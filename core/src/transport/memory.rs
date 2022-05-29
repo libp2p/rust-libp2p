@@ -211,6 +211,18 @@ impl Transport for MemoryTransport {
         Ok(())
     }
 
+    fn remove_listener(&mut self, id: ListenerId) -> bool {
+        if let Some(index) = self.listeners.iter().position(|listener| listener.id == id) {
+            let listener = self.listeners.get_mut(index).unwrap();
+            let val_in = HUB.unregister_port(&listener.port);
+            debug_assert!(val_in.is_some());
+            listener.receiver.close();
+            true
+        } else {
+            false
+        }
+    }
+
     fn dial(&mut self, addr: Multiaddr) -> Result<DialFuture, TransportError<Self::Error>> {
         let port = if let Ok(port) = parse_memory_addr(&addr) {
             if let Some(port) = NonZeroU64::new(port) {
@@ -258,13 +270,19 @@ impl Transport for MemoryTransport {
 
             let event = match Stream::poll_next(Pin::new(&mut listener.receiver), cx) {
                 Poll::Pending => None,
-                Poll::Ready(None) => panic!("Alive listeners always have a sender."),
                 Poll::Ready(Some((channel, dial_port))) => Some(TransportEvent::Incoming {
                     listener_id: listener.id,
                     upgrade: future::ready(Ok(channel)),
                     local_addr: listener.addr.clone(),
                     send_back_addr: Protocol::Memory(dial_port.get()).into(),
                 }),
+                Poll::Ready(None) => {
+                    // Listener was closed.
+                    return Poll::Ready(TransportEvent::ListenerClosed {
+                        listener_id: listener.id,
+                        reason: Ok(()),
+                    });
+                }
             };
 
             self.listeners.push_front(listener);
@@ -312,13 +330,6 @@ pub struct Listener {
     receiver: ChannelReceiver,
     /// Generate `TransportEvent::NewAddress` to inform about our listen address.
     tell_listen_addr: bool,
-}
-
-impl Drop for Listener {
-    fn drop(&mut self) {
-        let val_in = HUB.unregister_port(&self.port);
-        debug_assert!(val_in.is_some());
-    }
 }
 
 /// If the address is `/memory/n`, returns the value of `n`.
@@ -446,33 +457,38 @@ mod tests {
         );
     }
 
-    // TODO: test once remove_listener is implemented
-    // #[test]
-    // fn listening_twice() {
-    //     let mut transport = MemoryTransport::default();
-    //     assert!(transport
-    //         .listen_on(ListenerId::new(1), "/memory/1639174018481".parse().unwrap())
-    //         .is_ok());
-    //     assert!(transport
-    //         .listen_on(ListenerId::new(1), "/memory/1639174018481".parse().unwrap())
-    //         .is_ok());
-    //     let _listener = transport
-    //         .listen_on(ListenerId::new(1), "/memory/1639174018481".parse().unwrap())
-    //         .unwrap();
-    //     assert!(transport
-    //         .listen_on(ListenerId::new(1), "/memory/1639174018481".parse().unwrap())
-    //         .is_err());
-    //     assert!(transport
-    //         .listen_on(ListenerId::new(1), "/memory/1639174018481".parse().unwrap())
-    //         .is_err());
-    //     drop(_listener);
-    //     assert!(transport
-    //         .listen_on(ListenerId::new(1), "/memory/1639174018481".parse().unwrap())
-    //         .is_ok());
-    //     assert!(transport
-    //         .listen_on(ListenerId::new(1), "/memory/1639174018481".parse().unwrap())
-    //         .is_ok());
-    // }
+    #[test]
+    fn listening_twice() {
+        let mut transport = MemoryTransport::default();
+        let listener_id_1 = ListenerId::new(1);
+
+        let addr_1: Multiaddr = "/memory/1639174018481".parse().unwrap();
+        let addr_2: Multiaddr = "/memory/8459375923478".parse().unwrap();
+
+        assert!(transport.listen_on(listener_id_1, addr_1.clone()).is_ok());
+        assert!(transport.remove_listener(listener_id_1));
+
+        let listener_id_2 = ListenerId::new(2);
+        assert!(transport.listen_on(listener_id_2, addr_1.clone()).is_ok());
+        let listener_id_3 = ListenerId::new(3);
+        assert!(transport.listen_on(listener_id_3, addr_2.clone()).is_ok());
+
+        assert!(transport
+            .listen_on(ListenerId::new(4), addr_1.clone())
+            .is_err());
+        assert!(transport
+            .listen_on(ListenerId::new(4), addr_2.clone())
+            .is_err());
+
+        assert!(transport.remove_listener(listener_id_2));
+        assert!(transport.listen_on(ListenerId::new(4), addr_1).is_ok());
+        assert!(transport
+            .listen_on(ListenerId::new(4), addr_2.clone())
+            .is_err());
+
+        assert!(transport.remove_listener(listener_id_3));
+        assert!(transport.listen_on(ListenerId::new(4), addr_2).is_ok());
+    }
 
     #[test]
     fn port_not_in_use() {
@@ -489,6 +505,36 @@ mod tests {
         assert!(transport
             .dial("/memory/810172461024613".parse().unwrap())
             .is_ok());
+    }
+
+    #[test]
+    fn stop_listening() {
+        let rand_port = rand::random::<u64>().saturating_add(1);
+        let addr: Multiaddr = format!("/memory/{}", rand_port).parse().unwrap();
+
+        let mut transport = MemoryTransport::default().boxed();
+        futures::executor::block_on(async {
+            let listener_id = ListenerId::new(1);
+            transport.listen_on(listener_id, addr.clone()).unwrap();
+            let reported_addr = transport
+                .select_next_some()
+                .await
+                .into_new_address()
+                .expect("new address");
+            assert_eq!(addr, reported_addr);
+            assert!(transport.remove_listener(listener_id));
+            match transport.select_next_some().await {
+                TransportEvent::ListenerClosed {
+                    listener_id: id,
+                    reason,
+                } => {
+                    assert_eq!(id, listener_id);
+                    assert!(reason.is_ok())
+                }
+                other => panic!("Unexpected transport event: {:?}", other),
+            }
+            assert!(!transport.remove_listener(listener_id));
+        })
     }
 
     #[test]

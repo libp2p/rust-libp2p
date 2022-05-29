@@ -338,6 +338,10 @@ where
         self.0.dial(addr)
     }
 
+    fn remove_listener(&mut self, id: ListenerId) -> bool {
+        self.0.remove_listener(id)
+    }
+
     fn dial_as_listener(
         &mut self,
         addr: Multiaddr,
@@ -408,6 +412,10 @@ where
             future: Box::pin(future),
             upgrade: future::Either::Left(Some(self.upgrade.clone())),
         })
+    }
+
+    fn remove_listener(&mut self, id: ListenerId) -> bool {
+        self.inner.remove_listener(id)
     }
 
     fn dial_as_listener(

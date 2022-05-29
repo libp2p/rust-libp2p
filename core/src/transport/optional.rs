@@ -72,6 +72,14 @@ where
         }
     }
 
+    fn remove_listener(&mut self, id: ListenerId) -> bool {
+        if let Some(inner) = self.0.as_mut() {
+            inner.remove_listener(id)
+        } else {
+            false
+        }
+    }
+
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         if let Some(inner) = self.0.as_mut() {
             inner.dial(addr)

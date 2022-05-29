@@ -479,6 +479,13 @@ where
         }
     }
 
+    fn remove_listener(&mut self, id: ListenerId) -> bool {
+        match self {
+            EitherTransport::Left(t) => t.remove_listener(id),
+            EitherTransport::Right(t) => t.remove_listener(id),
+        }
+    }
+
     fn listen_on(
         &mut self,
         id: ListenerId,

@@ -131,6 +131,10 @@ where
         self.transport.listen_on(id, addr)
     }
 
+    fn remove_listener(&mut self, id: ListenerId) -> bool {
+        self.transport.remove_listener(id)
+    }
+
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         self.transport.dial(addr)
     }

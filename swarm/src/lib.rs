@@ -95,7 +95,7 @@ use libp2p_core::{
 };
 use registry::{AddressIntoIter, Addresses};
 use smallvec::SmallVec;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::iter;
 use std::num::{NonZeroU32, NonZeroU8, NonZeroUsize};
 use std::{
@@ -276,7 +276,7 @@ where
     supported_protocols: SmallVec<[Vec<u8>; 16]>,
 
     /// List of multiaddresses we're listening on.
-    listened_addrs: SmallVec<[Multiaddr; 8]>,
+    listened_addrs: HashMap<ListenerId, SmallVec<[Multiaddr; 1]>>,
 
     /// List of multiaddresses we're listening on, after account for external IP addresses and
     /// similar mechanisms.
@@ -339,10 +339,8 @@ where
     ///
     /// Returns `true` if there was a listener with this ID, `false`
     /// otherwise.
-    pub fn remove_listener(&mut self, _id: ListenerId) -> bool {
-        // TODO
-        false
-        // self.transport.remove_listener(id)
+    pub fn remove_listener(&mut self, listener_id: ListenerId) -> bool {
+        self.transport.remove_listener(listener_id)
     }
 
     /// Dial a known or unknown peer.
@@ -451,8 +449,9 @@ where
                         };
 
                         let mut unique_addresses = HashSet::new();
-                        addresses.retain(|a| {
-                            !self.listened_addrs.contains(a) && unique_addresses.insert(a.clone())
+                        addresses.retain(|addr| {
+                            !self.listened_addrs.values().flatten().any(|a| a == addr)
+                                && unique_addresses.insert(addr.clone())
                         });
 
                         if addresses.is_empty() {
@@ -548,9 +547,7 @@ where
 
     /// Returns an iterator that produces the list of addresses we're listening on.
     pub fn listeners(&self) -> impl Iterator<Item = &Multiaddr> {
-        // TODO
-        vec![].into_iter()
-        // self.transport.listen_addrs()
+        self.listened_addrs.values().flatten()
     }
 
     /// Returns the peer ID of the swarm passed as parameter.
@@ -875,8 +872,9 @@ where
                 listen_addr,
             } => {
                 log::debug!("Listener {:?}; New address: {:?}", listener_id, listen_addr);
-                if !self.listened_addrs.contains(&listen_addr) {
-                    self.listened_addrs.push(listen_addr.clone())
+                let addrs = self.listened_addrs.entry(listener_id).or_default();
+                if !addrs.contains(&listen_addr) {
+                    addrs.push(listen_addr.clone())
                 }
                 self.behaviour
                     .inject_new_listen_addr(listener_id, &listen_addr);
@@ -894,7 +892,9 @@ where
                     listener_id,
                     listen_addr
                 );
-                self.listened_addrs.retain(|a| a != &listen_addr);
+                if let Some(addrs) = self.listened_addrs.get_mut(&listener_id) {
+                    addrs.retain(|a| a != &listen_addr);
+                }
                 self.behaviour
                     .inject_expired_listen_addr(listener_id, &listen_addr);
                 return Some(SwarmEvent::ExpiredListenAddr {
@@ -902,13 +902,13 @@ where
                     address: listen_addr,
                 });
             }
-            TransportEvent::Closed {
+            TransportEvent::ListenerClosed {
                 listener_id,
-                addresses,
                 reason,
             } => {
                 log::debug!("Listener {:?}; Closed by {:?}.", listener_id, reason);
-                for addr in addresses.iter() {
+                let addrs = self.listened_addrs.remove(&listener_id).unwrap_or_default();
+                for addr in addrs.iter() {
                     self.behaviour.inject_expired_listen_addr(listener_id, addr);
                 }
                 self.behaviour.inject_listener_closed(
@@ -920,7 +920,7 @@ where
                 );
                 return Some(SwarmEvent::ListenerClosed {
                     listener_id,
-                    addresses,
+                    addresses: addrs.to_vec(),
                     reason,
                 });
             }
@@ -967,7 +967,7 @@ where
 
                 self.pending_event = Some((peer_id, handler, event));
             }
-            NetworkBehaviourAction::ReportObservedAddr { address: _, score } => {
+            NetworkBehaviourAction::ReportObservedAddr { address, score } => {
                 // Maps the given `observed_addr`, representing an address of the local
                 // node observed by a remote peer, onto the locally known listen addresses
                 // to yield one or more addresses of the local node that may be publicly
@@ -981,12 +981,12 @@ where
                 //
                 // The translation is transport-specific. See [`Transport::address_translation`].
                 let translated_addresses = {
-                    let mut addrs = vec![Multiaddr::empty()];
-                    // let mut addrs: Vec<_> = self
-                    //     .transport
-                    //     .listen_addrs()
-                    //     .filter_map(move |server| transport.address_translation(server, &address))
-                    //     .collect();
+                    let mut addrs: Vec<_> = self
+                        .listened_addrs
+                        .values()
+                        .flatten()
+                        .filter_map(|server| self.transport.address_translation(server, &address))
+                        .collect();
 
                     // remove duplicates
                     addrs.sort_unstable();
@@ -1067,7 +1067,7 @@ where
                         let mut parameters = SwarmPollParameters {
                             local_peer_id: &this.local_peer_id,
                             supported_protocols: &this.supported_protocols,
-                            listened_addrs: &this.listened_addrs,
+                            listened_addrs: this.listened_addrs.values().flatten().collect(),
                             external_addrs: &this.external_addrs,
                         };
                         this.behaviour.poll(cx, &mut parameters)
@@ -1238,13 +1238,13 @@ where
 pub struct SwarmPollParameters<'a> {
     local_peer_id: &'a PeerId,
     supported_protocols: &'a [Vec<u8>],
-    listened_addrs: &'a [Multiaddr],
+    listened_addrs: Vec<&'a Multiaddr>,
     external_addrs: &'a Addresses,
 }
 
 impl<'a> PollParameters for SwarmPollParameters<'a> {
     type SupportedProtocolsIter = std::iter::Cloned<std::slice::Iter<'a, std::vec::Vec<u8>>>;
-    type ListenedAddressesIter = std::iter::Cloned<std::slice::Iter<'a, Multiaddr>>;
+    type ListenedAddressesIter = std::iter::Cloned<std::vec::IntoIter<&'a Multiaddr>>;
     type ExternalAddressesIter = AddressIntoIter;
 
     fn supported_protocols(&self) -> Self::SupportedProtocolsIter {
@@ -1252,7 +1252,7 @@ impl<'a> PollParameters for SwarmPollParameters<'a> {
     }
 
     fn listened_addresses(&self) -> Self::ListenedAddressesIter {
-        self.listened_addrs.iter().cloned()
+        self.listened_addrs.clone().into_iter().cloned()
     }
 
     fn external_addresses(&self) -> Self::ExternalAddressesIter {
@@ -1405,7 +1405,7 @@ where
             pool: Pool::new(self.local_peer_id, pool_config, self.connection_limits),
             behaviour: self.behaviour,
             supported_protocols,
-            listened_addrs: SmallVec::new(),
+            listened_addrs: HashMap::new(),
             external_addrs: Addresses::default(),
             banned_peers: HashSet::new(),
             banned_peer_connections: HashSet::new(),

@@ -53,12 +53,10 @@ use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
     transport::{ListenerId, Transport, TransportError, TransportEvent},
 };
-use log::debug;
-use smallvec::SmallVec;
 use socket2::{Domain, Socket, Type};
 use std::{
     collections::{HashSet, VecDeque},
-    io, mem,
+    io,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpListener},
     pin::Pin,
     task::{Context, Poll},
@@ -404,6 +402,20 @@ where
         Ok(())
     }
 
+    fn remove_listener(&mut self, id: ListenerId) -> bool {
+        if let Some(index) = self.listeners.iter().position(|l| l.listener_id != id) {
+            self.listeners.remove(index);
+            self.pending_events
+                .push_back(TransportEvent::ListenerClosed {
+                    listener_id: id,
+                    reason: Ok(()),
+                });
+            true
+        } else {
+            false
+        }
+    }
+
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         let socket_addr = if let Ok(socket_addr) = multiaddr_to_socketaddr(addr.clone()) {
             if socket_addr.port() == 0 || socket_addr.ip().is_unspecified() {
@@ -510,11 +522,6 @@ where
                     });
                 }
                 Poll::Ready(Some(Ok(TcpTransportEvent::NewAddress(a)))) => {
-                    if listener.addresses.contains(&a) {
-                        debug!("Transport has reported address {} multiple times", a)
-                    } else {
-                        listener.addresses.push(a.clone());
-                    }
                     let id = listener.listener_id;
                     self.listeners.push_front(listener);
                     return Poll::Ready(TransportEvent::NewAddress {
@@ -523,7 +530,6 @@ where
                     });
                 }
                 Poll::Ready(Some(Ok(TcpTransportEvent::AddressExpired(a)))) => {
-                    listener.addresses.retain(|x| x != &a);
                     let id = listener.listener_id;
                     self.listeners.push_front(listener);
                     return Poll::Ready(TransportEvent::AddressExpired {
@@ -540,18 +546,14 @@ where
                     });
                 }
                 Poll::Ready(None) => {
-                    let addresses = mem::take(&mut listener.addresses).into_vec();
-                    return Poll::Ready(TransportEvent::Closed {
+                    return Poll::Ready(TransportEvent::ListenerClosed {
                         listener_id: listener.listener_id,
-                        addresses,
                         reason: Ok(()),
                     });
                 }
                 Poll::Ready(Some(Err(err))) => {
-                    let addresses = mem::take(&mut listener.addresses).into_vec();
-                    return Poll::Ready(TransportEvent::Closed {
+                    return Poll::Ready(TransportEvent::ListenerClosed {
                         listener_id: listener.listener_id,
-                        addresses,
                         reason: Err(err),
                     });
                 }
@@ -615,8 +617,6 @@ where
     /// which may be a "wildcard address" like `INADDR_ANY` or `IN6ADDR_ANY`
     /// when listening on all interfaces for IPv4 respectively IPv6 connections.
     listen_addr: SocketAddr,
-    /// Addresses it is listening on.
-    addresses: SmallVec<[Multiaddr; 4]>,
     /// The async listening socket for incoming connections.
     listener: T::Listener,
     /// The IP addresses of network interfaces on which the listening socket
@@ -676,7 +676,6 @@ where
             listener,
             listener_id,
             listen_addr,
-            addresses: Default::default(),
             in_addr,
             pause: None,
             sleep_on_error: Duration::from_millis(100),

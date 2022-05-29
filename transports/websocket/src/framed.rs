@@ -147,6 +147,10 @@ where
             .map_err(|e| e.map(Error::Transport))
     }
 
+    fn remove_listener(&mut self, id: ListenerId) -> bool {
+        self.transport.lock().remove_listener(id)
+    }
+
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         self.do_dial(addr, Endpoint::Dialer)
     }
@@ -207,22 +211,15 @@ where
                 listener_id,
                 error: Error::Transport(error),
             },
-            TransportEvent::Closed {
+            TransportEvent::ListenerClosed {
                 listener_id,
-                mut addresses,
                 reason,
             } => {
-                let proto = self
-                    .listener_protos
+                self.listener_protos
                     .remove(&listener_id)
                     .expect("Protocol was inserted in Transport::listen_on.");
-                addresses = addresses
-                    .into_iter()
-                    .map(|a| a.with(proto.clone()))
-                    .collect();
-                TransportEvent::Closed {
+                TransportEvent::ListenerClosed {
                     listener_id,
-                    addresses,
                     reason: reason.map_err(Error::Transport),
                 }
             }

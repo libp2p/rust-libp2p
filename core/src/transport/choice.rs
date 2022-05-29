@@ -62,6 +62,10 @@ where
         Err(TransportError::MultiaddrNotSupported(addr))
     }
 
+    fn remove_listener(&mut self, id: ListenerId) -> bool {
+        self.0.remove_listener(id) || self.1.remove_listener(id)
+    }
+
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         let addr = match self.0.dial(addr) {
             Ok(connec) => return Ok(EitherFuture::First(connec)),

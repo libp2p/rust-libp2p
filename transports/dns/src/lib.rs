@@ -208,6 +208,10 @@ where
             .map_err(|e| e.map(DnsErr::Transport))
     }
 
+    fn remove_listener(&mut self, id: ListenerId) -> bool {
+        self.inner.lock().remove_listener(id)
+    }
+
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         self.do_dial(addr, Endpoint::Dialer)
     }

@@ -51,17 +51,20 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::{io, path::PathBuf};
 
-pub type Listener<TUpgr, TErr> =
-    BoxStream<'static, Result<TransportEvent<TUpgr, TErr>, TransportEvent<TUpgr, TErr>>>;
+pub type Listener<T> = BoxStream<
+    'static,
+    Result<
+        TransportEvent<<T as Transport>::ListenerUpgrade, <T as Transport>::Error>,
+        Result<(), <T as Transport>::Error>,
+    >,
+>;
 
 macro_rules! codegen {
     ($feature_name:expr, $uds_config:ident, $build_listener:expr, $unix_stream:ty, $($mut_or_not:tt)*) => {
         /// Represents the configuration for a Unix domain sockets transport capability for libp2p.
         #[cfg_attr(docsrs, doc(cfg(feature = $feature_name)))]
         pub struct $uds_config {
-            listeners: VecDeque<
-                Listener<<Self as Transport>::ListenerUpgrade, <Self as Transport>::Error>,
-            >,
+            listeners: VecDeque<(ListenerId, Listener<Self>)>,
         }
 
         impl $uds_config {
@@ -91,55 +94,65 @@ macro_rules! codegen {
                 addr: Multiaddr,
             ) -> Result<(), TransportError<Self::Error>> {
                 if let Ok(path) = multiaddr_to_path(&addr) {
-                    let addr_clone = addr.clone();
-                    let listener = async move {
-                        $build_listener(path)
-                            .await
-                            .map_err(|e| TransportEvent::Closed {
-                                listener_id: id,
-                                addresses: vec![addr_clone],
-                                reason: Err(e),
-                            })
-                    }
-                    .map_ok(move |listener| {
-                        stream::once({
-                            let addr = addr.clone();
-                            async move {
-                                debug!("Now listening on {}", addr);
-                                Ok(TransportEvent::NewAddress {
-                                    listener_id: id,
-                                    listen_addr: addr,
-                                })
-                            }
-                        })
-                        .chain(stream::unfold(listener, move |listener| {
-                            let addr = addr.clone();
-                            async move {
-                                let event = match listener.accept().await {
-                                    Ok((stream, _)) => {
-                                        debug!("incoming connection on {}", addr);
-                                        TransportEvent::Incoming {
-                                            upgrade: future::ok(stream),
-                                            local_addr: addr.clone(),
-                                            send_back_addr: addr.clone(),
-                                            listener_id: id,
-                                        }
-                                    }
-                                    Err(error) => TransportEvent::Error {
+                    let listener = $build_listener(path)
+                        .map_err(Err)
+                        .map_ok(move |listener| {
+                            stream::once({
+                                let addr = addr.clone();
+                                async move {
+                                    debug!("Now listening on {}", addr);
+                                    Ok(TransportEvent::NewAddress {
                                         listener_id: id,
-                                        error,
-                                    },
-                                };
-                                Some((Ok(event), listener))
-                            }
-                        }))
-                    })
-                    .try_flatten_stream()
-                    .boxed();
-                    self.listeners.push_back(listener);
+                                        listen_addr: addr,
+                                    })
+                                }
+                            })
+                            .chain(stream::unfold(
+                                listener,
+                                move |listener| {
+                                    let addr = addr.clone();
+                                    async move {
+                                        let event = match listener.accept().await {
+                                            Ok((stream, _)) => {
+                                                debug!("incoming connection on {}", addr);
+                                                TransportEvent::Incoming {
+                                                    upgrade: future::ok(stream),
+                                                    local_addr: addr.clone(),
+                                                    send_back_addr: addr.clone(),
+                                                    listener_id: id,
+                                                }
+                                            }
+                                            Err(error) => TransportEvent::Error {
+                                                listener_id: id,
+                                                error,
+                                            },
+                                        };
+                                        Some((Ok(event), listener))
+                                    }
+                                },
+                            ))
+                        })
+                        .try_flatten_stream()
+                        .boxed();
+                    self.listeners.push_back((id, listener));
                     Ok(())
                 } else {
                     Err(TransportError::MultiaddrNotSupported(addr))
+                }
+            }
+
+            fn remove_listener(&mut self, id: ListenerId) -> bool {
+                if let Some(index) = self
+                    .listeners
+                    .iter()
+                    .position(|(listener_id, _)| listener_id == &id)
+                {
+                    let listener_stream = self.listeners.get_mut(index).unwrap();
+                    let report_closed_stream = stream::once(async { Err(Ok(())) }).boxed();
+                    *listener_stream = (id, report_closed_stream);
+                    true
+                } else {
+                    false
                 }
             }
 
@@ -173,14 +186,19 @@ macro_rules! codegen {
                 cx: &mut Context<'_>,
             ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
                 let mut remaining = self.listeners.len();
-                while let Some(mut listener) = self.listeners.pop_back() {
+                while let Some((id, mut listener)) = self.listeners.pop_back() {
                     let event = match Stream::poll_next(Pin::new(&mut listener), cx) {
                         Poll::Pending => None,
                         Poll::Ready(None) => panic!("Alive listeners always have a sender."),
                         Poll::Ready(Some(Ok(event))) => Some(event),
-                        Poll::Ready(Some(Err(event))) => return Poll::Ready(event),
+                        Poll::Ready(Some(Err(reason))) => {
+                            return Poll::Ready(TransportEvent::ListenerClosed {
+                                listener_id: id,
+                                reason,
+                            })
+                        }
                     };
-                    self.listeners.push_front(listener);
+                    self.listeners.push_front((id, listener));
                     if let Some(event) = event {
                         return Poll::Ready(event);
                     } else {

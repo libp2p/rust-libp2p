@@ -108,6 +108,7 @@ pub trait Transport {
     /// obtained from [dialing](Transport::dial).
     type Dial: Future<Output = Result<Self::Output, Self::Error>>;
 
+    // TODO: fix docs
     /// Listens on the given [`Multiaddr`], producing a stream of pending, inbound connections
     /// and addresses this transport is listening on (cf. [`TransportEvent`]).
     ///
@@ -120,6 +121,12 @@ pub trait Transport {
     ) -> Result<(), TransportError<Self::Error>>
     where
         Self: Sized;
+
+    /// Remove a listener.
+    ///
+    /// Return `true` if there was a listener with this Id, `false`
+    /// otherwise.
+    fn remove_listener(&mut self, id: ListenerId) -> bool;
 
     /// Dials the given [`Multiaddr`], returning a future for a pending outbound connection.
     ///
@@ -277,11 +284,9 @@ pub enum TransportEvent<TUpgr, TErr> {
         send_back_addr: Multiaddr,
     },
     /// A listener closed.
-    Closed {
+    ListenerClosed {
         /// The ID of the listener that closed.
         listener_id: ListenerId,
-        /// The addresses that the listener was listening on.
-        addresses: Vec<Multiaddr>,
         /// Reason for the closure. Contains `Ok(())` if the stream produced `None`, or `Err`
         /// if the stream produced an error.
         reason: Result<(), TErr>,
@@ -329,13 +334,11 @@ impl<TUpgr, TErr> TransportEvent<TUpgr, TErr> {
             TransportEvent::Error { listener_id, error } => {
                 TransportEvent::Error { listener_id, error }
             }
-            TransportEvent::Closed {
+            TransportEvent::ListenerClosed {
                 listener_id,
-                addresses,
                 reason,
-            } => TransportEvent::Closed {
+            } => TransportEvent::ListenerClosed {
                 listener_id,
-                addresses,
                 reason,
             },
         }
@@ -372,13 +375,11 @@ impl<TUpgr, TErr> TransportEvent<TUpgr, TErr> {
                 listener_id,
                 error: map_err(error),
             },
-            TransportEvent::Closed {
+            TransportEvent::ListenerClosed {
                 listener_id,
-                addresses,
                 reason,
-            } => TransportEvent::Closed {
+            } => TransportEvent::ListenerClosed {
                 listener_id,
-                addresses,
                 reason: reason.map_err(map_err),
             },
         }
@@ -486,14 +487,12 @@ impl<TUpgr, TErr: fmt::Debug> fmt::Debug for TransportEvent<TUpgr, TErr> {
                 .field("listener_id", listener_id)
                 .field("local_addr", local_addr)
                 .finish(),
-            TransportEvent::Closed {
+            TransportEvent::ListenerClosed {
                 listener_id,
-                addresses,
                 reason,
             } => f
                 .debug_struct("TransportEvent::Closed")
                 .field("listener_id", listener_id)
-                .field("addresses", addresses)
                 .field("reason", reason)
                 .finish(),
             TransportEvent::Error { listener_id, error } => f

@@ -57,6 +57,7 @@ trait Abstract<O> {
         id: ListenerId,
         addr: Multiaddr,
     ) -> Result<(), TransportError<io::Error>>;
+    fn remove_listener(&mut self, id: ListenerId) -> bool;
     fn dial(&mut self, addr: Multiaddr) -> Result<Dial<O>, TransportError<io::Error>>;
     fn dial_as_listener(&mut self, addr: Multiaddr) -> Result<Dial<O>, TransportError<io::Error>>;
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr>;
@@ -79,6 +80,10 @@ where
         addr: Multiaddr,
     ) -> Result<(), TransportError<io::Error>> {
         Transport::listen_on(self, id, addr).map_err(|e| e.map(box_err))
+    }
+
+    fn remove_listener(&mut self, id: ListenerId) -> bool {
+        Transport::remove_listener(self, id)
     }
 
     fn dial(&mut self, addr: Multiaddr) -> Result<Dial<O>, TransportError<io::Error>> {
@@ -132,6 +137,10 @@ impl<O> Transport for Boxed<O> {
         addr: Multiaddr,
     ) -> Result<(), TransportError<Self::Error>> {
         self.inner.listen_on(id, addr)
+    }
+
+    fn remove_listener(&mut self, id: ListenerId) -> bool {
+        self.inner.remove_listener(id)
     }
 
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {

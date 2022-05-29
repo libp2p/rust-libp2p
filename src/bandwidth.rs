@@ -104,6 +104,10 @@ where
         self.inner.listen_on(id, addr)
     }
 
+    fn remove_listener(&mut self, id: ListenerId) -> bool {
+        self.inner.remove_listener(id)
+    }
+
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         let sinks = self.sinks.clone();
         self.inner
