@@ -6,6 +6,11 @@
 
 - Update to `libp2p-request-response` `v0.18.0`.
 
+- Add `Config::only_global_ips` to skip peers that are observed at a private IP-address
+  (see [PR 2618]).
+
+[PR 2618]: https://github.com/libp2p/rust-libp2p/pull/2618
+
 # 0.3.0
 
 - Update to `libp2p-swarm` `v0.35.0`.
