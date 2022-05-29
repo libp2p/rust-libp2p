@@ -42,35 +42,35 @@ use std::{error, fmt, pin::Pin, task::Context, task::Poll, time::Duration};
 /// - Driving substream upgrades
 /// - Handling connection timeout
 // TODO: add a caching system for protocols that are supported or not
-pub struct HandlerWrapper<TProtoHandler>
+pub struct HandlerWrapper<TConnectionHandler>
 where
-    TProtoHandler: ConnectionHandler,
+    TConnectionHandler: ConnectionHandler,
 {
     /// The underlying handler.
-    handler: TProtoHandler,
+    handler: TConnectionHandler,
     /// Futures that upgrade incoming substreams.
     negotiating_in: FuturesUnordered<
         SubstreamUpgrade<
-            TProtoHandler::InboundOpenInfo,
+            TConnectionHandler::InboundOpenInfo,
             InboundUpgradeApply<
                 Substream<StreamMuxerBox>,
-                SendWrapper<TProtoHandler::InboundProtocol>,
+                SendWrapper<TConnectionHandler::InboundProtocol>,
             >,
         >,
     >,
     /// Futures that upgrade outgoing substreams.
     negotiating_out: FuturesUnordered<
         SubstreamUpgrade<
-            TProtoHandler::OutboundOpenInfo,
+            TConnectionHandler::OutboundOpenInfo,
             OutboundUpgradeApply<
                 Substream<StreamMuxerBox>,
-                SendWrapper<TProtoHandler::OutboundProtocol>,
+                SendWrapper<TConnectionHandler::OutboundProtocol>,
             >,
         >,
     >,
     /// For each outbound substream request, how to upgrade it. The first element of the tuple
     /// is the unique identifier (see `unique_dial_upgrade_id`).
-    queued_dial_upgrades: Vec<(u64, SendWrapper<TProtoHandler::OutboundProtocol>)>,
+    queued_dial_upgrades: Vec<(u64, SendWrapper<TConnectionHandler::OutboundProtocol>)>,
     /// Unique identifier assigned to each queued dial upgrade.
     unique_dial_upgrade_id: u64,
     /// The currently planned connection & handler shutdown.
@@ -79,7 +79,7 @@ where
     substream_upgrade_protocol_override: Option<upgrade::Version>,
 }
 
-impl<TProtoHandler: ConnectionHandler> std::fmt::Debug for HandlerWrapper<TProtoHandler> {
+impl<TConnectionHandler: ConnectionHandler> std::fmt::Debug for HandlerWrapper<TConnectionHandler> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("HandlerWrapper")
             .field("negotiating_in", &self.negotiating_in)
@@ -94,9 +94,9 @@ impl<TProtoHandler: ConnectionHandler> std::fmt::Debug for HandlerWrapper<TProto
     }
 }
 
-impl<TProtoHandler: ConnectionHandler> HandlerWrapper<TProtoHandler> {
+impl<TConnectionHandler: ConnectionHandler> HandlerWrapper<TConnectionHandler> {
     pub(crate) fn new(
-        handler: TProtoHandler,
+        handler: TConnectionHandler,
         substream_upgrade_protocol_override: Option<upgrade::Version>,
     ) -> Self {
         Self {
@@ -110,7 +110,7 @@ impl<TProtoHandler: ConnectionHandler> HandlerWrapper<TProtoHandler> {
         }
     }
 
-    pub(crate) fn into_protocols_handler(self) -> TProtoHandler {
+    pub(crate) fn into_connection_handler(self) -> TConnectionHandler {
         self.handler
     }
 }
@@ -224,22 +224,22 @@ where
     }
 }
 
-pub type OutboundOpenInfo<TProtoHandler> = (
+pub type OutboundOpenInfo<TConnectionHandler> = (
     u64,
-    <TProtoHandler as ConnectionHandler>::OutboundOpenInfo,
+    <TConnectionHandler as ConnectionHandler>::OutboundOpenInfo,
     Duration,
 );
 
-impl<TProtoHandler> HandlerWrapper<TProtoHandler>
+impl<TConnectionHandler> HandlerWrapper<TConnectionHandler>
 where
-    TProtoHandler: ConnectionHandler,
+    TConnectionHandler: ConnectionHandler,
 {
     pub fn inject_substream(
         &mut self,
         substream: Substream<StreamMuxerBox>,
         // The first element of the tuple is the unique upgrade identifier
         // (see `unique_dial_upgrade_id`).
-        endpoint: SubstreamEndpoint<OutboundOpenInfo<TProtoHandler>>,
+        endpoint: SubstreamEndpoint<OutboundOpenInfo<TConnectionHandler>>,
     ) {
         match endpoint {
             SubstreamEndpoint::Listener => {
@@ -290,7 +290,7 @@ where
         }
     }
 
-    pub fn inject_event(&mut self, event: TProtoHandler::InEvent) {
+    pub fn inject_event(&mut self, event: TConnectionHandler::InEvent) {
         self.handler.inject_event(event);
     }
 
@@ -298,36 +298,78 @@ where
         self.handler.inject_address_change(new_address);
     }
 
+    fn handle_connection_handler_event(
+        &mut self,
+        handler_event: ConnectionHandlerEvent<
+            TConnectionHandler::OutboundProtocol,
+            TConnectionHandler::OutboundOpenInfo,
+            TConnectionHandler::OutEvent,
+            TConnectionHandler::Error,
+        >,
+    ) -> Result<
+        Event<OutboundOpenInfo<TConnectionHandler>, TConnectionHandler::OutEvent>,
+        Error<TConnectionHandler::Error>,
+    > {
+        match handler_event {
+            ConnectionHandlerEvent::Custom(event) => Ok(Event::Custom(event)),
+            ConnectionHandlerEvent::OutboundSubstreamRequest { protocol } => {
+                let id = self.unique_dial_upgrade_id;
+                let timeout = *protocol.timeout();
+                self.unique_dial_upgrade_id += 1;
+                let (upgrade, info) = protocol.into_upgrade();
+                self.queued_dial_upgrades.push((id, SendWrapper(upgrade)));
+                Ok(Event::OutboundSubstreamRequest((id, info, timeout)))
+            }
+            ConnectionHandlerEvent::Close(err) => Err(err.into()),
+        }
+    }
+
     pub fn poll(
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<
         Result<
-            Event<OutboundOpenInfo<TProtoHandler>, TProtoHandler::OutEvent>,
-            Error<TProtoHandler::Error>,
+            Event<OutboundOpenInfo<TConnectionHandler>, TConnectionHandler::OutEvent>,
+            Error<TConnectionHandler::Error>,
         >,
     > {
-        while let Poll::Ready(Some((user_data, res))) = self.negotiating_in.poll_next_unpin(cx) {
-            match res {
-                Ok(upgrade) => self
-                    .handler
-                    .inject_fully_negotiated_inbound(upgrade, user_data),
-                Err(err) => self.handler.inject_listen_upgrade_error(user_data, err),
+        loop {
+            // Poll the [`ConnectionHandler`].
+            if let Poll::Ready(handler_event) = self.handler.poll(cx) {
+                let wrapper_event = self.handle_connection_handler_event(handler_event)?;
+                return Poll::Ready(Ok(wrapper_event));
             }
-        }
 
-        while let Poll::Ready(Some((user_data, res))) = self.negotiating_out.poll_next_unpin(cx) {
-            match res {
-                Ok(upgrade) => self
-                    .handler
-                    .inject_fully_negotiated_outbound(upgrade, user_data),
-                Err(err) => self.handler.inject_dial_upgrade_error(user_data, err),
+            // In case the [`ConnectionHandler`] can not make any more progress, poll the negotiating outbound streams.
+            if let Poll::Ready(Some((user_data, res))) = self.negotiating_out.poll_next_unpin(cx) {
+                match res {
+                    Ok(upgrade) => self
+                        .handler
+                        .inject_fully_negotiated_outbound(upgrade, user_data),
+                    Err(err) => self.handler.inject_dial_upgrade_error(user_data, err),
+                }
+
+                // After the `inject_*` calls, the [`ConnectionHandler`] might be able to make progress.
+                continue;
             }
-        }
 
-        // Poll the handler at the end so that we see the consequences of the method
-        // calls on `self.handler`.
-        let poll_result = self.handler.poll(cx);
+            // In case both the [`ConnectionHandler`] and the negotiating outbound streams can not
+            // make any more progress, poll the negotiating inbound streams.
+            if let Poll::Ready(Some((user_data, res))) = self.negotiating_in.poll_next_unpin(cx) {
+                match res {
+                    Ok(upgrade) => self
+                        .handler
+                        .inject_fully_negotiated_inbound(upgrade, user_data),
+                    Err(err) => self.handler.inject_listen_upgrade_error(user_data, err),
+                }
+
+                // After the `inject_*` calls, the [`ConnectionHandler`] might be able to make progress.
+                continue;
+            }
+
+            // None of the three can make any more progress, thus breaking the loop.
+            break;
+        }
 
         // Ask the handler whether it wants the connection (and the handler itself)
         // to be kept alive, which determines the planned shutdown, if any.
@@ -347,22 +389,6 @@ where
             }
             (_, KeepAlive::No) => self.shutdown = Shutdown::Asap,
             (_, KeepAlive::Yes) => self.shutdown = Shutdown::None,
-        };
-
-        match poll_result {
-            Poll::Ready(ConnectionHandlerEvent::Custom(event)) => {
-                return Poll::Ready(Ok(Event::Custom(event)));
-            }
-            Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest { protocol }) => {
-                let id = self.unique_dial_upgrade_id;
-                let timeout = *protocol.timeout();
-                self.unique_dial_upgrade_id += 1;
-                let (upgrade, info) = protocol.into_upgrade();
-                self.queued_dial_upgrades.push((id, SendWrapper(upgrade)));
-                return Poll::Ready(Ok(Event::OutboundSubstreamRequest((id, info, timeout))));
-            }
-            Poll::Ready(ConnectionHandlerEvent::Close(err)) => return Poll::Ready(Err(err.into())),
-            Poll::Pending => (),
         };
 
         // Check if the connection (and handler) should be shut down.

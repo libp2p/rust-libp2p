@@ -27,4 +27,4 @@ libp2p-mplex = { path = "../../muxers/mplex" }
 libp2p-plaintext = { path = "../../transports/plaintext" }
 quickcheck = "0.9.0"
 rand = "0.7.2"
-rw-stream-sink = "0.2.1"
+rw-stream-sink = { version = "0.3.0", path = "../../misc/rw-stream-sink" }

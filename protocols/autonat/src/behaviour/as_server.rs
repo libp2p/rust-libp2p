@@ -295,8 +295,8 @@ impl<'a> AsServer<'a> {
             .values()
             .find_map(|a| a.as_ref())
             .ok_or_else(|| {
-                let status_text = "no dial-request over relayed connections".to_string();
-                (status_text, ResponseError::DialError)
+                let status_text = "refusing to dial peer with blocked observed address".to_string();
+                (status_text, ResponseError::DialRefused)
             })?;
 
         let mut addrs = Self::filter_valid_addrs(sender, request.addresses, observed_addr);
@@ -304,7 +304,7 @@ impl<'a> AsServer<'a> {
 
         if addrs.is_empty() {
             let status_text = "no dialable addresses".to_string();
-            return Err((status_text, ResponseError::DialError));
+            return Err((status_text, ResponseError::DialRefused));
         }
 
         Ok(addrs)
@@ -316,10 +316,6 @@ impl<'a> AsServer<'a> {
         demanded: Vec<Multiaddr>,
         observed_remote_at: &Multiaddr,
     ) -> Vec<Multiaddr> {
-        // Skip if the observed address is a relay address.
-        if observed_remote_at.iter().any(|p| p == Protocol::P2pCircuit) {
-            return Vec::new();
-        }
         let observed_ip = match observed_remote_at
             .into_iter()
             .find(|p| matches!(p, Protocol::Ip4(_) | Protocol::Ip6(_)))
@@ -416,24 +412,5 @@ mod test {
             .unwrap()
             .with(Protocol::P2p(peer_id.into()));
         assert_eq!(filtered, vec![expected_1, expected_2]);
-    }
-
-    #[test]
-    fn skip_relayed_addr() {
-        let peer_id = PeerId::random();
-        let observed_ip = random_ip();
-        // Observed address is relayed.
-        let observed_addr = Multiaddr::empty()
-            .with(observed_ip.clone())
-            .with(random_port())
-            .with(Protocol::P2p(PeerId::random().into()))
-            .with(Protocol::P2pCircuit)
-            .with(Protocol::P2p(peer_id.into()));
-        let demanded = Multiaddr::empty()
-            .with(random_ip())
-            .with(random_port())
-            .with(Protocol::P2p(peer_id.into()));
-        let filtered = AsServer::filter_valid_addrs(peer_id, vec![demanded], &observed_addr);
-        assert!(filtered.is_empty());
     }
 }

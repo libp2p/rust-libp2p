@@ -50,8 +50,8 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     let net_behv_event_proc = quote! {::libp2p::swarm::NetworkBehaviourEventProcess};
     let either_ident = quote! {::libp2p::core::either::EitherOutput};
     let network_behaviour_action = quote! {::libp2p::swarm::NetworkBehaviourAction};
-    let into_protocols_handler = quote! {::libp2p::swarm::IntoConnectionHandler};
-    let protocols_handler = quote! {::libp2p::swarm::ConnectionHandler};
+    let into_connection_handler = quote! {::libp2p::swarm::IntoConnectionHandler};
+    let connection_handler = quote! {::libp2p::swarm::ConnectionHandler};
     let into_proto_select_ident = quote! {::libp2p::swarm::IntoConnectionHandlerSelect};
     let peer_id = quote! {::libp2p::core::PeerId};
     let connection_id = quote! {::libp2p::core::connection::ConnectionId};
@@ -371,7 +371,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     });
 
     // The [`ConnectionHandler`] associated type.
-    let protocols_handler_ty = {
+    let connection_handler_ty = {
         let mut ph_ty = None;
         for field in data_struct_fields.iter() {
             let ty = &field.ty;
@@ -402,7 +402,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
             match out_handler {
                 Some(h) => {
-                    out_handler = Some(quote! { #into_protocols_handler::select(#h, #builder) })
+                    out_handler = Some(quote! { #into_connection_handler::select(#h, #builder) })
                 }
                 ref mut h @ None => *h = Some(builder),
             }
@@ -476,7 +476,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
                 match out_handler {
                     Some(h) => {
-                        out_handler = Some(quote! { #into_protocols_handler::select(#h, #builder) })
+                        out_handler = Some(quote! { #into_connection_handler::select(#h, #builder) })
                     }
                     ref mut h @ None => *h = Some(builder),
                 }
@@ -530,11 +530,11 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         impl #impl_generics #trait_to_impl for #name #ty_generics
         #where_clause
         {
-            type ConnectionHandler = #protocols_handler_ty;
+            type ConnectionHandler = #connection_handler_ty;
             type OutEvent = #out_event;
 
             fn new_handler(&mut self) -> Self::ConnectionHandler {
-                use #into_protocols_handler;
+                use #into_connection_handler;
                 #new_handler
             }
 
@@ -552,7 +552,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 #(#inject_address_change_stmts);*
             }
 
-            fn inject_connection_closed(&mut self, peer_id: &#peer_id, connection_id: &#connection_id, endpoint: &#connected_point, handlers: <Self::ConnectionHandler as #into_protocols_handler>::Handler, remaining_established: usize) {
+            fn inject_connection_closed(&mut self, peer_id: &#peer_id, connection_id: &#connection_id, endpoint: &#connected_point, handlers: <Self::ConnectionHandler as #into_connection_handler>::Handler, remaining_established: usize) {
                 #(#inject_connection_closed_stmts);*
             }
 
@@ -596,7 +596,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 &mut self,
                 peer_id: #peer_id,
                 connection_id: #connection_id,
-                event: <<Self::ConnectionHandler as #into_protocols_handler>::Handler as #protocols_handler>::OutEvent
+                event: <<Self::ConnectionHandler as #into_connection_handler>::Handler as #connection_handler>::OutEvent
             ) {
                 match event {
                     #(#inject_node_event_stmts),*

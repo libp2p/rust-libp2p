@@ -124,6 +124,7 @@ members = [
     "core",
     "misc/metrics",
     "misc/multistream-select",
+    "misc/rw-stream-sink",
     "misc/keygen",
     "misc/prost-codec",
     "muxers/mplex",

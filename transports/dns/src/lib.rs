@@ -183,7 +183,7 @@ where
 
 impl<T, C, P> Transport for GenDnsConfig<T, C, P>
 where
-    T: Transport + Clone + Send + Unpin + 'static,
+    T: Transport + Send + Unpin + 'static,
     T::Error: Send,
     T::Dial: Send,
     C: DnsHandle<Error = ResolveError>,
@@ -238,7 +238,7 @@ where
 
 impl<T, C, P> GenDnsConfig<T, C, P>
 where
-    T: Transport + Clone + Send + Unpin + 'static,
+    T: Transport + Send + Unpin + 'static,
     T::Error: Send,
     T::Dial: Send,
     C: DnsHandle<Error = ResolveError>,
