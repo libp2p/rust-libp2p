@@ -343,17 +343,10 @@ where
         }
     }
 
-    fn close(&self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+    fn poll_close(&self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         match self {
-            EitherOutput::First(inner) => inner.close(cx),
-            EitherOutput::Second(inner) => inner.close(cx),
-        }
-    }
-
-    fn flush_all(&self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        match self {
-            EitherOutput::First(inner) => inner.flush_all(cx),
-            EitherOutput::Second(inner) => inner.flush_all(cx),
+            EitherOutput::First(inner) => inner.poll_close(cx),
+            EitherOutput::Second(inner) => inner.poll_close(cx),
         }
     }
 }

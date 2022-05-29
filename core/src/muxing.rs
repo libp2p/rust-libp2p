@@ -200,17 +200,6 @@ pub trait StreamMuxer {
     /// Destroys a substream.
     fn destroy_substream(&self, s: Self::Substream);
 
-    /// Returns `true` if the remote has shown any sign of activity after the muxer has been open.
-    ///
-    /// For optimisation purposes, the connection handshake of libp2p can be very optimistic and is
-    /// allowed to assume that the handshake has succeeded when it didn't in fact succeed. This
-    /// method can be called in order to determine whether the remote has accepted our handshake or
-    /// has potentially not received it yet.
-    #[deprecated(note = "This method is unused and will be removed in the future")]
-    fn is_remote_acknowledged(&self) -> bool {
-        true
-    }
-
     /// Closes this `StreamMuxer`.
     ///
     /// After this has returned `Poll::Ready(Ok(()))`, the muxer has become useless. All
@@ -223,14 +212,7 @@ pub trait StreamMuxer {
     /// >           that the remote is properly informed of the shutdown. However, apart from
     /// >           properly informing the remote, there is no difference between this and
     /// >           immediately dropping the muxer.
-    fn close(&self, cx: &mut Context<'_>) -> Poll<io::Result<()>>;
-
-    /// Flush this `StreamMuxer`.
-    ///
-    /// This drains any write buffers of substreams and delivers any pending shutdown notifications
-    /// due to `shutdown_substream` or `close`. One may thus shutdown groups of substreams
-    /// followed by a final `flush_all` instead of having to do `flush_substream` for each.
-    fn flush_all(&self, cx: &mut Context<'_>) -> Poll<io::Result<()>>;
+    fn poll_close(&self, cx: &mut Context<'_>) -> Poll<io::Result<()>>;
 }
 
 /// Event about a connection, reported by an implementation of [`StreamMuxer`].
@@ -609,13 +591,8 @@ impl StreamMuxer for StreamMuxerBox {
     }
 
     #[inline]
-    fn close(&self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        self.inner.close(cx)
-    }
-
-    #[inline]
-    fn flush_all(&self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        self.inner.flush_all(cx)
+    fn poll_close(&self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        self.inner.poll_close(cx)
     }
 }
 
@@ -742,12 +719,7 @@ where
     }
 
     #[inline]
-    fn close(&self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        self.inner.close(cx)
-    }
-
-    #[inline]
-    fn flush_all(&self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        self.inner.flush_all(cx)
+    fn poll_close(&self, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        self.inner.poll_close(cx)
     }
 }

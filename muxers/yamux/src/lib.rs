@@ -169,7 +169,7 @@ where
 
     fn destroy_substream(&self, _: Self::Substream) {}
 
-    fn close(&self, c: &mut Context<'_>) -> Poll<io::Result<()>> {
+    fn poll_close(&self, c: &mut Context<'_>) -> Poll<io::Result<()>> {
         let mut inner = self.0.lock();
         if let std::task::Poll::Ready(x) = Pin::new(&mut inner.control).poll_close(c) {
             return Poll::Ready(x.map_err(to_io_error));
@@ -182,10 +182,6 @@ where
             }
         }
         Poll::Pending
-    }
-
-    fn flush_all(&self, _: &mut Context<'_>) -> Poll<io::Result<()>> {
-        Poll::Ready(Ok(()))
     }
 }
 
