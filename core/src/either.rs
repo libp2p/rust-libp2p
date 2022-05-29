@@ -346,10 +346,10 @@ where
         }
     }
 
-    fn close(&self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+    fn poll_close(&self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         match self {
-            EitherOutput::First(inner) => inner.close(cx).map_err(|e| e.into()),
-            EitherOutput::Second(inner) => inner.close(cx).map_err(|e| e.into()),
+            EitherOutput::First(inner) => inner.poll_close(cx).map_err(|e| e.into()),
+            EitherOutput::Second(inner) => inner.poll_close(cx).map_err(|e| e.into()),
         }
     }
 
