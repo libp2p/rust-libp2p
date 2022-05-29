@@ -47,7 +47,7 @@
 //! let id_keys = identity::Keypair::generate_ed25519();
 //! let dh_keys = Keypair::<X25519Spec>::new().into_authentic(&id_keys).unwrap();
 //! let noise = NoiseConfig::xx(dh_keys).into_authenticated();
-//! let builder = TcpTransport::new().upgrade(upgrade::Version::V1).authenticate(noise);
+//! let builder = TcpTransport::default().upgrade(upgrade::Version::V1).authenticate(noise);
 //! // let transport = builder.multiplex(...);
 //! # }
 //! ```
