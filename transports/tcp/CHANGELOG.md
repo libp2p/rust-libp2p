@@ -2,6 +2,8 @@
 
 - Update to `libp2p-core` `v0.33.0`.
 
+- Remove implementation of `Clone` on `GenTcpConfig`.
+
 # 0.32.0 [2022-02-22]
 
 - Update to `libp2p-core` `v0.32.0`.

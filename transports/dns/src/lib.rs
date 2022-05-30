@@ -107,7 +107,6 @@ pub type DnsConfig<T> = GenDnsConfig<T, AsyncStdConnection, AsyncStdConnectionPr
 pub type TokioDnsConfig<T> = GenDnsConfig<T, TokioConnection, TokioConnectionProvider>;
 
 /// A `Transport` wrapper for performing DNS lookups when dialing `Multiaddr`esses.
-#[derive(Clone)]
 pub struct GenDnsConfig<T, C, P>
 where
     C: DnsHandle<Error = ResolveError>,
