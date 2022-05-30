@@ -952,7 +952,7 @@ mod tests {
         ) {
             let dest_addr = ready_rx.next().await.unwrap();
             let mut tcp = GenTcpConfig::<T>::new().port_reuse(true);
-            let mut listener = tcp.clone().listen_on(addr).unwrap();
+            let mut listener = tcp.listen_on(addr).unwrap();
             match listener.next().await.unwrap().unwrap() {
                 ListenerEvent::NewAddress(_) => {
                     // Check that tcp and listener share the same port reuse SocketAddr
@@ -1018,8 +1018,8 @@ mod tests {
         env_logger::try_init().ok();
 
         async fn listen_twice<T: Provider>(addr: Multiaddr) {
-            let tcp = GenTcpConfig::<T>::new().port_reuse(true);
-            let mut listener1 = tcp.clone().listen_on(addr).unwrap();
+            let mut tcp = GenTcpConfig::<T>::new().port_reuse(true);
+            let mut listener1 = tcp.listen_on(addr).unwrap();
             match listener1.next().await.unwrap().unwrap() {
                 ListenerEvent::NewAddress(addr1) => {
                     // Check that tcp and listener share the same port reuse SocketAddr
@@ -1032,7 +1032,7 @@ mod tests {
                     assert_eq!(port_reuse_tcp, port_reuse_listener1);
 
                     // Listen on the same address a second time.
-                    let mut listener2 = tcp.clone().listen_on(addr1.clone()).unwrap();
+                    let mut listener2 = tcp.listen_on(addr1.clone()).unwrap();
                     match listener2.next().await.unwrap().unwrap() {
                         ListenerEvent::NewAddress(addr2) => {
                             assert_eq!(addr1, addr2);

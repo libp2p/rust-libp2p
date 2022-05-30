@@ -627,7 +627,7 @@ mod tests {
             }
         }
 
-        async fn run<T, C, P>(transport: GenDnsConfig<T, C, P>)
+        async fn run<T, C, P>(mut transport: GenDnsConfig<T, C, P>)
         where
             C: DnsHandle<Error = ResolveError>,
             P: ConnectionProvider<Conn = C>,
@@ -637,7 +637,6 @@ mod tests {
         {
             // Success due to existing A record for example.com.
             let _ = transport
-                .clone()
                 .dial("/dns4/example.com/tcp/20000".parse().unwrap())
                 .unwrap()
                 .await
@@ -645,7 +644,6 @@ mod tests {
 
             // Success due to existing AAAA record for example.com.
             let _ = transport
-                .clone()
                 .dial("/dns6/example.com/tcp/20000".parse().unwrap())
                 .unwrap()
                 .await
@@ -653,7 +651,6 @@ mod tests {
 
             // Success due to pass-through, i.e. nothing to resolve.
             let _ = transport
-                .clone()
                 .dial("/ip4/1.2.3.4/tcp/20000".parse().unwrap())
                 .unwrap()
                 .await
@@ -661,7 +658,6 @@ mod tests {
 
             // Success due to the DNS TXT records at _dnsaddr.bootstrap.libp2p.io.
             let _ = transport
-                .clone()
                 .dial("/dnsaddr/bootstrap.libp2p.io".parse().unwrap())
                 .unwrap()
                 .await
@@ -671,7 +667,6 @@ mod tests {
             // an entry with suffix `/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN`,
             // i.e. a bootnode with such a peer ID.
             let _ = transport
-                .clone()
                 .dial("/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN".parse().unwrap())
                 .unwrap()
                 .await
@@ -680,7 +675,6 @@ mod tests {
             // Failure due to the DNS TXT records at _dnsaddr.libp2p.io not having
             // an entry with a random `p2p` suffix.
             match transport
-                .clone()
                 .dial(
                     format!("/dnsaddr/bootstrap.libp2p.io/p2p/{}", PeerId::random())
                         .parse()
@@ -696,7 +690,6 @@ mod tests {
 
             // Failure due to no records.
             match transport
-                .clone()
                 .dial("/dns4/example.invalid/tcp/20000".parse().unwrap())
                 .unwrap()
                 .await
