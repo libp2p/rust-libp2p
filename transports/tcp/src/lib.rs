@@ -995,7 +995,7 @@ mod tests {
             #[cfg(feature = "tokio")]
             {
                 let (ready_tx, ready_rx) = mpsc::channel(1);
-                let (port_reuse_tx, port_reuse_rx) = oneshot: channel();
+                let (port_reuse_tx, port_reuse_rx) = oneshot::channel();
                 let listener = listener::<tokio::Tcp>(addr.clone(), ready_tx, port_reuse_rx);
                 let dialer = dialer::<tokio::Tcp>(addr.clone(), ready_rx, port_reuse_tx);
                 let rt = tokio_crate::runtime::Builder::new_current_thread()
