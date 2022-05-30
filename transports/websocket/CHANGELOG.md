@@ -2,7 +2,9 @@
 
 - Update to `libp2p-core` `v0.33.0`.
 
-- Remove implementation of `Clone` on `WsConfig`.
+- Remove implementation of `Clone` on `WsConfig`. See [PR 2682].
+
+[PR 2682]: https://github.com/libp2p/rust-libp2p/pull/2682
 
 # 0.34.0 [2022-02-22]
 
