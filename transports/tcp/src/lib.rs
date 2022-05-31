@@ -67,7 +67,7 @@ use std::{
 use provider::{IfEvent, Provider};
 
 /// The configuration for a TCP/IP transport capability for libp2p.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct GenTcpConfig<T> {
     /// The type of the I/O provider.
     _impl: std::marker::PhantomData<T>,
@@ -258,7 +258,7 @@ where
     /// let listen_addr2: Multiaddr = "/ip4/127.0.0.1/tcp/9002".parse().unwrap();
     ///
     /// let mut tcp1 = TcpConfig::new().port_reuse(true);
-    /// let mut listener1 = tcp1.clone().listen_on(listen_addr1.clone()).expect("listener");
+    /// let mut listener1 = tcp1.listen_on(listen_addr1.clone()).expect("listener");
     /// match listener1.next().await.expect("event")? {
     ///     ListenerEvent::NewAddress(listen_addr) => {
     ///         println!("Listening on {:?}", listen_addr);
@@ -269,7 +269,7 @@ where
     /// }
     ///
     /// let mut tcp2 = TcpConfig::new().port_reuse(true);
-    /// let mut listener2 = tcp2.clone().listen_on(listen_addr2).expect("listener");
+    /// let mut listener2 = tcp2.listen_on(listen_addr2).expect("listener");
     /// match listener2.next().await.expect("event")? {
     ///     ListenerEvent::NewAddress(listen_addr) => {
     ///         println!("Listening on {:?}", listen_addr);
@@ -952,7 +952,7 @@ mod tests {
         ) {
             let dest_addr = ready_rx.next().await.unwrap();
             let mut tcp = GenTcpConfig::<T>::new().port_reuse(true);
-            let mut listener = tcp.clone().listen_on(addr).unwrap();
+            let mut listener = tcp.listen_on(addr).unwrap();
             match listener.next().await.unwrap().unwrap() {
                 ListenerEvent::NewAddress(_) => {
                     // Check that tcp and listener share the same port reuse SocketAddr
@@ -1018,8 +1018,8 @@ mod tests {
         env_logger::try_init().ok();
 
         async fn listen_twice<T: Provider>(addr: Multiaddr) {
-            let tcp = GenTcpConfig::<T>::new().port_reuse(true);
-            let mut listener1 = tcp.clone().listen_on(addr).unwrap();
+            let mut tcp = GenTcpConfig::<T>::new().port_reuse(true);
+            let mut listener1 = tcp.listen_on(addr).unwrap();
             match listener1.next().await.unwrap().unwrap() {
                 ListenerEvent::NewAddress(addr1) => {
                     // Check that tcp and listener share the same port reuse SocketAddr
@@ -1032,7 +1032,7 @@ mod tests {
                     assert_eq!(port_reuse_tcp, port_reuse_listener1);
 
                     // Listen on the same address a second time.
-                    let mut listener2 = tcp.clone().listen_on(addr1.clone()).unwrap();
+                    let mut listener2 = tcp.listen_on(addr1.clone()).unwrap();
                     match listener2.next().await.unwrap().unwrap() {
                         ListenerEvent::NewAddress(addr2) => {
                             assert_eq!(addr1, addr2);
