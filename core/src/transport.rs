@@ -152,7 +152,7 @@ pub trait Transport {
     /// Boxes the transport, including custom transport errors.
     fn boxed(self) -> boxed::Boxed<Self::Output>
     where
-        Self: Transport + Sized + Send + Sync + 'static,
+        Self: Transport + Sized + Send + 'static,
         Self::Dial: Send + 'static,
         Self::Listener: Send + 'static,
         Self::ListenerUpgrade: Send + 'static,
