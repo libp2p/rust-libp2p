@@ -1,4 +1,4 @@
-# 0.36.0 [unreleased]
+# 0.36.0
 
 - Don't require `Transport` to be `Clone`. See [PR 2529].
 
