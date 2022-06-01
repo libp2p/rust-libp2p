@@ -43,7 +43,7 @@
 
 # `libp2p` facade crate
 
-# 0.45.0 [unreleased]
+# 0.45.0
 
 - Update individual crates.
     - Update to [`libp2p-plaintext` `v0.33.0`](transports/plaintext/CHANGELOG.md).

@@ -54,7 +54,6 @@ async fn run(message1: Vec<u8>) {
     });
 
     let mut listener = transport
-        .clone()
         .listen_on("/ip4/0.0.0.0/tcp/0".parse().expect("multiaddr"))
         .expect("listener");
 

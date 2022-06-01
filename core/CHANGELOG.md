@@ -1,4 +1,4 @@
-# 0.33.0 [unreleased]
+# 0.33.0
 
 - Have methods on `Transport` take `&mut self` instead of `self`. See [PR 2529].
 - Remove `StreamMuxer::flush_all`. See [PR 2669].

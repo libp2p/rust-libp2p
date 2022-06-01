@@ -44,7 +44,7 @@ use std::{
 };
 
 /// A Websocket transport.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct WsConfig<T: Transport>
 where
     T: Transport,
