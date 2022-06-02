@@ -104,26 +104,24 @@ fn run(transport: &mut BenchTransport, payload: &Vec<u8>, listen_addr: &Multiadd
                 }
                 transport::ListenerEvent::Upgrade { upgrade, .. } => {
                     let (_peer, conn) = upgrade.await.unwrap();
-                    match poll_fn(|cx| conn.poll_event(cx)).await {
-                        Ok(muxing::StreamMuxerEvent::InboundSubstream(mut s)) => {
-                            let mut buf = vec![0u8; payload_len];
-                            let mut off = 0;
-                            loop {
-                                // Read in typical chunk sizes of up to 8KiB.
-                                let end = off + std::cmp::min(buf.len() - off, 8 * 1024);
-                                let n = poll_fn(|cx| {
-                                    conn.read_substream(cx, &mut s, &mut buf[off..end])
-                                })
-                                .await
-                                .unwrap();
-                                off += n;
-                                if off == buf.len() {
-                                    return;
-                                }
-                            }
+                    let mut s = poll_fn(|cx| conn.poll_event(cx))
+                        .await
+                        .expect("unexpected error")
+                        .into_inbound_substream()
+                        .expect("Unexpected muxer event");
+
+                    let mut buf = vec![0u8; payload_len];
+                    let mut off = 0;
+                    loop {
+                        // Read in typical chunk sizes of up to 8KiB.
+                        let end = off + std::cmp::min(buf.len() - off, 8 * 1024);
+                        let n = poll_fn(|cx| conn.read_substream(cx, &mut s, &mut buf[off..end]))
+                            .await
+                            .unwrap();
+                        off += n;
+                        if off == buf.len() {
+                            return;
                         }
-                        Ok(_) => panic!("Unexpected muxer event"),
-                        Err(e) => panic!("Unexpected error: {:?}", e),
                     }
                 }
                 _ => panic!("Unexpected listener event"),
