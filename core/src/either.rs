@@ -210,16 +210,14 @@ where
         cx: &mut Context<'_>,
     ) -> Poll<Result<StreamMuxerEvent<Self::Substream>, Self::Error>> {
         match self {
-            EitherOutput::First(inner) => inner.poll_event(cx).map(|result| {
-                result
-                    .map_err(|e| e.into())
-                    .map(|event| event.map_stream(EitherOutput::First))
-            }),
-            EitherOutput::Second(inner) => inner.poll_event(cx).map(|result| {
-                result
-                    .map_err(|e| e.into())
-                    .map(|event| event.map_stream(EitherOutput::Second))
-            }),
+            EitherOutput::First(inner) => inner
+                .poll_event(cx)
+                .map_err(|e| e.into())
+                .map_ok(|event| event.map_stream(EitherOutput::First)),
+            EitherOutput::Second(inner) => inner
+                .poll_event(cx)
+                .map_err(|e| e.into())
+                .map_ok(|event| event.map_stream(EitherOutput::Second)),
         }
     }
 
