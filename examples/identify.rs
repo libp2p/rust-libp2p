@@ -73,7 +73,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             SwarmEvent::NewListenAddr { address, .. } => println!("Listening on {:?}", address),
             // Prints peer id identify info is being sent to.
             SwarmEvent::Behaviour(IdentifyEvent::Sent {peer_id , ..}) => println!("Sent identify info to {:?}", peer_id),
-            // prints out the info received via the identify event
+            // Prints out the info received via the identify event
             SwarmEvent::Behaviour(IdentifyEvent::Received {info , ..}) => println!("Received {:?}", info),
             _ => {}
         }
