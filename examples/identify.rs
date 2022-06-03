@@ -68,7 +68,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         println!("Dialed {}", addr)
     }
 
-
     loop {
         match swarm.select_next_some().await {
             SwarmEvent::NewListenAddr { address, .. } => println!("Listening on {:?}", address),
