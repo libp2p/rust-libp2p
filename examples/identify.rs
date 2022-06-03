@@ -35,7 +35,7 @@
 //! ```
 //! The two nodes establish a connection, negotiate the identify protocol
 //! The dialing node prints out the peer id of the node it is sending identify info to
-//! The other node prints out the received identify info
+//! The other node prints out the received identify info.
 
 use futures::prelude::*;
 use libp2p::swarm::{Swarm, SwarmEvent};
