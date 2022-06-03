@@ -22,7 +22,6 @@ use async_trait::async_trait;
 use futures::stream::FusedStream;
 use futures::StreamExt;
 use futures::{future, Stream};
-use libp2p::core::muxing::StreamMuxerBox;
 use libp2p::core::transport::upgrade::Version;
 use libp2p::core::transport::MemoryTransport;
 use libp2p::core::upgrade::SelectUpgrade;
