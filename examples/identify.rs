@@ -25,7 +25,7 @@
 //! ```sh
 //! cargo run --example identify
 //! ```
-//! It will print the PeerId and the listening addresses, e.g. `Listening on
+//! It will print the `PeerId` and the listening addresses, e.g. `Listening on
 //! "/ip4/0.0.0.0/tcp/24915"`
 //!
 //! In the second terminal window, start a new instance of the example with:
