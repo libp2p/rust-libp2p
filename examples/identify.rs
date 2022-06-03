@@ -34,7 +34,7 @@
 //! cargo run --example identify -- /ip4/127.0.0.1/tcp/24915
 //! ```
 //! The two nodes establish a connection, negotiate the identify protocol
-//! The dialing node prints out the peer id of the node it is sending identify info to
+//! The dialing node prints out the `PeerId` of the node it is sending identify info to
 //! The other node prints out the received identify info.
 
 use futures::prelude::*;
