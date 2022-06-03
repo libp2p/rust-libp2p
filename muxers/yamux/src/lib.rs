@@ -427,10 +427,7 @@ impl<T> fmt::Debug for LocalIncoming<T> {
 impl<T> Stream for Incoming<T> {
     type Item = Result<yamux::Stream, YamuxError>;
 
-    fn poll_next(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> std::task::Poll<Option<Self::Item>> {
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         self.stream.as_mut().poll_next_unpin(cx)
     }
 
@@ -444,10 +441,7 @@ impl<T> Unpin for Incoming<T> {}
 impl<T> Stream for LocalIncoming<T> {
     type Item = Result<yamux::Stream, YamuxError>;
 
-    fn poll_next(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> std::task::Poll<Option<Self::Item>> {
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         self.stream.as_mut().poll_next_unpin(cx)
     }
 
