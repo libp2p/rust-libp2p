@@ -118,7 +118,7 @@ impl ConnectionHandler for IdentifyHandler {
                 IdentifyHandlerEvent::Identify(substream),
             )),
             EitherOutput::Second(fut) => {
-                if let Some(_) = self.inbound_identify_push.replace(fut) {
+                if self.inbound_identify_push.replace(fut).is_some() {
                     warn!(
                         "New inbound identify push stream while still upgrading previous one. \
                         Replacing previous with new.",
