@@ -89,7 +89,7 @@ where
 
     /// The maximum number of inbound streams concurrently negotiating on a connection.
     ///
-    /// See [super::handler_wrapper::HandlerWrapper::max_num_negotiating_inbound_streams].
+    /// See [`super::handler_wrapper::HandlerWrapper::max_number_negotiating_inbound_streams`].
     max_number_negotiating_inbound_streams: usize,
 
     /// The executor to use for running the background tasks. If `None`,
@@ -1238,7 +1238,7 @@ impl PoolConfig {
 
     /// The maximum number of inbound streams concurrently negotiating on a connection.
     ///
-    /// See [`super::handler_wrapper::HandlerWrapper::max_num_negotiating_inbound_streams`].
+    /// See [`super::handler_wrapper::HandlerWrapper::max_number_negotiating_inbound_streams`].
     pub fn with_max_number_negotiating_inbound_streams(mut self, v: usize) -> Self {
         self.max_number_negotiating_inbound_streams = v;
         self
