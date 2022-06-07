@@ -59,8 +59,8 @@ impl<T> KademliaHandlerProto<T> {
 impl<T: Clone + fmt::Debug + Send + 'static> IntoConnectionHandler for KademliaHandlerProto<T> {
     type Handler = KademliaHandler<T>;
 
-    fn into_handler(self, _: &PeerId, endpoint: &ConnectedPoint) -> Self::Handler {
-        KademliaHandler::new(self.config, endpoint.clone())
+    fn into_handler(self, remote_peer_id: &PeerId, endpoint: &ConnectedPoint) -> Self::Handler {
+        KademliaHandler::new(self.config, endpoint.clone(), *remote_peer_id)
     }
 
     fn inbound_protocol(&self) -> <Self::Handler as ConnectionHandler>::InboundProtocol {
@@ -98,6 +98,9 @@ pub struct KademliaHandler<TUserData> {
     /// The connected endpoint of the connection that the handler
     /// is associated with.
     endpoint: ConnectedPoint,
+
+    /// The [`PeerId`] of the remote.
+    remote_peer_id: PeerId,
 
     /// The current state of protocol confirmation.
     protocol_status: ProtocolStatus,
@@ -478,12 +481,17 @@ struct UniqueConnecId(u64);
 
 impl<TUserData> KademliaHandler<TUserData> {
     /// Create a [`KademliaHandler`] using the given configuration.
-    pub fn new(config: KademliaHandlerConfig, endpoint: ConnectedPoint) -> Self {
+    pub fn new(
+        config: KademliaHandlerConfig,
+        endpoint: ConnectedPoint,
+        remote_peer_id: PeerId,
+    ) -> Self {
         let keep_alive = KeepAlive::Until(Instant::now() + config.idle_timeout);
 
         KademliaHandler {
             config,
             endpoint,
+            remote_peer_id,
             next_connec_unique_id: UniqueConnecId(0),
             inbound_substreams: Default::default(),
             outbound_substreams: Default::default(),
@@ -561,13 +569,15 @@ where
             }) {
                 self.inbound_substreams.remove(position);
                 log::warn!(
-                    "New inbound substream exceeds inbound substream limit. \
-                    Removed older substream waiting to be reused."
+                    "New inbound substream to {:?} exceeds inbound substream limit. \
+                    Removed older substream waiting to be reused.",
+                    self.remote_peer_id,
                 )
             } else {
                 log::warn!(
-                    "New inbound substream exceeds inbound substream limit. \
-                     No older substream waiting to be reused. Dropping new substream."
+                    "New inbound substream to {:?} exceeds inbound substream limit. \
+                     No older substream waiting to be reused. Dropping new substream.",
+                    self.remote_peer_id,
                 );
                 return;
             }
