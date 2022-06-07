@@ -3,7 +3,7 @@ name = "libp2p-identify"
 edition = "2021"
 rust-version = "1.56.1"
 description = "Nodes identifcation protocol for libp2p"
-version = "0.36.0"
+version = "0.36.1"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -22,6 +22,7 @@ prost-codec = { version = "0.1", path = "../../misc/prost-codec" }
 prost = "0.10"
 smallvec = "1.6.1"
 thiserror = "1.0"
+void = "1.0"
 
 [dev-dependencies]
 async-std = "1.6.2"
