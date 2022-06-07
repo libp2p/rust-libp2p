@@ -1,3 +1,7 @@
+# 0.36.1 - unreleased
+
+- Allow at most one inbound identify push stream.
+
 # 0.36.0
 
 - Update to `libp2p-core` `v0.33.0`.
