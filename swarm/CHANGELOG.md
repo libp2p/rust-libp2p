@@ -1,3 +1,7 @@
+# 0.36.1 - unreleased
+
+- Limit negotiating inbound substreams per connection.
+
 # 0.36.0
 
 - Don't require `Transport` to be `Clone`. See [PR 2529].
