@@ -77,8 +77,9 @@ where
     shutdown: Shutdown,
     /// The substream upgrade protocol override, if any.
     substream_upgrade_protocol_override: Option<upgrade::Version>,
-    /// The maximum number of inbound streams concurrently negotiating. New inbound
-    /// streams exceeding the limit are dropped and thus reset.
+    /// The maximum number of inbound streams concurrently negotiating on a
+    /// connection. New inbound streams exceeding the limit are dropped and thus
+    /// reset.
     ///
     /// Note: This only enforces a limit on the number of concurrently
     /// negotiating inbound streams. The total number of inbound streams on a
