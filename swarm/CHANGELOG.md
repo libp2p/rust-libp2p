@@ -1,3 +1,9 @@
+# 0.36.1 - unreleased
+
+- Limit negotiating inbound substreams per connection. See [PR 2697].
+
+[PR 2697]: https://github.com/libp2p/rust-libp2p/pull/2697
+
 # 0.36.0
 
 - Don't require `Transport` to be `Clone`. See [PR 2529].

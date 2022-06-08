@@ -77,6 +77,16 @@ where
     shutdown: Shutdown,
     /// The substream upgrade protocol override, if any.
     substream_upgrade_protocol_override: Option<upgrade::Version>,
+    /// The maximum number of inbound streams concurrently negotiating on a
+    /// connection. New inbound streams exceeding the limit are dropped and thus
+    /// reset.
+    ///
+    /// Note: This only enforces a limit on the number of concurrently
+    /// negotiating inbound streams. The total number of inbound streams on a
+    /// connection is the sum of negotiating and negotiated streams. A limit on
+    /// the total number of streams can be enforced at the [`StreamMuxerBox`]
+    /// level.
+    max_negotiating_inbound_streams: usize,
 }
 
 impl<TConnectionHandler: ConnectionHandler> std::fmt::Debug for HandlerWrapper<TConnectionHandler> {
@@ -98,6 +108,7 @@ impl<TConnectionHandler: ConnectionHandler> HandlerWrapper<TConnectionHandler> {
     pub(crate) fn new(
         handler: TConnectionHandler,
         substream_upgrade_protocol_override: Option<upgrade::Version>,
+        max_negotiating_inbound_streams: usize,
     ) -> Self {
         Self {
             handler,
@@ -107,6 +118,7 @@ impl<TConnectionHandler: ConnectionHandler> HandlerWrapper<TConnectionHandler> {
             unique_dial_upgrade_id: 0,
             shutdown: Shutdown::None,
             substream_upgrade_protocol_override,
+            max_negotiating_inbound_streams,
         }
     }
 
@@ -243,6 +255,14 @@ where
     ) {
         match endpoint {
             SubstreamEndpoint::Listener => {
+                if self.negotiating_in.len() == self.max_negotiating_inbound_streams {
+                    log::warn!(
+                        "Incoming substream exceeding maximum number of \
+                         negotiating inbound streams. Dropping."
+                    );
+                    return;
+                }
+
                 let protocol = self.handler.listen_protocol();
                 let timeout = *protocol.timeout();
                 let (upgrade, user_data) = protocol.into_upgrade();
