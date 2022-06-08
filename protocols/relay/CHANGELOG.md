@@ -2,8 +2,9 @@
 
 - Respond to at most one incoming reservation request. Deny <= 8 incoming
   circuit requests with one per peer. And deny new circuits before accepting new
-  circuits.
-
+  circuits. See [PR 2698].
+  
+[PR 2698]: https://github.com/libp2p/rust-libp2p/pull/2698
 # 0.9.0
 
 - Update to `libp2p-core` `v0.33.0`.
