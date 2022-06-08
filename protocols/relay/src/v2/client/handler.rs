@@ -265,16 +265,18 @@ impl ConnectionHandler for Handler {
                         "Dropping inbound circuit request to be denied from {:?} due to exceeding limit.",
                         src_peer_id,
                     );
-                } else {
-                    if let Some(_) = self.circuit_deny_futs.insert(
+                } else if self
+                    .circuit_deny_futs
+                    .insert(
                         src_peer_id,
                         inbound_circuit.deny(Status::NoReservation).boxed(),
-                    ) {
-                        log::warn!(
+                    )
+                    .is_some()
+                {
+                    log::warn!(
                             "Dropping existing inbound circuit request to be denied from {:?} in favor of new one.",
                             src_peer_id
                         )
-                    }
                 }
             }
         }

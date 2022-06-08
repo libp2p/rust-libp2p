@@ -519,11 +519,12 @@ impl ConnectionHandler for Handler {
                 inbound_reservation_req,
                 addrs,
             } => {
-                if let Some(_) =
-                    self.reservation_request_future
-                        .replace(ReservationRequestFuture::Accepting(
-                            inbound_reservation_req.accept(addrs).boxed(),
-                        ))
+                if self
+                    .reservation_request_future
+                    .replace(ReservationRequestFuture::Accepting(
+                        inbound_reservation_req.accept(addrs).boxed(),
+                    ))
+                    .is_some()
                 {
                     log::warn!("Dropping existing deny/accept future in favor of new one.")
                 }
@@ -532,11 +533,12 @@ impl ConnectionHandler for Handler {
                 inbound_reservation_req,
                 status,
             } => {
-                if let Some(_) =
-                    self.reservation_request_future
-                        .replace(ReservationRequestFuture::Denying(
-                            inbound_reservation_req.deny(status).boxed(),
-                        ))
+                if self
+                    .reservation_request_future
+                    .replace(ReservationRequestFuture::Denying(
+                        inbound_reservation_req.deny(status).boxed(),
+                    ))
+                    .is_some()
                 {
                     log::warn!("Dropping existing deny/accept future in favor of new one.")
                 }
