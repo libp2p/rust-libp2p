@@ -97,12 +97,12 @@ where
         muxer: StreamMuxerBox,
         handler: THandler,
         substream_upgrade_protocol_override: Option<upgrade::Version>,
-        max_number_negotiating_inbound_streams: usize,
+        max_negotiating_inbound_streams: usize,
     ) -> Self {
         let wrapped_handler = HandlerWrapper::new(
             handler,
             substream_upgrade_protocol_override,
-            max_number_negotiating_inbound_streams,
+            max_negotiating_inbound_streams,
         );
         Connection {
             muxing: Muxing::new(muxer),

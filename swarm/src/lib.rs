@@ -1366,11 +1366,9 @@ where
 
     /// The maximum number of inbound streams concurrently negotiating on a connection.
     ///
-    /// See [`PoolConfig::with_max_number_negotiating_inbound_streams`].
-    pub fn max_number_negotiating_inbound_streams(mut self, v: usize) -> Self {
-        self.pool_config = self
-            .pool_config
-            .with_max_number_negotiating_inbound_streams(v);
+    /// See [`PoolConfig::with_max_negotiating_inbound_streams`].
+    pub fn max_negotiating_inbound_streams(mut self, v: usize) -> Self {
+        self.pool_config = self.pool_config.with_max_negotiating_inbound_streams(v);
         self
     }
 

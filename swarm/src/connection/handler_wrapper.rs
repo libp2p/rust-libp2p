@@ -86,7 +86,7 @@ where
     /// connection is the sum of negotiating and negotiated streams. A limit on
     /// the total number of streams can be enforced at the [`StreamMuxerBox`]
     /// level.
-    max_number_negotiating_inbound_streams: usize,
+    max_negotiating_inbound_streams: usize,
 }
 
 impl<TConnectionHandler: ConnectionHandler> std::fmt::Debug for HandlerWrapper<TConnectionHandler> {
@@ -108,7 +108,7 @@ impl<TConnectionHandler: ConnectionHandler> HandlerWrapper<TConnectionHandler> {
     pub(crate) fn new(
         handler: TConnectionHandler,
         substream_upgrade_protocol_override: Option<upgrade::Version>,
-        max_number_negotiating_inbound_streams: usize,
+        max_negotiating_inbound_streams: usize,
     ) -> Self {
         Self {
             handler,
@@ -118,7 +118,7 @@ impl<TConnectionHandler: ConnectionHandler> HandlerWrapper<TConnectionHandler> {
             unique_dial_upgrade_id: 0,
             shutdown: Shutdown::None,
             substream_upgrade_protocol_override,
-            max_number_negotiating_inbound_streams,
+            max_negotiating_inbound_streams,
         }
     }
 
@@ -255,7 +255,7 @@ where
     ) {
         match endpoint {
             SubstreamEndpoint::Listener => {
-                if self.negotiating_in.len() == self.max_number_negotiating_inbound_streams {
+                if self.negotiating_in.len() == self.max_negotiating_inbound_streams {
                     log::warn!(
                         "Incoming substream exceeding maximum number of \
                          negotiating inbound streams. Dropping."
