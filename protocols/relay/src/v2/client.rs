@@ -41,7 +41,7 @@ use libp2p_swarm::{
     NotifyHandler, PollParameters,
 };
 use std::collections::{hash_map, HashMap, VecDeque};
-use std::io::{Error, IoSlice};
+use std::io::{Error, ErrorKind, IoSlice};
 use std::ops::DerefMut;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -84,7 +84,7 @@ pub enum Event {
     /// Denying an inbound circuit request failed.
     InboundCircuitReqDenyFailed {
         src_peer_id: PeerId,
-        error: std::io::Error,
+        error: inbound_stop::UpgradeError,
     },
 }
 
@@ -320,7 +320,7 @@ impl NetworkBehaviour for Client {
 /// A [`NegotiatedSubstream`] acting as a [`RelayedConnection`].
 pub enum RelayedConnection {
     InboundAccepting {
-        accept: BoxFuture<'static, Result<RelayedConnection, std::io::Error>>,
+        accept: BoxFuture<'static, Result<RelayedConnection, Error>>,
     },
     Operational {
         read_buffer: Bytes,
@@ -338,7 +338,10 @@ impl RelayedConnection {
     ) -> Self {
         RelayedConnection::InboundAccepting {
             accept: async {
-                let (substream, read_buffer) = circuit.accept().await?;
+                let (substream, read_buffer) = circuit
+                    .accept()
+                    .await
+                    .map_err(|e| Error::new(ErrorKind::Other, e))?;
                 Ok(RelayedConnection::Operational {
                     read_buffer,
                     substream,
