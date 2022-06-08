@@ -1337,7 +1337,6 @@ where
             self.pool_config.or_else_with_executor(|| {
                 match ThreadPoolBuilder::new()
                     .name_prefix("libp2p-swarm-task-")
-                    .pool_size(1)
                     .create()
                 {
                     Ok(tp) => Some(Box::new(move |f| tp.spawn_ok(f))),
