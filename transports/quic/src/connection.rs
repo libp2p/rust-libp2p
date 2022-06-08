@@ -288,16 +288,12 @@ impl Connection {
                         }
                         Poll::Pending => break,
                     }
-                } else if let Some(when) = self.connection.poll_timeout() {
-                    if when <= now {
-                        self.connection.handle_timeout(now);
-                    } else {
-                        //let delay = when - now;
-                        self.next_timeout = Some(Timer::at(when));
-                    }
-                } else {
-                    break;
                 }
+                if let Some(when) = self.connection.poll_timeout() {
+                    self.next_timeout = Some(Timer::at(when));
+                    continue;
+                }
+                break;
             }
 
             // The connection also needs to be able to send control messages to the endpoint. This is
