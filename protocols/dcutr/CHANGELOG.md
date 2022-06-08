@@ -1,3 +1,7 @@
+# 0.3.1 - unreleased
+
+- Upgrade at most one inbound connect request.
+
 # 0.3.0
 
 - Update to `libp2p-core` `v0.33.0`.
