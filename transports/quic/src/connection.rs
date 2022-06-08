@@ -202,39 +202,6 @@ impl Connection {
         self.connection.streams().open(quinn_proto::Dir::Bi)
     }
 
-    // /// Reads data from the given substream. Similar to the API of `std::io::Read`.
-    // ///
-    // /// If `Err(ReadError::Blocked)` is returned, then a [`ConnectionEvent::StreamReadable`] event
-    // /// will later be produced when the substream has readable data. A
-    // /// [`ConnectionEvent::StreamStopped`] event can also be emitted.
-    // pub(crate) fn read_substream(
-    //     &mut self,
-    //     id: quinn_proto::StreamId,
-    //     buf: &mut [u8],
-    // ) -> Result<usize, quinn_proto::ReadError> {
-    //     let mut stream = self.connection.recv_stream(id);
-    //     let mut chunks = stream.read(true)?;
-    //     self.connection.read(id, buf).map(|n| {
-    //         // `n` is `None` in case of EOF.
-    //         // See https://github.com/quinn-rs/quinn/blob/9aa3bde3aa1319b2c743f792312508de9270b8c6/quinn/src/streams.rs#L367-L370
-    //         debug_assert_ne!(n, Some(0));  // Sanity check
-    //         n.unwrap_or(0)
-    //     })
-    // }
-
-    // /// Writes data to the given substream. Similar to the API of `std::io::Write`.
-    // ///
-    // /// If `Err(WriteError::Blocked)` is returned, then a [`ConnectionEvent::StreamWritable`] event
-    // /// will later be produced when the substream can be written to. A
-    // /// [`ConnectionEvent::StreamStopped`] event can also be emitted.
-    // pub(crate) fn write_substream(
-    //     &mut self,
-    //     id: quinn_proto::StreamId,
-    //     buf: &[u8],
-    // ) -> Result<usize, quinn_proto::WriteError> {
-    //     self.connection.write(id, buf)
-    // }
-
     /// Closes the given substream.
     ///
     /// [`Connection::write_substream`] must no longer be called. The substream is however still
