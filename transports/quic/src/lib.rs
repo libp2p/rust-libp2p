@@ -18,8 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-#![recursion_limit = "1024"]
-
 //! Implementation of the libp2p `Transport` and `StreamMuxer` traits for QUIC.
 //!
 //! # Usage
