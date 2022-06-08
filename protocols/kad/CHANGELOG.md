@@ -1,3 +1,7 @@
+# 0.37.1 - unreleased
+
+- Limit # of inbound substreams to 32.
+
 # 0.37.0
 
 - Update to `libp2p-core` `v0.33.0`.
