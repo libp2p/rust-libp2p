@@ -1,4 +1,4 @@
-# 0.36.1 - unreleased
+# 0.36.1
 
 - Limit negotiating inbound substreams per connection. See [PR 2697].
 

@@ -1,4 +1,4 @@
-# 0.9.1 - unreleased
+# 0.9.1
 
 - Respond to at most one incoming reservation request. Deny <= 8 incoming
   circuit requests with one per peer. And deny new circuits before accepting new

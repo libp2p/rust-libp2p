@@ -1,4 +1,4 @@
-# 0.3.1 - unreleased
+# 0.3.1
 
 - Upgrade at most one inbound connect request.
 
