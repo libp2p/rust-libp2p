@@ -1,3 +1,9 @@
+# 0.37.1 - unreleased
+
+- Limit # of inbound streams to 32. [See PR 2699].
+
+[PR 2699]: https://github.com/libp2p/rust-libp2p/pull/2699
+
 # 0.37.0
 
 - Update to `libp2p-core` `v0.33.0`.
