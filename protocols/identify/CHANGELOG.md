@@ -1,4 +1,4 @@
-# 0.36.1 - unreleased
+# 0.36.1
 
 - Allow at most one inbound identify push stream.
 

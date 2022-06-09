@@ -43,6 +43,15 @@
 
 # `libp2p` facade crate
 
+# 0.45.1
+
+- Update individual crates.
+    - Update to [`libp2p-dcutr` `v0.3.1`](protocols/dcutr/CHANGELOG.md).
+    - Update to [`libp2p-identify` `v0.36.1`](protocols/identify/CHANGELOG.md).
+    - Update to [`libp2p-kad` `v0.37.1`](protocols/kad/CHANGELOG.md).
+    - Update to [`libp2p-relay` `v0.9.1`](protocols/relay/CHANGELOG.md).
+    - Update to [`libp2p-swarm` `v0.36.1`](swarm/CHANGELOG.md).
+
 # 0.45.0
 
 - Update individual crates.
