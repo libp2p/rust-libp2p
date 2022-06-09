@@ -1,4 +1,4 @@
-# 0.37.1 - unreleased
+# 0.37.1
 
 - Limit # of inbound streams to 32. [See PR 2699].
 
