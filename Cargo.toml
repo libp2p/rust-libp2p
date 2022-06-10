@@ -1,9 +1,9 @@
 [package]
 name = "libp2p"
 edition = "2021"
-rust-version = "1.56.1"
+rust-version = "1.60.0"
 description = "Peer-to-peer networking library"
-version = "0.45.1"
+version = "0.46.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -35,35 +35,35 @@ default = [
     "websocket",
     "yamux",
 ]
-autonat = ["libp2p-autonat"]
-dcutr = ["libp2p-dcutr", "libp2p-metrics/dcutr"]
-deflate = ["libp2p-deflate"]
-dns-async-std = ["libp2p-dns", "libp2p-dns/async-std"]
-dns-tokio = ["libp2p-dns", "libp2p-dns/tokio"]
-floodsub = ["libp2p-floodsub"]
-identify = ["libp2p-identify", "libp2p-metrics/identify"]
-kad = ["libp2p-kad", "libp2p-metrics/kad"]
-gossipsub = ["libp2p-gossipsub", "libp2p-metrics/gossipsub"]
-metrics = ["libp2p-metrics"]
-mdns = ["libp2p-mdns"]
-mplex = ["libp2p-mplex"]
-noise = ["libp2p-noise"]
-ping = ["libp2p-ping", "libp2p-metrics/ping"]
-plaintext = ["libp2p-plaintext"]
-pnet = ["libp2p-pnet"]
-relay = ["libp2p-relay", "libp2p-metrics/relay"]
-request-response = ["libp2p-request-response"]
-rendezvous = ["libp2p-rendezvous"]
-tcp-async-io = ["libp2p-tcp", "libp2p-tcp/async-io"]
-tcp-tokio = ["libp2p-tcp", "libp2p-tcp/tokio"]
-uds = ["libp2p-uds"]
+autonat = ["dep:libp2p-autonat"]
+dcutr = ["dep:libp2p-dcutr", "libp2p-metrics?/dcutr"]
+deflate = ["dep:libp2p-deflate"]
+dns-async-std = ["dep:libp2p-dns", "libp2p-dns?/async-std"]
+dns-tokio = ["dep:libp2p-dns", "libp2p-dns?/tokio"]
+floodsub = ["dep:libp2p-floodsub"]
+identify = ["dep:libp2p-identify", "libp2p-metrics?/identify"]
+kad = ["dep:libp2p-kad", "libp2p-metrics?/kad"]
+gossipsub = ["dep:libp2p-gossipsub", "libp2p-metrics?/gossipsub"]
+metrics = ["dep:libp2p-metrics"]
+mdns = ["dep:libp2p-mdns"]
+mplex = ["dep:libp2p-mplex"]
+noise = ["dep:libp2p-noise"]
+ping = ["dep:libp2p-ping", "libp2p-metrics?/ping"]
+plaintext = ["dep:libp2p-plaintext"]
+pnet = ["dep:libp2p-pnet"]
+relay = ["dep:libp2p-relay", "libp2p-metrics?/relay"]
+request-response = ["dep:libp2p-request-response"]
+rendezvous = ["dep:libp2p-rendezvous"]
+tcp-async-io = ["dep:libp2p-tcp", "libp2p-tcp?/async-io"]
+tcp-tokio = ["dep:libp2p-tcp", "libp2p-tcp?/tokio"]
+uds = ["dep:libp2p-uds"]
 wasm-bindgen = ["futures-timer/wasm-bindgen", "instant/wasm-bindgen", "getrandom/js", "rand/wasm-bindgen"]
-wasm-ext = ["libp2p-wasm-ext"]
-wasm-ext-websocket = ["wasm-ext", "libp2p-wasm-ext/websocket"]
-websocket = ["libp2p-websocket"]
-yamux = ["libp2p-yamux"]
+wasm-ext = ["dep:libp2p-wasm-ext"]
+wasm-ext-websocket = ["wasm-ext", "libp2p-wasm-ext?/websocket"]
+websocket = ["dep:libp2p-websocket"]
+yamux = ["dep:libp2p-yamux"]
 secp256k1 = ["libp2p-core/secp256k1"]
-serde = ["libp2p-core/serde", "libp2p-kad/serde", "libp2p-gossipsub/serde"]
+serde = ["libp2p-core/serde", "libp2p-kad?/serde", "libp2p-gossipsub?/serde"]
 
 [package.metadata.docs.rs]
 all-features = true
