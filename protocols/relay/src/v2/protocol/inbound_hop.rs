@@ -25,13 +25,10 @@ use bytes::Bytes;
 use futures::{future::BoxFuture, prelude::*};
 use libp2p_core::{upgrade, Multiaddr, PeerId};
 use libp2p_swarm::NegotiatedSubstream;
-use prost::Message;
 use std::convert::TryInto;
-use std::io::Cursor;
 use std::iter;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use thiserror::Error;
-use unsigned_varint::codec::UviBytes;
 
 pub struct Upgrade {
     pub reservation_duration: Duration,
@@ -54,23 +51,19 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
     fn upgrade_inbound(self, substream: NegotiatedSubstream, _: Self::Info) -> Self::Future {
-        let mut codec = UviBytes::default();
-        codec.set_max_len(MAX_MESSAGE_SIZE);
-        let mut substream = Framed::new(substream, codec);
+        let mut substream = Framed::new(substream, prost_codec::Codec::new(MAX_MESSAGE_SIZE));
 
         async move {
-            let msg: bytes::BytesMut = substream
-                .next()
-                .await
-                .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::UnexpectedEof, ""))??;
-
             let HopMessage {
                 r#type,
                 peer,
                 reservation: _,
                 limit: _,
                 status: _,
-            } = HopMessage::decode(Cursor::new(msg))?;
+            } = substream
+                .next()
+                .await
+                .ok_or(FatalUpgradeError::StreamClosed)??;
 
             let r#type =
                 hop_message::Type::from_i32(r#type).ok_or(FatalUpgradeError::ParseTypeField)?;
@@ -103,28 +96,22 @@ pub enum UpgradeError {
     Fatal(#[from] FatalUpgradeError),
 }
 
-impl From<prost::DecodeError> for UpgradeError {
-    fn from(error: prost::DecodeError) -> Self {
-        Self::Fatal(error.into())
-    }
-}
-
-impl From<std::io::Error> for UpgradeError {
-    fn from(error: std::io::Error) -> Self {
+impl From<prost_codec::Error> for UpgradeError {
+    fn from(error: prost_codec::Error) -> Self {
         Self::Fatal(error.into())
     }
 }
 
 #[derive(Debug, Error)]
 pub enum FatalUpgradeError {
-    #[error("Failed to decode message: {0}.")]
-    Decode(
+    #[error("Failed to encode or decode")]
+    Codec(
         #[from]
         #[source]
-        prost::DecodeError,
+        prost_codec::Error,
     ),
-    #[error(transparent)]
-    Io(#[from] std::io::Error),
+    #[error("Stream closed")]
+    StreamClosed,
     #[error("Failed to parse response type field.")]
     ParseTypeField,
     #[error("Failed to parse peer id.")]
@@ -141,14 +128,14 @@ pub enum Req {
 }
 
 pub struct ReservationReq {
-    substream: Framed<NegotiatedSubstream, UviBytes<Cursor<Vec<u8>>>>,
+    substream: Framed<NegotiatedSubstream, prost_codec::Codec<HopMessage>>,
     reservation_duration: Duration,
     max_circuit_duration: Duration,
     max_circuit_bytes: u64,
 }
 
 impl ReservationReq {
-    pub async fn accept(self, addrs: Vec<Multiaddr>) -> Result<(), std::io::Error> {
+    pub async fn accept(self, addrs: Vec<Multiaddr>) -> Result<(), UpgradeError> {
         let msg = HopMessage {
             r#type: hop_message::Type::Status.into(),
             peer: None,
@@ -175,7 +162,7 @@ impl ReservationReq {
         self.send(msg).await
     }
 
-    pub async fn deny(self, status: Status) -> Result<(), std::io::Error> {
+    pub async fn deny(self, status: Status) -> Result<(), UpgradeError> {
         let msg = HopMessage {
             r#type: hop_message::Type::Status.into(),
             peer: None,
@@ -187,11 +174,8 @@ impl ReservationReq {
         self.send(msg).await
     }
 
-    async fn send(mut self, msg: HopMessage) -> Result<(), std::io::Error> {
-        let mut encoded_msg = Vec::with_capacity(msg.encoded_len());
-        msg.encode(&mut encoded_msg)
-            .expect("Vec to have sufficient capacity.");
-        self.substream.send(Cursor::new(encoded_msg)).await?;
+    async fn send(mut self, msg: HopMessage) -> Result<(), UpgradeError> {
+        self.substream.send(msg).await?;
         self.substream.flush().await?;
         self.substream.close().await?;
 
@@ -201,7 +185,7 @@ impl ReservationReq {
 
 pub struct CircuitReq {
     dst: PeerId,
-    substream: Framed<NegotiatedSubstream, UviBytes<Cursor<Vec<u8>>>>,
+    substream: Framed<NegotiatedSubstream, prost_codec::Codec<HopMessage>>,
 }
 
 impl CircuitReq {
@@ -209,7 +193,7 @@ impl CircuitReq {
         self.dst
     }
 
-    pub async fn accept(mut self) -> Result<(NegotiatedSubstream, Bytes), std::io::Error> {
+    pub async fn accept(mut self) -> Result<(NegotiatedSubstream, Bytes), UpgradeError> {
         let msg = HopMessage {
             r#type: hop_message::Type::Status.into(),
             peer: None,
@@ -234,7 +218,7 @@ impl CircuitReq {
         Ok((io, read_buffer.freeze()))
     }
 
-    pub async fn deny(mut self, status: Status) -> Result<(), std::io::Error> {
+    pub async fn deny(mut self, status: Status) -> Result<(), UpgradeError> {
         let msg = HopMessage {
             r#type: hop_message::Type::Status.into(),
             peer: None,
@@ -243,14 +227,11 @@ impl CircuitReq {
             status: Some(status.into()),
         };
         self.send(msg).await?;
-        self.substream.close().await
+        self.substream.close().await.map_err(Into::into)
     }
 
-    async fn send(&mut self, msg: HopMessage) -> Result<(), std::io::Error> {
-        let mut encoded_msg = Vec::with_capacity(msg.encoded_len());
-        msg.encode(&mut encoded_msg)
-            .expect("Vec to have sufficient capacity.");
-        self.substream.send(Cursor::new(encoded_msg)).await?;
+    async fn send(&mut self, msg: HopMessage) -> Result<(), prost_codec::Error> {
+        self.substream.send(msg).await?;
         self.substream.flush().await?;
 
         Ok(())
