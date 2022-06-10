@@ -757,8 +757,12 @@ impl Action {
                     addrs: poll_parameters
                         .external_addresses()
                         .map(|a| {
-                            a.addr
-                                .with(Protocol::P2p((*poll_parameters.local_peer_id()).into()))
+                            let p2p_proto =
+                                Protocol::P2p(*poll_parameters.local_peer_id().as_ref());
+                            match a.addr.iter().last() {
+                                Some(p) if p == p2p_proto => a.addr,
+                                _ => a.addr.with(p2p_proto),
+                            }
                         })
                         .collect(),
                 }),
