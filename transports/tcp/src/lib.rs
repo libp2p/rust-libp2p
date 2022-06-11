@@ -59,6 +59,7 @@ use std::{
     io,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpListener},
     pin::Pin,
+    sync::{Arc, RwLock},
     task::{Context, Poll},
     time::Duration,
 };
@@ -74,8 +75,8 @@ pub struct GenTcpConfig {
     nodelay: Option<bool>,
     /// Size of the listen backlog for listen sockets.
     backlog: u32,
-    /// The configuration of port reuse when dialing.
-    port_reuse: PortReuse,
+    /// Whether port reuse should be enabled.
+    enable_port_reuse: bool,
 }
 
 type Port = u16;
@@ -93,7 +94,7 @@ enum PortReuse {
     Enabled {
         /// The addresses and ports of the listening sockets
         /// registered as eligible for port reuse when dialing.
-        listen_addrs: HashSet<(IpAddr, Port)>,
+        listen_addrs: Arc<RwLock<HashSet<(IpAddr, Port)>>>,
     },
 }
 
@@ -104,7 +105,10 @@ impl PortReuse {
     fn register(&mut self, ip: IpAddr, port: Port) {
         if let PortReuse::Enabled { listen_addrs } = self {
             log::trace!("Registering for port reuse: {}:{}", ip, port);
-            listen_addrs.insert((ip, port));
+            listen_addrs
+                .write()
+                .expect("`register()` and `unregister()` never panic while holding the lock")
+                .insert((ip, port));
         }
     }
 
@@ -114,7 +118,10 @@ impl PortReuse {
     fn unregister(&mut self, ip: IpAddr, port: Port) {
         if let PortReuse::Enabled { listen_addrs } = self {
             log::trace!("Unregistering for port reuse: {}:{}", ip, port);
-            listen_addrs.remove(&(ip, port));
+            listen_addrs
+                .write()
+                .expect("`register()` and `unregister()` never panic while holding the lock")
+                .remove(&(ip, port));
         }
     }
 
@@ -129,7 +136,11 @@ impl PortReuse {
     /// listening socket address is found.
     fn local_dial_addr(&self, remote_ip: &IpAddr) -> Option<SocketAddr> {
         if let PortReuse::Enabled { listen_addrs } = self {
-            for (ip, port) in listen_addrs.iter() {
+            for (ip, port) in listen_addrs
+                .read()
+                .expect("`local_dial_addr` never panic while holding the lock")
+                .iter()
+            {
                 if ip.is_ipv4() == remote_ip.is_ipv4()
                     && ip.is_loopback() == remote_ip.is_loopback()
                 {
@@ -162,7 +173,7 @@ impl GenTcpConfig {
             ttl: None,
             nodelay: None,
             backlog: 1024,
-            port_reuse: PortReuse::Disabled,
+            enable_port_reuse: false,
         }
     }
 
@@ -279,14 +290,7 @@ impl GenTcpConfig {
     /// option `SO_REUSEPORT` is set, if available, to permit
     /// reuse of listening ports for multiple sockets.
     pub fn port_reuse(mut self, port_reuse: bool) -> Self {
-        self.port_reuse = if port_reuse {
-            PortReuse::Enabled {
-                listen_addrs: HashSet::new(),
-            }
-        } else {
-            PortReuse::Disabled
-        };
-
+        self.enable_port_reuse = port_reuse;
         self
     }
 }
@@ -303,6 +307,9 @@ where
 {
     config: GenTcpConfig,
 
+    /// The configuration of port reuse when dialing.
+    port_reuse: PortReuse,
+
     next_listener_id: ListenerId,
     /// All the active listeners.
     /// The `Listener` struct contains a stream that we want to be pinned. Since the `VecDeque`
@@ -317,8 +324,16 @@ where
     T: Provider + Send,
 {
     pub fn new(config: GenTcpConfig) -> Self {
+        let port_reuse = if config.enable_port_reuse {
+            PortReuse::Enabled {
+                listen_addrs: Arc::new(RwLock::new(HashSet::new())),
+            }
+        } else {
+            PortReuse::Disabled
+        };
         GenTcpTransport {
             config,
+            port_reuse,
             ..Default::default()
         }
     }
@@ -341,7 +356,7 @@ where
         }
         socket.set_reuse_address(true)?;
         #[cfg(unix)]
-        if let PortReuse::Enabled { .. } = &self.config.port_reuse {
+        if let PortReuse::Enabled { .. } = &self.port_reuse {
             socket.set_reuse_port(true)?;
         }
         Ok(socket)
@@ -356,7 +371,7 @@ where
         socket.bind(&socket_addr.into())?;
         socket.listen(self.config.backlog as _)?;
         socket.set_nonblocking(true)?;
-        TcpListenStream::<T>::new(id, socket.into(), self.config.port_reuse.clone())
+        TcpListenStream::<T>::new(id, socket.into(), self.port_reuse.clone())
     }
 }
 
@@ -365,9 +380,18 @@ where
     T: Provider + Send,
 {
     fn default() -> Self {
+        let config = GenTcpConfig::default();
+        let port_reuse = if config.enable_port_reuse {
+            PortReuse::Enabled {
+                listen_addrs: Arc::new(RwLock::new(HashSet::new())),
+            }
+        } else {
+            PortReuse::Disabled
+        };
         GenTcpTransport {
             next_listener_id: ListenerId::new::<Self>(1),
-            config: GenTcpConfig::default(),
+            port_reuse,
+            config,
             listeners: VecDeque::new(),
             pending_events: VecDeque::new(),
         }
@@ -430,7 +454,7 @@ where
             .create_socket(&socket_addr)
             .map_err(TransportError::Other)?;
 
-        if let Some(addr) = self.config.port_reuse.local_dial_addr(&socket_addr.ip()) {
+        if let Some(addr) = self.port_reuse.local_dial_addr(&socket_addr.ip()) {
             log::trace!("Binding dial socket to listen socket {}", addr);
             socket.bind(&addr.into()).map_err(TransportError::Other)?;
         }
@@ -480,7 +504,7 @@ where
     /// `None` is returned if one of the given addresses is not a TCP/IP
     /// address.
     fn address_translation(&self, listen: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        match &self.config.port_reuse {
+        match &self.port_reuse {
             PortReuse::Disabled => address_translation(listen, observed),
             PortReuse::Enabled { .. } => Some(observed.clone()),
         }
@@ -866,7 +890,7 @@ fn ip_to_multiaddr(ip: IpAddr, port: u16) -> Multiaddr {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use futures::channel::mpsc;
+    use futures::channel::{mpsc, oneshot};
 
     #[test]
     fn multiaddr_to_tcp_conversion() {
@@ -1059,7 +1083,11 @@ mod tests {
     fn port_reuse_dialing() {
         env_logger::try_init().ok();
 
-        async fn listener<T: Provider>(addr: Multiaddr, mut ready_tx: mpsc::Sender<Multiaddr>) {
+        async fn listener<T: Provider>(
+            addr: Multiaddr,
+            mut ready_tx: mpsc::Sender<Multiaddr>,
+            _port_reuse_rx: oneshot::Receiver<Protocol<'_>>,
+        ) {
             let mut tcp = GenTcpTransport::<T>::new(GenTcpConfig::new()).boxed();
             tcp.listen_on(addr).unwrap();
             loop {
@@ -1067,7 +1095,17 @@ mod tests {
                     TransportEvent::NewAddress { listen_addr, .. } => {
                         ready_tx.send(listen_addr).await.ok();
                     }
-                    TransportEvent::Incoming { upgrade, .. } => {
+                    TransportEvent::Incoming {
+                        upgrade,
+                        // mut send_back_addr,
+                        ..
+                    } => {
+                        // TODO
+                        // // Receive the dialer tcp port reuse
+                        // let remote_port_reuse = port_reuse_rx.await.unwrap();
+                        // // And check it is the same as the remote port used for upgrade
+                        // assert_eq!(send_back_addr.pop().unwrap(), remote_port_reuse);
+
                         let mut upgrade = upgrade.await.unwrap();
                         let mut buf = [0u8; 3];
                         upgrade.read_exact(&mut buf).await.unwrap();
@@ -1080,12 +1118,30 @@ mod tests {
             }
         }
 
-        async fn dialer<T: Provider>(addr: Multiaddr, mut ready_rx: mpsc::Receiver<Multiaddr>) {
+        async fn dialer<T: Provider>(
+            addr: Multiaddr,
+            mut ready_rx: mpsc::Receiver<Multiaddr>,
+            _port_reuse_tx: oneshot::Sender<Protocol<'_>>,
+        ) {
             let dest_addr = ready_rx.next().await.unwrap();
             let mut tcp = GenTcpTransport::<T>::new(GenTcpConfig::new().port_reuse(true)).boxed();
             tcp.listen_on(addr).unwrap();
             match tcp.select_next_some().await {
                 TransportEvent::NewAddress { .. } => {
+                    // TODO
+                    // // Check that tcp and listener share the same port reuse SocketAddr
+                    // let port_reuse_tcp = tcp.port_reuse.local_dial_addr(&listener.listen_addr.ip());
+                    // let port_reuse_listener = listener
+                    //     .port_reuse
+                    //     .local_dial_addr(&listener.listen_addr.ip());
+                    // assert!(port_reuse_tcp.is_some());
+                    // assert_eq!(port_reuse_tcp, port_reuse_listener);
+
+                    // // Send the dialer tcp port reuse to the listener
+                    // port_reuse_tx
+                    //     .send(Protocol::Tcp(port_reuse_tcp.unwrap().port()))
+                    //     .ok();
+
                     // Obtain a future socket through dialing
                     let mut socket = tcp.dial(dest_addr).unwrap().await.unwrap();
                     socket.write_all(&[0x1, 0x2, 0x3]).await.unwrap();
@@ -1102,8 +1158,9 @@ mod tests {
             #[cfg(feature = "async-io")]
             {
                 let (ready_tx, ready_rx) = mpsc::channel(1);
-                let listener = listener::<async_io::Tcp>(addr.clone(), ready_tx);
-                let dialer = dialer::<async_io::Tcp>(addr.clone(), ready_rx);
+                let (port_reuse_tx, port_reuse_rx) = oneshot::channel();
+                let listener = listener::<async_io::Tcp>(addr.clone(), ready_tx, port_reuse_rx);
+                let dialer = dialer::<async_io::Tcp>(addr.clone(), ready_rx, port_reuse_tx);
                 let listener = async_std::task::spawn(listener);
                 async_std::task::block_on(dialer);
                 async_std::task::block_on(listener);
@@ -1112,8 +1169,9 @@ mod tests {
             #[cfg(feature = "tokio")]
             {
                 let (ready_tx, ready_rx) = mpsc::channel(1);
-                let listener = listener::<tokio::Tcp>(addr.clone(), ready_tx);
-                let dialer = dialer::<tokio::Tcp>(addr.clone(), ready_rx);
+                let (port_reuse_tx, port_reuse_rx) = oneshot::channel();
+                let listener = listener::<tokio::Tcp>(addr.clone(), ready_tx, port_reuse_rx);
+                let dialer = dialer::<tokio::Tcp>(addr.clone(), ready_rx, port_reuse_tx);
                 let rt = tokio_crate::runtime::Builder::new_current_thread()
                     .enable_io()
                     .build()
@@ -1146,6 +1204,16 @@ mod tests {
                 TransportEvent::NewAddress {
                     listen_addr: addr1, ..
                 } => {
+                    // TODO
+                    // // Check that tcp and listener share the same port reuse SocketAddr
+                    // let port_reuse_tcp =
+                    //     tcp.port_reuse.local_dial_addr(&listener1.listen_addr.ip());
+                    // let port_reuse_listener1 = listener1
+                    //     .port_reuse
+                    //     .local_dial_addr(&listener1.listen_addr.ip());
+                    // assert!(port_reuse_tcp.is_some());
+                    // assert_eq!(port_reuse_tcp, port_reuse_listener1);
+
                     // Listen on the same address a second time.
                     tcp.listen_on(addr1.clone()).unwrap();
                     match tcp.select_next_some().await {

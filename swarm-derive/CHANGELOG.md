@@ -1,4 +1,4 @@
-# 0.27.2 [unreleased]
+# 0.27.2
 
 - Replace references of Protocol Handler with Connection Handler. See [PR 2640].
 

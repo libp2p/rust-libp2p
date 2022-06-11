@@ -20,7 +20,7 @@
 
 use crate::structs_proto;
 use asynchronous_codec::{FramedRead, FramedWrite};
-use futures::prelude::*;
+use futures::{future::BoxFuture, prelude::*};
 use libp2p_core::{
     identity, multiaddr,
     upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo},
@@ -30,6 +30,7 @@ use log::trace;
 use std::convert::TryFrom;
 use std::{fmt, io, iter, pin::Pin};
 use thiserror::Error;
+use void::Void;
 
 const MAX_MESSAGE_SIZE_BYTES: usize = 4096;
 
@@ -143,12 +144,13 @@ impl<C> InboundUpgrade<C> for IdentifyPushProtocol<InboundPush>
 where
     C: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
-    type Output = IdentifyInfo;
-    type Error = UpgradeError;
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
+    type Output = BoxFuture<'static, Result<IdentifyInfo, UpgradeError>>;
+    type Error = Void;
+    type Future = future::Ready<Result<Self::Output, Self::Error>>;
 
     fn upgrade_inbound(self, socket: C, _: Self::Info) -> Self::Future {
-        recv(socket).boxed()
+        // Lazily upgrade stream, thus allowing upgrade to happen within identify's handler.
+        future::ok(recv(socket).boxed())
     }
 }
 
