@@ -1192,13 +1192,7 @@ mod tests {
     fn port_reuse_listening() {
         env_logger::try_init().ok();
 
-        async fn listen_twice<T>(addr: Multiaddr)
-        where
-            T: Provider + Sized + Send + Sync + Unpin + 'static,
-            T::Listener: Sync,
-            T::IfWatcher: Sync,
-            T::Stream: Sync,
-        {
+        async fn listen_twice<T: Provider>(addr: Multiaddr) {
             let mut tcp = GenTcpTransport::<T>::new(GenTcpConfig::new().port_reuse(true));
             tcp.listen_on(addr).unwrap();
             match poll_fn(|cx| Pin::new(&mut tcp).poll(cx)).await {
@@ -1255,11 +1249,7 @@ mod tests {
     fn listen_port_0() {
         env_logger::try_init().ok();
 
-        async fn listen<T>(addr: Multiaddr) -> Multiaddr
-        where
-            T: Provider,
-            T::IfWatcher: Sync,
-        {
+        async fn listen<T: Provider>(addr: Multiaddr) -> Multiaddr {
             let mut tcp = GenTcpTransport::<T>::new(GenTcpConfig::new()).boxed();
             tcp.listen_on(addr).unwrap();
             tcp.select_next_some()
