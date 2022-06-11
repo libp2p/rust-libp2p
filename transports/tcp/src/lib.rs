@@ -31,14 +31,14 @@ mod provider;
 #[cfg(feature = "async-io")]
 pub use provider::async_io;
 
-/// The type of a [`GenTcpConfig`] using the `async-io` implementation.
+/// The type of a [`GenTcpTransport`] using the `async-io` implementation.
 #[cfg(feature = "async-io")]
 pub type TcpTransport = GenTcpTransport<async_io::Tcp>;
 
 #[cfg(feature = "tokio")]
 pub use provider::tokio;
 
-/// The type of a [`GenTcpConfig`] using the `tokio` implementation.
+/// The type of a [`GenTcpTransport`] using the `tokio` implementation.
 #[cfg(feature = "tokio")]
 pub type TokioTcpTransport = GenTcpTransport<tokio::Tcp>;
 
@@ -232,11 +232,10 @@ impl GenTcpConfig {
     /// > a single outgoing connection to a particular address and port
     /// > of a peer per local listening socket address.
     ///
-    /// `GenTcpConfig` keeps track of the listen socket addresses as they
-    /// are reported by polling [`TcpListenStream`]s obtained from
-    /// [`GenTcpConfig::listen_on()`]. It is possible to listen on multiple
+    /// [`GenTcpTransport`] keeps track of the listen socket addresses as they
+    /// are reported by polling it. It is possible to listen on multiple
     /// addresses, enabling port reuse for each, knowing exactly which listen
-    /// address is reused when dialing with a specific `GenTcpConfig`, as in the
+    /// address is reused when dialing with a specific `GenTcpTransport`, as in the
     /// following example:
     ///
     /// ```no_run
@@ -282,7 +281,7 @@ impl GenTcpConfig {
     /// case, one is chosen whose IP protocol version and loopback status is the
     /// same as that of the remote address. Consequently, for maximum control of
     /// the local listening addresses and ports that are used for outgoing
-    /// connections, a new `GenTcpConfig` should be created for each listening
+    /// connections, a new `GenTcpTransport` should be created for each listening
     /// socket, avoiding the use of wildcard addresses which bind a socket to
     /// all network interfaces.
     ///
@@ -312,10 +311,10 @@ where
 
     next_listener_id: ListenerId,
     /// All the active listeners.
-    /// The `Listener` struct contains a stream that we want to be pinned. Since the `VecDeque`
+    /// The `TcpListenStream` struct contains a stream that we want to be pinned. Since the `VecDeque`
     /// can be resized, the only way is to use a `Pin<Box<>>`.
     listeners: VecDeque<Pin<Box<TcpListenStream<T>>>>,
-    /// Pending listeners events to return from [`ListenersStream::poll`].
+    /// Pending listeners events to return from [`GenTcpTransport::poll`].
     pending_events: VecDeque<TransportEvent<<Self as Transport>::ListenerUpgrade, io::Error>>,
 }
 
@@ -667,7 +666,7 @@ where
     T: Provider,
 {
     /// Constructs a `TcpListenStream` for incoming connections around
-    /// the given `TcpListener`.
+    /// the given listener.
     fn new(
         listener_id: ListenerId,
         listener: TcpListener,

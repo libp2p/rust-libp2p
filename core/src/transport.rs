@@ -95,7 +95,7 @@ pub trait Transport {
     type Error: Error;
 
     /// A pending [`Output`](Transport::Output) for an inbound connection,
-    /// obtained from the [`Listener`](Transport::Listener) stream.
+    /// obtained from the [`Transport`] stream.
     ///
     /// After a connection has been accepted by the transport, it may need to go through
     /// asynchronous post-processing (i.e. protocol upgrade negotiations). Such
