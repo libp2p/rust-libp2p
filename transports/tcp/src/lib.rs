@@ -890,7 +890,10 @@ fn ip_to_multiaddr(ip: IpAddr, port: u16) -> Multiaddr {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use futures::channel::{mpsc, oneshot};
+    use futures::{
+        channel::{mpsc, oneshot},
+        future::poll_fn,
+    };
 
     #[test]
     fn multiaddr_to_tcp_conversion() {
@@ -1086,7 +1089,7 @@ mod tests {
         async fn listener<T: Provider>(
             addr: Multiaddr,
             mut ready_tx: mpsc::Sender<Multiaddr>,
-            _port_reuse_rx: oneshot::Receiver<Protocol<'_>>,
+            port_reuse_rx: oneshot::Receiver<Protocol<'_>>,
         ) {
             let mut tcp = GenTcpTransport::<T>::new(GenTcpConfig::new()).boxed();
             tcp.listen_on(addr).unwrap();
@@ -1097,14 +1100,13 @@ mod tests {
                     }
                     TransportEvent::Incoming {
                         upgrade,
-                        // mut send_back_addr,
+                        mut send_back_addr,
                         ..
                     } => {
-                        // TODO
-                        // // Receive the dialer tcp port reuse
-                        // let remote_port_reuse = port_reuse_rx.await.unwrap();
-                        // // And check it is the same as the remote port used for upgrade
-                        // assert_eq!(send_back_addr.pop().unwrap(), remote_port_reuse);
+                        // Receive the dialer tcp port reuse
+                        let remote_port_reuse = port_reuse_rx.await.unwrap();
+                        // And check it is the same as the remote port used for upgrade
+                        assert_eq!(send_back_addr.pop().unwrap(), remote_port_reuse);
 
                         let mut upgrade = upgrade.await.unwrap();
                         let mut buf = [0u8; 3];
@@ -1121,26 +1123,26 @@ mod tests {
         async fn dialer<T: Provider>(
             addr: Multiaddr,
             mut ready_rx: mpsc::Receiver<Multiaddr>,
-            _port_reuse_tx: oneshot::Sender<Protocol<'_>>,
+            port_reuse_tx: oneshot::Sender<Protocol<'_>>,
         ) {
             let dest_addr = ready_rx.next().await.unwrap();
-            let mut tcp = GenTcpTransport::<T>::new(GenTcpConfig::new().port_reuse(true)).boxed();
+            let mut tcp = GenTcpTransport::<T>::new(GenTcpConfig::new().port_reuse(true));
             tcp.listen_on(addr).unwrap();
-            match tcp.select_next_some().await {
+            match poll_fn(|cx| Pin::new(&mut tcp).poll(cx)).await {
                 TransportEvent::NewAddress { .. } => {
-                    // TODO
-                    // // Check that tcp and listener share the same port reuse SocketAddr
-                    // let port_reuse_tcp = tcp.port_reuse.local_dial_addr(&listener.listen_addr.ip());
-                    // let port_reuse_listener = listener
-                    //     .port_reuse
-                    //     .local_dial_addr(&listener.listen_addr.ip());
-                    // assert!(port_reuse_tcp.is_some());
-                    // assert_eq!(port_reuse_tcp, port_reuse_listener);
+                    // Check that tcp and listener share the same port reuse SocketAddr
+                    let listener = tcp.listeners.front().unwrap();
+                    let port_reuse_tcp = tcp.port_reuse.local_dial_addr(&listener.listen_addr.ip());
+                    let port_reuse_listener = listener
+                        .port_reuse
+                        .local_dial_addr(&listener.listen_addr.ip());
+                    assert!(port_reuse_tcp.is_some());
+                    assert_eq!(port_reuse_tcp, port_reuse_listener);
 
-                    // // Send the dialer tcp port reuse to the listener
-                    // port_reuse_tx
-                    //     .send(Protocol::Tcp(port_reuse_tcp.unwrap().port()))
-                    //     .ok();
+                    // Send the dialer tcp port reuse to the listener
+                    port_reuse_tx
+                        .send(Protocol::Tcp(port_reuse_tcp.unwrap().port()))
+                        .ok();
 
                     // Obtain a future socket through dialing
                     let mut socket = tcp.dial(dest_addr).unwrap().await.unwrap();
@@ -1198,25 +1200,24 @@ mod tests {
             T::IfWatcher: Sync,
             T::Stream: Sync,
         {
-            let mut tcp = GenTcpTransport::<T>::new(GenTcpConfig::new().port_reuse(true)).boxed();
+            let mut tcp = GenTcpTransport::<T>::new(GenTcpConfig::new().port_reuse(true));
             tcp.listen_on(addr).unwrap();
-            match tcp.select_next_some().await {
+            match poll_fn(|cx| Pin::new(&mut tcp).poll(cx)).await {
                 TransportEvent::NewAddress {
                     listen_addr: addr1, ..
                 } => {
-                    // TODO
-                    // // Check that tcp and listener share the same port reuse SocketAddr
-                    // let port_reuse_tcp =
-                    //     tcp.port_reuse.local_dial_addr(&listener1.listen_addr.ip());
-                    // let port_reuse_listener1 = listener1
-                    //     .port_reuse
-                    //     .local_dial_addr(&listener1.listen_addr.ip());
-                    // assert!(port_reuse_tcp.is_some());
-                    // assert_eq!(port_reuse_tcp, port_reuse_listener1);
+                    let listener1 = tcp.listeners.front().unwrap();
+                    let port_reuse_tcp =
+                        tcp.port_reuse.local_dial_addr(&listener1.listen_addr.ip());
+                    let port_reuse_listener1 = listener1
+                        .port_reuse
+                        .local_dial_addr(&listener1.listen_addr.ip());
+                    assert!(port_reuse_tcp.is_some());
+                    assert_eq!(port_reuse_tcp, port_reuse_listener1);
 
                     // Listen on the same address a second time.
                     tcp.listen_on(addr1.clone()).unwrap();
-                    match tcp.select_next_some().await {
+                    match poll_fn(|cx| Pin::new(&mut tcp).poll(cx)).await {
                         TransportEvent::NewAddress {
                             listen_addr: addr2, ..
                         } => {
