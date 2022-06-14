@@ -1,3 +1,9 @@
+# 0.38.1
+
+- Fix duplicate connection id. See [PR 2702].
+
+[PR 2702]: https://github.com/libp2p/rust-libp2p/pull/2702
+
 # 0.38.0
 
 - Update to `libp2p-core` `v0.33.0`.
