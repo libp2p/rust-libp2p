@@ -54,7 +54,7 @@ impl StreamMuxerBox {
     /// Construct a new [`StreamMuxerBox`].
     pub fn new<T>(muxer: T) -> StreamMuxerBox
     where
-        T: StreamMuxer<Substream = S> + Send + 'static,
+        T: StreamMuxer + Send + 'static,
         T::Substream: AsyncRead + AsyncWrite + Send + Unpin + 'static,
     {
         let wrap = Wrap { inner: muxer };
