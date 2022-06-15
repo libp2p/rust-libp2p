@@ -3104,7 +3104,7 @@ where
             .entry(*peer_id)
             .or_insert(PeerConnections {
                 kind: PeerKind::Floodsub,
-                connections: vec![*connection_id],
+                connections: vec![],
             })
             .connections
             .push(*connection_id);
