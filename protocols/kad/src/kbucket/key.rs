@@ -84,6 +84,11 @@ impl<T> Key<T> {
     pub fn for_distance(&self, d: Distance) -> KeyBytes {
         self.bytes.for_distance(d)
     }
+
+    /// Construct new `Key` from inputs without checking contents of arguments.
+    pub fn from_unchecked(preimage: T, bytes: KeyBytes) -> Self {
+        Self { preimage, bytes }
+    }
 }
 
 impl<T> From<Key<T>> for KeyBytes {
@@ -170,6 +175,11 @@ impl KeyBytes {
     pub fn for_distance(&self, d: Distance) -> KeyBytes {
         let key_int = U256::from(self.0.as_slice()) ^ d.0;
         KeyBytes(GenericArray::from(<[u8; 32]>::from(key_int)))
+    }
+
+    /// Construct new `KeyBytes` from input without checking contents of the argument.
+    pub fn from_unchecked(bytes: GenericArray<u8, U32>) -> Self {
+        Self(bytes)
     }
 }
 

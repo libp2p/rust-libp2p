@@ -1,3 +1,8 @@
+# [unreleased]
+* Support customizing function that transforms `PeerId` into `Key<PeerId>` in Kademlia (see [PR 2704])
+
+[PR 2704]: https://github.com/libp2p/rust-libp2p/pull/2704
+
 # 0.37.1
 
 - Limit # of inbound streams to 32. [See PR 2699].

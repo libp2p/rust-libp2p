@@ -105,6 +105,11 @@ pub struct Kademlia<TStore> {
     /// The currently known addresses of the local node.
     local_addrs: HashSet<Multiaddr>,
 
+    /// Function that converts [`PeerId`] to [`kbucket::Key`].
+    ///
+    /// In the simplest case just [`kbucket::Key::from`].
+    peer_id_to_key: fn(PeerId) -> kbucket::Key<PeerId>,
+
     /// See [`KademliaConfig::caching`].
     caching: KademliaCaching,
 
@@ -175,6 +180,7 @@ pub struct KademliaConfig {
     provider_publication_interval: Option<Duration>,
     connection_idle_timeout: Duration,
     kbucket_inserts: KademliaBucketInserts,
+    peer_id_to_key: fn(PeerId) -> kbucket::Key<PeerId>,
     caching: KademliaCaching,
 }
 
@@ -209,6 +215,7 @@ impl Default for KademliaConfig {
             provider_record_ttl: Some(Duration::from_secs(24 * 60 * 60)),
             connection_idle_timeout: Duration::from_secs(10),
             kbucket_inserts: KademliaBucketInserts::OnConnected,
+            peer_id_to_key: kbucket::Key::from,
             caching: KademliaCaching::Enabled { max_peers: 1 },
         }
     }
@@ -381,6 +388,13 @@ impl KademliaConfig {
         self
     }
 
+    /// Sets the function that converts [`PeerId`] to [`kbucket::Key`].
+    ///
+    /// In the simplest case just [`kbucket::Key::from`].
+    pub fn set_peer_id_to_key(&mut self, peer_id_to_key: fn(PeerId) -> kbucket::Key<PeerId>) {
+        self.peer_id_to_key = peer_id_to_key;
+    }
+
     /// Sets the [`KademliaCaching`] strategy to use for successful lookups.
     ///
     /// The default is [`KademliaCaching::Enabled`] with a `max_peers` of 1.
@@ -410,7 +424,7 @@ where
 
     /// Creates a new `Kademlia` network behaviour with the given configuration.
     pub fn with_config(id: PeerId, store: TStore, config: KademliaConfig) -> Self {
-        let local_key = kbucket::Key::from(id);
+        let local_key = (config.peer_id_to_key)(id);
 
         let put_record_job = config
             .record_replication_interval
@@ -443,6 +457,7 @@ where
             provider_record_ttl: config.provider_record_ttl,
             connection_idle_timeout: config.connection_idle_timeout,
             local_addrs: HashSet::new(),
+            peer_id_to_key: config.peer_id_to_key,
             caching: config.caching,
         }
     }
@@ -509,7 +524,7 @@ where
     /// If the routing table has been updated as a result of this operation,
     /// a [`KademliaEvent::RoutingUpdated`] event is emitted.
     pub fn add_address(&mut self, peer: &PeerId, address: Multiaddr) -> RoutingUpdate {
-        let key = kbucket::Key::from(*peer);
+        let key = (self.peer_id_to_key)(*peer);
         match self.kbuckets.entry(&key) {
             kbucket::Entry::Present(mut entry, _) => {
                 if entry.value().insert(address) {
@@ -594,7 +609,7 @@ where
         peer: &PeerId,
         address: &Multiaddr,
     ) -> Option<kbucket::EntryView<kbucket::Key<PeerId>, Addresses>> {
-        let key = kbucket::Key::from(*peer);
+        let key = (self.peer_id_to_key)(*peer);
         match self.kbuckets.entry(&key) {
             kbucket::Entry::Present(mut entry, _) => {
                 if entry.value().remove(address).is_err() {
@@ -622,7 +637,7 @@ where
         &mut self,
         peer: &PeerId,
     ) -> Option<kbucket::EntryView<kbucket::Key<PeerId>, Addresses>> {
-        let key = kbucket::Key::from(*peer);
+        let key = (self.peer_id_to_key)(*peer);
         match self.kbuckets.entry(&key) {
             kbucket::Entry::Present(entry, _) => Some(entry.remove()),
             kbucket::Entry::Pending(entry, _) => Some(entry.remove()),
@@ -986,6 +1001,7 @@ where
         let kbuckets = &mut self.kbuckets;
         let connected = &mut self.connected_peers;
         let local_addrs = &self.local_addrs;
+        let peer_id_to_key = self.peer_id_to_key;
         self.store
             .providers(key)
             .into_iter()
@@ -1008,7 +1024,7 @@ where
                         if &node_id == kbuckets.local_key().preimage() {
                             Some(local_addrs.iter().cloned().collect::<Vec<_>>())
                         } else {
-                            let key = kbucket::Key::from(node_id);
+                            let key = peer_id_to_key(node_id);
                             kbuckets
                                 .entry(&key)
                                 .view()
@@ -1065,7 +1081,7 @@ where
         address: Option<Multiaddr>,
         new_status: NodeStatus,
     ) {
-        let key = kbucket::Key::from(peer);
+        let key = (self.peer_id_to_key)(peer);
         match self.kbuckets.entry(&key) {
             kbucket::Entry::Present(mut entry, old_status) => {
                 if old_status != new_status {
@@ -1185,7 +1201,7 @@ where
     ) -> Option<KademliaEvent> {
         let query_id = q.id();
         log::trace!("Query {:?} finished.", query_id);
-        let result = q.into_result();
+        let result = q.into_result(self.peer_id_to_key);
         match result.inner.info {
             QueryInfo::Bootstrap { peer, remaining } => {
                 let local_key = self.kbuckets.local_key().clone();
@@ -1213,13 +1229,13 @@ where
                             // Pr(bucket-253) = 1 - (7/8)^16   ~= 0.88
                             // Pr(bucket-252) = 1 - (15/16)^16 ~= 0.64
                             // ...
-                            let mut target = kbucket::Key::from(PeerId::random());
+                            let mut target = (self.peer_id_to_key)(PeerId::random());
                             for _ in 0..16 {
                                 let d = local_key.distance(&target);
                                 if b.contains(&d) {
                                     break;
                                 }
-                                target = kbucket::Key::from(PeerId::random());
+                                target = (self.peer_id_to_key)(PeerId::random());
                             }
                             target
                         })
@@ -1433,7 +1449,7 @@ where
     fn query_timeout(&mut self, query: Query<QueryInner>) -> Option<KademliaEvent> {
         let query_id = query.id();
         log::trace!("Query {:?} timed out.", query_id);
-        let result = query.into_result();
+        let result = query.into_result(self.peer_id_to_key);
         match result.inner.info {
             QueryInfo::Bootstrap {
                 peer,
@@ -1735,7 +1751,7 @@ where
     }
 
     fn address_failed(&mut self, peer_id: PeerId, address: &Multiaddr) {
-        let key = kbucket::Key::from(peer_id);
+        let key = (self.peer_id_to_key)(peer_id);
 
         if let Some(addrs) = self.kbuckets.entry(&key).value() {
             // TODO: Ideally, the address should only be removed if the error can
@@ -1797,7 +1813,7 @@ where
     fn addresses_of_peer(&mut self, peer_id: &PeerId) -> Vec<Multiaddr> {
         // We should order addresses from decreasing likelyhood of connectivity, so start with
         // the addresses of that peer in the k-buckets.
-        let key = kbucket::Key::from(*peer_id);
+        let key = (self.peer_id_to_key)(*peer_id);
         let mut peer_addrs =
             if let kbucket::Entry::Present(mut entry, _) = self.kbuckets.entry(&key) {
                 let addrs = entry.value().iter().cloned().collect::<Vec<_>>();
@@ -1867,7 +1883,7 @@ where
         let (old, new) = (old.get_remote_address(), new.get_remote_address());
 
         // Update routing table.
-        if let Some(addrs) = self.kbuckets.entry(&kbucket::Key::from(*peer)).value() {
+        if let Some(addrs) = self.kbuckets.entry(&(self.peer_id_to_key)(*peer)).value() {
             if addrs.replace(old, new) {
                 debug!(
                     "Address '{}' replaced with '{}' for peer '{}'.",
@@ -2170,7 +2186,7 @@ where
                         } else {
                             log::trace!("Record with key {:?} not found at {}", key, source);
                             if let KademliaCaching::Enabled { max_peers } = self.caching {
-                                let source_key = kbucket::Key::from(source);
+                                let source_key = (self.peer_id_to_key)(source);
                                 let target_key = kbucket::Key::from(key.clone());
                                 let distance = source_key.distance(&target_key);
                                 cache_candidates.insert(distance, source);

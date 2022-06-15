@@ -407,10 +407,15 @@ impl<TInner> Query<TInner> {
     }
 
     /// Consumes the query, producing the final `QueryResult`.
-    pub fn into_result(self) -> QueryResult<TInner, impl Iterator<Item = PeerId>> {
+    pub fn into_result(
+        self,
+        peer_id_to_key: fn(PeerId) -> Key<PeerId>,
+    ) -> QueryResult<TInner, impl Iterator<Item = PeerId>> {
         let peers = match self.peer_iter {
             QueryPeerIter::Closest(iter) => Either::Left(Either::Left(iter.into_result())),
-            QueryPeerIter::ClosestDisjoint(iter) => Either::Left(Either::Right(iter.into_result())),
+            QueryPeerIter::ClosestDisjoint(iter) => {
+                Either::Left(Either::Right(iter.into_result(peer_id_to_key)))
+            }
             QueryPeerIter::Fixed(iter) => Either::Right(iter.into_result()),
         };
         QueryResult {

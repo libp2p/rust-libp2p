@@ -72,6 +72,11 @@ pub struct ClosestPeersIterConfig {
     /// the peer when evaluating the termination conditions, until and unless a
     /// result is delivered. Defaults to `10` seconds.
     pub peer_timeout: Duration,
+
+    /// Function that converts [`PeerId`] to [`Key`].
+    ///
+    /// In the simplest case just [`Key::from`].
+    pub peer_id_to_key: fn(PeerId) -> Key<PeerId>,
 }
 
 impl Default for ClosestPeersIterConfig {
@@ -80,6 +85,7 @@ impl Default for ClosestPeersIterConfig {
             parallelism: ALPHA_VALUE,
             num_results: K_VALUE,
             peer_timeout: Duration::from_secs(10),
+            peer_id_to_key: Key::from,
         }
     }
 }
@@ -157,7 +163,7 @@ impl ClosestPeersIter {
             return false;
         }
 
-        let key = Key::from(*peer);
+        let key = (self.config.peer_id_to_key)(*peer);
         let distance = key.distance(&self.target);
 
         // Mark the peer as succeeded.
@@ -181,7 +187,7 @@ impl ClosestPeersIter {
 
         // Incorporate the reported closer peers into the iterator.
         for peer in closer_peers {
-            let key = peer.into();
+            let key = (self.config.peer_id_to_key)(peer);
             let distance = self.target.distance(&key);
             let peer = Peer {
                 key,
@@ -233,7 +239,7 @@ impl ClosestPeersIter {
             return false;
         }
 
-        let key = Key::from(*peer);
+        let key = (self.config.peer_id_to_key)(*peer);
         let distance = key.distance(&self.target);
 
         match self.closest_peers.entry(distance) {
@@ -510,6 +516,7 @@ mod tests {
                 parallelism: NonZeroUsize::new(g.gen_range(1, 10)).unwrap(),
                 num_results: NonZeroUsize::new(g.gen_range(1, 25)).unwrap(),
                 peer_timeout: Duration::from_secs(g.gen_range(10, 30)),
+                peer_id_to_key: Key::from,
             };
             ClosestPeersIter::with_config(config, target, known_closest_peers)
         }

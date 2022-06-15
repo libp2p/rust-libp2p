@@ -57,6 +57,10 @@ pub struct MemoryStoreConfig {
     /// The maximum number of provider records for which the
     /// local node is the provider.
     pub max_provided_keys: usize,
+    /// Function that converts [`PeerId`] to [`kbucket::Key`].
+    ///
+    /// In the simplest case just [`kbucket::Key::from`].
+    pub peer_id_to_key: fn(PeerId) -> kbucket::Key<PeerId>,
 }
 
 impl Default for MemoryStoreConfig {
@@ -66,6 +70,7 @@ impl Default for MemoryStoreConfig {
             max_value_bytes: 65 * 1024,
             max_provided_keys: 1024,
             max_providers_per_key: K_VALUE.get(),
+            peer_id_to_key: kbucket::Key::from,
         }
     }
 }
@@ -79,7 +84,7 @@ impl MemoryStore {
     /// Creates a new `MemoryRecordStore` with the given configuration.
     pub fn with_config(local_id: PeerId, config: MemoryStoreConfig) -> Self {
         MemoryStore {
-            local_key: kbucket::Key::from(local_id),
+            local_key: (config.peer_id_to_key)(local_id),
             config,
             records: HashMap::default(),
             provided: HashSet::default(),
@@ -161,9 +166,9 @@ impl<'a> RecordStore<'a> for MemoryStore {
             // It is a new provider record for that key.
             let local_key = self.local_key.clone();
             let key = kbucket::Key::new(record.key.clone());
-            let provider = kbucket::Key::from(record.provider);
+            let provider = (self.config.peer_id_to_key)(record.provider);
             if let Some(i) = providers.iter().position(|p| {
-                let pk = kbucket::Key::from(p.provider);
+                let pk = (self.config.peer_id_to_key)(p.provider);
                 provider.distance(&key) < pk.distance(&key)
             }) {
                 // Insert the new provider.

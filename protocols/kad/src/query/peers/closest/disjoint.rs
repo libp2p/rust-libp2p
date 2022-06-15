@@ -323,11 +323,14 @@ impl ClosestDisjointPeersIter {
     ///       `num_results` closest benign peers, but as it can not
     ///       differentiate benign from faulty paths it as well returns faulty
     ///       peers and thus overall returns more than `num_results` peers.
-    pub fn into_result(self) -> impl Iterator<Item = PeerId> {
+    pub fn into_result(
+        self,
+        peer_id_to_key: fn(PeerId) -> Key<PeerId>,
+    ) -> impl Iterator<Item = PeerId> {
         let result_per_path = self
             .iters
             .into_iter()
-            .map(|iter| iter.into_result().map(Key::from));
+            .map(|iter| iter.into_result().map(peer_id_to_key));
 
         ResultIter::new(self.target, result_per_path).map(Key::into_preimage)
     }
@@ -606,6 +609,7 @@ mod tests {
                 parallelism: Parallelism::arbitrary(g).0,
                 num_results: NumResults::arbitrary(g).0,
                 peer_timeout: Duration::from_secs(1),
+                peer_id_to_key: Key::from,
             }
         }
     }
@@ -722,7 +726,7 @@ mod tests {
 
         assert_eq!(PeersIterState::Finished, peers_iter.next(now),);
 
-        let final_peers: Vec<_> = peers_iter.into_result().collect();
+        let final_peers: Vec<_> = peers_iter.into_result(Key::from).collect();
 
         // Expect final result to contain peer from each disjoint path, even
         // though not all are among the best ones.
@@ -858,7 +862,7 @@ mod tests {
 
         fn into_result(self) -> Vec<PeerId> {
             match self {
-                PeerIterator::Disjoint(iter) => iter.into_result().collect(),
+                PeerIterator::Disjoint(iter) => iter.into_result(Key::from).collect(),
                 PeerIterator::Closest(iter) => iter.into_result().collect(),
             }
         }
