@@ -1,6 +1,7 @@
 # 0.34.0 [unreleased]
 
 - `Substream` now implements `AsyncRead` and `AsyncWrite`. See [PR 2706].
+- Update to `libp2p-core` `v0.34.0`
 
 [PR 2706]: https://github.com/libp2p/rust-libp2p/pull/2706/
 
