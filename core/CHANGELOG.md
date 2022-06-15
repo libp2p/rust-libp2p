@@ -1,4 +1,4 @@
-# 0.33.1
+# 0.33.1 - unreleased
 
 - Introduce `StreamMuxerEvent::map_inbound_stream`. See [PR 2691].
 
