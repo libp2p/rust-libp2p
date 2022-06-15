@@ -25,10 +25,10 @@ struct Wrap<T> {
     inner: T,
 }
 
-impl<T, S> StreamMuxer for Wrap<T>
+impl<T> StreamMuxer for Wrap<T>
 where
-    T: StreamMuxer<Substream = S>,
-    S: AsyncRead + AsyncWrite + Send + Unpin + 'static,
+    T: StreamMuxer,
+    T::Substream: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
     type Substream = SubstreamBox;
 
