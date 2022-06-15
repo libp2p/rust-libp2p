@@ -1,3 +1,9 @@
+# 0.33.1 - unreleased
+
+- Introduce `StreamMuxerEvent::map_inbound_stream`. See [PR 2691].
+
+[PR 2691]: https://github.com/libp2p/rust-libp2p/pull/2691
+
 # 0.33.0
 
 - Have methods on `Transport` take `&mut self` instead of `self`. See [PR 2529].
