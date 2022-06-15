@@ -52,12 +52,15 @@ where
 
 impl StreamMuxerBox {
     /// Construct a new [`StreamMuxerBox`].
-    pub fn new<S>(muxer: impl StreamMuxer<Substream = S> + Send + 'static) -> Self
+    pub fn new<T>(muxer: T) -> StreamMuxerBox
     where
-        S: AsyncRead + AsyncWrite + Send + Unpin + 'static,
+        T: StreamMuxer<Substream = S> + Send + 'static,
+        T::Substream: AsyncRead + AsyncWrite + Send + Unpin + 'static,
     {
-        Self {
-            inner: Box::new(Wrap { inner: muxer }),
+        let wrap = Wrap { inner: muxer };
+
+        StreamMuxerBox {
+            inner: Box::new(wrap),
         }
     }
 }
