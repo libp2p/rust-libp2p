@@ -756,13 +756,13 @@ impl Action {
                     inbound_reservation_req,
                     addrs: poll_parameters
                         .external_addresses()
-                        .map(|a| {
-                            let p2p_proto =
-                                Protocol::P2p(*poll_parameters.local_peer_id().as_ref());
-                            match a.addr.iter().last() {
-                                Some(p) if p == p2p_proto => a.addr,
-                                _ => a.addr.with(p2p_proto),
-                            }
+                        .map(|a| a.addr)
+                        // Add local peer ID in case it isn't present yet.
+                        .filter_map(|a| match a.iter().last()? {
+                            Protocol::P2p(_) => Some(a),
+                            _ => Some(
+                                a.with(Protocol::P2p(*poll_parameters.local_peer_id().as_ref())),
+                            ),
                         })
                         .collect(),
                 }),
