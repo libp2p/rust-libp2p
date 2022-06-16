@@ -21,6 +21,7 @@
 use super::*;
 
 use crate::kbucket;
+use crate::kbucket::PreimageIntoKeyBytes;
 use libp2p_core::PeerId;
 use smallvec::SmallVec;
 use std::borrow::Cow;
@@ -28,9 +29,9 @@ use std::collections::{hash_map, hash_set, HashMap, HashSet};
 use std::iter;
 
 /// In-memory implementation of a `RecordStore`.
-pub struct MemoryStore {
+pub struct MemoryStore<C> {
     /// The identity of the peer owning the store.
-    local_key: kbucket::Key<PeerId>,
+    local_key: kbucket::Key<PeerId, C>,
     /// The configuration of the store.
     config: MemoryStoreConfig,
     /// The stored (regular) records.
@@ -57,10 +58,6 @@ pub struct MemoryStoreConfig {
     /// The maximum number of provider records for which the
     /// local node is the provider.
     pub max_provided_keys: usize,
-    /// Function that converts [`PeerId`] to [`kbucket::Key`].
-    ///
-    /// In the simplest case just [`kbucket::Key::from`].
-    pub peer_id_to_key: fn(PeerId) -> kbucket::Key<PeerId>,
 }
 
 impl Default for MemoryStoreConfig {
@@ -70,12 +67,14 @@ impl Default for MemoryStoreConfig {
             max_value_bytes: 65 * 1024,
             max_provided_keys: 1024,
             max_providers_per_key: K_VALUE.get(),
-            peer_id_to_key: kbucket::Key::from,
         }
     }
 }
 
-impl MemoryStore {
+impl<C> MemoryStore<C>
+where
+    C: PreimageIntoKeyBytes<PeerId>,
+{
     /// Creates a new `MemoryRecordStore` with a default configuration.
     pub fn new(local_id: PeerId) -> Self {
         Self::with_config(local_id, Default::default())
@@ -84,7 +83,7 @@ impl MemoryStore {
     /// Creates a new `MemoryRecordStore` with the given configuration.
     pub fn with_config(local_id: PeerId, config: MemoryStoreConfig) -> Self {
         MemoryStore {
-            local_key: (config.peer_id_to_key)(local_id),
+            local_key: kbucket::Key::new(local_id),
             config,
             records: HashMap::default(),
             provided: HashSet::default(),
@@ -101,7 +100,10 @@ impl MemoryStore {
     }
 }
 
-impl<'a> RecordStore<'a> for MemoryStore {
+impl<'a, C> RecordStore<'a> for MemoryStore<C>
+where
+    C: PreimageIntoKeyBytes<PeerId> + PreimageIntoKeyBytes<Key>,
+{
     type RecordsIter =
         iter::Map<hash_map::Values<'a, Key, Record>, fn(&'a Record) -> Cow<'a, Record>>;
 
@@ -165,10 +167,10 @@ impl<'a> RecordStore<'a> for MemoryStore {
         } else {
             // It is a new provider record for that key.
             let local_key = self.local_key.clone();
-            let key = kbucket::Key::new(record.key.clone());
-            let provider = (self.config.peer_id_to_key)(record.provider);
+            let key = kbucket::Key::<Key, C>::new(record.key.clone());
+            let provider = kbucket::Key::new(record.provider);
             if let Some(i) = providers.iter().position(|p| {
-                let pk = (self.config.peer_id_to_key)(p.provider);
+                let pk = kbucket::Key::new(p.provider);
                 provider.distance(&key) < pk.distance(&key)
             }) {
                 // Insert the new provider.
@@ -221,6 +223,7 @@ impl<'a> RecordStore<'a> for MemoryStore {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::kbucket::Sha256Hash;
     use libp2p_core::multihash::{Code, Multihash};
     use quickcheck::*;
     use rand::Rng;
@@ -229,38 +232,50 @@ mod tests {
         Multihash::wrap(Code::Sha2_256.into(), &rand::thread_rng().gen::<[u8; 32]>()).unwrap()
     }
 
-    fn distance(r: &ProviderRecord) -> kbucket::Distance {
-        kbucket::Key::new(r.key.clone()).distance(&kbucket::Key::from(r.provider))
+    fn distance<C>(r: &ProviderRecord) -> kbucket::Distance
+    where
+        C: PreimageIntoKeyBytes<PeerId> + PreimageIntoKeyBytes<Key>,
+    {
+        kbucket::Key::<_, C>::new(r.key.clone()).distance(&kbucket::Key::<_, C>::new(r.provider))
     }
 
     #[test]
     fn put_get_remove_record() {
-        fn prop(r: Record) {
-            let mut store = MemoryStore::new(PeerId::random());
+        fn prop<C>(r: Record)
+        where
+            C: PreimageIntoKeyBytes<PeerId> + PreimageIntoKeyBytes<Key>,
+        {
+            let mut store = MemoryStore::<C>::new(PeerId::random());
             assert!(store.put(r.clone()).is_ok());
             assert_eq!(Some(Cow::Borrowed(&r)), store.get(&r.key));
             store.remove(&r.key);
             assert!(store.get(&r.key).is_none());
         }
-        quickcheck(prop as fn(_))
+        quickcheck(prop::<Sha256Hash> as fn(_))
     }
 
     #[test]
     fn add_get_remove_provider() {
-        fn prop(r: ProviderRecord) {
-            let mut store = MemoryStore::new(PeerId::random());
+        fn prop<C>(r: ProviderRecord)
+        where
+            C: PreimageIntoKeyBytes<PeerId> + PreimageIntoKeyBytes<Key>,
+        {
+            let mut store = MemoryStore::<C>::new(PeerId::random());
             assert!(store.add_provider(r.clone()).is_ok());
             assert!(store.providers(&r.key).contains(&r));
             store.remove_provider(&r.key, &r.provider);
             assert!(!store.providers(&r.key).contains(&r));
         }
-        quickcheck(prop as fn(_))
+        quickcheck(prop::<Sha256Hash> as fn(_))
     }
 
     #[test]
     fn providers_ordered_by_distance_to_key() {
-        fn prop(providers: Vec<kbucket::Key<PeerId>>) -> bool {
-            let mut store = MemoryStore::new(PeerId::random());
+        fn prop<C>(providers: Vec<kbucket::Key<PeerId, C>>) -> bool
+        where
+            C: PreimageIntoKeyBytes<PeerId> + PreimageIntoKeyBytes<Key>,
+        {
+            let mut store = MemoryStore::<C>::new(PeerId::random());
             let key = Key::from(random_multihash());
 
             let mut records = providers
@@ -272,19 +287,19 @@ mod tests {
                 assert!(store.add_provider(r.clone()).is_ok());
             }
 
-            records.sort_by(|r1, r2| distance(r1).cmp(&distance(r2)));
+            records.sort_by(|r1, r2| distance::<C>(r1).cmp(&distance::<C>(r2)));
             records.truncate(store.config.max_providers_per_key);
 
             records == store.providers(&key).to_vec()
         }
 
-        quickcheck(prop as fn(_) -> _)
+        quickcheck(prop::<Sha256Hash> as fn(_) -> _)
     }
 
     #[test]
     fn provided() {
         let id = PeerId::random();
-        let mut store = MemoryStore::new(id.clone());
+        let mut store = MemoryStore::<Sha256Hash>::new(id.clone());
         let key = random_multihash();
         let rec = ProviderRecord::new(key, id.clone(), Vec::new());
         assert!(store.add_provider(rec.clone()).is_ok());
@@ -298,7 +313,7 @@ mod tests {
 
     #[test]
     fn update_provider() {
-        let mut store = MemoryStore::new(PeerId::random());
+        let mut store = MemoryStore::<Sha256Hash>::new(PeerId::random());
         let key = random_multihash();
         let prv = PeerId::random();
         let mut rec = ProviderRecord::new(key, prv, Vec::new());
@@ -311,7 +326,7 @@ mod tests {
 
     #[test]
     fn max_provided_keys() {
-        let mut store = MemoryStore::new(PeerId::random());
+        let mut store = MemoryStore::<Sha256Hash>::new(PeerId::random());
         for _ in 0..store.config.max_provided_keys {
             let key = random_multihash();
             let prv = PeerId::random();

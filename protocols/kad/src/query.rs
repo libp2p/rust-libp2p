@@ -26,7 +26,7 @@ use peers::closest::{
 use peers::fixed::FixedPeersIter;
 use peers::PeersIterState;
 
-use crate::kbucket::{Key, KeyBytes};
+use crate::kbucket::{Key, KeyBytes, PreimageIntoKeyBytes};
 use crate::{ALPHA_VALUE, K_VALUE};
 use either::Either;
 use fnv::FnvHashMap;
@@ -39,26 +39,29 @@ use std::{num::NonZeroUsize, time::Duration};
 /// Internally, a `Query` is in turn driven by an underlying `QueryPeerIter`
 /// that determines the peer selection strategy, i.e. the order in which the
 /// peers involved in the query should be contacted.
-pub struct QueryPool<TInner> {
+pub struct QueryPool<TInner, C> {
     next_id: usize,
     config: QueryConfig,
-    queries: FnvHashMap<QueryId, Query<TInner>>,
+    queries: FnvHashMap<QueryId, Query<TInner, C>>,
 }
 
 /// The observable states emitted by [`QueryPool::poll`].
-pub enum QueryPoolState<'a, TInner> {
+pub enum QueryPoolState<'a, TInner, C> {
     /// The pool is idle, i.e. there are no queries to process.
     Idle,
     /// At least one query is waiting for results. `Some(request)` indicates
     /// that a new request is now being waited on.
-    Waiting(Option<(&'a mut Query<TInner>, PeerId)>),
+    Waiting(Option<(&'a mut Query<TInner, C>, PeerId)>),
     /// A query has finished.
-    Finished(Query<TInner>),
+    Finished(Query<TInner, C>),
     /// A query has timed out.
-    Timeout(Query<TInner>),
+    Timeout(Query<TInner, C>),
 }
 
-impl<TInner> QueryPool<TInner> {
+impl<TInner, C> QueryPool<TInner, C>
+where
+    C: PreimageIntoKeyBytes<PeerId>,
+{
     /// Creates a new `QueryPool` with the given configuration.
     pub fn new(config: QueryConfig) -> Self {
         QueryPool {
@@ -74,7 +77,7 @@ impl<TInner> QueryPool<TInner> {
     }
 
     /// Returns an iterator over the queries in the pool.
-    pub fn iter(&self) -> impl Iterator<Item = &Query<TInner>> {
+    pub fn iter(&self) -> impl Iterator<Item = &Query<TInner, C>> {
         self.queries.values()
     }
 
@@ -84,7 +87,7 @@ impl<TInner> QueryPool<TInner> {
     }
 
     /// Returns an iterator that allows modifying each query in the pool.
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Query<TInner>> {
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Query<TInner, C>> {
         self.queries.values_mut()
     }
 
@@ -115,8 +118,8 @@ impl<TInner> QueryPool<TInner> {
     /// Adds a query to the pool that iterates towards the closest peers to the target.
     pub fn add_iter_closest<T, I>(&mut self, target: T, peers: I, inner: TInner) -> QueryId
     where
-        T: Into<KeyBytes> + Clone,
-        I: IntoIterator<Item = Key<PeerId>>,
+        T: Into<KeyBytes<C>> + Clone,
+        I: IntoIterator<Item = Key<PeerId, C>>,
     {
         let id = self.next_query_id();
         self.continue_iter_closest(id, target, peers, inner);
@@ -126,8 +129,8 @@ impl<TInner> QueryPool<TInner> {
     /// Adds a query to the pool that iterates towards the closest peers to the target.
     pub fn continue_iter_closest<T, I>(&mut self, id: QueryId, target: T, peers: I, inner: TInner)
     where
-        T: Into<KeyBytes> + Clone,
-        I: IntoIterator<Item = Key<PeerId>>,
+        T: Into<KeyBytes<C>> + Clone,
+        I: IntoIterator<Item = Key<PeerId, C>>,
     {
         let cfg = ClosestPeersIterConfig {
             num_results: self.config.replication_factor,
@@ -154,17 +157,17 @@ impl<TInner> QueryPool<TInner> {
     }
 
     /// Returns a reference to a query with the given ID, if it is in the pool.
-    pub fn get(&self, id: &QueryId) -> Option<&Query<TInner>> {
+    pub fn get(&self, id: &QueryId) -> Option<&Query<TInner, C>> {
         self.queries.get(id)
     }
 
     /// Returns a mutablereference to a query with the given ID, if it is in the pool.
-    pub fn get_mut(&mut self, id: &QueryId) -> Option<&mut Query<TInner>> {
+    pub fn get_mut(&mut self, id: &QueryId) -> Option<&mut Query<TInner, C>> {
         self.queries.get_mut(id)
     }
 
     /// Polls the pool to advance the queries.
-    pub fn poll(&mut self, now: Instant) -> QueryPoolState<'_, TInner> {
+    pub fn poll(&mut self, now: Instant) -> QueryPoolState<'_, TInner, C> {
         let mut finished = None;
         let mut timeout = None;
         let mut waiting = None;
@@ -256,11 +259,11 @@ impl Default for QueryConfig {
 }
 
 /// A query in a `QueryPool`.
-pub struct Query<TInner> {
+pub struct Query<TInner, C> {
     /// The unique ID of the query.
     id: QueryId,
     /// The peer iterator that drives the query state.
-    peer_iter: QueryPeerIter,
+    peer_iter: QueryPeerIter<C>,
     /// Execution statistics of the query.
     stats: QueryStats,
     /// The opaque inner query state.
@@ -268,15 +271,18 @@ pub struct Query<TInner> {
 }
 
 /// The peer selection strategies that can be used by queries.
-enum QueryPeerIter {
-    Closest(ClosestPeersIter),
-    ClosestDisjoint(ClosestDisjointPeersIter),
+enum QueryPeerIter<C> {
+    Closest(ClosestPeersIter<C>),
+    ClosestDisjoint(ClosestDisjointPeersIter<C>),
     Fixed(FixedPeersIter),
 }
 
-impl<TInner> Query<TInner> {
+impl<TInner, C> Query<TInner, C>
+where
+    C: PreimageIntoKeyBytes<PeerId>,
+{
     /// Creates a new query without starting it.
-    fn new(id: QueryId, peer_iter: QueryPeerIter, inner: TInner) -> Self {
+    fn new(id: QueryId, peer_iter: QueryPeerIter<C>, inner: TInner) -> Self {
         Query {
             id,
             inner,
@@ -407,15 +413,10 @@ impl<TInner> Query<TInner> {
     }
 
     /// Consumes the query, producing the final `QueryResult`.
-    pub fn into_result(
-        self,
-        peer_id_to_key: fn(PeerId) -> Key<PeerId>,
-    ) -> QueryResult<TInner, impl Iterator<Item = PeerId>> {
+    pub fn into_result(self) -> QueryResult<TInner, impl Iterator<Item = PeerId>> {
         let peers = match self.peer_iter {
             QueryPeerIter::Closest(iter) => Either::Left(Either::Left(iter.into_result())),
-            QueryPeerIter::ClosestDisjoint(iter) => {
-                Either::Left(Either::Right(iter.into_result(peer_id_to_key)))
-            }
+            QueryPeerIter::ClosestDisjoint(iter) => Either::Left(Either::Right(iter.into_result())),
             QueryPeerIter::Fixed(iter) => Either::Right(iter.into_result()),
         };
         QueryResult {

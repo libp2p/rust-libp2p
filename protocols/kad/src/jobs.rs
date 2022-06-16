@@ -327,6 +327,7 @@ impl AddProviderJob {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::kbucket::{PreimageIntoKeyBytes, Sha256Hash};
     use crate::record::store::MemoryStore;
     use futures::{executor::block_on, future::poll_fn};
     use quickcheck::*;
@@ -357,10 +358,13 @@ mod tests {
 
     #[test]
     fn run_put_record_job() {
-        fn prop(records: Vec<Record>) {
+        fn prop<C>(records: Vec<Record>)
+        where
+            C: PreimageIntoKeyBytes<PeerId> + PreimageIntoKeyBytes<record::Key>,
+        {
             let mut job = rand_put_record_job();
             // Fill a record store.
-            let mut store = MemoryStore::new(job.local_id.clone());
+            let mut store = MemoryStore::<C>::new(job.local_id.clone());
             for r in records {
                 let _ = store.put(r);
             }
@@ -380,16 +384,19 @@ mod tests {
             }));
         }
 
-        quickcheck(prop as fn(_))
+        quickcheck(prop::<Sha256Hash> as fn(_))
     }
 
     #[test]
     fn run_add_provider_job() {
-        fn prop(records: Vec<ProviderRecord>) {
+        fn prop<C>(records: Vec<ProviderRecord>)
+        where
+            C: PreimageIntoKeyBytes<PeerId> + PreimageIntoKeyBytes<record::Key>,
+        {
             let mut job = rand_add_provider_job();
             let id = PeerId::random();
             // Fill a record store.
-            let mut store = MemoryStore::new(id.clone());
+            let mut store = MemoryStore::<C>::new(id.clone());
             for mut r in records {
                 r.provider = id.clone();
                 let _ = store.add_provider(r);
@@ -410,6 +417,6 @@ mod tests {
             }));
         }
 
-        quickcheck(prop as fn(_))
+        quickcheck(prop::<Sha256Hash> as fn(_))
     }
 }

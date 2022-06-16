@@ -22,8 +22,8 @@
 
 use super::*;
 
-use crate::kbucket::Distance;
-use crate::record::{store::MemoryStore, Key};
+use crate::kbucket::{Distance, PreimageIntoKeyBytes, Sha256Hash};
+use crate::record::store::MemoryStore;
 use crate::K_VALUE;
 use futures::{executor::block_on, future::poll_fn, prelude::*};
 use futures_timer::Delay;
@@ -47,7 +47,7 @@ use std::{
     u64,
 };
 
-type TestSwarm = Swarm<Kademlia<MemoryStore>>;
+type TestSwarm = Swarm<Kademlia<MemoryStore<Sha256Hash>, Sha256Hash>>;
 
 fn build_node() -> (Multiaddr, TestSwarm) {
     build_node_with_config(Default::default())
@@ -235,15 +235,22 @@ fn bootstrap() {
 
 #[test]
 fn query_iter() {
-    fn distances<K>(key: &kbucket::Key<K>, peers: Vec<PeerId>) -> Vec<Distance> {
+    fn distances<K, C>(key: &kbucket::Key<K, C>, peers: Vec<PeerId>) -> Vec<Distance>
+    where
+        C: PreimageIntoKeyBytes<PeerId> + PreimageIntoKeyBytes<K>,
+    {
         peers
             .into_iter()
-            .map(kbucket::Key::from)
+            .map(kbucket::Key::new)
             .map(|k| k.distance(key))
             .collect()
     }
 
-    fn run(rng: &mut impl Rng) {
+    fn run<R, C>(rng: &mut R)
+    where
+        R: Rng,
+        C: PreimageIntoKeyBytes<PeerId> + PreimageIntoKeyBytes<Vec<u8>>,
+    {
         let num_total = rng.gen_range(2, 20);
         let mut swarms = build_connected_nodes(num_total, 1)
             .into_iter()
@@ -254,7 +261,7 @@ fn query_iter() {
         // Ask the first peer in the list to search a random peer. The search should
         // propagate forwards through the list of peers.
         let search_target = PeerId::random();
-        let search_target_key = kbucket::Key::from(search_target);
+        let search_target_key = kbucket::Key::<_, C>::new(search_target);
         let qid = swarms[0].behaviour_mut().get_closest_peers(search_target);
 
         match swarms[0].behaviour_mut().query(&qid) {
@@ -290,7 +297,7 @@ fn query_iter() {
                             assert_eq!(swarm_ids[i], expected_swarm_id);
                             assert_eq!(swarm.behaviour_mut().queries.size(), 0);
                             assert!(expected_peer_ids.iter().all(|p| ok.peers.contains(p)));
-                            let key = kbucket::Key::new(ok.key);
+                            let key = kbucket::Key::<_, C>::new(ok.key);
                             assert_eq!(expected_distances, distances(&key, ok.peers));
                             return Poll::Ready(());
                         }
@@ -307,7 +314,7 @@ fn query_iter() {
 
     let mut rng = thread_rng();
     for _ in 0..10 {
-        run(&mut rng)
+        run::<_, Sha256Hash>(&mut rng)
     }
 }
 
@@ -489,7 +496,10 @@ fn get_record_not_found() {
 /// is equal to the configured replication factor.
 #[test]
 fn put_record() {
-    fn prop(records: Vec<Record>, seed: Seed, filter_records: bool, drop_records: bool) {
+    fn prop<C>(records: Vec<Record>, seed: Seed, filter_records: bool, drop_records: bool)
+    where
+        C: PreimageIntoKeyBytes<PeerId> + PreimageIntoKeyBytes<record::Key>,
+    {
         let mut rng = StdRng::from_seed(seed.0);
         let replication_factor =
             NonZeroUsize::new(rng.gen_range(1, (K_VALUE.get() / 2) + 1)).unwrap();
@@ -650,7 +660,7 @@ fn put_record() {
                 assert_eq!(r.expires, expected.expires);
                 assert_eq!(r.publisher, Some(*swarms[0].local_peer_id()));
 
-                let key = kbucket::Key::new(r.key.clone());
+                let key = kbucket::Key::<_, C>::new(r.key.clone());
                 let mut expected = swarms
                     .iter()
                     .skip(1)
@@ -658,9 +668,9 @@ fn put_record() {
                     .cloned()
                     .collect::<Vec<_>>();
                 expected.sort_by(|id1, id2| {
-                    kbucket::Key::from(*id1)
+                    kbucket::Key::new(*id1)
                         .distance(&key)
-                        .cmp(&kbucket::Key::from(*id2).distance(&key))
+                        .cmp(&kbucket::Key::new(*id2).distance(&key))
                 });
 
                 let expected = expected
@@ -732,7 +742,7 @@ fn put_record() {
 
     QuickCheck::new()
         .tests(4)
-        .quickcheck(prop as fn(_, _, _, _) -> _)
+        .quickcheck(prop::<Sha256Hash> as fn(_, _, _, _) -> _)
 }
 
 #[test]
@@ -853,7 +863,10 @@ fn get_record_many() {
 /// network where X is equal to the configured replication factor.
 #[test]
 fn add_provider() {
-    fn prop(keys: Vec<record::Key>, seed: Seed) {
+    fn prop<C>(keys: Vec<record::Key>, seed: Seed)
+    where
+        C: PreimageIntoKeyBytes<PeerId> + PreimageIntoKeyBytes<record::Key>,
+    {
         let mut rng = StdRng::from_seed(seed.0);
         let replication_factor =
             NonZeroUsize::new(rng.gen_range(1, (K_VALUE.get() / 2) + 1)).unwrap();
@@ -982,11 +995,11 @@ fn add_provider() {
                     .map(Swarm::local_peer_id)
                     .cloned()
                     .collect::<Vec<_>>();
-                let kbucket_key = kbucket::Key::new(key);
+                let kbucket_key = kbucket::Key::<_, C>::new(key);
                 expected.sort_by(|id1, id2| {
-                    kbucket::Key::from(*id1)
+                    kbucket::Key::new(*id1)
                         .distance(&kbucket_key)
-                        .cmp(&kbucket::Key::from(*id2).distance(&kbucket_key))
+                        .cmp(&kbucket::Key::new(*id2).distance(&kbucket_key))
                 });
 
                 let expected = expected
@@ -1029,7 +1042,9 @@ fn add_provider() {
         }))
     }
 
-    QuickCheck::new().tests(3).quickcheck(prop as fn(_, _))
+    QuickCheck::new()
+        .tests(3)
+        .quickcheck(prop::<Sha256Hash> as fn(_, _))
 }
 
 /// User code should be able to start queries beyond the internal
@@ -1090,7 +1105,7 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
     let mut trudy = build_node(); // Trudy the intrudor, an adversary.
     let mut bob = build_node();
 
-    let key = Key::from(Code::Sha2_256.digest(&thread_rng().gen::<[u8; 32]>()));
+    let key = record::Key::from(Code::Sha2_256.digest(&thread_rng().gen::<[u8; 32]>()));
     let record_bob = Record::new(key.clone(), b"bob".to_vec());
     let record_trudy = Record::new(key.clone(), b"trudy".to_vec());
 
@@ -1285,7 +1300,10 @@ fn network_behaviour_inject_address_change() {
     let old_address: Multiaddr = Protocol::Memory(1).into();
     let new_address: Multiaddr = Protocol::Memory(2).into();
 
-    let mut kademlia = Kademlia::new(local_peer_id.clone(), MemoryStore::new(local_peer_id));
+    let mut kademlia = Kademlia::<_, Sha256Hash>::new(
+        local_peer_id.clone(),
+        MemoryStore::<Sha256Hash>::new(local_peer_id),
+    );
 
     let endpoint = ConnectedPoint::Dialer {
         address: old_address.clone(),

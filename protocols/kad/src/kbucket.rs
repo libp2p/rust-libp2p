@@ -77,21 +77,38 @@ pub use entry::*;
 use arrayvec::{self, ArrayVec};
 use bucket::KBucket;
 use std::collections::VecDeque;
+use std::marker::PhantomData;
 use std::time::{Duration, Instant};
 
 /// Maximum number of k-buckets.
 const NUM_BUCKETS: usize = 256;
 
 /// A `KBucketsTable` represents a Kademlia routing table.
-#[derive(Debug, Clone)]
-pub struct KBucketsTable<TKey, TVal> {
+#[derive(Debug)]
+pub struct KBucketsTable<TKey, TVal, C> {
     /// The key identifying the local peer that owns the routing table.
     local_key: TKey,
     /// The buckets comprising the routing table.
-    buckets: Vec<KBucket<TKey, TVal>>,
+    buckets: Vec<KBucket<TKey, TVal, C>>,
     /// The list of evicted entries that have been replaced with pending
     /// entries since the last call to [`KBucketsTable::take_applied_pending`].
     applied_pending: VecDeque<AppliedPending<TKey, TVal>>,
+    _convertor: PhantomData<C>,
+}
+
+impl<TKey, TVal, C> Clone for KBucketsTable<TKey, TVal, C>
+where
+    TKey: Clone,
+    TVal: Clone,
+{
+    fn clone(&self) -> Self {
+        Self {
+            local_key: self.local_key.clone(),
+            buckets: self.buckets.clone(),
+            applied_pending: self.applied_pending.clone(),
+            _convertor: self._convertor.clone(),
+        }
+    }
 }
 
 /// A (type-safe) index into a `KBucketsTable`, i.e. a non-negative integer in the
@@ -143,9 +160,9 @@ impl BucketIndex {
     }
 }
 
-impl<TKey, TVal> KBucketsTable<TKey, TVal>
+impl<TKey, TVal, C> KBucketsTable<TKey, TVal, C>
 where
-    TKey: Clone + AsRef<KeyBytes>,
+    TKey: Clone + AsRef<KeyBytes<C>>,
     TVal: Clone,
 {
     /// Creates a new, empty Kademlia routing table with entries partitioned
@@ -161,6 +178,7 @@ where
                 .map(|_| KBucket::new(pending_timeout))
                 .collect(),
             applied_pending: VecDeque::new(),
+            _convertor: PhantomData::default(),
         }
     }
 
@@ -171,7 +189,7 @@ where
 
     /// Returns an `Entry` for the given key, representing the state of the entry
     /// in the routing table.
-    pub fn entry<'a>(&'a mut self, key: &'a TKey) -> Entry<'a, TKey, TVal> {
+    pub fn entry<'a>(&'a mut self, key: &'a TKey) -> Entry<'a, TKey, TVal, C> {
         let index = BucketIndex::new(&self.local_key.as_ref().distance(key));
         if let Some(i) = index {
             let bucket = &mut self.buckets[i.get()];
@@ -188,7 +206,7 @@ where
     ///
     /// The buckets are ordered by proximity to the `local_key`, i.e. the first
     /// bucket is the closest bucket (containing at most one key).
-    pub fn iter(&mut self) -> impl Iterator<Item = KBucketRef<'_, TKey, TVal>> + '_ {
+    pub fn iter(&mut self) -> impl Iterator<Item = KBucketRef<'_, TKey, TVal, C>> + '_ {
         let applied_pending = &mut self.applied_pending;
         self.buckets.iter_mut().enumerate().map(move |(i, b)| {
             if let Some(applied) = b.apply_pending() {
@@ -197,6 +215,7 @@ where
             KBucketRef {
                 index: BucketIndex(i),
                 bucket: b,
+                _convertor: PhantomData::default(),
             }
         })
     }
@@ -204,9 +223,9 @@ where
     /// Returns the bucket for the distance to the given key.
     ///
     /// Returns `None` if the given key refers to the local key.
-    pub fn bucket<K>(&mut self, key: &K) -> Option<KBucketRef<'_, TKey, TVal>>
+    pub fn bucket<K>(&mut self, key: &K) -> Option<KBucketRef<'_, TKey, TVal, C>>
     where
-        K: AsRef<KeyBytes>,
+        K: AsRef<KeyBytes<C>>,
     {
         let d = self.local_key.as_ref().distance(key);
         if let Some(index) = BucketIndex::new(&d) {
@@ -214,7 +233,11 @@ where
             if let Some(applied) = bucket.apply_pending() {
                 self.applied_pending.push_back(applied)
             }
-            Some(KBucketRef { bucket, index })
+            Some(KBucketRef {
+                index,
+                bucket,
+                _convertor: PhantomData::default(),
+            })
         } else {
             None
         }
@@ -240,7 +263,7 @@ where
     /// increasing distance.
     pub fn closest_keys<'a, T>(&'a mut self, target: &'a T) -> impl Iterator<Item = TKey> + 'a
     where
-        T: AsRef<KeyBytes>,
+        T: AsRef<KeyBytes<C>>,
     {
         let distance = self.local_key.as_ref().distance(target);
         ClosestIter {
@@ -248,7 +271,7 @@ where
             iter: None,
             table: self,
             buckets_iter: ClosestBucketsIter::new(distance),
-            fmap: |b: &KBucket<TKey, _>| -> ArrayVec<_, { K_VALUE.get() }> {
+            fmap: |b: &KBucket<TKey, _, C>| -> ArrayVec<_, { K_VALUE.get() }> {
                 b.iter().map(|(n, _)| n.key.clone()).collect()
             },
         }
@@ -261,7 +284,7 @@ where
         target: &'a T,
     ) -> impl Iterator<Item = EntryView<TKey, TVal>> + 'a
     where
-        T: Clone + AsRef<KeyBytes>,
+        T: Clone + AsRef<KeyBytes<C>>,
         TVal: Clone,
     {
         let distance = self.local_key.as_ref().distance(target);
@@ -270,7 +293,7 @@ where
             iter: None,
             table: self,
             buckets_iter: ClosestBucketsIter::new(distance),
-            fmap: |b: &KBucket<_, TVal>| -> ArrayVec<_, { K_VALUE.get() }> {
+            fmap: |b: &KBucket<_, TVal, C>| -> ArrayVec<_, { K_VALUE.get() }> {
                 b.iter()
                     .map(|(n, status)| EntryView {
                         node: n.clone(),
@@ -288,7 +311,7 @@ where
     /// calculated by backtracking from the target towards the local key.
     pub fn count_nodes_between<T>(&mut self, target: &T) -> usize
     where
-        T: AsRef<KeyBytes>,
+        T: AsRef<KeyBytes<C>>,
     {
         let local_key = self.local_key.clone();
         let distance = target.as_ref().distance(&local_key);
@@ -308,14 +331,14 @@ where
 
 /// An iterator over (some projection of) the closest entries in a
 /// `KBucketsTable` w.r.t. some target `Key`.
-struct ClosestIter<'a, TTarget, TKey, TVal, TMap, TOut> {
+struct ClosestIter<'a, TTarget, TKey, TVal, TMap, TOut, C> {
     /// A reference to the target key whose distance to the local key determines
     /// the order in which the buckets are traversed. The resulting
     /// array from projecting the entries of each bucket using `fmap` is
     /// sorted according to the distance to the target.
     target: &'a TTarget,
     /// A reference to all buckets of the `KBucketsTable`.
-    table: &'a mut KBucketsTable<TKey, TVal>,
+    table: &'a mut KBucketsTable<TKey, TVal, C>,
     /// The iterator over the bucket indices in the order determined by the
     /// distance of the local key to the target.
     buckets_iter: ClosestBucketsIter,
@@ -420,13 +443,14 @@ impl Iterator for ClosestBucketsIter {
     }
 }
 
-impl<TTarget, TKey, TVal, TMap, TOut> Iterator for ClosestIter<'_, TTarget, TKey, TVal, TMap, TOut>
+impl<TTarget, TKey, TVal, TMap, TOut, C> Iterator
+    for ClosestIter<'_, TTarget, TKey, TVal, TMap, TOut, C>
 where
-    TTarget: AsRef<KeyBytes>,
-    TKey: Clone + AsRef<KeyBytes>,
+    TTarget: AsRef<KeyBytes<C>>,
+    TKey: Clone + AsRef<KeyBytes<C>>,
     TVal: Clone,
-    TMap: Fn(&KBucket<TKey, TVal>) -> ArrayVec<TOut, { K_VALUE.get() }>,
-    TOut: AsRef<KeyBytes>,
+    TMap: Fn(&KBucket<TKey, TVal, C>) -> ArrayVec<TOut, { K_VALUE.get() }>,
+    TOut: AsRef<KeyBytes<C>>,
 {
     type Item = TOut;
 
@@ -461,14 +485,15 @@ where
 }
 
 /// A reference to a bucket in a [`KBucketsTable`].
-pub struct KBucketRef<'a, TKey, TVal> {
+pub struct KBucketRef<'a, TKey, TVal, C> {
     index: BucketIndex,
-    bucket: &'a mut KBucket<TKey, TVal>,
+    bucket: &'a mut KBucket<TKey, TVal, C>,
+    _convertor: PhantomData<C>,
 }
 
-impl<'a, TKey, TVal> KBucketRef<'a, TKey, TVal>
+impl<'a, TKey, TVal, C> KBucketRef<'a, TKey, TVal, C>
 where
-    TKey: Clone + AsRef<KeyBytes>,
+    TKey: Clone + AsRef<KeyBytes<C>>,
     TVal: Clone,
 {
     /// Returns the minimum inclusive and maximum inclusive [`Distance`] for
@@ -526,11 +551,14 @@ mod tests {
     use quickcheck::*;
     use rand::Rng;
 
-    type TestTable = KBucketsTable<KeyBytes, ()>;
+    type TestTable<C> = KBucketsTable<KeyBytes<C>, (), C>;
 
-    impl Arbitrary for TestTable {
-        fn arbitrary<G: Gen>(g: &mut G) -> TestTable {
-            let local_key = Key::from(PeerId::random());
+    impl<C> Arbitrary for TestTable<C>
+    where
+        C: PreimageIntoKeyBytes<PeerId>,
+    {
+        fn arbitrary<G: Gen>(g: &mut G) -> TestTable<C> {
+            let local_key = Key::new(PeerId::random());
             let timeout = Duration::from_secs(g.gen_range(1, 360));
             let mut table = TestTable::new(local_key.clone().into(), timeout);
             let mut num_total = g.gen_range(0, 100);
@@ -558,9 +586,10 @@ mod tests {
 
     #[test]
     fn buckets_are_non_overlapping_and_exhaustive() {
-        let local_key = Key::from(PeerId::random());
+        let local_key = Key::new(PeerId::random());
         let timeout = Duration::from_secs(0);
-        let mut table = KBucketsTable::<KeyBytes, ()>::new(local_key.into(), timeout);
+        let mut table =
+            KBucketsTable::<KeyBytes<Sha256Hash>, (), Sha256Hash>::new(local_key.into(), timeout);
 
         let mut prev_max = U256::from(0);
 
@@ -577,10 +606,12 @@ mod tests {
     fn bucket_contains_range() {
         fn prop(ix: u8) {
             let index = BucketIndex(ix as usize);
-            let mut bucket = KBucket::<Key<PeerId>, ()>::new(Duration::from_secs(0));
+            let mut bucket =
+                KBucket::<Key<PeerId, Sha256Hash>, (), Sha256Hash>::new(Duration::from_secs(0));
             let bucket_ref = KBucketRef {
                 index,
                 bucket: &mut bucket,
+                _convertor: PhantomData::default(),
             };
 
             let (min, max) = bucket_ref.range();
@@ -613,10 +644,10 @@ mod tests {
 
     #[test]
     fn entry_inserted() {
-        let local_key = Key::from(PeerId::random());
-        let other_id = Key::from(PeerId::random());
+        let local_key = Key::new(PeerId::random());
+        let other_id = Key::new(PeerId::random());
 
-        let mut table = KBucketsTable::<_, ()>::new(local_key, Duration::from_secs(5));
+        let mut table = KBucketsTable::<_, (), Sha256Hash>::new(local_key, Duration::from_secs(5));
         if let Entry::Absent(entry) = table.entry(&other_id) {
             match entry.insert((), NodeStatus::Connected) {
                 InsertResult::Inserted => (),
@@ -633,8 +664,9 @@ mod tests {
 
     #[test]
     fn entry_self() {
-        let local_key = Key::from(PeerId::random());
-        let mut table = KBucketsTable::<_, ()>::new(local_key.clone(), Duration::from_secs(5));
+        let local_key = Key::new(PeerId::random());
+        let mut table =
+            KBucketsTable::<_, (), Sha256Hash>::new(local_key.clone(), Duration::from_secs(5));
         match table.entry(&local_key) {
             Entry::SelfEntry => (),
             _ => panic!(),
@@ -643,14 +675,14 @@ mod tests {
 
     #[test]
     fn closest() {
-        let local_key = Key::from(PeerId::random());
-        let mut table = KBucketsTable::<_, ()>::new(local_key, Duration::from_secs(5));
+        let local_key = Key::new(PeerId::random());
+        let mut table = KBucketsTable::<_, (), Sha256Hash>::new(local_key, Duration::from_secs(5));
         let mut count = 0;
         loop {
             if count == 100 {
                 break;
             }
-            let key = Key::from(PeerId::random());
+            let key = Key::new(PeerId::random());
             if let Entry::Absent(e) = table.entry(&key) {
                 match e.insert((), NodeStatus::Connected) {
                     InsertResult::Inserted => count += 1,
@@ -668,7 +700,7 @@ mod tests {
             .collect();
 
         for _ in 0..10 {
-            let target_key = Key::from(PeerId::random());
+            let target_key = Key::new(PeerId::random());
             let keys = table.closest_keys(&target_key).collect::<Vec<_>>();
             // The list of keys is expected to match the result of a full-table scan.
             expected_keys.sort_by_key(|k| k.distance(&target_key));
@@ -678,12 +710,13 @@ mod tests {
 
     #[test]
     fn applied_pending() {
-        let local_key = Key::from(PeerId::random());
-        let mut table = KBucketsTable::<_, ()>::new(local_key.clone(), Duration::from_millis(1));
+        let local_key = Key::new(PeerId::random());
+        let mut table =
+            KBucketsTable::<_, (), Sha256Hash>::new(local_key.clone(), Duration::from_millis(1));
         let expected_applied;
         let full_bucket_index;
         loop {
-            let key = Key::from(PeerId::random());
+            let key = Key::new(PeerId::random());
             if let Entry::Absent(e) = table.entry(&key) {
                 match e.insert((), NodeStatus::Disconnected) {
                     InsertResult::Full => {
@@ -737,7 +770,7 @@ mod tests {
 
     #[test]
     fn count_nodes_between() {
-        fn prop(mut table: TestTable, target: Key<PeerId>) -> bool {
+        fn prop<C>(mut table: TestTable<C>, target: Key<PeerId, C>) -> bool {
             let num_to_target = table.count_nodes_between(&target);
             let distance = table.local_key.distance(&target);
             let base2 = U256::from(2);
@@ -758,6 +791,6 @@ mod tests {
 
         QuickCheck::new()
             .tests(10)
-            .quickcheck(prop as fn(_, _) -> _)
+            .quickcheck(prop::<Sha256Hash> as fn(_, _) -> _)
     }
 }

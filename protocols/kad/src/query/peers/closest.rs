@@ -20,7 +20,7 @@
 
 use super::*;
 
-use crate::kbucket::{Distance, Key, KeyBytes};
+use crate::kbucket::{Distance, Key, KeyBytes, PreimageIntoKeyBytes};
 use crate::{ALPHA_VALUE, K_VALUE};
 use instant::Instant;
 use libp2p_core::PeerId;
@@ -31,22 +31,34 @@ pub mod disjoint;
 
 /// A peer iterator for a dynamically changing list of peers, sorted by increasing
 /// distance to a chosen target.
-#[derive(Debug, Clone)]
-pub struct ClosestPeersIter {
+#[derive(Debug)]
+pub struct ClosestPeersIter<C> {
     config: ClosestPeersIterConfig,
 
     /// The target whose distance to any peer determines the position of
     /// the peer in the iterator.
-    target: KeyBytes,
+    target: KeyBytes<C>,
 
     /// The internal iterator state.
     state: State,
 
     /// The closest peers to the target, ordered by increasing distance.
-    closest_peers: BTreeMap<Distance, Peer>,
+    closest_peers: BTreeMap<Distance, Peer<C>>,
 
     /// The number of peers for which the iterator is currently waiting for results.
     num_waiting: usize,
+}
+
+impl<C> Clone for ClosestPeersIter<C> {
+    fn clone(&self) -> Self {
+        Self {
+            config: self.config.clone(),
+            target: self.target.clone(),
+            state: self.state.clone(),
+            closest_peers: self.closest_peers.clone(),
+            num_waiting: self.num_waiting.clone(),
+        }
+    }
 }
 
 /// Configuration for a `ClosestPeersIter`.
@@ -72,11 +84,6 @@ pub struct ClosestPeersIterConfig {
     /// the peer when evaluating the termination conditions, until and unless a
     /// result is delivered. Defaults to `10` seconds.
     pub peer_timeout: Duration,
-
-    /// Function that converts [`PeerId`] to [`Key`].
-    ///
-    /// In the simplest case just [`Key::from`].
-    pub peer_id_to_key: fn(PeerId) -> Key<PeerId>,
 }
 
 impl Default for ClosestPeersIterConfig {
@@ -85,16 +92,18 @@ impl Default for ClosestPeersIterConfig {
             parallelism: ALPHA_VALUE,
             num_results: K_VALUE,
             peer_timeout: Duration::from_secs(10),
-            peer_id_to_key: Key::from,
         }
     }
 }
 
-impl ClosestPeersIter {
+impl<C> ClosestPeersIter<C>
+where
+    C: PreimageIntoKeyBytes<PeerId>,
+{
     /// Creates a new iterator with a default configuration.
-    pub fn new<I>(target: KeyBytes, known_closest_peers: I) -> Self
+    pub fn new<I>(target: KeyBytes<C>, known_closest_peers: I) -> Self
     where
-        I: IntoIterator<Item = Key<PeerId>>,
+        I: IntoIterator<Item = Key<PeerId, C>>,
     {
         Self::with_config(
             ClosestPeersIterConfig::default(),
@@ -110,8 +119,8 @@ impl ClosestPeersIter {
         known_closest_peers: I,
     ) -> Self
     where
-        I: IntoIterator<Item = Key<PeerId>>,
-        T: Into<KeyBytes>,
+        I: IntoIterator<Item = Key<PeerId, C>>,
+        T: Into<KeyBytes<C>>,
     {
         let target = target.into();
 
@@ -163,7 +172,7 @@ impl ClosestPeersIter {
             return false;
         }
 
-        let key = (self.config.peer_id_to_key)(*peer);
+        let key = Key::new(*peer);
         let distance = key.distance(&self.target);
 
         // Mark the peer as succeeded.
@@ -187,7 +196,7 @@ impl ClosestPeersIter {
 
         // Incorporate the reported closer peers into the iterator.
         for peer in closer_peers {
-            let key = (self.config.peer_id_to_key)(peer);
+            let key = Key::new(peer);
             let distance = self.target.distance(&key);
             let peer = Peer {
                 key,
@@ -239,7 +248,7 @@ impl ClosestPeersIter {
             return false;
         }
 
-        let key = (self.config.peer_id_to_key)(*peer);
+        let key = Key::new(*peer);
         let distance = key.distance(&self.target);
 
         match self.closest_peers.entry(distance) {
@@ -444,10 +453,19 @@ enum State {
 }
 
 /// Representation of a peer in the context of a iterator.
-#[derive(Debug, Clone)]
-struct Peer {
-    key: Key<PeerId>,
+#[derive(Debug)]
+struct Peer<C> {
+    key: Key<PeerId, C>,
     state: PeerState,
+}
+
+impl<C> Clone for Peer<C> {
+    fn clone(&self) -> Self {
+        Self {
+            key: self.key.clone(),
+            state: self.state.clone(),
+        }
+    }
 }
 
 /// The state of a single `Peer`.
@@ -481,6 +499,7 @@ enum PeerState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::kbucket::Sha256Hash;
     use libp2p_core::{
         multihash::{Code, Multihash},
         PeerId,
@@ -500,23 +519,28 @@ mod tests {
             .collect()
     }
 
-    fn sorted<T: AsRef<KeyBytes>>(target: &T, peers: &Vec<Key<PeerId>>) -> bool {
+    fn sorted<T, C>(target: &T, peers: &Vec<Key<PeerId, C>>) -> bool
+    where
+        T: AsRef<KeyBytes<C>>,
+    {
         peers
             .windows(2)
             .all(|w| w[0].distance(&target) < w[1].distance(&target))
     }
 
-    impl Arbitrary for ClosestPeersIter {
-        fn arbitrary<G: Gen>(g: &mut G) -> ClosestPeersIter {
+    impl<C> Arbitrary for ClosestPeersIter<C>
+    where
+        C: PreimageIntoKeyBytes<PeerId> + PreimageIntoKeyBytes<Multihash>,
+    {
+        fn arbitrary<G: Gen>(g: &mut G) -> ClosestPeersIter<C> {
             let known_closest_peers = random_peers(g.gen_range(1, 60), g)
                 .into_iter()
-                .map(Key::from);
-            let target = Key::from(Into::<Multihash>::into(PeerId::random()));
+                .map(Key::new);
+            let target = Key::new(Into::<Multihash>::into(PeerId::random()));
             let config = ClosestPeersIterConfig {
                 parallelism: NonZeroUsize::new(g.gen_range(1, 10)).unwrap(),
                 num_results: NonZeroUsize::new(g.gen_range(1, 25)).unwrap(),
                 peer_timeout: Duration::from_secs(g.gen_range(10, 30)),
-                peer_id_to_key: Key::from,
             };
             ClosestPeersIter::with_config(config, target, known_closest_peers)
         }
@@ -533,7 +557,10 @@ mod tests {
 
     #[test]
     fn new_iter() {
-        fn prop(iter: ClosestPeersIter) {
+        fn prop<C>(iter: ClosestPeersIter<C>)
+        where
+            C: PreimageIntoKeyBytes<PeerId>,
+        {
             let target = iter.target.clone();
 
             let (keys, states): (Vec<_>, Vec<_>) = iter
@@ -564,12 +591,17 @@ mod tests {
             );
         }
 
-        QuickCheck::new().tests(10).quickcheck(prop as fn(_) -> _)
+        QuickCheck::new()
+            .tests(10)
+            .quickcheck(prop::<Sha256Hash> as fn(_) -> _)
     }
 
     #[test]
     fn termination_and_parallelism() {
-        fn prop(mut iter: ClosestPeersIter, seed: Seed) {
+        fn prop<C>(mut iter: ClosestPeersIter<C>, seed: Seed)
+        where
+            C: PreimageIntoKeyBytes<PeerId>,
+        {
             let now = Instant::now();
             let mut rng = StdRng::from_seed(seed.0);
 
@@ -621,7 +653,7 @@ mod tests {
                     if rng.gen_bool(0.75) {
                         let num_closer = rng.gen_range(0, iter.config.num_results.get() + 1);
                         let closer_peers = random_peers(num_closer, &mut rng);
-                        remaining.extend(closer_peers.iter().cloned().map(Key::from));
+                        remaining.extend(closer_peers.iter().cloned().map(Key::new));
                         iter.on_success(k.preimage(), closer_peers);
                     } else {
                         num_failures += 1;
@@ -651,7 +683,7 @@ mod tests {
             let target = iter.target.clone();
             let num_results = iter.config.num_results;
             let result = iter.into_result();
-            let closest = result.map(Key::from).collect::<Vec<_>>();
+            let closest = result.map(Key::new).collect::<Vec<_>>();
 
             assert!(sorted(&target, &closest));
 
@@ -670,12 +702,15 @@ mod tests {
 
         QuickCheck::new()
             .tests(10)
-            .quickcheck(prop as fn(_, _) -> _)
+            .quickcheck(prop::<Sha256Hash> as fn(_, _) -> _)
     }
 
     #[test]
     fn no_duplicates() {
-        fn prop(mut iter: ClosestPeersIter, seed: Seed) -> bool {
+        fn prop<C>(mut iter: ClosestPeersIter<C>, seed: Seed) -> bool
+        where
+            C: PreimageIntoKeyBytes<PeerId>,
+        {
             let now = Instant::now();
             let mut rng = StdRng::from_seed(seed.0);
 
@@ -713,12 +748,15 @@ mod tests {
 
         QuickCheck::new()
             .tests(10)
-            .quickcheck(prop as fn(_, _) -> _)
+            .quickcheck(prop::<Sha256Hash> as fn(_, _) -> _)
     }
 
     #[test]
     fn timeout() {
-        fn prop(mut iter: ClosestPeersIter) -> bool {
+        fn prop<C>(mut iter: ClosestPeersIter<C>) -> bool
+        where
+            C: PreimageIntoKeyBytes<PeerId>,
+        {
             let mut now = Instant::now();
             let peer = iter
                 .closest_peers
@@ -766,12 +804,17 @@ mod tests {
             true
         }
 
-        QuickCheck::new().tests(10).quickcheck(prop as fn(_) -> _)
+        QuickCheck::new()
+            .tests(10)
+            .quickcheck(prop::<Sha256Hash> as fn(_) -> _)
     }
 
     #[test]
     fn without_success_try_up_to_k_peers() {
-        fn prop(mut iter: ClosestPeersIter) {
+        fn prop<C>(mut iter: ClosestPeersIter<C>)
+        where
+            C: PreimageIntoKeyBytes<PeerId>,
+        {
             let now = Instant::now();
 
             for _ in 0..(usize::min(iter.closest_peers.len(), K_VALUE.get())) {
@@ -787,11 +830,16 @@ mod tests {
             assert_eq!(PeersIterState::Finished, iter.next(now));
         }
 
-        QuickCheck::new().tests(10).quickcheck(prop as fn(_))
+        QuickCheck::new()
+            .tests(10)
+            .quickcheck(prop::<Sha256Hash> as fn(_))
     }
 
     fn stalled_at_capacity() {
-        fn prop(mut iter: ClosestPeersIter) {
+        fn prop<C>(mut iter: ClosestPeersIter<C>)
+        where
+            C: PreimageIntoKeyBytes<PeerId>,
+        {
             iter.state = State::Stalled;
 
             for i in 0..usize::max(iter.config.parallelism.get(), iter.config.num_results.get()) {
@@ -812,6 +860,8 @@ mod tests {
             )
         }
 
-        QuickCheck::new().tests(10).quickcheck(prop as fn(_))
+        QuickCheck::new()
+            .tests(10)
+            .quickcheck(prop::<Sha256Hash> as fn(_))
     }
 }

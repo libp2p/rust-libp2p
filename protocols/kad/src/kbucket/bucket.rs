@@ -27,6 +27,7 @@
 
 use super::*;
 pub use crate::K_VALUE;
+use std::marker::PhantomData;
 
 /// A `PendingNode` is a `Node` that is pending insertion into a `KBucket`.
 #[derive(Debug, Clone)]
@@ -98,8 +99,8 @@ pub struct Position(usize);
 
 /// A `KBucket` is a list of up to `K_VALUE` keys and associated values,
 /// ordered from least-recently connected to most-recently connected.
-#[derive(Debug, Clone)]
-pub struct KBucket<TKey, TVal> {
+#[derive(Debug)]
+pub struct KBucket<TKey, TVal, C> {
     /// The nodes contained in the bucket.
     nodes: ArrayVec<Node<TKey, TVal>, { K_VALUE.get() }>,
 
@@ -126,6 +127,24 @@ pub struct KBucket<TKey, TVal> {
     /// if the least-recently connected node is not updated as being connected
     /// in the meantime.
     pending_timeout: Duration,
+
+    _convertor: PhantomData<C>,
+}
+
+impl<TKey, TVal, C> Clone for KBucket<TKey, TVal, C>
+where
+    TKey: Clone,
+    TVal: Clone,
+{
+    fn clone(&self) -> Self {
+        Self {
+            nodes: self.nodes.clone(),
+            first_connected_pos: self.first_connected_pos.clone(),
+            pending: self.pending.clone(),
+            pending_timeout: self.pending_timeout.clone(),
+            _convertor: self._convertor.clone(),
+        }
+    }
 }
 
 /// The result of inserting an entry into a bucket.
@@ -161,18 +180,19 @@ pub struct AppliedPending<TKey, TVal> {
     pub evicted: Option<Node<TKey, TVal>>,
 }
 
-impl<TKey, TVal> KBucket<TKey, TVal>
+impl<TKey, TVal, C> KBucket<TKey, TVal, C>
 where
-    TKey: Clone + AsRef<KeyBytes>,
+    TKey: Clone + AsRef<KeyBytes<C>>,
     TVal: Clone,
 {
     /// Creates a new `KBucket` with the given timeout for pending entries.
     pub fn new(pending_timeout: Duration) -> Self {
-        KBucket {
+        Self {
             nodes: ArrayVec::new(),
             first_connected_pos: None,
             pending: None,
             pending_timeout,
+            _convertor: PhantomData::default(),
         }
     }
 
@@ -440,13 +460,16 @@ mod tests {
     use rand::Rng;
     use std::collections::VecDeque;
 
-    impl Arbitrary for KBucket<Key<PeerId>, ()> {
-        fn arbitrary<G: Gen>(g: &mut G) -> KBucket<Key<PeerId>, ()> {
+    impl<C> Arbitrary for KBucket<Key<PeerId, C>, (), C>
+    where
+        C: PreimageIntoKeyBytes<PeerId>,
+    {
+        fn arbitrary<G: Gen>(g: &mut G) -> Self {
             let timeout = Duration::from_secs(g.gen_range(1, g.size() as u64));
-            let mut bucket = KBucket::<Key<PeerId>, ()>::new(timeout);
+            let mut bucket = KBucket::<Key<PeerId, C>, (), C>::new(timeout);
             let num_nodes = g.gen_range(1, K_VALUE.get() + 1);
             for _ in 0..num_nodes {
-                let key = Key::from(PeerId::random());
+                let key = Key::new(PeerId::random());
                 let node = Node {
                     key: key.clone(),
                     value: (),
@@ -478,10 +501,13 @@ mod tests {
     }
 
     // Fill a bucket with random nodes with the given status.
-    fn fill_bucket(bucket: &mut KBucket<Key<PeerId>, ()>, status: NodeStatus) {
+    fn fill_bucket<C>(bucket: &mut KBucket<Key<PeerId, C>, (), C>, status: NodeStatus)
+    where
+        C: PreimageIntoKeyBytes<PeerId>,
+    {
         let num_entries_start = bucket.num_entries();
         for i in 0..K_VALUE.get() - num_entries_start {
-            let key = Key::from(PeerId::random());
+            let key = Key::new(PeerId::random());
             let node = Node { key, value: () };
             assert_eq!(InsertResult::Inserted, bucket.insert(node, status));
             assert_eq!(bucket.num_entries(), num_entries_start + i + 1);
@@ -490,8 +516,11 @@ mod tests {
 
     #[test]
     fn ordering() {
-        fn prop(status: Vec<NodeStatus>) -> bool {
-            let mut bucket = KBucket::<Key<PeerId>, ()>::new(Duration::from_secs(1));
+        fn prop<C>(status: Vec<NodeStatus>) -> bool
+        where
+            C: PreimageIntoKeyBytes<PeerId>,
+        {
+            let mut bucket = KBucket::<Key<PeerId, C>, (), C>::new(Duration::from_secs(1));
 
             // The expected lists of connected and disconnected nodes.
             let mut connected = VecDeque::new();
@@ -499,7 +528,7 @@ mod tests {
 
             // Fill the bucket, thereby populating the expected lists in insertion order.
             for status in status {
-                let key = Key::from(PeerId::random());
+                let key = Key::new(PeerId::random());
                 let node = Node {
                     key: key.clone(),
                     value: (),
@@ -537,18 +566,19 @@ mod tests {
             nodes == Vec::from(disconnected) && tail == Vec::from(connected)
         }
 
-        quickcheck(prop as fn(_) -> _);
+        quickcheck(prop::<Sha256Hash> as fn(_) -> _);
     }
 
     #[test]
     fn full_bucket() {
-        let mut bucket = KBucket::<Key<PeerId>, ()>::new(Duration::from_secs(1));
+        let mut bucket =
+            KBucket::<Key<PeerId, Sha256Hash>, (), Sha256Hash>::new(Duration::from_secs(1));
 
         // Fill the bucket with disconnected nodes.
         fill_bucket(&mut bucket, NodeStatus::Disconnected);
 
         // Trying to insert another disconnected node fails.
-        let key = Key::from(PeerId::random());
+        let key = Key::new(PeerId::random());
         let node = Node { key, value: () };
         match bucket.insert(node, NodeStatus::Disconnected) {
             InsertResult::Full => {}
@@ -563,7 +593,7 @@ mod tests {
 
             // Add a connected node, which is expected to be pending, scheduled to
             // replace the first (i.e. least-recently connected) node.
-            let key = Key::from(PeerId::random());
+            let key = Key::new(PeerId::random());
             let node = Node {
                 key: key.clone(),
                 value: (),
@@ -603,7 +633,7 @@ mod tests {
         assert_eq!(K_VALUE.get(), bucket.num_entries());
 
         // Trying to insert another connected node fails.
-        let key = Key::from(PeerId::random());
+        let key = Key::new(PeerId::random());
         let node = Node { key, value: () };
         match bucket.insert(node, NodeStatus::Connected) {
             InsertResult::Full => {}
@@ -613,13 +643,14 @@ mod tests {
 
     #[test]
     fn full_bucket_discard_pending() {
-        let mut bucket = KBucket::<Key<PeerId>, ()>::new(Duration::from_secs(1));
+        let mut bucket =
+            KBucket::<Key<PeerId, Sha256Hash>, (), Sha256Hash>::new(Duration::from_secs(1));
         fill_bucket(&mut bucket, NodeStatus::Disconnected);
         let (first, _) = bucket.iter().next().unwrap();
         let first_disconnected = first.clone();
 
         // Add a connected pending node.
-        let key = Key::from(PeerId::random());
+        let key = Key::new(PeerId::random());
         let node = Node {
             key: key.clone(),
             value: (),
@@ -653,7 +684,11 @@ mod tests {
 
     #[test]
     fn bucket_update() {
-        fn prop(mut bucket: KBucket<Key<PeerId>, ()>, pos: Position, status: NodeStatus) -> bool {
+        fn prop<C>(
+            mut bucket: KBucket<Key<PeerId, C>, (), C>,
+            pos: Position,
+            status: NodeStatus,
+        ) -> bool {
             let num_nodes = bucket.num_entries();
 
             // Capture position and key of the random node to update.
@@ -684,6 +719,6 @@ mod tests {
             expected == actual
         }
 
-        quickcheck(prop as fn(_, _, _) -> _);
+        quickcheck(prop::<Sha256Hash> as fn(_, _, _) -> _);
     }
 }

@@ -66,21 +66,24 @@ pub struct EntryView<TKey, TVal> {
     pub status: NodeStatus,
 }
 
-impl<TKey: AsRef<KeyBytes>, TVal> AsRef<KeyBytes> for EntryView<TKey, TVal> {
-    fn as_ref(&self) -> &KeyBytes {
+impl<TKey, TVal, C> AsRef<KeyBytes<C>> for EntryView<TKey, TVal>
+where
+    TKey: AsRef<KeyBytes<C>>,
+{
+    fn as_ref(&self) -> &KeyBytes<C> {
         self.node.key.as_ref()
     }
 }
 
 /// A reference into a single entry of a `KBucketsTable`.
 #[derive(Debug)]
-pub enum Entry<'a, TPeerId, TVal> {
+pub enum Entry<'a, TPeerId, TVal, C> {
     /// The entry is present in a bucket.
-    Present(PresentEntry<'a, TPeerId, TVal>, NodeStatus),
+    Present(PresentEntry<'a, TPeerId, TVal, C>, NodeStatus),
     /// The entry is pending insertion in a bucket.
-    Pending(PendingEntry<'a, TPeerId, TVal>, NodeStatus),
+    Pending(PendingEntry<'a, TPeerId, TVal, C>, NodeStatus),
     /// The entry is absent and may be inserted.
-    Absent(AbsentEntry<'a, TPeerId, TVal>),
+    Absent(AbsentEntry<'a, TPeerId, TVal, C>),
     /// The entry represents the local node.
     SelfEntry,
 }
@@ -88,18 +91,19 @@ pub enum Entry<'a, TPeerId, TVal> {
 /// The internal representation of the different states of an `Entry`,
 /// referencing the associated key and bucket.
 #[derive(Debug)]
-struct EntryRef<'a, TKey, TVal> {
-    bucket: &'a mut KBucket<TKey, TVal>,
+struct EntryRef<'a, TKey, TVal, C> {
+    bucket: &'a mut KBucket<TKey, TVal, C>,
     key: &'a TKey,
+    _convertor: PhantomData<C>,
 }
 
-impl<'a, TKey, TVal> Entry<'a, TKey, TVal>
+impl<'a, TKey, TVal, C> Entry<'a, TKey, TVal, C>
 where
-    TKey: Clone + AsRef<KeyBytes>,
+    TKey: Clone + AsRef<KeyBytes<C>>,
     TVal: Clone,
 {
     /// Creates a new `Entry` for a `Key`, encapsulating access to a bucket.
-    pub(super) fn new(bucket: &'a mut KBucket<TKey, TVal>, key: &'a TKey) -> Self {
+    pub(super) fn new(bucket: &'a mut KBucket<TKey, TVal, C>, key: &'a TKey) -> Self {
         if let Some(pos) = bucket.position(key) {
             let status = bucket.status(pos);
             Entry::Present(PresentEntry::new(bucket, key), status)
@@ -165,15 +169,19 @@ where
 
 /// An entry present in a bucket.
 #[derive(Debug)]
-pub struct PresentEntry<'a, TKey, TVal>(EntryRef<'a, TKey, TVal>);
+pub struct PresentEntry<'a, TKey, TVal, C>(EntryRef<'a, TKey, TVal, C>);
 
-impl<'a, TKey, TVal> PresentEntry<'a, TKey, TVal>
+impl<'a, TKey, TVal, C> PresentEntry<'a, TKey, TVal, C>
 where
-    TKey: Clone + AsRef<KeyBytes>,
+    TKey: Clone + AsRef<KeyBytes<C>>,
     TVal: Clone,
 {
-    fn new(bucket: &'a mut KBucket<TKey, TVal>, key: &'a TKey) -> Self {
-        PresentEntry(EntryRef { bucket, key })
+    fn new(bucket: &'a mut KBucket<TKey, TVal, C>, key: &'a TKey) -> Self {
+        PresentEntry(EntryRef {
+            bucket,
+            key,
+            _convertor: PhantomData::default(),
+        })
     }
 
     /// Returns the key of the entry.
@@ -209,15 +217,19 @@ where
 
 /// An entry waiting for a slot to be available in a bucket.
 #[derive(Debug)]
-pub struct PendingEntry<'a, TKey, TVal>(EntryRef<'a, TKey, TVal>);
+pub struct PendingEntry<'a, TKey, TVal, C>(EntryRef<'a, TKey, TVal, C>);
 
-impl<'a, TKey, TVal> PendingEntry<'a, TKey, TVal>
+impl<'a, TKey, TVal, C> PendingEntry<'a, TKey, TVal, C>
 where
-    TKey: Clone + AsRef<KeyBytes>,
+    TKey: Clone + AsRef<KeyBytes<C>>,
     TVal: Clone,
 {
-    fn new(bucket: &'a mut KBucket<TKey, TVal>, key: &'a TKey) -> Self {
-        PendingEntry(EntryRef { bucket, key })
+    fn new(bucket: &'a mut KBucket<TKey, TVal, C>, key: &'a TKey) -> Self {
+        PendingEntry(EntryRef {
+            bucket,
+            key,
+            _convertor: PhantomData::default(),
+        })
     }
 
     /// Returns the key of the entry.
@@ -235,7 +247,7 @@ where
     }
 
     /// Updates the status of the pending entry.
-    pub fn update(self, status: NodeStatus) -> PendingEntry<'a, TKey, TVal> {
+    pub fn update(self, status: NodeStatus) -> PendingEntry<'a, TKey, TVal, C> {
         self.0.bucket.update_pending(status);
         PendingEntry::new(self.0.bucket, self.0.key)
     }
@@ -254,15 +266,19 @@ where
 
 /// An entry that is not present in any bucket.
 #[derive(Debug)]
-pub struct AbsentEntry<'a, TKey, TVal>(EntryRef<'a, TKey, TVal>);
+pub struct AbsentEntry<'a, TKey, TVal, C>(EntryRef<'a, TKey, TVal, C>);
 
-impl<'a, TKey, TVal> AbsentEntry<'a, TKey, TVal>
+impl<'a, TKey, TVal, C> AbsentEntry<'a, TKey, TVal, C>
 where
-    TKey: Clone + AsRef<KeyBytes>,
+    TKey: Clone + AsRef<KeyBytes<C>>,
     TVal: Clone,
 {
-    fn new(bucket: &'a mut KBucket<TKey, TVal>, key: &'a TKey) -> Self {
-        AbsentEntry(EntryRef { bucket, key })
+    fn new(bucket: &'a mut KBucket<TKey, TVal, C>, key: &'a TKey) -> Self {
+        AbsentEntry(EntryRef {
+            bucket,
+            key,
+            _convertor: PhantomData::default(),
+        })
     }
 
     /// Returns the key of the entry.
