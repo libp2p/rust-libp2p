@@ -106,7 +106,7 @@ where
             local_key: self.local_key.clone(),
             buckets: self.buckets.clone(),
             applied_pending: self.applied_pending.clone(),
-            _convertor: self._convertor.clone(),
+            _convertor: PhantomData::default(),
         }
     }
 }

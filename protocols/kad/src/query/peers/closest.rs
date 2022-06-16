@@ -54,9 +54,9 @@ impl<C> Clone for ClosestPeersIter<C> {
         Self {
             config: self.config.clone(),
             target: self.target.clone(),
-            state: self.state.clone(),
+            state: self.state,
             closest_peers: self.closest_peers.clone(),
-            num_waiting: self.num_waiting.clone(),
+            num_waiting: self.num_waiting,
         }
     }
 }
@@ -463,7 +463,7 @@ impl<C> Clone for Peer<C> {
     fn clone(&self) -> Self {
         Self {
             key: self.key.clone(),
-            state: self.state.clone(),
+            state: self.state,
         }
     }
 }

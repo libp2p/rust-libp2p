@@ -139,10 +139,10 @@ where
     fn clone(&self) -> Self {
         Self {
             nodes: self.nodes.clone(),
-            first_connected_pos: self.first_connected_pos.clone(),
+            first_connected_pos: self.first_connected_pos,
             pending: self.pending.clone(),
-            pending_timeout: self.pending_timeout.clone(),
-            _convertor: self._convertor.clone(),
+            pending_timeout: self.pending_timeout,
+            _convertor: PhantomData::default(),
         }
     }
 }

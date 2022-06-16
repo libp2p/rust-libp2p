@@ -198,7 +198,7 @@ pub struct KeyBytes<C> {
 impl<C> Clone for KeyBytes<C> {
     fn clone(&self) -> Self {
         Self {
-            bytes: self.bytes.clone(),
+            bytes: self.bytes,
             _convertor: PhantomData::default(),
         }
     }
