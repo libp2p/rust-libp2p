@@ -203,7 +203,7 @@ where
 {
     type Substream = EitherOutput<A::Substream, B::Substream>;
     type OutboundSubstream = EitherOutbound<A, B>;
-    type Error = io::Error;
+    type Error = EitherError<A::Error, B::Error>;
 
     fn poll_event(
         &self,
@@ -212,11 +212,11 @@ where
         match self {
             EitherOutput::First(inner) => inner
                 .poll_event(cx)
-                .map_err(|e| e.into())
+                .map_err(EitherError::A)
                 .map_ok(|event| event.map_inbound_stream(EitherOutput::First)),
             EitherOutput::Second(inner) => inner
                 .poll_event(cx)
-                .map_err(|e| e.into())
+                .map_err(EitherError::B)
                 .map_ok(|event| event.map_inbound_stream(EitherOutput::Second)),
         }
     }
@@ -237,11 +237,11 @@ where
             (EitherOutput::First(ref inner), EitherOutbound::A(ref mut substream)) => inner
                 .poll_outbound(cx, substream)
                 .map(|p| p.map(EitherOutput::First))
-                .map_err(|e| e.into()),
+                .map_err(EitherError::A),
             (EitherOutput::Second(ref inner), EitherOutbound::B(ref mut substream)) => inner
                 .poll_outbound(cx, substream)
                 .map(|p| p.map(EitherOutput::Second))
-                .map_err(|e| e.into()),
+                .map_err(EitherError::B),
             _ => panic!("Wrong API usage"),
         }
     }
@@ -261,8 +261,8 @@ where
 
     fn poll_close(&self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         match self {
-            EitherOutput::First(inner) => inner.poll_close(cx).map_err(|e| e.into()),
-            EitherOutput::Second(inner) => inner.poll_close(cx).map_err(|e| e.into()),
+            EitherOutput::First(inner) => inner.poll_close(cx).map_err(EitherError::A),
+            EitherOutput::Second(inner) => inner.poll_close(cx).map_err(EitherError::B),
         }
     }
 }
