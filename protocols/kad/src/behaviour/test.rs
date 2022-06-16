@@ -1339,7 +1339,7 @@ fn network_behaviour_on_address_change() {
 }
 
 #[test]
-fn get_providers() {
+fn get_providers_single() {
     fn prop(key: record::Key) {
         let (_, mut single_swarm) = build_node();
         single_swarm
@@ -1358,7 +1358,9 @@ fn get_providers() {
             }
         });
 
-        let query_id = single_swarm.behaviour_mut().get_providers(key.clone());
+        let query_id = single_swarm
+            .behaviour_mut()
+            .get_providers(key.clone(), ProviderLimit::None);
 
         block_on(async {
             match single_swarm.next().await.unwrap() {
@@ -1384,4 +1386,86 @@ fn get_providers() {
         });
     }
     QuickCheck::new().tests(10).quickcheck(prop as fn(_))
+}
+
+fn get_providers_limit<const N: usize>() {
+    fn prop<const N: usize>(key: record::Key) {
+        let mut swarms = build_nodes(3);
+
+        // Let first peer know of second peer and second peer know of third peer.
+        for i in 0..2 {
+            let (peer_id, address) = (
+                Swarm::local_peer_id(&swarms[i + 1].1).clone(),
+                swarms[i + 1].0.clone(),
+            );
+            swarms[i].1.behaviour_mut().add_address(&peer_id, address);
+        }
+
+        // Drop the swarm addresses.
+        let mut swarms = swarms
+            .into_iter()
+            .map(|(_addr, swarm)| swarm)
+            .collect::<Vec<_>>();
+
+        // Provide the content on peer 2 and 3.
+        for i in 1..3 {
+            swarms[i]
+                .behaviour_mut()
+                .start_providing(key.clone())
+                .expect("could not provide");
+        }
+
+        // Query with expecting a single provider.
+        let query_id = swarms[0]
+            .behaviour_mut()
+            .get_providers(key.clone(), ProviderLimit::N(N.try_into().unwrap()));
+
+        block_on(poll_fn(move |ctx| {
+            for (i, swarm) in swarms.iter_mut().enumerate() {
+                loop {
+                    match swarm.poll_next_unpin(ctx) {
+                        Poll::Ready(Some(SwarmEvent::Behaviour(
+                            KademliaEvent::OutboundQueryCompleted {
+                                id,
+                                result:
+                                    QueryResult::GetProviders(Ok(GetProvidersOk {
+                                        key: found_key,
+                                        providers,
+                                        ..
+                                    })),
+                                ..
+                            },
+                        ))) if i == 0 && id == query_id => {
+                            // There are a total of 2 providers.
+                            assert_eq!(providers.len(), std::cmp::min(N, 2));
+                            assert_eq!(key, found_key);
+                            // Providers should be either 2 or 3
+                            assert_ne!(swarm.local_peer_id(), providers.iter().next().unwrap());
+                            return Poll::Ready(());
+                        }
+                        Poll::Ready(..) => {}
+                        Poll::Pending => break,
+                    }
+                }
+            }
+            Poll::Pending
+        }));
+    }
+
+    QuickCheck::new().tests(10).quickcheck(prop::<N> as fn(_))
+}
+
+#[test]
+fn get_providers_limit_n_1() {
+    get_providers_limit::<1>();
+}
+
+#[test]
+fn get_providers_limit_n_2() {
+    get_providers_limit::<1>();
+}
+
+#[test]
+fn get_providers_limit_n_5() {
+    get_providers_limit::<5>();
 }

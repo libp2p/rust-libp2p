@@ -923,17 +923,23 @@ where
     ///
     /// The result of this operation is delivered in a
     /// reported via [`KademliaEvent::OutboundQueryCompleted{QueryResult::GetProviders}`].
-    pub fn get_providers(&mut self, key: record::Key) -> QueryId {
+    pub fn get_providers(&mut self, key: record::Key, limit: ProviderLimit) -> QueryId {
         let providers = self
             .store
             .providers(&key)
             .into_iter()
             .filter(|p| !p.is_expired(Instant::now()))
-            .map(|p| p.provider)
-            .collect();
+            .map(|p| p.provider);
+
+        let providers = match limit {
+            ProviderLimit::None => providers.collect(),
+            ProviderLimit::N(limit) => providers.take(limit.into()).collect(),
+        };
+
         let info = QueryInfo::GetProviders {
             key: key.clone(),
             providers,
+            limit,
         };
         let target = kbucket::Key::new(key);
         let peers = self.kbuckets.closest_keys(&target);
@@ -1261,17 +1267,19 @@ where
                 })),
             }),
 
-            QueryInfo::GetProviders { key, providers } => {
-                Some(KademliaEvent::OutboundQueryCompleted {
-                    id: query_id,
-                    stats: result.stats,
-                    result: QueryResult::GetProviders(Ok(GetProvidersOk {
-                        key,
-                        providers,
-                        closest_peers: result.peers.collect(),
-                    })),
-                })
-            }
+            QueryInfo::GetProviders {
+                key,
+                providers,
+                limit: _,
+            } => Some(KademliaEvent::OutboundQueryCompleted {
+                id: query_id,
+                stats: result.stats,
+                result: QueryResult::GetProviders(Ok(GetProvidersOk {
+                    key,
+                    providers,
+                    closest_peers: result.peers.collect(),
+                })),
+            }),
 
             QueryInfo::AddProvider {
                 context,
@@ -1556,17 +1564,19 @@ where
                 })),
             }),
 
-            QueryInfo::GetProviders { key, providers } => {
-                Some(KademliaEvent::OutboundQueryCompleted {
-                    id: query_id,
-                    stats: result.stats,
-                    result: QueryResult::GetProviders(Err(GetProvidersError::Timeout {
-                        key,
-                        providers,
-                        closest_peers: result.peers.collect(),
-                    })),
-                })
-            }
+            QueryInfo::GetProviders {
+                key,
+                providers,
+                limit: _,
+            } => Some(KademliaEvent::OutboundQueryCompleted {
+                id: query_id,
+                stats: result.stats,
+                result: QueryResult::GetProviders(Err(GetProvidersError::Timeout {
+                    key,
+                    providers,
+                    closest_peers: result.peers.collect(),
+                })),
+            }),
         }
     }
 
@@ -2323,6 +2333,31 @@ where
                         {
                             query.on_success(&peer_id, vec![])
                         }
+
+                        if let QueryInfo::GetProviders {
+                            key: _,
+                            providers,
+                            limit,
+                        } = &query.inner.info
+                        {
+                            match limit {
+                                ProviderLimit::None => {
+                                    // No limit, so wait for enough peers to respond.
+                                }
+                                ProviderLimit::N(n) => {
+                                    // Check if we have enough providers.
+                                    if usize::from(*n) <= providers.len() {
+                                        debug!(
+                                            "found enough providers {}/{}, finishing",
+                                            providers.len(),
+                                            n
+                                        );
+                                        query.finish();
+                                    }
+                                }
+                            }
+                        }
+
                         if self.connected_peers.contains(&peer_id) {
                             self.queued_events
                                 .push_back(NetworkBehaviourAction::NotifyHandler {
@@ -2380,6 +2415,15 @@ where
             | FromSwarm::ExpiredExternalAddr(_) => {}
         }
     }
+}
+
+/// Specifies the number of provider records fetched.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum ProviderLimit {
+    /// No limit on the number of records.
+    None,
+    /// Finishes the query as soon as this many records have been found.
+    N(NonZeroUsize),
 }
 
 /// A quorum w.r.t. the configured replication factor specifies the minimum
@@ -2882,6 +2926,8 @@ pub enum QueryInfo {
         key: record::Key,
         /// The found providers.
         providers: HashSet<PeerId>,
+        /// The limit of how many providers to find,
+        limit: ProviderLimit,
     },
 
     /// A (repeated) query initiated by [`Kademlia::start_providing`].
