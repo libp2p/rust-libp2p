@@ -50,18 +50,15 @@ where
         &self,
         cx: &mut Context<'_>,
     ) -> Poll<Result<StreamMuxerEvent<Self::Substream>, Self::Error>> {
-        let substream = match self.inner.poll_event(cx).map_err(into_io_error) {
+        match self.inner.poll_event(cx).map_err(into_io_error)? {
             Poll::Pending => return Poll::Pending,
-            Poll::Ready(Ok(StreamMuxerEvent::AddressChange(a))) => {
-                return Poll::Ready(Ok(StreamMuxerEvent::AddressChange(a)))
+            Poll::Ready(StreamMuxerEvent::AddressChange(a)) => {
+                Poll::Ready(Ok(StreamMuxerEvent::AddressChange(a)))
             }
-            Poll::Ready(Ok(StreamMuxerEvent::InboundSubstream(s))) => s,
-            Poll::Ready(Err(err)) => return Poll::Ready(Err(err)),
-        };
-
-        Poll::Ready(Ok(StreamMuxerEvent::InboundSubstream(SubstreamBox::new(
-            substream,
-        ))))
+            Poll::Ready(StreamMuxerEvent::InboundSubstream(s)) => {
+                Poll::Ready(Ok(StreamMuxerEvent::InboundSubstream(SubstreamBox::new(s))))
+            }
+        }
     }
 
     #[inline]
@@ -79,17 +76,15 @@ where
         substream: &mut Self::OutboundSubstream,
     ) -> Poll<Result<Self::Substream, Self::Error>> {
         let mut list = self.outbound.lock();
-        let substream = match self
+
+        match self
             .inner
             .poll_outbound(cx, list.get_mut(substream).unwrap())
-            .map_err(into_io_error)
+            .map_err(into_io_error)?
         {
-            Poll::Pending => return Poll::Pending,
-            Poll::Ready(Ok(s)) => s,
-            Poll::Ready(Err(err)) => return Poll::Ready(Err(err)),
-        };
-
-        Poll::Ready(Ok(SubstreamBox::new(substream)))
+            Poll::Pending => Poll::Pending,
+            Poll::Ready(s) => Poll::Ready(Ok(SubstreamBox::new(s))),
+        }
     }
 
     #[inline]
