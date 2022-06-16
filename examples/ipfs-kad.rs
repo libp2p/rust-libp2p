@@ -26,7 +26,9 @@
 use async_std::task;
 use futures::StreamExt;
 use libp2p::kad::record::store::MemoryStore;
-use libp2p::kad::{GetClosestPeersError, Kademlia, KademliaConfig, KademliaEvent, QueryResult};
+use libp2p::kad::{
+    kbucket, GetClosestPeersError, Kademlia, KademliaConfig, KademliaEvent, QueryResult,
+};
 use libp2p::{
     development_transport, identity,
     swarm::{Swarm, SwarmEvent},
@@ -58,7 +60,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let mut cfg = KademliaConfig::default();
         cfg.set_query_timeout(Duration::from_secs(5 * 60));
         let store = MemoryStore::new(local_peer_id);
-        let mut behaviour = Kademlia::with_config(local_peer_id, store, cfg);
+        let mut behaviour: Kademlia<MemoryStore> = Kademlia::with_config(local_peer_id, store, cfg);
 
         // Add the bootnodes to the local routing table. `libp2p-dns` built
         // into the `transport` resolves the `dnsaddr` when Kademlia tries

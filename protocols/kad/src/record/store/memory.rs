@@ -21,7 +21,7 @@
 use super::*;
 
 use crate::kbucket;
-use crate::kbucket::PreimageIntoKeyBytes;
+use crate::kbucket::{PreimageIntoKeyBytes, Sha256Hash};
 use libp2p_core::PeerId;
 use smallvec::SmallVec;
 use std::borrow::Cow;
@@ -29,7 +29,7 @@ use std::collections::{hash_map, hash_set, HashMap, HashSet};
 use std::iter;
 
 /// In-memory implementation of a `RecordStore`.
-pub struct MemoryStore<C> {
+pub struct MemoryStore<C = Sha256Hash> {
     /// The identity of the peer owning the store.
     local_key: kbucket::Key<PeerId, C>,
     /// The configuration of the store.
