@@ -1,7 +1,7 @@
 use crate::muxing::StreamMuxerEvent;
 use crate::StreamMuxer;
 use fnv::FnvHashMap;
-use futures::{AsyncRead, AsyncWrite};
+use futures::{ready, AsyncRead, AsyncWrite};
 use parking_lot::Mutex;
 use std::error::Error;
 use std::fmt;
@@ -50,12 +50,13 @@ where
         &self,
         cx: &mut Context<'_>,
     ) -> Poll<Result<StreamMuxerEvent<Self::Substream>, Self::Error>> {
-        match self.inner.poll_event(cx).map_err(into_io_error)? {
-            Poll::Pending => return Poll::Pending,
-            Poll::Ready(StreamMuxerEvent::AddressChange(a)) => {
+        let event = ready!(self.inner.poll_event(cx).map_err(into_io_error)?);
+
+        match event {
+            StreamMuxerEvent::AddressChange(a) => {
                 Poll::Ready(Ok(StreamMuxerEvent::AddressChange(a)))
             }
-            Poll::Ready(StreamMuxerEvent::InboundSubstream(s)) => {
+            StreamMuxerEvent::InboundSubstream(s) => {
                 Poll::Ready(Ok(StreamMuxerEvent::InboundSubstream(SubstreamBox::new(s))))
             }
         }
@@ -76,15 +77,12 @@ where
         substream: &mut Self::OutboundSubstream,
     ) -> Poll<Result<Self::Substream, Self::Error>> {
         let mut list = self.outbound.lock();
-
-        match self
+        let stream = ready!(self
             .inner
             .poll_outbound(cx, list.get_mut(substream).unwrap())
-            .map_err(into_io_error)?
-        {
-            Poll::Pending => Poll::Pending,
-            Poll::Ready(s) => Poll::Ready(Ok(SubstreamBox::new(s))),
-        }
+            .map_err(into_io_error)?);
+
+        Poll::Ready(Ok(SubstreamBox::new(stream)))
     }
 
     #[inline]
