@@ -324,12 +324,16 @@ mod network {
 
         /// Find the providers for the given file on the DHT.
         pub async fn get_providers(&mut self, file_name: String) -> HashSet<PeerId> {
-            let (sender, receiver) = oneshot::channel();
+            let (sender, mut receiver) = mpsc::channel(0);
             self.sender
                 .send(Command::GetProviders { file_name, sender })
                 .await
                 .expect("Command receiver not to be dropped.");
-            receiver.await.expect("Sender not to be dropped.")
+            let mut out = HashSet::new();
+            while let Some(h) = receiver.next().await {
+                out.extend(h);
+            }
+            out
         }
 
         /// Request the content of the given file from the given peer.
@@ -369,7 +373,7 @@ mod network {
         event_sender: mpsc::Sender<Event>,
         pending_dial: HashMap<PeerId, oneshot::Sender<Result<(), Box<dyn Error + Send>>>>,
         pending_start_providing: HashMap<QueryId, oneshot::Sender<()>>,
-        pending_get_providers: HashMap<QueryId, oneshot::Sender<HashSet<PeerId>>>,
+        pending_get_providers: HashMap<QueryId, mpsc::Sender<HashSet<PeerId>>>,
         pending_request_file:
             HashMap<RequestId, oneshot::Sender<Result<Vec<u8>, Box<dyn Error + Send>>>>,
     }
@@ -413,7 +417,7 @@ mod network {
         ) {
             match event {
                 SwarmEvent::Behaviour(ComposedEvent::Kademlia(
-                    KademliaEvent::OutboundQueryCompleted {
+                    KademliaEvent::OutboundQueryProgressed {
                         id,
                         result: QueryResult::StartProviding(_),
                         ..
@@ -426,7 +430,7 @@ mod network {
                     let _ = sender.send(());
                 }
                 SwarmEvent::Behaviour(ComposedEvent::Kademlia(
-                    KademliaEvent::OutboundQueryCompleted {
+                    KademliaEvent::OutboundQueryProgressed {
                         id,
                         result: QueryResult::GetProviders(Ok(GetProvidersOk { providers, .. })),
                         ..
@@ -434,9 +438,22 @@ mod network {
                 )) => {
                     let _ = self
                         .pending_get_providers
-                        .remove(&id)
+                        .get_mut(&id)
                         .expect("Completed query to be previously pending.")
                         .send(providers);
+                }
+                SwarmEvent::Behaviour(ComposedEvent::Kademlia(
+                    KademliaEvent::OutboundQueryProgressed {
+                        id,
+                        result: QueryResult::GetProviders(..),
+                        ..
+                    },
+                )) => {
+                    // Drop channel to signal query is complete.
+                    let _ = self
+                        .pending_get_providers
+                        .remove(&id)
+                        .expect("Completed query to be previously pending.");
                 }
                 SwarmEvent::Behaviour(ComposedEvent::Kademlia(_)) => {}
                 SwarmEvent::Behaviour(ComposedEvent::RequestResponse(
@@ -624,7 +641,7 @@ mod network {
         },
         GetProviders {
             file_name: String,
-            sender: oneshot::Sender<HashSet<PeerId>>,
+            sender: mpsc::Sender<HashSet<PeerId>>,
         },
         RequestFile {
             file_name: String,

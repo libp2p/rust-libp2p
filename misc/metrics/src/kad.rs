@@ -18,6 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use libp2p_kad::GetProvidersOk;
 use prometheus_client::encoding::text::Encode;
 use prometheus_client::metrics::counter::Counter;
 use prometheus_client::metrics::family::Family;
@@ -162,7 +163,7 @@ impl Metrics {
 impl super::Recorder<libp2p_kad::KademliaEvent> for Metrics {
     fn record(&self, event: &libp2p_kad::KademliaEvent) {
         match event {
-            libp2p_kad::KademliaEvent::OutboundQueryCompleted { result, stats, .. } => {
+            libp2p_kad::KademliaEvent::OutboundQueryProgressed { result, stats, .. } => {
                 self.query_result_num_requests
                     .get_or_create(&result.into())
                     .observe(stats.num_requests().into());
@@ -200,9 +201,10 @@ impl super::Recorder<libp2p_kad::KademliaEvent> for Metrics {
                         }
                     },
                     libp2p_kad::QueryResult::GetProviders(result) => match result {
-                        Ok(ok) => self
-                            .query_result_get_providers_ok
-                            .observe(ok.providers.len() as f64),
+                        Ok(GetProvidersOk { providers, .. }) => {
+                            self.query_result_get_providers_ok
+                                .observe(providers.len() as f64);
+                        }
                         Err(error) => {
                             self.query_result_get_providers_error
                                 .get_or_create(&error.into())

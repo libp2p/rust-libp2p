@@ -331,6 +331,15 @@ impl ClosestDisjointPeersIter {
 
         ResultIter::new(self.target, result_per_path).map(Key::into_preimage)
     }
+
+    pub fn as_intermediary_result(&self) -> impl Iterator<Item = PeerId> + '_ {
+        let result_per_path = self
+            .iters
+            .iter()
+            .map(|iter| iter.clone().into_result().map(Key::from));
+
+        ResultIter::new(self.target.clone(), result_per_path).map(Key::into_preimage)
+    }
 }
 
 /// Index into the [`ClosestDisjointPeersIter`] `iters` vector.

@@ -170,6 +170,16 @@ impl FixedPeersIter {
             }
         })
     }
+
+    pub fn as_intermediary_result(&self) -> impl Iterator<Item = PeerId> + '_ {
+        self.peers.iter().filter_map(|(p, s)| {
+            if let PeerState::Succeeded = s {
+                Some(*p)
+            } else {
+                None
+            }
+        })
+    }
 }
 
 #[cfg(test)]
