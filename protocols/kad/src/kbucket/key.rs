@@ -39,32 +39,32 @@ construct_uint! {
 /// `Key`s have an XOR metric as defined in the Kademlia paper, i.e. the bitwise XOR of
 /// the hash digests, interpreted as an integer. See [`Key::distance`].
 #[derive(Clone, Debug)]
-pub struct Key<T> {
-    preimage: T,
+pub struct Key<P> {
+    preimage: P,
     bytes: KeyBytes,
 }
 
-impl<T> Key<T> {
+impl<P> Key<P> {
     /// Constructs a new `Key` by running the given value through a random
     /// oracle.
     ///
     /// The preimage of type `T` is preserved. See [`Key::preimage`] and
     /// [`Key::into_preimage`].
-    pub fn new(preimage: T) -> Key<T>
+    pub fn new(preimage: P) -> Key<P>
     where
-        T: Borrow<[u8]>,
+        P: Borrow<[u8]>,
     {
         let bytes = KeyBytes::new(preimage.borrow());
         Key { preimage, bytes }
     }
 
     /// Borrows the preimage of the key.
-    pub fn preimage(&self) -> &T {
+    pub fn preimage(&self) -> &P {
         &self.preimage
     }
 
     /// Converts the key into its preimage.
-    pub fn into_preimage(self) -> T {
+    pub fn into_preimage(self) -> P {
         self.preimage
     }
 
@@ -86,13 +86,13 @@ impl<T> Key<T> {
     }
 
     /// Construct new `Key` from inputs without checking contents of arguments.
-    pub fn from_unchecked(preimage: T, bytes: KeyBytes) -> Self {
+    pub fn from_unchecked(preimage: P, bytes: KeyBytes) -> Self {
         Self { preimage, bytes }
     }
 }
 
-impl<T> From<Key<T>> for KeyBytes {
-    fn from(key: Key<T>) -> KeyBytes {
+impl<P> From<Key<P>> for KeyBytes {
+    fn from(key: Key<P>) -> KeyBytes {
         key.bytes
     }
 }
@@ -123,21 +123,21 @@ impl From<record::Key> for Key<record::Key> {
     }
 }
 
-impl<T> AsRef<KeyBytes> for Key<T> {
+impl<P> AsRef<KeyBytes> for Key<P> {
     fn as_ref(&self) -> &KeyBytes {
         &self.bytes
     }
 }
 
-impl<T, U> PartialEq<Key<U>> for Key<T> {
+impl<P, U> PartialEq<Key<U>> for Key<P> {
     fn eq(&self, other: &Key<U>) -> bool {
         self.bytes == other.bytes
     }
 }
 
-impl<T> Eq for Key<T> {}
+impl<P> Eq for Key<P> {}
 
-impl<T> Hash for Key<T> {
+impl<P> Hash for Key<P> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.bytes.0.hash(state);
     }
@@ -150,9 +150,9 @@ pub struct KeyBytes(GenericArray<u8, U32>);
 impl KeyBytes {
     /// Creates a new key in the DHT keyspace by running the given
     /// value through a random oracle.
-    pub fn new<T>(value: T) -> Self
+    pub fn new<P>(value: P) -> Self
     where
-        T: Borrow<[u8]>,
+        P: Borrow<[u8]>,
     {
         KeyBytes(Sha256::digest(value.borrow()))
     }
