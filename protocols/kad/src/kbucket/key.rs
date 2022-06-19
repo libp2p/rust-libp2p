@@ -45,15 +45,6 @@ where
 #[derive(Clone, Debug)]
 pub struct Sha256Hash(GenericArray<u8, U32>);
 
-// impl<P> PreimageIntoKeyBytes<P> for Sha256Hash
-// where
-//     P: Borrow<[u8]>,
-// {
-//     fn preimage_into_key_bytes(p: &P) -> KeyBytes<Self> {
-//         KeyBytes::from_unchecked(Sha256::digest(p.borrow()))
-//     }
-// }
-
 impl PreimageIntoKeyBytes<Multihash> for Sha256Hash {
     fn preimage_into_key_bytes(multihash: &Multihash) -> KeyBytes<Self> {
         KeyBytes::from_unchecked(Sha256::digest(multihash.to_bytes()))
