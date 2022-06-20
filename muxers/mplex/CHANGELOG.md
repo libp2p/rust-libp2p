@@ -1,4 +1,4 @@
-# 0.34.0
+# 0.34.0 [unreleased]
 
 - `Substream` now implements `AsyncRead` and `AsyncWrite`. See [PR 2706].
 
