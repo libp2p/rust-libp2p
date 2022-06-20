@@ -1,3 +1,7 @@
+# 0.36.2 [unreleased]
+
+- Extend log message when exceeding inbound negotiating streams with peer ID and limit.
+
 # 0.36.1
 
 - Limit negotiating inbound substreams per connection. See [PR 2697].
