@@ -3056,13 +3056,22 @@ where
     type OutEvent = GossipsubEvent;
 
     fn new_handler(&mut self) -> Self::ConnectionHandler {
-        GossipsubHandler::new(
-            self.config.protocol_id_prefix().clone(),
-            self.config.max_transmit_size(),
-            self.config.validation_mode().clone(),
-            self.config.idle_timeout(),
-            self.config.support_floodsub(),
-        )
+        if self.config.support_custom() {
+            GossipsubHandler::new_custom(
+                self.config.custom_protocol_id().clone(),
+                self.config.max_transmit_size(),
+                self.config.validation_mode().clone(),
+                self.config.idle_timeout(),
+            )
+        } else {
+            GossipsubHandler::new(
+                self.config.protocol_id_prefix().clone(),
+                self.config.max_transmit_size(),
+                self.config.validation_mode().clone(),
+                self.config.idle_timeout(),
+                self.config.support_floodsub(),
+            )
+        }
     }
 
     fn inject_connection_established(

@@ -81,6 +81,22 @@ impl ProtocolConfig {
             validation_mode,
         }
     }
+
+    pub fn new_custom(
+        protocol_id: Cow<'static, str>,
+        max_transmit_size: usize,
+        validation_mode: ValidationMode
+    ) -> ProtocolConfig {
+        let protocol_ids = vec![
+            ProtocolId::new(protocol_id, PeerKind::Custom),
+        ];
+
+        ProtocolConfig {
+            protocol_ids,
+            max_transmit_size,
+            validation_mode,
+        }
+    }
 }
 
 /// The protocol ID
@@ -94,11 +110,12 @@ pub struct ProtocolId {
 
 /// An RPC protocol ID.
 impl ProtocolId {
-    pub fn new(prefix: Cow<'static, str>, kind: PeerKind) -> Self {
+    pub fn new(prefix_or_custom: Cow<'static, str>, kind: PeerKind) -> Self {
         let protocol_id = match kind {
-            PeerKind::Gossipsubv1_1 => format!("/{}/{}", prefix, "1.1.0"),
-            PeerKind::Gossipsub => format!("/{}/{}", prefix, "1.0.0"),
+            PeerKind::Gossipsubv1_1 => format!("/{}/{}", prefix_or_custom, "1.1.0"),
+            PeerKind::Gossipsub => format!("/{}/{}", prefix_or_custom, "1.0.0"),
             PeerKind::Floodsub => format!("/{}/{}", "floodsub", "1.0.0"),
+            PeerKind::Custom => format!("{}", prefix_or_custom),
             // NOTE: This is used for informing the behaviour of unsupported peers. We do not
             // advertise this variant.
             PeerKind::NotSupported => unreachable!("Should never advertise NotSupported"),

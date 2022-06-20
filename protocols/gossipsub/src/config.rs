@@ -53,6 +53,7 @@ pub enum ValidationMode {
 #[derive(Clone)]
 pub struct GossipsubConfig {
     protocol_id_prefix: Cow<'static, str>,
+    custom_protocol_id: Cow<'static, str>,
     history_length: usize,
     history_gossip: usize,
     mesh_n: usize,
@@ -90,6 +91,7 @@ pub struct GossipsubConfig {
     max_ihave_messages: usize,
     iwant_followup_time: Duration,
     support_floodsub: bool,
+    support_custom: bool,
     published_message_ids_cache_time: Duration,
 }
 
@@ -103,6 +105,11 @@ impl GossipsubConfig {
     /// The default prefix is `meshsub`, giving the supported protocol ids: `/meshsub/1.1.0` and `/meshsub/1.0.0`, negotiated in that order.
     pub fn protocol_id_prefix(&self) -> &Cow<'static, str> {
         &self.protocol_id_prefix
+    }
+
+    /// The custom protocol id. It is optional and will replace anything that is set on protocol_id_prefix.
+    pub fn custom_protocol_id(&self) -> &Cow<'static, str> {
+        &self.custom_protocol_id
     }
 
     // Overlay network parameters.
@@ -370,6 +377,11 @@ impl GossipsubConfig {
         self.support_floodsub
     }
 
+    /// Enable support for custom Gossipsub Protocol IDs. Default false.
+    pub fn support_custom(&self) -> bool {
+        self.support_custom
+    }
+
     /// Published message ids time cache duration. The default is 10 seconds.
     pub fn published_message_ids_cache_time(&self) -> Duration {
         self.published_message_ids_cache_time
@@ -395,6 +407,7 @@ impl Default for GossipsubConfigBuilder {
         GossipsubConfigBuilder {
             config: GossipsubConfig {
                 protocol_id_prefix: Cow::Borrowed("meshsub"),
+                custom_protocol_id: Cow::Borrowed(""),
                 history_length: 5,
                 history_gossip: 3,
                 mesh_n: 6,
@@ -444,6 +457,7 @@ impl Default for GossipsubConfigBuilder {
                 max_ihave_messages: 10,
                 iwant_followup_time: Duration::from_secs(3),
                 support_floodsub: false,
+                support_custom: false,
                 published_message_ids_cache_time: Duration::from_secs(10),
             },
         }
@@ -457,9 +471,16 @@ impl From<GossipsubConfig> for GossipsubConfigBuilder {
 }
 
 impl GossipsubConfigBuilder {
-    /// The protocol id to negotiate this protocol (default is `/meshsub/1.0.0`).
-    pub fn protocol_id_prefix(&mut self, protocol_id: impl Into<Cow<'static, str>>) -> &mut Self {
-        self.config.protocol_id_prefix = protocol_id.into();
+    /// The protocol id prefix to negotiate this protocol (default is `/meshsub/1.0.0`).
+    pub fn protocol_id_prefix(&mut self, protocol_id_prefix: impl Into<Cow<'static, str>>) -> &mut Self {
+        self.config.protocol_id_prefix = protocol_id_prefix.into();
+        self
+    }
+
+    /// The custom protocol id to negotiate this protocol (overrides any prefix set via `protocol_id_prefix`)
+    pub fn protocol_id(&mut self, protocol_id: impl Into<Cow<'static, str>>) -> &mut Self {
+        self.config.support_custom = true;
+        self.config.custom_protocol_id = protocol_id.into();
         self
     }
 
@@ -811,6 +832,7 @@ impl std::fmt::Debug for GossipsubConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut builder = f.debug_struct("GossipsubConfig");
         let _ = builder.field("protocol_id_prefix", &self.protocol_id_prefix);
+        let _ = builder.field("custom_protocol_id", &self.custom_protocol_id);
         let _ = builder.field("history_length", &self.history_length);
         let _ = builder.field("history_gossip", &self.history_gossip);
         let _ = builder.field("mesh_n", &self.mesh_n);
@@ -842,6 +864,7 @@ impl std::fmt::Debug for GossipsubConfig {
         let _ = builder.field("max_ihave_messages", &self.max_ihave_messages);
         let _ = builder.field("iwant_followup_time", &self.iwant_followup_time);
         let _ = builder.field("support_floodsub", &self.support_floodsub);
+        let _ = builder.field("support_custom", &self.support_custom);
         let _ = builder.field(
             "published_message_ids_cache_time",
             &self.published_message_ids_cache_time,
