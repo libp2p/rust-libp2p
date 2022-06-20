@@ -236,6 +236,16 @@ impl<T> StreamMuxerEvent<T> {
             None
         }
     }
+
+    /// Map the stream within [`StreamMuxerEvent::InboundSubstream`] to a new type.
+    pub fn map_inbound_stream<O>(self, map: impl FnOnce(T) -> O) -> StreamMuxerEvent<O> {
+        match self {
+            StreamMuxerEvent::InboundSubstream(stream) => {
+                StreamMuxerEvent::InboundSubstream(map(stream))
+            }
+            StreamMuxerEvent::AddressChange(addr) => StreamMuxerEvent::AddressChange(addr),
+        }
+    }
 }
 
 /// Polls for an event from the muxer and, if an inbound substream, wraps this substream in an
