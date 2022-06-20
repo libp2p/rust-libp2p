@@ -25,21 +25,16 @@ use std::{
     collections::{HashMap, HashSet},
     io::ErrorKind,
     net::SocketAddr,
-    sync::Arc,
+    sync::{Arc, Weak},
 };
 
 use futures::channel::mpsc;
 use libp2p_core::multiaddr::{Multiaddr, Protocol};
-use webrtc_ice::udp_mux::UDPMux;
+use webrtc_ice::udp_mux::{UDPMux, UDPMuxConn, UDPMuxConnParams, UDPMuxWriter};
 use webrtc_util::{sync::RwLock, Conn, Error};
 
 use tokio_crate as tokio;
 use tokio_crate::sync::{watch, Mutex};
-
-mod socket_addr_ext;
-
-mod udp_mux_conn;
-use udp_mux_conn::{UDPMuxConn, UDPMuxConnParams};
 
 use async_trait::async_trait;
 
@@ -127,14 +122,6 @@ impl UDPMuxNewAddr {
         self.closed_watch_tx.lock().await.is_none()
     }
 
-    async fn send_to(&self, buf: &[u8], target: &SocketAddr) -> Result<usize, Error> {
-        self.params
-            .conn
-            .send_to(buf, *target)
-            .await
-            .map_err(Into::into)
-    }
-
     /// Create a muxed connection for a given ufrag.
     async fn create_muxed_conn(self: &Arc<Self>, ufrag: &str) -> Result<UDPMuxConn, Error> {
         let local_addr = self.params.conn.local_addr().await?;
@@ -142,39 +129,10 @@ impl UDPMuxNewAddr {
         let params = UDPMuxConnParams {
             local_addr,
             key: ufrag.into(),
-            udp_mux: Arc::clone(self),
+            udp_mux: Arc::downgrade(self) as Weak<dyn UDPMuxWriter + Sync + Send>,
         };
 
         Ok(UDPMuxConn::new(params))
-    }
-
-    async fn register_conn_for_address(&self, conn: &UDPMuxConn, addr: SocketAddr) {
-        if self.is_closed().await {
-            return;
-        }
-
-        let key = conn.key();
-        {
-            let mut addresses = self.address_map.write();
-
-            addresses
-                .entry(addr)
-                .and_modify(|e| {
-                    if e.key() != key {
-                        e.remove_address(&addr);
-                        *e = conn.clone()
-                    }
-                })
-                .or_insert_with(|| conn.clone());
-        }
-
-        // remove addr from new_addrs once conn is established
-        {
-            let mut new_addrs = self.new_addrs.write();
-            new_addrs.remove(&addr);
-        }
-
-        log::debug!("Registered {} for {}", addr, key);
     }
 
     async fn conn_from_stun_message(&self, buffer: &[u8], addr: &SocketAddr) -> Option<UDPMuxConn> {
@@ -234,12 +192,12 @@ impl UDPMuxNewAddr {
                                                     let a = Multiaddr::empty()
                                                         .with(addr.ip().into())
                                                         .with(Protocol::Udp(addr.port()))
-                                                        .with(Protocol::XWebRTC(hex_to_cow(&ufrag.replace(":", ""))));
+                                                        .with(Protocol::XWebRTC(hex_to_cow(&ufrag.replace(':', ""))));
                                                     if let Err(err) = new_addr_tx.try_send(a) {
                                                         log::error!("Failed to send new address {}: {}", &addr, err);
                                                     } else {
                                                         let mut new_addrs = loop_self.new_addrs.write();
-                                                        new_addrs.insert(addr.clone());
+                                                        new_addrs.insert(addr);
                                                     };
                                                 }
                                                 Err(e) => {
@@ -291,7 +249,7 @@ impl UDPMux for UDPMuxNewAddr {
             };
 
             // NOTE: We don't wait for these closure to complete
-            for (_, conn) in old_conns.into_iter() {
+            for (_, conn) in old_conns {
                 conn.close();
             }
 
@@ -364,6 +322,46 @@ impl UDPMux for UDPMuxNewAddr {
     }
 }
 
+#[async_trait]
+impl UDPMuxWriter for UDPMuxNewAddr {
+    async fn register_conn_for_address(&self, conn: &UDPMuxConn, addr: SocketAddr) {
+        if self.is_closed().await {
+            return;
+        }
+
+        let key = conn.key();
+        {
+            let mut addresses = self.address_map.write();
+
+            addresses
+                .entry(addr)
+                .and_modify(|e| {
+                    if e.key() != key {
+                        e.remove_address(&addr);
+                        *e = conn.clone();
+                    }
+                })
+                .or_insert_with(|| conn.clone());
+        }
+
+        // remove addr from new_addrs once conn is established
+        {
+            let mut new_addrs = self.new_addrs.write();
+            new_addrs.remove(&addr);
+        }
+
+        log::debug!("Registered {} for {}", addr, key);
+    }
+
+    async fn send_to(&self, buf: &[u8], target: &SocketAddr) -> Result<usize, Error> {
+        self.params
+            .conn
+            .send_to(buf, *target)
+            .await
+            .map_err(Into::into)
+    }
+}
+
 fn hex_to_cow<'a>(s: &str) -> Cow<'a, [u8; 32]> {
     let mut buf = [0; 32];
     hex::decode_to_slice(s, &mut buf).unwrap();
@@ -379,37 +377,36 @@ fn ufrag_from_stun_message(buffer: &[u8], local_ufrag: bool) -> Result<String, E
         (m.unmarshal_binary(buffer), m)
     };
 
-    match result {
-        Err(err) => Err(Error::Other(format!(
+    if let Err(err) = result {
+        Err(Error::Other(format!(
             "failed to handle decode ICE: {}",
             err
-        ))),
-        Ok(_) => {
-            let (attr, found) = message.attributes.get(ATTR_USERNAME);
-            if !found {
-                return Err(Error::Other("no username attribute in STUN message".into()));
-            }
+        )))
+    } else {
+        let (attr, found) = message.attributes.get(ATTR_USERNAME);
+        if !found {
+            return Err(Error::Other("no username attribute in STUN message".into()));
+        }
 
-            match String::from_utf8(attr.value) {
-                // Per the RFC this shouldn't happen
-                // https://datatracker.ietf.org/doc/html/rfc5389#section-15.3
-                Err(err) => Err(Error::Other(format!(
-                    "failed to decode USERNAME from STUN message as UTF-8: {}",
-                    err
-                ))),
-                Ok(s) => {
-                    // s is a combination of the local_ufrag and the remote ufrag separated by `:`.
-                    let res = if local_ufrag {
-                        s.split(":").next()
-                    } else {
-                        s.split(":").last()
-                    };
-                    match res {
-                        Some(s) => Ok(s.to_owned()),
-                        None => Err(Error::Other("can't get ufrag from username".into())),
-                    }
-                },
-            }
-        },
+        match String::from_utf8(attr.value) {
+            // Per the RFC this shouldn't happen
+            // https://datatracker.ietf.org/doc/html/rfc5389#section-15.3
+            Err(err) => Err(Error::Other(format!(
+                "failed to decode USERNAME from STUN message as UTF-8: {}",
+                err
+            ))),
+            Ok(s) => {
+                // s is a combination of the local_ufrag and the remote ufrag separated by `:`.
+                let res = if local_ufrag {
+                    s.split(':').next()
+                } else {
+                    s.split(':').last()
+                };
+                match res {
+                    Some(s) => Ok(s.to_owned()),
+                    None => Err(Error::Other("can't get ufrag from username".into())),
+                }
+            },
+        }
     }
 }

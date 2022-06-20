@@ -18,6 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use libp2p_core::PeerId;
 use thiserror::Error;
 
 /// Error in WebRTC.
@@ -29,6 +30,18 @@ pub enum Error {
     WebRTC(#[from] webrtc::Error),
     #[error("io error: {0}")]
     IoError(#[from] std::io::Error),
+    #[error("noise error: {0}")]
+    Noise(#[from] libp2p_noise::NoiseError),
+
+    // Authentication errors.
+    #[error("invalid fingerprint (expected {expected:?}, got {got:?})")]
+    InvalidFingerprint { expected: String, got: String },
+    #[error("invalid peer ID (expected {expected:?}, got {got:?})")]
+    InvalidPeerID {
+        expected: Option<PeerId>,
+        got: PeerId,
+    },
+
     #[error("internal error: {0} (see debug logs)")]
     InternalError(String),
 }
