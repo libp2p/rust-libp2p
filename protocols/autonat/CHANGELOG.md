@@ -1,3 +1,7 @@
+# Unreleased
+
+- Export `DEFAULT_PROTOCOL_NAME`.
+
 # 0.4.0
 
 - Update to `libp2p-core` `v0.33.0`.
