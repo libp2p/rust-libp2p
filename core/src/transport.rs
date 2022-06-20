@@ -229,7 +229,7 @@ pub trait Transport {
 }
 
 /// The ID of a single listener.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ListenerId(u64);
 
 impl ListenerId {
