@@ -46,6 +46,8 @@
 # 0.46.0 [unreleased]
 - Semver bump Rust from `1.56.1` to `1.60.0` . See [PR 2646].
 - Added weak dependencies for features. See [PR 2646].
+- Update individual crates.
+    - Update to [`libp2p-mplex` `v0.34.0`](muxers/mplex/CHANGELOG.md).
 
 [PR 2646]: https://github.com/libp2p/rust-libp2p/pull/2646
 
