@@ -39,7 +39,6 @@ impl<T> StreamMuxer for Wrap<T>
 where
     T: StreamMuxer,
     T::Substream: Send + Unpin + 'static,
-    T::Error: Into<Box<dyn Error + Send + Sync>>,
 {
     type Substream = SubstreamBox;
     type OutboundSubstream = usize; // TODO: use a newtype
@@ -100,7 +99,7 @@ where
 
 fn into_io_error<E>(err: E) -> io::Error
 where
-    E: Into<Box<dyn Error + Send + Sync>>,
+    E: Error + Send + Sync + 'static,
 {
     io::Error::new(io::ErrorKind::Other, err)
 }
@@ -112,7 +111,6 @@ impl StreamMuxerBox {
         T: StreamMuxer + Send + Sync + 'static,
         T::OutboundSubstream: Send,
         T::Substream: Send + Unpin + 'static,
-        T::Error: Into<Box<dyn Error + Send + Sync>>,
     {
         let wrap = Wrap {
             inner: muxer,

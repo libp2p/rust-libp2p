@@ -75,7 +75,7 @@ pub trait StreamMuxer {
     type OutboundSubstream;
 
     /// Error type of the muxer
-    type Error;
+    type Error: std::error::Error + Send + Sync + 'static;
 
     /// Polls for a connection-wide event.
     ///
