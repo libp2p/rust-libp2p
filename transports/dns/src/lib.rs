@@ -200,7 +200,6 @@ where
         self.inner
             .lock()
             .listen_on(addr)
-            .map(ListenerId::map_type::<Self>)
             .map_err(|e| e.map(DnsErr::Transport))
     }
 
@@ -230,7 +229,6 @@ where
         let mut inner = self.inner.lock();
         Transport::poll(Pin::new(inner.deref_mut()), cx).map(|event| {
             event
-                .map_transport_type::<Self>()
                 .map_upgrade(|upgr| upgr.map_err::<_, fn(_) -> _>(DnsErr::Transport))
                 .map_err(DnsErr::Transport)
         })

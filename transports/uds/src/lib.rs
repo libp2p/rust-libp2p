@@ -69,7 +69,6 @@ macro_rules! codegen {
         #[cfg_attr(docsrs, doc(cfg(feature = $feature_name)))]
         pub struct $uds_config {
             listeners: VecDeque<(ListenerId, Listener<Self>)>,
-            next_listener_id: ListenerId,
         }
 
         impl $uds_config {
@@ -77,7 +76,6 @@ macro_rules! codegen {
             pub fn new() -> $uds_config {
                 $uds_config {
                     listeners: VecDeque::new(),
-                    next_listener_id: ListenerId::new::<Self>(1),
                 }
             }
         }
@@ -99,7 +97,7 @@ macro_rules! codegen {
                 addr: Multiaddr,
             ) -> Result<ListenerId, TransportError<Self::Error>> {
                 if let Ok(path) = multiaddr_to_path(&addr) {
-                    let id = self.next_listener_id.next_id();
+                    let id = ListenerId::new();
                     let listener = $build_listener(path)
                         .map_err(Err)
                         .map_ok(move |listener| {

@@ -308,8 +308,6 @@ where
 
     /// The configuration of port reuse when dialing.
     port_reuse: PortReuse,
-
-    next_listener_id: ListenerId,
     /// All the active listeners.
     /// The `TcpListenStream` struct contains a stream that we want to be pinned. Since the `VecDeque`
     /// can be resized, the only way is to use a `Pin<Box<>>`.
@@ -388,7 +386,6 @@ where
             PortReuse::Disabled
         };
         GenTcpTransport {
-            next_listener_id: ListenerId::new::<Self>(1),
             port_reuse,
             config,
             listeners: VecDeque::new(),
@@ -415,7 +412,7 @@ where
         } else {
             return Err(TransportError::MultiaddrNotSupported(addr));
         };
-        let id = self.next_listener_id.next_id();
+        let id = ListenerId::new();
         log::debug!("listening on {}", socket_addr);
         let listener = self
             .do_listen(id, socket_addr)

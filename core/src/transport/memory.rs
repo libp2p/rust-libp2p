@@ -93,18 +93,9 @@ impl Hub {
 }
 
 /// Transport that supports `/memory/N` multiaddresses.
+#[derive(Default)]
 pub struct MemoryTransport {
     listeners: VecDeque<Pin<Box<Listener>>>,
-    next_listener_id: ListenerId,
-}
-
-impl Default for MemoryTransport {
-    fn default() -> Self {
-        MemoryTransport {
-            listeners: VecDeque::new(),
-            next_listener_id: ListenerId::new::<Self>(1),
-        }
-    }
 }
 
 impl MemoryTransport {
@@ -202,7 +193,7 @@ impl Transport for MemoryTransport {
             None => return Err(TransportError::Other(MemoryTransportError::Unreachable)),
         };
 
-        let id = self.next_listener_id.next_id();
+        let id = ListenerId::new();
         let listener = Listener {
             id,
             port,

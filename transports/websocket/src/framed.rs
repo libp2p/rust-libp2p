@@ -138,7 +138,6 @@ where
         };
         match self.transport.lock().listen_on(inner_addr) {
             Ok(id) => {
-                let id = id.map_type::<Self>();
                 self.listener_protos.insert(id, proto);
                 Ok(id)
             }
@@ -176,7 +175,7 @@ where
         };
         drop(transport);
 
-        let event = match inner_event.map_transport_type::<Self>() {
+        let event = match inner_event {
             TransportEvent::NewAddress {
                 listener_id,
                 mut listen_addr,

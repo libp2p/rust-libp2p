@@ -124,9 +124,7 @@ where
     type Dial = MapFuture<InnerFuture<T::Output, T::Error>, WrapperFn<T::Output>>;
 
     fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
-        self.transport
-            .listen_on(addr)
-            .map(ListenerId::map_type::<Self>)
+        self.transport.listen_on(addr)
     }
 
     fn remove_listener(&mut self, id: ListenerId) -> bool {
