@@ -47,13 +47,23 @@ use std::{
     u64,
 };
 
-type TestSwarm = Swarm<Kademlia<MemoryStore<Sha256Hash>, Sha256Hash>>;
+type TestSwarm<C> = Swarm<Kademlia<MemoryStore<Sha256Hash>, C>>;
 
-fn build_node() -> (Multiaddr, TestSwarm) {
+fn build_node<C>() -> (Multiaddr, TestSwarm<C>)
+where
+    C: PreimageIntoKeyBytes<PeerId>
+        + PreimageIntoKeyBytes<record::Key>
+        + PreimageIntoKeyBytes<Vec<u8>>,
+{
     build_node_with_config(Default::default())
 }
 
-fn build_node_with_config(cfg: KademliaConfig) -> (Multiaddr, TestSwarm) {
+fn build_node_with_config<C>(cfg: KademliaConfig) -> (Multiaddr, TestSwarm<C>)
+where
+    C: PreimageIntoKeyBytes<PeerId>
+        + PreimageIntoKeyBytes<record::Key>
+        + PreimageIntoKeyBytes<Vec<u8>>,
+{
     let local_key = identity::Keypair::generate_ed25519();
     let local_public_key = local_key.public();
     let noise_keys = noise::Keypair::<noise::X25519>::new()
@@ -78,26 +88,46 @@ fn build_node_with_config(cfg: KademliaConfig) -> (Multiaddr, TestSwarm) {
 }
 
 /// Builds swarms, each listening on a port. Does *not* connect the nodes together.
-fn build_nodes(num: usize) -> Vec<(Multiaddr, TestSwarm)> {
+fn build_nodes<C>(num: usize) -> Vec<(Multiaddr, TestSwarm<C>)>
+where
+    C: PreimageIntoKeyBytes<PeerId>
+        + PreimageIntoKeyBytes<record::Key>
+        + PreimageIntoKeyBytes<Vec<u8>>,
+{
     build_nodes_with_config(num, Default::default())
 }
 
 /// Builds swarms, each listening on a port. Does *not* connect the nodes together.
-fn build_nodes_with_config(num: usize, cfg: KademliaConfig) -> Vec<(Multiaddr, TestSwarm)> {
+fn build_nodes_with_config<C>(num: usize, cfg: KademliaConfig) -> Vec<(Multiaddr, TestSwarm<C>)>
+where
+    C: PreimageIntoKeyBytes<PeerId>
+        + PreimageIntoKeyBytes<record::Key>
+        + PreimageIntoKeyBytes<Vec<u8>>,
+{
     (0..num)
         .map(|_| build_node_with_config(cfg.clone()))
         .collect()
 }
 
-fn build_connected_nodes(total: usize, step: usize) -> Vec<(Multiaddr, TestSwarm)> {
+fn build_connected_nodes<C>(total: usize, step: usize) -> Vec<(Multiaddr, TestSwarm<C>)>
+where
+    C: PreimageIntoKeyBytes<PeerId>
+        + PreimageIntoKeyBytes<record::Key>
+        + PreimageIntoKeyBytes<Vec<u8>>,
+{
     build_connected_nodes_with_config(total, step, Default::default())
 }
 
-fn build_connected_nodes_with_config(
+fn build_connected_nodes_with_config<C>(
     total: usize,
     step: usize,
     cfg: KademliaConfig,
-) -> Vec<(Multiaddr, TestSwarm)> {
+) -> Vec<(Multiaddr, TestSwarm<C>)>
+where
+    C: PreimageIntoKeyBytes<PeerId>
+        + PreimageIntoKeyBytes<record::Key>
+        + PreimageIntoKeyBytes<Vec<u8>>,
+{
     let mut swarms = build_nodes_with_config(total, cfg);
     let swarm_ids: Vec<_> = swarms
         .iter()
@@ -120,10 +150,15 @@ fn build_connected_nodes_with_config(
     swarms
 }
 
-fn build_fully_connected_nodes_with_config(
+fn build_fully_connected_nodes_with_config<C>(
     total: usize,
     cfg: KademliaConfig,
-) -> Vec<(Multiaddr, TestSwarm)> {
+) -> Vec<(Multiaddr, TestSwarm<C>)>
+where
+    C: PreimageIntoKeyBytes<PeerId>
+        + PreimageIntoKeyBytes<record::Key>
+        + PreimageIntoKeyBytes<Vec<u8>>,
+{
     let mut swarms = build_nodes_with_config(total, cfg);
     let swarm_addr_and_peer_id: Vec<_> = swarms
         .iter()
@@ -154,7 +189,12 @@ impl Arbitrary for Seed {
 
 #[test]
 fn bootstrap() {
-    fn prop(seed: Seed) {
+    fn prop<C>(seed: Seed)
+    where
+        C: PreimageIntoKeyBytes<PeerId>
+            + PreimageIntoKeyBytes<record::Key>
+            + PreimageIntoKeyBytes<Vec<u8>>,
+    {
         let mut rng = StdRng::from_seed(seed.0);
 
         let num_total = rng.gen_range(2, 20);
@@ -171,7 +211,7 @@ fn bootstrap() {
             cfg.disjoint_query_paths(true);
         }
 
-        let mut swarms = build_connected_nodes_with_config(num_total, num_group, cfg)
+        let mut swarms = build_connected_nodes_with_config::<C>(num_total, num_group, cfg)
             .into_iter()
             .map(|(_a, s)| s)
             .collect::<Vec<_>>();
@@ -230,7 +270,9 @@ fn bootstrap() {
         }))
     }
 
-    QuickCheck::new().tests(10).quickcheck(prop as fn(_) -> _)
+    QuickCheck::new()
+        .tests(10)
+        .quickcheck(prop::<Sha256Hash> as fn(_) -> _)
 }
 
 #[test]
@@ -249,7 +291,9 @@ fn query_iter() {
     fn run<R, C>(rng: &mut R)
     where
         R: Rng,
-        C: PreimageIntoKeyBytes<PeerId> + PreimageIntoKeyBytes<Vec<u8>>,
+        C: PreimageIntoKeyBytes<PeerId>
+            + PreimageIntoKeyBytes<record::Key>
+            + PreimageIntoKeyBytes<Vec<u8>>,
     {
         let num_total = rng.gen_range(2, 20);
         let mut swarms = build_connected_nodes(num_total, 1)
@@ -262,7 +306,9 @@ fn query_iter() {
         // propagate forwards through the list of peers.
         let search_target = PeerId::random();
         let search_target_key = kbucket::Key::<_, C>::new(search_target);
-        let qid = swarms[0].behaviour_mut().get_closest_peers(search_target);
+        let qid = swarms[0]
+            .behaviour_mut()
+            .get_closest_peers(search_target_key.clone());
 
         match swarms[0].behaviour_mut().query(&qid) {
             Some(q) => match q.info() {
@@ -324,7 +370,7 @@ fn unresponsive_not_returned_direct() {
     // Build one node. It contains fake addresses to non-existing nodes. We ask it to find a
     // random peer. We make sure that no fake address is returned.
 
-    let mut swarms = build_nodes(1)
+    let mut swarms = build_nodes::<Sha256Hash>(1)
         .into_iter()
         .map(|(_a, s)| s)
         .collect::<Vec<_>>();
@@ -338,7 +384,9 @@ fn unresponsive_not_returned_direct() {
 
     // Ask first to search a random value.
     let search_target = PeerId::random();
-    swarms[0].behaviour_mut().get_closest_peers(search_target);
+    swarms[0]
+        .behaviour_mut()
+        .get_closest_peers(kbucket::Key::new(search_target));
 
     block_on(poll_fn(move |ctx| {
         for swarm in &mut swarms {
@@ -372,7 +420,7 @@ fn unresponsive_not_returned_indirect() {
     // non-existing nodes. We ask node #2 to find a random peer. We make sure that no fake address
     // is returned.
 
-    let mut swarms = build_nodes(2);
+    let mut swarms = build_nodes::<Sha256Hash>(2);
 
     // Add fake addresses to first.
     for _ in 0..10 {
@@ -398,7 +446,9 @@ fn unresponsive_not_returned_indirect() {
 
     // Ask second to search a random value.
     let search_target = PeerId::random();
-    swarms[1].behaviour_mut().get_closest_peers(search_target);
+    swarms[1]
+        .behaviour_mut()
+        .get_closest_peers(kbucket::Key::new(search_target));
 
     block_on(poll_fn(move |ctx| {
         for swarm in &mut swarms {
@@ -429,7 +479,7 @@ fn unresponsive_not_returned_indirect() {
 
 #[test]
 fn get_record_not_found() {
-    let mut swarms = build_nodes(3);
+    let mut swarms = build_nodes::<Sha256Hash>(3);
 
     let swarm_ids: Vec<_> = swarms
         .iter()
@@ -498,7 +548,9 @@ fn get_record_not_found() {
 fn put_record() {
     fn prop<C>(records: Vec<Record>, seed: Seed, filter_records: bool, drop_records: bool)
     where
-        C: PreimageIntoKeyBytes<PeerId> + PreimageIntoKeyBytes<record::Key>,
+        C: PreimageIntoKeyBytes<PeerId>
+            + PreimageIntoKeyBytes<record::Key>
+            + PreimageIntoKeyBytes<Vec<u8>>,
     {
         let mut rng = StdRng::from_seed(seed.0);
         let replication_factor =
@@ -518,7 +570,7 @@ fn put_record() {
 
         let mut swarms = {
             let mut fully_connected_swarms =
-                build_fully_connected_nodes_with_config(num_total - 1, config.clone());
+                build_fully_connected_nodes_with_config::<C>(num_total - 1, config.clone());
 
             let mut single_swarm = build_node_with_config(config);
             // Connect `single_swarm` to three bootnodes.
@@ -747,7 +799,7 @@ fn put_record() {
 
 #[test]
 fn get_record() {
-    let mut swarms = build_nodes(3);
+    let mut swarms = build_nodes::<Sha256Hash>(3);
 
     // Let first peer know of second peer and second peer know of third peer.
     for i in 0..2 {
@@ -814,7 +866,7 @@ fn get_record() {
 fn get_record_many() {
     // TODO: Randomise
     let num_nodes = 12;
-    let mut swarms = build_connected_nodes(num_nodes, 3)
+    let mut swarms = build_connected_nodes::<Sha256Hash>(num_nodes, 3)
         .into_iter()
         .map(|(_addr, swarm)| swarm)
         .collect::<Vec<_>>();
@@ -865,7 +917,9 @@ fn get_record_many() {
 fn add_provider() {
     fn prop<C>(keys: Vec<record::Key>, seed: Seed)
     where
-        C: PreimageIntoKeyBytes<PeerId> + PreimageIntoKeyBytes<record::Key>,
+        C: PreimageIntoKeyBytes<PeerId>
+            + PreimageIntoKeyBytes<record::Key>
+            + PreimageIntoKeyBytes<Vec<u8>>,
     {
         let mut rng = StdRng::from_seed(seed.0);
         let replication_factor =
@@ -881,7 +935,7 @@ fn add_provider() {
 
         let mut swarms = {
             let mut fully_connected_swarms =
-                build_fully_connected_nodes_with_config(num_total - 1, config.clone());
+                build_fully_connected_nodes_with_config::<C>(num_total - 1, config.clone());
 
             let mut single_swarm = build_node_with_config(config);
             // Connect `single_swarm` to three bootnodes.
@@ -1052,10 +1106,12 @@ fn add_provider() {
 /// arithmetic overflow, see https://github.com/libp2p/rust-libp2p/issues/1290.
 #[test]
 fn exceed_jobs_max_queries() {
-    let (_addr, mut swarm) = build_node();
+    let (_addr, mut swarm) = build_node::<Sha256Hash>();
     let num = JOBS_MAX_QUERIES + 1;
     for _ in 0..num {
-        swarm.behaviour_mut().get_closest_peers(PeerId::random());
+        swarm
+            .behaviour_mut()
+            .get_closest_peers(kbucket::Key::new(PeerId::random()));
     }
 
     assert_eq!(swarm.behaviour_mut().queries.size(), num);
@@ -1101,9 +1157,9 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
     // I.e. setting the amount disjoint paths to be explored to 2.
     config.set_parallelism(NonZeroUsize::new(2).unwrap());
 
-    let mut alice = build_node_with_config(config);
-    let mut trudy = build_node(); // Trudy the intrudor, an adversary.
-    let mut bob = build_node();
+    let mut alice = build_node_with_config::<Sha256Hash>(config);
+    let mut trudy = build_node::<Sha256Hash>(); // Trudy the intrudor, an adversary.
+    let mut bob = build_node::<Sha256Hash>();
 
     let key = record::Key::from(Code::Sha2_256.digest(&thread_rng().gen::<[u8; 32]>()));
     let record_bob = Record::new(key.clone(), b"bob".to_vec());
@@ -1244,7 +1300,7 @@ fn manual_bucket_inserts() {
     let mut cfg = KademliaConfig::default();
     cfg.set_kbucket_inserts(KademliaBucketInserts::Manual);
     // 1 -> 2 -> [3 -> ...]
-    let mut swarms = build_connected_nodes_with_config(3, 1, cfg);
+    let mut swarms = build_connected_nodes_with_config::<Sha256Hash>(3, 1, cfg);
     // The peers and their addresses for which we expect `RoutablePeer` events.
     let mut expected = swarms
         .iter()
@@ -1263,7 +1319,7 @@ fn manual_bucket_inserts() {
     swarms[0]
         .1
         .behaviour_mut()
-        .get_closest_peers(PeerId::random());
+        .get_closest_peers(kbucket::Key::new(PeerId::random()));
     block_on(poll_fn(move |ctx| {
         for (_, swarm) in swarms.iter_mut() {
             loop {
@@ -1276,7 +1332,10 @@ fn manual_bucket_inserts() {
                         routable.push(peer);
                         if expected.is_empty() {
                             for peer in routable.iter() {
-                                let bucket = swarm.behaviour_mut().kbucket(*peer).unwrap();
+                                let bucket = swarm
+                                    .behaviour_mut()
+                                    .kbucket(&kbucket::Key::new(*peer))
+                                    .unwrap();
                                 assert!(bucket.iter().all(|e| e.node.key.preimage() != peer));
                             }
                             return Poll::Ready(());
@@ -1353,7 +1412,7 @@ fn network_behaviour_inject_address_change() {
 #[test]
 fn get_providers() {
     fn prop(key: record::Key) {
-        let (_, mut single_swarm) = build_node();
+        let (_, mut single_swarm) = build_node::<Sha256Hash>();
         single_swarm
             .behaviour_mut()
             .start_providing(key.clone())

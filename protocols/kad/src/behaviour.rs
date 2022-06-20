@@ -645,28 +645,27 @@ where
     /// Returns `None` if the given key refers to the local key.
     pub fn kbucket<K>(
         &mut self,
-        key: K,
+        key: &kbucket::Key<K, C>,
     ) -> Option<kbucket::KBucketRef<'_, kbucket::Key<PeerId, C>, Addresses, C>>
     where
-        K: Clone,
         C: PreimageIntoKeyBytes<K>,
     {
-        self.kbuckets.bucket(&kbucket::Key::new(key))
+        self.kbuckets.bucket(key)
     }
 
     /// Initiates an iterative query for the closest peers to the given key.
     ///
     /// The result of the query is delivered in a
     /// [`KademliaEvent::OutboundQueryCompleted{QueryResult::GetClosestPeers}`].
-    pub fn get_closest_peers<K>(&mut self, key: K) -> QueryId
+    pub fn get_closest_peers<K>(&mut self, key: kbucket::Key<K, C>) -> QueryId
     where
         K: Into<Vec<u8>> + Clone,
         C: PreimageIntoKeyBytes<K>,
     {
         let info = QueryInfo::GetClosestPeers {
-            key: key.clone().into(),
+            key: key.clone().into_preimage().into(),
         };
-        let target = kbucket::Key::new(key);
+        let target = key;
         let peers = self.kbuckets.closest_keys(&target);
         let inner = QueryInner::new(info);
         self.queries.add_iter_closest(target.clone(), peers, inner)
