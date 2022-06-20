@@ -21,8 +21,7 @@
 //! Muxing is the process of splitting a connection into multiple substreams.
 //!
 //! The main item of this module is the `StreamMuxer` trait. An implementation of `StreamMuxer`
-//! has ownership of a connection, lets you open and close substreams, and read/write data
-//! on open substreams.
+//! has ownership of a connection, lets you open and close substreams.
 //!
 //! > **Note**: You normally don't need to use the methods of the `StreamMuxer` directly, as this
 //! >           is managed by the library's internals.
@@ -62,18 +61,13 @@ pub use self::singleton::SingletonMuxer;
 mod boxed;
 mod singleton;
 
-/// Implemented on objects that can open and manage substreams.
+/// Provides multiplexing for a connection by allowing users to open substreams.
 ///
-/// The state of a muxer, as exposed by this API, is the following:
+/// A substream created by a [`StreamMuxer`] is a type that implements [`AsyncRead`] and [`AsyncWrite`].
 ///
-/// - A connection to the remote. The `poll_event`, `flush_all` and `close` methods operate
-///   on this.
-/// - A list of substreams that are open. The `poll_outbound`, `read_substream`, `write_substream`,
-///   `flush_substream`, `shutdown_substream` and `destroy_substream` methods allow controlling
-///   these entries.
-/// - A list of outbound substreams being opened. The `open_outbound`, `poll_outbound` and
-///   `destroy_outbound` methods allow controlling these entries.
-///
+/// Inbound substreams are reported via [`StreamMuxer::poll_event`].
+/// Outbound substreams can be opened via [`StreamMuxer::open_outbound`] and subsequent polling via
+/// [`StreamMuxer::poll_outbound`].
 pub trait StreamMuxer {
     /// Type of the object that represents the raw substream where data can be read and written.
     type Substream: AsyncRead + AsyncWrite;
@@ -132,8 +126,6 @@ pub trait StreamMuxer {
     /// After this has returned `Poll::Ready(Ok(()))`, the muxer has become useless. All
     /// subsequent reads must return either `EOF` or an error. All subsequent writes, shutdowns,
     /// or polls must generate an error or be ignored.
-    ///
-    /// Calling this method implies `flush_all`.
     ///
     /// > **Note**: You are encouraged to call this method and wait for it to return `Ready`, so
     /// >           that the remote is properly informed of the shutdown. However, apart from
