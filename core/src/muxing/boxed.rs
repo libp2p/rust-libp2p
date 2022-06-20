@@ -37,7 +37,7 @@ where
 impl<T> StreamMuxer for Wrap<T>
 where
     T: StreamMuxer,
-    T::Substream: AsyncRead + AsyncWrite + Send + Unpin + 'static,
+    T::Substream: Send + Unpin + 'static,
 {
     type Substream = SubstreamBox;
     type OutboundSubstream = usize; // TODO: use a newtype
@@ -108,7 +108,7 @@ impl StreamMuxerBox {
     where
         T: StreamMuxer + Send + Sync + 'static,
         T::OutboundSubstream: Send,
-        T::Substream: AsyncRead + AsyncWrite + Send + Unpin + 'static,
+        T::Substream: Send + Unpin + 'static,
     {
         let wrap = Wrap {
             inner: muxer,
