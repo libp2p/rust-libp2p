@@ -39,6 +39,7 @@ impl<T> StreamMuxer for Wrap<T>
 where
     T: StreamMuxer,
     T::Substream: Send + Unpin + 'static,
+    T::Error: Send + Sync + 'static,
 {
     type Substream = SubstreamBox;
     type OutboundSubstream = usize; // TODO: use a newtype
@@ -111,6 +112,7 @@ impl StreamMuxerBox {
         T: StreamMuxer + Send + Sync + 'static,
         T::OutboundSubstream: Send,
         T::Substream: Send + Unpin + 'static,
+        T::Error: Send + Sync + 'static,
     {
         let wrap = Wrap {
             inner: muxer,
