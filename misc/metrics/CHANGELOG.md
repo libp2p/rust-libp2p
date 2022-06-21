@@ -1,3 +1,7 @@
+# 0.6.1
+
+- Update `dcutr` events from `libp2p_relay_events` to `libp2p_dcutr_events`, to avoid conflict with `relay` events.
+
 # 0.6.0
 
 - Update to `libp2p-core` `v0.33.0`.
