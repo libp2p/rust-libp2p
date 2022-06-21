@@ -1,4 +1,4 @@
-# Unreleased
+# 0.4.1
 
 - Export `DEFAULT_PROTOCOL_NAME`.
 
