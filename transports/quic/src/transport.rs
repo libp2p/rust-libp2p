@@ -91,17 +91,17 @@ impl Transport for QuicTransport {
     type ListenerUpgrade = Upgrade;
     type Dial = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
+    fn listen_on(&mut self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
         multiaddr_to_socketaddr(&addr)
             .ok_or_else(|| TransportError::MultiaddrNotSupported(addr))?;
-        Ok(self)
+        Ok(self.clone())
     }
 
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
         Some(observed.clone())
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         let socket_addr = if let Some(socket_addr) = multiaddr_to_socketaddr(&addr) {
             if socket_addr.port() == 0 || socket_addr.ip().is_unspecified() {
                 tracing::error!("multiaddr not supported");
@@ -113,9 +113,10 @@ impl Transport for QuicTransport {
             return Err(TransportError::MultiaddrNotSupported(addr));
         };
 
+        let endpoint = self.endpoint.clone();
+
         Ok(async move {
-            let connection = self
-                .endpoint
+            let connection = endpoint
                 .dial(socket_addr)
                 .await
                 .map_err(Error::Reach)?;
@@ -125,7 +126,7 @@ impl Transport for QuicTransport {
         .boxed())
     }
 
-    fn dial_as_listener(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial_as_listener(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         // TODO: As the listener of a QUIC hole punch, we need to send a random UDP packet to the
         // `addr`. See DCUtR specification below.
         //
