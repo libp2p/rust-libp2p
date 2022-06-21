@@ -1825,7 +1825,7 @@ where
         errors: Option<&Vec<Multiaddr>>,
         other_established: usize,
     ) {
-        for addr in errors.map(|a| a.into_iter()).into_iter().flatten() {
+        for addr in errors.map(|a| a.iter()).into_iter().flatten() {
             self.address_failed(*peer_id, addr);
         }
 
@@ -2555,17 +2555,20 @@ pub struct GetRecordOk {
 }
 
 /// The error result of [`Kademlia::get_record`].
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Error)]
 pub enum GetRecordError {
+    #[error("the record was not found")]
     NotFound {
         key: record::Key,
         closest_peers: Vec<PeerId>,
     },
+    #[error("the quorum failed; needed {quorum} peers")]
     QuorumFailed {
         key: record::Key,
         records: Vec<PeerRecord>,
         quorum: NonZeroUsize,
     },
+    #[error("the request timed out")]
     Timeout {
         key: record::Key,
         records: Vec<PeerRecord>,

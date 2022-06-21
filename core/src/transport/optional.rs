@@ -59,24 +59,30 @@ where
     type ListenerUpgrade = T::ListenerUpgrade;
     type Dial = T::Dial;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
-        if let Some(inner) = self.0 {
+    fn listen_on(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<Self::Listener, TransportError<Self::Error>> {
+        if let Some(inner) = self.0.as_mut() {
             inner.listen_on(addr)
         } else {
             Err(TransportError::MultiaddrNotSupported(addr))
         }
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        if let Some(inner) = self.0 {
+    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        if let Some(inner) = self.0.as_mut() {
             inner.dial(addr)
         } else {
             Err(TransportError::MultiaddrNotSupported(addr))
         }
     }
 
-    fn dial_as_listener(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        if let Some(inner) = self.0 {
+    fn dial_as_listener(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+        if let Some(inner) = self.0.as_mut() {
             inner.dial_as_listener(addr)
         } else {
             Err(TransportError::MultiaddrNotSupported(addr))

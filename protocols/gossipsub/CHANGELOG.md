@@ -1,10 +1,32 @@
+# 0.38.1
+
+- Fix duplicate connection id. See [PR 2702].
+
+[PR 2702]: https://github.com/libp2p/rust-libp2p/pull/2702
+
+# 0.38.0
+
+- Update to `libp2p-core` `v0.33.0`.
+
+- Update to `libp2p-swarm` `v0.36.0`.
+
+- changed `TimeCache::contains_key` and `DuplicateCache::contains` to immutable methods. See [PR 2620].
+
+- Update to `prometheus-client` `v0.16.0`. See [PR 2631].
+
+[PR 2620]: https://github.com/libp2p/rust-libp2p/pull/2620
+[PR 2631]: https://github.com/libp2p/rust-libp2p/pull/2631
+
 # 0.37.0
 
 - Update to `libp2p-swarm` `v0.35.0`.
 
 - Fix gossipsub metric (see [PR 2558]).
 
+- Allow the user to set the buckets for the score histogram, and to adjust them from the score thresholds. See [PR 2595].
+
 [PR 2558]: https://github.com/libp2p/rust-libp2p/pull/2558
+[PR 2595]: https://github.com/libp2p/rust-libp2p/pull/2595
 
 # 0.36.0 [2022-02-22]
 

@@ -49,6 +49,7 @@ async fn spawn_server(kill: oneshot::Receiver<()>) -> (PeerId, Multiaddr) {
         let mut server = init_swarm(Config {
             boot_delay: Duration::from_secs(60),
             throttle_clients_peer_max: usize::MAX,
+            only_global_ips: false,
             ..Default::default()
         })
         .await;
@@ -100,6 +101,7 @@ async fn test_auto_probe() {
             retry_interval: TEST_RETRY_INTERVAL,
             refresh_interval: TEST_REFRESH_INTERVAL,
             confidence_max: MAX_CONFIDENCE,
+            only_global_ips: false,
             throttle_server_period: Duration::ZERO,
             boot_delay: Duration::ZERO,
             ..Default::default()
@@ -189,15 +191,14 @@ async fn test_auto_probe() {
             other => panic!("Unexpected behaviour event: {:?}.", other),
         };
 
-        let mut has_received_response = false;
-        // Expect inbound dial from server.
+        let mut had_connection_event = false;
         loop {
             match client.select_next_some().await {
                 SwarmEvent::ConnectionEstablished {
                     endpoint, peer_id, ..
                 } if endpoint.is_listener() => {
                     assert_eq!(peer_id, server_id);
-                    break;
+                    had_connection_event = true;
                 }
                 SwarmEvent::Behaviour(Event::OutboundProbe(OutboundProbeEvent::Response {
                     probe_id,
@@ -206,7 +207,13 @@ async fn test_auto_probe() {
                 })) => {
                     assert_eq!(peer, server_id);
                     assert_eq!(probe_id, id);
-                    has_received_response = true;
+                }
+                SwarmEvent::Behaviour(Event::StatusChanged { old, new }) => {
+                    // Expect to flip status to public
+                    assert_eq!(old, NatStatus::Private);
+                    assert!(matches!(new, NatStatus::Public(_)));
+                    assert!(new.is_public());
+                    break;
                 }
                 SwarmEvent::IncomingConnection { .. }
                 | SwarmEvent::NewListenAddr { .. }
@@ -215,35 +222,23 @@ async fn test_auto_probe() {
             }
         }
 
-        if !has_received_response {
+        // It can happen that the server observed the established connection and
+        // returned a response before the inbound established connection was reported at the client.
+        // In this (rare) case the `ConnectionEstablished` event occurs after the `OutboundProbeEvent::Response`.
+        if !had_connection_event {
             match client.select_next_some().await {
-                SwarmEvent::Behaviour(Event::OutboundProbe(OutboundProbeEvent::Response {
-                    probe_id,
-                    peer,
-                    ..
-                })) => {
-                    assert_eq!(peer, server_id);
-                    assert_eq!(probe_id, id);
+                SwarmEvent::ConnectionEstablished {
+                    endpoint, peer_id, ..
+                } if endpoint.is_listener() => {
+                    assert_eq!(peer_id, server_id);
                 }
                 other => panic!("Unexpected swarm event: {:?}.", other),
             }
         }
 
-        // Expect to flip status to public
-        match next_event(&mut client).await {
-            Event::StatusChanged { old, new } => {
-                assert_eq!(old, NatStatus::Private);
-                assert!(matches!(new, NatStatus::Public(_)));
-                assert!(new.is_public());
-            }
-            other => panic!("Unexpected behaviour event: {:?}.", other),
-        }
-
         assert_eq!(client.behaviour().confidence(), 0);
         assert!(client.behaviour().nat_status().is_public());
         assert!(client.behaviour().public_address().is_some());
-
-        drop(_handle);
     };
 
     run_test_with_timeout(test).await;
@@ -256,6 +251,7 @@ async fn test_confidence() {
             retry_interval: TEST_RETRY_INTERVAL,
             refresh_interval: TEST_REFRESH_INTERVAL,
             confidence_max: MAX_CONFIDENCE,
+            only_global_ips: false,
             throttle_server_period: Duration::ZERO,
             boot_delay: Duration::from_millis(100),
             ..Default::default()
@@ -337,8 +333,6 @@ async fn test_confidence() {
                 }
             }
         }
-
-        drop(_handle);
     };
 
     run_test_with_timeout(test).await;
@@ -351,6 +345,7 @@ async fn test_throttle_server_period() {
             retry_interval: TEST_RETRY_INTERVAL,
             refresh_interval: TEST_REFRESH_INTERVAL,
             confidence_max: MAX_CONFIDENCE,
+            only_global_ips: false,
             // Throttle servers so they can not be re-used for dial request.
             throttle_server_period: Duration::from_secs(1000),
             boot_delay: Duration::from_millis(100),
@@ -398,8 +393,6 @@ async fn test_throttle_server_period() {
             other => panic!("Unexpected behaviour event: {:?}.", other),
         }
         assert_eq!(client.behaviour().confidence(), 0);
-
-        drop(_handle)
     };
 
     run_test_with_timeout(test).await;
@@ -412,6 +405,7 @@ async fn test_use_connected_as_server() {
             retry_interval: TEST_RETRY_INTERVAL,
             refresh_interval: TEST_REFRESH_INTERVAL,
             confidence_max: MAX_CONFIDENCE,
+            only_global_ips: false,
             throttle_server_period: Duration::ZERO,
             boot_delay: Duration::from_millis(100),
             ..Default::default()
@@ -450,8 +444,6 @@ async fn test_use_connected_as_server() {
             }
             other => panic!("Unexpected behaviour event: {:?}.", other),
         }
-
-        drop(_handle);
     };
 
     run_test_with_timeout(test).await;
@@ -466,6 +458,7 @@ async fn test_outbound_failure() {
             retry_interval: TEST_RETRY_INTERVAL,
             refresh_interval: TEST_REFRESH_INTERVAL,
             confidence_max: MAX_CONFIDENCE,
+            only_global_ips: false,
             throttle_server_period: Duration::ZERO,
             boot_delay: Duration::from_millis(100),
             ..Default::default()
@@ -524,6 +517,58 @@ async fn test_outbound_failure() {
                 }
                 other => panic!("Unexpected behaviour event: {:?}.", other),
             }
+        }
+    };
+
+    run_test_with_timeout(test).await;
+}
+
+#[async_std::test]
+async fn test_global_ips_config() {
+    let test = async {
+        let mut client = init_swarm(Config {
+            retry_interval: TEST_RETRY_INTERVAL,
+            refresh_interval: TEST_REFRESH_INTERVAL,
+            confidence_max: MAX_CONFIDENCE,
+            // Enforce that only peers outside of the local network are used as servers.
+            only_global_ips: true,
+            boot_delay: Duration::from_millis(100),
+            ..Default::default()
+        })
+        .await;
+
+        client
+            .listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap())
+            .unwrap();
+        loop {
+            match client.select_next_some().await {
+                SwarmEvent::NewListenAddr { .. } => break,
+                _ => {}
+            }
+        }
+
+        let (_handle, rx) = oneshot::channel();
+        let (server_id, addr) = spawn_server(rx).await;
+
+        // Dial server instead of adding it via `Behaviour::add_server` because the
+        // `only_global_ips` restriction does not apply for manually added servers.
+        client.dial(addr).unwrap();
+        loop {
+            if let SwarmEvent::ConnectionEstablished { peer_id, .. } =
+                client.select_next_some().await
+            {
+                assert_eq!(peer_id, server_id);
+                break;
+            }
+        }
+
+        // Expect that the server is not qualified for dial-back because it is observed
+        // at a local IP.
+        match next_event(&mut client).await {
+            Event::OutboundProbe(OutboundProbeEvent::Error { error, .. }) => {
+                assert!(matches!(error, OutboundProbeError::NoServer))
+            }
+            other => panic!("Unexpected behaviour event: {:?}.", other),
         }
     };
 

@@ -19,6 +19,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use clap::Parser;
 use futures::executor::block_on;
 use futures::stream::StreamExt;
 use libp2p::core::upgrade;
@@ -33,12 +34,11 @@ use libp2p::{identity, NetworkBehaviour, PeerId};
 use libp2p::{noise, Multiaddr};
 use std::error::Error;
 use std::net::{Ipv4Addr, Ipv6Addr};
-use structopt::StructOpt;
 
 fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
-    let opt = Opt::from_args();
+    let opt = Opt::parse();
     println!("opt: {:?}", opt);
 
     // Create a static known PeerId based on given secret
@@ -135,18 +135,18 @@ fn generate_ed25519(secret_key_seed: u8) -> identity::Keypair {
     identity::Keypair::Ed25519(secret_key.into())
 }
 
-#[derive(Debug, StructOpt)]
-#[structopt(name = "libp2p relay")]
+#[derive(Debug, Parser)]
+#[clap(name = "libp2p relay")]
 struct Opt {
     /// Determine if the relay listen on ipv6 or ipv4 loopback address. the default is ipv4
-    #[structopt(long)]
+    #[clap(long)]
     use_ipv6: Option<bool>,
 
     /// Fixed value to generate deterministic peer id
-    #[structopt(long)]
+    #[clap(long)]
     secret_key_seed: u8,
 
     /// The port used to listen on all interfaces
-    #[structopt(long)]
+    #[clap(long)]
     port: u16,
 }

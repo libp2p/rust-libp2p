@@ -44,7 +44,7 @@ fn lot_of_data() {
 }
 
 async fn run(message1: Vec<u8>) {
-    let transport = TcpConfig::new().and_then(|conn, endpoint| {
+    let mut transport = TcpConfig::new().and_then(|conn, endpoint| {
         upgrade::apply(
             conn,
             DeflateConfig::default(),
@@ -54,7 +54,6 @@ async fn run(message1: Vec<u8>) {
     });
 
     let mut listener = transport
-        .clone()
         .listen_on("/ip4/0.0.0.0/tcp/0".parse().expect("multiaddr"))
         .expect("listener");
 

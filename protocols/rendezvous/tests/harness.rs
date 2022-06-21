@@ -22,7 +22,6 @@ use async_trait::async_trait;
 use futures::stream::FusedStream;
 use futures::StreamExt;
 use futures::{future, Stream};
-use libp2p::core::muxing::StreamMuxerBox;
 use libp2p::core::transport::upgrade::Version;
 use libp2p::core::transport::MemoryTransport;
 use libp2p::core::upgrade::SelectUpgrade;
@@ -57,7 +56,6 @@ where
             MplexConfig::new(),
         ))
         .timeout(Duration::from_secs(5))
-        .map(|(peer, muxer), _| (peer, StreamMuxerBox::new(muxer)))
         .boxed();
 
     SwarmBuilder::new(transport, behaviour_fn(peer_id, identity), peer_id)

@@ -157,7 +157,7 @@ impl ExtTransport {
         }
     }
     fn do_dial(
-        self,
+        &mut self,
         addr: Multiaddr,
         role_override: Endpoint,
     ) -> Result<<Self as Transport>::Dial, TransportError<<Self as Transport>::Error>> {
@@ -202,7 +202,10 @@ impl Transport for ExtTransport {
     type ListenerUpgrade = Ready<Result<Self::Output, Self::Error>>;
     type Dial = Dial;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
+    fn listen_on(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<Self::Listener, TransportError<Self::Error>> {
         let iter = self.inner.listen_on(&addr.to_string()).map_err(|err| {
             if is_not_supported_error(&err) {
                 TransportError::MultiaddrNotSupported(addr)
@@ -218,14 +221,17 @@ impl Transport for ExtTransport {
         })
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>>
+    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>>
     where
         Self: Sized,
     {
         self.do_dial(addr, Endpoint::Dialer)
     }
 
-    fn dial_as_listener(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>>
+    fn dial_as_listener(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<Self::Dial, TransportError<Self::Error>>
     where
         Self: Sized,
     {
@@ -312,15 +318,15 @@ impl Stream for Listen {
             };
 
             if let Some(addrs) = event.new_addrs() {
-                for addr in addrs.into_iter() {
-                    let addr = js_value_to_addr(&addr)?;
+                for addr in addrs.iter() {
+                    let addr = js_value_to_addr(addr)?;
                     self.pending_events
                         .push_back(ListenerEvent::NewAddress(addr));
                 }
             }
 
             if let Some(upgrades) = event.new_connections() {
-                for upgrade in upgrades.into_iter().cloned() {
+                for upgrade in upgrades.iter().cloned() {
                     let upgrade: ffi::ConnectionEvent = upgrade.into();
                     self.pending_events.push_back(ListenerEvent::Upgrade {
                         local_addr: upgrade.local_addr().parse()?,
@@ -331,8 +337,8 @@ impl Stream for Listen {
             }
 
             if let Some(addrs) = event.expired_addrs() {
-                for addr in addrs.into_iter() {
-                    match js_value_to_addr(&addr) {
+                for addr in addrs.iter() {
+                    match js_value_to_addr(addr) {
                         Ok(addr) => self
                             .pending_events
                             .push_back(ListenerEvent::NewAddress(addr)),
