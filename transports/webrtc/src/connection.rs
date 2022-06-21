@@ -120,10 +120,10 @@ impl Connection {
                                                 // generally shouldn't be the case.
                                                 error!("Can't send data channel: {}", e);
                                             }
-                                        },
+                                        }
                                         Err(e) => {
                                             error!("Can't detach data channel: {}", e);
-                                        },
+                                        }
                                     };
                                 })
                             })
@@ -149,7 +149,7 @@ impl<'a> StreamMuxer for Connection {
             Some(detached) => {
                 trace!("Incoming substream {}", detached.stream_identifier());
 
-                let ch = PollDataChannel::new(detached);
+                let mut ch = PollDataChannel::new(detached);
                 if let Some(cap) = data_channels_inner.read_buf_cap {
                     ch.set_read_buf_capacity(cap);
                 }
@@ -159,7 +159,7 @@ impl<'a> StreamMuxer for Connection {
                     .insert(ch.stream_identifier(), ch.clone());
 
                 Poll::Ready(Ok(StreamMuxerEvent::InboundSubstream(ch)))
-            },
+            }
             None => Poll::Ready(Err(io::Error::new(
                 io::ErrorKind::Other,
                 "incoming_data_channels_rx is closed (no messages left)",
@@ -207,7 +207,7 @@ impl<'a> StreamMuxer for Connection {
             Ok(detached) => {
                 let mut data_channels_inner = self.data_channels_inner.lock().unwrap();
 
-                let ch = PollDataChannel::new(detached);
+                let mut ch = PollDataChannel::new(detached);
                 if let Some(cap) = data_channels_inner.read_buf_cap {
                     ch.set_read_buf_capacity(cap);
                 }
@@ -217,7 +217,7 @@ impl<'a> StreamMuxer for Connection {
                     .insert(ch.stream_identifier(), ch.clone());
 
                 Poll::Ready(Ok(ch))
-            },
+            }
             Err(e) => Poll::Ready(Err(e)),
         }
     }
@@ -285,7 +285,7 @@ impl<'a> StreamMuxer for Connection {
                 data_channels_inner.incoming_data_channels_rx.close();
 
                 Poll::Ready(Ok(()))
-            },
+            }
             Err(e) => Poll::Ready(Err(e)),
         }
     }
@@ -323,10 +323,10 @@ pub(crate) async fn register_data_channel_open_handler(
                             if let Err(e) = data_channel_tx.send(detached) {
                                 error!("Can't send data channel: {:?}", e);
                             }
-                        },
+                        }
                         Err(e) => {
                             error!("Can't detach data channel: {}", e);
-                        },
+                        }
                     };
                 })
             })

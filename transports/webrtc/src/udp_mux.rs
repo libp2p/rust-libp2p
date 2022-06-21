@@ -54,7 +54,7 @@ fn normalize_socket_addr(target: &SocketAddr, socket_addr: &SocketAddr) -> Socke
             let ipv6_mapped = target_ipv4.ip().to_ipv6_mapped();
 
             SocketAddr::new(std::net::IpAddr::V6(ipv6_mapped), target_ipv4.port())
-        },
+        }
         // This will fail later if target is IPv6 and socket is IPv4, we ignore it here
         (_, _) => *target,
     }
@@ -140,11 +140,11 @@ impl UDPMuxNewAddr {
             Ok(ufrag) => {
                 let conns = self.conns.lock().await;
                 conns.get(&ufrag).map(Clone::clone)
-            },
+            }
             Err(e) => {
                 log::error!("{} (addr: {})", e, addr);
                 None
-            },
+            }
         }
     }
 
@@ -406,7 +406,7 @@ fn ufrag_from_stun_message(buffer: &[u8], local_ufrag: bool) -> Result<String, E
                     Some(s) => Ok(s.to_owned()),
                     None => Err(Error::Other("can't get ufrag from username".into())),
                 }
-            },
+            }
         }
     }
 }

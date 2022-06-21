@@ -11,7 +11,7 @@ use libp2p_request_response::{
     RequestResponseEvent, RequestResponseMessage,
 };
 use libp2p_swarm::{Swarm, SwarmBuilder, SwarmEvent};
-use libp2p_webrtc_direct::transport::WebRTCDirectTransport;
+use libp2p_webrtc::transport::WebRTCTransport;
 use log::trace;
 use rand::RngCore;
 use rcgen::KeyPair;
@@ -34,7 +34,7 @@ async fn create_swarm() -> Result<(Swarm<RequestResponse<PingCodec>>, String)> {
     let cert = generate_certificate();
     let keypair = generate_tls_keypair();
     let peer_id = keypair.public().to_peer_id();
-    let transport = WebRTCDirectTransport::new(cert, keypair, "127.0.0.1:0").await?;
+    let transport = WebRTCTransport::new(cert, keypair, "127.0.0.1:0").await?;
     let fingerprint = transport.cert_fingerprint();
     let protocols = iter::once((PingProtocol(), ProtocolSupport::Full));
     let cfg = RequestResponseConfig::default();
@@ -78,22 +78,22 @@ async fn smoke() -> Result<()> {
         .send_request(&Swarm::local_peer_id(&a), Ping(data.clone()));
 
     match b.next().await {
-        Some(SwarmEvent::Dialing(_)) => {},
+        Some(SwarmEvent::Dialing(_)) => {}
         e => panic!("{:?}", e),
     }
 
     match a.next().await {
-        Some(SwarmEvent::IncomingConnection { .. }) => {},
+        Some(SwarmEvent::IncomingConnection { .. }) => {}
         e => panic!("{:?}", e),
     };
 
     match b.next().await {
-        Some(SwarmEvent::ConnectionEstablished { .. }) => {},
+        Some(SwarmEvent::ConnectionEstablished { .. }) => {}
         e => panic!("{:?}", e),
     };
 
     match a.next().await {
-        Some(SwarmEvent::ConnectionEstablished { .. }) => {},
+        Some(SwarmEvent::ConnectionEstablished { .. }) => {}
         e => panic!("{:?}", e),
     };
 
@@ -112,12 +112,12 @@ async fn smoke() -> Result<()> {
             a.behaviour_mut()
                 .send_response(channel, Pong(ping))
                 .unwrap();
-        },
+        }
         e => panic!("{:?}", e),
     }
 
     match a.next().await {
-        Some(SwarmEvent::Behaviour(RequestResponseEvent::ResponseSent { .. })) => {},
+        Some(SwarmEvent::Behaviour(RequestResponseEvent::ResponseSent { .. })) => {}
         e => panic!("{:?}", e),
     }
 
@@ -153,12 +153,12 @@ async fn smoke() -> Result<()> {
             b.behaviour_mut()
                 .send_response(channel, Pong(data))
                 .unwrap();
-        },
+        }
         e => panic!("{:?}", e),
     }
 
     match b.next().await {
-        Some(SwarmEvent::Behaviour(RequestResponseEvent::ResponseSent { .. })) => {},
+        Some(SwarmEvent::Behaviour(RequestResponseEvent::ResponseSent { .. })) => {}
         e => panic!("{:?}", e),
     }
 
@@ -281,17 +281,17 @@ async fn dial_failure() -> Result<()> {
         .send_request(a_peer_id, Ping(b"hello world".to_vec()));
 
     match b.next().await {
-        Some(SwarmEvent::Dialing(_)) => {},
+        Some(SwarmEvent::Dialing(_)) => {}
         e => panic!("{:?}", e),
     }
 
     match b.next().await {
-        Some(SwarmEvent::OutgoingConnectionError { .. }) => {},
+        Some(SwarmEvent::OutgoingConnectionError { .. }) => {}
         e => panic!("{:?}", e),
     };
 
     match b.next().await {
-        Some(SwarmEvent::Behaviour(RequestResponseEvent::OutboundFailure { .. })) => {},
+        Some(SwarmEvent::Behaviour(RequestResponseEvent::OutboundFailure { .. })) => {}
         e => panic!("{:?}", e),
     };
 
