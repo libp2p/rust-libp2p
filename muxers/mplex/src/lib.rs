@@ -75,9 +75,6 @@ where
 }
 
 /// Multiplexer. Implements the `StreamMuxer` trait.
-///
-/// This implementation isn't capable of detecting when the underlying socket changes its address,
-/// and no [`StreamMuxerEvent::AddressChange`] event is ever emitted.
 pub struct Multiplex<C> {
     io: Arc<Mutex<io::Multiplexed<C>>>,
 }
