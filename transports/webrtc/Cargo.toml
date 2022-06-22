@@ -10,22 +10,22 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-async-trait = "0.1.52"
+async-trait = "0.1"
 bytes = "1"
 fnv = "1.0"
-futures = "0.3.17"
-futures-lite = "1.12.0"
-futures-timer = "3.0"
+futures = "0.3"
+futures-lite = "1"
+futures-timer = "3"
 hex = "0.4"
-if-watch = "0.2.2"
+if-watch = "0.2"
 libp2p-core = { version = "0.33.0", path = "../../core", default-features = false  }
 libp2p-noise = { version = "0.36.0", path = "../../transports/noise" }
-log = "0.4.14"
+log = "0.4"
 serde = { version = "1.0", features = ["derive"] }
-stun = "0.4.2"
+stun = "0.4"
 thiserror = "1"
 tinytemplate = "1.2"
-tokio-crate = { package = "tokio", version = "1.18.2", features = ["net"]}
+tokio-crate = { package = "tokio", version = "1.18", features = ["net"]}
 webrtc = { version = "0.4.0", git = "https://github.com/melekes/webrtc.git", branch = "anton/168-allow-persistent-certificates-plus-deps" }
 webrtc-data = { version = "0.3.3", git = "https://github.com/webrtc-rs/data.git", branch = "main" }
 webrtc-ice = "0.7.0"
@@ -33,13 +33,13 @@ webrtc-sctp = "0.5.0"
 webrtc-util = { version = "0.5.3", default-features = false, features = ["conn", "vnet", "sync"] }
 
 [dev-dependencies]
-anyhow = "1.0.41"
-env_logger = "0.9.0"
+anyhow = "1.0"
+env_logger = "0.9"
 libp2p-request-response = { version = "0.18.0", path = "../../protocols/request-response" }
 libp2p-swarm = { version = "0.36.0", path = "../../swarm" }
-rand = "0.8.4"
-rand_core = "0.5.1"
-rcgen = "0.8.14"
+rand = "0.8"
+rand_core = "0.5"
+rcgen = "0.8"
 
 [patch.crates-io]
 webrtc-data = { version = "0.3.3", git = "https://github.com/webrtc-rs/data.git", branch = "main" }
