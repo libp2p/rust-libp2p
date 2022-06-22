@@ -135,9 +135,10 @@ fn run(transport: &mut BenchTransport, payload: &Vec<u8>, listen_addr: &Multiadd
     task::block_on(async move {
         let addr = addr_receiver.await.unwrap();
         let (_peer, conn) = transport.dial(addr).unwrap().await.unwrap();
-        let mut handle = conn.open_outbound();
-        let mut stream = poll_fn(|cx| conn.poll_outbound(cx, &mut handle))
+        let mut stream = poll_fn(|cx| conn.poll_event(OpenFlags::OUTBOUND, cx))
             .await
+            .unwrap()
+            .into_outbound_substream()
             .unwrap();
         let mut off = 0;
         loop {
