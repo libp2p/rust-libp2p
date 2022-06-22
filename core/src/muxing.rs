@@ -145,7 +145,7 @@ impl<T> StreamMuxerEvent<T> {
     /// returns `None`.
     pub fn into_inbound_substream(self) -> Option<T> {
         match self {
-            StreamMuxerEvent::InboundSubstream(stream) => Some(stream)
+            StreamMuxerEvent::InboundSubstream(stream) => Some(stream),
         }
     }
 
