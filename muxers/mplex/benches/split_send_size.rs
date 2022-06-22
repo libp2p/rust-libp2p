@@ -57,9 +57,15 @@ fn prepare(c: &mut Criterion) {
     let tcp_addr = multiaddr![Ip4(std::net::Ipv4Addr::new(127, 0, 0, 1)), Tcp(0u16)];
     for &size in BENCH_SIZES.iter() {
         tcp.throughput(Throughput::Bytes(payload.len() as u64));
-        let trans = tcp_transport(size);
+        let mut trans = tcp_transport(size);
         tcp.bench_function(format!("{}", size), |b| {
-            b.iter(|| run(black_box(&trans), black_box(&payload), black_box(&tcp_addr)))
+            b.iter(|| {
+                run(
+                    black_box(&mut trans),
+                    black_box(&payload),
+                    black_box(&tcp_addr),
+                )
+            })
         });
     }
     tcp.finish();
@@ -68,17 +74,23 @@ fn prepare(c: &mut Criterion) {
     let mem_addr = multiaddr![Memory(0u64)];
     for &size in BENCH_SIZES.iter() {
         mem.throughput(Throughput::Bytes(payload.len() as u64));
-        let trans = mem_transport(size);
+        let mut trans = mem_transport(size);
         mem.bench_function(format!("{}", size), |b| {
-            b.iter(|| run(black_box(&trans), black_box(&payload), black_box(&mem_addr)))
+            b.iter(|| {
+                run(
+                    black_box(&mut trans),
+                    black_box(&payload),
+                    black_box(&mem_addr),
+                )
+            })
         });
     }
     mem.finish();
 }
 
 /// Transfers the given payload between two nodes using the given transport.
-fn run(transport: &BenchTransport, payload: &Vec<u8>, listen_addr: &Multiaddr) {
-    let mut listener = transport.clone().listen_on(listen_addr.clone()).unwrap();
+fn run(transport: &mut BenchTransport, payload: &Vec<u8>, listen_addr: &Multiaddr) {
+    let mut listener = transport.listen_on(listen_addr.clone()).unwrap();
     let (addr_sender, addr_receiver) = oneshot::channel();
     let mut addr_sender = Some(addr_sender);
     let payload_len = payload.len();
@@ -92,26 +104,24 @@ fn run(transport: &BenchTransport, payload: &Vec<u8>, listen_addr: &Multiaddr) {
                 }
                 transport::ListenerEvent::Upgrade { upgrade, .. } => {
                     let (_peer, conn) = upgrade.await.unwrap();
-                    match poll_fn(|cx| conn.poll_event(cx)).await {
-                        Ok(muxing::StreamMuxerEvent::InboundSubstream(mut s)) => {
-                            let mut buf = vec![0u8; payload_len];
-                            let mut off = 0;
-                            loop {
-                                // Read in typical chunk sizes of up to 8KiB.
-                                let end = off + std::cmp::min(buf.len() - off, 8 * 1024);
-                                let n = poll_fn(|cx| {
-                                    conn.read_substream(cx, &mut s, &mut buf[off..end])
-                                })
-                                .await
-                                .unwrap();
-                                off += n;
-                                if off == buf.len() {
-                                    return;
-                                }
-                            }
+                    let mut s = poll_fn(|cx| conn.poll_event(cx))
+                        .await
+                        .expect("unexpected error")
+                        .into_inbound_substream()
+                        .expect("Unexpected muxer event");
+
+                    let mut buf = vec![0u8; payload_len];
+                    let mut off = 0;
+                    loop {
+                        // Read in typical chunk sizes of up to 8KiB.
+                        let end = off + std::cmp::min(buf.len() - off, 8 * 1024);
+                        let n = poll_fn(|cx| conn.read_substream(cx, &mut s, &mut buf[off..end]))
+                            .await
+                            .unwrap();
+                        off += n;
+                        if off == buf.len() {
+                            return;
                         }
-                        Ok(_) => panic!("Unexpected muxer event"),
-                        Err(e) => panic!("Unexpected error: {:?}", e),
                     }
                 }
                 _ => panic!("Unexpected listener event"),
@@ -122,7 +132,7 @@ fn run(transport: &BenchTransport, payload: &Vec<u8>, listen_addr: &Multiaddr) {
     // Spawn and block on the sender, i.e. until all data is sent.
     task::block_on(async move {
         let addr = addr_receiver.await.unwrap();
-        let (_peer, conn) = transport.clone().dial(addr).unwrap().await.unwrap();
+        let (_peer, conn) = transport.dial(addr).unwrap().await.unwrap();
         let mut handle = conn.open_outbound();
         let mut stream = poll_fn(|cx| conn.poll_outbound(cx, &mut handle))
             .await

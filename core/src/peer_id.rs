@@ -94,7 +94,7 @@ impl PeerId {
     /// In case the given [`Multiaddr`] ends with `/p2p/<peer-id>`, this function
     /// will return the encapsulated [`PeerId`], otherwise it will return `None`.
     pub fn try_from_multiaddr(address: &Multiaddr) -> Option<PeerId> {
-        address.iter().last().map_or(None, |p| match p {
+        address.iter().last().and_then(|p| match p {
             Protocol::P2p(hash) => PeerId::from_multihash(hash).ok(),
             _ => None,
         })

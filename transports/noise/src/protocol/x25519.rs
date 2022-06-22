@@ -180,6 +180,12 @@ impl Keypair<X25519> {
     }
 }
 
+impl Default for Keypair<X25519> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Promote a X25519 secret key into a keypair.
 impl From<SecretKey<X25519>> for Keypair<X25519> {
     fn from(secret: SecretKey<X25519>) -> Keypair<X25519> {

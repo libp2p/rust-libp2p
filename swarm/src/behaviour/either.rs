@@ -227,11 +227,11 @@ where
     ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
         let event = match self {
             Either::Left(behaviour) => futures::ready!(behaviour.poll(cx, params))
-                .map_out(|e| Either::Left(e))
-                .map_handler_and_in(|h| IntoEitherHandler::Left(h), |e| Either::Left(e)),
+                .map_out(Either::Left)
+                .map_handler_and_in(IntoEitherHandler::Left, Either::Left),
             Either::Right(behaviour) => futures::ready!(behaviour.poll(cx, params))
-                .map_out(|e| Either::Right(e))
-                .map_handler_and_in(|h| IntoEitherHandler::Right(h), |e| Either::Right(e)),
+                .map_out(Either::Right)
+                .map_handler_and_in(IntoEitherHandler::Right, Either::Right),
         };
 
         Poll::Ready(event)

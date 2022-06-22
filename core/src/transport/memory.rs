@@ -150,9 +150,12 @@ impl Future for DialFuture {
             .take()
             .expect("Future should not be polled again once complete");
         let dial_port = self.dial_port;
-        match self.sender.start_send((channel_to_send, dial_port)) {
-            Err(_) => return Poll::Ready(Err(MemoryTransportError::Unreachable)),
-            Ok(()) => {}
+        if self
+            .sender
+            .start_send((channel_to_send, dial_port))
+            .is_err()
+        {
+            return Poll::Ready(Err(MemoryTransportError::Unreachable));
         }
 
         Poll::Ready(Ok(self
@@ -169,7 +172,10 @@ impl Transport for MemoryTransport {
     type ListenerUpgrade = Ready<Result<Self::Output, Self::Error>>;
     type Dial = DialFuture;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
+    fn listen_on(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<Self::Listener, TransportError<Self::Error>> {
         let port = if let Ok(port) = parse_memory_addr(&addr) {
             port
         } else {
@@ -191,7 +197,7 @@ impl Transport for MemoryTransport {
         Ok(listener)
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<DialFuture, TransportError<Self::Error>> {
+    fn dial(&mut self, addr: Multiaddr) -> Result<DialFuture, TransportError<Self::Error>> {
         let port = if let Ok(port) = parse_memory_addr(&addr) {
             if let Some(port) = NonZeroU64::new(port) {
                 port
@@ -205,7 +211,10 @@ impl Transport for MemoryTransport {
         DialFuture::new(port).ok_or(TransportError::Other(MemoryTransportError::Unreachable))
     }
 
-    fn dial_as_listener(self, addr: Multiaddr) -> Result<DialFuture, TransportError<Self::Error>> {
+    fn dial_as_listener(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<DialFuture, TransportError<Self::Error>> {
         self.dial(addr)
     }
 
@@ -352,9 +361,9 @@ impl<T> Sink<T> for Chan<T> {
     }
 }
 
-impl<T: AsRef<[u8]>> Into<RwStreamSink<Chan<T>>> for Chan<T> {
-    fn into(self) -> RwStreamSink<Chan<T>> {
-        RwStreamSink::new(self)
+impl<T: AsRef<[u8]>> From<Chan<T>> for RwStreamSink<Chan<T>> {
+    fn from(channel: Chan<T>) -> RwStreamSink<Chan<T>> {
+        RwStreamSink::new(channel)
     }
 }
 
@@ -408,7 +417,7 @@ mod tests {
 
     #[test]
     fn listening_twice() {
-        let transport = MemoryTransport::default();
+        let mut transport = MemoryTransport::default();
         assert!(transport
             .listen_on("/memory/1639174018481".parse().unwrap())
             .is_ok());
@@ -435,7 +444,7 @@ mod tests {
 
     #[test]
     fn port_not_in_use() {
-        let transport = MemoryTransport::default();
+        let mut transport = MemoryTransport::default();
         assert!(transport
             .dial("/memory/810172461024613".parse().unwrap())
             .is_err());
@@ -457,7 +466,7 @@ mod tests {
         let t1_addr: Multiaddr = format!("/memory/{}", rand_port).parse().unwrap();
         let cloned_t1_addr = t1_addr.clone();
 
-        let t1 = MemoryTransport::default();
+        let mut t1 = MemoryTransport::default();
 
         let listener = async move {
             let listener = t1.listen_on(t1_addr.clone()).unwrap();
@@ -478,7 +487,7 @@ mod tests {
 
         // Setup dialer.
 
-        let t2 = MemoryTransport::default();
+        let mut t2 = MemoryTransport::default();
         let dialer = async move {
             let mut socket = t2.dial(cloned_t1_addr).unwrap().await.unwrap();
             socket.write_all(&msg).await.unwrap();
@@ -495,7 +504,7 @@ mod tests {
             Protocol::Memory(rand::random::<u64>().saturating_add(1)).into();
         let listener_addr_cloned = listener_addr.clone();
 
-        let listener_transport = MemoryTransport::default();
+        let mut listener_transport = MemoryTransport::default();
 
         let listener = async move {
             let mut listener = listener_transport.listen_on(listener_addr.clone()).unwrap();
@@ -530,7 +539,7 @@ mod tests {
             Protocol::Memory(rand::random::<u64>().saturating_add(1)).into();
         let listener_addr_cloned = listener_addr.clone();
 
-        let listener_transport = MemoryTransport::default();
+        let mut listener_transport = MemoryTransport::default();
 
         let listener = async move {
             let mut listener = listener_transport.listen_on(listener_addr.clone()).unwrap();

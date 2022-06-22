@@ -49,16 +49,19 @@ where
     type ListenerUpgrade = MapErrListenerUpgrade<T, F>;
     type Dial = MapErrDial<T, F>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
-        let map = self.map;
+    fn listen_on(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<Self::Listener, TransportError<Self::Error>> {
+        let map = self.map.clone();
         match self.transport.listen_on(addr) {
             Ok(stream) => Ok(MapErrListener { inner: stream, map }),
             Err(err) => Err(err.map(map)),
         }
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let map = self.map;
+    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        let map = self.map.clone();
         match self.transport.dial(addr) {
             Ok(future) => Ok(MapErrDial {
                 inner: future,
@@ -68,8 +71,11 @@ where
         }
     }
 
-    fn dial_as_listener(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let map = self.map;
+    fn dial_as_listener(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+        let map = self.map.clone();
         match self.transport.dial_as_listener(addr) {
             Ok(future) => Ok(MapErrDial {
                 inner: future,

@@ -26,7 +26,6 @@ use crate::{
     Multiaddr,
 };
 
-use atomic::Atomic;
 use futures::{
     io::{IoSlice, IoSliceMut},
     prelude::*,
@@ -36,7 +35,10 @@ use std::{
     convert::TryFrom as _,
     io,
     pin::Pin,
-    sync::{atomic::Ordering, Arc},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc,
+    },
     task::{Context, Poll},
 };
 
@@ -52,8 +54,8 @@ impl<TInner> BandwidthLogging<TInner> {
     /// Creates a new [`BandwidthLogging`] around the transport.
     pub fn new(inner: TInner) -> (Self, Arc<BandwidthSinks>) {
         let sink = Arc::new(BandwidthSinks {
-            inbound: Atomic::new(0),
-            outbound: Atomic::new(0),
+            inbound: AtomicU64::new(0),
+            outbound: AtomicU64::new(0),
         });
 
         let trans = BandwidthLogging {
@@ -75,22 +77,28 @@ where
     type ListenerUpgrade = BandwidthFuture<TInner::ListenerUpgrade>;
     type Dial = BandwidthFuture<TInner::Dial>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
-        let sinks = self.sinks;
+    fn listen_on(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<Self::Listener, TransportError<Self::Error>> {
+        let sinks = self.sinks.clone();
         self.inner
             .listen_on(addr)
             .map(move |inner| BandwidthListener { inner, sinks })
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let sinks = self.sinks;
+    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        let sinks = self.sinks.clone();
         self.inner
             .dial(addr)
             .map(move |fut| BandwidthFuture { inner: fut, sinks })
     }
 
-    fn dial_as_listener(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let sinks = self.sinks;
+    fn dial_as_listener(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+        let sinks = self.sinks.clone();
         self.inner
             .dial_as_listener(addr)
             .map(move |fut| BandwidthFuture { inner: fut, sinks })
@@ -159,8 +167,8 @@ impl<TInner: TryFuture> Future for BandwidthFuture<TInner> {
 
 /// Allows obtaining the average bandwidth of the connections created from a [`BandwidthLogging`].
 pub struct BandwidthSinks {
-    inbound: Atomic<u64>,
-    outbound: Atomic<u64>,
+    inbound: AtomicU64,
+    outbound: AtomicU64,
 }
 
 impl BandwidthSinks {

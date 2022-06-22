@@ -22,7 +22,6 @@
 
 use crate::protocol;
 use futures::future::{BoxFuture, FutureExt};
-use futures::stream::{FuturesUnordered, StreamExt};
 use instant::Instant;
 use libp2p_core::either::{EitherError, EitherOutput};
 use libp2p_core::multiaddr::Multiaddr;
@@ -144,10 +143,9 @@ pub struct Handler {
             <Self as ConnectionHandler>::Error,
         >,
     >,
-    /// Inbound connects, accepted by the behaviour, pending completion.
-    inbound_connects: FuturesUnordered<
-        BoxFuture<'static, Result<Vec<Multiaddr>, protocol::inbound::UpgradeError>>,
-    >,
+    /// Inbound connect, accepted by the behaviour, pending completion.
+    inbound_connect:
+        Option<BoxFuture<'static, Result<Vec<Multiaddr>, protocol::inbound::UpgradeError>>>,
     keep_alive: KeepAlive,
 }
 
@@ -157,7 +155,7 @@ impl Handler {
             endpoint,
             pending_error: Default::default(),
             queued_events: Default::default(),
-            inbound_connects: Default::default(),
+            inbound_connect: Default::default(),
             keep_alive: KeepAlive::Until(Instant::now() + Duration::from_secs(30)),
         }
     }
@@ -247,8 +245,15 @@ impl ConnectionHandler for Handler {
                 inbound_connect,
                 obs_addrs,
             } => {
-                self.inbound_connects
-                    .push(inbound_connect.accept(obs_addrs).boxed());
+                if let Some(_) = self
+                    .inbound_connect
+                    .replace(inbound_connect.accept(obs_addrs).boxed())
+                {
+                    log::warn!(
+                        "New inbound connect stream while still upgrading previous one. \
+                         Replacing previous with new.",
+                    );
+                }
             }
             Command::UpgradeFinishedDontKeepAlive => {
                 self.keep_alive = KeepAlive::No;
@@ -364,7 +369,8 @@ impl ConnectionHandler for Handler {
             return Poll::Ready(event);
         }
 
-        while let Poll::Ready(Some(result)) = self.inbound_connects.poll_next_unpin(cx) {
+        if let Some(Poll::Ready(result)) = self.inbound_connect.as_mut().map(|f| f.poll_unpin(cx)) {
+            self.inbound_connect = None;
             match result {
                 Ok(addresses) => {
                     return Poll::Ready(ConnectionHandlerEvent::Custom(

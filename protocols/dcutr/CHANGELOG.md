@@ -1,3 +1,13 @@
+# 0.3.1
+
+- Upgrade at most one inbound connect request.
+
+# 0.3.0
+
+- Update to `libp2p-core` `v0.33.0`.
+
+- Update to `libp2p-swarm` `v0.36.0`.
+
 # 0.2.0
 
 - Expose `InboundUpgradeError` and `OutboundUpgradeError`. See [PR, 2586].

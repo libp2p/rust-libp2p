@@ -19,12 +19,11 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::handler::{IdentifyHandler, IdentifyHandlerEvent, IdentifyPush};
-use crate::protocol::{IdentifyInfo, ReplySubstream};
+use crate::protocol::{IdentifyInfo, ReplySubstream, UpgradeError};
 use futures::prelude::*;
 use libp2p_core::{
     connection::{ConnectionId, ListenerId},
     multiaddr::Protocol,
-    upgrade::UpgradeError,
     ConnectedPoint, Multiaddr, PeerId, PublicKey,
 };
 use libp2p_swarm::{
@@ -35,7 +34,6 @@ use libp2p_swarm::{
 use lru::LruCache;
 use std::{
     collections::{HashMap, HashSet, VecDeque},
-    io,
     iter::FromIterator,
     pin::Pin,
     task::Context,
@@ -75,7 +73,7 @@ enum Reply {
     /// The reply is being sent.
     Sending {
         peer: PeerId,
-        io: Pin<Box<dyn Future<Output = Result<(), io::Error>> + Send>>,
+        io: Pin<Box<dyn Future<Output = Result<(), UpgradeError>> + Send>>,
     },
 }
 
@@ -196,16 +194,14 @@ impl Identify {
         I: IntoIterator<Item = PeerId>,
     {
         for p in peers {
-            if self.pending_push.insert(p) {
-                if !self.connected.contains_key(&p) {
-                    let handler = self.new_handler();
-                    self.events.push_back(NetworkBehaviourAction::Dial {
-                        opts: DialOpts::peer_id(p)
-                            .condition(dial_opts::PeerCondition::Disconnected)
-                            .build(),
-                        handler,
-                    });
-                }
+            if self.pending_push.insert(p) && !self.connected.contains_key(&p) {
+                let handler = self.new_handler();
+                self.events.push_back(NetworkBehaviourAction::Dial {
+                    opts: DialOpts::peer_id(p)
+                        .condition(dial_opts::PeerCondition::Disconnected)
+                        .build(),
+                    handler,
+                });
             }
         }
     }
@@ -240,7 +236,7 @@ impl NetworkBehaviour for Identify {
         if let Some(entry) = self.discovered_peers.get_mut(peer_id) {
             for addr in failed_addresses
                 .into_iter()
-                .flat_map(|addresses| addresses.into_iter())
+                .flat_map(|addresses| addresses.iter())
             {
                 entry.remove(addr);
             }
@@ -431,9 +427,9 @@ impl NetworkBehaviour for Identify {
                             Poll::Ready(Err(err)) => {
                                 let event = IdentifyEvent::Error {
                                     peer_id: peer,
-                                    error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(
-                                        err,
-                                    )),
+                                    error: ConnectionHandlerUpgrErr::Upgrade(
+                                        libp2p_core::upgrade::UpgradeError::Apply(err),
+                                    ),
                                 };
                                 return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event));
                             }
@@ -451,7 +447,7 @@ impl NetworkBehaviour for Identify {
         self.discovered_peers
             .get(peer)
             .cloned()
-            .map(|addr| Vec::from_iter(addr))
+            .map(Vec::from_iter)
             .unwrap_or_default()
     }
 }
@@ -484,7 +480,7 @@ pub enum IdentifyEvent {
         /// The peer with whom the error originated.
         peer_id: PeerId,
         /// The error that occurred.
-        error: ConnectionHandlerUpgrErr<io::Error>,
+        error: ConnectionHandlerUpgrErr<UpgradeError>,
     },
 }
 
@@ -510,7 +506,7 @@ fn multiaddr_matches_peer_id(addr: &Multiaddr, peer_id: &PeerId) -> bool {
     if let Some(Protocol::P2p(multi_addr_peer_id)) = last_component {
         return multi_addr_peer_id == *peer_id.as_ref();
     }
-    return true;
+    true
 }
 
 #[cfg(test)]

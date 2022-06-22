@@ -204,10 +204,10 @@ impl Connection {
 
     /// Closes the given substream.
     ///
-    /// [`Connection::write_substream`] must no longer be called. The substream is however still
+    /// `write_substream` must no longer be called. The substream is however still
     /// readable.
     ///
-    /// On success, a [`StreamEvent::Finished`] event will later be produced when the
+    /// On success, a [`quinn_proto::StreamEvent::Finished`] event will later be produced when the
     /// substream has been effectively closed. A [`ConnectionEvent::StreamStopped`] event can also
     /// be emitted.
     pub(crate) fn shutdown_substream(
@@ -413,11 +413,9 @@ pub(crate) enum ConnectionEvent {
     /// `None`. After this event has been generated, this method is guaranteed to return `Some`.
     StreamOpened,
 
-    /// Generated after [`Connection::read_substream`] has been called and has returned a
-    /// `Blocked` error.
+    /// Generated after `read_substream` has returned a `Blocked` error.
     StreamReadable(quinn_proto::StreamId),
-    /// Generated after [`Connection::write_substream`] has been called and has returned a
-    /// `Blocked` error.
+    /// Generated after `write_substream` has returned a `Blocked` error.
     StreamWritable(quinn_proto::StreamId),
 
     /// Generated after [`Connection::shutdown_substream`] has been called.

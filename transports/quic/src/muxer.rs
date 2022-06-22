@@ -373,17 +373,7 @@ impl StreamMuxer for QuicMuxer {
         Poll::Ready(Ok(()))
     }
 
-    fn flush_all(&self, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        // quinn doesn't support flushing, calling close will flush all substreams.
-        Poll::Ready(Ok(()))
-    }
-
-    fn close(&self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        // StreamMuxer's `close` documentation mentions that it automatically implies `flush_all`.
-        if self.flush_all(cx)?.is_pending() {
-            return Poll::Pending;
-        }
-
+    fn poll_close(&self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         let mut inner = self.inner.lock();
 
         if inner.connection.connection.is_drained() {

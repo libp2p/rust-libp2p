@@ -172,7 +172,7 @@ where
         self.list.clear();
     }
 
-    pub fn contains_key(&mut self, key: &Key) -> bool {
+    pub fn contains_key(&self, key: &Key) -> bool {
         self.map.contains_key(key)
     }
 
@@ -208,7 +208,7 @@ where
         }
     }
 
-    pub fn contains(&mut self, key: &Key) -> bool {
+    pub fn contains(&self, key: &Key) -> bool {
         self.0.contains_key(key)
     }
 }

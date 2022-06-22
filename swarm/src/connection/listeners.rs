@@ -145,11 +145,8 @@ where
     pub fn listen_on(
         &mut self,
         addr: Multiaddr,
-    ) -> Result<ListenerId, TransportError<TTrans::Error>>
-    where
-        TTrans: Clone,
-    {
-        let listener = self.transport.clone().listen_on(addr)?;
+    ) -> Result<ListenerId, TransportError<TTrans::Error>> {
+        let listener = self.transport.listen_on(addr)?;
         self.listeners.push_back(Box::pin(Listener {
             id: self.next_id,
             listener,
@@ -183,9 +180,14 @@ where
         }
     }
 
-    /// Returns the transport passed when building this object.
+    /// Returns a reference to the transport passed when building this object.
     pub fn transport(&self) -> &TTrans {
         &self.transport
+    }
+
+    /// Returns a mutable reference to the transport passed when building this object.
+    pub fn transport_mut(&mut self) -> &mut TTrans {
+        &mut self.transport
     }
 
     /// Returns an iterator that produces the list of addresses we're listening on.
@@ -365,7 +367,7 @@ mod tests {
     #[test]
     fn incoming_event() {
         async_std::task::block_on(async move {
-            let mem_transport = transport::MemoryTransport::default();
+            let mut mem_transport = transport::MemoryTransport::default();
 
             let mut listeners = ListenersStream::new(mem_transport);
             listeners.listen_on("/memory/0".parse().unwrap()).unwrap();
@@ -416,7 +418,7 @@ mod tests {
             type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
             fn listen_on(
-                self,
+                &mut self,
                 _: Multiaddr,
             ) -> Result<Self::Listener, transport::TransportError<Self::Error>> {
                 Ok(Box::pin(stream::unfold((), |()| async move {
@@ -430,14 +432,14 @@ mod tests {
             }
 
             fn dial(
-                self,
+                &mut self,
                 _: Multiaddr,
             ) -> Result<Self::Dial, transport::TransportError<Self::Error>> {
                 panic!()
             }
 
             fn dial_as_listener(
-                self,
+                &mut self,
                 _: Multiaddr,
             ) -> Result<Self::Dial, transport::TransportError<Self::Error>> {
                 panic!()
@@ -479,7 +481,7 @@ mod tests {
             type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
             fn listen_on(
-                self,
+                &mut self,
                 _: Multiaddr,
             ) -> Result<Self::Listener, transport::TransportError<Self::Error>> {
                 Ok(Box::pin(stream::unfold((), |()| async move {
@@ -488,14 +490,14 @@ mod tests {
             }
 
             fn dial(
-                self,
+                &mut self,
                 _: Multiaddr,
             ) -> Result<Self::Dial, transport::TransportError<Self::Error>> {
                 panic!()
             }
 
             fn dial_as_listener(
-                self,
+                &mut self,
                 _: Multiaddr,
             ) -> Result<Self::Dial, transport::TransportError<Self::Error>> {
                 panic!()
