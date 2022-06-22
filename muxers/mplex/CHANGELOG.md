@@ -1,7 +1,5 @@
 # 0.34.0 [unreleased]
 
-- Update to `libp2p-core` `v0.34.0`.
-
 - `Substream` now implements `AsyncRead` and `AsyncWrite`. See [PR 2706].
 - Update to `libp2p-core` `v0.34.0`
 
