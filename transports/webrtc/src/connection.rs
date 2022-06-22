@@ -249,6 +249,7 @@ impl<'a> StreamMuxer for Connection {
         cx: &mut Context<'_>,
         s: &mut Self::Substream,
     ) -> Poll<Result<(), Self::Error>> {
+        trace!("Flushing substream {}", s.stream_identifier());
         Pin::new(s).poll_flush(cx)
     }
 
@@ -262,42 +263,35 @@ impl<'a> StreamMuxer for Connection {
     }
 
     fn destroy_substream(&self, s: Self::Substream) {
+        trace!("Destroying substream {}", s.stream_identifier());
         let mut data_channels_inner = self.data_channels_inner.lock().unwrap();
         data_channels_inner.map.remove(&s.stream_identifier());
     }
 
-    fn close(&self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+    fn poll_close(&self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         debug!("Closing connection");
 
-        // First, flush all the buffered data.
-        match ready!(self.flush_all(cx)) {
-            Ok(_) => {
-                // Second, shutdown all the substreams.
-                let mut data_channels_inner = self.data_channels_inner.lock().unwrap();
-                for (_, ch) in &mut data_channels_inner.map {
-                    match ready!(self.shutdown_substream(cx, ch)) {
-                        Ok(_) => continue,
-                        Err(e) => return Poll::Ready(Err(e)),
-                    }
-                }
-
-                // Third, close `incoming_data_channels_rx`
-                data_channels_inner.incoming_data_channels_rx.close();
-
-                Poll::Ready(Ok(()))
-            }
-            Err(e) => Poll::Ready(Err(e)),
-        }
-    }
-
-    fn flush_all(&self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         let mut data_channels_inner = self.data_channels_inner.lock().unwrap();
+
+        // First, flush all the buffered data.
         for (_, ch) in &mut data_channels_inner.map {
             match ready!(self.flush_substream(cx, ch)) {
                 Ok(_) => continue,
                 Err(e) => return Poll::Ready(Err(e)),
             }
         }
+
+        // Second, shutdown all the substreams.
+        for (_, ch) in &mut data_channels_inner.map {
+            match ready!(self.shutdown_substream(cx, ch)) {
+                Ok(_) => continue,
+                Err(e) => return Poll::Ready(Err(e)),
+            }
+        }
+
+        // Third, close `incoming_data_channels_rx`
+        data_channels_inner.incoming_data_channels_rx.close();
+
         Poll::Ready(Ok(()))
     }
 }
