@@ -104,7 +104,7 @@ pub struct Endpoint {
     /// This is protected by a futures-friendly `Mutex`, meaning that receiving a connection is
     /// done in two steps: locking this mutex, and grabbing the next element on the `Receiver`.
     /// The only consequence of this `Mutex` is that multiple simultaneous calls to
-    /// [`Endpoint::next_incoming`] are serialized.
+    /// [`Endpoint::poll_incoming`] are serialized.
     new_connections: Mutex<mpsc::Receiver<Connection>>,
 
     /// Copy of [`Endpoint::to_endpoint`], except not behind a `Mutex`. Used if we want to be
