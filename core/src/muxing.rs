@@ -160,6 +160,16 @@ impl<T> StreamMuxerEvent<T> {
         }
     }
 
+    /// If `self` is a [`StreamMuxerEvent::OutboundSubstream`], returns the content. Otherwise
+    /// returns `None`.
+    pub fn into_outbound_substream(self) -> Option<T> {
+        if let StreamMuxerEvent::OutboundSubstream(s) = self {
+            Some(s)
+        } else {
+            None
+        }
+    }
+
     /// Map the stream within [`StreamMuxerEvent::InboundSubstream`] and
     /// [`StreamMuxerEvent::OutboundStream`] to a new type.
     pub fn map_stream<O>(self, map: impl FnOnce(T) -> O) -> StreamMuxerEvent<O> {
