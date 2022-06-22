@@ -213,11 +213,11 @@ where
             EitherOutput::First(inner) => inner
                 .poll_event(cx)
                 .map_err(EitherError::A)
-                .map_ok(|event| event.map_inbound_stream(EitherOutput::First)),
+                .map_ok(|event| event.map_stream(EitherOutput::First)),
             EitherOutput::Second(inner) => inner
                 .poll_event(cx)
                 .map_err(EitherError::B)
-                .map_ok(|event| event.map_inbound_stream(EitherOutput::Second)),
+                .map_ok(|event| event.map_stream(EitherOutput::Second)),
         }
     }
 

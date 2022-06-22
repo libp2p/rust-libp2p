@@ -139,6 +139,9 @@ pub enum StreamMuxerEvent<T> {
     /// Remote has opened a new substream. Contains the substream in question.
     InboundSubstream(T),
 
+    /// We opened a new substream. Contains the substream in question.
+    OutboundSubstream(T),
+
     /// Address to the remote has changed. The previous one is now obsolete.
     ///
     /// > **Note**: This can for example happen when using the QUIC protocol, where the two nodes
@@ -157,11 +160,15 @@ impl<T> StreamMuxerEvent<T> {
         }
     }
 
-    /// Map the stream within [`StreamMuxerEvent::InboundSubstream`] to a new type.
-    pub fn map_inbound_stream<O>(self, map: impl FnOnce(T) -> O) -> StreamMuxerEvent<O> {
+    /// Map the stream within [`StreamMuxerEvent::InboundSubstream`] and
+    /// [`StreamMuxerEvent::OutboundStream`] to a new type.
+    pub fn map_stream<O>(self, map: impl FnOnce(T) -> O) -> StreamMuxerEvent<O> {
         match self {
             StreamMuxerEvent::InboundSubstream(stream) => {
                 StreamMuxerEvent::InboundSubstream(map(stream))
+            }
+            StreamMuxerEvent::OutboundSubstream(stream) => {
+                StreamMuxerEvent::OutboundSubstream(map(stream))
             }
             StreamMuxerEvent::AddressChange(addr) => StreamMuxerEvent::AddressChange(addr),
         }

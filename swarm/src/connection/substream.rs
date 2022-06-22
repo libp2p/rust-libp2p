@@ -140,6 +140,12 @@ where
             Poll::Ready(Ok(StreamMuxerEvent::InboundSubstream(substream))) => {
                 return Poll::Ready(Ok(SubstreamEvent::InboundSubstream { substream }));
             }
+            Poll::Ready(Ok(StreamMuxerEvent::OutboundSubstream(substream))) => {
+                return Poll::Ready(Ok(SubstreamEvent::OutboundSubstream {
+                    substream,
+                    user_data: todo!(),
+                }));
+            }
             Poll::Ready(Ok(StreamMuxerEvent::AddressChange(addr))) => {
                 return Poll::Ready(Ok(SubstreamEvent::AddressChange(addr)))
             }

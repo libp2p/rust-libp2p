@@ -50,8 +50,8 @@ where
         &self,
         cx: &mut Context<'_>,
     ) -> Poll<Result<StreamMuxerEvent<Self::Substream>, Self::Error>> {
-        let event = ready!(self.inner.poll_event(cx).map_err(into_io_error)?)
-            .map_inbound_stream(SubstreamBox::new);
+        let event =
+            ready!(self.inner.poll_event(cx).map_err(into_io_error)?).map_stream(SubstreamBox::new);
 
         Poll::Ready(Ok(event))
     }
