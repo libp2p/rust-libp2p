@@ -1,6 +1,10 @@
 # 0.37.0 [unreleased]
 
 - Update to `libp2p-core` `v0.34.0`.
+- Deprecate `NetworkBehaviour::inject_address_change` and
+  `Connectionhandler::inject_address_change`. See [PR XXXX].
+
+[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
 
 # 0.36.2 [unreleased]
 

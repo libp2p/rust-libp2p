@@ -107,19 +107,6 @@ where
         }
     }
 
-    fn inject_address_change(
-        &mut self,
-        peer_id: &PeerId,
-        connection: &ConnectionId,
-        old: &ConnectedPoint,
-        new: &ConnectedPoint,
-    ) {
-        match self {
-            Either::Left(a) => a.inject_address_change(peer_id, connection, old, new),
-            Either::Right(b) => b.inject_address_change(peer_id, connection, old, new),
-        }
-    }
-
     fn inject_event(
         &mut self,
         peer_id: PeerId,

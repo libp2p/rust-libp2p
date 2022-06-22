@@ -23,7 +23,6 @@ use crate::handler::{
     SubstreamProtocol,
 };
 use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend};
-use libp2p_core::Multiaddr;
 use std::{fmt::Debug, marker::PhantomData, task::Context, task::Poll};
 
 /// Wrapper around a protocol handler that turns the input event into something else.
@@ -84,10 +83,6 @@ where
         if let Some(event) = (self.map)(event) {
             self.inner.inject_event(event);
         }
-    }
-
-    fn inject_address_change(&mut self, addr: &Multiaddr) {
-        self.inner.inject_address_change(addr)
     }
 
     fn inject_dial_upgrade_error(

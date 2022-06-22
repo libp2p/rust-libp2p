@@ -810,21 +810,6 @@ where
                     self.behaviour.inject_event(peer_id, id, event);
                 }
             }
-            PoolEvent::AddressChange {
-                peer_id,
-                id,
-                new_endpoint,
-                old_endpoint,
-            } => {
-                if !self.banned_peer_connections.contains(&id) {
-                    self.behaviour.inject_address_change(
-                        &peer_id,
-                        &id,
-                        &old_endpoint,
-                        &new_endpoint,
-                    );
-                }
-            }
         }
 
         None

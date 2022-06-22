@@ -32,7 +32,6 @@ use instant::Instant;
 use libp2p_core::{
     muxing::SubstreamBox,
     upgrade::{self, InboundUpgradeApply, OutboundUpgradeApply, UpgradeError},
-    Multiaddr,
 };
 use libp2p_core::{ConnectedPoint, PeerId};
 use std::{error, fmt, pin::Pin, task::Context, task::Poll, time::Duration};
@@ -315,10 +314,6 @@ where
 
     pub fn inject_event(&mut self, event: TConnectionHandler::InEvent) {
         self.handler.inject_event(event);
-    }
-
-    pub fn inject_address_change(&mut self, new_address: &Multiaddr) {
-        self.handler.inject_address_change(new_address);
     }
 
     fn handle_connection_handler_event(

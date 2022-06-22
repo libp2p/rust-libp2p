@@ -136,6 +136,7 @@ pub trait ConnectionHandler: Send + 'static {
     fn inject_event(&mut self, event: Self::InEvent);
 
     /// Notifies the handler of a change in the address of the remote.
+    #[deprecated(since = "0.37.0", note = "This handler will no longer be called.")]
     fn inject_address_change(&mut self, _new_address: &Multiaddr) {}
 
     /// Indicates to the handler that upgrading an outbound substream to the given protocol has failed.

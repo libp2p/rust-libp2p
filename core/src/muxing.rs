@@ -51,7 +51,6 @@
 //! implementation of `StreamMuxer` to control everything that happens on the wire.
 
 use futures::{task::Context, task::Poll, AsyncRead, AsyncWrite};
-use multiaddr::Multiaddr;
 use std::io;
 
 pub use self::boxed::StreamMuxerBox;
@@ -139,22 +138,14 @@ pub trait StreamMuxer {
 pub enum StreamMuxerEvent<T> {
     /// Remote has opened a new substream. Contains the substream in question.
     InboundSubstream(T),
-
-    /// Address to the remote has changed. The previous one is now obsolete.
-    ///
-    /// > **Note**: This can for example happen when using the QUIC protocol, where the two nodes
-    /// >           can change their IP address while retaining the same QUIC connection.
-    AddressChange(Multiaddr),
 }
 
 impl<T> StreamMuxerEvent<T> {
     /// If `self` is a [`StreamMuxerEvent::InboundSubstream`], returns the content. Otherwise
     /// returns `None`.
     pub fn into_inbound_substream(self) -> Option<T> {
-        if let StreamMuxerEvent::InboundSubstream(s) = self {
-            Some(s)
-        } else {
-            None
+        match self {
+            StreamMuxerEvent::InboundSubstream(stream) => Some(stream)
         }
     }
 
@@ -164,7 +155,6 @@ impl<T> StreamMuxerEvent<T> {
             StreamMuxerEvent::InboundSubstream(stream) => {
                 StreamMuxerEvent::InboundSubstream(map(stream))
             }
-            StreamMuxerEvent::AddressChange(addr) => StreamMuxerEvent::AddressChange(addr),
         }
     }
 }

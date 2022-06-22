@@ -232,6 +232,7 @@ pub trait NetworkBehaviour: 'static {
     }
 
     /// Informs the behaviour that the [`ConnectedPoint`] of an existing connection has changed.
+    #[deprecated(since = "0.37.0", note = "This function will no longer be called.")]
     fn inject_address_change(
         &mut self,
         _: &PeerId,

@@ -29,7 +29,7 @@ use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, UpgradeInfoSend};
 use crate::NegotiatedSubstream;
 use futures::{future::BoxFuture, prelude::*};
 use libp2p_core::upgrade::{NegotiationError, ProtocolError, ProtocolName, UpgradeError};
-use libp2p_core::{ConnectedPoint, Multiaddr, PeerId};
+use libp2p_core::{ConnectedPoint, PeerId};
 use rand::Rng;
 use std::{
     cmp,
@@ -152,12 +152,6 @@ where
             h.inject_event(event)
         } else {
             log::error!("inject_event: no handler for key")
-        }
-    }
-
-    fn inject_address_change(&mut self, addr: &Multiaddr) {
-        for h in self.handlers.values_mut() {
-            h.inject_address_change(addr)
         }
     }
 

@@ -126,18 +126,6 @@ where
         }
     }
 
-    fn inject_address_change(
-        &mut self,
-        peer_id: &PeerId,
-        connection: &ConnectionId,
-        old: &ConnectedPoint,
-        new: &ConnectedPoint,
-    ) {
-        if let Some(inner) = self.inner.as_mut() {
-            inner.inject_address_change(peer_id, connection, old, new)
-        }
-    }
-
     fn inject_event(
         &mut self,
         peer_id: PeerId,
@@ -343,12 +331,6 @@ where
             .as_mut()
             .expect("Can't receive events if disabled; QED")
             .inject_event(event)
-    }
-
-    fn inject_address_change(&mut self, addr: &Multiaddr) {
-        if let Some(inner) = self.inner.as_mut() {
-            inner.inject_address_change(addr)
-        }
     }
 
     fn inject_dial_upgrade_error(

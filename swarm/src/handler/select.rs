@@ -27,7 +27,7 @@ use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper};
 use libp2p_core::{
     either::{EitherError, EitherOutput},
     upgrade::{EitherUpgrade, NegotiationError, ProtocolError, SelectUpgrade, UpgradeError},
-    ConnectedPoint, Multiaddr, PeerId,
+    ConnectedPoint, PeerId,
 };
 use std::{cmp, task::Context, task::Poll};
 
@@ -167,11 +167,6 @@ where
             EitherOutput::First(event) => self.proto1.inject_event(event),
             EitherOutput::Second(event) => self.proto2.inject_event(event),
         }
-    }
-
-    fn inject_address_change(&mut self, new_address: &Multiaddr) {
-        self.proto1.inject_address_change(new_address);
-        self.proto2.inject_address_change(new_address)
     }
 
     fn inject_dial_upgrade_error(

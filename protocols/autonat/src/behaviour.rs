@@ -383,29 +383,6 @@ impl NetworkBehaviour for Behaviour {
         }
     }
 
-    fn inject_address_change(
-        &mut self,
-        peer: &PeerId,
-        conn: &ConnectionId,
-        old: &ConnectedPoint,
-        new: &ConnectedPoint,
-    ) {
-        self.inner.inject_address_change(peer, conn, old, new);
-
-        if old.is_relayed() && new.is_relayed() {
-            return;
-        }
-        let connections = self.connected.get_mut(peer).expect("Peer is connected.");
-        let addr = new.get_remote_address();
-        let observed_addr =
-            if !new.is_relayed() && (!self.config.only_global_ips || addr.is_global_ip()) {
-                Some(addr.clone())
-            } else {
-                None
-            };
-        connections.insert(*conn, observed_addr);
-    }
-
     fn inject_new_listen_addr(&mut self, id: ListenerId, addr: &Multiaddr) {
         self.inner.inject_new_listen_addr(id, addr);
         self.as_client().on_new_address();

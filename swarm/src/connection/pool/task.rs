@@ -73,12 +73,6 @@ where
 
 #[derive(Debug)]
 pub enum EstablishedConnectionEvent<THandler: ConnectionHandler> {
-    /// A node we are connected to has changed its address.
-    AddressChange {
-        id: ConnectionId,
-        peer_id: PeerId,
-        new_address: Multiaddr,
-    },
     /// Notify the manager of an event from the connection.
     Notify {
         id: ConnectionId,
@@ -222,15 +216,6 @@ pub async fn new_for_established_connection<THandler>(
                                 id: connection_id,
                                 peer_id,
                                 event,
-                            })
-                            .await;
-                    }
-                    Ok(connection::Event::AddressChange(new_address)) => {
-                        let _ = events
-                            .send(EstablishedConnectionEvent::AddressChange {
-                                id: connection_id,
-                                peer_id,
-                                new_address,
                             })
                             .await;
                     }

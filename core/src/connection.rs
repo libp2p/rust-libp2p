@@ -230,14 +230,4 @@ impl ConnectedPoint {
             ConnectedPoint::Listener { send_back_addr, .. } => send_back_addr,
         }
     }
-
-    /// Modifies the address of the remote stored in this struct.
-    ///
-    /// For `Dialer`, this modifies `address`. For `Listener`, this modifies `send_back_addr`.
-    pub fn set_remote_address(&mut self, new_address: Multiaddr) {
-        match self {
-            ConnectedPoint::Dialer { address, .. } => *address = new_address,
-            ConnectedPoint::Listener { send_back_addr, .. } => *send_back_addr = new_address,
-        }
-    }
 }

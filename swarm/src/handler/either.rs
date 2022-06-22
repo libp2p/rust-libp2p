@@ -26,7 +26,7 @@ use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper};
 use either::Either;
 use libp2p_core::either::{EitherError, EitherOutput};
 use libp2p_core::upgrade::{EitherUpgrade, UpgradeError};
-use libp2p_core::{ConnectedPoint, Multiaddr, PeerId};
+use libp2p_core::{ConnectedPoint, PeerId};
 use std::task::{Context, Poll};
 
 pub enum IntoEitherHandler<L, R> {
@@ -131,13 +131,6 @@ where
             (Either::Left(handler), Either::Left(event)) => handler.inject_event(event),
             (Either::Right(handler), Either::Right(event)) => handler.inject_event(event),
             _ => unreachable!(),
-        }
-    }
-
-    fn inject_address_change(&mut self, addr: &Multiaddr) {
-        match self {
-            Either::Left(handler) => handler.inject_address_change(addr),
-            Either::Right(handler) => handler.inject_address_change(addr),
         }
     }
 

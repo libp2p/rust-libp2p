@@ -19,7 +19,6 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::prelude::*;
-use libp2p_core::multiaddr::Multiaddr;
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
 use smallvec::SmallVec;
 use std::sync::Arc;
@@ -75,12 +74,6 @@ where
         /// destroyed or `close_graceful` is called.
         substream: TMuxer::Substream,
     },
-
-    /// Address to the remote has changed. The previous one is now obsolete.
-    ///
-    /// > **Note**: This can for example happen when using the QUIC protocol, where the two nodes
-    /// >           can change their IP address while retaining the same QUIC connection.
-    AddressChange(Multiaddr),
 }
 
 /// Identifier for a substream being opened.
@@ -139,9 +132,6 @@ where
         match self.inner.poll_event(cx) {
             Poll::Ready(Ok(StreamMuxerEvent::InboundSubstream(substream))) => {
                 return Poll::Ready(Ok(SubstreamEvent::InboundSubstream { substream }));
-            }
-            Poll::Ready(Ok(StreamMuxerEvent::AddressChange(addr))) => {
-                return Poll::Ready(Ok(SubstreamEvent::AddressChange(addr)))
             }
             Poll::Ready(Err(err)) => return Poll::Ready(Err(err.into())),
             Poll::Pending => {}
@@ -242,10 +232,6 @@ where
                 .debug_struct("SubstreamEvent::OutboundSubstream")
                 .field("user_data", user_data)
                 .field("substream", substream)
-                .finish(),
-            SubstreamEvent::AddressChange(address) => f
-                .debug_struct("SubstreamEvent::AddressChange")
-                .field("address", address)
                 .finish(),
         }
     }

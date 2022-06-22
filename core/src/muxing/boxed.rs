@@ -50,9 +50,6 @@ where
     ) -> Poll<Result<StreamMuxerEvent<Self::Substream>, Self::Error>> {
         let substream = match self.inner.poll_event(cx) {
             Poll::Pending => return Poll::Pending,
-            Poll::Ready(Ok(StreamMuxerEvent::AddressChange(a))) => {
-                return Poll::Ready(Ok(StreamMuxerEvent::AddressChange(a)))
-            }
             Poll::Ready(Ok(StreamMuxerEvent::InboundSubstream(s))) => s,
             Poll::Ready(Err(err)) => return Poll::Ready(Err(err.into())),
         };

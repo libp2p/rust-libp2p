@@ -236,16 +236,6 @@ where
         /// The produced event.
         event: THandlerOutEvent<THandler>,
     },
-
-    /// The connection to a node has changed its address.
-    AddressChange {
-        id: ConnectionId,
-        peer_id: PeerId,
-        /// The new endpoint.
-        new_endpoint: ConnectedPoint,
-        /// The old endpoint.
-        old_endpoint: ConnectedPoint,
-    },
 }
 
 impl<THandler, TTrans> Pool<THandler, TTrans>
@@ -541,29 +531,6 @@ where
 
             Poll::Ready(Some(task::EstablishedConnectionEvent::Notify { id, peer_id, event })) => {
                 return Poll::Ready(PoolEvent::ConnectionEvent { peer_id, id, event });
-            }
-            Poll::Ready(Some(task::EstablishedConnectionEvent::AddressChange {
-                id,
-                peer_id,
-                new_address,
-            })) => {
-                let connection = self
-                    .established
-                    .get_mut(&peer_id)
-                    .expect("Receive `AddressChange` event for established peer.")
-                    .get_mut(&id)
-                    .expect("Receive `AddressChange` event from established connection");
-                let mut new_endpoint = connection.endpoint.clone();
-                new_endpoint.set_remote_address(new_address);
-                let old_endpoint =
-                    std::mem::replace(&mut connection.endpoint, new_endpoint.clone());
-
-                return Poll::Ready(PoolEvent::AddressChange {
-                    peer_id,
-                    id,
-                    new_endpoint,
-                    old_endpoint,
-                });
             }
             Poll::Ready(Some(task::EstablishedConnectionEvent::Closed {
                 id,
