@@ -83,10 +83,6 @@ where
     AddressChange(Multiaddr),
 }
 
-/// Identifier for a substream being opened.
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub struct OutboundSubstreamId(usize);
-
 impl<TMuxer, TUserData> Muxing<TMuxer, TUserData>
 where
     TMuxer: StreamMuxer,
