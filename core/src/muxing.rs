@@ -79,12 +79,6 @@ pub trait StreamMuxer {
     /// Depending on the passed [`OpenFlags`], the muxer will either open a new outbound substream,
     /// check for new incoming substreams or both.
     ///
-    /// This function behaves the same as a `Stream`.
-    ///
-    /// If `Pending` is returned, then the current task will be notified once the muxer
-    /// is ready to be polled, similar to the API of `Stream::poll()`.
-    /// Only the latest task that was used to call this method may be notified.
-    ///
     /// It is permissible and common to use this method to perform background
     /// work, such as processing incoming packets and polling timers.
     ///
