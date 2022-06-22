@@ -177,7 +177,7 @@ impl fmt::Debug for SubstreamBox {
 trait AsyncReadWrite: AsyncRead + AsyncWrite + Unpin {
     /// Helper function to capture the erased inner type.
     ///
-    /// Used to make the `Debug` implementation of `SubstreamBox` more useful.
+    /// Used to make the [`Debug`] implementation of [`SubstreamBox`] more useful.
     fn type_name(&self) -> &'static str;
 }
 
