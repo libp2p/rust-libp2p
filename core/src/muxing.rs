@@ -71,13 +71,13 @@ pub trait StreamMuxer {
     /// Type of the object that represents the raw substream where data can be read and written.
     type Substream: AsyncRead + AsyncWrite;
 
-    /// Future that will be resolved when the outgoing substream is open.
-    type OutboundSubstream;
-
     /// Error type of the muxer
     type Error: std::error::Error;
 
     /// Polls for a connection-wide event.
+    ///
+    /// Depending on the passed [`OpenFlags`], the muxer will either open a new outbound substream,
+    /// check for new incoming substreams or both.
     ///
     /// This function behaves the same as a `Stream`.
     ///
@@ -91,34 +91,9 @@ pub trait StreamMuxer {
     /// An error can be generated if the connection has been closed.
     fn poll_event(
         &self,
+        flags: OpenFlags,
         cx: &mut Context<'_>,
     ) -> Poll<Result<StreamMuxerEvent<Self::Substream>, Self::Error>>;
-
-    /// Opens a new outgoing substream, and produces the equivalent to a future that will be
-    /// resolved when it becomes available.
-    ///
-    /// The API of `OutboundSubstream` is totally opaque, and the object can only be interfaced
-    /// through the methods on the `StreamMuxer` trait.
-    fn open_outbound(&self) -> Self::OutboundSubstream;
-
-    /// Polls the outbound substream.
-    ///
-    /// If `Pending` is returned, then the current task will be notified once the substream
-    /// is ready to be polled, similar to the API of `Future::poll()`.
-    /// However, for each individual outbound substream, only the latest task that was used to
-    /// call this method may be notified.
-    ///
-    /// May panic or produce an undefined result if an earlier polling of the same substream
-    /// returned `Ready` or `Err`.
-    fn poll_outbound(
-        &self,
-        cx: &mut Context<'_>,
-        s: &mut Self::OutboundSubstream,
-    ) -> Poll<Result<Self::Substream, Self::Error>>;
-
-    /// Destroys an outbound substream future. Use this after the outbound substream has finished,
-    /// or if you want to interrupt it.
-    fn destroy_outbound(&self, s: Self::OutboundSubstream);
 
     /// Closes this `StreamMuxer`.
     ///
@@ -131,6 +106,24 @@ pub trait StreamMuxer {
     /// >           properly informing the remote, there is no difference between this and
     /// >           immediately dropping the muxer.
     fn poll_close(&self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>>;
+}
+
+bitflags::bitflags! {
+    /// Tells the [`StreamMuxer`] which substreams it should open.
+    ///
+    /// How this is implemented may vary from muxer to muxer. Not all muxing protocols support
+    /// this on the lowest level so some muxers may for example still accept incoming substreams but
+    /// immediately drop them if the flags do not contain [`OpenFlags::INBOUND`].
+    pub struct OpenFlags: u8 {
+        const INBOUND  = 0b00000001;
+        const OUTBOUND = 0b00000010;
+    }
+}
+
+impl Default for OpenFlags {
+    fn default() -> Self {
+        OpenFlags::INBOUND
+    }
 }
 
 /// Event about a connection, reported by an implementation of [`StreamMuxer`].

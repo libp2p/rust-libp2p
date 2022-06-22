@@ -20,6 +20,7 @@
 
 use futures::future::poll_fn;
 use futures::{channel::oneshot, prelude::*};
+use libp2p_core::muxing::OpenFlags;
 use libp2p_core::{upgrade, StreamMuxer, Transport};
 use libp2p_tcp::TcpConfig;
 use std::sync::Arc;
@@ -61,9 +62,10 @@ fn client_to_server_outbound() {
             .await
             .unwrap();
 
-        let mut outbound_token = client.open_outbound();
-        let mut outbound = poll_fn(|cx| client.poll_outbound(cx, &mut outbound_token))
+        let mut outbound = poll_fn(|cx| client.poll_event(OpenFlags::OUTBOUND, cx))
             .await
+            .unwrap()
+            .into_outbound_substream()
             .unwrap();
 
         let mut buf = Vec::new();
@@ -78,7 +80,7 @@ fn client_to_server_outbound() {
 
         let client = Arc::new(transport.dial(rx.await.unwrap()).unwrap().await.unwrap());
         let mut inbound = loop {
-            if let Some(s) = poll_fn(|cx| client.poll_event(cx))
+            if let Some(s) = poll_fn(|cx| client.poll_event(OpenFlags::INBOUND, cx))
                 .await
                 .unwrap()
                 .into_inbound_substream()
@@ -133,7 +135,7 @@ fn client_to_server_inbound() {
         );
 
         let mut inbound = loop {
-            if let Some(s) = poll_fn(|cx| client.poll_event(cx))
+            if let Some(s) = poll_fn(|cx| client.poll_event(OpenFlags::INBOUND, cx))
                 .await
                 .unwrap()
                 .into_inbound_substream()
@@ -154,9 +156,10 @@ fn client_to_server_inbound() {
 
         let client = transport.dial(rx.await.unwrap()).unwrap().await.unwrap();
 
-        let mut outbound_token = client.open_outbound();
-        let mut outbound = poll_fn(|cx| client.poll_outbound(cx, &mut outbound_token))
+        let mut outbound = poll_fn(|cx| client.poll_event(OpenFlags::OUTBOUND, cx))
             .await
+            .unwrap()
+            .into_outbound_substream()
             .unwrap();
         outbound.write_all(b"hello world").await.unwrap();
         outbound.close().await.unwrap();
@@ -200,9 +203,10 @@ fn protocol_not_match() {
             .await
             .unwrap();
 
-        let mut outbound_token = client.open_outbound();
-        let mut outbound = poll_fn(|cx| client.poll_outbound(cx, &mut outbound_token))
+        let mut outbound = poll_fn(|cx| client.poll_event(OpenFlags::OUTBOUND, cx))
             .await
+            .unwrap()
+            .into_outbound_substream()
             .unwrap();
 
         let mut buf = Vec::new();

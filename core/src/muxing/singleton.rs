@@ -23,6 +23,7 @@ use crate::{
     muxing::{StreamMuxer, StreamMuxerEvent},
 };
 
+use crate::muxing::OpenFlags;
 use futures::prelude::*;
 use std::cell::Cell;
 use std::{io, task::Context, task::Poll};
@@ -52,55 +53,36 @@ impl<TSocket> SingletonMuxer<TSocket> {
     }
 }
 
-/// Outbound substream attempt of the `SingletonMuxer`.
-pub struct OutboundSubstream {}
-
 impl<TSocket> StreamMuxer for SingletonMuxer<TSocket>
 where
     TSocket: AsyncRead + AsyncWrite + Unpin,
 {
     type Substream = TSocket;
-    type OutboundSubstream = OutboundSubstream;
     type Error = io::Error;
 
     fn poll_event(
         &self,
+        flags: OpenFlags,
         _: &mut Context<'_>,
-    ) -> Poll<Result<StreamMuxerEvent<Self::Substream>, io::Error>> {
+    ) -> Poll<Result<StreamMuxerEvent<Self::Substream>, Self::Error>> {
+        // these combinations will never emit a stream.
         match self.endpoint {
-            Endpoint::Dialer => return Poll::Pending,
-            Endpoint::Listener => {}
+            Endpoint::Dialer if flags == OpenFlags::INBOUND => return Poll::Pending,
+            Endpoint::Listener if flags == OpenFlags::OUTBOUND => return Poll::Pending,
+            _ => {}
         }
 
-        if let Some(stream) = self.inner.replace(None) {
-            Poll::Ready(Ok(StreamMuxerEvent::InboundSubstream(stream)))
-        } else {
-            Poll::Pending
-        }
-    }
+        // can only emit the stream once
+        let socket = match self.inner.replace(None) {
+            None => return Poll::Pending,
+            Some(stream) => stream,
+        };
 
-    fn open_outbound(&self) -> Self::OutboundSubstream {
-        OutboundSubstream {}
-    }
-
-    fn poll_outbound(
-        &self,
-        _: &mut Context<'_>,
-        _: &mut Self::OutboundSubstream,
-    ) -> Poll<Result<Self::Substream, io::Error>> {
         match self.endpoint {
-            Endpoint::Listener => return Poll::Pending,
-            Endpoint::Dialer => {}
-        }
-
-        if let Some(stream) = self.inner.replace(None) {
-            Poll::Ready(Ok(stream))
-        } else {
-            Poll::Pending
+            Endpoint::Dialer => Poll::Ready(Ok(StreamMuxerEvent::OutboundSubstream(socket))),
+            Endpoint::Listener => Poll::Ready(Ok(StreamMuxerEvent::InboundSubstream(socket))),
         }
     }
-
-    fn destroy_outbound(&self, _: Self::OutboundSubstream) {}
 
     fn poll_close(&self, _cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         Poll::Ready(Ok(()))

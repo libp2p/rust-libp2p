@@ -26,6 +26,7 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughpu
 use futures::channel::oneshot;
 use futures::future::poll_fn;
 use futures::prelude::*;
+use libp2p_core::muxing::OpenFlags;
 use libp2p_core::{
     identity, multiaddr::multiaddr, muxing, transport, upgrade, Multiaddr, PeerId, StreamMuxer,
     Transport,
@@ -105,7 +106,7 @@ fn run(transport: &mut BenchTransport, payload: &Vec<u8>, listen_addr: &Multiadd
                 }
                 transport::ListenerEvent::Upgrade { upgrade, .. } => {
                     let (_peer, conn) = upgrade.await.unwrap();
-                    let mut s = poll_fn(|cx| conn.poll_event(cx))
+                    let mut s = poll_fn(|cx| conn.poll_event(OpenFlags::INBOUND, cx))
                         .await
                         .expect("unexpected error")
                         .into_inbound_substream()

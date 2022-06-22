@@ -28,7 +28,7 @@ use bytes::Bytes;
 use codec::LocalStreamId;
 use futures::{future, prelude::*, ready};
 use libp2p_core::{
-    muxing::StreamMuxerEvent,
+    muxing::{OpenFlags, StreamMuxerEvent},
     upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo},
     StreamMuxer,
 };
@@ -87,42 +87,47 @@ where
     C: AsyncRead + AsyncWrite + Unpin,
 {
     type Substream = Substream<C>;
-    type OutboundSubstream = OutboundSubstream;
     type Error = io::Error;
 
     fn poll_event(
         &self,
+        flags: OpenFlags,
         cx: &mut Context<'_>,
-    ) -> Poll<io::Result<StreamMuxerEvent<Self::Substream>>> {
-        let stream_id = ready!(self.io.lock().poll_next_stream(cx))?;
-        let stream = Substream::new(stream_id, self.io.clone());
-        Poll::Ready(Ok(StreamMuxerEvent::InboundSubstream(stream)))
-    }
+    ) -> Poll<Result<StreamMuxerEvent<Self::Substream>, Self::Error>> {
+        let mut io = self.io.lock();
 
-    fn open_outbound(&self) -> Self::OutboundSubstream {
-        OutboundSubstream {}
-    }
+        loop {
+            if flags.contains(OpenFlags::OUTBOUND) {
+                if let Poll::Ready(stream_id) = io.poll_open_stream(cx)? {
+                    return Poll::Ready(Ok(StreamMuxerEvent::OutboundSubstream(Substream::new(
+                        stream_id,
+                        self.io.clone(),
+                    ))));
+                }
+            }
 
-    fn poll_outbound(
-        &self,
-        cx: &mut Context<'_>,
-        _: &mut Self::OutboundSubstream,
-    ) -> Poll<Result<Self::Substream, io::Error>> {
-        let stream_id = ready!(self.io.lock().poll_open_stream(cx))?;
-        Poll::Ready(Ok(Substream::new(stream_id, self.io.clone())))
-    }
+            let stream_id = ready!(io.poll_next_stream(cx))?;
 
-    fn destroy_outbound(&self, _substream: Self::OutboundSubstream) {
-        // Nothing to do, since `open_outbound` creates no new local state.
+            if !flags.contains(OpenFlags::INBOUND) {
+                log::debug!(
+                    "Dropping inbound stream {stream_id} because OpenFlags::INBOUND is not present"
+                );
+                io.drop_stream(stream_id);
+
+                continue;
+            }
+
+            return Poll::Ready(Ok(StreamMuxerEvent::InboundSubstream(Substream::new(
+                stream_id,
+                self.io.clone(),
+            ))));
+        }
     }
 
     fn poll_close(&self, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         self.io.lock().poll_close(cx)
     }
 }
-
-/// Active attempt to open an outbound substream.
-pub struct OutboundSubstream {}
 
 impl<C> AsyncRead for Substream<C>
 where

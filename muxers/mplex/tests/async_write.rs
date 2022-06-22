@@ -20,6 +20,7 @@
 
 use futures::future::poll_fn;
 use futures::{channel::oneshot, prelude::*};
+use libp2p_core::muxing::OpenFlags;
 use libp2p_core::{upgrade, StreamMuxer, Transport};
 use libp2p_tcp::TcpConfig;
 use std::sync::Arc;
@@ -61,9 +62,10 @@ fn async_write() {
             .await
             .unwrap();
 
-        let mut outbound_token = client.open_outbound();
-        let mut outbound = poll_fn(|cx| client.poll_outbound(cx, &mut outbound_token))
+        let mut outbound = poll_fn(|cx| client.poll_event(OpenFlags::OUTBOUND, cx))
             .await
+            .unwrap()
+            .into_outbound_substream()
             .unwrap();
 
         let mut buf = Vec::new();
@@ -78,7 +80,7 @@ fn async_write() {
 
         let client = Arc::new(transport.dial(rx.await.unwrap()).unwrap().await.unwrap());
         let mut inbound = loop {
-            if let Some(s) = poll_fn(|cx| client.poll_event(cx))
+            if let Some(s) = poll_fn(|cx| client.poll_event(OpenFlags::INBOUND, cx))
                 .await
                 .unwrap()
                 .into_inbound_substream()

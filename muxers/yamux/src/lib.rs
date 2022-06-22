@@ -27,7 +27,7 @@ use futures::{
     ready,
     stream::{BoxStream, LocalBoxStream},
 };
-use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
+use libp2p_core::muxing::{OpenFlags, StreamMuxer, StreamMuxerEvent};
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use parking_lot::Mutex;
 use std::{
@@ -36,6 +36,7 @@ use std::{
     task::{Context, Poll},
 };
 use thiserror::Error;
+use yamux::ConnectionError;
 
 /// A Yamux connection.
 pub struct Yamux<S>(Mutex<Inner<S>>);
@@ -103,38 +104,38 @@ where
     S: Stream<Item = Result<yamux::Stream, YamuxError>> + Unpin,
 {
     type Substream = yamux::Stream;
-    type OutboundSubstream = OpenSubstreamToken;
     type Error = YamuxError;
 
     fn poll_event(
         &self,
-        c: &mut Context<'_>,
-    ) -> Poll<YamuxResult<StreamMuxerEvent<Self::Substream>>> {
+        flags: OpenFlags,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<StreamMuxerEvent<Self::Substream>, Self::Error>> {
         let mut inner = self.0.lock();
-        match ready!(inner.incoming.poll_next_unpin(c)) {
-            Some(Ok(s)) => Poll::Ready(Ok(StreamMuxerEvent::InboundSubstream(s))),
-            Some(Err(e)) => Poll::Ready(Err(e)),
-            None => Poll::Ready(Err(yamux::ConnectionError::Closed.into())),
+
+        loop {
+            if flags.contains(OpenFlags::OUTBOUND) {
+                if let Poll::Ready(stream) = Pin::new(&mut inner.control).poll_open_stream(cx)? {
+                    return Poll::Ready(Ok(StreamMuxerEvent::OutboundSubstream(stream)));
+                }
+            }
+
+            let stream = match ready!(inner.incoming.poll_next_unpin(cx)).transpose()? {
+                Some(stream) => stream,
+                None => return Poll::Ready(Err(YamuxError(ConnectionError::Closed))),
+            };
+
+            if !flags.contains(OpenFlags::INBOUND) {
+                log::debug!(
+                    "Dropping inbound stream {stream} because OpenFlags::INBOUND is not present"
+                );
+                mem::drop(stream);
+
+                continue;
+            }
+
+            return Poll::Ready(Ok(StreamMuxerEvent::InboundSubstream(stream)));
         }
-    }
-
-    fn open_outbound(&self) -> Self::OutboundSubstream {
-        OpenSubstreamToken(())
-    }
-
-    fn poll_outbound(
-        &self,
-        c: &mut Context<'_>,
-        _: &mut OpenSubstreamToken,
-    ) -> Poll<YamuxResult<Self::Substream>> {
-        let mut inner = self.0.lock();
-        Pin::new(&mut inner.control)
-            .poll_open_stream(c)
-            .map_err(YamuxError)
-    }
-
-    fn destroy_outbound(&self, _: Self::OutboundSubstream) {
-        self.0.lock().control.abort_open_stream()
     }
 
     fn poll_close(&self, c: &mut Context<'_>) -> Poll<YamuxResult<()>> {

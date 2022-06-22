@@ -1,23 +1,16 @@
-use crate::muxing::StreamMuxerEvent;
+use crate::muxing::{OpenFlags, StreamMuxerEvent};
 use crate::StreamMuxer;
-use fnv::FnvHashMap;
 use futures::{ready, AsyncRead, AsyncWrite};
-use parking_lot::Mutex;
 use std::error::Error;
 use std::fmt;
 use std::io;
 use std::io::{IoSlice, IoSliceMut};
 use std::pin::Pin;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::task::{Context, Poll};
 
 /// Abstract `StreamMuxer`.
 pub struct StreamMuxerBox {
-    inner: Box<
-        dyn StreamMuxer<Substream = SubstreamBox, OutboundSubstream = usize, Error = io::Error>
-            + Send
-            + Sync,
-    >,
+    inner: Box<dyn StreamMuxer<Substream = SubstreamBox, Error = io::Error> + Send + Sync>,
 }
 
 /// Abstract type for asynchronous reading and writing.
@@ -31,8 +24,6 @@ where
     T: StreamMuxer,
 {
     inner: T,
-    outbound: Mutex<FnvHashMap<usize, T::OutboundSubstream>>,
-    next_outbound: AtomicUsize,
 }
 
 impl<T> StreamMuxer for Wrap<T>
@@ -42,48 +33,18 @@ where
     T::Error: Send + Sync + 'static,
 {
     type Substream = SubstreamBox;
-    type OutboundSubstream = usize; // TODO: use a newtype
     type Error = io::Error;
 
     #[inline]
     fn poll_event(
         &self,
+        flags: OpenFlags,
         cx: &mut Context<'_>,
     ) -> Poll<Result<StreamMuxerEvent<Self::Substream>, Self::Error>> {
-        let event =
-            ready!(self.inner.poll_event(cx).map_err(into_io_error)?).map_stream(SubstreamBox::new);
+        let event = ready!(self.inner.poll_event(flags, cx).map_err(into_io_error)?)
+            .map_stream(SubstreamBox::new);
 
         Poll::Ready(Ok(event))
-    }
-
-    #[inline]
-    fn open_outbound(&self) -> Self::OutboundSubstream {
-        let outbound = self.inner.open_outbound();
-        let id = self.next_outbound.fetch_add(1, Ordering::Relaxed);
-        self.outbound.lock().insert(id, outbound);
-        id
-    }
-
-    #[inline]
-    fn poll_outbound(
-        &self,
-        cx: &mut Context<'_>,
-        substream: &mut Self::OutboundSubstream,
-    ) -> Poll<Result<Self::Substream, Self::Error>> {
-        let mut list = self.outbound.lock();
-        let stream = ready!(self
-            .inner
-            .poll_outbound(cx, list.get_mut(substream).unwrap())
-            .map_err(into_io_error)?);
-
-        Poll::Ready(Ok(SubstreamBox::new(stream)))
-    }
-
-    #[inline]
-    fn destroy_outbound(&self, substream: Self::OutboundSubstream) {
-        let mut list = self.outbound.lock();
-        self.inner
-            .destroy_outbound(list.remove(&substream).unwrap())
     }
 
     #[inline]
@@ -104,15 +65,10 @@ impl StreamMuxerBox {
     pub fn new<T>(muxer: T) -> StreamMuxerBox
     where
         T: StreamMuxer + Send + Sync + 'static,
-        T::OutboundSubstream: Send,
         T::Substream: Send + Unpin + 'static,
         T::Error: Send + Sync + 'static,
     {
-        let wrap = Wrap {
-            inner: muxer,
-            outbound: Mutex::new(Default::default()),
-            next_outbound: AtomicUsize::new(0),
-        };
+        let wrap = Wrap { inner: muxer };
 
         StreamMuxerBox {
             inner: Box::new(wrap),
@@ -122,34 +78,15 @@ impl StreamMuxerBox {
 
 impl StreamMuxer for StreamMuxerBox {
     type Substream = SubstreamBox;
-    type OutboundSubstream = usize; // TODO: use a newtype
     type Error = io::Error;
 
     #[inline]
     fn poll_event(
         &self,
+        flags: OpenFlags,
         cx: &mut Context<'_>,
     ) -> Poll<Result<StreamMuxerEvent<Self::Substream>, Self::Error>> {
-        self.inner.poll_event(cx)
-    }
-
-    #[inline]
-    fn open_outbound(&self) -> Self::OutboundSubstream {
-        self.inner.open_outbound()
-    }
-
-    #[inline]
-    fn poll_outbound(
-        &self,
-        cx: &mut Context<'_>,
-        s: &mut Self::OutboundSubstream,
-    ) -> Poll<Result<Self::Substream, Self::Error>> {
-        self.inner.poll_outbound(cx, s)
-    }
-
-    #[inline]
-    fn destroy_outbound(&self, substream: Self::OutboundSubstream) {
-        self.inner.destroy_outbound(substream)
+        self.inner.poll_event(flags, cx)
     }
 
     #[inline]
