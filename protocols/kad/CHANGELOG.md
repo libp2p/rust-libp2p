@@ -1,4 +1,10 @@
-# 0.37.0 [unreleased]
+# 0.37.1
+
+- Limit # of inbound streams to 32. [See PR 2699].
+
+[PR 2699]: https://github.com/libp2p/rust-libp2p/pull/2699
+
+# 0.37.0
 
 - Update to `libp2p-core` `v0.33.0`.
 
@@ -6,7 +12,7 @@
 
 - Derive `Error` for `GetRecordError` (see [PR 2614]).
 
-[pr 2614]: https://github.com/libp2p/rust-libp2p/pull/2614
+[PR 2614]: https://github.com/libp2p/rust-libp2p/pull/2614
 
 # 0.36.0
 

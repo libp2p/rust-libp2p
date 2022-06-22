@@ -3,7 +3,7 @@ name = "libp2p-kad"
 edition = "2021"
 rust-version = "1.56.1"
 description = "Kademlia protocol for libp2p"
-version = "0.37.0"
+version = "0.37.1"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -11,7 +11,7 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-arrayvec = "0.5.1"
+arrayvec = "0.7.2"
 bytes = "1"
 either = "1.5"
 fnv = "1.0"

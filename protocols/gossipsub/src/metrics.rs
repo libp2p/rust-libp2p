@@ -517,9 +517,7 @@ impl Metrics {
         let metric = self
             .peers_per_protocol
             .get_or_create(&ProtocolLabel { protocol: kind });
-        if metric.get() == 0 {
-            return;
-        } else {
+        if metric.get() != 0 {
             // decrement the counter
             metric.set(metric.get() - 1);
         }

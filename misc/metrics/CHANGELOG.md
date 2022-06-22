@@ -1,4 +1,8 @@
-# 0.6.0 [unreleased]
+# 0.6.1
+
+- Update `dcutr` events from `libp2p_relay_events` to `libp2p_dcutr_events`, to avoid conflict with `relay` events.
+
+# 0.6.0
 
 - Update to `libp2p-core` `v0.33.0`.
 
@@ -13,6 +17,10 @@
 - Update to `libp2p-relay` `v0.9.0`.
 
 - Update to `libp2p-kad` `v0.37.0`.
+
+- Update to `prometheus-client` `v0.16.0`. See [PR 2631].
+
+[PR 2631]: https://github.com/libp2p/rust-libp2p/pull/2631
 
 # 0.5.0
 

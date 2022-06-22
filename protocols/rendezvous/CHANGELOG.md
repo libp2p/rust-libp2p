@@ -1,8 +1,12 @@
-# 0.6.0 [unreleased]
+# 0.6.0
 
 - Update to `libp2p-core` `v0.33.0`.
 
 - Update to `libp2p-swarm` `v0.36.0`.
+
+- Renamed `Error::ConversionError` to `Error::Conversion` in the `codec` module. See [PR 2620].
+
+[PR 2620]: https://github.com/libp2p/rust-libp2p/pull/2620
 
 # 0.5.0
 

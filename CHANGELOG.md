@@ -39,11 +39,28 @@
 
 - [`libp2p-metrics` CHANGELOG](misc/metrics/CHANGELOG.md)
 - [`multistream-select` CHANGELOG](misc/multistream-select/CHANGELOG.md)
+- [`rw-stream-sink` CHANGELOG](misc/rw-stream-sink/CHANGELOG.md)
 
 # `libp2p` facade crate
 
-# 0.45.0 [unreleased]
+# 0.46.0 [unreleased]
+- Semver bump Rust from `1.56.1` to `1.60.0` . See [PR 2646].
+- Added weak dependencies for features. See [PR 2646].
+- Update individual crates.
+    - Update to [`libp2p-mplex` `v0.34.0`](muxers/mplex/CHANGELOG.md).
 
+[PR 2646]: https://github.com/libp2p/rust-libp2p/pull/2646
+
+# 0.45.1
+
+- Update individual crates.
+    - Update to [`libp2p-dcutr` `v0.3.1`](protocols/dcutr/CHANGELOG.md).
+    - Update to [`libp2p-identify` `v0.36.1`](protocols/identify/CHANGELOG.md).
+    - Update to [`libp2p-kad` `v0.37.1`](protocols/kad/CHANGELOG.md).
+    - Update to [`libp2p-relay` `v0.9.1`](protocols/relay/CHANGELOG.md).
+    - Update to [`libp2p-swarm` `v0.36.1`](swarm/CHANGELOG.md).
+
+# 0.45.0
 - Update individual crates.
     - Update to [`libp2p-plaintext` `v0.33.0`](transports/plaintext/CHANGELOG.md).
     - Update to [`libp2p-noise` `v0.36.0`](transports/noise/CHANGELOG.md).

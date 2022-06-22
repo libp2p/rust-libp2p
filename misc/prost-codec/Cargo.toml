@@ -1,0 +1,21 @@
+[package]
+name = "prost-codec"
+edition = "2021"
+rust-version = "1.56.1"
+description = "Asynchronous de-/encoding of Protobuf structs using asynchronous-codec, unsigned-varint and prost."
+version = "0.1.0"
+authors = ["Max Inden <mail@max-inden.de>"]
+license = "MIT"
+repository = "https://github.com/libp2p/rust-libp2p"
+keywords = ["networking"]
+categories = ["asynchronous"]
+
+[dependencies]
+asynchronous-codec = { version = "0.6" }
+bytes = { version = "1" }
+prost = "0.10"
+thiserror = "1.0"
+unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
+
+[dev-dependencies]
+prost-build = "0.10"

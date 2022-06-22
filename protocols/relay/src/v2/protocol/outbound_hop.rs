@@ -26,13 +26,10 @@ use futures::{future::BoxFuture, prelude::*};
 use futures_timer::Delay;
 use libp2p_core::{upgrade, Multiaddr, PeerId};
 use libp2p_swarm::NegotiatedSubstream;
-use prost::Message;
 use std::convert::TryFrom;
-use std::io::Cursor;
 use std::iter;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use thiserror::Error;
-use unsigned_varint::codec::UviBytes;
 
 pub enum Upgrade {
     Reserve,
@@ -74,34 +71,30 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
             },
         };
 
-        let mut encoded_msg = Vec::with_capacity(msg.encoded_len());
-        msg.encode(&mut encoded_msg)
-            .expect("Vec to have sufficient capacity.");
-
-        let mut codec = UviBytes::default();
-        codec.set_max_len(MAX_MESSAGE_SIZE);
-        let mut substream = Framed::new(substream, codec);
+        let mut substream = Framed::new(substream, prost_codec::Codec::new(MAX_MESSAGE_SIZE));
 
         async move {
-            substream.send(Cursor::new(encoded_msg)).await?;
-            let msg: bytes::BytesMut = substream
-                .next()
-                .await
-                .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::UnexpectedEof, ""))??;
-
+            substream.send(msg).await?;
             let HopMessage {
                 r#type,
                 peer: _,
                 reservation,
                 limit,
                 status,
-            } = HopMessage::decode(Cursor::new(msg))?;
+            } = substream
+                .next()
+                .await
+                .ok_or(FatalUpgradeError::StreamClosed)??;
 
             let r#type =
                 hop_message::Type::from_i32(r#type).ok_or(FatalUpgradeError::ParseTypeField)?;
             match r#type {
-                hop_message::Type::Connect => Err(FatalUpgradeError::UnexpectedTypeConnect)?,
-                hop_message::Type::Reserve => Err(FatalUpgradeError::UnexpectedTypeReserve)?,
+                hop_message::Type::Connect => {
+                    return Err(FatalUpgradeError::UnexpectedTypeConnect.into())
+                }
+                hop_message::Type::Reserve => {
+                    return Err(FatalUpgradeError::UnexpectedTypeReserve.into())
+                }
                 hop_message::Type::Status => {}
             }
 
@@ -114,18 +107,20 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
                 Upgrade::Reserve => {
                     match status {
                         Status::Ok => {}
-                        Status::ReservationRefused => Err(ReservationFailedReason::Refused)?,
-                        Status::ResourceLimitExceeded => {
-                            Err(ReservationFailedReason::ResourceLimitExceeded)?
+                        Status::ReservationRefused => {
+                            return Err(ReservationFailedReason::Refused.into())
                         }
-                        s => Err(FatalUpgradeError::UnexpectedStatus(s))?,
+                        Status::ResourceLimitExceeded => {
+                            return Err(ReservationFailedReason::ResourceLimitExceeded.into())
+                        }
+                        s => return Err(FatalUpgradeError::UnexpectedStatus(s).into()),
                     }
 
                     let reservation =
                         reservation.ok_or(FatalUpgradeError::MissingReservationField)?;
 
                     if reservation.addrs.is_empty() {
-                        Err(FatalUpgradeError::NoAddressesInReservation)?;
+                        return Err(FatalUpgradeError::NoAddressesInReservation.into());
                     }
 
                     let addrs = reservation
@@ -161,12 +156,18 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
                     match status {
                         Status::Ok => {}
                         Status::ResourceLimitExceeded => {
-                            Err(CircuitFailedReason::ResourceLimitExceeded)?
+                            return Err(CircuitFailedReason::ResourceLimitExceeded.into())
                         }
-                        Status::ConnectionFailed => Err(CircuitFailedReason::ConnectionFailed)?,
-                        Status::NoReservation => Err(CircuitFailedReason::NoReservation)?,
-                        Status::PermissionDenied => Err(CircuitFailedReason::PermissionDenied)?,
-                        s => Err(FatalUpgradeError::UnexpectedStatus(s))?,
+                        Status::ConnectionFailed => {
+                            return Err(CircuitFailedReason::ConnectionFailed.into())
+                        }
+                        Status::NoReservation => {
+                            return Err(CircuitFailedReason::NoReservation.into())
+                        }
+                        Status::PermissionDenied => {
+                            return Err(CircuitFailedReason::PermissionDenied.into())
+                        }
+                        s => return Err(FatalUpgradeError::UnexpectedStatus(s).into()),
                     }
 
                     let FramedParts {
@@ -204,14 +205,8 @@ pub enum UpgradeError {
     Fatal(#[from] FatalUpgradeError),
 }
 
-impl From<std::io::Error> for UpgradeError {
-    fn from(error: std::io::Error) -> Self {
-        Self::Fatal(error.into())
-    }
-}
-
-impl From<prost::DecodeError> for UpgradeError {
-    fn from(error: prost::DecodeError) -> Self {
+impl From<prost_codec::Error> for UpgradeError {
+    fn from(error: prost_codec::Error) -> Self {
         Self::Fatal(error.into())
     }
 }
@@ -238,14 +233,14 @@ pub enum ReservationFailedReason {
 
 #[derive(Debug, Error)]
 pub enum FatalUpgradeError {
-    #[error("Failed to decode message: {0}.")]
-    Decode(
+    #[error("Failed to encode or decode")]
+    Codec(
         #[from]
         #[source]
-        prost::DecodeError,
+        prost_codec::Error,
     ),
-    #[error(transparent)]
-    Io(#[from] std::io::Error),
+    #[error("Stream closed")]
+    StreamClosed,
     #[error("Expected 'status' field to be set.")]
     MissingStatusField,
     #[error("Expected 'reservation' field to be set.")]

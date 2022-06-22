@@ -71,6 +71,9 @@ Conduct](https://github.com/ipfs/community/blob/master/code-of-conduct.md).
 
 ## Maintainers
 
+(In alphabetical order.)
+
+- Elena Frank ([@elenaf9](https://github.com/elenaf9/))
 - Max Inden ([@mxinden](https://github.com/mxinden/))
 - Thomas Eizinger ([@thomaseizinger](https://github.com/thomaseizinger))
 

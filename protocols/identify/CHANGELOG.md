@@ -1,9 +1,16 @@
-# 0.36.0 [unreleased]
+# 0.36.1
+
+- Allow at most one inbound identify push stream.
+
+# 0.36.0
 
 - Update to `libp2p-core` `v0.33.0`.
 
 - Update to `libp2p-swarm` `v0.36.0`.
 
+- Expose explicits errors via `UpgradeError` instead of generic `io::Error`. See [PR 2630].
+
+[PR 2630]: https://github.com/libp2p/rust-libp2p/pull/2630
 # 0.35.0
 
 - Update to `libp2p-swarm` `v0.35.0`.

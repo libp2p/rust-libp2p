@@ -101,7 +101,7 @@ pub struct Position(usize);
 #[derive(Debug, Clone)]
 pub struct KBucket<TKey, TVal> {
     /// The nodes contained in the bucket.
-    nodes: ArrayVec<[Node<TKey, TVal>; K_VALUE.get()]>,
+    nodes: ArrayVec<Node<TKey, TVal>, { K_VALUE.get() }>,
 
     /// The position (index) in `nodes` that marks the first connected node.
     ///
@@ -365,11 +365,11 @@ where
             // Adjust `first_connected_pos` accordingly.
             match status {
                 NodeStatus::Connected => {
-                    if self.first_connected_pos.map_or(false, |p| p == pos.0) {
-                        if pos.0 == self.nodes.len() {
-                            // It was the last connected node.
-                            self.first_connected_pos = None
-                        }
+                    if self.first_connected_pos.map_or(false, |p| p == pos.0)
+                        && pos.0 == self.nodes.len()
+                    {
+                        // It was the last connected node.
+                        self.first_connected_pos = None
                     }
                 }
                 NodeStatus::Disconnected => {

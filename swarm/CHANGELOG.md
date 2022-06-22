@@ -1,4 +1,16 @@
-# 0.36.0 [unreleased]
+# 0.36.2 [unreleased]
+
+- Extend log message when exceeding inbound negotiating streams with peer ID and limit. See [PR 2716].
+
+[PR 2716]: https://github.com/libp2p/rust-libp2p/pull/2716/
+
+# 0.36.1
+
+- Limit negotiating inbound substreams per connection. See [PR 2697].
+
+[PR 2697]: https://github.com/libp2p/rust-libp2p/pull/2697
+
+# 0.36.0
 
 - Don't require `Transport` to be `Clone`. See [PR 2529].
 
@@ -6,8 +18,14 @@
 
 - Make `behaviour::either` module private. See [PR 2610]
 
+- Rename `IncomingInfo::to_connected_point` to `IncomingInfo::create_connected_point`. See [PR 2620].
+
+- Rename `TProtoHandler` to `TConnectionHandler`, `ToggleProtoHandler` to `ToggleConnectionHandler`, `ToggleIntoProtoHandler` to `ToggleIntoConnectionHandler`. See [PR 2640].
+
 [PR 2529]: https://github.com/libp2p/rust-libp2p/pull/2529
-[PR 2610]: https://github.com/libp2p/rust-libp2p/pull/2610/
+[PR 2610]: https://github.com/libp2p/rust-libp2p/pull/2610
+[PR 2620]: https://github.com/libp2p/rust-libp2p/pull/2620
+[PR 2640]: https://github.com/libp2p/rust-libp2p/pull/2640
 
 # 0.35.0
 

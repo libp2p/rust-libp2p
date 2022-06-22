@@ -1,6 +1,10 @@
-# 0.33.0 [unreleased]
+# 0.33.0
 
 - Update to `libp2p-core` `v0.33.0`.
+
+- Remove implementation of `Clone` on `GenTcpConfig`. See [PR 2682].
+
+[PR 2682]: https://github.com/libp2p/rust-libp2p/pull/2682
 
 # 0.32.0 [2022-02-22]
 
