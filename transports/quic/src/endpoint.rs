@@ -328,7 +328,7 @@ enum ToEndpoint {
 /// [`quinn_proto::Endpoint`].
 ///
 /// Unfortunately, this design has the consequence that, on the network layer, we will accept a
-/// certain number of incoming connections even if [`Endpoint::next_incoming`] is never even
+/// certain number of incoming connections even if [`Endpoint::poll_incoming`] is never even
 /// called. The `quinn-proto` library doesn't provide any way to not accept incoming connections
 /// apart from filling the accept buffer.
 ///
@@ -344,8 +344,8 @@ enum ToEndpoint {
 /// In an ideal world, we would handle a background-task-to-connection channel being full by
 /// dropping UDP packets destined to this connection, as a way to back-pressure the remote.
 /// Unfortunately, the `quinn-proto` library doesn't provide any way for us to know which
-/// connection a UDP packet is destined for before it has been turned into a [`ConnectionEvent`],
-/// and because these [`ConnectionEvent`]s are sometimes used to synchronize the states of the
+/// connection a UDP packet is destined for before it has been turned into a `ConnectionEvent`,
+/// and because these `ConnectionEvent`s are sometimes used to synchronize the states of the
 /// endpoint and connection, it would be a logic error to silently drop them.
 ///
 /// We handle this tricky situation by simply killing connections as soon as their associated
