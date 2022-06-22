@@ -1,3 +1,7 @@
+# 0.37.0 [unreleased]
+
+- Update to `libp2p-core` `v0.34.0`.
+
 # 0.36.1
 
 - Limit negotiating inbound substreams per connection. See [PR 2697].
