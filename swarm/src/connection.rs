@@ -32,7 +32,7 @@ pub use error::{
 pub use listeners::{ListenersEvent, ListenersStream};
 pub use pool::{ConnectionCounters, ConnectionLimits};
 pub use pool::{EstablishedConnection, PendingConnection};
-pub use substream::{Close, Substream, SubstreamEndpoint};
+pub use substream::{Close, SubstreamEndpoint};
 
 use crate::handler::ConnectionHandler;
 use crate::IntoConnectionHandler;

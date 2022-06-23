@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::connection::{Substream, SubstreamEndpoint};
+use crate::connection::SubstreamEndpoint;
 use crate::handler::{
     ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
 };
@@ -30,7 +30,7 @@ use futures::stream::FuturesUnordered;
 use futures_timer::Delay;
 use instant::Instant;
 use libp2p_core::{
-    muxing::StreamMuxerBox,
+    muxing::SubstreamBox,
     upgrade::{self, InboundUpgradeApply, OutboundUpgradeApply, UpgradeError},
     Multiaddr,
 };
@@ -55,20 +55,14 @@ where
     negotiating_in: FuturesUnordered<
         SubstreamUpgrade<
             TConnectionHandler::InboundOpenInfo,
-            InboundUpgradeApply<
-                Substream<StreamMuxerBox>,
-                SendWrapper<TConnectionHandler::InboundProtocol>,
-            >,
+            InboundUpgradeApply<SubstreamBox, SendWrapper<TConnectionHandler::InboundProtocol>>,
         >,
     >,
     /// Futures that upgrade outgoing substreams.
     negotiating_out: FuturesUnordered<
         SubstreamUpgrade<
             TConnectionHandler::OutboundOpenInfo,
-            OutboundUpgradeApply<
-                Substream<StreamMuxerBox>,
-                SendWrapper<TConnectionHandler::OutboundProtocol>,
-            >,
+            OutboundUpgradeApply<SubstreamBox, SendWrapper<TConnectionHandler::OutboundProtocol>>,
         >,
     >,
     /// For each outbound substream request, how to upgrade it. The first element of the tuple
@@ -87,8 +81,8 @@ where
     /// Note: This only enforces a limit on the number of concurrently
     /// negotiating inbound streams. The total number of inbound streams on a
     /// connection is the sum of negotiating and negotiated streams. A limit on
-    /// the total number of streams can be enforced at the [`StreamMuxerBox`]
-    /// level.
+    /// the total number of streams can be enforced at the
+    /// [`StreamMuxerBox`](libp2p_core::muxing::StreamMuxerBox) level.
     max_negotiating_inbound_streams: usize,
 }
 
@@ -254,7 +248,7 @@ where
 {
     pub fn inject_substream(
         &mut self,
-        substream: Substream<StreamMuxerBox>,
+        substream: SubstreamBox,
         // The first element of the tuple is the unique upgrade identifier
         // (see `unique_dial_upgrade_id`).
         endpoint: SubstreamEndpoint<OutboundOpenInfo<TConnectionHandler>>,

@@ -1,3 +1,7 @@
+# 0.37.0 [unreleased]
+
+- Update to `libp2p-core` `v0.34.0`.
+
 # 0.36.2 [unreleased]
 
 - Extend log message when exceeding inbound negotiating streams with peer ID and limit. See [PR 2716].

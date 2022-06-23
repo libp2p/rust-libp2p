@@ -44,10 +44,27 @@
 # `libp2p` facade crate
 
 # 0.46.0 [unreleased]
+
 - Semver bump Rust from `1.56.1` to `1.60.0` . See [PR 2646].
 - Added weak dependencies for features. See [PR 2646].
 - Update individual crates.
+    - Update to [`libp2p-autonat` `v0.5.0`](protocols/autonat/CHANGELOG.md#050).
+    - Update to [`libp2p-core` `v0.34.0`](core/CHANGELOG.md#0340).
+    - Update to [`libp2p-dcutr` `v0.4.0`](protocols/dcutr/CHANGELOG.md#040).
+    - Update to [`libp2p-floodsub` `v0.37.0`](protocols/floodsub/CHANGELOG.md#0370).
+    - Update to [`libp2p-identify` `v0.37.0`](protocols/identify/CHANGELOG.md#0370).
+    - Update to [`libp2p-kad` `v0.38.0`](protocols/kad/CHANGELOG.md#0380).
+    - Update to [`libp2p-metrics` `v0.7.0`](misc/metrics/CHANGELOG.md#070).
     - Update to [`libp2p-mplex` `v0.34.0`](muxers/mplex/CHANGELOG.md).
+    - Update to [`libp2p-noise` `v0.37.0`](transports/noise/CHANGELOG.md#0370).
+    - Update to [`libp2p-ping` `v0.37.0`](protocols/ping/CHANGELOG.md#0370).
+    - Update to [`libp2p-plaintext` `v0.34.0`](transports/plaintext/CHANGELOG.md#0340).
+    - Update to [`libp2p-relay` `v0.10.0`](protocols/relay/CHANGELOG.md#0100).
+    - Update to [`libp2p-rendezvous` `v0.7.0`](protocols/rendezvous/CHANGELOG.md#070).
+    - Update to [`libp2p-request-response` `v0.19.0`](protocols/request-response/CHANGELOG.md#0190).
+    - Update to [`libp2p-swarm` `v0.37.0`](swarm/CHANGELOG.md#0370).
+    - Update to [`libp2p-wasm-ext` `v0.34.0`](transports/wasm-ext/CHANGELOG.md#0340).
+    - Update to [`libp2p-yamux` `v0.38.0`](muxers/yamux/CHANGELOG.md#0380).
     - Update to `libp2p-uds` [`v0.33.0`](transports/uds/CHANGELOG.md).
 
 [PR 2646]: https://github.com/libp2p/rust-libp2p/pull/2646
