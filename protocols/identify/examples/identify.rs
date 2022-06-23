@@ -41,7 +41,9 @@ use futures::prelude::*;
 use libp2p::swarm::{Swarm, SwarmEvent};
 use libp2p::{identity, Multiaddr, PeerId};
 use std::error::Error;
+use libp2p_core::{identity, Multiaddr, PeerId};
 use libp2p_identify::{Identify, IdentifyConfig, IdentifyEvent};
+use libp2p_swarm::{Swarm, SwarmEvent};
 
 #[async_std::main]
 async fn main() -> Result<(), Box<dyn Error>> {
