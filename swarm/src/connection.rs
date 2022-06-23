@@ -35,6 +35,7 @@ pub use pool::{EstablishedConnection, PendingConnection};
 pub use substream::{Close, Substream, SubstreamEndpoint};
 
 use crate::handler::ConnectionHandler;
+use crate::IntoConnectionHandler;
 use handler_wrapper::HandlerWrapper;
 use libp2p_core::connection::ConnectedPoint;
 use libp2p_core::multiaddr::Multiaddr;
@@ -94,12 +95,16 @@ where
     /// Builds a new `Connection` from the given substream multiplexer
     /// and connection handler.
     pub fn new(
+        peer_id: PeerId,
+        endpoint: ConnectedPoint,
         muxer: StreamMuxerBox,
-        handler: THandler,
+        handler: impl IntoConnectionHandler<Handler = THandler>,
         substream_upgrade_protocol_override: Option<upgrade::Version>,
         max_negotiating_inbound_streams: usize,
     ) -> Self {
         let wrapped_handler = HandlerWrapper::new(
+            peer_id,
+            endpoint,
             handler,
             substream_upgrade_protocol_override,
             max_negotiating_inbound_streams,

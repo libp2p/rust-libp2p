@@ -747,8 +747,10 @@ where
                     );
 
                     let connection = super::Connection::new(
+                        obtained_peer_id,
+                        endpoint,
                         muxer,
-                        handler.into_handler(&obtained_peer_id, &endpoint),
+                        handler,
                         self.substream_upgrade_protocol_override,
                         self.max_negotiating_inbound_streams,
                     );

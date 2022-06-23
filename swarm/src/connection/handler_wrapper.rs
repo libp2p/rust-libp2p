@@ -23,6 +23,7 @@ use crate::handler::{
     ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
 };
 use crate::upgrade::SendWrapper;
+use crate::IntoConnectionHandler;
 
 use futures::prelude::*;
 use futures::stream::FuturesUnordered;
@@ -33,6 +34,7 @@ use libp2p_core::{
     upgrade::{self, InboundUpgradeApply, OutboundUpgradeApply, UpgradeError},
     Multiaddr,
 };
+use libp2p_core::{ConnectedPoint, PeerId};
 use std::{error, fmt, pin::Pin, task::Context, task::Poll, time::Duration};
 
 /// A wrapper for an underlying [`ConnectionHandler`].
@@ -46,6 +48,7 @@ pub struct HandlerWrapper<TConnectionHandler>
 where
     TConnectionHandler: ConnectionHandler,
 {
+    remote_peer_id: PeerId,
     /// The underlying handler.
     handler: TConnectionHandler,
     /// Futures that upgrade incoming substreams.
@@ -106,12 +109,15 @@ impl<TConnectionHandler: ConnectionHandler> std::fmt::Debug for HandlerWrapper<T
 
 impl<TConnectionHandler: ConnectionHandler> HandlerWrapper<TConnectionHandler> {
     pub(crate) fn new(
-        handler: TConnectionHandler,
+        remote_peer_id: PeerId,
+        endpoint: ConnectedPoint,
+        handler: impl IntoConnectionHandler<Handler = TConnectionHandler>,
         substream_upgrade_protocol_override: Option<upgrade::Version>,
         max_negotiating_inbound_streams: usize,
     ) -> Self {
         Self {
-            handler,
+            remote_peer_id,
+            handler: handler.into_handler(&remote_peer_id, &endpoint),
             negotiating_in: Default::default(),
             negotiating_out: Default::default(),
             queued_dial_upgrades: Vec::new(),
@@ -257,8 +263,11 @@ where
             SubstreamEndpoint::Listener => {
                 if self.negotiating_in.len() == self.max_negotiating_inbound_streams {
                     log::warn!(
-                        "Incoming substream exceeding maximum number of \
-                         negotiating inbound streams. Dropping."
+                        "Incoming substream from {} exceeding maximum number \
+                         of negotiating inbound streams {} on connection. \
+                         Dropping. See PoolConfig::with_max_negotiating_inbound_streams.",
+                        self.remote_peer_id,
+                        self.max_negotiating_inbound_streams,
                     );
                     return;
                 }
