@@ -65,6 +65,7 @@
     - Update to [`libp2p-swarm` `v0.37.0`](swarm/CHANGELOG.md#0370).
     - Update to [`libp2p-wasm-ext` `v0.34.0`](transports/wasm-ext/CHANGELOG.md#0340).
     - Update to [`libp2p-yamux` `v0.38.0`](muxers/yamux/CHANGELOG.md#0380).
+    - Update to `libp2p-uds` [`v0.33.0`](transports/uds/CHANGELOG.md).
 
 [PR 2646]: https://github.com/libp2p/rust-libp2p/pull/2646
 
