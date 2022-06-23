@@ -39,10 +39,15 @@ use libp2p_swarm::{
     KeepAlive, NegotiatedSubstream, SubstreamProtocol,
 };
 use log::debug;
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::fmt;
 use std::task::{Context, Poll};
 use std::time::Duration;
+
+/// The maximum number of circuits being denied concurrently.
+///
+/// Circuits to be denied exceeding the limit are dropped.
+const MAX_NUMBER_DENYING_CIRCUIT: usize = 8;
 
 pub enum In {
     Reserve {
@@ -100,7 +105,7 @@ pub enum Event {
     /// Denying an inbound circuit request failed.
     InboundCircuitReqDenyFailed {
         src_peer_id: PeerId,
-        error: std::io::Error,
+        error: inbound_stop::UpgradeError,
     },
 }
 
@@ -196,7 +201,8 @@ pub struct Handler {
     /// eventually.
     alive_lend_out_substreams: FuturesUnordered<oneshot::Receiver<void::Void>>,
 
-    circuit_deny_futs: FuturesUnordered<BoxFuture<'static, (PeerId, Result<(), std::io::Error>)>>,
+    circuit_deny_futs:
+        HashMap<PeerId, BoxFuture<'static, Result<(), protocol::inbound_stop::UpgradeError>>>,
 
     /// Futures that try to send errors to the transport.
     ///
@@ -251,12 +257,27 @@ impl ConnectionHandler for Handler {
             }
             Reservation::None => {
                 let src_peer_id = inbound_circuit.src_peer_id();
-                self.circuit_deny_futs.push(
-                    inbound_circuit
-                        .deny(Status::NoReservation)
-                        .map(move |result| (src_peer_id, result))
-                        .boxed(),
-                )
+
+                if self.circuit_deny_futs.len() == MAX_NUMBER_DENYING_CIRCUIT
+                    && !self.circuit_deny_futs.contains_key(&src_peer_id)
+                {
+                    log::warn!(
+                        "Dropping inbound circuit request to be denied from {:?} due to exceeding limit.",
+                        src_peer_id,
+                    );
+                } else if self
+                    .circuit_deny_futs
+                    .insert(
+                        src_peer_id,
+                        inbound_circuit.deny(Status::NoReservation).boxed(),
+                    )
+                    .is_some()
+                {
+                    log::warn!(
+                            "Dropping existing inbound circuit request to be denied from {:?} in favor of new one.",
+                            src_peer_id
+                        )
+                }
             }
         }
     }
@@ -537,20 +558,28 @@ impl ConnectionHandler for Handler {
         }
 
         // Deny incoming circuit requests.
-        if let Poll::Ready(Some((src_peer_id, result))) = self.circuit_deny_futs.poll_next_unpin(cx)
-        {
-            match result {
-                Ok(()) => {
-                    return Poll::Ready(ConnectionHandlerEvent::Custom(
-                        Event::InboundCircuitReqDenied { src_peer_id },
-                    ))
-                }
-                Err(error) => {
-                    return Poll::Ready(ConnectionHandlerEvent::Custom(
-                        Event::InboundCircuitReqDenyFailed { src_peer_id, error },
-                    ))
-                }
-            }
+        let maybe_event =
+            self.circuit_deny_futs
+                .iter_mut()
+                .find_map(|(src_peer_id, fut)| match fut.poll_unpin(cx) {
+                    Poll::Ready(Ok(())) => Some((
+                        *src_peer_id,
+                        Event::InboundCircuitReqDenied {
+                            src_peer_id: *src_peer_id,
+                        },
+                    )),
+                    Poll::Ready(Err(error)) => Some((
+                        *src_peer_id,
+                        Event::InboundCircuitReqDenyFailed {
+                            src_peer_id: *src_peer_id,
+                            error,
+                        },
+                    )),
+                    Poll::Pending => None,
+                });
+        if let Some((src_peer_id, event)) = maybe_event {
+            self.circuit_deny_futs.remove(&src_peer_id);
+            return Poll::Ready(ConnectionHandlerEvent::Custom(event));
         }
 
         // Send errors to transport.

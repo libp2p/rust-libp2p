@@ -138,14 +138,14 @@ pub enum Event {
     /// Accepting an inbound reservation request failed.
     ReservationReqAcceptFailed {
         src_peer_id: PeerId,
-        error: std::io::Error,
+        error: inbound_hop::UpgradeError,
     },
     /// An inbound reservation request has been denied.
     ReservationReqDenied { src_peer_id: PeerId },
     /// Denying an inbound reservation request has failed.
     ReservationReqDenyFailed {
         src_peer_id: PeerId,
-        error: std::io::Error,
+        error: inbound_hop::UpgradeError,
     },
     /// An inbound reservation has timed out.
     ReservationTimedOut { src_peer_id: PeerId },
@@ -162,7 +162,7 @@ pub enum Event {
     CircuitReqDenyFailed {
         src_peer_id: PeerId,
         dst_peer_id: PeerId,
-        error: std::io::Error,
+        error: inbound_hop::UpgradeError,
     },
     /// An inbound cirucit request has been accepted.
     CircuitReqAccepted {
@@ -179,7 +179,7 @@ pub enum Event {
     CircuitReqAcceptFailed {
         src_peer_id: PeerId,
         dst_peer_id: PeerId,
-        error: std::io::Error,
+        error: inbound_hop::UpgradeError,
     },
     /// An inbound circuit has closed.
     CircuitClosed {

@@ -87,6 +87,11 @@ where
     /// The configured override for substream protocol upgrades, if any.
     substream_upgrade_protocol_override: Option<libp2p_core::upgrade::Version>,
 
+    /// The maximum number of inbound streams concurrently negotiating on a connection.
+    ///
+    /// See [`super::handler_wrapper::HandlerWrapper::max_negotiating_inbound_streams`].
+    max_negotiating_inbound_streams: usize,
+
     /// The executor to use for running the background tasks. If `None`,
     /// the tasks are kept in `local_spawns` instead and polled on the
     /// current thread when the [`Pool`] is polled for new events.
@@ -263,6 +268,7 @@ where
             task_command_buffer_size: config.task_command_buffer_size,
             dial_concurrency_factor: config.dial_concurrency_factor,
             substream_upgrade_protocol_override: config.substream_upgrade_protocol_override,
+            max_negotiating_inbound_streams: config.max_negotiating_inbound_streams,
             executor: config.executor,
             local_spawns: FuturesUnordered::new(),
             pending_connection_events_tx,
@@ -741,9 +747,12 @@ where
                     );
 
                     let connection = super::Connection::new(
+                        obtained_peer_id,
+                        endpoint,
                         muxer,
-                        handler.into_handler(&obtained_peer_id, &endpoint),
+                        handler,
                         self.substream_upgrade_protocol_override,
+                        self.max_negotiating_inbound_streams,
                     );
                     self.spawn(
                         task::new_for_established_connection(
@@ -1153,6 +1162,11 @@ pub struct PoolConfig {
 
     /// The configured override for substream protocol upgrades, if any.
     substream_upgrade_protocol_override: Option<libp2p_core::upgrade::Version>,
+
+    /// The maximum number of inbound streams concurrently negotiating on a connection.
+    ///
+    /// See [super::handler_wrapper::HandlerWrapper::max_negotiating_inbound_streams].
+    max_negotiating_inbound_streams: usize,
 }
 
 impl Default for PoolConfig {
@@ -1164,6 +1178,7 @@ impl Default for PoolConfig {
             // By default, addresses of a single connection attempt are dialed in sequence.
             dial_concurrency_factor: NonZeroU8::new(1).expect("1 > 0"),
             substream_upgrade_protocol_override: None,
+            max_negotiating_inbound_streams: 128,
         }
     }
 }
@@ -1220,6 +1235,14 @@ impl PoolConfig {
         v: libp2p_core::upgrade::Version,
     ) -> Self {
         self.substream_upgrade_protocol_override = Some(v);
+        self
+    }
+
+    /// The maximum number of inbound streams concurrently negotiating on a connection.
+    ///
+    /// See [`super::handler_wrapper::HandlerWrapper::max_negotiating_inbound_streams`].
+    pub fn with_max_negotiating_inbound_streams(mut self, v: usize) -> Self {
+        self.max_negotiating_inbound_streams = v;
         self
     }
 }

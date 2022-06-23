@@ -1,3 +1,19 @@
+# 0.37.0 [unreleased]
+
+- Update to `libp2p-core` `v0.34.0`.
+
+# 0.36.2 [unreleased]
+
+- Extend log message when exceeding inbound negotiating streams with peer ID and limit. See [PR 2716].
+
+[PR 2716]: https://github.com/libp2p/rust-libp2p/pull/2716/
+
+# 0.36.1
+
+- Limit negotiating inbound substreams per connection. See [PR 2697].
+
+[PR 2697]: https://github.com/libp2p/rust-libp2p/pull/2697
+
 # 0.36.0
 
 - Don't require `Transport` to be `Clone`. See [PR 2529].
