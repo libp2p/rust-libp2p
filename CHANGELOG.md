@@ -48,6 +48,7 @@
 - Added weak dependencies for features. See [PR 2646].
 - Update individual crates.
     - Update to [`libp2p-mplex` `v0.34.0`](muxers/mplex/CHANGELOG.md).
+    - Update to `libp2p-uds` [`v0.33.0`](transports/uds/CHANGELOG.md).
 
 [PR 2646]: https://github.com/libp2p/rust-libp2p/pull/2646
 
