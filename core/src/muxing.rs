@@ -158,7 +158,7 @@ impl<T> StreamMuxerEvent<T> {
     }
 
     /// Map the stream within [`StreamMuxerEvent::InboundSubstream`] and
-    /// [`StreamMuxerEvent::OutboundStream`] to a new type.
+    /// [`StreamMuxerEvent::OutboundSubstream`] to a new type.
     pub fn map_stream<O>(self, map: impl FnOnce(T) -> O) -> StreamMuxerEvent<O> {
         match self {
             StreamMuxerEvent::InboundSubstream(stream) => {
