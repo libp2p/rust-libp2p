@@ -98,7 +98,6 @@ where
 
 pub type YamuxResult<T> = Result<T, YamuxError>;
 
-/// > **Note**: This implementation never emits [`StreamMuxerEvent::AddressChange`] events.
 impl<S> StreamMuxer for Yamux<S>
 where
     S: Stream<Item = Result<yamux::Stream, YamuxError>> + Unpin,
