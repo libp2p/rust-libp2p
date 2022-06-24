@@ -75,6 +75,12 @@ impl<THandlerErr> From<handler_wrapper::Error<THandlerErr>> for ConnectionError<
     }
 }
 
+impl<THandlerErr> From<io::Error> for ConnectionError<THandlerErr> {
+    fn from(error: io::Error) -> Self {
+        ConnectionError::IO(error)
+    }
+}
+
 /// Errors that can occur in the context of a pending outgoing `Connection`.
 ///
 /// Note: Addresses for an outbound connection are dialed in parallel. Thus, compared to
