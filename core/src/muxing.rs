@@ -64,9 +64,8 @@ mod singleton;
 ///
 /// A substream created by a [`StreamMuxer`] is a type that implements [`AsyncRead`] and [`AsyncWrite`].
 ///
-/// Inbound substreams are reported via [`StreamMuxer::poll_event`].
-/// Outbound substreams can be opened via [`StreamMuxer::open_outbound`] and subsequent polling via
-/// [`StreamMuxer::poll_outbound`].
+/// The process new incoming substreams and open new outbound ones, call the [`StreamMuxer::poll_event`]
+/// function with the appropriate [`OpenFlags`].
 pub trait StreamMuxer {
     /// Type of the object that represents the raw substream where data can be read and written.
     type Substream: AsyncRead + AsyncWrite;
