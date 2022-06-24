@@ -1,8 +1,9 @@
 use crate::muxing::StreamMuxerEvent;
 use crate::StreamMuxer;
 use fnv::FnvHashMap;
-use futures::{AsyncRead, AsyncWrite};
+use futures::{ready, AsyncRead, AsyncWrite};
 use parking_lot::Mutex;
+use std::error::Error;
 use std::fmt;
 use std::io;
 use std::io::{IoSlice, IoSliceMut};
@@ -38,6 +39,7 @@ impl<T> StreamMuxer for Wrap<T>
 where
     T: StreamMuxer,
     T::Substream: Send + Unpin + 'static,
+    T::Error: Send + Sync + 'static,
 {
     type Substream = SubstreamBox;
     type OutboundSubstream = usize; // TODO: use a newtype
@@ -48,18 +50,10 @@ where
         &self,
         cx: &mut Context<'_>,
     ) -> Poll<Result<StreamMuxerEvent<Self::Substream>, Self::Error>> {
-        let substream = match self.inner.poll_event(cx) {
-            Poll::Pending => return Poll::Pending,
-            Poll::Ready(Ok(StreamMuxerEvent::AddressChange(a))) => {
-                return Poll::Ready(Ok(StreamMuxerEvent::AddressChange(a)))
-            }
-            Poll::Ready(Ok(StreamMuxerEvent::InboundSubstream(s))) => s,
-            Poll::Ready(Err(err)) => return Poll::Ready(Err(err.into())),
-        };
+        let event = ready!(self.inner.poll_event(cx).map_err(into_io_error)?)
+            .map_inbound_stream(SubstreamBox::new);
 
-        Poll::Ready(Ok(StreamMuxerEvent::InboundSubstream(SubstreamBox::new(
-            substream,
-        ))))
+        Poll::Ready(Ok(event))
     }
 
     #[inline]
@@ -77,16 +71,12 @@ where
         substream: &mut Self::OutboundSubstream,
     ) -> Poll<Result<Self::Substream, Self::Error>> {
         let mut list = self.outbound.lock();
-        let substream = match self
+        let stream = ready!(self
             .inner
             .poll_outbound(cx, list.get_mut(substream).unwrap())
-        {
-            Poll::Pending => return Poll::Pending,
-            Poll::Ready(Ok(s)) => s,
-            Poll::Ready(Err(err)) => return Poll::Ready(Err(err.into())),
-        };
+            .map_err(into_io_error)?);
 
-        Poll::Ready(Ok(SubstreamBox::new(substream)))
+        Poll::Ready(Ok(SubstreamBox::new(stream)))
     }
 
     #[inline]
@@ -98,8 +88,15 @@ where
 
     #[inline]
     fn poll_close(&self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.inner.poll_close(cx).map_err(|e| e.into())
+        self.inner.poll_close(cx).map_err(into_io_error)
     }
+}
+
+fn into_io_error<E>(err: E) -> io::Error
+where
+    E: Error + Send + Sync + 'static,
+{
+    io::Error::new(io::ErrorKind::Other, err)
 }
 
 impl StreamMuxerBox {
@@ -109,6 +106,7 @@ impl StreamMuxerBox {
         T: StreamMuxer + Send + Sync + 'static,
         T::OutboundSubstream: Send,
         T::Substream: Send + Unpin + 'static,
+        T::Error: Send + Sync + 'static,
     {
         let wrap = Wrap {
             inner: muxer,
