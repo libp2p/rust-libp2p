@@ -18,12 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{
-    connection::Endpoint,
-    muxing::{OpenFlags, StreamMuxer, StreamMuxerEvent},
-};
+use crate::{connection::Endpoint, muxing::StreamMuxer};
 
 use futures::prelude::*;
+use multiaddr::Multiaddr;
 use std::cell::Cell;
 use std::{io, task::Context, task::Poll};
 
@@ -59,28 +57,28 @@ where
     type Substream = TSocket;
     type Error = io::Error;
 
-    fn poll_event(
-        &self,
-        flags: OpenFlags,
-        _: &mut Context<'_>,
-    ) -> Poll<Result<StreamMuxerEvent<Self::Substream>, Self::Error>> {
-        // these combinations will never emit a stream.
+    fn poll_inbound(&self, _: &mut Context<'_>) -> Poll<Result<Self::Substream, Self::Error>> {
         match self.endpoint {
-            Endpoint::Dialer if flags == OpenFlags::INBOUND => return Poll::Pending,
-            Endpoint::Listener if flags == OpenFlags::OUTBOUND => return Poll::Pending,
-            _ => {}
+            Endpoint::Dialer => Poll::Pending,
+            Endpoint::Listener => match self.inner.replace(None) {
+                None => Poll::Pending,
+                Some(stream) => Poll::Ready(Ok(stream)),
+            },
         }
+    }
 
-        // can only emit the stream once
-        let socket = match self.inner.replace(None) {
-            None => return Poll::Pending,
-            Some(stream) => stream,
-        };
-
+    fn poll_outbound(&self, _: &mut Context<'_>) -> Poll<Result<Self::Substream, Self::Error>> {
         match self.endpoint {
-            Endpoint::Dialer => Poll::Ready(Ok(StreamMuxerEvent::OutboundSubstream(socket))),
-            Endpoint::Listener => Poll::Ready(Ok(StreamMuxerEvent::InboundSubstream(socket))),
+            Endpoint::Listener => Poll::Pending,
+            Endpoint::Dialer => match self.inner.replace(None) {
+                None => Poll::Pending,
+                Some(stream) => Poll::Ready(Ok(stream)),
+            },
         }
+    }
+
+    fn poll_address_change(&self, _: &mut Context<'_>) -> Poll<Result<Multiaddr, Self::Error>> {
+        Poll::Pending
     }
 
     fn poll_close(&self, _cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {

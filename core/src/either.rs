@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
-    muxing::{OpenFlags, StreamMuxer, StreamMuxerEvent},
+    muxing::StreamMuxer,
     transport::{ListenerEvent, Transport, TransportError},
     Multiaddr, ProtocolName,
 };
@@ -204,20 +204,36 @@ where
     type Substream = EitherOutput<A::Substream, B::Substream>;
     type Error = EitherError<A::Error, B::Error>;
 
-    fn poll_event(
-        &self,
-        flags: OpenFlags,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<StreamMuxerEvent<Self::Substream>, Self::Error>> {
+    fn poll_inbound(&self, cx: &mut Context<'_>) -> Poll<Result<Self::Substream, Self::Error>> {
         match self {
             EitherOutput::First(inner) => inner
-                .poll_event(flags, cx)
-                .map_err(EitherError::A)
-                .map_ok(|event| event.map_stream(EitherOutput::First)),
+                .poll_inbound(cx)
+                .map_ok(EitherOutput::First)
+                .map_err(EitherError::A),
             EitherOutput::Second(inner) => inner
-                .poll_event(flags, cx)
-                .map_err(EitherError::B)
-                .map_ok(|event| event.map_stream(EitherOutput::Second)),
+                .poll_inbound(cx)
+                .map_ok(EitherOutput::Second)
+                .map_err(EitherError::B),
+        }
+    }
+
+    fn poll_outbound(&self, cx: &mut Context<'_>) -> Poll<Result<Self::Substream, Self::Error>> {
+        match self {
+            EitherOutput::First(inner) => inner
+                .poll_outbound(cx)
+                .map_ok(EitherOutput::First)
+                .map_err(EitherError::A),
+            EitherOutput::Second(inner) => inner
+                .poll_outbound(cx)
+                .map_ok(EitherOutput::Second)
+                .map_err(EitherError::B),
+        }
+    }
+
+    fn poll_address_change(&self, cx: &mut Context<'_>) -> Poll<Result<Multiaddr, Self::Error>> {
+        match self {
+            EitherOutput::First(inner) => inner.poll_address_change(cx).map_err(EitherError::A),
+            EitherOutput::Second(inner) => inner.poll_address_change(cx).map_err(EitherError::B),
         }
     }
 

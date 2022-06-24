@@ -24,11 +24,11 @@
 use futures::{
     future,
     prelude::*,
-    ready,
     stream::{BoxStream, LocalBoxStream},
 };
-use libp2p_core::muxing::{OpenFlags, StreamMuxer, StreamMuxerEvent};
+use libp2p_core::muxing::StreamMuxer;
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use libp2p_core::Multiaddr;
 use parking_lot::Mutex;
 use std::{
     fmt, io, iter, mem,
@@ -106,36 +106,26 @@ where
     type Substream = yamux::Stream;
     type Error = YamuxError;
 
-    fn poll_event(
-        &self,
-        flags: OpenFlags,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<StreamMuxerEvent<Self::Substream>, Self::Error>> {
-        let mut inner = self.0.lock();
+    fn poll_inbound(&self, cx: &mut Context<'_>) -> Poll<Result<Self::Substream, Self::Error>> {
+        self.0
+            .lock()
+            .incoming
+            .poll_next_unpin(cx)
+            .map(|maybe_stream| {
+                maybe_stream
+                    .transpose()?
+                    .ok_or(YamuxError(ConnectionError::Closed))
+            })
+    }
 
-        loop {
-            if flags.contains(OpenFlags::OUTBOUND) {
-                if let Poll::Ready(stream) = Pin::new(&mut inner.control).poll_open_stream(cx)? {
-                    return Poll::Ready(Ok(StreamMuxerEvent::OutboundSubstream(stream)));
-                }
-            }
+    fn poll_outbound(&self, cx: &mut Context<'_>) -> Poll<Result<Self::Substream, Self::Error>> {
+        Pin::new(&mut self.0.lock().control)
+            .poll_open_stream(cx)
+            .map_err(YamuxError)
+    }
 
-            let stream = match ready!(inner.incoming.poll_next_unpin(cx)).transpose()? {
-                Some(stream) => stream,
-                None => return Poll::Ready(Err(YamuxError(ConnectionError::Closed))),
-            };
-
-            if !flags.contains(OpenFlags::INBOUND) {
-                log::debug!(
-                    "Dropping inbound stream {stream} because OpenFlags::INBOUND is not present"
-                );
-                mem::drop(stream);
-
-                continue;
-            }
-
-            return Poll::Ready(Ok(StreamMuxerEvent::InboundSubstream(stream)));
-        }
+    fn poll_address_change(&self, _: &mut Context<'_>) -> Poll<Result<Multiaddr, Self::Error>> {
+        Poll::Pending
     }
 
     fn poll_close(&self, c: &mut Context<'_>) -> Poll<YamuxResult<()>> {

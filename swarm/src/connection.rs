@@ -38,7 +38,7 @@ use futures::future::poll_fn;
 use handler_wrapper::HandlerWrapper;
 use libp2p_core::connection::ConnectedPoint;
 use libp2p_core::multiaddr::Multiaddr;
-use libp2p_core::muxing::{OpenFlags, StreamMuxerBox, StreamMuxerEvent};
+use libp2p_core::muxing::StreamMuxerBox;
 use libp2p_core::PeerId;
 use libp2p_core::{upgrade, StreamMuxer};
 use std::collections::VecDeque;
@@ -159,32 +159,24 @@ where
                 }
             }
 
-            let mut flags = OpenFlags::default();
-
-            // (1) Ensure queue is not empty.
             if !self.open_info.is_empty() {
-                flags.insert(OpenFlags::OUTBOUND);
-            }
-
-            // Perform I/O on the connection through the muxer, informing the handler
-            // of new substreams.
-            match self.muxing.poll_event(flags, cx)? {
-                Poll::Pending => {}
-                Poll::Ready(StreamMuxerEvent::InboundSubstream(substream)) => {
-                    self.handler
-                        .inject_substream(substream, SubstreamEndpoint::Listener);
-                    continue;
-                }
-                Poll::Ready(StreamMuxerEvent::OutboundSubstream(substream)) => {
+                if let Poll::Ready(substream) = self.muxing.poll_outbound(cx)? {
                     let user_data = self.open_info.pop_front().expect("See (1); qed.");
                     let endpoint = SubstreamEndpoint::Dialer(user_data);
                     self.handler.inject_substream(substream, endpoint);
                     continue;
                 }
-                Poll::Ready(StreamMuxerEvent::AddressChange(address)) => {
-                    self.handler.inject_address_change(&address);
-                    return Poll::Ready(Ok(Event::AddressChange(address)));
-                }
+            }
+
+            if let Poll::Ready(substream) = self.muxing.poll_inbound(cx)? {
+                self.handler
+                    .inject_substream(substream, SubstreamEndpoint::Listener);
+                continue;
+            }
+
+            if let Poll::Ready(address) = self.muxing.poll_address_change(cx)? {
+                self.handler.inject_address_change(&address);
+                return Poll::Ready(Ok(Event::AddressChange(address)));
             }
 
             return Poll::Pending;

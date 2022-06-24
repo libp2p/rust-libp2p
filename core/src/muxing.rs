@@ -64,8 +64,7 @@ mod singleton;
 ///
 /// A substream created by a [`StreamMuxer`] is a type that implements [`AsyncRead`] and [`AsyncWrite`].
 ///
-/// The process new incoming substreams and open new outbound ones, call the [`StreamMuxer::poll_event`]
-/// function with the appropriate [`OpenFlags`].
+/// TODO(docs)
 pub trait StreamMuxer {
     /// Type of the object that represents the raw substream where data can be read and written.
     type Substream: AsyncRead + AsyncWrite;
@@ -73,20 +72,14 @@ pub trait StreamMuxer {
     /// Error type of the muxer
     type Error: std::error::Error;
 
-    /// Polls for a connection-wide event.
-    ///
-    /// Depending on the passed [`OpenFlags`], the muxer will either open a new outbound substream,
-    /// check for new incoming substreams or both.
-    ///
-    /// It is permissible and common to use this method to perform background
-    /// work, such as processing incoming packets and polling timers.
-    ///
-    /// An error can be generated if the connection has been closed.
-    fn poll_event(
-        &self,
-        flags: OpenFlags,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<StreamMuxerEvent<Self::Substream>, Self::Error>>;
+    /// TODO(docs)
+    fn poll_inbound(&self, cx: &mut Context<'_>) -> Poll<Result<Self::Substream, Self::Error>>;
+
+    /// TODO(docs)
+    fn poll_outbound(&self, cx: &mut Context<'_>) -> Poll<Result<Self::Substream, Self::Error>>;
+
+    /// TODO(docs)
+    fn poll_address_change(&self, cx: &mut Context<'_>) -> Poll<Result<Multiaddr, Self::Error>>;
 
     /// Closes this `StreamMuxer`.
     ///
@@ -99,74 +92,4 @@ pub trait StreamMuxer {
     /// >           properly informing the remote, there is no difference between this and
     /// >           immediately dropping the muxer.
     fn poll_close(&self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>>;
-}
-
-bitflags::bitflags! {
-    /// Tells the [`StreamMuxer`] which substreams it should open.
-    ///
-    /// How this is implemented may vary from muxer to muxer. Not all muxing protocols support
-    /// this on the lowest level so some muxers may for example still accept incoming substreams but
-    /// immediately drop them if the flags do not contain [`OpenFlags::INBOUND`].
-    pub struct OpenFlags: u8 {
-        const INBOUND  = 0b00000001;
-        const OUTBOUND = 0b00000010;
-    }
-}
-
-impl Default for OpenFlags {
-    fn default() -> Self {
-        OpenFlags::INBOUND
-    }
-}
-
-/// Event about a connection, reported by an implementation of [`StreamMuxer`].
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum StreamMuxerEvent<T> {
-    /// Remote has opened a new substream. Contains the substream in question.
-    InboundSubstream(T),
-
-    /// We opened a new substream. Contains the substream in question.
-    OutboundSubstream(T),
-
-    /// Address to the remote has changed. The previous one is now obsolete.
-    ///
-    /// > **Note**: This can for example happen when using the QUIC protocol, where the two nodes
-    /// >           can change their IP address while retaining the same QUIC connection.
-    AddressChange(Multiaddr),
-}
-
-impl<T> StreamMuxerEvent<T> {
-    /// If `self` is a [`StreamMuxerEvent::InboundSubstream`], returns the content. Otherwise
-    /// returns `None`.
-    pub fn into_inbound_substream(self) -> Option<T> {
-        if let StreamMuxerEvent::InboundSubstream(s) = self {
-            Some(s)
-        } else {
-            None
-        }
-    }
-
-    /// If `self` is a [`StreamMuxerEvent::OutboundSubstream`], returns the content. Otherwise
-    /// returns `None`.
-    pub fn into_outbound_substream(self) -> Option<T> {
-        if let StreamMuxerEvent::OutboundSubstream(s) = self {
-            Some(s)
-        } else {
-            None
-        }
-    }
-
-    /// Map the stream within [`StreamMuxerEvent::InboundSubstream`] and
-    /// [`StreamMuxerEvent::OutboundSubstream`] to a new type.
-    pub fn map_stream<O>(self, map: impl FnOnce(T) -> O) -> StreamMuxerEvent<O> {
-        match self {
-            StreamMuxerEvent::InboundSubstream(stream) => {
-                StreamMuxerEvent::InboundSubstream(map(stream))
-            }
-            StreamMuxerEvent::OutboundSubstream(stream) => {
-                StreamMuxerEvent::OutboundSubstream(map(stream))
-            }
-            StreamMuxerEvent::AddressChange(addr) => StreamMuxerEvent::AddressChange(addr),
-        }
-    }
 }

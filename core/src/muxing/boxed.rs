@@ -1,6 +1,6 @@
-use crate::muxing::{OpenFlags, StreamMuxerEvent};
 use crate::StreamMuxer;
-use futures::{ready, AsyncRead, AsyncWrite};
+use futures::{AsyncRead, AsyncWrite};
+use multiaddr::Multiaddr;
 use std::error::Error;
 use std::fmt;
 use std::io;
@@ -36,20 +36,26 @@ where
     type Error = io::Error;
 
     #[inline]
-    fn poll_event(
-        &self,
-        flags: OpenFlags,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<StreamMuxerEvent<Self::Substream>, Self::Error>> {
-        let event = ready!(self.inner.poll_event(flags, cx).map_err(into_io_error)?)
-            .map_stream(SubstreamBox::new);
-
-        Poll::Ready(Ok(event))
-    }
-
-    #[inline]
     fn poll_close(&self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         self.inner.poll_close(cx).map_err(into_io_error)
+    }
+
+    fn poll_inbound(&self, cx: &mut Context<'_>) -> Poll<Result<Self::Substream, Self::Error>> {
+        self.inner
+            .poll_inbound(cx)
+            .map_ok(SubstreamBox::new)
+            .map_err(into_io_error)
+    }
+
+    fn poll_outbound(&self, cx: &mut Context<'_>) -> Poll<Result<Self::Substream, Self::Error>> {
+        self.inner
+            .poll_outbound(cx)
+            .map_ok(SubstreamBox::new)
+            .map_err(into_io_error)
+    }
+
+    fn poll_address_change(&self, cx: &mut Context<'_>) -> Poll<Result<Multiaddr, Self::Error>> {
+        self.inner.poll_address_change(cx).map_err(into_io_error)
     }
 }
 
@@ -81,17 +87,20 @@ impl StreamMuxer for StreamMuxerBox {
     type Error = io::Error;
 
     #[inline]
-    fn poll_event(
-        &self,
-        flags: OpenFlags,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<StreamMuxerEvent<Self::Substream>, Self::Error>> {
-        self.inner.poll_event(flags, cx)
-    }
-
-    #[inline]
     fn poll_close(&self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         self.inner.poll_close(cx)
+    }
+
+    fn poll_inbound(&self, cx: &mut Context<'_>) -> Poll<Result<Self::Substream, Self::Error>> {
+        self.inner.poll_inbound(cx)
+    }
+
+    fn poll_outbound(&self, cx: &mut Context<'_>) -> Poll<Result<Self::Substream, Self::Error>> {
+        self.inner.poll_outbound(cx)
+    }
+
+    fn poll_address_change(&self, cx: &mut Context<'_>) -> Poll<Result<Multiaddr, Self::Error>> {
+        self.inner.poll_address_change(cx)
     }
 }
 

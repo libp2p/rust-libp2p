@@ -28,9 +28,8 @@ use bytes::Bytes;
 use codec::LocalStreamId;
 use futures::{future, prelude::*, ready};
 use libp2p_core::{
-    muxing::{OpenFlags, StreamMuxerEvent},
     upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo},
-    StreamMuxer,
+    Multiaddr, StreamMuxer,
 };
 use parking_lot::Mutex;
 use std::{cmp, iter, pin::Pin, sync::Arc, task::Context, task::Poll};
@@ -89,39 +88,22 @@ where
     type Substream = Substream<C>;
     type Error = io::Error;
 
-    fn poll_event(
-        &self,
-        flags: OpenFlags,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<StreamMuxerEvent<Self::Substream>, Self::Error>> {
-        let mut io = self.io.lock();
+    fn poll_inbound(&self, cx: &mut Context<'_>) -> Poll<Result<Self::Substream, Self::Error>> {
+        self.io
+            .lock()
+            .poll_next_stream(cx)
+            .map_ok(|stream_id| Substream::new(stream_id, self.io.clone()))
+    }
 
-        loop {
-            if flags.contains(OpenFlags::OUTBOUND) {
-                if let Poll::Ready(stream_id) = io.poll_open_stream(cx)? {
-                    return Poll::Ready(Ok(StreamMuxerEvent::OutboundSubstream(Substream::new(
-                        stream_id,
-                        self.io.clone(),
-                    ))));
-                }
-            }
+    fn poll_outbound(&self, cx: &mut Context<'_>) -> Poll<Result<Self::Substream, Self::Error>> {
+        self.io
+            .lock()
+            .poll_open_stream(cx)
+            .map_ok(|stream_id| Substream::new(stream_id, self.io.clone()))
+    }
 
-            let stream_id = ready!(io.poll_next_stream(cx))?;
-
-            if !flags.contains(OpenFlags::INBOUND) {
-                log::debug!(
-                    "Dropping inbound stream {stream_id} because OpenFlags::INBOUND is not present"
-                );
-                io.drop_stream(stream_id);
-
-                continue;
-            }
-
-            return Poll::Ready(Ok(StreamMuxerEvent::InboundSubstream(Substream::new(
-                stream_id,
-                self.io.clone(),
-            ))));
-        }
+    fn poll_address_change(&self, _: &mut Context<'_>) -> Poll<Result<Multiaddr, Self::Error>> {
+        Poll::Pending
     }
 
     fn poll_close(&self, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
