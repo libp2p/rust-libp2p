@@ -161,7 +161,10 @@ where
 
             if !self.open_info.is_empty() {
                 if let Poll::Ready(substream) = self.muxing.poll_outbound(cx)? {
-                    let user_data = self.open_info.pop_front().expect("See (1); qed.");
+                    let user_data = self
+                        .open_info
+                        .pop_front()
+                        .expect("`open_info` is not empty");
                     let endpoint = SubstreamEndpoint::Dialer(user_data);
                     self.handler.inject_substream(substream, endpoint);
                     continue;
