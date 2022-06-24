@@ -160,8 +160,9 @@ where
             }
 
             let mut flags = OpenFlags::default();
+
+            // (1) Ensure queue is not empty.
             if !self.open_info.is_empty() {
-                // Ensure queue is not empty.
                 flags.insert(OpenFlags::OUTBOUND);
             }
 

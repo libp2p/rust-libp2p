@@ -26,10 +26,9 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughpu
 use futures::channel::oneshot;
 use futures::future::poll_fn;
 use futures::prelude::*;
-use libp2p_core::muxing::OpenFlags;
 use libp2p_core::{
-    identity, multiaddr::multiaddr, muxing, transport, upgrade, Multiaddr, PeerId, StreamMuxer,
-    Transport,
+    identity, multiaddr::multiaddr, muxing, muxing::OpenFlags, transport, upgrade, Multiaddr,
+    PeerId, StreamMuxer, Transport,
 };
 use libp2p_mplex as mplex;
 use libp2p_plaintext::PlainText2Config;

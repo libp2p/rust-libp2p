@@ -20,10 +20,9 @@
 
 use crate::{
     connection::Endpoint,
-    muxing::{StreamMuxer, StreamMuxerEvent},
+    muxing::{OpenFlags, StreamMuxer, StreamMuxerEvent},
 };
 
-use crate::muxing::OpenFlags;
 use futures::prelude::*;
 use std::cell::Cell;
 use std::{io, task::Context, task::Poll};
