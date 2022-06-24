@@ -1,13 +1,14 @@
 # 0.34.0 - unreleased
 
-- Introduce `StreamMuxerEvent::map_inbound_stream`. See [PR 2691].
 - Remove `{read,write,flush,shutdown,destroy}_substream` functions from `StreamMuxer` trait
   in favor of forcing `StreamMuxer::Substream` to implement `AsyncRead + AsyncWrite`. See [PR 2707].
 - Replace `Into<std::io::Error>` bound on `StreamMuxer::Error` with `std::error::Error`. See [PR 2710].
+- Remove `StreamMuxer::poll_event` in favor of individual functions: `poll_inbound`, `poll_outbound`
+  and `poll_address_change`. Consequently, `StreamMuxerEvent` is also removed. See [PR 2724].
 
-[PR 2691]: https://github.com/libp2p/rust-libp2p/pull/2691
 [PR 2707]: https://github.com/libp2p/rust-libp2p/pull/2707
 [PR 2710]: https://github.com/libp2p/rust-libp2p/pull/2710
+[PR 2724]: https://github.com/libp2p/rust-libp2p/pull/2724
 
 # 0.33.0
 
