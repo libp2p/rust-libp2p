@@ -27,8 +27,8 @@ use futures::channel::oneshot;
 use futures::future::poll_fn;
 use futures::prelude::*;
 use libp2p_core::{
-    identity, multiaddr::multiaddr, muxing, muxing::OpenFlags, transport, upgrade, Multiaddr,
-    PeerId, StreamMuxer, Transport,
+    identity, multiaddr::multiaddr, muxing, transport, upgrade, Multiaddr, PeerId, StreamMuxer,
+    Transport,
 };
 use libp2p_mplex as mplex;
 use libp2p_plaintext::PlainText2Config;
@@ -105,11 +105,9 @@ fn run(transport: &mut BenchTransport, payload: &Vec<u8>, listen_addr: &Multiadd
                 }
                 transport::ListenerEvent::Upgrade { upgrade, .. } => {
                     let (_peer, conn) = upgrade.await.unwrap();
-                    let mut s = poll_fn(|cx| conn.poll_event(OpenFlags::INBOUND, cx))
+                    let mut s = poll_fn(|cx| conn.poll_inbound(cx))
                         .await
-                        .expect("unexpected error")
-                        .into_inbound_substream()
-                        .expect("Unexpected muxer event");
+                        .expect("unexpected error");
 
                     let mut buf = vec![0u8; payload_len];
                     let mut off = 0;
@@ -134,11 +132,7 @@ fn run(transport: &mut BenchTransport, payload: &Vec<u8>, listen_addr: &Multiadd
     task::block_on(async move {
         let addr = addr_receiver.await.unwrap();
         let (_peer, conn) = transport.dial(addr).unwrap().await.unwrap();
-        let mut stream = poll_fn(|cx| conn.poll_event(OpenFlags::OUTBOUND, cx))
-            .await
-            .unwrap()
-            .into_outbound_substream()
-            .unwrap();
+        let mut stream = poll_fn(|cx| conn.poll_inbound(cx)).await.unwrap();
         let mut off = 0;
         loop {
             let n = poll_fn(|cx| Pin::new(&mut stream).poll_write(cx, &payload[off..]))
