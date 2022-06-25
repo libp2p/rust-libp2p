@@ -54,7 +54,7 @@ use crate::handler::{GossipsubHandler, GossipsubHandlerIn, HandlerEvent};
 use crate::mcache::MessageCache;
 use crate::metrics::{Churn, Config as MetricsConfig, Inclusion, Metrics, Penalty};
 use crate::peer_score::{PeerScore, PeerScoreParams, PeerScoreThresholds, RejectReason};
-use crate::protocol::SIGNING_PREFIX;
+use crate::protocol::{SIGNING_PREFIX, ProtocolConfig};
 use crate::subscription_filter::{AllowAllSubscriptionFilter, TopicSubscriptionFilter};
 use crate::time_cache::{DuplicateCache, TimeCache};
 use crate::topic::{Hasher, Topic, TopicHash};
@@ -3056,22 +3056,21 @@ where
     type OutEvent = GossipsubEvent;
 
     fn new_handler(&mut self) -> Self::ConnectionHandler {
-        if self.config.support_custom() {
-            GossipsubHandler::new_custom(
-                self.config.custom_protocol_id().clone(),
-                self.config.max_transmit_size(),
-                self.config.validation_mode().clone(),
-                self.config.idle_timeout(),
-            )
-        } else {
-            GossipsubHandler::new(
-                self.config.protocol_id_prefix().clone(),
-                self.config.max_transmit_size(),
-                self.config.validation_mode().clone(),
-                self.config.idle_timeout(),
-                self.config.support_floodsub(),
-            )
-        }
+        let protocol_config = ProtocolConfig::new(
+            match self.config.support_custom() {
+                true => self.config.custom_protocol_id().clone(),
+                false => self.config.protocol_id_prefix().clone(),
+            },
+            self.config.max_transmit_size(),
+            self.config.validation_mode().clone(),
+            self.config.support_floodsub(),
+            self.config.support_custom(),
+        );
+
+        GossipsubHandler::new(
+            protocol_config,
+            self.config.idle_timeout(),
+        )
     }
 
     fn inject_connection_established(

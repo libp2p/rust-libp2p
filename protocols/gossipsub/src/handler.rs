@@ -18,7 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::config::ValidationMode;
 use crate::error::{GossipsubHandlerError, ValidationError};
 use crate::protocol::{GossipsubCodec, ProtocolConfig};
 use crate::types::{GossipsubRpc, PeerKind, RawGossipsubMessage};
@@ -164,52 +163,12 @@ enum OutboundSubstreamState {
 impl GossipsubHandler {
     /// Builds a new [`GossipsubHandler`].
     pub fn new(
-        protocol_id_prefix: std::borrow::Cow<'static, str>,
-        max_transmit_size: usize,
-        validation_mode: ValidationMode,
-        idle_timeout: Duration,
-        support_floodsub: bool,
-    ) -> Self {
-        GossipsubHandler {
-            listen_protocol: SubstreamProtocol::new(
-                ProtocolConfig::new(
-                    protocol_id_prefix,
-                    max_transmit_size,
-                    validation_mode,
-                    support_floodsub,
-                ),
-                (),
-            ),
-            inbound_substream: None,
-            outbound_substream: None,
-            outbound_substream_establishing: false,
-            outbound_substreams_created: 0,
-            inbound_substreams_created: 0,
-            send_queue: SmallVec::new(),
-            peer_kind: None,
-            peer_kind_sent: false,
-            protocol_unsupported: false,
-            idle_timeout,
-            upgrade_errors: VecDeque::new(),
-            keep_alive: KeepAlive::Until(Instant::now() + Duration::from_secs(INITIAL_KEEP_ALIVE)),
-            in_mesh: false,
-        }
-    }
-
-    /// Builds a new [`GossipsubHandler`] with a custom Protocol ID
-    pub fn new_custom(
-        protocol_id: std::borrow::Cow<'static, str>,
-        max_transmit_size: usize,
-        validation_mode: ValidationMode,
+        protocol_config: ProtocolConfig,
         idle_timeout: Duration,
     ) -> Self {
         GossipsubHandler {
             listen_protocol: SubstreamProtocol::new(
-                ProtocolConfig::new_custom(
-                    protocol_id,
-                    max_transmit_size,
-                    validation_mode,
-                ),
+                protocol_config,
                 (),
             ),
             inbound_substream: None,

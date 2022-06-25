@@ -59,37 +59,28 @@ impl ProtocolConfig {
     ///
     /// Sets the maximum gossip transmission size.
     pub fn new(
-        id_prefix: Cow<'static, str>,
+        id: Cow<'static, str>,
         max_transmit_size: usize,
         validation_mode: ValidationMode,
         support_floodsub: bool,
+        support_custom: bool,
     ) -> ProtocolConfig {
-        // support version 1.1.0 and 1.0.0 with user-customized prefix
-        let mut protocol_ids = vec![
-            ProtocolId::new(id_prefix.clone(), PeerKind::Gossipsubv1_1),
-            ProtocolId::new(id_prefix, PeerKind::Gossipsub),
-        ];
+        let protocol_ids = match support_custom {
+            true => vec![ProtocolId::new(id, PeerKind::Custom)],
+            false => {
+                // support version 1.1.0 and 1.0.0 with user-customized prefix
+                let mut protocol_ids = vec![
+                    ProtocolId::new(id.clone(), PeerKind::Gossipsubv1_1),
+                    ProtocolId::new(id, PeerKind::Gossipsub),
+                ];
 
-        // add floodsub support if enabled.
-        if support_floodsub {
-            protocol_ids.push(ProtocolId::new(Cow::from(""), PeerKind::Floodsub));
-        }
-
-        ProtocolConfig {
-            protocol_ids,
-            max_transmit_size,
-            validation_mode,
-        }
-    }
-
-    pub fn new_custom(
-        protocol_id: Cow<'static, str>,
-        max_transmit_size: usize,
-        validation_mode: ValidationMode
-    ) -> ProtocolConfig {
-        let protocol_ids = vec![
-            ProtocolId::new(protocol_id, PeerKind::Custom),
-        ];
+                // add floodsub support if enabled.
+                if support_floodsub {
+                    protocol_ids.push(ProtocolId::new(Cow::from(""), PeerKind::Floodsub));
+                }
+                protocol_ids
+            }
+        };
 
         ProtocolConfig {
             protocol_ids,
