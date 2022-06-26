@@ -63,24 +63,17 @@ impl ProtocolConfig {
         max_transmit_size: usize,
         validation_mode: ValidationMode,
         support_floodsub: bool,
-        support_custom: bool,
+        id_is_prefix: bool,
     ) -> ProtocolConfig {
-        let protocol_ids = match support_custom {
-            true => vec![ProtocolId::new(id, PeerKind::Custom)],
-            false => {
-                // support version 1.1.0 and 1.0.0 with user-customized prefix
-                let mut protocol_ids = vec![
-                    ProtocolId::new(id.clone(), PeerKind::Gossipsubv1_1),
-                    ProtocolId::new(id, PeerKind::Gossipsub),
-                ];
+        let mut protocol_ids = vec![
+            ProtocolId::new(id.clone(), PeerKind::Gossipsubv1_1, id_is_prefix),
+            ProtocolId::new(id, PeerKind::Gossipsub, id_is_prefix),
+        ];
 
-                // add floodsub support if enabled.
-                if support_floodsub {
-                    protocol_ids.push(ProtocolId::new(Cow::from(""), PeerKind::Floodsub));
-                }
-                protocol_ids
-            }
-        };
+        // add floodsub support if enabled.
+        if support_floodsub {
+            protocol_ids.push(ProtocolId::new(Cow::from(""), PeerKind::Floodsub, false));
+        }
 
         ProtocolConfig {
             protocol_ids,
@@ -101,12 +94,17 @@ pub struct ProtocolId {
 
 /// An RPC protocol ID.
 impl ProtocolId {
-    pub fn new(prefix_or_custom: Cow<'static, str>, kind: PeerKind) -> Self {
+    pub fn new(id: Cow<'static, str>, kind: PeerKind, prefix: bool) -> Self {
         let protocol_id = match kind {
-            PeerKind::Gossipsubv1_1 => format!("/{}/{}", prefix_or_custom, "1.1.0"),
-            PeerKind::Gossipsub => format!("/{}/{}", prefix_or_custom, "1.0.0"),
+            PeerKind::Gossipsubv1_1 => match prefix {
+                true => format!("/{}/{}", id, "1.1.0"),
+                false => format!("{}", id),
+            },
+            PeerKind::Gossipsub => match prefix {
+                true => format!("/{}/{}", id, "1.0.0"),
+                false => format!("{}", id),
+            },
             PeerKind::Floodsub => format!("/{}/{}", "floodsub", "1.0.0"),
-            PeerKind::Custom => format!("{}", prefix_or_custom),
             // NOTE: This is used for informing the behaviour of unsupported peers. We do not
             // advertise this variant.
             PeerKind::NotSupported => unreachable!("Should never advertise NotSupported"),

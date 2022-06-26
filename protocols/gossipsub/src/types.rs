@@ -103,8 +103,6 @@ pub enum PeerKind {
     Gossipsub,
     /// A floodsub peer.
     Floodsub,
-    /// A custom gossipsub peer.
-    Custom,
     /// The peer doesn't support any of the protocols.
     NotSupported,
 }
@@ -374,7 +372,6 @@ impl PeerKind {
     pub fn as_static_ref(&self) -> &'static str {
         match self {
             Self::NotSupported => "Not Supported",
-            Self::Custom => "Custom",
             Self::Floodsub => "Floodsub",
             Self::Gossipsub => "Gossipsub v1.0",
             Self::Gossipsubv1_1 => "Gossipsub v1.1",
