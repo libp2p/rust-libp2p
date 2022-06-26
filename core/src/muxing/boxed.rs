@@ -1,27 +1,36 @@
 use crate::muxing::StreamMuxerEvent;
 use crate::StreamMuxer;
 use fnv::FnvHashMap;
+use futures::{ready, AsyncRead, AsyncWrite};
 use parking_lot::Mutex;
+use std::error::Error;
+use std::fmt;
 use std::io;
+use std::io::{IoSlice, IoSliceMut};
+use std::pin::Pin;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::task::{Context, Poll};
 
 /// Abstract `StreamMuxer`.
 pub struct StreamMuxerBox {
     inner: Box<
-        dyn StreamMuxer<Substream = usize, OutboundSubstream = usize, Error = io::Error>
+        dyn StreamMuxer<Substream = SubstreamBox, OutboundSubstream = usize, Error = io::Error>
             + Send
             + Sync,
     >,
 }
+
+/// Abstract type for asynchronous reading and writing.
+///
+/// A [`SubstreamBox`] erases the concrete type it is given and only retains its `AsyncRead`
+/// and `AsyncWrite` capabilities.
+pub struct SubstreamBox(Box<dyn AsyncReadWrite + Send + Unpin>);
 
 struct Wrap<T>
 where
     T: StreamMuxer,
 {
     inner: T,
-    substreams: Mutex<FnvHashMap<usize, T::Substream>>,
-    next_substream: AtomicUsize,
     outbound: Mutex<FnvHashMap<usize, T::OutboundSubstream>>,
     next_outbound: AtomicUsize,
 }
@@ -29,8 +38,10 @@ where
 impl<T> StreamMuxer for Wrap<T>
 where
     T: StreamMuxer,
+    T::Substream: Send + Unpin + 'static,
+    T::Error: Send + Sync + 'static,
 {
-    type Substream = usize; // TODO: use a newtype
+    type Substream = SubstreamBox;
     type OutboundSubstream = usize; // TODO: use a newtype
     type Error = io::Error;
 
@@ -39,18 +50,10 @@ where
         &self,
         cx: &mut Context<'_>,
     ) -> Poll<Result<StreamMuxerEvent<Self::Substream>, Self::Error>> {
-        let substream = match self.inner.poll_event(cx) {
-            Poll::Pending => return Poll::Pending,
-            Poll::Ready(Ok(StreamMuxerEvent::AddressChange(a))) => {
-                return Poll::Ready(Ok(StreamMuxerEvent::AddressChange(a)))
-            }
-            Poll::Ready(Ok(StreamMuxerEvent::InboundSubstream(s))) => s,
-            Poll::Ready(Err(err)) => return Poll::Ready(Err(err.into())),
-        };
+        let event = ready!(self.inner.poll_event(cx).map_err(into_io_error)?)
+            .map_inbound_stream(SubstreamBox::new);
 
-        let id = self.next_substream.fetch_add(1, Ordering::Relaxed);
-        self.substreams.lock().insert(id, substream);
-        Poll::Ready(Ok(StreamMuxerEvent::InboundSubstream(id)))
+        Poll::Ready(Ok(event))
     }
 
     #[inline]
@@ -68,17 +71,12 @@ where
         substream: &mut Self::OutboundSubstream,
     ) -> Poll<Result<Self::Substream, Self::Error>> {
         let mut list = self.outbound.lock();
-        let substream = match self
+        let stream = ready!(self
             .inner
             .poll_outbound(cx, list.get_mut(substream).unwrap())
-        {
-            Poll::Pending => return Poll::Pending,
-            Poll::Ready(Ok(s)) => s,
-            Poll::Ready(Err(err)) => return Poll::Ready(Err(err.into())),
-        };
-        let id = self.next_substream.fetch_add(1, Ordering::Relaxed);
-        self.substreams.lock().insert(id, substream);
-        Poll::Ready(Ok(id))
+            .map_err(into_io_error)?);
+
+        Poll::Ready(Ok(SubstreamBox::new(stream)))
     }
 
     #[inline]
@@ -89,66 +87,16 @@ where
     }
 
     #[inline]
-    fn read_substream(
-        &self,
-        cx: &mut Context<'_>,
-        s: &mut Self::Substream,
-        buf: &mut [u8],
-    ) -> Poll<Result<usize, Self::Error>> {
-        let mut list = self.substreams.lock();
-        self.inner
-            .read_substream(cx, list.get_mut(s).unwrap(), buf)
-            .map_err(|e| e.into())
-    }
-
-    #[inline]
-    fn write_substream(
-        &self,
-        cx: &mut Context<'_>,
-        s: &mut Self::Substream,
-        buf: &[u8],
-    ) -> Poll<Result<usize, Self::Error>> {
-        let mut list = self.substreams.lock();
-        self.inner
-            .write_substream(cx, list.get_mut(s).unwrap(), buf)
-            .map_err(|e| e.into())
-    }
-
-    #[inline]
-    fn flush_substream(
-        &self,
-        cx: &mut Context<'_>,
-        s: &mut Self::Substream,
-    ) -> Poll<Result<(), Self::Error>> {
-        let mut list = self.substreams.lock();
-        self.inner
-            .flush_substream(cx, list.get_mut(s).unwrap())
-            .map_err(|e| e.into())
-    }
-
-    #[inline]
-    fn shutdown_substream(
-        &self,
-        cx: &mut Context<'_>,
-        s: &mut Self::Substream,
-    ) -> Poll<Result<(), Self::Error>> {
-        let mut list = self.substreams.lock();
-        self.inner
-            .shutdown_substream(cx, list.get_mut(s).unwrap())
-            .map_err(|e| e.into())
-    }
-
-    #[inline]
-    fn destroy_substream(&self, substream: Self::Substream) {
-        let mut list = self.substreams.lock();
-        self.inner
-            .destroy_substream(list.remove(&substream).unwrap())
-    }
-
-    #[inline]
     fn poll_close(&self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.inner.poll_close(cx).map_err(|e| e.into())
+        self.inner.poll_close(cx).map_err(into_io_error)
     }
+}
+
+fn into_io_error<E>(err: E) -> io::Error
+where
+    E: Error + Send + Sync + 'static,
+{
+    io::Error::new(io::ErrorKind::Other, err)
 }
 
 impl StreamMuxerBox {
@@ -157,12 +105,11 @@ impl StreamMuxerBox {
     where
         T: StreamMuxer + Send + Sync + 'static,
         T::OutboundSubstream: Send,
-        T::Substream: Send,
+        T::Substream: Send + Unpin + 'static,
+        T::Error: Send + Sync + 'static,
     {
         let wrap = Wrap {
             inner: muxer,
-            substreams: Mutex::new(Default::default()),
-            next_substream: AtomicUsize::new(0),
             outbound: Mutex::new(Default::default()),
             next_outbound: AtomicUsize::new(0),
         };
@@ -174,7 +121,7 @@ impl StreamMuxerBox {
 }
 
 impl StreamMuxer for StreamMuxerBox {
-    type Substream = usize; // TODO: use a newtype
+    type Substream = SubstreamBox;
     type OutboundSubstream = usize; // TODO: use a newtype
     type Error = io::Error;
 
@@ -206,50 +153,81 @@ impl StreamMuxer for StreamMuxerBox {
     }
 
     #[inline]
-    fn read_substream(
-        &self,
-        cx: &mut Context<'_>,
-        s: &mut Self::Substream,
-        buf: &mut [u8],
-    ) -> Poll<Result<usize, Self::Error>> {
-        self.inner.read_substream(cx, s, buf)
-    }
-
-    #[inline]
-    fn write_substream(
-        &self,
-        cx: &mut Context<'_>,
-        s: &mut Self::Substream,
-        buf: &[u8],
-    ) -> Poll<Result<usize, Self::Error>> {
-        self.inner.write_substream(cx, s, buf)
-    }
-
-    #[inline]
-    fn flush_substream(
-        &self,
-        cx: &mut Context<'_>,
-        s: &mut Self::Substream,
-    ) -> Poll<Result<(), Self::Error>> {
-        self.inner.flush_substream(cx, s)
-    }
-
-    #[inline]
-    fn shutdown_substream(
-        &self,
-        cx: &mut Context<'_>,
-        s: &mut Self::Substream,
-    ) -> Poll<Result<(), Self::Error>> {
-        self.inner.shutdown_substream(cx, s)
-    }
-
-    #[inline]
-    fn destroy_substream(&self, s: Self::Substream) {
-        self.inner.destroy_substream(s)
-    }
-
-    #[inline]
     fn poll_close(&self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         self.inner.poll_close(cx)
+    }
+}
+
+impl SubstreamBox {
+    /// Construct a new [`SubstreamBox`] from something that implements [`AsyncRead`] and [`AsyncWrite`].
+    pub fn new<S: AsyncRead + AsyncWrite + Send + Unpin + 'static>(stream: S) -> Self {
+        Self(Box::new(stream))
+    }
+}
+
+impl fmt::Debug for SubstreamBox {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "SubstreamBox({})", self.0.type_name())
+    }
+}
+
+/// Workaround because Rust does not allow `Box<dyn AsyncRead + AsyncWrite>`.
+trait AsyncReadWrite: AsyncRead + AsyncWrite + Unpin {
+    /// Helper function to capture the erased inner type.
+    ///
+    /// Used to make the [`Debug`] implementation of [`SubstreamBox`] more useful.
+    fn type_name(&self) -> &'static str;
+}
+
+impl<S> AsyncReadWrite for S
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
+    fn type_name(&self) -> &'static str {
+        std::any::type_name::<S>()
+    }
+}
+
+impl AsyncRead for SubstreamBox {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut [u8],
+    ) -> Poll<std::io::Result<usize>> {
+        Pin::new(&mut self.get_mut().0).poll_read(cx, buf)
+    }
+
+    fn poll_read_vectored(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        bufs: &mut [IoSliceMut<'_>],
+    ) -> Poll<std::io::Result<usize>> {
+        Pin::new(&mut self.get_mut().0).poll_read_vectored(cx, bufs)
+    }
+}
+
+impl AsyncWrite for SubstreamBox {
+    fn poll_write(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<std::io::Result<usize>> {
+        Pin::new(&mut self.get_mut().0).poll_write(cx, buf)
+    }
+
+    fn poll_write_vectored(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        bufs: &[IoSlice<'_>],
+    ) -> Poll<std::io::Result<usize>> {
+        Pin::new(&mut self.get_mut().0).poll_write_vectored(cx, bufs)
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        Pin::new(&mut self.get_mut().0).poll_flush(cx)
+    }
+
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        Pin::new(&mut self.get_mut().0).poll_close(cx)
     }
 }

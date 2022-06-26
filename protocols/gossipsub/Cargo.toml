@@ -3,7 +3,7 @@ name = "libp2p-gossipsub"
 edition = "2021"
 rust-version = "1.56.1"
 description = "Gossipsub protocol for libp2p"
-version = "0.38.1"
+version = "0.39.0"
 authors = ["Age Manning <Age@AgeManning.com>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -11,8 +11,8 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-libp2p-swarm = { version = "0.36.0", path = "../../swarm" }
-libp2p-core = { version = "0.33.0", path = "../../core", default-features = false }
+libp2p-swarm = { version = "0.37.0", path = "../../swarm" }
+libp2p-core = { version = "0.34.0", path = "../../core", default-features = false }
 bytes = "1.0"
 byteorder = "1.3.4"
 fnv = "1.0.7"
