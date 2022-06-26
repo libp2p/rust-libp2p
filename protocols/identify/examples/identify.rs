@@ -26,7 +26,7 @@
 //! cargo run --example identify
 //! ```
 //! It will print the [`PeerId`] and the listening addresses, e.g. `Listening on
-//! "/ip6/2001:db8:: /tcp/24915"`
+//! "/ip4/127.0.0.1/tcp/24915"`
 //!
 //! In the second terminal window, start a new instance of the example with:
 //!
@@ -34,8 +34,7 @@
 //! cargo run --example identify -- /ip4/127.0.0.1/tcp/24915
 //! ```
 //! The two nodes establish a connection, negotiate the identify protocol
-//! The dialing node prints out the `PeerId` of the node it is sending identify info to
-//! The other node prints out the received identify info.
+//! and will send each other identify info which is then printed to the console.
 
 use futures::prelude::*;
 use libp2p::{identity, Multiaddr, PeerId};
