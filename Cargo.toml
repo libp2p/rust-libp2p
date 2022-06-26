@@ -25,7 +25,7 @@ default = [
     "ping",
     "plaintext",
     "pnet",
-    # "relay",
+    "relay",
     "request-response",
     "rendezvous",
     "secp256k1",
@@ -37,7 +37,7 @@ default = [
 ]
 
 autonat = ["dep:libp2p-autonat"]
-# dcutr = ["dep:libp2p-dcutr", "libp2p-metrics?/dcutr"]
+dcutr = ["dep:libp2p-dcutr", "libp2p-metrics?/dcutr"]
 deflate = ["dep:libp2p-deflate"]
 dns-async-std = ["dep:libp2p-dns", "libp2p-dns?/async-std"]
 dns-tokio = ["dep:libp2p-dns", "libp2p-dns?/tokio"]
@@ -52,7 +52,7 @@ noise = ["dep:libp2p-noise"]
 ping = ["dep:libp2p-ping", "libp2p-metrics?/ping"]
 plaintext = ["dep:libp2p-plaintext"]
 pnet = ["dep:libp2p-pnet"]
-# relay = ["dep:libp2p-relay", "libp2p-metrics?/relay"]
+relay = ["dep:libp2p-relay", "libp2p-metrics?/relay"]
 request-response = ["dep:libp2p-request-response"]
 rendezvous = ["dep:libp2p-rendezvous"]
 tcp-async-io = ["dep:libp2p-tcp", "libp2p-tcp?/async-io"]
@@ -79,7 +79,7 @@ lazy_static = "1.2"
 
 libp2p-autonat = { version = "0.4.0", path = "protocols/autonat", optional = true }
 libp2p-core = { version = "0.33.0", path = "core",  default-features = false }
-# libp2p-dcutr = { version = "0.3.1", path = "protocols/dcutr",  optional = true }
+libp2p-dcutr = { version = "0.3.1", path = "protocols/dcutr",  optional = true }
 libp2p-floodsub = { version = "0.36.0", path = "protocols/floodsub", optional = true }
 libp2p-identify = { version = "0.36.1", path = "protocols/identify", optional = true }
 libp2p-kad = { version = "0.37.1", path = "protocols/kad", optional = true }
@@ -89,7 +89,7 @@ libp2p-noise = { version = "0.36.0", path = "transports/noise", optional = true 
 libp2p-ping = { version = "0.36.0", path = "protocols/ping", optional = true }
 libp2p-plaintext = { version = "0.33.0", path = "transports/plaintext", optional = true }
 libp2p-pnet = { version = "0.22.0", path = "transports/pnet", optional = true }
-# libp2p-relay = { version = "0.9.1", path = "protocols/relay", optional = true }
+libp2p-relay = { version = "0.9.1", path = "protocols/relay", optional = true }
 libp2p-rendezvous = { version = "0.6.0", path = "protocols/rendezvous", optional = true }
 libp2p-request-response = { version = "0.18.0", path = "protocols/request-response", optional = true }
 libp2p-swarm = { version = "0.36.1", path = "swarm" }
@@ -130,7 +130,7 @@ members = [
     "misc/prost-codec",
     "muxers/mplex",
     "muxers/yamux",
-    # "protocols/dcutr",
+    "protocols/dcutr",
     "protocols/autonat",
     "protocols/floodsub",
     "protocols/gossipsub",
@@ -139,7 +139,7 @@ members = [
     "protocols/kad",
     "protocols/mdns",
     "protocols/ping",
-    # "protocols/relay",
+    "protocols/relay",
     "protocols/request-response",
     "swarm",
     "swarm-derive",
