@@ -136,8 +136,8 @@ mod tests {
             .expect("MemoryTransport not listening on an address!");
 
         async_std::task::spawn(async move {
-            let listener_event = transport.next().await.unwrap();
-            let (listener_upgrade, _) = listener_event.into_upgrade().unwrap();
+            let transport_event = transport.next().await.unwrap();
+            let (listener_upgrade, _) = transport_event.into_upgrade().unwrap();
             let conn = listener_upgrade.await.unwrap();
             recv_ping(conn).await.unwrap();
         });

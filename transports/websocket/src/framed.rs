@@ -168,13 +168,13 @@ where
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<libp2p_core::transport::TransportEvent<Self::ListenerUpgrade, Self::Error>> {
-        let mut transport = self.transport.lock();
-        let inner_event = match Transport::poll(Pin::new(transport.deref_mut()), cx) {
-            Poll::Ready(ev) => ev,
-            Poll::Pending => return Poll::Pending,
+        let inner_event = {
+            let mut transport = self.transport.lock();
+            match Transport::poll(Pin::new(transport.deref_mut()), cx) {
+                Poll::Ready(ev) => ev,
+                Poll::Pending => return Poll::Pending,
+            }
         };
-        drop(transport);
-
         let event = match inner_event {
             TransportEvent::NewAddress {
                 listener_id,

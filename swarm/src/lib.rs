@@ -827,7 +827,7 @@ where
         None
     }
 
-    fn handle_listeners_event(
+    fn handle_transport_event(
         &mut self,
         event: TransportEvent<
             <transport::Boxed<(PeerId, StreamMuxerBox)> as Transport>::ListenerUpgrade,
@@ -1098,8 +1098,8 @@ where
             // Poll the listener(s) for new connections.
             match Pin::new(&mut this.transport).poll(cx) {
                 Poll::Pending => {}
-                Poll::Ready(listeners_event) => {
-                    if let Some(swarm_event) = this.handle_listeners_event(listeners_event) {
+                Poll::Ready(transport_event) => {
+                    if let Some(swarm_event) = this.handle_transport_event(transport_event) {
                         return Poll::Ready(swarm_event);
                     }
 

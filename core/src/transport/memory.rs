@@ -460,7 +460,10 @@ mod tests {
         let addr_2: Multiaddr = "/memory/8459375923478".parse().unwrap();
 
         let listener_id_1 = transport.listen_on(addr_1.clone()).unwrap();
-        assert!(transport.remove_listener(listener_id_1));
+        assert!(
+            transport.remove_listener(listener_id_1),
+            "Listener doesn't exist."
+        );
 
         let listener_id_2 = transport.listen_on(addr_1.clone()).unwrap();
         let listener_id_3 = transport.listen_on(addr_2.clone()).unwrap();
@@ -468,11 +471,17 @@ mod tests {
         assert!(transport.listen_on(addr_1.clone()).is_err());
         assert!(transport.listen_on(addr_2.clone()).is_err());
 
-        assert!(transport.remove_listener(listener_id_2));
+        assert!(
+            transport.remove_listener(listener_id_2),
+            "Listener doesn't exist."
+        );
         assert!(transport.listen_on(addr_1).is_ok());
         assert!(transport.listen_on(addr_2.clone()).is_err());
 
-        assert!(transport.remove_listener(listener_id_3));
+        assert!(
+            transport.remove_listener(listener_id_3),
+            "Listener doesn't exist."
+        );
         assert!(transport.listen_on(addr_2).is_ok());
     }
 
