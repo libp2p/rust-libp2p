@@ -4,6 +4,8 @@
 
 - Update to `libp2p-swarm` `v0.37.0`.
 
+- Extend log message on second identify push stream with peer ID.
+
 # 0.36.1
 
 - Allow at most one inbound identify push stream.
