@@ -114,9 +114,7 @@ pub trait Transport {
     ///
     /// Returning an error from the stream is considered fatal. The listener can also report
     /// non-fatal errors by producing a [`TransportEvent::Error`].
-    fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>>
-    where
-        Self: Sized;
+    fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>>;
 
     /// Remove a listener.
     ///
@@ -128,9 +126,7 @@ pub trait Transport {
     ///
     /// If [`TransportError::MultiaddrNotSupported`] is returned, it may be desirable to
     /// try an alternative [`Transport`], if available.
-    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>>
-    where
-        Self: Sized;
+    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>>;
 
     /// As [`Transport::dial`] but has the local node act as a listener on the outgoing connection.
     ///
@@ -140,17 +136,13 @@ pub trait Transport {
     fn dial_as_listener(
         &mut self,
         addr: Multiaddr,
-    ) -> Result<Self::Dial, TransportError<Self::Error>>
-    where
-        Self: Sized;
+    ) -> Result<Self::Dial, TransportError<Self::Error>>;
 
     // TODO: Add docs
     fn poll(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>>
-    where
-        Self: Sized;
+    ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>>;
 
     /// Performs a transport-specific mapping of an address `observed` by
     /// a remote onto a local `listen` address to yield an address for
@@ -160,7 +152,7 @@ pub trait Transport {
     /// Boxes the transport, including custom transport errors.
     fn boxed(self) -> boxed::Boxed<Self::Output>
     where
-        Self: Transport + Sized + Send + Unpin + 'static,
+        Self: Sized + Send + Unpin + 'static,
         Self::Dial: Send + 'static,
         Self::ListenerUpgrade: Send + 'static,
         Self::Error: Send + Sync,
