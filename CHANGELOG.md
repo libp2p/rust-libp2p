@@ -43,7 +43,7 @@
 
 # `libp2p` facade crate
 
-# 0.46.0 [unreleased]
+# 0.46.0
 
 - Semver bump Rust from `1.56.1` to `1.60.0` . See [PR 2646].
 - Added weak dependencies for features. See [PR 2646].
