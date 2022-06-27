@@ -1,4 +1,4 @@
-# 0.34.0 - unreleased
+# 0.34.0
 
 - Introduce `StreamMuxerEvent::map_inbound_stream`. See [PR 2691].
 - Remove `{read,write,flush,shutdown,destroy}_substream` functions from `StreamMuxer` trait
