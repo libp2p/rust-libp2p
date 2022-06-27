@@ -203,29 +203,21 @@ where
 {
     type Substream = EitherOutput<A::Substream, B::Substream>;
     type OutboundSubstream = EitherOutbound<A, B>;
-    type Error = io::Error;
+    type Error = EitherError<A::Error, B::Error>;
 
     fn poll_event(
         &self,
         cx: &mut Context<'_>,
     ) -> Poll<Result<StreamMuxerEvent<Self::Substream>, Self::Error>> {
         match self {
-            EitherOutput::First(inner) => inner.poll_event(cx).map(|result| {
-                result.map_err(|e| e.into()).map(|event| match event {
-                    StreamMuxerEvent::AddressChange(addr) => StreamMuxerEvent::AddressChange(addr),
-                    StreamMuxerEvent::InboundSubstream(substream) => {
-                        StreamMuxerEvent::InboundSubstream(EitherOutput::First(substream))
-                    }
-                })
-            }),
-            EitherOutput::Second(inner) => inner.poll_event(cx).map(|result| {
-                result.map_err(|e| e.into()).map(|event| match event {
-                    StreamMuxerEvent::AddressChange(addr) => StreamMuxerEvent::AddressChange(addr),
-                    StreamMuxerEvent::InboundSubstream(substream) => {
-                        StreamMuxerEvent::InboundSubstream(EitherOutput::Second(substream))
-                    }
-                })
-            }),
+            EitherOutput::First(inner) => inner
+                .poll_event(cx)
+                .map_err(EitherError::A)
+                .map_ok(|event| event.map_inbound_stream(EitherOutput::First)),
+            EitherOutput::Second(inner) => inner
+                .poll_event(cx)
+                .map_err(EitherError::B)
+                .map_ok(|event| event.map_inbound_stream(EitherOutput::Second)),
         }
     }
 
@@ -245,11 +237,11 @@ where
             (EitherOutput::First(ref inner), EitherOutbound::A(ref mut substream)) => inner
                 .poll_outbound(cx, substream)
                 .map(|p| p.map(EitherOutput::First))
-                .map_err(|e| e.into()),
+                .map_err(EitherError::A),
             (EitherOutput::Second(ref inner), EitherOutbound::B(ref mut substream)) => inner
                 .poll_outbound(cx, substream)
                 .map(|p| p.map(EitherOutput::Second))
-                .map_err(|e| e.into()),
+                .map_err(EitherError::B),
             _ => panic!("Wrong API usage"),
         }
     }
@@ -267,89 +259,10 @@ where
         }
     }
 
-    fn read_substream(
-        &self,
-        cx: &mut Context<'_>,
-        sub: &mut Self::Substream,
-        buf: &mut [u8],
-    ) -> Poll<Result<usize, Self::Error>> {
-        match (self, sub) {
-            (EitherOutput::First(ref inner), EitherOutput::First(ref mut sub)) => {
-                inner.read_substream(cx, sub, buf).map_err(|e| e.into())
-            }
-            (EitherOutput::Second(ref inner), EitherOutput::Second(ref mut sub)) => {
-                inner.read_substream(cx, sub, buf).map_err(|e| e.into())
-            }
-            _ => panic!("Wrong API usage"),
-        }
-    }
-
-    fn write_substream(
-        &self,
-        cx: &mut Context<'_>,
-        sub: &mut Self::Substream,
-        buf: &[u8],
-    ) -> Poll<Result<usize, Self::Error>> {
-        match (self, sub) {
-            (EitherOutput::First(ref inner), EitherOutput::First(ref mut sub)) => {
-                inner.write_substream(cx, sub, buf).map_err(|e| e.into())
-            }
-            (EitherOutput::Second(ref inner), EitherOutput::Second(ref mut sub)) => {
-                inner.write_substream(cx, sub, buf).map_err(|e| e.into())
-            }
-            _ => panic!("Wrong API usage"),
-        }
-    }
-
-    fn flush_substream(
-        &self,
-        cx: &mut Context<'_>,
-        sub: &mut Self::Substream,
-    ) -> Poll<Result<(), Self::Error>> {
-        match (self, sub) {
-            (EitherOutput::First(ref inner), EitherOutput::First(ref mut sub)) => {
-                inner.flush_substream(cx, sub).map_err(|e| e.into())
-            }
-            (EitherOutput::Second(ref inner), EitherOutput::Second(ref mut sub)) => {
-                inner.flush_substream(cx, sub).map_err(|e| e.into())
-            }
-            _ => panic!("Wrong API usage"),
-        }
-    }
-
-    fn shutdown_substream(
-        &self,
-        cx: &mut Context<'_>,
-        sub: &mut Self::Substream,
-    ) -> Poll<Result<(), Self::Error>> {
-        match (self, sub) {
-            (EitherOutput::First(ref inner), EitherOutput::First(ref mut sub)) => {
-                inner.shutdown_substream(cx, sub).map_err(|e| e.into())
-            }
-            (EitherOutput::Second(ref inner), EitherOutput::Second(ref mut sub)) => {
-                inner.shutdown_substream(cx, sub).map_err(|e| e.into())
-            }
-            _ => panic!("Wrong API usage"),
-        }
-    }
-
-    fn destroy_substream(&self, substream: Self::Substream) {
-        match self {
-            EitherOutput::First(inner) => match substream {
-                EitherOutput::First(substream) => inner.destroy_substream(substream),
-                _ => panic!("Wrong API usage"),
-            },
-            EitherOutput::Second(inner) => match substream {
-                EitherOutput::Second(substream) => inner.destroy_substream(substream),
-                _ => panic!("Wrong API usage"),
-            },
-        }
-    }
-
     fn poll_close(&self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         match self {
-            EitherOutput::First(inner) => inner.poll_close(cx).map_err(|e| e.into()),
-            EitherOutput::Second(inner) => inner.poll_close(cx).map_err(|e| e.into()),
+            EitherOutput::First(inner) => inner.poll_close(cx).map_err(EitherError::A),
+            EitherOutput::Second(inner) => inner.poll_close(cx).map_err(EitherError::B),
         }
     }
 }

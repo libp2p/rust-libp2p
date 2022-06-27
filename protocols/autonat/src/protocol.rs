@@ -29,9 +29,12 @@ use std::{convert::TryFrom, io};
 #[derive(Clone, Debug)]
 pub struct AutoNatProtocol;
 
+/// The protocol name used for negotiating with multistream-select.
+pub const DEFAULT_PROTOCOL_NAME: &[u8] = b"/libp2p/autonat/1.0.0";
+
 impl ProtocolName for AutoNatProtocol {
     fn protocol_name(&self) -> &[u8] {
-        b"/libp2p/autonat/1.0.0"
+        DEFAULT_PROTOCOL_NAME
     }
 }
 

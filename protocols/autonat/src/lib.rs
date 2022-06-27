@@ -27,7 +27,7 @@ pub use self::{
         Behaviour, Config, Event, InboundProbeError, InboundProbeEvent, NatStatus,
         OutboundProbeError, OutboundProbeEvent, ProbeId,
     },
-    protocol::ResponseError,
+    protocol::{ResponseError, DEFAULT_PROTOCOL_NAME},
 };
 pub use libp2p_request_response::{InboundFailure, OutboundFailure};
 
