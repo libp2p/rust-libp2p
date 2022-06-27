@@ -113,7 +113,7 @@ pub trait Transport {
     /// and addresses this transport is listening on (cf. [`TransportEvent`]).
     ///
     /// Returning an error from the stream is considered fatal. The listener can also report
-    /// non-fatal errors by producing a [`TransportEvent::Error`].
+    /// non-fatal errors by producing a [`TransportEvent::ListenerError`].
     fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>>;
 
     /// Remove a listener.
@@ -281,7 +281,7 @@ pub enum TransportEvent<TUpgr, TErr> {
     ///
     /// The listener will continue to be polled for new events and the event
     /// is for informational purposes only.
-    Error {
+    ListenerError {
         /// The ID of the listener that errored.
         listener_id: ListenerId,
         /// The error value.
@@ -317,8 +317,8 @@ impl<TUpgr, TErr> TransportEvent<TUpgr, TErr> {
                 listen_addr,
                 listener_id,
             },
-            TransportEvent::Error { listener_id, error } => {
-                TransportEvent::Error { listener_id, error }
+            TransportEvent::ListenerError { listener_id, error } => {
+                TransportEvent::ListenerError { listener_id, error }
             }
             TransportEvent::ListenerClosed {
                 listener_id,
@@ -357,7 +357,7 @@ impl<TUpgr, TErr> TransportEvent<TUpgr, TErr> {
                 listen_addr,
                 listener_id,
             },
-            TransportEvent::Error { listener_id, error } => TransportEvent::Error {
+            TransportEvent::ListenerError { listener_id, error } => TransportEvent::ListenerError {
                 listener_id,
                 error: map_err(error),
             },
@@ -429,7 +429,7 @@ impl<TUpgr, TErr> TransportEvent<TUpgr, TErr> {
 
     /// Returns `true` if this is an `Error` listener event.
     pub fn is_error(&self) -> bool {
-        matches!(self, TransportEvent::Error { .. })
+        matches!(self, TransportEvent::ListenerError { .. })
     }
 
     /// Try to turn this listener event into the `Error` part.
@@ -437,7 +437,7 @@ impl<TUpgr, TErr> TransportEvent<TUpgr, TErr> {
     /// Returns `None` if the event is not actually a `Error`,
     /// otherwise the error.
     pub fn into_error(self) -> Option<TErr> {
-        if let TransportEvent::Error { error, .. } = self {
+        if let TransportEvent::ListenerError { error, .. } = self {
             Some(error)
         } else {
             None
@@ -481,8 +481,8 @@ impl<TUpgr, TErr: fmt::Debug> fmt::Debug for TransportEvent<TUpgr, TErr> {
                 .field("listener_id", listener_id)
                 .field("reason", reason)
                 .finish(),
-            TransportEvent::Error { listener_id, error } => f
-                .debug_struct("TransportEvent::Error")
+            TransportEvent::ListenerError { listener_id, error } => f
+                .debug_struct("TransportEvent::ListenerError")
                 .field("listener_id", listener_id)
                 .field("error", error)
                 .finish(),

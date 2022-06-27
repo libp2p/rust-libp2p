@@ -559,7 +559,7 @@ where
                 Poll::Ready(Some(Ok(TcpTransportEvent::Error(error)))) => {
                     let id = listener.listener_id;
                     self.listeners.push_front(listener);
-                    return Poll::Ready(TransportEvent::Error {
+                    return Poll::Ready(TransportEvent::ListenerError {
                         listener_id: id,
                         error,
                     });

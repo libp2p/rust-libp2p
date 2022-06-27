@@ -205,7 +205,7 @@ where
                     listen_addr,
                 }
             }
-            TransportEvent::Error { listener_id, error } => TransportEvent::Error {
+            TransportEvent::ListenerError { listener_id, error } => TransportEvent::ListenerError {
                 listener_id,
                 error: Error::Transport(error),
             },

@@ -921,7 +921,7 @@ where
                     reason,
                 });
             }
-            TransportEvent::Error { listener_id, error } => {
+            TransportEvent::ListenerError { listener_id, error } => {
                 self.behaviour.inject_listener_error(listener_id, &error);
                 return Some(SwarmEvent::ListenerError { listener_id, error });
             }

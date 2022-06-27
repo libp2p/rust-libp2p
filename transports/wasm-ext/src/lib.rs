@@ -365,10 +365,12 @@ impl Stream for Listen {
                             listener_id,
                             listen_addr: addr,
                         }),
-                        Err(err) => self.pending_events.push_back(TransportEvent::Error {
-                            listener_id,
-                            error: err,
-                        }),
+                        Err(err) => self
+                            .pending_events
+                            .push_back(TransportEvent::ListenerError {
+                                listener_id,
+                                error: err,
+                            }),
                     };
                 }
             }
@@ -388,10 +390,12 @@ impl Stream for Listen {
                                 upgrade: futures::future::ok(Connection::new(upgrade.connection())),
                             })
                         }
-                        Err(err) => self.pending_events.push_back(TransportEvent::Error {
-                            listener_id,
-                            error: err.into(),
-                        }),
+                        Err(err) => self
+                            .pending_events
+                            .push_back(TransportEvent::ListenerError {
+                                listener_id,
+                                error: err.into(),
+                            }),
                     }
                 }
             }
@@ -405,10 +409,12 @@ impl Stream for Listen {
                                 listener_id,
                                 listen_addr: addr,
                             }),
-                        Err(err) => self.pending_events.push_back(TransportEvent::Error {
-                            listener_id,
-                            error: err,
-                        }),
+                        Err(err) => self
+                            .pending_events
+                            .push_back(TransportEvent::ListenerError {
+                                listener_id,
+                                error: err,
+                            }),
                     }
                 }
             }

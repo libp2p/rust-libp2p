@@ -126,7 +126,7 @@ macro_rules! codegen {
                                                     listener_id: id,
                                                 }
                                             }
-                                            Err(error) => TransportEvent::Error {
+                                            Err(error) => TransportEvent::ListenerError {
                                                 listener_id: id,
                                                 error,
                                             },
