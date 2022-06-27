@@ -29,7 +29,7 @@ pub struct Metrics {
 
 impl Metrics {
     pub fn new(registry: &mut Registry) -> Self {
-        let sub_registry = registry.sub_registry_with_prefix("relay");
+        let sub_registry = registry.sub_registry_with_prefix("dcutr");
 
         let events = Family::default();
         sub_registry.register(

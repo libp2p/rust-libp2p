@@ -1,5 +1,10 @@
-# [unreleased]
-* Support customizing function that transforms `PeerId` into `Key<PeerId>` in Kademlia (see [PR 2704])
+# 0.38.0 [unreleased]
+
+- Update to `libp2p-core` `v0.34.0`.
+
+- Update to `libp2p-swarm` `v0.37.0`.
+
+- Support customizing function that transforms `PeerId` into `Key<PeerId>` in Kademlia (see [PR 2704])
 
 [PR 2704]: https://github.com/libp2p/rust-libp2p/pull/2704
 

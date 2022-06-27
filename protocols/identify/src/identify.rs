@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::handler::{IdentifyHandler, IdentifyHandlerEvent, IdentifyPush};
+use crate::handler::{IdentifyHandlerEvent, IdentifyHandlerProto, IdentifyPush};
 use crate::protocol::{IdentifyInfo, ReplySubstream, UpgradeError};
 use futures::prelude::*;
 use libp2p_core::{
@@ -54,7 +54,7 @@ pub struct Identify {
     /// Pending replies to send.
     pending_replies: VecDeque<Reply>,
     /// Pending events to be emitted when polled.
-    events: VecDeque<NetworkBehaviourAction<IdentifyEvent, IdentifyHandler>>,
+    events: VecDeque<NetworkBehaviourAction<IdentifyEvent, IdentifyHandlerProto>>,
     /// Peers to which an active push with current information about
     /// the local peer should be sent.
     pending_push: HashSet<PeerId>,
@@ -208,11 +208,11 @@ impl Identify {
 }
 
 impl NetworkBehaviour for Identify {
-    type ConnectionHandler = IdentifyHandler;
+    type ConnectionHandler = IdentifyHandlerProto;
     type OutEvent = IdentifyEvent;
 
     fn new_handler(&mut self) -> Self::ConnectionHandler {
-        IdentifyHandler::new(self.config.initial_delay, self.config.interval)
+        IdentifyHandlerProto::new(self.config.initial_delay, self.config.interval)
     }
 
     fn inject_connection_established(
@@ -296,7 +296,7 @@ impl NetworkBehaviour for Identify {
         &mut self,
         peer_id: PeerId,
         connection: ConnectionId,
-        event: <Self::ConnectionHandler as ConnectionHandler>::OutEvent,
+        event: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent,
     ) {
         match event {
             IdentifyHandlerEvent::Identified(mut info) => {

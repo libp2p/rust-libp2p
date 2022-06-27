@@ -27,13 +27,40 @@ use futures::prelude::*;
 use futures_timer::Delay;
 use libp2p_core::either::{EitherError, EitherOutput};
 use libp2p_core::upgrade::{EitherUpgrade, InboundUpgrade, OutboundUpgrade, SelectUpgrade};
+use libp2p_core::{ConnectedPoint, PeerId};
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
-    NegotiatedSubstream, SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, IntoConnectionHandler,
+    KeepAlive, NegotiatedSubstream, SubstreamProtocol,
 };
 use log::warn;
 use smallvec::SmallVec;
 use std::{io, pin::Pin, task::Context, task::Poll, time::Duration};
+
+pub struct IdentifyHandlerProto {
+    initial_delay: Duration,
+    interval: Duration,
+}
+
+impl IdentifyHandlerProto {
+    pub fn new(initial_delay: Duration, interval: Duration) -> Self {
+        IdentifyHandlerProto {
+            initial_delay,
+            interval,
+        }
+    }
+}
+
+impl IntoConnectionHandler for IdentifyHandlerProto {
+    type Handler = IdentifyHandler;
+
+    fn into_handler(self, remote_peer_id: &PeerId, _endpoint: &ConnectedPoint) -> Self::Handler {
+        IdentifyHandler::new(self.initial_delay, self.interval, *remote_peer_id)
+    }
+
+    fn inbound_protocol(&self) -> <Self::Handler as ConnectionHandler>::InboundProtocol {
+        SelectUpgrade::new(IdentifyProtocol, IdentifyPushProtocol::inbound())
+    }
+}
 
 /// Protocol handler for sending and receiving identification requests.
 ///
@@ -41,6 +68,7 @@ use std::{io, pin::Pin, task::Context, task::Poll, time::Duration};
 /// at least one identification request to be answered by the remote before
 /// permitting the underlying connection to be closed.
 pub struct IdentifyHandler {
+    remote_peer_id: PeerId,
     inbound_identify_push: Option<BoxFuture<'static, Result<IdentifyInfo, UpgradeError>>>,
     /// Pending events to yield.
     events: SmallVec<
@@ -81,8 +109,9 @@ pub struct IdentifyPush(pub IdentifyInfo);
 
 impl IdentifyHandler {
     /// Creates a new `IdentifyHandler`.
-    pub fn new(initial_delay: Duration, interval: Duration) -> Self {
+    pub fn new(initial_delay: Duration, interval: Duration, remote_peer_id: PeerId) -> Self {
         IdentifyHandler {
+            remote_peer_id,
             inbound_identify_push: Default::default(),
             events: SmallVec::new(),
             trigger_next_identify: Delay::new(initial_delay),
@@ -120,8 +149,9 @@ impl ConnectionHandler for IdentifyHandler {
             EitherOutput::Second(fut) => {
                 if self.inbound_identify_push.replace(fut).is_some() {
                     warn!(
-                        "New inbound identify push stream while still upgrading previous one. \
-                        Replacing previous with new.",
+                        "New inbound identify push stream from {} while still \
+                         upgrading previous one. Replacing previous with new.",
+                        self.remote_peer_id,
                     );
                 }
             }
