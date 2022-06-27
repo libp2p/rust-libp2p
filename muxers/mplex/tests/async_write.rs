@@ -54,7 +54,7 @@ fn async_write() {
             .next()
             .await
             .expect("some event")
-            .into_upgrade()
+            .into_incoming()
             .unwrap()
             .0
             .await

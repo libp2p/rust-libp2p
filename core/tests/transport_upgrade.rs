@@ -125,7 +125,7 @@ fn upgrade_pipeline() {
     let server = async move {
         loop {
             let (upgrade, _send_back_addr) =
-                match listener_transport.select_next_some().await.into_upgrade() {
+                match listener_transport.select_next_some().await.into_incoming() {
                     Some(u) => u,
                     None => continue,
                 };

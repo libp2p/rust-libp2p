@@ -54,7 +54,7 @@ fn client_to_server_outbound() {
             .next()
             .await
             .expect("some event")
-            .into_upgrade()
+            .into_incoming()
             .unwrap()
             .0
             .await
@@ -124,7 +124,7 @@ fn client_to_server_inbound() {
                 .next()
                 .await
                 .expect("some event")
-                .into_upgrade()
+                .into_incoming()
                 .unwrap()
                 .0
                 .await
@@ -193,7 +193,7 @@ fn protocol_not_match() {
             .next()
             .await
             .expect("some event")
-            .into_upgrade()
+            .into_incoming()
             .unwrap()
             .0
             .await

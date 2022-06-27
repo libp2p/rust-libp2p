@@ -103,7 +103,7 @@ fn variable_msg_length() {
                     .next()
                     .await
                     .expect("some event")
-                    .into_upgrade()
+                    .into_incoming()
                     .expect("no error")
                     .0
                     .await

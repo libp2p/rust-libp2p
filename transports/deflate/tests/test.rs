@@ -57,11 +57,11 @@ async fn run(message1: Vec<u8>) {
             .boxed()
     };
     let mut listener_transport = new_transport();
-    listener_trans
+    listener_transport
         .listen_on("/ip4/0.0.0.0/tcp/0".parse().expect("multiaddr"))
         .expect("listener");
 
-    let listen_addr = listener_trans
+    let listen_addr = listener_transport
         .next()
         .await
         .expect("some event")
@@ -71,12 +71,12 @@ async fn run(message1: Vec<u8>) {
     let message2 = message1.clone();
 
     let listener_task = async_std::task::spawn(async move {
-        let mut conn = listener_trans
+        let mut conn = listener_transport
             .filter(|e| future::ready(e.is_upgrade()))
             .next()
             .await
             .expect("some event")
-            .into_upgrade()
+            .into_incoming()
             .expect("upgrade")
             .0
             .await
@@ -91,7 +91,7 @@ async fn run(message1: Vec<u8>) {
     });
 
     let mut dialer_transport = new_transport();
-    let mut conn = dialer_trans
+    let mut conn = dialer_transport
         .dial(listen_addr)
         .expect("dialer")
         .await
