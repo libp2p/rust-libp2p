@@ -498,7 +498,7 @@ where
     C: AsyncRead + AsyncWrite + Unpin,
 {
     future: Pin<Box<F>>,
-    upgrade: future::Either<Option<U>, (Option<PeerId>, OutboundUpgradeApply<C, U>)>,
+    upgrade: future::Either<Option<U>, (PeerId, OutboundUpgradeApply<C, U>)>,
 }
 
 impl<F, U, C, D> Future for DialUpgradeFuture<F, U, C>
@@ -527,18 +527,15 @@ where
                     let u = up
                         .take()
                         .expect("DialUpgradeFuture is constructed with Either::Left(Some).");
-                    future::Either::Right((Some(i), apply_outbound(c, u, upgrade::Version::V1)))
+                    future::Either::Right((i, apply_outbound(c, u, upgrade::Version::V1)))
                 }
-                future::Either::Right((ref mut i, ref mut up)) => {
+                future::Either::Right((i, ref mut up)) => {
                     let d = match ready!(
                         Future::poll(Pin::new(up), cx).map_err(TransportUpgradeError::Upgrade)
                     ) {
                         Ok(d) => d,
                         Err(err) => return Poll::Ready(Err(err)),
                     };
-                    let i = i
-                        .take()
-                        .expect("DialUpgradeFuture polled after completion.");
                     return Poll::Ready(Ok((i, d)));
                 }
             }
@@ -560,7 +557,7 @@ where
     U: InboundUpgrade<Negotiated<C>>,
 {
     future: Pin<Box<F>>,
-    upgrade: future::Either<Option<U>, (Option<PeerId>, InboundUpgradeApply<C, U>)>,
+    upgrade: future::Either<Option<U>, (PeerId, InboundUpgradeApply<C, U>)>,
 }
 
 impl<F, U, C, D> Future for ListenerUpgradeFuture<F, U, C>
@@ -589,18 +586,15 @@ where
                     let u = up
                         .take()
                         .expect("ListenerUpgradeFuture is constructed with Either::Left(Some).");
-                    future::Either::Right((Some(i), apply_inbound(c, u)))
+                    future::Either::Right((i, apply_inbound(c, u)))
                 }
-                future::Either::Right((ref mut i, ref mut up)) => {
+                future::Either::Right((i, ref mut up)) => {
                     let d = match ready!(TryFuture::try_poll(Pin::new(up), cx)
                         .map_err(TransportUpgradeError::Upgrade))
                     {
                         Ok(v) => v,
                         Err(err) => return Poll::Ready(Err(err)),
                     };
-                    let i = i
-                        .take()
-                        .expect("ListenerUpgradeFuture polled after completion.");
                     return Poll::Ready(Ok((i, d)));
                 }
             }
