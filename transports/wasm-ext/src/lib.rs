@@ -226,20 +226,14 @@ impl Transport for ExtTransport {
         }
     }
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>>
-    where
-        Self: Sized,
-    {
+    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         self.do_dial(addr, Endpoint::Dialer)
     }
 
     fn dial_as_listener(
         &mut self,
         addr: Multiaddr,
-    ) -> Result<Self::Dial, TransportError<Self::Error>>
-    where
-        Self: Sized,
-    {
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
         self.do_dial(addr, Endpoint::Listener)
     }
 
