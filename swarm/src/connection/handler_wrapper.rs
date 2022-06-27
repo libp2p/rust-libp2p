@@ -18,21 +18,23 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::connection::{Substream, SubstreamEndpoint};
+use crate::connection::SubstreamEndpoint;
 use crate::handler::{
     ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
 };
 use crate::upgrade::SendWrapper;
+use crate::IntoConnectionHandler;
 
 use futures::prelude::*;
 use futures::stream::FuturesUnordered;
 use futures_timer::Delay;
 use instant::Instant;
 use libp2p_core::{
-    muxing::StreamMuxerBox,
+    muxing::SubstreamBox,
     upgrade::{self, InboundUpgradeApply, OutboundUpgradeApply, UpgradeError},
     Multiaddr,
 };
+use libp2p_core::{ConnectedPoint, PeerId};
 use std::{error, fmt, pin::Pin, task::Context, task::Poll, time::Duration};
 
 /// A wrapper for an underlying [`ConnectionHandler`].
@@ -46,26 +48,21 @@ pub struct HandlerWrapper<TConnectionHandler>
 where
     TConnectionHandler: ConnectionHandler,
 {
+    remote_peer_id: PeerId,
     /// The underlying handler.
     handler: TConnectionHandler,
     /// Futures that upgrade incoming substreams.
     negotiating_in: FuturesUnordered<
         SubstreamUpgrade<
             TConnectionHandler::InboundOpenInfo,
-            InboundUpgradeApply<
-                Substream<StreamMuxerBox>,
-                SendWrapper<TConnectionHandler::InboundProtocol>,
-            >,
+            InboundUpgradeApply<SubstreamBox, SendWrapper<TConnectionHandler::InboundProtocol>>,
         >,
     >,
     /// Futures that upgrade outgoing substreams.
     negotiating_out: FuturesUnordered<
         SubstreamUpgrade<
             TConnectionHandler::OutboundOpenInfo,
-            OutboundUpgradeApply<
-                Substream<StreamMuxerBox>,
-                SendWrapper<TConnectionHandler::OutboundProtocol>,
-            >,
+            OutboundUpgradeApply<SubstreamBox, SendWrapper<TConnectionHandler::OutboundProtocol>>,
         >,
     >,
     /// For each outbound substream request, how to upgrade it. The first element of the tuple
@@ -84,8 +81,8 @@ where
     /// Note: This only enforces a limit on the number of concurrently
     /// negotiating inbound streams. The total number of inbound streams on a
     /// connection is the sum of negotiating and negotiated streams. A limit on
-    /// the total number of streams can be enforced at the [`StreamMuxerBox`]
-    /// level.
+    /// the total number of streams can be enforced at the
+    /// [`StreamMuxerBox`](libp2p_core::muxing::StreamMuxerBox) level.
     max_negotiating_inbound_streams: usize,
 }
 
@@ -106,12 +103,15 @@ impl<TConnectionHandler: ConnectionHandler> std::fmt::Debug for HandlerWrapper<T
 
 impl<TConnectionHandler: ConnectionHandler> HandlerWrapper<TConnectionHandler> {
     pub(crate) fn new(
-        handler: TConnectionHandler,
+        remote_peer_id: PeerId,
+        endpoint: ConnectedPoint,
+        handler: impl IntoConnectionHandler<Handler = TConnectionHandler>,
         substream_upgrade_protocol_override: Option<upgrade::Version>,
         max_negotiating_inbound_streams: usize,
     ) -> Self {
         Self {
-            handler,
+            remote_peer_id,
+            handler: handler.into_handler(&remote_peer_id, &endpoint),
             negotiating_in: Default::default(),
             negotiating_out: Default::default(),
             queued_dial_upgrades: Vec::new(),
@@ -248,7 +248,7 @@ where
 {
     pub fn inject_substream(
         &mut self,
-        substream: Substream<StreamMuxerBox>,
+        substream: SubstreamBox,
         // The first element of the tuple is the unique upgrade identifier
         // (see `unique_dial_upgrade_id`).
         endpoint: SubstreamEndpoint<OutboundOpenInfo<TConnectionHandler>>,
@@ -257,8 +257,11 @@ where
             SubstreamEndpoint::Listener => {
                 if self.negotiating_in.len() == self.max_negotiating_inbound_streams {
                     log::warn!(
-                        "Incoming substream exceeding maximum number of \
-                         negotiating inbound streams. Dropping."
+                        "Incoming substream from {} exceeding maximum number \
+                         of negotiating inbound streams {} on connection. \
+                         Dropping. See PoolConfig::with_max_negotiating_inbound_streams.",
+                        self.remote_peer_id,
+                        self.max_negotiating_inbound_streams,
                     );
                     return;
                 }

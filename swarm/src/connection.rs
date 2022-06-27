@@ -30,9 +30,10 @@ pub use error::{
 };
 pub use pool::{ConnectionCounters, ConnectionLimits};
 pub use pool::{EstablishedConnection, PendingConnection};
-pub use substream::{Close, Substream, SubstreamEndpoint};
+pub use substream::{Close, SubstreamEndpoint};
 
 use crate::handler::ConnectionHandler;
+use crate::IntoConnectionHandler;
 use handler_wrapper::HandlerWrapper;
 use libp2p_core::connection::ConnectedPoint;
 use libp2p_core::multiaddr::Multiaddr;
@@ -92,12 +93,16 @@ where
     /// Builds a new `Connection` from the given substream multiplexer
     /// and connection handler.
     pub fn new(
+        peer_id: PeerId,
+        endpoint: ConnectedPoint,
         muxer: StreamMuxerBox,
-        handler: THandler,
+        handler: impl IntoConnectionHandler<Handler = THandler>,
         substream_upgrade_protocol_override: Option<upgrade::Version>,
         max_negotiating_inbound_streams: usize,
     ) -> Self {
         let wrapped_handler = HandlerWrapper::new(
+            peer_id,
+            endpoint,
             handler,
             substream_upgrade_protocol_override,
             max_negotiating_inbound_streams,
@@ -130,40 +135,38 @@ where
     ) -> Poll<Result<Event<THandler::OutEvent>, ConnectionError<THandler::Error>>> {
         loop {
             // Poll the handler for new events.
-            match self.handler.poll(cx) {
+            match self.handler.poll(cx)? {
                 Poll::Pending => {}
-                Poll::Ready(Ok(handler_wrapper::Event::OutboundSubstreamRequest(user_data))) => {
+                Poll::Ready(handler_wrapper::Event::OutboundSubstreamRequest(user_data)) => {
                     self.muxing.open_substream(user_data);
                     continue;
                 }
-                Poll::Ready(Ok(handler_wrapper::Event::Custom(event))) => {
+                Poll::Ready(handler_wrapper::Event::Custom(event)) => {
                     return Poll::Ready(Ok(Event::Handler(event)));
                 }
-                Poll::Ready(Err(err)) => return Poll::Ready(Err(err.into())),
             }
 
             // Perform I/O on the connection through the muxer, informing the handler
             // of new substreams.
-            match self.muxing.poll(cx) {
+            match self.muxing.poll(cx)? {
                 Poll::Pending => {}
-                Poll::Ready(Ok(SubstreamEvent::InboundSubstream { substream })) => {
+                Poll::Ready(SubstreamEvent::InboundSubstream { substream }) => {
                     self.handler
                         .inject_substream(substream, SubstreamEndpoint::Listener);
                     continue;
                 }
-                Poll::Ready(Ok(SubstreamEvent::OutboundSubstream {
+                Poll::Ready(SubstreamEvent::OutboundSubstream {
                     user_data,
                     substream,
-                })) => {
+                }) => {
                     let endpoint = SubstreamEndpoint::Dialer(user_data);
                     self.handler.inject_substream(substream, endpoint);
                     continue;
                 }
-                Poll::Ready(Ok(SubstreamEvent::AddressChange(address))) => {
+                Poll::Ready(SubstreamEvent::AddressChange(address)) => {
                     self.handler.inject_address_change(&address);
                     return Poll::Ready(Ok(Event::AddressChange(address)));
                 }
-                Poll::Ready(Err(err)) => return Poll::Ready(Err(ConnectionError::IO(err))),
             }
 
             return Poll::Pending;

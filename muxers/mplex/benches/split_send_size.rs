@@ -33,6 +33,7 @@ use libp2p_core::{
 use libp2p_mplex as mplex;
 use libp2p_plaintext::PlainText2Config;
 use libp2p_tcp::GenTcpConfig;
+use std::pin::Pin;
 use std::time::Duration;
 
 type BenchTransport = transport::Boxed<(PeerId, muxing::StreamMuxerBox)>;
@@ -124,7 +125,7 @@ fn run(
                     loop {
                         // Read in typical chunk sizes of up to 8KiB.
                         let end = off + std::cmp::min(buf.len() - off, 8 * 1024);
-                        let n = poll_fn(|cx| conn.read_substream(cx, &mut s, &mut buf[off..end]))
+                        let n = poll_fn(|cx| Pin::new(&mut s).poll_read(cx, &mut buf[off..end]))
                             .await
                             .unwrap();
                         off += n;
@@ -148,12 +149,12 @@ fn run(
             .unwrap();
         let mut off = 0;
         loop {
-            let n = poll_fn(|cx| conn.write_substream(cx, &mut stream, &payload[off..]))
+            let n = poll_fn(|cx| Pin::new(&mut stream).poll_write(cx, &payload[off..]))
                 .await
                 .unwrap();
             off += n;
             if off == payload.len() {
-                poll_fn(|cx| conn.flush_substream(cx, &mut stream))
+                poll_fn(|cx| Pin::new(&mut stream).poll_flush(cx))
                     .await
                     .unwrap();
                 return;

@@ -116,44 +116,6 @@ where
         // Nothing to do, since `open_outbound` creates no new local state.
     }
 
-    fn read_substream(
-        &self,
-        cx: &mut Context<'_>,
-        substream: &mut Self::Substream,
-        buf: &mut [u8],
-    ) -> Poll<Result<usize, io::Error>> {
-        Pin::new(substream).poll_read(cx, buf)
-    }
-
-    fn write_substream(
-        &self,
-        cx: &mut Context<'_>,
-        substream: &mut Self::Substream,
-        buf: &[u8],
-    ) -> Poll<Result<usize, io::Error>> {
-        Pin::new(substream).poll_write(cx, buf)
-    }
-
-    fn flush_substream(
-        &self,
-        cx: &mut Context<'_>,
-        substream: &mut Self::Substream,
-    ) -> Poll<Result<(), io::Error>> {
-        Pin::new(substream).poll_flush(cx)
-    }
-
-    fn shutdown_substream(
-        &self,
-        cx: &mut Context<'_>,
-        substream: &mut Self::Substream,
-    ) -> Poll<Result<(), io::Error>> {
-        Pin::new(substream).poll_close(cx)
-    }
-
-    fn destroy_substream(&self, sub: Self::Substream) {
-        std::mem::drop(sub)
-    }
-
     fn poll_close(&self, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         self.io.lock().poll_close(cx)
     }
