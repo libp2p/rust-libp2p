@@ -252,7 +252,7 @@ impl Transport for ExtTransport {
         cx: &mut Context<'_>,
     ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
         match ready!(self.listeners.poll_next_unpin(cx)) {
-            Some(event) => return Poll::Ready(event),
+            Some(event) => Poll::Ready(event),
             None => Poll::Pending,
         }
     }
