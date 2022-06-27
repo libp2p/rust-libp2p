@@ -27,7 +27,7 @@ use futures::{future::Either, prelude::*};
 use multiaddr::Multiaddr;
 use std::{error, marker::PhantomPinned, pin::Pin, task::Context, task::Poll};
 
-/// See the `Transport::and_then` method.
+/// See the [`Transport::and_then`] method.
 #[pin_project::pin_project]
 #[derive(Debug, Clone)]
 pub struct AndThen<T, C> {

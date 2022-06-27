@@ -247,10 +247,10 @@ impl Default for ListenerId {
 
 /// Event produced by [`Transport`]s.
 ///
-/// Transports are expected to produce `Incoming` events only for
+/// Transports are expected to produce [`TransportEvent::Incoming`] events only for
 /// listen addresses which have previously been announced via
-/// a `NewAddress` event and which have not been invalidated by
-/// an `AddressExpired` event yet.
+/// a [`TransportEvent::NewAddress`] event and which have not been invalidated by
+/// an [`TransportEvent::AddressExpired`] event yet.
 pub enum TransportEvent<TUpgr, TErr> {
     /// A new address is being listened on.
     NewAddress {

@@ -345,7 +345,7 @@ impl<A: ProtocolName, B: ProtocolName> ProtocolName for EitherName<A, B> {
 }
 #[pin_project(project = EitherTransportProj)]
 #[derive(Debug, Copy, Clone)]
-#[must_use = "futures do nothing unless polled"]
+#[must_use = "transports do nothing unless polled"]
 pub enum EitherTransport<A, B> {
     Left(#[pin] A),
     Right(#[pin] B),

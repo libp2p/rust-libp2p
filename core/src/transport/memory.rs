@@ -323,7 +323,7 @@ pub struct Listener {
     addr: Multiaddr,
     /// Receives incoming connections.
     receiver: ChannelReceiver,
-    /// Generate `TransportEvent::NewAddress` to inform about our listen address.
+    /// Generate [`TransportEvent::NewAddress`] to inform about our listen address.
     tell_listen_addr: bool,
 }
 
