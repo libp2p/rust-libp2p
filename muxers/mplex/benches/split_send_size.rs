@@ -59,13 +59,13 @@ fn prepare(c: &mut Criterion) {
     let tcp_addr = multiaddr![Ip4(std::net::Ipv4Addr::new(127, 0, 0, 1)), Tcp(0u16)];
     for &size in BENCH_SIZES.iter() {
         tcp.throughput(Throughput::Bytes(payload.len() as u64));
-        let mut receiver_trans = tcp_transport(size);
-        let mut sender_trans = tcp_transport(size);
+        let mut receiver_transport = tcp_transport(size);
+        let mut sender_transport = tcp_transport(size);
         tcp.bench_function(format!("{}", size), |b| {
             b.iter(|| {
                 run(
-                    black_box(&mut receiver_trans),
-                    black_box(&mut sender_trans),
+                    black_box(&mut receiver_transport),
+                    black_box(&mut sender_transport),
                     black_box(&payload),
                     black_box(&tcp_addr),
                 )
@@ -78,13 +78,13 @@ fn prepare(c: &mut Criterion) {
     let mem_addr = multiaddr![Memory(0u64)];
     for &size in BENCH_SIZES.iter() {
         mem.throughput(Throughput::Bytes(payload.len() as u64));
-        let mut receiver_trans = mem_transport(size);
-        let mut sender_trans = mem_transport(size);
+        let mut receiver_transport = mem_transport(size);
+        let mut sender_transport = mem_transport(size);
         mem.bench_function(format!("{}", size), |b| {
             b.iter(|| {
                 run(
-                    black_box(&mut receiver_trans),
-                    black_box(&mut sender_trans),
+                    black_box(&mut receiver_transport),
+                    black_box(&mut sender_transport),
                     black_box(&payload),
                     black_box(&mem_addr),
                 )
@@ -134,7 +134,7 @@ fn run(
                         }
                     }
                 }
-                _ => panic!("Unexpected listener event"),
+                _ => panic!("Unexpected transport event"),
             }
         }
     };

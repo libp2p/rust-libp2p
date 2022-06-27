@@ -320,12 +320,21 @@ fn parse_relayed_multiaddr(
 
 pub struct RelayListener {
     listener_id: ListenerId,
+    /// Queue of events to report when polled.
     queued_events: VecDeque<<Self as Stream>::Item>,
+    /// Channel for messages from the behaviour [`Handler`][super::handler::Handler].
     from_behaviour: mpsc::Receiver<ToListenerMsg>,
+    /// The listener can be closed either manually with [`Transport::remove_listener`] or if
+    /// the sender side of the `from_behaviour` channel is dropped.
     is_closed: bool,
 }
 
 impl RelayListener {
+    /// Close the listener.
+    ///
+    /// This will create a [`TransportEvent::ListenerClosed`] event
+    /// and terminate the stream once all remaining events in queue have
+    /// been reported.
     fn close(&mut self, reason: Result<(), RelayError>) {
         self.queued_events
             .push_back(TransportEvent::ListenerClosed {
@@ -346,6 +355,7 @@ impl Stream for RelayListener {
             }
 
             if self.is_closed {
+                // Terminate the stream if the listener closed and all remaining events have been reported.
                 return Poll::Ready(None);
             }
 

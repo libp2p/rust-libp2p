@@ -53,6 +53,10 @@ pub struct WsConfig<T> {
     tls_config: tls::Config,
     max_redirects: u8,
     use_deflate: bool,
+    /// Websocket protocol of the inner listener.
+    ///
+    /// This is the suffix of the address provided in `listen_on`.
+    /// Can only be [`Protocol::Ws`] or [`Protocol::Wss`].
     listener_protos: HashMap<ListenerId, Protocol<'static>>,
 }
 
@@ -180,6 +184,7 @@ where
                 listener_id,
                 mut listen_addr,
             } => {
+                // Append the ws / wss protocol back to the inner address.
                 let proto = self
                     .listener_protos
                     .get(&listener_id)

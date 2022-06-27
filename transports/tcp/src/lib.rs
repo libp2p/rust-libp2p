@@ -312,7 +312,7 @@ where
     /// The `TcpListenStream` struct contains a stream that we want to be pinned. Since the `VecDeque`
     /// can be resized, the only way is to use a `Pin<Box<>>`.
     listeners: VecDeque<Pin<Box<TcpListenStream<T>>>>,
-    /// Pending listeners events to return from [`GenTcpTransport::poll`].
+    /// Pending transport events to return from [`GenTcpTransport::poll`].
     pending_events: VecDeque<TransportEvent<<Self as Transport>::ListenerUpgrade, io::Error>>,
 }
 
@@ -506,7 +506,7 @@ where
         }
     }
 
-    // TODO: docs
+    /// Poll all listeners.
     fn poll(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -526,7 +526,7 @@ where
                         break;
                     }
                 }
-                Poll::Ready(Some(Ok(TcpTransportEvent::Upgrade {
+                Poll::Ready(Some(Ok(TcpListenerEvent::Upgrade {
                     upgrade,
                     local_addr,
                     remote_addr,
@@ -540,7 +540,7 @@ where
                         send_back_addr: remote_addr,
                     });
                 }
-                Poll::Ready(Some(Ok(TcpTransportEvent::NewAddress(a)))) => {
+                Poll::Ready(Some(Ok(TcpListenerEvent::NewAddress(a)))) => {
                     let id = listener.listener_id;
                     self.listeners.push_front(listener);
                     return Poll::Ready(TransportEvent::NewAddress {
@@ -548,7 +548,7 @@ where
                         listen_addr: a,
                     });
                 }
-                Poll::Ready(Some(Ok(TcpTransportEvent::AddressExpired(a)))) => {
+                Poll::Ready(Some(Ok(TcpListenerEvent::AddressExpired(a)))) => {
                     let id = listener.listener_id;
                     self.listeners.push_front(listener);
                     return Poll::Ready(TransportEvent::AddressExpired {
@@ -556,7 +556,7 @@ where
                         listen_addr: a,
                     });
                 }
-                Poll::Ready(Some(Ok(TcpTransportEvent::Error(error)))) => {
+                Poll::Ready(Some(Ok(TcpListenerEvent::Error(error)))) => {
                     let id = listener.listener_id;
                     self.listeners.push_front(listener);
                     return Poll::Ready(TransportEvent::ListenerError {
@@ -578,15 +578,15 @@ where
                 }
             }
         }
-
         // We register the current task to be woken up if a new listener is added.
         Poll::Pending
     }
 }
 
+/// Event produced by a [`TcpListenStream`].
 #[derive(Debug)]
-pub enum TcpTransportEvent<S> {
-    /// The transport is listening on a new additional [`Multiaddr`].
+pub enum TcpListenerEvent<S> {
+    /// The listener is listening on a new additional [`Multiaddr`].
     NewAddress(Multiaddr),
     /// An upgrade, consisting of the upgrade future, the listener address and the remote address.
     Upgrade {
@@ -662,8 +662,8 @@ impl<T> TcpListenStream<T>
 where
     T: Provider,
 {
-    /// Constructs a `TcpListenStream` for incoming connections around
-    /// the given listener.
+    /// Constructs a [`TcpListenStream`] for incoming connections around
+    /// the given [`TcpListener`].
     fn new(
         listener_id: ListenerId,
         listener: TcpListener,
@@ -737,7 +737,7 @@ where
     T::Stream: Unpin,
     T::IfWatcher: Unpin,
 {
-    type Item = Result<TcpTransportEvent<T::Stream>, io::Error>;
+    type Item = Result<TcpListenerEvent<T::Stream>, io::Error>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         let me = Pin::into_inner(self);
@@ -758,7 +758,7 @@ where
                             };
                             *if_watch = IfWatch::Pending(T::if_watcher());
                             me.pause = Some(Delay::new(me.sleep_on_error));
-                            return Poll::Ready(Some(Ok(TcpTransportEvent::Error(err))));
+                            return Poll::Ready(Some(Ok(TcpListenerEvent::Error(err))));
                         }
                     },
                     // Consume all events for up/down interface changes.
@@ -773,7 +773,7 @@ where
                                         log::debug!("New listen address: {}", ma);
                                         me.port_reuse.register(ip, me.listen_addr.port());
                                         return Poll::Ready(Some(Ok(
-                                            TcpTransportEvent::NewAddress(ma),
+                                            TcpListenerEvent::NewAddress(ma),
                                         )));
                                     }
                                 }
@@ -785,7 +785,7 @@ where
                                         log::debug!("Expired listen address: {}", ma);
                                         me.port_reuse.unregister(ip, me.listen_addr.port());
                                         return Poll::Ready(Some(Ok(
-                                            TcpTransportEvent::AddressExpired(ma),
+                                            TcpListenerEvent::AddressExpired(ma),
                                         )));
                                     }
                                 }
@@ -795,7 +795,7 @@ where
                                         err
                                     };
                                     me.pause = Some(Delay::new(me.sleep_on_error));
-                                    return Poll::Ready(Some(Ok(TcpTransportEvent::Error(err))));
+                                    return Poll::Ready(Some(Ok(TcpListenerEvent::Error(err))));
                                 }
                             }
                         }
@@ -806,7 +806,7 @@ where
                 InAddr::One { addr, out } => {
                     if let Some(multiaddr) = out.take() {
                         me.port_reuse.register(*addr, me.listen_addr.port());
-                        return Poll::Ready(Some(Ok(TcpTransportEvent::NewAddress(multiaddr))));
+                        return Poll::Ready(Some(Ok(TcpListenerEvent::NewAddress(multiaddr))));
                     }
                 }
             }
@@ -829,7 +829,7 @@ where
                     // These errors are non-fatal for the listener stream.
                     log::error!("error accepting incoming connection: {}", e);
                     me.pause = Some(Delay::new(me.sleep_on_error));
-                    return Poll::Ready(Some(Ok(TcpTransportEvent::Error(e))));
+                    return Poll::Ready(Some(Ok(TcpListenerEvent::Error(e))));
                 }
             };
 
@@ -839,7 +839,7 @@ where
 
             log::debug!("Incoming connection from {} at {}", remote_addr, local_addr);
 
-            return Poll::Ready(Some(Ok(TcpTransportEvent::Upgrade {
+            return Poll::Ready(Some(Ok(TcpListenerEvent::Upgrade {
                 upgrade: future::ok(incoming.stream),
                 local_addr,
                 remote_addr,
@@ -960,7 +960,7 @@ mod tests {
                         upgrade.write_all(&[4, 5, 6]).await.unwrap();
                         return;
                     }
-                    e => panic!("Unexpected listener event: {:?}", e),
+                    e => panic!("Unexpected transport event: {:?}", e),
                 }
             }
         }
@@ -1148,7 +1148,7 @@ mod tests {
                     socket.read_exact(&mut buf).await.unwrap();
                     assert_eq!(buf, [4, 5, 6]);
                 }
-                e => panic!("Unexpected listener event: {:?}", e),
+                e => panic!("Unexpected transport event: {:?}", e),
             }
         }
 
@@ -1214,10 +1214,10 @@ mod tests {
                             assert_eq!(addr1, addr2);
                             return;
                         }
-                        e => panic!("Unexpected listener event: {:?}", e),
+                        e => panic!("Unexpected transport event: {:?}", e),
                     }
                 }
-                e => panic!("Unexpected listener event: {:?}", e),
+                e => panic!("Unexpected transport event: {:?}", e),
             }
         }
 

@@ -298,7 +298,7 @@ pub struct Listen {
 }
 
 impl Listen {
-    /// Report the listener as closed as terminate its stream.
+    /// Report the listener as closed and terminate its stream.
     fn close(&mut self, reason: Result<(), JsErr>) {
         self.pending_events
             .push_back(TransportEvent::ListenerClosed {

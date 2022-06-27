@@ -56,7 +56,7 @@ async fn run(message1: Vec<u8>) {
             })
             .boxed()
     };
-    let mut listener_trans = new_transport();
+    let mut listener_transport = new_transport();
     listener_trans
         .listen_on("/ip4/0.0.0.0/tcp/0".parse().expect("multiaddr"))
         .expect("listener");
@@ -90,7 +90,7 @@ async fn run(message1: Vec<u8>) {
         conn.close().await.expect("close")
     });
 
-    let mut dialer_trans = new_transport();
+    let mut dialer_transport = new_transport();
     let mut conn = dialer_trans
         .dial(listen_addr)
         .expect("dialer")

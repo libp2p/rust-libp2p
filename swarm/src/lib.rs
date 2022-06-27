@@ -258,7 +258,7 @@ pub struct Swarm<TBehaviour>
 where
     TBehaviour: NetworkBehaviour,
 {
-    /// Listeners for incoming connections.
+    /// [`Transport`] for dialing remote peers and listening for incoming connection.
     transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
 
     /// The nodes currently active.
@@ -274,7 +274,7 @@ where
     /// List of protocols that the behaviour says it supports.
     supported_protocols: SmallVec<[Vec<u8>; 16]>,
 
-    /// List of multiaddresses we're listening on.
+    /// Multiaddresses that our listeners are listening on,
     listened_addrs: HashMap<ListenerId, SmallVec<[Multiaddr; 1]>>,
 
     /// List of multiaddresses we're listening on, after account for external IP addresses and
@@ -2104,7 +2104,7 @@ mod tests {
                                 break;
                             }
                             Either::Left(_) => {
-                                panic!("Unexpected listener event.")
+                                panic!("Unexpected transport event.")
                             }
                             Either::Right((e, _)) => {
                                 panic!("Expect swarm to not emit any event {:?}", e)

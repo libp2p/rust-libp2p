@@ -108,12 +108,7 @@ pub trait Transport {
     /// obtained from [dialing](Transport::dial).
     type Dial: Future<Output = Result<Self::Output, Self::Error>>;
 
-    // TODO: fix docs
-    /// Listens on the given [`Multiaddr`], producing a stream of pending, inbound connections
-    /// and addresses this transport is listening on (cf. [`TransportEvent`]).
-    ///
-    /// Returning an error from the stream is considered fatal. The listener can also report
-    /// non-fatal errors by producing a [`TransportEvent::ListenerError`].
+    /// Listens on the given [`Multiaddr`] for inbound connections.
     fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>>;
 
     /// Remove a listener.
@@ -138,7 +133,17 @@ pub trait Transport {
         addr: Multiaddr,
     ) -> Result<Self::Dial, TransportError<Self::Error>>;
 
-    // TODO: Add docs
+    /// Poll for [`TransportEvent`]s.
+    ///
+    /// A [`TransportEvent::Incoming`] should be produced whenever a connection is received at the lowest
+    /// level of the transport stack. The item must be a [`ListenerUpgrade`](Transport::ListenerUpgrade)
+    /// future that resolves to an [`Output`](Transport::Output) value once all protocol upgrades have
+    /// been applied.
+    ///
+    /// Transports are expected to produce [`TransportEvent::Incoming`] events only for
+    /// listen addresses which have previously been announced via
+    /// a [`TransportEvent::NewAddress`] event and which have not been invalidated by
+    /// an [`TransportEvent::AddressExpired`] event yet.
     fn poll(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -238,11 +243,6 @@ impl Default for ListenerId {
 }
 
 /// Event produced by [`Transport`]s.
-///
-/// Transports are expected to produce [`TransportEvent::Incoming`] events only for
-/// listen addresses which have previously been announced via
-/// a [`TransportEvent::NewAddress`] event and which have not been invalidated by
-/// an [`TransportEvent::AddressExpired`] event yet.
 pub enum TransportEvent<TUpgr, TErr> {
     /// A new address is being listened on.
     NewAddress {
@@ -290,6 +290,8 @@ pub enum TransportEvent<TUpgr, TErr> {
 }
 
 impl<TUpgr, TErr> TransportEvent<TUpgr, TErr> {
+    /// In case this [`TransportEvent`] is an upgrade, apply the given function
+    /// to the upgrade and produce another transport event based the the function's result.
     pub fn map_upgrade<U>(self, map: impl FnOnce(TUpgr) -> U) -> TransportEvent<U, TErr> {
         match self {
             TransportEvent::Incoming {
@@ -330,6 +332,9 @@ impl<TUpgr, TErr> TransportEvent<TUpgr, TErr> {
         }
     }
 
+    /// In case this [`TransportEvent`] is an [`ListenerError`](TransportEvent::ListenerError),
+    /// or [`ListenerClosed`](TransportEvent::ListenerClosed) apply the given function to the
+    /// error and produce another transport event based on the function's result.
     pub fn map_err<E>(self, map_err: impl FnOnce(TErr) -> E) -> TransportEvent<TUpgr, E> {
         match self {
             TransportEvent::Incoming {
@@ -371,16 +376,17 @@ impl<TUpgr, TErr> TransportEvent<TUpgr, TErr> {
         }
     }
 
-    /// Returns `true` if this is an `Upgrade` listener event.
+    /// Returns `true` if this is an [`Incoming`](TransportEvent::Incoming) transport event.
     pub fn is_upgrade(&self) -> bool {
         matches!(self, TransportEvent::Incoming { .. })
     }
 
-    /// Try to turn this listener event into upgrade parts.
+    /// Try to turn this transport event into the upgrade parts of the
+    /// incoming connection.
     ///
-    /// Returns `None` if the event is not actually an upgrade,
+    /// Returns `None` if the event is not actually an incoming connection,
     /// otherwise the upgrade and the remote address.
-    pub fn into_upgrade(self) -> Option<(TUpgr, Multiaddr)> {
+    pub fn into_incoming(self) -> Option<(TUpgr, Multiaddr)> {
         if let TransportEvent::Incoming {
             upgrade,
             send_back_addr,
@@ -393,14 +399,14 @@ impl<TUpgr, TErr> TransportEvent<TUpgr, TErr> {
         }
     }
 
-    /// Returns `true` if this is a `NewAddress` listener event.
+    /// Returns `true` if this is a [`TransportEvent::NewAddress`].
     pub fn is_new_address(&self) -> bool {
         matches!(self, TransportEvent::NewAddress { .. })
     }
 
-    /// Try to turn this listener event into the `NewAddress` part.
+    /// Try to turn this transport event into the new `Multiaddr`.
     ///
-    /// Returns `None` if the event is not actually a `NewAddress`,
+    /// Returns `None` if the event is not actually a [`TransportEvent::NewAddress`],
     /// otherwise the address.
     pub fn into_new_address(self) -> Option<Multiaddr> {
         if let TransportEvent::NewAddress { listen_addr, .. } = self {
@@ -410,14 +416,14 @@ impl<TUpgr, TErr> TransportEvent<TUpgr, TErr> {
         }
     }
 
-    /// Returns `true` if this is an `AddressExpired` listener event.
+    /// Returns `true` if this is an [`TransportEvent::AddressExpired`].
     pub fn is_address_expired(&self) -> bool {
         matches!(self, TransportEvent::AddressExpired { .. })
     }
 
-    /// Try to turn this listener event into the `AddressExpired` part.
+    /// Try to turn this transport event into the expire `Multiaddr`.
     ///
-    /// Returns `None` if the event is not actually a `AddressExpired`,
+    /// Returns `None` if the event is not actually a [`TransportEvent::AddressExpired`],
     /// otherwise the address.
     pub fn into_address_expired(self) -> Option<Multiaddr> {
         if let TransportEvent::AddressExpired { listen_addr, .. } = self {
@@ -427,16 +433,16 @@ impl<TUpgr, TErr> TransportEvent<TUpgr, TErr> {
         }
     }
 
-    /// Returns `true` if this is an `Error` listener event.
-    pub fn is_error(&self) -> bool {
+    /// Returns `true` if this is an [`TransportEvent::ListenerError`] transport event.
+    pub fn is_listener_error(&self) -> bool {
         matches!(self, TransportEvent::ListenerError { .. })
     }
 
-    /// Try to turn this listener event into the `Error` part.
+    /// Try to turn this transport event into the listener error.
     ///
-    /// Returns `None` if the event is not actually a `Error`,
+    /// Returns `None` if the event is not actually a [`TransportEvent::ListenerError`]`,
     /// otherwise the error.
-    pub fn into_error(self) -> Option<TErr> {
+    pub fn into_listener_error(self) -> Option<TErr> {
         if let TransportEvent::ListenerError { error, .. } = self {
             Some(error)
         } else {

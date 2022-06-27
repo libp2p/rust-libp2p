@@ -137,7 +137,7 @@ mod tests {
 
         async_std::task::spawn(async move {
             let transport_event = transport.next().await.unwrap();
-            let (listener_upgrade, _) = transport_event.into_upgrade().unwrap();
+            let (listener_upgrade, _) = transport_event.into_incoming().unwrap();
             let conn = listener_upgrade.await.unwrap();
             recv_ping(conn).await.unwrap();
         });

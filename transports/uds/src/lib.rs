@@ -307,7 +307,7 @@ mod tests {
             let (sock, _addr) = transport
                 .select_next_some()
                 .await
-                .into_upgrade()
+                .into_incoming()
                 .expect("incoming stream");
 
             let mut sock = sock.await.unwrap();

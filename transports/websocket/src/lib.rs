@@ -42,13 +42,11 @@ use std::{
 
 /// A Websocket transport.
 #[derive(Debug)]
-#[pin_project::pin_project]
 pub struct WsConfig<T: Transport>
 where
     T: Transport,
     T::Output: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
-    #[pin]
     transport: libp2p_core::transport::map::Map<framed::WsConfig<T>, WrapperFn<T::Output>>,
 }
 
@@ -147,10 +145,10 @@ where
     }
 
     fn poll(
-        self: Pin<&mut Self>,
+        mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
-        self.project().transport.poll(cx)
+        Pin::new(&mut self.transport).poll(cx)
     }
 }
 
@@ -236,11 +234,12 @@ mod tests {
         futures::executor::block_on(connect(a))
     }
 
-    async fn connect(listen_addr: Multiaddr) {
-        let new_ws_config =
-            || WsConfig::new(tcp::TcpTransport::new(tcp::GenTcpConfig::default())).boxed();
+    fn new_ws_config() -> WsConfig<tcp::TcpTransport> {
+        WsConfig::new(tcp::TcpTransport::new(tcp::GenTcpConfig::default()))
+    }
 
-        let mut ws_config = new_ws_config();
+    async fn connect(listen_addr: Multiaddr) {
+        let mut ws_config = new_ws_config().boxed();
         ws_config.listen_on(listen_addr).expect("listener");
 
         let addr = ws_config
@@ -256,13 +255,14 @@ mod tests {
         let inbound = async move {
             let (conn, _addr) = ws_config
                 .select_next_some()
-                .map(|ev| ev.into_upgrade())
+                .map(|ev| ev.into_incoming())
                 .await
                 .unwrap();
             conn.await
         };
 
         let outbound = new_ws_config()
+            .boxed()
             .dial(addr.with(Protocol::P2p(PeerId::random().into())))
             .unwrap();
 

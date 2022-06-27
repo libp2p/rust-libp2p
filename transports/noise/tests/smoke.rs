@@ -281,7 +281,7 @@ fn run<I, C>(
                 .next()
                 .await
                 .expect("some event")
-                .into_upgrade()
+                .into_incoming()
                 .expect("listener upgrade")
                 .0
                 .await

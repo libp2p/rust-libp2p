@@ -544,7 +544,7 @@ mod tests {
             t1.listen_on(t1_addr.clone()).unwrap();
             let upgrade = loop {
                 let event = t1.select_next_some().await;
-                if let Some(upgrade) = event.into_upgrade() {
+                if let Some(upgrade) = event.into_incoming() {
                     break upgrade;
                 }
             };
