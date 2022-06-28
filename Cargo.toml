@@ -114,14 +114,9 @@ libp2p-websocket = { version = "0.35.0", path = "transports/websocket", optional
 [target.'cfg(not(target_os = "unknown"))'.dependencies]
 libp2p-gossipsub = { version = "0.38.0", path = "protocols/gossipsub", optional = true }
 
-[patch.crates-io]
 # TODO: use upstream once Protocol for WebRTC is there.
+[patch.crates-io]
 multiaddr = { version = "0.14.0", git = "https://github.com/melekes/rust-multiaddr.git", branch = "anton/x-webrtc" }
-# TODO: remove once webrtc-* crates have new versions
-webrtc-data = { version = "0.3.3", git = "https://github.com/webrtc-rs/data.git", branch = "anton/new-sctp" }
-webrtc-ice = { version = "0.7.0", git = "https://github.com/webrtc-rs/ice.git", branch = "main" }
-webrtc-sctp = { version = "0.5.0", git = "https://github.com/webrtc-rs/sctp.git", branch = "main" }
-webrtc-dtls = { version = "0.5.3", git = "https://github.com/melekes/webrtc-dtls.git", branch = "anton/old-elliptic-curve" }
 
 [dev-dependencies]
 async-std = { version = "1.6.2", features = ["attributes"] }
