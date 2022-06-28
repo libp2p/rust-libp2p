@@ -14,6 +14,8 @@
 
 - Update to `libp2p-kad` `v0.38.0`.
 
+- Track number of connected nodes supporting a specific protocol via the identify protocol.
+
 # 0.6.1
 
 - Update `dcutr` events from `libp2p_relay_events` to `libp2p_dcutr_events`, to avoid conflict with `relay` events.
