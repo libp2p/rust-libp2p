@@ -235,7 +235,7 @@ impl GenTcpConfig {
     /// [`GenTcpTransport`] keeps track of the listen socket addresses as they
     /// are reported by polling it. It is possible to listen on multiple
     /// addresses, enabling port reuse for each, knowing exactly which listen
-    /// address is reused when dialing with a specific `GenTcpTransport`, as in the
+    /// address is reused when dialing with a specific [`GenTcpTransport`], as in the
     /// following example:
     ///
     /// ```no_run
@@ -281,7 +281,7 @@ impl GenTcpConfig {
     /// case, one is chosen whose IP protocol version and loopback status is the
     /// same as that of the remote address. Consequently, for maximum control of
     /// the local listening addresses and ports that are used for outgoing
-    /// connections, a new `GenTcpTransport` should be created for each listening
+    /// connections, a new [`GenTcpTransport`] should be created for each listening
     /// socket, avoiding the use of wildcard addresses which bind a socket to
     /// all network interfaces.
     ///
