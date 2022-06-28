@@ -6,6 +6,8 @@
 
 - Extend log message on second identify push stream with peer ID.
 
+- Expose `PROTOCOL_NAME` and `PUSH_PROTOCOL_NAME`.
+
 # 0.36.1
 
 - Allow at most one inbound identify push stream.
