@@ -4,6 +4,8 @@
 
 - Update to `libp2p-swarm` `v0.37.0`.
 
+- Expose `PROTOCOL_NAME`.
+
 # 0.3.1
 
 - Upgrade at most one inbound connect request.
