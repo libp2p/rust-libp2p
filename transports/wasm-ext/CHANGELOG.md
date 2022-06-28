@@ -1,6 +1,10 @@
 # 0.34.0 [unreleased]
 
 - Update to `libp2p-core` `v0.34.0`.
+- Add `Transport::poll` and `Transport::remove_listener` and remove `Transport::Listener`
+  for `ExtTransport`. Drive the `Listen` streams within `ExtTransport`. See [PR 2652].
+
+[PR 2652]: https://github.com/libp2p/rust-libp2p/pull/2652
 
 # 0.33.0
 
