@@ -27,7 +27,7 @@ thiserror = "1"
 tinytemplate = "1.2"
 tokio-crate = { package = "tokio", version = "1.18", features = ["net"]}
 webrtc = { version = "0.4.0", git = "https://github.com/melekes/webrtc.git", branch = "anton/168-allow-persistent-certificates-plus-deps" }
-webrtc-data = { version = "0.3.3", git = "https://github.com/webrtc-rs/data.git", branch = "main" }
+webrtc-data = { version = "0.3.3", git = "https://github.com/webrtc-rs/data.git", rev = "9656a255a69365268a5b1e0978b84e56f4d7114d" }
 webrtc-ice = "0.7.0"
 webrtc-sctp = "0.5.0"
 webrtc-util = { version = "0.5.3", default-features = false, features = ["conn", "vnet", "sync"] }
@@ -39,7 +39,4 @@ libp2p-request-response = { version = "0.18.0", path = "../../protocols/request-
 libp2p-swarm = { version = "0.36.0", path = "../../swarm" }
 rand = "0.8"
 rand_core = "0.5"
-rcgen = "0.8"
-
-[patch.crates-io]
-webrtc-data = { version = "0.3.3", git = "https://github.com/webrtc-rs/data.git", branch = "main" }
+rcgen = "0.9"
