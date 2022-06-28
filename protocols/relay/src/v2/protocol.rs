@@ -26,8 +26,8 @@ pub mod inbound_stop;
 pub mod outbound_hop;
 pub mod outbound_stop;
 
-const HOP_PROTOCOL_NAME: &[u8; 31] = b"/libp2p/circuit/relay/0.2.0/hop";
-const STOP_PROTOCOL_NAME: &[u8; 32] = b"/libp2p/circuit/relay/0.2.0/stop";
+pub const HOP_PROTOCOL_NAME: &[u8; 31] = b"/libp2p/circuit/relay/0.2.0/hop";
+pub const STOP_PROTOCOL_NAME: &[u8; 32] = b"/libp2p/circuit/relay/0.2.0/stop";
 
 const MAX_MESSAGE_SIZE: usize = 4096;
 
