@@ -578,7 +578,6 @@ where
                 }
             }
         }
-        // We register the current task to be woken up if a new listener is added.
         Poll::Pending
     }
 }
