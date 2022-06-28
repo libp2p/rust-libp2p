@@ -77,10 +77,9 @@ impl From<&libp2p_dcutr::behaviour::Event> for EventType {
     }
 }
 
-impl super::Recorder<libp2p_dcutr::behaviour::Event> for super::Metrics {
+impl super::Recorder<libp2p_dcutr::behaviour::Event> for Metrics {
     fn record(&self, event: &libp2p_dcutr::behaviour::Event) {
-        self.dcutr
-            .events
+        self.events
             .get_or_create(&EventLabels {
                 event: event.into(),
             })
