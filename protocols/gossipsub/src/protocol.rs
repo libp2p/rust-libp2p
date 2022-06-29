@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::config::ValidationMode;
+use crate::config::{GossipsubVersion, ValidationMode};
 use crate::error::{GossipsubHandlerError, ValidationError};
 use crate::handler::HandlerEvent;
 use crate::rpc_proto;
@@ -60,20 +60,30 @@ impl ProtocolConfig {
     /// Sets the maximum gossip transmission size.
     pub fn new(
         id: Cow<'static, str>,
+        custom_id_peer_kind: Option<GossipsubVersion>,
         max_transmit_size: usize,
         validation_mode: ValidationMode,
         support_floodsub: bool,
-        id_is_prefix: bool,
     ) -> ProtocolConfig {
-        let mut protocol_ids = vec![
-            ProtocolId::new(id.clone(), PeerKind::Gossipsubv1_1, id_is_prefix),
-            ProtocolId::new(id, PeerKind::Gossipsub, id_is_prefix),
-        ];
+        let protocol_ids = match custom_id_peer_kind {
+            Some(v) => match v {
+                GossipsubVersion::V1_0 => vec![ProtocolId::new(id, PeerKind::Gossipsub, false)],
+                GossipsubVersion::V1_1 => vec![ProtocolId::new(id, PeerKind::Gossipsubv1_1, false)]
+            }
+            None => {
+                let mut protocol_ids = vec![
+                    ProtocolId::new(id.clone(), PeerKind::Gossipsubv1_1, true),
+                    ProtocolId::new(id, PeerKind::Gossipsub, true),
+                ];
 
-        // add floodsub support if enabled.
-        if support_floodsub {
-            protocol_ids.push(ProtocolId::new(Cow::from(""), PeerKind::Floodsub, false));
-        }
+                // add floodsub support if enabled.
+                if support_floodsub {
+                    protocol_ids.push(ProtocolId::new(Cow::from(""), PeerKind::Floodsub, false));
+                }
+
+                protocol_ids
+            }
+        };
 
         ProtocolConfig {
             protocol_ids,

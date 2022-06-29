@@ -3058,10 +3058,10 @@ where
     fn new_handler(&mut self) -> Self::ConnectionHandler {
         let protocol_config = ProtocolConfig::new(
             self.config.protocol_id().clone(),
+            self.config.custom_id_version().clone(),
             self.config.max_transmit_size(),
             self.config.validation_mode().clone(),
             self.config.support_floodsub(),
-            self.config.protocol_id_is_prefix(),
         );
 
         GossipsubHandler::new(
