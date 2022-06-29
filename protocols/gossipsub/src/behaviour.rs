@@ -1528,7 +1528,7 @@ where
                 )
                 .is_err()
             {
-                error!("Failed to send graft. Message too large");
+                error!("Failed to send PRUNE. Message too large");
             }
         }
         debug!("Completed GRAFT handling for peer: {}", peer_id);
