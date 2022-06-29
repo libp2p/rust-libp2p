@@ -287,12 +287,12 @@ pub enum UpgradeError {
 mod tests {
     use super::*;
     use futures::channel::oneshot;
+    use libp2p::tcp::TcpConfig;
     use libp2p_core::{
         identity,
         upgrade::{self, apply_inbound, apply_outbound},
         Transport,
     };
-    use libp2p_tcp::TcpConfig;
 
     #[test]
     fn correct_transfer() {

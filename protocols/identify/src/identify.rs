@@ -513,11 +513,11 @@ fn multiaddr_matches_peer_id(addr: &Multiaddr, peer_id: &PeerId) -> bool {
 mod tests {
     use super::*;
     use futures::pin_mut;
+    use libp2p::mplex::MplexConfig;
+    use libp2p::noise;
+    use libp2p::tcp::TcpConfig;
     use libp2p_core::{identity, muxing::StreamMuxerBox, transport, upgrade, PeerId, Transport};
-    use libp2p_mplex::MplexConfig;
-    use libp2p_noise as noise;
     use libp2p_swarm::{Swarm, SwarmEvent};
-    use libp2p_tcp::TcpConfig;
 
     fn transport() -> (
         identity::PublicKey,
