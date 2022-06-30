@@ -34,7 +34,6 @@ default = [
     "wasm-ext",
     "websocket",
     "yamux",
-    "webrtc"
 ]
 autonat = ["dep:libp2p-autonat"]
 dcutr = ["dep:libp2p-dcutr", "libp2p-metrics?/dcutr"]
