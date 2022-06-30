@@ -144,6 +144,10 @@ pub use libp2p_websocket as websocket;
 #[cfg_attr(docsrs, doc(cfg(feature = "yamux")))]
 #[doc(inline)]
 pub use libp2p_yamux as yamux;
+#[cfg(feature = "webrtc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "webrtc")))]
+#[doc(inline)]
+pub use libp2p_webrtc as webrtc;
 
 mod transport_ext;
 
