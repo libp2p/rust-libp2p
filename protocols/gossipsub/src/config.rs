@@ -878,10 +878,14 @@ impl std::fmt::Debug for GossipsubConfig {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::{Gossipsub, MessageAuthenticity};
     use crate::topic::IdentityHash;
     use crate::Topic;
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
+    use libp2p_core::UpgradeInfo;
+    use libp2p_swarm::{ConnectionHandler, NetworkBehaviour};
+    use crate::types::PeerKind;
 
     #[test]
     fn create_thing() {
@@ -973,23 +977,53 @@ mod test {
     fn create_config_with_protocol_id_prefix() {
         let builder: GossipsubConfig = GossipsubConfigBuilder::default()
             .protocol_id_prefix("purple")
+            .validation_mode(ValidationMode::Anonymous)
             .message_id_fn(message_id_plain_function)
             .build()
             .unwrap();
 
         assert_eq!(builder.protocol_id(), "purple");
         assert_eq!(builder.custom_id_version(), &None);
+
+        let mut gossipsub: Gossipsub = Gossipsub::new(MessageAuthenticity::Anonymous, builder)
+            .expect("Correct configuration");
+
+        let handler = gossipsub.new_handler();
+        let (protocol_config, _) = handler.listen_protocol().into_upgrade();
+        let protocol_ids = protocol_config.protocol_info();
+
+        assert_eq!(protocol_ids.len(), 2);
+
+        assert_eq!(protocol_ids[0].protocol_id, b"/purple/1.1.0".to_vec());
+        assert_eq!(protocol_ids[0].kind, PeerKind::Gossipsubv1_1);
+
+        assert_eq!(protocol_ids[1].protocol_id, b"/purple/1.0.0".to_vec());
+        assert_eq!(protocol_ids[1].kind, PeerKind::Gossipsub);
+
     }
 
     #[test]
     fn create_config_with_custom_protocol_id() {
         let builder: GossipsubConfig = GossipsubConfigBuilder::default()
             .protocol_id("purple", GossipsubVersion::V1_0)
+            .validation_mode(ValidationMode::Anonymous)
             .message_id_fn(message_id_plain_function)
             .build()
             .unwrap();
 
         assert_eq!(builder.protocol_id(), "purple");
         assert_eq!(builder.custom_id_version(), &Some(GossipsubVersion::V1_0));
+
+        let mut gossipsub: Gossipsub = Gossipsub::new(MessageAuthenticity::Anonymous, builder)
+            .expect("Correct configuration");
+
+        let handler = gossipsub.new_handler();
+        let (protocol_config, _) = handler.listen_protocol().into_upgrade();
+        let protocol_ids = protocol_config.protocol_info();
+
+        assert_eq!(protocol_ids.len(), 1);
+
+        assert_eq!(protocol_ids[0].protocol_id, b"purple".to_vec());
+        assert_eq!(protocol_ids[0].kind, PeerKind::Gossipsub);
     }
 }
