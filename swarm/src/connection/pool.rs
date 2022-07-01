@@ -1175,8 +1175,8 @@ impl Default for PoolConfig {
             executor: None,
             task_event_buffer_size: 32,
             task_command_buffer_size: 7,
-            // By default, addresses of a single connection attempt are dialed in sequence.
-            dial_concurrency_factor: NonZeroU8::new(1).expect("1 > 0"),
+            // Set to a default of 8 based on frequency of dialer connections
+            dial_concurrency_factor: NonZeroU8::new(8).expect("8 > 0"),
             substream_upgrade_protocol_override: None,
             max_negotiating_inbound_streams: 128,
         }
