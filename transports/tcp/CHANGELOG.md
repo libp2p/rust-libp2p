@@ -10,7 +10,6 @@
   within the `GenTcpTransport`. Add `Transport::poll` and `Transport::remove_listener`
   for `GenTcpTransport`. See [PR 2652].
 
-[PR 2701]: https://github.com/libp2p/rust-libp2p/pull/2701/
 [PR 2652]: https://github.com/libp2p/rust-libp2p/pull/2652
 
 # 0.33.0
