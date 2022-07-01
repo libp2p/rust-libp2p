@@ -1516,19 +1516,16 @@ where
                 peer_id
             );
 
-            if self
-                .send_message(
-                    *peer_id,
-                    GossipsubRpc {
-                        subscriptions: Vec::new(),
-                        messages: Vec::new(),
-                        control_msgs: prune_messages,
-                    }
-                    .into_protobuf(),
-                )
-                .is_err()
-            {
-                error!("Failed to send graft. Message too large");
+            if let Err(e) = self.send_message(
+                *peer_id,
+                GossipsubRpc {
+                    subscriptions: Vec::new(),
+                    messages: Vec::new(),
+                    control_msgs: prune_messages,
+                }
+                .into_protobuf(),
+            ) {
+                error!("Failed to send PRUNE: {:?}", e);
             }
         }
         debug!("Completed GRAFT handling for peer: {}", peer_id);

@@ -2,6 +2,10 @@
 
 - Update to `libp2p-core` `v0.34.0`.
 
+- Call `TcpStream::take_error` in tokio `Provider` to report connection
+  establishment errors early. See also [PR 2458] for the related async-io
+  change.
+
 # 0.33.0
 
 - Update to `libp2p-core` `v0.33.0`.
@@ -16,7 +20,9 @@
 
 # 0.31.1 [2022-02-02]
 
-- Call `TcpSocket::take_error` to report connection establishment errors early.
+- Call `TcpSocket::take_error` to report connection establishment errors early. See [PR 2458].
+
+[PR 2458]: https://github.com/libp2p/rust-libp2p/pull/2458
 
 # 0.31.0 [2022-01-27]
 
