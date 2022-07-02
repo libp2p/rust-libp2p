@@ -162,15 +162,9 @@ enum OutboundSubstreamState {
 
 impl GossipsubHandler {
     /// Builds a new [`GossipsubHandler`].
-    pub fn new(
-        protocol_config: ProtocolConfig,
-        idle_timeout: Duration,
-    ) -> Self {
+    pub fn new(protocol_config: ProtocolConfig, idle_timeout: Duration) -> Self {
         GossipsubHandler {
-            listen_protocol: SubstreamProtocol::new(
-                protocol_config,
-                (),
-            ),
+            listen_protocol: SubstreamProtocol::new(protocol_config, ()),
             inbound_substream: None,
             outbound_substream: None,
             outbound_substream_establishing: false,

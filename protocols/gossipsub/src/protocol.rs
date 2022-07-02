@@ -68,8 +68,8 @@ impl ProtocolConfig {
         let protocol_ids = match custom_id_peer_kind {
             Some(v) => match v {
                 GossipsubVersion::V1_0 => vec![ProtocolId::new(id, PeerKind::Gossipsub, false)],
-                GossipsubVersion::V1_1 => vec![ProtocolId::new(id, PeerKind::Gossipsubv1_1, false)]
-            }
+                GossipsubVersion::V1_1 => vec![ProtocolId::new(id, PeerKind::Gossipsubv1_1, false)],
+            },
             None => {
                 let mut protocol_ids = vec![
                     ProtocolId::new(id.clone(), PeerKind::Gossipsubv1_1, true),
