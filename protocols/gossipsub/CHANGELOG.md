@@ -6,6 +6,8 @@
 
 - Allow for custom protocol ID via `GossipsubConfigBuilder::protocol_id()`. See [PR 2718].
 
+[PR 2718]: https://github.com/libp2p/rust-libp2p/pull/2718/
+
 # 0.38.1
 
 - Fix duplicate connection id. See [PR 2702].
