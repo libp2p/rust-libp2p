@@ -6,7 +6,9 @@
 
 - Do not duplicate the p2p/xxx component with the relay PeerId when a client requests a reservation. See [PR 2701].
 
-- Expose `HOP_PROTOCOL_NAME` and `STOP_PROTOCOL_NAME`.
+- Expose `HOP_PROTOCOL_NAME` and `STOP_PROTOCOL_NAME`. See [PR 2734].
+
+[PR 2734]: https://github.com/libp2p/rust-libp2p/pull/2734/
 
 [PR 2701]: https://github.com/libp2p/rust-libp2p/pull/2701/
 
