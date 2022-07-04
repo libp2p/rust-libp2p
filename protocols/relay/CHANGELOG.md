@@ -8,9 +8,12 @@
 
 - Expose `HOP_PROTOCOL_NAME` and `STOP_PROTOCOL_NAME`. See [PR 2734].
 
-[PR 2734]: https://github.com/libp2p/rust-libp2p/pull/2734/
+- Drive the `RelayListener`s within the `ClientTransport`. Add `Transport::poll` and `Transport::remove_listener`
+  for `ClientTransport`. See [PR 2652].
 
 [PR 2701]: https://github.com/libp2p/rust-libp2p/pull/2701/
+[PR 2652]: https://github.com/libp2p/rust-libp2p/pull/2652
+[PR 2734]: https://github.com/libp2p/rust-libp2p/pull/2734/
 
 # 0.9.1
 

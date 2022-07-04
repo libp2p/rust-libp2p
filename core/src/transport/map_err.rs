@@ -18,14 +18,16 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::transport::{ListenerEvent, Transport, TransportError};
+use crate::transport::{ListenerId, Transport, TransportError, TransportEvent};
 use futures::prelude::*;
 use multiaddr::Multiaddr;
 use std::{error, pin::Pin, task::Context, task::Poll};
 
 /// See `Transport::map_err`.
 #[derive(Debug, Copy, Clone)]
+#[pin_project::pin_project]
 pub struct MapErr<T, F> {
+    #[pin]
     transport: T,
     map: F,
 }
@@ -45,19 +47,16 @@ where
 {
     type Output = T::Output;
     type Error = TErr;
-    type Listener = MapErrListener<T, F>;
     type ListenerUpgrade = MapErrListenerUpgrade<T, F>;
     type Dial = MapErrDial<T, F>;
 
-    fn listen_on(
-        &mut self,
-        addr: Multiaddr,
-    ) -> Result<Self::Listener, TransportError<Self::Error>> {
+    fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
         let map = self.map.clone();
-        match self.transport.listen_on(addr) {
-            Ok(stream) => Ok(MapErrListener { inner: stream, map }),
-            Err(err) => Err(err.map(map)),
-        }
+        self.transport.listen_on(addr).map_err(|err| err.map(map))
+    }
+
+    fn remove_listener(&mut self, id: ListenerId) -> bool {
+        self.transport.remove_listener(id)
     }
 
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
@@ -88,41 +87,20 @@ where
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
         self.transport.address_translation(server, observed)
     }
-}
 
-/// Listening stream for `MapErr`.
-#[pin_project::pin_project]
-pub struct MapErrListener<T: Transport, F> {
-    #[pin]
-    inner: T::Listener,
-    map: F,
-}
-
-impl<T, F, TErr> Stream for MapErrListener<T, F>
-where
-    T: Transport,
-    F: FnOnce(T::Error) -> TErr + Clone,
-    TErr: error::Error,
-{
-    type Item = Result<ListenerEvent<MapErrListenerUpgrade<T, F>, TErr>, TErr>;
-
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+    fn poll(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
         let this = self.project();
-        match TryStream::try_poll_next(this.inner, cx) {
-            Poll::Ready(Some(Ok(event))) => {
-                let map = &*this.map;
-                let event = event
-                    .map(move |value| MapErrListenerUpgrade {
-                        inner: value,
-                        map: Some(map.clone()),
-                    })
-                    .map_err(|err| (map.clone())(err));
-                Poll::Ready(Some(Ok(event)))
-            }
-            Poll::Ready(None) => Poll::Ready(None),
-            Poll::Pending => Poll::Pending,
-            Poll::Ready(Some(Err(err))) => Poll::Ready(Some(Err((this.map.clone())(err)))),
-        }
+        let map = &*this.map;
+        this.transport.poll(cx).map(|ev| {
+            ev.map_upgrade(move |value| MapErrListenerUpgrade {
+                inner: value,
+                map: Some(map.clone()),
+            })
+            .map_err(map.clone())
+        })
     }
 }
 

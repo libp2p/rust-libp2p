@@ -25,8 +25,7 @@ use crate::dial_opts::DialOpts;
 use crate::handler::{ConnectionHandler, IntoConnectionHandler};
 use crate::{AddressRecord, AddressScore, DialError};
 use libp2p_core::{
-    connection::{ConnectionId, ListenerId},
-    ConnectedPoint, Multiaddr, PeerId,
+    connection::ConnectionId, transport::ListenerId, ConnectedPoint, Multiaddr, PeerId,
 };
 use std::{task::Context, task::Poll};
 

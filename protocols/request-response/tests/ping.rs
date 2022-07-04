@@ -32,7 +32,7 @@ use libp2p_core::{
 use libp2p_noise::{Keypair, NoiseConfig, X25519Spec};
 use libp2p_request_response::*;
 use libp2p_swarm::{Swarm, SwarmEvent};
-use libp2p_tcp::TcpConfig;
+use libp2p_tcp::{GenTcpConfig, TcpTransport};
 use rand::{self, Rng};
 use std::{io, iter};
 
@@ -300,8 +300,7 @@ fn mk_transport() -> (PeerId, transport::Boxed<(PeerId, StreamMuxerBox)>) {
         .unwrap();
     (
         peer_id,
-        TcpConfig::new()
-            .nodelay(true)
+        TcpTransport::new(GenTcpConfig::default().nodelay(true))
             .upgrade(upgrade::Version::V1)
             .authenticate(NoiseConfig::xx(noise_keys).into_authenticated())
             .multiplex(libp2p_yamux::YamuxConfig::default())

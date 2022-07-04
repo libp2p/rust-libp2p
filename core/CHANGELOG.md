@@ -5,9 +5,14 @@
   in favor of forcing `StreamMuxer::Substream` to implement `AsyncRead + AsyncWrite`. See [PR 2707].
 - Replace `Into<std::io::Error>` bound on `StreamMuxer::Error` with `std::error::Error`. See [PR 2710].
 
+- Remove the concept of individual `Transport::Listener` streams from `Transport`.
+  Instead the `Transport` is polled directly via `Transport::poll`. The
+  `Transport` is now responsible for driving its listeners. See [PR 2652].
+
 [PR 2691]: https://github.com/libp2p/rust-libp2p/pull/2691
 [PR 2707]: https://github.com/libp2p/rust-libp2p/pull/2707
 [PR 2710]: https://github.com/libp2p/rust-libp2p/pull/2710
+[PR 2652]: https://github.com/libp2p/rust-libp2p/pull/2652
 
 # 0.33.0
 

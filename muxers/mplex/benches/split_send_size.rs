@@ -23,15 +23,16 @@
 
 use async_std::task;
 use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
-use futures::channel::oneshot;
 use futures::future::poll_fn;
 use futures::prelude::*;
+use futures::{channel::oneshot, future::join};
 use libp2p_core::{
     identity, multiaddr::multiaddr, muxing, transport, upgrade, Multiaddr, PeerId, StreamMuxer,
     Transport,
 };
 use libp2p_mplex as mplex;
 use libp2p_plaintext::PlainText2Config;
+use libp2p_tcp::GenTcpConfig;
 use std::pin::Pin;
 use std::time::Duration;
 
@@ -58,11 +59,13 @@ fn prepare(c: &mut Criterion) {
     let tcp_addr = multiaddr![Ip4(std::net::Ipv4Addr::new(127, 0, 0, 1)), Tcp(0u16)];
     for &size in BENCH_SIZES.iter() {
         tcp.throughput(Throughput::Bytes(payload.len() as u64));
-        let mut trans = tcp_transport(size);
+        let mut receiver_transport = tcp_transport(size);
+        let mut sender_transport = tcp_transport(size);
         tcp.bench_function(format!("{}", size), |b| {
             b.iter(|| {
                 run(
-                    black_box(&mut trans),
+                    black_box(&mut receiver_transport),
+                    black_box(&mut sender_transport),
                     black_box(&payload),
                     black_box(&tcp_addr),
                 )
@@ -75,11 +78,13 @@ fn prepare(c: &mut Criterion) {
     let mem_addr = multiaddr![Memory(0u64)];
     for &size in BENCH_SIZES.iter() {
         mem.throughput(Throughput::Bytes(payload.len() as u64));
-        let mut trans = mem_transport(size);
+        let mut receiver_transport = mem_transport(size);
+        let mut sender_transport = mem_transport(size);
         mem.bench_function(format!("{}", size), |b| {
             b.iter(|| {
                 run(
-                    black_box(&mut trans),
+                    black_box(&mut receiver_transport),
+                    black_box(&mut sender_transport),
                     black_box(&payload),
                     black_box(&mem_addr),
                 )
@@ -90,20 +95,24 @@ fn prepare(c: &mut Criterion) {
 }
 
 /// Transfers the given payload between two nodes using the given transport.
-fn run(transport: &mut BenchTransport, payload: &Vec<u8>, listen_addr: &Multiaddr) {
-    let mut listener = transport.listen_on(listen_addr.clone()).unwrap();
+fn run(
+    receiver_trans: &mut BenchTransport,
+    sender_trans: &mut BenchTransport,
+    payload: &Vec<u8>,
+    listen_addr: &Multiaddr,
+) {
+    receiver_trans.listen_on(listen_addr.clone()).unwrap();
     let (addr_sender, addr_receiver) = oneshot::channel();
     let mut addr_sender = Some(addr_sender);
     let payload_len = payload.len();
 
-    // Spawn the receiver.
-    let receiver = task::spawn(async move {
+    let receiver = async move {
         loop {
-            match listener.next().await.unwrap().unwrap() {
-                transport::ListenerEvent::NewAddress(a) => {
-                    addr_sender.take().unwrap().send(a).unwrap();
+            match receiver_trans.next().await.unwrap() {
+                transport::TransportEvent::NewAddress { listen_addr, .. } => {
+                    addr_sender.take().unwrap().send(listen_addr).unwrap();
                 }
-                transport::ListenerEvent::Upgrade { upgrade, .. } => {
+                transport::TransportEvent::Incoming { upgrade, .. } => {
                     let (_peer, conn) = upgrade.await.unwrap();
                     let mut s = poll_fn(|cx| conn.poll_event(cx))
                         .await
@@ -125,15 +134,15 @@ fn run(transport: &mut BenchTransport, payload: &Vec<u8>, listen_addr: &Multiadd
                         }
                     }
                 }
-                _ => panic!("Unexpected listener event"),
+                _ => panic!("Unexpected transport event"),
             }
         }
-    });
+    };
 
     // Spawn and block on the sender, i.e. until all data is sent.
-    task::block_on(async move {
+    let sender = async move {
         let addr = addr_receiver.await.unwrap();
-        let (_peer, conn) = transport.dial(addr).unwrap().await.unwrap();
+        let (_peer, conn) = sender_trans.dial(addr).unwrap().await.unwrap();
         let mut handle = conn.open_outbound();
         let mut stream = poll_fn(|cx| conn.poll_outbound(cx, &mut handle))
             .await
@@ -151,10 +160,10 @@ fn run(transport: &mut BenchTransport, payload: &Vec<u8>, listen_addr: &Multiadd
                 return;
             }
         }
-    });
+    };
 
     // Wait for all data to be received.
-    task::block_on(receiver);
+    task::block_on(join(sender, receiver));
 }
 
 fn tcp_transport(split_send_size: usize) -> BenchTransport {
@@ -164,8 +173,7 @@ fn tcp_transport(split_send_size: usize) -> BenchTransport {
     let mut mplex = mplex::MplexConfig::default();
     mplex.set_split_send_size(split_send_size);
 
-    libp2p_tcp::TcpConfig::new()
-        .nodelay(true)
+    libp2p_tcp::TcpTransport::new(GenTcpConfig::default().nodelay(true))
         .upgrade(upgrade::Version::V1)
         .authenticate(PlainText2Config { local_public_key })
         .multiplex(mplex)

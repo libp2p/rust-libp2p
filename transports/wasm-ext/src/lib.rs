@@ -32,10 +32,10 @@
 //! module.
 //!
 
-use futures::{future::Ready, prelude::*};
+use futures::{future::Ready, prelude::*, ready, stream::SelectAll};
 use libp2p_core::{
     connection::Endpoint,
-    transport::{ListenerEvent, TransportError},
+    transport::{ListenerId, TransportError, TransportEvent},
     Multiaddr, Transport,
 };
 use parity_send_wrapper::SendWrapper;
@@ -147,6 +147,7 @@ pub mod ffi {
 /// Implementation of `Transport` whose implementation is handled by some FFI.
 pub struct ExtTransport {
     inner: SendWrapper<ffi::Transport>,
+    listeners: SelectAll<Listen>,
 }
 
 impl ExtTransport {
@@ -154,8 +155,10 @@ impl ExtTransport {
     pub fn new(transport: ffi::Transport) -> Self {
         ExtTransport {
             inner: SendWrapper::new(transport),
+            listeners: SelectAll::new(),
         }
     }
+
     fn do_dial(
         &mut self,
         addr: Multiaddr,
@@ -187,25 +190,13 @@ impl fmt::Debug for ExtTransport {
     }
 }
 
-impl Clone for ExtTransport {
-    fn clone(&self) -> Self {
-        ExtTransport {
-            inner: SendWrapper::new(self.inner.clone().into()),
-        }
-    }
-}
-
 impl Transport for ExtTransport {
     type Output = Connection;
     type Error = JsErr;
-    type Listener = Listen;
     type ListenerUpgrade = Ready<Result<Self::Output, Self::Error>>;
     type Dial = Dial;
 
-    fn listen_on(
-        &mut self,
-        addr: Multiaddr,
-    ) -> Result<Self::Listener, TransportError<Self::Error>> {
+    fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
         let iter = self.inner.listen_on(&addr.to_string()).map_err(|err| {
             if is_not_supported_error(&err) {
                 TransportError::MultiaddrNotSupported(addr)
@@ -213,33 +204,51 @@ impl Transport for ExtTransport {
                 TransportError::Other(JsErr::from(err))
             }
         })?;
-
-        Ok(Listen {
+        let listener_id = ListenerId::new();
+        let listen = Listen {
+            listener_id,
             iterator: SendWrapper::new(iter),
             next_event: None,
             pending_events: VecDeque::new(),
-        })
+            is_closed: false,
+        };
+        self.listeners.push(listen);
+        Ok(listener_id)
     }
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>>
-    where
-        Self: Sized,
-    {
+    fn remove_listener(&mut self, id: ListenerId) -> bool {
+        match self.listeners.iter_mut().find(|l| l.listener_id == id) {
+            Some(listener) => {
+                listener.close(Ok(()));
+                true
+            }
+            None => false,
+        }
+    }
+
+    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         self.do_dial(addr, Endpoint::Dialer)
     }
 
     fn dial_as_listener(
         &mut self,
         addr: Multiaddr,
-    ) -> Result<Self::Dial, TransportError<Self::Error>>
-    where
-        Self: Sized,
-    {
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
         self.do_dial(addr, Endpoint::Listener)
     }
 
     fn address_translation(&self, _server: &Multiaddr, _observed: &Multiaddr) -> Option<Multiaddr> {
         None
+    }
+
+    fn poll(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
+        match ready!(self.listeners.poll_next_unpin(cx)) {
+            Some(event) => Poll::Ready(event),
+            None => Poll::Pending,
+        }
     }
 }
 
@@ -271,27 +280,47 @@ impl Future for Dial {
 /// Stream that listens for incoming connections through an external transport.
 #[must_use = "futures do nothing unless polled"]
 pub struct Listen {
+    listener_id: ListenerId,
     /// Iterator of `ListenEvent`s.
     iterator: SendWrapper<js_sys::Iterator>,
     /// Promise that will yield the next `ListenEvent`.
     next_event: Option<SendWrapper<JsFuture>>,
     /// List of events that we are waiting to propagate.
-    pending_events: VecDeque<ListenerEvent<Ready<Result<Connection, JsErr>>, JsErr>>,
+    pending_events: VecDeque<<Self as Stream>::Item>,
+    /// If the iterator is done close the listener.
+    is_closed: bool,
+}
+
+impl Listen {
+    /// Report the listener as closed and terminate its stream.
+    fn close(&mut self, reason: Result<(), JsErr>) {
+        self.pending_events
+            .push_back(TransportEvent::ListenerClosed {
+                listener_id: self.listener_id,
+                reason,
+            });
+        self.is_closed = true;
+    }
 }
 
 impl fmt::Debug for Listen {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple("Listen").finish()
+        f.debug_tuple("Listen").field(&self.listener_id).finish()
     }
 }
 
 impl Stream for Listen {
-    type Item = Result<ListenerEvent<Ready<Result<Connection, JsErr>>, JsErr>, JsErr>;
+    type Item = TransportEvent<<ExtTransport as Transport>::ListenerUpgrade, JsErr>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         loop {
             if let Some(ev) = self.pending_events.pop_front() {
-                return Poll::Ready(Some(Ok(ev)));
+                return Poll::Ready(Some(ev));
+            }
+
+            if self.is_closed {
+                // Terminate the stream if the listener closed and all remaining events have been reported.
+                return Poll::Ready(None);
             }
 
             // Try to fill `self.next_event` if necessary and possible. If we fail, then
@@ -309,30 +338,59 @@ impl Stream for Listen {
                 let e = match Future::poll(Pin::new(&mut **next_event), cx) {
                     Poll::Ready(Ok(ev)) => ffi::ListenEvent::from(ev),
                     Poll::Pending => return Poll::Pending,
-                    Poll::Ready(Err(err)) => return Poll::Ready(Some(Err(err.into()))),
+                    Poll::Ready(Err(err)) => {
+                        self.close(Err(err.into()));
+                        continue;
+                    }
                 };
                 self.next_event = None;
                 e
             } else {
-                return Poll::Ready(None);
+                self.close(Ok(()));
+                continue;
             };
+
+            let listener_id = self.listener_id;
 
             if let Some(addrs) = event.new_addrs() {
                 for addr in addrs.iter() {
-                    let addr = js_value_to_addr(addr)?;
-                    self.pending_events
-                        .push_back(ListenerEvent::NewAddress(addr));
+                    match js_value_to_addr(addr) {
+                        Ok(addr) => self.pending_events.push_back(TransportEvent::NewAddress {
+                            listener_id,
+                            listen_addr: addr,
+                        }),
+                        Err(err) => self
+                            .pending_events
+                            .push_back(TransportEvent::ListenerError {
+                                listener_id,
+                                error: err,
+                            }),
+                    };
                 }
             }
 
             if let Some(upgrades) = event.new_connections() {
                 for upgrade in upgrades.iter().cloned() {
                     let upgrade: ffi::ConnectionEvent = upgrade.into();
-                    self.pending_events.push_back(ListenerEvent::Upgrade {
-                        local_addr: upgrade.local_addr().parse()?,
-                        remote_addr: upgrade.observed_addr().parse()?,
-                        upgrade: futures::future::ok(Connection::new(upgrade.connection())),
-                    });
+                    match upgrade.local_addr().parse().and_then(|local| {
+                        let observed = upgrade.observed_addr().parse()?;
+                        Ok((local, observed))
+                    }) {
+                        Ok((local_addr, send_back_addr)) => {
+                            self.pending_events.push_back(TransportEvent::Incoming {
+                                listener_id,
+                                local_addr,
+                                send_back_addr,
+                                upgrade: futures::future::ok(Connection::new(upgrade.connection())),
+                            })
+                        }
+                        Err(err) => self
+                            .pending_events
+                            .push_back(TransportEvent::ListenerError {
+                                listener_id,
+                                error: err.into(),
+                            }),
+                    }
                 }
             }
 
@@ -341,8 +399,16 @@ impl Stream for Listen {
                     match js_value_to_addr(addr) {
                         Ok(addr) => self
                             .pending_events
-                            .push_back(ListenerEvent::NewAddress(addr)),
-                        Err(err) => self.pending_events.push_back(ListenerEvent::Error(err)),
+                            .push_back(TransportEvent::AddressExpired {
+                                listener_id,
+                                listen_addr: addr,
+                            }),
+                        Err(err) => self
+                            .pending_events
+                            .push_back(TransportEvent::ListenerError {
+                                listener_id,
+                                error: err,
+                            }),
                     }
                 }
             }

@@ -18,14 +18,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::io::{AsyncReadExt, AsyncWriteExt};
-use futures::stream::TryStreamExt;
-use libp2p_core::{
-    identity,
-    multiaddr::Multiaddr,
-    transport::{ListenerEvent, Transport},
-    upgrade,
+use futures::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    StreamExt,
 };
+use libp2p_core::{identity, multiaddr::Multiaddr, transport::Transport, upgrade};
 use libp2p_plaintext::PlainText2Config;
 use log::debug;
 use quickcheck::QuickCheck;
@@ -45,8 +42,8 @@ fn variable_msg_length() {
         let client_id_public = client_id.public();
 
         futures::executor::block_on(async {
-            let mut server_transport =
-                libp2p_core::transport::MemoryTransport {}.and_then(move |output, endpoint| {
+            let mut server = libp2p_core::transport::MemoryTransport::new()
+                .and_then(move |output, endpoint| {
                     upgrade::apply(
                         output,
                         PlainText2Config {
@@ -55,10 +52,11 @@ fn variable_msg_length() {
                         endpoint,
                         libp2p_core::upgrade::Version::V1,
                     )
-                });
+                })
+                .boxed();
 
-            let mut client_transport =
-                libp2p_core::transport::MemoryTransport {}.and_then(move |output, endpoint| {
+            let mut client = libp2p_core::transport::MemoryTransport::new()
+                .and_then(move |output, endpoint| {
                     upgrade::apply(
                         output,
                         PlainText2Config {
@@ -67,31 +65,28 @@ fn variable_msg_length() {
                         endpoint,
                         libp2p_core::upgrade::Version::V1,
                     )
-                });
+                })
+                .boxed();
 
             let server_address: Multiaddr =
                 format!("/memory/{}", std::cmp::Ord::max(1, rand::random::<u64>()))
                     .parse()
                     .unwrap();
 
-            let mut server = server_transport.listen_on(server_address.clone()).unwrap();
+            server.listen_on(server_address.clone()).unwrap();
 
             // Ignore server listen address event.
             let _ = server
-                .try_next()
+                .next()
                 .await
                 .expect("some event")
-                .expect("no error")
                 .into_new_address()
                 .expect("listen address");
 
             let client_fut = async {
                 debug!("dialing {:?}", server_address);
-                let (received_server_id, mut client_channel) = client_transport
-                    .dial(server_address)
-                    .unwrap()
-                    .await
-                    .unwrap();
+                let (received_server_id, mut client_channel) =
+                    client.dial(server_address).unwrap().await.unwrap();
                 assert_eq!(received_server_id, server_id.public().to_peer_id());
 
                 debug!("Client: writing message.");
@@ -105,13 +100,12 @@ fn variable_msg_length() {
 
             let server_fut = async {
                 let mut server_channel = server
-                    .try_next()
+                    .next()
                     .await
                     .expect("some event")
-                    .map(ListenerEvent::into_upgrade)
+                    .into_incoming()
                     .expect("no error")
-                    .map(|client| client.0)
-                    .expect("listener upgrade xyz")
+                    .0
                     .await
                     .map(|(_, session)| session)
                     .expect("no error");
