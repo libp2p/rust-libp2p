@@ -49,10 +49,18 @@ pub enum ValidationMode {
     None,
 }
 
+/// Selector for custom Protocol Id
+#[derive(Clone, Debug, PartialEq)]
+pub enum GossipsubVersion {
+    V1_0,
+    V1_1,
+}
+
 /// Configuration parameters that define the performance of the gossipsub network.
 #[derive(Clone)]
 pub struct GossipsubConfig {
-    protocol_id_prefix: Cow<'static, str>,
+    protocol_id: Cow<'static, str>,
+    custom_id_version: Option<GossipsubVersion>,
     history_length: usize,
     history_gossip: usize,
     mesh_n: usize,
@@ -96,13 +104,20 @@ pub struct GossipsubConfig {
 impl GossipsubConfig {
     // All the getters
 
-    /// The protocol id prefix to negotiate this protocol. The protocol id is of the form
-    /// `/<prefix>/<supported-versions>`. As gossipsub supports version 1.0 and 1.1, there are two
-    /// protocol id's supported.
+    /// The protocol id to negotiate this protocol. By default, the resulting protocol id has the form
+    /// `/<prefix>/<supported-versions>`, but can optionally be changed to a literal form by providing some GossipsubVersion as custom_id_version.
+    /// As gossipsub supports version 1.0 and 1.1, there are two suffixes supported for the resulting protocol id.
+    ///
+    /// Calling `GossipsubConfigBuilder::protocol_id_prefix` will set a new prefix and retain the prefix logic.
+    /// Calling `GossipsubConfigBuilder::protocol_id` will set a custom `protocol_id` and disable the prefix logic.
     ///
     /// The default prefix is `meshsub`, giving the supported protocol ids: `/meshsub/1.1.0` and `/meshsub/1.0.0`, negotiated in that order.
-    pub fn protocol_id_prefix(&self) -> &Cow<'static, str> {
-        &self.protocol_id_prefix
+    pub fn protocol_id(&self) -> &Cow<'static, str> {
+        &self.protocol_id
+    }
+
+    pub fn custom_id_version(&self) -> &Option<GossipsubVersion> {
+        &self.custom_id_version
     }
 
     // Overlay network parameters.
@@ -394,7 +409,8 @@ impl Default for GossipsubConfigBuilder {
     fn default() -> Self {
         GossipsubConfigBuilder {
             config: GossipsubConfig {
-                protocol_id_prefix: Cow::Borrowed("meshsub"),
+                protocol_id: Cow::Borrowed("meshsub"),
+                custom_id_version: None,
                 history_length: 5,
                 history_gossip: 3,
                 mesh_n: 6,
@@ -457,9 +473,24 @@ impl From<GossipsubConfig> for GossipsubConfigBuilder {
 }
 
 impl GossipsubConfigBuilder {
-    /// The protocol id to negotiate this protocol (default is `/meshsub/1.0.0`).
-    pub fn protocol_id_prefix(&mut self, protocol_id: impl Into<Cow<'static, str>>) -> &mut Self {
-        self.config.protocol_id_prefix = protocol_id.into();
+    /// The protocol id prefix to negotiate this protocol (default is `/meshsub/1.0.0`).
+    pub fn protocol_id_prefix(
+        &mut self,
+        protocol_id_prefix: impl Into<Cow<'static, str>>,
+    ) -> &mut Self {
+        self.config.custom_id_version = None;
+        self.config.protocol_id = protocol_id_prefix.into();
+        self
+    }
+
+    /// The full protocol id to negotiate this protocol (does not append `/1.0.0` or `/1.1.0`).
+    pub fn protocol_id(
+        &mut self,
+        protocol_id: impl Into<Cow<'static, str>>,
+        custom_id_version: GossipsubVersion,
+    ) -> &mut Self {
+        self.config.custom_id_version = Some(custom_id_version);
+        self.config.protocol_id = protocol_id.into();
         self
     }
 
@@ -810,7 +841,8 @@ impl GossipsubConfigBuilder {
 impl std::fmt::Debug for GossipsubConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut builder = f.debug_struct("GossipsubConfig");
-        let _ = builder.field("protocol_id_prefix", &self.protocol_id_prefix);
+        let _ = builder.field("protocol_id", &self.protocol_id);
+        let _ = builder.field("custom_id_version", &self.custom_id_version);
         let _ = builder.field("history_length", &self.history_length);
         let _ = builder.field("history_gossip", &self.history_gossip);
         let _ = builder.field("mesh_n", &self.mesh_n);
@@ -854,7 +886,11 @@ impl std::fmt::Debug for GossipsubConfig {
 mod test {
     use super::*;
     use crate::topic::IdentityHash;
+    use crate::types::PeerKind;
     use crate::Topic;
+    use crate::{Gossipsub, MessageAuthenticity};
+    use libp2p_core::UpgradeInfo;
+    use libp2p_swarm::{ConnectionHandler, NetworkBehaviour};
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
 
@@ -942,5 +978,58 @@ mod test {
 
         let result = builder.message_id(&get_gossipsub_message());
         assert_eq!(result, get_expected_message_id());
+    }
+
+    #[test]
+    fn create_config_with_protocol_id_prefix() {
+        let builder: GossipsubConfig = GossipsubConfigBuilder::default()
+            .protocol_id_prefix("purple")
+            .validation_mode(ValidationMode::Anonymous)
+            .message_id_fn(message_id_plain_function)
+            .build()
+            .unwrap();
+
+        assert_eq!(builder.protocol_id(), "purple");
+        assert_eq!(builder.custom_id_version(), &None);
+
+        let mut gossipsub: Gossipsub =
+            Gossipsub::new(MessageAuthenticity::Anonymous, builder).expect("Correct configuration");
+
+        let handler = gossipsub.new_handler();
+        let (protocol_config, _) = handler.listen_protocol().into_upgrade();
+        let protocol_ids = protocol_config.protocol_info();
+
+        assert_eq!(protocol_ids.len(), 2);
+
+        assert_eq!(protocol_ids[0].protocol_id, b"/purple/1.1.0".to_vec());
+        assert_eq!(protocol_ids[0].kind, PeerKind::Gossipsubv1_1);
+
+        assert_eq!(protocol_ids[1].protocol_id, b"/purple/1.0.0".to_vec());
+        assert_eq!(protocol_ids[1].kind, PeerKind::Gossipsub);
+    }
+
+    #[test]
+    fn create_config_with_custom_protocol_id() {
+        let builder: GossipsubConfig = GossipsubConfigBuilder::default()
+            .protocol_id("purple", GossipsubVersion::V1_0)
+            .validation_mode(ValidationMode::Anonymous)
+            .message_id_fn(message_id_plain_function)
+            .build()
+            .unwrap();
+
+        assert_eq!(builder.protocol_id(), "purple");
+        assert_eq!(builder.custom_id_version(), &Some(GossipsubVersion::V1_0));
+
+        let mut gossipsub: Gossipsub =
+            Gossipsub::new(MessageAuthenticity::Anonymous, builder).expect("Correct configuration");
+
+        let handler = gossipsub.new_handler();
+        let (protocol_config, _) = handler.listen_protocol().into_upgrade();
+        let protocol_ids = protocol_config.protocol_info();
+
+        assert_eq!(protocol_ids.len(), 1);
+
+        assert_eq!(protocol_ids[0].protocol_id, b"purple".to_vec());
+        assert_eq!(protocol_ids[0].kind, PeerKind::Gossipsub);
     }
 }

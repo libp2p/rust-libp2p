@@ -160,7 +160,7 @@ mod rpc_proto;
 pub use self::behaviour::{Gossipsub, GossipsubEvent, MessageAuthenticity};
 pub use self::transform::{DataTransform, IdentityTransform};
 
-pub use self::config::{GossipsubConfig, GossipsubConfigBuilder, ValidationMode};
+pub use self::config::{GossipsubConfig, GossipsubConfigBuilder, GossipsubVersion, ValidationMode};
 pub use self::peer_score::{
     score_parameter_decay, score_parameter_decay_with_base, PeerScoreParams, PeerScoreThresholds,
     TopicScoreParams,
