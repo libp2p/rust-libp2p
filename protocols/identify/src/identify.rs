@@ -22,9 +22,8 @@ use crate::handler::{IdentifyHandlerEvent, IdentifyHandlerProto, IdentifyPush};
 use crate::protocol::{IdentifyInfo, ReplySubstream, UpgradeError};
 use futures::prelude::*;
 use libp2p_core::{
-    connection::{ConnectionId, ListenerId},
-    multiaddr::Protocol,
-    ConnectedPoint, Multiaddr, PeerId, PublicKey,
+    connection::ConnectionId, multiaddr::Protocol, transport::ListenerId, ConnectedPoint,
+    Multiaddr, PeerId, PublicKey,
 };
 use libp2p_swarm::{
     dial_opts::{self, DialOpts},
@@ -515,7 +514,7 @@ mod tests {
     use futures::pin_mut;
     use libp2p::mplex::MplexConfig;
     use libp2p::noise;
-    use libp2p::tcp::TcpConfig;
+    use libp2p::tcp::{GenTcpConfig, TcpTransport};
     use libp2p_core::{identity, muxing::StreamMuxerBox, transport, upgrade, PeerId, Transport};
     use libp2p_swarm::{Swarm, SwarmEvent};
     use std::time::Duration;
@@ -529,8 +528,7 @@ mod tests {
             .into_authentic(&id_keys)
             .unwrap();
         let pubkey = id_keys.public();
-        let transport = TcpConfig::new()
-            .nodelay(true)
+        let transport = TcpTransport::new(GenTcpConfig::default().nodelay(true))
             .upgrade(upgrade::Version::V1)
             .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
             .multiplex(MplexConfig::new())

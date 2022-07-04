@@ -24,12 +24,12 @@ use futures::{
     prelude::*,
 };
 use libp2p_core::identity;
-use libp2p_core::transport::{ListenerEvent, Transport};
+use libp2p_core::transport::{self, Transport};
 use libp2p_core::upgrade::{self, apply_inbound, apply_outbound, Negotiated};
 use libp2p_noise::{
     Keypair, NoiseConfig, NoiseError, NoiseOutput, RemoteIdentity, X25519Spec, X25519,
 };
-use libp2p_tcp::TcpConfig;
+use libp2p_tcp::TcpTransport;
 use log::info;
 use quickcheck::QuickCheck;
 use std::{convert::TryInto, io, net::TcpStream};
@@ -41,7 +41,7 @@ fn core_upgrade_compat() {
     let id_keys = identity::Keypair::generate_ed25519();
     let dh_keys = Keypair::<X25519>::new().into_authentic(&id_keys).unwrap();
     let noise = NoiseConfig::xx(dh_keys).into_authenticated();
-    let _ = TcpConfig::new()
+    let _ = TcpTransport::default()
         .upgrade(upgrade::Version::V1)
         .authenticate(noise);
 }
@@ -60,7 +60,7 @@ fn xx_spec() {
         let server_dh = Keypair::<X25519Spec>::new()
             .into_authentic(&server_id)
             .unwrap();
-        let server_transport = TcpConfig::new()
+        let server_transport = TcpTransport::default()
             .and_then(move |output, endpoint| {
                 upgrade::apply(
                     output,
@@ -69,12 +69,13 @@ fn xx_spec() {
                     upgrade::Version::V1,
                 )
             })
-            .and_then(move |out, _| expect_identity(out, &client_id_public));
+            .and_then(move |out, _| expect_identity(out, &client_id_public))
+            .boxed();
 
         let client_dh = Keypair::<X25519Spec>::new()
             .into_authentic(&client_id)
             .unwrap();
-        let client_transport = TcpConfig::new()
+        let client_transport = TcpTransport::default()
             .and_then(move |output, endpoint| {
                 upgrade::apply(
                     output,
@@ -83,7 +84,8 @@ fn xx_spec() {
                     upgrade::Version::V1,
                 )
             })
-            .and_then(move |out, _| expect_identity(out, &server_id_public));
+            .and_then(move |out, _| expect_identity(out, &server_id_public))
+            .boxed();
 
         run(server_transport, client_transport, messages);
         true
@@ -105,7 +107,7 @@ fn xx() {
         let client_id_public = client_id.public();
 
         let server_dh = Keypair::<X25519>::new().into_authentic(&server_id).unwrap();
-        let server_transport = TcpConfig::new()
+        let server_transport = TcpTransport::default()
             .and_then(move |output, endpoint| {
                 upgrade::apply(
                     output,
@@ -114,10 +116,11 @@ fn xx() {
                     upgrade::Version::V1,
                 )
             })
-            .and_then(move |out, _| expect_identity(out, &client_id_public));
+            .and_then(move |out, _| expect_identity(out, &client_id_public))
+            .boxed();
 
         let client_dh = Keypair::<X25519>::new().into_authentic(&client_id).unwrap();
-        let client_transport = TcpConfig::new()
+        let client_transport = TcpTransport::default()
             .and_then(move |output, endpoint| {
                 upgrade::apply(
                     output,
@@ -126,7 +129,8 @@ fn xx() {
                     upgrade::Version::V1,
                 )
             })
-            .and_then(move |out, _| expect_identity(out, &server_id_public));
+            .and_then(move |out, _| expect_identity(out, &server_id_public))
+            .boxed();
 
         run(server_transport, client_transport, messages);
         true
@@ -148,7 +152,7 @@ fn ix() {
         let client_id_public = client_id.public();
 
         let server_dh = Keypair::<X25519>::new().into_authentic(&server_id).unwrap();
-        let server_transport = TcpConfig::new()
+        let server_transport = TcpTransport::default()
             .and_then(move |output, endpoint| {
                 upgrade::apply(
                     output,
@@ -157,10 +161,11 @@ fn ix() {
                     upgrade::Version::V1,
                 )
             })
-            .and_then(move |out, _| expect_identity(out, &client_id_public));
+            .and_then(move |out, _| expect_identity(out, &client_id_public))
+            .boxed();
 
         let client_dh = Keypair::<X25519>::new().into_authentic(&client_id).unwrap();
-        let client_transport = TcpConfig::new()
+        let client_transport = TcpTransport::default()
             .and_then(move |output, endpoint| {
                 upgrade::apply(
                     output,
@@ -169,7 +174,8 @@ fn ix() {
                     upgrade::Version::V1,
                 )
             })
-            .and_then(move |out, _| expect_identity(out, &server_id_public));
+            .and_then(move |out, _| expect_identity(out, &server_id_public))
+            .boxed();
 
         run(server_transport, client_transport, messages);
         true
@@ -192,7 +198,7 @@ fn ik_xx() {
 
         let server_dh = Keypair::<X25519>::new().into_authentic(&server_id).unwrap();
         let server_dh_public = server_dh.public().clone();
-        let server_transport = TcpConfig::new()
+        let server_transport = TcpTransport::default()
             .and_then(move |output, endpoint| {
                 if endpoint.is_listener() {
                     Either::Left(apply_inbound(output, NoiseConfig::ik_listener(server_dh)))
@@ -204,11 +210,12 @@ fn ik_xx() {
                     ))
                 }
             })
-            .and_then(move |out, _| expect_identity(out, &client_id_public));
+            .and_then(move |out, _| expect_identity(out, &client_id_public))
+            .boxed();
 
         let client_dh = Keypair::<X25519>::new().into_authentic(&client_id).unwrap();
         let server_id_public2 = server_id_public.clone();
-        let client_transport = TcpConfig::new()
+        let client_transport = TcpTransport::default()
             .and_then(move |output, endpoint| {
                 if endpoint.is_dialer() {
                     Either::Left(apply_outbound(
@@ -220,7 +227,8 @@ fn ik_xx() {
                     Either::Right(apply_inbound(output, NoiseConfig::xx(client_dh)))
                 }
             })
-            .and_then(move |out, _| expect_identity(out, &server_id_public2));
+            .and_then(move |out, _| expect_identity(out, &server_id_public2))
+            .boxed();
 
         run(server_transport, client_transport, messages);
         true
@@ -232,34 +240,28 @@ fn ik_xx() {
 
 type Output<C> = (RemoteIdentity<C>, NoiseOutput<Negotiated<Async<TcpStream>>>);
 
-fn run<T, U, I, C>(mut server_transport: T, mut client_transport: U, messages: I)
-where
-    T: Transport<Output = Output<C>>,
-    T::Dial: Send + 'static,
-    T::Listener: Send + Unpin + 'static,
-    T::ListenerUpgrade: Send + 'static,
-    U: Transport<Output = Output<C>>,
-    U::Dial: Send + 'static,
-    U::Listener: Send + 'static,
-    U::ListenerUpgrade: Send + 'static,
+fn run<I, C>(
+    mut server: transport::Boxed<Output<C>>,
+    mut client: transport::Boxed<Output<C>>,
+    messages: I,
+) where
     I: IntoIterator<Item = Message> + Clone,
 {
     futures::executor::block_on(async {
-        let mut server: T::Listener = server_transport
+        server
             .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
             .unwrap();
 
         let server_address = server
-            .try_next()
+            .next()
             .await
             .expect("some event")
-            .expect("no error")
             .into_new_address()
             .expect("listen address");
 
         let outbound_msgs = messages.clone();
         let client_fut = async {
-            let mut client_session = client_transport
+            let mut client_session = client
                 .dial(server_address.clone())
                 .unwrap()
                 .await
@@ -276,13 +278,12 @@ where
 
         let server_fut = async {
             let mut server_session = server
-                .try_next()
+                .next()
                 .await
                 .expect("some event")
-                .map(ListenerEvent::into_upgrade)
-                .expect("no error")
-                .map(|client| client.0)
+                .into_incoming()
                 .expect("listener upgrade")
+                .0
                 .await
                 .map(|(_, session)| session)
                 .expect("no error");

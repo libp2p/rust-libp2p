@@ -287,7 +287,7 @@ pub enum UpgradeError {
 mod tests {
     use super::*;
     use futures::channel::oneshot;
-    use libp2p::tcp::TcpConfig;
+    use libp2p::tcp::TcpTransport;
     use libp2p_core::{
         identity,
         upgrade::{self, apply_inbound, apply_outbound},
@@ -304,27 +304,25 @@ mod tests {
         let (tx, rx) = oneshot::channel();
 
         let bg_task = async_std::task::spawn(async move {
-            let mut transport = TcpConfig::new();
+            let mut transport = TcpTransport::default().boxed();
 
-            let mut listener = transport
+            transport
                 .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
                 .unwrap();
 
-            let addr = listener
+            let addr = transport
                 .next()
                 .await
                 .expect("some event")
-                .expect("no error")
                 .into_new_address()
                 .expect("listen address");
             tx.send(addr).unwrap();
 
-            let socket = listener
+            let socket = transport
                 .next()
                 .await
-                .unwrap()
-                .unwrap()
-                .into_upgrade()
+                .expect("some event")
+                .into_incoming()
                 .unwrap()
                 .0
                 .await
@@ -349,7 +347,7 @@ mod tests {
         });
 
         async_std::task::block_on(async move {
-            let mut transport = TcpConfig::new();
+            let mut transport = TcpTransport::default();
 
             let socket = transport.dial(rx.await.unwrap()).unwrap().await.unwrap();
             let info = apply_outbound(socket, IdentifyProtocol, upgrade::Version::V1)

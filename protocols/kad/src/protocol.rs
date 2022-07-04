@@ -603,7 +603,7 @@ where
 mod tests {
 
     /*// TODO: restore
-    use self::libp2p_tcp::TcpConfig;
+    use self::libp2p_tcp::TcpTransport;
     use self::tokio::runtime::current_thread::Runtime;
     use futures::{Future, Sink, Stream};
     use libp2p_core::{PeerId, PublicKey, Transport};
@@ -658,10 +658,10 @@ mod tests {
             let (tx, rx) = mpsc::channel();
 
             let bg_thread = thread::spawn(move || {
-                let transport = TcpConfig::new().with_upgrade(KademliaProtocolConfig);
+                let transport = TcpTransport::default().with_upgrade(KademliaProtocolConfig);
 
                 let (listener, addr) = transport
-                    .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
+                    .listen_on( "/ip4/127.0.0.1/tcp/0".parse().unwrap())
                     .unwrap();
                 tx.send(addr).unwrap();
 
@@ -678,7 +678,7 @@ mod tests {
                 let _ = rt.block_on(future).unwrap();
             });
 
-            let transport = TcpConfig::new().with_upgrade(KademliaProtocolConfig);
+            let transport = TcpTransport::default().with_upgrade(KademliaProtocolConfig);
 
             let future = transport
                 .dial(rx.recv().unwrap())

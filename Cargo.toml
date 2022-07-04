@@ -35,6 +35,7 @@ default = [
     "websocket",
     "yamux",
 ]
+
 autonat = ["dep:libp2p-autonat"]
 dcutr = ["dep:libp2p-dcutr", "libp2p-metrics?/dcutr"]
 deflate = ["dep:libp2p-deflate"]
