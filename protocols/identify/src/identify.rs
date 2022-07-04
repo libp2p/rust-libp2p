@@ -518,6 +518,7 @@ mod tests {
     use libp2p::tcp::TcpConfig;
     use libp2p_core::{identity, muxing::StreamMuxerBox, transport, upgrade, PeerId, Transport};
     use libp2p_swarm::{Swarm, SwarmEvent};
+    use std::time::Duration;
 
     fn transport() -> (
         identity::PublicKey,
@@ -700,7 +701,14 @@ mod tests {
 
         let mut swarm1 = {
             let (pubkey, transport) = transport();
-            let protocol = Identify::new(IdentifyConfig::new("a".to_string(), pubkey.clone()));
+            let protocol = Identify::new(
+                IdentifyConfig::new("a".to_string(), pubkey.clone())
+                    // `swarm1` will set `KeepAlive::No` once it identified `swarm2` and thus
+                    // closes the connection. At this point in time `swarm2` might not yet have
+                    // identified `swarm1`. To give `swarm2` enough time, set an initial delay on
+                    // `swarm1`.
+                    .with_initial_delay(Duration::from_secs(10)),
+            );
 
             Swarm::new(transport, protocol, pubkey.to_peer_id())
         };
