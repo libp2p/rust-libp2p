@@ -61,7 +61,7 @@ mod upgrade;
 
 pub mod transport;
 
-pub use endpoint::{Config, Endpoint};
+pub use endpoint::Config;
 pub use error::Error;
 pub use muxer::QuicMuxer;
 pub use transport::QuicTransport;

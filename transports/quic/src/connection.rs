@@ -44,7 +44,7 @@ use std::{
 ///
 /// Contains everything needed to process a connection with a remote.
 /// Tied to a specific [`crate::Endpoint`].
-pub(crate) struct Connection {
+pub struct Connection {
     /// Endpoint this connection belongs to.
     endpoint: Arc<Endpoint>,
     /// Future whose job is to send a message to the endpoint. Only one at a time.
@@ -54,7 +54,7 @@ pub(crate) struct Connection {
     from_endpoint: mpsc::Receiver<quinn_proto::ConnectionEvent>,
 
     /// The QUIC state machine for this specific connection.
-    pub(crate) connection: quinn_proto::Connection,
+    pub connection: quinn_proto::Connection,
     /// Identifier for this connection according to the endpoint. Used when sending messages to
     /// the endpoint.
     connection_id: quinn_proto::ConnectionHandle,
@@ -100,7 +100,7 @@ impl Connection {
     /// This function assumes that the [`quinn_proto::Connection`] is completely fresh and none of
     /// its methods has ever been called. Failure to comply might lead to logic errors and panics.
     // TODO: maybe abstract `to_endpoint` more and make it generic? dunno
-    pub(crate) fn from_quinn_connection(
+    pub fn from_quinn_connection(
         endpoint: Arc<Endpoint>,
         connection: quinn_proto::Connection,
         connection_id: quinn_proto::ConnectionHandle,
@@ -124,9 +124,9 @@ impl Connection {
     /// The local address which was used when the peer established the connection.
     ///
     /// Works for server connections only.
-    pub(crate) fn local_addr(&self) -> SocketAddr {
+    pub fn local_addr(&self) -> SocketAddr {
         debug_assert_eq!(self.connection.side(), quinn_proto::Side::Server);
-        let endpoint_addr = self.endpoint.local_addr;
+        let endpoint_addr = self.endpoint.socket_addr();
         self.connection
             .local_ip()
             .map(|ip| SocketAddr::new(ip, endpoint_addr.port()))
@@ -134,25 +134,25 @@ impl Connection {
                 // In a normal case scenario this should not happen, because
                 // we get want to get a local addr for a server connection only.
                 tracing::error!("trying to get quinn::local_ip for a client");
-                endpoint_addr
+                endpoint_addr.clone()
             })
     }
 
     /// Returns the address of the node we're connected to.
     // TODO: can change /!\
-    pub(crate) fn remote_addr(&self) -> SocketAddr {
+    pub fn remote_addr(&self) -> SocketAddr {
         self.connection.remote_address()
     }
 
     /// Returns `true` if this connection is still pending. Returns `false` if we are connected to
     /// the remote or if the connection is closed.
-    pub(crate) fn is_handshaking(&self) -> bool {
+    pub fn is_handshaking(&self) -> bool {
         self.is_handshaking
     }
 
     /// Returns the address of the node we're connected to.
     /// Panics if the connection is still handshaking.
-    pub(crate) fn remote_peer_id(&self) -> PeerId {
+    pub fn remote_peer_id(&self) -> PeerId {
         debug_assert!(!self.is_handshaking());
         let session = self.connection.crypto_session();
         let identity = session
@@ -171,7 +171,7 @@ impl Connection {
 
     /// Start closing the connection. A [`ConnectionEvent::ConnectionLost`] event will be
     /// produced in the future.
-    pub(crate) fn close(&mut self) {
+    pub fn close(&mut self) {
         // TODO: what if the user calls this multiple times?
         // We send a dummy `0` error code with no message, as the API of StreamMuxer doesn't
         // support this.
@@ -187,7 +187,7 @@ impl Connection {
     ///
     /// If `None` is returned, then a [`ConnectionEvent::StreamAvailable`] event will later be
     /// produced when a substream is available.
-    pub(crate) fn pop_incoming_substream(&mut self) -> Option<quinn_proto::StreamId> {
+    pub fn pop_incoming_substream(&mut self) -> Option<quinn_proto::StreamId> {
         self.connection.streams().accept(quinn_proto::Dir::Bi)
     }
 
@@ -198,7 +198,7 @@ impl Connection {
     ///
     /// If `None` is returned, then a [`ConnectionEvent::StreamOpened`] event will later be
     /// produced when a substream is available.
-    pub(crate) fn pop_outgoing_substream(&mut self) -> Option<quinn_proto::StreamId> {
+    pub fn pop_outgoing_substream(&mut self) -> Option<quinn_proto::StreamId> {
         self.connection.streams().open(quinn_proto::Dir::Bi)
     }
 
@@ -210,7 +210,7 @@ impl Connection {
     /// On success, a [`quinn_proto::StreamEvent::Finished`] event will later be produced when the
     /// substream has been effectively closed. A [`ConnectionEvent::StreamStopped`] event can also
     /// be emitted.
-    pub(crate) fn shutdown_substream(
+    pub fn shutdown_substream(
         &mut self,
         id: quinn_proto::StreamId,
     ) -> Result<(), quinn_proto::FinishError> {
@@ -220,7 +220,7 @@ impl Connection {
     }
 
     /// Polls the connection for an event that happend on it.
-    pub(crate) fn poll_event(&mut self, cx: &mut Context<'_>) -> Poll<ConnectionEvent> {
+    pub fn poll_event(&mut self, cx: &mut Context<'_>) -> Poll<ConnectionEvent> {
         // Nothing more can be done if the connection is closed.
         // Return `Pending` without registering the waker, essentially freezing the task forever.
         if self.closed.is_some() {
@@ -399,7 +399,7 @@ impl Drop for Connection {
 
 /// Event generated by the [`Connection`].
 #[derive(Debug)]
-pub(crate) enum ConnectionEvent {
+pub enum ConnectionEvent {
     /// Now connected to the remote and certificates are available.
     Connected,
 

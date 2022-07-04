@@ -3,21 +3,19 @@ use async_trait::async_trait;
 use futures::future::FutureExt;
 use futures::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use futures::stream::StreamExt;
-use libp2p::core::upgrade;
+use futures::task::Spawn;
+use libp2p::core::muxing::StreamMuxerBox;
+use libp2p::core::{upgrade, Transport};
 use libp2p::request_response::{
     ProtocolName, ProtocolSupport, RequestResponse, RequestResponseCodec, RequestResponseConfig,
     RequestResponseEvent, RequestResponseMessage,
 };
-use libp2p::swarm::{Swarm, SwarmBuilder, SwarmEvent};
-use libp2p::{Multiaddr, Transport};
-use libp2p_core::muxing::StreamMuxerBox;
-use libp2p_quic::{Config as QuicConfig, Endpoint as QuicEndpoint, QuicTransport};
+use libp2p::swarm::{Swarm, SwarmEvent};
+use libp2p_quic::{Config as QuicConfig, QuicTransport};
 use rand::RngCore;
-use std::{io, iter};
-
-use futures::task::Spawn;
 use std::num::NonZeroU8;
 use std::time::Duration;
+use std::{io, iter};
 
 fn generate_tls_keypair() -> libp2p::identity::Keypair {
     libp2p::identity::Keypair::generate_ed25519()
@@ -27,10 +25,8 @@ fn generate_tls_keypair() -> libp2p::identity::Keypair {
 async fn create_swarm(keylog: bool) -> Result<Swarm<RequestResponse<PingCodec>>> {
     let keypair = generate_tls_keypair();
     let peer_id = keypair.public().to_peer_id();
-    let addr: Multiaddr = "/ip4/127.0.0.1/udp/0/quic".parse()?;
-    let config = QuicConfig::new(&keypair, addr).unwrap();
-    let endpoint = QuicEndpoint::new(config).unwrap();
-    let transport = QuicTransport::new(endpoint);
+    let config = QuicConfig::new(&keypair).unwrap();
+    let transport = QuicTransport::new(config);
 
     // TODO:
     // transport

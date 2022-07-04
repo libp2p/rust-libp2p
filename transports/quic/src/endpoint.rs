@@ -36,16 +36,13 @@ use futures::{
     channel::{mpsc, oneshot},
     lock::Mutex,
     prelude::*,
-    stream::Stream,
 };
-use libp2p_core::multiaddr::Multiaddr;
 use quinn_proto::{ClientConfig as QuinnClientConfig, ServerConfig as QuinnServerConfig};
 use std::{
     collections::{HashMap, VecDeque},
     fmt, io,
-    pin::Pin,
     sync::{Arc, Weak},
-    task::{Context, Poll},
+    task::Poll,
     time::{Duration, Instant},
 };
 
@@ -58,16 +55,11 @@ pub struct Config {
     server_config: Arc<quinn_proto::ServerConfig>,
     /// The endpoint configuration to pass to `quinn_proto`.
     endpoint_config: Arc<quinn_proto::EndpointConfig>,
-    /// The [`Multiaddr`] to use to spawn the UDP socket.
-    multiaddr: Multiaddr,
 }
 
 impl Config {
     /// Creates a new configuration object with default values.
-    pub fn new(
-        keypair: &libp2p_core::identity::Keypair,
-        multiaddr: Multiaddr,
-    ) -> Result<Self, tls::ConfigError> {
+    pub fn new(keypair: &libp2p_core::identity::Keypair) -> Result<Self, tls::ConfigError> {
         let mut transport = quinn_proto::TransportConfig::default();
         transport.max_concurrent_uni_streams(0u32.into()); // Can only panic if value is out of range.
         transport.datagram_receive_buffer_size(None);
@@ -86,7 +78,6 @@ impl Config {
             client_config,
             server_config: Arc::new(server_config),
             endpoint_config: Default::default(),
-            multiaddr,
         })
     }
 }
@@ -100,32 +91,21 @@ pub struct Endpoint {
     /// See [`Endpoint::new_connections`] (just below) for a commentary about the mutex.
     to_endpoint: Mutex<mpsc::Sender<ToEndpoint>>,
 
-    /// Channel where new connections are being sent.
-    /// This is protected by a futures-friendly `Mutex`, meaning that receiving a connection is
-    /// done in two steps: locking this mutex, and grabbing the next element on the `Receiver`.
-    /// The only consequence of this `Mutex` is that multiple simultaneous calls to
-    /// [`Endpoint::poll_incoming`] are serialized.
-    new_connections: Mutex<mpsc::Receiver<Connection>>,
-
     /// Copy of [`Endpoint::to_endpoint`], except not behind a `Mutex`. Used if we want to be
     /// guaranteed a slot in the messages buffer.
     to_endpoint2: mpsc::Sender<ToEndpoint>,
 
-    /// Socketaddr of the local UDP socket passed in the configuration at initialization after it
-    /// has potentially been modified to handle port number `0`.
-    pub(crate) local_addr: SocketAddr,
+    socket_addr: SocketAddr,
 }
 
 impl Endpoint {
     /// Builds a new `Endpoint`.
-    pub fn new(config: Config) -> Result<Arc<Endpoint>, io::Error> {
-        let local_socket_addr = match crate::transport::multiaddr_to_socketaddr(&config.multiaddr) {
-            Some(a) => a,
-            None => panic!(), // TODO: Err(TransportError::MultiaddrNotSupported(multiaddr)),
-        };
-
+    pub fn new(
+        config: Config,
+        socket_addr: SocketAddr,
+    ) -> Result<(Arc<Endpoint>, mpsc::Receiver<Connection>), io::Error> {
         // NOT blocking, as per man:bind(2), as we pass an IP address.
-        let socket = std::net::UdpSocket::bind(&local_socket_addr)?;
+        let socket = std::net::UdpSocket::bind(&socket_addr)?;
         // TODO:
         /*let port_is_zero = local_socket_addr.port() == 0;
         let local_socket_addr = socket.local_addr()?;
@@ -144,8 +124,7 @@ impl Endpoint {
         let endpoint = Arc::new(Endpoint {
             to_endpoint: Mutex::new(to_endpoint_tx),
             to_endpoint2,
-            new_connections: Mutex::new(new_connections_rx),
-            local_addr: socket.local_addr()?,
+            socket_addr,
         });
 
         // TODO: just for testing, do proper task spawning
@@ -158,17 +137,18 @@ impl Endpoint {
         ))
         .detach();
 
-        Ok(endpoint)
+        Ok((endpoint, new_connections_rx))
+    }
+
+    pub fn socket_addr(&self) -> &SocketAddr {
+        &self.socket_addr
     }
 
     /// Asks the endpoint to start dialing the given address.
     ///
     /// Note that this method only *starts* the dialing. `Ok` is returned as soon as possible, even
     /// when the remote might end up being unreachable.
-    pub(crate) async fn dial(
-        &self,
-        addr: SocketAddr,
-    ) -> Result<Connection, quinn_proto::ConnectError> {
+    pub async fn dial(&self, addr: SocketAddr) -> Result<Connection, quinn_proto::ConnectError> {
         // The two `expect`s below can panic if the background task has stopped. The background
         // task can stop only if the `Endpoint` is destroyed or if the task itself panics. In other
         // words, we panic here iff a panic has already happened somewhere else, which is a
@@ -183,19 +163,12 @@ impl Endpoint {
         rx.await.expect("background task has crashed")
     }
 
-    /// Tries to pop a new incoming connection from the queue.
-    pub(crate) fn poll_incoming(&self, cx: &mut Context) -> Poll<Option<Connection>> {
-        let mut connections_lock = self.new_connections.lock();
-        let mut guard = futures::ready!(Pin::new(&mut connections_lock).poll(cx));
-        Pin::new(&mut *guard).poll_next(cx)
-    }
-
     /// Asks the endpoint to send a UDP packet.
     ///
     /// Note that this method only queues the packet and returns as soon as the packet is in queue.
     /// There is no guarantee that the packet will actually be sent, but considering that this is
     /// a UDP packet, you cannot rely on the packet being delivered anyway.
-    pub(crate) async fn send_udp_packet(&self, destination: SocketAddr, data: impl Into<Vec<u8>>) {
+    pub async fn send_udp_packet(&self, destination: SocketAddr, data: impl Into<Vec<u8>>) {
         let _ = self
             .to_endpoint
             .lock()
@@ -213,7 +186,7 @@ impl Endpoint {
     ///
     /// If `event.is_drained()` is true, the event indicates that the connection no longer exists.
     /// This must therefore be the last event sent using this [`quinn_proto::ConnectionHandle`].
-    pub(crate) async fn report_quinn_event(
+    pub async fn report_quinn_event(
         &self,
         connection_id: quinn_proto::ConnectionHandle,
         event: quinn_proto::EndpointEvent,
@@ -234,7 +207,7 @@ impl Endpoint {
     ///
     /// This method bypasses back-pressure mechanisms and is meant to be called only from
     /// destructors, where waiting is not advisable.
-    pub(crate) fn report_quinn_event_non_block(
+    pub fn report_quinn_event_non_block(
         &self,
         connection_id: quinn_proto::ConnectionHandle,
         event: quinn_proto::EndpointEvent,
@@ -251,7 +224,6 @@ impl Endpoint {
         assert!(result.is_ok());
     }
 }
-
 /// Message sent to the endpoint background task.
 #[derive(Debug)]
 enum ToEndpoint {

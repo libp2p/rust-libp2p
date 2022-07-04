@@ -22,10 +22,12 @@
 //!
 //! Combines all the objects in the other modules to implement the trait.
 
+use crate::connection::Connection;
+use crate::Config;
 use crate::{endpoint::Endpoint, in_addr::InAddr, muxer::QuicMuxer, upgrade::Upgrade};
 
-use futures::prelude::*;
 use futures::stream::StreamExt;
+use futures::{channel::mpsc, prelude::*, stream::SelectAll};
 
 use if_watch::IfEvent;
 
@@ -34,8 +36,12 @@ use libp2p_core::{
     transport::{ListenerId, TransportError, TransportEvent},
     PeerId, Transport,
 };
-use std::task::{Context, Poll};
-use std::{net::SocketAddr, pin::Pin, sync::Arc};
+use std::{
+    net::SocketAddr,
+    pin::Pin,
+    sync::Arc,
+    task::{Context, Poll},
+};
 
 // We reexport the errors that are exposed in the API.
 // All of these types use one another.
@@ -45,22 +51,17 @@ pub use quinn_proto::{
     TransportError as QuinnTransportError, TransportErrorCode,
 };
 
-/// Wraps around an `Arc<Endpoint>` and implements the [`Transport`] trait.
-///
-/// > **Note**: This type is necessary because Rust unfortunately forbids implementing the
-/// >           `Transport` trait directly on `Arc<Endpoint>`.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct QuicTransport {
-    endpoint: Arc<Endpoint>,
-
-    listener: Option<(ListenerId, InAddr)>,
+    config: Config,
+    listeners: SelectAll<Listener>,
 }
 
 impl QuicTransport {
-    pub fn new(endpoint: Arc<Endpoint>) -> Self {
+    pub fn new(config: Config) -> Self {
         Self {
-            endpoint,
-            listener: None
+            listeners: SelectAll::new(),
+            config,
         }
     }
 }
@@ -77,6 +78,12 @@ pub enum Error {
     /// Error while working with IfWatcher.
     #[error("{0}")]
     IfWatcher(std::io::Error),
+
+    #[error("{0}")]
+    Socket(std::io::Error),
+
+    #[error("Background task crashed.")]
+    TaskCrashed,
 }
 
 impl Transport for QuicTransport {
@@ -86,20 +93,24 @@ impl Transport for QuicTransport {
     type Dial = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
     fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
-        multiaddr_to_socketaddr(&addr)
+        let socket_addr = multiaddr_to_socketaddr(&addr)
             .ok_or_else(|| TransportError::MultiaddrNotSupported(addr))?;
-        let listener = self.listener.get_or_insert((ListenerId::new(),  InAddr::new(self.endpoint.local_addr.ip())));
-        Ok(listener.0)
+        let in_addr = InAddr::new(socket_addr.ip());
+        let (endpoint, new_connections_rx) = Endpoint::new(self.config.clone(), socket_addr)
+            .map_err(|e| TransportError::Other(Error::Socket(e)))?;
+        let listener_id = ListenerId::new();
+        let listener = Listener::new(listener_id, endpoint, new_connections_rx, in_addr);
+        self.listeners.push(listener);
+        Ok(listener_id)
     }
 
     fn remove_listener(&mut self, id: ListenerId) -> bool {
-        if let Some((listener_id, _)) = self.listener {
-            if id == listener_id {
-                self.listener = None;
-                return true
-            }
+        if let Some(listener) = self.listeners.iter_mut().find(|l| l.listener_id == id) {
+            listener.close(Ok(()));
+            true
+        } else {
+            false
         }
-        false
     }
 
     fn address_translation(&self, _server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
@@ -107,25 +118,26 @@ impl Transport for QuicTransport {
     }
 
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let socket_addr = if let Some(socket_addr) = multiaddr_to_socketaddr(&addr) {
-            if socket_addr.port() == 0 || socket_addr.ip().is_unspecified() {
-                tracing::error!("multiaddr not supported");
-                return Err(TransportError::MultiaddrNotSupported(addr));
-            }
-            socket_addr
-        } else {
-            tracing::error!("multiaddr not supported");
-            return Err(TransportError::MultiaddrNotSupported(addr));
-        };
+        todo!()
+        // let socket_addr = if let Some(socket_addr) = multiaddr_to_socketaddr(&addr) {
+        //     if socket_addr.port() == 0 || socket_addr.ip().is_unspecified() {
+        //         tracing::error!("multiaddr not supported");
+        //         return Err(TransportError::MultiaddrNotSupported(addr));
+        //     }
+        //     socket_addr
+        // } else {
+        //     tracing::error!("multiaddr not supported");
+        //     return Err(TransportError::MultiaddrNotSupported(addr));
+        // };
 
-        let endpoint = self.endpoint.clone();
+        // let endpoint = self.endpoint.clone();
 
-        Ok(async move {
-            let connection = endpoint.dial(socket_addr).await.map_err(Error::Reach)?;
-            let final_connec = Upgrade::from_connection(connection).await?;
-            Ok(final_connec)
-        }
-        .boxed())
+        // Ok(async move {
+        //     let connection = endpoint.dial(socket_addr).await.map_err(Error::Reach)?;
+        //     let final_connec = Upgrade::from_connection(connection).await?;
+        //     Ok(final_connec)
+        // }
+        // .boxed())
     }
 
     fn dial_as_listener(
@@ -140,45 +152,106 @@ impl Transport for QuicTransport {
     }
 
     fn poll(
-        self: Pin<&mut Self>,
+        mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
-        let me = Pin::into_inner(self);
-        // Poll for a next IfEvent
-        let (listener_id, in_addr) = match me.listener.as_mut() {
-            Some((id, in_addr)) => (*id, in_addr),
-            None => return Poll::Pending
-        };
-        let endpoint = me.endpoint.as_ref();
+        match self.listeners.poll_next_unpin(cx) {
+            Poll::Ready(Some(ev)) => Poll::Ready(ev),
+            _ => Poll::Pending,
+        }
+    }
+}
 
-        // Poll for a next IfEvent
-        match in_addr.poll_next_unpin(cx) {
+#[derive(Debug)]
+struct Listener {
+    endpoint: Arc<Endpoint>,
+
+    listener_id: ListenerId,
+
+    /// Channel where new connections are being sent.
+    new_connections: mpsc::Receiver<Connection>,
+
+    /// The IP addresses of network interfaces on which the listening socket
+    /// is accepting connections.
+    ///
+    /// If the listen socket listens on all interfaces, these may change over
+    /// time as interfaces become available or unavailable.
+    in_addr: InAddr,
+
+    /// Set to `Some` if this [`Listener`] should close.
+    /// Optionally contains a [`TransportEvent::ListenerClosed`] that should be
+    /// reported before the listener's stream is terminated.
+    report_closed: Option<Option<<Self as Stream>::Item>>,
+}
+
+impl Listener {
+    fn new(
+        listener_id: ListenerId,
+        endpoint: Arc<Endpoint>,
+        new_connections: mpsc::Receiver<Connection>,
+        in_addr: InAddr,
+    ) -> Self {
+        Listener {
+            endpoint,
+            listener_id,
+            new_connections,
+            in_addr,
+            report_closed: None,
+        }
+    }
+
+    /// Report the listener as closed in a [`TransportEvent::ListenerClosed`] and
+    /// terminate the stream.
+    fn close(&mut self, reason: Result<(), Error>) {
+        match self.report_closed {
+            Some(_) => tracing::debug!("Listener was already closed."),
+            None => {
+                // Report the listener event as closed.
+                let _ = self
+                    .report_closed
+                    .insert(Some(TransportEvent::ListenerClosed {
+                        listener_id: self.listener_id,
+                        reason,
+                    }));
+            }
+        }
+    }
+
+    /// Poll for a next If Event.
+    fn poll_if_addr(&mut self, cx: &mut Context<'_>) -> Option<<Self as Stream>::Item> {
+        match self.in_addr.poll_next_unpin(cx) {
             Poll::Ready(mut item) => {
                 if let Some(item) = item.take() {
                     // Consume all events for up/down interface changes.
                     match item {
                         Ok(IfEvent::Up(inet)) => {
                             let ip = inet.addr();
-                            if endpoint.local_addr.is_ipv4() == ip.is_ipv4() {
-                                let socket_addr = SocketAddr::new(ip, endpoint.local_addr.port());
+                            if self.endpoint.socket_addr().is_ipv4() == ip.is_ipv4() {
+                                let socket_addr =
+                                    SocketAddr::new(ip, self.endpoint.socket_addr().port());
                                 let ma = socketaddr_to_multiaddr(&socket_addr);
                                 tracing::debug!("New listen address: {}", ma);
-                                return Poll::Ready(TransportEvent::NewAddress {
-                                    listener_id,
+                                Some(TransportEvent::NewAddress {
+                                    listener_id: self.listener_id,
                                     listen_addr: ma,
-                                });
+                                })
+                            } else {
+                                self.poll_if_addr(cx)
                             }
                         }
                         Ok(IfEvent::Down(inet)) => {
                             let ip = inet.addr();
-                            if endpoint.local_addr.is_ipv4() == ip.is_ipv4() {
-                                let socket_addr = SocketAddr::new(ip, endpoint.local_addr.port());
+                            if self.endpoint.socket_addr().is_ipv4() == ip.is_ipv4() {
+                                let socket_addr =
+                                    SocketAddr::new(ip, self.endpoint.socket_addr().port());
                                 let ma = socketaddr_to_multiaddr(&socket_addr);
                                 tracing::debug!("Expired listen address: {}", ma);
-                                return Poll::Ready(TransportEvent::AddressExpired {
-                                    listener_id,
+                                Some(TransportEvent::AddressExpired {
+                                    listener_id: self.listener_id,
                                     listen_addr: ma,
-                                });
+                                })
+                            } else {
+                                self.poll_if_addr(cx)
                             }
                         }
                         Err(err) => {
@@ -186,44 +259,56 @@ impl Transport for QuicTransport {
                                 "Failure polling interfaces: {:?}.",
                                 err
                             };
-                            return Poll::Ready(TransportEvent::ListenerError {
-                                listener_id,
+                            Some(TransportEvent::ListenerError {
+                                listener_id: self.listener_id,
                                 error: Error::IfWatcher(err),
-                            });
+                            })
                         }
                     }
+                } else {
+                    self.poll_if_addr(cx)
                 }
             }
-            Poll::Pending => {
-                // continue polling endpoint
-            }
+            Poll::Pending => None,
         }
+    }
+}
 
-        let connection = match endpoint.poll_incoming(cx) {
-            Poll::Ready(Some(connection)) => connection,
-            Poll::Ready(None) => {
-                return Poll::Ready(TransportEvent::ListenerClosed {
-                    listener_id,
-                    reason: Ok(()),
-                })
+impl Stream for Listener {
+    type Item = TransportEvent<<QuicTransport as Transport>::ListenerUpgrade, Error>;
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        if let Some(closed) = self.report_closed.as_mut() {
+            // Listener was closed.
+            // Report the transport event if there is one. On the next iteration, return
+            // `Poll::Ready(None)` to terminate the stream.
+            return Poll::Ready(closed.take());
+        }
+        if let Some(event) = self.poll_if_addr(cx) {
+            return Poll::Ready(Some(event));
+        }
+        let connection = match futures::ready!(self.new_connections.poll_next_unpin(cx)) {
+            Some(c) => c,
+            None => {
+                self.close(Err(Error::TaskCrashed));
+                return self.poll_next(cx);
             }
-            Poll::Pending => return Poll::Pending,
         };
+
         let local_addr = socketaddr_to_multiaddr(&connection.local_addr());
         let send_back_addr = socketaddr_to_multiaddr(&connection.remote_addr());
         let event = TransportEvent::Incoming {
             upgrade: Upgrade::from_connection(connection),
             local_addr,
             send_back_addr,
-            listener_id,
+            listener_id: self.listener_id,
         };
-        Poll::Ready(event)
+        Poll::Ready(Some(event))
     }
 }
 
 /// Tries to turn a QUIC multiaddress into a UDP [`SocketAddr`]. Returns None if the format
 /// of the multiaddr is wrong.
-pub(crate) fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Option<SocketAddr> {
+pub fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Option<SocketAddr> {
     let mut iter = addr.iter();
     let proto1 = iter.next()?;
     let proto2 = iter.next()?;
