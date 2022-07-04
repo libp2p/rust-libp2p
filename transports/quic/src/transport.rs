@@ -93,8 +93,8 @@ impl Transport for QuicTransport {
     type Dial = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
     fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
-        let socket_addr = multiaddr_to_socketaddr(&addr)
-            .ok_or(TransportError::MultiaddrNotSupported(addr))?;
+        let socket_addr =
+            multiaddr_to_socketaddr(&addr).ok_or(TransportError::MultiaddrNotSupported(addr))?;
         let listener_id = ListenerId::new();
         let listener = Listener::new(listener_id, socket_addr, self.config.clone())
             .map_err(TransportError::Other)?;
