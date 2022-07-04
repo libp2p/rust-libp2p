@@ -55,6 +55,8 @@ pub use quinn_proto::{
 pub struct QuicTransport {
     config: Config,
     listeners: SelectAll<Listener>,
+    /// Endpoint to use if no listener exists.
+    dialer: Option<Arc<Endpoint>>,
 }
 
 impl QuicTransport {
@@ -62,6 +64,7 @@ impl QuicTransport {
         Self {
             listeners: SelectAll::new(),
             config,
+            dialer: None,
         }
     }
 }
@@ -75,12 +78,9 @@ pub enum Error {
     /// Error after the remote has been reached.
     #[error("{0}")]
     Established(Libp2pQuicConnectionError),
-    /// Error while working with IfWatcher.
-    #[error("{0}")]
-    IfWatcher(std::io::Error),
 
     #[error("{0}")]
-    Socket(std::io::Error),
+    Io(#[from] std::io::Error),
 
     #[error("Background task crashed.")]
     TaskCrashed,
@@ -94,13 +94,15 @@ impl Transport for QuicTransport {
 
     fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
         let socket_addr = multiaddr_to_socketaddr(&addr)
-            .ok_or_else(|| TransportError::MultiaddrNotSupported(addr))?;
-        let in_addr = InAddr::new(socket_addr.ip());
-        let (endpoint, new_connections_rx) = Endpoint::new(self.config.clone(), socket_addr)
-            .map_err(|e| TransportError::Other(Error::Socket(e)))?;
+            .ok_or(TransportError::MultiaddrNotSupported(addr))?;
         let listener_id = ListenerId::new();
-        let listener = Listener::new(listener_id, endpoint, new_connections_rx, in_addr);
+        let listener = Listener::new(listener_id, socket_addr, self.config.clone())
+            .map_err(TransportError::Other)?;
         self.listeners.push(listener);
+        // Drop reference to dialer endpoint so that the endpoint is dropped once the last
+        // connection that uses it is closed.
+        // New outbound connections will use a bidirectional (listener) endpoint.
+        let _ = self.dialer.take();
         Ok(listener_id)
     }
 
@@ -118,26 +120,40 @@ impl Transport for QuicTransport {
     }
 
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        todo!()
-        // let socket_addr = if let Some(socket_addr) = multiaddr_to_socketaddr(&addr) {
-        //     if socket_addr.port() == 0 || socket_addr.ip().is_unspecified() {
-        //         tracing::error!("multiaddr not supported");
-        //         return Err(TransportError::MultiaddrNotSupported(addr));
-        //     }
-        //     socket_addr
-        // } else {
-        //     tracing::error!("multiaddr not supported");
-        //     return Err(TransportError::MultiaddrNotSupported(addr));
-        // };
+        let socket_addr = multiaddr_to_socketaddr(&addr)
+            .ok_or_else(|| TransportError::MultiaddrNotSupported(addr.clone()))?;
+        if socket_addr.port() == 0 || socket_addr.ip().is_unspecified() {
+            tracing::error!("multiaddr not supported");
+            return Err(TransportError::MultiaddrNotSupported(addr));
+        }
+        let endpoint = if self.listeners.is_empty() {
+            match self.dialer.clone() {
+                Some(endpoint) => endpoint,
+                None => {
+                    let endpoint =
+                        Endpoint::new_dialer(self.config.clone()).map_err(TransportError::Other)?;
+                    let _ = self.dialer.insert(endpoint.clone());
+                    endpoint
+                }
+            }
+        } else {
+            // Pick a random listener to use for dialing.
+            // TODO: Prefer listeners with same IP version.
+            let n = rand::random::<usize>() % self.listeners.len();
+            let listener = self
+                .listeners
+                .iter_mut()
+                .nth(n)
+                .expect("Can not be out of bound.");
+            listener.endpoint.clone()
+        };
 
-        // let endpoint = self.endpoint.clone();
-
-        // Ok(async move {
-        //     let connection = endpoint.dial(socket_addr).await.map_err(Error::Reach)?;
-        //     let final_connec = Upgrade::from_connection(connection).await?;
-        //     Ok(final_connec)
-        // }
-        // .boxed())
+        Ok(async move {
+            let connection = endpoint.dial(socket_addr).await.map_err(Error::Reach)?;
+            let final_connec = Upgrade::from_connection(connection).await?;
+            Ok(final_connec)
+        }
+        .boxed())
     }
 
     fn dial_as_listener(
@@ -169,7 +185,7 @@ struct Listener {
     listener_id: ListenerId,
 
     /// Channel where new connections are being sent.
-    new_connections: mpsc::Receiver<Connection>,
+    new_connections_rx: mpsc::Receiver<Connection>,
 
     /// The IP addresses of network interfaces on which the listening socket
     /// is accepting connections.
@@ -187,17 +203,18 @@ struct Listener {
 impl Listener {
     fn new(
         listener_id: ListenerId,
-        endpoint: Arc<Endpoint>,
-        new_connections: mpsc::Receiver<Connection>,
-        in_addr: InAddr,
-    ) -> Self {
-        Listener {
+        socket_addr: SocketAddr,
+        config: Config,
+    ) -> Result<Self, Error> {
+        let in_addr = InAddr::new(socket_addr.ip());
+        let (endpoint, new_connections_rx) = Endpoint::new_bidirectional(config, socket_addr)?;
+        Ok(Listener {
             endpoint,
             listener_id,
-            new_connections,
+            new_connections_rx,
             in_addr,
             report_closed: None,
-        }
+        })
     }
 
     /// Report the listener as closed in a [`TransportEvent::ListenerClosed`] and
@@ -261,7 +278,7 @@ impl Listener {
                             };
                             Some(TransportEvent::ListenerError {
                                 listener_id: self.listener_id,
-                                error: Error::IfWatcher(err),
+                                error: err.into(),
                             })
                         }
                     }
@@ -286,7 +303,7 @@ impl Stream for Listener {
         if let Some(event) = self.poll_if_addr(cx) {
             return Poll::Ready(Some(event));
         }
-        let connection = match futures::ready!(self.new_connections.poll_next_unpin(cx)) {
+        let connection = match futures::ready!(self.new_connections_rx.poll_next_unpin(cx)) {
             Some(c) => c,
             None => {
                 self.close(Err(Error::TaskCrashed));

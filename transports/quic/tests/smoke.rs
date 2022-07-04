@@ -14,7 +14,6 @@ use libp2p::swarm::{Swarm, SwarmEvent};
 use libp2p_quic::{Config as QuicConfig, QuicTransport};
 use rand::RngCore;
 use std::num::NonZeroU8;
-use std::time::Duration;
 use std::{io, iter};
 
 fn generate_tls_keypair() -> libp2p::identity::Keypair {

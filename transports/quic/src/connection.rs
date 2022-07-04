@@ -134,7 +134,7 @@ impl Connection {
                 // In a normal case scenario this should not happen, because
                 // we get want to get a local addr for a server connection only.
                 tracing::error!("trying to get quinn::local_ip for a client");
-                endpoint_addr.clone()
+                *endpoint_addr
             })
     }
 
