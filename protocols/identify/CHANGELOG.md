@@ -6,7 +6,9 @@
 
 - Extend log message on second identify push stream with peer ID.
 
-- Expose `PROTOCOL_NAME` and `PUSH_PROTOCOL_NAME`.
+- Expose `PROTOCOL_NAME` and `PUSH_PROTOCOL_NAME`. See [PR 2734].
+
+[PR 2734]: https://github.com/libp2p/rust-libp2p/pull/2734/
 
 # 0.36.1
 
