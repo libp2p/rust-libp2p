@@ -21,7 +21,7 @@
 use futures::{future, prelude::*};
 use libp2p_core::{transport::Transport, upgrade};
 use libp2p_deflate::DeflateConfig;
-use libp2p_tcp::TcpConfig;
+use libp2p_tcp::TcpTransport;
 use quickcheck::{QuickCheck, RngCore, TestResult};
 
 #[test]
@@ -44,38 +44,39 @@ fn lot_of_data() {
 }
 
 async fn run(message1: Vec<u8>) {
-    let mut transport = TcpConfig::new().and_then(|conn, endpoint| {
-        upgrade::apply(
-            conn,
-            DeflateConfig::default(),
-            endpoint,
-            upgrade::Version::V1,
-        )
-    });
-
-    let mut listener = transport
+    let new_transport = || {
+        TcpTransport::default()
+            .and_then(|conn, endpoint| {
+                upgrade::apply(
+                    conn,
+                    DeflateConfig::default(),
+                    endpoint,
+                    upgrade::Version::V1,
+                )
+            })
+            .boxed()
+    };
+    let mut listener_transport = new_transport();
+    listener_transport
         .listen_on("/ip4/0.0.0.0/tcp/0".parse().expect("multiaddr"))
         .expect("listener");
 
-    let listen_addr = listener
-        .by_ref()
+    let listen_addr = listener_transport
         .next()
         .await
         .expect("some event")
-        .expect("no error")
         .into_new_address()
         .expect("new address");
 
     let message2 = message1.clone();
 
     let listener_task = async_std::task::spawn(async move {
-        let mut conn = listener
-            .filter(|e| future::ready(e.as_ref().map(|e| e.is_upgrade()).unwrap_or(false)))
+        let mut conn = listener_transport
+            .filter(|e| future::ready(e.is_upgrade()))
             .next()
             .await
             .expect("some event")
-            .expect("no error")
-            .into_upgrade()
+            .into_incoming()
             .expect("upgrade")
             .0
             .await
@@ -89,7 +90,8 @@ async fn run(message1: Vec<u8>) {
         conn.close().await.expect("close")
     });
 
-    let mut conn = transport
+    let mut dialer_transport = new_transport();
+    let mut conn = dialer_transport
         .dial(listen_addr)
         .expect("dialer")
         .await

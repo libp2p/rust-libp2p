@@ -20,7 +20,7 @@
 
 use crate::{
     muxing::{StreamMuxer, StreamMuxerEvent},
-    transport::{ListenerEvent, Transport, TransportError},
+    transport::{ListenerId, Transport, TransportError, TransportEvent},
     Multiaddr, ProtocolName,
 };
 use futures::{
@@ -274,48 +274,6 @@ pub enum EitherOutbound<A: StreamMuxer, B: StreamMuxer> {
     B(B::OutboundSubstream),
 }
 
-/// Implements `Stream` and dispatches all method calls to either `First` or `Second`.
-#[pin_project(project = EitherListenStreamProj)]
-#[derive(Debug, Copy, Clone)]
-#[must_use = "futures do nothing unless polled"]
-pub enum EitherListenStream<A, B> {
-    First(#[pin] A),
-    Second(#[pin] B),
-}
-
-impl<AStream, BStream, AInner, BInner, AError, BError> Stream
-    for EitherListenStream<AStream, BStream>
-where
-    AStream: TryStream<Ok = ListenerEvent<AInner, AError>, Error = AError>,
-    BStream: TryStream<Ok = ListenerEvent<BInner, BError>, Error = BError>,
-{
-    type Item = Result<
-        ListenerEvent<EitherFuture<AInner, BInner>, EitherError<AError, BError>>,
-        EitherError<AError, BError>,
-    >;
-
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        match self.project() {
-            EitherListenStreamProj::First(a) => match TryStream::try_poll_next(a, cx) {
-                Poll::Pending => Poll::Pending,
-                Poll::Ready(None) => Poll::Ready(None),
-                Poll::Ready(Some(Ok(le))) => Poll::Ready(Some(Ok(le
-                    .map(EitherFuture::First)
-                    .map_err(EitherError::A)))),
-                Poll::Ready(Some(Err(err))) => Poll::Ready(Some(Err(EitherError::A(err)))),
-            },
-            EitherListenStreamProj::Second(a) => match TryStream::try_poll_next(a, cx) {
-                Poll::Pending => Poll::Pending,
-                Poll::Ready(None) => Poll::Ready(None),
-                Poll::Ready(Some(Ok(le))) => Poll::Ready(Some(Ok(le
-                    .map(EitherFuture::Second)
-                    .map_err(EitherError::B)))),
-                Poll::Ready(Some(Err(err))) => Poll::Ready(Some(Err(EitherError::B(err)))),
-            },
-        }
-    }
-}
-
 /// Implements `Future` and dispatches all method calls to either `First` or `Second`.
 #[pin_project(project = EitherFutureProj)]
 #[derive(Debug, Copy, Clone)]
@@ -385,11 +343,12 @@ impl<A: ProtocolName, B: ProtocolName> ProtocolName for EitherName<A, B> {
         }
     }
 }
-
-#[derive(Debug, Copy, Clone)]
+#[pin_project(project = EitherTransportProj)]
+#[derive(Debug)]
+#[must_use = "transports do nothing unless polled"]
 pub enum EitherTransport<A, B> {
-    Left(A),
-    Right(B),
+    Left(#[pin] A),
+    Right(#[pin] B),
 }
 
 impl<A, B> Transport for EitherTransport<A, B>
@@ -399,26 +358,51 @@ where
 {
     type Output = EitherOutput<A::Output, B::Output>;
     type Error = EitherError<A::Error, B::Error>;
-    type Listener = EitherListenStream<A::Listener, B::Listener>;
     type ListenerUpgrade = EitherFuture<A::ListenerUpgrade, B::ListenerUpgrade>;
     type Dial = EitherFuture<A::Dial, B::Dial>;
 
-    fn listen_on(
-        &mut self,
-        addr: Multiaddr,
-    ) -> Result<Self::Listener, TransportError<Self::Error>> {
+    fn poll(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
+        match self.project() {
+            EitherTransportProj::Left(a) => match a.poll(cx) {
+                Poll::Pending => Poll::Pending,
+                Poll::Ready(event) => Poll::Ready(
+                    event
+                        .map_upgrade(EitherFuture::First)
+                        .map_err(EitherError::A),
+                ),
+            },
+            EitherTransportProj::Right(b) => match b.poll(cx) {
+                Poll::Pending => Poll::Pending,
+                Poll::Ready(event) => Poll::Ready(
+                    event
+                        .map_upgrade(EitherFuture::Second)
+                        .map_err(EitherError::B),
+                ),
+            },
+        }
+    }
+
+    fn remove_listener(&mut self, id: ListenerId) -> bool {
+        match self {
+            EitherTransport::Left(t) => t.remove_listener(id),
+            EitherTransport::Right(t) => t.remove_listener(id),
+        }
+    }
+
+    fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
         use TransportError::*;
         match self {
-            EitherTransport::Left(a) => match a.listen_on(addr) {
-                Ok(listener) => Ok(EitherListenStream::First(listener)),
-                Err(MultiaddrNotSupported(addr)) => Err(MultiaddrNotSupported(addr)),
-                Err(Other(err)) => Err(Other(EitherError::A(err))),
-            },
-            EitherTransport::Right(b) => match b.listen_on(addr) {
-                Ok(listener) => Ok(EitherListenStream::Second(listener)),
-                Err(MultiaddrNotSupported(addr)) => Err(MultiaddrNotSupported(addr)),
-                Err(Other(err)) => Err(Other(EitherError::B(err))),
-            },
+            EitherTransport::Left(a) => a.listen_on(addr).map_err(|e| match e {
+                MultiaddrNotSupported(addr) => MultiaddrNotSupported(addr),
+                Other(err) => Other(EitherError::A(err)),
+            }),
+            EitherTransport::Right(b) => b.listen_on(addr).map_err(|e| match e {
+                MultiaddrNotSupported(addr) => MultiaddrNotSupported(addr),
+                Other(err) => Other(EitherError::B(err)),
+            }),
         }
     }
 
