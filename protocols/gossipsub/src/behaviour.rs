@@ -54,7 +54,7 @@ use crate::handler::{GossipsubHandler, GossipsubHandlerIn, HandlerEvent};
 use crate::mcache::MessageCache;
 use crate::metrics::{Churn, Config as MetricsConfig, Inclusion, Metrics, Penalty};
 use crate::peer_score::{PeerScore, PeerScoreParams, PeerScoreThresholds, RejectReason};
-use crate::protocol::SIGNING_PREFIX;
+use crate::protocol::{ProtocolConfig, SIGNING_PREFIX};
 use crate::subscription_filter::{AllowAllSubscriptionFilter, TopicSubscriptionFilter};
 use crate::time_cache::{DuplicateCache, TimeCache};
 use crate::topic::{Hasher, Topic, TopicHash};
@@ -3053,13 +3053,15 @@ where
     type OutEvent = GossipsubEvent;
 
     fn new_handler(&mut self) -> Self::ConnectionHandler {
-        GossipsubHandler::new(
-            self.config.protocol_id_prefix().clone(),
+        let protocol_config = ProtocolConfig::new(
+            self.config.protocol_id().clone(),
+            self.config.custom_id_version().clone(),
             self.config.max_transmit_size(),
             self.config.validation_mode().clone(),
-            self.config.idle_timeout(),
             self.config.support_floodsub(),
-        )
+        );
+
+        GossipsubHandler::new(protocol_config, self.config.idle_timeout())
     }
 
     fn inject_connection_established(
