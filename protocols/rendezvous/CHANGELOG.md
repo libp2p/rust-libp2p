@@ -1,4 +1,4 @@
-# 0.7.0 [unreleased]
+# 0.7.0
 
 - Update to `libp2p-core` `v0.34.0`.
 
