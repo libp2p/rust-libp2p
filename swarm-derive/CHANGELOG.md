@@ -1,6 +1,6 @@
 # 0.28.0
 
-- Remove ListenersStream. See [PR 2652].
+- Import `ListenerId` from `libp2p::core::transport`. See [PR 2652].
 
 [PR 2652]: https://github.com/libp2p/rust-libp2p/pull/2652
 
