@@ -23,7 +23,8 @@ mod socket;
 mod timer;
 
 use self::iface::InterfaceState;
-use self::timer::{time::AsyncTimer, TimerBuilder};
+
+use crate::behaviour::timer::TimerBuilder;
 
 use crate::MdnsConfig;
 use futures::prelude::*;
@@ -38,6 +39,12 @@ use smallvec::SmallVec;
 use std::collections::hash_map::{Entry, HashMap};
 use std::{cmp, fmt, io, net::IpAddr, pin::Pin, task::Context, task::Poll, time::Instant};
 
+#[cfg(feature = "async-io")]
+use crate::behaviour::{socket::asio::AsyncUdpSocket, timer::asio::AsyncTimer};
+
+#[cfg(feature = "tokio")]
+use crate::behaviour::{socket::tokio::TokioUdpSocket, timer::tokio::AsyncTimer};
+
 /// A `NetworkBehaviour` for mDNS. Automatically discovers peers on the local network and adds
 /// them to the topology.
 #[derive(Debug)]
@@ -49,7 +56,11 @@ pub struct Mdns {
     if_watch: IfWatcher,
 
     /// Mdns interface states.
-    iface_states: HashMap<IpAddr, InterfaceState>,
+    #[cfg(feature = "async-io")]
+    iface_states: HashMap<IpAddr, InterfaceState<AsyncUdpSocket, AsyncTimer>>,
+
+    #[cfg(feature = "tokio")]
+    iface_states: HashMap<IpAddr, InterfaceState<TokioUdpSocket, AsyncTimer>>,
 
     /// List of nodes that we have discovered, the address, and when their TTL expires.
     ///

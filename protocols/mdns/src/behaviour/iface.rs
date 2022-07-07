@@ -25,10 +25,7 @@ use self::dns::{build_query, build_query_response, build_service_discovery_respo
 use self::query::MdnsPacket;
 use crate::MdnsConfig;
 
-use crate::behaviour::{
-    socket::{udp::AsyncUdpSocket, AsyncSocket},
-    timer::{time::AsyncTimer, TimerBuilder},
-};
+use crate::behaviour::{socket::AsyncSocket, timer::TimerBuilder};
 
 use libp2p_core::{address_translation, multiaddr::Protocol, Multiaddr, PeerId};
 use libp2p_swarm::PollParameters;
@@ -45,13 +42,17 @@ use std::{
 /// An mDNS instance for a networking interface. To discover all peers when having multiple
 /// interfaces an [`InterfaceState`] is required for each interface.
 #[derive(Debug)]
-pub struct InterfaceState {
+pub struct InterfaceState<U, T>
+where
+    U: AsyncSocket,
+    T: TimerBuilder + std::marker::Unpin,
+{
     /// Address this instance is bound to.
     addr: IpAddr,
     /// Receive socket.
-    recv_socket: AsyncUdpSocket,
+    recv_socket: U,
     /// Send socket.
-    send_socket: AsyncUdpSocket,
+    send_socket: U,
     /// Buffer used for receiving data from the main socket.
     /// RFC6762 discourages packets larger than the interface MTU, but allows sizes of up to 9000
     /// bytes, if it can be ensured that all participating devices can handle such large packets.
@@ -64,7 +65,7 @@ pub struct InterfaceState {
     /// Discovery interval.
     query_interval: Duration,
     /// Discovery timer.
-    timeout: AsyncTimer,
+    timeout: T,
     /// Multicast address.
     multicast_addr: IpAddr,
     /// Discovered addresses.
@@ -73,7 +74,11 @@ pub struct InterfaceState {
     ttl: Duration,
 }
 
-impl InterfaceState {
+impl<U, T> InterfaceState<U, T>
+where
+    U: AsyncSocket,
+    T: TimerBuilder + std::marker::Unpin,
+{
     /// Builds a new [`InterfaceState`].
     pub fn new(addr: IpAddr, config: MdnsConfig) -> io::Result<Self> {
         log::info!("creating instance on iface {}", addr);
@@ -87,7 +92,7 @@ impl InterfaceState {
                 socket.set_multicast_loop_v4(true)?;
                 socket.set_multicast_ttl_v4(255)?;
                 socket.join_multicast_v4(&*crate::IPV4_MDNS_MULTICAST_ADDRESS, &addr)?;
-                AsyncUdpSocket::from_socket(UdpSocket::from(socket))?
+                U::from_socket(UdpSocket::from(socket))?
             }
             IpAddr::V6(_) => {
                 let socket = Socket::new(Domain::IPV6, Type::DGRAM, Some(socket2::Protocol::UDP))?;
@@ -98,7 +103,7 @@ impl InterfaceState {
                 socket.set_multicast_loop_v6(true)?;
                 // TODO: find interface matching addr.
                 socket.join_multicast_v6(&*crate::IPV6_MDNS_MULTICAST_ADDRESS, 0)?;
-                AsyncUdpSocket::from_socket(UdpSocket::from(socket))?
+                U::from_socket(UdpSocket::from(socket))?
             }
         };
         let bind_addr = match addr {
@@ -112,7 +117,7 @@ impl InterfaceState {
             }
         };
         let std_socket = UdpSocket::bind(bind_addr)?;
-        let send_socket = AsyncUdpSocket::from_socket(std_socket)?;
+        let send_socket = U::from_socket(std_socket)?;
 
         // randomize timer to prevent all converging and firing at the same time.
         let query_interval = {
@@ -133,18 +138,18 @@ impl InterfaceState {
             send_buffer: Default::default(),
             discovered: Default::default(),
             query_interval,
-            timeout: AsyncTimer::interval_at(Instant::now(), query_interval),
+            timeout: T::interval_at(Instant::now(), query_interval),
             multicast_addr,
             ttl: config.ttl,
         })
     }
 
     pub fn reset_timer(&mut self) {
-        self.timeout = AsyncTimer::interval(self.query_interval);
+        self.timeout = T::interval(self.query_interval);
     }
 
     pub fn fire_timer(&mut self) {
-        self.timeout = AsyncTimer::interval_at(Instant::now(), self.query_interval);
+        self.timeout = T::interval_at(Instant::now(), self.query_interval);
     }
 
     fn inject_mdns_packet(&mut self, packet: MdnsPacket, params: &impl PollParameters) {
@@ -214,7 +219,7 @@ impl InterfaceState {
 
         // Send responses.
         let mut s_buffer = VecDeque::new();
-         while let Some(packet) = self.send_buffer.pop_front() {
+        while let Some(packet) = self.send_buffer.pop_front() {
             match self.send_socket.poll_send_packet(
                 cx,
                 &packet,
@@ -224,7 +229,7 @@ impl InterfaceState {
                 Poll::Pending => s_buffer.push_front(packet),
             }
         }
-        
+
         if !s_buffer.is_empty() {
             self.send_buffer = s_buffer;
         }

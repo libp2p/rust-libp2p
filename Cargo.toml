@@ -161,7 +161,7 @@ required-features = ["floodsub"]
 
 [[example]]
 name = "chat-tokio"
-required-features = ["tcp-tokio", "mdns"]
+required-features = ["tcp-tokio", "mdns-tokio"]
 
 [[example]]
 name = "file-sharing"

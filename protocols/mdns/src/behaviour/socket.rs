@@ -23,11 +23,17 @@ use std::{
     task::{Context, Poll},
 };
 
-pub(crate) trait AsyncSocket {
-    type Socket;
+/// Interface that must be implemented by the different runtimes to use the UdpSocket in async mode
+///
+pub trait AsyncSocket {
+    /// Create the async socket from the ```std::net::UdpSocket```
+    ///
+    fn from_socket(socket: UdpSocket) -> std::io::Result<Self>
+    where
+        Self: Sized;
 
-    fn from_socket(socket: UdpSocket) -> std::io::Result<Self::Socket>;
-
+    /// Attempts to receive a single packet on the socket from the remote address to which it is connected.
+    ///
     fn poll_receive_packet(
         &mut self,
         _cx: &mut Context,
@@ -36,26 +42,32 @@ pub(crate) trait AsyncSocket {
         Poll::Pending
     }
 
+    /// Attempts to send data on the socket to a given address.
+    ///
     fn poll_send_packet(&mut self, _cx: &mut Context, _packet: &[u8], _to: SocketAddr) -> Poll<()> {
         Poll::Pending
     }
 }
 
 #[cfg(feature = "async-io")]
-pub(crate) mod udp {
+pub mod asio {
     use super::*;
-    use async_io::Async;
+    use async_io_crate::Async;
     use futures::FutureExt;
 
+    /// AsyncIo UdpSocket
+    ///
     pub type AsyncUdpSocket = Async<UdpSocket>;
 
     impl AsyncSocket for AsyncUdpSocket {
-        type Socket = Self;
-
-        fn from_socket(socket: UdpSocket) -> std::io::Result<Self::Socket> {
+        /// Create the async socket from the ```std::net::UdpSocket```
+        ///
+        fn from_socket(socket: UdpSocket) -> std::io::Result<Self> {
             Async::new(socket)
         }
 
+        /// Attempts to receive a single packet on the socket from the remote address to which it is connected.
+        ///
         fn poll_receive_packet(
             &mut self,
             cx: &mut Context,
@@ -79,6 +91,8 @@ pub(crate) mod udp {
             Poll::Pending
         }
 
+        /// Attempts to send data on the socket to a given address.
+        ///
         fn poll_send_packet(
             &mut self,
             cx: &mut Context,
@@ -107,20 +121,23 @@ pub(crate) mod udp {
 }
 
 #[cfg(feature = "tokio")]
-pub(crate) mod udp {
+pub mod tokio {
     use super::*;
-    use tokio::net::UdpSocket as TokioUdpSocket;
+    use tokio_crate::net::UdpSocket as TkUdpSocket;
 
-    pub type AsyncUdpSocket = TokioUdpSocket;
+    /// Tokio ASync Socket`
+    pub type TokioUdpSocket = TkUdpSocket;
 
-    impl AsyncSocket for AsyncUdpSocket {
-        type Socket = Self;
-
-        fn from_socket(socket: UdpSocket) -> std::io::Result<Self::Socket> {
+    impl AsyncSocket for TokioUdpSocket {
+        /// Create the async socket from the ```std::net::UdpSocket```
+        ///
+        fn from_socket(socket: UdpSocket) -> std::io::Result<Self> {
             socket.set_nonblocking(true)?;
             TokioUdpSocket::from_std(socket)
         }
 
+        /// Attempts to receive a single packet on the socket from the remote address to which it is connected.
+        ///
         fn poll_receive_packet(
             &mut self,
             cx: &mut Context,
@@ -149,6 +166,8 @@ pub(crate) mod udp {
             Poll::Pending
         }
 
+        /// Attempts to send data on the socket to a given address.
+        ///
         fn poll_send_packet(
             &mut self,
             cx: &mut Context,

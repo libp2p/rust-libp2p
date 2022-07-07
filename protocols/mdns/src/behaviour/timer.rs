@@ -21,53 +21,66 @@
 use std::task::{Context, Poll};
 use std::time::{Duration, Instant};
 
+/// Simple wrapper for the differents type of timers
+///
 #[derive(Debug)]
-pub(crate) struct WrapTimer<T> {
+pub struct WrapTimer<T> {
     timer: T,
 }
 
+/// Builder interface to homogenize the differents implementations
+///
 pub trait TimerBuilder {
     type Item;
 
+    /// Creates a timer that emits an event once at the given time instant.
     fn at(instant: Instant) -> Self;
 
+    /// Creates a timer that emits events periodically.
     fn interval(duration: Duration) -> Self;
 
+    /// Creates a timer that emits events periodically, starting at start.
     fn interval_at(start: Instant, duration: Duration) -> Self;
 
+    /// Poll the timer
     fn poll_tick(&mut self, cx: &mut Context) -> Poll<Self::Item>;
 }
 
 #[cfg(feature = "async-io")]
-pub(crate) mod time {
+pub mod asio {
     use super::*;
-    use async_io::Timer;
+    use async_io_crate::Timer;
     use futures::Stream;
     use std::pin::Pin;
 
-    pub(crate) type AsyncTimer = WrapTimer<Timer>;
+    /// Async Timer
+    pub type AsyncTimer = WrapTimer<Timer>;
 
     impl TimerBuilder for WrapTimer<Timer> {
         type Item = Option<Instant>;
 
+        /// Creates a timer that emits an event once at the given time instant.
         fn at(instant: Instant) -> Self {
             WrapTimer {
                 timer: Timer::at(instant),
             }
         }
 
+        /// Creates a timer that emits events periodically.
         fn interval(duration: Duration) -> Self {
             WrapTimer {
                 timer: Timer::interval(duration),
             }
         }
 
+        /// Creates a timer that emits events periodically, starting at start.
         fn interval_at(start: Instant, duration: Duration) -> Self {
             WrapTimer {
                 timer: Timer::interval_at(start, duration),
             }
         }
 
+        /// Poll the timer
         fn poll_tick(&mut self, cx: &mut Context) -> Poll<Self::Item> {
             Pin::new(&mut self.timer).poll_next(cx)
         }
@@ -75,16 +88,19 @@ pub(crate) mod time {
 }
 
 #[cfg(feature = "tokio")]
-pub(crate) mod time {
+pub mod tokio {
     use super::*;
-    use tokio::time::{self, Instant as TokioInstant, Interval};
+    use tokio_crate::time::{self, Instant as TokioInstant, Interval};
 
-    pub(crate) type AsyncTimer = WrapTimer<Interval>;
+    /// Tokio wrapper
+    pub type AsyncTimer = WrapTimer<Interval>;
 
     impl TimerBuilder for WrapTimer<Interval> {
         type Item = time::Instant;
 
+        /// Creates a timer that emits an event once at the given time instant.
         fn at(instant: Instant) -> Self {
+            // Taken from: https://docs.rs/async-io/1.7.0/src/async_io/lib.rs.html#91
             let timer = time::interval_at(
                 TokioInstant::from_std(instant),
                 Duration::new(std::u64::MAX, 1_000_000_000 - 1),
@@ -92,18 +108,21 @@ pub(crate) mod time {
             WrapTimer { timer }
         }
 
+        /// Creates a timer that emits events periodically.
         fn interval(duration: Duration) -> Self {
             WrapTimer {
                 timer: time::interval(duration),
             }
         }
 
+        /// Creates a timer that emits events periodically, starting at start.
         fn interval_at(start: Instant, duration: Duration) -> Self {
             WrapTimer {
                 timer: time::interval_at(TokioInstant::from_std(start), duration),
             }
         }
 
+        /// Poll the timer
         fn poll_tick(&mut self, cx: &mut Context) -> Poll<Self::Item> {
             self.timer.poll_tick(cx)
         }
