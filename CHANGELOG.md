@@ -67,6 +67,10 @@
 
 - Update to [`libp2p-swarm` `v0.38.0`](swarm/CHANGELOG.md#0380).
 
+# 0.46.1
+
+- Update to `libp2p-derive` [`v0.28.0`](swarm-derive/CHANGELOG.md#0280).
+
 # 0.46.0
 
 - Semver bump Rust from `1.56.1` to `1.60.0` . See [PR 2646].
