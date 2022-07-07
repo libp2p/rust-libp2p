@@ -21,29 +21,30 @@
 use crate::connection::{Connection, ConnectionEvent};
 use crate::error::Error;
 
+use futures::{AsyncRead, AsyncWrite};
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
 use parking_lot::Mutex;
 use std::{
     collections::{HashMap, VecDeque},
-    fmt,
+    fmt, io,
+    pin::Pin,
+    sync::{Arc, Weak},
     task::{Context, Poll, Waker},
 };
-
-pub type Substream = quinn_proto::StreamId;
 
 /// State for a single opened QUIC connection.
 pub struct QuicMuxer {
     // Note: This could theoretically be an asynchronous future, in order to yield the current
     // task if a task running in parallel is already holding the lock. However, using asynchronous
     // mutexes without async/await is extremely tedious and maybe not worth the effort.
-    inner: Mutex<QuicMuxerInner>,
+    inner: Arc<Mutex<QuicMuxerInner>>,
 }
 
 /// Mutex-protected fields of [`QuicMuxer`].
 struct QuicMuxerInner {
     /// Inner connection object that yields events.
     connection: Connection,
-    /// State of all the substreams that the muxer reports as open.
+    // /// State of all the substreams that the muxer reports as open.
     substreams: HashMap<quinn_proto::StreamId, SubstreamState>,
     /// A FIFO of wakers to wake if a new outgoing substream is opened.
     pending_substreams: VecDeque<Waker>,
@@ -78,20 +79,201 @@ impl QuicMuxer {
         assert!(!connection.is_handshaking());
 
         QuicMuxer {
-            inner: Mutex::new(QuicMuxerInner {
-                connection,
+            inner: Arc::new(Mutex::new(QuicMuxerInner {
+                connection: connection,
                 substreams: Default::default(),
                 pending_substreams: Default::default(),
                 poll_close_waker: None,
                 poll_event_waker: None,
-            }),
+            })),
+        }
+    }
+}
+
+pub struct Substream {
+    id: quinn_proto::StreamId,
+    muxer: Weak<Mutex<QuicMuxerInner>>,
+}
+
+impl Substream {
+    fn new(id: quinn_proto::StreamId, muxer: Arc<Mutex<QuicMuxerInner>>) -> Self {
+        Self {
+            id,
+            muxer: Arc::downgrade(&muxer),
+        }
+    }
+}
+
+impl Drop for Substream {
+    fn drop(&mut self) {
+        if let Some(muxer) = self.muxer.upgrade() {
+            let mut muxer = muxer.lock();
+            muxer.substreams.remove(&self.id);
+        }
+    }
+}
+
+impl AsyncRead for Substream {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        mut buf: &mut [u8],
+    ) -> Poll<std::io::Result<usize>> {
+        use quinn_proto::{ReadError, ReadableError};
+        use std::io::Write;
+
+        let muxer = self
+            .muxer
+            .upgrade()
+            .expect("StreamMuxer::read_substream: muxer is dead");
+        let mut muxer = muxer.lock();
+
+        let substream_state = muxer
+            .substreams
+            .get(&self.id)
+            .expect("invalid Substream::poll_read API usage");
+        if substream_state.stopped {
+            return Poll::Ready(Ok(0));
+        }
+
+        let mut stream = muxer.connection.connection.recv_stream(self.id);
+        let mut chunks = match stream.read(true) {
+            Ok(chunks) => chunks,
+            Err(ReadableError::UnknownStream) => {
+                return Poll::Ready(Ok(0)); // FIXME This is a hack,
+                                           // a rust client should close substream correctly
+                                           // return Poll::Ready(Err(Self::Error::ExpiredStream))
+            }
+            Err(ReadableError::IllegalOrderedRead) => {
+                panic!("Illegal ordered read can only happen if `stream.read(false)` is used.");
+            }
+        };
+        let mut bytes = 0;
+        let mut pending = false;
+        loop {
+            if buf.is_empty() {
+                break;
+            }
+            match chunks.next(buf.len()) {
+                Ok(Some(chunk)) => {
+                    buf.write_all(&chunk.bytes).expect("enough buffer space");
+                    bytes += chunk.bytes.len();
+                }
+                Ok(None) => {
+                    break;
+                }
+                Err(ReadError::Reset(error_code)) => {
+                    tracing::error!(
+                        "substream {} was reset with error code {}",
+                        self.id,
+                        error_code
+                    );
+                    bytes = 0;
+                    break;
+                }
+                Err(ReadError::Blocked) => {
+                    pending = true;
+                    break;
+                }
+            }
+        }
+        if chunks.finalize().should_transmit() {
+            if let Some(waker) = muxer.poll_event_waker.take() {
+                waker.wake();
+            }
+        }
+        if pending && bytes == 0 {
+            let mut substream_state = muxer
+                .substreams
+                .get_mut(&self.id)
+                .expect("known substream; qed");
+            substream_state.read_waker = Some(cx.waker().clone());
+            Poll::Pending
+        } else {
+            Poll::Ready(Ok(bytes))
+        }
+    }
+}
+
+impl AsyncWrite for Substream {
+    fn poll_write(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<std::io::Result<usize>> {
+        use quinn_proto::WriteError;
+
+        let muxer = self
+            .muxer
+            .upgrade()
+            .expect("Substream::poll_write: muxer is dead");
+        let mut muxer = muxer.lock();
+
+        match muxer.connection.connection.send_stream(self.id).write(buf) {
+            Ok(bytes) => Poll::Ready(Ok(bytes)),
+            Err(WriteError::Blocked) => {
+                let mut substream = muxer
+                    .substreams
+                    .get_mut(&self.id)
+                    .expect("known substream; qed");
+                substream.write_waker = Some(cx.waker().clone());
+                Poll::Pending
+            }
+            Err(err @ WriteError::Stopped(_)) => {
+                Poll::Ready(Err(io::Error::new(io::ErrorKind::ConnectionReset, err)))
+            }
+            Err(WriteError::UnknownStream) => {
+                tracing::error!(
+                    "The application used a connection that is already being \
+                    closed. This is a bug in the application or in libp2p."
+                );
+                Poll::Pending
+            }
+        }
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        // quinn doesn't support flushing, calling close will flush all substreams.
+        Poll::Ready(Ok(()))
+    }
+
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+        let muxer = self
+            .muxer
+            .upgrade()
+            .expect("Substream::poll_close: muxer is dead");
+        let mut muxer = muxer.lock();
+        let muxer = &mut *muxer;
+
+        let mut substream_state = muxer
+            .substreams
+            .get_mut(&self.id)
+            .expect("invalid Substream::poll_close API usage");
+        if substream_state.finished {
+            return Poll::Ready(Ok(()));
+        }
+
+        match muxer.connection.shutdown_substream(self.id) {
+            Ok(()) => {
+                substream_state.finished_waker = Some(cx.waker().clone());
+                Poll::Pending
+            }
+            Err(err @ quinn_proto::FinishError::Stopped(_)) => {
+                Poll::Ready(Err(io::Error::new(io::ErrorKind::ConnectionReset, err)))
+            }
+            Err(quinn_proto::FinishError::UnknownStream) => {
+                // Illegal usage of the API.
+                debug_assert!(false);
+                Poll::Ready(Ok(()))
+                // Poll::Ready(Err(Error::ExpiredStream)) FIXME
+            }
         }
     }
 }
 
 impl StreamMuxer for QuicMuxer {
     type OutboundSubstream = ();
-    type Substream = quinn_proto::StreamId;
+    type Substream = Substream;
     type Error = Error;
 
     /// Polls for a connection-wide event.
@@ -163,8 +345,9 @@ impl StreamMuxer for QuicMuxer {
             }
         }
 
-        if let Some(substream) = inner.connection.pop_incoming_substream() {
-            inner.substreams.insert(substream, Default::default());
+        if let Some(substream_id) = inner.connection.pop_incoming_substream() {
+            inner.substreams.insert(substream_id, Default::default());
+            let substream = Substream::new(substream_id, self.inner.clone());
             Poll::Ready(Ok(StreamMuxerEvent::InboundSubstream(substream)))
         } else {
             inner.poll_event_waker = Some(cx.waker().clone());
@@ -189,8 +372,9 @@ impl StreamMuxer for QuicMuxer {
         _: &mut Self::OutboundSubstream,
     ) -> Poll<Result<Self::Substream, Self::Error>> {
         let mut inner = self.inner.lock();
-        if let Some(substream) = inner.connection.pop_outgoing_substream() {
-            inner.substreams.insert(substream, Default::default());
+        if let Some(substream_id) = inner.connection.pop_outgoing_substream() {
+            inner.substreams.insert(substream_id, Default::default());
+            let substream = Substream::new(substream_id, self.inner.clone());
             Poll::Ready(Ok(substream))
         } else {
             inner.pending_substreams.push_back(cx.waker().clone());
@@ -203,174 +387,6 @@ impl StreamMuxer for QuicMuxer {
     fn destroy_outbound(&self, _: Self::OutboundSubstream) {
         // Do nothing because we don't know which waker should be destroyed.
         // TODO `Self::OutboundSubstream` -> autoincrement id.
-    }
-
-    /// Write data to a substream. The behaviour is the same as `futures::AsyncWrite::poll_write`.
-    ///
-    /// If `Pending` is returned, then the current task will be notified once the substream
-    /// is ready to be read. For each individual substream, only the latest task that was used to
-    /// call this method may be notified.
-    ///
-    /// Calling `write_substream` does not guarantee that data will arrive to the remote. To
-    /// ensure that, you should call `flush_substream`.
-    ///
-    /// It is incorrect to call this method on a substream if you called `shutdown_substream` on
-    /// this substream earlier.
-    fn write_substream(
-        &self,
-        cx: &mut Context<'_>,
-        substream: &mut Self::Substream,
-        buf: &[u8],
-    ) -> Poll<Result<usize, Self::Error>> {
-        use quinn_proto::WriteError;
-
-        let mut inner = self.inner.lock();
-
-        let id = substream;
-
-        match inner.connection.connection.send_stream(*id).write(buf) {
-            Ok(bytes) => Poll::Ready(Ok(bytes)),
-            Err(WriteError::Blocked) => {
-                let mut substream = inner.substreams.get_mut(id).expect("known substream; qed");
-                substream.write_waker = Some(cx.waker().clone());
-                Poll::Pending
-            }
-            Err(WriteError::Stopped(err_code)) => Poll::Ready(Err(Error::Reset(err_code))),
-            Err(WriteError::UnknownStream) => {
-                tracing::error!(
-                    "The application used a connection that is already being \
-                    closed. This is a bug in the application or in libp2p."
-                );
-                Poll::Pending
-            }
-        }
-    }
-
-    /// Reads data from a substream. The behaviour is the same as `futures::AsyncRead::poll_read`.
-    ///
-    /// If `Pending` is returned, then the current task will be notified once the substream
-    /// is ready to be read. However, for each individual substream, only the latest task that
-    /// was used to call this method may be notified.
-    ///
-    /// If `Async::Ready(0)` is returned, the substream has been closed by the remote and should
-    /// no longer be read afterwards.
-    ///
-    /// An error can be generated if the connection has been closed, or if a protocol misbehaviour
-    /// happened.
-    fn read_substream(
-        &self,
-        cx: &mut Context<'_>,
-        substream: &mut Self::Substream,
-        mut buf: &mut [u8],
-    ) -> Poll<Result<usize, Self::Error>> {
-        use quinn_proto::{ReadError, ReadableError};
-        use std::io::Write;
-
-        let id = *substream;
-
-        let mut inner = self.inner.lock();
-
-        let substream_state = inner
-            .substreams
-            .get_mut(substream)
-            .expect("invalid StreamMuxer::read_substream API usage");
-        if substream_state.stopped {
-            return Poll::Ready(Ok(0));
-        }
-
-        let mut stream = inner.connection.connection.recv_stream(id);
-        let mut chunks = match stream.read(true) {
-            Ok(chunks) => chunks,
-            Err(ReadableError::UnknownStream) => {
-                return Poll::Ready(Ok(0)); // FIXME This is a hack,
-                                           // a rust client should close substream correctly
-                                           // return Poll::Ready(Err(Self::Error::ExpiredStream))
-            }
-            Err(ReadableError::IllegalOrderedRead) => {
-                panic!("Illegal ordered read can only happen if `stream.read(false)` is used.");
-            }
-        };
-        let mut bytes = 0;
-        let mut pending = false;
-        loop {
-            if buf.is_empty() {
-                break;
-            }
-            match chunks.next(buf.len()) {
-                Ok(Some(chunk)) => {
-                    buf.write_all(&chunk.bytes).expect("enough buffer space");
-                    bytes += chunk.bytes.len();
-                }
-                Ok(None) => {
-                    break;
-                }
-                Err(ReadError::Reset(error_code)) => {
-                    tracing::error!("substream {} was reset with error code {}", id, error_code);
-                    bytes = 0;
-                    break;
-                }
-                Err(ReadError::Blocked) => {
-                    pending = true;
-                    break;
-                }
-            }
-        }
-        if chunks.finalize().should_transmit() {
-            if let Some(waker) = inner.poll_event_waker.take() {
-                waker.wake();
-            }
-        }
-        let substream = inner.substreams.get_mut(&id).expect("known substream; qed");
-        if pending && bytes == 0 {
-            substream.read_waker = Some(cx.waker().clone());
-            Poll::Pending
-        } else {
-            Poll::Ready(Ok(bytes))
-        }
-    }
-
-    fn shutdown_substream(
-        &self,
-        cx: &mut Context<'_>,
-        substream: &mut Self::Substream,
-    ) -> Poll<Result<(), Self::Error>> {
-        let mut inner = self.inner.lock();
-        let inner = &mut *inner;
-
-        let mut substream_state = inner
-            .substreams
-            .get_mut(substream)
-            .expect("invalid StreamMuxer::shutdown_substream API usage");
-        if substream_state.finished {
-            return Poll::Ready(Ok(()));
-        }
-
-        match inner.connection.shutdown_substream(*substream) {
-            Ok(()) => {
-                substream_state.finished_waker = Some(cx.waker().clone());
-                Poll::Pending
-            }
-            Err(quinn_proto::FinishError::Stopped(err)) => Poll::Ready(Err(Error::Reset(err))),
-            Err(quinn_proto::FinishError::UnknownStream) => {
-                // Illegal usage of the API.
-                debug_assert!(false);
-                Poll::Ready(Err(Error::ExpiredStream))
-            }
-        }
-    }
-
-    fn destroy_substream(&self, substream: Self::Substream) {
-        let mut inner = self.inner.lock();
-        inner.substreams.remove(&substream);
-    }
-
-    fn flush_substream(
-        &self,
-        _: &mut Context<'_>,
-        _: &mut Self::Substream,
-    ) -> Poll<Result<(), Self::Error>> {
-        // quinn doesn't support flushing, calling close will flush all substreams.
-        Poll::Ready(Ok(()))
     }
 
     fn poll_close(&self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {

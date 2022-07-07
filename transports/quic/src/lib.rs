@@ -63,6 +63,6 @@ pub mod transport;
 
 pub use endpoint::{Config, Endpoint};
 pub use error::Error;
-pub use muxer::{QuicMuxer, Substream};
+pub use muxer::QuicMuxer;
 pub use transport::QuicTransport;
 pub use upgrade::Upgrade;
