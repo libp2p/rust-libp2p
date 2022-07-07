@@ -33,7 +33,7 @@
 //! ```sh
 //!cargo run --example chat-tokio \\
 //!    --no-default-features \\
-//!    --features="floodsub mplex noise tcp-tokio mdns"
+//!    --features="floodsub mplex noise tcp-tokio mdns-tokio"
 //! ```
 
 use futures::StreamExt;
