@@ -137,46 +137,6 @@ where
         self.0.lock().control.abort_open_stream()
     }
 
-    fn read_substream(
-        &self,
-        c: &mut Context<'_>,
-        s: &mut Self::Substream,
-        b: &mut [u8],
-    ) -> Poll<YamuxResult<usize>> {
-        Pin::new(s)
-            .poll_read(c, b)
-            .map_err(|e| YamuxError(e.into()))
-    }
-
-    fn write_substream(
-        &self,
-        c: &mut Context<'_>,
-        s: &mut Self::Substream,
-        b: &[u8],
-    ) -> Poll<YamuxResult<usize>> {
-        Pin::new(s)
-            .poll_write(c, b)
-            .map_err(|e| YamuxError(e.into()))
-    }
-
-    fn flush_substream(
-        &self,
-        c: &mut Context<'_>,
-        s: &mut Self::Substream,
-    ) -> Poll<YamuxResult<()>> {
-        Pin::new(s).poll_flush(c).map_err(|e| YamuxError(e.into()))
-    }
-
-    fn shutdown_substream(
-        &self,
-        c: &mut Context<'_>,
-        s: &mut Self::Substream,
-    ) -> Poll<YamuxResult<()>> {
-        Pin::new(s).poll_close(c).map_err(|e| YamuxError(e.into()))
-    }
-
-    fn destroy_substream(&self, _: Self::Substream) {}
-
     fn poll_close(&self, c: &mut Context<'_>) -> Poll<YamuxResult<()>> {
         let mut inner = self.0.lock();
 

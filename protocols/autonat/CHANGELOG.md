@@ -1,3 +1,11 @@
+# 0.5.0 [unreleased]
+
+- Update to `libp2p-core` `v0.34.0`.
+
+- Update to `libp2p-swarm` `v0.37.0`.
+
+- Update to `libp2p-request-response` `v0.19.0`.
+
 # 0.4.1
 
 - Export `DEFAULT_PROTOCOL_NAME`.

@@ -1,8 +1,11 @@
-# 0.33.1 - unreleased
+# 0.34.0 - unreleased
 
 - Introduce `StreamMuxerEvent::map_inbound_stream`. See [PR 2691].
+- Remove `{read,write,flush,shutdown,destroy}_substream` functions from `StreamMuxer` trait
+  in favor of forcing `StreamMuxer::Substream` to implement `AsyncRead + AsyncWrite`. See [PR 2707].
 
 [PR 2691]: https://github.com/libp2p/rust-libp2p/pull/2691
+[PR 2707]: https://github.com/libp2p/rust-libp2p/pull/2707
 
 # 0.33.0
 
