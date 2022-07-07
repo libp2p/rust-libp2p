@@ -9,6 +9,8 @@
 
 - Update to `libp2p-core` `v0.35.0`.
 
+- fix(protocols/mdns): fix high cpu usage with tokio library.
+
 # 0.38.0
 
 - Update to `libp2p-core` `v0.34.0`.
