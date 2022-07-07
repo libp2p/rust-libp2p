@@ -43,6 +43,30 @@
 
 # `libp2p` facade crate
 
+# 0.47.0 [unreleased]
+
+- Update to [`libp2p-dcutr` `v0.5.0`](protocols/dcutr/CHANGELOG.md#050).
+
+- Update to [`libp2p-rendezvous` `v0.8.0`](protocols/rendezvous/CHANGELOG.md#080).
+
+- Update to [`libp2p-ping` `v0.38.0`](protocols/ping/CHANGELOG.md#0380).
+
+- Update to [`libp2p-identify` `v0.38.0`](protocols/identify/CHANGELOG.md#0380).
+
+- Update to [`libp2p-floodsub` `v0.38.0`](protocols/floodsub/CHANGELOG.md#0380).
+
+- Update to [`libp2p-relay` `v0.11.0`](protocols/relay/CHANGELOG.md#0110).
+
+- Update to [`libp2p-metrics` `v0.8.0`](misc/metrics/CHANGELOG.md#080).
+
+- Update to [`libp2p-kad` `v0.39.0`](protocols/kad/CHANGELOG.md#0390).
+
+- Update to [`libp2p-autonat` `v0.6.0`](protocols/autonat/CHANGELOG.md#060).
+
+- Update to [`libp2p-request-response` `v0.20.0`](protocols/request-response/CHANGELOG.md#0200).
+
+- Update to [`libp2p-swarm` `v0.38.0`](swarm/CHANGELOG.md#0380).
+
 # 0.46.1
 
 - Update to `libp2p-derive` [`v0.28.0`](swarm-derive/CHANGELOG.md#0280).
