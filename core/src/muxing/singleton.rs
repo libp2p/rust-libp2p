@@ -24,14 +24,8 @@ use crate::{
 };
 
 use futures::prelude::*;
-use parking_lot::Mutex;
-use std::{
-    io,
-    pin::Pin,
-    sync::atomic::{AtomicBool, Ordering},
-    task::Context,
-    task::Poll,
-};
+use std::cell::Cell;
+use std::{io, task::Context, task::Poll};
 
 /// Implementation of `StreamMuxer` that allows only one substream on top of a connection,
 /// yielding the connection itself.
@@ -40,9 +34,7 @@ use std::{
 /// Most notably, no protocol is negotiated.
 pub struct SingletonMuxer<TSocket> {
     /// The inner connection.
-    inner: Mutex<TSocket>,
-    /// If true, a substream has been produced and any further attempt should fail.
-    substream_extracted: AtomicBool,
+    inner: Cell<Option<TSocket>>,
     /// Our local endpoint. Always the same value as was passed to `new`.
     endpoint: Endpoint,
 }
@@ -54,15 +46,12 @@ impl<TSocket> SingletonMuxer<TSocket> {
     /// If `endpoint` is `Listener`, then only one inbound substream will be permitted.
     pub fn new(inner: TSocket, endpoint: Endpoint) -> Self {
         SingletonMuxer {
-            inner: Mutex::new(inner),
-            substream_extracted: AtomicBool::new(false),
+            inner: Cell::new(Some(inner)),
             endpoint,
         }
     }
 }
 
-/// Substream of the `SingletonMuxer`.
-pub struct Substream {}
 /// Outbound substream attempt of the `SingletonMuxer`.
 pub struct OutboundSubstream {}
 
@@ -70,7 +59,7 @@ impl<TSocket> StreamMuxer for SingletonMuxer<TSocket>
 where
     TSocket: AsyncRead + AsyncWrite + Unpin,
 {
-    type Substream = Substream;
+    type Substream = TSocket;
     type OutboundSubstream = OutboundSubstream;
     type Error = io::Error;
 
@@ -83,8 +72,8 @@ where
             Endpoint::Listener => {}
         }
 
-        if !self.substream_extracted.swap(true, Ordering::Relaxed) {
-            Poll::Ready(Ok(StreamMuxerEvent::InboundSubstream(Substream {})))
+        if let Some(stream) = self.inner.replace(None) {
+            Poll::Ready(Ok(StreamMuxerEvent::InboundSubstream(stream)))
         } else {
             Poll::Pending
         }
@@ -104,50 +93,14 @@ where
             Endpoint::Dialer => {}
         }
 
-        if !self.substream_extracted.swap(true, Ordering::Relaxed) {
-            Poll::Ready(Ok(Substream {}))
+        if let Some(stream) = self.inner.replace(None) {
+            Poll::Ready(Ok(stream))
         } else {
             Poll::Pending
         }
     }
 
     fn destroy_outbound(&self, _: Self::OutboundSubstream) {}
-
-    fn read_substream(
-        &self,
-        cx: &mut Context<'_>,
-        _: &mut Self::Substream,
-        buf: &mut [u8],
-    ) -> Poll<Result<usize, io::Error>> {
-        AsyncRead::poll_read(Pin::new(&mut *self.inner.lock()), cx, buf)
-    }
-
-    fn write_substream(
-        &self,
-        cx: &mut Context<'_>,
-        _: &mut Self::Substream,
-        buf: &[u8],
-    ) -> Poll<Result<usize, io::Error>> {
-        AsyncWrite::poll_write(Pin::new(&mut *self.inner.lock()), cx, buf)
-    }
-
-    fn flush_substream(
-        &self,
-        cx: &mut Context<'_>,
-        _: &mut Self::Substream,
-    ) -> Poll<Result<(), io::Error>> {
-        AsyncWrite::poll_flush(Pin::new(&mut *self.inner.lock()), cx)
-    }
-
-    fn shutdown_substream(
-        &self,
-        cx: &mut Context<'_>,
-        _: &mut Self::Substream,
-    ) -> Poll<Result<(), io::Error>> {
-        AsyncWrite::poll_close(Pin::new(&mut *self.inner.lock()), cx)
-    }
-
-    fn destroy_substream(&self, _: Self::Substream) {}
 
     fn poll_close(&self, _cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         Poll::Ready(Ok(()))

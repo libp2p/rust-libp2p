@@ -20,7 +20,7 @@
 
 use futures::prelude::*;
 use libp2p_core::multiaddr::Multiaddr;
-use libp2p_core::muxing::{substream_from_ref, StreamMuxer, StreamMuxerEvent, SubstreamRef};
+use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
 use smallvec::SmallVec;
 use std::sync::Arc;
 use std::{fmt, io::Error as IoError, pin::Pin, task::Context, task::Poll};
@@ -55,9 +55,6 @@ pub struct Close<TMuxer> {
     muxer: Arc<TMuxer>,
 }
 
-/// A successfully opened substream.
-pub type Substream<TMuxer> = SubstreamRef<Arc<TMuxer>>;
-
 /// Event that can happen on the `Muxing`.
 pub enum SubstreamEvent<TMuxer, TUserData>
 where
@@ -67,7 +64,7 @@ where
     InboundSubstream {
         /// The newly-opened substream. Will return EOF of an error if the `Muxing` is
         /// destroyed or `close_graceful` is called.
-        substream: Substream<TMuxer>,
+        substream: TMuxer::Substream,
     },
 
     /// An outbound substream has successfully been opened.
@@ -76,7 +73,7 @@ where
         user_data: TUserData,
         /// The newly-opened substream. Will return EOF of an error if the `Muxing` is
         /// destroyed or `close_graceful` is called.
-        substream: Substream<TMuxer>,
+        substream: TMuxer::Substream,
     },
 
     /// Address to the remote has changed. The previous one is now obsolete.
@@ -141,7 +138,6 @@ where
         // Polling inbound substream.
         match self.inner.poll_event(cx) {
             Poll::Ready(Ok(StreamMuxerEvent::InboundSubstream(substream))) => {
-                let substream = substream_from_ref(self.inner.clone(), substream);
                 return Poll::Ready(Ok(SubstreamEvent::InboundSubstream { substream }));
             }
             Poll::Ready(Ok(StreamMuxerEvent::AddressChange(addr))) => {
@@ -157,7 +153,6 @@ where
             let (user_data, mut outbound) = self.outbound_substreams.swap_remove(n);
             match self.inner.poll_outbound(cx, &mut outbound) {
                 Poll::Ready(Ok(substream)) => {
-                    let substream = substream_from_ref(self.inner.clone(), substream);
                     self.inner.destroy_outbound(outbound);
                     return Poll::Ready(Ok(SubstreamEvent::OutboundSubstream {
                         user_data,
