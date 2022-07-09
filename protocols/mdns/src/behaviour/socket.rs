@@ -24,16 +24,13 @@ use std::{
 };
 
 /// Interface that must be implemented by the different runtimes to use the UdpSocket in async mode
-///
-pub trait AsyncSocket {
+pub trait AsyncSocket: Send + 'static {
     /// Create the async socket from the ```std::net::UdpSocket```
-    ///
     fn from_socket(socket: UdpSocket) -> std::io::Result<Self>
     where
         Self: Sized;
 
     /// Attempts to receive a single packet on the socket from the remote address to which it is connected.
-    ///
     fn poll_receive_packet(
         &mut self,
         _cx: &mut Context,
@@ -43,7 +40,6 @@ pub trait AsyncSocket {
     }
 
     /// Attempts to send data on the socket to a given address.
-    ///
     fn poll_send_packet(&mut self, _cx: &mut Context, _packet: &[u8], _to: SocketAddr) -> Poll<()> {
         Poll::Pending
     }
@@ -56,18 +52,15 @@ pub mod asio {
     use futures::FutureExt;
 
     /// AsyncIo UdpSocket
-    ///
     pub type AsyncUdpSocket = Async<UdpSocket>;
 
     impl AsyncSocket for AsyncUdpSocket {
         /// Create the async socket from the ```std::net::UdpSocket```
-        ///
         fn from_socket(socket: UdpSocket) -> std::io::Result<Self> {
             Async::new(socket)
         }
 
         /// Attempts to receive a single packet on the socket from the remote address to which it is connected.
-        ///
         fn poll_receive_packet(
             &mut self,
             cx: &mut Context,
@@ -92,7 +85,6 @@ pub mod asio {
         }
 
         /// Attempts to send data on the socket to a given address.
-        ///
         fn poll_send_packet(
             &mut self,
             cx: &mut Context,
@@ -130,14 +122,12 @@ pub mod tokio {
 
     impl AsyncSocket for TokioUdpSocket {
         /// Create the async socket from the ```std::net::UdpSocket```
-        ///
         fn from_socket(socket: UdpSocket) -> std::io::Result<Self> {
             socket.set_nonblocking(true)?;
             TokioUdpSocket::from_std(socket)
         }
 
         /// Attempts to receive a single packet on the socket from the remote address to which it is connected.
-        ///
         fn poll_receive_packet(
             &mut self,
             cx: &mut Context,
@@ -167,7 +157,6 @@ pub mod tokio {
         }
 
         /// Attempts to send data on the socket to a given address.
-        ///
         fn poll_send_packet(
             &mut self,
             cx: &mut Context,

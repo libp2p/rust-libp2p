@@ -24,7 +24,7 @@ mod timer;
 
 use self::iface::InterfaceState;
 
-use crate::behaviour::timer::TimerBuilder;
+use crate::behaviour::{socket::AsyncSocket, timer::TimerBuilder};
 
 use crate::MdnsConfig;
 use futures::prelude::*;
@@ -42,13 +42,25 @@ use std::{cmp, fmt, io, net::IpAddr, pin::Pin, task::Context, task::Poll, time::
 #[cfg(feature = "async-io")]
 use crate::behaviour::{socket::asio::AsyncUdpSocket, timer::asio::AsyncTimer};
 
+/// The type of a [`GenMdns`] using the `async-io` implementation.
+#[cfg(feature = "async-io")]
+pub type Mdns = GenMdns<AsyncUdpSocket, AsyncTimer>;
+
 #[cfg(feature = "tokio")]
-use crate::behaviour::{socket::tokio::TokioUdpSocket, timer::tokio::AsyncTimer};
+use crate::behaviour::{socket::tokio::TokioUdpSocket, timer::tokio::TokioTimer};
+
+/// The type of a [`GenMdns`] using the `tokio` implementation.
+#[cfg(feature = "tokio")]
+pub type TokioMdns = GenMdns<TokioUdpSocket, TokioTimer>;
 
 /// A `NetworkBehaviour` for mDNS. Automatically discovers peers on the local network and adds
 /// them to the topology.
 #[derive(Debug)]
-pub struct Mdns {
+pub struct GenMdns<S, T>
+where
+    T: TimerBuilder,
+    S: AsyncSocket,
+{
     /// InterfaceState config.
     config: MdnsConfig,
 
@@ -56,11 +68,7 @@ pub struct Mdns {
     if_watch: IfWatcher,
 
     /// Mdns interface states.
-    #[cfg(feature = "async-io")]
-    iface_states: HashMap<IpAddr, InterfaceState<AsyncUdpSocket, AsyncTimer>>,
-
-    #[cfg(feature = "tokio")]
-    iface_states: HashMap<IpAddr, InterfaceState<TokioUdpSocket, AsyncTimer>>,
+    iface_states: HashMap<IpAddr, InterfaceState<S, T>>,
 
     /// List of nodes that we have discovered, the address, and when their TTL expires.
     ///
@@ -71,10 +79,14 @@ pub struct Mdns {
     /// Future that fires when the TTL of at least one node in `discovered_nodes` expires.
     ///
     /// `None` if `discovered_nodes` is empty.
-    closest_expiration: Option<AsyncTimer>,
+    closest_expiration: Option<T>,
 }
 
-impl Mdns {
+impl<S, T> GenMdns<S, T>
+where
+    T: TimerBuilder,
+    S: AsyncSocket,
+{
     /// Builds a new `Mdns` behaviour.
     pub async fn new(config: MdnsConfig) -> io::Result<Self> {
         let if_watch = if_watch::IfWatcher::new().await?;
@@ -105,11 +117,15 @@ impl Mdns {
                 *expires = now;
             }
         }
-        self.closest_expiration = Some(AsyncTimer::at(now));
+        self.closest_expiration = Some(T::at(now));
     }
 }
 
-impl NetworkBehaviour for Mdns {
+impl<S, T> NetworkBehaviour for GenMdns<S, T>
+where
+    T: TimerBuilder,
+    S: AsyncSocket,
+{
     type ConnectionHandler = DummyConnectionHandler;
     type OutEvent = MdnsEvent;
 
@@ -233,7 +249,7 @@ impl NetworkBehaviour for Mdns {
             return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event));
         }
         if let Some(closest_expiration) = closest_expiration {
-            let mut timer = AsyncTimer::at(closest_expiration);
+            let mut timer = T::at(closest_expiration);
             let _ = Pin::new(&mut timer).poll_tick(cx);
 
             self.closest_expiration = Some(timer);

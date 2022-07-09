@@ -18,19 +18,20 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::task::{Context, Poll};
-use std::time::{Duration, Instant};
+use std::{
+    marker::Unpin,
+    task::{Context, Poll},
+    time::{Duration, Instant},
+};
 
 /// Simple wrapper for the differents type of timers
-///
 #[derive(Debug)]
 pub struct WrapTimer<T> {
     timer: T,
 }
 
 /// Builder interface to homogenize the differents implementations
-///
-pub trait TimerBuilder {
+pub trait TimerBuilder: Send + Unpin + 'static {
     type Item;
 
     /// Creates a timer that emits an event once at the given time instant.
@@ -93,7 +94,7 @@ pub mod tokio {
     use tokio_crate::time::{self, Instant as TokioInstant, Interval};
 
     /// Tokio wrapper
-    pub type AsyncTimer = WrapTimer<Interval>;
+    pub type TokioTimer = WrapTimer<Interval>;
 
     impl TimerBuilder for WrapTimer<Interval> {
         type Item = time::Instant;

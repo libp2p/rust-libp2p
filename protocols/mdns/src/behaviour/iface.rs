@@ -45,7 +45,7 @@ use std::{
 pub struct InterfaceState<U, T>
 where
     U: AsyncSocket,
-    T: TimerBuilder + std::marker::Unpin,
+    T: TimerBuilder,
 {
     /// Address this instance is bound to.
     addr: IpAddr,
@@ -77,7 +77,7 @@ where
 impl<U, T> InterfaceState<U, T>
 where
     U: AsyncSocket,
-    T: TimerBuilder + std::marker::Unpin,
+    T: TimerBuilder,
 {
     /// Builds a new [`InterfaceState`].
     pub fn new(addr: IpAddr, config: MdnsConfig) -> io::Result<Self> {
