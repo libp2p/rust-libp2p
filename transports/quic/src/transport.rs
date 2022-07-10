@@ -358,65 +358,125 @@ pub(crate) fn socketaddr_to_multiaddr(socket_addr: &SocketAddr) -> Multiaddr {
 }
 
 #[cfg(test)]
-#[test]
-fn multiaddr_to_udp_conversion() {
+mod test {
+
+    use futures::future::poll_fn;
     use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
-    assert!(
-        multiaddr_to_socketaddr(&"/ip4/127.0.0.1/udp/1234".parse::<Multiaddr>().unwrap()).is_none()
-    );
+    use super::*;
 
-    assert_eq!(
-        multiaddr_to_socketaddr(
-            &"/ip4/127.0.0.1/udp/12345/quic"
-                .parse::<Multiaddr>()
-                .unwrap()
-        ),
-        Some(SocketAddr::new(
-            IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-            12345,
-        ))
-    );
-    assert_eq!(
-        multiaddr_to_socketaddr(
-            &"/ip4/255.255.255.255/udp/8080/quic"
-                .parse::<Multiaddr>()
-                .unwrap()
-        ),
-        Some(SocketAddr::new(
-            IpAddr::V4(Ipv4Addr::new(255, 255, 255, 255)),
-            8080,
-        ))
-    );
-    assert_eq!(
-        multiaddr_to_socketaddr(
-            &"/ip4/127.0.0.1/udp/55148/quic/p2p/12D3KooW9xk7Zp1gejwfwNpfm6L9zH5NL4Bx5rm94LRYJJHJuARZ"
-                .parse::<Multiaddr>()
-                .unwrap()
-        ),
-        Some(SocketAddr::new(
-            IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-            55148,
-        ))
-    );
-    assert_eq!(
-        multiaddr_to_socketaddr(&"/ip6/::1/udp/12345/quic".parse::<Multiaddr>().unwrap()),
-        Some(SocketAddr::new(
-            IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)),
-            12345,
-        ))
-    );
-    assert_eq!(
-        multiaddr_to_socketaddr(
-            &"/ip6/ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff/udp/8080/quic"
-                .parse::<Multiaddr>()
-                .unwrap()
-        ),
-        Some(SocketAddr::new(
-            IpAddr::V6(Ipv6Addr::new(
-                65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535,
-            )),
-            8080,
-        ))
-    );
+    #[test]
+    fn multiaddr_to_udp_conversion() {
+        assert!(
+            multiaddr_to_socketaddr(&"/ip4/127.0.0.1/udp/1234".parse::<Multiaddr>().unwrap())
+                .is_none()
+        );
+
+        assert_eq!(
+            multiaddr_to_socketaddr(
+                &"/ip4/127.0.0.1/udp/12345/quic"
+                    .parse::<Multiaddr>()
+                    .unwrap()
+            ),
+            Some(SocketAddr::new(
+                IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+                12345,
+            ))
+        );
+        assert_eq!(
+            multiaddr_to_socketaddr(
+                &"/ip4/255.255.255.255/udp/8080/quic"
+                    .parse::<Multiaddr>()
+                    .unwrap()
+            ),
+            Some(SocketAddr::new(
+                IpAddr::V4(Ipv4Addr::new(255, 255, 255, 255)),
+                8080,
+            ))
+        );
+        assert_eq!(
+            multiaddr_to_socketaddr(
+                &"/ip4/127.0.0.1/udp/55148/quic/p2p/12D3KooW9xk7Zp1gejwfwNpfm6L9zH5NL4Bx5rm94LRYJJHJuARZ"
+                    .parse::<Multiaddr>()
+                    .unwrap()
+            ),
+            Some(SocketAddr::new(
+                IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+                55148,
+            ))
+        );
+        assert_eq!(
+            multiaddr_to_socketaddr(&"/ip6/::1/udp/12345/quic".parse::<Multiaddr>().unwrap()),
+            Some(SocketAddr::new(
+                IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)),
+                12345,
+            ))
+        );
+        assert_eq!(
+            multiaddr_to_socketaddr(
+                &"/ip6/ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff/udp/8080/quic"
+                    .parse::<Multiaddr>()
+                    .unwrap()
+            ),
+            Some(SocketAddr::new(
+                IpAddr::V6(Ipv6Addr::new(
+                    65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535,
+                )),
+                8080,
+            ))
+        );
+    }
+
+    #[async_std::test]
+    async fn close_listener() {
+        let keypair = libp2p_core::identity::Keypair::generate_ed25519();
+        let mut transport = QuicTransport::new(Config::new(&keypair).unwrap());
+
+        assert!(poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx))
+            .now_or_never()
+            .is_none());
+
+        // Run test twice to check that there is no unexpected behaviour if `QuicTransport.listener`
+        // is temporarily empty.
+        for _ in 0..2 {
+            let listener = transport
+                .listen_on("/ip4/0.0.0.0/udp/0/quic".parse().unwrap())
+                .unwrap();
+            match poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx)).await {
+                TransportEvent::NewAddress {
+                    listener_id,
+                    listen_addr,
+                } => {
+                    assert_eq!(listener_id, listener);
+                    assert!(
+                        matches!(listen_addr.iter().next(), Some(Protocol::Ip4(a)) if !a.is_unspecified())
+                    );
+                    assert!(
+                        matches!(listen_addr.iter().nth(1), Some(Protocol::Udp(port)) if port != 0)
+                    );
+                    assert!(matches!(listen_addr.iter().nth(2), Some(Protocol::Quic)));
+                }
+                e => panic!("Unexpected event: {:?}", e),
+            }
+            assert!(
+                transport.remove_listener(listener),
+                "Expect listener to exist."
+            );
+            match poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx)).await {
+                TransportEvent::ListenerClosed {
+                    listener_id,
+                    reason: Ok(()),
+                } => {
+                    assert_eq!(listener_id, listener);
+                }
+                e => panic!("Unexpected event: {:?}", e),
+            }
+            // Poll once again so that the listener has the chance to return `Poll::Ready(None)` and
+            // be removed from the list of listeners.
+            assert!(poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx))
+                .now_or_never()
+                .is_none());
+            assert!(transport.listeners.is_empty());
+        }
+    }
 }
