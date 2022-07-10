@@ -20,15 +20,19 @@
 
 use crate::{
     connection::{ConnectedPoint, Endpoint},
-    transport::{ListenerEvent, Transport, TransportError},
+    transport::{Transport, TransportError, TransportEvent},
 };
 use futures::prelude::*;
 use multiaddr::Multiaddr;
 use std::{pin::Pin, task::Context, task::Poll};
 
+use super::ListenerId;
+
 /// See `Transport::map`.
 #[derive(Debug, Copy, Clone)]
+#[pin_project::pin_project]
 pub struct Map<T, F> {
+    #[pin]
     transport: T,
     fun: F,
 }
@@ -54,19 +58,15 @@ where
 {
     type Output = D;
     type Error = T::Error;
-    type Listener = MapStream<T::Listener, F>;
     type ListenerUpgrade = MapFuture<T::ListenerUpgrade, F>;
     type Dial = MapFuture<T::Dial, F>;
 
-    fn listen_on(
-        &mut self,
-        addr: Multiaddr,
-    ) -> Result<Self::Listener, TransportError<Self::Error>> {
-        let stream = self.transport.listen_on(addr)?;
-        Ok(MapStream {
-            stream,
-            fun: self.fun.clone(),
-        })
+    fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
+        self.transport.listen_on(addr)
+    }
+
+    fn remove_listener(&mut self, id: ListenerId) -> bool {
+        self.transport.remove_listener(id)
     }
 
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
@@ -99,58 +99,37 @@ where
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
         self.transport.address_translation(server, observed)
     }
-}
 
-/// Custom `Stream` implementation to avoid boxing.
-///
-/// Maps a function over every stream item.
-#[pin_project::pin_project]
-#[derive(Clone, Debug)]
-pub struct MapStream<T, F> {
-    #[pin]
-    stream: T,
-    fun: F,
-}
-
-impl<T, F, A, B, X, E> Stream for MapStream<T, F>
-where
-    T: TryStream<Ok = ListenerEvent<X, E>, Error = E>,
-    X: TryFuture<Ok = A>,
-    F: FnOnce(A, ConnectedPoint) -> B + Clone,
-{
-    type Item = Result<ListenerEvent<MapFuture<X, F>, E>, E>;
-
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+    fn poll(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
         let this = self.project();
-        match TryStream::try_poll_next(this.stream, cx) {
-            Poll::Ready(Some(Ok(event))) => {
-                let event = match event {
-                    ListenerEvent::Upgrade {
-                        upgrade,
-                        local_addr,
-                        remote_addr,
-                    } => {
-                        let point = ConnectedPoint::Listener {
-                            local_addr: local_addr.clone(),
-                            send_back_addr: remote_addr.clone(),
-                        };
-                        ListenerEvent::Upgrade {
-                            upgrade: MapFuture {
-                                inner: upgrade,
-                                args: Some((this.fun.clone(), point)),
-                            },
-                            local_addr,
-                            remote_addr,
-                        }
-                    }
-                    ListenerEvent::NewAddress(a) => ListenerEvent::NewAddress(a),
-                    ListenerEvent::AddressExpired(a) => ListenerEvent::AddressExpired(a),
-                    ListenerEvent::Error(e) => ListenerEvent::Error(e),
+        match this.transport.poll(cx) {
+            Poll::Ready(TransportEvent::Incoming {
+                listener_id,
+                upgrade,
+                local_addr,
+                send_back_addr,
+            }) => {
+                let point = ConnectedPoint::Listener {
+                    local_addr: local_addr.clone(),
+                    send_back_addr: send_back_addr.clone(),
                 };
-                Poll::Ready(Some(Ok(event)))
+                Poll::Ready(TransportEvent::Incoming {
+                    listener_id,
+                    upgrade: MapFuture {
+                        inner: upgrade,
+                        args: Some((this.fun.clone(), point)),
+                    },
+                    local_addr,
+                    send_back_addr,
+                })
             }
-            Poll::Ready(Some(Err(err))) => Poll::Ready(Some(Err(err))),
-            Poll::Ready(None) => Poll::Ready(None),
+            Poll::Ready(other) => {
+                let mapped = other.map_upgrade(|_upgrade| unreachable!("case already matched"));
+                Poll::Ready(mapped)
+            }
             Poll::Pending => Poll::Pending,
         }
     }

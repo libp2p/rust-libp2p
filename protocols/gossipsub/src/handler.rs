@@ -18,7 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::config::ValidationMode;
 use crate::error::{GossipsubHandlerError, ValidationError};
 use crate::protocol::{GossipsubCodec, ProtocolConfig};
 use crate::types::{GossipsubRpc, PeerKind, RawGossipsubMessage};
@@ -163,23 +162,9 @@ enum OutboundSubstreamState {
 
 impl GossipsubHandler {
     /// Builds a new [`GossipsubHandler`].
-    pub fn new(
-        protocol_id_prefix: std::borrow::Cow<'static, str>,
-        max_transmit_size: usize,
-        validation_mode: ValidationMode,
-        idle_timeout: Duration,
-        support_floodsub: bool,
-    ) -> Self {
+    pub fn new(protocol_config: ProtocolConfig, idle_timeout: Duration) -> Self {
         GossipsubHandler {
-            listen_protocol: SubstreamProtocol::new(
-                ProtocolConfig::new(
-                    protocol_id_prefix,
-                    max_transmit_size,
-                    validation_mode,
-                    support_floodsub,
-                ),
-                (),
-            ),
+            listen_protocol: SubstreamProtocol::new(protocol_config, ()),
             inbound_substream: None,
             outbound_substream: None,
             outbound_substream_establishing: false,

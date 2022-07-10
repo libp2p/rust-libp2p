@@ -43,25 +43,6 @@ impl std::ops::Add<usize> for ConnectionId {
     }
 }
 
-/// The ID of a single listener.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct ListenerId(u64);
-
-impl ListenerId {
-    /// Creates a `ListenerId` from a non-negative integer.
-    pub fn new(id: u64) -> Self {
-        Self(id)
-    }
-}
-
-impl std::ops::Add<u64> for ListenerId {
-    type Output = Self;
-
-    fn add(self, other: u64) -> Self {
-        Self(self.0 + other)
-    }
-}
-
 /// The endpoint roles associated with a peer-to-peer communication channel.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Endpoint {

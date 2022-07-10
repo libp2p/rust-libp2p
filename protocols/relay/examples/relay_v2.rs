@@ -28,7 +28,7 @@ use libp2p::multiaddr::Protocol;
 use libp2p::ping::{Ping, PingConfig, PingEvent};
 use libp2p::relay::v2::relay::{self, Relay};
 use libp2p::swarm::{Swarm, SwarmEvent};
-use libp2p::tcp::TcpConfig;
+use libp2p::tcp::TcpTransport;
 use libp2p::Transport;
 use libp2p::{identity, NetworkBehaviour, PeerId};
 use libp2p::{noise, Multiaddr};
@@ -46,7 +46,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let local_peer_id = PeerId::from(local_key.public());
     println!("Local peer id: {:?}", local_peer_id);
 
-    let tcp_transport = TcpConfig::new();
+    let tcp_transport = TcpTransport::default();
 
     let noise_keys = noise::Keypair::<noise::X25519Spec>::new()
         .into_authentic(&local_key)

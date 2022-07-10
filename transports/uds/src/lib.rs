@@ -43,113 +43,194 @@ use futures::{
     future::{BoxFuture, Ready},
     prelude::*,
 };
+use libp2p_core::transport::ListenerId;
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
-    transport::{ListenerEvent, TransportError},
+    transport::{TransportError, TransportEvent},
     Transport,
 };
 use log::debug;
+use std::collections::VecDeque;
+use std::pin::Pin;
+use std::task::{Context, Poll};
 use std::{io, path::PathBuf};
+
+pub type Listener<T> = BoxStream<
+    'static,
+    Result<
+        TransportEvent<<T as Transport>::ListenerUpgrade, <T as Transport>::Error>,
+        Result<(), <T as Transport>::Error>,
+    >,
+>;
 
 macro_rules! codegen {
     ($feature_name:expr, $uds_config:ident, $build_listener:expr, $unix_stream:ty, $($mut_or_not:tt)*) => {
-
-/// Represents the configuration for a Unix domain sockets transport capability for libp2p.
-#[cfg_attr(docsrs, doc(cfg(feature = $feature_name)))]
-#[derive(Debug, Clone)]
-pub struct $uds_config {
-}
-
-impl $uds_config {
-    /// Creates a new configuration object for Unix domain sockets.
-    pub fn new() -> $uds_config {
-        $uds_config {}
-    }
-}
-
-impl Default for $uds_config {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl Transport for $uds_config {
-    type Output = $unix_stream;
-    type Error = io::Error;
-    type Listener = BoxStream<'static, Result<ListenerEvent<Self::ListenerUpgrade, Self::Error>, Self::Error>>;
-    type ListenerUpgrade = Ready<Result<Self::Output, Self::Error>>;
-    type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
-
-    fn listen_on(&mut self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
-        if let Ok(path) = multiaddr_to_path(&addr) {
-            Ok(async move { $build_listener(&path).await }
-                .map_ok(move |listener| {
-                    stream::once({
-                        let addr = addr.clone();
-                        async move {
-                            debug!("Now listening on {}", addr);
-                            Ok(ListenerEvent::NewAddress(addr))
-                        }
-                    }).chain(stream::unfold(listener, move |$($mut_or_not)* listener| {
-                        let addr = addr.clone();
-                        async move {
-                            let (stream, _) = match listener.accept().await {
-                                Ok(v) => v,
-                                Err(err) => return Some((Err(err), listener))
-                            };
-                            debug!("incoming connection on {}", addr);
-                            let event = ListenerEvent::Upgrade {
-                                upgrade: future::ok(stream),
-                                local_addr: addr.clone(),
-                                remote_addr: addr.clone()
-                            };
-                            Some((Ok(event), listener))
-                        }
-                    }))
-                })
-                .try_flatten_stream()
-                .boxed())
-        } else {
-            Err(TransportError::MultiaddrNotSupported(addr))
+        /// Represents the configuration for a Unix domain sockets transport capability for libp2p.
+        #[cfg_attr(docsrs, doc(cfg(feature = $feature_name)))]
+        pub struct $uds_config {
+            listeners: VecDeque<(ListenerId, Listener<Self>)>,
         }
-    }
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        // TODO: Should we dial at all?
-        if let Ok(path) = multiaddr_to_path(&addr) {
-            debug!("Dialing {}", addr);
-            Ok(async move { <$unix_stream>::connect(&path).await }.boxed())
-        } else {
-            Err(TransportError::MultiaddrNotSupported(addr))
+        impl $uds_config {
+            /// Creates a new configuration object for Unix domain sockets.
+            pub fn new() -> $uds_config {
+                $uds_config {
+                    listeners: VecDeque::new(),
+                }
+            }
         }
-    }
 
-    fn dial_as_listener(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        self.dial(addr)
-    }
+        impl Default for $uds_config {
+            fn default() -> Self {
+                Self::new()
+            }
+        }
 
-    fn address_translation(&self, _server: &Multiaddr, _observed: &Multiaddr) -> Option<Multiaddr> {
-        None
-    }
-}
+        impl Transport for $uds_config {
+            type Output = $unix_stream;
+            type Error = io::Error;
+            type ListenerUpgrade = Ready<Result<Self::Output, Self::Error>>;
+            type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
-};
+            fn listen_on(
+                &mut self,
+                addr: Multiaddr,
+            ) -> Result<ListenerId, TransportError<Self::Error>> {
+                if let Ok(path) = multiaddr_to_path(&addr) {
+                    let id = ListenerId::new();
+                    let listener = $build_listener(path)
+                        .map_err(Err)
+                        .map_ok(move |listener| {
+                            stream::once({
+                                let addr = addr.clone();
+                                async move {
+                                    debug!("Now listening on {}", addr);
+                                    Ok(TransportEvent::NewAddress {
+                                        listener_id: id,
+                                        listen_addr: addr,
+                                    })
+                                }
+                            })
+                            .chain(stream::unfold(
+                                listener,
+                                move |listener| {
+                                    let addr = addr.clone();
+                                    async move {
+                                        let event = match listener.accept().await {
+                                            Ok((stream, _)) => {
+                                                debug!("incoming connection on {}", addr);
+                                                TransportEvent::Incoming {
+                                                    upgrade: future::ok(stream),
+                                                    local_addr: addr.clone(),
+                                                    send_back_addr: addr.clone(),
+                                                    listener_id: id,
+                                                }
+                                            }
+                                            Err(error) => TransportEvent::ListenerError {
+                                                listener_id: id,
+                                                error,
+                                            },
+                                        };
+                                        Some((Ok(event), listener))
+                                    }
+                                },
+                            ))
+                        })
+                        .try_flatten_stream()
+                        .boxed();
+                    self.listeners.push_back((id, listener));
+                    Ok(id)
+                } else {
+                    Err(TransportError::MultiaddrNotSupported(addr))
+                }
+            }
+
+            fn remove_listener(&mut self, id: ListenerId) -> bool {
+                if let Some(index) = self
+                    .listeners
+                    .iter()
+                    .position(|(listener_id, _)| listener_id == &id)
+                {
+                    let listener_stream = self.listeners.get_mut(index).unwrap();
+                    let report_closed_stream = stream::once(async { Err(Ok(())) }).boxed();
+                    *listener_stream = (id, report_closed_stream);
+                    true
+                } else {
+                    false
+                }
+            }
+
+            fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+                // TODO: Should we dial at all?
+                if let Ok(path) = multiaddr_to_path(&addr) {
+                    debug!("Dialing {}", addr);
+                    Ok(async move { <$unix_stream>::connect(&path).await }.boxed())
+                } else {
+                    Err(TransportError::MultiaddrNotSupported(addr))
+                }
+            }
+
+            fn dial_as_listener(
+                &mut self,
+                addr: Multiaddr,
+            ) -> Result<Self::Dial, TransportError<Self::Error>> {
+                self.dial(addr)
+            }
+
+            fn address_translation(
+                &self,
+                _server: &Multiaddr,
+                _observed: &Multiaddr,
+            ) -> Option<Multiaddr> {
+                None
+            }
+
+            fn poll(
+                mut self: Pin<&mut Self>,
+                cx: &mut Context<'_>,
+            ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
+                let mut remaining = self.listeners.len();
+                while let Some((id, mut listener)) = self.listeners.pop_back() {
+                    let event = match Stream::poll_next(Pin::new(&mut listener), cx) {
+                        Poll::Pending => None,
+                        Poll::Ready(None) => panic!("Alive listeners always have a sender."),
+                        Poll::Ready(Some(Ok(event))) => Some(event),
+                        Poll::Ready(Some(Err(reason))) => {
+                            return Poll::Ready(TransportEvent::ListenerClosed {
+                                listener_id: id,
+                                reason,
+                            })
+                        }
+                    };
+                    self.listeners.push_front((id, listener));
+                    if let Some(event) = event {
+                        return Poll::Ready(event);
+                    } else {
+                        remaining -= 1;
+                        if remaining == 0 {
+                            break;
+                        }
+                    }
+                }
+                Poll::Pending
+            }
+        }
+    };
 }
 
 #[cfg(feature = "async-std")]
 codegen!(
     "async-std",
     UdsConfig,
-    |addr| async move { async_std::os::unix::net::UnixListener::bind(addr).await },
+    |addr| async move { async_std::os::unix::net::UnixListener::bind(&addr).await },
     async_std::os::unix::net::UnixStream,
 );
 #[cfg(feature = "tokio")]
 codegen!(
     "tokio",
     TokioUdsConfig,
-    |addr| async move { tokio::net::UnixListener::bind(addr) },
+    |addr| async move { tokio::net::UnixListener::bind(&addr) },
     tokio::net::UnixStream,
-    mut
 );
 
 /// Turns a `Multiaddr` containing a single `Unix` component into a path.
@@ -212,24 +293,22 @@ mod tests {
         let (tx, rx) = oneshot::channel();
 
         async_std::task::spawn(async move {
-            let mut listener = UdsConfig::new().listen_on(addr).unwrap();
+            let mut transport = UdsConfig::new().boxed();
+            transport.listen_on(addr).unwrap();
 
-            let listen_addr = listener
-                .try_next()
+            let listen_addr = transport
+                .select_next_some()
                 .await
-                .unwrap()
-                .expect("some event")
                 .into_new_address()
                 .expect("listen address");
 
             tx.send(listen_addr).unwrap();
 
-            let (sock, _addr) = listener
-                .try_filter_map(|e| future::ok(e.into_upgrade()))
-                .try_next()
+            let (sock, _addr) = transport
+                .select_next_some()
                 .await
-                .unwrap()
-                .expect("some event");
+                .into_incoming()
+                .expect("incoming stream");
 
             let mut sock = sock.await.unwrap();
             let mut buf = [0u8; 3];

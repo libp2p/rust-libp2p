@@ -23,7 +23,7 @@ use libp2p_core::multiaddr::Multiaddr;
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
 use smallvec::SmallVec;
 use std::sync::Arc;
-use std::{fmt, io::Error as IoError, pin::Pin, task::Context, task::Poll};
+use std::{fmt, pin::Pin, task::Context, task::Poll};
 
 /// Endpoint for a received substream.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -134,7 +134,7 @@ where
     pub fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<Result<SubstreamEvent<TMuxer, TUserData>, IoError>> {
+    ) -> Poll<Result<SubstreamEvent<TMuxer, TUserData>, TMuxer::Error>> {
         // Polling inbound substream.
         match self.inner.poll_event(cx) {
             Poll::Ready(Ok(StreamMuxerEvent::InboundSubstream(substream))) => {
@@ -143,7 +143,7 @@ where
             Poll::Ready(Ok(StreamMuxerEvent::AddressChange(addr))) => {
                 return Poll::Ready(Ok(SubstreamEvent::AddressChange(addr)))
             }
-            Poll::Ready(Err(err)) => return Poll::Ready(Err(err.into())),
+            Poll::Ready(Err(err)) => return Poll::Ready(Err(err)),
             Poll::Pending => {}
         }
 
@@ -164,7 +164,7 @@ where
                 }
                 Poll::Ready(Err(err)) => {
                     self.inner.destroy_outbound(outbound);
-                    return Poll::Ready(Err(err.into()));
+                    return Poll::Ready(Err(err));
                 }
             }
         }
@@ -203,13 +203,13 @@ impl<TMuxer> Future for Close<TMuxer>
 where
     TMuxer: StreamMuxer,
 {
-    type Output = Result<(), IoError>;
+    type Output = Result<(), TMuxer::Error>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         match self.muxer.poll_close(cx) {
             Poll::Pending => Poll::Pending,
             Poll::Ready(Ok(())) => Poll::Ready(Ok(())),
-            Poll::Ready(Err(err)) => Poll::Ready(Err(err.into())),
+            Poll::Ready(Err(err)) => Poll::Ready(Err(err)),
         }
     }
 }

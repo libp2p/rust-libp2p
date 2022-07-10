@@ -64,8 +64,22 @@ impl Provider for Tcp {
 
     fn new_stream(s: net::TcpStream) -> BoxFuture<'static, io::Result<Self::Stream>> {
         async move {
+            // Taken from [`tokio_crate::net::TcpStream::connect_mio`].
+
             let stream = tokio_crate::net::TcpStream::try_from(s)?;
+
+            // Once we've connected, wait for the stream to be writable as
+            // that's when the actual connection has been initiated. Once we're
+            // writable we check for `take_socket_error` to see if the connect
+            // actually hit an error or not.
+            //
+            // If all that succeeded then we ship everything on up.
             stream.writable().await?;
+
+            if let Some(e) = stream.take_error()? {
+                return Err(e);
+            }
+
             Ok(TcpStream(stream))
         }
         .boxed()
