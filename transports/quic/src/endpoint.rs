@@ -98,7 +98,7 @@ pub struct Endpoint {
 }
 
 impl Endpoint {
-    /// Builds a new `Endpoint` that is listening on the [`SocketAddr`].
+    /// Builds a new [`Endpoint`] that is listening on the [`SocketAddr`].
     pub fn new_bidirectional(
         config: Config,
         socket_addr: SocketAddr,
@@ -108,7 +108,7 @@ impl Endpoint {
         Ok((endpoint, new_connections_rx))
     }
 
-    /// Builds a new `Endpoint` that only supports outbound connections.
+    /// Builds a new [`Endpoint`] that only supports outbound connections.
     pub fn new_dialer(config: Config) -> Result<Arc<Endpoint>, transport::Error> {
         let socket_addr = SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0);
         Self::new(config, socket_addr.into(), None)
