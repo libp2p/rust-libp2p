@@ -42,6 +42,9 @@ pub enum Error {
         got: PeerId,
     },
 
+    #[error("no active listeners")]
+    NoListeners,
+
     #[error("internal error: {0} (see debug logs)")]
     InternalError(String),
 }

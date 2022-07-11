@@ -34,7 +34,7 @@ async fn create_swarm() -> Result<(Swarm<RequestResponse<PingCodec>>, String)> {
     let cert = generate_certificate();
     let keypair = generate_tls_keypair();
     let peer_id = keypair.public().to_peer_id();
-    let transport = WebRTCTransport::new(cert, keypair, "127.0.0.1:0").await?;
+    let transport = WebRTCTransport::new(cert, keypair);
     let fingerprint = transport.cert_fingerprint();
     let protocols = iter::once((PingProtocol(), ProtocolSupport::Full));
     let cfg = RequestResponseConfig::default();
@@ -59,7 +59,7 @@ async fn smoke() -> Result<()> {
     let (mut a, a_fingerprint) = create_swarm().await?;
     let (mut b, _b_fingerprint) = create_swarm().await?;
 
-    Swarm::listen_on(&mut a, "/ip4/127.0.0.1/udp/0".parse()?)?;
+    Swarm::listen_on(&mut a, "/ip4/127.0.0.1/udp/0/x-webrtc/ACD1E533EC271FCDE0275947F4D62A2B2331FF10C9DDE0298EB7B399B4BFF60B".parse()?)?;
 
     let addr = match a.next().await {
         Some(SwarmEvent::NewListenAddr { address, .. }) => address,
