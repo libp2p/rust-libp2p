@@ -1,4 +1,4 @@
-# 0.36.0 [unreleased]
+# 0.36.0
 
 - Update to `libp2p-core` `v0.34.0`.
 - Add `Transport::poll` and `Transport::remove_listener` and remove `Transport::Listener`
