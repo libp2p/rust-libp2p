@@ -45,13 +45,14 @@ use libp2p::{
     mplex,
     noise,
     swarm::{dial_opts::DialOpts, NetworkBehaviourEventProcess, SwarmBuilder, SwarmEvent},
-    // `TokioTcpConfig` is available through the `tcp-tokio` feature.
-    tcp::TokioTcpConfig,
+    // `TokioTcpTransport` is available through the `tcp-tokio` feature.
+    tcp::TokioTcpTransport,
     Multiaddr,
     NetworkBehaviour,
     PeerId,
     Transport,
 };
+use libp2p_tcp::GenTcpConfig;
 use std::error::Error;
 use tokio::io::{self, AsyncBufReadExt};
 
@@ -72,8 +73,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Create a tokio-based TCP transport use noise for authenticated
     // encryption and Mplex for multiplexing of substreams on a TCP stream.
-    let transport = TokioTcpConfig::new()
-        .nodelay(true)
+    let transport = TokioTcpTransport::new(GenTcpConfig::default().nodelay(true))
         .upgrade(upgrade::Version::V1)
         .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
         .multiplex(mplex::MplexConfig::new())

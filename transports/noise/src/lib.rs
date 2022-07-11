@@ -40,14 +40,14 @@
 //!
 //! ```
 //! use libp2p_core::{identity, Transport, upgrade};
-//! use libp2p_tcp::TcpConfig;
+//! use libp2p_tcp::TcpTransport;
 //! use libp2p_noise::{Keypair, X25519Spec, NoiseConfig};
 //!
 //! # fn main() {
 //! let id_keys = identity::Keypair::generate_ed25519();
 //! let dh_keys = Keypair::<X25519Spec>::new().into_authentic(&id_keys).unwrap();
 //! let noise = NoiseConfig::xx(dh_keys).into_authenticated();
-//! let builder = TcpConfig::new().upgrade(upgrade::Version::V1).authenticate(noise);
+//! let builder = TcpTransport::default().upgrade(upgrade::Version::V1).authenticate(noise);
 //! // let transport = builder.multiplex(...);
 //! # }
 //! ```

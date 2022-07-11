@@ -18,9 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use futures::future::poll_fn;
 use futures::{channel::oneshot, prelude::*};
-use libp2p_core::{muxing, upgrade, Transport};
-use libp2p_tcp::TcpConfig;
+use libp2p_core::{upgrade, StreamMuxer, Transport};
+use libp2p_tcp::TcpTransport;
 use std::sync::Arc;
 
 #[test]
@@ -32,35 +33,35 @@ fn async_write() {
     let bg_thread = async_std::task::spawn(async move {
         let mplex = libp2p_mplex::MplexConfig::new();
 
-        let mut transport = TcpConfig::new()
-            .and_then(move |c, e| upgrade::apply(c, mplex, e, upgrade::Version::V1));
+        let mut transport = TcpTransport::default()
+            .and_then(move |c, e| upgrade::apply(c, mplex, e, upgrade::Version::V1))
+            .boxed();
 
-        let mut listener = transport
+        transport
             .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
             .unwrap();
 
-        let addr = listener
+        let addr = transport
             .next()
             .await
             .expect("some event")
-            .expect("no error")
             .into_new_address()
             .expect("listen address");
 
         tx.send(addr).unwrap();
 
-        let client = listener
+        let client = transport
             .next()
             .await
-            .unwrap()
-            .unwrap()
-            .into_upgrade()
+            .expect("some event")
+            .into_incoming()
             .unwrap()
             .0
             .await
             .unwrap();
 
-        let mut outbound = muxing::outbound_from_ref_and_wrap(Arc::new(client))
+        let mut outbound_token = client.open_outbound();
+        let mut outbound = poll_fn(|cx| client.poll_outbound(cx, &mut outbound_token))
             .await
             .unwrap();
 
@@ -71,12 +72,12 @@ fn async_write() {
 
     async_std::task::block_on(async {
         let mplex = libp2p_mplex::MplexConfig::new();
-        let mut transport = TcpConfig::new()
+        let mut transport = TcpTransport::default()
             .and_then(move |c, e| upgrade::apply(c, mplex, e, upgrade::Version::V1));
 
         let client = Arc::new(transport.dial(rx.await.unwrap()).unwrap().await.unwrap());
         let mut inbound = loop {
-            if let Some(s) = muxing::event_from_ref_and_wrap(client.clone())
+            if let Some(s) = poll_fn(|cx| client.poll_event(cx))
                 .await
                 .unwrap()
                 .into_inbound_substream()
