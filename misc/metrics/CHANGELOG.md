@@ -12,6 +12,10 @@
 
 - Update to `libp2p-kad` `v0.39.0`.
 
+- Track number of connected nodes supporting a specific protocol via the identify protocol. See [PR 2734].
+
+[PR 2734]: https://github.com/libp2p/rust-libp2p/pull/2734/
+
 # 0.7.0
 
 - Update to `libp2p-core` `v0.34.0`.
@@ -27,10 +31,6 @@
 - Update to `libp2p-relay` `v0.10.0`.
 
 - Update to `libp2p-kad` `v0.38.0`.
-
-- Track number of connected nodes supporting a specific protocol via the identify protocol. See [PR 2734].
-
-[PR 2734]: https://github.com/libp2p/rust-libp2p/pull/2734/
 
 # 0.6.1
 
