@@ -45,7 +45,9 @@ impl Metrics {
         let protocols = Protocols::default();
         sub_registry.register(
             "protocols",
-            "Number of connected nodes supporting a specific protocol",
+            "Number of connected nodes supporting a specific protocol, with \
+             \"unrecognized\" for each peer supporting one or more unrecognized \
+             protocols",
             Box::new(protocols.clone()),
         );
 
@@ -147,6 +149,13 @@ impl super::Recorder<libp2p_identify::IdentifyEvent> for Metrics {
                         })
                         .cloned()
                         .collect();
+
+                    // Signal via an additional label value that one or more
+                    // protocols of the remote peer have not been recognized.
+                    if protocols.len() < info.protocols.len() {
+                        protocols.push("unrecognized".to_string());
+                    }
+
                     protocols.sort_unstable();
                     protocols.dedup();
 
