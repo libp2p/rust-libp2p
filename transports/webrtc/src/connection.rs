@@ -225,42 +225,6 @@ impl<'a> StreamMuxer for Connection {
     /// abruptly interrupt the execution.
     fn destroy_outbound(&self, _s: Self::OutboundSubstream) {}
 
-    // fn read_substream(
-    //     &self,
-    //     cx: &mut Context<'_>,
-    //     s: &mut Self::Substream,
-    //     buf: &mut [u8],
-    // ) -> Poll<Result<usize, Self::Error>> {
-    //     Pin::new(s).poll_read(cx, buf)
-    // }
-
-    // fn write_substream(
-    //     &self,
-    //     cx: &mut Context<'_>,
-    //     s: &mut Self::Substream,
-    //     buf: &[u8],
-    // ) -> Poll<Result<usize, Self::Error>> {
-    //     Pin::new(s).poll_write(cx, buf)
-    // }
-
-    // fn flush_substream(
-    //     &self,
-    //     cx: &mut Context<'_>,
-    //     s: &mut Self::Substream,
-    // ) -> Poll<Result<(), Self::Error>> {
-    //     trace!("Flushing substream {}", s.stream_identifier());
-    //     Pin::new(s).poll_flush(cx)
-    // }
-
-    // fn shutdown_substream(
-    //     &self,
-    //     cx: &mut Context<'_>,
-    //     s: &mut Self::Substream,
-    // ) -> Poll<Result<(), Self::Error>> {
-    //     trace!("Closing substream {}", s.stream_identifier());
-    //     Pin::new(s).poll_close(cx)
-    // }
-
     // fn destroy_substream(&self, s: Self::Substream) {
     //     trace!("Destroying substream {}", s.stream_identifier());
     //     let mut data_channels_inner = self.data_channels_inner.lock().unwrap();
