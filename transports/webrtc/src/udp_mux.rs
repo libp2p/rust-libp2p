@@ -20,6 +20,18 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+use async_trait::async_trait;
+use futures::channel::mpsc;
+use libp2p_core::multiaddr::{Multiaddr, Protocol};
+use stun::{
+    attributes::ATTR_USERNAME,
+    message::{is_message as is_stun_message, Message as STUNMessage},
+};
+use tokio_crate as tokio;
+use tokio_crate::sync::{watch, Mutex};
+use webrtc_ice::udp_mux::{UDPMux, UDPMuxConn, UDPMuxConnParams, UDPMuxWriter};
+use webrtc_util::{sync::RwLock, Conn, Error};
+
 use std::{
     borrow::Cow,
     collections::{HashMap, HashSet},
@@ -28,37 +40,7 @@ use std::{
     sync::{Arc, Weak},
 };
 
-use futures::channel::mpsc;
-use libp2p_core::multiaddr::{Multiaddr, Protocol};
-use webrtc_ice::udp_mux::{UDPMux, UDPMuxConn, UDPMuxConnParams, UDPMuxWriter};
-use webrtc_util::{sync::RwLock, Conn, Error};
-
-use tokio_crate as tokio;
-use tokio_crate::sync::{watch, Mutex};
-
-use async_trait::async_trait;
-
-use stun::{
-    attributes::ATTR_USERNAME,
-    message::{is_message as is_stun_message, Message as STUNMessage},
-};
-
 const RECEIVE_MTU: usize = 8192;
-
-/// Normalize a target socket addr for sending over a given local socket addr. This is useful when
-/// a dual stack socket is used, in which case an IPv4 target needs to be mapped to an IPv6
-/// address.
-fn normalize_socket_addr(target: &SocketAddr, socket_addr: &SocketAddr) -> SocketAddr {
-    match (target, socket_addr) {
-        (SocketAddr::V4(target_ipv4), SocketAddr::V6(_)) => {
-            let ipv6_mapped = target_ipv4.ip().to_ipv6_mapped();
-
-            SocketAddr::new(std::net::IpAddr::V6(ipv6_mapped), target_ipv4.port())
-        }
-        // This will fail later if target is IPv6 and socket is IPv4, we ignore it here
-        (_, _) => *target,
-    }
-}
 
 pub struct UDPMuxParams {
     conn: Box<dyn Conn + Send + Sync>,
