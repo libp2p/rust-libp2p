@@ -424,7 +424,9 @@ impl WebRTCListenStream {
                     match item {
                         Ok(IfEvent::Up(inet)) => {
                             let ip = inet.addr();
-                            if self.listen_addr.is_ipv4() == ip.is_ipv4() {
+                            if self.listen_addr.is_ipv4() == ip.is_ipv4()
+                                || self.listen_addr.is_ipv6() == ip.is_ipv6()
+                            {
                                 let socket_addr = SocketAddr::new(ip, self.listen_addr.port());
                                 let ma = socketaddr_to_multiaddr(&socket_addr);
                                 debug!("New listen address: {}", ma);
@@ -438,7 +440,9 @@ impl WebRTCListenStream {
                         }
                         Ok(IfEvent::Down(inet)) => {
                             let ip = inet.addr();
-                            if self.listen_addr.is_ipv4() == ip.is_ipv4() {
+                            if self.listen_addr.is_ipv4() == ip.is_ipv4()
+                                || self.listen_addr.is_ipv6() == ip.is_ipv6()
+                            {
                                 let socket_addr = SocketAddr::new(ip, self.listen_addr.port());
                                 let ma = socketaddr_to_multiaddr(&socket_addr);
                                 debug!("Expired listen address: {}", ma);
