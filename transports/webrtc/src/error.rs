@@ -45,6 +45,9 @@ pub enum Error {
     #[error("no active listeners")]
     NoListeners,
 
+    #[error("UDP mux is closed")]
+    UDPMuxIsClosed,
+
     #[error("internal error: {0} (see debug logs)")]
     InternalError(String),
 }

@@ -24,10 +24,13 @@ use futures::{
     future,
     future::BoxFuture,
     prelude::*,
-    ready, select, TryFutureExt,
+    select,
+    stream::SelectAll,
+    stream::Stream,
+    TryFutureExt,
 };
 use futures_timer::Delay;
-use if_watch::{IfEvent, IfWatcher};
+use if_watch::IfEvent;
 use libp2p_core::identity;
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
@@ -51,36 +54,23 @@ use webrtc_ice::network_type::NetworkType;
 use webrtc_ice::udp_mux::UDPMux;
 use webrtc_ice::udp_network::UDPNetwork;
 
-use std::borrow::Cow;
-use std::collections::VecDeque;
-use std::io;
-use std::net::IpAddr;
-use std::net::SocketAddr;
-use std::pin::Pin;
-use std::sync::Arc;
-use std::task::{Context, Poll};
-use std::time::Duration;
+use std::{
+    borrow::Cow,
+    net::SocketAddr,
+    pin::Pin,
+    sync::Arc,
+    task::{Context, Poll},
+    time::Duration,
+};
 
 use crate::connection::Connection;
 use crate::connection::PollDataChannel;
 use crate::error::Error;
+use crate::in_addr::InAddr;
 use crate::sdp;
 use crate::udp_mux::UDPMuxNewAddr;
 use crate::udp_mux::UDPMuxParams;
 use crate::upgrade;
-
-enum IfWatch {
-    Pending(BoxFuture<'static, io::Result<IfWatcher>>),
-    Ready(IfWatcher),
-}
-
-/// The listening addresses of a [`WebRTCTransport`].
-enum InAddr {
-    /// The stream accepts connections on a single interface.
-    One { out: Option<Multiaddr> },
-    /// The stream accepts connections on all interfaces.
-    Any { if_watch: IfWatch },
-}
 
 /// A WebRTC transport with direct p2p communication (without a STUN server).
 pub struct WebRTCTransport {
@@ -89,11 +79,7 @@ pub struct WebRTCTransport {
     /// `Keypair` identifying this peer
     id_keys: identity::Keypair,
     /// All the active listeners.
-    /// The `WebRTCListenStream` struct contains a stream that we want to be pinned. Since the `VecDeque`
-    /// can be resized, the only way is to use a `Pin<Box<>>`.
-    listeners: VecDeque<Pin<Box<WebRTCListenStream>>>,
-    /// Pending transport events to return from [`WebRTCTransport::poll`].
-    pending_events: VecDeque<TransportEvent<<Self as Transport>::ListenerUpgrade, Error>>,
+    listeners: SelectAll<WebRTCListenStream>,
 }
 
 impl WebRTCTransport {
@@ -105,8 +91,7 @@ impl WebRTCTransport {
                 ..RTCConfiguration::default()
             },
             id_keys,
-            listeners: VecDeque::new(),
-            pending_events: VecDeque::new(),
+            listeners: SelectAll::new(),
         }
     }
 
@@ -174,18 +159,13 @@ impl Transport for WebRTCTransport {
     fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
         let id = ListenerId::new();
         let listener = self.do_listen(id, addr)?;
-        self.listeners.push_back(Box::pin(listener));
+        self.listeners.push(listener);
         Ok(id)
     }
 
     fn remove_listener(&mut self, id: ListenerId) -> bool {
-        if let Some(index) = self.listeners.iter().position(|l| l.listener_id != id) {
-            self.listeners.remove(index);
-            self.pending_events
-                .push_back(TransportEvent::ListenerClosed {
-                    listener_id: id,
-                    reason: Ok(()),
-                });
+        if let Some(listener) = self.listeners.iter_mut().find(|l| l.listener_id == id) {
+            listener.close(Ok(()));
             true
         } else {
             false
@@ -197,103 +177,31 @@ impl Transport for WebRTCTransport {
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
-        // Return pending events from closed listeners.
-        if let Some(event) = self.pending_events.pop_front() {
-            return Poll::Ready(event);
+        match self.listeners.poll_next_unpin(cx) {
+            Poll::Ready(Some(ev)) => Poll::Ready(ev),
+            _ => Poll::Pending,
         }
-        // We remove each element from `listeners` one by one and add them back.
-        let mut remaining = self.listeners.len();
-        while let Some(mut listener) = self.listeners.pop_back() {
-            match TryStream::try_poll_next(listener.as_mut(), cx) {
-                Poll::Pending => {
-                    self.listeners.push_front(listener);
-                    remaining -= 1;
-                    if remaining == 0 {
-                        break;
-                    }
-                }
-                Poll::Ready(Some(Ok(WebRTCListenerEvent::Upgrade {
-                    upgrade,
-                    local_addr,
-                    remote_addr,
-                }))) => {
-                    let id = listener.listener_id;
-                    self.listeners.push_front(listener);
-                    return Poll::Ready(TransportEvent::Incoming {
-                        listener_id: id,
-                        upgrade,
-                        local_addr,
-                        send_back_addr: remote_addr,
-                    });
-                }
-                Poll::Ready(Some(Ok(WebRTCListenerEvent::NewAddress(a)))) => {
-                    let id = listener.listener_id;
-                    self.listeners.push_front(listener);
-                    return Poll::Ready(TransportEvent::NewAddress {
-                        listener_id: id,
-                        listen_addr: a,
-                    });
-                }
-                Poll::Ready(Some(Ok(WebRTCListenerEvent::AddressExpired(a)))) => {
-                    let id = listener.listener_id;
-                    self.listeners.push_front(listener);
-                    return Poll::Ready(TransportEvent::AddressExpired {
-                        listener_id: id,
-                        listen_addr: a,
-                    });
-                }
-                Poll::Ready(Some(Ok(WebRTCListenerEvent::Error(error)))) => {
-                    let id = listener.listener_id;
-                    self.listeners.push_front(listener);
-                    return Poll::Ready(TransportEvent::ListenerError {
-                        listener_id: id,
-                        error: error.into(),
-                    });
-                }
-                Poll::Ready(None) => {
-                    return Poll::Ready(TransportEvent::ListenerClosed {
-                        listener_id: listener.listener_id,
-                        reason: Ok(()),
-                    });
-                }
-                Poll::Ready(Some(Err(err))) => {
-                    return Poll::Ready(TransportEvent::ListenerClosed {
-                        listener_id: listener.listener_id,
-                        reason: Err(err),
-                    });
-                }
-            }
-        }
-        Poll::Pending
     }
 
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        self.dial_as_listener(addr)
-    }
-
-    fn dial_as_listener(
-        &mut self,
-        addr: Multiaddr,
-    ) -> Result<Self::Dial, TransportError<Self::Error>> {
         let config = self.config.clone();
         let our_fingerprint = self.cert_fingerprint();
         let id_keys = self.id_keys.clone();
-        let udp_mux = if let Some(l) = self.listeners.back() {
-            l.udp_mux.clone()
-        } else {
-            return Err(TransportError::Other(Error::NoListeners));
-        };
 
         let sock_addr = multiaddr_to_socketaddr(&addr)
             .ok_or_else(|| TransportError::MultiaddrNotSupported(addr.clone()))?;
         if sock_addr.port() == 0 || sock_addr.ip().is_unspecified() {
             return Err(TransportError::MultiaddrNotSupported(addr));
         }
-
         let remote = addr.clone(); // used for logging
         trace!("dialing address: {:?}", remote);
 
-        let se = build_setting_engine(udp_mux.clone(), &sock_addr, &our_fingerprint);
+        let udp_mux = if let Some(l) = self.listeners.iter_mut().next() {
+            l.udp_mux.clone()
+        } else {
+            return Err(TransportError::Other(Error::NoListeners));
+        };
+        let se = build_setting_engine(udp_mux, &sock_addr, &our_fingerprint);
         let api = APIBuilder::new().with_setting_engine(se).build();
 
         // [`Transport::dial`] should do no work unless the returned [`Future`] is polled. Thus
@@ -415,61 +323,55 @@ impl Transport for WebRTCTransport {
         .boxed())
     }
 
+    fn dial_as_listener(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+        // TODO: As the listener of a WebRTC hole punch, we need to send a random UDP packet to the
+        // `addr`. See DCUtR specification below.
+        //
+        // https://github.com/libp2p/specs/blob/master/relay/DCUtR.md#the-protocol
+        self.dial(addr)
+    }
+
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
         libp2p_core::address_translation(server, observed)
     }
-}
-
-/// Event produced by a [`WebRTCListenStream`].
-#[derive(Debug)]
-pub enum WebRTCListenerEvent<S> {
-    /// The listener is listening on a new additional [`Multiaddr`].
-    NewAddress(Multiaddr),
-    /// An upgrade, consisting of the upgrade future, the listener address and the remote address.
-    Upgrade {
-        /// The upgrade.
-        upgrade: S,
-        /// The local address which produced this upgrade.
-        local_addr: Multiaddr,
-        /// The remote address which produced this upgrade.
-        remote_addr: Multiaddr,
-    },
-    /// A [`Multiaddr`] is no longer used for listening.
-    AddressExpired(Multiaddr),
-    /// A non-fatal error has happened on the listener.
-    ///
-    /// This event should be generated in order to notify the user that something wrong has
-    /// happened. The listener, however, continues to run.
-    Error(Error),
 }
 
 /// A stream of incoming connections on one or more interfaces.
 pub struct WebRTCListenStream {
     /// The ID of this listener.
     listener_id: ListenerId,
+
     /// The socket address that the listening socket is bound to,
     /// which may be a "wildcard address" like `INADDR_ANY` or `IN6ADDR_ANY`
     /// when listening on all interfaces for IPv4 respectively IPv6 connections.
     listen_addr: SocketAddr,
+
     /// The IP addresses of network interfaces on which the listening socket
     /// is accepting connections.
     ///
     /// If the listen socket listens on all interfaces, these may change over
     /// time as interfaces become available or unavailable.
     in_addr: InAddr,
-    /// How long to sleep after a (non-fatal) error while trying
-    /// to accept a new connection.
-    sleep_on_error: Duration,
-    /// The current pause, if any.
-    pause: Option<Delay>,
+
     /// A `RTCConfiguration` which holds this peer's certificate(s).
     config: RTCConfiguration,
+
     /// The `UDPMux` that manages all ICE connections.
     udp_mux: Arc<dyn UDPMux + Send + Sync>,
+
     /// The receiver for new `SocketAddr` connecting to this peer.
     new_addr_rx: mpsc::Receiver<Multiaddr>,
+
     /// `Keypair` identifying this peer
     id_keys: identity::Keypair,
+
+    /// Set to `Some` if this [`Listener`] should close.
+    /// Optionally contains a [`TransportEvent::ListenerClosed`] that should be
+    /// reported before the listener's stream is terminated.
+    report_closed: Option<Option<<Self as Stream>::Item>>,
 }
 
 impl WebRTCListenStream {
@@ -482,147 +384,145 @@ impl WebRTCListenStream {
         new_addr_rx: mpsc::Receiver<Multiaddr>,
         id_keys: identity::Keypair,
     ) -> Self {
-        // Check whether the listening IP is set or not.
-        let in_addr = if match &listen_addr {
-            SocketAddr::V4(a) => a.ip().is_unspecified(),
-            SocketAddr::V6(a) => a.ip().is_unspecified(),
-        } {
-            // The `addrs` are populated via `if_watch` when the
-            // `WebRTCTransport` is polled.
-            InAddr::Any {
-                if_watch: IfWatch::Pending(IfWatcher::new().boxed()),
-            }
-        } else {
-            InAddr::One {
-                out: Some(ip_to_multiaddr(listen_addr.ip(), listen_addr.port())),
-            }
-        };
+        let in_addr = InAddr::new(listen_addr.ip());
 
         WebRTCListenStream {
             listener_id,
             listen_addr,
             in_addr,
-            pause: None,
-            sleep_on_error: Duration::from_millis(100),
             config,
             udp_mux,
             new_addr_rx,
             id_keys,
+            report_closed: None,
+        }
+    }
+
+    /// Report the listener as closed in a [`TransportEvent::ListenerClosed`] and
+    /// terminate the stream.
+    fn close(&mut self, reason: Result<(), Error>) {
+        match self.report_closed {
+            Some(_) => debug!("Listener was already closed."),
+            None => {
+                // Report the listener event as closed.
+                let _ = self
+                    .report_closed
+                    .insert(Some(TransportEvent::ListenerClosed {
+                        listener_id: self.listener_id,
+                        reason,
+                    }));
+            }
+        }
+    }
+
+    /// Poll for a next If Event.
+    fn poll_if_addr(&mut self, cx: &mut Context<'_>) -> Option<<Self as Stream>::Item> {
+        match self.in_addr.poll_next_unpin(cx) {
+            Poll::Ready(mut item) => {
+                if let Some(item) = item.take() {
+                    // Consume all events for up/down interface changes.
+                    match item {
+                        Ok(IfEvent::Up(inet)) => {
+                            let ip = inet.addr();
+                            if self.listen_addr.is_ipv4() == ip.is_ipv4() {
+                                let socket_addr = SocketAddr::new(ip, self.listen_addr.port());
+                                let ma = socketaddr_to_multiaddr(&socket_addr);
+                                debug!("New listen address: {}", ma);
+                                Some(TransportEvent::NewAddress {
+                                    listener_id: self.listener_id,
+                                    listen_addr: ma,
+                                })
+                            } else {
+                                self.poll_if_addr(cx)
+                            }
+                        }
+                        Ok(IfEvent::Down(inet)) => {
+                            let ip = inet.addr();
+                            if self.listen_addr.is_ipv4() == ip.is_ipv4() {
+                                let socket_addr = SocketAddr::new(ip, self.listen_addr.port());
+                                let ma = socketaddr_to_multiaddr(&socket_addr);
+                                debug!("Expired listen address: {}", ma);
+                                Some(TransportEvent::AddressExpired {
+                                    listener_id: self.listener_id,
+                                    listen_addr: ma,
+                                })
+                            } else {
+                                self.poll_if_addr(cx)
+                            }
+                        }
+                        Err(err) => {
+                            debug! {
+                                "Failure polling interfaces: {:?}.",
+                                err
+                            };
+                            Some(TransportEvent::ListenerError {
+                                listener_id: self.listener_id,
+                                error: err.into(),
+                            })
+                        }
+                    }
+                } else {
+                    self.poll_if_addr(cx)
+                }
+            }
+            Poll::Pending => None,
         }
     }
 }
 
 impl Stream for WebRTCListenStream {
-    type Item =
-        Result<WebRTCListenerEvent<BoxFuture<'static, Result<(PeerId, Connection), Error>>>, Error>;
+    type Item = TransportEvent<<WebRTCTransport as Transport>::ListenerUpgrade, Error>;
 
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        let me = Pin::into_inner(self);
-
-        loop {
-            match &mut me.in_addr {
-                InAddr::Any { if_watch } => match if_watch {
-                    // If we listen on all interfaces, wait for `if-watch` to be ready.
-                    IfWatch::Pending(f) => match ready!(Pin::new(f).poll(cx)) {
-                        Ok(w) => {
-                            *if_watch = IfWatch::Ready(w);
-                            continue;
-                        }
-                        Err(err) => {
-                            debug! {
-                                "Failed to begin observing interfaces: {:?}. Scheduling retry.",
-                                err
-                            };
-                            *if_watch = IfWatch::Pending(IfWatcher::new().boxed());
-                            me.pause = Some(Delay::new(me.sleep_on_error));
-                            return Poll::Ready(Some(Ok(WebRTCListenerEvent::Error(
-                                Error::IoError(err),
-                            ))));
-                        }
-                    },
-                    // Consume all events for up/down interface changes.
-                    IfWatch::Ready(watch) => {
-                        while let Poll::Ready(ev) = watch.poll_unpin(cx) {
-                            match ev {
-                                Ok(IfEvent::Up(inet)) => {
-                                    let ip = inet.addr();
-                                    if me.listen_addr.is_ipv4() == ip.is_ipv4()
-                                        || me.listen_addr.is_ipv6() == ip.is_ipv6()
-                                    {
-                                        let ma = ip_to_multiaddr(ip, me.listen_addr.port());
-                                        debug!("New listen address: {}", ma);
-                                        return Poll::Ready(Some(Ok(
-                                            WebRTCListenerEvent::NewAddress(ma),
-                                        )));
-                                    }
-                                }
-                                Ok(IfEvent::Down(inet)) => {
-                                    let ip = inet.addr();
-                                    if me.listen_addr.is_ipv4() == ip.is_ipv4()
-                                        || me.listen_addr.is_ipv6() == ip.is_ipv6()
-                                    {
-                                        let ma = ip_to_multiaddr(ip, me.listen_addr.port());
-                                        debug!("Expired listen address: {}", ma);
-                                        return Poll::Ready(Some(Ok(
-                                            WebRTCListenerEvent::AddressExpired(ma),
-                                        )));
-                                    }
-                                }
-                                Err(err) => {
-                                    debug! {
-                                        "Failure polling interfaces: {:?}. Scheduling retry.",
-                                        err
-                                    };
-                                    me.pause = Some(Delay::new(me.sleep_on_error));
-                                    return Poll::Ready(Some(Ok(WebRTCListenerEvent::Error(
-                                        Error::IoError(err),
-                                    ))));
-                                }
-                            }
-                        }
-                    }
-                },
-                // If the listener is bound to a single interface, make sure the address reported
-                // once.
-                InAddr::One { out } => {
-                    if let Some(multiaddr) = out.take() {
-                        return Poll::Ready(Some(Ok(WebRTCListenerEvent::NewAddress(multiaddr))));
-                    }
-                }
-            }
-
-            if let Some(mut pause) = me.pause.take() {
-                match Pin::new(&mut pause).poll(cx) {
-                    Poll::Ready(_) => {}
-                    Poll::Pending => {
-                        me.pause = Some(pause);
-                        return Poll::Pending;
-                    }
-                }
-            }
-
-            // Safe to unwrap here since this is the only place `new_addr_rx` is locked.
-            return match Pin::new(&mut me.new_addr_rx).poll_next(cx) {
-                Poll::Ready(Some(addr)) => Poll::Ready(Some(Ok(WebRTCListenerEvent::Upgrade {
-                    local_addr: ip_to_multiaddr(me.listen_addr.ip(), me.listen_addr.port()),
-                    remote_addr: addr.clone(),
-                    upgrade: Box::pin(upgrade::webrtc(
-                        me.udp_mux.clone(),
-                        me.config.clone(),
-                        addr,
-                        me.id_keys.clone(),
-                    )) as BoxFuture<'static, _>,
-                }))),
-                Poll::Ready(None) => Poll::Ready(None),
-                Poll::Pending => Poll::Pending,
-            };
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        if let Some(closed) = self.report_closed.as_mut() {
+            // Listener was closed.
+            // Report the transport event if there is one. On the next iteration, return
+            // `Poll::Ready(None)` to terminate the stream.
+            return Poll::Ready(closed.take());
         }
+        if let Some(event) = self.poll_if_addr(cx) {
+            return Poll::Ready(Some(event));
+        }
+
+        let addr = match futures::ready!(self.new_addr_rx.poll_next_unpin(cx)) {
+            Some(addr) => addr,
+            None => {
+                self.close(Err(Error::UDPMuxIsClosed));
+                return self.poll_next(cx);
+            }
+        };
+
+        let local_addr = socketaddr_to_multiaddr(&self.listen_addr);
+        let event = TransportEvent::Incoming {
+            upgrade: Box::pin(upgrade::webrtc(
+                self.udp_mux.clone(),
+                self.config.clone(),
+                addr.clone(),
+                self.id_keys.clone(),
+            )) as BoxFuture<'static, _>,
+            local_addr,
+            send_back_addr: addr,
+            listener_id: self.listener_id,
+        };
+        Poll::Ready(Some(event))
     }
 }
 
-/// Creates a [`Multiaddr`] from the given IP address and port number.
-fn ip_to_multiaddr(ip: IpAddr, port: u16) -> Multiaddr {
-    Multiaddr::empty().with(ip.into()).with(Protocol::Udp(port))
+// TODO: remove
+fn hex_to_cow<'a>(s: &str) -> Cow<'a, [u8; 32]> {
+    let mut buf = [0; 32];
+    hex::decode_to_slice(s, &mut buf).unwrap();
+    Cow::Owned(buf)
+}
+
+/// Turns an IP address and port into the corresponding WebRTC multiaddr.
+pub(crate) fn socketaddr_to_multiaddr(socket_addr: &SocketAddr) -> Multiaddr {
+    // TODO: remove
+    let f = "ACD1E533EC271FCDE0275947F4D62A2B2331FF10C9DDE0298EB7B399B4BFF60B";
+    Multiaddr::empty()
+        .with(socket_addr.ip().into())
+        .with(Protocol::Udp(socket_addr.port()))
+        .with(Protocol::XWebRTC(hex_to_cow(&f)))
 }
 
 /// Renders a [`TinyTemplate`] description using the provided arguments.
@@ -881,7 +781,7 @@ mod tests {
 
         let outbound = transport2
             .dial(
-                addr.with(Protocol::XWebRTC(hex_to_cow(&f)))
+                addr.replace(2, |_| Some(Protocol::XWebRTC(hex_to_cow(&f)))).unwrap()
                     .with(Protocol::P2p(t1_peer_id.into())),
             )
             .unwrap();

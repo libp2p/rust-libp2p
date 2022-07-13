@@ -60,11 +60,18 @@ async fn smoke() -> Result<()> {
     let (mut b, _b_fingerprint) = create_swarm().await?;
 
     Swarm::listen_on(&mut a, "/ip4/127.0.0.1/udp/0/x-webrtc/ACD1E533EC271FCDE0275947F4D62A2B2331FF10C9DDE0298EB7B399B4BFF60B".parse()?)?;
+    Swarm::listen_on(&mut b, "/ip4/127.0.0.1/udp/0/x-webrtc/ACD1E533EC271FCDE0275947F4D62A2B2331FF10C9DDE0298EB7B399B4BFF60B".parse()?)?;
 
     let addr = match a.next().await {
         Some(SwarmEvent::NewListenAddr { address, .. }) => address,
         e => panic!("{:?}", e),
     };
+
+    let _ = match b.next().await {
+        Some(SwarmEvent::NewListenAddr { address, .. }) => address,
+        e => panic!("{:?}", e),
+    };
+
     let addr = addr.with(Protocol::XWebRTC(hex_to_cow(
         &a_fingerprint.replace(":", ""),
     )));
