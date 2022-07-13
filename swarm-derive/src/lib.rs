@@ -20,7 +20,7 @@
 
 #![recursion_limit = "256"]
 
-use proc_macro::TokenStream;
+use proc_macro::{Span, TokenStream};
 use quote::quote;
 use syn::{parse_macro_input, Data, DataStruct, DeriveInput, Ident};
 
@@ -44,10 +44,10 @@ fn build(ast: &DeriveInput) -> TokenStream {
 /// The version for structs
 fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     let name = &ast.ident;
+    let event_name = Ident::new(&(ast.ident.to_string() + "Event"), Span::call_site().into());
     let (_, ty_generics, where_clause) = ast.generics.split_for_impl();
     let multiaddr = quote! {::libp2p::core::Multiaddr};
     let trait_to_impl = quote! {::libp2p::swarm::NetworkBehaviour};
-    let net_behv_event_proc = quote! {::libp2p::swarm::NetworkBehaviourEventProcess};
     let either_ident = quote! {::libp2p::core::either::EitherOutput};
     let network_behaviour_action = quote! {::libp2p::swarm::NetworkBehaviourAction};
     let into_connection_handler = quote! {::libp2p::swarm::IntoConnectionHandler};
@@ -70,28 +70,6 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         quote! {<#(#lf,)* #(#tp,)* #(#cst,)*>}
     };
 
-    // Whether or not we require the `NetworkBehaviourEventProcess` trait to be implemented.
-    let event_process = {
-        let mut event_process = false;
-
-        for meta_items in ast.attrs.iter().filter_map(get_meta_items) {
-            for meta_item in meta_items {
-                match meta_item {
-                    syn::NestedMeta::Meta(syn::Meta::NameValue(ref m))
-                        if m.path.is_ident("event_process") =>
-                    {
-                        if let syn::Lit::Bool(ref b) = m.lit {
-                            event_process = b.value
-                        }
-                    }
-                    _ => (),
-                }
-            }
-        }
-
-        event_process
-    };
-
     // The fields of the struct we are interested in (no ignored fields).
     let data_struct_fields = data_struct
         .fields
@@ -99,43 +77,35 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         .filter(|f| !is_ignored(f))
         .collect::<Vec<_>>();
 
-    // The final out event.
-    // If we find a `#[behaviour(out_event = "Foo")]` attribute on the struct, we set `Foo` as
-    // the out event. Otherwise we use `()`.
-    let out_event = {
-        let mut out = quote! {()};
-        for meta_items in ast.attrs.iter().filter_map(get_meta_items) {
-            for meta_item in meta_items {
-                match meta_item {
-                    syn::NestedMeta::Meta(syn::Meta::NameValue(ref m))
-                        if m.path.is_ident("out_event") =>
-                    {
-                        if let syn::Lit::Str(ref s) = m.lit {
-                            let ident: syn::Type = syn::parse_str(&s.value()).unwrap();
-                            out = quote! {#ident};
-                        }
-                    }
-                    _ => (),
-                }
+    let event = {
+        let fields = data_struct_fields
+            .iter()
+            .map(|field| {
+                let variant = &capitalize(
+                    field
+                        .ident
+                        .clone()
+                        .expect("Fields of NetworkBehaviour implementation to be named."),
+                );
+                let ty = &field.ty;
+                quote! {#variant(<#ty as NetworkBehaviour>::OutEvent)}
+            })
+            .collect::<Vec<_>>();
+        let visibility = &ast.vis;
+        quote! {
+            #visibility enum #event_name {
+                #(#fields),*
             }
         }
-        out
     };
 
     // Build the `where ...` clause of the trait implementation.
     let where_clause = {
         let additional = data_struct_fields
             .iter()
-            .flat_map(|field| {
+            .map(|field| {
                 let ty = &field.ty;
-                vec![
-                    quote! {#ty: #trait_to_impl},
-                    if event_process {
-                        quote! {Self: #net_behv_event_proc<<#ty as #trait_to_impl>::OutEvent>}
-                    } else {
-                        quote! {#out_event: From< <#ty as #trait_to_impl>::OutEvent >}
-                    },
-                ]
+                quote! {#ty: #trait_to_impl}
             })
             .collect::<Vec<_>>();
 
@@ -437,18 +407,20 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     // List of statements to put in `poll()`.
     //
     // We poll each child one by one and wrap around the output.
-    let poll_stmts = data_struct_fields.iter().enumerate().enumerate().map(|(enum_n, (field_n, field))| {
-        let field_name = match field.ident {
-            Some(ref i) => quote!{ self.#i },
-            None => quote!{ self.#field_n },
-        };
+    let poll_stmts = data_struct_fields.iter().enumerate().map(|(field_n, field)| {
+        let field = field
+            .ident
+            .clone()
+            .expect("Fields of NetworkBehaviour implementation to be named.");
 
-        let mut wrapped_event = if enum_n != 0 {
+        let event_variant = capitalize(field.clone());
+
+        let mut wrapped_event = if field_n != 0 {
             quote!{ #either_ident::Second(event) }
         } else {
             quote!{ event }
         };
-        for _ in 0 .. data_struct_fields.len() - 1 - enum_n {
+        for _ in 0 .. data_struct_fields.len() - 1 - field_n {
             wrapped_event = quote!{ #either_ident::First(#wrapped_event) };
         }
 
@@ -485,23 +457,16 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             out_handler.unwrap_or(quote! {()}) // TODO: See test `empty`.
         };
 
-        let generate_event_match_arm = if event_process {
+        let generate_event_match_arm =
             quote! {
                 std::task::Poll::Ready(#network_behaviour_action::GenerateEvent(event)) => {
-                    #net_behv_event_proc::inject_event(self, event)
+                    return std::task::Poll::Ready(#network_behaviour_action::GenerateEvent(#event_name::#event_variant(event)))
                 }
-            }
-        } else {
-            quote! {
-                std::task::Poll::Ready(#network_behaviour_action::GenerateEvent(event)) => {
-                    return std::task::Poll::Ready(#network_behaviour_action::GenerateEvent(event.into()))
-                }
-            }
-        };
+            };
 
         Some(quote!{
             loop {
-                match #trait_to_impl::poll(&mut #field_name, cx, poll_params) {
+                match #trait_to_impl::poll(&mut self.#field, cx, poll_params) {
                     #generate_event_match_arm
                     std::task::Poll::Ready(#network_behaviour_action::Dial { opts, handler: provided_handler }) => {
                         return std::task::Poll::Ready(#network_behaviour_action::Dial { opts, handler: #provided_handler_and_new_handlers });
@@ -527,11 +492,14 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
     // Now the magic happens.
     let final_quote = quote! {
+        #event
+
+
         impl #impl_generics #trait_to_impl for #name #ty_generics
         #where_clause
         {
             type ConnectionHandler = #connection_handler_ty;
-            type OutEvent = #out_event;
+            type OutEvent = #event_name;
 
             fn new_handler(&mut self) -> Self::ConnectionHandler {
                 use #into_connection_handler;
@@ -644,4 +612,16 @@ fn is_ignored(field: &syn::Field) -> bool {
     }
 
     false
+}
+
+fn capitalize(ident: Ident) -> Ident {
+    let name = ident.to_string();
+    let mut chars = name.chars();
+    let capitalized = chars
+        .next()
+        .expect("Identifier to have at least one character.")
+        .to_uppercase()
+        .collect::<String>()
+        + chars.as_str();
+    Ident::new(&capitalized, Span::call_site().into())
 }
