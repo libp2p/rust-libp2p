@@ -42,9 +42,9 @@ use libp2p::{
     floodsub::{self, Floodsub, FloodsubEvent},
     identity,
     mdns::{
+        MdnsEvent,
         // `MdnsTokio` is available through the `mdns-tokio` feature.
-        TokioMdns, 
-        MdnsEvent
+        TokioMdns,
     },
     mplex,
     noise,
