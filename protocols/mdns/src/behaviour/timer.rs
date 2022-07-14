@@ -20,6 +20,7 @@
 
 use std::{
     marker::Unpin,
+    pin::Pin,
     task::{Context, Poll},
     time::{Duration, Instant},
 };
@@ -32,8 +33,6 @@ pub struct WrapTimer<T> {
 
 /// Builder interface to homogenize the differents implementations
 pub trait TimerBuilder: Send + Unpin + 'static {
-    type Item;
-
     /// Creates a timer that emits an event once at the given time instant.
     fn at(instant: Instant) -> Self;
 
@@ -42,24 +41,18 @@ pub trait TimerBuilder: Send + Unpin + 'static {
 
     /// Creates a timer that emits events periodically, starting at start.
     fn interval_at(start: Instant, duration: Duration) -> Self;
-
-    /// Poll the timer
-    fn poll_tick(&mut self, cx: &mut Context) -> Poll<Self::Item>;
 }
 
 #[cfg(feature = "async-io")]
 pub mod asio {
     use super::*;
-    use async_io_crate::Timer;
+    use async_io::Timer;
     use futures::Stream;
-    use std::pin::Pin;
 
     /// Async Timer
     pub type AsyncTimer = WrapTimer<Timer>;
 
     impl TimerBuilder for WrapTimer<Timer> {
-        type Item = Option<Instant>;
-
         /// Creates a timer that emits an event once at the given time instant.
         fn at(instant: Instant) -> Self {
             WrapTimer {
@@ -80,9 +73,12 @@ pub mod asio {
                 timer: Timer::interval_at(start, duration),
             }
         }
+    }
 
-        /// Poll the timer
-        fn poll_tick(&mut self, cx: &mut Context) -> Poll<Self::Item> {
+    impl Stream for AsyncTimer {
+        type Item = Instant;
+
+        fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Instant>> {
             Pin::new(&mut self.timer).poll_next(cx)
         }
     }
@@ -91,14 +87,13 @@ pub mod asio {
 #[cfg(feature = "tokio")]
 pub mod tokio {
     use super::*;
-    use tokio_crate::time::{self, Instant as TokioInstant, Interval};
+    use ::tokio::time::{self, Instant as TokioInstant, Interval};
+    use futures::Stream;
 
     /// Tokio wrapper
     pub type TokioTimer = WrapTimer<Interval>;
 
     impl TimerBuilder for WrapTimer<Interval> {
-        type Item = time::Instant;
-
         /// Creates a timer that emits an event once at the given time instant.
         fn at(instant: Instant) -> Self {
             // Taken from: https://docs.rs/async-io/1.7.0/src/async_io/lib.rs.html#91
@@ -122,10 +117,13 @@ pub mod tokio {
                 timer: time::interval_at(TokioInstant::from_std(start), duration),
             }
         }
+    }
 
-        /// Poll the timer
-        fn poll_tick(&mut self, cx: &mut Context) -> Poll<Self::Item> {
-            self.timer.poll_tick(cx)
+    impl Stream for TokioTimer {
+        type Item = TokioInstant;
+
+        fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+            self.timer.poll_tick(cx).map(Some)
         }
     }
 }

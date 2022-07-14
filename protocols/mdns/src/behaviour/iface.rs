@@ -23,10 +23,8 @@ mod query;
 
 use self::dns::{build_query, build_query_response, build_service_discovery_response};
 use self::query::MdnsPacket;
-use crate::MdnsConfig;
-
 use crate::behaviour::{socket::AsyncSocket, timer::TimerBuilder};
-
+use crate::MdnsConfig;
 use libp2p_core::{address_translation, multiaddr::Protocol, Multiaddr, PeerId};
 use libp2p_swarm::PollParameters;
 use socket2::{Domain, Socket, Type};
@@ -42,11 +40,7 @@ use std::{
 /// An mDNS instance for a networking interface. To discover all peers when having multiple
 /// interfaces an [`InterfaceState`] is required for each interface.
 #[derive(Debug)]
-pub struct InterfaceState<U, T>
-where
-    U: AsyncSocket,
-    T: TimerBuilder,
-{
+pub struct InterfaceState<U, T> {
     /// Address this instance is bound to.
     addr: IpAddr,
     /// Receive socket.
@@ -77,7 +71,7 @@ where
 impl<U, T> InterfaceState<U, T>
 where
     U: AsyncSocket,
-    T: TimerBuilder,
+    T: TimerBuilder + futures::Stream,
 {
     /// Builds a new [`InterfaceState`].
     pub fn new(addr: IpAddr, config: MdnsConfig) -> io::Result<Self> {
@@ -209,32 +203,41 @@ where
             .recv_socket
             .poll_receive_packet(cx, &mut self.recv_buffer)
         {
-            Poll::Ready(Some((len, from))) => {
+            Poll::Ready(Ok(Some((len, from)))) => {
                 if let Some(packet) = MdnsPacket::new_from_bytes(&self.recv_buffer[..len], from) {
                     self.inject_mdns_packet(packet, params);
                 }
             }
-            Poll::Ready(None) | Poll::Pending => {}
+            Poll::Ready(Ok(None)) => {}
+            Poll::Ready(Err(err)) => {
+                log::error!("failed reading datagram: {}", err);
+            }
+            Poll::Pending => {}
         }
 
         // Send responses.
-        let mut s_buffer = VecDeque::new();
         while let Some(packet) = self.send_buffer.pop_front() {
             match self.send_socket.poll_send_packet(
                 cx,
                 &packet,
                 SocketAddr::new(self.multicast_addr, 5353),
             ) {
-                Poll::Ready(_) => log::trace!("sent packet on iface {}", self.addr),
-                Poll::Pending => s_buffer.push_front(packet),
+                Poll::Ready(Ok(_)) => {
+                    log::trace!("sent packet on iface {}", self.addr)
+                }
+                Poll::Ready(Err(err)) => {
+                    log::error!("error sending packet on iface {} {}", self.addr, err);
+                    self.send_buffer.push_front(packet);
+                    break;
+                }
+                Poll::Pending => {
+                    self.send_buffer.push_front(packet);
+                    break;
+                }
             }
         }
 
-        if !s_buffer.is_empty() {
-            self.send_buffer = s_buffer;
-        }
-
-        if Pin::new(&mut self.timeout).poll_tick(cx).is_ready() {
+        if Pin::new(&mut self.timeout).poll_next(cx).is_ready() {
             log::trace!("sending query on iface {}", self.addr);
             self.send_buffer.push_back(build_query());
         }

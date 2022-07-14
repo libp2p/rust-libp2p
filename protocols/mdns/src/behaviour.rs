@@ -23,11 +23,10 @@ mod socket;
 mod timer;
 
 use self::iface::InterfaceState;
-
 use crate::behaviour::{socket::AsyncSocket, timer::TimerBuilder};
-
 use crate::MdnsConfig;
 use futures::prelude::*;
+use futures::Stream;
 use if_watch::{IfEvent, IfWatcher};
 use libp2p_core::transport::ListenerId;
 use libp2p_core::{Multiaddr, PeerId};
@@ -56,11 +55,7 @@ pub type TokioMdns = GenMdns<TokioUdpSocket, TokioTimer>;
 /// A `NetworkBehaviour` for mDNS. Automatically discovers peers on the local network and adds
 /// them to the topology.
 #[derive(Debug)]
-pub struct GenMdns<S, T>
-where
-    T: TimerBuilder,
-    S: AsyncSocket,
-{
+pub struct GenMdns<S, T> {
     /// InterfaceState config.
     config: MdnsConfig,
 
@@ -85,7 +80,6 @@ where
 impl<S, T> GenMdns<S, T>
 where
     T: TimerBuilder,
-    S: AsyncSocket,
 {
     /// Builds a new `Mdns` behaviour.
     pub async fn new(config: MdnsConfig) -> io::Result<Self> {
@@ -123,7 +117,7 @@ where
 
 impl<S, T> NetworkBehaviour for GenMdns<S, T>
 where
-    T: TimerBuilder,
+    T: TimerBuilder + Stream,
     S: AsyncSocket,
 {
     type ConnectionHandler = DummyConnectionHandler;
@@ -250,7 +244,7 @@ where
         }
         if let Some(closest_expiration) = closest_expiration {
             let mut timer = T::at(closest_expiration);
-            let _ = Pin::new(&mut timer).poll_tick(cx);
+            let _ = Pin::new(&mut timer).poll_next(cx);
 
             self.closest_expiration = Some(timer);
         }

@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use std::{
+    io::Error,
     net::{SocketAddr, UdpSocket},
     task::{Context, Poll},
 };
@@ -35,20 +36,21 @@ pub trait AsyncSocket: Send + 'static {
         &mut self,
         _cx: &mut Context,
         _buf: &mut [u8],
-    ) -> Poll<Option<(usize, SocketAddr)>> {
-        Poll::Pending
-    }
+    ) -> Poll<Result<Option<(usize, SocketAddr)>, Error>>;
 
     /// Attempts to send data on the socket to a given address.
-    fn poll_send_packet(&mut self, _cx: &mut Context, _packet: &[u8], _to: SocketAddr) -> Poll<()> {
-        Poll::Pending
-    }
+    fn poll_send_packet(
+        &mut self,
+        _cx: &mut Context,
+        _packet: &[u8],
+        _to: SocketAddr,
+    ) -> Poll<Result<(), Error>>;
 }
 
 #[cfg(feature = "async-io")]
 pub mod asio {
     use super::*;
-    use async_io_crate::Async;
+    use async_io::Async;
     use futures::FutureExt;
 
     /// AsyncIo UdpSocket
@@ -65,23 +67,14 @@ pub mod asio {
             &mut self,
             cx: &mut Context,
             buf: &mut [u8],
-        ) -> Poll<Option<(usize, SocketAddr)>> {
+        ) -> Poll<Result<Option<(usize, SocketAddr)>, Error>> {
             // Poll receive socket.
-            if self.poll_readable(cx).is_ready() {
-                match self.recv_from(buf).now_or_never() {
-                    Some(Ok((len, from))) => {
-                        return Poll::Ready(Some((len, from)));
-                    }
-                    Some(Err(err)) => {
-                        log::error!("Failed reading datagram: {}", err);
-                        return Poll::Ready(None);
-                    }
-                    None => {
-                        return Poll::Ready(None);
-                    }
-                }
+            let _ = futures::ready!(self.poll_readable(cx));
+            match self.recv_from(buf).now_or_never() {
+                Some(Ok((len, from))) => Poll::Ready(Ok(Some((len, from)))),
+                Some(Err(err)) => Poll::Ready(Err(err)),
+                None => Poll::Ready(Ok(None)),
             }
-            Poll::Pending
         }
 
         /// Attempts to send data on the socket to a given address.
@@ -90,24 +83,13 @@ pub mod asio {
             cx: &mut Context,
             packet: &[u8],
             to: SocketAddr,
-        ) -> Poll<()> {
-            if self.poll_writable(cx).is_ready() {
-                match self.send_to(packet, to).now_or_never() {
-                    Some(Ok(_)) => {
-                        log::trace!("sent packet on iface {}", to);
-                        return Poll::Ready(());
-                    }
-                    Some(Err(err)) => {
-                        log::error!("error sending packet on iface {}: {}", to, err);
-                        return Poll::Ready(());
-                    }
-                    None => {
-                        return Poll::Pending;
-                    }
-                }
+        ) -> Poll<Result<(), Error>> {
+            let _ = futures::ready!(self.poll_writable(cx));
+            match self.send_to(packet, to).now_or_never() {
+                Some(Ok(_)) => Poll::Ready(Ok(())),
+                Some(Err(err)) => Poll::Ready(Err(err)),
+                None => Poll::Pending,
             }
-
-            Poll::Pending
         }
     }
 }
@@ -115,7 +97,7 @@ pub mod asio {
 #[cfg(feature = "tokio")]
 pub mod tokio {
     use super::*;
-    use tokio_crate::net::UdpSocket as TkUdpSocket;
+    use ::tokio::net::UdpSocket as TkUdpSocket;
 
     /// Tokio ASync Socket`
     pub type TokioUdpSocket = TkUdpSocket;
@@ -132,28 +114,18 @@ pub mod tokio {
             &mut self,
             cx: &mut Context,
             buf: &mut [u8],
-        ) -> Poll<Option<(usize, SocketAddr)>> {
+        ) -> Poll<Result<Option<(usize, SocketAddr)>, Error>> {
             match self.poll_recv_ready(cx) {
                 Poll::Ready(Ok(_)) => match self.try_recv_from(buf) {
-                    Ok((len, from)) => {
-                        return Poll::Ready(Some((len, from)));
-                    }
+                    Ok((len, from)) => Poll::Ready(Ok(Some((len, from)))),
                     Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
-                        return Poll::Ready(None);
+                        Poll::Ready(Ok(None))
                     }
-                    Err(err) => {
-                        log::error!("Failed reading datagram: {}", err);
-                        return Poll::Ready(None);
-                    }
+                    Err(err) => Poll::Ready(Err(err)),
                 },
-                Poll::Ready(Err(e)) => {
-                    log::error!("Failed recv ready datagram: {}", e);
-                    return Poll::Ready(None);
-                }
-                _ => {}
+                Poll::Ready(Err(e)) => Poll::Ready(Err(e)),
+                _ => Poll::Pending,
             }
-
-            Poll::Pending
         }
 
         /// Attempts to send data on the socket to a given address.
@@ -162,29 +134,16 @@ pub mod tokio {
             cx: &mut Context,
             packet: &[u8],
             to: SocketAddr,
-        ) -> Poll<()> {
+        ) -> Poll<Result<(), Error>> {
             match self.poll_send_ready(cx) {
                 Poll::Ready(Ok(_)) => match self.try_send_to(packet, to) {
-                    Ok(_len) => {
-                        log::trace!("sent packet on iface {}", to);
-                        return Poll::Ready(());
-                    }
-                    Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
-                        return Poll::Ready(());
-                    }
-                    Err(err) => {
-                        log::error!("Failed reading datagram: {}", err);
-                        return Poll::Ready(());
-                    }
+                    Ok(_len) => Poll::Ready(Ok(())),
+                    Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => Poll::Ready(Ok(())),
+                    Err(err) => Poll::Ready(Err(err)),
                 },
-                Poll::Ready(Err(e)) => {
-                    log::error!("Failed recv ready datagram: {}", e);
-                    return Poll::Ready(());
-                }
-                _ => {}
+                Poll::Ready(Err(e)) => Poll::Ready(Err(e)),
+                _ => Poll::Pending,
             }
-
-            Poll::Pending
         }
     }
 }
