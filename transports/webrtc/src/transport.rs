@@ -785,7 +785,8 @@ mod tests {
 
         let outbound = transport2
             .dial(
-                addr.replace(2, |_| Some(Protocol::XWebRTC(hex_to_cow(&f)))).unwrap()
+                addr.replace(2, |_| Some(Protocol::XWebRTC(hex_to_cow(&f))))
+                    .unwrap()
                     .with(Protocol::P2p(t1_peer_id.into())),
             )
             .unwrap();
