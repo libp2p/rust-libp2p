@@ -95,7 +95,8 @@ fn upgrade_pipeline() {
             // Gracefully close the connection to allow protocol
             // negotiation to complete.
             util::CloseMuxer::new(mplex).map_ok(move |mplex| (peer, mplex))
-        });
+        })
+        .boxed();
 
     let dialer_keys = identity::Keypair::generate_ed25519();
     let dialer_id = dialer_keys.public().to_peer_id();
@@ -113,17 +114,18 @@ fn upgrade_pipeline() {
             // Gracefully close the connection to allow protocol
             // negotiation to complete.
             util::CloseMuxer::new(mplex).map_ok(move |mplex| (peer, mplex))
-        });
+        })
+        .boxed();
 
     let listen_addr1 = Multiaddr::from(Protocol::Memory(random::<u64>()));
     let listen_addr2 = listen_addr1.clone();
 
-    let mut listener = listener_transport.listen_on(listen_addr1).unwrap();
+    listener_transport.listen_on(listen_addr1).unwrap();
 
     let server = async move {
         loop {
-            let (upgrade, _remote_addr) =
-                match listener.next().await.unwrap().unwrap().into_upgrade() {
+            let (upgrade, _send_back_addr) =
+                match listener_transport.select_next_some().await.into_incoming() {
                     Some(u) => u,
                     None => continue,
                 };

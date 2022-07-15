@@ -20,7 +20,6 @@
 
 mod error;
 mod handler_wrapper;
-mod listeners;
 
 pub(crate) mod pool;
 
@@ -28,7 +27,6 @@ pub use error::{
     ConnectionError, PendingConnectionError, PendingInboundConnectionError,
     PendingOutboundConnectionError,
 };
-pub use listeners::{ListenersEvent, ListenersStream};
 pub use pool::{ConnectionCounters, ConnectionLimits};
 pub use pool::{EstablishedConnection, PendingConnection};
 

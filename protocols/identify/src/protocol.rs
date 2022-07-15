@@ -34,6 +34,10 @@ use void::Void;
 
 const MAX_MESSAGE_SIZE_BYTES: usize = 4096;
 
+pub const PROTOCOL_NAME: &[u8; 14] = b"/ipfs/id/1.0.0";
+
+pub const PUSH_PROTOCOL_NAME: &[u8; 19] = b"/ipfs/id/push/1.0.0";
+
 /// Substream upgrade protocol for `/ipfs/id/1.0.0`.
 #[derive(Debug, Clone)]
 pub struct IdentifyProtocol;
@@ -104,7 +108,7 @@ impl UpgradeInfo for IdentifyProtocol {
     type InfoIter = iter::Once<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
-        iter::once(b"/ipfs/id/1.0.0")
+        iter::once(PROTOCOL_NAME)
     }
 }
 
@@ -136,7 +140,7 @@ impl<T> UpgradeInfo for IdentifyPushProtocol<T> {
     type InfoIter = iter::Once<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
-        iter::once(b"/ipfs/id/push/1.0.0")
+        iter::once(PUSH_PROTOCOL_NAME)
     }
 }
 
@@ -287,12 +291,12 @@ pub enum UpgradeError {
 mod tests {
     use super::*;
     use futures::channel::oneshot;
+    use libp2p::tcp::TcpTransport;
     use libp2p_core::{
         identity,
         upgrade::{self, apply_inbound, apply_outbound},
         Transport,
     };
-    use libp2p_tcp::TcpConfig;
 
     #[test]
     fn correct_transfer() {
@@ -304,27 +308,25 @@ mod tests {
         let (tx, rx) = oneshot::channel();
 
         let bg_task = async_std::task::spawn(async move {
-            let mut transport = TcpConfig::new();
+            let mut transport = TcpTransport::default().boxed();
 
-            let mut listener = transport
+            transport
                 .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
                 .unwrap();
 
-            let addr = listener
+            let addr = transport
                 .next()
                 .await
                 .expect("some event")
-                .expect("no error")
                 .into_new_address()
                 .expect("listen address");
             tx.send(addr).unwrap();
 
-            let socket = listener
+            let socket = transport
                 .next()
                 .await
-                .unwrap()
-                .unwrap()
-                .into_upgrade()
+                .expect("some event")
+                .into_incoming()
                 .unwrap()
                 .0
                 .await
@@ -349,7 +351,7 @@ mod tests {
         });
 
         async_std::task::block_on(async move {
-            let mut transport = TcpConfig::new();
+            let mut transport = TcpTransport::default();
 
             let socket = transport.dial(rx.await.unwrap()).unwrap().await.unwrap();
             let info = apply_outbound(socket, IdentifyProtocol, upgrade::Version::V1)

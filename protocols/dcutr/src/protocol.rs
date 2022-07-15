@@ -21,6 +21,6 @@
 pub mod inbound;
 pub mod outbound;
 
-const PROTOCOL_NAME: &[u8; 13] = b"/libp2p/dcutr";
+pub const PROTOCOL_NAME: &[u8; 13] = b"/libp2p/dcutr";
 
 const MAX_MESSAGE_SIZE_BYTES: usize = 4096;

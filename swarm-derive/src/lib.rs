@@ -57,7 +57,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     let connection_id = quote! {::libp2p::core::connection::ConnectionId};
     let dial_errors = quote! {Option<&Vec<::libp2p::core::Multiaddr>>};
     let connected_point = quote! {::libp2p::core::ConnectedPoint};
-    let listener_id = quote! {::libp2p::core::connection::ListenerId};
+    let listener_id = quote! {::libp2p::core::transport::ListenerId};
     let dial_error = quote! {::libp2p::swarm::DialError};
 
     let poll_parameters = quote! {::libp2p::swarm::PollParameters};

@@ -138,34 +138,29 @@ impl Metrics {
     }
 }
 
-impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleErr>>
-    for super::Metrics
-{
+impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleErr>> for Metrics {
     fn record(&self, event: &libp2p_swarm::SwarmEvent<TBvEv, THandleErr>) {
         match event {
             libp2p_swarm::SwarmEvent::Behaviour(_) => {}
             libp2p_swarm::SwarmEvent::ConnectionEstablished { endpoint, .. } => {
-                self.swarm
-                    .connections_established
+                self.connections_established
                     .get_or_create(&ConnectionEstablishedLabels {
                         role: endpoint.into(),
                     })
                     .inc();
             }
             libp2p_swarm::SwarmEvent::ConnectionClosed { endpoint, .. } => {
-                self.swarm
-                    .connections_closed
+                self.connections_closed
                     .get_or_create(&ConnectionClosedLabels {
                         role: endpoint.into(),
                     })
                     .inc();
             }
             libp2p_swarm::SwarmEvent::IncomingConnection { .. } => {
-                self.swarm.connections_incoming.inc();
+                self.connections_incoming.inc();
             }
             libp2p_swarm::SwarmEvent::IncomingConnectionError { error, .. } => {
-                self.swarm
-                    .connections_incoming_error
+                self.connections_incoming_error
                     .get_or_create(&IncomingConnectionErrorLabels {
                         error: error.into(),
                     })
@@ -178,8 +173,7 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
                 };
 
                 let record = |error| {
-                    self.swarm
-                        .outgoing_connection_error
+                    self.outgoing_connection_error
                         .get_or_create(&OutgoingConnectionErrorLabels { peer, error })
                         .inc();
                 };
@@ -228,22 +222,22 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
                 };
             }
             libp2p_swarm::SwarmEvent::BannedPeer { .. } => {
-                self.swarm.connected_to_banned_peer.inc();
+                self.connected_to_banned_peer.inc();
             }
             libp2p_swarm::SwarmEvent::NewListenAddr { .. } => {
-                self.swarm.new_listen_addr.inc();
+                self.new_listen_addr.inc();
             }
             libp2p_swarm::SwarmEvent::ExpiredListenAddr { .. } => {
-                self.swarm.expired_listen_addr.inc();
+                self.expired_listen_addr.inc();
             }
             libp2p_swarm::SwarmEvent::ListenerClosed { .. } => {
-                self.swarm.listener_closed.inc();
+                self.listener_closed.inc();
             }
             libp2p_swarm::SwarmEvent::ListenerError { .. } => {
-                self.swarm.listener_error.inc();
+                self.listener_error.inc();
             }
             libp2p_swarm::SwarmEvent::Dialing(_) => {
-                self.swarm.dial_attempt.inc();
+                self.dial_attempt.inc();
             }
         }
     }

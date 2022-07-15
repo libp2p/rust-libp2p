@@ -1,12 +1,19 @@
-# 0.37.0 [unreleased]
+# 0.38.0 [unreleased]
+
+- Update dial address concurrency factor to `8`, thus dialing up to 8 addresses concurrently for a single connection attempt. See `Swarm::dial_concurrency_factor` and [PR 2741].
+
+[PR 2741]: https://github.com/libp2p/rust-libp2p/pull/2741/
+
+# 0.37.0
 
 - Update to `libp2p-core` `v0.34.0`.
 
-# 0.36.2 [unreleased]
-
 - Extend log message when exceeding inbound negotiating streams with peer ID and limit. See [PR 2716].
 
+- Remove `connection::ListenersStream` and poll the `Transport` directly. See [PR 2652].
+
 [PR 2716]: https://github.com/libp2p/rust-libp2p/pull/2716/
+[PR 2652]: https://github.com/libp2p/rust-libp2p/pull/2652
 
 # 0.36.1
 
