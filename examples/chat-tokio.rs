@@ -43,7 +43,7 @@ use libp2p::{
     identity,
     mdns::{
         MdnsEvent,
-        // `MdnsTokio` is available through the `mdns-tokio` feature.
+        // `TokioMdns` is available through the `mdns-tokio` feature.
         TokioMdns,
     },
     mplex,
