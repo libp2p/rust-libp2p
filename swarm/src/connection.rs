@@ -150,7 +150,7 @@ where
                 Poll::Pending => {}
                 Poll::Ready(handler_wrapper::Event::OutboundSubstreamRequest(user_data)) => {
                     self.open_info.push_back(user_data);
-                    continue;
+                    continue; // Poll handler until exhausted.
                 }
                 Poll::Ready(handler_wrapper::Event::Custom(event)) => {
                     return Poll::Ready(Ok(Event::Handler(event)));
@@ -165,14 +165,14 @@ where
                         .expect("`open_info` is not empty");
                     let endpoint = SubstreamEndpoint::Dialer(user_data);
                     self.handler.inject_substream(substream, endpoint);
-                    continue;
+                    continue; // Go back to the top, handler can potentially make progress again.
                 }
             }
 
             if let Poll::Ready(substream) = self.muxing.poll_inbound(cx)? {
                 self.handler
                     .inject_substream(substream, SubstreamEndpoint::Listener);
-                continue;
+                continue; // Go back to the top, handler can potentially make progress again.
             }
 
             if let Poll::Ready(address) = self.muxing.poll_address_change(cx)? {
@@ -180,7 +180,7 @@ where
                 return Poll::Ready(Ok(Event::AddressChange(address)));
             }
 
-            return Poll::Pending;
+            return Poll::Pending; // Nothing can make progress, return `Pending`.
         }
     }
 }
