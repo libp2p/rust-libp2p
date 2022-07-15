@@ -111,9 +111,11 @@ where
             .incoming
             .poll_next_unpin(cx)
             .map(|maybe_stream| {
-                maybe_stream
+                let stream = maybe_stream
                     .transpose()?
-                    .ok_or(YamuxError(ConnectionError::Closed))
+                    .ok_or(YamuxError(ConnectionError::Closed))?;
+
+                Ok(stream)
             })
     }
 
