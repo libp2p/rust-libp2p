@@ -102,10 +102,9 @@ impl From<&libp2p_relay::v2::relay::Event> for EventType {
     }
 }
 
-impl super::Recorder<libp2p_relay::v2::relay::Event> for super::Metrics {
+impl super::Recorder<libp2p_relay::v2::relay::Event> for Metrics {
     fn record(&self, event: &libp2p_relay::v2::relay::Event) {
-        self.relay
-            .events
+        self.events
             .get_or_create(&EventLabels {
                 event: event.into(),
             })

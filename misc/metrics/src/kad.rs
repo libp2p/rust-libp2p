@@ -159,25 +159,21 @@ impl Metrics {
     }
 }
 
-impl super::Recorder<libp2p_kad::KademliaEvent> for super::Metrics {
+impl super::Recorder<libp2p_kad::KademliaEvent> for Metrics {
     fn record(&self, event: &libp2p_kad::KademliaEvent) {
         match event {
             libp2p_kad::KademliaEvent::OutboundQueryCompleted { result, stats, .. } => {
-                self.kad
-                    .query_result_num_requests
+                self.query_result_num_requests
                     .get_or_create(&result.into())
                     .observe(stats.num_requests().into());
-                self.kad
-                    .query_result_num_success
+                self.query_result_num_success
                     .get_or_create(&result.into())
                     .observe(stats.num_successes().into());
-                self.kad
-                    .query_result_num_failure
+                self.query_result_num_failure
                     .get_or_create(&result.into())
                     .observe(stats.num_failures().into());
                 if let Some(duration) = stats.duration() {
-                    self.kad
-                        .query_result_duration
+                    self.query_result_duration
                         .get_or_create(&result.into())
                         .observe(duration.as_secs_f64());
                 }
@@ -185,36 +181,30 @@ impl super::Recorder<libp2p_kad::KademliaEvent> for super::Metrics {
                 match result {
                     libp2p_kad::QueryResult::GetRecord(result) => match result {
                         Ok(ok) => self
-                            .kad
                             .query_result_get_record_ok
                             .observe(ok.records.len() as f64),
                         Err(error) => {
-                            self.kad
-                                .query_result_get_record_error
+                            self.query_result_get_record_error
                                 .get_or_create(&error.into())
                                 .inc();
                         }
                     },
                     libp2p_kad::QueryResult::GetClosestPeers(result) => match result {
                         Ok(ok) => self
-                            .kad
                             .query_result_get_closest_peers_ok
                             .observe(ok.peers.len() as f64),
                         Err(error) => {
-                            self.kad
-                                .query_result_get_closest_peers_error
+                            self.query_result_get_closest_peers_error
                                 .get_or_create(&error.into())
                                 .inc();
                         }
                     },
                     libp2p_kad::QueryResult::GetProviders(result) => match result {
                         Ok(ok) => self
-                            .kad
                             .query_result_get_providers_ok
                             .observe(ok.providers.len() as f64),
                         Err(error) => {
-                            self.kad
-                                .query_result_get_providers_error
+                            self.query_result_get_providers_error
                                 .get_or_create(&error.into())
                                 .inc();
                         }
@@ -230,16 +220,14 @@ impl super::Recorder<libp2p_kad::KademliaEvent> for super::Metrics {
             } => {
                 let bucket = low.ilog2().unwrap_or(0);
                 if *is_new_peer {
-                    self.kad
-                        .routing_updated
+                    self.routing_updated
                         .get_or_create(&RoutingUpdated {
                             action: RoutingAction::Added,
                             bucket,
                         })
                         .inc();
                 } else {
-                    self.kad
-                        .routing_updated
+                    self.routing_updated
                         .get_or_create(&RoutingUpdated {
                             action: RoutingAction::Updated,
                             bucket,
@@ -248,8 +236,7 @@ impl super::Recorder<libp2p_kad::KademliaEvent> for super::Metrics {
                 }
 
                 if old_peer.is_some() {
-                    self.kad
-                        .routing_updated
+                    self.routing_updated
                         .get_or_create(&RoutingUpdated {
                             action: RoutingAction::Evicted,
                             bucket,
@@ -259,10 +246,7 @@ impl super::Recorder<libp2p_kad::KademliaEvent> for super::Metrics {
             }
 
             libp2p_kad::KademliaEvent::InboundRequest { request } => {
-                self.kad
-                    .inbound_requests
-                    .get_or_create(&request.into())
-                    .inc();
+                self.inbound_requests.get_or_create(&request.into()).inc();
             }
             _ => {}
         }

@@ -95,3 +95,55 @@ pub trait Recorder<Event> {
     /// Record the given event.
     fn record(&self, event: &Event);
 }
+
+#[cfg(feature = "dcutr")]
+impl Recorder<libp2p_dcutr::behaviour::Event> for Metrics {
+    fn record(&self, event: &libp2p_dcutr::behaviour::Event) {
+        self.dcutr.record(event)
+    }
+}
+
+#[cfg(feature = "gossipsub")]
+#[cfg(not(target_os = "unknown"))]
+impl Recorder<libp2p_gossipsub::GossipsubEvent> for Metrics {
+    fn record(&self, event: &libp2p_gossipsub::GossipsubEvent) {
+        self.gossipsub.record(event)
+    }
+}
+
+#[cfg(feature = "identify")]
+impl Recorder<libp2p_identify::IdentifyEvent> for Metrics {
+    fn record(&self, event: &libp2p_identify::IdentifyEvent) {
+        self.identify.record(event)
+    }
+}
+
+#[cfg(feature = "kad")]
+impl Recorder<libp2p_kad::KademliaEvent> for Metrics {
+    fn record(&self, event: &libp2p_kad::KademliaEvent) {
+        self.kad.record(event)
+    }
+}
+
+#[cfg(feature = "ping")]
+impl Recorder<libp2p_ping::PingEvent> for Metrics {
+    fn record(&self, event: &libp2p_ping::PingEvent) {
+        self.ping.record(event)
+    }
+}
+
+#[cfg(feature = "relay")]
+impl Recorder<libp2p_relay::v2::relay::Event> for Metrics {
+    fn record(&self, event: &libp2p_relay::v2::relay::Event) {
+        self.relay.record(event)
+    }
+}
+
+impl<TBvEv, THandleErr> Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleErr>> for Metrics {
+    fn record(&self, event: &libp2p_swarm::SwarmEvent<TBvEv, THandleErr>) {
+        self.swarm.record(event);
+
+        #[cfg(feature = "identify")]
+        self.identify.record(event)
+    }
+}

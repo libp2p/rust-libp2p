@@ -40,10 +40,10 @@ impl Metrics {
     }
 }
 
-impl super::Recorder<libp2p_gossipsub::GossipsubEvent> for super::Metrics {
+impl super::Recorder<libp2p_gossipsub::GossipsubEvent> for Metrics {
     fn record(&self, event: &libp2p_gossipsub::GossipsubEvent) {
         if let libp2p_gossipsub::GossipsubEvent::Message { .. } = event {
-            self.gossipsub.messages.inc();
+            self.messages.inc();
         }
     }
 }

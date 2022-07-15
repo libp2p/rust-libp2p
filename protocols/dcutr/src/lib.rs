@@ -27,6 +27,7 @@ mod protocol;
 
 pub use protocol::{
     inbound::UpgradeError as InboundUpgradeError, outbound::UpgradeError as OutboundUpgradeError,
+    PROTOCOL_NAME,
 };
 
 mod message_proto {

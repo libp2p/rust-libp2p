@@ -34,6 +34,10 @@ use void::Void;
 
 const MAX_MESSAGE_SIZE_BYTES: usize = 4096;
 
+pub const PROTOCOL_NAME: &[u8; 14] = b"/ipfs/id/1.0.0";
+
+pub const PUSH_PROTOCOL_NAME: &[u8; 19] = b"/ipfs/id/push/1.0.0";
+
 /// Substream upgrade protocol for `/ipfs/id/1.0.0`.
 #[derive(Debug, Clone)]
 pub struct IdentifyProtocol;
@@ -104,7 +108,7 @@ impl UpgradeInfo for IdentifyProtocol {
     type InfoIter = iter::Once<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
-        iter::once(b"/ipfs/id/1.0.0")
+        iter::once(PROTOCOL_NAME)
     }
 }
 
@@ -136,7 +140,7 @@ impl<T> UpgradeInfo for IdentifyPushProtocol<T> {
     type InfoIter = iter::Once<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
-        iter::once(b"/ipfs/id/push/1.0.0")
+        iter::once(PUSH_PROTOCOL_NAME)
     }
 }
 
