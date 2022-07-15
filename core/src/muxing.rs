@@ -63,8 +63,8 @@ mod singleton;
 /// Provides multiplexing for a connection by allowing users to open substreams.
 ///
 /// A substream created by a [`StreamMuxer`] is a type that implements [`AsyncRead`] and [`AsyncWrite`].
-///
-/// TODO(docs)
+/// The [`StreamMuxer`] itself is modelled closely after [`AsyncWrite`]. It features `poll`-style
+/// functions that allow the implementation to make progress on various tasks.
 pub trait StreamMuxer {
     /// Type of the object that represents the raw substream where data can be read and written.
     type Substream: AsyncRead + AsyncWrite;
@@ -72,13 +72,15 @@ pub trait StreamMuxer {
     /// Error type of the muxer
     type Error: std::error::Error;
 
-    /// TODO(docs)
+    /// Poll for new inbound substreams.
     fn poll_inbound(&self, cx: &mut Context<'_>) -> Poll<Result<Self::Substream, Self::Error>>;
 
-    /// TODO(docs)
+    /// Poll for a new, outbound substream.
     fn poll_outbound(&self, cx: &mut Context<'_>) -> Poll<Result<Self::Substream, Self::Error>>;
 
-    /// TODO(docs)
+    /// Poll for an address change of the underlying connection.
+    ///
+    /// Not all implementations may support this feature.
     fn poll_address_change(&self, cx: &mut Context<'_>) -> Poll<Result<Multiaddr, Self::Error>>;
 
     /// Closes this `StreamMuxer`.
