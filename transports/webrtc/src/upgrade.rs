@@ -22,13 +22,11 @@ use futures::io::{AsyncReadExt, AsyncWriteExt};
 use futures::{channel::oneshot, future, select, FutureExt, TryFutureExt};
 use futures_timer::Delay;
 use libp2p_core::identity;
-use libp2p_core::{
-    multiaddr::{Multiaddr, Protocol},
-    PeerId,
-};
+use libp2p_core::PeerId;
 use libp2p_core::{InboundUpgrade, UpgradeInfo};
 use libp2p_noise::{Keypair, NoiseConfig, NoiseError, RemoteIdentity, X25519Spec};
 use log::{debug, trace};
+use multihash::Hasher;
 use webrtc::api::APIBuilder;
 use webrtc::data_channel::data_channel_init::RTCDataChannelInit;
 use webrtc::dtls_transport::dtls_role::DTLSRole;
@@ -37,6 +35,7 @@ use webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
 use webrtc_data::data_channel::DataChannel as DetachedDataChannel;
 use webrtc_ice::udp_mux::UDPMux;
 
+use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -49,19 +48,18 @@ use crate::transport;
 pub async fn webrtc(
     udp_mux: Arc<dyn UDPMux + Send + Sync>,
     config: RTCConfiguration,
-    addr: Multiaddr,
+    socket_addr: SocketAddr,
+    ufrag: String,
     id_keys: identity::Keypair,
 ) -> Result<(PeerId, Connection), Error> {
-    trace!("upgrading {}", addr);
+    trace!("upgrading {} (ufrag: {})", socket_addr, ufrag);
 
-    let socket_addr = transport::multiaddr_to_socketaddr(&addr)
-        .ok_or_else(|| Error::InvalidMultiaddr(addr.clone()))?;
     let our_fingerprint = transport::fingerprint_of_first_certificate(&config);
 
     let mut se = transport::build_setting_engine(udp_mux, &socket_addr, &our_fingerprint);
     {
-        // Act as a lite ICE (ICE which does not send additional candidates).
         se.set_lite(true);
+        se.disable_certificate_fingerprint_verification(true);
         // Act as a DTLS server (one which waits for a connection).
         //
         // NOTE: removing this seems to break DTLS setup (both sides send `ClientHello` messages,
@@ -72,17 +70,11 @@ pub async fn webrtc(
     let api = APIBuilder::new().with_setting_engine(se).build();
     let peer_connection = api.new_peer_connection(config).await?;
 
-    // Set the remote description to the predefined SDP.
-    let remote_fingerprint = if let Some(Protocol::XWebRTC(f)) = addr.iter().last() {
-        transport::fingerprint_to_string(&f)
-    } else {
-        debug!("{} is not a WebRTC multiaddr", addr);
-        return Err(Error::InvalidMultiaddr(addr));
-    };
     let client_session_description = transport::render_description(
         sdp::CLIENT_SESSION_DESCRIPTION,
         socket_addr,
-        &remote_fingerprint,
+        "UNKNOWN",
+        &ufrag,
     );
     debug!("OFFER: {:?}", client_session_description);
     let sdp = RTCSessionDescription::offer(client_session_description).unwrap();
@@ -123,7 +115,7 @@ pub async fn webrtc(
         ))
     };
 
-    trace!("noise handshake with {}", addr);
+    trace!("noise handshake with {} (ufrag: {})", socket_addr, ufrag);
     let dh_keys = Keypair::<X25519Spec>::new()
         .into_authentic(&id_keys)
         .unwrap();
@@ -139,13 +131,35 @@ pub async fn webrtc(
         .map_err(Error::Noise)?;
 
     // Exchange TLS certificate fingerprints to prevent MiM attacks.
-    trace!("exchanging TLS certificate fingerprints with {}", addr);
+    trace!(
+        "exchanging TLS certificate fingerprints with {} (ufrag: {})",
+        socket_addr,
+        ufrag
+    );
+
+    // 1. Submit SHA-256 fingerprint
     let n = noise_io.write(&our_fingerprint.into_bytes()).await?;
     noise_io.flush().await?;
+
+    // 2. Receive one too and compare it to the fingerprint of the remote DTLS certificate.
     let mut buf = vec![0; n]; // ASSERT: fingerprint's format is the same.
     noise_io.read_exact(buf.as_mut_slice()).await?;
     let fingerprint_from_noise =
         String::from_utf8(buf).map_err(|_| Error::Noise(NoiseError::AuthenticationFailed))?;
+    let remote_fingerprint = {
+        let remote_cert_bytes =
+            peer_connection
+                .get_remote_dtls_certificate()
+                .await
+                .ok_or(Error::InternalError(
+                    "No remote certificate found".to_owned(),
+                ))?;
+        let mut h = multihash::Sha2_256::default();
+        h.update(&remote_cert_bytes);
+        let hashed = h.finalize();
+        let values: Vec<String> = hashed.iter().map(|x| format! {"{:02x}", x}).collect();
+        values.join(":")
+    };
     if fingerprint_from_noise != remote_fingerprint {
         return Err(Error::InvalidFingerprint {
             expected: remote_fingerprint,

@@ -68,8 +68,7 @@ use crate::connection::PollDataChannel;
 use crate::error::Error;
 use crate::in_addr::InAddr;
 use crate::sdp;
-use crate::udp_mux::UDPMuxNewAddr;
-use crate::udp_mux::UDPMuxParams;
+use crate::udp_mux::{NewAddr, UDPMuxNewAddr, UDPMuxParams};
 use crate::upgrade;
 
 /// A WebRTC transport with direct p2p communication (without a STUN server).
@@ -231,6 +230,7 @@ impl Transport for WebRTCTransport {
                 sdp::SERVER_SESSION_DESCRIPTION,
                 sock_addr,
                 &remote_fingerprint,
+                &remote_fingerprint.to_owned().replace(':', ""),
             );
             debug!("ANSWER: {:?}", server_session_description);
             let sdp = RTCSessionDescription::answer(server_session_description).unwrap();
@@ -363,7 +363,7 @@ pub struct WebRTCListenStream {
     udp_mux: Arc<dyn UDPMux + Send + Sync>,
 
     /// The receiver for new `SocketAddr` connecting to this peer.
-    new_addr_rx: mpsc::Receiver<Multiaddr>,
+    new_addr_rx: mpsc::Receiver<NewAddr>,
 
     /// `Keypair` identifying this peer
     id_keys: identity::Keypair,
@@ -381,7 +381,7 @@ impl WebRTCListenStream {
         listen_addr: SocketAddr,
         config: RTCConfiguration,
         udp_mux: Arc<dyn UDPMux + Send + Sync>,
-        new_addr_rx: mpsc::Receiver<Multiaddr>,
+        new_addr_rx: mpsc::Receiver<NewAddr>,
         id_keys: identity::Keypair,
     ) -> Self {
         let in_addr = InAddr::new(listen_addr.ip());
@@ -488,8 +488,8 @@ impl Stream for WebRTCListenStream {
             return Poll::Ready(Some(event));
         }
 
-        let addr = match futures::ready!(self.new_addr_rx.poll_next_unpin(cx)) {
-            Some(addr) => addr,
+        let new_addr = match futures::ready!(self.new_addr_rx.poll_next_unpin(cx)) {
+            Some(a) => a,
             None => {
                 self.close(Err(Error::UDPMuxIsClosed));
                 return self.poll_next(cx);
@@ -497,15 +497,17 @@ impl Stream for WebRTCListenStream {
         };
 
         let local_addr = socketaddr_to_multiaddr(&self.listen_addr);
+        let send_back_addr = socketaddr_to_multiaddr(&new_addr.addr);
         let event = TransportEvent::Incoming {
             upgrade: Box::pin(upgrade::webrtc(
                 self.udp_mux.clone(),
                 self.config.clone(),
-                addr.clone(),
+                new_addr.addr,
+                new_addr.ufrag,
                 self.id_keys.clone(),
             )) as BoxFuture<'static, _>,
             local_addr,
-            send_back_addr: addr,
+            send_back_addr,
             listener_id: self.listener_id,
         };
         Poll::Ready(Some(event))
@@ -530,11 +532,15 @@ pub(crate) fn socketaddr_to_multiaddr(socket_addr: &SocketAddr) -> Multiaddr {
 }
 
 /// Renders a [`TinyTemplate`] description using the provided arguments.
-pub(crate) fn render_description(description: &str, addr: SocketAddr, fingerprint: &str) -> String {
+pub(crate) fn render_description(
+    description: &str,
+    addr: SocketAddr,
+    fingerprint: &str,
+    ufrag: &str,
+) -> String {
     let mut tt = TinyTemplate::new();
     tt.add_template("description", description).unwrap();
 
-    let f = fingerprint.to_owned().replace(':', "");
     let context = sdp::DescriptionContext {
         ip_version: {
             if addr.is_ipv4() {
@@ -545,11 +551,10 @@ pub(crate) fn render_description(description: &str, addr: SocketAddr, fingerprin
         },
         target_ip: addr.ip(),
         target_port: addr.port(),
-        // Hashing algorithm (SHA-256) is hardcoded for now
         fingerprint: fingerprint.to_owned(),
-        // ufrag and pwd are both equal to the fingerprint (minus the `:` delimiter)
-        ufrag: f.clone(),
-        pwd: f,
+        // NOTE: ufrag is equal to pwd.
+        ufrag: ufrag.to_owned(),
+        pwd: ufrag.to_owned(),
     };
     tt.render("description", &context).unwrap()
 }
@@ -586,7 +591,7 @@ pub(crate) fn fingerprint_to_string(f: &Cow<'_, [u8; 32]>) -> String {
     values.join(":")
 }
 
-/// Returns a fingerprint of the first certificate.
+/// Returns a SHA-256 fingerprint of the first certificate.
 ///
 /// # Panics
 ///
@@ -599,6 +604,7 @@ pub(crate) fn fingerprint_of_first_certificate(config: &RTCConfiguration) -> Str
         .expect("at least one certificate")
         .get_fingerprints()
         .expect("fingerprints to succeed");
+    debug_assert_eq!("sha-256", fingerprints.first().unwrap().algorithm);
     fingerprints.first().unwrap().value.clone()
 }
 
@@ -633,6 +639,7 @@ fn fingerprint_from_addr<'a>(addr: &'a Multiaddr) -> Option<Cow<'a, [u8; 32]>> {
     let iter = addr.iter();
     for proto in iter {
         match proto {
+            // TODO: check hash is one of https://datatracker.ietf.org/doc/html/rfc8122#section-5
             Protocol::XWebRTC(f) => return Some(f),
             _ => continue,
         }

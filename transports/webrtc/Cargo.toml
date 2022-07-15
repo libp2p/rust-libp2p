@@ -26,11 +26,12 @@ stun = "0.4"
 thiserror = "1"
 tinytemplate = "1.2"
 tokio-crate = { package = "tokio", version = "1.18", features = ["net"]}
-webrtc = { version = "0.4.0", git = "https://github.com/melekes/webrtc.git", branch = "anton/168-allow-persistent-certificates-plus-deps" }
-webrtc-data = { version = "0.3.3", git = "https://github.com/webrtc-rs/data.git", rev = "9656a255a69365268a5b1e0978b84e56f4d7114d" }
+webrtc = { version = "0.4.0", git = "https://github.com/melekes/webrtc.git", branch = "always-set-remote-certificate" }
+webrtc-data = { version = "0.3.3", git = "https://github.com/webrtc-rs/data.git", rev = "f630dcd2b90ed8faf57d1b36c18ec5aa715325c0" }
 webrtc-ice = "0.7.0"
 webrtc-sctp = "0.5.0"
-webrtc-util = { version = "0.5.3", default-features = false, features = ["conn", "vnet", "sync"] }
+webrtc-util = { version = "0.5.4", default-features = false, features = ["conn", "vnet", "sync"] }
+multihash = { version = "0.16", default-features = false, features = ["sha2"] }
 
 [dev-dependencies]
 anyhow = "1.0"

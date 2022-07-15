@@ -135,6 +135,10 @@ pub use libp2p_uds as uds;
 #[cfg_attr(docsrs, doc(cfg(feature = "wasm-ext")))]
 #[doc(inline)]
 pub use libp2p_wasm_ext as wasm_ext;
+#[cfg(feature = "webrtc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "webrtc")))]
+#[doc(inline)]
+pub use libp2p_webrtc as webrtc;
 #[cfg(feature = "websocket")]
 #[cfg_attr(docsrs, doc(cfg(feature = "websocket")))]
 #[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
@@ -144,10 +148,6 @@ pub use libp2p_websocket as websocket;
 #[cfg_attr(docsrs, doc(cfg(feature = "yamux")))]
 #[doc(inline)]
 pub use libp2p_yamux as yamux;
-#[cfg(feature = "webrtc")]
-#[cfg_attr(docsrs, doc(cfg(feature = "webrtc")))]
-#[doc(inline)]
-pub use libp2p_webrtc as webrtc;
 
 mod transport_ext;
 

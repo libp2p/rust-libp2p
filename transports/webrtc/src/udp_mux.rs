@@ -22,7 +22,6 @@
 
 use async_trait::async_trait;
 use futures::channel::mpsc;
-use libp2p_core::multiaddr::{Multiaddr, Protocol};
 use stun::{
     attributes::ATTR_USERNAME,
     message::{is_message as is_stun_message, Message as STUNMessage},
@@ -33,7 +32,6 @@ use webrtc_ice::udp_mux::{UDPMux, UDPMuxConn, UDPMuxConnParams, UDPMuxWriter};
 use webrtc_util::{sync::RwLock, Conn, Error};
 
 use std::{
-    borrow::Cow,
     collections::{HashMap, HashSet},
     io::ErrorKind,
     net::SocketAddr,
@@ -41,6 +39,11 @@ use std::{
 };
 
 const RECEIVE_MTU: usize = 8192;
+
+pub struct NewAddr {
+    pub addr: SocketAddr,
+    pub ufrag: String,
+}
 
 pub struct UDPMuxParams {
     conn: Box<dyn Conn + Send + Sync>,
@@ -82,7 +85,7 @@ pub struct UDPMuxNewAddr {
 }
 
 impl UDPMuxNewAddr {
-    pub fn new(params: UDPMuxParams, new_addr_tx: mpsc::Sender<Multiaddr>) -> Arc<Self> {
+    pub fn new(params: UDPMuxParams, new_addr_tx: mpsc::Sender<NewAddr>) -> Arc<Self> {
         let (closed_watch_tx, closed_watch_rx) = watch::channel(());
 
         let mux = Arc::new(Self {
@@ -133,7 +136,7 @@ impl UDPMuxNewAddr {
     fn start_conn_worker(
         self: Arc<Self>,
         mut closed_watch_rx: watch::Receiver<()>,
-        mut new_addr_tx: mpsc::Sender<Multiaddr>,
+        mut new_addr_tx: mpsc::Sender<NewAddr>,
     ) {
         tokio::spawn(async move {
             let mut buffer = [0u8; RECEIVE_MTU];
@@ -171,11 +174,7 @@ impl UDPMuxNewAddr {
                                             match ufrag_from_stun_message(&buffer, false) {
                                                 Ok(ufrag) => {
                                                     log::trace!("Notifying about new address {} from {}", &addr, ufrag);
-                                                    let a = Multiaddr::empty()
-                                                        .with(addr.ip().into())
-                                                        .with(Protocol::Udp(addr.port()))
-                                                        .with(Protocol::XWebRTC(hex_to_cow(&ufrag.replace(':', ""))));
-                                                    if let Err(err) = new_addr_tx.try_send(a) {
+                                                    if let Err(err) = new_addr_tx.try_send(NewAddr { addr, ufrag }) {
                                                         log::error!("Failed to send new address {}: {}", &addr, err);
                                                     } else {
                                                         let mut new_addrs = loop_self.new_addrs.write();
@@ -342,12 +341,6 @@ impl UDPMuxWriter for UDPMuxNewAddr {
             .await
             .map_err(Into::into)
     }
-}
-
-fn hex_to_cow<'a>(s: &str) -> Cow<'a, [u8; 32]> {
-    let mut buf = [0; 32];
-    hex::decode_to_slice(s, &mut buf).unwrap();
-    Cow::Owned(buf)
 }
 
 /// Gets the ufrag from the given STUN message or returns an error, if failed to decode or the

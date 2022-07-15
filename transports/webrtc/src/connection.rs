@@ -32,8 +32,8 @@ use webrtc::data_channel::RTCDataChannel;
 use webrtc::peer_connection::RTCPeerConnection;
 use webrtc_data::data_channel::DataChannel as DetachedDataChannel;
 
-use std::pin::Pin;
 use std::io;
+use std::pin::Pin;
 use std::sync::{Arc, Mutex as StdMutex};
 use std::task::{Context, Poll};
 
