@@ -1,4 +1,4 @@
-# 0.35.0
+# 0.35.0 [unreleased]
 
 - Remove `StreamMuxer::poll_event` in favor of individual functions: `poll_inbound`, `poll_outbound`
   and `poll_address_change`. Consequently, `StreamMuxerEvent` is also removed. See [PR 2724].
