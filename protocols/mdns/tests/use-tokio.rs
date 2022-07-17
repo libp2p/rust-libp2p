@@ -27,6 +27,34 @@ use libp2p::{
 use std::error::Error;
 use std::time::Duration;
 
+#[tokio::test]
+async fn test_discovery_tokio_ipv4() -> Result<(), Box<dyn Error>> {
+    run_discovery_test(MdnsConfig::default()).await
+}
+
+#[tokio::test]
+async fn test_discovery_tokio_ipv6() -> Result<(), Box<dyn Error>> {
+    let config = MdnsConfig {
+        enable_ipv6: true,
+        ..Default::default()
+    };
+    run_discovery_test(config).await
+}
+
+#[tokio::test]
+async fn test_expired_tokio() -> Result<(), Box<dyn Error>> {
+    env_logger::try_init().ok();
+    let config = MdnsConfig {
+        ttl: Duration::from_secs(1),
+        query_interval: Duration::from_secs(10),
+        ..Default::default()
+    };
+
+    tokio::time::timeout(Duration::from_secs(6), run_peer_expiration_test(config))
+        .await
+        .unwrap()
+}
+
 async fn create_swarm(config: MdnsConfig) -> Result<Swarm<TokioMdns>, Box<dyn Error>> {
     let id_keys = identity::Keypair::generate_ed25519();
     let peer_id = PeerId::from(id_keys.public());
@@ -77,20 +105,6 @@ async fn run_discovery_test(config: MdnsConfig) -> Result<(), Box<dyn Error>> {
     }
 }
 
-#[tokio::test]
-async fn test_discovery_tokio_ipv4() -> Result<(), Box<dyn Error>> {
-    run_discovery_test(MdnsConfig::default()).await
-}
-
-#[tokio::test]
-async fn test_discovery_tokio_ipv6() -> Result<(), Box<dyn Error>> {
-    let config = MdnsConfig {
-        enable_ipv6: true,
-        ..Default::default()
-    };
-    run_discovery_test(config).await
-}
-
 async fn run_peer_expiration_test(config: MdnsConfig) -> Result<(), Box<dyn Error>> {
     let mut a = create_swarm(config.clone()).await?;
     let mut b = create_swarm(config).await?;
@@ -120,18 +134,4 @@ async fn run_peer_expiration_test(config: MdnsConfig) -> Result<(), Box<dyn Erro
 
         }
     }
-}
-
-#[tokio::test]
-async fn test_expired_tokio() -> Result<(), Box<dyn Error>> {
-    env_logger::try_init().ok();
-    let config = MdnsConfig {
-        ttl: Duration::from_secs(1),
-        query_interval: Duration::from_secs(10),
-        ..Default::default()
-    };
-
-    tokio::time::timeout(Duration::from_secs(6), run_peer_expiration_test(config))
-        .await
-        .unwrap()
 }
