@@ -23,7 +23,7 @@ mod socket;
 mod timer;
 
 use self::iface::InterfaceState;
-use crate::behaviour::{socket::AsyncSocket, timer::TimerBuilder};
+use crate::behaviour::{socket::AsyncSocket, timer::Builder};
 use crate::MdnsConfig;
 use futures::prelude::*;
 use futures::Stream;
@@ -79,7 +79,7 @@ pub struct GenMdns<S, T> {
 
 impl<S, T> GenMdns<S, T>
 where
-    T: TimerBuilder,
+    T: Builder,
 {
     /// Builds a new `Mdns` behaviour.
     pub async fn new(config: MdnsConfig) -> io::Result<Self> {
@@ -117,7 +117,7 @@ where
 
 impl<S, T> NetworkBehaviour for GenMdns<S, T>
 where
-    T: TimerBuilder + Stream,
+    T: Builder + Stream,
     S: AsyncSocket,
 {
     type ConnectionHandler = DummyConnectionHandler;

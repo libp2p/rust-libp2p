@@ -23,7 +23,7 @@ mod query;
 
 use self::dns::{build_query, build_query_response, build_service_discovery_response};
 use self::query::MdnsPacket;
-use crate::behaviour::{socket::AsyncSocket, timer::TimerBuilder};
+use crate::behaviour::{socket::AsyncSocket, timer::Builder};
 use crate::MdnsConfig;
 use libp2p_core::{address_translation, multiaddr::Protocol, Multiaddr, PeerId};
 use libp2p_swarm::PollParameters;
@@ -71,7 +71,7 @@ pub struct InterfaceState<U, T> {
 impl<U, T> InterfaceState<U, T>
 where
     U: AsyncSocket,
-    T: TimerBuilder + futures::Stream,
+    T: Builder + futures::Stream,
 {
     /// Builds a new [`InterfaceState`].
     pub fn new(addr: IpAddr, config: MdnsConfig) -> io::Result<Self> {
@@ -199,10 +199,7 @@ where
         params: &impl PollParameters,
     ) -> Option<(PeerId, Multiaddr, Instant)> {
         // Poll receive socket.
-        match self
-            .recv_socket
-            .poll_read(cx, &mut self.recv_buffer)
-        {
+        match self.recv_socket.poll_read(cx, &mut self.recv_buffer) {
             Poll::Ready(Ok(Some((len, from)))) => {
                 if let Some(packet) = MdnsPacket::new_from_bytes(&self.recv_buffer[..len], from) {
                     self.inject_mdns_packet(packet, params);

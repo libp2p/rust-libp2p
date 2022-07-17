@@ -32,7 +32,7 @@ pub struct WrapTimer<T> {
 }
 
 /// Builder interface to homogenize the differents implementations
-pub trait TimerBuilder: Send + Unpin + 'static {
+pub trait Builder: Send + Unpin + 'static {
     /// Creates a timer that emits an event once at the given time instant.
     fn at(instant: Instant) -> Self;
 
@@ -52,22 +52,19 @@ pub mod asio {
     /// Async Timer
     pub type AsyncTimer = WrapTimer<Timer>;
 
-    impl TimerBuilder for WrapTimer<Timer> {
-        /// Creates a timer that emits an event once at the given time instant.
+    impl Builder for WrapTimer<Timer> {
         fn at(instant: Instant) -> Self {
             WrapTimer {
                 timer: Timer::at(instant),
             }
         }
 
-        /// Creates a timer that emits events periodically.
         fn interval(duration: Duration) -> Self {
             WrapTimer {
                 timer: Timer::interval(duration),
             }
         }
 
-        /// Creates a timer that emits events periodically, starting at start.
         fn interval_at(start: Instant, duration: Duration) -> Self {
             WrapTimer {
                 timer: Timer::interval_at(start, duration),
@@ -78,7 +75,7 @@ pub mod asio {
     impl Stream for AsyncTimer {
         type Item = Instant;
 
-        fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Instant>> {
+        fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
             Pin::new(&mut self.timer).poll_next(cx)
         }
     }
@@ -93,8 +90,7 @@ pub mod tokio {
     /// Tokio wrapper
     pub type TokioTimer = WrapTimer<Interval>;
 
-    impl TimerBuilder for WrapTimer<Interval> {
-        /// Creates a timer that emits an event once at the given time instant.
+    impl Builder for WrapTimer<Interval> {
         fn at(instant: Instant) -> Self {
             // Taken from: https://docs.rs/async-io/1.7.0/src/async_io/lib.rs.html#91
             let timer = time::interval_at(
@@ -104,14 +100,12 @@ pub mod tokio {
             WrapTimer { timer }
         }
 
-        /// Creates a timer that emits events periodically.
         fn interval(duration: Duration) -> Self {
             WrapTimer {
                 timer: time::interval(duration),
             }
         }
 
-        /// Creates a timer that emits events periodically, starting at start.
         fn interval_at(start: Instant, duration: Duration) -> Self {
             WrapTimer {
                 timer: time::interval_at(TokioInstant::from_std(start), duration),
