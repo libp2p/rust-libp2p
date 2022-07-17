@@ -86,7 +86,7 @@ where
                 socket.set_multicast_loop_v4(true)?;
                 socket.set_multicast_ttl_v4(255)?;
                 socket.join_multicast_v4(&*crate::IPV4_MDNS_MULTICAST_ADDRESS, &addr)?;
-                U::from_socket(UdpSocket::from(socket))?
+                U::from_std(UdpSocket::from(socket))?
             }
             IpAddr::V6(_) => {
                 let socket = Socket::new(Domain::IPV6, Type::DGRAM, Some(socket2::Protocol::UDP))?;
@@ -97,7 +97,7 @@ where
                 socket.set_multicast_loop_v6(true)?;
                 // TODO: find interface matching addr.
                 socket.join_multicast_v6(&*crate::IPV6_MDNS_MULTICAST_ADDRESS, 0)?;
-                U::from_socket(UdpSocket::from(socket))?
+                U::from_std(UdpSocket::from(socket))?
             }
         };
         let bind_addr = match addr {
@@ -111,7 +111,7 @@ where
             }
         };
         let std_socket = UdpSocket::bind(bind_addr)?;
-        let send_socket = U::from_socket(std_socket)?;
+        let send_socket = U::from_std(std_socket)?;
 
         // randomize timer to prevent all converging and firing at the same time.
         let query_interval = {
@@ -201,7 +201,7 @@ where
         // Poll receive socket.
         match self
             .recv_socket
-            .poll_receive_packet(cx, &mut self.recv_buffer)
+            .poll_read(cx, &mut self.recv_buffer)
         {
             Poll::Ready(Ok(Some((len, from)))) => {
                 if let Some(packet) = MdnsPacket::new_from_bytes(&self.recv_buffer[..len], from) {
@@ -217,7 +217,7 @@ where
 
         // Send responses.
         while let Some(packet) = self.send_buffer.pop_front() {
-            match self.send_socket.poll_send_packet(
+            match self.send_socket.poll_write(
                 cx,
                 &packet,
                 SocketAddr::new(self.multicast_addr, 5353),

@@ -27,19 +27,19 @@ use std::{
 /// Interface that must be implemented by the different runtimes to use the UdpSocket in async mode
 pub trait AsyncSocket: Send + 'static {
     /// Create the async socket from the ```std::net::UdpSocket```
-    fn from_socket(socket: UdpSocket) -> std::io::Result<Self>
+    fn from_std(socket: UdpSocket) -> std::io::Result<Self>
     where
         Self: Sized;
 
     /// Attempts to receive a single packet on the socket from the remote address to which it is connected.
-    fn poll_receive_packet(
+    fn poll_read(
         &mut self,
         _cx: &mut Context,
         _buf: &mut [u8],
     ) -> Poll<Result<Option<(usize, SocketAddr)>, Error>>;
 
     /// Attempts to send data on the socket to a given address.
-    fn poll_send_packet(
+    fn poll_write(
         &mut self,
         _cx: &mut Context,
         _packet: &[u8],
@@ -57,13 +57,11 @@ pub mod asio {
     pub type AsyncUdpSocket = Async<UdpSocket>;
 
     impl AsyncSocket for AsyncUdpSocket {
-        /// Create the async socket from the ```std::net::UdpSocket```
-        fn from_socket(socket: UdpSocket) -> std::io::Result<Self> {
+        fn from_std(socket: UdpSocket) -> std::io::Result<Self> {
             Async::new(socket)
         }
 
-        /// Attempts to receive a single packet on the socket from the remote address to which it is connected.
-        fn poll_receive_packet(
+        fn poll_read(
             &mut self,
             cx: &mut Context,
             buf: &mut [u8],
@@ -77,8 +75,7 @@ pub mod asio {
             }
         }
 
-        /// Attempts to send data on the socket to a given address.
-        fn poll_send_packet(
+        fn poll_write(
             &mut self,
             cx: &mut Context,
             packet: &[u8],
@@ -103,14 +100,12 @@ pub mod tokio {
     pub type TokioUdpSocket = TkUdpSocket;
 
     impl AsyncSocket for TokioUdpSocket {
-        /// Create the async socket from the ```std::net::UdpSocket```
-        fn from_socket(socket: UdpSocket) -> std::io::Result<Self> {
+        fn from_std(socket: UdpSocket) -> std::io::Result<Self> {
             socket.set_nonblocking(true)?;
             TokioUdpSocket::from_std(socket)
         }
 
-        /// Attempts to receive a single packet on the socket from the remote address to which it is connected.
-        fn poll_receive_packet(
+        fn poll_read(
             &mut self,
             cx: &mut Context,
             buf: &mut [u8],
@@ -128,8 +123,7 @@ pub mod tokio {
             }
         }
 
-        /// Attempts to send data on the socket to a given address.
-        fn poll_send_packet(
+        fn poll_write(
             &mut self,
             cx: &mut Context,
             packet: &[u8],
