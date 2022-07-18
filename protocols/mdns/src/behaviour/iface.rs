@@ -200,15 +200,20 @@ where
     ) -> Option<(PeerId, Multiaddr, Instant)> {
         // Poll receive socket.
         match self.recv_socket.poll_read(cx, &mut self.recv_buffer) {
-            Poll::Ready(Ok(Some((len, from)))) => {
-                if let Some(packet) = MdnsPacket::new_from_bytes(&self.recv_buffer[..len], from) {
-                    self.inject_mdns_packet(packet, params);
+            Poll::Ready(result) => match result {
+                Ok((len, from)) => {
+                    if let Some(packet) = MdnsPacket::new_from_bytes(&self.recv_buffer[..len], from)
+                    {
+                        self.inject_mdns_packet(packet, params);
+                    }
                 }
-            }
-            Poll::Ready(Ok(None)) => {}
-            Poll::Ready(Err(err)) => {
-                log::error!("failed reading datagram: {}", err);
-            }
+                Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                    // Not more bytes available on the socket to read
+                }
+                Err(err) => {
+                    log::error!("failed reading datagram: {}", err);
+                }
+            },
             Poll::Pending => {}
         }
 
@@ -219,14 +224,14 @@ where
                 &packet,
                 SocketAddr::new(self.multicast_addr, 5353),
             ) {
-                Poll::Ready(Ok(_)) => {
-                    log::trace!("sent packet on iface {}", self.addr)
-                }
-                Poll::Ready(Err(err)) => {
-                    log::error!("error sending packet on iface {} {}", self.addr, err);
-                    self.send_buffer.push_front(packet);
-                    break;
-                }
+                Poll::Ready(data) => match data {
+                    Ok(_) => log::trace!("sent packet on iface {}", self.addr),
+                    Err(err) => {
+                        log::error!("error sending packet on iface {} {}", self.addr, err);
+                        self.send_buffer.push_front(packet);
+                        break;
+                    }
+                },
                 Poll::Pending => {
                     self.send_buffer.push_front(packet);
                     break;

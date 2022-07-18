@@ -27,8 +27,8 @@ use std::{
 
 /// Simple wrapper for the differents type of timers
 #[derive(Debug)]
-pub struct WrapTimer<T> {
-    timer: T,
+pub struct Timer<T> {
+    inner: T,
 }
 
 /// Builder interface to homogenize the differents implementations
@@ -46,28 +46,28 @@ pub trait Builder: Send + Unpin + 'static {
 #[cfg(feature = "async-io")]
 pub mod asio {
     use super::*;
-    use async_io::Timer;
+    use async_io::Timer as AsioTimer;
     use futures::Stream;
 
     /// Async Timer
-    pub type AsyncTimer = WrapTimer<Timer>;
+    pub type AsyncTimer = Timer<AsioTimer>;
 
-    impl Builder for WrapTimer<Timer> {
+    impl Builder for AsyncTimer {
         fn at(instant: Instant) -> Self {
-            WrapTimer {
-                timer: Timer::at(instant),
+            Self {
+                inner: AsioTimer::at(instant),
             }
         }
 
         fn interval(duration: Duration) -> Self {
-            WrapTimer {
-                timer: Timer::interval(duration),
+            Self {
+                inner: AsioTimer::interval(duration),
             }
         }
 
         fn interval_at(start: Instant, duration: Duration) -> Self {
-            WrapTimer {
-                timer: Timer::interval_at(start, duration),
+            Self {
+                inner: AsioTimer::interval_at(start, duration),
             }
         }
     }
@@ -76,7 +76,7 @@ pub mod asio {
         type Item = Instant;
 
         fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-            Pin::new(&mut self.timer).poll_next(cx)
+            Pin::new(&mut self.inner).poll_next(cx)
         }
     }
 }
@@ -88,27 +88,27 @@ pub mod tokio {
     use futures::Stream;
 
     /// Tokio wrapper
-    pub type TokioTimer = WrapTimer<Interval>;
+    pub type TokioTimer = Timer<Interval>;
 
-    impl Builder for WrapTimer<Interval> {
+    impl Builder for TokioTimer {
         fn at(instant: Instant) -> Self {
             // Taken from: https://docs.rs/async-io/1.7.0/src/async_io/lib.rs.html#91
             let timer = time::interval_at(
                 TokioInstant::from_std(instant),
                 Duration::new(std::u64::MAX, 1_000_000_000 - 1),
             );
-            WrapTimer { timer }
+            Self { inner: timer }
         }
 
         fn interval(duration: Duration) -> Self {
-            WrapTimer {
-                timer: time::interval(duration),
+            Timer {
+                inner: time::interval(duration),
             }
         }
 
         fn interval_at(start: Instant, duration: Duration) -> Self {
-            WrapTimer {
-                timer: time::interval_at(TokioInstant::from_std(start), duration),
+            Timer {
+                inner: time::interval_at(TokioInstant::from_std(start), duration),
             }
         }
     }
@@ -117,7 +117,7 @@ pub mod tokio {
         type Item = TokioInstant;
 
         fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-            self.timer.poll_tick(cx).map(Some)
+            self.inner.poll_tick(cx).map(Some)
         }
     }
 }
