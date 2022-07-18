@@ -60,10 +60,7 @@ fn client_to_server_outbound() {
             .await
             .unwrap();
 
-        let mut outbound_token = client.open_outbound();
-        let mut outbound = poll_fn(|cx| client.poll_outbound(cx, &mut outbound_token))
-            .await
-            .unwrap();
+        let mut outbound = poll_fn(|cx| client.poll_outbound(cx)).await.unwrap();
 
         let mut buf = Vec::new();
         outbound.read_to_end(&mut buf).await.unwrap();
@@ -77,15 +74,7 @@ fn client_to_server_outbound() {
             .boxed();
 
         let client = Arc::new(transport.dial(rx.await.unwrap()).unwrap().await.unwrap());
-        let mut inbound = loop {
-            if let Some(s) = poll_fn(|cx| client.poll_event(cx))
-                .await
-                .unwrap()
-                .into_inbound_substream()
-            {
-                break s;
-            }
-        };
+        let mut inbound = poll_fn(|cx| client.poll_inbound(cx)).await.unwrap();
         inbound.write_all(b"hello world").await.unwrap();
         inbound.close().await.unwrap();
 
@@ -131,15 +120,7 @@ fn client_to_server_inbound() {
                 .unwrap(),
         );
 
-        let mut inbound = loop {
-            if let Some(s) = poll_fn(|cx| client.poll_event(cx))
-                .await
-                .unwrap()
-                .into_inbound_substream()
-            {
-                break s;
-            }
-        };
+        let mut inbound = poll_fn(|cx| client.poll_inbound(cx)).await.unwrap();
 
         let mut buf = Vec::new();
         inbound.read_to_end(&mut buf).await.unwrap();
@@ -154,10 +135,7 @@ fn client_to_server_inbound() {
 
         let client = transport.dial(rx.await.unwrap()).unwrap().await.unwrap();
 
-        let mut outbound_token = client.open_outbound();
-        let mut outbound = poll_fn(|cx| client.poll_outbound(cx, &mut outbound_token))
-            .await
-            .unwrap();
+        let mut outbound = poll_fn(|cx| client.poll_outbound(cx)).await.unwrap();
         outbound.write_all(b"hello world").await.unwrap();
         outbound.close().await.unwrap();
 
@@ -199,10 +177,7 @@ fn protocol_not_match() {
             .await
             .unwrap();
 
-        let mut outbound_token = client.open_outbound();
-        let mut outbound = poll_fn(|cx| client.poll_outbound(cx, &mut outbound_token))
-            .await
-            .unwrap();
+        let mut outbound = poll_fn(|cx| client.poll_outbound(cx)).await.unwrap();
 
         let mut buf = Vec::new();
         outbound.read_to_end(&mut buf).await.unwrap();

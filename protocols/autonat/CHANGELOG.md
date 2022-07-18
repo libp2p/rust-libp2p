@@ -4,6 +4,8 @@
 
 - Update to `libp2p-request-response` `v0.20.0`.
 
+- Update to `libp2p-core` `v0.35.0`.
+
 # 0.5.0
 
 - Update to `libp2p-core` `v0.34.0`.

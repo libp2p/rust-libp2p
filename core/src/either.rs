@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
-    muxing::{StreamMuxer, StreamMuxerEvent},
+    muxing::StreamMuxer,
     transport::{ListenerId, Transport, TransportError, TransportEvent},
     Multiaddr, ProtocolName,
 };
@@ -202,60 +202,38 @@ where
     B: StreamMuxer,
 {
     type Substream = EitherOutput<A::Substream, B::Substream>;
-    type OutboundSubstream = EitherOutbound<A, B>;
     type Error = EitherError<A::Error, B::Error>;
 
-    fn poll_event(
-        &self,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<StreamMuxerEvent<Self::Substream>, Self::Error>> {
+    fn poll_inbound(&self, cx: &mut Context<'_>) -> Poll<Result<Self::Substream, Self::Error>> {
         match self {
             EitherOutput::First(inner) => inner
-                .poll_event(cx)
-                .map_err(EitherError::A)
-                .map_ok(|event| event.map_inbound_stream(EitherOutput::First)),
-            EitherOutput::Second(inner) => inner
-                .poll_event(cx)
-                .map_err(EitherError::B)
-                .map_ok(|event| event.map_inbound_stream(EitherOutput::Second)),
-        }
-    }
-
-    fn open_outbound(&self) -> Self::OutboundSubstream {
-        match self {
-            EitherOutput::First(inner) => EitherOutbound::A(inner.open_outbound()),
-            EitherOutput::Second(inner) => EitherOutbound::B(inner.open_outbound()),
-        }
-    }
-
-    fn poll_outbound(
-        &self,
-        cx: &mut Context<'_>,
-        substream: &mut Self::OutboundSubstream,
-    ) -> Poll<Result<Self::Substream, Self::Error>> {
-        match (self, substream) {
-            (EitherOutput::First(ref inner), EitherOutbound::A(ref mut substream)) => inner
-                .poll_outbound(cx, substream)
-                .map(|p| p.map(EitherOutput::First))
+                .poll_inbound(cx)
+                .map_ok(EitherOutput::First)
                 .map_err(EitherError::A),
-            (EitherOutput::Second(ref inner), EitherOutbound::B(ref mut substream)) => inner
-                .poll_outbound(cx, substream)
-                .map(|p| p.map(EitherOutput::Second))
+            EitherOutput::Second(inner) => inner
+                .poll_inbound(cx)
+                .map_ok(EitherOutput::Second)
                 .map_err(EitherError::B),
-            _ => panic!("Wrong API usage"),
         }
     }
 
-    fn destroy_outbound(&self, substream: Self::OutboundSubstream) {
+    fn poll_outbound(&self, cx: &mut Context<'_>) -> Poll<Result<Self::Substream, Self::Error>> {
         match self {
-            EitherOutput::First(inner) => match substream {
-                EitherOutbound::A(substream) => inner.destroy_outbound(substream),
-                _ => panic!("Wrong API usage"),
-            },
-            EitherOutput::Second(inner) => match substream {
-                EitherOutbound::B(substream) => inner.destroy_outbound(substream),
-                _ => panic!("Wrong API usage"),
-            },
+            EitherOutput::First(inner) => inner
+                .poll_outbound(cx)
+                .map_ok(EitherOutput::First)
+                .map_err(EitherError::A),
+            EitherOutput::Second(inner) => inner
+                .poll_outbound(cx)
+                .map_ok(EitherOutput::Second)
+                .map_err(EitherError::B),
+        }
+    }
+
+    fn poll_address_change(&self, cx: &mut Context<'_>) -> Poll<Result<Multiaddr, Self::Error>> {
+        match self {
+            EitherOutput::First(inner) => inner.poll_address_change(cx).map_err(EitherError::A),
+            EitherOutput::Second(inner) => inner.poll_address_change(cx).map_err(EitherError::B),
         }
     }
 
@@ -265,13 +243,6 @@ where
             EitherOutput::Second(inner) => inner.poll_close(cx).map_err(EitherError::B),
         }
     }
-}
-
-#[derive(Debug, Copy, Clone)]
-#[must_use = "futures do nothing unless polled"]
-pub enum EitherOutbound<A: StreamMuxer, B: StreamMuxer> {
-    A(A::OutboundSubstream),
-    B(B::OutboundSubstream),
 }
 
 /// Implements `Future` and dispatches all method calls to either `First` or `Second`.
