@@ -26,6 +26,8 @@ use rand::{distributions, prelude::*};
 use std::{io, iter, time::Duration};
 use void::Void;
 
+pub const PROTOCOL_NAME: &[u8; 16] = b"/ipfs/ping/1.0.0";
+
 /// The `Ping` protocol upgrade.
 ///
 /// The ping protocol sends 32 bytes of random data in configurable
@@ -55,7 +57,7 @@ impl UpgradeInfo for Ping {
     type InfoIter = iter::Once<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
-        iter::once(b"/ipfs/ping/1.0.0")
+        iter::once(PROTOCOL_NAME)
     }
 }
 
