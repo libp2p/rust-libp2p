@@ -28,9 +28,8 @@ use bytes::Bytes;
 use codec::LocalStreamId;
 use futures::{future, prelude::*, ready};
 use libp2p_core::{
-    muxing::StreamMuxerEvent,
     upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo},
-    StreamMuxer,
+    Multiaddr, StreamMuxer,
 };
 use parking_lot::Mutex;
 use std::{cmp, iter, pin::Pin, sync::Arc, task::Context, task::Poll};
@@ -75,9 +74,6 @@ where
 }
 
 /// Multiplexer. Implements the `StreamMuxer` trait.
-///
-/// This implementation isn't capable of detecting when the underlying socket changes its address,
-/// and no [`StreamMuxerEvent::AddressChange`] event is ever emitted.
 pub struct Multiplex<C> {
     io: Arc<Mutex<io::Multiplexed<C>>>,
 }
@@ -87,42 +83,30 @@ where
     C: AsyncRead + AsyncWrite + Unpin,
 {
     type Substream = Substream<C>;
-    type OutboundSubstream = OutboundSubstream;
     type Error = io::Error;
 
-    fn poll_event(
-        &self,
-        cx: &mut Context<'_>,
-    ) -> Poll<io::Result<StreamMuxerEvent<Self::Substream>>> {
-        let stream_id = ready!(self.io.lock().poll_next_stream(cx))?;
-        let stream = Substream::new(stream_id, self.io.clone());
-        Poll::Ready(Ok(StreamMuxerEvent::InboundSubstream(stream)))
+    fn poll_inbound(&self, cx: &mut Context<'_>) -> Poll<Result<Self::Substream, Self::Error>> {
+        self.io
+            .lock()
+            .poll_next_stream(cx)
+            .map_ok(|stream_id| Substream::new(stream_id, self.io.clone()))
     }
 
-    fn open_outbound(&self) -> Self::OutboundSubstream {
-        OutboundSubstream {}
+    fn poll_outbound(&self, cx: &mut Context<'_>) -> Poll<Result<Self::Substream, Self::Error>> {
+        self.io
+            .lock()
+            .poll_open_stream(cx)
+            .map_ok(|stream_id| Substream::new(stream_id, self.io.clone()))
     }
 
-    fn poll_outbound(
-        &self,
-        cx: &mut Context<'_>,
-        _: &mut Self::OutboundSubstream,
-    ) -> Poll<Result<Self::Substream, io::Error>> {
-        let stream_id = ready!(self.io.lock().poll_open_stream(cx))?;
-        Poll::Ready(Ok(Substream::new(stream_id, self.io.clone())))
-    }
-
-    fn destroy_outbound(&self, _substream: Self::OutboundSubstream) {
-        // Nothing to do, since `open_outbound` creates no new local state.
+    fn poll_address_change(&self, _: &mut Context<'_>) -> Poll<Result<Multiaddr, Self::Error>> {
+        Poll::Pending
     }
 
     fn poll_close(&self, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         self.io.lock().poll_close(cx)
     }
 }
-
-/// Active attempt to open an outbound substream.
-pub struct OutboundSubstream {}
 
 impl<C> AsyncRead for Substream<C>
 where
