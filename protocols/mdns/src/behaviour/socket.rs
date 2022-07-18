@@ -67,7 +67,7 @@ pub mod asio {
             buf: &mut [u8],
         ) -> Poll<Result<(usize, SocketAddr), Error>> {
             // Poll receive socket.
-            let _ = futures::ready!(self.poll_readable(cx))?;
+            futures::ready!(self.poll_readable(cx))?;
             match self.recv_from(buf).now_or_never() {
                 Some(data) => Poll::Ready(data),
                 None => Poll::Pending,
@@ -80,7 +80,7 @@ pub mod asio {
             packet: &[u8],
             to: SocketAddr,
         ) -> Poll<Result<(), Error>> {
-            let _ = futures::ready!(self.poll_writable(cx))?;
+            futures::ready!(self.poll_writable(cx))?;
             match self.send_to(packet, to).now_or_never() {
                 Some(Ok(_)) => Poll::Ready(Ok(())),
                 Some(Err(err)) => Poll::Ready(Err(err)),
@@ -109,7 +109,7 @@ pub mod tokio {
             cx: &mut Context,
             buf: &mut [u8],
         ) -> Poll<Result<(usize, SocketAddr), Error>> {
-            let _ = futures::ready!(self.poll_recv_ready(cx))?;
+            futures::ready!(self.poll_recv_ready(cx))?;
             Poll::Ready(self.try_recv_from(buf))
         }
 
@@ -119,7 +119,7 @@ pub mod tokio {
             packet: &[u8],
             to: SocketAddr,
         ) -> Poll<Result<(), Error>> {
-            let _ = futures::ready!(self.poll_send_ready(cx))?;
+            futures::ready!(self.poll_send_ready(cx))?;
             match self.try_send_to(packet, to) {
                 Ok(_len) => Poll::Ready(Ok(())),
                 Err(err) => Poll::Ready(Err(err)),

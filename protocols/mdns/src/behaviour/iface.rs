@@ -110,8 +110,7 @@ where
                 SocketAddr::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), 0)
             }
         };
-        let std_socket = UdpSocket::bind(bind_addr)?;
-        let send_socket = U::from_std(std_socket)?;
+        let send_socket = U::from_std(UdpSocket::bind(bind_addr)?)?;
 
         // randomize timer to prevent all converging and firing at the same time.
         let query_interval = {
@@ -176,13 +175,16 @@ where
                     let new_expiration = Instant::now() + peer.ttl();
 
                     for addr in peer.addresses() {
-                        let da = if let Some(new_addr) = address_translation(addr, &observed) {
-                            new_addr.clone()
-                        } else {
-                            addr.clone()
-                        };
+                        if let Some(new_addr) = address_translation(addr, &observed) {
+                            self.discovered.push_back((
+                                *peer.id(),
+                                new_addr.clone(),
+                                new_expiration,
+                            ));
+                        }
 
-                        self.discovered.push_back((*peer.id(), da, new_expiration));
+                        self.discovered
+                            .push_back((*peer.id(), addr.clone(), new_expiration));
                     }
                 }
             }
@@ -199,22 +201,26 @@ where
         params: &impl PollParameters,
     ) -> Option<(PeerId, Multiaddr, Instant)> {
         // Poll receive socket.
-        match self.recv_socket.poll_read(cx, &mut self.recv_buffer) {
-            Poll::Ready(result) => match result {
-                Ok((len, from)) => {
+        loop {
+            match self.recv_socket.poll_read(cx, &mut self.recv_buffer) {
+                Poll::Ready(Ok((len, from))) => {
                     if let Some(packet) = MdnsPacket::new_from_bytes(&self.recv_buffer[..len], from)
                     {
                         self.inject_mdns_packet(packet, params);
                     }
                 }
-                Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                Poll::Ready(Err(err)) if err.kind() == std::io::ErrorKind::WouldBlock => {
                     // Not more bytes available on the socket to read
+                    break;
                 }
-                Err(err) => {
+                Poll::Ready(Err(err)) => {
                     log::error!("failed reading datagram: {}", err);
+                    break;
                 }
-            },
-            Poll::Pending => {}
+                Poll::Pending => {
+                    break;
+                }
+            }
         }
 
         // Send responses.
@@ -224,14 +230,11 @@ where
                 &packet,
                 SocketAddr::new(self.multicast_addr, 5353),
             ) {
-                Poll::Ready(data) => match data {
-                    Ok(_) => log::trace!("sent packet on iface {}", self.addr),
-                    Err(err) => {
-                        log::error!("error sending packet on iface {} {}", self.addr, err);
-                        self.send_buffer.push_front(packet);
-                        break;
-                    }
-                },
+                Poll::Ready(Ok(_)) => log::trace!("sent packet on iface {}", self.addr),
+                Poll::Ready(Err(err)) => {
+                    log::error!("error sending packet on iface {} {}", self.addr, err);
+                    break;
+                }
                 Poll::Pending => {
                     self.send_buffer.push_front(packet);
                     break;
