@@ -25,7 +25,7 @@ use futures::channel::oneshot::{self, Sender};
 use futures::lock::Mutex as FutMutex;
 use futures::{future::BoxFuture, prelude::*, ready};
 use futures_lite::stream::StreamExt;
-use libp2p_core::{ muxing::StreamMuxer, Multiaddr };
+use libp2p_core::{muxing::StreamMuxer, Multiaddr};
 use log::{debug, error, trace};
 use webrtc::data_channel::RTCDataChannel;
 use webrtc::peer_connection::RTCPeerConnection;
@@ -34,8 +34,8 @@ use webrtc_data::data_channel::DataChannel as DetachedDataChannel;
 use std::sync::{Arc, Mutex as StdMutex};
 use std::task::{Context, Poll};
 
-pub(crate) use poll_data_channel::PollDataChannel;
 use crate::error::Error;
+pub(crate) use poll_data_channel::PollDataChannel;
 
 /// A WebRTC connection, wrapping [`RTCPeerConnection`] and implementing [`StreamMuxer`] trait.
 pub struct Connection {
@@ -145,10 +145,7 @@ impl<'a> StreamMuxer for Connection {
     type Substream = PollDataChannel;
     type Error = Error;
 
-    fn poll_inbound(
-        &self,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<Self::Substream, Self::Error>> {
+    fn poll_inbound(&self, cx: &mut Context<'_>) -> Poll<Result<Self::Substream, Self::Error>> {
         let mut inner = self.inner.lock().unwrap();
         match ready!(inner.incoming_data_channels_rx.poll_next(cx)) {
             Some(detached) => {
@@ -171,38 +168,34 @@ impl<'a> StreamMuxer for Connection {
         return Poll::Pending;
     }
 
-    fn poll_outbound(
-        &self,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<Self::Substream, Self::Error>> {
+    fn poll_outbound(&self, cx: &mut Context<'_>) -> Poll<Result<Self::Substream, Self::Error>> {
         let mut inner = self.inner.lock().unwrap();
         let peer_conn = self.peer_conn.clone();
-        let fut = inner.outbound_fut.get_or_insert(
-            Box::pin(async move {
-                let peer_conn = peer_conn.lock().await;
+        let fut = inner.outbound_fut.get_or_insert(Box::pin(async move {
+            let peer_conn = peer_conn.lock().await;
 
-                // Create a datachannel with label 'data'
-                let data_channel = peer_conn
-                    .create_data_channel("data", None)
-                    .map_err(Error::WebRTC)
-                    .await?;
+            // Create a datachannel with label 'data'
+            let data_channel = peer_conn
+                .create_data_channel("data", None)
+                .map_err(Error::WebRTC)
+                .await?;
 
-                trace!("Opening outbound substream {}", data_channel.id());
+            trace!("Opening outbound substream {}", data_channel.id());
 
-                // No need to hold the lock during the DTLS handshake.
-                drop(peer_conn);
+            // No need to hold the lock during the DTLS handshake.
+            drop(peer_conn);
 
-                let (tx, rx) = oneshot::channel::<Arc<DetachedDataChannel>>();
+            let (tx, rx) = oneshot::channel::<Arc<DetachedDataChannel>>();
 
-                // Wait until the data channel is opened and detach it.
-                register_data_channel_open_handler(data_channel, tx).await;
+            // Wait until the data channel is opened and detach it.
+            register_data_channel_open_handler(data_channel, tx).await;
 
-                // Wait until data channel is opened and ready to use
-                match rx.await {
-                    Ok(detached) => Ok(detached),
-                    Err(e) => Err(Error::InternalError(e.to_string())),
-                }
-            }));
+            // Wait until data channel is opened and ready to use
+            match rx.await {
+                Ok(detached) => Ok(detached),
+                Err(e) => Err(Error::InternalError(e.to_string())),
+            }
+        }));
 
         match ready!(fut.as_mut().poll(cx)) {
             Ok(detached) => {
@@ -222,14 +215,10 @@ impl<'a> StreamMuxer for Connection {
 
         let mut inner = self.inner.lock().unwrap();
         let peer_conn = self.peer_conn.clone();
-        let fut = inner.close_fut.get_or_insert(
-            Box::pin(async move {
-                let peer_conn = peer_conn.lock().await;
-                peer_conn
-                    .close()
-                    .await
-                    .map_err(Error::WebRTC)
-                }));
+        let fut = inner.close_fut.get_or_insert(Box::pin(async move {
+            let peer_conn = peer_conn.lock().await;
+            peer_conn.close().await.map_err(Error::WebRTC)
+        }));
 
         match ready!(fut.as_mut().poll(cx)) {
             Ok(()) => {

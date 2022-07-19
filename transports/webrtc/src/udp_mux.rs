@@ -21,13 +21,12 @@
 // SOFTWARE.
 
 use async_trait::async_trait;
-use futures::channel::mpsc;
 use stun::{
     attributes::ATTR_USERNAME,
     message::{is_message as is_stun_message, Message as STUNMessage},
 };
 use tokio_crate as tokio;
-use tokio_crate::sync::{watch, Mutex};
+use tokio_crate::sync::Mutex;
 use webrtc_ice::udp_mux::{UDPMux, UDPMuxConn, UDPMuxConnParams, UDPMuxWriter};
 use webrtc_util::{sync::RwLock, Conn, Error};
 
@@ -35,7 +34,10 @@ use std::{
     collections::{HashMap, HashSet},
     io::ErrorKind,
     net::SocketAddr,
-    sync::{Arc, Weak},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Weak,
+    },
 };
 
 const RECEIVE_MTU: usize = 8192;
@@ -60,6 +62,16 @@ impl UDPMuxParams {
     }
 }
 
+/// An event emitted by [`UDPMuxNewAddr`] when it's polled.
+pub enum UDPMuxEvent {
+    /// Connection error. UDP mux should be stopped.
+    Error(Error),
+    /// Got a [`NewAddr`] from the socket.
+    NewAddr(NewAddr),
+    /// Non-important event. Can be ignored.
+    None,
+}
+
 /// This is a copy of `UDPMuxDefault` with the exception of ability to report new addresses via
 /// `new_addr_tx`.
 pub struct UDPMuxNewAddr {
@@ -73,38 +85,25 @@ pub struct UDPMuxNewAddr {
     /// Maps from ip address to the underlying connection.
     address_map: RwLock<HashMap<SocketAddr, UDPMuxConn>>,
 
-    // Close sender
-    closed_watch_tx: Mutex<Option<watch::Sender<()>>>,
-
-    /// Close reciever
-    closed_watch_rx: watch::Receiver<()>,
-
-    /// Set of the new IP addresses reported via `new_addr_tx` to avoid sending the same IP
-    /// multiple times.
+    /// Set of the new IP addresses to avoid sending the same IP multiple times.
     new_addrs: RwLock<HashSet<SocketAddr>>,
+
+    /// `true` when UDP mux is closed.
+    is_closed: AtomicBool,
+
+    read_buffer: [u8; RECEIVE_MTU],
 }
 
 impl UDPMuxNewAddr {
-    pub fn new(params: UDPMuxParams, new_addr_tx: mpsc::Sender<NewAddr>) -> Arc<Self> {
-        let (closed_watch_tx, closed_watch_rx) = watch::channel(());
-
-        let mux = Arc::new(Self {
+    pub fn new(params: UDPMuxParams) -> Arc<Self> {
+        Arc::new(Self {
             params,
             conns: Mutex::default(),
             address_map: RwLock::default(),
-            closed_watch_tx: Mutex::new(Some(closed_watch_tx)),
-            closed_watch_rx: closed_watch_rx.clone(),
             new_addrs: RwLock::default(),
-        });
-
-        let cloned_mux = Arc::clone(&mux);
-        cloned_mux.start_conn_worker(closed_watch_rx, new_addr_tx);
-
-        mux
-    }
-
-    pub async fn is_closed(&self) -> bool {
-        self.closed_watch_tx.lock().await.is_none()
+            is_closed: AtomicBool::new(false),
+            read_buffer: [0u8; RECEIVE_MTU],
+        })
     }
 
     /// Create a muxed connection for a given ufrag.
@@ -133,129 +132,116 @@ impl UDPMuxNewAddr {
         }
     }
 
-    fn start_conn_worker(
-        self: Arc<Self>,
-        mut closed_watch_rx: watch::Receiver<()>,
-        mut new_addr_tx: mpsc::Sender<NewAddr>,
-    ) {
-        tokio::spawn(async move {
-            let mut buffer = [0u8; RECEIVE_MTU];
+    pub fn is_closed(&self) -> bool {
+        return self.is_closed.load(Ordering::Relaxed);
+    }
 
-            loop {
-                let loop_self = Arc::clone(&self);
-                let conn = &loop_self.params.conn;
+    pub async fn read_from_conn(&self) -> UDPMuxEvent {
+        let mut buffer = self.read_buffer;
+        let conn = &self.params.conn;
 
-                tokio::select! {
-                    res = conn.recv_from(&mut buffer) => {
-                        match res {
-                            Ok((len, addr)) => {
-                                // Find connection based on previously having seen this source address
-                                let conn = {
-                                    let address_map = loop_self
-                                        .address_map
-                                        .read();
+        let res = conn.recv_from(&mut buffer).await;
+        match res {
+            Ok((len, addr)) => {
+                // Find connection based on previously having seen this source address
+                let conn = {
+                    let address_map = self.address_map.read();
 
-                                    address_map.get(&addr).map(Clone::clone)
-                                };
+                    address_map.get(&addr).map(Clone::clone)
+                };
 
-                                let conn = match conn {
-                                    // If we couldn't find the connection based on source address, see if
-                                    // this is a STUN mesage and if so if we can find the connection based on ufrag.
-                                    None if is_stun_message(&buffer) => {
-                                        loop_self.conn_from_stun_message(&buffer, &addr).await
-                                    }
-                                    s @ Some(_) => s,
-                                    _ => None,
-                                };
+                let conn = match conn {
+                    // If we couldn't find the connection based on source address, see if
+                    // this is a STUN mesage and if so if we can find the connection based on ufrag.
+                    None if is_stun_message(&buffer) => {
+                        self.conn_from_stun_message(&buffer, &addr).await
+                    }
+                    s @ Some(_) => s,
+                    _ => None,
+                };
 
-                                match conn {
-                                    None => {
-                                        if !loop_self.new_addrs.read().contains(&addr) {
-                                            match ufrag_from_stun_message(&buffer, false) {
-                                                Ok(ufrag) => {
-                                                    log::trace!("Notifying about new address {} from {}", &addr, ufrag);
-                                                    if let Err(err) = new_addr_tx.try_send(NewAddr { addr, ufrag }) {
-                                                        log::error!("Failed to send new address {}: {}", &addr, err);
-                                                    } else {
-                                                        let mut new_addrs = loop_self.new_addrs.write();
-                                                        new_addrs.insert(addr);
-                                                    };
-                                                }
-                                                Err(e) => {
-                                                    log::trace!("Unknown address {} (non STUN packet: {})", &addr, e);
-                                                }
-                                            }
-                                        }
-                                    }
-                                    Some(conn) => {
-                                        if let Err(err) = conn.write_packet(&buffer[..len], addr).await {
-                                            log::error!("Failed to write packet: {}", err);
-                                        }
-                                    }
+                match conn {
+                    None => {
+                        if !self.new_addrs.read().contains(&addr) {
+                            match ufrag_from_stun_message(&buffer, false) {
+                                Ok(ufrag) => {
+                                    log::trace!(
+                                        "Notifying about new address {} from {}",
+                                        &addr,
+                                        ufrag
+                                    );
+                                    let mut new_addrs = self.new_addrs.write();
+                                    new_addrs.insert(addr);
+                                    return UDPMuxEvent::NewAddr(NewAddr { addr, ufrag });
                                 }
-                            }
-                            Err(Error::Io(err)) if err.0.kind() == ErrorKind::TimedOut => continue,
-                            Err(err) => {
-                                log::error!("Could not read udp packet: {}", err);
-                                break;
+                                Err(e) => {
+                                    log::trace!(
+                                        "Unknown address {} (non STUN packet: {})",
+                                        &addr,
+                                        e
+                                    );
+                                }
                             }
                         }
                     }
-                    _ = closed_watch_rx.changed() => {
-                        return;
+                    Some(conn) => {
+                        tokio::spawn(async move {
+                            if let Err(err) = conn.write_packet(&buffer[..len], addr).await {
+                                log::error!("Failed to write packet: {}", err);
+                            }
+                        });
                     }
                 }
             }
-        });
+            Err(Error::Io(err)) if err.0.kind() == ErrorKind::TimedOut => {}
+            Err(err) => {
+                log::error!("Could not read udp packet: {}", err);
+                return UDPMuxEvent::Error(err);
+            }
+        }
+        UDPMuxEvent::None
     }
 }
 
 #[async_trait]
 impl UDPMux for UDPMuxNewAddr {
     async fn close(&self) -> Result<(), Error> {
-        if self.is_closed().await {
+        if self.is_closed() {
             return Err(Error::ErrAlreadyClosed);
         }
 
-        let mut closed_tx = self.closed_watch_tx.lock().await;
+        let old_conns = {
+            let mut conns = self.conns.lock().await;
 
-        if let Some(tx) = closed_tx.take() {
-            let _ = tx.send(());
-            drop(closed_tx);
+            std::mem::take(&mut (*conns))
+        };
 
-            let old_conns = {
-                let mut conns = self.conns.lock().await;
+        // NOTE: We don't wait for these closure to complete
+        for (_, conn) in old_conns {
+            conn.close();
+        }
 
-                std::mem::take(&mut (*conns))
-            };
+        {
+            let mut address_map = self.address_map.write();
 
-            // NOTE: We don't wait for these closure to complete
-            for (_, conn) in old_conns {
-                conn.close();
-            }
+            // NOTE: This is important, we need to drop all instances of `UDPMuxConn` to
+            // avoid a retain cycle due to the use of [`std::sync::Arc`] on both sides.
+            let _ = std::mem::take(&mut (*address_map));
+        }
 
-            {
-                let mut address_map = self.address_map.write();
+        {
+            let mut new_addrs = self.new_addrs.write();
 
-                // NOTE: This is important, we need to drop all instances of `UDPMuxConn` to
-                // avoid a retain cycle due to the use of [`std::sync::Arc`] on both sides.
-                let _ = std::mem::take(&mut (*address_map));
-            }
-
-            {
-                let mut new_addrs = self.new_addrs.write();
-
-                // NOTE: This is important, we need to drop all instances of `UDPMuxConn` to
-                // avoid a retain cycle due to the use of [`std::sync::Arc`] on both sides.
-                let _ = std::mem::take(&mut (*new_addrs));
-            }
+            // NOTE: This is important, we need to drop all instances of `UDPMuxConn` to
+            // avoid a retain cycle due to the use of [`std::sync::Arc`] on both sides.
+            let _ = std::mem::take(&mut (*new_addrs));
         }
 
         Ok(())
     }
 
     async fn get_conn(self: Arc<Self>, ufrag: &str) -> Result<Arc<dyn Conn + Send + Sync>, Error> {
-        if self.is_closed().await {
+        if self.is_closed() {
             return Err(Error::ErrUseClosedNetworkConn);
         }
 
@@ -306,7 +292,7 @@ impl UDPMux for UDPMuxNewAddr {
 #[async_trait]
 impl UDPMuxWriter for UDPMuxNewAddr {
     async fn register_conn_for_address(&self, conn: &UDPMuxConn, addr: SocketAddr) {
-        if self.is_closed().await {
+        if self.is_closed() {
             return;
         }
 

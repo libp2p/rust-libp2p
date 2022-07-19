@@ -20,14 +20,8 @@
 
 use futures::io::{AsyncReadExt, AsyncWriteExt};
 use futures::{
-    channel::{mpsc, oneshot},
-    future,
-    future::BoxFuture,
-    prelude::*,
-    select,
-    stream::SelectAll,
-    stream::Stream,
-    TryFutureExt,
+    channel::oneshot, future, future::BoxFuture, prelude::*, select, stream::SelectAll,
+    stream::Stream, TryFutureExt,
 };
 use futures_timer::Delay;
 use if_watch::IfEvent;
@@ -68,7 +62,7 @@ use crate::connection::PollDataChannel;
 use crate::error::Error;
 use crate::in_addr::InAddr;
 use crate::sdp;
-use crate::udp_mux::{NewAddr, UDPMuxNewAddr, UDPMuxParams};
+use crate::udp_mux::{UDPMuxEvent, UDPMuxNewAddr, UDPMuxParams};
 use crate::upgrade;
 
 /// A WebRTC transport with direct p2p communication (without a STUN server).
@@ -135,15 +129,13 @@ impl WebRTCTransport {
         debug!("listening on {}", listen_addr);
 
         // Sender and receiver for new addresses
-        let (new_addr_tx, new_addr_rx) = mpsc::channel(1);
-        let udp_mux = UDPMuxNewAddr::new(UDPMuxParams::new(socket), new_addr_tx);
+        let udp_mux = UDPMuxNewAddr::new(UDPMuxParams::new(socket));
 
         Ok(WebRTCListenStream::new(
             listener_id,
             listen_addr,
             self.config.clone(),
             udp_mux,
-            new_addr_rx,
             self.id_keys.clone(),
         ))
     }
@@ -359,11 +351,11 @@ pub struct WebRTCListenStream {
     /// A `RTCConfiguration` which holds this peer's certificate(s).
     config: RTCConfiguration,
 
-    /// The `UDPMux` that manages all ICE connections.
-    udp_mux: Arc<dyn UDPMux + Send + Sync>,
+    /// The UDP muxer that manages all ICE connections.
+    udp_mux: Arc<UDPMuxNewAddr>,
 
-    /// The receiver for new `SocketAddr` connecting to this peer.
-    new_addr_rx: mpsc::Receiver<NewAddr>,
+    /// Future that drives reading from the UDP socket.
+    udp_mux_read_fut: Option<BoxFuture<'static, UDPMuxEvent>>,
 
     /// `Keypair` identifying this peer
     id_keys: identity::Keypair,
@@ -380,8 +372,7 @@ impl WebRTCListenStream {
         listener_id: ListenerId,
         listen_addr: SocketAddr,
         config: RTCConfiguration,
-        udp_mux: Arc<dyn UDPMux + Send + Sync>,
-        new_addr_rx: mpsc::Receiver<NewAddr>,
+        udp_mux: Arc<UDPMuxNewAddr>,
         id_keys: identity::Keypair,
     ) -> Self {
         let in_addr = InAddr::new(listen_addr.ip());
@@ -392,7 +383,7 @@ impl WebRTCListenStream {
             in_addr,
             config,
             udp_mux,
-            new_addr_rx,
+            udp_mux_read_fut: None,
             id_keys,
             report_closed: None,
         }
@@ -488,29 +479,41 @@ impl Stream for WebRTCListenStream {
             return Poll::Ready(Some(event));
         }
 
-        let new_addr = match futures::ready!(self.new_addr_rx.poll_next_unpin(cx)) {
-            Some(a) => a,
-            None => {
-                self.close(Err(Error::UDPMuxIsClosed));
-                return self.poll_next(cx);
-            }
-        };
+        let udp_mux = self.udp_mux.clone();
+        let udp_mux_read_fut = self
+            .udp_mux_read_fut
+            .get_or_insert(Box::pin(async move { udp_mux.read_from_conn().await }));
+        match udp_mux_read_fut.as_mut().poll(cx) {
+            Poll::Pending => Poll::Pending,
+            Poll::Ready(event) => {
+                self.udp_mux_read_fut = None;
 
-        let local_addr = socketaddr_to_multiaddr(&self.listen_addr);
-        let send_back_addr = socketaddr_to_multiaddr(&new_addr.addr);
-        let event = TransportEvent::Incoming {
-            upgrade: Box::pin(upgrade::webrtc(
-                self.udp_mux.clone(),
-                self.config.clone(),
-                new_addr.addr,
-                new_addr.ufrag,
-                self.id_keys.clone(),
-            )) as BoxFuture<'static, _>,
-            local_addr,
-            send_back_addr,
-            listener_id: self.listener_id,
-        };
-        Poll::Ready(Some(event))
+                match event {
+                    UDPMuxEvent::NewAddr(new_addr) => {
+                        let local_addr = socketaddr_to_multiaddr(&self.listen_addr);
+                        let send_back_addr = socketaddr_to_multiaddr(&new_addr.addr);
+                        let event = TransportEvent::Incoming {
+                            upgrade: Box::pin(upgrade::webrtc(
+                                self.udp_mux.clone(),
+                                self.config.clone(),
+                                new_addr.addr,
+                                new_addr.ufrag,
+                                self.id_keys.clone(),
+                            )) as BoxFuture<'static, _>,
+                            local_addr,
+                            send_back_addr,
+                            listener_id: self.listener_id,
+                        };
+                        Poll::Ready(Some(event))
+                    }
+                    UDPMuxEvent::Error(e) => {
+                        self.close(Err(Error::UDPMuxError(e)));
+                        return self.poll_next(cx);
+                    }
+                    _ => return self.poll_next(cx),
+                }
+            }
+        }
     }
 }
 

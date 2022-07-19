@@ -45,8 +45,8 @@ pub enum Error {
     #[error("no active listeners")]
     NoListeners,
 
-    #[error("UDP mux is closed")]
-    UDPMuxIsClosed,
+    #[error("UDP mux error: {0}")]
+    UDPMuxError(webrtc_util::Error),
 
     #[error("internal error: {0} (see debug logs)")]
     InternalError(String),
