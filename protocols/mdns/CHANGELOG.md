@@ -1,6 +1,7 @@
 # 0.39.0 [unreleased]
 
 - Update to `libp2p-swarm` `v0.38.0`.
+- Update to `if-watch` `v1.1.1`.
 
 - Update to `libp2p-core` `v0.35.0`.
 
