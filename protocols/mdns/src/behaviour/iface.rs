@@ -210,7 +210,7 @@ where
                     }
                 }
                 Poll::Ready(Err(err)) if err.kind() == std::io::ErrorKind::WouldBlock => {
-                    // Not more bytes available on the socket to read
+                    // No more bytes available on the socket to read
                     break;
                 }
                 Poll::Ready(Err(err)) => {

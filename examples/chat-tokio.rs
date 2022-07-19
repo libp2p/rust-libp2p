@@ -25,7 +25,7 @@
 //! The example is run per node as follows:
 //!
 //! ```sh
-//! cargo run --example chat-tokio --features="tcp-tokio mdns"
+//! cargo run --example chat-tokio --features="tcp-tokio mdns-tokio"
 //! ```
 //!
 //! Alternatively, to run with the minimal set of features and crates:

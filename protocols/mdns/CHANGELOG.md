@@ -7,6 +7,10 @@
 - Update to `libp2p-swarm` `v0.38.0`.
 - Update to `if-watch` `v1.1.1`.
 
+- Allow users to choose between async-io and tokio runtime
+  in the mdns protocol implementation. `async-io` is a default
+  feature, with an additional `tokyo` feature  (see [PR 2748])
+
 - Update to `libp2p-core` `v0.35.0`.
 
 - Fix high CPU usage with Tokio library (see [PR 2748]).
