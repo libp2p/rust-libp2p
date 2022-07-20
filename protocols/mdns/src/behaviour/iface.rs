@@ -201,24 +201,20 @@ where
         params: &impl PollParameters,
     ) -> Option<(PeerId, Multiaddr, Instant)> {
         // Poll receive socket.
-        loop {
-            match self.recv_socket.poll_read(cx, &mut self.recv_buffer) {
-                Poll::Ready(Ok((len, from))) => {
+        while let Poll::Ready(data) = self.recv_socket.poll_read(cx, &mut self.recv_buffer) {
+            match data {
+                Ok((len, from)) => {
                     if let Some(packet) = MdnsPacket::new_from_bytes(&self.recv_buffer[..len], from)
                     {
                         self.inject_mdns_packet(packet, params);
                     }
                 }
-                Poll::Ready(Err(err)) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
                     // No more bytes available on the socket to read
                     break;
                 }
-                Poll::Ready(Err(err)) => {
+                Err(err) => {
                     log::error!("failed reading datagram: {}", err);
-                    break;
-                }
-                Poll::Pending => {
-                    break;
                 }
             }
         }
@@ -233,7 +229,6 @@ where
                 Poll::Ready(Ok(_)) => log::trace!("sent packet on iface {}", self.addr),
                 Poll::Ready(Err(err)) => {
                     log::error!("error sending packet on iface {} {}", self.addr, err);
-                    break;
                 }
                 Poll::Pending => {
                     self.send_buffer.push_front(packet);

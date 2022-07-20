@@ -9,7 +9,7 @@
 
 - Allow users to choose between async-io and tokio runtime
   in the mdns protocol implementation. `async-io` is a default
-  feature, with an additional `tokyo` feature  (see [PR 2748])
+  feature, with an additional `tokio` feature  (see [PR 2748])
 
 - Update to `libp2p-core` `v0.35.0`.
 
