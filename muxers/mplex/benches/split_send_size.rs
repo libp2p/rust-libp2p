@@ -114,7 +114,7 @@ fn run(
                     addr_sender.take().unwrap().send(listen_addr).unwrap();
                 }
                 transport::TransportEvent::Incoming { upgrade, .. } => {
-                    let (_peer, conn) = upgrade.await.unwrap();
+                    let (_peer, mut conn) = upgrade.await.unwrap();
                     let mut s = conn.next_inbound().await.expect("unexpected error");
 
                     let mut buf = vec![0u8; payload_len];
@@ -139,7 +139,7 @@ fn run(
     // Spawn and block on the sender, i.e. until all data is sent.
     let sender = async move {
         let addr = addr_receiver.await.unwrap();
-        let (_peer, conn) = sender_trans.dial(addr).unwrap().await.unwrap();
+        let (_peer, mut conn) = sender_trans.dial(addr).unwrap().await.unwrap();
         let mut stream = conn.next_outbound().await.unwrap();
         let mut off = 0;
         loop {

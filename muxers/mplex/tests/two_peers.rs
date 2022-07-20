@@ -50,7 +50,7 @@ fn client_to_server_outbound() {
 
         tx.send(addr).unwrap();
 
-        let client = transport
+        let mut client = transport
             .next()
             .await
             .expect("some event")
@@ -73,7 +73,7 @@ fn client_to_server_outbound() {
             .and_then(move |c, e| upgrade::apply(c, mplex, e, upgrade::Version::V1))
             .boxed();
 
-        let client = Arc::new(transport.dial(rx.await.unwrap()).unwrap().await.unwrap());
+        let mut client = Arc::new(transport.dial(rx.await.unwrap()).unwrap().await.unwrap());
         let mut inbound = client.next_inbound().await.unwrap();
         inbound.write_all(b"hello world").await.unwrap();
         inbound.close().await.unwrap();
@@ -108,7 +108,7 @@ fn client_to_server_inbound() {
 
         tx.send(addr).unwrap();
 
-        let client = Arc::new(
+        let mut client = Arc::new(
             transport
                 .next()
                 .await
@@ -133,7 +133,7 @@ fn client_to_server_inbound() {
             .and_then(move |c, e| upgrade::apply(c, mplex, e, upgrade::Version::V1))
             .boxed();
 
-        let client = transport.dial(rx.await.unwrap()).unwrap().await.unwrap();
+        let mut client = transport.dial(rx.await.unwrap()).unwrap().await.unwrap();
 
         let mut outbound = client.next_outbound().await.unwrap();
         outbound.write_all(b"hello world").await.unwrap();
@@ -167,7 +167,7 @@ fn protocol_not_match() {
 
         tx.send(addr).unwrap();
 
-        let client = transport
+        let mut client = transport
             .next()
             .await
             .expect("some event")

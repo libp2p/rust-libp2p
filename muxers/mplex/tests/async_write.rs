@@ -50,7 +50,7 @@ fn async_write() {
 
         tx.send(addr).unwrap();
 
-        let client = transport
+        let mut client = transport
             .next()
             .await
             .expect("some event")
@@ -72,7 +72,7 @@ fn async_write() {
         let mut transport = TcpTransport::default()
             .and_then(move |c, e| upgrade::apply(c, mplex, e, upgrade::Version::V1));
 
-        let client = Arc::new(transport.dial(rx.await.unwrap()).unwrap().await.unwrap());
+        let mut client = Arc::new(transport.dial(rx.await.unwrap()).unwrap().await.unwrap());
 
         let mut inbound = client.next_inbound().await.unwrap();
         inbound.write_all(b"hello world").await.unwrap();

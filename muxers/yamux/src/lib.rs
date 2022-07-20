@@ -105,7 +105,10 @@ where
     type Substream = yamux::Stream;
     type Error = YamuxError;
 
-    fn poll_inbound(&self, cx: &mut Context<'_>) -> Poll<Result<Self::Substream, Self::Error>> {
+    fn poll_inbound(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<Self::Substream, Self::Error>> {
         self.0
             .lock()
             .incoming
@@ -119,17 +122,23 @@ where
             })
     }
 
-    fn poll_outbound(&self, cx: &mut Context<'_>) -> Poll<Result<Self::Substream, Self::Error>> {
+    fn poll_outbound(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<Self::Substream, Self::Error>> {
         Pin::new(&mut self.0.lock().control)
             .poll_open_stream(cx)
             .map_err(YamuxError)
     }
 
-    fn poll_address_change(&self, _: &mut Context<'_>) -> Poll<Result<Multiaddr, Self::Error>> {
+    fn poll_address_change(
+        self: Pin<&mut Self>,
+        _: &mut Context<'_>,
+    ) -> Poll<Result<Multiaddr, Self::Error>> {
         Poll::Pending
     }
 
-    fn poll_close(&self, c: &mut Context<'_>) -> Poll<YamuxResult<()>> {
+    fn poll_close(self: Pin<&mut Self>, c: &mut Context<'_>) -> Poll<YamuxResult<()>> {
         let mut inner = self.0.lock();
 
         if let Poll::Ready(()) = Pin::new(&mut inner.control)
