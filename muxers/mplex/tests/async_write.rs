@@ -18,9 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::future::poll_fn;
 use futures::{channel::oneshot, prelude::*};
-use libp2p_core::{upgrade, StreamMuxer, Transport};
+use libp2p_core::muxing::StreamMuxerExt;
+use libp2p_core::{upgrade, Transport};
 use libp2p_tcp::TcpTransport;
 use std::sync::Arc;
 
@@ -60,7 +60,7 @@ fn async_write() {
             .await
             .unwrap();
 
-        let mut outbound = poll_fn(|cx| client.poll_outbound(cx)).await.unwrap();
+        let mut outbound = client.next_outbound().await.unwrap();
 
         let mut buf = Vec::new();
         outbound.read_to_end(&mut buf).await.unwrap();
@@ -73,7 +73,8 @@ fn async_write() {
             .and_then(move |c, e| upgrade::apply(c, mplex, e, upgrade::Version::V1));
 
         let client = Arc::new(transport.dial(rx.await.unwrap()).unwrap().await.unwrap());
-        let mut inbound = poll_fn(|cx| client.poll_inbound(cx)).await.unwrap();
+
+        let mut inbound = client.next_inbound().await.unwrap();
         inbound.write_all(b"hello world").await.unwrap();
 
         // The test consists in making sure that this flushes the substream.

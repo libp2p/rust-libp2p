@@ -26,6 +26,7 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughpu
 use futures::future::poll_fn;
 use futures::prelude::*;
 use futures::{channel::oneshot, future::join};
+use libp2p_core::muxing::StreamMuxerExt;
 use libp2p_core::{
     identity, multiaddr::multiaddr, muxing, transport, upgrade, Multiaddr, PeerId, StreamMuxer,
     Transport,
@@ -114,9 +115,7 @@ fn run(
                 }
                 transport::TransportEvent::Incoming { upgrade, .. } => {
                     let (_peer, conn) = upgrade.await.unwrap();
-                    let mut s = poll_fn(|cx| conn.poll_inbound(cx))
-                        .await
-                        .expect("unexpected error");
+                    let mut s = conn.next_inbound().await.expect("unexpected error");
 
                     let mut buf = vec![0u8; payload_len];
                     let mut off = 0;
@@ -141,7 +140,7 @@ fn run(
     let sender = async move {
         let addr = addr_receiver.await.unwrap();
         let (_peer, conn) = sender_trans.dial(addr).unwrap().await.unwrap();
-        let mut stream = poll_fn(|cx| conn.poll_outbound(cx)).await.unwrap();
+        let mut stream = conn.next_outbound().await.unwrap();
         let mut off = 0;
         loop {
             let n = poll_fn(|cx| Pin::new(&mut stream).poll_write(cx, &payload[off..]))

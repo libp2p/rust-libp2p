@@ -52,6 +52,8 @@
 
 use futures::{task::Context, task::Poll, AsyncRead, AsyncWrite};
 use multiaddr::Multiaddr;
+use std::future::Future;
+use std::pin::Pin;
 
 pub use self::boxed::StreamMuxerBox;
 pub use self::boxed::SubstreamBox;
@@ -94,4 +96,49 @@ pub trait StreamMuxer {
     /// >           properly informing the remote, there is no difference between this and
     /// >           immediately dropping the muxer.
     fn poll_close(&self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>>;
+}
+
+/// Extension trait for [`StreamMuxer`].
+pub trait StreamMuxerExt: StreamMuxer + Sized {
+    fn next_inbound(&self) -> NextInbound<'_, Self>;
+    fn next_outbound(&self) -> NextOutbound<'_, Self>;
+}
+
+impl<S> StreamMuxerExt for S
+where
+    S: StreamMuxer,
+{
+    fn next_inbound(&self) -> NextInbound<'_, Self> {
+        NextInbound(self)
+    }
+
+    fn next_outbound(&self) -> NextOutbound<'_, Self> {
+        NextOutbound(self)
+    }
+}
+
+pub struct NextInbound<'a, S>(&'a S);
+
+pub struct NextOutbound<'a, S>(&'a S);
+
+impl<'a, S> Future for NextInbound<'a, S>
+where
+    S: StreamMuxer,
+{
+    type Output = Result<S::Substream, S::Error>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.0.poll_inbound(cx)
+    }
+}
+
+impl<'a, S> Future for NextOutbound<'a, S>
+where
+    S: StreamMuxer,
+{
+    type Output = Result<S::Substream, S::Error>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.0.poll_outbound(cx)
+    }
 }
