@@ -22,7 +22,6 @@ use futures::future::poll_fn;
 use futures::{channel::oneshot, prelude::*};
 use libp2p_core::{upgrade, StreamMuxer, Transport};
 use libp2p_tcp::TcpTransport;
-use std::sync::Arc;
 
 #[test]
 fn async_write() {
@@ -72,7 +71,7 @@ fn async_write() {
         let mut transport = TcpTransport::default()
             .and_then(move |c, e| upgrade::apply(c, mplex, e, upgrade::Version::V1));
 
-        let client = Arc::new(transport.dial(rx.await.unwrap()).unwrap().await.unwrap());
+        let client = transport.dial(rx.await.unwrap()).unwrap().await.unwrap();
         let mut inbound = poll_fn(|cx| client.poll_inbound(cx)).await.unwrap();
         inbound.write_all(b"hello world").await.unwrap();
 
