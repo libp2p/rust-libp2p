@@ -236,57 +236,53 @@ impl Listener {
 
     /// Poll for a next If Event.
     fn poll_if_addr(&mut self, cx: &mut Context<'_>) -> Option<<Self as Stream>::Item> {
-        match self.in_addr.poll_next_unpin(cx) {
-            Poll::Ready(mut item) => {
-                if let Some(item) = item.take() {
-                    // Consume all events for up/down interface changes.
-                    match item {
-                        Ok(IfEvent::Up(inet)) => {
-                            let ip = inet.addr();
-                            if self.endpoint.socket_addr().is_ipv4() == ip.is_ipv4() {
-                                let socket_addr =
-                                    SocketAddr::new(ip, self.endpoint.socket_addr().port());
-                                let ma = socketaddr_to_multiaddr(&socket_addr);
-                                tracing::debug!("New listen address: {}", ma);
-                                Some(TransportEvent::NewAddress {
-                                    listener_id: self.listener_id,
-                                    listen_addr: ma,
-                                })
-                            } else {
-                                self.poll_if_addr(cx)
+        loop {
+            match self.in_addr.poll_next_unpin(cx) {
+                Poll::Ready(mut item) => {
+                    if let Some(item) = item.take() {
+                        // Consume all events for up/down interface changes.
+                        match item {
+                            Ok(IfEvent::Up(inet)) => {
+                                let ip = inet.addr();
+                                if self.endpoint.socket_addr().is_ipv4() == ip.is_ipv4() {
+                                    let socket_addr =
+                                        SocketAddr::new(ip, self.endpoint.socket_addr().port());
+                                    let ma = socketaddr_to_multiaddr(&socket_addr);
+                                    tracing::debug!("New listen address: {}", ma);
+                                    return Some(TransportEvent::NewAddress {
+                                        listener_id: self.listener_id,
+                                        listen_addr: ma,
+                                    })
+                                }
                             }
-                        }
-                        Ok(IfEvent::Down(inet)) => {
-                            let ip = inet.addr();
-                            if self.endpoint.socket_addr().is_ipv4() == ip.is_ipv4() {
-                                let socket_addr =
-                                    SocketAddr::new(ip, self.endpoint.socket_addr().port());
-                                let ma = socketaddr_to_multiaddr(&socket_addr);
-                                tracing::debug!("Expired listen address: {}", ma);
-                                Some(TransportEvent::AddressExpired {
-                                    listener_id: self.listener_id,
-                                    listen_addr: ma,
-                                })
-                            } else {
-                                self.poll_if_addr(cx)
+                            Ok(IfEvent::Down(inet)) => {
+                                let ip = inet.addr();
+                                if self.endpoint.socket_addr().is_ipv4() == ip.is_ipv4() {
+                                    let socket_addr =
+                                        SocketAddr::new(ip, self.endpoint.socket_addr().port());
+                                    let ma = socketaddr_to_multiaddr(&socket_addr);
+                                    tracing::debug!("Expired listen address: {}", ma);
+                                    return Some(TransportEvent::AddressExpired {
+                                        listener_id: self.listener_id,
+                                        listen_addr: ma,
+                                    })
+                                }
                             }
-                        }
-                        Err(err) => {
-                            tracing::debug! {
-                                "Failure polling interfaces: {:?}.",
-                                err
-                            };
-                            Some(TransportEvent::ListenerError {
-                                listener_id: self.listener_id,
-                                error: err.into(),
-                            })
+                            Err(err) => {
+                                tracing::debug! {
+                                    "Failure polling interfaces: {:?}.",
+                                    err
+                                };
+                                return Some(TransportEvent::ListenerError {
+                                    listener_id: self.listener_id,
+                                    error: err.into(),
+                                })
+                            }
                         }
                     }
-                } else {
-                    self.poll_if_addr(cx)
                 }
+                Poll::Pending => return None,
             }
-            Poll::Pending => None,
         }
     }
 }
