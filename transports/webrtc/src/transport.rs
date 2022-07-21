@@ -660,12 +660,14 @@ fn fingerprint_from_addr<'a>(addr: &'a Multiaddr) -> Option<Cow<'a, [u8; 32]>> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use futures::future::poll_fn;
     use libp2p_core::{multiaddr::Protocol, Multiaddr};
     use rcgen::KeyPair;
-    use std::net::IpAddr;
-    use std::net::{Ipv4Addr, Ipv6Addr};
     use tokio_crate as tokio;
+
+    use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+
+    use super::*;
 
     #[test]
     fn multiaddr_to_socketaddr_conversion() {
@@ -809,5 +811,64 @@ mod tests {
 
         let (a, b) = futures::join!(inbound, outbound);
         a.and(b).unwrap();
+    }
+
+    #[tokio::test]
+    async fn close_listener() {
+        let id_keys = identity::Keypair::generate_ed25519();
+        let mut transport = {
+            let kp = KeyPair::generate(&rcgen::PKCS_ECDSA_P256_SHA256).expect("key pair");
+            let cert = RTCCertificate::from_key_pair(kp).expect("certificate");
+            WebRTCTransport::new(cert, id_keys)
+        };
+
+        assert!(poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx))
+            .now_or_never()
+            .is_none());
+
+        // Run test twice to check that there is no unexpected behaviour if `QuicTransport.listener`
+        // is temporarily empty.
+        for _ in 0..2 {
+            let listener = transport
+                .listen_on("/ip4/0.0.0.0/udp/0/x-webrtc/ACD1E533EC271FCDE0275947F4D62A2B2331FF10C9DDE0298EB7B399B4BFF60B".parse().unwrap())
+                .unwrap();
+            match poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx)).await {
+                TransportEvent::NewAddress {
+                    listener_id,
+                    listen_addr,
+                } => {
+                    assert_eq!(listener_id, listener);
+                    assert!(
+                        matches!(listen_addr.iter().next(), Some(Protocol::Ip4(a)) if !a.is_unspecified())
+                    );
+                    assert!(
+                        matches!(listen_addr.iter().nth(1), Some(Protocol::Udp(port)) if port != 0)
+                    );
+                    assert!(
+                        matches!(listen_addr.iter().nth(2), Some(Protocol::XWebRTC(f)) if !f.is_empty())
+                    );
+                }
+                e => panic!("Unexpected event: {:?}", e),
+            }
+            assert!(
+                transport.remove_listener(listener),
+                "Expect listener to exist."
+            );
+            match poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx)).await {
+                TransportEvent::ListenerClosed {
+                    listener_id,
+                    reason: Ok(()),
+                } => {
+                    assert_eq!(listener_id, listener);
+                }
+                e => panic!("Unexpected event: {:?}", e),
+            }
+            // Poll once again so that the listener has the chance to return `Poll::Ready(None)` and
+            // be removed from the list of listeners.
+            assert!(poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx))
+                .now_or_never()
+                .is_none());
+            assert!(transport.listeners.is_empty());
+        }
     }
 }
