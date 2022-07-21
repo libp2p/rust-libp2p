@@ -42,16 +42,19 @@ use std::{
 
 const RECEIVE_MTU: usize = 8192;
 
+/// A previously unseen address of a remote who've sent us an ICE binding request.
 pub struct NewAddr {
     pub addr: SocketAddr,
     pub ufrag: String,
 }
 
+/// Parameters for [`UDPMuxNewAddr`].
 pub struct UDPMuxParams {
     conn: Box<dyn Conn + Send + Sync>,
 }
 
 impl UDPMuxParams {
+    /// Creates new params.
     pub fn new<C>(conn: C) -> Self
     where
         C: Conn + Send + Sync + 'static,
@@ -72,8 +75,8 @@ pub enum UDPMuxEvent {
     None,
 }
 
-/// This is a copy of `UDPMuxDefault` with the exception of ability to report new addresses via
-/// `new_addr_tx`.
+/// A modified version of [`webrtc_ice::udp_mux::UDPMuxDefault`], which reports previously unseen
+/// addresses instead of ignoring them.
 pub struct UDPMuxNewAddr {
     /// The params this instance is configured with.
     /// Contains the underlying UDP socket in use
@@ -82,19 +85,21 @@ pub struct UDPMuxNewAddr {
     /// Maps from ufrag to the underlying connection.
     conns: Mutex<HashMap<String, UDPMuxConn>>,
 
-    /// Maps from ip address to the underlying connection.
+    /// Maps from socket address to the underlying connection.
     address_map: RwLock<HashMap<SocketAddr, UDPMuxConn>>,
 
-    /// Set of the new IP addresses to avoid sending the same IP multiple times.
+    /// Set of the new addresses to avoid sending the same address multiple times.
     new_addrs: RwLock<HashSet<SocketAddr>>,
 
     /// `true` when UDP mux is closed.
     is_closed: AtomicBool,
 
+    /// Buffer used when reading from the underlying UDP socket.
     read_buffer: [u8; RECEIVE_MTU],
 }
 
 impl UDPMuxNewAddr {
+    /// Creates a new UDP muxer.
     pub fn new(params: UDPMuxParams) -> Arc<Self> {
         Arc::new(Self {
             params,
@@ -119,6 +124,8 @@ impl UDPMuxNewAddr {
         Ok(UDPMuxConn::new(params))
     }
 
+    /// Returns a muxed connection if the `ufrag` from the given STUN message matches an existing
+    /// connection.
     async fn conn_from_stun_message(&self, buffer: &[u8], addr: &SocketAddr) -> Option<UDPMuxConn> {
         match ufrag_from_stun_message(buffer, true) {
             Ok(ufrag) => {
@@ -126,16 +133,19 @@ impl UDPMuxNewAddr {
                 conns.get(&ufrag).map(Clone::clone)
             }
             Err(e) => {
-                log::error!("{} (addr: {})", e, addr);
+                log::debug!("{} (addr: {})", e, addr);
                 None
             }
         }
     }
 
+    /// Returns true if the UDP muxer is closed.
     pub fn is_closed(&self) -> bool {
         return self.is_closed.load(Ordering::Relaxed);
     }
 
+    /// Reads from the underlying UDP socket and either reports a new address or proxies data to the
+    /// muxed connection.
     pub async fn read_from_conn(&self) -> UDPMuxEvent {
         let mut buffer = self.read_buffer;
         let conn = &self.params.conn;
@@ -175,7 +185,7 @@ impl UDPMuxNewAddr {
                                     return UDPMuxEvent::NewAddr(NewAddr { addr, ufrag });
                                 }
                                 Err(e) => {
-                                    log::trace!(
+                                    log::debug!(
                                         "Unknown address {} (non STUN packet: {})",
                                         &addr,
                                         e
@@ -187,7 +197,7 @@ impl UDPMuxNewAddr {
                     Some(conn) => {
                         tokio::spawn(async move {
                             if let Err(err) = conn.write_packet(&buffer[..len], addr).await {
-                                log::error!("Failed to write packet: {}", err);
+                                log::error!("Failed to write packet: {} (addr: {})", err, addr);
                             }
                         });
                     }

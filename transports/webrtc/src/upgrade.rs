@@ -18,12 +18,16 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::io::{AsyncReadExt, AsyncWriteExt};
-use futures::{channel::oneshot, future, select, FutureExt, TryFutureExt};
+use futures::{
+    channel::oneshot,
+    future,
+    io::{AsyncReadExt, AsyncWriteExt},
+    select, FutureExt, TryFutureExt,
+};
 use futures_timer::Delay;
-use libp2p_core::identity;
-use libp2p_core::PeerId;
-use libp2p_core::{InboundUpgrade, UpgradeInfo};
+use libp2p_core::{
+    identity, PeerId, {InboundUpgrade, UpgradeInfo},
+};
 use libp2p_noise::{Keypair, NoiseConfig, NoiseError, RemoteIdentity, X25519Spec};
 use log::{debug, trace};
 use multihash::Hasher;
@@ -35,15 +39,13 @@ use webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
 use webrtc_data::data_channel::DataChannel as DetachedDataChannel;
 use webrtc_ice::udp_mux::UDPMux;
 
-use std::net::SocketAddr;
-use std::sync::Arc;
-use std::time::Duration;
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 
-use crate::connection::Connection;
-use crate::connection::PollDataChannel;
-use crate::error::Error;
-use crate::sdp;
-use crate::transport;
+use crate::{
+    connection::{Connection, PollDataChannel},
+    error::Error,
+    sdp, transport,
+};
 
 pub async fn webrtc(
     udp_mux: Arc<dyn UDPMux + Send + Sync>,
@@ -73,7 +75,7 @@ pub async fn webrtc(
     let client_session_description = transport::render_description(
         sdp::CLIENT_SESSION_DESCRIPTION,
         socket_addr,
-        "UNKNOWN",
+        "UNKNOWN", // certificate verification is disabled, so any value is okay.
         &ufrag,
     );
     debug!("OFFER: {:?}", client_session_description);
@@ -86,13 +88,13 @@ pub async fn webrtc(
     debug!("ANSWER: {:?}", answer.sdp);
     peer_connection.set_local_description(answer).await?;
 
-    // Create a datachannel with label 'data'.
+    // Open a data channel to do Noise on top and verify the remote.
     let data_channel = peer_connection
         .create_data_channel(
             "data",
             Some(RTCDataChannelInit {
-                negotiated: Some(true),
-                id: Some(1),
+                negotiated: Some(true), // channel is already negotiated by the client
+                id: Some(1),            // id MUST match one used during dial
                 ..RTCDataChannelInit::default()
             }),
         )
@@ -101,10 +103,7 @@ pub async fn webrtc(
     let (tx, mut rx) = oneshot::channel::<Arc<DetachedDataChannel>>();
 
     // Wait until the data channel is opened and detach it.
-    // Wait until the data channel is opened and detach it.
     crate::connection::register_data_channel_open_handler(data_channel, tx).await;
-
-    // Wait until data channel is opened and ready to use
     let detached = select! {
         res = rx => match res {
             Ok(detached) => detached,
@@ -147,13 +146,16 @@ pub async fn webrtc(
     let fingerprint_from_noise =
         String::from_utf8(buf).map_err(|_| Error::Noise(NoiseError::AuthenticationFailed))?;
     let remote_fingerprint = {
-        let remote_cert_bytes =
-            peer_connection
-                .get_remote_dtls_certificate()
-                .await
-                .ok_or(Error::InternalError(
-                    "No remote certificate found".to_owned(),
-                ))?;
+        let remote_cert_bytes = peer_connection
+            .sctp()
+            .transport()
+            .get_remote_certificate()
+            .await;
+        if remote_cert_bytes.is_empty() {
+            return Err(Error::InternalError(
+                "No remote certificate found".to_owned(),
+            ));
+        }
         let mut h = multihash::Sha2_256::default();
         h.update(&remote_cert_bytes);
         let hashed = h.finalize();
@@ -168,14 +170,13 @@ pub async fn webrtc(
     }
 
     // Close the initial data channel after noise handshake is done.
-    // https://github.com/webrtc-rs/sctp/pull/14
-    // detached
-    //     .close()
-    //     .await
-    //     .map_err(|e| Error::WebRTC(e.into()))?;
+    detached
+        .close()
+        .await
+        .map_err(|e| Error::WebRTC(webrtc::Error::Data(e)))?;
 
     let mut c = Connection::new(peer_connection).await;
-    // XXX: default buffer size is too small to fit some messages. Possibly remove once
+    // TODO: default buffer size is too small to fit some messages. Possibly remove once
     // https://github.com/webrtc-rs/sctp/issues/28 is fixed.
     c.set_data_channels_read_buf_capacity(8192 * 10);
     Ok((peer_id, c))

@@ -20,10 +20,14 @@
 
 mod poll_data_channel;
 
-use futures::channel::mpsc;
-use futures::channel::oneshot::{self, Sender};
-use futures::lock::Mutex as FutMutex;
-use futures::{future::BoxFuture, prelude::*, ready};
+use futures::{
+    channel::{
+        mpsc,
+        oneshot::{self, Sender},
+    },
+    lock::Mutex as FutMutex,
+    {future::BoxFuture, prelude::*, ready},
+};
 use futures_lite::stream::StreamExt;
 use libp2p_core::{muxing::StreamMuxer, Multiaddr};
 use log::{debug, error, trace};
@@ -31,11 +35,15 @@ use webrtc::data_channel::RTCDataChannel;
 use webrtc::peer_connection::RTCPeerConnection;
 use webrtc_data::data_channel::DataChannel as DetachedDataChannel;
 
-use std::sync::{Arc, Mutex as StdMutex};
-use std::task::{Context, Poll};
+use std::{
+    sync::{Arc, Mutex as StdMutex},
+    task::{Context, Poll},
+};
 
 use crate::error::Error;
 pub(crate) use poll_data_channel::PollDataChannel;
+
+const MAX_DATA_CHANNELS_IN_FLIGHT: usize = 10;
 
 /// A WebRTC connection, wrapping [`RTCPeerConnection`] and implementing [`StreamMuxer`] trait.
 pub struct Connection {
@@ -68,7 +76,7 @@ struct ConnectionInner {
 impl Connection {
     /// Creates a new connection.
     pub async fn new(rtc_conn: RTCPeerConnection) -> Self {
-        let (data_channel_tx, data_channel_rx) = mpsc::channel(10);
+        let (data_channel_tx, data_channel_rx) = mpsc::channel(MAX_DATA_CHANNELS_IN_FLIGHT);
 
         Connection::register_incoming_data_channels_handler(&rtc_conn, data_channel_tx).await;
 

@@ -18,15 +18,21 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::io::{AsyncReadExt, AsyncWriteExt};
 use futures::{
-    channel::oneshot, future, future::BoxFuture, prelude::*, select, stream::SelectAll,
-    stream::Stream, TryFutureExt,
+    channel::oneshot,
+    future,
+    future::BoxFuture,
+    io::{AsyncReadExt, AsyncWriteExt},
+    prelude::*,
+    select,
+    stream::SelectAll,
+    stream::Stream,
+    TryFutureExt,
 };
 use futures_timer::Delay;
 use if_watch::IfEvent;
-use libp2p_core::identity;
 use libp2p_core::{
+    identity,
     multiaddr::{Multiaddr, Protocol},
     muxing::StreamMuxerBox,
     transport::{Boxed, ListenerId, TransportError, TransportEvent},
@@ -57,13 +63,15 @@ use std::{
     time::Duration,
 };
 
-use crate::connection::Connection;
-use crate::connection::PollDataChannel;
-use crate::error::Error;
-use crate::in_addr::InAddr;
-use crate::sdp;
-use crate::udp_mux::{UDPMuxEvent, UDPMuxNewAddr, UDPMuxParams};
-use crate::upgrade;
+use crate::{
+    connection::Connection,
+    connection::PollDataChannel,
+    error::Error,
+    in_addr::InAddr,
+    sdp,
+    udp_mux::{UDPMuxEvent, UDPMuxNewAddr, UDPMuxParams},
+    upgrade,
+};
 
 /// A WebRTC transport with direct p2p communication (without a STUN server).
 pub struct WebRTCTransport {
@@ -76,7 +84,7 @@ pub struct WebRTCTransport {
 }
 
 impl WebRTCTransport {
-    /// Create a new WebRTC transport.
+    /// Creates a new WebRTC transport.
     pub fn new(certificate: RTCCertificate, id_keys: identity::Keypair) -> Self {
         Self {
             config: RTCConfiguration {
@@ -110,6 +118,7 @@ impl WebRTCTransport {
         let sock_addr = multiaddr_to_socketaddr(&addr)
             .ok_or_else(|| TransportError::MultiaddrNotSupported(addr))?;
 
+        // XXX: `UdpSocket::bind` is async, so use a std socket and convert
         let std_sock = std::net::UdpSocket::bind(sock_addr)
             .map_err(Error::IoError)
             .map_err(TransportError::Other)?;
@@ -125,10 +134,8 @@ impl WebRTCTransport {
             .local_addr()
             .map_err(Error::IoError)
             .map_err(TransportError::Other)?;
-
         debug!("listening on {}", listen_addr);
 
-        // Sender and receiver for new addresses
         let udp_mux = UDPMuxNewAddr::new(UDPMuxParams::new(socket));
 
         Ok(WebRTCListenStream::new(
@@ -233,12 +240,12 @@ impl Transport for WebRTCTransport {
                 .map_err(Error::WebRTC)
                 .await?;
 
-            // Create a datachannel with label 'data'
+            // Open a data channel to do Noise on top and verify the remote.
             let data_channel = peer_connection
                 .create_data_channel(
                     "data",
                     Some(RTCDataChannelInit {
-                        id: Some(1),
+                        id: Some(1), // id MUST match one used during upgrade
                         ..RTCDataChannelInit::default()
                     }),
                 )
@@ -248,8 +255,6 @@ impl Transport for WebRTCTransport {
 
             // Wait until the data channel is opened and detach it.
             crate::connection::register_data_channel_open_handler(data_channel, tx).await;
-
-            // Wait until data channel is opened and ready to use
             let detached = select! {
                 res = rx => match res {
                     Ok(detached) => detached,
@@ -267,7 +272,7 @@ impl Transport for WebRTCTransport {
             let noise = NoiseConfig::xx(dh_keys);
             let info = noise.protocol_info().next().unwrap();
             let (peer_id, mut noise_io) = noise
-                .upgrade_outbound(PollDataChannel::new(detached), info)
+                .upgrade_outbound(PollDataChannel::new(detached.clone()), info)
                 .and_then(|(remote, io)| match remote {
                     RemoteIdentity::IdentityKey(pk) => future::ok((pk.to_peer_id(), io)),
                     _ => future::err(NoiseError::AuthenticationFailed),
@@ -300,14 +305,13 @@ impl Transport for WebRTCTransport {
             }
 
             // Close the initial data channel after noise handshake is done.
-            // https://github.com/webrtc-rs/sctp/pull/14
-            // detached
-            //     .close()
-            //     .await
-            //     .map_err(|e| Error::WebRTC(e.into()))?;
+            detached
+                .close()
+                .await
+                .map_err(|e| Error::WebRTC(webrtc::Error::Data(e)))?;
 
             let mut c = Connection::new(peer_connection).await;
-            // XXX: default buffer size is too small to fit some messages. Possibly remove once
+            // TODO: default buffer size is too small to fit some messages. Possibly remove once
             // https://github.com/webrtc-rs/sctp/issues/28 is fixed.
             c.set_data_channels_read_buf_capacity(8192 * 10);
             Ok((peer_id, c))
@@ -606,7 +610,7 @@ pub(crate) fn fingerprint_of_first_certificate(config: &RTCConfiguration) -> Str
         .first()
         .expect("at least one certificate")
         .get_fingerprints()
-        .expect("fingerprints to succeed");
+        .expect("get_fingerprints to succeed");
     debug_assert_eq!("sha-256", fingerprints.first().unwrap().algorithm);
     fingerprints.first().unwrap().value.clone()
 }
@@ -638,6 +642,8 @@ pub(crate) fn build_setting_engine(
     se
 }
 
+/// Extracts a SHA-256 fingerprint from the given address. Returns `None` if the address does not
+/// contain one.
 fn fingerprint_from_addr<'a>(addr: &'a Multiaddr) -> Option<Cow<'a, [u8; 32]>> {
     let iter = addr.iter();
     for proto in iter {

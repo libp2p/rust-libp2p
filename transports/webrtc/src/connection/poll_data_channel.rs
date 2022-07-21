@@ -27,6 +27,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
+/// A wrapper around [`RTCPollDataChannel`] implementing futures [`AsyncRead`] / [`AsyncWrite`].
 #[derive(Debug)]
 pub struct PollDataChannel(RTCPollDataChannel);
 
