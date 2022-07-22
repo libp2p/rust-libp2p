@@ -26,7 +26,7 @@ libp2p-kad = { version = "0.39.0", path = "../../protocols/kad", optional = true
 libp2p-ping = { version = "0.38.0", path = "../../protocols/ping", optional = true }
 libp2p-relay =  { version = "0.11.0", path = "../../protocols/relay", optional = true }
 libp2p-swarm = { version = "0.38.0", path = "../../swarm" }
-prometheus-client = "0.16.0"
+prometheus-client = "0.17.0"
 
 [target.'cfg(not(target_os = "unknown"))'.dependencies]
 libp2p-gossipsub =  { version = "0.40.0", path = "../../protocols/gossipsub", optional = true }
