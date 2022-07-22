@@ -66,8 +66,7 @@ pub async fn webrtc(
         //
         // NOTE: removing this seems to break DTLS setup (both sides send `ClientHello` messages,
         // but none end up responding).
-        se.set_answering_dtls_role(DTLSRole::Server)
-            .map_err(Error::WebRTC)?;
+        se.set_answering_dtls_role(DTLSRole::Server)?;
     }
     let api = APIBuilder::new().with_setting_engine(se).build();
     let peer_connection = api.new_peer_connection(config).await?;
@@ -126,8 +125,7 @@ pub async fn webrtc(
             RemoteIdentity::IdentityKey(pk) => future::ok((pk.to_peer_id(), io)),
             _ => future::err(NoiseError::AuthenticationFailed),
         })
-        .await
-        .map_err(Error::Noise)?;
+        .await?;
 
     // Exchange TLS certificate fingerprints to prevent MiM attacks.
     trace!(

@@ -3,9 +3,7 @@ use async_trait::async_trait;
 use futures::future::FutureExt;
 use futures::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use futures::stream::StreamExt;
-use libp2p_core::identity;
-use libp2p_core::multiaddr::Protocol;
-use libp2p_core::upgrade;
+use libp2p_core::{identity, multiaddr::Protocol, muxing::StreamMuxerBox, upgrade, Transport};
 use libp2p_request_response::{
     ProtocolName, ProtocolSupport, RequestResponse, RequestResponseCodec, RequestResponseConfig,
     RequestResponseEvent, RequestResponseMessage,
@@ -40,8 +38,12 @@ async fn create_swarm() -> Result<(Swarm<RequestResponse<PingCodec>>, String)> {
     let cfg = RequestResponseConfig::default();
     let behaviour = RequestResponse::new(PingCodec(), protocols, cfg);
     trace!("{}", peer_id);
+    let transport = Transport::map(transport, |(peer_id, conn), _| {
+        (peer_id, StreamMuxerBox::new(conn))
+    })
+    .boxed();
     Ok((
-        SwarmBuilder::new(transport.boxed(), behaviour, peer_id)
+        SwarmBuilder::new(transport, behaviour, peer_id)
             .executor(Box::new(|fut| {
                 tokio::spawn(fut);
             }))

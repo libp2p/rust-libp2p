@@ -34,11 +34,9 @@ use if_watch::IfEvent;
 use libp2p_core::{
     identity,
     multiaddr::{Multiaddr, Protocol},
-    muxing::StreamMuxerBox,
-    transport::{Boxed, ListenerId, TransportError, TransportEvent},
-    PeerId, Transport,
+    transport::{ListenerId, TransportError, TransportEvent},
+    OutboundUpgrade, PeerId, Transport, UpgradeInfo,
 };
-use libp2p_core::{OutboundUpgrade, UpgradeInfo};
 use libp2p_noise::{Keypair, NoiseConfig, NoiseError, RemoteIdentity, X25519Spec};
 use log::{debug, trace};
 use tinytemplate::TinyTemplate;
@@ -100,14 +98,6 @@ impl WebRTCTransport {
     /// utilizing the syntax of 'fingerprint' in <https://tools.ietf.org/html/rfc4572#section-5>.
     pub fn cert_fingerprint(&self) -> String {
         fingerprint_of_first_certificate(&self.config)
-    }
-
-    /// Creates a boxed libp2p transport.
-    pub fn boxed(self) -> Boxed<(PeerId, StreamMuxerBox)> {
-        Transport::map(self, |(peer_id, conn), _| {
-            (peer_id, StreamMuxerBox::new(conn))
-        })
-        .boxed()
     }
 
     fn do_listen(
@@ -194,31 +184,23 @@ impl Transport for WebRTCTransport {
         let remote = addr.clone(); // used for logging
         trace!("dialing address: {:?}", remote);
 
-        let udp_mux = if let Some(l) = self.listeners.iter_mut().next() {
-            l.udp_mux.clone()
-        } else {
-            return Err(TransportError::Other(Error::NoListeners));
-        };
+        let first_listener = self
+            .listeners
+            .iter_mut()
+            .next()
+            .ok_or(TransportError::Other(Error::NoListeners))?;
+        let udp_mux = first_listener.udp_mux.clone();
         let se = build_setting_engine(udp_mux, &sock_addr, &our_fingerprint);
         let api = APIBuilder::new().with_setting_engine(se).build();
 
         // [`Transport::dial`] should do no work unless the returned [`Future`] is polled. Thus
         // do the `set_remote_description` call within the [`Future`].
         Ok(async move {
-            let peer_connection = api
-                .new_peer_connection(config)
-                .map_err(Error::WebRTC)
-                .await?;
+            let peer_connection = api.new_peer_connection(config).await?;
 
-            let offer = peer_connection
-                .create_offer(None)
-                .map_err(Error::WebRTC)
-                .await?;
+            let offer = peer_connection.create_offer(None).await?;
             debug!("OFFER: {:?}", offer.sdp);
-            peer_connection
-                .set_local_description(offer)
-                .map_err(Error::WebRTC)
-                .await?;
+            peer_connection.set_local_description(offer).await?;
 
             // Set the remote description to the predefined SDP.
             let remote_fingerprint = match fingerprint_from_addr(&addr) {
@@ -235,10 +217,7 @@ impl Transport for WebRTCTransport {
             let sdp = RTCSessionDescription::answer(server_session_description).unwrap();
             // Set the local description and start UDP listeners
             // Note: this will start the gathering of ICE candidates
-            peer_connection
-                .set_remote_description(sdp)
-                .map_err(Error::WebRTC)
-                .await?;
+            peer_connection.set_remote_description(sdp).await?;
 
             // Open a data channel to do Noise on top and verify the remote.
             let data_channel = peer_connection
@@ -277,8 +256,7 @@ impl Transport for WebRTCTransport {
                     RemoteIdentity::IdentityKey(pk) => future::ok((pk.to_peer_id(), io)),
                     _ => future::err(NoiseError::AuthenticationFailed),
                 })
-                .await
-                .map_err(Error::Noise)?;
+                .await?;
 
             // Exchange TLS certificate fingerprints to prevent MiM attacks.
             trace!("exchanging TLS certificate fingerprints with {}", remote);
