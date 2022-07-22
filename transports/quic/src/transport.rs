@@ -252,7 +252,7 @@ impl Listener {
                                     return Some(TransportEvent::NewAddress {
                                         listener_id: self.listener_id,
                                         listen_addr: ma,
-                                    })
+                                    });
                                 }
                             }
                             Ok(IfEvent::Down(inet)) => {
@@ -265,7 +265,7 @@ impl Listener {
                                     return Some(TransportEvent::AddressExpired {
                                         listener_id: self.listener_id,
                                         listen_addr: ma,
-                                    })
+                                    });
                                 }
                             }
                             Err(err) => {
@@ -276,7 +276,7 @@ impl Listener {
                                 return Some(TransportEvent::ListenerError {
                                     listener_id: self.listener_id,
                                     error: err.into(),
-                                })
+                                });
                             }
                         }
                     }

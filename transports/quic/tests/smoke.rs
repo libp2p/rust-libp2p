@@ -575,5 +575,5 @@ async fn ipv4_dial_ipv6() -> Result<()> {
                 e => panic!("{:?}", e),
             }
         }
-    };
+    }
 }
