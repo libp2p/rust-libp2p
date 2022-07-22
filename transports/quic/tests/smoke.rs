@@ -542,3 +542,38 @@ async fn endpoint_reuse() -> Result<()> {
 
     Ok(())
 }
+
+#[async_std::test]
+#[ignore]
+async fn ipv4_dial_ipv6() -> Result<()> {
+    setup_global_subscriber();
+
+    let mut swarm_a = create_swarm(false).await?;
+    let mut swarm_b = create_swarm(false).await?;
+
+    swarm_a.listen_on("/ip6/::1/udp/0/quic".parse()?)?;
+    let a_addr = match swarm_a.next().await {
+        Some(SwarmEvent::NewListenAddr { address, .. }) => address,
+        e => panic!("{:?}", e),
+    };
+
+    swarm_b.dial(a_addr.clone()).unwrap();
+
+    loop {
+        select! {
+            ev = swarm_a.select_next_some() => match ev {
+                SwarmEvent::ConnectionEstablished { .. } => {
+                    return Ok(())
+                }
+                SwarmEvent::IncomingConnection { local_addr, ..} => {
+                    assert!(swarm_a.listeners().any(|a| a == &local_addr));
+                }
+                e => panic!("{:?}", e),
+            },
+            ev = swarm_b.select_next_some() => match ev {
+                SwarmEvent::ConnectionEstablished { .. } => {},
+                e => panic!("{:?}", e),
+            }
+        }
+    }
+}
