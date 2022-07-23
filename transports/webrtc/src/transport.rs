@@ -19,17 +19,14 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::{
-    channel::oneshot,
     future,
     future::BoxFuture,
     io::{AsyncReadExt, AsyncWriteExt},
     prelude::*,
-    select,
     stream::SelectAll,
     stream::Stream,
     TryFutureExt,
 };
-use futures_timer::Delay;
 use if_watch::IfEvent;
 use libp2p_core::{
     identity,
@@ -39,18 +36,9 @@ use libp2p_core::{
 };
 use libp2p_noise::{Keypair, NoiseConfig, NoiseError, RemoteIdentity, X25519Spec};
 use log::{debug, trace};
-use tinytemplate::TinyTemplate;
 use tokio_crate::net::UdpSocket;
-use webrtc::api::setting_engine::SettingEngine;
-use webrtc::api::APIBuilder;
-use webrtc::data_channel::data_channel_init::RTCDataChannelInit;
 use webrtc::peer_connection::certificate::RTCCertificate;
 use webrtc::peer_connection::configuration::RTCConfiguration;
-use webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
-use webrtc_data::data_channel::DataChannel as DetachedDataChannel;
-use webrtc_ice::network_type::NetworkType;
-use webrtc_ice::udp_mux::UDPMux;
-use webrtc_ice::udp_network::UDPNetwork;
 
 use std::{
     borrow::Cow,
@@ -58,7 +46,6 @@ use std::{
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
-    time::Duration,
 };
 
 use crate::{
@@ -66,9 +53,9 @@ use crate::{
     connection::PollDataChannel,
     error::Error,
     in_addr::InAddr,
-    sdp,
     udp_mux::{UDPMuxEvent, UDPMuxNewAddr, UDPMuxParams},
     upgrade,
+    webrtc_connection::WebRTCConnection,
 };
 
 /// A WebRTC transport with direct p2p communication (without a STUN server).
@@ -172,17 +159,18 @@ impl Transport for WebRTCTransport {
     }
 
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let config = self.config.clone();
-        let our_fingerprint = self.cert_fingerprint();
-        let id_keys = self.id_keys.clone();
-
         let sock_addr = multiaddr_to_socketaddr(&addr)
             .ok_or_else(|| TransportError::MultiaddrNotSupported(addr.clone()))?;
         if sock_addr.port() == 0 || sock_addr.ip().is_unspecified() {
             return Err(TransportError::MultiaddrNotSupported(addr));
         }
+
         let remote = addr.clone(); // used for logging
         trace!("dialing address: {:?}", remote);
+
+        let config = self.config.clone();
+        let our_fingerprint = self.cert_fingerprint();
+        let id_keys = self.id_keys.clone();
 
         let first_listener = self
             .listeners
@@ -190,59 +178,25 @@ impl Transport for WebRTCTransport {
             .next()
             .ok_or(TransportError::Other(Error::NoListeners))?;
         let udp_mux = first_listener.udp_mux.clone();
-        let se = build_setting_engine(udp_mux, &sock_addr, &our_fingerprint);
-        let api = APIBuilder::new().with_setting_engine(se).build();
 
         // [`Transport::dial`] should do no work unless the returned [`Future`] is polled. Thus
         // do the `set_remote_description` call within the [`Future`].
         Ok(async move {
-            let peer_connection = api.new_peer_connection(config).await?;
+            let remote_fingerprint = fingerprint_from_addr(&addr)
+                .map(|f| fingerprint_to_string(f.iter()))
+                .ok_or(Error::InvalidMultiaddr(addr.clone()))?;
 
-            let offer = peer_connection.create_offer(None).await?;
-            debug!("OFFER: {:?}", offer.sdp);
-            peer_connection.set_local_description(offer).await?;
-
-            // Set the remote description to the predefined SDP.
-            let remote_fingerprint = match fingerprint_from_addr(&addr) {
-                Some(f) => fingerprint_to_string(&f),
-                None => return Err(Error::InvalidMultiaddr(addr.clone())),
-            };
-            let server_session_description = render_description(
-                sdp::SERVER_SESSION_DESCRIPTION,
+            let conn = WebRTCConnection::connect(
                 sock_addr,
+                config,
+                udp_mux,
+                &our_fingerprint,
                 &remote_fingerprint,
-                &remote_fingerprint.to_owned().replace(':', ""),
-            );
-            debug!("ANSWER: {:?}", server_session_description);
-            let sdp = RTCSessionDescription::answer(server_session_description).unwrap();
-            // Set the local description and start UDP listeners
-            // Note: this will start the gathering of ICE candidates
-            peer_connection.set_remote_description(sdp).await?;
+            )
+            .await?;
 
             // Open a data channel to do Noise on top and verify the remote.
-            let data_channel = peer_connection
-                .create_data_channel(
-                    "data",
-                    Some(RTCDataChannelInit {
-                        id: Some(1), // id MUST match one used during upgrade
-                        ..RTCDataChannelInit::default()
-                    }),
-                )
-                .await?;
-
-            let (tx, mut rx) = oneshot::channel::<Arc<DetachedDataChannel>>();
-
-            // Wait until the data channel is opened and detach it.
-            crate::connection::register_data_channel_open_handler(data_channel, tx).await;
-            let detached = select! {
-                res = rx => match res {
-                    Ok(detached) => detached,
-                    Err(e) => return Err(Error::InternalError(e.to_string())),
-                },
-                _ = Delay::new(Duration::from_secs(10)).fuse() => return Err(Error::InternalError(
-                    "data channel opening took longer than 10 seconds (see logs)".into(),
-                ))
-            };
+            let data_channel = conn.create_initial_upgrade_data_channel(None).await?;
 
             trace!("noise handshake with {}", remote);
             let dh_keys = Keypair::<X25519Spec>::new()
@@ -251,7 +205,7 @@ impl Transport for WebRTCTransport {
             let noise = NoiseConfig::xx(dh_keys);
             let info = noise.protocol_info().next().unwrap();
             let (peer_id, mut noise_io) = noise
-                .upgrade_outbound(PollDataChannel::new(detached.clone()), info)
+                .upgrade_outbound(PollDataChannel::new(data_channel.clone()), info)
                 .and_then(|(remote, io)| match remote {
                     RemoteIdentity::IdentityKey(pk) => future::ok((pk.to_peer_id(), io)),
                     _ => future::err(NoiseError::AuthenticationFailed),
@@ -283,12 +237,12 @@ impl Transport for WebRTCTransport {
             }
 
             // Close the initial data channel after noise handshake is done.
-            detached
+            data_channel
                 .close()
                 .await
                 .map_err(|e| Error::WebRTC(webrtc::Error::Data(e)))?;
 
-            let mut c = Connection::new(peer_connection).await;
+            let mut c = Connection::new(conn.into_inner()).await;
             // TODO: default buffer size is too small to fit some messages. Possibly remove once
             // https://github.com/webrtc-rs/sctp/issues/28 is fixed.
             c.set_data_channels_read_buf_capacity(8192 * 10);
@@ -516,37 +470,33 @@ pub(crate) fn socketaddr_to_multiaddr(socket_addr: &SocketAddr) -> Multiaddr {
         .with(Protocol::XWebRTC(hex_to_cow(&f)))
 }
 
-/// Renders a [`TinyTemplate`] description using the provided arguments.
-pub(crate) fn render_description(
-    description: &str,
-    addr: SocketAddr,
-    fingerprint: &str,
-    ufrag: &str,
-) -> String {
-    let mut tt = TinyTemplate::new();
-    tt.add_template("description", description).unwrap();
+/// Extracts a SHA-256 fingerprint from the given address. Returns `None` if the address does not
+/// contain one.
+fn fingerprint_from_addr<'a>(addr: &'a Multiaddr) -> Option<Cow<'a, [u8; 32]>> {
+    let iter = addr.iter();
+    for proto in iter {
+        match proto {
+            // TODO: check hash is one of https://datatracker.ietf.org/doc/html/rfc8122#section-5
+            Protocol::XWebRTC(f) => return Some(f),
+            _ => continue,
+        }
+    }
+    None
+}
 
-    let context = sdp::DescriptionContext {
-        ip_version: {
-            if addr.is_ipv4() {
-                sdp::IpVersion::IP4
-            } else {
-                sdp::IpVersion::IP6
-            }
-        },
-        target_ip: addr.ip(),
-        target_port: addr.port(),
-        fingerprint: fingerprint.to_owned(),
-        // NOTE: ufrag is equal to pwd.
-        ufrag: ufrag.to_owned(),
-        pwd: ufrag.to_owned(),
-    };
-    tt.render("description", &context).unwrap()
+/// Transforms a byte array fingerprint into a string.
+pub(crate) fn fingerprint_to_string<T>(f: T) -> String
+where
+    T: IntoIterator,
+    <T as IntoIterator>::Item: core::fmt::LowerHex,
+{
+    let values: Vec<String> = f.into_iter().map(|x| format! {"{:02x}", x}).collect();
+    values.join(":")
 }
 
 /// Tries to turn a WebRTC multiaddress into a [`SocketAddr`]. Returns None if the format of the
 /// multiaddr is wrong.
-pub(crate) fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Option<SocketAddr> {
+fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Option<SocketAddr> {
     let mut iter = addr.iter();
     let proto1 = iter.next()?;
     let proto2 = iter.next()?;
@@ -570,12 +520,6 @@ pub(crate) fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Option<SocketAddr> {
     }
 }
 
-/// Transforms a byte array fingerprint into a string.
-pub(crate) fn fingerprint_to_string(f: &Cow<'_, [u8; 32]>) -> String {
-    let values: Vec<String> = f.iter().map(|x| format! {"{:02x}", x}).collect();
-    values.join(":")
-}
-
 /// Returns a SHA-256 fingerprint of the first certificate.
 ///
 /// # Panics
@@ -591,47 +535,6 @@ pub(crate) fn fingerprint_of_first_certificate(config: &RTCConfiguration) -> Str
         .expect("get_fingerprints to succeed");
     debug_assert_eq!("sha-256", fingerprints.first().unwrap().algorithm);
     fingerprints.first().unwrap().value.clone()
-}
-
-/// Creates a new [`SettingEngine`] and configures it.
-pub(crate) fn build_setting_engine(
-    udp_mux: Arc<dyn UDPMux + Send + Sync>,
-    addr: &SocketAddr,
-    fingerprint: &str,
-) -> SettingEngine {
-    let mut se = SettingEngine::default();
-    // Set both ICE user and password to fingerprint.
-    // It will be checked by remote side when exchanging ICE messages.
-    let f = fingerprint.to_owned().replace(':', "");
-    se.set_ice_credentials(f.clone(), f);
-    se.set_udp_network(UDPNetwork::Muxed(udp_mux.clone()));
-    // Allow detaching data channels.
-    se.detach_data_channels();
-    // Set the desired network type.
-    //
-    // NOTE: if not set, a [`webrtc_ice::agent::Agent`] might pick a wrong local candidate
-    // (e.g. IPv6 `[::1]` while dialing an IPv4 `10.11.12.13`).
-    let network_type = if addr.is_ipv4() {
-        NetworkType::Udp4
-    } else {
-        NetworkType::Udp6
-    };
-    se.set_network_types(vec![network_type]);
-    se
-}
-
-/// Extracts a SHA-256 fingerprint from the given address. Returns `None` if the address does not
-/// contain one.
-fn fingerprint_from_addr<'a>(addr: &'a Multiaddr) -> Option<Cow<'a, [u8; 32]>> {
-    let iter = addr.iter();
-    for proto in iter {
-        match proto {
-            // TODO: check hash is one of https://datatracker.ietf.org/doc/html/rfc8122#section-5
-            Protocol::XWebRTC(f) => return Some(f),
-            _ => continue,
-        }
-    }
-    None
 }
 
 // Tests //////////////////////////////////////////////////////////////////////////////////////////
