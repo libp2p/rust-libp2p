@@ -544,7 +544,6 @@ async fn endpoint_reuse() -> Result<()> {
 }
 
 #[async_std::test]
-#[ignore]
 async fn ipv4_dial_ipv6() -> Result<()> {
     setup_global_subscriber();
 

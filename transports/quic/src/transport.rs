@@ -55,8 +55,10 @@ pub use quinn_proto::{
 pub struct QuicTransport {
     config: Config,
     listeners: SelectAll<Listener>,
-    /// Endpoint to use if no listener exists.
-    dialer: Option<Arc<Endpoint>>,
+    /// Endpoints to use for dialing Ipv4 addresses if no matching listener exists.
+    ipv4_dialer: Option<Arc<Endpoint>>,
+    /// Endpoints to use for dialing Ipv6 addresses if no matching listener exists.
+    ipv6_dialer: Option<Arc<Endpoint>>,
 }
 
 impl QuicTransport {
@@ -64,7 +66,8 @@ impl QuicTransport {
         Self {
             listeners: SelectAll::new(),
             config,
-            dialer: None,
+            ipv4_dialer: None,
+            ipv6_dialer: None,
         }
     }
 }
@@ -102,7 +105,10 @@ impl Transport for QuicTransport {
         // Drop reference to dialer endpoint so that the endpoint is dropped once the last
         // connection that uses it is closed.
         // New outbound connections will use a bidirectional (listener) endpoint.
-        let _ = self.dialer.take();
+        match socket_addr {
+            SocketAddr::V4(_) => self.ipv4_dialer.take(),
+            SocketAddr::V6(_) => self.ipv6_dialer.take(),
+        };
         Ok(listener_id)
     }
 
@@ -126,25 +132,33 @@ impl Transport for QuicTransport {
             tracing::error!("multiaddr not supported");
             return Err(TransportError::MultiaddrNotSupported(addr));
         }
-        let endpoint = if self.listeners.is_empty() {
-            match self.dialer.clone() {
-                Some(endpoint) => endpoint,
+        let listeners = self
+            .listeners
+            .iter()
+            .filter(|l| {
+                let listen_addr = l.endpoint.socket_addr();
+                listen_addr.is_ipv4() == socket_addr.is_ipv4()
+                    && listen_addr.ip().is_loopback() == socket_addr.ip().is_loopback()
+            })
+            .collect::<Vec<_>>();
+        let endpoint = if listeners.is_empty() {
+            let dialer = match socket_addr {
+                SocketAddr::V4(_) => &mut self.ipv4_dialer,
+                SocketAddr::V6(_) => &mut self.ipv6_dialer,
+            };
+            match dialer {
+                Some(endpoint) => endpoint.clone(),
                 None => {
-                    let endpoint =
-                        Endpoint::new_dialer(self.config.clone()).map_err(TransportError::Other)?;
-                    let _ = self.dialer.insert(endpoint.clone());
+                    let endpoint = Endpoint::new_dialer(self.config.clone(), socket_addr.is_ipv6())
+                        .map_err(TransportError::Other)?;
+                    let _ = dialer.insert(endpoint.clone());
                     endpoint
                 }
             }
         } else {
             // Pick a random listener to use for dialing.
-            // TODO: Prefer listeners with same IP version.
-            let n = rand::random::<usize>() % self.listeners.len();
-            let listener = self
-                .listeners
-                .iter_mut()
-                .nth(n)
-                .expect("Can not be out of bound.");
+            let n = rand::random::<usize>() % listeners.len();
+            let listener = listeners.get(n).expect("Can not be out of bound.");
             listener.endpoint.clone()
         };
 

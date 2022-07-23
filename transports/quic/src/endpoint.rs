@@ -39,7 +39,7 @@ use quinn_proto::{ClientConfig as QuinnClientConfig, ServerConfig as QuinnServer
 use std::{
     collections::{HashMap, VecDeque},
     fmt,
-    net::{Ipv4Addr, SocketAddr, SocketAddrV4, UdpSocket},
+    net::{Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket},
     sync::{Arc, Weak},
     task::{Poll, Waker},
     time::{Duration, Instant},
@@ -109,9 +109,13 @@ impl Endpoint {
     }
 
     /// Builds a new [`Endpoint`] that only supports outbound connections.
-    pub fn new_dialer(config: Config) -> Result<Arc<Endpoint>, transport::Error> {
-        let socket_addr = SocketAddrV4::new(Ipv4Addr::LOCALHOST, 0);
-        Self::new(config, socket_addr.into(), None)
+    pub fn new_dialer(config: Config, is_ipv6: bool) -> Result<Arc<Endpoint>, transport::Error> {
+        let socket_addr = if is_ipv6 {
+            SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0)
+        } else {
+            SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0)
+        };
+        Self::new(config, socket_addr, None)
     }
 
     fn new(
