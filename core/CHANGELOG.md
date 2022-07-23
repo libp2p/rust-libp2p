@@ -2,10 +2,10 @@
 
 - Remove `StreamMuxer::poll_event` in favor of individual functions: `poll_inbound`, `poll_outbound`
   and `poll_address_change`. Consequently, `StreamMuxerEvent` is also removed. See [PR 2724].
-- Use `Pin<&mut Self>` as the receiver type for all `StreamMuxer` poll functions. See [PR XXXX].
+- Use `Pin<&mut Self>` as the receiver type for all `StreamMuxer` poll functions. See [PR 2765].
 
 [PR 2724]: https://github.com/libp2p/rust-libp2p/pull/2724
-[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+[PR 2765]: https://github.com/libp2p/rust-libp2p/pull/XXXX
 
 # 0.34.0
 
