@@ -43,7 +43,7 @@ use std::{
 /// Underlying structure for both [`crate::QuicMuxer`] and [`crate::Upgrade`].
 ///
 /// Contains everything needed to process a connection with a remote.
-/// Tied to a specific [`crate::Endpoint`].
+/// Tied to a specific [`Endpoint`].
 pub struct Connection {
     /// Endpoint this connection belongs to.
     endpoint: Arc<Endpoint>,

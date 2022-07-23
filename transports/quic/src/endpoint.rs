@@ -87,7 +87,6 @@ impl Config {
 // TODO: remove useless fields
 pub struct Endpoint {
     /// Channel to the background of the endpoint.
-    /// See [`Endpoint::new_connections`] (just below) for a commentary about the mutex.
     to_endpoint: Mutex<mpsc::Sender<ToEndpoint>>,
 
     /// Copy of [`Endpoint::to_endpoint`], except not behind a `Mutex`. Used if we want to be
@@ -308,11 +307,6 @@ enum ToEndpoint {
 /// are therefore in total three buffers in play: the `new_connections` channel itself, the queue
 /// of elements being sent on `new_connections`, and the accept buffer of the
 /// [`quinn_proto::Endpoint`].
-///
-/// Unfortunately, this design has the consequence that, on the network layer, we will accept a
-/// certain number of incoming connections even if [`Endpoint::poll_incoming`] is never even
-/// called. The `quinn-proto` library doesn't provide any way to not accept incoming connections
-/// apart from filling the accept buffer.
 ///
 /// ## Back-pressure on connections
 ///
