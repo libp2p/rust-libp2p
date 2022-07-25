@@ -77,71 +77,72 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         .filter(|f| !is_ignored(f))
         .collect::<Vec<_>>();
 
-    let (out_event_name, out_event_definition, out_event_from_clause) = {
-        // The final out event.
-        // If we find a `#[behaviour(out_event = "Foo")]` attribute on the struct, we set `Foo` as
-        // the out event.
-        let user_provided_out_event_name = {
-            let mut out = None;
-            for meta_items in ast.attrs.iter().filter_map(get_meta_items) {
-                for meta_item in meta_items {
-                    match meta_item {
-                        syn::NestedMeta::Meta(syn::Meta::NameValue(ref m))
-                            if m.path.is_ident("out_event") =>
-                        {
-                            if let syn::Lit::Str(ref s) = m.lit {
-                                let ident: syn::Type = syn::parse_str(&s.value()).unwrap();
-                                out = Some(ident);
-                            }
+    let (out_event_name, out_event_definition, out_event_from_clauses) = {
+        // If we find a `#[behaviour(out_event = "Foo")]` attribute on the
+        // struct, we set `Foo` as the out event. If not, the `OutEvent` is
+        // generated.
+        let user_provided_out_event_name: Option<syn::Type> = ast
+            .attrs
+            .iter()
+            .filter_map(get_meta_items)
+            .flatten()
+            .filter_map(|meta_item| {
+                if let syn::NestedMeta::Meta(syn::Meta::NameValue(ref m)) = meta_item {
+                    if m.path.is_ident("out_event") {
+                        if let syn::Lit::Str(ref s) = m.lit {
+                            return Some(syn::parse_str(&s.value()).unwrap());
                         }
-                        _ => (),
                     }
                 }
-            }
-            out
-        };
+                None
+            })
+            .next();
 
         match user_provided_out_event_name {
+            // User provided `OutEvent`.
             Some(name) => {
-                // TODO: Rename
-                let additional = data_struct_fields
+                let definition = None;
+                let from_clauses = data_struct_fields
                     .iter()
                     .map(|field| {
                         let ty = &field.ty;
                         quote! {#name #ty_generics: From< <#ty as #trait_to_impl>::OutEvent >}
                     })
                     .collect::<Vec<_>>();
-                (name, None, additional)
+                (name, definition, from_clauses)
             }
+            // User did not provide `OutEvent`. Generate it.
             None => {
-                let event_name: syn::Type =
-                    syn::parse_str(&(ast.ident.to_string() + "Event")).unwrap();
-                let fields = data_struct_fields
-                    .iter()
-                    .map(|field| {
-                        let variant: syn::Variant = syn::parse_str(
-                            &field
-                                .ident
-                                .clone()
-                                .expect("Fields of NetworkBehaviour implementation to be named.")
-                                .to_string()
-                                .to_upper_camel_case(),
-                        )
-                        .unwrap();
-                        let ty = &field.ty;
-                        quote! {#variant(<#ty as NetworkBehaviour>::OutEvent)}
-                    })
-                    .collect::<Vec<_>>();
-                let visibility = &ast.vis;
-                (
-                    event_name.clone(),
+                let name: syn::Type = syn::parse_str(&(ast.ident.to_string() + "Event")).unwrap();
+                let definition = {
+                    let fields = data_struct_fields
+                        .iter()
+                        .map(|field| {
+                            let variant: syn::Variant = syn::parse_str(
+                                &field
+                                    .ident
+                                    .clone()
+                                    .expect(
+                                        "Fields of NetworkBehaviour implementation to be named.",
+                                    )
+                                    .to_string()
+                                    .to_upper_camel_case(),
+                            )
+                            .unwrap();
+                            let ty = &field.ty;
+                            quote! {#variant(<#ty as NetworkBehaviour>::OutEvent)}
+                        })
+                        .collect::<Vec<_>>();
+                    let visibility = &ast.vis;
+
                     Some(quote! {
-                        #visibility enum #event_name #impl_generics {
+                        #visibility enum #name #impl_generics {
                             #(#fields),*
                         }
-                    }),
-                    vec![],
-                )
+                    })
+                };
+                let from_clauses = vec![];
+                (name, definition, from_clauses)
             }
         }
     };
@@ -160,12 +161,12 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         // TODO: Clean up
         if let Some(where_clause) = where_clause {
             if where_clause.predicates.trailing_punct() {
-                Some(quote! {#where_clause #(#additional),*, #(#out_event_from_clause),*})
+                Some(quote! {#where_clause #(#additional),*, #(#out_event_from_clauses),*})
             } else {
-                Some(quote! {#where_clause, #(#additional),*, #(#out_event_from_clause),*})
+                Some(quote! {#where_clause, #(#additional),*, #(#out_event_from_clauses),*})
             }
         } else {
-            Some(quote! {where #(#additional),*, #(#out_event_from_clause),*})
+            Some(quote! {where #(#additional),*, #(#out_event_from_clauses),*})
         }
     };
 
