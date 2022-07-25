@@ -27,8 +27,9 @@ use libp2p_core::{
     identity, PeerId, {InboundUpgrade, UpgradeInfo},
 };
 use libp2p_noise::{Keypair, NoiseConfig, NoiseError, RemoteIdentity, X25519Spec};
-use log::trace;
+use log::{debug, trace};
 use webrtc::peer_connection::configuration::RTCConfiguration;
+use webrtc_data::data_channel::DataChannel;
 use webrtc_ice::udp_mux::UDPMux;
 
 use std::{net::SocketAddr, sync::Arc};
@@ -47,7 +48,7 @@ pub async fn webrtc(
     ufrag: String,
     id_keys: identity::Keypair,
 ) -> Result<(PeerId, Connection), Error> {
-    trace!("upgrading {} (ufrag: {})", socket_addr, ufrag);
+    trace!("upgrading addr={} (ufrag={})", socket_addr, ufrag);
 
     let our_fingerprint = transport::fingerprint_of_first_certificate(&config);
 
@@ -58,7 +59,42 @@ pub async fn webrtc(
     // NOTE: channel is already negotiated by the client
     let data_channel = conn.create_initial_upgrade_data_channel(Some(true)).await?;
 
-    trace!("noise handshake with {} (ufrag: {})", socket_addr, ufrag);
+    trace!(
+        "noise handshake with addr={} (ufrag={})",
+        socket_addr,
+        ufrag
+    );
+    let remote_fingerprint = {
+        let f = conn.get_remote_fingerprint().await;
+        crate::transport::fingerprint_to_string(f.iter())
+    };
+    let peer_id = perform_noise_handshake(
+        id_keys,
+        data_channel.clone(),
+        our_fingerprint,
+        remote_fingerprint,
+    )
+    .await?;
+
+    // Close the initial data channel after noise handshake is done.
+    data_channel
+        .close()
+        .await
+        .map_err(|e| Error::WebRTC(webrtc::Error::Data(e)))?;
+
+    let mut c = Connection::new(conn.into_inner()).await;
+    // TODO: default buffer size is too small to fit some messages. Possibly remove once
+    // https://github.com/webrtc-rs/sctp/issues/28 is fixed.
+    c.set_data_channels_read_buf_capacity(8192 * 10);
+    Ok((peer_id, c))
+}
+
+async fn perform_noise_handshake(
+    id_keys: identity::Keypair,
+    data_channel: Arc<DataChannel>,
+    our_fingerprint: String,
+    remote_fingerprint: String,
+) -> Result<PeerId, Error> {
     let dh_keys = Keypair::<X25519Spec>::new()
         .into_authentic(&id_keys)
         .unwrap();
@@ -73,10 +109,9 @@ pub async fn webrtc(
         .await?;
 
     // Exchange TLS certificate fingerprints to prevent MiM attacks.
-    trace!(
-        "exchanging TLS certificate fingerprints with {} (ufrag: {})",
-        socket_addr,
-        ufrag
+    debug!(
+        "exchanging TLS certificate fingerprints with peer_id={}",
+        peer_id
     );
 
     // 1. Submit SHA-256 fingerprint
@@ -88,10 +123,6 @@ pub async fn webrtc(
     noise_io.read_exact(buf.as_mut_slice()).await?;
     let fingerprint_from_noise =
         String::from_utf8(buf).map_err(|_| Error::Noise(NoiseError::AuthenticationFailed))?;
-    let remote_fingerprint = {
-        let f = conn.get_remote_fingerprint().await;
-        crate::transport::fingerprint_to_string(f.iter())
-    };
     if fingerprint_from_noise != remote_fingerprint {
         return Err(Error::InvalidFingerprint {
             expected: remote_fingerprint,
@@ -99,15 +130,5 @@ pub async fn webrtc(
         });
     }
 
-    // Close the initial data channel after noise handshake is done.
-    data_channel
-        .close()
-        .await
-        .map_err(|e| Error::WebRTC(webrtc::Error::Data(e)))?;
-
-    let mut c = Connection::new(conn.into_inner()).await;
-    // TODO: default buffer size is too small to fit some messages. Possibly remove once
-    // https://github.com/webrtc-rs/sctp/issues/28 is fixed.
-    c.set_data_channels_read_buf_capacity(8192 * 10);
-    Ok((peer_id, c))
+    Ok(peer_id)
 }

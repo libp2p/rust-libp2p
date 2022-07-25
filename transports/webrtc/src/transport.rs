@@ -39,6 +39,7 @@ use log::{debug, trace};
 use tokio_crate::net::UdpSocket;
 use webrtc::peer_connection::certificate::RTCCertificate;
 use webrtc::peer_connection::configuration::RTCConfiguration;
+use webrtc_data::data_channel::DataChannel;
 
 use std::{
     borrow::Cow,
@@ -166,7 +167,7 @@ impl Transport for WebRTCTransport {
         }
 
         let remote = addr.clone(); // used for logging
-        trace!("dialing address: {:?}", remote);
+        trace!("dialing addr={}", remote);
 
         let config = self.config.clone();
         let our_fingerprint = self.cert_fingerprint();
@@ -198,36 +199,16 @@ impl Transport for WebRTCTransport {
             // Open a data channel to do Noise on top and verify the remote.
             let data_channel = conn.create_initial_upgrade_data_channel(None).await?;
 
-            trace!("noise handshake with {}", remote);
-            let dh_keys = Keypair::<X25519Spec>::new()
-                .into_authentic(&id_keys)
-                .unwrap();
-            let noise = NoiseConfig::xx(dh_keys);
-            let info = noise.protocol_info().next().unwrap();
-            let (peer_id, mut noise_io) = noise
-                .upgrade_outbound(PollDataChannel::new(data_channel.clone()), info)
-                .and_then(|(remote, io)| match remote {
-                    RemoteIdentity::IdentityKey(pk) => future::ok((pk.to_peer_id(), io)),
-                    _ => future::err(NoiseError::AuthenticationFailed),
-                })
-                .await?;
+            trace!("noise handshake with addr={}", remote);
+            let peer_id = perform_noise_handshake(
+                id_keys,
+                data_channel.clone(),
+                our_fingerprint,
+                remote_fingerprint,
+            )
+            .await?;
 
-            // Exchange TLS certificate fingerprints to prevent MiM attacks.
-            trace!("exchanging TLS certificate fingerprints with {}", remote);
-            let n = noise_io.write(&our_fingerprint.into_bytes()).await?;
-            noise_io.flush().await?;
-            let mut buf = vec![0; n]; // ASSERT: fingerprint's format is the same.
-            noise_io.read_exact(buf.as_mut_slice()).await?;
-            let fingerprint_from_noise = String::from_utf8(buf)
-                .map_err(|_| Error::Noise(NoiseError::AuthenticationFailed))?;
-            if fingerprint_from_noise != remote_fingerprint {
-                return Err(Error::InvalidFingerprint {
-                    expected: remote_fingerprint,
-                    got: fingerprint_from_noise,
-                });
-            }
-
-            trace!("verifying peer's identity {}", remote);
+            trace!("verifying peer's identity addr={}", remote);
             let peer_id_from_addr = PeerId::try_from_multiaddr(&addr);
             if peer_id_from_addr.is_none() || peer_id_from_addr.unwrap() != peer_id {
                 return Err(Error::InvalidPeerID {
@@ -535,6 +516,46 @@ pub(crate) fn fingerprint_of_first_certificate(config: &RTCConfiguration) -> Str
         .expect("get_fingerprints to succeed");
     debug_assert_eq!("sha-256", fingerprints.first().unwrap().algorithm);
     fingerprints.first().unwrap().value.clone()
+}
+
+async fn perform_noise_handshake(
+    id_keys: identity::Keypair,
+    data_channel: Arc<DataChannel>,
+    our_fingerprint: String,
+    remote_fingerprint: String,
+) -> Result<PeerId, Error> {
+    let dh_keys = Keypair::<X25519Spec>::new()
+        .into_authentic(&id_keys)
+        .unwrap();
+    let noise = NoiseConfig::xx(dh_keys);
+    let info = noise.protocol_info().next().unwrap();
+    let (peer_id, mut noise_io) = noise
+        .upgrade_outbound(PollDataChannel::new(data_channel), info)
+        .and_then(|(remote, io)| match remote {
+            RemoteIdentity::IdentityKey(pk) => future::ok((pk.to_peer_id(), io)),
+            _ => future::err(NoiseError::AuthenticationFailed),
+        })
+        .await?;
+
+    // Exchange TLS certificate fingerprints to prevent MiM attacks.
+    debug!(
+        "exchanging TLS certificate fingerprints with peer_id={}",
+        peer_id
+    );
+    let n = noise_io.write(&our_fingerprint.into_bytes()).await?;
+    noise_io.flush().await?;
+    let mut buf = vec![0; n]; // ASSERT: fingerprint's format is the same.
+    noise_io.read_exact(buf.as_mut_slice()).await?;
+    let fingerprint_from_noise =
+        String::from_utf8(buf).map_err(|_| Error::Noise(NoiseError::AuthenticationFailed))?;
+    if fingerprint_from_noise != remote_fingerprint {
+        return Err(Error::InvalidFingerprint {
+            expected: remote_fingerprint,
+            got: fingerprint_from_noise,
+        });
+    }
+
+    Ok(peer_id)
 }
 
 // Tests //////////////////////////////////////////////////////////////////////////////////////////
