@@ -74,9 +74,13 @@ async fn smoke() -> Result<()> {
         e => panic!("{:?}", e),
     };
 
-    let addr = addr.with(Protocol::XWebRTC(hex_to_cow(
-        &a_fingerprint.replace(":", ""),
-    )));
+    let addr = addr
+        .replace(2, |_| {
+            Some(Protocol::XWebRTC(hex_to_cow(
+                &a_fingerprint.replace(":", ""),
+            )))
+        })
+        .unwrap();
 
     let mut data = vec![0; 4096];
     rng.fill_bytes(&mut data);
