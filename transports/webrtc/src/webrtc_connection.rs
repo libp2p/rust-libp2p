@@ -21,6 +21,8 @@
 use futures::{channel::oneshot, prelude::*, select};
 use futures_timer::Delay;
 use multihash::Hasher;
+use rand::distributions::Alphanumeric;
+use rand::{thread_rng, Rng};
 use tinytemplate::TinyTemplate;
 use webrtc::api::setting_engine::SettingEngine;
 use webrtc::api::APIBuilder;
@@ -53,10 +55,14 @@ impl WebRTCConnection {
         addr: SocketAddr,
         config: RTCConfiguration,
         udp_mux: Arc<dyn UDPMux + Send + Sync>,
-        our_fingerprint: &str,
         remote_fingerprint: &str,
     ) -> Result<Self, Error> {
-        let se = Self::setting_engine(udp_mux, our_fingerprint, addr.is_ipv4());
+        let ufrag: String = thread_rng()
+            .sample_iter(&Alphanumeric)
+            .take(64)
+            .map(char::from)
+            .collect();
+        let se = Self::setting_engine(udp_mux, &ufrag, addr.is_ipv4());
         let api = APIBuilder::new().with_setting_engine(se).build();
 
         let peer_connection = api.new_peer_connection(config).await?;
@@ -68,11 +74,12 @@ impl WebRTCConnection {
 
         // 2. ANSWER
         // Set the remote description to the predefined SDP.
+        let remote_ufrag = remote_fingerprint.to_owned().replace(":", "");
         let server_session_description = render_description(
             sdp::SERVER_SESSION_DESCRIPTION,
             addr,
             &remote_fingerprint,
-            &remote_fingerprint.to_owned().replace(':', ""),
+            &remote_ufrag,
         );
         log::debug!("ANSWER: {:?}", server_session_description);
         let sdp = RTCSessionDescription::answer(server_session_description).unwrap();
@@ -87,9 +94,12 @@ impl WebRTCConnection {
         config: RTCConfiguration,
         udp_mux: Arc<dyn UDPMux + Send + Sync>,
         our_fingerprint: &str,
-        ufrag: &str,
+        remote_ufrag: &str,
     ) -> Result<Self, Error> {
-        let mut se = Self::setting_engine(udp_mux, our_fingerprint, addr.is_ipv4());
+        // Set both ICE user and password to our fingerprint because that's what the client is
+        // expecting (see [`Self::connect`] "2. ANSWER").
+        let ufrag = our_fingerprint.to_owned().replace(':', "");
+        let mut se = Self::setting_engine(udp_mux, &ufrag, addr.is_ipv4());
         {
             se.set_lite(true);
             se.disable_certificate_fingerprint_verification(true);
@@ -107,7 +117,7 @@ impl WebRTCConnection {
             sdp::CLIENT_SESSION_DESCRIPTION,
             addr,
             "UNKNOWN", // certificate verification is disabled, so any value is okay.
-            &ufrag,
+            &remote_ufrag,
         );
         log::debug!("OFFER: {:?}", client_session_description);
         let sdp = RTCSessionDescription::offer(client_session_description).unwrap();
@@ -132,7 +142,7 @@ impl WebRTCConnection {
             .create_data_channel(
                 "data",
                 Some(RTCDataChannelInit {
-                    id: Some(1), // id MUST match one used during upgrade
+                    id: Some(1),
                     negotiated,
                     ..RTCDataChannelInit::default()
                 }),
@@ -174,15 +184,12 @@ impl WebRTCConnection {
 
     fn setting_engine(
         udp_mux: Arc<dyn UDPMux + Send + Sync>,
-        fingerprint: &str,
+        ufrag: &str,
         is_ipv4: bool,
     ) -> SettingEngine {
         let mut se = SettingEngine::default();
 
-        // Set both ICE user and password to fingerprint.
-        // It will be checked by remote side when exchanging ICE messages.
-        let f = fingerprint.to_owned().replace(':', "");
-        se.set_ice_credentials(f.clone(), f);
+        se.set_ice_credentials(ufrag.to_owned(), ufrag.to_owned());
 
         se.set_udp_network(UDPNetwork::Muxed(udp_mux.clone()));
 

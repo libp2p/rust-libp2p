@@ -86,6 +86,7 @@ pub async fn webrtc(
     // TODO: default buffer size is too small to fit some messages. Possibly remove once
     // https://github.com/webrtc-rs/sctp/issues/28 is fixed.
     c.set_data_channels_read_buf_capacity(8192 * 10);
+
     Ok((peer_id, c))
 }
 

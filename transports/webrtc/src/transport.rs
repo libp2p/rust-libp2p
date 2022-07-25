@@ -187,14 +187,8 @@ impl Transport for WebRTCTransport {
                 .map(|f| fingerprint_to_string(f.iter()))
                 .ok_or(Error::InvalidMultiaddr(addr.clone()))?;
 
-            let conn = WebRTCConnection::connect(
-                sock_addr,
-                config,
-                udp_mux,
-                &our_fingerprint,
-                &remote_fingerprint,
-            )
-            .await?;
+            let conn =
+                WebRTCConnection::connect(sock_addr, config, udp_mux, &remote_fingerprint).await?;
 
             // Open a data channel to do Noise on top and verify the remote.
             let data_channel = conn.create_initial_upgrade_data_channel(None).await?;
@@ -640,79 +634,6 @@ mod tests {
                     8080,
             ) )
         );
-    }
-
-    fn hex_to_cow<'a>(s: &str) -> Cow<'a, [u8; 32]> {
-        let mut buf = [0; 32];
-        hex::decode_to_slice(s, &mut buf).unwrap();
-        Cow::Owned(buf)
-    }
-
-    #[tokio::test]
-    async fn dialer_connects_to_listener_ipv4() {
-        let _ = env_logger::builder().is_test(true).try_init();
-        let a = "/ip4/127.0.0.1/udp/0/x-webrtc/ACD1E533EC271FCDE0275947F4D62A2B2331FF10C9DDE0298EB7B399B4BFF60B".parse().unwrap();
-        futures::executor::block_on(connect(a));
-    }
-
-    #[tokio::test]
-    async fn dialer_connects_to_listener_ipv6() {
-        let _ = env_logger::builder().is_test(true).try_init();
-        let a = "/ip6/::1/udp/0/x-webrtc/ACD1E533EC271FCDE0275947F4D62A2B2331FF10C9DDE0298EB7B399B4BFF60B".parse().unwrap();
-        futures::executor::block_on(connect(a));
-    }
-
-    async fn connect(listen_addr: Multiaddr) {
-        let id_keys = identity::Keypair::generate_ed25519();
-        let t1_peer_id = PeerId::from_public_key(&id_keys.public());
-        let mut transport = {
-            let kp = KeyPair::generate(&rcgen::PKCS_ECDSA_P256_SHA256).expect("key pair");
-            let cert = RTCCertificate::from_key_pair(kp).expect("certificate");
-            WebRTCTransport::new(cert, id_keys).boxed()
-        };
-
-        transport.listen_on(listen_addr.clone()).expect("listener");
-
-        let addr = transport
-            .next()
-            .await
-            .expect("no error")
-            .into_new_address()
-            .expect("listen address");
-
-        assert_ne!(Some(Protocol::Udp(0)), addr.iter().nth(1));
-
-        let inbound = async move {
-            let (conn, _addr) = transport
-                .select_next_some()
-                .map(|ev| ev.into_incoming())
-                .await
-                .unwrap();
-            conn.await
-        };
-
-        let (mut transport2, f) = {
-            let kp = KeyPair::generate(&rcgen::PKCS_ECDSA_P256_SHA256).expect("key pair");
-            let id_keys = identity::Keypair::generate_ed25519();
-            let cert = RTCCertificate::from_key_pair(kp).expect("certificate");
-            let t = WebRTCTransport::new(cert, id_keys);
-            // TODO: make code cleaner wrt ":"
-            let f = t.cert_fingerprint().replace(':', "");
-            (t.boxed(), f)
-        };
-
-        transport2.listen_on(listen_addr).expect("listener");
-
-        let outbound = transport2
-            .dial(
-                addr.replace(2, |_| Some(Protocol::XWebRTC(hex_to_cow(&f))))
-                    .unwrap()
-                    .with(Protocol::P2p(t1_peer_id.into())),
-            )
-            .unwrap();
-
-        let (a, b) = futures::join!(inbound, outbound);
-        a.and(b).unwrap();
     }
 
     #[tokio::test]

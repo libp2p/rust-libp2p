@@ -1,8 +1,10 @@
 use anyhow::Result;
 use async_trait::async_trait;
-use futures::future::FutureExt;
-use futures::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
-use futures::stream::StreamExt;
+use futures::{
+    future::FutureExt,
+    io::{AsyncRead, AsyncWrite, AsyncWriteExt},
+    stream::StreamExt,
+};
 use libp2p_core::{identity, multiaddr::Protocol, muxing::StreamMuxerBox, upgrade, Transport};
 use libp2p_request_response::{
     ProtocolName, ProtocolSupport, RequestResponse, RequestResponseCodec, RequestResponseConfig,
@@ -10,7 +12,6 @@ use libp2p_request_response::{
 };
 use libp2p_swarm::{Swarm, SwarmBuilder, SwarmEvent};
 use libp2p_webrtc::transport::WebRTCTransport;
-use log::trace;
 use rand::RngCore;
 use rcgen::KeyPair;
 use tokio_crate as tokio;
@@ -37,7 +38,6 @@ async fn create_swarm() -> Result<(Swarm<RequestResponse<PingCodec>>, String)> {
     let protocols = iter::once((PingProtocol(), ProtocolSupport::Full));
     let cfg = RequestResponseConfig::default();
     let behaviour = RequestResponse::new(PingCodec(), protocols, cfg);
-    trace!("{}", peer_id);
     let transport = Transport::map(transport, |(peer_id, conn), _| {
         (peer_id, StreamMuxerBox::new(conn))
     })
@@ -69,11 +69,6 @@ async fn smoke() -> Result<()> {
         e => panic!("{:?}", e),
     };
 
-    let _ = match b.next().await {
-        Some(SwarmEvent::NewListenAddr { address, .. }) => address,
-        e => panic!("{:?}", e),
-    };
-
     let addr = addr
         .replace(2, |_| {
             Some(Protocol::XWebRTC(hex_to_cow(
@@ -81,6 +76,11 @@ async fn smoke() -> Result<()> {
             )))
         })
         .unwrap();
+
+    let _ = match b.next().await {
+        Some(SwarmEvent::NewListenAddr { address, .. }) => address,
+        e => panic!("{:?}", e),
+    };
 
     let mut data = vec![0; 4096];
     rng.fill_bytes(&mut data);
@@ -276,15 +276,26 @@ async fn dial_failure() -> Result<()> {
     let (mut a, a_fingerprint) = create_swarm().await?;
     let (mut b, _b_fingerprint) = create_swarm().await?;
 
-    Swarm::listen_on(&mut a, "/ip4/127.0.0.1/udp/0".parse()?)?;
+    Swarm::listen_on(&mut a, "/ip4/127.0.0.1/udp/0/x-webrtc/ACD1E533EC271FCDE0275947F4D62A2B2331FF10C9DDE0298EB7B399B4BFF60B".parse()?)?;
+    Swarm::listen_on(&mut b, "/ip4/127.0.0.1/udp/0/x-webrtc/ACD1E533EC271FCDE0275947F4D62A2B2331FF10C9DDE0298EB7B399B4BFF60B".parse()?)?;
 
     let addr = match a.next().await {
         Some(SwarmEvent::NewListenAddr { address, .. }) => address,
         e => panic!("{:?}", e),
     };
-    let addr = addr.with(Protocol::XWebRTC(hex_to_cow(
-        &a_fingerprint.replace(":", ""),
-    )));
+
+    let addr = addr
+        .replace(2, |_| {
+            Some(Protocol::XWebRTC(hex_to_cow(
+                &a_fingerprint.replace(":", ""),
+            )))
+        })
+        .unwrap();
+
+    let _ = match b.next().await {
+        Some(SwarmEvent::NewListenAddr { address, .. }) => address,
+        e => panic!("{:?}", e),
+    };
 
     let a_peer_id = &Swarm::local_peer_id(&a).clone();
     drop(a); // stop a swarm so b can never reach it
