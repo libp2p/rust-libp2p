@@ -223,7 +223,7 @@ impl EncodeMetric for Protocols {
                 |mut acc, (_, protocols)| {
                     for protocol in protocols {
                         let count = acc.entry(protocol.to_string()).or_default();
-                        *count = *count + 1;
+                        *count += 1;
                     }
                     acc
                 },
