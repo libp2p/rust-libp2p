@@ -1,3 +1,11 @@
+# 0.29.0 - [unreleased]
+
+- Drop support for `NetworkBehaviourEventProcess`. See [`libp2p-swarm`
+  CHANGELOG.md](../swarm/CHANGELOG.md).
+
+- Generate `NetworkBehaviour::OutEvent` if not provided through `#[behaviour(out_event =
+  "MyOutEvent")]`.
+
 # 0.28.0
 
 - Import `ListenerId` from `libp2p::core::transport`. See [PR 2652].
