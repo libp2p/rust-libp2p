@@ -138,7 +138,7 @@ pub trait StreamMuxerExt: StreamMuxer + Sized {
 
     fn next_outbound(&mut self) -> NextOutbound<'_, Self>;
 
-    fn close(&mut self) -> Close<'_, Self>;
+    fn close(self) -> Close<Self>;
 }
 
 impl<S> StreamMuxerExt for S
@@ -190,7 +190,7 @@ where
         NextOutbound(self)
     }
 
-    fn close(&mut self) -> Close<'_, Self> {
+    fn close(self) -> Close<Self> {
         Close(self)
     }
 }
@@ -199,7 +199,7 @@ pub struct NextInbound<'a, S>(&'a mut S);
 
 pub struct NextOutbound<'a, S>(&'a mut S);
 
-pub struct Close<'a, S>(&'a mut S);
+pub struct Close<S>(S);
 
 impl<'a, S> Future for NextInbound<'a, S>
 where
@@ -223,7 +223,7 @@ where
     }
 }
 
-impl<'a, S> Future for Close<'a, S>
+impl<S> Future for Close<S>
 where
     S: StreamMuxer + Unpin,
 {

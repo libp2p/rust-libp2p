@@ -32,7 +32,6 @@ pub use pool::{EstablishedConnection, PendingConnection};
 
 use crate::handler::ConnectionHandler;
 use crate::IntoConnectionHandler;
-use futures::future::poll_fn;
 use handler_wrapper::HandlerWrapper;
 use libp2p_core::connection::ConnectedPoint;
 use libp2p_core::multiaddr::Multiaddr;
@@ -131,11 +130,8 @@ where
 
     /// Begins an orderly shutdown of the connection, returning the connection
     /// handler and a `Future` that resolves when connection shutdown is complete.
-    pub fn close(mut self) -> (THandler, impl Future<Output = io::Result<()>>) {
-        (
-            self.handler.into_connection_handler(),
-            poll_fn(move |cx| self.muxing.poll_close_unpin(cx)),
-        )
+    pub fn close(self) -> (THandler, impl Future<Output = io::Result<()>>) {
+        (self.handler.into_connection_handler(), self.muxing.close())
     }
 
     /// Polls the handler and the substream, forwarding events from the former to the latter and
