@@ -44,7 +44,6 @@ fn build(ast: &DeriveInput) -> TokenStream {
 /// The version for structs
 fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     let name = &ast.ident;
-    let event_name = Ident::new(&(ast.ident.to_string() + "Event"), Span::call_site().into());
     let (_, ty_generics, where_clause) = ast.generics.split_for_impl();
     let multiaddr = quote! {::libp2p::core::Multiaddr};
     let trait_to_impl = quote! {::libp2p::swarm::NetworkBehaviour};
@@ -77,30 +76,74 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         .filter(|f| !is_ignored(f))
         .collect::<Vec<_>>();
 
-    let event = {
-        let fields = data_struct_fields
-            .iter()
-            .map(|field| {
-                let variant = &capitalize(
-                    field
-                        .ident
-                        .clone()
-                        .expect("Fields of NetworkBehaviour implementation to be named."),
-                );
-                let ty = &field.ty;
-                quote! {#variant(<#ty as NetworkBehaviour>::OutEvent)}
-            })
-            .collect::<Vec<_>>();
-        let visibility = &ast.vis;
-        quote! {
-            #visibility enum #event_name {
-                #(#fields),*
+    let (out_event_name, out_event_definition, out_event_from_clause) = {
+        // The final out event.
+        // If we find a `#[behaviour(out_event = "Foo")]` attribute on the struct, we set `Foo` as
+        // the out event.
+        let user_provided_out_event_name = {
+            let mut out = None;
+            for meta_items in ast.attrs.iter().filter_map(get_meta_items) {
+                for meta_item in meta_items {
+                    match meta_item {
+                        syn::NestedMeta::Meta(syn::Meta::NameValue(ref m))
+                            if m.path.is_ident("out_event") =>
+                        {
+                            if let syn::Lit::Str(ref s) = m.lit {
+                                let ident: syn::Type = syn::parse_str(&s.value()).unwrap();
+                                out = Some(ident);
+                            }
+                        }
+                        _ => (),
+                    }
+                }
+            }
+            out
+        };
+
+        match user_provided_out_event_name {
+            Some(name) => {
+                // TODO: Rename
+                let additional = data_struct_fields
+                    .iter()
+                    .map(|field| {
+                        let ty = &field.ty;
+                        quote! {#name: From< <#ty as #trait_to_impl>::OutEvent >}
+                    })
+                    .collect::<Vec<_>>();
+                (name, None, additional)
+            }
+            None => {
+                let event_name: syn::Type =
+                    syn::parse_str(&(ast.ident.to_string() + "Event")).unwrap();
+                let fields =
+                    data_struct_fields
+                        .iter()
+                        .map(|field| {
+                            let variant =
+                                &capitalize(field.ident.clone().expect(
+                                    "Fields of NetworkBehaviour implementation to be named.",
+                                ));
+                            let ty = &field.ty;
+                            quote! {#variant(<#ty as NetworkBehaviour>::OutEvent)}
+                        })
+                        .collect::<Vec<_>>();
+                let visibility = &ast.vis;
+                (
+                    event_name.clone(),
+                    Some(quote! {
+                        #visibility enum #event_name #impl_generics {
+                            #(#fields),*
+                        }
+                    }),
+                    vec![],
+                )
             }
         }
     };
 
     // Build the `where ...` clause of the trait implementation.
     let where_clause = {
+        // TODO: Rename to NetworkBehaviourBound
         let additional = data_struct_fields
             .iter()
             .map(|field| {
@@ -109,14 +152,15 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             })
             .collect::<Vec<_>>();
 
+        // TODO: Clean up
         if let Some(where_clause) = where_clause {
             if where_clause.predicates.trailing_punct() {
-                Some(quote! {#where_clause #(#additional),*})
+                Some(quote! {#where_clause #(#additional),*, #(#out_event_from_clause),*})
             } else {
-                Some(quote! {#where_clause, #(#additional),*})
+                Some(quote! {#where_clause, #(#additional),*, #(#out_event_from_clause),*})
             }
         } else {
-            Some(quote! {where #(#additional),*})
+            Some(quote! {where #(#additional),*, #(#out_event_from_clause),*})
         }
     };
 
@@ -460,7 +504,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         let generate_event_match_arm =
             quote! {
                 std::task::Poll::Ready(#network_behaviour_action::GenerateEvent(event)) => {
-                    return std::task::Poll::Ready(#network_behaviour_action::GenerateEvent(#event_name::#event_variant(event)))
+                    return std::task::Poll::Ready(#network_behaviour_action::GenerateEvent(#out_event_name::#event_variant(event)))
                 }
             };
 
@@ -492,14 +536,13 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
     // Now the magic happens.
     let final_quote = quote! {
-        #event
-
+        #out_event_definition
 
         impl #impl_generics #trait_to_impl for #name #ty_generics
         #where_clause
         {
             type ConnectionHandler = #connection_handler_ty;
-            type OutEvent = #event_name;
+            type OutEvent = #out_event_name;
 
             fn new_handler(&mut self) -> Self::ConnectionHandler {
                 use #into_connection_handler;
