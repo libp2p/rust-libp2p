@@ -21,7 +21,7 @@
 #![recursion_limit = "256"]
 
 use heck::ToUpperCamelCase;
-use proc_macro::{Span, TokenStream};
+use proc_macro::TokenStream;
 use quote::quote;
 use syn::{parse_macro_input, Data, DataStruct, DeriveInput, Ident};
 
@@ -63,21 +63,11 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     let poll_parameters = quote! {::libp2p::swarm::PollParameters};
 
     // Build the generics.
-    let (impl_generics, type_parameter_idents) = {
-        // TODO: Rework clone
-        let type_parameter_idents = ast
-            .generics
-            .type_params()
-            .map(|param| param.ident.clone())
-            .collect::<Vec<_>>();
-
+    let impl_generics = {
         let tp = ast.generics.type_params();
         let lf = ast.generics.lifetimes();
         let cst = ast.generics.const_params();
-        (
-            quote! {<#(#lf,)* #(#tp,)* #(#cst,)*>},
-            type_parameter_idents,
-        )
+        quote! {<#(#lf,)* #(#tp,)* #(#cst,)*>}
     };
 
     // The fields of the struct we are interested in (no ignored fields).
@@ -118,7 +108,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                     .iter()
                     .map(|field| {
                         let ty = &field.ty;
-                        quote! {#name<#(#type_parameter_idents),*>: From< <#ty as #trait_to_impl>::OutEvent >}
+                        quote! {#name #ty_generics: From< <#ty as #trait_to_impl>::OutEvent >}
                     })
                     .collect::<Vec<_>>();
                 (name, None, additional)
@@ -568,7 +558,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         #where_clause
         {
             type ConnectionHandler = #connection_handler_ty;
-            type OutEvent = #out_event_name<#(#type_parameter_idents),*>;
+            type OutEvent = #out_event_name #ty_generics;
 
             fn new_handler(&mut self) -> Self::ConnectionHandler {
                 use #into_connection_handler;
