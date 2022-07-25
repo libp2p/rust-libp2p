@@ -57,8 +57,8 @@ use std::{
     note = "Use re-exports that omit `Ping` prefix, i.e. `libp2p::ping::Config` etc"
 )]
 pub use self::{
-    Config as PingConfig, Event as PingEvent, Failure as PingFailure, Result as PingResult,
-    Success as PingSuccess,
+    protocol::PROTOCOL_NAME, Config as PingConfig, Event as PingEvent, Failure as PingFailure,
+    Result as PingResult, Success as PingSuccess,
 };
 #[deprecated(since = "0.30.0", note = "Use libp2p::ping::Behaviour instead.")]
 pub use Behaviour as Ping;

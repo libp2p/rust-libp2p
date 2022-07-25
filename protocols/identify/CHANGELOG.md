@@ -2,6 +2,12 @@
 
 - Update to `libp2p-swarm` `v0.38.0`.
 
+- Expose `PROTOCOL_NAME` and `PUSH_PROTOCOL_NAME`. See [PR 2734].
+
+- Update to `libp2p-core` `v0.35.0`.
+
+[PR 2734]: https://github.com/libp2p/rust-libp2p/pull/2734/
+
 # 0.37.0
 
 - Update to `libp2p-core` `v0.34.0`.

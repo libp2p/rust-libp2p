@@ -2,6 +2,12 @@
 
 - Update to `libp2p-swarm` `v0.38.0`.
 
+- Update to `libp2p-core` `v0.35.0`.
+
+- Update to `prometheus-client` `v0.17.0`. See [PR 2761].
+
+[PR 2761]: https://github.com/libp2p/rust-libp2p/pull/2761/
+
 # 0.39.0
 
 - Update to `libp2p-core` `v0.34.0`.
