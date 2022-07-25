@@ -38,13 +38,8 @@ fn empty() {
 fn one_field() {
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
-    #[behaviour(event_process = true)]
     struct Foo {
         ping: libp2p::ping::Ping,
-    }
-
-    impl libp2p::swarm::NetworkBehaviourEventProcess<libp2p::ping::PingEvent> for Foo {
-        fn inject_event(&mut self, _: libp2p::ping::PingEvent) {}
     }
 
     #[allow(dead_code)]

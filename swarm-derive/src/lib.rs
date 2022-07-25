@@ -20,6 +20,7 @@
 
 #![recursion_limit = "256"]
 
+use heck::ToUpperCamelCase;
 use proc_macro::{Span, TokenStream};
 use quote::quote;
 use syn::{parse_macro_input, Data, DataStruct, DeriveInput, Ident};
@@ -125,18 +126,22 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             None => {
                 let event_name: syn::Type =
                     syn::parse_str(&(ast.ident.to_string() + "Event")).unwrap();
-                let fields =
-                    data_struct_fields
-                        .iter()
-                        .map(|field| {
-                            let variant =
-                                &capitalize(field.ident.clone().expect(
-                                    "Fields of NetworkBehaviour implementation to be named.",
-                                ));
-                            let ty = &field.ty;
-                            quote! {#variant(<#ty as NetworkBehaviour>::OutEvent)}
-                        })
-                        .collect::<Vec<_>>();
+                let fields = data_struct_fields
+                    .iter()
+                    .map(|field| {
+                        let variant: syn::Variant = syn::parse_str(
+                            &field
+                                .ident
+                                .clone()
+                                .expect("Fields of NetworkBehaviour implementation to be named.")
+                                .to_string()
+                                .to_upper_camel_case(),
+                        )
+                        .unwrap();
+                        let ty = &field.ty;
+                        quote! {#variant(<#ty as NetworkBehaviour>::OutEvent)}
+                    })
+                    .collect::<Vec<_>>();
                 let visibility = &ast.vis;
                 (
                     event_name.clone(),
@@ -467,7 +472,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             .clone()
             .expect("Fields of NetworkBehaviour implementation to be named.");
 
-        let event_variant = capitalize(field.clone());
+        let event_variant: syn::Variant = syn::parse_str(&field.clone().to_string().to_upper_camel_case()).unwrap();
 
         let mut wrapped_event = if field_n != 0 {
             quote!{ #either_ident::Second(event) }
@@ -512,6 +517,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         };
 
         let generate_event_match_arm =
+            // TODO: Doesn't work with provided event.
             quote! {
                 std::task::Poll::Ready(#network_behaviour_action::GenerateEvent(event)) => {
                     return std::task::Poll::Ready(#network_behaviour_action::GenerateEvent(#out_event_name::#event_variant(event)))
@@ -665,16 +671,4 @@ fn is_ignored(field: &syn::Field) -> bool {
     }
 
     false
-}
-
-fn capitalize(ident: Ident) -> Ident {
-    let name = ident.to_string();
-    let mut chars = name.chars();
-    let capitalized = chars
-        .next()
-        .expect("Identifier to have at least one character.")
-        .to_uppercase()
-        .collect::<String>()
-        + chars.as_str();
-    Ident::new(&capitalized, Span::call_site().into())
 }
