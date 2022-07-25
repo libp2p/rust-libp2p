@@ -155,9 +155,9 @@ impl Provider for Tcp {
 #[derive(Debug)]
 pub struct TcpStream(pub tokio_crate::net::TcpStream);
 
-impl Into<tokio_crate::net::TcpStream> for TcpStream {
-    fn into(self: TcpStream) -> tokio_crate::net::TcpStream {
-        self.0
+impl From<TcpStream> for tokio_crate::net::TcpStream {
+    fn from(t: TcpStream) -> tokio_crate::net::TcpStream {
+        t.0
     }
 }
 
