@@ -183,7 +183,22 @@ fn custom_event_no_polling() {
         identify: libp2p::identify::Identify,
     }
 
-    enum MyEvent {}
+    enum MyEvent {
+        Ping(libp2p::ping::PingEvent),
+        Identify(libp2p::identify::IdentifyEvent),
+    }
+
+    impl From<libp2p::ping::PingEvent> for MyEvent {
+        fn from(event: libp2p::ping::PingEvent) -> Self {
+            MyEvent::Ping(event)
+        }
+    }
+
+    impl From<libp2p::identify::IdentifyEvent> for MyEvent {
+        fn from(event: libp2p::identify::IdentifyEvent) -> Self {
+            MyEvent::Identify(event)
+        }
+    }
 
     #[allow(dead_code)]
     fn foo() {
@@ -201,7 +216,22 @@ fn custom_event_and_polling() {
         identify: libp2p::identify::Identify,
     }
 
-    enum MyEvent {}
+    enum MyEvent {
+        Ping(libp2p::ping::PingEvent),
+        Identify(libp2p::identify::IdentifyEvent),
+    }
+
+    impl From<libp2p::ping::PingEvent> for MyEvent {
+        fn from(event: libp2p::ping::PingEvent) -> Self {
+            MyEvent::Ping(event)
+        }
+    }
+
+    impl From<libp2p::identify::IdentifyEvent> for MyEvent {
+        fn from(event: libp2p::identify::IdentifyEvent) -> Self {
+            MyEvent::Identify(event)
+        }
+    }
 
     impl Foo {
         fn foo(
@@ -229,7 +259,7 @@ fn where_clause() {
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
     #[behaviour(event_process = true)]
-    struct Foo<T: Copy> {
+    struct Foo<T: Copy + NetworkBehaviour> {
         ping: libp2p::ping::Ping,
         bar: T,
     }
@@ -384,7 +414,7 @@ fn no_event_with_either() {
 
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
-    #[behaviour(out_event = "BehaviourOutEvent", event_process = false)]
+    #[behaviour(out_event = "BehaviourOutEvent")]
     struct Foo {
         kad: libp2p::kad::Kademlia<libp2p::kad::record::store::MemoryStore>,
         ping_or_identify: Either<libp2p::ping::Ping, libp2p::identify::Identify>,
