@@ -149,24 +149,23 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
     // Build the `where ...` clause of the trait implementation.
     let where_clause = {
-        // TODO: Rename to NetworkBehaviourBound
         let additional = data_struct_fields
             .iter()
             .map(|field| {
                 let ty = &field.ty;
                 quote! {#ty: #trait_to_impl}
             })
+            .chain(out_event_from_clauses)
             .collect::<Vec<_>>();
 
-        // TODO: Clean up
         if let Some(where_clause) = where_clause {
             if where_clause.predicates.trailing_punct() {
-                Some(quote! {#where_clause #(#additional),*, #(#out_event_from_clauses),*})
+                Some(quote! {#where_clause #(#additional),* })
             } else {
-                Some(quote! {#where_clause, #(#additional),*, #(#out_event_from_clauses),*})
+                Some(quote! {#where_clause, #(#additional),*})
             }
         } else {
-            Some(quote! {where #(#additional),*, #(#out_event_from_clauses),*})
+            Some(quote! {where #(#additional),*})
         }
     };
 
