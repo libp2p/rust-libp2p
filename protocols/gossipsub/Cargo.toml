@@ -31,7 +31,7 @@ serde = { version = "1", optional = true, features = ["derive"] }
 wasm-timer = "0.2.5"
 instant = "0.1.11"
 # Metrics dependencies
-prometheus-client = "0.16.0"
+prometheus-client = "0.17.0"
 
 [dev-dependencies]
 async-std = "1.6.3"
