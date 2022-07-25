@@ -28,8 +28,7 @@ use futures::prelude::*;
 use futures::{channel::oneshot, future::join};
 use libp2p_core::muxing::StreamMuxerExt;
 use libp2p_core::{
-    identity, multiaddr::multiaddr, muxing, transport, upgrade, Multiaddr, PeerId, StreamMuxer,
-    Transport,
+    identity, multiaddr::multiaddr, muxing, transport, upgrade, Multiaddr, PeerId, Transport,
 };
 use libp2p_mplex as mplex;
 use libp2p_plaintext::PlainText2Config;

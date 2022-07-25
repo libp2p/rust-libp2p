@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use futures::prelude::*;
-use libp2p_core::muxing::StreamMuxer;
+use libp2p_core::muxing::{StreamMuxer, StreamMuxerExt};
 use std::{pin::Pin, task::Context, task::Poll};
 
 pub struct CloseMuxer<M> {
@@ -23,7 +23,7 @@ pub enum CloseMuxerState<M> {
 
 impl<M> Future for CloseMuxer<M>
 where
-    M: StreamMuxer,
+    M: StreamMuxer + Unpin,
     M::Error: From<std::io::Error>,
 {
     type Output = Result<M, M::Error>;
@@ -31,8 +31,8 @@ where
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         loop {
             match std::mem::replace(&mut self.state, CloseMuxerState::Done) {
-                CloseMuxerState::Close(muxer) => {
-                    if !muxer.poll_close(cx)?.is_ready() {
+                CloseMuxerState::Close(mut muxer) => {
+                    if !muxer.poll_close_unpin(cx)?.is_ready() {
                         self.state = CloseMuxerState::Close(muxer);
                         return Poll::Pending;
                     }
