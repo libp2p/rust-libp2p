@@ -29,7 +29,7 @@ where
 impl<T> StreamMuxer for Wrap<T>
 where
     T: StreamMuxer,
-    T::Substream: Send + Unpin + 'static,
+    T::Substream: Send + 'static,
     T::Error: Send + Sync + 'static,
 {
     type Substream = SubstreamBox;
@@ -71,7 +71,7 @@ impl StreamMuxerBox {
     pub fn new<T>(muxer: T) -> StreamMuxerBox
     where
         T: StreamMuxer + Send + Sync + 'static,
-        T::Substream: Send + Unpin + 'static,
+        T::Substream: Send + 'static,
         T::Error: Send + Sync + 'static,
     {
         let wrap = Wrap { inner: muxer };
