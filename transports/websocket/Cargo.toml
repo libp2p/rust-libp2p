@@ -24,4 +24,9 @@ url = "2.1"
 webpki-roots = "0.22"
 
 [dev-dependencies]
+libp2p = { path = "../../" }
 libp2p-tcp = { path = "../tcp" }
+async-trait = "*"
+rand = "*"
+tracing = "*"
+tracing-subscriber = {version = "0.3.8", features = ["env-filter"] }
