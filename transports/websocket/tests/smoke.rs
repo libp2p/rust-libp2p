@@ -10,13 +10,8 @@ use libp2p::request_response::{
 };
 
 use libp2p::{
-    core::{
-        self,
-        either::EitherOutput,
-        upgrade::{self, InboundUpgradeExt, OptionalUpgrade, OutboundUpgradeExt, SelectUpgrade},
-    },
+    core::upgrade::{self, SelectUpgrade},
     mplex, noise,
-    plaintext::PlainText2Config,
     swarm::{Swarm, SwarmEvent},
     tcp, websocket, yamux, Transport,
 };
@@ -36,14 +31,24 @@ async fn create_swarm() -> Swarm<RequestResponse<PingCodec>> {
     let transport = websocket::WsConfig::new(tcp::TcpTransport::new(tcp::GenTcpConfig::new()));
 
     let authentication_config = {
-        let plaintext = PlainText2Config {
-            local_public_key: keypair.public(),
+        // For more information about these two panics, see in "On the Importance of
+        // Checking Cryptographic Protocols for Faults" by Dan Boneh, Richard A. DeMillo,
+        // and Richard J. Lipton.
+        let noise_keypair = noise::Keypair::<noise::X25519Spec>::new()
+                .into_authentic(&keypair)
+                .expect("can only fail in case of a hardware bug; since this signing is performed only \
+                    once and at initialization, we're taking the bet that the inconvenience of a very \
+                    rare panic here is basically zero");
+
+        // Legacy noise configurations for backward compatibility.
+        let noise_legacy = noise::LegacyConfig {
+            recv_legacy_handshake: true,
+            ..Default::default()
         };
 
-        SelectUpgrade::new(
-            OptionalUpgrade::<noise::NoiseAuthenticated<noise::XX, noise::X25519Spec, ()>>::none(),
-            OptionalUpgrade::some(plaintext),
-        )
+        let mut xx_config = noise::NoiseConfig::xx(noise_keypair);
+        xx_config.set_legacy_config(noise_legacy);
+        xx_config.into_authenticated()
     };
 
     let multiplexing_config = {
@@ -56,22 +61,12 @@ async fn create_swarm() -> Swarm<RequestResponse<PingCodec>> {
         // buffered data has been consumed.
         yamux_config.set_window_update_mode(yamux::WindowUpdateMode::on_read());
 
-        core::upgrade::SelectUpgrade::new(yamux_config, mplex_config)
+        SelectUpgrade::new(yamux_config, mplex_config)
     };
 
     let transport = transport
         .upgrade(upgrade::Version::V1Lazy)
-        .authenticate(
-            authentication_config
-                .map_inbound(move |result| match result {
-                    EitherOutput::First((peer_id, o)) => (peer_id, EitherOutput::First(o)),
-                    EitherOutput::Second((peer_id, o)) => (peer_id, EitherOutput::Second(o)),
-                })
-                .map_outbound(move |result| match result {
-                    EitherOutput::First((peer_id, o)) => (peer_id, EitherOutput::First(o)),
-                    EitherOutput::Second((peer_id, o)) => (peer_id, EitherOutput::Second(o)),
-                }),
-        )
+        .authenticate(authentication_config)
         .multiplex(multiplexing_config)
         .timeout(Duration::from_secs(5))
         .boxed();
