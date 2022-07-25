@@ -18,8 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-mod util;
-
 use futures::prelude::*;
 use libp2p_core::identity;
 use libp2p_core::transport::{MemoryTransport, Transport};
@@ -91,11 +89,6 @@ fn upgrade_pipeline() {
         .apply(HelloUpgrade {})
         .apply(HelloUpgrade {})
         .multiplex(MplexConfig::default())
-        .and_then(|(peer, mplex), _| {
-            // Gracefully close the connection to allow protocol
-            // negotiation to complete.
-            util::CloseMuxer::new(mplex).map_ok(move |mplex| (peer, mplex))
-        })
         .boxed();
 
     let dialer_keys = identity::Keypair::generate_ed25519();
@@ -110,11 +103,6 @@ fn upgrade_pipeline() {
         .apply(HelloUpgrade {})
         .apply(HelloUpgrade {})
         .multiplex(MplexConfig::default())
-        .and_then(|(peer, mplex), _| {
-            // Gracefully close the connection to allow protocol
-            // negotiation to complete.
-            util::CloseMuxer::new(mplex).map_ok(move |mplex| (peer, mplex))
-        })
         .boxed();
 
     let listen_addr1 = Multiaddr::from(Protocol::Memory(random::<u64>()));
