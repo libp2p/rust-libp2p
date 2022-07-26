@@ -175,7 +175,7 @@ impl Transport for WebRTCTransport {
 
         let first_listener = self
             .listeners
-            .iter_mut()
+            .iter()
             .next()
             .ok_or(TransportError::Other(Error::NoListeners))?;
         let udp_mux = first_listener.udp_mux.clone();
@@ -318,7 +318,7 @@ impl WebRTCListenStream {
     }
 
     /// Poll for a next If Event.
-    fn poll_if_addr(&mut self, cx: &mut Context<'_>) -> Option<<Self as Stream>::Item> {
+    fn poll_if_addr(&mut self, cx: &mut Context<'_>) -> Poll<<Self as Stream>::Item> {
         match self.in_addr.poll_next_unpin(cx) {
             Poll::Ready(mut item) => {
                 if let Some(item) = item.take() {
@@ -332,7 +332,7 @@ impl WebRTCListenStream {
                                 let socket_addr = SocketAddr::new(ip, self.listen_addr.port());
                                 let ma = socketaddr_to_multiaddr(&socket_addr);
                                 debug!("New listen address: {}", ma);
-                                Some(TransportEvent::NewAddress {
+                                Poll::Ready(TransportEvent::NewAddress {
                                     listener_id: self.listener_id,
                                     listen_addr: ma,
                                 })
@@ -348,7 +348,7 @@ impl WebRTCListenStream {
                                 let socket_addr = SocketAddr::new(ip, self.listen_addr.port());
                                 let ma = socketaddr_to_multiaddr(&socket_addr);
                                 debug!("Expired listen address: {}", ma);
-                                Some(TransportEvent::AddressExpired {
+                                Poll::Ready(TransportEvent::AddressExpired {
                                     listener_id: self.listener_id,
                                     listen_addr: ma,
                                 })
@@ -361,7 +361,7 @@ impl WebRTCListenStream {
                                 "Failure polling interfaces: {:?}.",
                                 err
                             };
-                            Some(TransportEvent::ListenerError {
+                            Poll::Ready(TransportEvent::ListenerError {
                                 listener_id: self.listener_id,
                                 error: err.into(),
                             })
@@ -371,7 +371,7 @@ impl WebRTCListenStream {
                     self.poll_if_addr(cx)
                 }
             }
-            Poll::Pending => None,
+            Poll::Pending => Poll::Pending,
         }
     }
 }
@@ -386,7 +386,7 @@ impl Stream for WebRTCListenStream {
             // `Poll::Ready(None)` to terminate the stream.
             return Poll::Ready(closed.take());
         }
-        if let Some(event) = self.poll_if_addr(cx) {
+        if let Poll::Ready(event) = self.poll_if_addr(cx) {
             return Poll::Ready(Some(event));
         }
 

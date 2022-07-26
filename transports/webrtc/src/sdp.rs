@@ -79,7 +79,6 @@ use std::net::IpAddr;
 //
 //     Fingerprint of the certificate that the remote will use during the TLS
 //     handshake. (RFC8122)
-//     TODO: do we verify fingerprint here?
 //
 // a=setup:actpass
 //
