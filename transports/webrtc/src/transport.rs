@@ -419,7 +419,7 @@ impl Stream for WebRTCListenStream {
                     }
                     UDPMuxEvent::Error(e) => {
                         self.close(Err(Error::UDPMuxError(e)));
-                        return self.poll_next(cx);
+                        return Poll::Ready(None);
                     }
                     _ => return self.poll_next(cx),
                 }

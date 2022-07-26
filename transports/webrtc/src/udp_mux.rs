@@ -43,6 +43,7 @@ use std::{
 const RECEIVE_MTU: usize = 8192;
 
 /// A previously unseen address of a remote who've sent us an ICE binding request.
+#[derive(Debug)]
 pub struct NewAddr {
     pub addr: SocketAddr,
     pub ufrag: String,
@@ -66,6 +67,7 @@ impl UDPMuxParams {
 }
 
 /// An event emitted by [`UDPMuxNewAddr`] when it's polled.
+#[derive(Debug)]
 pub enum UDPMuxEvent {
     /// Connection error. UDP mux should be stopped.
     Error(Error),
@@ -93,9 +95,6 @@ pub struct UDPMuxNewAddr {
 
     /// `true` when UDP mux is closed.
     is_closed: AtomicBool,
-
-    /// Buffer used when reading from the underlying UDP socket.
-    read_buffer: [u8; RECEIVE_MTU],
 }
 
 impl UDPMuxNewAddr {
@@ -107,7 +106,6 @@ impl UDPMuxNewAddr {
             address_map: RwLock::default(),
             new_addrs: RwLock::default(),
             is_closed: AtomicBool::new(false),
-            read_buffer: [0u8; RECEIVE_MTU],
         })
     }
 
@@ -133,7 +131,7 @@ impl UDPMuxNewAddr {
                 conns.get(&ufrag).map(Clone::clone)
             }
             Err(e) => {
-                log::debug!("{} (addr: {})", e, addr);
+                log::debug!("{} (addr={})", e, addr);
                 None
             }
         }
@@ -147,7 +145,8 @@ impl UDPMuxNewAddr {
     /// Reads from the underlying UDP socket and either reports a new address or proxies data to the
     /// muxed connection.
     pub async fn read_from_conn(&self) -> UDPMuxEvent {
-        let mut buffer = self.read_buffer;
+        // TODO: avoid reallocating the buffer
+        let mut buffer = [0u8; RECEIVE_MTU];
         let conn = &self.params.conn;
 
         let res = conn.recv_from(&mut buffer).await;
@@ -176,7 +175,7 @@ impl UDPMuxNewAddr {
                             match ufrag_from_stun_message(&buffer, false) {
                                 Ok(ufrag) => {
                                     log::trace!(
-                                        "Notifying about new address {} from {}",
+                                        "Notifying about new address addr={} from ufrag={}",
                                         &addr,
                                         ufrag
                                     );
@@ -186,7 +185,7 @@ impl UDPMuxNewAddr {
                                 }
                                 Err(e) => {
                                     log::debug!(
-                                        "Unknown address {} (non STUN packet: {})",
+                                        "Unknown address addr={} (non STUN packet: {})",
                                         &addr,
                                         e
                                     );
@@ -197,7 +196,7 @@ impl UDPMuxNewAddr {
                     Some(conn) => {
                         tokio::spawn(async move {
                             if let Err(err) = conn.write_packet(&buffer[..len], addr).await {
-                                log::error!("Failed to write packet: {} (addr: {})", err, addr);
+                                log::error!("Failed to write packet: {} (addr={})", err, addr);
                             }
                         });
                     }

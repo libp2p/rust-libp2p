@@ -57,6 +57,7 @@ impl WebRTCConnection {
         udp_mux: Arc<dyn UDPMux + Send + Sync>,
         remote_fingerprint: &str,
     ) -> Result<Self, Error> {
+        // TODO: at least 128 bit of entropy
         let ufrag: String = thread_rng()
             .sample_iter(&Alphanumeric)
             .take(64)
@@ -116,7 +117,7 @@ impl WebRTCConnection {
         let client_session_description = render_description(
             sdp::CLIENT_SESSION_DESCRIPTION,
             addr,
-            "UNKNOWN", // certificate verification is disabled, so any value is okay.
+            "NONE", // certificate verification is disabled, so any value is okay.
             &remote_ufrag,
         );
         log::debug!("OFFER: {:?}", client_session_description);
