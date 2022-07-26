@@ -18,7 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Implementation of the [`Transport`] trait for WebRTC protocol without a signaling server.
+//! Implementation of the [`libp2p_core::Transport`] trait for WebRTC protocol without a signaling
+//! server.
 //!
 //! # Overview
 //!

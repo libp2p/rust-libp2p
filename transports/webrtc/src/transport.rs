@@ -271,7 +271,8 @@ pub struct WebRTCListenStream {
     /// `Keypair` identifying this peer
     id_keys: identity::Keypair,
 
-    /// Set to `Some` if this [`Listener`] should close.
+    /// Set to `Some` if this listener should close.
+    ///
     /// Optionally contains a [`TransportEvent::ListenerClosed`] that should be
     /// reported before the listener's stream is terminated.
     report_closed: Option<Option<<Self as Stream>::Item>>,
