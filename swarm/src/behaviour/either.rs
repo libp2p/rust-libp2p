@@ -19,10 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::handler::{either::IntoEitherHandler, ConnectionHandler, IntoConnectionHandler};
-use crate::{
-    DialError, NetworkBehaviour, NetworkBehaviourAction, NetworkBehaviourEventProcess,
-    PollParameters,
-};
+use crate::{DialError, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use either::Either;
 use libp2p_core::{
     connection::ConnectionId, transport::ListenerId, ConnectedPoint, Multiaddr, PeerId,
@@ -234,19 +231,5 @@ where
         };
 
         Poll::Ready(event)
-    }
-}
-
-impl<TEvent, TBehaviourLeft, TBehaviourRight> NetworkBehaviourEventProcess<TEvent>
-    for Either<TBehaviourLeft, TBehaviourRight>
-where
-    TBehaviourLeft: NetworkBehaviourEventProcess<TEvent>,
-    TBehaviourRight: NetworkBehaviourEventProcess<TEvent>,
-{
-    fn inject_event(&mut self, event: TEvent) {
-        match self {
-            Either::Left(a) => a.inject_event(event),
-            Either::Right(b) => b.inject_event(event),
-        }
     }
 }
