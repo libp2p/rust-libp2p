@@ -299,7 +299,7 @@ impl<T> Multiplexed<T> {
         T::Dial: Send + 'static,
         T::ListenerUpgrade: Send + 'static,
         T::Error: Send + Sync,
-        M: StreamMuxer + Send + Sync + 'static,
+        M: StreamMuxer + Send + 'static,
         M::Substream: Send + 'static,
         M::Error: Send + Sync + 'static,
     {

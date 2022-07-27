@@ -3,9 +3,11 @@
 - Remove `StreamMuxer::poll_event` in favor of individual functions: `poll_inbound`, `poll_outbound`
   and `poll_address_change`. Consequently, `StreamMuxerEvent` is also removed. See [PR 2724].
 - Drop `Unpin` requirement from `SubstreamBox`. See [PR 2762] and [PR 2776].
+- Drop `Sync` requirement on `StreamMuxer` for constructing `StreamMuxerBox`. See [PR 2775].
 
 [PR 2724]: https://github.com/libp2p/rust-libp2p/pull/2724
 [PR 2762]: https://github.com/libp2p/rust-libp2p/pull/2762
+[PR 2775]: https://github.com/libp2p/rust-libp2p/pull/2775
 [PR 2776]: https://github.com/libp2p/rust-libp2p/pull/2776
 
 # 0.34.0

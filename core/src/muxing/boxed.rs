@@ -10,7 +10,7 @@ use std::task::{Context, Poll};
 
 /// Abstract `StreamMuxer`.
 pub struct StreamMuxerBox {
-    inner: Box<dyn StreamMuxer<Substream = SubstreamBox, Error = io::Error> + Send + Sync>,
+    inner: Box<dyn StreamMuxer<Substream = SubstreamBox, Error = io::Error> + Send>,
 }
 
 /// Abstract type for asynchronous reading and writing.
@@ -70,7 +70,7 @@ impl StreamMuxerBox {
     /// Turns a stream muxer into a `StreamMuxerBox`.
     pub fn new<T>(muxer: T) -> StreamMuxerBox
     where
-        T: StreamMuxer + Send + Sync + 'static,
+        T: StreamMuxer + Send + 'static,
         T::Substream: Send + 'static,
         T::Error: Send + Sync + 'static,
     {
