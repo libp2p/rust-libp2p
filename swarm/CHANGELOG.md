@@ -35,6 +35,7 @@
 
   ``` rust
   #[derive(NetworkBehaviour)]
+  #[behaviour(out_event = "MyBehaviourEvent")]
   struct MyBehaviour {
       floodsub: Gossipsub,
       mdns: Mdns,
