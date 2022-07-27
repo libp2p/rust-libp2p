@@ -20,7 +20,7 @@
 
 use futures::{
     future,
-    io::{AsyncReadExt, AsyncWriteExt},
+    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
     TryFutureExt,
 };
 use libp2p_core::{
@@ -28,7 +28,6 @@ use libp2p_core::{
 };
 use libp2p_noise::{Keypair, NoiseConfig, NoiseError, RemoteIdentity, X25519Spec};
 use log::{debug, trace};
-use webrtc_data::data_channel::DataChannel;
 use webrtc_ice::udp_mux::UDPMux;
 
 use std::{net::SocketAddr, sync::Arc};
@@ -75,7 +74,7 @@ pub(crate) async fn webrtc(
     };
     let peer_id = perform_noise_handshake(
         id_keys,
-        data_channel.clone(),
+        PollDataChannel::new(data_channel.clone()),
         our_fingerprint,
         remote_fingerprint,
     )
@@ -95,19 +94,22 @@ pub(crate) async fn webrtc(
     Ok((peer_id, c))
 }
 
-async fn perform_noise_handshake(
+async fn perform_noise_handshake<T>(
     id_keys: identity::Keypair,
-    data_channel: Arc<DataChannel>,
+    poll_data_channel: T,
     our_fingerprint: String,
     remote_fingerprint: String,
-) -> Result<PeerId, Error> {
+) -> Result<PeerId, Error>
+where
+    T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
     let dh_keys = Keypair::<X25519Spec>::new()
         .into_authentic(&id_keys)
         .unwrap();
     let noise = NoiseConfig::xx(dh_keys);
     let info = noise.protocol_info().next().unwrap();
     let (peer_id, mut noise_io) = noise
-        .upgrade_inbound(PollDataChannel::new(data_channel.clone()), info)
+        .upgrade_inbound(poll_data_channel, info)
         .and_then(|(remote, io)| match remote {
             RemoteIdentity::IdentityKey(pk) => future::ok((pk.to_peer_id(), io)),
             _ => future::err(NoiseError::AuthenticationFailed),
