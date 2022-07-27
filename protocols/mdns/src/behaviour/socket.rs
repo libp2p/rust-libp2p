@@ -20,12 +20,13 @@
 
 use std::{
     io::Error,
+    marker::Unpin,
     net::{SocketAddr, UdpSocket},
     task::{Context, Poll},
 };
 
 /// Interface that must be implemented by the different runtimes to use the [`UdpSocket`] in async mode
-pub trait AsyncSocket: Send + 'static {
+pub trait AsyncSocket: Unpin + Send + 'static {
     /// Create the async socket from the [`std::net::UdpSocket`]
     fn from_std(socket: UdpSocket) -> std::io::Result<Self>
     where
@@ -93,7 +94,7 @@ pub mod asio {
 #[cfg(feature = "tokio")]
 pub mod tokio {
     use super::*;
-    use ::tokio::net::UdpSocket as TkUdpSocket;
+    use ::tokio::{io::ReadBuf, net::UdpSocket as TkUdpSocket};
 
     /// Tokio ASync Socket`
     pub type TokioUdpSocket = TkUdpSocket;
@@ -109,8 +110,12 @@ pub mod tokio {
             cx: &mut Context,
             buf: &mut [u8],
         ) -> Poll<Result<(usize, SocketAddr), Error>> {
-            futures::ready!(self.poll_recv_ready(cx))?;
-            Poll::Ready(self.try_recv_from(buf))
+            let mut rbuf = ReadBuf::new(buf);
+            match self.poll_recv_from(cx, &mut rbuf) {
+                Poll::Pending => Poll::Pending,
+                Poll::Ready(Err(err)) => Poll::Ready(Err(err)),
+                Poll::Ready(Ok(addr)) => Poll::Ready(Ok((rbuf.filled().len(), addr))),
+            }
         }
 
         fn poll_write(
@@ -119,10 +124,10 @@ pub mod tokio {
             packet: &[u8],
             to: SocketAddr,
         ) -> Poll<Result<(), Error>> {
-            futures::ready!(self.poll_send_ready(cx))?;
-            match self.try_send_to(packet, to) {
-                Ok(_len) => Poll::Ready(Ok(())),
-                Err(err) => Poll::Ready(Err(err)),
+            match self.poll_send_to(cx, packet, to) {
+                Poll::Pending => Poll::Pending,
+                Poll::Ready(Err(err)) => Poll::Ready(Err(err)),
+                Poll::Ready(Ok(_len)) => Poll::Ready(Ok(())),
             }
         }
     }

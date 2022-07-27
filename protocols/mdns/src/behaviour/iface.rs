@@ -201,7 +201,9 @@ where
         params: &impl PollParameters,
     ) -> Option<(PeerId, Multiaddr, Instant)> {
         // Poll receive socket.
-        while let Poll::Ready(data) = self.recv_socket.poll_read(cx, &mut self.recv_buffer) {
+        while let Poll::Ready(data) =
+            Pin::new(&mut self.recv_socket).poll_read(cx, &mut self.recv_buffer)
+        {
             match data {
                 Ok((len, from)) => {
                     if let Some(packet) = MdnsPacket::new_from_bytes(&self.recv_buffer[..len], from)
@@ -221,7 +223,7 @@ where
 
         // Send responses.
         while let Some(packet) = self.send_buffer.pop_front() {
-            match self.send_socket.poll_write(
+            match Pin::new(&mut self.send_socket).poll_write(
                 cx,
                 &packet,
                 SocketAddr::new(self.multicast_addr, 5353),
