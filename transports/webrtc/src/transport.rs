@@ -23,6 +23,7 @@ use futures::{
     future::BoxFuture,
     io::{AsyncReadExt, AsyncWriteExt},
     prelude::*,
+    ready,
     stream::SelectAll,
     stream::Stream,
     TryFutureExt,
@@ -61,8 +62,8 @@ use crate::{
 
 /// A WebRTC transport with direct p2p communication (without a STUN server).
 pub struct WebRTCTransport {
-    /// A `RTCConfiguration` which holds this peer's certificate(s).
-    config: RTCConfiguration,
+    /// The config which holds this peer's certificate(s).
+    config: WebRTCConfiguration,
     /// `Keypair` identifying this peer
     id_keys: identity::Keypair,
     /// All the active listeners.
@@ -73,10 +74,7 @@ impl WebRTCTransport {
     /// Creates a new WebRTC transport.
     pub fn new(certificate: RTCCertificate, id_keys: identity::Keypair) -> Self {
         Self {
-            config: RTCConfiguration {
-                certificates: vec![certificate],
-                ..RTCConfiguration::default()
-            },
+            config: WebRTCConfiguration::new(certificate),
             id_keys,
             listeners: SelectAll::new(),
         }
@@ -85,7 +83,7 @@ impl WebRTCTransport {
     /// Returns the SHA-256 fingerprint of the certificate in lowercase hex string as expressed
     /// utilizing the syntax of 'fingerprint' in <https://tools.ietf.org/html/rfc4572#section-5>.
     pub fn cert_fingerprint(&self) -> String {
-        fingerprint_of_first_certificate(&self.config)
+        self.config.fingerprint_of_first_certificate()
     }
 
     fn do_listen(
@@ -187,8 +185,13 @@ impl Transport for WebRTCTransport {
                 .map(|f| fingerprint_to_string(f.iter()))
                 .ok_or(Error::InvalidMultiaddr(addr.clone()))?;
 
-            let conn =
-                WebRTCConnection::connect(sock_addr, config, udp_mux, &remote_fingerprint).await?;
+            let conn = WebRTCConnection::connect(
+                sock_addr,
+                config.into_inner(),
+                udp_mux,
+                &remote_fingerprint,
+            )
+            .await?;
 
             // Open a data channel to do Noise on top and verify the remote.
             let data_channel = conn.create_initial_upgrade_data_channel(None).await?;
@@ -259,8 +262,8 @@ pub struct WebRTCListenStream {
     /// time as interfaces become available or unavailable.
     in_addr: InAddr,
 
-    /// A `RTCConfiguration` which holds this peer's certificate(s).
-    config: RTCConfiguration,
+    /// The config which holds this peer's certificate(s).
+    config: WebRTCConfiguration,
 
     /// The UDP muxer that manages all ICE connections.
     udp_mux: Arc<UDPMuxNewAddr>,
@@ -283,7 +286,7 @@ impl WebRTCListenStream {
     fn new(
         listener_id: ListenerId,
         listen_addr: SocketAddr,
-        config: RTCConfiguration,
+        config: WebRTCConfiguration,
         udp_mux: Arc<UDPMuxNewAddr>,
         id_keys: identity::Keypair,
     ) -> Self {
@@ -391,41 +394,79 @@ impl Stream for WebRTCListenStream {
             return Poll::Ready(Some(event));
         }
 
-        let udp_mux = self.udp_mux.clone();
-        let udp_mux_read_fut = self
-            .udp_mux_read_fut
-            .get_or_insert(Box::pin(async move { udp_mux.read_from_conn().await }));
-        match udp_mux_read_fut.as_mut().poll(cx) {
-            Poll::Pending => Poll::Pending,
-            Poll::Ready(event) => {
-                self.udp_mux_read_fut = None;
-
-                match event {
-                    UDPMuxEvent::NewAddr(new_addr) => {
-                        let local_addr = socketaddr_to_multiaddr(&self.listen_addr);
-                        let send_back_addr = socketaddr_to_multiaddr(&new_addr.addr);
-                        let event = TransportEvent::Incoming {
-                            upgrade: Box::pin(upgrade::webrtc(
-                                self.udp_mux.clone(),
-                                self.config.clone(),
-                                new_addr.addr,
-                                new_addr.ufrag,
-                                self.id_keys.clone(),
-                            )) as BoxFuture<'static, _>,
-                            local_addr,
-                            send_back_addr,
-                            listener_id: self.listener_id,
-                        };
-                        Poll::Ready(Some(event))
-                    }
-                    UDPMuxEvent::Error(e) => {
-                        self.close(Err(Error::UDPMuxError(e)));
-                        return self.poll_next(cx);
-                    }
-                    _ => return self.poll_next(cx),
-                }
+        // Poll UDP muxer for new addresses or incoming data for streams.
+        let udp_mux_read_fut = {
+            let udp_mux = self.udp_mux.clone();
+            self.udp_mux_read_fut
+                .get_or_insert(Box::pin(async move { udp_mux.read_from_conn().await }))
+        };
+        let event = ready!(udp_mux_read_fut.as_mut().poll(cx));
+        self.udp_mux_read_fut = None;
+        match event {
+            UDPMuxEvent::NewAddr(new_addr) => {
+                let local_addr = socketaddr_to_multiaddr(&self.listen_addr);
+                let send_back_addr = socketaddr_to_multiaddr(&new_addr.addr);
+                let event = TransportEvent::Incoming {
+                    upgrade: Box::pin(upgrade::webrtc(
+                        self.udp_mux.clone(),
+                        self.config.clone(),
+                        new_addr.addr,
+                        new_addr.ufrag,
+                        self.id_keys.clone(),
+                    )) as BoxFuture<'static, _>,
+                    local_addr,
+                    send_back_addr,
+                    listener_id: self.listener_id,
+                };
+                Poll::Ready(Some(event))
             }
+            UDPMuxEvent::Error(e) => {
+                self.close(Err(Error::UDPMuxError(e)));
+                return self.poll_next(cx);
+            }
+            _ => return self.poll_next(cx),
         }
+    }
+}
+
+/// A wrapper around [`RTCConfiguration`].
+#[derive(Clone)]
+pub(crate) struct WebRTCConfiguration {
+    inner: RTCConfiguration,
+}
+
+impl WebRTCConfiguration {
+    /// Creates a new config.
+    pub fn new(certificate: RTCCertificate) -> Self {
+        Self {
+            inner: RTCConfiguration {
+                certificates: vec![certificate],
+                ..RTCConfiguration::default()
+            },
+        }
+    }
+
+    /// Returns a SHA-256 fingerprint of the first certificate.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the config does not contain any certificates.
+    pub fn fingerprint_of_first_certificate(&self) -> String {
+        // safe to unwrap here because we require a certificate during construction.
+        let fingerprints = self
+            .inner
+            .certificates
+            .first()
+            .expect("at least one certificate")
+            .get_fingerprints()
+            .expect("get_fingerprints to succeed");
+        debug_assert_eq!("sha-256", fingerprints.first().unwrap().algorithm);
+        fingerprints.first().unwrap().value.clone()
+    }
+
+    /// Consumes the `WebRTCConfiguration`, returning its inner configuration.
+    pub fn into_inner(self) -> RTCConfiguration {
+        self.inner
     }
 }
 
@@ -494,23 +535,6 @@ fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Option<SocketAddr> {
         }
         _ => None,
     }
-}
-
-/// Returns a SHA-256 fingerprint of the first certificate.
-///
-/// # Panics
-///
-/// Panics if the config does not contain any certificates.
-pub(crate) fn fingerprint_of_first_certificate(config: &RTCConfiguration) -> String {
-    // safe to unwrap here because we require a certificate during construction.
-    let fingerprints = config
-        .certificates
-        .first()
-        .expect("at least one certificate")
-        .get_fingerprints()
-        .expect("get_fingerprints to succeed");
-    debug_assert_eq!("sha-256", fingerprints.first().unwrap().algorithm);
-    fingerprints.first().unwrap().value.clone()
 }
 
 async fn perform_noise_handshake(

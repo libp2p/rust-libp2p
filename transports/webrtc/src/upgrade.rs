@@ -28,7 +28,6 @@ use libp2p_core::{
 };
 use libp2p_noise::{Keypair, NoiseConfig, NoiseError, RemoteIdentity, X25519Spec};
 use log::{debug, trace};
-use webrtc::peer_connection::configuration::RTCConfiguration;
 use webrtc_data::data_channel::DataChannel;
 use webrtc_ice::udp_mux::UDPMux;
 
@@ -37,23 +36,29 @@ use std::{net::SocketAddr, sync::Arc};
 use crate::{
     connection::{Connection, PollDataChannel},
     error::Error,
-    transport,
+    transport::WebRTCConfiguration,
     webrtc_connection::WebRTCConnection,
 };
 
-pub async fn webrtc(
+pub(crate) async fn webrtc(
     udp_mux: Arc<dyn UDPMux + Send + Sync>,
-    config: RTCConfiguration,
+    config: WebRTCConfiguration,
     socket_addr: SocketAddr,
     ufrag: String,
     id_keys: identity::Keypair,
 ) -> Result<(PeerId, Connection), Error> {
     trace!("upgrading addr={} (ufrag={})", socket_addr, ufrag);
 
-    let our_fingerprint = transport::fingerprint_of_first_certificate(&config);
+    let our_fingerprint = config.fingerprint_of_first_certificate();
 
-    let conn =
-        WebRTCConnection::accept(socket_addr, config, udp_mux, &our_fingerprint, &ufrag).await?;
+    let conn = WebRTCConnection::accept(
+        socket_addr,
+        config.into_inner(),
+        udp_mux,
+        &our_fingerprint,
+        &ufrag,
+    )
+    .await?;
 
     // Open a data channel to do Noise on top and verify the remote.
     // NOTE: channel is already negotiated by the client
