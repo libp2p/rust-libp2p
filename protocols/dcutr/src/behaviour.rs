@@ -65,6 +65,7 @@ pub enum UpgradeError {
     Handler(ConnectionHandlerUpgrErr<void::Void>),
 }
 
+#[derive(Default)]
 pub struct Behaviour {
     /// Queue of actions to return when polled.
     queued_actions: VecDeque<ActionBuilder>,
@@ -145,40 +146,35 @@ impl NetworkBehaviour for Behaviour {
         handler: Self::ConnectionHandler,
         _error: &DialError,
     ) {
-        match handler {
-            handler::Prototype::DirectConnection {
-                relayed_connection_id,
-                role: handler::Role::Initiator { attempt },
-            } => {
-                let peer_id =
-                    peer_id.expect("Peer of `Prototype::DirectConnection` is always known.");
-                if attempt < MAX_NUMBER_OF_UPGRADE_ATTEMPTS {
-                    self.queued_actions.push_back(ActionBuilder::Connect {
+        if let handler::Prototype::DirectConnection {
+            relayed_connection_id,
+            role: handler::Role::Initiator { attempt },
+        } = handler
+        {
+            let peer_id = peer_id.expect("Peer of `Prototype::DirectConnection` is always known.");
+            if attempt < MAX_NUMBER_OF_UPGRADE_ATTEMPTS {
+                self.queued_actions.push_back(ActionBuilder::Connect {
+                    peer_id,
+                    handler: NotifyHandler::One(relayed_connection_id),
+                    attempt: attempt + 1,
+                });
+            } else {
+                self.queued_actions.extend([
+                    NetworkBehaviourAction::NotifyHandler {
                         peer_id,
                         handler: NotifyHandler::One(relayed_connection_id),
-                        attempt: attempt + 1,
-                    });
-                } else {
-                    self.queued_actions.extend([
-                        NetworkBehaviourAction::NotifyHandler {
-                            peer_id,
-                            handler: NotifyHandler::One(relayed_connection_id),
-                            event: Either::Left(
-                                handler::relayed::Command::UpgradeFinishedDontKeepAlive,
-                            ),
-                        }
-                        .into(),
-                        NetworkBehaviourAction::GenerateEvent(
-                            Event::DirectConnectionUpgradeFailed {
-                                remote_peer_id: peer_id,
-                                error: UpgradeError::Dial,
-                            },
-                        )
-                        .into(),
-                    ]);
-                }
+                        event: Either::Left(
+                            handler::relayed::Command::UpgradeFinishedDontKeepAlive,
+                        ),
+                    }
+                    .into(),
+                    NetworkBehaviourAction::GenerateEvent(Event::DirectConnectionUpgradeFailed {
+                        remote_peer_id: peer_id,
+                        error: UpgradeError::Dial,
+                    })
+                    .into(),
+                ]);
             }
-            _ => {}
         }
     }
 
@@ -324,7 +320,6 @@ impl NetworkBehaviour for Behaviour {
 
 /// A [`NetworkBehaviourAction`], either complete, or still requiring data from [`PollParameters`]
 /// before being returned in [`Behaviour::poll`].
-#[allow(clippy::large_enum_variant)]
 enum ActionBuilder {
     Done(NetworkBehaviourAction<Event, handler::Prototype>),
     Connect {
@@ -333,7 +328,7 @@ enum ActionBuilder {
         peer_id: PeerId,
     },
     AcceptInboundConnect {
-        inbound_connect: protocol::inbound::PendingConnect,
+        inbound_connect: Box<protocol::inbound::PendingConnect>,
         handler: NotifyHandler,
         peer_id: PeerId,
     },
