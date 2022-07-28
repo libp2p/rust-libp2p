@@ -46,7 +46,7 @@ pub enum Error {
     NoListeners,
 
     #[error("UDP mux error: {0}")]
-    UDPMuxError(webrtc_util::Error),
+    UDPMuxError(std::io::Error),
 
     #[error("internal error: {0} (see debug logs)")]
     InternalError(String),

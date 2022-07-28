@@ -21,12 +21,13 @@
 // SOFTWARE.
 
 use async_trait::async_trait;
+use futures::ready;
 use stun::{
     attributes::ATTR_USERNAME,
     message::{is_message as is_stun_message, Message as STUNMessage},
 };
+use tokio::{io::ReadBuf, net::UdpSocket};
 use tokio_crate as tokio;
-use tokio_crate::sync::Mutex;
 use webrtc_ice::udp_mux::{UDPMux, UDPMuxConn, UDPMuxConnParams, UDPMuxWriter};
 use webrtc_util::{sync::RwLock, Conn, Error};
 
@@ -36,8 +37,9 @@ use std::{
     net::SocketAddr,
     sync::{
         atomic::{AtomicBool, Ordering},
-        Arc, Weak,
+        Arc, Mutex, Weak,
     },
+    task::{Context, Poll},
 };
 
 const RECEIVE_MTU: usize = 8192;
@@ -49,28 +51,11 @@ pub struct NewAddr {
     pub ufrag: String,
 }
 
-/// Parameters for [`UDPMuxNewAddr`].
-pub struct UDPMuxParams {
-    conn: Box<dyn Conn + Send + Sync>,
-}
-
-impl UDPMuxParams {
-    /// Creates new params.
-    pub fn new<C>(conn: C) -> Self
-    where
-        C: Conn + Send + Sync + 'static,
-    {
-        Self {
-            conn: Box::new(conn),
-        }
-    }
-}
-
 /// An event emitted by [`UDPMuxNewAddr`] when it's polled.
 #[derive(Debug)]
 pub enum UDPMuxEvent {
     /// Connection error. UDP mux should be stopped.
-    Error(Error),
+    Error(std::io::Error),
     /// Got a [`NewAddr`] from the socket.
     NewAddr(NewAddr),
     /// Non-important event. Can be ignored.
@@ -80,9 +65,7 @@ pub enum UDPMuxEvent {
 /// A modified version of [`webrtc_ice::udp_mux::UDPMuxDefault`], which reports previously unseen
 /// addresses instead of ignoring them.
 pub struct UDPMuxNewAddr {
-    /// The params this instance is configured with.
-    /// Contains the underlying UDP socket in use
-    params: UDPMuxParams,
+    udp_sock: UdpSocket,
 
     /// Maps from ufrag to the underlying connection.
     conns: Mutex<HashMap<String, UDPMuxConn>>,
@@ -99,9 +82,9 @@ pub struct UDPMuxNewAddr {
 
 impl UDPMuxNewAddr {
     /// Creates a new UDP muxer.
-    pub fn new(params: UDPMuxParams) -> Arc<Self> {
+    pub fn new(udp_sock: UdpSocket) -> Arc<Self> {
         Arc::new(Self {
-            params,
+            udp_sock,
             conns: Mutex::default(),
             address_map: RwLock::default(),
             new_addrs: RwLock::default(),
@@ -110,8 +93,8 @@ impl UDPMuxNewAddr {
     }
 
     /// Create a muxed connection for a given ufrag.
-    async fn create_muxed_conn(self: &Arc<Self>, ufrag: &str) -> Result<UDPMuxConn, Error> {
-        let local_addr = self.params.conn.local_addr().await?;
+    fn create_muxed_conn(self: &Arc<Self>, ufrag: &str) -> Result<UDPMuxConn, Error> {
+        let local_addr = self.udp_sock.local_addr()?;
 
         let params = UDPMuxConnParams {
             local_addr,
@@ -124,10 +107,10 @@ impl UDPMuxNewAddr {
 
     /// Returns a muxed connection if the `ufrag` from the given STUN message matches an existing
     /// connection.
-    async fn conn_from_stun_message(&self, buffer: &[u8], addr: &SocketAddr) -> Option<UDPMuxConn> {
+    fn conn_from_stun_message(&self, buffer: &[u8], addr: &SocketAddr) -> Option<UDPMuxConn> {
         match ufrag_from_stun_message(buffer, true) {
             Ok(ufrag) => {
-                let conns = self.conns.lock().await;
+                let conns = self.conns.lock().unwrap();
                 conns.get(&ufrag).map(Clone::clone)
             }
             Err(e) => {
@@ -144,26 +127,24 @@ impl UDPMuxNewAddr {
 
     /// Reads from the underlying UDP socket and either reports a new address or proxies data to the
     /// muxed connection.
-    pub async fn read_from_conn(&self) -> UDPMuxEvent {
-        // TODO: avoid reallocating the buffer
-        let mut buffer = [0u8; RECEIVE_MTU];
-        let conn = &self.params.conn;
+    pub fn poll(&self, cx: &mut Context) -> Poll<UDPMuxEvent> {
+        // TODO: avoid allocating the buffer each time.
+        let mut recv_buf = [0u8; RECEIVE_MTU];
+        let mut read = ReadBuf::new(&mut recv_buf);
 
-        let res = conn.recv_from(&mut buffer).await;
-        match res {
-            Ok((len, addr)) => {
+        match ready!(self.udp_sock.poll_recv_from(cx, &mut read)) {
+            Ok(addr) => {
                 // Find connection based on previously having seen this source address
                 let conn = {
                     let address_map = self.address_map.read();
-
                     address_map.get(&addr).map(Clone::clone)
                 };
 
                 let conn = match conn {
                     // If we couldn't find the connection based on source address, see if
                     // this is a STUN mesage and if so if we can find the connection based on ufrag.
-                    None if is_stun_message(&buffer) => {
-                        self.conn_from_stun_message(&buffer, &addr).await
+                    None if is_stun_message(read.filled()) => {
+                        self.conn_from_stun_message(&read.filled(), &addr)
                     }
                     s @ Some(_) => s,
                     _ => None,
@@ -172,7 +153,7 @@ impl UDPMuxNewAddr {
                 match conn {
                     None => {
                         if !self.new_addrs.read().contains(&addr) {
-                            match ufrag_from_stun_message(&buffer, false) {
+                            match ufrag_from_stun_message(read.filled(), false) {
                                 Ok(ufrag) => {
                                     log::trace!(
                                         "Notifying about new address addr={} from ufrag={}",
@@ -181,7 +162,10 @@ impl UDPMuxNewAddr {
                                     );
                                     let mut new_addrs = self.new_addrs.write();
                                     new_addrs.insert(addr);
-                                    return UDPMuxEvent::NewAddr(NewAddr { addr, ufrag });
+                                    return Poll::Ready(UDPMuxEvent::NewAddr(NewAddr {
+                                        addr,
+                                        ufrag,
+                                    }));
                                 }
                                 Err(e) => {
                                     log::debug!(
@@ -194,22 +178,29 @@ impl UDPMuxNewAddr {
                         }
                     }
                     Some(conn) => {
-                        tokio::spawn(async move {
-                            if let Err(err) = conn.write_packet(&buffer[..len], addr).await {
-                                log::error!("Failed to write packet: {} (addr={})", err, addr);
-                            }
-                        });
+                        let mut packet = Vec::with_capacity(read.filled().len());
+                        packet.copy_from_slice(read.filled());
+                        write_packet_to_conn_from_addr(conn, packet, addr);
                     }
                 }
             }
-            Err(Error::Io(err)) if err.0.kind() == ErrorKind::TimedOut => {}
+            Err(err) if err.kind() == ErrorKind::TimedOut => {}
             Err(err) => {
                 log::error!("Could not read udp packet: {}", err);
-                return UDPMuxEvent::Error(err);
+                return Poll::Ready(UDPMuxEvent::Error(err));
             }
         }
-        UDPMuxEvent::None
+
+        Poll::Ready(UDPMuxEvent::None)
     }
+}
+
+fn write_packet_to_conn_from_addr(conn: UDPMuxConn, packet: Vec<u8>, addr: SocketAddr) {
+    tokio::spawn(async move {
+        if let Err(err) = conn.write_packet(&packet, addr).await {
+            log::error!("Failed to write packet: {} (addr={})", err, addr);
+        }
+    });
 }
 
 #[async_trait]
@@ -220,7 +211,7 @@ impl UDPMux for UDPMuxNewAddr {
         }
 
         let old_conns = {
-            let mut conns = self.conns.lock().await;
+            let mut conns = self.conns.lock().unwrap();
 
             std::mem::take(&mut (*conns))
         };
@@ -255,14 +246,14 @@ impl UDPMux for UDPMuxNewAddr {
         }
 
         {
-            let mut conns = self.conns.lock().await;
+            let mut conns = self.conns.lock().unwrap();
             if let Some(conn) = conns.get(ufrag) {
                 // UDPMuxConn uses `Arc` internally so it's cheap to clone, but because
                 // we implement `Conn` we need to further wrap it in an `Arc` here.
                 return Ok(Arc::new(conn.clone()) as Arc<dyn Conn + Send + Sync>);
             }
 
-            let muxed_conn = self.create_muxed_conn(ufrag).await?;
+            let muxed_conn = self.create_muxed_conn(ufrag)?;
             let mut close_rx = muxed_conn.close_rx();
             let cloned_self = Arc::clone(&self);
             let cloned_ufrag = ufrag.to_string();
@@ -284,7 +275,7 @@ impl UDPMux for UDPMuxNewAddr {
         // is keyed on `ufrag` their implementation is equivalent.
 
         let removed_conn = {
-            let mut conns = self.conns.lock().await;
+            let mut conns = self.conns.lock().unwrap();
             conns.remove(ufrag)
         };
 
@@ -330,8 +321,7 @@ impl UDPMuxWriter for UDPMuxNewAddr {
     }
 
     async fn send_to(&self, buf: &[u8], target: &SocketAddr) -> Result<usize, Error> {
-        self.params
-            .conn
+        self.udp_sock
             .send_to(buf, *target)
             .await
             .map_err(Into::into)

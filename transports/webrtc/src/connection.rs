@@ -28,7 +28,7 @@ use futures::{
     lock::Mutex as FutMutex,
     {future::BoxFuture, prelude::*, ready},
 };
-use futures_lite::stream::StreamExt;
+use futures_lite::StreamExt;
 use libp2p_core::{muxing::StreamMuxer, Multiaddr};
 use log::{debug, error, trace};
 use webrtc::data_channel::RTCDataChannel;

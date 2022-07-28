@@ -54,7 +54,7 @@ use crate::{
     connection::PollDataChannel,
     error::Error,
     in_addr::InAddr,
-    udp_mux::{UDPMuxEvent, UDPMuxNewAddr, UDPMuxParams},
+    udp_mux::{UDPMuxEvent, UDPMuxNewAddr},
     upgrade,
     webrtc_connection::WebRTCConnection,
 };
@@ -111,7 +111,7 @@ impl WebRTCTransport {
             .map_err(TransportError::Other)?;
         debug!("listening on {}", listen_addr);
 
-        let udp_mux = UDPMuxNewAddr::new(UDPMuxParams::new(socket));
+        let udp_mux = UDPMuxNewAddr::new(socket);
 
         Ok(WebRTCListenStream::new(
             listener_id,
@@ -267,9 +267,6 @@ pub struct WebRTCListenStream {
     /// The UDP muxer that manages all ICE connections.
     udp_mux: Arc<UDPMuxNewAddr>,
 
-    /// Future that drives reading from the UDP socket.
-    udp_mux_read_fut: Option<BoxFuture<'static, UDPMuxEvent>>,
-
     /// `Keypair` identifying this peer
     id_keys: identity::Keypair,
 
@@ -297,7 +294,6 @@ impl WebRTCListenStream {
             in_addr,
             config,
             udp_mux,
-            udp_mux_read_fut: None,
             id_keys,
             report_closed: None,
         }
@@ -394,14 +390,7 @@ impl Stream for WebRTCListenStream {
         }
 
         // Poll UDP muxer for new addresses or incoming data for streams.
-        let udp_mux_read_fut = {
-            let udp_mux = self.udp_mux.clone();
-            self.udp_mux_read_fut
-                .get_or_insert(Box::pin(async move { udp_mux.read_from_conn().await }))
-        };
-        let event = ready!(udp_mux_read_fut.as_mut().poll(cx));
-        self.udp_mux_read_fut = None;
-        match event {
+        match ready!(self.udp_mux.as_ref().poll(cx)) {
             UDPMuxEvent::NewAddr(new_addr) => {
                 let local_addr = socketaddr_to_multiaddr(&self.listen_addr);
                 let send_back_addr = socketaddr_to_multiaddr(&new_addr.addr);
