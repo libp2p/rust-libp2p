@@ -187,7 +187,7 @@ impl Transport for WebRTCTransport {
             .await?;
 
             // Open a data channel to do Noise on top and verify the remote.
-            let data_channel = conn.create_initial_upgrade_data_channel(None).await?;
+            let data_channel = conn.create_initial_upgrade_data_channel(false).await?;
 
             trace!("noise handshake with addr={}", remote);
             let peer_id = perform_noise_handshake_outbound(
@@ -578,7 +578,7 @@ async fn upgrade(
 
     // Open a data channel to do Noise on top and verify the remote.
     // NOTE: channel is already negotiated by the client
-    let data_channel = conn.create_initial_upgrade_data_channel(Some(true)).await?;
+    let data_channel = conn.create_initial_upgrade_data_channel(true).await?;
 
     trace!(
         "noise handshake with addr={} (ufrag={})",

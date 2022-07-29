@@ -129,7 +129,7 @@ impl WebRTCConnection {
 
     pub async fn create_initial_upgrade_data_channel(
         &self,
-        negotiated: Option<bool>,
+        negotiated: bool,
     ) -> Result<Arc<DataChannel>, Error> {
         // Open a data channel to do Noise on top and verify the remote.
         let data_channel = self
@@ -138,7 +138,7 @@ impl WebRTCConnection {
                 "data",
                 Some(RTCDataChannelInit {
                     id: Some(1),
-                    negotiated,
+                    negotiated: Some(negotiated),
                     ..RTCDataChannelInit::default()
                 }),
             )
