@@ -105,7 +105,7 @@ a=mid:0
 a=ice-options:ice2
 a=ice-ufrag:{ufrag}
 a=ice-pwd:{pwd}
-a=fingerprint:sha-256 {fingerprint}
+a=fingerprint:{fingerprint_algorithm} {fingerprint_value}
 a=setup:actpass
 a=sctp-port:5000
 a=max-message-size:100000
@@ -157,7 +157,7 @@ a=mid:0
 a=ice-options:ice2
 a=ice-ufrag:{ufrag}
 a=ice-pwd:{pwd}
-a=fingerprint:sha-256 {fingerprint}
+a=fingerprint:{fingerprint_algorithm} {fingerprint_value}
 
 a=setup:passive
 a=sctp-port:5000
@@ -179,7 +179,8 @@ pub struct DescriptionContext {
     pub ip_version: IpVersion,
     pub target_ip: IpAddr,
     pub target_port: u16,
-    pub fingerprint: String,
+    pub fingerprint_algorithm: String,
+    pub fingerprint_value: String,
     pub ufrag: String,
     pub pwd: String,
 }

@@ -36,7 +36,7 @@ use crate::{
     connection::{Connection, PollDataChannel},
     error::Error,
     transport::WebRTCConfiguration,
-    webrtc_connection::WebRTCConnection,
+    webrtc_connection::{Fingerprint, WebRTCConnection},
 };
 
 pub(crate) async fn webrtc(
@@ -48,7 +48,7 @@ pub(crate) async fn webrtc(
 ) -> Result<(PeerId, Connection), Error> {
     trace!("upgrading addr={} (ufrag={})", socket_addr, ufrag);
 
-    let our_fingerprint = config.fingerprint_of_first_certificate();
+    let our_fingerprint = Fingerprint::new_sha256(config.fingerprint_of_first_certificate());
 
     let conn = WebRTCConnection::accept(
         socket_addr,
@@ -70,13 +70,13 @@ pub(crate) async fn webrtc(
     );
     let remote_fingerprint = {
         let f = conn.get_remote_fingerprint().await;
-        crate::transport::fingerprint_to_string(f.iter())
+        Fingerprint::from(f.iter())
     };
     let peer_id = perform_noise_handshake(
         id_keys,
         PollDataChannel::new(data_channel.clone()),
-        our_fingerprint,
-        remote_fingerprint,
+        our_fingerprint.as_ref(),
+        remote_fingerprint.as_ref(),
     )
     .await?;
 
@@ -97,8 +97,8 @@ pub(crate) async fn webrtc(
 async fn perform_noise_handshake<T>(
     id_keys: identity::Keypair,
     poll_data_channel: T,
-    our_fingerprint: String,
-    remote_fingerprint: String,
+    our_fingerprint: &str,
+    remote_fingerprint: &str,
 ) -> Result<PeerId, Error>
 where
     T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
@@ -123,7 +123,9 @@ where
     );
 
     // 1. Submit SHA-256 fingerprint
-    let n = noise_io.write(&our_fingerprint.into_bytes()).await?;
+    let n = noise_io
+        .write(&our_fingerprint.to_owned().into_bytes())
+        .await?;
     noise_io.flush().await?;
 
     // 2. Receive one too and compare it to the fingerprint of the remote DTLS certificate.
@@ -133,7 +135,7 @@ where
         String::from_utf8(buf).map_err(|_| Error::Noise(NoiseError::AuthenticationFailed))?;
     if fingerprint_from_noise != remote_fingerprint {
         return Err(Error::InvalidFingerprint {
-            expected: remote_fingerprint,
+            expected: remote_fingerprint.to_owned(),
             got: fingerprint_from_noise,
         });
     }

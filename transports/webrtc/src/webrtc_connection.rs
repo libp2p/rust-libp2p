@@ -27,6 +27,7 @@ use tinytemplate::TinyTemplate;
 use webrtc::api::setting_engine::SettingEngine;
 use webrtc::api::APIBuilder;
 use webrtc::data_channel::data_channel_init::RTCDataChannelInit;
+use webrtc::dtls_transport::dtls_fingerprint::RTCDtlsFingerprint;
 use webrtc::dtls_transport::dtls_role::DTLSRole;
 use webrtc::peer_connection::configuration::RTCConfiguration;
 use webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
@@ -55,7 +56,7 @@ impl WebRTCConnection {
         addr: SocketAddr,
         config: RTCConfiguration,
         udp_mux: Arc<dyn UDPMux + Send + Sync>,
-        remote_fingerprint: &str,
+        remote_fingerprint: &Fingerprint,
     ) -> Result<Self, Error> {
         // TODO: at least 128 bit of entropy
         let ufrag: String = thread_rng()
@@ -75,11 +76,11 @@ impl WebRTCConnection {
 
         // 2. ANSWER
         // Set the remote description to the predefined SDP.
-        let remote_ufrag = remote_fingerprint.to_owned().replace(":", "");
+        let remote_ufrag = remote_fingerprint.to_ufrag();
         let server_session_description = render_description(
             sdp::SERVER_SESSION_DESCRIPTION,
             addr,
-            &remote_fingerprint,
+            remote_fingerprint,
             &remote_ufrag,
         );
         log::debug!("ANSWER: {:?}", server_session_description);
@@ -94,12 +95,12 @@ impl WebRTCConnection {
         addr: SocketAddr,
         config: RTCConfiguration,
         udp_mux: Arc<dyn UDPMux + Send + Sync>,
-        our_fingerprint: &str,
+        our_fingerprint: &Fingerprint,
         remote_ufrag: &str,
     ) -> Result<Self, Error> {
         // Set both ICE user and password to our fingerprint because that's what the client is
         // expecting (see [`Self::connect`] "2. ANSWER").
-        let ufrag = our_fingerprint.to_owned().replace(':', "");
+        let ufrag = our_fingerprint.to_ufrag();
         let mut se = Self::setting_engine(udp_mux, &ufrag, addr.is_ipv4());
         {
             se.set_lite(true);
@@ -117,8 +118,8 @@ impl WebRTCConnection {
         let client_session_description = render_description(
             sdp::CLIENT_SESSION_DESCRIPTION,
             addr,
-            "NONE", // certificate verification is disabled, so any value is okay.
-            &remote_ufrag,
+            &Fingerprint::new_sha256("NONE".to_owned()), // certificate verification is disabled, so any value is okay.
+            remote_ufrag,
         );
         log::debug!("OFFER: {:?}", client_session_description);
         let sdp = RTCSessionDescription::offer(client_session_description).unwrap();
@@ -212,11 +213,63 @@ impl WebRTCConnection {
     }
 }
 
+const SHA256: &str = "sha-256";
+
+pub(crate) struct Fingerprint(RTCDtlsFingerprint);
+
+impl Fingerprint {
+    /// Creates new `Fingerprint` w/ "sha-256" hash function.
+    pub fn new_sha256(value: String) -> Self {
+        Self(RTCDtlsFingerprint {
+            algorithm: SHA256.to_owned(),
+            value,
+        })
+    }
+
+    /// Transforms this fingerprint into a ufrag.
+    pub fn to_ufrag(&self) -> String {
+        self.0.value.replace(':', "").to_lowercase()
+    }
+
+    /// Returns the lower-hex value, each byte separated by ":".
+    /// E.g. "7D:E3:D8:3F:81:A6:80:59:2A:47:1E:6B:6A:BB:07:47:AB:D3:53:85:A8:09:3F:DF:E1:12:C1:EE:BB:6C:C6:AC"
+    pub fn value(&self) -> String {
+        self.0.value.clone()
+    }
+
+    /// Returns the algorithm used (e.g. "sha-256").
+    /// See https://datatracker.ietf.org/doc/html/rfc8122#section-5
+    pub fn algorithm(&self) -> String {
+        self.0.algorithm.clone()
+    }
+}
+
+impl<T> From<T> for Fingerprint
+where
+    T: IntoIterator,
+    <T as IntoIterator>::Item: core::fmt::UpperHex,
+{
+    fn from(t: T) -> Self {
+        let values: Vec<String> = t.into_iter().map(|x| format! {"{:02X}", x}).collect();
+        Self(RTCDtlsFingerprint {
+            algorithm: SHA256.to_owned(),
+            value: values.join(":"),
+        })
+    }
+}
+
+impl AsRef<str> for Fingerprint {
+    #[inline]
+    fn as_ref(&self) -> &str {
+        self.0.value.as_ref()
+    }
+}
+
 /// Renders a [`TinyTemplate`] description using the provided arguments.
 pub(crate) fn render_description(
     description: &str,
     addr: SocketAddr,
-    fingerprint: &str,
+    fingerprint: &Fingerprint,
     ufrag: &str,
 ) -> String {
     let mut tt = TinyTemplate::new();
@@ -232,7 +285,8 @@ pub(crate) fn render_description(
         },
         target_ip: addr.ip(),
         target_port: addr.port(),
-        fingerprint: fingerprint.to_owned(),
+        fingerprint_algorithm: fingerprint.algorithm(),
+        fingerprint_value: fingerprint.value(),
         // NOTE: ufrag is equal to pwd.
         ufrag: ufrag.to_owned(),
         pwd: ufrag.to_owned(),

@@ -56,7 +56,7 @@ use crate::{
     in_addr::InAddr,
     udp_mux::{UDPMuxEvent, UDPMuxNewAddr},
     upgrade,
-    webrtc_connection::WebRTCConnection,
+    webrtc_connection::{Fingerprint, WebRTCConnection},
 };
 
 /// A WebRTC transport with direct p2p communication (without a STUN server).
@@ -181,7 +181,7 @@ impl Transport for WebRTCTransport {
         // do the `set_remote_description` call within the [`Future`].
         Ok(async move {
             let remote_fingerprint = fingerprint_from_addr(&addr)
-                .map(|f| fingerprint_to_string(f.iter()))
+                .map(|f| Fingerprint::from(f.iter()))
                 .ok_or(Error::InvalidMultiaddr(addr.clone()))?;
 
             let conn = WebRTCConnection::connect(
@@ -199,8 +199,8 @@ impl Transport for WebRTCTransport {
             let peer_id = perform_noise_handshake(
                 id_keys,
                 PollDataChannel::new(data_channel.clone()),
-                our_fingerprint,
-                remote_fingerprint,
+                &our_fingerprint,
+                remote_fingerprint.as_ref(),
             )
             .await?;
 
@@ -449,7 +449,8 @@ impl WebRTCConfiguration {
             .get_fingerprints()
             .expect("get_fingerprints to succeed");
         debug_assert_eq!("sha-256", fingerprints.first().unwrap().algorithm);
-        fingerprints.first().unwrap().value.clone()
+        // TODO: modify webrtc-rs to return value in upper-hex rather than lower-hex
+        fingerprints.first().unwrap().value.to_uppercase()
     }
 
     /// Consumes the `WebRTCConfiguration`, returning its inner configuration.
@@ -489,16 +490,6 @@ fn fingerprint_from_addr<'a>(addr: &'a Multiaddr) -> Option<Cow<'a, [u8; 32]>> {
     None
 }
 
-/// Transforms a byte array fingerprint into a string.
-pub(crate) fn fingerprint_to_string<T>(f: T) -> String
-where
-    T: IntoIterator,
-    <T as IntoIterator>::Item: core::fmt::LowerHex,
-{
-    let values: Vec<String> = f.into_iter().map(|x| format! {"{:02x}", x}).collect();
-    values.join(":")
-}
-
 /// Tries to turn a WebRTC multiaddress into a [`SocketAddr`]. Returns None if the format of the
 /// multiaddr is wrong.
 fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Option<SocketAddr> {
@@ -528,8 +519,8 @@ fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Option<SocketAddr> {
 async fn perform_noise_handshake<T>(
     id_keys: identity::Keypair,
     poll_data_channel: T,
-    our_fingerprint: String,
-    remote_fingerprint: String,
+    our_fingerprint: &str,
+    remote_fingerprint: &str,
 ) -> Result<PeerId, Error>
 where
     T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
@@ -552,7 +543,9 @@ where
         "exchanging TLS certificate fingerprints with peer_id={}",
         peer_id
     );
-    let n = noise_io.write(&our_fingerprint.into_bytes()).await?;
+    let n = noise_io
+        .write(&our_fingerprint.to_owned().into_bytes())
+        .await?;
     noise_io.flush().await?;
     let mut buf = vec![0; n]; // ASSERT: fingerprint's format is the same.
     noise_io.read_exact(buf.as_mut_slice()).await?;
@@ -560,7 +553,7 @@ where
         String::from_utf8(buf).map_err(|_| Error::Noise(NoiseError::AuthenticationFailed))?;
     if fingerprint_from_noise != remote_fingerprint {
         return Err(Error::InvalidFingerprint {
-            expected: remote_fingerprint,
+            expected: remote_fingerprint.to_owned(),
             got: fingerprint_from_noise,
         });
     }
