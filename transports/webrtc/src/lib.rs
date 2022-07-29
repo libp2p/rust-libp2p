@@ -84,8 +84,8 @@ pub mod connection;
 pub mod error;
 pub mod transport;
 
+mod fingerprint;
 mod in_addr;
 mod sdp;
 mod udp_mux;
-mod upgrade;
 mod webrtc_connection;

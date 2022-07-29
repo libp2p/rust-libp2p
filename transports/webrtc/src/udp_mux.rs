@@ -58,8 +58,6 @@ pub enum UDPMuxEvent {
     Error(std::io::Error),
     /// Got a [`NewAddr`] from the socket.
     NewAddr(NewAddr),
-    /// Non-important event. Can be ignored.
-    None,
 }
 
 /// A modified version of [`webrtc_ice::udp_mux::UDPMuxDefault`], which reports previously unseen
@@ -132,66 +130,66 @@ impl UDPMuxNewAddr {
         let mut recv_buf = [0u8; RECEIVE_MTU];
         let mut read = ReadBuf::new(&mut recv_buf);
 
-        match ready!(self.udp_sock.poll_recv_from(cx, &mut read)) {
-            Ok(addr) => {
-                // Find connection based on previously having seen this source address
-                let conn = {
-                    let address_map = self.address_map.read();
-                    address_map.get(&addr).map(Clone::clone)
-                };
+        loop {
+            match ready!(self.udp_sock.poll_recv_from(cx, &mut read)) {
+                Ok(addr) => {
+                    // Find connection based on previously having seen this source address
+                    let conn = {
+                        let address_map = self.address_map.read();
+                        address_map.get(&addr).map(Clone::clone)
+                    };
 
-                let conn = match conn {
-                    // If we couldn't find the connection based on source address, see if
-                    // this is a STUN mesage and if so if we can find the connection based on ufrag.
-                    None if is_stun_message(read.filled()) => {
-                        self.conn_from_stun_message(&read.filled(), &addr)
-                    }
-                    s @ Some(_) => s,
-                    _ => None,
-                };
+                    let conn = match conn {
+                        // If we couldn't find the connection based on source address, see if
+                        // this is a STUN mesage and if so if we can find the connection based on ufrag.
+                        None if is_stun_message(read.filled()) => {
+                            self.conn_from_stun_message(&read.filled(), &addr)
+                        }
+                        s @ Some(_) => s,
+                        _ => None,
+                    };
 
-                match conn {
-                    None => {
-                        if !self.new_addrs.read().contains(&addr) {
-                            match ufrag_from_stun_message(read.filled(), false) {
-                                Ok(ufrag) => {
-                                    log::trace!(
-                                        "Notifying about new address addr={} from ufrag={}",
-                                        &addr,
-                                        ufrag
-                                    );
-                                    let mut new_addrs = self.new_addrs.write();
-                                    new_addrs.insert(addr);
-                                    return Poll::Ready(UDPMuxEvent::NewAddr(NewAddr {
-                                        addr,
-                                        ufrag,
-                                    }));
-                                }
-                                Err(e) => {
-                                    log::debug!(
-                                        "Unknown address addr={} (non STUN packet: {})",
-                                        &addr,
-                                        e
-                                    );
+                    match conn {
+                        None => {
+                            if !self.new_addrs.read().contains(&addr) {
+                                match ufrag_from_stun_message(read.filled(), false) {
+                                    Ok(ufrag) => {
+                                        log::trace!(
+                                            "Notifying about new address addr={} from ufrag={}",
+                                            &addr,
+                                            ufrag
+                                        );
+                                        let mut new_addrs = self.new_addrs.write();
+                                        new_addrs.insert(addr);
+                                        return Poll::Ready(UDPMuxEvent::NewAddr(NewAddr {
+                                            addr,
+                                            ufrag,
+                                        }));
+                                    }
+                                    Err(e) => {
+                                        log::debug!(
+                                            "Unknown address addr={} (non STUN packet: {})",
+                                            &addr,
+                                            e
+                                        );
+                                    }
                                 }
                             }
                         }
-                    }
-                    Some(conn) => {
-                        let mut packet = Vec::with_capacity(read.filled().len());
-                        packet.copy_from_slice(read.filled());
-                        write_packet_to_conn_from_addr(conn, packet, addr);
+                        Some(conn) => {
+                            let mut packet = Vec::with_capacity(read.filled().len());
+                            packet.copy_from_slice(read.filled());
+                            write_packet_to_conn_from_addr(conn, packet, addr);
+                        }
                     }
                 }
-            }
-            Err(err) if err.kind() == ErrorKind::TimedOut => {}
-            Err(err) => {
-                log::error!("Could not read udp packet: {}", err);
-                return Poll::Ready(UDPMuxEvent::Error(err));
+                Err(err) if err.kind() == ErrorKind::TimedOut => {}
+                Err(err) => {
+                    log::error!("Could not read udp packet: {}", err);
+                    return Poll::Ready(UDPMuxEvent::Error(err));
+                }
             }
         }
-
-        Poll::Ready(UDPMuxEvent::None)
     }
 }
 

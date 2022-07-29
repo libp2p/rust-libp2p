@@ -19,8 +19,12 @@
 // DEALINGS IN THE SOFTWARE.
 
 use serde::Serialize;
+use std::net::SocketAddr;
+use tinytemplate::TinyTemplate;
 
 use std::net::IpAddr;
+
+use crate::fingerprint::Fingerprint;
 
 // An SDP message that constitutes the offer.
 //
@@ -94,7 +98,7 @@ use std::net::IpAddr;
 // a=max-message-size:<value>
 //
 //     The maximum SCTP user message size (in bytes). (RFC8841)
-pub const CLIENT_SESSION_DESCRIPTION: &'static str = "v=0
+const CLIENT_SESSION_DESCRIPTION: &'static str = "v=0
 o=- 0 0 IN {ip_version} {target_ip}
 s=-
 c=IN {ip_version} {target_ip}
@@ -146,7 +150,7 @@ a=max-message-size:100000
 // a=candidate:<foundation> <component-id> <transport> <priority> <connection-address> <port> <cand-type>
 //
 //     A transport address for a candidate that can be used for connectivity checks (RFC8839).
-pub const SERVER_SESSION_DESCRIPTION: &'static str = "v=0
+const SERVER_SESSION_DESCRIPTION: &'static str = "v=0
 o=- 0 0 IN {ip_version} {target_ip}
 s=-
 t=0 0
@@ -167,7 +171,7 @@ a=candidate:1 1 UDP 1 {target_ip} {target_port} typ host
 
 /// Indicates the IP version used in WebRTC: `IP4` or `IP6`.
 #[derive(Serialize)]
-pub enum IpVersion {
+enum IpVersion {
     IP4,
     IP6,
 }
@@ -175,7 +179,7 @@ pub enum IpVersion {
 /// Context passed to the templating engine, which replaces the above placeholders (e.g.
 /// `{IP_VERSION}`) with real values.
 #[derive(Serialize)]
-pub struct DescriptionContext {
+struct DescriptionContext {
     pub ip_version: IpVersion,
     pub target_ip: IpAddr,
     pub target_port: u16,
@@ -183,4 +187,49 @@ pub struct DescriptionContext {
     pub fingerprint_value: String,
     pub ufrag: String,
     pub pwd: String,
+}
+
+pub(crate) fn render_server_session_description(
+    addr: SocketAddr,
+    fingerprint: &Fingerprint,
+    ufrag: &str,
+) -> String {
+    render_description(SERVER_SESSION_DESCRIPTION, addr, fingerprint, ufrag)
+}
+
+pub(crate) fn render_client_session_description(
+    addr: SocketAddr,
+    fingerprint: &Fingerprint,
+    ufrag: &str,
+) -> String {
+    render_description(CLIENT_SESSION_DESCRIPTION, addr, fingerprint, ufrag)
+}
+
+/// Renders a [`TinyTemplate`] description using the provided arguments.
+fn render_description(
+    description: &str,
+    addr: SocketAddr,
+    fingerprint: &Fingerprint,
+    ufrag: &str,
+) -> String {
+    let mut tt = TinyTemplate::new();
+    tt.add_template("description", description).unwrap();
+
+    let context = DescriptionContext {
+        ip_version: {
+            if addr.is_ipv4() {
+                IpVersion::IP4
+            } else {
+                IpVersion::IP6
+            }
+        },
+        target_ip: addr.ip(),
+        target_port: addr.port(),
+        fingerprint_algorithm: fingerprint.algorithm(),
+        fingerprint_value: fingerprint.value(),
+        // NOTE: ufrag is equal to pwd.
+        ufrag: ufrag.to_owned(),
+        pwd: ufrag.to_owned(),
+    };
+    tt.render("description", &context).unwrap()
 }

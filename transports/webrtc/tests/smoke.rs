@@ -33,8 +33,14 @@ async fn create_swarm() -> Result<(Swarm<RequestResponse<PingCodec>>, String)> {
     let cert = generate_certificate();
     let keypair = generate_tls_keypair();
     let peer_id = keypair.public().to_peer_id();
+    let fingerprint = cert
+        .get_fingerprints()
+        .unwrap()
+        .first()
+        .unwrap()
+        .value
+        .to_uppercase();
     let transport = WebRTCTransport::new(cert, keypair);
-    let fingerprint = transport.cert_fingerprint();
     let protocols = iter::once((PingProtocol(), ProtocolSupport::Full));
     let cfg = RequestResponseConfig::default();
     let behaviour = RequestResponse::new(PingCodec(), protocols, cfg);
