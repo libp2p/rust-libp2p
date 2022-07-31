@@ -100,8 +100,7 @@ impl StreamMuxerBox {
 
     fn project(
         self: Pin<&mut Self>,
-    ) -> Pin<&mut (dyn StreamMuxer<Substream = SubstreamBox, Error = io::Error> + Send + Sync)>
-    {
+    ) -> Pin<&mut (dyn StreamMuxer<Substream = SubstreamBox, Error = io::Error> + Send)> {
         self.get_mut().inner.as_mut()
     }
 }
