@@ -114,42 +114,6 @@ pub trait StreamMuxerExt: StreamMuxer + Sized {
         cx: &mut Context<'_>,
     ) -> Poll<Result<Self::Substream, Self::Error>>
     where
-        Self: Unpin;
-
-    fn poll_outbound_unpin(
-        &mut self,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<Self::Substream, Self::Error>>
-    where
-        Self: Unpin;
-
-    fn poll_address_change_unpin(
-        &mut self,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<Multiaddr, Self::Error>>
-    where
-        Self: Unpin;
-
-    fn poll_close_unpin(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>>
-    where
-        Self: Unpin;
-
-    fn next_inbound(&mut self) -> NextInbound<'_, Self>;
-
-    fn next_outbound(&mut self) -> NextOutbound<'_, Self>;
-
-    fn close(self) -> Close<Self>;
-}
-
-impl<S> StreamMuxerExt for S
-where
-    S: StreamMuxer,
-{
-    fn poll_inbound_unpin(
-        &mut self,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<Self::Substream, Self::Error>>
-    where
         Self: Unpin,
     {
         Pin::new(self).poll_inbound(cx)
@@ -194,6 +158,8 @@ where
         Close(self)
     }
 }
+
+impl<S> StreamMuxerExt for S where S: StreamMuxer {}
 
 pub struct NextInbound<'a, S>(&'a mut S);
 
