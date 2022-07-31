@@ -2,6 +2,8 @@
 
 - Update dial address concurrency factor to `8`, thus dialing up to 8 addresses concurrently for a single connection attempt. See `Swarm::dial_concurrency_factor` and [PR 2741].
 
+- Update to `libp2p-core` `v0.35.0`.
+
 [PR 2741]: https://github.com/libp2p/rust-libp2p/pull/2741/
 
 # 0.37.0

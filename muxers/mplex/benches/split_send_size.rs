@@ -114,11 +114,9 @@ fn run(
                 }
                 transport::TransportEvent::Incoming { upgrade, .. } => {
                     let (_peer, conn) = upgrade.await.unwrap();
-                    let mut s = poll_fn(|cx| conn.poll_event(cx))
+                    let mut s = poll_fn(|cx| conn.poll_inbound(cx))
                         .await
-                        .expect("unexpected error")
-                        .into_inbound_substream()
-                        .expect("Unexpected muxer event");
+                        .expect("unexpected error");
 
                     let mut buf = vec![0u8; payload_len];
                     let mut off = 0;
@@ -143,10 +141,7 @@ fn run(
     let sender = async move {
         let addr = addr_receiver.await.unwrap();
         let (_peer, conn) = sender_trans.dial(addr).unwrap().await.unwrap();
-        let mut handle = conn.open_outbound();
-        let mut stream = poll_fn(|cx| conn.poll_outbound(cx, &mut handle))
-            .await
-            .unwrap();
+        let mut stream = poll_fn(|cx| conn.poll_outbound(cx)).await.unwrap();
         let mut off = 0;
         loop {
             let n = poll_fn(|cx| Pin::new(&mut stream).poll_write(cx, &payload[off..]))

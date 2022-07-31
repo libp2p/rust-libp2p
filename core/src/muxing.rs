@@ -63,62 +63,25 @@ mod singleton;
 /// Provides multiplexing for a connection by allowing users to open substreams.
 ///
 /// A substream created by a [`StreamMuxer`] is a type that implements [`AsyncRead`] and [`AsyncWrite`].
-///
-/// Inbound substreams are reported via [`StreamMuxer::poll_event`].
-/// Outbound substreams can be opened via [`StreamMuxer::open_outbound`] and subsequent polling via
-/// [`StreamMuxer::poll_outbound`].
+/// The [`StreamMuxer`] itself is modelled closely after [`AsyncWrite`]. It features `poll`-style
+/// functions that allow the implementation to make progress on various tasks.
 pub trait StreamMuxer {
     /// Type of the object that represents the raw substream where data can be read and written.
     type Substream: AsyncRead + AsyncWrite;
 
-    /// Future that will be resolved when the outgoing substream is open.
-    type OutboundSubstream;
-
     /// Error type of the muxer
     type Error: std::error::Error;
 
-    /// Polls for a connection-wide event.
-    ///
-    /// This function behaves the same as a `Stream`.
-    ///
-    /// If `Pending` is returned, then the current task will be notified once the muxer
-    /// is ready to be polled, similar to the API of `Stream::poll()`.
-    /// Only the latest task that was used to call this method may be notified.
-    ///
-    /// It is permissible and common to use this method to perform background
-    /// work, such as processing incoming packets and polling timers.
-    ///
-    /// An error can be generated if the connection has been closed.
-    fn poll_event(
-        &self,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<StreamMuxerEvent<Self::Substream>, Self::Error>>;
+    /// Poll for new inbound substreams.
+    fn poll_inbound(&self, cx: &mut Context<'_>) -> Poll<Result<Self::Substream, Self::Error>>;
 
-    /// Opens a new outgoing substream, and produces the equivalent to a future that will be
-    /// resolved when it becomes available.
-    ///
-    /// The API of `OutboundSubstream` is totally opaque, and the object can only be interfaced
-    /// through the methods on the `StreamMuxer` trait.
-    fn open_outbound(&self) -> Self::OutboundSubstream;
+    /// Poll for a new, outbound substream.
+    fn poll_outbound(&self, cx: &mut Context<'_>) -> Poll<Result<Self::Substream, Self::Error>>;
 
-    /// Polls the outbound substream.
+    /// Poll for an address change of the underlying connection.
     ///
-    /// If `Pending` is returned, then the current task will be notified once the substream
-    /// is ready to be polled, similar to the API of `Future::poll()`.
-    /// However, for each individual outbound substream, only the latest task that was used to
-    /// call this method may be notified.
-    ///
-    /// May panic or produce an undefined result if an earlier polling of the same substream
-    /// returned `Ready` or `Err`.
-    fn poll_outbound(
-        &self,
-        cx: &mut Context<'_>,
-        s: &mut Self::OutboundSubstream,
-    ) -> Poll<Result<Self::Substream, Self::Error>>;
-
-    /// Destroys an outbound substream future. Use this after the outbound substream has finished,
-    /// or if you want to interrupt it.
-    fn destroy_outbound(&self, s: Self::OutboundSubstream);
+    /// Not all implementations may support this feature.
+    fn poll_address_change(&self, cx: &mut Context<'_>) -> Poll<Result<Multiaddr, Self::Error>>;
 
     /// Closes this `StreamMuxer`.
     ///
@@ -131,39 +94,4 @@ pub trait StreamMuxer {
     /// >           properly informing the remote, there is no difference between this and
     /// >           immediately dropping the muxer.
     fn poll_close(&self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>>;
-}
-
-/// Event about a connection, reported by an implementation of [`StreamMuxer`].
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum StreamMuxerEvent<T> {
-    /// Remote has opened a new substream. Contains the substream in question.
-    InboundSubstream(T),
-
-    /// Address to the remote has changed. The previous one is now obsolete.
-    ///
-    /// > **Note**: This can for example happen when using the QUIC protocol, where the two nodes
-    /// >           can change their IP address while retaining the same QUIC connection.
-    AddressChange(Multiaddr),
-}
-
-impl<T> StreamMuxerEvent<T> {
-    /// If `self` is a [`StreamMuxerEvent::InboundSubstream`], returns the content. Otherwise
-    /// returns `None`.
-    pub fn into_inbound_substream(self) -> Option<T> {
-        if let StreamMuxerEvent::InboundSubstream(s) = self {
-            Some(s)
-        } else {
-            None
-        }
-    }
-
-    /// Map the stream within [`StreamMuxerEvent::InboundSubstream`] to a new type.
-    pub fn map_inbound_stream<O>(self, map: impl FnOnce(T) -> O) -> StreamMuxerEvent<O> {
-        match self {
-            StreamMuxerEvent::InboundSubstream(stream) => {
-                StreamMuxerEvent::InboundSubstream(map(stream))
-            }
-            StreamMuxerEvent::AddressChange(addr) => StreamMuxerEvent::AddressChange(addr),
-        }
-    }
 }

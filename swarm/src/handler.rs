@@ -116,6 +116,12 @@ pub trait ConnectionHandler: Send + 'static {
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo>;
 
     /// Injects the output of a successful upgrade on a new inbound substream.
+    ///
+    /// Note that it is up to the [`ConnectionHandler`] implementation to manage the lifetime of the
+    /// negotiated inbound substreams. E.g. the implementation has to enforce a limit on the number
+    /// of simultaneously open negotiated inbound substreams. In other words it is up to the
+    /// [`ConnectionHandler`] implementation to stop a malicious remote node to open and keep alive
+    /// an excessive amount of inbound substreams.
     fn inject_fully_negotiated_inbound(
         &mut self,
         protocol: <Self::InboundProtocol as InboundUpgradeSend>::Output,

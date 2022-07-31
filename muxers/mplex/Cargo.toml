@@ -3,7 +3,7 @@ name = "libp2p-mplex"
 edition = "2021"
 rust-version = "1.56.1"
 description = "Mplex multiplexing protocol for libp2p"
-version = "0.34.0"
+version = "0.35.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -14,7 +14,7 @@ categories = ["network-programming", "asynchronous"]
 bytes = "1"
 futures = "0.3.1"
 asynchronous-codec = "0.6"
-libp2p-core = { version = "0.34.0", path = "../../core", default-features = false }
+libp2p-core = { version = "0.35.0", path = "../../core", default-features = false }
 log = "0.4"
 nohash-hasher = "0.2"
 parking_lot = "0.12"

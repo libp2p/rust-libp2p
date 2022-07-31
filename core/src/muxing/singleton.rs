@@ -18,12 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{
-    connection::Endpoint,
-    muxing::{StreamMuxer, StreamMuxerEvent},
-};
+use crate::{connection::Endpoint, muxing::StreamMuxer};
 
 use futures::prelude::*;
+use multiaddr::Multiaddr;
 use std::cell::Cell;
 use std::{io, task::Context, task::Poll};
 
@@ -52,55 +50,36 @@ impl<TSocket> SingletonMuxer<TSocket> {
     }
 }
 
-/// Outbound substream attempt of the `SingletonMuxer`.
-pub struct OutboundSubstream {}
-
 impl<TSocket> StreamMuxer for SingletonMuxer<TSocket>
 where
     TSocket: AsyncRead + AsyncWrite + Unpin,
 {
     type Substream = TSocket;
-    type OutboundSubstream = OutboundSubstream;
     type Error = io::Error;
 
-    fn poll_event(
-        &self,
-        _: &mut Context<'_>,
-    ) -> Poll<Result<StreamMuxerEvent<Self::Substream>, io::Error>> {
+    fn poll_inbound(&self, _: &mut Context<'_>) -> Poll<Result<Self::Substream, Self::Error>> {
         match self.endpoint {
-            Endpoint::Dialer => return Poll::Pending,
-            Endpoint::Listener => {}
-        }
-
-        if let Some(stream) = self.inner.replace(None) {
-            Poll::Ready(Ok(StreamMuxerEvent::InboundSubstream(stream)))
-        } else {
-            Poll::Pending
+            Endpoint::Dialer => Poll::Pending,
+            Endpoint::Listener => match self.inner.replace(None) {
+                None => Poll::Pending,
+                Some(stream) => Poll::Ready(Ok(stream)),
+            },
         }
     }
 
-    fn open_outbound(&self) -> Self::OutboundSubstream {
-        OutboundSubstream {}
-    }
-
-    fn poll_outbound(
-        &self,
-        _: &mut Context<'_>,
-        _: &mut Self::OutboundSubstream,
-    ) -> Poll<Result<Self::Substream, io::Error>> {
+    fn poll_outbound(&self, _: &mut Context<'_>) -> Poll<Result<Self::Substream, Self::Error>> {
         match self.endpoint {
-            Endpoint::Listener => return Poll::Pending,
-            Endpoint::Dialer => {}
-        }
-
-        if let Some(stream) = self.inner.replace(None) {
-            Poll::Ready(Ok(stream))
-        } else {
-            Poll::Pending
+            Endpoint::Listener => Poll::Pending,
+            Endpoint::Dialer => match self.inner.replace(None) {
+                None => Poll::Pending,
+                Some(stream) => Poll::Ready(Ok(stream)),
+            },
         }
     }
 
-    fn destroy_outbound(&self, _: Self::OutboundSubstream) {}
+    fn poll_address_change(&self, _: &mut Context<'_>) -> Poll<Result<Multiaddr, Self::Error>> {
+        Poll::Pending
+    }
 
     fn poll_close(&self, _cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         Poll::Ready(Ok(()))
