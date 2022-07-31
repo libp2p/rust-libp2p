@@ -440,3 +440,84 @@ pub enum Event<TOutboundOpenInfo, TCustom> {
     /// Other event.
     Custom(TCustom),
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::handler::PendingConnectionHandler;
+    use quickcheck::*;
+    use std::num::NonZeroU8;
+    use std::sync::Arc;
+
+    struct DummySubstream(Arc<()>);
+
+    impl AsyncRead for DummySubstream {
+        fn poll_read(
+            self: Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+            _buf: &mut [u8],
+        ) -> Poll<std::io::Result<usize>> {
+            Poll::Pending
+        }
+    }
+
+    impl AsyncWrite for DummySubstream {
+        fn poll_write(
+            self: Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+            _buf: &[u8],
+        ) -> Poll<std::io::Result<usize>> {
+            Poll::Pending
+        }
+
+        fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+            Poll::Pending
+        }
+
+        fn poll_close(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+            Poll::Pending
+        }
+    }
+
+    #[test]
+    fn max_negotiating_inbound_streams() {
+        fn prop(max_negotiating_inbound_streams: NonZeroU8) {
+            let max_negotiating_inbound_streams: usize =
+                max_negotiating_inbound_streams.get().into();
+            let handler = PendingConnectionHandler::new("test".to_string());
+            let mut wrapper = HandlerWrapper::new(
+                PeerId::random(),
+                ConnectedPoint::Listener {
+                    local_addr: Multiaddr::empty(),
+                    send_back_addr: Multiaddr::empty(),
+                },
+                handler,
+                None,
+                max_negotiating_inbound_streams,
+            );
+            let alive_substreams_counter = Arc::new(());
+
+            for _ in 0..max_negotiating_inbound_streams {
+                let substream = SubstreamBox::new(DummySubstream(alive_substreams_counter.clone()));
+                wrapper.inject_substream(substream, SubstreamEndpoint::Listener);
+            }
+
+            assert_eq!(
+                Arc::strong_count(&alive_substreams_counter),
+                max_negotiating_inbound_streams + 1,
+                "Expect none of the substreams up to the limit to be dropped."
+            );
+
+            let substream = SubstreamBox::new(DummySubstream(alive_substreams_counter.clone()));
+            wrapper.inject_substream(substream, SubstreamEndpoint::Listener);
+
+            assert_eq!(
+                Arc::strong_count(&alive_substreams_counter),
+                max_negotiating_inbound_streams + 1,
+                "Expect substream exceeding the limit to be dropped."
+            );
+        }
+
+        QuickCheck::new().quickcheck(prop as fn(_));
+    }
+}
