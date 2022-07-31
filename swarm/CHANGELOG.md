@@ -1,5 +1,72 @@
 # 0.38.0 [unreleased]
 
+- Deprecate `NetworkBehaviourEventProcess`. When deriving `NetworkBehaviour` on a custom `struct` users
+  should bring their own `OutEvent` via `#[behaviour(out_event = "MyBehaviourEvent")]`.
+
+  See [`NetworkBehaviour`
+  documentation](https://docs.rs/libp2p/latest/libp2p/swarm/trait.NetworkBehaviour.html) for
+  details.
+
+  Previously
+
+  ``` rust
+  #[derive(NetworkBehaviour)]
+  #[behaviour(event_process = true)]
+  struct MyBehaviour {
+      floodsub: Gossipsub,
+      mdns: Mdns,
+  }
+
+  impl NetworkBehaviourEventProcess<Gossipsub> for MyBehaviour {
+      fn inject_event(&mut self, message: GossipsubEvent) {
+        todo!("Handle event")
+      }
+  }
+
+  impl NetworkBehaviourEventProcess<MdnsEvent> for MyBehaviour {
+      fn inject_event(&mut self, message: MdnsEvent) {
+        todo!("Handle event")
+      }
+  }
+  ```
+
+  Now
+
+  ``` rust
+  #[derive(NetworkBehaviour)]
+  #[behaviour(out_event = "MyBehaviourEvent")]
+  struct MyBehaviour {
+      floodsub: Gossipsub,
+      mdns: Mdns,
+  }
+
+  enum MyBehaviourEvent {
+      Floodsub(FloodsubEvent),
+      Mdns(MdnsEvent),
+  }
+
+  impl From<GossipsubEvent> for MyBehaviourEvent {
+      fn from(event: GossipsubEvent) -> Self {
+          MyBehaviourEvent::Gossipsub(event)
+      }
+  }
+
+  impl From<MdnsEvent> for MyBehaviourEvent {
+      fn from(event: MdnsEvent) -> Self {
+          MyBehaviourEvent::Mdns(event)
+      }
+  }
+
+  match swarm.next().await.unwrap() {
+    SwarmEvent::Behaviour(MyBehaviourEvent::Gossipsub(event)) => {
+      todo!("Handle event")
+    }
+    SwarmEvent::Behaviour(MyBehaviourEvent::Mdns(event)) => {
+      todo!("Handle event")
+    }
+  }
+  ```
+
 - Update dial address concurrency factor to `8`, thus dialing up to 8 addresses concurrently for a single connection attempt. See `Swarm::dial_concurrency_factor` and [PR 2741].
 
 - Update to `libp2p-core` `v0.35.0`.
