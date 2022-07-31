@@ -24,8 +24,8 @@ use futures::future;
 use std::iter;
 use void::Void;
 
-/// Dummy implementation of `UpgradeInfo`/`InboundUpgrade`/`OutboundUpgrade` that doesn't support
-/// any protocol.
+/// Implementation of [`UpgradeInfo`], [`InboundUpgrade`] and [`OutboundUpgrade`] that always
+/// returns a pending upgrade.
 #[derive(Debug, Copy, Clone)]
 pub struct PendingUpgrade<P> {
     protocol_name: P,
