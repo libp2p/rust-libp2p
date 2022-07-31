@@ -109,6 +109,7 @@ pub trait StreamMuxer {
 
 /// Extension trait for [`StreamMuxer`].
 pub trait StreamMuxerExt: StreamMuxer + Sized {
+    /// Convenience function for calling [`StreamMuxer::poll_inbound`] for [`StreamMuxer`]s that are `Unpin`.
     fn poll_inbound_unpin(
         &mut self,
         cx: &mut Context<'_>,
@@ -119,6 +120,7 @@ pub trait StreamMuxerExt: StreamMuxer + Sized {
         Pin::new(self).poll_inbound(cx)
     }
 
+    /// Convenience function for calling [`StreamMuxer::poll_outbound`] for [`StreamMuxer`]s that are `Unpin`.
     fn poll_outbound_unpin(
         &mut self,
         cx: &mut Context<'_>,
@@ -129,6 +131,7 @@ pub trait StreamMuxerExt: StreamMuxer + Sized {
         Pin::new(self).poll_outbound(cx)
     }
 
+    /// Convenience function for calling [`StreamMuxer::poll_address_change`] for [`StreamMuxer`]s that are `Unpin`.
     fn poll_address_change_unpin(
         &mut self,
         cx: &mut Context<'_>,
@@ -139,6 +142,7 @@ pub trait StreamMuxerExt: StreamMuxer + Sized {
         Pin::new(self).poll_address_change(cx)
     }
 
+    /// Convenience function for calling [`StreamMuxer::poll_close`] for [`StreamMuxer`]s that are `Unpin`.
     fn poll_close_unpin(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>>
     where
         Self: Unpin,
@@ -146,14 +150,17 @@ pub trait StreamMuxerExt: StreamMuxer + Sized {
         Pin::new(self).poll_close(cx)
     }
 
+    /// Returns a future that resolves to the next inbound `Substream` opened by the remote.
     fn next_inbound(&mut self) -> NextInbound<'_, Self> {
         NextInbound(self)
     }
 
+    /// Returns a future that opens a new outbound `Substream` with the remote.
     fn next_outbound(&mut self) -> NextOutbound<'_, Self> {
         NextOutbound(self)
     }
 
+    /// Returns a future for closing this [`StreamMuxer`].
     fn close(self) -> Close<Self> {
         Close(self)
     }
