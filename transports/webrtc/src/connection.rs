@@ -128,11 +128,15 @@ impl Connection {
                                     let data_channel = data_channel.clone();
                                     match data_channel.detach().await {
                                         Ok(detached) => {
-                                            if let Err(e) = tx.try_send(detached) {
-                                                // This can happen if the client is not reading
-                                                // events (using `poll_event`) fast enough, which
-                                                // generally shouldn't be the case.
+                                            if let Err(e) = tx.try_send(detached.clone()) {
                                                 error!("Can't send data channel: {}", e);
+                                                // We're not accepting data channels fast enough =>
+                                                // close this channel.
+                                                //
+                                                // Ideally we'd refuse to accept a data channel
+                                                // during the negotiation process, but it's not
+                                                // possible with the current API.
+                                                detached.close().await;
                                             }
                                         }
                                         Err(e) => {
@@ -256,8 +260,9 @@ pub(crate) async fn register_data_channel_open_handler(
                     let data_channel = data_channel.clone();
                     match data_channel.detach().await {
                         Ok(detached) => {
-                            if let Err(e) = data_channel_tx.send(detached) {
+                            if let Err(e) = data_channel_tx.send(detached.clone()) {
                                 error!("Can't send data channel: {:?}", e);
+                                detached.close().await;
                             }
                         }
                         Err(e) => {

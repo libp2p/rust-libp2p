@@ -177,7 +177,7 @@ impl UDPMuxNewAddr {
                             }
                         }
                         Some(conn) => {
-                            let mut packet = Vec::with_capacity(read.filled().len());
+                            let mut packet = vec![0u8; read.filled().len()];
                             packet.copy_from_slice(read.filled());
                             write_packet_to_conn_from_addr(conn, packet, addr);
                         }
