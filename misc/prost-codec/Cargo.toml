@@ -18,4 +18,4 @@ thiserror = "1.0"
 unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
 
 [dev-dependencies]
-prost-build = "0.10"
+prost-build = "0.11"

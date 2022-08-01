@@ -37,4 +37,4 @@ libp2p = { path = "../..", default-features = false, features = [
 ]}
 
 [build-dependencies]
-prost-build = "0.10"
+prost-build = "0.11"
