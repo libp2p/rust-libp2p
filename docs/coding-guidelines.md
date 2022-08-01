@@ -16,6 +16,8 @@
     - [Use `async/await` for sequential execution only](#use-asyncawait-for-sequential-execution-only)
     - [Don't communicate by sharing memory; share memory by communicating.](#dont-communicate-by-sharing-memory-share-memory-by-communicating)
         - [Further Reading](#further-reading)
+    - [Use iteration not recursion](#use-iteration-not-recursion)
+        - [Further Reading](#further-reading-1)
 
 <!-- markdown-toc end -->
 
@@ -268,3 +270,14 @@ about data flow easier.
 ### Further Reading
 
 - https://go.dev/blog/codelab-share
+
+## Use iteration not recursion
+
+Rust does not support tail call optimization, thus using recursion may grow the
+stack potentially unboundedly. Instead use iteration e.g. via `loop` or `for`.
+
+### Further Reading
+
+- https://en.wikipedia.org/wiki/Tail_call
+- https://stackoverflow.com/questions/65948553/why-is-recursion-not-suggested-in-rust
+- https://stackoverflow.com/questions/59257543/when-is-tail-recursion-guaranteed-in-rust
