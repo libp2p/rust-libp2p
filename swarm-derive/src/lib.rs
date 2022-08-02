@@ -178,7 +178,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                     })
                     .collect::<Vec<_>>();
                 (
-                    name.unwrap_or(syn::parse_str("()").unwrap()),
+                    name.unwrap_or_else(|| syn::parse_str("()").unwrap()),
                     definition,
                     from_clauses,
                 )
@@ -555,7 +555,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             // implementation.
             let into_out_event = if out_event_definition.is_some() {
                 let event_variant: syn::Variant = syn::parse_str(
-                    &field.clone()
+                    &field
                         .to_string()
                         .to_upper_camel_case()
                 ).unwrap();
