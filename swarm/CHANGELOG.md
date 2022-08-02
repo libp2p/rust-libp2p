@@ -4,6 +4,8 @@
 
 - Update to `libp2p-core` `v0.35.0`.
 
+- `DialError::WrongPeerId` now uses `Multiaddr` instead of ambiguous `ConnectedPoint`
+
 [PR 2741]: https://github.com/libp2p/rust-libp2p/pull/2741/
 
 # 0.37.0
