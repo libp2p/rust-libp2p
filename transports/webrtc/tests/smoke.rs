@@ -1,7 +1,7 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use futures::{
-    future::{FutureExt, join},
+    future::{join, select, Either, FutureExt},
     io::{AsyncRead, AsyncWrite, AsyncWriteExt},
     stream::StreamExt,
 };
@@ -108,27 +108,35 @@ async fn smoke() -> Result<()> {
 
     let pair = join(a.next(), b.next());
     match pair.await {
-        (Some(SwarmEvent::ConnectionEstablished { .. }), Some(SwarmEvent::ConnectionEstablished { .. })) => {}
+        (
+            Some(SwarmEvent::ConnectionEstablished { .. }),
+            Some(SwarmEvent::ConnectionEstablished { .. }),
+        ) => {}
         e => panic!("{:?}", e),
     };
 
     assert!(b.next().now_or_never().is_none());
 
-    match a.next().await {
-        Some(SwarmEvent::Behaviour(RequestResponseEvent::Message {
-            message:
-                RequestResponseMessage::Request {
-                    request: Ping(ping),
-                    channel,
-                    ..
-                },
-            ..
-        })) => {
+    let pair = select(a.next(), b.next());
+    match pair.await {
+        Either::Left((
+            Some(SwarmEvent::Behaviour(RequestResponseEvent::Message {
+                message:
+                    RequestResponseMessage::Request {
+                        request: Ping(ping),
+                        channel,
+                        ..
+                    },
+                ..
+            })),
+            _,
+        )) => {
             a.behaviour_mut()
                 .send_response(channel, Pong(ping))
                 .unwrap();
         }
-        e => panic!("{:?}", e),
+        Either::Left((e, _)) => panic!("{:?}", e),
+        Either::Right(_) => panic!("b completed first"),
     }
 
     match a.next().await {
@@ -136,16 +144,21 @@ async fn smoke() -> Result<()> {
         e => panic!("{:?}", e),
     }
 
-    match b.next().await {
-        Some(SwarmEvent::Behaviour(RequestResponseEvent::Message {
-            message:
-                RequestResponseMessage::Response {
-                    response: Pong(pong),
-                    ..
-                },
-            ..
-        })) => assert_eq!(data, pong),
-        e => panic!("{:?}", e),
+    let pair = select(a.next(), b.next());
+    match pair.await {
+        Either::Right((
+            Some(SwarmEvent::Behaviour(RequestResponseEvent::Message {
+                message:
+                    RequestResponseMessage::Response {
+                        response: Pong(pong),
+                        ..
+                    },
+                ..
+            })),
+            _,
+        )) => assert_eq!(data, pong),
+        Either::Right((e, _)) => panic!("{:?}", e),
+        Either::Left(_) => panic!("a completed first"),
     }
 
     a.behaviour_mut().send_request(
@@ -155,21 +168,26 @@ async fn smoke() -> Result<()> {
 
     assert!(a.next().now_or_never().is_none());
 
-    match b.next().await {
-        Some(SwarmEvent::Behaviour(RequestResponseEvent::Message {
-            message:
-                RequestResponseMessage::Request {
-                    request: Ping(data),
-                    channel,
-                    ..
-                },
-            ..
-        })) => {
+    let pair = select(a.next(), b.next());
+    match pair.await {
+        Either::Right((
+            Some(SwarmEvent::Behaviour(RequestResponseEvent::Message {
+                message:
+                    RequestResponseMessage::Request {
+                        request: Ping(data),
+                        channel,
+                        ..
+                    },
+                ..
+            })),
+            _,
+        )) => {
             b.behaviour_mut()
                 .send_response(channel, Pong(data))
                 .unwrap();
         }
-        e => panic!("{:?}", e),
+        Either::Right((e, _)) => panic!("{:?}", e),
+        Either::Left(_) => panic!("a completed first"),
     }
 
     match b.next().await {
@@ -177,16 +195,21 @@ async fn smoke() -> Result<()> {
         e => panic!("{:?}", e),
     }
 
-    match a.next().await {
-        Some(SwarmEvent::Behaviour(RequestResponseEvent::Message {
-            message:
-                RequestResponseMessage::Response {
-                    response: Pong(data),
-                    ..
-                },
-            ..
-        })) => assert_eq!(data, b"another substream".to_vec()),
-        e => panic!("{:?}", e),
+    let pair = select(a.next(), b.next());
+    match pair.await {
+        Either::Left((
+            Some(SwarmEvent::Behaviour(RequestResponseEvent::Message {
+                message:
+                    RequestResponseMessage::Response {
+                        response: Pong(data),
+                        ..
+                    },
+                ..
+            })),
+            _,
+        )) => assert_eq!(data, b"another substream".to_vec()),
+        Either::Left((e, _)) => panic!("{:?}", e),
+        Either::Right(_) => panic!("b completed first"),
     }
 
     Ok(())

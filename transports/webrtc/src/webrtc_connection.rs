@@ -138,7 +138,7 @@ impl WebRTCConnection {
                 "data",
                 Some(RTCDataChannelInit {
                     id: Some(1),
-                    negotiated: Some(negotiated),
+                    negotiated: if negotiated { Some(negotiated) } else { None },
                     ..RTCDataChannelInit::default()
                 }),
             )

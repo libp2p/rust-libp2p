@@ -136,7 +136,9 @@ impl Connection {
                                                 // Ideally we'd refuse to accept a data channel
                                                 // during the negotiation process, but it's not
                                                 // possible with the current API.
-                                                detached.close().await;
+                                                if let Err(e) = detached.close().await {
+                                                    error!("Failed to close data channel: {}", e);
+                                                }
                                             }
                                         }
                                         Err(e) => {
@@ -262,7 +264,9 @@ pub(crate) async fn register_data_channel_open_handler(
                         Ok(detached) => {
                             if let Err(e) = data_channel_tx.send(detached.clone()) {
                                 error!("Can't send data channel: {:?}", e);
-                                detached.close().await;
+                                if let Err(e) = detached.close().await {
+                                    error!("Failed to close data channel: {}", e);
+                                }
                             }
                         }
                         Err(e) => {
