@@ -204,43 +204,54 @@ where
     type Substream = EitherOutput<A::Substream, B::Substream>;
     type Error = EitherError<A::Error, B::Error>;
 
-    fn poll_inbound(&self, cx: &mut Context<'_>) -> Poll<Result<Self::Substream, Self::Error>> {
-        match self {
-            EitherOutput::First(inner) => inner
+    fn poll_inbound(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<Self::Substream, Self::Error>> {
+        match self.project() {
+            EitherOutputProj::First(inner) => inner
                 .poll_inbound(cx)
                 .map_ok(EitherOutput::First)
                 .map_err(EitherError::A),
-            EitherOutput::Second(inner) => inner
+            EitherOutputProj::Second(inner) => inner
                 .poll_inbound(cx)
                 .map_ok(EitherOutput::Second)
                 .map_err(EitherError::B),
         }
     }
 
-    fn poll_outbound(&self, cx: &mut Context<'_>) -> Poll<Result<Self::Substream, Self::Error>> {
-        match self {
-            EitherOutput::First(inner) => inner
+    fn poll_outbound(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<Self::Substream, Self::Error>> {
+        match self.project() {
+            EitherOutputProj::First(inner) => inner
                 .poll_outbound(cx)
                 .map_ok(EitherOutput::First)
                 .map_err(EitherError::A),
-            EitherOutput::Second(inner) => inner
+            EitherOutputProj::Second(inner) => inner
                 .poll_outbound(cx)
                 .map_ok(EitherOutput::Second)
                 .map_err(EitherError::B),
         }
     }
 
-    fn poll_address_change(&self, cx: &mut Context<'_>) -> Poll<Result<Multiaddr, Self::Error>> {
-        match self {
-            EitherOutput::First(inner) => inner.poll_address_change(cx).map_err(EitherError::A),
-            EitherOutput::Second(inner) => inner.poll_address_change(cx).map_err(EitherError::B),
+    fn poll_address_change(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<Multiaddr, Self::Error>> {
+        match self.project() {
+            EitherOutputProj::First(inner) => inner.poll_address_change(cx).map_err(EitherError::A),
+            EitherOutputProj::Second(inner) => {
+                inner.poll_address_change(cx).map_err(EitherError::B)
+            }
         }
     }
 
-    fn poll_close(&self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        match self {
-            EitherOutput::First(inner) => inner.poll_close(cx).map_err(EitherError::A),
-            EitherOutput::Second(inner) => inner.poll_close(cx).map_err(EitherError::B),
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        match self.project() {
+            EitherOutputProj::First(inner) => inner.poll_close(cx).map_err(EitherError::A),
+            EitherOutputProj::Second(inner) => inner.poll_close(cx).map_err(EitherError::B),
         }
     }
 }
