@@ -32,13 +32,12 @@ pub use pool::{EstablishedConnection, PendingConnection};
 
 use crate::handler::ConnectionHandler;
 use crate::IntoConnectionHandler;
-use futures::future::poll_fn;
 use handler_wrapper::HandlerWrapper;
 use libp2p_core::connection::ConnectedPoint;
 use libp2p_core::multiaddr::Multiaddr;
-use libp2p_core::muxing::StreamMuxerBox;
+use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerExt};
+use libp2p_core::upgrade;
 use libp2p_core::PeerId;
-use libp2p_core::{upgrade, StreamMuxer};
 use std::collections::VecDeque;
 use std::future::Future;
 use std::{error::Error, fmt, io, pin::Pin, task::Context, task::Poll};
@@ -132,10 +131,7 @@ where
     /// Begins an orderly shutdown of the connection, returning the connection
     /// handler and a `Future` that resolves when connection shutdown is complete.
     pub fn close(self) -> (THandler, impl Future<Output = io::Result<()>>) {
-        (
-            self.handler.into_connection_handler(),
-            poll_fn(move |cx| self.muxing.poll_close(cx)),
-        )
+        (self.handler.into_connection_handler(), self.muxing.close())
     }
 
     /// Polls the handler and the substream, forwarding events from the former to the latter and
@@ -158,7 +154,7 @@ where
             }
 
             if !self.open_info.is_empty() {
-                if let Poll::Ready(substream) = self.muxing.poll_outbound(cx)? {
+                if let Poll::Ready(substream) = self.muxing.poll_outbound_unpin(cx)? {
                     let user_data = self
                         .open_info
                         .pop_front()
@@ -169,13 +165,13 @@ where
                 }
             }
 
-            if let Poll::Ready(substream) = self.muxing.poll_inbound(cx)? {
+            if let Poll::Ready(substream) = self.muxing.poll_inbound_unpin(cx)? {
                 self.handler
                     .inject_substream(substream, SubstreamEndpoint::Listener);
                 continue; // Go back to the top, handler can potentially make progress again.
             }
 
-            if let Poll::Ready(address) = self.muxing.poll_address_change(cx)? {
+            if let Poll::Ready(address) = self.muxing.poll_address_change_unpin(cx)? {
                 self.handler.inject_address_change(&address);
                 return Poll::Ready(Ok(Event::AddressChange(address)));
             }
