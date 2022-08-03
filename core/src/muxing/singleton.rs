@@ -88,14 +88,14 @@ where
         }
     }
 
+    fn poll_close(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+        Poll::Ready(Ok(()))
+    }
+
     fn poll_event(
         self: Pin<&mut Self>,
         _: &mut Context<'_>,
     ) -> Poll<Result<StreamMuxerEvent, Self::Error>> {
         Poll::Pending
-    }
-
-    fn poll_close(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
-        Poll::Ready(Ok(()))
     }
 }

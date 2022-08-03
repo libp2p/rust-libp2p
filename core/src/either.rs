@@ -237,6 +237,13 @@ where
         }
     }
 
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        match self.project() {
+            EitherOutputProj::First(inner) => inner.poll_close(cx).map_err(EitherError::A),
+            EitherOutputProj::Second(inner) => inner.poll_close(cx).map_err(EitherError::B),
+        }
+    }
+
     fn poll_event(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -244,13 +251,6 @@ where
         match self.project() {
             EitherOutputProj::First(inner) => inner.poll_event(cx).map_err(EitherError::A),
             EitherOutputProj::Second(inner) => inner.poll_event(cx).map_err(EitherError::B),
-        }
-    }
-
-    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        match self.project() {
-            EitherOutputProj::First(inner) => inner.poll_close(cx).map_err(EitherError::A),
-            EitherOutputProj::Second(inner) => inner.poll_close(cx).map_err(EitherError::B),
         }
     }
 }

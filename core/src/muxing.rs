@@ -86,16 +86,6 @@ pub trait StreamMuxer {
         cx: &mut Context<'_>,
     ) -> Poll<Result<Self::Substream, Self::Error>>;
 
-    /// Poll for an event of the underlying connection.
-    ///
-    /// In addition to returning an event, this function may be used to perform any kind of background
-    /// work that needs to happen for the muxer to do its work. Implementations can rely on this
-    /// function to be called regularly and unconditionally.
-    fn poll_event(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<StreamMuxerEvent, Self::Error>>;
-
     /// Closes this `StreamMuxer`.
     ///
     /// After this has returned `Poll::Ready(Ok(()))`, the muxer has become useless. All
@@ -107,6 +97,16 @@ pub trait StreamMuxer {
     /// >           properly informing the remote, there is no difference between this and
     /// >           immediately dropping the muxer.
     fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>>;
+
+    /// Poll for an event of the underlying connection.
+    ///
+    /// In addition to returning an event, this function may be used to perform any kind of background
+    /// work that needs to happen for the muxer to do its work. Implementations can rely on this
+    /// function to be called regularly and unconditionally.
+    fn poll_event(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<StreamMuxerEvent, Self::Error>>;
 }
 
 /// An event produced by a [`StreamMuxer`].

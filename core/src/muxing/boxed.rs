@@ -38,11 +38,6 @@ where
     type Substream = SubstreamBox;
     type Error = io::Error;
 
-    #[inline]
-    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.project().inner.poll_close(cx).map_err(into_io_error)
-    }
-
     fn poll_inbound(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -63,6 +58,11 @@ where
             .poll_outbound(cx)
             .map_ok(SubstreamBox::new)
             .map_err(into_io_error)
+    }
+
+    #[inline]
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        self.project().inner.poll_close(cx).map_err(into_io_error)
     }
 
     fn poll_event(
@@ -106,11 +106,6 @@ impl StreamMuxer for StreamMuxerBox {
     type Substream = SubstreamBox;
     type Error = io::Error;
 
-    #[inline]
-    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.project().poll_close(cx)
-    }
-
     fn poll_inbound(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -123,6 +118,11 @@ impl StreamMuxer for StreamMuxerBox {
         cx: &mut Context<'_>,
     ) -> Poll<Result<Self::Substream, Self::Error>> {
         self.project().poll_outbound(cx)
+    }
+
+    #[inline]
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        self.project().poll_close(cx)
     }
 
     fn poll_event(
