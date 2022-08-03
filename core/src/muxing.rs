@@ -86,13 +86,15 @@ pub trait StreamMuxer {
         cx: &mut Context<'_>,
     ) -> Poll<Result<Self::Substream, Self::Error>>;
 
-    /// Poll for an address change of the underlying connection.
+    /// Poll for an event of the underlying connection.
     ///
-    /// Not all implementations may support this feature.
-    fn poll_address_change(
+    /// In addition to returning an event, this function may be used to perform any kind of background
+    /// work that needs to happen for the muxer to do its work. Implementations can rely on this
+    /// function to be called regularly and unconditionally.
+    fn poll_event(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> Poll<Result<Multiaddr, Self::Error>>;
+    ) -> Poll<Result<StreamMuxerEvent, Self::Error>>;
 
     /// Closes this `StreamMuxer`.
     ///
@@ -105,6 +107,12 @@ pub trait StreamMuxer {
     /// >           properly informing the remote, there is no difference between this and
     /// >           immediately dropping the muxer.
     fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>>;
+}
+
+/// An event produced by a [`StreamMuxer`].
+pub enum StreamMuxerEvent {
+    /// The address of the remote has changed.
+    AddressChange(Multiaddr),
 }
 
 /// Extension trait for [`StreamMuxer`].
@@ -131,15 +139,15 @@ pub trait StreamMuxerExt: StreamMuxer + Sized {
         Pin::new(self).poll_outbound(cx)
     }
 
-    /// Convenience function for calling [`StreamMuxer::poll_address_change`] for [`StreamMuxer`]s that are `Unpin`.
-    fn poll_address_change_unpin(
+    /// Convenience function for calling [`StreamMuxer::poll_event`] for [`StreamMuxer`]s that are `Unpin`.
+    fn poll_event_unpin(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<Result<Multiaddr, Self::Error>>
+    ) -> Poll<Result<StreamMuxerEvent, Self::Error>>
     where
         Self: Unpin,
     {
-        Pin::new(self).poll_address_change(cx)
+        Pin::new(self).poll_event(cx)
     }
 
     /// Convenience function for calling [`StreamMuxer::poll_close`] for [`StreamMuxer`]s that are `Unpin`.

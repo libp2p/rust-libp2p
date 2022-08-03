@@ -20,8 +20,8 @@
 
 use crate::{connection::Endpoint, muxing::StreamMuxer};
 
+use crate::muxing::StreamMuxerEvent;
 use futures::prelude::*;
-use multiaddr::Multiaddr;
 use std::cell::Cell;
 use std::pin::Pin;
 use std::{io, task::Context, task::Poll};
@@ -88,10 +88,10 @@ where
         }
     }
 
-    fn poll_address_change(
+    fn poll_event(
         self: Pin<&mut Self>,
         _: &mut Context<'_>,
-    ) -> Poll<Result<Multiaddr, Self::Error>> {
+    ) -> Poll<Result<StreamMuxerEvent, Self::Error>> {
         Poll::Pending
     }
 

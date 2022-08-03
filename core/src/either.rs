@@ -18,6 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::muxing::StreamMuxerEvent;
 use crate::{
     muxing::StreamMuxer,
     transport::{ListenerId, Transport, TransportError, TransportEvent},
@@ -236,15 +237,13 @@ where
         }
     }
 
-    fn poll_address_change(
+    fn poll_event(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> Poll<Result<Multiaddr, Self::Error>> {
+    ) -> Poll<Result<StreamMuxerEvent, Self::Error>> {
         match self.project() {
-            EitherOutputProj::First(inner) => inner.poll_address_change(cx).map_err(EitherError::A),
-            EitherOutputProj::Second(inner) => {
-                inner.poll_address_change(cx).map_err(EitherError::B)
-            }
+            EitherOutputProj::First(inner) => inner.poll_event(cx).map_err(EitherError::A),
+            EitherOutputProj::Second(inner) => inner.poll_event(cx).map_err(EitherError::B),
         }
     }
 

@@ -1,6 +1,6 @@
+use crate::muxing::StreamMuxerEvent;
 use crate::StreamMuxer;
 use futures::{AsyncRead, AsyncWrite};
-use multiaddr::Multiaddr;
 use pin_project::pin_project;
 use std::error::Error;
 use std::fmt;
@@ -65,14 +65,11 @@ where
             .map_err(into_io_error)
     }
 
-    fn poll_address_change(
+    fn poll_event(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> Poll<Result<Multiaddr, Self::Error>> {
-        self.project()
-            .inner
-            .poll_address_change(cx)
-            .map_err(into_io_error)
+    ) -> Poll<Result<StreamMuxerEvent, Self::Error>> {
+        self.project().inner.poll_event(cx).map_err(into_io_error)
     }
 }
 
@@ -128,11 +125,11 @@ impl StreamMuxer for StreamMuxerBox {
         self.project().poll_outbound(cx)
     }
 
-    fn poll_address_change(
+    fn poll_event(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> Poll<Result<Multiaddr, Self::Error>> {
-        self.project().poll_address_change(cx)
+    ) -> Poll<Result<StreamMuxerEvent, Self::Error>> {
+        self.project().poll_event(cx)
     }
 }
 
