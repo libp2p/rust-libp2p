@@ -217,10 +217,13 @@ impl<'a> StreamMuxer for Connection {
                 if let Some(cap) = inner.read_buf_cap {
                     ch.set_read_buf_capacity(cap);
                 }
-
+                inner.outbound_fut = None;
                 Poll::Ready(Ok(ch))
             }
-            Err(e) => Poll::Ready(Err(e)),
+            Err(e) => {
+                inner.outbound_fut = None;
+                Poll::Ready(Err(e))
+            }
         }
     }
 
@@ -237,9 +240,13 @@ impl<'a> StreamMuxer for Connection {
         match ready!(fut.as_mut().poll(cx)) {
             Ok(()) => {
                 inner.incoming_data_channels_rx.close();
+                inner.close_fut = None;
                 Poll::Ready(Ok(()))
             }
-            Err(e) => Poll::Ready(Err(e)),
+            Err(e) => {
+                inner.close_fut = None;
+                Poll::Ready(Err(e))
+            }
         }
     }
 }

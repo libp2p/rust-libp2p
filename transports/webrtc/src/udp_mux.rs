@@ -194,7 +194,11 @@ impl UDPMuxNewAddr {
 }
 
 fn write_packet_to_conn_from_addr(conn: UDPMuxConn, packet: Vec<u8>, addr: SocketAddr) {
-    tokio::spawn(async move {
+    // Writing the packet should be quick given it just buffers the data (no actual IO).
+    //
+    // Block until completion instead of spawning to provide backpressure to the clients.
+    // NOTE: `block_on` could be removed once/if `write_packet` becomes sync.
+    futures::executor::block_on(async move {
         if let Err(err) = conn.write_packet(&packet, addr).await {
             log::error!("Failed to write packet: {} (addr={})", err, addr);
         }
