@@ -41,3 +41,4 @@ libp2p-request-response = { version = "0.20.0", path = "../../protocols/request-
 libp2p-swarm = { version = "0.38.0", path = "../../swarm" }
 rand_core = "0.5"
 rcgen = "0.9"
+quickcheck = "1"
