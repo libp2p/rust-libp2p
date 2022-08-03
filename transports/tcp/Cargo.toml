@@ -3,7 +3,7 @@ name = "libp2p-tcp"
 edition = "2021"
 rust-version = "1.56.1"
 description = "TCP/IP transport protocol for libp2p"
-version = "0.34.0"
+version = "0.35.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -14,7 +14,7 @@ categories = ["network-programming", "asynchronous"]
 async-io-crate = { package = "async-io", version = "1.2.0", optional = true }
 futures = "0.3.8"
 futures-timer = "3.0"
-if-watch = { version = "1.0.0", optional = true }
+if-watch = { version = "1.1.1", optional = true }
 if-addrs = { version = "0.7.0", optional = true }
 ipnet = "2.0.0"
 libc = "0.2.80"

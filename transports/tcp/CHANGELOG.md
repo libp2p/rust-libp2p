@@ -1,3 +1,9 @@
+# 0.35.0 [unreleased]
+
+- Update to `libp2p-core` `v0.35.0`.
+
+- Update to `if-watch` `v1.1.1`.
+
 # 0.34.0
 
 - Update to `libp2p-core` `v0.34.0`.

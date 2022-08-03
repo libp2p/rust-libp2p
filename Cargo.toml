@@ -109,7 +109,7 @@ smallvec = "1.6.1"
 libp2p-deflate = { version = "0.35.0", path = "transports/deflate", optional = true }
 libp2p-dns = { version = "0.35.0", path = "transports/dns", optional = true, default-features = false }
 libp2p-mdns = { version = "0.39.0", path = "protocols/mdns", optional = true }
-libp2p-tcp = { version = "0.34.0", path = "transports/tcp", default-features = false, optional = true }
+libp2p-tcp = { version = "0.35.0", path = "transports/tcp", default-features = false, optional = true }
 libp2p-websocket = { version = "0.37.0", path = "transports/websocket", optional = true }
 
 [target.'cfg(not(target_os = "unknown"))'.dependencies]

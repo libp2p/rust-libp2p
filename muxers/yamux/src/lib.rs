@@ -29,7 +29,6 @@ use futures::{
 use libp2p_core::muxing::StreamMuxer;
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_core::Multiaddr;
-use parking_lot::Mutex;
 use std::{
     fmt, io, iter, mem,
     pin::Pin,
@@ -39,19 +38,17 @@ use thiserror::Error;
 use yamux::ConnectionError;
 
 /// A Yamux connection.
-pub struct Yamux<S>(Mutex<Inner<S>>);
+pub struct Yamux<S> {
+    /// The [`futures::stream::Stream`] of incoming substreams.
+    incoming: S,
+    /// Handle to control the connection.
+    control: yamux::Control,
+}
 
 impl<S> fmt::Debug for Yamux<S> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("Yamux")
     }
-}
-
-struct Inner<S> {
-    /// The [`futures::stream::Stream`] of incoming substreams.
-    incoming: S,
-    /// Handle to control the connection.
-    control: yamux::Control,
 }
 
 /// A token to poll for an outbound substream.
@@ -66,14 +63,14 @@ where
     fn new(io: C, cfg: yamux::Config, mode: yamux::Mode) -> Self {
         let conn = yamux::Connection::new(io, cfg, mode);
         let ctrl = conn.control();
-        let inner = Inner {
+
+        Yamux {
             incoming: Incoming {
                 stream: yamux::into_stream(conn).err_into().boxed(),
                 _marker: std::marker::PhantomData,
             },
             control: ctrl,
-        };
-        Yamux(Mutex::new(inner))
+        }
     }
 }
 
@@ -85,14 +82,14 @@ where
     fn local(io: C, cfg: yamux::Config, mode: yamux::Mode) -> Self {
         let conn = yamux::Connection::new(io, cfg, mode);
         let ctrl = conn.control();
-        let inner = Inner {
+
+        Yamux {
             incoming: LocalIncoming {
                 stream: yamux::into_stream(conn).err_into().boxed_local(),
                 _marker: std::marker::PhantomData,
             },
             control: ctrl,
-        };
-        Yamux(Mutex::new(inner))
+        }
     }
 }
 
@@ -105,41 +102,44 @@ where
     type Substream = yamux::Stream;
     type Error = YamuxError;
 
-    fn poll_inbound(&self, cx: &mut Context<'_>) -> Poll<Result<Self::Substream, Self::Error>> {
-        self.0
-            .lock()
-            .incoming
-            .poll_next_unpin(cx)
-            .map(|maybe_stream| {
-                let stream = maybe_stream
-                    .transpose()?
-                    .ok_or(YamuxError(ConnectionError::Closed))?;
+    fn poll_inbound(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<Self::Substream, Self::Error>> {
+        self.incoming.poll_next_unpin(cx).map(|maybe_stream| {
+            let stream = maybe_stream
+                .transpose()?
+                .ok_or(YamuxError(ConnectionError::Closed))?;
 
-                Ok(stream)
-            })
+            Ok(stream)
+        })
     }
 
-    fn poll_outbound(&self, cx: &mut Context<'_>) -> Poll<Result<Self::Substream, Self::Error>> {
-        Pin::new(&mut self.0.lock().control)
+    fn poll_outbound(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<Self::Substream, Self::Error>> {
+        Pin::new(&mut self.control)
             .poll_open_stream(cx)
             .map_err(YamuxError)
     }
 
-    fn poll_address_change(&self, _: &mut Context<'_>) -> Poll<Result<Multiaddr, Self::Error>> {
+    fn poll_address_change(
+        self: Pin<&mut Self>,
+        _: &mut Context<'_>,
+    ) -> Poll<Result<Multiaddr, Self::Error>> {
         Poll::Pending
     }
 
-    fn poll_close(&self, c: &mut Context<'_>) -> Poll<YamuxResult<()>> {
-        let mut inner = self.0.lock();
-
-        if let Poll::Ready(()) = Pin::new(&mut inner.control)
+    fn poll_close(mut self: Pin<&mut Self>, c: &mut Context<'_>) -> Poll<YamuxResult<()>> {
+        if let Poll::Ready(()) = Pin::new(&mut self.control)
             .poll_close(c)
             .map_err(YamuxError)?
         {
             return Poll::Ready(Ok(()));
         }
 
-        while let Poll::Ready(maybe_inbound_stream) = inner.incoming.poll_next_unpin(c)? {
+        while let Poll::Ready(maybe_inbound_stream) = self.incoming.poll_next_unpin(c)? {
             match maybe_inbound_stream {
                 Some(inbound_stream) => mem::drop(inbound_stream),
                 None => return Poll::Ready(Ok(())),
