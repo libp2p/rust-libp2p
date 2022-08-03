@@ -31,12 +31,14 @@ use futures::{
 use futures_lite::StreamExt;
 use libp2p_core::{muxing::StreamMuxer, Multiaddr};
 use log::{debug, error, trace};
+use pin_project::pin_project;
 use webrtc::data_channel::RTCDataChannel;
 use webrtc::peer_connection::RTCPeerConnection;
 use webrtc_data::data_channel::DataChannel as DetachedDataChannel;
 
 use std::{
-    sync::{Arc, Mutex as StdMutex},
+    pin::Pin,
+    sync::Arc,
     task::{Context, Poll},
 };
 
@@ -46,16 +48,13 @@ pub(crate) use poll_data_channel::PollDataChannel;
 const MAX_DATA_CHANNELS_IN_FLIGHT: usize = 10;
 
 /// A WebRTC connection, wrapping [`RTCPeerConnection`] and implementing [`StreamMuxer`] trait.
+#[pin_project]
 pub struct Connection {
     /// `RTCPeerConnection` to the remote peer.
     ///
     /// Uses futures mutex because used in async code (see poll_outbound and poll_close).
     peer_conn: Arc<FutMutex<RTCPeerConnection>>,
 
-    inner: StdMutex<ConnectionInner>,
-}
-
-struct ConnectionInner {
     /// Channel onto which incoming data channels are put.
     incoming_data_channels_rx: mpsc::Receiver<Arc<DetachedDataChannel>>,
 
@@ -64,9 +63,6 @@ struct ConnectionInner {
     read_buf_cap: Option<usize>,
 
     /// Future, which, once polled, will result in an outbound substream.
-    ///
-    /// NOTE: future might be waiting at one of the await points, and dropping the future will
-    /// abruptly interrupt the execution.
     outbound_fut: Option<BoxFuture<'static, Result<Arc<DetachedDataChannel>, Error>>>,
 
     /// Future, which, once polled, will result in closing the entire connection.
@@ -82,19 +78,16 @@ impl Connection {
 
         Self {
             peer_conn: Arc::new(FutMutex::new(rtc_conn)),
-            inner: StdMutex::new(ConnectionInner {
-                incoming_data_channels_rx: data_channel_rx,
-                read_buf_cap: None,
-                outbound_fut: None,
-                close_fut: None,
-            }),
+            incoming_data_channels_rx: data_channel_rx,
+            read_buf_cap: None,
+            outbound_fut: None,
+            close_fut: None,
         }
     }
 
     /// Set the capacity of a data channel's temporary read buffer (equal for all data channels; default: 8192).
     pub fn set_data_channels_read_buf_capacity(&mut self, cap: usize) {
-        let mut inner = self.inner.lock().unwrap();
-        inner.read_buf_cap = Some(cap);
+        self.read_buf_cap = Some(cap);
     }
 
     /// Registers a handler for incoming data channels.
@@ -159,15 +152,18 @@ impl<'a> StreamMuxer for Connection {
     type Substream = PollDataChannel;
     type Error = Error;
 
-    fn poll_inbound(&self, cx: &mut Context<'_>) -> Poll<Result<Self::Substream, Self::Error>> {
-        let mut inner = self.inner.lock().unwrap();
-        match ready!(inner.incoming_data_channels_rx.poll_next(cx)) {
+    fn poll_inbound(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<Self::Substream, Self::Error>> {
+        let this = self.project();
+        match ready!(this.incoming_data_channels_rx.poll_next(cx)) {
             Some(detached) => {
                 trace!("Incoming substream {}", detached.stream_identifier());
 
                 let mut ch = PollDataChannel::new(detached);
-                if let Some(cap) = inner.read_buf_cap {
-                    ch.set_read_buf_capacity(cap);
+                if let Some(cap) = this.read_buf_cap {
+                    ch.set_read_buf_capacity(*cap);
                 }
 
                 Poll::Ready(Ok(ch))
@@ -178,14 +174,20 @@ impl<'a> StreamMuxer for Connection {
         }
     }
 
-    fn poll_address_change(&self, _cx: &mut Context<'_>) -> Poll<Result<Multiaddr, Self::Error>> {
+    fn poll_address_change(
+        self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+    ) -> Poll<Result<Multiaddr, Self::Error>> {
         return Poll::Pending;
     }
 
-    fn poll_outbound(&self, cx: &mut Context<'_>) -> Poll<Result<Self::Substream, Self::Error>> {
-        let mut inner = self.inner.lock().unwrap();
-        let peer_conn = self.peer_conn.clone();
-        let fut = inner.outbound_fut.get_or_insert(Box::pin(async move {
+    fn poll_outbound(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<Self::Substream, Self::Error>> {
+        let this = self.project();
+        let peer_conn = this.peer_conn.clone();
+        let fut = this.outbound_fut.get_or_insert(Box::pin(async move {
             let peer_conn = peer_conn.lock().await;
 
             // Create a datachannel with label 'data'
@@ -214,37 +216,37 @@ impl<'a> StreamMuxer for Connection {
         match ready!(fut.as_mut().poll(cx)) {
             Ok(detached) => {
                 let mut ch = PollDataChannel::new(detached);
-                if let Some(cap) = inner.read_buf_cap {
-                    ch.set_read_buf_capacity(cap);
+                if let Some(cap) = this.read_buf_cap {
+                    ch.set_read_buf_capacity(*cap);
                 }
-                inner.outbound_fut = None;
+                *this.outbound_fut = None;
                 Poll::Ready(Ok(ch))
             }
             Err(e) => {
-                inner.outbound_fut = None;
+                *this.outbound_fut = None;
                 Poll::Ready(Err(e))
             }
         }
     }
 
-    fn poll_close(&self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         debug!("Closing connection");
 
-        let mut inner = self.inner.lock().unwrap();
-        let peer_conn = self.peer_conn.clone();
-        let fut = inner.close_fut.get_or_insert(Box::pin(async move {
+        let this = self.project();
+        let peer_conn = this.peer_conn.clone();
+        let fut = this.close_fut.get_or_insert(Box::pin(async move {
             let peer_conn = peer_conn.lock().await;
             peer_conn.close().await.map_err(Error::WebRTC)
         }));
 
         match ready!(fut.as_mut().poll(cx)) {
             Ok(()) => {
-                inner.incoming_data_channels_rx.close();
-                inner.close_fut = None;
+                this.incoming_data_channels_rx.close();
+                *this.close_fut = None;
                 Poll::Ready(Ok(()))
             }
             Err(e) => {
-                inner.close_fut = None;
+                *this.close_fut = None;
                 Poll::Ready(Err(e))
             }
         }
