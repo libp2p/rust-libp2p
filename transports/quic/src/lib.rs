@@ -3,6 +3,7 @@
 use libp2p_core::{Transport, StreamMuxer,
     PeerId,
     multiaddr::{Multiaddr, Protocol},
+    identity::Keypair,
     transport::{TransportError, ListenerId, TransportEvent},
 };
 
@@ -11,6 +12,7 @@ use std::{
     pin::Pin,
     future::Future,
     io::self,
+    time::Duration,
     sync::Arc,
     net::SocketAddr,
 };
@@ -143,8 +145,48 @@ impl Future for QuicUpgrade {
     }
 }
 
+/// Represents the configuration for the [`Endpoint`].
+#[derive(Debug, Clone)]
+pub struct Config {
+    /// The client configuration to pass to `quinn`.
+    client_config: quinn::ClientConfig,
+    /// The server configuration to pass to `quinn`.
+    server_config: quinn::ServerConfig
+}
+
+impl Config {
+    /// Creates a new configuration object with default values.
+    pub fn new(keypair: &Keypair) -> Result<Self, tls::ConfigError> {
+        let mut transport = quinn::TransportConfig::default();
+        transport.max_concurrent_uni_streams(0u32.into()); // Can only panic if value is out of range.
+        transport.datagram_receive_buffer_size(None);
+        transport.keep_alive_interval(Some(Duration::from_millis(10)));
+        let transport = Arc::new(transport);
+
+        let client_tls_config = tls::make_client_config(keypair).unwrap();
+        let server_tls_config = tls::make_server_config(keypair).unwrap();
+
+        let mut server_config = quinn::ServerConfig::with_crypto(Arc::new(server_tls_config));
+        server_config.transport = Arc::clone(&transport);
+
+        let mut client_config = quinn::ClientConfig::new(Arc::new(client_tls_config));
+        client_config.transport_config(transport);
+        Ok(Self {
+            client_config,
+            server_config: server_config,
+        })
+    }
+}
+
 struct QuicTransport {
+    config: Config,
     endpoint: Option<(quinn::Endpoint, quinn::Incoming)>,
+}
+
+impl QuicTransport {
+    pub fn new(keypair: &Keypair) -> Self {
+        Self { config: Config::new(keypair).unwrap(), endpoint: None }
+    }
 }
 
 impl Transport for QuicTransport {
@@ -157,21 +199,11 @@ impl Transport for QuicTransport {
         let socket_addr =
             multiaddr_to_socketaddr(&addr).ok_or(TransportError::MultiaddrNotSupported(addr))?;
 
-        let server_config = {
-            let key = rustls::PrivateKey(vec![]);
-            let certs = vec![];
-            let server_crypto = rustls::ServerConfig::builder()
-                .with_safe_defaults()
-                .with_no_client_auth()
-                .with_single_cert(certs, key).unwrap();
-            let mut server_config = quinn::ServerConfig::with_crypto(Arc::new(server_crypto));
-            Arc::get_mut(&mut server_config.transport)
-                .unwrap()
-                .max_concurrent_uni_streams(0_u8.into());
-            server_config
-        };
+        let client_config = self.config.client_config.clone();
+        let server_config = self.config.server_config.clone();
 
-        let (endpoint, incoming) = quinn::Endpoint::server(server_config, socket_addr).unwrap();
+        let (mut endpoint, incoming) = quinn::Endpoint::server(server_config, socket_addr).unwrap();
+        endpoint.set_default_client_config(client_config);
 
         self.endpoint = Some((endpoint, incoming));
 
@@ -193,13 +225,18 @@ impl Transport for QuicTransport {
     }
 
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let endpoint = quinn::Endpoint::client("[::]:0".parse().unwrap()).unwrap();
-
         let socket_addr = multiaddr_to_socketaddr(&addr)
             .ok_or_else(|| TransportError::MultiaddrNotSupported(addr.clone()))?;
         if socket_addr.port() == 0 || socket_addr.ip().is_unspecified() {
             return Err(TransportError::MultiaddrNotSupported(addr));
         }
+
+        let server_addr = "[::]:0".parse().unwrap();
+        let client_config = self.config.client_config.clone();
+        let server_config = self.config.server_config.clone();
+
+        let (mut endpoint, _) = quinn::Endpoint::server(server_config, server_addr).unwrap();
+        endpoint.set_default_client_config(client_config);
 
         Ok(Box::pin(async move {
             let connecting = endpoint.connect(socket_addr, "server_name").unwrap();
