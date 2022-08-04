@@ -52,6 +52,8 @@
 
 use futures::{task::Context, task::Poll, AsyncRead, AsyncWrite};
 use multiaddr::Multiaddr;
+use std::future::Future;
+use std::pin::Pin;
 
 pub use self::boxed::StreamMuxerBox;
 pub use self::boxed::SubstreamBox;
@@ -73,15 +75,24 @@ pub trait StreamMuxer {
     type Error: std::error::Error;
 
     /// Poll for new inbound substreams.
-    fn poll_inbound(&self, cx: &mut Context<'_>) -> Poll<Result<Self::Substream, Self::Error>>;
+    fn poll_inbound(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<Self::Substream, Self::Error>>;
 
     /// Poll for a new, outbound substream.
-    fn poll_outbound(&self, cx: &mut Context<'_>) -> Poll<Result<Self::Substream, Self::Error>>;
+    fn poll_outbound(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<Self::Substream, Self::Error>>;
 
     /// Poll for an address change of the underlying connection.
     ///
     /// Not all implementations may support this feature.
-    fn poll_address_change(&self, cx: &mut Context<'_>) -> Poll<Result<Multiaddr, Self::Error>>;
+    fn poll_address_change(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<Multiaddr, Self::Error>>;
 
     /// Closes this `StreamMuxer`.
     ///
@@ -93,5 +104,105 @@ pub trait StreamMuxer {
     /// >           that the remote is properly informed of the shutdown. However, apart from
     /// >           properly informing the remote, there is no difference between this and
     /// >           immediately dropping the muxer.
-    fn poll_close(&self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>>;
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>>;
+}
+
+/// Extension trait for [`StreamMuxer`].
+pub trait StreamMuxerExt: StreamMuxer + Sized {
+    /// Convenience function for calling [`StreamMuxer::poll_inbound`] for [`StreamMuxer`]s that are `Unpin`.
+    fn poll_inbound_unpin(
+        &mut self,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<Self::Substream, Self::Error>>
+    where
+        Self: Unpin,
+    {
+        Pin::new(self).poll_inbound(cx)
+    }
+
+    /// Convenience function for calling [`StreamMuxer::poll_outbound`] for [`StreamMuxer`]s that are `Unpin`.
+    fn poll_outbound_unpin(
+        &mut self,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<Self::Substream, Self::Error>>
+    where
+        Self: Unpin,
+    {
+        Pin::new(self).poll_outbound(cx)
+    }
+
+    /// Convenience function for calling [`StreamMuxer::poll_address_change`] for [`StreamMuxer`]s that are `Unpin`.
+    fn poll_address_change_unpin(
+        &mut self,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<Multiaddr, Self::Error>>
+    where
+        Self: Unpin,
+    {
+        Pin::new(self).poll_address_change(cx)
+    }
+
+    /// Convenience function for calling [`StreamMuxer::poll_close`] for [`StreamMuxer`]s that are `Unpin`.
+    fn poll_close_unpin(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>>
+    where
+        Self: Unpin,
+    {
+        Pin::new(self).poll_close(cx)
+    }
+
+    /// Returns a future that resolves to the next inbound `Substream` opened by the remote.
+    fn next_inbound(&mut self) -> NextInbound<'_, Self> {
+        NextInbound(self)
+    }
+
+    /// Returns a future that opens a new outbound `Substream` with the remote.
+    fn next_outbound(&mut self) -> NextOutbound<'_, Self> {
+        NextOutbound(self)
+    }
+
+    /// Returns a future for closing this [`StreamMuxer`].
+    fn close(self) -> Close<Self> {
+        Close(self)
+    }
+}
+
+impl<S> StreamMuxerExt for S where S: StreamMuxer {}
+
+pub struct NextInbound<'a, S>(&'a mut S);
+
+pub struct NextOutbound<'a, S>(&'a mut S);
+
+pub struct Close<S>(S);
+
+impl<'a, S> Future for NextInbound<'a, S>
+where
+    S: StreamMuxer + Unpin,
+{
+    type Output = Result<S::Substream, S::Error>;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.0.poll_inbound_unpin(cx)
+    }
+}
+
+impl<'a, S> Future for NextOutbound<'a, S>
+where
+    S: StreamMuxer + Unpin,
+{
+    type Output = Result<S::Substream, S::Error>;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.0.poll_outbound_unpin(cx)
+    }
+}
+
+impl<S> Future for Close<S>
+where
+    S: StreamMuxer + Unpin,
+{
+    type Output = Result<(), S::Error>;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.0.poll_close_unpin(cx)
+    }
 }

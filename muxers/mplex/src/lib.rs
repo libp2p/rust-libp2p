@@ -85,25 +85,34 @@ where
     type Substream = Substream<C>;
     type Error = io::Error;
 
-    fn poll_inbound(&self, cx: &mut Context<'_>) -> Poll<Result<Self::Substream, Self::Error>> {
+    fn poll_inbound(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<Self::Substream, Self::Error>> {
         self.io
             .lock()
             .poll_next_stream(cx)
             .map_ok(|stream_id| Substream::new(stream_id, self.io.clone()))
     }
 
-    fn poll_outbound(&self, cx: &mut Context<'_>) -> Poll<Result<Self::Substream, Self::Error>> {
+    fn poll_outbound(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<Self::Substream, Self::Error>> {
         self.io
             .lock()
             .poll_open_stream(cx)
             .map_ok(|stream_id| Substream::new(stream_id, self.io.clone()))
     }
 
-    fn poll_address_change(&self, _: &mut Context<'_>) -> Poll<Result<Multiaddr, Self::Error>> {
+    fn poll_address_change(
+        self: Pin<&mut Self>,
+        _: &mut Context<'_>,
+    ) -> Poll<Result<Multiaddr, Self::Error>> {
         Poll::Pending
     }
 
-    fn poll_close(&self, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         self.io.lock().poll_close(cx)
     }
 }
