@@ -105,7 +105,7 @@ fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output>{
 
       // The child did not make progress. It has registered the waker for a
       // later wake up. Proceed with the other childs.
-      Poll::Ready(_) => {
+      Poll::Pending(_) => {
     }
 
     match self.child_2.poll(cx) {
