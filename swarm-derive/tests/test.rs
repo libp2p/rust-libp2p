@@ -47,9 +47,7 @@ fn one_field() {
     fn foo() {
         let _out_event: <Foo as NetworkBehaviour>::OutEvent = unimplemented!();
         match _out_event {
-            FooEvent::Ping(event) => {
-                let _: libp2p::ping::Event = event;
-            }
+            FooEvent::Ping(libp2p::ping::Event { .. }) => {}
         }
     }
 }
@@ -68,9 +66,7 @@ fn two_fields() {
     fn foo() {
         let _out_event: <Foo as NetworkBehaviour>::OutEvent = unimplemented!();
         match _out_event {
-            FooEvent::Ping(event) => {
-                let _: libp2p::ping::Event = event;
-            }
+            FooEvent::Ping(libp2p::ping::Event { .. }) => {}
             FooEvent::Identify(event) => {
                 let _: libp2p::identify::IdentifyEvent = event;
             }
@@ -95,9 +91,7 @@ fn three_fields() {
     fn foo() {
         let _out_event: <Foo as NetworkBehaviour>::OutEvent = unimplemented!();
         match _out_event {
-            FooEvent::Ping(event) => {
-                let _: libp2p::ping::Event = event;
-            }
+            FooEvent::Ping(libp2p::ping::Event { .. }) => {}
             FooEvent::Identify(event) => {
                 let _: libp2p::identify::IdentifyEvent = event;
             }
@@ -124,9 +118,7 @@ fn three_fields_non_last_ignored() {
     fn foo() {
         let _out_event: <Foo as NetworkBehaviour>::OutEvent = unimplemented!();
         match _out_event {
-            FooEvent::Ping(event) => {
-                let _: libp2p::ping::Event = event;
-            }
+            FooEvent::Ping(libp2p::ping::Event { .. }) => {}
             FooEvent::Kad(event) => {
                 let _: libp2p::kad::KademliaEvent = event;
             }
@@ -308,9 +300,7 @@ fn nested_derives_with_import() {
     fn foo() {
         let _out_event: <Bar as NetworkBehaviour>::OutEvent = unimplemented!();
         match _out_event {
-            BarEvent::Foo(FooEvent::Ping(event)) => {
-                let _: libp2p::ping::Event = event;
-            }
+            BarEvent::Foo(FooEvent::Ping(libp2p::ping::Event { .. })) => {}
         }
     }
 }
