@@ -30,6 +30,13 @@ use in_addr::InAddr;
 pub struct QuicSubstream {
     send: quinn::SendStream,
     recv: quinn::RecvStream,
+    closed: bool,
+}
+
+impl QuicSubstream {
+    fn new(send: quinn::SendStream, recv: quinn::RecvStream) -> Self {
+        Self { send, recv, closed: false}
+    }
 }
 
 impl AsyncRead for QuicSubstream {
@@ -56,7 +63,16 @@ impl AsyncWrite for QuicSubstream {
     }
 
     fn poll_close(self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
-        AsyncWrite::poll_close(Pin::new(&mut self.get_mut().send), cx)
+        let this = self.get_mut();
+        if this.closed {
+            // For some reason poll_close needs to be 'fuse'able
+            return Poll::Ready(Ok(()))
+        }
+        let close_result = AsyncWrite::poll_close(Pin::new(&mut this.send), cx);
+        if close_result.is_ready() {
+            this.closed = true;
+        }
+        close_result
     }
 }
 
@@ -77,7 +93,7 @@ impl StreamMuxer for QuicMuxer {
         let res = futures::Stream::poll_next(Pin::new(&mut self.get_mut().incoming), cx);
         let res = res?;
         match res {
-            Poll::Ready(Some((send, recv))) => Poll::Ready(Ok(QuicSubstream { send, recv })),
+            Poll::Ready(Some((send, recv))) => Poll::Ready(Ok(QuicSubstream::new(send, recv))),
             Poll::Pending => Poll::Pending,
             Poll::Ready(None) => panic!("exhasted")
         }
@@ -99,7 +115,7 @@ impl StreamMuxer for QuicMuxer {
                 },
                 Poll::Ready(result) => {
                     let result = result
-                        .map(|(send, recv)| QuicSubstream { send, recv });
+                        .map(|(send, recv)| QuicSubstream::new(send, recv));
                     Poll::Ready(result)
                 },
             }
