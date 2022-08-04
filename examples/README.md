@@ -7,7 +7,7 @@ A set of examples showcasing how to use rust-libp2p.
 - [Ping](ping.rs)
 
   Small `ping` clone, sending a ping to a peer, expecting a pong as a response. See
-  [tutorial](../src/tutorial.rs) for a step-by-step guide building the example.
+  [tutorial](../src/tutorials/ping.rs) for a step-by-step guide building the example.
 
 ## Individual libp2p protocols
 
