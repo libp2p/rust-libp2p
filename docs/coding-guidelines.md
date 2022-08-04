@@ -142,19 +142,27 @@ impl Stream for SomeStateMachine {
   type Item = Event;
 
   fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-    // First priority is returning local finished work.
-    if let Some(event) = events_to_return_to_parent.pop_front() {
-      return Poll::Ready(Some(event));
-    }
+    loop {
+      // First priority is returning local finished work.
+      if let Some(event) = events_to_return_to_parent.pop_front() {
+        return Poll::Ready(Some(event));
+      }
 
-    // Second priority is finishing local work, i.e. sending on the socket.
-    if let Poll::Ready(()) = socket.poll_ready(cx) {
-      todo!("Send messages")
-    }
+      // Second priority is finishing local work, i.e. sending on the socket.
+      if let Poll::Ready(()) = socket.poll_ready(cx) {
+        todo!("Send messages")
+        continue // Go back to the top. One might be able to send more.
+      }
 
-    // Last priority is accepting new work, i.e. reading from the socket.
-    if let Some(work_item) = socket.poll_next(cx) {
-      todo!("Start work on new work item")
+      // Last priority is accepting new work, i.e. reading from the socket.
+      if let Poll::Ready(work_item) = socket.poll_next(cx) {
+        todo!("Start work on new item")
+        continue // Go back to the top. There might be more progress to be made.
+      }
+
+      // At this point in time, there is no more progress to be made. Return
+      // `Pending` and be woken up later.
+      return Poll::Pending;
     }
   }
 }
