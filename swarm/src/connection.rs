@@ -153,31 +153,36 @@ where
                 }
             }
 
-            if let Poll::Ready(event) = self.muxing.poll_event_unpin(cx)? {
-                match event {
-                    StreamMuxerEvent::AddressChange(address) => {
-                        self.handler.inject_address_change(&address);
-                        return Poll::Ready(Ok(Event::AddressChange(address)));
-                    }
+            match self.muxing.poll_event_unpin(cx)? {
+                Poll::Pending => {}
+                Poll::Ready(StreamMuxerEvent::AddressChange(address)) => {
+                    self.handler.inject_address_change(&address);
+                    return Poll::Ready(Ok(Event::AddressChange(address)));
                 }
             }
 
             if !self.open_info.is_empty() {
-                if let Poll::Ready(substream) = self.muxing.poll_outbound_unpin(cx)? {
-                    let user_data = self
-                        .open_info
-                        .pop_front()
-                        .expect("`open_info` is not empty");
-                    let endpoint = SubstreamEndpoint::Dialer(user_data);
-                    self.handler.inject_substream(substream, endpoint);
-                    continue; // Go back to the top, handler can potentially make progress again.
+                match self.muxing.poll_outbound_unpin(cx)? {
+                    Poll::Pending => {}
+                    Poll::Ready(substream) => {
+                        let user_data = self
+                            .open_info
+                            .pop_front()
+                            .expect("`open_info` is not empty");
+                        let endpoint = SubstreamEndpoint::Dialer(user_data);
+                        self.handler.inject_substream(substream, endpoint);
+                        continue; // Go back to the top, handler can potentially make progress again.
+                    }
                 }
             }
 
-            if let Poll::Ready(substream) = self.muxing.poll_inbound_unpin(cx)? {
-                self.handler
-                    .inject_substream(substream, SubstreamEndpoint::Listener);
-                continue; // Go back to the top, handler can potentially make progress again.
+            match self.muxing.poll_inbound_unpin(cx)? {
+                Poll::Pending => {}
+                Poll::Ready(substream) => {
+                    self.handler
+                        .inject_substream(substream, SubstreamEndpoint::Listener);
+                    continue; // Go back to the top, handler can potentially make progress again.
+                }
             }
 
             return Poll::Pending; // Nothing can make progress, return `Pending`.
