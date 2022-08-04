@@ -136,6 +136,26 @@ impl QuicUpgrade {
     }
 }
 
+impl QuicUpgrade {
+    /// Returns the address of the node we're connected to.
+    /// Panics if the connection is still handshaking.
+    fn remote_peer_id(connection: &quinn::Connection) -> PeerId {
+        //debug_assert!(!connection.handshake_data().is_some());
+        let identity = connection
+            .peer_identity()
+            .expect("connection got identity because it passed TLS handshake; qed");
+        let certificates: Box<Vec<rustls::Certificate>> =
+            identity.downcast().expect("we rely on rustls feature; qed");
+        let end_entity = certificates
+            .get(0)
+            .expect("there should be exactly one certificate; qed");
+        let end_entity_der = end_entity.as_ref();
+        let p2p_cert = crate::tls::certificate::parse_certificate(end_entity_der)
+            .expect("the certificate was validated during TLS handshake; qed");
+        PeerId::from_public_key(&p2p_cert.extension.public_key)
+    }
+}
+
 impl Future for QuicUpgrade {
     type Output = Result<(PeerId, QuicMuxer), io::Error>;
 
@@ -146,8 +166,8 @@ impl Future for QuicUpgrade {
             .map_err(|e| io::Error::from(e))
             .map_ok(|new_connection| {
                 let quinn::NewConnection { connection, bi_streams, .. } = new_connection;
+                let peer_id = QuicUpgrade::remote_peer_id(&connection);
                 let muxer = QuicMuxer { connection, incoming: bi_streams, outgoing: None};
-                let peer_id = PeerId::from_bytes(&[]).unwrap(); // TODO
                 (peer_id, muxer)
             })
     }
@@ -189,7 +209,7 @@ impl Config {
 pub struct QuicTransport {
     config: Config,
     listeners: SelectAll<Listener>,
-    endpoint: Option<(quinn::Endpoint, quinn::Incoming)>,
+    endpoint: Option<quinn::Endpoint>,
 }
 
 impl QuicTransport {
@@ -255,6 +275,8 @@ impl Transport for QuicTransport {
 
         let (mut endpoint, _) = quinn::Endpoint::server(server_config, server_addr).unwrap();
         endpoint.set_default_client_config(client_config);
+
+        //self.endpoint = Some(endpoint.clone());
 
         Ok(Box::pin(async move {
             let connecting = endpoint.connect(socket_addr, "server_name").unwrap();
