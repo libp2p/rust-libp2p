@@ -43,8 +43,14 @@ fn one_field() {
     }
 
     #[allow(dead_code)]
+    #[allow(unreachable_code)]
     fn foo() {
-        require_net_behaviour::<Foo>();
+        let _out_event: <Foo as NetworkBehaviour>::OutEvent = unimplemented!();
+        match _out_event {
+            FooEvent::Ping(event) => {
+                let _: libp2p::ping::Event = event;
+            }
+        }
     }
 }
 
@@ -58,8 +64,17 @@ fn two_fields() {
     }
 
     #[allow(dead_code)]
+    #[allow(unreachable_code)]
     fn foo() {
-        require_net_behaviour::<Foo>();
+        let _out_event: <Foo as NetworkBehaviour>::OutEvent = unimplemented!();
+        match _out_event {
+            FooEvent::Ping(event) => {
+                let _: libp2p::ping::Event = event;
+            }
+            FooEvent::Identify(event) => {
+                let _: libp2p::identify::IdentifyEvent = event;
+            }
+        }
     }
 }
 
@@ -76,8 +91,20 @@ fn three_fields() {
     }
 
     #[allow(dead_code)]
+    #[allow(unreachable_code)]
     fn foo() {
-        require_net_behaviour::<Foo>();
+        let _out_event: <Foo as NetworkBehaviour>::OutEvent = unimplemented!();
+        match _out_event {
+            FooEvent::Ping(event) => {
+                let _: libp2p::ping::Event = event;
+            }
+            FooEvent::Identify(event) => {
+                let _: libp2p::identify::IdentifyEvent = event;
+            }
+            FooEvent::Kad(event) => {
+                let _: libp2p::kad::KademliaEvent = event;
+            }
+        }
     }
 }
 
@@ -93,8 +120,17 @@ fn three_fields_non_last_ignored() {
     }
 
     #[allow(dead_code)]
+    #[allow(unreachable_code)]
     fn foo() {
-        require_net_behaviour::<Foo>();
+        let _out_event: <Foo as NetworkBehaviour>::OutEvent = unimplemented!();
+        match _out_event {
+            FooEvent::Ping(event) => {
+                let _: libp2p::ping::Event = event;
+            }
+            FooEvent::Kad(event) => {
+                let _: libp2p::kad::KademliaEvent = event;
+            }
+        }
     }
 }
 
@@ -268,8 +304,14 @@ fn nested_derives_with_import() {
     }
 
     #[allow(dead_code)]
-    fn bar() {
-        require_net_behaviour::<Bar>();
+    #[allow(unreachable_code)]
+    fn foo() {
+        let _out_event: <Bar as NetworkBehaviour>::OutEvent = unimplemented!();
+        match _out_event {
+            BarEvent::Foo(FooEvent::Ping(event)) => {
+                let _: libp2p::ping::Event = event;
+            }
+        }
     }
 }
 
@@ -434,7 +476,6 @@ fn event_process() {
 
         let mut _swarm: libp2p::Swarm<Foo> = unimplemented!();
 
-        // check that the event is bubbled up all the way to swarm
         let _ = async {
             loop {
                 match _swarm.select_next_some().await {
