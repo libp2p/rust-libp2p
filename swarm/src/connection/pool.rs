@@ -38,7 +38,7 @@ use futures::{
     stream::FuturesUnordered,
 };
 use libp2p_core::connection::{ConnectionId, Endpoint, PendingPoint};
-use libp2p_core::muxing::{StreamMuxer, StreamMuxerBox};
+use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerExt};
 use std::{
     collections::{hash_map, HashMap},
     convert::TryFrom as _,
@@ -604,7 +604,7 @@ where
             match event {
                 task::PendingConnectionEvent::ConnectionEstablished {
                     id,
-                    output: (obtained_peer_id, muxer),
+                    output: (obtained_peer_id, mut muxer),
                     outgoing,
                 } => {
                     let PendingConnectionInfo {
@@ -692,7 +692,7 @@ where
                     if let Err(error) = error {
                         self.spawn(
                             poll_fn(move |cx| {
-                                if let Err(e) = ready!(muxer.poll_close(cx)) {
+                                if let Err(e) = ready!(muxer.poll_close_unpin(cx)) {
                                     log::debug!(
                                         "Failed to close connection {:?} to peer {}: {:?}",
                                         id,
