@@ -22,3 +22,13 @@ ring = "0.16.20"
 rustls = { version = "0.20.2", default-features = false, features = ["dangerous_configuration"] }
 x509-parser = "0.14.0"
 yasna = "0.5.0"
+
+[dev-dependencies]
+anyhow = "1.0.41"
+tokio = { version = "1.20", features = ["macros", "rt-multi-thread", ] }
+async-trait = "0.1.50"
+libp2p = { version = "0.47.0", default-features = false, features = ["request-response"], path = "../.." }
+#libp2p = { version = "0.47.0", path = "../.." }
+rand = "0.8.4"
+tracing-subscriber = {version = "0.3.8", features = ["env-filter"] }
+quickcheck = "1"
