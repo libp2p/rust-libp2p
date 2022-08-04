@@ -19,9 +19,10 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
-    either::{EitherError, EitherFuture2, EitherName, EitherOutput},
+    either::{EitherError, EitherFuture2, EitherOutput},
     upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo},
 };
+use either::Either;
 
 /// A type to represent two possible upgrade types (inbound or outbound).
 #[derive(Debug, Clone)]
@@ -35,7 +36,7 @@ where
     A: UpgradeInfo,
     B: UpgradeInfo,
 {
-    type Info = EitherName<A::Info, B::Info>;
+    type Info = Either<A::Info, B::Info>;
     type InfoIter = EitherIter<
         <A::InfoIter as IntoIterator>::IntoIter,
         <B::InfoIter as IntoIterator>::IntoIter,
@@ -60,10 +61,10 @@ where
 
     fn upgrade_inbound(self, sock: C, info: Self::Info) -> Self::Future {
         match (self, info) {
-            (EitherUpgrade::A(a), EitherName::A(info)) => {
+            (EitherUpgrade::A(a), Either::Left(info)) => {
                 EitherFuture2::A(a.upgrade_inbound(sock, info))
             }
-            (EitherUpgrade::B(b), EitherName::B(info)) => {
+            (EitherUpgrade::B(b), Either::Right(info)) => {
                 EitherFuture2::B(b.upgrade_inbound(sock, info))
             }
             _ => panic!("Invalid invocation of EitherUpgrade::upgrade_inbound"),
@@ -82,10 +83,10 @@ where
 
     fn upgrade_outbound(self, sock: C, info: Self::Info) -> Self::Future {
         match (self, info) {
-            (EitherUpgrade::A(a), EitherName::A(info)) => {
+            (EitherUpgrade::A(a), Either::Left(info)) => {
                 EitherFuture2::A(a.upgrade_outbound(sock, info))
             }
-            (EitherUpgrade::B(b), EitherName::B(info)) => {
+            (EitherUpgrade::B(b), Either::Right(info)) => {
                 EitherFuture2::B(b.upgrade_outbound(sock, info))
             }
             _ => panic!("Invalid invocation of EitherUpgrade::upgrade_outbound"),
@@ -105,12 +106,12 @@ where
     A: Iterator,
     B: Iterator,
 {
-    type Item = EitherName<A::Item, B::Item>;
+    type Item = Either<A::Item, B::Item>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self {
-            EitherIter::A(a) => a.next().map(EitherName::A),
-            EitherIter::B(b) => b.next().map(EitherName::B),
+            EitherIter::A(a) => a.next().map(Either::Left),
+            EitherIter::B(b) => b.next().map(Either::Right),
         }
     }
 

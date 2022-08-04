@@ -19,9 +19,10 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
-    either::{EitherError, EitherFuture2, EitherName, EitherOutput},
+    either::{EitherError, EitherFuture2, EitherOutput},
     upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo},
 };
+use either::Either;
 
 /// Upgrade that combines two upgrades into one. Supports all the protocols supported by either
 /// sub-upgrade.
@@ -44,7 +45,7 @@ where
     A: UpgradeInfo,
     B: UpgradeInfo,
 {
-    type Info = EitherName<A::Info, B::Info>;
+    type Info = Either<A::Info, B::Info>;
     type InfoIter = InfoIterChain<
         <A::InfoIter as IntoIterator>::IntoIter,
         <B::InfoIter as IntoIterator>::IntoIter,
@@ -69,8 +70,8 @@ where
 
     fn upgrade_inbound(self, sock: C, info: Self::Info) -> Self::Future {
         match info {
-            EitherName::A(info) => EitherFuture2::A(self.0.upgrade_inbound(sock, info)),
-            EitherName::B(info) => EitherFuture2::B(self.1.upgrade_inbound(sock, info)),
+            Either::Left(info) => EitherFuture2::A(self.0.upgrade_inbound(sock, info)),
+            Either::Right(info) => EitherFuture2::B(self.1.upgrade_inbound(sock, info)),
         }
     }
 }
@@ -86,8 +87,8 @@ where
 
     fn upgrade_outbound(self, sock: C, info: Self::Info) -> Self::Future {
         match info {
-            EitherName::A(info) => EitherFuture2::A(self.0.upgrade_outbound(sock, info)),
-            EitherName::B(info) => EitherFuture2::B(self.1.upgrade_outbound(sock, info)),
+            Either::Left(info) => EitherFuture2::A(self.0.upgrade_outbound(sock, info)),
+            Either::Right(info) => EitherFuture2::B(self.1.upgrade_outbound(sock, info)),
         }
     }
 }
@@ -101,14 +102,14 @@ where
     A: Iterator,
     B: Iterator,
 {
-    type Item = EitherName<A::Item, B::Item>;
+    type Item = Either<A::Item, B::Item>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(info) = self.0.next() {
-            return Some(EitherName::A(info));
+            return Some(Either::Left(info));
         }
         if let Some(info) = self.1.next() {
-            return Some(EitherName::B(info));
+            return Some(Either::Right(info));
         }
         None
     }

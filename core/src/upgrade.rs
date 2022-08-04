@@ -67,6 +67,7 @@ mod optional;
 mod select;
 mod transfer;
 
+use ::either::Either;
 use futures::future::Future;
 
 pub use self::{
@@ -127,6 +128,12 @@ pub trait ProtocolName {
 impl<T: AsRef<[u8]>> ProtocolName for T {
     fn protocol_name(&self) -> &[u8] {
         self.as_ref()
+    }
+}
+
+impl<A, B> ProtocolName for Either<A, B> where A: ProtocolName, B: ProtocolName {
+    fn protocol_name(&self) -> &[u8] {
+        ::either::for_both!(self, inner => inner.protocol_name())
     }
 }
 
