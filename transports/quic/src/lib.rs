@@ -17,6 +17,11 @@ use std::{
     net::SocketAddr,
 };
 
+use futures::{
+    stream::SelectAll,
+    AsyncRead, AsyncWrite, Stream, StreamExt,
+};
+
 mod tls;
 
 pub struct QuicSubstream {
@@ -24,31 +29,31 @@ pub struct QuicSubstream {
     recv: quinn::RecvStream,
 }
 
-impl futures::AsyncRead for QuicSubstream {
+impl AsyncRead for QuicSubstream {
     fn poll_read(
         self: Pin<&mut Self>,
         cx: &mut Context,
         buf: &mut [u8],
     ) -> Poll<io::Result<usize>> {
-        futures::AsyncRead::poll_read(Pin::new(&mut self.get_mut().recv), cx, buf)
+        AsyncRead::poll_read(Pin::new(&mut self.get_mut().recv), cx, buf)
     }
 }
 
-impl futures::AsyncWrite for QuicSubstream {
+impl AsyncWrite for QuicSubstream {
     fn poll_write(
         self: Pin<&mut Self>,
         cx: &mut Context,
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
-        futures::AsyncWrite::poll_write(Pin::new(&mut self.get_mut().send), cx, buf)
+        AsyncWrite::poll_write(Pin::new(&mut self.get_mut().send), cx, buf)
     }
 
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
-        futures::AsyncWrite::poll_flush(Pin::new(&mut self.get_mut().send), cx)
+        AsyncWrite::poll_flush(Pin::new(&mut self.get_mut().send), cx)
     }
 
     fn poll_close(self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
-        futures::AsyncWrite::poll_close(Pin::new(&mut self.get_mut().send), cx)
+        AsyncWrite::poll_close(Pin::new(&mut self.get_mut().send), cx)
     }
 }
 
@@ -180,12 +185,13 @@ impl Config {
 
 struct QuicTransport {
     config: Config,
+    listeners: SelectAll<Listener>,
     endpoint: Option<(quinn::Endpoint, quinn::Incoming)>,
 }
 
 impl QuicTransport {
     pub fn new(keypair: &Keypair) -> Self {
-        Self { config: Config::new(keypair).unwrap(), endpoint: None }
+        Self { config: Config::new(keypair).unwrap(), listeners: Default::default(), endpoint: None }
     }
 }
 
@@ -202,22 +208,29 @@ impl Transport for QuicTransport {
         let client_config = self.config.client_config.clone();
         let server_config = self.config.server_config.clone();
 
-        let (mut endpoint, incoming) = quinn::Endpoint::server(server_config, socket_addr).unwrap();
+        let (mut endpoint, new_connections) = quinn::Endpoint::server(server_config, socket_addr).unwrap();
         endpoint.set_default_client_config(client_config);
 
-        self.endpoint = Some((endpoint, incoming));
-
-        Ok(ListenerId::new())
+        let listener_id = ListenerId::new();
+        let listener = Listener::new(listener_id, endpoint, new_connections);
+        self.listeners.push(listener);
+        // // Drop reference to dialer endpoint so that the endpoint is dropped once the last
+        // // connection that uses it is closed.
+        // // New outbound connections will use a bidirectional (listener) endpoint.
+        // match socket_addr {
+        //     SocketAddr::V4(_) => self.ipv4_dialer.take(),
+        //     SocketAddr::V6(_) => self.ipv6_dialer.take(),
+        // };
+        Ok(listener_id)
     }
 
     fn remove_listener(&mut self, id: ListenerId) -> bool {
-        true
-        // if let Some(listener) = self.listeners.iter_mut().find(|l| l.listener_id == id) {
-        //     listener.close(Ok(()));
-        //     true
-        // } else {
-        //     false
-        // }
+        if let Some(listener) = self.listeners.iter_mut().find(|l| l.listener_id == id) {
+            listener.close(Ok(()));
+            true
+        } else {
+            false
+        }
     }
 
     fn address_translation(&self, _server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
@@ -259,27 +272,83 @@ impl Transport for QuicTransport {
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
-        let incoming = Pin::new(&mut self.endpoint.as_mut().unwrap().1);
-        futures::Stream::poll_next(incoming, cx)
-            .map(|connecting| {
-                let connecting = connecting.unwrap();
-                let upgrade = QuicUpgrade::from_connecting(connecting);
-                let event = TransportEvent::Incoming {
-                    upgrade,
-                    local_addr: Multiaddr::empty(),
-                    send_back_addr: Multiaddr::empty(),
-                    listener_id: ListenerId::new(),
-                };
-                event
-            })
-        // match self.listeners.poll_next_unpin(cx) {
-        //     Poll::Ready(Some(ev)) => Poll::Ready(ev),
-        //     _ => Poll::Pending,
-        // }
+        match self.listeners.poll_next_unpin(cx) {
+            Poll::Ready(Some(ev)) => Poll::Ready(ev),
+            _ => Poll::Pending,
+        }
     }
 }
 
-pub fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Option<SocketAddr> {
+struct Listener {
+    listener_id: ListenerId,
+    endpoint: quinn::Endpoint,
+    new_connections: quinn::Incoming,
+
+    /// Set to `Some` if this [`Listener`] should close.
+    /// Optionally contains a [`TransportEvent::ListenerClosed`] that should be
+    /// reported before the listener's stream is terminated.
+    report_closed: Option<Option<<Self as Stream>::Item>>,
+}
+
+impl Listener {
+    fn new(listener_id: ListenerId,
+            endpoint: quinn::Endpoint,
+            new_connections: quinn::Incoming,) -> Self {
+        Self { listener_id, endpoint, new_connections, report_closed: None }
+    }
+
+    /// Report the listener as closed in a [`TransportEvent::ListenerClosed`] and
+    /// terminate the stream.
+    fn close(&mut self, reason: Result<(), io::Error>) {
+        match self.report_closed {
+            Some(_) => println!("Listener was already closed."),
+            None => {
+                self.endpoint.close(From::from(0u32), &[]);
+                // Report the listener event as closed.
+                let _ = self
+                    .report_closed
+                    .insert(Some(TransportEvent::ListenerClosed {
+                        listener_id: self.listener_id,
+                        reason,
+                    }));
+            }
+        }
+    }
+}
+
+impl Stream for Listener {
+    type Item = TransportEvent<<QuicTransport as Transport>::ListenerUpgrade, io::Error>;
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        if let Some(closed) = self.report_closed.as_mut() {
+            // Listener was closed.
+            // Report the transport event if there is one. On the next iteration, return
+            // `Poll::Ready(None)` to terminate the stream.
+            return Poll::Ready(closed.take());
+        }
+        // if let Some(event) = self.poll_if_addr(cx) {
+        //     return Poll::Ready(Some(event));
+        // }
+        let connecting = match futures::ready!(self.new_connections.poll_next_unpin(cx)) {
+            Some(c) => c,
+            None => {
+                self.close(Err(io::Error::from(quinn::ConnectionError::LocallyClosed))); // TODO Error: TaskCrashed
+                return self.poll_next(cx);
+            }
+        };
+
+        let local_addr = socketaddr_to_multiaddr(&self.endpoint.local_addr().unwrap());
+        let send_back_addr = socketaddr_to_multiaddr(&connecting.remote_address());
+        let event = TransportEvent::Incoming {
+            upgrade: QuicUpgrade::from_connecting(connecting),
+            local_addr,
+            send_back_addr,
+            listener_id: self.listener_id,
+        };
+        Poll::Ready(Some(event))
+    }
+}
+
+pub(crate) fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Option<SocketAddr> {
     let mut iter = addr.iter();
     let proto1 = iter.next()?;
     let proto2 = iter.next()?;
@@ -301,4 +370,12 @@ pub fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Option<SocketAddr> {
         }
         _ => None,
     }
+}
+
+/// Turns an IP address and port into the corresponding QUIC multiaddr.
+pub(crate) fn socketaddr_to_multiaddr(socket_addr: &SocketAddr) -> Multiaddr {
+    Multiaddr::empty()
+        .with(socket_addr.ip().into())
+        .with(Protocol::Udp(socket_addr.port()))
+        .with(Protocol::Quic)
 }
