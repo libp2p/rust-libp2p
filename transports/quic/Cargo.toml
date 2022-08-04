@@ -11,5 +11,13 @@ license = "MIT"
 if-watch = "1.1.1"
 libp2p-core = { version = "0.35.0", path = "../../core" }
 quinn = { version = "0.8.0", git = "https://github.com/quinn-rs/quinn.git", branch = "named-futures", default-features = false, features = ["tls-rustls", "futures-io", "futures-core"] } # "runtime-async-std"
-rustls = { version = "0.20.2", default-features = false, features = ["dangerous_configuration"] }
 futures = "0.3.21"
+thiserror = "1.0.26"
+
+oid-registry = "0.6.0"
+webpki = "0.22.0"
+rcgen = "0.9.2"
+ring = "0.16.20"
+rustls = { version = "0.20.2", default-features = false, features = ["dangerous_configuration"] }
+x509-parser = "0.14.0"
+yasna = "0.5.0"

@@ -15,6 +15,8 @@ use std::{
     net::SocketAddr,
 };
 
+mod tls;
+
 pub struct QuicSubstream {
     send: quinn::SendStream,
     recv: quinn::RecvStream,
