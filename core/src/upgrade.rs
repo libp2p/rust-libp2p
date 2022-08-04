@@ -131,7 +131,11 @@ impl<T: AsRef<[u8]>> ProtocolName for T {
     }
 }
 
-impl<A, B> ProtocolName for Either<A, B> where A: ProtocolName, B: ProtocolName {
+impl<A, B> ProtocolName for Either<A, B>
+where
+    A: ProtocolName,
+    B: ProtocolName,
+{
     fn protocol_name(&self) -> &[u8] {
         ::either::for_both!(self, inner => inner.protocol_name())
     }
