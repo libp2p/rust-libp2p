@@ -1,0 +1,15 @@
+[package]
+name = "libp2p-quic"
+version = "0.8.0"
+authors = ["Parity Technologies <admin@parity.io>"]
+edition = "2021"
+description = "TLS based QUIC transport implementation for libp2p"
+repository = "https://github.com/libp2p/rust-libp2p"
+license = "MIT"
+
+[dependencies]
+if-watch = "1.1.1"
+libp2p-core = { version = "0.35.0", path = "../../core" }
+quinn = { version = "0.8.0", git = "https://github.com/quinn-rs/quinn.git", branch = "named-futures", default-features = false, features = ["tls-rustls", "futures-io", "futures-core"] } # "runtime-async-std"
+rustls = { version = "0.20.2", default-features = false, features = ["dangerous_configuration"] }
+futures = "0.3.21"
