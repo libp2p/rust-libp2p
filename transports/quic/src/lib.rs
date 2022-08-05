@@ -179,7 +179,7 @@ impl Future for QuicUpgrade {
         let connecting = Pin::new(&mut self.get_mut().connecting);
 
         connecting.poll(cx)
-            .map_err(|e| io::Error::from(e))
+            .map_err(io::Error::from)
             .map_ok(|new_connection| {
                 let quinn::NewConnection { connection, bi_streams, .. } = new_connection;
                 let peer_id = QuicUpgrade::remote_peer_id(&connection);
@@ -217,7 +217,7 @@ impl Config {
         client_config.transport_config(transport);
         Ok(Self {
             client_config,
-            server_config: server_config,
+            server_config,
         })
     }
 }
@@ -439,14 +439,14 @@ impl Listener {
                                     });
                                 }
                             }
-                            Err(err) => {
+                            Err(error) => {
                                 tracing::debug! {
                                     "Failure polling interfaces: {:?}.",
-                                    err
+                                    error
                                 };
                                 return Some(TransportEvent::ListenerError {
                                     listener_id: self.listener_id,
-                                    error: err.into(),
+                                    error,
                                 });
                             }
                         }
