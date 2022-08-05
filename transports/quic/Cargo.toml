@@ -14,6 +14,7 @@ quinn = { version = "0.8.0", git = "https://github.com/quinn-rs/quinn.git", bran
 futures = "0.3.21"
 thiserror = "1.0.26"
 tracing = "0.1"
+rand = "0.8.5"
 
 oid-registry = "0.6.0"
 webpki = "0.22.0"
@@ -29,6 +30,4 @@ tokio = { version = "1.20", features = ["macros", "rt-multi-thread", ] }
 async-trait = "0.1.50"
 libp2p = { version = "0.47.0", default-features = false, features = ["request-response"], path = "../.." }
 #libp2p = { version = "0.47.0", path = "../.." }
-rand = "0.8.4"
 tracing-subscriber = {version = "0.3.8", features = ["env-filter"] }
-quickcheck = "1"

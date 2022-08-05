@@ -14,7 +14,7 @@ use std::{
     io::self,
     time::Duration,
     sync::Arc,
-    net::SocketAddr,
+    net::{SocketAddr, Ipv4Addr, Ipv6Addr},
 };
 
 use futures::{
@@ -175,7 +175,7 @@ impl QuicUpgrade {
 impl Future for QuicUpgrade {
     type Output = Result<(PeerId, QuicMuxer), io::Error>;
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let connecting = Pin::new(&mut self.get_mut().connecting);
 
         connecting.poll(cx)
@@ -225,12 +225,15 @@ impl Config {
 pub struct QuicTransport {
     config: Config,
     listeners: SelectAll<Listener>,
-    endpoint: Option<quinn::Endpoint>,
+    /// Endpoints to use for dialing Ipv4 addresses if no matching listener exists.
+    ipv4_dialer: Option<quinn::Endpoint>,
+    /// Endpoints to use for dialing Ipv6 addresses if no matching listener exists.
+    ipv6_dialer: Option<quinn::Endpoint>,
 }
 
 impl QuicTransport {
     pub fn new(config: Config) -> Self {
-        Self { config, listeners: Default::default(), endpoint: None }
+        Self { config, listeners: Default::default(), ipv4_dialer: None, ipv6_dialer: None }
     }
 }
 
@@ -255,13 +258,13 @@ impl Transport for QuicTransport {
         let listener_id = ListenerId::new();
         let listener = Listener::new(listener_id, endpoint, new_connections, in_addr);
         self.listeners.push(listener);
-        // // Drop reference to dialer endpoint so that the endpoint is dropped once the last
-        // // connection that uses it is closed.
-        // // New outbound connections will use a bidirectional (listener) endpoint.
-        // match socket_addr {
-        //     SocketAddr::V4(_) => self.ipv4_dialer.take(),
-        //     SocketAddr::V6(_) => self.ipv6_dialer.take(),
-        // };
+        // Drop reference to dialer endpoint so that the endpoint is dropped once the last
+        // connection that uses it is closed.
+        // New outbound connections will use a bidirectional (listener) endpoint.
+        match socket_addr {
+            SocketAddr::V4(_) => self.ipv4_dialer.take(),
+            SocketAddr::V6(_) => self.ipv6_dialer.take(),
+        };
         Ok(listener_id)
     }
 
@@ -285,14 +288,43 @@ impl Transport for QuicTransport {
             return Err(TransportError::MultiaddrNotSupported(addr));
         }
 
-        let server_addr = "[::]:0".parse().unwrap();
-        let client_config = self.config.client_config.clone();
-        let server_config = self.config.server_config.clone();
+        let listeners = self
+            .listeners
+            .iter()
+            .filter(|l| {
+                let listen_addr = l.socket_addr();
+                listen_addr.is_ipv4() == socket_addr.is_ipv4()
+                    && listen_addr.ip().is_loopback() == socket_addr.ip().is_loopback()
+            })
+            .collect::<Vec<_>>();
+        let endpoint = if listeners.is_empty() {
+            let dialer = match socket_addr {
+                SocketAddr::V4(_) => &mut self.ipv4_dialer,
+                SocketAddr::V6(_) => &mut self.ipv6_dialer,
+            };
+            match dialer {
+                Some(endpoint) => endpoint.clone(),
+                None => {
+                    let server_addr = if socket_addr.is_ipv6() {
+                        SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0)
+                    } else {
+                        SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0)
+                    };
+                    let client_config = self.config.client_config.clone();
+                    let server_config = self.config.server_config.clone();
 
-        let (mut endpoint, _) = quinn::Endpoint::server(server_config, server_addr).unwrap();
-        endpoint.set_default_client_config(client_config);
-
-        //self.endpoint = Some(endpoint.clone());
+                    let (mut endpoint, _) = quinn::Endpoint::server(server_config, server_addr).unwrap();
+                    endpoint.set_default_client_config(client_config);
+                    let _ = dialer.insert(endpoint.clone());
+                    endpoint
+                }
+            }
+        } else {
+            // Pick a random listener to use for dialing.
+            let n = rand::random::<usize>() % listeners.len();
+            let listener = listeners.get(n).expect("Can not be out of bound.");
+            listener.endpoint.clone()
+        };
 
         Ok(Box::pin(async move {
             let connecting = endpoint.connect(socket_addr, "server_name").unwrap();
