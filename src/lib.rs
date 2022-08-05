@@ -108,6 +108,10 @@ pub use libp2p_plaintext as plaintext;
 #[cfg_attr(docsrs, doc(cfg(feature = "pnet")))]
 #[doc(inline)]
 pub use libp2p_pnet as pnet;
+#[cfg(feature = "quic")]
+#[cfg_attr(docsrs, doc(cfg(feature = "quic")))]
+#[doc(inline)]
+pub use libp2p_quic as quic;
 #[cfg(feature = "relay")]
 #[cfg_attr(docsrs, doc(cfg(feature = "relay")))]
 #[doc(inline)]
