@@ -561,4 +561,56 @@ mod test {
         );
     }
 
+    #[tokio::test]
+    async fn close_listener() {
+        let keypair = libp2p_core::identity::Keypair::generate_ed25519();
+        let mut transport = QuicTransport::new(Config::new(&keypair).unwrap());
+
+        assert!(poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx))
+            .now_or_never()
+            .is_none());
+
+        // Run test twice to check that there is no unexpected behaviour if `QuicTransport.listener`
+        // is temporarily empty.
+        for _ in 0..2 {
+            let listener = transport
+                .listen_on("/ip4/0.0.0.0/udp/0/quic".parse().unwrap())
+                .unwrap();
+            match poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx)).await {
+                TransportEvent::NewAddress {
+                    listener_id,
+                    listen_addr,
+                } => {
+                    assert_eq!(listener_id, listener);
+                    assert!(
+                        matches!(listen_addr.iter().next(), Some(Protocol::Ip4(a)) if !a.is_unspecified())
+                    );
+                    assert!(
+                        matches!(listen_addr.iter().nth(1), Some(Protocol::Udp(port)) if port != 0)
+                    );
+                    assert!(matches!(listen_addr.iter().nth(2), Some(Protocol::Quic)));
+                }
+                e => panic!("Unexpected event: {:?}", e),
+            }
+            assert!(
+                transport.remove_listener(listener),
+                "Expect listener to exist."
+            );
+            match poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx)).await {
+                TransportEvent::ListenerClosed {
+                    listener_id,
+                    reason: Ok(()),
+                } => {
+                    assert_eq!(listener_id, listener);
+                }
+                e => panic!("Unexpected event: {:?}", e),
+            }
+            // Poll once again so that the listener has the chance to return `Poll::Ready(None)` and
+            // be removed from the list of listeners.
+            assert!(poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx))
+                .now_or_never()
+                .is_none());
+            assert!(transport.listeners.is_empty());
+        }
+    }
 }
