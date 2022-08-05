@@ -13,7 +13,7 @@ libp2p-core = { version = "0.35.0", path = "../../core" }
 quinn = { version = "0.8.0", git = "https://github.com/quinn-rs/quinn.git", branch = "named-futures", default-features = false, features = ["tls-rustls", "futures-io", "futures-core"] } # "runtime-async-std"
 futures = "0.3.21"
 thiserror = "1.0.26"
-tracing = "0.1.36"
+tracing = "0.1"
 
 oid-registry = "0.6.0"
 webpki = "0.22.0"
