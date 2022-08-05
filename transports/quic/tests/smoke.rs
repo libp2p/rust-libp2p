@@ -15,7 +15,6 @@ use libp2p::swarm::dial_opts::{DialOpts, PeerCondition};
 use libp2p::swarm::{DialError, Swarm, SwarmBuilder, SwarmEvent};
 use libp2p_quic::{Config as QuicConfig, QuicTransport};
 use rand::RngCore;
-use std::num::NonZeroU8;
 use std::{io, iter};
 
 fn generate_tls_keypair() -> libp2p::identity::Keypair {
@@ -305,14 +304,11 @@ async fn dial_failure() -> Result<()> {
 
 #[tokio::test]
 async fn concurrent_connections_and_streams() {
-    use quickcheck::*;
-
     setup_global_subscriber();
 
     let number_listeners = 10;
     let number_streams = 10;
 
-        let pool = tokio::runtime::Handle::current();
         let mut data = vec![0; 4096 * 10];
         rand::thread_rng().fill_bytes(&mut data);
         let mut listeners = vec![];
