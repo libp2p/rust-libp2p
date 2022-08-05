@@ -22,7 +22,10 @@ use futures::{
     AsyncRead, AsyncWrite, Stream, StreamExt,
 };
 
+mod in_addr;
 mod tls;
+
+use in_addr::InAddr;
 
 pub struct QuicSubstream {
     send: quinn::SendStream,
