@@ -186,15 +186,15 @@ impl Config {
     }
 }
 
-struct QuicTransport {
+pub struct QuicTransport {
     config: Config,
     listeners: SelectAll<Listener>,
     endpoint: Option<(quinn::Endpoint, quinn::Incoming)>,
 }
 
 impl QuicTransport {
-    pub fn new(keypair: &Keypair) -> Self {
-        Self { config: Config::new(keypair).unwrap(), listeners: Default::default(), endpoint: None }
+    pub fn new(config: Config) -> Self {
+        Self { config, listeners: Default::default(), endpoint: None }
     }
 }
 
@@ -214,8 +214,10 @@ impl Transport for QuicTransport {
         let (mut endpoint, new_connections) = quinn::Endpoint::server(server_config, socket_addr).unwrap();
         endpoint.set_default_client_config(client_config);
 
+        let in_addr = InAddr::new(socket_addr.ip());
+
         let listener_id = ListenerId::new();
-        let listener = Listener::new(listener_id, endpoint, new_connections);
+        let listener = Listener::new(listener_id, endpoint, new_connections, in_addr);
         self.listeners.push(listener);
         // // Drop reference to dialer endpoint so that the endpoint is dropped once the last
         // // connection that uses it is closed.
@@ -285,7 +287,16 @@ impl Transport for QuicTransport {
 struct Listener {
     listener_id: ListenerId,
     endpoint: quinn::Endpoint,
+
+    /// Channel where new connections are being sent.
     new_connections: quinn::Incoming,
+
+    /// The IP addresses of network interfaces on which the listening socket
+    /// is accepting connections.
+    ///
+    /// If the listen socket listens on all interfaces, these may change over
+    /// time as interfaces become available or unavailable.
+    in_addr: InAddr,
 
     /// Set to `Some` if this [`Listener`] should close.
     /// Optionally contains a [`TransportEvent::ListenerClosed`] that should be
@@ -296,8 +307,9 @@ struct Listener {
 impl Listener {
     fn new(listener_id: ListenerId,
             endpoint: quinn::Endpoint,
-            new_connections: quinn::Incoming,) -> Self {
-        Self { listener_id, endpoint, new_connections, report_closed: None }
+            new_connections: quinn::Incoming,
+            in_addr: InAddr,) -> Self {
+        Self { listener_id, endpoint, new_connections, in_addr, report_closed: None }
     }
 
     /// Report the listener as closed in a [`TransportEvent::ListenerClosed`] and
@@ -317,6 +329,63 @@ impl Listener {
             }
         }
     }
+
+    fn socket_addr(&self) -> SocketAddr {
+        self.endpoint.local_addr().unwrap()
+    }
+
+    /// Poll for a next If Event.
+    fn poll_if_addr(&mut self, cx: &mut Context<'_>) -> Option<<Self as Stream>::Item> {
+        use if_watch::IfEvent;
+        loop {
+            match self.in_addr.poll_next_unpin(cx) {
+                Poll::Ready(mut item) => {
+                    if let Some(item) = item.take() {
+                        // Consume all events for up/down interface changes.
+                        match item {
+                            Ok(IfEvent::Up(inet)) => {
+                                let ip = inet.addr();
+                                if self.socket_addr().is_ipv4() == ip.is_ipv4() {
+                                    let socket_addr =
+                                        SocketAddr::new(ip, self.socket_addr().port());
+                                    let ma = socketaddr_to_multiaddr(&socket_addr);
+                                    tracing::debug!("New listen address: {}", ma);
+                                    return Some(TransportEvent::NewAddress {
+                                        listener_id: self.listener_id,
+                                        listen_addr: ma,
+                                    });
+                                }
+                            }
+                            Ok(IfEvent::Down(inet)) => {
+                                let ip = inet.addr();
+                                if self.socket_addr().is_ipv4() == ip.is_ipv4() {
+                                    let socket_addr =
+                                        SocketAddr::new(ip, self.socket_addr().port());
+                                    let ma = socketaddr_to_multiaddr(&socket_addr);
+                                    tracing::debug!("Expired listen address: {}", ma);
+                                    return Some(TransportEvent::AddressExpired {
+                                        listener_id: self.listener_id,
+                                        listen_addr: ma,
+                                    });
+                                }
+                            }
+                            Err(err) => {
+                                tracing::debug! {
+                                    "Failure polling interfaces: {:?}.",
+                                    err
+                                };
+                                return Some(TransportEvent::ListenerError {
+                                    listener_id: self.listener_id,
+                                    error: err.into(),
+                                });
+                            }
+                        }
+                    }
+                }
+                Poll::Pending => return None,
+            }
+        }
+    }
 }
 
 impl Stream for Listener {
@@ -328,9 +397,9 @@ impl Stream for Listener {
             // `Poll::Ready(None)` to terminate the stream.
             return Poll::Ready(closed.take());
         }
-        // if let Some(event) = self.poll_if_addr(cx) {
-        //     return Poll::Ready(Some(event));
-        // }
+        if let Some(event) = self.poll_if_addr(cx) {
+            return Poll::Ready(Some(event));
+        }
         let connecting = match futures::ready!(self.new_connections.poll_next_unpin(cx)) {
             Some(c) => c,
             None => {
@@ -339,7 +408,7 @@ impl Stream for Listener {
             }
         };
 
-        let local_addr = socketaddr_to_multiaddr(&self.endpoint.local_addr().unwrap());
+        let local_addr = socketaddr_to_multiaddr(&self.socket_addr());
         let send_back_addr = socketaddr_to_multiaddr(&connecting.remote_address());
         let event = TransportEvent::Incoming {
             upgrade: QuicUpgrade::from_connecting(connecting),
