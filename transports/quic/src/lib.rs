@@ -489,3 +489,76 @@ pub(crate) fn socketaddr_to_multiaddr(socket_addr: &SocketAddr) -> Multiaddr {
         .with(Protocol::Udp(socket_addr.port()))
         .with(Protocol::Quic)
 }
+
+
+#[cfg(test)]
+mod test {
+
+    use futures::{FutureExt, future::poll_fn};
+    use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+
+    use super::*;
+
+    #[test]
+    fn multiaddr_to_udp_conversion() {
+        assert!(
+            multiaddr_to_socketaddr(&"/ip4/127.0.0.1/udp/1234".parse::<Multiaddr>().unwrap())
+                .is_none()
+        );
+
+        assert_eq!(
+            multiaddr_to_socketaddr(
+                &"/ip4/127.0.0.1/udp/12345/quic"
+                    .parse::<Multiaddr>()
+                    .unwrap()
+            ),
+            Some(SocketAddr::new(
+                IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+                12345,
+            ))
+        );
+        assert_eq!(
+            multiaddr_to_socketaddr(
+                &"/ip4/255.255.255.255/udp/8080/quic"
+                    .parse::<Multiaddr>()
+                    .unwrap()
+            ),
+            Some(SocketAddr::new(
+                IpAddr::V4(Ipv4Addr::new(255, 255, 255, 255)),
+                8080,
+            ))
+        );
+        assert_eq!(
+            multiaddr_to_socketaddr(
+                &"/ip4/127.0.0.1/udp/55148/quic/p2p/12D3KooW9xk7Zp1gejwfwNpfm6L9zH5NL4Bx5rm94LRYJJHJuARZ"
+                    .parse::<Multiaddr>()
+                    .unwrap()
+            ),
+            Some(SocketAddr::new(
+                IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+                55148,
+            ))
+        );
+        assert_eq!(
+            multiaddr_to_socketaddr(&"/ip6/::1/udp/12345/quic".parse::<Multiaddr>().unwrap()),
+            Some(SocketAddr::new(
+                IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)),
+                12345,
+            ))
+        );
+        assert_eq!(
+            multiaddr_to_socketaddr(
+                &"/ip6/ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff/udp/8080/quic"
+                    .parse::<Multiaddr>()
+                    .unwrap()
+            ),
+            Some(SocketAddr::new(
+                IpAddr::V6(Ipv6Addr::new(
+                    65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535,
+                )),
+                8080,
+            ))
+        );
+    }
+
+}
