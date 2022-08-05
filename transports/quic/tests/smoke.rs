@@ -309,117 +309,113 @@ async fn concurrent_connections_and_streams() {
     let number_listeners = 10;
     let number_streams = 10;
 
-        let mut data = vec![0; 4096 * 10];
-        rand::thread_rng().fill_bytes(&mut data);
-        let mut listeners = vec![];
+    let mut data = vec![0; 4096 * 10];
+    rand::thread_rng().fill_bytes(&mut data);
+    let mut listeners = vec![];
 
-        // Spawn the listener nodes.
-        for _ in 0..number_listeners {
-            let mut listener = create_swarm(true).await.unwrap();
-            Swarm::listen_on(&mut listener, "/ip4/127.0.0.1/udp/0/quic".parse().unwrap()).unwrap();
+    // Spawn the listener nodes.
+    for _ in 0..number_listeners {
+        let mut listener = create_swarm(true).await.unwrap();
+        Swarm::listen_on(&mut listener, "/ip4/127.0.0.1/udp/0/quic".parse().unwrap()).unwrap();
 
-            // Wait to listen on address.
-            let addr = match listener.next().await {
-                Some(SwarmEvent::NewListenAddr { address, .. }) => address,
-                e => panic!("{:?}", e),
-            };
+        // Wait to listen on address.
+        let addr = match listener.next().await {
+            Some(SwarmEvent::NewListenAddr { address, .. }) => address,
+            e => panic!("{:?}", e),
+        };
 
-            listeners.push((*listener.local_peer_id(), addr));
+        listeners.push((*listener.local_peer_id(), addr));
 
-            tokio::spawn(
-                async move {
-                    loop {
-                        match listener.next().await {
-                            Some(SwarmEvent::ConnectionEstablished { .. }) => {
-                                tracing::info!("listener ConnectionEstablished");
-                            }
-                            Some(SwarmEvent::IncomingConnection { .. }) => {
-                                tracing::info!("listener IncomingConnection");
-                            }
-                            Some(SwarmEvent::Behaviour(RequestResponseEvent::Message {
-                                message:
-                                    RequestResponseMessage::Request {
-                                        request: Ping(ping),
-                                        channel,
-                                        ..
-                                    },
-                                ..
-                            })) => {
-                                tracing::info!("listener got Message");
-                                listener
-                                    .behaviour_mut()
-                                    .send_response(channel, Pong(ping))
-                                    .unwrap();
-                            }
-                            Some(SwarmEvent::Behaviour(
-                                RequestResponseEvent::ResponseSent { .. },
-                            )) => {
-                                tracing::info!("listener ResponseSent");
-                            }
-                            Some(SwarmEvent::ConnectionClosed { .. }) => {}
-                            Some(e) => {
-                                panic!("unexpected event {:?}", e);
-                            }
-                            None => {
-                                panic!("listener stopped");
-                            }
-                        }
-                    }
-                }
-            );
-        }
-
-        let mut dialer = create_swarm(true).await.unwrap();
-
-        // For each listener node start `number_streams` requests.
-        for (listener_peer_id, listener_addr) in &listeners {
-            dialer
-                .behaviour_mut()
-                .add_address(&listener_peer_id, listener_addr.clone());
-
-            dialer.dial(listener_peer_id.clone()).unwrap();
-        }
-
-        // Wait for responses to each request.
-            let mut num_responses = 0;
+        tokio::spawn(async move {
             loop {
-                match dialer.next().await {
-                    Some(SwarmEvent::Dialing(_)) => {
-                        tracing::info!("dialer Dialing");
+                match listener.next().await {
+                    Some(SwarmEvent::ConnectionEstablished { .. }) => {
+                        tracing::info!("listener ConnectionEstablished");
                     }
-                    Some(SwarmEvent::ConnectionEstablished { peer_id, .. }) => {
-                        tracing::info!("dialer Connection established");
-                        for _ in 0..number_streams {
-                            dialer
-                                .behaviour_mut()
-                                .send_request(&peer_id, Ping(data.clone()));
-                        }
+                    Some(SwarmEvent::IncomingConnection { .. }) => {
+                        tracing::info!("listener IncomingConnection");
                     }
                     Some(SwarmEvent::Behaviour(RequestResponseEvent::Message {
                         message:
-                            RequestResponseMessage::Response {
-                                response: Pong(pong),
+                            RequestResponseMessage::Request {
+                                request: Ping(ping),
+                                channel,
                                 ..
                             },
                         ..
                     })) => {
-                        tracing::info!("dialer got Message");
-                        num_responses += 1;
-                        assert_eq!(data, pong);
-                        let should_be = number_listeners as usize * (number_streams) as usize;
-                        tracing::info!(?num_responses, ?should_be);
-                        if num_responses == should_be {
-                            break;
-                        }
+                        tracing::info!("listener got Message");
+                        listener
+                            .behaviour_mut()
+                            .send_response(channel, Pong(ping))
+                            .unwrap();
                     }
-                    Some(SwarmEvent::ConnectionClosed { .. }) => {
-                        tracing::info!("dialer ConnectionClosed");
+                    Some(SwarmEvent::Behaviour(RequestResponseEvent::ResponseSent { .. })) => {
+                        tracing::info!("listener ResponseSent");
                     }
-                    e => {
+                    Some(SwarmEvent::ConnectionClosed { .. }) => {}
+                    Some(e) => {
                         panic!("unexpected event {:?}", e);
+                    }
+                    None => {
+                        panic!("listener stopped");
                     }
                 }
             }
+        });
+    }
+
+    let mut dialer = create_swarm(true).await.unwrap();
+
+    // For each listener node start `number_streams` requests.
+    for (listener_peer_id, listener_addr) in &listeners {
+        dialer
+            .behaviour_mut()
+            .add_address(&listener_peer_id, listener_addr.clone());
+
+        dialer.dial(listener_peer_id.clone()).unwrap();
+    }
+
+    // Wait for responses to each request.
+    let mut num_responses = 0;
+    loop {
+        match dialer.next().await {
+            Some(SwarmEvent::Dialing(_)) => {
+                tracing::info!("dialer Dialing");
+            }
+            Some(SwarmEvent::ConnectionEstablished { peer_id, .. }) => {
+                tracing::info!("dialer Connection established");
+                for _ in 0..number_streams {
+                    dialer
+                        .behaviour_mut()
+                        .send_request(&peer_id, Ping(data.clone()));
+                }
+            }
+            Some(SwarmEvent::Behaviour(RequestResponseEvent::Message {
+                message:
+                    RequestResponseMessage::Response {
+                        response: Pong(pong),
+                        ..
+                    },
+                ..
+            })) => {
+                tracing::info!("dialer got Message");
+                num_responses += 1;
+                assert_eq!(data, pong);
+                let should_be = number_listeners as usize * (number_streams) as usize;
+                tracing::info!(?num_responses, ?should_be);
+                if num_responses == should_be {
+                    break;
+                }
+            }
+            Some(SwarmEvent::ConnectionClosed { .. }) => {
+                tracing::info!("dialer ConnectionClosed");
+            }
+            e => {
+                panic!("unexpected event {:?}", e);
+            }
+        }
+    }
 }
 
 #[tokio::test]

@@ -1,26 +1,21 @@
-
-
-use libp2p_core::{Transport, StreamMuxer,
-    PeerId,
-    multiaddr::{Multiaddr, Protocol},
+use libp2p_core::{
     identity::Keypair,
-    transport::{TransportError, ListenerId, TransportEvent},
+    multiaddr::{Multiaddr, Protocol},
+    transport::{ListenerId, TransportError, TransportEvent},
+    PeerId, StreamMuxer, Transport,
 };
 
 use std::{
-    task::{Context, Poll},
-    pin::Pin,
     future::Future,
-    io::self,
-    time::Duration,
+    io,
+    net::{Ipv4Addr, Ipv6Addr, SocketAddr},
+    pin::Pin,
     sync::Arc,
-    net::{SocketAddr, Ipv4Addr, Ipv6Addr},
+    task::{Context, Poll},
+    time::Duration,
 };
 
-use futures::{
-    stream::SelectAll,
-    AsyncRead, AsyncWrite, Stream, StreamExt,
-};
+use futures::{stream::SelectAll, AsyncRead, AsyncWrite, Stream, StreamExt};
 
 mod in_addr;
 mod tls;
@@ -35,7 +30,11 @@ pub struct QuicSubstream {
 
 impl QuicSubstream {
     fn new(send: quinn::SendStream, recv: quinn::RecvStream) -> Self {
-        Self { send, recv, closed: false}
+        Self {
+            send,
+            recv,
+            closed: false,
+        }
     }
 }
 
@@ -50,11 +49,7 @@ impl AsyncRead for QuicSubstream {
 }
 
 impl AsyncWrite for QuicSubstream {
-    fn poll_write(
-        self: Pin<&mut Self>,
-        cx: &mut Context,
-        buf: &[u8],
-    ) -> Poll<io::Result<usize>> {
+    fn poll_write(self: Pin<&mut Self>, cx: &mut Context, buf: &[u8]) -> Poll<io::Result<usize>> {
         AsyncWrite::poll_write(Pin::new(&mut self.get_mut().send), cx, buf)
     }
 
@@ -66,7 +61,7 @@ impl AsyncWrite for QuicSubstream {
         let this = self.get_mut();
         if this.closed {
             // For some reason poll_close needs to be 'fuse'able
-            return Poll::Ready(Ok(()))
+            return Poll::Ready(Ok(()));
         }
         let close_result = AsyncWrite::poll_close(Pin::new(&mut this.send), cx);
         if close_result.is_ready() {
@@ -95,7 +90,7 @@ impl StreamMuxer for QuicMuxer {
         match res {
             Poll::Ready(Some((send, recv))) => Poll::Ready(Ok(QuicSubstream::new(send, recv))),
             Poll::Pending => Poll::Pending,
-            Poll::Ready(None) => panic!("exhasted")
+            Poll::Ready(None) => panic!("exhasted"),
         }
     }
 
@@ -112,17 +107,16 @@ impl StreamMuxer for QuicMuxer {
                 Poll::Pending => {
                     this.outgoing.replace(open_future);
                     Poll::Pending
-                },
+                }
                 Poll::Ready(result) => {
-                    let result = result
-                        .map(|(send, recv)| QuicSubstream::new(send, recv));
+                    let result = result.map(|(send, recv)| QuicSubstream::new(send, recv));
                     Poll::Ready(result)
-                },
+                }
             }
         } else {
             let open_future = this.connection.open_bi();
             this.outgoing.replace(open_future);
-            
+
             Pin::new(this).poll_outbound(cx)
         }
     }
@@ -138,7 +132,6 @@ impl StreamMuxer for QuicMuxer {
         self.connection.close(From::from(0u32), &[]);
         Poll::Ready(Ok(()))
     }
-
 }
 
 pub struct QuicUpgrade {
@@ -178,12 +171,21 @@ impl Future for QuicUpgrade {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let connecting = Pin::new(&mut self.get_mut().connecting);
 
-        connecting.poll(cx)
+        connecting
+            .poll(cx)
             .map_err(io::Error::from)
             .map_ok(|new_connection| {
-                let quinn::NewConnection { connection, bi_streams, .. } = new_connection;
+                let quinn::NewConnection {
+                    connection,
+                    bi_streams,
+                    ..
+                } = new_connection;
                 let peer_id = QuicUpgrade::remote_peer_id(&connection);
-                let muxer = QuicMuxer { connection, incoming: bi_streams, outgoing: None};
+                let muxer = QuicMuxer {
+                    connection,
+                    incoming: bi_streams,
+                    outgoing: None,
+                };
                 (peer_id, muxer)
             })
     }
@@ -195,7 +197,7 @@ pub struct Config {
     /// The client configuration to pass to `quinn`.
     client_config: quinn::ClientConfig,
     /// The server configuration to pass to `quinn`.
-    server_config: quinn::ServerConfig
+    server_config: quinn::ServerConfig,
 }
 
 impl Config {
@@ -233,7 +235,12 @@ pub struct QuicTransport {
 
 impl QuicTransport {
     pub fn new(config: Config) -> Self {
-        Self { config, listeners: Default::default(), ipv4_dialer: None, ipv6_dialer: None }
+        Self {
+            config,
+            listeners: Default::default(),
+            ipv4_dialer: None,
+            ipv6_dialer: None,
+        }
     }
 }
 
@@ -250,7 +257,8 @@ impl Transport for QuicTransport {
         let client_config = self.config.client_config.clone();
         let server_config = self.config.server_config.clone();
 
-        let (mut endpoint, new_connections) = quinn::Endpoint::server(server_config, socket_addr).unwrap();
+        let (mut endpoint, new_connections) =
+            quinn::Endpoint::server(server_config, socket_addr).unwrap();
         endpoint.set_default_client_config(client_config);
 
         let in_addr = InAddr::new(socket_addr.ip());
@@ -313,7 +321,8 @@ impl Transport for QuicTransport {
                     let client_config = self.config.client_config.clone();
                     let server_config = self.config.server_config.clone();
 
-                    let (mut endpoint, _) = quinn::Endpoint::server(server_config, server_addr).unwrap();
+                    let (mut endpoint, _) =
+                        quinn::Endpoint::server(server_config, server_addr).unwrap();
                     endpoint.set_default_client_config(client_config);
                     let _ = dialer.insert(endpoint.clone());
                     endpoint
@@ -375,11 +384,19 @@ struct Listener {
 }
 
 impl Listener {
-    fn new(listener_id: ListenerId,
-            endpoint: quinn::Endpoint,
-            new_connections: quinn::Incoming,
-            in_addr: InAddr,) -> Self {
-        Self { listener_id, endpoint, new_connections, in_addr, report_closed: None }
+    fn new(
+        listener_id: ListenerId,
+        endpoint: quinn::Endpoint,
+        new_connections: quinn::Incoming,
+        in_addr: InAddr,
+    ) -> Self {
+        Self {
+            listener_id,
+            endpoint,
+            new_connections,
+            in_addr,
+            report_closed: None,
+        }
     }
 
     /// Report the listener as closed in a [`TransportEvent::ListenerClosed`] and
@@ -522,11 +539,10 @@ pub(crate) fn socketaddr_to_multiaddr(socket_addr: &SocketAddr) -> Multiaddr {
         .with(Protocol::Quic)
 }
 
-
 #[cfg(test)]
 mod test {
 
-    use futures::{FutureExt, future::poll_fn};
+    use futures::{future::poll_fn, FutureExt};
     use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
     use super::*;
