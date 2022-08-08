@@ -72,7 +72,6 @@
 //!              --peer /ip4/127.0.0.1/tcp/40837/p2p/12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X \
 //!              get \
 //!              --name <name-for-others-to-find-your-file>
-//!              --path <path-to-outputing-file>
 //!    ```
 //!
 //! Note: The client does not need to be directly connected to the providing
@@ -155,7 +154,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             }
         }
         // Locating and getting a file.
-        CliArgument::Get { path, name } => {
+        CliArgument::Get { name } => {
             // Locate all nodes providing the file.
             let providers = network_client.get_providers(name.clone()).await;
             if providers.is_empty() {
@@ -175,7 +174,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 .map_err(|_| "None of the providers returned file.")?
                 .0;
 
-            std::fs::write(&path, file_content)?;
+            std::io::stdout()::write(file_content)?;
         }
     }
 
@@ -208,8 +207,6 @@ enum CliArgument {
         name: String,
     },
     Get {
-        #[clap(long)]
-        path: PathBuf,
         #[clap(long)]
         name: String,
     },
