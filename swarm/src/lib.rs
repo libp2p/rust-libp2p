@@ -1701,13 +1701,11 @@ mod tests {
     /// after which one peer bans the other.
     ///
     /// The test expects both behaviours to be notified via pairs of
-    /// inject_connected / inject_disconnected as well as
     /// inject_connection_established / inject_connection_closed calls
     /// while unbanned.
     ///
     /// While the ban is in effect, further dials occur. For these connections no
-    /// `inject_connected`, `inject_connection_established`, `inject_disconnected`,
-    /// `inject_connection_closed` calls should be registered.
+    /// `inject_connection_established`, `inject_connection_closed` calls should be registered.
     #[test]
     fn test_connect_disconnect_ban() {
         // Since the test does not try to open any substreams, we can
@@ -1827,7 +1825,6 @@ mod tests {
     /// after which one peer disconnects the other using [`Swarm::disconnect_peer_id`].
     ///
     /// The test expects both behaviours to be notified via pairs of
-    /// inject_connected / inject_disconnected as well as
     /// inject_connection_established / inject_connection_closed calls.
     #[test]
     fn test_swarm_disconnect() {
@@ -1896,7 +1893,6 @@ mod tests {
     /// using [`NetworkBehaviourAction::CloseConnection`] returned by a [`NetworkBehaviour`].
     ///
     /// The test expects both behaviours to be notified via pairs of
-    /// inject_connected / inject_disconnected as well as
     /// inject_connection_established / inject_connection_closed calls.
     #[test]
     fn test_behaviour_disconnect_all() {
@@ -1967,7 +1963,6 @@ mod tests {
     /// using [`NetworkBehaviourAction::CloseConnection`] returned by a [`NetworkBehaviour`].
     ///
     /// The test expects both behaviours to be notified via pairs of
-    /// inject_connected / inject_disconnected as well as
     /// inject_connection_established / inject_connection_closed calls.
     #[test]
     fn test_behaviour_disconnect_one() {
