@@ -100,9 +100,9 @@ pub trait StreamMuxer {
 
     /// Poll for an event of the underlying connection.
     ///
-    /// In addition to returning an event, this function may be used to perform any kind of background
-    /// work that needs to happen for the muxer to do its work. Implementations can rely on this
-    /// function to be called regularly and unconditionally.
+    /// Out of all functions on [`StreamMuxer`] this function is guaranteed to be called conditionally
+    /// and may thus be used to perform necessary background work in order for the muxer or the
+    /// underlying connection to work.
     fn poll_event(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
