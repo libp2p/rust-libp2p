@@ -5,14 +5,14 @@
 - Use `Pin<&mut Self>` as the receiver type for all `StreamMuxer` poll functions. See [PR 2765].
 - Change `StreamMuxer` interface to be entirely poll-based. All functions on `StreamMuxer` now
   require a `Context` and return `Poll`. This gives callers fine-grained control over what they
-  would like to make progress on. See [PR 2724] and [PR XXXX].
+  would like to make progress on. See [PR 2724] and [PR 2797].
 
 [PR 2724]: https://github.com/libp2p/rust-libp2p/pull/2724
 [PR 2762]: https://github.com/libp2p/rust-libp2p/pull/2762
 [PR 2775]: https://github.com/libp2p/rust-libp2p/pull/2775
 [PR 2776]: https://github.com/libp2p/rust-libp2p/pull/2776
 [PR 2765]: https://github.com/libp2p/rust-libp2p/pull/2765
-[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+[PR 2797]: https://github.com/libp2p/rust-libp2p/pull/2797
 
 # 0.34.0
 
