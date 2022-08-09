@@ -1,5 +1,4 @@
-use crate::muxing::StreamMuxerEvent;
-use crate::StreamMuxer;
+use crate::muxing::{StreamMuxer, StreamMuxerEvent};
 use futures::{AsyncRead, AsyncWrite};
 use pin_project::pin_project;
 use std::error::Error;
