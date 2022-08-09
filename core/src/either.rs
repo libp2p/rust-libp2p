@@ -244,13 +244,13 @@ where
         }
     }
 
-    fn poll_event(
+    fn poll(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Result<StreamMuxerEvent, Self::Error>> {
         match self.project() {
-            EitherOutputProj::First(inner) => inner.poll_event(cx).map_err(EitherError::A),
-            EitherOutputProj::Second(inner) => inner.poll_event(cx).map_err(EitherError::B),
+            EitherOutputProj::First(inner) => inner.poll(cx).map_err(EitherError::A),
+            EitherOutputProj::Second(inner) => inner.poll(cx).map_err(EitherError::B),
         }
     }
 }

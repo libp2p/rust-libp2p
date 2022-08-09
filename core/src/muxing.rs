@@ -101,12 +101,13 @@ pub trait StreamMuxer {
     /// >           immediately dropping the muxer.
     fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>>;
 
-    /// Poll for an event of the underlying connection.
+    /// Poll to allow the underlying connection to make progress.
     ///
-    /// Out of all functions on [`StreamMuxer`] this function is guaranteed to be called conditionally
-    /// and may thus be used to perform necessary background work in order for the muxer or the
-    /// underlying connection to work.
-    fn poll_event(
+    /// In contrast to all other `poll`-functions on [`StreamMuxer`], this function must be called
+    /// unconditionally. Because it will be called regardless, this function can be used by
+    /// implementations to return events about the underlying connection that the caller MUST deal
+    /// with.
+    fn poll(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Result<StreamMuxerEvent, Self::Error>>;
@@ -142,15 +143,12 @@ pub trait StreamMuxerExt: StreamMuxer + Sized {
         Pin::new(self).poll_outbound(cx)
     }
 
-    /// Convenience function for calling [`StreamMuxer::poll_event`] for [`StreamMuxer`]s that are `Unpin`.
-    fn poll_event_unpin(
-        &mut self,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<StreamMuxerEvent, Self::Error>>
+    /// Convenience function for calling [`StreamMuxer::poll`] for [`StreamMuxer`]s that are `Unpin`.
+    fn poll_unpin(&mut self, cx: &mut Context<'_>) -> Poll<Result<StreamMuxerEvent, Self::Error>>
     where
         Self: Unpin,
     {
-        Pin::new(self).poll_event(cx)
+        Pin::new(self).poll(cx)
     }
 
     /// Convenience function for calling [`StreamMuxer::poll_close`] for [`StreamMuxer`]s that are `Unpin`.

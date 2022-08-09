@@ -153,7 +153,7 @@ where
                 }
             }
 
-            match self.muxing.poll_event_unpin(cx)? {
+            match self.muxing.poll_unpin(cx)? {
                 Poll::Pending => {}
                 Poll::Ready(StreamMuxerEvent::AddressChange(address)) => {
                     self.handler.inject_address_change(&address);

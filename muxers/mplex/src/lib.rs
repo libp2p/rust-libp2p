@@ -106,7 +106,7 @@ where
             .map_ok(|stream_id| Substream::new(stream_id, self.io.clone()))
     }
 
-    fn poll_event(
+    fn poll(
         self: Pin<&mut Self>,
         _: &mut Context<'_>,
     ) -> Poll<Result<StreamMuxerEvent, Self::Error>> {

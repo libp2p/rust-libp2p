@@ -65,11 +65,11 @@ where
         self.project().inner.poll_close(cx).map_err(into_io_error)
     }
 
-    fn poll_event(
+    fn poll(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Result<StreamMuxerEvent, Self::Error>> {
-        self.project().inner.poll_event(cx).map_err(into_io_error)
+        self.project().inner.poll(cx).map_err(into_io_error)
     }
 }
 
@@ -125,11 +125,11 @@ impl StreamMuxer for StreamMuxerBox {
         self.project().poll_close(cx)
     }
 
-    fn poll_event(
+    fn poll(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Result<StreamMuxerEvent, Self::Error>> {
-        self.project().poll_event(cx)
+        self.project().poll(cx)
     }
 }
 

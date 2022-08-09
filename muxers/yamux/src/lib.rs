@@ -123,7 +123,7 @@ where
             .map_err(YamuxError)
     }
 
-    fn poll_event(
+    fn poll(
         self: Pin<&mut Self>,
         _: &mut Context<'_>,
     ) -> Poll<Result<StreamMuxerEvent, Self::Error>> {
