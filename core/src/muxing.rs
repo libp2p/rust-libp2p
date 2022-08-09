@@ -75,6 +75,10 @@ pub trait StreamMuxer {
     type Error: std::error::Error;
 
     /// Poll for new inbound substreams.
+    ///
+    /// This function should be called whenever callers are ready to accept more inbound streams. In
+    /// other words, callers may exercise back-pressure on incoming streams by not calling this
+    /// function if a certain limit is hit.
     fn poll_inbound(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -86,11 +90,10 @@ pub trait StreamMuxer {
         cx: &mut Context<'_>,
     ) -> Poll<Result<Self::Substream, Self::Error>>;
 
-    /// Closes this `StreamMuxer`.
+    /// Poll to close this [`StreamMuxer`].
     ///
-    /// After this has returned `Poll::Ready(Ok(()))`, the muxer has become useless. All
-    /// subsequent reads must return either `EOF` or an error. All subsequent writes, shutdowns,
-    /// or polls must generate an error or be ignored.
+    /// After this has returned `Poll::Ready(Ok(()))`, the muxer has become useless and may be safely
+    /// dropped.
     ///
     /// > **Note**: You are encouraged to call this method and wait for it to return `Ready`, so
     /// >           that the remote is properly informed of the shutdown. However, apart from
