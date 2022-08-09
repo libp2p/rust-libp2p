@@ -103,7 +103,7 @@ pub trait StreamMuxer {
 
     /// Poll to allow the underlying connection to make progress.
     ///
-    /// In contrast to all other `poll`-functions on [`StreamMuxer`], this function must be called
+    /// In contrast to all other `poll`-functions on [`StreamMuxer`], this function MUST be called
     /// unconditionally. Because it will be called regardless, this function can be used by
     /// implementations to return events about the underlying connection that the caller MUST deal
     /// with.
