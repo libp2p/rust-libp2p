@@ -29,8 +29,8 @@ use fnv::FnvHashSet;
 use libp2p_core::{connection::ConnectionId, PeerId};
 use libp2p_core::{ConnectedPoint, Multiaddr};
 use libp2p_swarm::{
-    dial_opts::{self, DialOpts},
-    NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, OneShotHandler, PollParameters,
+    dial_opts::DialOpts, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, OneShotHandler,
+    PollParameters,
 };
 use log::warn;
 use smallvec::SmallVec;
@@ -109,9 +109,7 @@ impl Floodsub {
         if self.target_peers.insert(peer_id) {
             let handler = self.new_handler();
             self.events.push_back(NetworkBehaviourAction::Dial {
-                opts: DialOpts::peer_id(peer_id)
-                    .condition(dial_opts::PeerCondition::Disconnected)
-                    .build(),
+                opts: DialOpts::peer_id(peer_id).build(),
                 handler,
             });
         }
@@ -343,9 +341,7 @@ impl NetworkBehaviour for Floodsub {
         if self.target_peers.contains(id) {
             let handler = self.new_handler();
             self.events.push_back(NetworkBehaviourAction::Dial {
-                opts: DialOpts::peer_id(*id)
-                    .condition(dial_opts::PeerCondition::Disconnected)
-                    .build(),
+                opts: DialOpts::peer_id(*id).build(),
                 handler,
             });
         }
