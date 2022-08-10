@@ -135,7 +135,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     // Reply with the content of the file on incoming requests.
                     Some(network::Event::InboundRequest { request, channel }) => {
                         if request == name {
-                            network_client.respond_file(&std::fs::read(&path)?, channel).await;
+                            network_client.respond_file(std::fs::read(&path)?, channel).await;
                         }
                     }
                     e => todo!("{:?}", e),
