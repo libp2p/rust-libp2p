@@ -136,17 +136,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     // Reply with the content of the file on incoming requests.
                     Some(network::Event::InboundRequest { request, channel }) => {
                         if request == name {
-                            let mut reader = BufReader::new(File::open(&path)?);
-                            let mut vec = Vec::<u8>::new();
-                            let mut buffer = reader.fill_buf()?;
-                            let mut len = buffer.len();
-                            while len > 0 {
-                                vec.extend_from_slice(buffer);
-                                reader.consume(len);
-                                buffer = reader.fill_buf()?;
-                                len = buffer.len();
-                            }
-                            network_client.respond_file(&vec, channel).await;
+                            network_client.respond_file(&std::fs::read(&path)?, channel).await;
                         }
                     }
                     e => todo!("{:?}", e),
