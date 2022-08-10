@@ -41,8 +41,8 @@ use libp2p_core::{
     multiaddr::Protocol::Ip6, ConnectedPoint, Multiaddr, PeerId,
 };
 use libp2p_swarm::{
-    dial_opts::{self, DialOpts},
-    IntoConnectionHandler, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
+    dial_opts::DialOpts, IntoConnectionHandler, NetworkBehaviour, NetworkBehaviourAction,
+    NotifyHandler, PollParameters,
 };
 use wasm_timer::Instant;
 
@@ -1143,9 +1143,7 @@ where
             debug!("Connecting to explicit peer {:?}", peer_id);
             let handler = self.new_handler();
             self.events.push_back(NetworkBehaviourAction::Dial {
-                opts: DialOpts::peer_id(*peer_id)
-                    .condition(dial_opts::PeerCondition::Disconnected)
-                    .build(),
+                opts: DialOpts::peer_id(*peer_id).build(),
                 handler,
             });
         }
@@ -1644,9 +1642,7 @@ where
                 // dial peer
                 let handler = self.new_handler();
                 self.events.push_back(NetworkBehaviourAction::Dial {
-                    opts: DialOpts::peer_id(peer_id)
-                        .condition(dial_opts::PeerCondition::Disconnected)
-                        .build(),
+                    opts: DialOpts::peer_id(peer_id).build(),
                     handler,
                 });
             }
