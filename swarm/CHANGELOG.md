@@ -1,7 +1,8 @@
 # 0.38.0 [unreleased]
 
-- Deprecate `NetworkBehaviourEventProcess`. When deriving `NetworkBehaviour` on a custom `struct` users
-  should bring their own `OutEvent` via `#[behaviour(out_event = "MyBehaviourEvent")]`.
+- Remove `NetworkBehaviourEventProcess`. When deriving `NetworkBehaviour` on a custom `struct` users
+  should either bring their own `OutEvent` via `#[behaviour(out_event = "MyBehaviourEvent")]` or,
+  when not specified, have the derive macro generate one for the user.
 
   See [`NetworkBehaviour`
   documentation](https://docs.rs/libp2p/latest/libp2p/swarm/trait.NetworkBehaviour.html) for
@@ -67,10 +68,6 @@
   }
   ```
 
-- Update dial address concurrency factor to `8`, thus dialing up to 8 addresses concurrently for a single connection attempt. See `Swarm::dial_concurrency_factor` and [PR 2741].
-
-- Update to `libp2p-core` `v0.35.0`.
-
 - When deriving `NetworkBehaviour` on a custom `struct` where the user does not specify their own
   `OutEvent` via `#[behaviour(out_event = "MyBehaviourEvent")]` and where the user does not enable
   `#[behaviour(event_process = true)]`, then the derive macro generates an `OutEvent` definition for
@@ -79,6 +76,10 @@
   See [`NetworkBehaviour`
   documentation](https://docs.rs/libp2p/latest/libp2p/swarm/trait.NetworkBehaviour.html) for
   details.
+
+- Update dial address concurrency factor to `8`, thus dialing up to 8 addresses concurrently for a single connection attempt. See `Swarm::dial_concurrency_factor` and [PR 2741].
+
+- Update to `libp2p-core` `v0.35.0`.
 
 [PR 2741]: https://github.com/libp2p/rust-libp2p/pull/2741/
 
