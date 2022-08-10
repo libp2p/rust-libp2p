@@ -144,7 +144,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
         // Locating and getting a file.
         CliArgument::Get { name } => {
-            // Locate all iodes providing the file.
+            // Locate all nodes providing the file.
             let providers = network_client.get_providers(name.clone()).await;
             if providers.is_empty() {
                 return Err(format!("Could not find provider for file {}.", name).into());
