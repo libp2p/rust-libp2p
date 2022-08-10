@@ -4,6 +4,15 @@
 
 - Update to `libp2p-core` `v0.35.0`.
 
+- When deriving `NetworkBehaviour` on a custom `struct` where the user does not specify their own
+  `OutEvent` via `#[behaviour(out_event = "MyBehaviourEvent")]` and where the user does not enable
+  `#[behaviour(event_process = true)]`, then the derive macro generates an `OutEvent` definition for
+  the user.
+
+  See [`NetworkBehaviour`
+  documentation](https://docs.rs/libp2p/latest/libp2p/swarm/trait.NetworkBehaviour.html) for
+  details.
+
 [PR 2741]: https://github.com/libp2p/rust-libp2p/pull/2741/
 
 # 0.37.0
