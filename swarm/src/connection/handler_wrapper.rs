@@ -446,7 +446,6 @@ mod tests {
     use super::*;
     use crate::handler::PendingConnectionHandler;
     use quickcheck::*;
-    use std::num::NonZeroU8;
     use std::sync::Arc;
 
     struct DummySubstream(Arc<()>);
@@ -481,9 +480,8 @@ mod tests {
 
     #[test]
     fn max_negotiating_inbound_streams() {
-        fn prop(max_negotiating_inbound_streams: NonZeroU8) {
-            let max_negotiating_inbound_streams: usize =
-                max_negotiating_inbound_streams.get().into();
+        fn prop(max_negotiating_inbound_streams: u8) {
+            let max_negotiating_inbound_streams: usize = max_negotiating_inbound_streams.into();
             let handler = PendingConnectionHandler::new("test".to_string());
             let mut wrapper = HandlerWrapper::new(
                 PeerId::random(),
