@@ -78,9 +78,8 @@
 //! peer, as long as both are connected to some node on the same DHT.
 
 use async_std::io;
-use std::io::{BufReader, BufRead};
-use std::fs::File;
 use async_std::task::spawn;
+use std::io::Write;
 use clap::Parser;
 use futures::prelude::*;
 use libp2p::core::{Multiaddr, PeerId};
@@ -164,7 +163,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 .map_err(|_| "None of the providers returned file.")?
                 .0;
 
-            std::io::stdout()::write(file_content)?;
+            std::io::stdout().write(&file_content)?;
         }
     }
 
