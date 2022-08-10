@@ -23,6 +23,7 @@ use crate::{connection::Endpoint, muxing::StreamMuxer};
 use futures::prelude::*;
 use multiaddr::Multiaddr;
 use std::cell::Cell;
+use std::pin::Pin;
 use std::{io, task::Context, task::Poll};
 
 /// Implementation of `StreamMuxer` that allows only one substream on top of a connection,
@@ -57,31 +58,44 @@ where
     type Substream = TSocket;
     type Error = io::Error;
 
-    fn poll_inbound(&self, _: &mut Context<'_>) -> Poll<Result<Self::Substream, Self::Error>> {
-        match self.endpoint {
+    fn poll_inbound(
+        self: Pin<&mut Self>,
+        _: &mut Context<'_>,
+    ) -> Poll<Result<Self::Substream, Self::Error>> {
+        let this = self.get_mut();
+
+        match this.endpoint {
             Endpoint::Dialer => Poll::Pending,
-            Endpoint::Listener => match self.inner.replace(None) {
+            Endpoint::Listener => match this.inner.replace(None) {
                 None => Poll::Pending,
                 Some(stream) => Poll::Ready(Ok(stream)),
             },
         }
     }
 
-    fn poll_outbound(&self, _: &mut Context<'_>) -> Poll<Result<Self::Substream, Self::Error>> {
-        match self.endpoint {
+    fn poll_outbound(
+        self: Pin<&mut Self>,
+        _: &mut Context<'_>,
+    ) -> Poll<Result<Self::Substream, Self::Error>> {
+        let this = self.get_mut();
+
+        match this.endpoint {
             Endpoint::Listener => Poll::Pending,
-            Endpoint::Dialer => match self.inner.replace(None) {
+            Endpoint::Dialer => match this.inner.replace(None) {
                 None => Poll::Pending,
                 Some(stream) => Poll::Ready(Ok(stream)),
             },
         }
     }
 
-    fn poll_address_change(&self, _: &mut Context<'_>) -> Poll<Result<Multiaddr, Self::Error>> {
+    fn poll_address_change(
+        self: Pin<&mut Self>,
+        _: &mut Context<'_>,
+    ) -> Poll<Result<Multiaddr, Self::Error>> {
         Poll::Pending
     }
 
-    fn poll_close(&self, _cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+    fn poll_close(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         Poll::Ready(Ok(()))
     }
 }
