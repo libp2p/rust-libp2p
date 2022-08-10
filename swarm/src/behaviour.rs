@@ -204,8 +204,8 @@ pub trait NetworkBehaviour: 'static {
 
     /// Informs the behaviour about a closed connection to a peer.
     ///
-    /// A call to this method is always paired with an earlier call to [`NetworkBehaviour::inject_connection_established`] with
-    /// the same peer ID, connection ID and endpoint.
+    /// A call to this method is always paired with an earlier call to
+    /// [`NetworkBehaviour::inject_connection_established`] with the same peer ID, connection ID and endpoint.
     fn inject_connection_closed(
         &mut self,
         _: &PeerId,
