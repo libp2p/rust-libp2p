@@ -1,3 +1,8 @@
+# 0.29.0 - [unreleased]
+
+- Generate `NetworkBehaviour::OutEvent` if not provided through `#[behaviour(out_event =
+  "MyOutEvent")]` and event processing is disabled (default).
+
 # 0.28.0
 
 - Import `ListenerId` from `libp2p::core::transport`. See [PR 2652].
