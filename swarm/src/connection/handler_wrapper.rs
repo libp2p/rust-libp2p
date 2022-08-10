@@ -482,14 +482,13 @@ mod tests {
     fn max_negotiating_inbound_streams() {
         fn prop(max_negotiating_inbound_streams: u8) {
             let max_negotiating_inbound_streams: usize = max_negotiating_inbound_streams.into();
-            let handler = PendingConnectionHandler::new("test".to_string());
             let mut wrapper = HandlerWrapper::new(
                 PeerId::random(),
                 ConnectedPoint::Listener {
                     local_addr: Multiaddr::empty(),
                     send_back_addr: Multiaddr::empty(),
                 },
-                handler,
+                PendingConnectionHandler::new("test".to_string()),
                 None,
                 max_negotiating_inbound_streams,
             );
