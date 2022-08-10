@@ -3335,7 +3335,7 @@ where
                     ));
                 } else if let Some(conn) = self.connected_peers.get_mut(&propagation_source) {
                     // Only change the value if the old value is Floodsub (the default set in
-                    // inject_connected). All other PeerKind changes are ignored.
+                    // inject_connection_established). All other PeerKind changes are ignored.
                     debug!(
                         "New peer type found: {} for peer: {}",
                         kind, propagation_source
