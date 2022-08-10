@@ -448,36 +448,6 @@ mod tests {
     use quickcheck::*;
     use std::sync::Arc;
 
-    struct DummySubstream(Arc<()>);
-
-    impl AsyncRead for DummySubstream {
-        fn poll_read(
-            self: Pin<&mut Self>,
-            _cx: &mut Context<'_>,
-            _buf: &mut [u8],
-        ) -> Poll<std::io::Result<usize>> {
-            Poll::Pending
-        }
-    }
-
-    impl AsyncWrite for DummySubstream {
-        fn poll_write(
-            self: Pin<&mut Self>,
-            _cx: &mut Context<'_>,
-            _buf: &[u8],
-        ) -> Poll<std::io::Result<usize>> {
-            Poll::Pending
-        }
-
-        fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
-            Poll::Pending
-        }
-
-        fn poll_close(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
-            Poll::Pending
-        }
-    }
-
     #[test]
     fn max_negotiating_inbound_streams() {
         fn prop(max_negotiating_inbound_streams: u8) {
@@ -495,7 +465,8 @@ mod tests {
             let alive_substreams_counter = Arc::new(());
 
             for _ in 0..max_negotiating_inbound_streams {
-                let substream = SubstreamBox::new(DummySubstream(alive_substreams_counter.clone()));
+                let substream =
+                    SubstreamBox::new(PendingSubstream(alive_substreams_counter.clone()));
                 wrapper.inject_substream(substream, SubstreamEndpoint::Listener);
             }
 
@@ -505,7 +476,7 @@ mod tests {
                 "Expect none of the substreams up to the limit to be dropped."
             );
 
-            let substream = SubstreamBox::new(DummySubstream(alive_substreams_counter.clone()));
+            let substream = SubstreamBox::new(PendingSubstream(alive_substreams_counter.clone()));
             wrapper.inject_substream(substream, SubstreamEndpoint::Listener);
 
             assert_eq!(
@@ -516,5 +487,35 @@ mod tests {
         }
 
         QuickCheck::new().quickcheck(prop as fn(_));
+    }
+
+    struct PendingSubstream(Arc<()>);
+
+    impl AsyncRead for PendingSubstream {
+        fn poll_read(
+            self: Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+            _buf: &mut [u8],
+        ) -> Poll<std::io::Result<usize>> {
+            Poll::Pending
+        }
+    }
+
+    impl AsyncWrite for PendingSubstream {
+        fn poll_write(
+            self: Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+            _buf: &[u8],
+        ) -> Poll<std::io::Result<usize>> {
+            Poll::Pending
+        }
+
+        fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+            Poll::Pending
+        }
+
+        fn poll_close(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+            Poll::Pending
+        }
     }
 }
