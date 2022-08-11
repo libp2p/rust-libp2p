@@ -351,7 +351,7 @@ mod network {
         }
 
         /// Respond with the provided file content to the given request.
-        pub async fn respond_file(&mut self, file: &Vec<u8>, channel: ResponseChannel<FileResponse>) {
+        pub async fn respond_file(&mut self, file: Vec<u8>, channel: ResponseChannel<FileResponse>) {
             self.sender
                 .send(Command::RespondFile { file: file.to_vec(), channel })
                 .await
