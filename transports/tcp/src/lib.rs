@@ -610,15 +610,9 @@ pub enum TcpListenerEvent<S> {
 /// The listening addresses of a [`TcpListenStream`].
 enum InAddr {
     /// The stream accepts connections on a single interface.
-    One {
-        addr: IpAddr,
-        out: Option<Multiaddr>,
-    },
+    One(Option<Multiaddr>),
     /// The stream accepts connections on all interfaces.
-    Any {
-        addrs: HashSet<IpAddr>,
-        if_watch: IfWatcher,
-    },
+    Any(IfWatcher),
 }
 
 /// A stream of incoming connections on one or more interfaces.
@@ -673,15 +667,9 @@ where
         } {
             // The `addrs` are populated via `if_watch` when the
             // `TcpListenStream` is polled.
-            InAddr::Any {
-                addrs: HashSet::new(),
-                if_watch: IfWatcher::new()?,
-            }
+            InAddr::Any(IfWatcher::new()?)
         } else {
-            InAddr::One {
-                out: Some(ip_to_multiaddr(listen_addr.ip(), listen_addr.port())),
-                addr: listen_addr.ip(),
-            }
+            InAddr::One(Some(ip_to_multiaddr(listen_addr.ip(), listen_addr.port())))
         };
 
         let listener = T::new_listener(listener)?;
@@ -705,12 +693,14 @@ where
     /// Has no effect if port reuse is disabled.
     fn disable_port_reuse(&mut self) {
         match &self.in_addr {
-            InAddr::One { addr, .. } => {
-                self.port_reuse.unregister(*addr, self.listen_addr.port());
+            InAddr::One(_) => {
+                self.port_reuse
+                    .unregister(self.listen_addr.ip(), self.listen_addr.port());
             }
-            InAddr::Any { addrs, .. } => {
-                for addr in addrs {
-                    self.port_reuse.unregister(*addr, self.listen_addr.port());
+            InAddr::Any(if_watcher) => {
+                for ip_net in if_watcher.iter() {
+                    self.port_reuse
+                        .unregister(ip_net.addr(), self.listen_addr.port());
                 }
             }
         }
@@ -739,12 +729,12 @@ where
 
         loop {
             match &mut me.in_addr {
-                InAddr::Any { if_watch, addrs } => {
-                    while let Poll::Ready(ev) = IfWatcher::poll_next(Pin::new(if_watch), cx) {
+                InAddr::Any(if_watcher) => {
+                    while let Poll::Ready(ev) = IfWatcher::poll_next(Pin::new(if_watcher), cx) {
                         match ev {
                             Ok(IfEvent::Up(inet)) => {
                                 let ip = inet.addr();
-                                if me.listen_addr.is_ipv4() == ip.is_ipv4() && addrs.insert(ip) {
+                                if me.listen_addr.is_ipv4() == ip.is_ipv4() {
                                     let ma = ip_to_multiaddr(ip, me.listen_addr.port());
                                     log::debug!("New listen address: {}", ma);
                                     me.port_reuse.register(ip, me.listen_addr.port());
@@ -753,7 +743,7 @@ where
                             }
                             Ok(IfEvent::Down(inet)) => {
                                 let ip = inet.addr();
-                                if me.listen_addr.is_ipv4() == ip.is_ipv4() && addrs.remove(&ip) {
+                                if me.listen_addr.is_ipv4() == ip.is_ipv4() {
                                     let ma = ip_to_multiaddr(ip, me.listen_addr.port());
                                     log::debug!("Expired listen address: {}", ma);
                                     me.port_reuse.unregister(ip, me.listen_addr.port());
@@ -775,9 +765,10 @@ where
                 }
                 // If the listener is bound to a single interface, make sure the
                 // address is registered for port reuse and reported once.
-                InAddr::One { addr, out } => {
+                InAddr::One(out) => {
                     if let Some(multiaddr) = out.take() {
-                        me.port_reuse.register(*addr, me.listen_addr.port());
+                        me.port_reuse
+                            .register(me.listen_addr.ip(), me.listen_addr.port());
                         return Poll::Ready(Some(Ok(TcpListenerEvent::NewAddress(multiaddr))));
                     }
                 }
