@@ -18,11 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use super::{IfEvent, Incoming, Provider};
+use super::{Incoming, Provider};
 
 use async_io_crate::Async;
 use futures::future::{BoxFuture, FutureExt};
-use if_watch::IfWatcher;
 use std::io;
 use std::net;
 use std::task::{Context, Poll};
@@ -33,11 +32,6 @@ pub enum Tcp {}
 impl Provider for Tcp {
     type Stream = Async<net::TcpStream>;
     type Listener = Async<net::TcpListener>;
-    type IfWatcher = if_watch::IfWatcher;
-
-    fn if_watcher() -> io::Result<Self::IfWatcher> {
-        if_watch::IfWatcher::new()
-    }
 
     fn new_listener(l: net::TcpListener) -> io::Result<Self::Listener> {
         Async::new(l)
@@ -87,12 +81,5 @@ impl Provider for Tcp {
             local_addr,
             remote_addr,
         }))
-    }
-
-    fn poll_interfaces(w: &mut Self::IfWatcher, cx: &mut Context<'_>) -> Poll<io::Result<IfEvent>> {
-        IfWatcher::poll_next(std::pin::Pin::new(w), cx).map_ok(|e| match e {
-            if_watch::IfEvent::Up(a) => IfEvent::Up(a),
-            if_watch::IfEvent::Down(a) => IfEvent::Down(a),
-        })
     }
 }

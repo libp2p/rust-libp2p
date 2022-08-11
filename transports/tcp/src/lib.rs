@@ -28,6 +28,7 @@
 
 mod provider;
 
+use if_watch::{IfEvent, IfWatcher};
 #[cfg(feature = "async-io")]
 pub use provider::async_io;
 
@@ -63,7 +64,7 @@ use std::{
     time::Duration,
 };
 
-use provider::{IfEvent, Provider};
+use provider::Provider;
 
 /// The configuration for a TCP/IP transport capability for libp2p.
 #[derive(Clone, Debug)]
@@ -397,7 +398,6 @@ impl<T> Transport for GenTcpTransport<T>
 where
     T: Provider + Send + 'static,
     T::Listener: Unpin,
-    T::IfWatcher: Unpin,
     T::Stream: Unpin,
 {
     type Output = T::Stream;
@@ -605,7 +605,7 @@ pub enum TcpListenerEvent<S> {
 }
 
 /// The listening addresses of a [`TcpListenStream`].
-enum InAddr<TIfWatcher> {
+enum InAddr {
     /// The stream accepts connections on a single interface.
     One {
         addr: IpAddr,
@@ -614,7 +614,7 @@ enum InAddr<TIfWatcher> {
     /// The stream accepts connections on all interfaces.
     Any {
         addrs: HashSet<IpAddr>,
-        if_watch: TIfWatcher,
+        if_watch: IfWatcher,
     },
 }
 
@@ -636,7 +636,7 @@ where
     ///
     /// If the listen socket listens on all interfaces, these may change over
     /// time as interfaces become available or unavailable.
-    in_addr: InAddr<T::IfWatcher>,
+    in_addr: InAddr,
     /// The port reuse configuration for outgoing connections.
     ///
     /// If enabled, all IP addresses on which this listening stream
@@ -672,7 +672,7 @@ where
             // `TcpListenStream` is polled.
             InAddr::Any {
                 addrs: HashSet::new(),
-                if_watch: T::if_watcher()?,
+                if_watch: IfWatcher::new()?,
             }
         } else {
             InAddr::One {
@@ -728,7 +728,6 @@ where
     T: Provider,
     T::Listener: Unpin,
     T::Stream: Unpin,
-    T::IfWatcher: Unpin,
 {
     type Item = Result<TcpListenerEvent<T::Stream>, io::Error>;
 
@@ -738,7 +737,7 @@ where
         loop {
             match &mut me.in_addr {
                 InAddr::Any { if_watch, addrs } => {
-                    while let Poll::Ready(ev) = T::poll_interfaces(if_watch, cx) {
+                    while let Poll::Ready(ev) = IfWatcher::poll_next(Pin::new(if_watch), cx) {
                         match ev {
                             Ok(IfEvent::Up(inet)) => {
                                 let ip = inet.addr();
