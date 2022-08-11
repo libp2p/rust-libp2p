@@ -21,7 +21,7 @@
 use super::{IfEvent, Incoming, Provider};
 
 use futures::{
-    future::{self, BoxFuture, FutureExt},
+    future::{BoxFuture, FutureExt},
     prelude::*,
 };
 use futures_timer::Delay;
@@ -49,13 +49,12 @@ impl Provider for Tcp {
     type Listener = tokio_crate::net::TcpListener;
     type IfWatcher = IfWatcher;
 
-    fn if_watcher() -> BoxFuture<'static, io::Result<Self::IfWatcher>> {
-        future::ready(Ok(IfWatcher {
+    fn if_watcher() -> io::Result<Self::IfWatcher> {
+        Ok(IfWatcher {
             addrs: HashSet::new(),
             delay: Delay::new(Duration::from_secs(0)),
             pending: Vec::new(),
-        }))
-        .boxed()
+        })
     }
 
     fn new_listener(l: net::TcpListener) -> io::Result<Self::Listener> {

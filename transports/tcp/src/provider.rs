@@ -59,7 +59,7 @@ pub trait Provider: Clone + Send + 'static {
 
     /// Creates an instance of [`Self::IfWatcher`] that can be polled for
     /// network interface changes via [`Self::poll_interfaces`].
-    fn if_watcher() -> BoxFuture<'static, io::Result<Self::IfWatcher>>;
+    fn if_watcher() -> io::Result<Self::IfWatcher>;
 
     /// Creates a new listener wrapping the given [`TcpListener`] that
     /// can be polled for incoming connections via [`Self::poll_accept()`].

@@ -43,9 +43,8 @@ pub use provider::tokio;
 pub type TokioTcpTransport = GenTcpTransport<tokio::Tcp>;
 
 use futures::{
-    future::{self, BoxFuture, Ready},
+    future::{self, Ready},
     prelude::*,
-    ready,
 };
 use futures_timer::Delay;
 use libp2p_core::{
@@ -605,11 +604,6 @@ pub enum TcpListenerEvent<S> {
     Error(io::Error),
 }
 
-enum IfWatch<TIfWatcher> {
-    Pending(BoxFuture<'static, io::Result<TIfWatcher>>),
-    Ready(TIfWatcher),
-}
-
 /// The listening addresses of a [`TcpListenStream`].
 enum InAddr<TIfWatcher> {
     /// The stream accepts connections on a single interface.
@@ -620,7 +614,7 @@ enum InAddr<TIfWatcher> {
     /// The stream accepts connections on all interfaces.
     Any {
         addrs: HashSet<IpAddr>,
-        if_watch: IfWatch<TIfWatcher>,
+        if_watch: TIfWatcher,
     },
 }
 
@@ -678,7 +672,7 @@ where
             // `TcpListenStream` is polled.
             InAddr::Any {
                 addrs: HashSet::new(),
-                if_watch: IfWatch::Pending(T::if_watcher()),
+                if_watch: T::if_watcher()?,
             }
         } else {
             InAddr::One {
@@ -743,63 +737,40 @@ where
 
         loop {
             match &mut me.in_addr {
-                InAddr::Any { if_watch, addrs } => match if_watch {
-                    // If we listen on all interfaces, wait for `if-watch` to be ready.
-                    IfWatch::Pending(f) => match ready!(Pin::new(f).poll(cx)) {
-                        Ok(w) => {
-                            *if_watch = IfWatch::Ready(w);
-                            continue;
-                        }
-                        Err(err) => {
-                            log::debug! {
-                                "Failed to begin observing interfaces: {:?}. Scheduling retry.",
-                                err
-                            };
-                            *if_watch = IfWatch::Pending(T::if_watcher());
-                            me.pause = Some(Delay::new(me.sleep_on_error));
-                            return Poll::Ready(Some(Ok(TcpListenerEvent::Error(err))));
-                        }
-                    },
-                    // Consume all events for up/down interface changes.
-                    IfWatch::Ready(watch) => {
-                        while let Poll::Ready(ev) = T::poll_interfaces(watch, cx) {
-                            match ev {
-                                Ok(IfEvent::Up(inet)) => {
-                                    let ip = inet.addr();
-                                    if me.listen_addr.is_ipv4() == ip.is_ipv4() && addrs.insert(ip)
-                                    {
-                                        let ma = ip_to_multiaddr(ip, me.listen_addr.port());
-                                        log::debug!("New listen address: {}", ma);
-                                        me.port_reuse.register(ip, me.listen_addr.port());
-                                        return Poll::Ready(Some(Ok(
-                                            TcpListenerEvent::NewAddress(ma),
-                                        )));
-                                    }
+                InAddr::Any { if_watch, addrs } => {
+                    while let Poll::Ready(ev) = T::poll_interfaces(if_watch, cx) {
+                        match ev {
+                            Ok(IfEvent::Up(inet)) => {
+                                let ip = inet.addr();
+                                if me.listen_addr.is_ipv4() == ip.is_ipv4() && addrs.insert(ip) {
+                                    let ma = ip_to_multiaddr(ip, me.listen_addr.port());
+                                    log::debug!("New listen address: {}", ma);
+                                    me.port_reuse.register(ip, me.listen_addr.port());
+                                    return Poll::Ready(Some(Ok(TcpListenerEvent::NewAddress(ma))));
                                 }
-                                Ok(IfEvent::Down(inet)) => {
-                                    let ip = inet.addr();
-                                    if me.listen_addr.is_ipv4() == ip.is_ipv4() && addrs.remove(&ip)
-                                    {
-                                        let ma = ip_to_multiaddr(ip, me.listen_addr.port());
-                                        log::debug!("Expired listen address: {}", ma);
-                                        me.port_reuse.unregister(ip, me.listen_addr.port());
-                                        return Poll::Ready(Some(Ok(
-                                            TcpListenerEvent::AddressExpired(ma),
-                                        )));
-                                    }
+                            }
+                            Ok(IfEvent::Down(inet)) => {
+                                let ip = inet.addr();
+                                if me.listen_addr.is_ipv4() == ip.is_ipv4() && addrs.remove(&ip) {
+                                    let ma = ip_to_multiaddr(ip, me.listen_addr.port());
+                                    log::debug!("Expired listen address: {}", ma);
+                                    me.port_reuse.unregister(ip, me.listen_addr.port());
+                                    return Poll::Ready(Some(Ok(
+                                        TcpListenerEvent::AddressExpired(ma),
+                                    )));
                                 }
-                                Err(err) => {
-                                    log::debug! {
-                                        "Failure polling interfaces: {:?}. Scheduling retry.",
-                                        err
-                                    };
-                                    me.pause = Some(Delay::new(me.sleep_on_error));
-                                    return Poll::Ready(Some(Ok(TcpListenerEvent::Error(err))));
-                                }
+                            }
+                            Err(err) => {
+                                log::debug! {
+                                    "Failure polling interfaces: {:?}. Scheduling retry.",
+                                    err
+                                };
+                                me.pause = Some(Delay::new(me.sleep_on_error));
+                                return Poll::Ready(Some(Ok(TcpListenerEvent::Error(err))));
                             }
                         }
                     }
-                },
+                }
                 // If the listener is bound to a single interface, make sure the
                 // address is registered for port reuse and reported once.
                 InAddr::One { addr, out } => {

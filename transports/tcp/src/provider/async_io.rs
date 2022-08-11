@@ -22,6 +22,7 @@ use super::{IfEvent, Incoming, Provider};
 
 use async_io_crate::Async;
 use futures::future::{BoxFuture, FutureExt};
+use if_watch::IfWatcher;
 use std::io;
 use std::net;
 use std::task::{Context, Poll};
@@ -34,8 +35,8 @@ impl Provider for Tcp {
     type Listener = Async<net::TcpListener>;
     type IfWatcher = if_watch::IfWatcher;
 
-    fn if_watcher() -> BoxFuture<'static, io::Result<Self::IfWatcher>> {
-        if_watch::IfWatcher::new().boxed()
+    fn if_watcher() -> io::Result<Self::IfWatcher> {
+        if_watch::IfWatcher::new()
     }
 
     fn new_listener(l: net::TcpListener) -> io::Result<Self::Listener> {
@@ -89,7 +90,7 @@ impl Provider for Tcp {
     }
 
     fn poll_interfaces(w: &mut Self::IfWatcher, cx: &mut Context<'_>) -> Poll<io::Result<IfEvent>> {
-        w.poll_unpin(cx).map_ok(|e| match e {
+        IfWatcher::poll_next(std::pin::Pin::new(w), cx).map_ok(|e| match e {
             if_watch::IfEvent::Up(a) => IfEvent::Up(a),
             if_watch::IfEvent::Down(a) => IfEvent::Down(a),
         })
