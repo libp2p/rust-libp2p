@@ -47,6 +47,8 @@
 
 - Update to [`libp2p-dcutr` `v0.5.0`](protocols/dcutr/CHANGELOG.md#050).
 
+- Update to [`libp2p-derive` `v0.29.0`](swarm-derive/CHANGELOG.md#0290).
+
 - Update to [`libp2p-rendezvous` `v0.8.0`](protocols/rendezvous/CHANGELOG.md#080).
 
 - Update to [`libp2p-ping` `v0.38.0`](protocols/ping/CHANGELOG.md#0380).
