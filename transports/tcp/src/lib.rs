@@ -243,6 +243,9 @@ impl GenTcpConfig {
     /// # use libp2p_core::transport::{ListenerId, TransportEvent};
     /// # use libp2p_core::{Multiaddr, Transport};
     /// # use std::pin::Pin;
+    /// # #[cfg(not(feature = "async-io"))]
+    /// # fn main() {}
+    /// #
     /// #[cfg(feature = "async-io")]
     /// #[async_std::main]
     /// async fn main() -> std::io::Result<()> {
