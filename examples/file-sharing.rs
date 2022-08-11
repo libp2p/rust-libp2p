@@ -79,12 +79,12 @@
 
 use async_std::io;
 use async_std::task::spawn;
-use std::io::Write;
 use clap::Parser;
 use futures::prelude::*;
 use libp2p::core::{Multiaddr, PeerId};
 use libp2p::multiaddr::Protocol;
 use std::error::Error;
+use std::io::Write;
 use std::path::PathBuf;
 
 #[async_std::main]
@@ -135,7 +135,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     // Reply with the content of the file on incoming requests.
                     Some(network::Event::InboundRequest { request, channel }) => {
                         if request == name {
-                            network_client.respond_file(std::fs::read(&path)?, channel).await;
+                            network_client
+                                .respond_file(std::fs::read(&path)?, channel)
+                                .await;
                         }
                     }
                     e => todo!("{:?}", e),
@@ -351,9 +353,16 @@ mod network {
         }
 
         /// Respond with the provided file content to the given request.
-        pub async fn respond_file(&mut self, file: Vec<u8>, channel: ResponseChannel<FileResponse>) {
+        pub async fn respond_file(
+            &mut self,
+            file: Vec<u8>,
+            channel: ResponseChannel<FileResponse>,
+        ) {
             self.sender
-                .send(Command::RespondFile { file, channel })
+                .send(Command::RespondFile {
+                    file: file,
+                    channel,
+                })
                 .await
                 .expect("Command receiver not to be dropped.");
         }
