@@ -1,6 +1,6 @@
 # 0.38.0 [unreleased]
 
-- Remove `NetworkBehaviourEventProcess`. When deriving `NetworkBehaviour` on a custom `struct` users
+- Deprecate `NetworkBehaviourEventProcess`. When deriving `NetworkBehaviour` on a custom `struct` users
   should either bring their own `OutEvent` via `#[behaviour(out_event = "MyBehaviourEvent")]` or,
   when not specified, have the derive macro generate one for the user.
 
