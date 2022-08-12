@@ -278,9 +278,9 @@ impl snow::types::Dh for Keypair<X25519> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ed25519_dalek::Signer::sign;
     use libp2p_core::identity::ed25519;
     use quickcheck::*;
-    use ed25519_dalek::Signer::sign;
     use std::os::raw::c_int;
     use x25519_dalek::StaticSecret;
 
