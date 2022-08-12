@@ -42,7 +42,7 @@
   }
 
   enum MyBehaviourEvent {
-      Floodsub(FloodsubEvent),
+      Gossipsub(GossipsubEvent),
       Mdns(MdnsEvent),
   }
 
