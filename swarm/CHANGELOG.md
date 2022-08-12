@@ -5,8 +5,8 @@
   when not specified, have the derive macro generate one for the user.
 
   See [`NetworkBehaviour`
-  documentation](https://docs.rs/libp2p/latest/libp2p/swarm/trait.NetworkBehaviour.html) for
-  details.
+  documentation](https://docs.rs/libp2p/latest/libp2p/swarm/trait.NetworkBehaviour.html) and [PR
+  2784] for details.
 
   Previously
 
@@ -74,14 +74,16 @@
   the user.
 
   See [`NetworkBehaviour`
-  documentation](https://docs.rs/libp2p/latest/libp2p/swarm/trait.NetworkBehaviour.html) for
-  details.
+  documentation](https://docs.rs/libp2p/latest/libp2p/swarm/trait.NetworkBehaviour.html) and [PR
+  2792] for details.
 
 - Update dial address concurrency factor to `8`, thus dialing up to 8 addresses concurrently for a single connection attempt. See `Swarm::dial_concurrency_factor` and [PR 2741].
 
 - Update to `libp2p-core` `v0.35.0`.
 
 [PR 2741]: https://github.com/libp2p/rust-libp2p/pull/2741/
+[PR 2784]: https://github.com/libp2p/rust-libp2p/pull/2784
+[PR 2792]: https://github.com/libp2p/rust-libp2p/pull/2792
 
 # 0.37.0
 
