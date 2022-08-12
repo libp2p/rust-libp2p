@@ -14,7 +14,7 @@
   #[derive(NetworkBehaviour)]
   #[behaviour(event_process = true)]
   struct MyBehaviour {
-      floodsub: Gossipsub,
+      gossipsub: Gossipsub,
       mdns: Mdns,
   }
 
