@@ -26,9 +26,9 @@ use libp2p_core::{
     Multiaddr, PeerId, PublicKey,
 };
 use libp2p_swarm::{
-    dial_opts::{self, DialOpts},
-    AddressScore, ConnectionHandler, ConnectionHandlerUpgrErr, DialError, IntoConnectionHandler,
-    NegotiatedSubstream, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
+    dial_opts::DialOpts, AddressScore, ConnectionHandler, ConnectionHandlerUpgrErr, DialError,
+    IntoConnectionHandler, NegotiatedSubstream, NetworkBehaviour, NetworkBehaviourAction,
+    NotifyHandler, PollParameters,
 };
 use lru::LruCache;
 use std::{
@@ -196,9 +196,7 @@ impl Identify {
             if self.pending_push.insert(p) && !self.connected.contains_key(&p) {
                 let handler = self.new_handler();
                 self.events.push_back(NetworkBehaviourAction::Dial {
-                    opts: DialOpts::peer_id(p)
-                        .condition(dial_opts::PeerCondition::Disconnected)
-                        .build(),
+                    opts: DialOpts::peer_id(p).build(),
                     handler,
                 });
             }
