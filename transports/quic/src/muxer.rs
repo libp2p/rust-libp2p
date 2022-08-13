@@ -25,14 +25,15 @@ use futures::{AsyncRead, AsyncWrite};
 use libp2p_core::muxing::StreamMuxer;
 use parking_lot::Mutex;
 use std::{
-    collections::{HashMap, VecDeque},
-    fmt, io,
+    collections::HashMap,
+    io,
     pin::Pin,
     sync::{Arc, Weak},
     task::{Context, Poll, Waker},
 };
 
 /// State for a single opened QUIC connection.
+#[derive(Debug)]
 pub struct QuicMuxer {
     // Note: This could theoretically be an asynchronous future, in order to yield the current
     // task if a task running in parallel is already holding the lock. However, using asynchronous
@@ -41,17 +42,18 @@ pub struct QuicMuxer {
 }
 
 /// Mutex-protected fields of [`QuicMuxer`].
+#[derive(Debug)]
 struct QuicMuxerInner {
     /// Inner connection object that yields events.
     connection: Connection,
     // /// State of all the substreams that the muxer reports as open.
     substreams: HashMap<quinn_proto::StreamId, SubstreamState>,
-    /// A FIFO of wakers to wake if a new outgoing substream is opened.
-    pending_substreams: VecDeque<Waker>,
+    /// Waker to wake if a new outbound substream is opened.
+    poll_outbound_waker: Option<Waker>,
+    /// Waker to wake if a new inbound substream was happened.
+    poll_inbound_waker: Option<Waker>,
     /// Waker to wake if the connection is closed.
     poll_close_waker: Option<Waker>,
-    /// Waker to wake if any event is happened.
-    poll_event_waker: Option<Waker>,
 }
 
 impl QuicMuxerInner {
@@ -59,7 +61,7 @@ impl QuicMuxerInner {
         while let Poll::Ready(event) = self.connection.poll_event(cx) {
             match event {
                 ConnectionEvent::Connected => {
-                    tracing::error!("Unexpected Connected event on established QUIC connection");
+                    tracing::warn!("Unexpected Connected event on established QUIC connection");
                 }
                 ConnectionEvent::ConnectionLost(_) => {
                     if let Some(waker) = self.poll_close_waker.take() {
@@ -69,7 +71,7 @@ impl QuicMuxerInner {
                 }
 
                 ConnectionEvent::StreamOpened => {
-                    if let Some(waker) = self.pending_substreams.pop_front() {
+                    if let Some(waker) = self.poll_outbound_waker.take() {
                         waker.wake();
                     }
                 }
@@ -101,7 +103,9 @@ impl QuicMuxerInner {
                     }
                 }
                 ConnectionEvent::StreamAvailable => {
-                    // Handled below.
+                    if let Some(waker) = self.poll_inbound_waker.take() {
+                        waker.wake();
+                    }
                 }
             }
         }
@@ -109,7 +113,7 @@ impl QuicMuxerInner {
 }
 
 /// State of a single substream.
-#[derive(Default, Clone)]
+#[derive(Debug, Default, Clone)]
 struct SubstreamState {
     /// Waker to wake if the substream becomes readable or stopped.
     read_waker: Option<Waker>,
@@ -136,9 +140,9 @@ impl QuicMuxer {
             inner: Arc::new(Mutex::new(QuicMuxerInner {
                 connection,
                 substreams: Default::default(),
-                pending_substreams: Default::default(),
+                poll_outbound_waker: None,
                 poll_close_waker: None,
-                poll_event_waker: None,
+                poll_inbound_waker: None,
             })),
         }
     }
@@ -167,7 +171,7 @@ impl StreamMuxer for QuicMuxer {
             let substream = Substream::new(substream_id, self.inner.clone());
             Poll::Ready(Ok(substream))
         } else {
-            inner.poll_event_waker = Some(cx.waker().clone());
+            inner.poll_inbound_waker = Some(cx.waker().clone());
             Poll::Pending
         }
     }
@@ -183,7 +187,7 @@ impl StreamMuxer for QuicMuxer {
             let substream = Substream::new(substream_id, self.inner.clone());
             Poll::Ready(Ok(substream))
         } else {
-            inner.pending_substreams.push_back(cx.waker().clone());
+            inner.poll_outbound_waker = Some(cx.waker().clone());
             Poll::Pending
         }
     }
@@ -200,7 +204,7 @@ impl StreamMuxer for QuicMuxer {
             let connection = &mut inner.connection;
             if !connection.connection.is_closed() {
                 connection.close();
-                if let Some(waker) = inner.poll_event_waker.take() {
+                if let Some(waker) = inner.poll_inbound_waker.take() {
                     waker.wake();
                 }
             } else {
@@ -211,9 +215,9 @@ impl StreamMuxer for QuicMuxer {
                 }
             }
         } else {
-            for substream in inner.substreams.clone().keys() {
-                if let Err(e) = inner.connection.shutdown_substream(*substream) {
-                    tracing::error!("substream finish error on muxer close: {}", e);
+            for substream in inner.substreams.keys().cloned().collect::<Vec<_>>() {
+                if let Err(e) = inner.connection.shutdown_substream(substream) {
+                    tracing::warn!("substream finish error on muxer close: {}", e);
                 }
             }
         }
@@ -222,12 +226,6 @@ impl StreamMuxer for QuicMuxer {
         inner.poll_close_waker = Some(cx.waker().clone());
 
         Poll::Pending
-    }
-}
-
-impl fmt::Debug for QuicMuxer {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_tuple("QuicMuxer").finish()
     }
 }
 
@@ -319,7 +317,7 @@ impl AsyncRead for Substream {
             }
         }
         if chunks.finalize().should_transmit() {
-            if let Some(waker) = muxer.poll_event_waker.take() {
+            if let Some(waker) = muxer.poll_inbound_waker.take() {
                 waker.wake();
             }
         }
