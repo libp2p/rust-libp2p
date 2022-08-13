@@ -75,10 +75,16 @@ events down to their children and children pass events up to their parents.
 ```
 
 Using hierarchical state machines is a deliberate choice throughout the
-rust-libp2p code base. It makes reasoning about control and data flow easy. It
+rust-libp2p code base. It makes reasoning about control and data flow simple. It
 works well with Rust's `Future` model. It allows fine-grain control e.g. on the
-order child state machines are polled. The archetecture pattern of hierarchical
-state machines should be used wherever possible.
+order child state machines are polled.
+
+The above comes with downsides. It feels more verbose. The mix of control flow (`loop`, `return`,
+`break`, `continue`) in `poll` functions together with the asynchronous and thus decoupled
+communication via events can be very hard to understand. Both are a form of complexity that we are
+trading for correctness and performance which aligns with Rust's and rust-libp2p's goals.
+
+The archetecture pattern of hierarchical state machines should be used wherever possible.
 
 ### Conventions for `poll` implementations
 
