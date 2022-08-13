@@ -94,7 +94,8 @@ fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output>{
       Poll::Ready(_) => {
         // Either return an event to the parent:
         return Poll::Ready(todo!());
-        // or `continue`, thus polling `child_1` again. `child_1` can potentially make more progress:
+        // or `continue`, thus polling `child_1` again. `child_1` can potentially make more progress. Try to exhaust
+        // it before moving on to the next child.
         continue
         // but NEVER move to the next child if the current child made progress. Given
         // that the current child might be able to make more progress, it did not yet
@@ -104,19 +105,28 @@ fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output>{
       }
 
       // The child did not make progress. It has registered the waker for a
-      // later wake up. Proceed with the other childs.
-      Poll::Pending(_) => {
+      // later wake up. Proceed with the other children.
+      Poll::Pending(_) => {}
     }
 
     match self.child_2.poll(cx) {
-      // As above.
+      Poll::Ready(child_2_event) => {
+        // Events can be dispatched from one child to the other.
+        self.child_1.handle_event(child_2_event);
+
+        // Either `continue` thus polling `child_1` again, or `return Poll::Ready` with a result to the parent.
+        todo!()
+      }
+      Poll::Pending(_) => {}
     }
 
     match self.child_3.poll(cx) {
-      // As above.
+      Poll::Ready(__) => {
+        // Either `continue` thus polling `child_1` again, or `return Poll::Ready` with a result to the parent.
+        todo!()
+      }
+      Poll::Pending(_) => {}
     }
-
-    // ...
 
     // None of the child state machines can make any more progress. Each registered
     // the waker in order for the root `Future` task to be woken up again.
