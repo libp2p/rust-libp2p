@@ -38,12 +38,12 @@ pub struct QuicMuxer {
     // Note: This could theoretically be an asynchronous future, in order to yield the current
     // task if a task running in parallel is already holding the lock. However, using asynchronous
     // mutexes without async/await is extremely tedious and maybe not worth the effort.
-    inner: Arc<Mutex<QuicMuxerInner>>,
+    inner: Arc<Mutex<Inner>>,
 }
 
 /// Mutex-protected fields of [`QuicMuxer`].
 #[derive(Debug)]
-struct QuicMuxerInner {
+struct Inner {
     /// Inner connection object that yields events.
     connection: Connection,
     // /// State of all the substreams that the muxer reports as open.
@@ -56,7 +56,7 @@ struct QuicMuxerInner {
     poll_close_waker: Option<Waker>,
 }
 
-impl QuicMuxerInner {
+impl Inner {
     fn poll_connection(&mut self, cx: &mut Context<'_>) {
         while let Poll::Ready(event) = self.connection.poll_event(cx) {
             match event {
@@ -137,7 +137,7 @@ impl QuicMuxer {
         assert!(!connection.is_handshaking());
 
         QuicMuxer {
-            inner: Arc::new(Mutex::new(QuicMuxerInner {
+            inner: Arc::new(Mutex::new(Inner {
                 connection,
                 substreams: Default::default(),
                 poll_outbound_waker: None,
@@ -231,11 +231,11 @@ impl StreamMuxer for QuicMuxer {
 
 pub struct Substream {
     id: quinn_proto::StreamId,
-    muxer: Weak<Mutex<QuicMuxerInner>>,
+    muxer: Weak<Mutex<Inner>>,
 }
 
 impl Substream {
-    fn new(id: quinn_proto::StreamId, muxer: Arc<Mutex<QuicMuxerInner>>) -> Self {
+    fn new(id: quinn_proto::StreamId, muxer: Arc<Mutex<Inner>>) -> Self {
         Self {
             id,
             muxer: Arc::downgrade(&muxer),
