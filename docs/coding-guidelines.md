@@ -30,7 +30,7 @@ If you sqint, rust-libp2p is just a big hierarchy of [state
 machines](https://en.wikipedia.org/wiki/Finite-state_machine) where parents pass
 events down to their children and children pass events up to their parents.
 
-![Archetecture](architecture.svg)
+![Architecture](architecture.svg)
 
 <details>
     <summary>Reproduce diagram</summary>
