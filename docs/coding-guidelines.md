@@ -238,17 +238,16 @@ such pseudo optimizations is increased memory footprint and latency.
 
 Concurrency adds complexity. Concurrency adds overhead due to synchronization.
 Thus unless proven to be a bottleneck, don't make things concurrent. As an example
-the hierarchical `NetworkBehaviour` state machine, run sequentially. It is easy
+the hierarchical `NetworkBehaviour` state machine runs sequentially. It is easy
 to debug as it runs sequentially. Thus far there has been no proof that
 shows a speed up when running it concurrently.
 
 ## Use `async/await` for sequential execution only
 
-Using `async/await` does not allow accesing methods on the object being
-`await`ed unless paired with some synchronization mechanism like an
-`Arc<Mutex<_>>`.
-
 Using `async/await` for sequential execution makes things significantly simpler.
+Though unfortunately using `async/await` does not allow accesing methods on the
+object being `await`ed unless paired with some synchronization mechanism like an
+`Arc<Mutex<_>>`.
 
 Example: Read and once done write from/to a socket. Use `async/await`.
 
