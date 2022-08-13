@@ -166,14 +166,16 @@ impl StreamMuxer for QuicMuxer {
     ) -> Poll<Result<Self::Substream, Self::Error>> {
         let mut inner = self.inner.lock();
         inner.poll_connection(cx);
-        if let Some(substream_id) = inner.connection.pop_incoming_substream() {
-            inner.substreams.insert(substream_id, Default::default());
-            let substream = Substream::new(substream_id, self.inner.clone());
-            Poll::Ready(Ok(substream))
-        } else {
-            inner.poll_inbound_waker = Some(cx.waker().clone());
-            Poll::Pending
-        }
+        let substream_id = match inner.connection.pop_incoming_substream() {
+        	Some(id) => id,
+        	None => {
+        		inner.poll_inbound_waker = Some(cx.waker().clone());
+        		return Poll::Pending;
+        	}
+        };
+        inner.substreams.insert(substream_id, Default::default());
+        let substream = Substream::new(substream_id, self.inner.clone());
+        Poll::Ready(Ok(substream))
     }
 
     fn poll_outbound(
@@ -182,14 +184,16 @@ impl StreamMuxer for QuicMuxer {
     ) -> Poll<Result<Self::Substream, Self::Error>> {
         let mut inner = self.inner.lock();
         inner.poll_connection(cx);
-        if let Some(substream_id) = inner.connection.pop_outgoing_substream() {
-            inner.substreams.insert(substream_id, Default::default());
-            let substream = Substream::new(substream_id, self.inner.clone());
-            Poll::Ready(Ok(substream))
-        } else {
-            inner.poll_outbound_waker = Some(cx.waker().clone());
-            Poll::Pending
-        }
+        let substream_id = match inner.connection.pop_outgoing_substream() {
+        	Some(id) => id,
+        	None => {
+        		inner.poll_outbound_waker = Some(cx.waker().clone());
+        		return Poll::Pending;
+        	}
+        };
+        inner.substreams.insert(substream_id, Default::default());
+        let substream = Substream::new(substream_id, self.inner.clone());
+        Poll::Ready(Ok(substream))
     }
 
     fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
