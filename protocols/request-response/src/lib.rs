@@ -66,9 +66,8 @@ use futures::channel::oneshot;
 use handler::{RequestProtocol, RequestResponseHandler, RequestResponseHandlerEvent};
 use libp2p_core::{connection::ConnectionId, ConnectedPoint, Multiaddr, PeerId};
 use libp2p_swarm::{
-    dial_opts::{self, DialOpts},
-    DialError, IntoConnectionHandler, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
-    PollParameters,
+    dial_opts::DialOpts, DialError, IntoConnectionHandler, NetworkBehaviour,
+    NetworkBehaviourAction, NotifyHandler, PollParameters,
 };
 use smallvec::SmallVec;
 use std::{
@@ -385,9 +384,7 @@ where
         if let Some(request) = self.try_send_request(peer, request) {
             let handler = self.new_handler();
             self.pending_events.push_back(NetworkBehaviourAction::Dial {
-                opts: DialOpts::peer_id(*peer)
-                    .condition(dial_opts::PeerCondition::Disconnected)
-                    .build(),
+                opts: DialOpts::peer_id(*peer).build(),
                 handler,
             });
             self.pending_outbound_requests
