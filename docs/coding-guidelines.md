@@ -30,8 +30,10 @@ If you sqint, rust-libp2p is just a big hierarchy of [state
 machines](https://en.wikipedia.org/wiki/Finite-state_machine) where parents pass
 events down to their children and children pass events up to their parents.
 
+![Archetecture](architecture.svg)
+
 <details>
-    <summary>Code</summary>
+    <summary>Reproduce diagram</summary>
 
     ```
     @startuml
@@ -52,27 +54,6 @@ events down to their children and children pass events up to their parents.
     @enduml
     ```
 </details>
-
-```
-                                         ,------.
-                                         |Swarm |
-                                         |------|
-                                         |poll()|
-                                         `------'
-                                             |
-                                             |
-                   ,-------------.   ,--------------.   ,---------.
-                   |RootBehaviour|   |ConnectionPool|   |Transport|
-                   |-------------|   |--------------|   |---------|
-                   |poll()       |   |poll()        |   |poll()   |
-                   `-------------'   `--------------'   `---------'
-                           |
-,-------------.  ,-----------------.   ,-----------------.
-|PingBehaviour|  |IdentifyBehaviour|   |KademliaBehaviour|
-|-------------|  |-----------------|   |-----------------|
-|poll()       |  |poll()           |   |poll()           |
-`-------------'  `-----------------'   `-----------------'
-```
 
 Using hierarchical state machines is a deliberate choice throughout the
 rust-libp2p code base. It makes reasoning about control and data flow simple. It
