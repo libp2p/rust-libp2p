@@ -179,7 +179,7 @@ impl Message {
 
         // If it starts with a `/`, ends with a line feed without any
         // other line feeds in-between, it must be a protocol name.
-        if msg.get(0) == Some(&b'/')
+        if msg.first() == Some(&b'/')
             && msg.last() == Some(&b'\n')
             && !msg[..msg.len() - 1].contains(&b'\n')
         {

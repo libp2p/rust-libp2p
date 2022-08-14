@@ -565,9 +565,7 @@ where
                     kbucket::InsertResult::Pending { disconnected } => {
                         let handler = self.new_handler();
                         self.queued_events.push_back(NetworkBehaviourAction::Dial {
-                            opts: DialOpts::peer_id(disconnected.into_preimage())
-                                .condition(dial_opts::PeerCondition::Disconnected)
-                                .build(),
+                            opts: DialOpts::peer_id(disconnected.into_preimage()).build(),
                             handler,
                         });
                         RoutingUpdate::Pending
@@ -1162,7 +1160,6 @@ where
                                     let handler = self.new_handler();
                                     self.queued_events.push_back(NetworkBehaviourAction::Dial {
                                         opts: DialOpts::peer_id(disconnected.into_preimage())
-                                            .condition(dial_opts::PeerCondition::Disconnected)
                                             .build(),
                                         handler,
                                     })
@@ -2342,9 +2339,7 @@ where
                             query.inner.pending_rpcs.push((peer_id, event));
                             let handler = self.new_handler();
                             self.queued_events.push_back(NetworkBehaviourAction::Dial {
-                                opts: DialOpts::peer_id(peer_id)
-                                    .condition(dial_opts::PeerCondition::Disconnected)
-                                    .build(),
+                                opts: DialOpts::peer_id(peer_id).build(),
                                 handler,
                             });
                         }
