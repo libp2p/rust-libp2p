@@ -50,7 +50,7 @@ pub enum ValidationMode {
 }
 
 /// Selector for custom Protocol Id
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum GossipsubVersion {
     V1_0,
     V1_1,
