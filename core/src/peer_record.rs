@@ -13,7 +13,7 @@ const DOMAIN_SEP: &str = "libp2p-routing-state";
 ///
 /// Peer records are designed to be distributable and carry a signature by being wrapped in a signed envelope.
 /// For more information see RFC0003 of the libp2p specifications: <https://github.com/libp2p/specs/blob/master/RFC/0003-routing-records.md>
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct PeerRecord {
     peer_id: PeerId,
     seq: u64,
