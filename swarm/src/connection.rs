@@ -27,7 +27,6 @@ pub use error::{
     ConnectionError, PendingConnectionError, PendingInboundConnectionError,
     PendingOutboundConnectionError,
 };
-pub use pool::{ConnectionCounters, ConnectionLimits};
 pub use pool::{EstablishedConnection, PendingConnection};
 
 use crate::handler::ConnectionHandler;
@@ -40,7 +39,7 @@ use libp2p_core::upgrade;
 use libp2p_core::PeerId;
 use std::collections::VecDeque;
 use std::future::Future;
-use std::{error::Error, fmt, io, pin::Pin, task::Context, task::Poll};
+use std::{fmt, io, pin::Pin, task::Context, task::Poll};
 
 /// Information about a successfully established connection.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -199,21 +198,3 @@ impl<'a> IncomingInfo<'a> {
         }
     }
 }
-
-/// Information about a connection limit.
-#[derive(Debug, Clone)]
-pub struct ConnectionLimit {
-    /// The maximum number of connections.
-    pub limit: u32,
-    /// The current number of connections.
-    pub current: u32,
-}
-
-impl fmt::Display for ConnectionLimit {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}/{}", self.current, self.limit)
-    }
-}
-
-/// A `ConnectionLimit` can represent an error if it has been exceeded.
-impl Error for ConnectionLimit {}

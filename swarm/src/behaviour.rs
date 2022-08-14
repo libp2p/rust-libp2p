@@ -24,10 +24,11 @@ pub mod toggle;
 use crate::dial_opts::DialOpts;
 use crate::handler::{ConnectionHandler, IntoConnectionHandler};
 use crate::{AddressRecord, AddressScore, DialError};
-use libp2p_core::{
-    connection::ConnectionId, transport::ListenerId, ConnectedPoint, Multiaddr, PeerId,
-};
-use std::{task::Context, task::Poll};
+use libp2p_core::connection::{ConnectionId, Endpoint};
+use libp2p_core::{transport::ListenerId, ConnectedPoint, Multiaddr, PeerId};
+use std::error::Error;
+use std::task::Context;
+use std::task::Poll;
 
 /// Custom event that can be received by the [`ConnectionHandler`].
 pub(crate) type THandlerInEvent<THandler> =
@@ -189,6 +190,24 @@ pub trait NetworkBehaviour: 'static {
     /// address should be the most likely to be reachable.
     fn addresses_of_peer(&mut self, _: &PeerId) -> Vec<Multiaddr> {
         vec![]
+    }
+
+    fn review_pending_connection(
+        &mut self,
+        _peer_id: Option<PeerId>,
+        // TODO: Maybe an iterator is better?
+        _addresses: &[Multiaddr],
+        _endpoint: Endpoint,
+    ) -> Result<(), ReviewDenied> {
+        Ok(())
+    }
+
+    fn inject_connection_pending(
+        &mut self,
+        _peer_id: Option<PeerId>,
+        _connection_id: ConnectionId,
+        _endpoint: Endpoint,
+    ) {
     }
 
     /// Informs the behaviour about a newly established connection to a peer.
@@ -770,4 +789,10 @@ impl Default for CloseConnection {
     fn default() -> Self {
         CloseConnection::All
     }
+}
+
+// TODO: Needed in the first place? Are there some common errors that we want?
+#[derive(Debug)]
+pub enum ReviewDenied {
+    Error(Box<dyn Error>),
 }

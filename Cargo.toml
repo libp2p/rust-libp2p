@@ -13,6 +13,8 @@ categories = ["network-programming", "asynchronous"]
 [features]
 default = [
     "autonat",
+    # TODO: Should this really be a default?
+    "connection-limit",
     "deflate",
     "dns-async-std",
     "floodsub",
@@ -37,6 +39,7 @@ default = [
 ]
 
 autonat = ["dep:libp2p-autonat"]
+connection-limit = ["dep:libp2p-connection-limit"]
 dcutr = ["dep:libp2p-dcutr", "libp2p-metrics?/dcutr"]
 deflate = ["dep:libp2p-deflate"]
 dns-async-std = ["dep:libp2p-dns", "libp2p-dns?/async-std"]
@@ -79,6 +82,7 @@ lazy_static = "1.2"
 
 libp2p-autonat = { version = "0.6.0", path = "protocols/autonat", optional = true }
 libp2p-core = { version = "0.35.0", path = "core",  default-features = false }
+libp2p-connection-limit = { version = "0.1.0", path = "protocols/connection-limit", optional = true }
 libp2p-dcutr = { version = "0.5.0", path = "protocols/dcutr",  optional = true }
 libp2p-floodsub = { version = "0.38.0", path = "protocols/floodsub", optional = true }
 libp2p-identify = { version = "0.38.0", path = "protocols/identify", optional = true }
@@ -130,6 +134,7 @@ members = [
     "misc/prost-codec",
     "muxers/mplex",
     "muxers/yamux",
+    "protocols/connection-limit",
     "protocols/dcutr",
     "protocols/autonat",
     "protocols/floodsub",

@@ -21,7 +21,7 @@
 use super::handler_wrapper;
 use crate::transport::TransportError;
 use crate::Multiaddr;
-use crate::{connection::ConnectionLimit, ConnectedPoint, PeerId};
+use crate::{ConnectedPoint, PeerId};
 use std::{fmt, io};
 
 /// Errors that can occur in the context of an established `Connection`.
@@ -99,9 +99,10 @@ pub enum PendingConnectionError<TTransErr> {
     /// An error occurred while negotiating the transport protocol(s) on a connection.
     Transport(TTransErr),
 
+    // TODO: Still needed?
     /// The connection was dropped because the connection limit
     /// for a peer has been reached.
-    ConnectionLimit(ConnectionLimit),
+    // ConnectionLimit(ConnectionLimit),
 
     /// Pending connection attempt has been aborted.
     Aborted,
@@ -122,9 +123,6 @@ impl<T> PendingConnectionError<T> {
     pub fn map<U>(self, f: impl FnOnce(T) -> U) -> PendingConnectionError<U> {
         match self {
             PendingConnectionError::Transport(t) => PendingConnectionError::Transport(f(t)),
-            PendingConnectionError::ConnectionLimit(l) => {
-                PendingConnectionError::ConnectionLimit(l)
-            }
             PendingConnectionError::Aborted => PendingConnectionError::Aborted,
             PendingConnectionError::WrongPeerId { obtained, endpoint } => {
                 PendingConnectionError::WrongPeerId { obtained, endpoint }
@@ -149,9 +147,6 @@ where
                     err
                 )
             }
-            PendingConnectionError::ConnectionLimit(l) => {
-                write!(f, "Connection error: Connection limit: {}.", l)
-            }
             PendingConnectionError::WrongPeerId { obtained, endpoint } => {
                 write!(
                     f,
@@ -173,7 +168,6 @@ where
             PendingConnectionError::Transport(_) => None,
             PendingConnectionError::WrongPeerId { .. } => None,
             PendingConnectionError::Aborted => None,
-            PendingConnectionError::ConnectionLimit(..) => None,
         }
     }
 }

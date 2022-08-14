@@ -22,7 +22,7 @@
 use crate::{
     behaviour::{THandlerInEvent, THandlerOutEvent},
     connection::{
-        Connected, ConnectionError, ConnectionLimit, IncomingInfo, PendingConnectionError,
+        Connected, ConnectionError, IncomingInfo, PendingConnectionError,
         PendingInboundConnectionError, PendingOutboundConnectionError,
     },
     transport::{Transport, TransportError},
@@ -41,7 +41,6 @@ use libp2p_core::connection::{ConnectionId, Endpoint, PendingPoint};
 use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerExt};
 use std::{
     collections::{hash_map, HashMap},
-    convert::TryFrom as _,
     fmt,
     num::{NonZeroU8, NonZeroUsize},
     pin::Pin,
@@ -59,9 +58,6 @@ where
     TTrans: Transport,
 {
     local_id: PeerId,
-
-    /// The connection counter(s).
-    counters: ConnectionCounters,
 
     /// The managed connections of each peer that are currently considered established.
     established: FnvHashMap<
@@ -153,9 +149,7 @@ struct PendingConnectionInfo<THandler> {
 
 impl<THandler: IntoConnectionHandler, TTrans: Transport> fmt::Debug for Pool<THandler, TTrans> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
-        f.debug_struct("Pool")
-            .field("counters", &self.counters)
-            .finish()
+        f.debug_struct("Pool").finish()
     }
 }
 
@@ -254,14 +248,13 @@ where
     TTrans: Transport,
 {
     /// Creates a new empty `Pool`.
-    pub fn new(local_id: PeerId, config: PoolConfig, limits: ConnectionLimits) -> Self {
+    pub fn new(local_id: PeerId, config: PoolConfig) -> Self {
         let (pending_connection_events_tx, pending_connection_events_rx) =
             mpsc::channel(config.task_event_buffer_size);
         let (established_connection_events_tx, established_connection_events_rx) =
             mpsc::channel(config.task_event_buffer_size);
         Pool {
             local_id,
-            counters: ConnectionCounters::new(limits),
             established: Default::default(),
             pending: Default::default(),
             next_connection_id: ConnectionId::new(0),
@@ -276,11 +269,6 @@ where
             established_connection_events_tx,
             established_connection_events_rx,
         }
-    }
-
-    /// Gets the dedicated connection counters.
-    pub fn counters(&self) -> &ConnectionCounters {
-        &self.counters
     }
 
     /// Gets an entry representing a connection in the pool.
@@ -433,14 +421,15 @@ where
         handler: THandler,
         role_override: Endpoint,
         dial_concurrency_factor_override: Option<NonZeroU8>,
-    ) -> Result<ConnectionId, (ConnectionLimit, THandler)>
+    ) -> ConnectionId
     where
         TTrans: Send,
         TTrans::Dial: Send + 'static,
     {
-        if let Err(limit) = self.counters.check_max_pending_outgoing() {
-            return Err((limit, handler));
-        };
+        // TODO
+        // if let Err(limit) = self.counters.check_max_pending_outgoing() {
+        //     return Err((limit, handler));
+        // };
 
         let dial = ConcurrentDial::new(
             dials,
@@ -463,7 +452,8 @@ where
 
         let endpoint = PendingPoint::Dialer { role_override };
 
-        self.counters.inc_pending(&endpoint);
+        // TODO
+        // self.counters.inc_pending(&endpoint);
         self.pending.insert(
             connection_id,
             PendingConnectionInfo {
@@ -473,7 +463,7 @@ where
                 abort_notifier: Some(abort_notifier),
             },
         );
-        Ok(connection_id)
+        connection_id
     }
 
     /// Adds a pending incoming connection to the pool in the form of a
@@ -486,15 +476,16 @@ where
         future: TFut,
         handler: THandler,
         info: IncomingInfo<'_>,
-    ) -> Result<ConnectionId, (ConnectionLimit, THandler)>
+    ) -> ConnectionId
     where
         TFut: Future<Output = Result<TTrans::Output, TTrans::Error>> + Send + 'static,
     {
         let endpoint = info.create_connected_point();
 
-        if let Err(limit) = self.counters.check_max_pending_incoming() {
-            return Err((limit, handler));
-        }
+        // TODO
+        // if let Err(limit) = self.counters.check_max_pending_incoming() {
+        //     return Err((limit, handler));
+        // }
 
         let connection_id = self.next_connection_id();
 
@@ -510,7 +501,8 @@ where
             .boxed(),
         );
 
-        self.counters.inc_pending_incoming();
+        // TODO
+        // self.counters.inc_pending_incoming();
         self.pending.insert(
             connection_id,
             PendingConnectionInfo {
@@ -520,7 +512,7 @@ where
                 abort_notifier: Some(abort_notifier),
             },
         );
-        Ok(connection_id)
+        connection_id
     }
 
     /// Polls the connection pool for events.
@@ -577,7 +569,8 @@ where
                     .expect("`Closed` event for established connection");
                 let EstablishedConnectionInfo { endpoint, .. } =
                     connections.remove(&id).expect("Connection to be present");
-                self.counters.dec_established(&endpoint);
+                // TODO
+                // self.counters.dec_established(&endpoint);
                 let remaining_established_connection_ids: Vec<ConnectionId> =
                     connections.keys().cloned().collect();
                 if remaining_established_connection_ids.is_empty() {
@@ -617,7 +610,8 @@ where
                         .remove(&id)
                         .expect("Entry in `self.pending` for previously pending connection.");
 
-                    self.counters.dec_pending(&endpoint);
+                    // TODO
+                    // self.counters.dec_pending(&endpoint);
 
                     let (endpoint, concurrent_dial_errors) = match (endpoint, outgoing) {
                         (PendingPoint::Dialer { role_override }, Some((address, errors))) => (
@@ -648,20 +642,23 @@ where
                         ),
                     };
 
-                    let error: Result<(), PendingInboundConnectionError<_>> = self
-                        .counters
-                        // Check general established connection limit.
-                        .check_max_established(&endpoint)
-                        .map_err(PendingConnectionError::ConnectionLimit)
+                    let error: Result<(), PendingInboundConnectionError<_>> = Ok(())
+                        // TODO
+                        // self
+                        // .counters
+                        // // Check general established connection limit.
+                        // .check_max_established(&endpoint)
+                        // .map_err(PendingConnectionError::ConnectionLimit)
                         // Check per-peer established connection limit.
-                        .and_then(|()| {
-                            self.counters
-                                .check_max_established_per_peer(num_peer_established(
-                                    &self.established,
-                                    obtained_peer_id,
-                                ))
-                                .map_err(PendingConnectionError::ConnectionLimit)
-                        })
+                        // TODO
+                        // .and_then(|()| {
+                        //     self.counters
+                        //         .check_max_established_per_peer(num_peer_established(
+                        //             &self.established,
+                        //             obtained_peer_id,
+                        //         ))
+                        //         .map_err(PendingConnectionError::ConnectionLimit)
+                        // })
                         // Check expected peer id matches.
                         .and_then(|()| {
                             if let Some(peer) = expected_peer_id {
@@ -733,7 +730,8 @@ where
                     // Add the connection to the pool.
                     let conns = self.established.entry(obtained_peer_id).or_default();
                     let other_established_connection_ids = conns.keys().cloned().collect();
-                    self.counters.inc_established(&endpoint);
+                    // TODO
+                    // self.counters.inc_established(&endpoint);
 
                     let (command_sender, command_receiver) =
                         mpsc::channel(self.task_command_buffer_size);
@@ -786,7 +784,8 @@ where
                         abort_notifier: _,
                     }) = self.pending.remove(&id)
                     {
-                        self.counters.dec_pending(&endpoint);
+                        // TODO
+                        // self.counters.dec_pending(&endpoint);
 
                         match (endpoint, error) {
                             (PendingPoint::Dialer { .. }, Either::Left(error)) => {
@@ -920,225 +919,6 @@ impl<TInEvent> EstablishedConnection<'_, TInEvent> {
     /// Has no effect if the connection is already closing.
     pub fn start_close(mut self) {
         self.entry.get_mut().start_close()
-    }
-}
-
-/// Network connection information.
-#[derive(Debug, Clone)]
-pub struct ConnectionCounters {
-    /// The effective connection limits.
-    limits: ConnectionLimits,
-    /// The current number of incoming connections.
-    pending_incoming: u32,
-    /// The current number of outgoing connections.
-    pending_outgoing: u32,
-    /// The current number of established inbound connections.
-    established_incoming: u32,
-    /// The current number of established outbound connections.
-    established_outgoing: u32,
-}
-
-impl ConnectionCounters {
-    fn new(limits: ConnectionLimits) -> Self {
-        Self {
-            limits,
-            pending_incoming: 0,
-            pending_outgoing: 0,
-            established_incoming: 0,
-            established_outgoing: 0,
-        }
-    }
-
-    /// The effective connection limits.
-    pub fn limits(&self) -> &ConnectionLimits {
-        &self.limits
-    }
-
-    /// The total number of connections, both pending and established.
-    pub fn num_connections(&self) -> u32 {
-        self.num_pending() + self.num_established()
-    }
-
-    /// The total number of pending connections, both incoming and outgoing.
-    pub fn num_pending(&self) -> u32 {
-        self.pending_incoming + self.pending_outgoing
-    }
-
-    /// The number of incoming connections being established.
-    pub fn num_pending_incoming(&self) -> u32 {
-        self.pending_incoming
-    }
-
-    /// The number of outgoing connections being established.
-    pub fn num_pending_outgoing(&self) -> u32 {
-        self.pending_outgoing
-    }
-
-    /// The number of established incoming connections.
-    pub fn num_established_incoming(&self) -> u32 {
-        self.established_incoming
-    }
-
-    /// The number of established outgoing connections.
-    pub fn num_established_outgoing(&self) -> u32 {
-        self.established_outgoing
-    }
-
-    /// The total number of established connections.
-    pub fn num_established(&self) -> u32 {
-        self.established_outgoing + self.established_incoming
-    }
-
-    fn inc_pending(&mut self, endpoint: &PendingPoint) {
-        match endpoint {
-            PendingPoint::Dialer { .. } => {
-                self.pending_outgoing += 1;
-            }
-            PendingPoint::Listener { .. } => {
-                self.pending_incoming += 1;
-            }
-        }
-    }
-
-    fn inc_pending_incoming(&mut self) {
-        self.pending_incoming += 1;
-    }
-
-    fn dec_pending(&mut self, endpoint: &PendingPoint) {
-        match endpoint {
-            PendingPoint::Dialer { .. } => {
-                self.pending_outgoing -= 1;
-            }
-            PendingPoint::Listener { .. } => {
-                self.pending_incoming -= 1;
-            }
-        }
-    }
-
-    fn inc_established(&mut self, endpoint: &ConnectedPoint) {
-        match endpoint {
-            ConnectedPoint::Dialer { .. } => {
-                self.established_outgoing += 1;
-            }
-            ConnectedPoint::Listener { .. } => {
-                self.established_incoming += 1;
-            }
-        }
-    }
-
-    fn dec_established(&mut self, endpoint: &ConnectedPoint) {
-        match endpoint {
-            ConnectedPoint::Dialer { .. } => {
-                self.established_outgoing -= 1;
-            }
-            ConnectedPoint::Listener { .. } => {
-                self.established_incoming -= 1;
-            }
-        }
-    }
-
-    fn check_max_pending_outgoing(&self) -> Result<(), ConnectionLimit> {
-        Self::check(self.pending_outgoing, self.limits.max_pending_outgoing)
-    }
-
-    fn check_max_pending_incoming(&self) -> Result<(), ConnectionLimit> {
-        Self::check(self.pending_incoming, self.limits.max_pending_incoming)
-    }
-
-    fn check_max_established(&self, endpoint: &ConnectedPoint) -> Result<(), ConnectionLimit> {
-        // Check total connection limit.
-        Self::check(self.num_established(), self.limits.max_established_total)?;
-        // Check incoming/outgoing connection limits
-        match endpoint {
-            ConnectedPoint::Dialer { .. } => Self::check(
-                self.established_outgoing,
-                self.limits.max_established_outgoing,
-            ),
-            ConnectedPoint::Listener { .. } => Self::check(
-                self.established_incoming,
-                self.limits.max_established_incoming,
-            ),
-        }
-    }
-
-    fn check_max_established_per_peer(&self, current: u32) -> Result<(), ConnectionLimit> {
-        Self::check(current, self.limits.max_established_per_peer)
-    }
-
-    fn check(current: u32, limit: Option<u32>) -> Result<(), ConnectionLimit> {
-        if let Some(limit) = limit {
-            if current >= limit {
-                return Err(ConnectionLimit { limit, current });
-            }
-        }
-        Ok(())
-    }
-}
-
-/// Counts the number of established connections to the given peer.
-fn num_peer_established<TInEvent>(
-    established: &FnvHashMap<PeerId, FnvHashMap<ConnectionId, EstablishedConnectionInfo<TInEvent>>>,
-    peer: PeerId,
-) -> u32 {
-    established.get(&peer).map_or(0, |conns| {
-        u32::try_from(conns.len()).expect("Unexpectedly large number of connections for a peer.")
-    })
-}
-
-/// The configurable connection limits.
-///
-/// By default no connection limits apply.
-#[derive(Debug, Clone, Default)]
-pub struct ConnectionLimits {
-    max_pending_incoming: Option<u32>,
-    max_pending_outgoing: Option<u32>,
-    max_established_incoming: Option<u32>,
-    max_established_outgoing: Option<u32>,
-    max_established_per_peer: Option<u32>,
-    max_established_total: Option<u32>,
-}
-
-impl ConnectionLimits {
-    /// Configures the maximum number of concurrently incoming connections being established.
-    pub fn with_max_pending_incoming(mut self, limit: Option<u32>) -> Self {
-        self.max_pending_incoming = limit;
-        self
-    }
-
-    /// Configures the maximum number of concurrently outgoing connections being established.
-    pub fn with_max_pending_outgoing(mut self, limit: Option<u32>) -> Self {
-        self.max_pending_outgoing = limit;
-        self
-    }
-
-    /// Configures the maximum number of concurrent established inbound connections.
-    pub fn with_max_established_incoming(mut self, limit: Option<u32>) -> Self {
-        self.max_established_incoming = limit;
-        self
-    }
-
-    /// Configures the maximum number of concurrent established outbound connections.
-    pub fn with_max_established_outgoing(mut self, limit: Option<u32>) -> Self {
-        self.max_established_outgoing = limit;
-        self
-    }
-
-    /// Configures the maximum number of concurrent established connections (both
-    /// inbound and outbound).
-    ///
-    /// Note: This should be used in conjunction with
-    /// [`ConnectionLimits::with_max_established_incoming`] to prevent possible
-    /// eclipse attacks (all connections being inbound).
-    pub fn with_max_established(mut self, limit: Option<u32>) -> Self {
-        self.max_established_total = limit;
-        self
-    }
-
-    /// Configures the maximum number of concurrent established connections per peer,
-    /// regardless of direction (incoming or outgoing).
-    pub fn with_max_established_per_peer(mut self, limit: Option<u32>) -> Self {
-        self.max_established_per_peer = limit;
-        self
     }
 }
 
