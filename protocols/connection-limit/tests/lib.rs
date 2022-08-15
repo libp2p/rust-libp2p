@@ -1,6 +1,14 @@
+// TODO: Should imports go through libp2p crate?
+use futures::executor::LocalPool;
+use futures::task::LocalSpawn;
+use futures::task::LocalSpawnExt;
+use futures::task::Spawn;
+use futures::FutureExt;
+use futures::StreamExt;
 use libp2p_connection_limit::{Behaviour, ConnectionLimits};
 use libp2p_core::connection::{ConnectionId, Endpoint};
 use libp2p_core::identity;
+use libp2p_core::transport::TransportEvent;
 use libp2p_core::transport::{MemoryTransport, Transport};
 use libp2p_core::upgrade;
 use libp2p_core::Multiaddr;
@@ -9,11 +17,12 @@ use libp2p_plaintext::PlainText2Config;
 use libp2p_swarm::behaviour::NetworkBehaviour;
 use libp2p_swarm::dial_opts::DialOpts;
 use libp2p_swarm::SwarmBuilder;
+use libp2p_swarm::SwarmEvent;
 use libp2p_yamux::YamuxConfig;
 use quickcheck::QuickCheck;
 
 #[test]
-fn enforces_pending_connection_limit() {
+fn enforces_pending_outbound_connection_limit() {
     fn prop(outbound: u8) {
         let limit = ConnectionLimits::default().with_max_pending_outgoing(Some(outbound.into()));
 
@@ -51,7 +60,64 @@ fn enforces_pending_connection_limit() {
             .is_err());
     }
 
-    QuickCheck::new().tests(10).quickcheck(prop as fn(_));
+    QuickCheck::new().quickcheck(prop as fn(_));
+}
+
+#[test]
+fn enforces_pending_inbound_connection_limit() {
+    fn prop(inbound: u8) {
+        let mut pool = LocalPool::default();
+
+        let mut swarm = {
+            let local_public_key = identity::Keypair::generate_ed25519().public();
+            // TODO: Abstract into method
+            let transport = MemoryTransport::default()
+                .upgrade(upgrade::Version::V1)
+                .authenticate(PlainText2Config {
+                    local_public_key: local_public_key.clone(),
+                })
+                .multiplex(YamuxConfig::default())
+                .boxed();
+            let limit = ConnectionLimits::default().with_max_pending_incoming(Some(inbound.into()));
+            SwarmBuilder::new(transport, Behaviour::new(limit), local_public_key.into()).build()
+        };
+
+        swarm.listen_on("/memory/0".parse().unwrap()).unwrap();
+        let listen_addr = match pool.run_until(swarm.next()).unwrap() {
+            SwarmEvent::NewListenAddr { address, .. } => address,
+            e => panic!("Unexpected event {:?}", e),
+        };
+
+        pool.spawner().spawn_local(async move {
+            let mut remote_transport = MemoryTransport::default();
+
+            let dials = (0..inbound + 1)
+                .map(|_| remote_transport.dial(listen_addr.clone()).unwrap())
+                .collect::<Vec<_>>();
+
+            // TODO: What if any of them fails?
+            futures::future::join(
+                futures::future::try_join_all(dials),
+                Transport::boxed(remote_transport).collect::<Vec<TransportEvent<_, _>>>(),
+            )
+            .await;
+        });
+
+        for i in 0..inbound {
+            println!("{:?}", i);
+            match pool.run_until(swarm.next()).unwrap() {
+                SwarmEvent::IncomingConnection { .. } => {}
+                e => panic!("Unexpected event {:?}", e),
+            }
+        }
+
+        match pool.run_until(swarm.next()).unwrap() {
+            SwarmEvent::IncomingConnectionError { .. } => {}
+            e => panic!("Unexpected event {:?}", e),
+        }
+    }
+
+    QuickCheck::new().quickcheck(prop as fn(_));
 }
 
 // TODO: Bring back
