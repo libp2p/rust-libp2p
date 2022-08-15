@@ -179,6 +179,8 @@ pub enum SwarmEvent<TBehaviourOutEvent, THandlerErr> {
         /// Address used to send back data to the remote.
         send_back_addr: Multiaddr,
     },
+    // TODO: Extend
+    IncomingConnectionDenied,
     /// An error happened on a connection during its initial handshake.
     ///
     /// This can include, for example, an error during the handshake of the encryption layer, or
@@ -844,8 +846,24 @@ where
                 local_addr,
                 send_back_addr,
             } => {
+                // TODO: Ideally we would only request the handler afterwards, or maybe even in the
+                // review_pending_connection call.
+
                 let handler = self.behaviour.new_handler();
-                self.pool.add_incoming(
+
+                if let Err(err) = self.behaviour.review_pending_connection(
+                    None,
+                    // TODO: It does not make sense to provide a vector here.
+                    &[send_back_addr.clone()],
+                    Endpoint::Listener,
+                ) {
+                    self.behaviour
+                        .inject_listen_failure(&local_addr, &send_back_addr, handler);
+                    log::warn!("Incoming connection rejected: {:?}", err);
+                    return Some(SwarmEvent::IncomingConnectionDenied);
+                }
+
+                let connection_id = self.pool.add_incoming(
                     upgrade,
                     handler,
                     IncomingInfo {
@@ -853,6 +871,9 @@ where
                         send_back_addr: &send_back_addr,
                     },
                 );
+
+                self.behaviour
+                    .inject_connection_pending(None, connection_id, Endpoint::Listener);
 
                 return Some(SwarmEvent::IncomingConnection {
                     local_addr,

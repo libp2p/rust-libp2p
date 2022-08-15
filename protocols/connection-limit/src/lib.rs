@@ -164,10 +164,6 @@ impl ConnectionCounters {
         }
     }
 
-    fn inc_pending_incoming(&mut self) {
-        self.pending_incoming += 1;
-    }
-
     fn dec_pending(&mut self, endpoint: &PendingPoint) {
         match endpoint {
             PendingPoint::Dialer { .. } => {
