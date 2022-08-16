@@ -18,10 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{connection::Endpoint, muxing::StreamMuxer};
+use crate::connection::Endpoint;
+use crate::muxing::{StreamMuxer, StreamMuxerEvent};
 
 use futures::prelude::*;
-use multiaddr::Multiaddr;
 use std::cell::Cell;
 use std::pin::Pin;
 use std::{io, task::Context, task::Poll};
@@ -88,14 +88,14 @@ where
         }
     }
 
-    fn poll_address_change(
-        self: Pin<&mut Self>,
-        _: &mut Context<'_>,
-    ) -> Poll<Result<Multiaddr, Self::Error>> {
-        Poll::Pending
-    }
-
     fn poll_close(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         Poll::Ready(Ok(()))
+    }
+
+    fn poll(
+        self: Pin<&mut Self>,
+        _: &mut Context<'_>,
+    ) -> Poll<Result<StreamMuxerEvent, Self::Error>> {
+        Poll::Pending
     }
 }
