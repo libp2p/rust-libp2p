@@ -159,6 +159,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                     let visibility = &ast.vis;
 
                     Some(quote! {
+                        #[derive(::std::fmt::Debug)]
                         #visibility enum #name #impl_generics
                             #where_clause
                         {

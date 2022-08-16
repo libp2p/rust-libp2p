@@ -21,6 +21,7 @@
 use futures::prelude::*;
 use libp2p::swarm::{NetworkBehaviour, SwarmEvent};
 use libp2p_swarm_derive::*;
+use std::fmt::Debug;
 
 /// Small utility to check that a type implements `NetworkBehaviour`.
 #[allow(dead_code)]
@@ -488,4 +489,22 @@ fn event_process() {
             }
         };
     }
+}
+
+#[test]
+fn generated_out_event_derive_debug() {
+    #[allow(dead_code)]
+    #[derive(NetworkBehaviour)]
+    struct Foo {
+        ping: libp2p::ping::Ping,
+    }
+
+    fn require_debug<T>()
+    where
+        T: NetworkBehaviour,
+        <T as NetworkBehaviour>::OutEvent: Debug,
+    {
+    }
+
+    require_debug::<Foo>();
 }
