@@ -192,6 +192,7 @@ pub trait NetworkBehaviour: 'static {
         vec![]
     }
 
+    // TODO: Make sure this and all the methods below are really implemented across all behaviours.
     fn review_pending_connection(
         &mut self,
         _peer_id: Option<PeerId>,

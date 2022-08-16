@@ -60,6 +60,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     let connected_point = quote! {::libp2p::core::ConnectedPoint};
     let listener_id = quote! {::libp2p::core::transport::ListenerId};
     let dial_error = quote! {::libp2p::swarm::DialError};
+    let review_denied = quote! {::libp2p::swarm::ReviewDenied};
 
     let poll_parameters = quote! {::libp2p::swarm::PollParameters};
 
@@ -219,6 +220,28 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             .map(move |(field_n, field)| match field.ident {
                 Some(ref i) => quote! { out.extend(self.#i.addresses_of_peer(peer_id)); },
                 None => quote! { out.extend(self.#field_n.addresses_of_peer(peer_id)); },
+            })
+    };
+
+    // TODO
+    let review_pending_connection_stmts = {
+        data_struct_fields
+            .iter()
+            .enumerate()
+            .map(move |(field_n, field)| match field.ident {
+                Some(ref i) => quote! { self.#i.review_pending_connection(peer_id, addresses, endpoint)?; },
+                None => quote! { self.#field_n.review_pending_connection(peer_id, addresses, endpoint)?; },
+            })
+    };
+
+    // TODO
+    let inject_connection_pending_stmts = {
+        data_struct_fields
+            .iter()
+            .enumerate()
+            .map(move |(field_n, field)| match field.ident {
+                Some(ref i) => quote! { self.#i.inject_connection_pending(peer_id, connection_id, endpoint); },
+                None => quote! { self.#field_n.inject_connection_pending(peer_id, connection_id, endpoint); },
             })
     };
 
@@ -619,6 +642,15 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 let mut out = Vec::new();
                 #(#addresses_of_peer_stmts);*
                 out
+            }
+
+            fn review_pending_connection(&mut self, peer_id: Option<PeerId>, addresses: &[Multiaddr], endpoint: Endpoint) -> Result<(), #review_denied> {
+                #(#review_pending_connection_stmts);*
+                Ok(())
+            }
+
+            fn inject_connection_pending(&mut self, peer_id: Option<PeerId>, connection_id: ConnectionId, endpoint: Endpoint) {
+                #(#inject_connection_pending_stmts);*
             }
 
             fn inject_connection_established(&mut self, peer_id: &#peer_id, connection_id: &#connection_id, endpoint: &#connected_point, errors: #dial_errors, other_established: usize) {

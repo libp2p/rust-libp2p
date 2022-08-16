@@ -23,6 +23,7 @@ use libp2p_plaintext::PlainText2Config;
 use libp2p_swarm::dial_opts::DialOpts;
 use libp2p_swarm::DummyBehaviour;
 use libp2p_swarm::KeepAlive;
+use libp2p_swarm::NetworkBehaviour;
 use libp2p_swarm::Swarm;
 use libp2p_swarm::SwarmBuilder;
 use libp2p_swarm::SwarmEvent;
