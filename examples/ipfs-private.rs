@@ -41,9 +41,10 @@ use libp2p::{
     identify::{Identify, IdentifyConfig, IdentifyEvent},
     identity,
     multiaddr::Protocol,
-    noise, ping,
+    noise,
+    ping::{self, PingEvent},
     pnet::{PnetConfig, PreSharedKey},
-    swarm::{NetworkBehaviourEventProcess, SwarmEvent},
+    swarm::SwarmEvent,
     tcp::TcpTransport,
     yamux::YamuxConfig,
     Multiaddr, NetworkBehaviour, PeerId, Swarm, Transport,
@@ -157,78 +158,34 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // We create a custom network behaviour that combines gossipsub, ping and identify.
     #[derive(NetworkBehaviour)]
-    #[behaviour(event_process = true)]
+    #[behaviour(out_event = "MyBehaviourEvent")]
     struct MyBehaviour {
         gossipsub: Gossipsub,
         identify: Identify,
         ping: ping::Behaviour,
     }
 
-    impl NetworkBehaviourEventProcess<IdentifyEvent> for MyBehaviour {
-        // Called when `identify` produces an event.
-        fn inject_event(&mut self, event: IdentifyEvent) {
-            println!("identify: {:?}", event);
+    enum MyBehaviourEvent {
+        Gossipsub(GossipsubEvent),
+        Identify(IdentifyEvent),
+        Ping(PingEvent),
+    }
+
+    impl From<GossipsubEvent> for MyBehaviourEvent {
+        fn from(event: GossipsubEvent) -> Self {
+            MyBehaviourEvent::Gossipsub(event)
         }
     }
 
-    impl NetworkBehaviourEventProcess<GossipsubEvent> for MyBehaviour {
-        // Called when `gossipsub` produces an event.
-        fn inject_event(&mut self, event: GossipsubEvent) {
-            match event {
-                GossipsubEvent::Message {
-                    propagation_source: peer_id,
-                    message_id: id,
-                    message,
-                } => println!(
-                    "Got message: {} with id: {} from peer: {:?}",
-                    String::from_utf8_lossy(&message.data),
-                    id,
-                    peer_id
-                ),
-                _ => {}
-            }
+    impl From<IdentifyEvent> for MyBehaviourEvent {
+        fn from(event: IdentifyEvent) -> Self {
+            MyBehaviourEvent::Identify(event)
         }
     }
 
-    impl NetworkBehaviourEventProcess<ping::Event> for MyBehaviour {
-        // Called when `ping` produces an event.
-        fn inject_event(&mut self, event: ping::Event) {
-            match event {
-                ping::Event {
-                    peer,
-                    result: Result::Ok(ping::Success::Ping { rtt }),
-                } => {
-                    println!(
-                        "ping: rtt to {} is {} ms",
-                        peer.to_base58(),
-                        rtt.as_millis()
-                    );
-                }
-                ping::Event {
-                    peer,
-                    result: Result::Ok(ping::Success::Pong),
-                } => {
-                    println!("ping: pong from {}", peer.to_base58());
-                }
-                ping::Event {
-                    peer,
-                    result: Result::Err(ping::Failure::Timeout),
-                } => {
-                    println!("ping: timeout to {}", peer.to_base58());
-                }
-                ping::Event {
-                    peer,
-                    result: Result::Err(ping::Failure::Unsupported),
-                } => {
-                    println!("ping: {} does not support ping protocol", peer.to_base58());
-                }
-                ping::Event {
-                    peer,
-                    result: Result::Err(ping::Failure::Other { error }),
-                } => {
-                    println!("ping: ping::Failure with {}: {}", peer.to_base58(), error);
-                }
-            }
+    impl From<PingEvent> for MyBehaviourEvent {
+        fn from(event: PingEvent) -> Self {
+            MyBehaviourEvent::Ping(event)
         }
     }
 
@@ -282,8 +239,64 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 }
             },
             event = swarm.select_next_some() => {
-                if let SwarmEvent::NewListenAddr { address, .. } = event {
-                    println!("Listening on {:?}", address);
+                match event {
+                    SwarmEvent::NewListenAddr { address, .. } => {
+                        println!("Listening on {:?}", address);
+                    }
+                    SwarmEvent::Behaviour(MyBehaviourEvent::Identify(event)) => {
+                        println!("identify: {:?}", event);
+                    }
+                    SwarmEvent::Behaviour(MyBehaviourEvent::Gossipsub(GossipsubEvent::Message {
+                        propagation_source: peer_id,
+                        message_id: id,
+                        message,
+                    })) => {
+                        println!(
+                            "Got message: {} with id: {} from peer: {:?}",
+                            String::from_utf8_lossy(&message.data),
+                            id,
+                            peer_id
+                        )
+                    }
+                    SwarmEvent::Behaviour(MyBehaviourEvent::Ping(event)) => {
+                        match event {
+                            ping::Event {
+                                peer,
+                                result: Result::Ok(ping::Success::Ping { rtt }),
+                            } => {
+                                println!(
+                                    "ping: rtt to {} is {} ms",
+                                    peer.to_base58(),
+                                    rtt.as_millis()
+                                );
+                            }
+                            ping::Event {
+                                peer,
+                                result: Result::Ok(ping::Success::Pong),
+                            } => {
+                                println!("ping: pong from {}", peer.to_base58());
+                            }
+                            ping::Event {
+                                peer,
+                                result: Result::Err(ping::Failure::Timeout),
+                            } => {
+                                println!("ping: timeout to {}", peer.to_base58());
+                            }
+                            ping::Event {
+                                peer,
+                                result: Result::Err(ping::Failure::Unsupported),
+                            } => {
+                                println!("ping: {} does not support ping protocol", peer.to_base58());
+                            }
+                            ping::Event {
+                                peer,
+                                result: Result::Err(ping::Failure::Other { error }),
+                            } => {
+                                println!("ping: ping::Failure with {}: {}", peer.to_base58(), error);
+                            }
+                        }
+                    }
+                    _ => {}
                 }
             }
         }
