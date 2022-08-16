@@ -19,10 +19,9 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::handler::{either::IntoEitherHandler, ConnectionHandler, IntoConnectionHandler};
-use crate::{
-    DialError, NetworkBehaviour, NetworkBehaviourAction, NetworkBehaviourEventProcess,
-    PollParameters,
-};
+#[allow(deprecated)]
+pub use crate::NetworkBehaviourEventProcess;
+use crate::{DialError, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use either::Either;
 use libp2p_core::{
     connection::ConnectionId, transport::ListenerId, ConnectedPoint, Multiaddr, PeerId,
@@ -237,6 +236,7 @@ where
     }
 }
 
+#[allow(deprecated)]
 impl<TEvent, TBehaviourLeft, TBehaviourRight> NetworkBehaviourEventProcess<TEvent>
     for Either<TBehaviourLeft, TBehaviourRight>
 where

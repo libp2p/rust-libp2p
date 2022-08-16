@@ -1,8 +1,72 @@
 # 0.38.0 [unreleased]
 
-- Update dial address concurrency factor to `8`, thus dialing up to 8 addresses concurrently for a single connection attempt. See `Swarm::dial_concurrency_factor` and [PR 2741].
+- Deprecate `NetworkBehaviourEventProcess`. When deriving `NetworkBehaviour` on a custom `struct` users
+  should either bring their own `OutEvent` via `#[behaviour(out_event = "MyBehaviourEvent")]` or,
+  when not specified, have the derive macro generate one for the user.
 
-- Update to `libp2p-core` `v0.35.0`.
+  See [`NetworkBehaviour`
+  documentation](https://docs.rs/libp2p/latest/libp2p/swarm/trait.NetworkBehaviour.html) and [PR
+  2784] for details.
+
+  Previously
+
+  ``` rust
+  #[derive(NetworkBehaviour)]
+  #[behaviour(event_process = true)]
+  struct MyBehaviour {
+      gossipsub: Gossipsub,
+      mdns: Mdns,
+  }
+
+  impl NetworkBehaviourEventProcess<Gossipsub> for MyBehaviour {
+      fn inject_event(&mut self, message: GossipsubEvent) {
+        todo!("Handle event")
+      }
+  }
+
+  impl NetworkBehaviourEventProcess<MdnsEvent> for MyBehaviour {
+      fn inject_event(&mut self, message: MdnsEvent) {
+        todo!("Handle event")
+      }
+  }
+  ```
+
+  Now
+
+  ``` rust
+  #[derive(NetworkBehaviour)]
+  #[behaviour(out_event = "MyBehaviourEvent")]
+  struct MyBehaviour {
+      gossipsub: Gossipsub,
+      mdns: Mdns,
+  }
+
+  enum MyBehaviourEvent {
+      Gossipsub(GossipsubEvent),
+      Mdns(MdnsEvent),
+  }
+
+  impl From<GossipsubEvent> for MyBehaviourEvent {
+      fn from(event: GossipsubEvent) -> Self {
+          MyBehaviourEvent::Gossipsub(event)
+      }
+  }
+
+  impl From<MdnsEvent> for MyBehaviourEvent {
+      fn from(event: MdnsEvent) -> Self {
+          MyBehaviourEvent::Mdns(event)
+      }
+  }
+
+  match swarm.next().await.unwrap() {
+    SwarmEvent::Behaviour(MyBehaviourEvent::Gossipsub(event)) => {
+      todo!("Handle event")
+    }
+    SwarmEvent::Behaviour(MyBehaviourEvent::Mdns(event)) => {
+      todo!("Handle event")
+    }
+  }
+  ```
 
 - When deriving `NetworkBehaviour` on a custom `struct` where the user does not specify their own
   `OutEvent` via `#[behaviour(out_event = "MyBehaviourEvent")]` and where the user does not enable
@@ -10,10 +74,16 @@
   the user.
 
   See [`NetworkBehaviour`
-  documentation](https://docs.rs/libp2p/latest/libp2p/swarm/trait.NetworkBehaviour.html) for
-  details.
+  documentation](https://docs.rs/libp2p/latest/libp2p/swarm/trait.NetworkBehaviour.html) and [PR
+  2792] for details.
+
+- Update dial address concurrency factor to `8`, thus dialing up to 8 addresses concurrently for a single connection attempt. See `Swarm::dial_concurrency_factor` and [PR 2741].
+
+- Update to `libp2p-core` `v0.35.0`.
 
 [PR 2741]: https://github.com/libp2p/rust-libp2p/pull/2741/
+[PR 2784]: https://github.com/libp2p/rust-libp2p/pull/2784
+[PR 2792]: https://github.com/libp2p/rust-libp2p/pull/2792
 
 # 0.37.0
 

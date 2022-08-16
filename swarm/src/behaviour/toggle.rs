@@ -23,10 +23,9 @@ use crate::handler::{
     KeepAlive, SubstreamProtocol,
 };
 use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper};
-use crate::{
-    DialError, NetworkBehaviour, NetworkBehaviourAction, NetworkBehaviourEventProcess,
-    PollParameters,
-};
+#[allow(deprecated)]
+pub use crate::NetworkBehaviourEventProcess;
+use crate::{DialError, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use either::Either;
 use libp2p_core::{
     connection::ConnectionId,
@@ -233,6 +232,7 @@ where
     }
 }
 
+#[allow(deprecated)]
 impl<TEvent, TBehaviour> NetworkBehaviourEventProcess<TEvent> for Toggle<TBehaviour>
 where
     TBehaviour: NetworkBehaviourEventProcess<TEvent>,
