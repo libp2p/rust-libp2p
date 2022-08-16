@@ -203,6 +203,15 @@ pub trait NetworkBehaviour: 'static {
         Ok(())
     }
 
+    fn review_established_connection(
+        &mut self,
+        _peer_id: PeerId,
+        // TODO: Maybe an iterator is better?
+        _endpoint: &ConnectedPoint,
+    ) -> Result<(), ReviewDenied> {
+        Ok(())
+    }
+
     fn inject_connection_pending(
         &mut self,
         _peer_id: Option<PeerId>,

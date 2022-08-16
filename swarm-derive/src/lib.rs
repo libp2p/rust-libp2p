@@ -235,6 +235,17 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     };
 
     // TODO
+    let review_established_connection_stmts = {
+        data_struct_fields
+            .iter()
+            .enumerate()
+            .map(move |(field_n, field)| match field.ident {
+                Some(ref i) => quote! { self.#i.review_established_connection(peer_id, addresses, endpoint)?; },
+                None => quote! { self.#field_n.review_established_connection(peer_id, addresses, endpoint)?; },
+            })
+    };
+
+    // TODO
     let inject_connection_pending_stmts = {
         data_struct_fields
             .iter()
@@ -646,6 +657,11 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
             fn review_pending_connection(&mut self, peer_id: Option<PeerId>, addresses: &[Multiaddr], endpoint: Endpoint) -> Result<(), #review_denied> {
                 #(#review_pending_connection_stmts);*
+                Ok(())
+            }
+
+            fn review_established_connection(&mut self, peer_id: Option<PeerId>, addresses: &[Multiaddr], endpoint: Endpoint) -> Result<(), #review_denied> {
+                #(#review_established_connection_stmts);*
                 Ok(())
             }
 

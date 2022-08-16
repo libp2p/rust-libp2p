@@ -283,6 +283,7 @@ where
     /// similar mechanisms.
     external_addrs: Addresses,
 
+    // TODO: I think this should move into the connection manager behaviour as well.
     /// List of nodes for which we deny any incoming connection.
     banned_peers: HashSet<PeerId>,
 
@@ -531,7 +532,7 @@ where
             })
             .collect();
 
-        let connection_id = self.pool.add_outgoing(
+        let connection_id = self.pool.add_pending_outgoing(
             dials,
             peer_id,
             handler,
@@ -679,13 +680,18 @@ where
                 endpoint,
                 other_established_connection_ids,
                 concurrent_dial_errors,
+                handler,
+                muxer,
             } => {
                 if self.banned_peers.contains(&peer_id) {
                     // Mark the connection for the banned peer as banned, thus withholding any
                     // future events from the connection to the behaviour.
                     self.banned_peer_connections.insert(id);
                     self.pool.disconnect(peer_id);
+                    // TODO: Should we close the connection?
                     return Some(SwarmEvent::BannedPeer { peer_id, endpoint });
+
+                    // TODO: The else below is unnecessary given that the above is a return.
                 } else {
                     let num_established = NonZeroU32::new(
                         u32::try_from(other_established_connection_ids.len() + 1).unwrap(),
@@ -706,6 +712,18 @@ where
                     let failed_addresses = concurrent_dial_errors
                         .as_ref()
                         .map(|es| es.iter().map(|(a, _)| a).cloned().collect());
+
+                    // TODO: Clean up
+                    if let Err(e) = self
+                        .behaviour
+                        .review_established_connection(peer_id, &endpoint)
+                    {
+                        todo!()
+                    }
+
+                    self.pool
+                        .add_established(peer_id, id, endpoint.clone(), muxer, handler);
+
                     self.behaviour.inject_connection_established(
                         &peer_id,
                         &id,
@@ -863,7 +881,7 @@ where
                     return Some(SwarmEvent::IncomingConnectionDenied);
                 }
 
-                let connection_id = self.pool.add_incoming(
+                let connection_id = self.pool.add_pending_incoming(
                     upgrade,
                     handler,
                     IncomingInfo {

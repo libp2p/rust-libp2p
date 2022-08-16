@@ -140,6 +140,7 @@ impl<TInEvent> EstablishedConnectionInfo<TInEvent> {
 struct PendingConnectionInfo<THandler> {
     /// [`PeerId`] of the remote peer.
     peer_id: Option<PeerId>,
+    // TODO: There is no need to have the handler here already.
     /// Handler to handle connection once no longer pending but established.
     handler: THandler,
     endpoint: PendingPoint,
@@ -154,7 +155,6 @@ impl<THandler: IntoConnectionHandler, TTrans: Transport> fmt::Debug for Pool<THa
 }
 
 /// Event that can happen on the `Pool`.
-#[derive(Debug)]
 pub enum PoolEvent<THandler: IntoConnectionHandler, TTrans>
 where
     TTrans: Transport,
@@ -172,6 +172,9 @@ where
         /// Addresses are dialed in parallel. Contains the addresses and errors
         /// of dial attempts that failed before the one successful dial.
         concurrent_dial_errors: Option<Vec<(Multiaddr, TransportError<TTrans::Error>)>>,
+        // TODO: It doesn't make sense to have the handler here already.
+        handler: THandler,
+        muxer: StreamMuxerBox,
     },
 
     /// An established connection was closed.
@@ -240,6 +243,12 @@ where
         /// The old endpoint.
         old_endpoint: ConnectedPoint,
     },
+}
+
+impl<THandler: ConnectionHandler, TTrans: Transport> fmt::Debug for PoolEvent<THandler, TTrans> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        todo!("due to streammuxerbox")
+    }
 }
 
 impl<THandler, TTrans> Pool<THandler, TTrans>
@@ -403,7 +412,7 @@ where
     ///
     /// Returns an error if the limit of pending outgoing connections
     /// has been reached.
-    pub fn add_outgoing(
+    pub fn add_pending_outgoing(
         &mut self,
         dials: Vec<
             BoxFuture<
@@ -471,7 +480,7 @@ where
     ///
     /// Returns an error if the limit of pending incoming connections
     /// has been reached.
-    pub fn add_incoming<TFut>(
+    pub fn add_pending_incoming<TFut>(
         &mut self,
         future: TFut,
         handler: THandler,
@@ -513,6 +522,47 @@ where
             },
         );
         connection_id
+    }
+
+    pub fn add_established(
+        &mut self,
+        peer_id: PeerId,
+        connection_id: ConnectionId,
+        endpoint: ConnectedPoint,
+        muxer: StreamMuxerBox,
+        handler: THandler,
+    ) {
+        // Add the connection to the pool.
+        let conns = self.established.entry(peer_id).or_default();
+
+        let (command_sender, command_receiver) = mpsc::channel(self.task_command_buffer_size);
+        conns.insert(
+            connection_id,
+            EstablishedConnectionInfo {
+                peer_id: peer_id,
+                endpoint: endpoint.clone(),
+                sender: command_sender,
+            },
+        );
+
+        let connection = super::Connection::new(
+            peer_id,
+            endpoint,
+            muxer,
+            handler,
+            self.substream_upgrade_protocol_override,
+            self.max_negotiating_inbound_streams,
+        );
+        self.spawn(
+            task::new_for_established_connection(
+                connection_id,
+                peer_id,
+                connection,
+                command_receiver,
+                self.established_connection_events_tx.clone(),
+            )
+            .boxed(),
+        );
     }
 
     /// Polls the connection pool for events.
@@ -727,41 +777,10 @@ where
                         };
                     }
 
-                    // Add the connection to the pool.
                     let conns = self.established.entry(obtained_peer_id).or_default();
                     let other_established_connection_ids = conns.keys().cloned().collect();
                     // TODO
                     // self.counters.inc_established(&endpoint);
-
-                    let (command_sender, command_receiver) =
-                        mpsc::channel(self.task_command_buffer_size);
-                    conns.insert(
-                        id,
-                        EstablishedConnectionInfo {
-                            peer_id: obtained_peer_id,
-                            endpoint: endpoint.clone(),
-                            sender: command_sender,
-                        },
-                    );
-
-                    let connection = super::Connection::new(
-                        obtained_peer_id,
-                        endpoint,
-                        muxer,
-                        handler,
-                        self.substream_upgrade_protocol_override,
-                        self.max_negotiating_inbound_streams,
-                    );
-                    self.spawn(
-                        task::new_for_established_connection(
-                            id,
-                            obtained_peer_id,
-                            connection,
-                            command_receiver,
-                            self.established_connection_events_tx.clone(),
-                        )
-                        .boxed(),
-                    );
 
                     match self.get(id) {
                         Some(PoolConnection::Established(connection)) => {
@@ -771,6 +790,8 @@ where
                                 id: connection.id(),
                                 other_established_connection_ids,
                                 concurrent_dial_errors,
+                                handler,
+                                muxer,
                             })
                         }
                         _ => unreachable!("since `entry` is an `EstablishedEntry`."),
