@@ -782,20 +782,15 @@ where
                     // TODO
                     // self.counters.inc_established(&endpoint);
 
-                    match self.get(id) {
-                        Some(PoolConnection::Established(connection)) => {
-                            return Poll::Ready(PoolEvent::ConnectionEstablished {
-                                peer_id: connection.peer_id(),
-                                endpoint: connection.endpoint().clone(),
-                                id: connection.id(),
-                                other_established_connection_ids,
-                                concurrent_dial_errors,
-                                handler,
-                                muxer,
-                            })
-                        }
-                        _ => unreachable!("since `entry` is an `EstablishedEntry`."),
-                    }
+                    return Poll::Ready(PoolEvent::ConnectionEstablished {
+                        peer_id: obtained_peer_id,
+                        endpoint,
+                        id,
+                        other_established_connection_ids,
+                        concurrent_dial_errors,
+                        handler,
+                        muxer,
+                    });
                 }
                 task::PendingConnectionEvent::PendingFailed { id, error } => {
                     if let Some(PendingConnectionInfo {

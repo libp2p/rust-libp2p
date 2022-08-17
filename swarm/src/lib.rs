@@ -718,7 +718,15 @@ where
                         .behaviour
                         .review_established_connection(peer_id, &endpoint)
                     {
-                        todo!()
+                        match endpoint {
+                            ConnectedPoint::Dialer { .. } => {
+                                return Some(SwarmEvent::OutgoingConnectionError {
+                                    peer_id: Some(peer_id),
+                                    error: DialError::ConnectionReviewDenied(e),
+                                })
+                            }
+                            _ => todo!(),
+                        }
                     }
 
                     self.pool

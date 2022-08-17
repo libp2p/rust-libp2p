@@ -21,6 +21,7 @@ use libp2p_core::Multiaddr;
 use libp2p_core::PeerId;
 use libp2p_plaintext::PlainText2Config;
 use libp2p_swarm::dial_opts::DialOpts;
+use libp2p_swarm::DialError;
 use libp2p_swarm::DummyBehaviour;
 use libp2p_swarm::KeepAlive;
 use libp2p_swarm::NetworkBehaviour;
@@ -153,7 +154,18 @@ fn enforces_established_outbound_connection_limit() {
             }
         }
 
-        assert!(local_swarm.dial(remote_addr).is_err());
+        local_swarm
+            .dial(remote_addr.clone())
+            .ok()
+            .expect("Unexpected connection limit.");
+
+        match pool.run_until(local_swarm.next()).unwrap() {
+            SwarmEvent::OutgoingConnectionError {
+                error: DialError::ConnectionReviewDenied(e),
+                ..
+            } => {}
+            e => panic!("Unexpected event {:?}", e),
+        }
     }
 
     QuickCheck::new().quickcheck(prop as fn(_));

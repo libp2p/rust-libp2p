@@ -61,6 +61,18 @@ impl NetworkBehaviour for Behaviour {
         .map_err(|e| ReviewDenied::Error(e.into()))
     }
 
+    fn review_established_connection(
+        &mut self,
+        _peer_id: PeerId,
+        // TODO: Maybe an iterator is better?
+        endpoint: &ConnectedPoint,
+    ) -> Result<(), ReviewDenied> {
+        println!("review_established_connection");
+        self.counters
+            .check_max_established(endpoint)
+            .map_err(|e| ReviewDenied::Error(e.into()))
+    }
+
     fn inject_connection_pending(
         &mut self,
         _peer_id: Option<PeerId>,
@@ -68,6 +80,18 @@ impl NetworkBehaviour for Behaviour {
         endpoint: Endpoint,
     ) {
         self.counters.inc_pending(endpoint)
+    }
+
+    fn inject_connection_established(
+        &mut self,
+        _peer_id: &PeerId,
+        _connection_id: &ConnectionId,
+        endpoint: &ConnectedPoint,
+        _failed_addresses: Option<&Vec<Multiaddr>>,
+        _other_established: usize,
+    ) {
+        println!("inject_connection_established");
+        self.counters.inc_established(endpoint)
     }
 
     fn inject_event(
