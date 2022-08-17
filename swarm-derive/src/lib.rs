@@ -240,8 +240,10 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             .iter()
             .enumerate()
             .map(move |(field_n, field)| match field.ident {
-                Some(ref i) => quote! { self.#i.review_established_connection(peer_id, addresses, endpoint)?; },
-                None => quote! { self.#field_n.review_established_connection(peer_id, addresses, endpoint)?; },
+                Some(ref i) => {
+                    quote! { self.#i.review_established_connection(peer_id, endpoint)?; }
+                }
+                None => quote! { self.#field_n.review_established_connection(peer_id, endpoint)?; },
             })
     };
 
@@ -660,7 +662,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 Ok(())
             }
 
-            fn review_established_connection(&mut self, peer_id: Option<PeerId>, addresses: &[Multiaddr], endpoint: Endpoint) -> Result<(), #review_denied> {
+            fn review_established_connection(&mut self, peer_id: PeerId, endpoint: &#connected_point) -> Result<(), #review_denied> {
                 #(#review_established_connection_stmts);*
                 Ok(())
             }
