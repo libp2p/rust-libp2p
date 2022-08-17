@@ -276,7 +276,10 @@ fn custom_event_mismatching_field_names() {
 fn bound() {
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
-    struct Foo<T: Copy + NetworkBehaviour> {
+    struct Foo<T: Copy + NetworkBehaviour>
+    where
+        <T as NetworkBehaviour>::OutEvent: Debug,
+    {
         ping: libp2p::ping::Ping,
         bar: T,
     }
@@ -289,6 +292,7 @@ fn where_clause() {
     struct Foo<T>
     where
         T: Copy + NetworkBehaviour,
+        <T as NetworkBehaviour>::OutEvent: Debug,
     {
         ping: libp2p::ping::Ping,
         bar: T,
