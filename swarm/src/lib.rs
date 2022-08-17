@@ -63,9 +63,11 @@ pub mod behaviour;
 pub mod dial_opts;
 pub mod handler;
 
+#[allow(deprecated)]
+pub use behaviour::NetworkBehaviourEventProcess;
 pub use behaviour::{
-    CloseConnection, NetworkBehaviour, NetworkBehaviourAction, NetworkBehaviourEventProcess,
-    NotifyHandler, PollParameters, ReviewDenied,
+    CloseConnection, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
+    ReviewDenied,
 };
 pub use connection::{
     ConnectionError, PendingConnectionError, PendingInboundConnectionError,
