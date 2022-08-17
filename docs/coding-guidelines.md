@@ -65,7 +65,7 @@ The above comes with downsides. It feels more verbose. The mix of control flow (
 communication via events can be very hard to understand. Both are a form of complexity that we are
 trading for correctness and performance which aligns with Rust's and rust-libp2p's goals.
 
-The archetecture pattern of hierarchical state machines should be used wherever possible.
+The architecture pattern of hierarchical state machines should be used wherever possible.
 
 ### Conventions for `poll` implementations
 
