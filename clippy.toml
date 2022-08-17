@@ -1,0 +1,3 @@
+disallowed-methods = [
+  { path = "futures::sync::mpsc::channel", reason = "does not enforce backpressure" },
+]
