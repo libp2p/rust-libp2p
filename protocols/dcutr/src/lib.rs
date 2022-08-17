@@ -30,6 +30,7 @@ pub use protocol::{
     PROTOCOL_NAME,
 };
 
+#[allow(clippy::derive_partial_eq_without_eq)]
 mod message_proto {
     include!(concat!(env!("OUT_DIR"), "/holepunch.pb.rs"));
 }
