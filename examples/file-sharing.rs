@@ -359,10 +359,7 @@ mod network {
             channel: ResponseChannel<FileResponse>,
         ) {
             self.sender
-                .send(Command::RespondFile {
-                    file: file,
-                    channel,
-                })
+                .send(Command::RespondFile { file, channel })
                 .await
                 .expect("Command receiver not to be dropped.");
         }
