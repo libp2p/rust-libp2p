@@ -146,7 +146,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
     println!("using random peer id: {:?}", local_peer_id);
-    for psk in psk {
+    if let Some(psk) = psk {
         println!("using swarm key with fingerprint: {}", psk.fingerprint());
     }
 
