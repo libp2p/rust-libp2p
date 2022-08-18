@@ -91,6 +91,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         mdns: Mdns,
     }
 
+    #[allow(clippy::large_enum_variant)]
     enum MyBehaviourEvent {
         Floodsub(FloodsubEvent),
         Mdns(MdnsEvent),
