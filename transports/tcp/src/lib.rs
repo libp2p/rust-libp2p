@@ -612,7 +612,7 @@ enum InAddr {
     /// The stream accepts connections on a single interface.
     One(Option<Multiaddr>),
     /// The stream accepts connections on all interfaces.
-    Any(IfWatcher),
+    Any(Box<IfWatcher>),
 }
 
 /// A stream of incoming connections on one or more interfaces.
@@ -667,7 +667,7 @@ where
         } {
             // The `addrs` are populated via `if_watch` when the
             // `TcpListenStream` is polled.
-            InAddr::Any(IfWatcher::new()?)
+            InAddr::Any(Box::new(IfWatcher::new()?))
         } else {
             InAddr::One(Some(ip_to_multiaddr(listen_addr.ip(), listen_addr.port())))
         };
@@ -727,87 +727,82 @@ where
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         let me = Pin::into_inner(self);
 
-        loop {
-            match &mut me.in_addr {
-                InAddr::Any(if_watcher) => {
-                    while let Poll::Ready(ev) = IfWatcher::poll_next(Pin::new(if_watcher), cx) {
-                        match ev {
-                            Ok(IfEvent::Up(inet)) => {
-                                let ip = inet.addr();
-                                if me.listen_addr.is_ipv4() == ip.is_ipv4() {
-                                    let ma = ip_to_multiaddr(ip, me.listen_addr.port());
-                                    log::debug!("New listen address: {}", ma);
-                                    me.port_reuse.register(ip, me.listen_addr.port());
-                                    return Poll::Ready(Some(Ok(TcpListenerEvent::NewAddress(ma))));
-                                }
+        match &mut me.in_addr {
+            InAddr::Any(if_watcher) => {
+                while let Poll::Ready(ev) = IfWatcher::poll_next(Pin::new(if_watcher), cx) {
+                    match ev {
+                        Ok(IfEvent::Up(inet)) => {
+                            let ip = inet.addr();
+                            if me.listen_addr.is_ipv4() == ip.is_ipv4() {
+                                let ma = ip_to_multiaddr(ip, me.listen_addr.port());
+                                log::debug!("New listen address: {}", ma);
+                                me.port_reuse.register(ip, me.listen_addr.port());
+                                return Poll::Ready(Some(Ok(TcpListenerEvent::NewAddress(ma))));
                             }
-                            Ok(IfEvent::Down(inet)) => {
-                                let ip = inet.addr();
-                                if me.listen_addr.is_ipv4() == ip.is_ipv4() {
-                                    let ma = ip_to_multiaddr(ip, me.listen_addr.port());
-                                    log::debug!("Expired listen address: {}", ma);
-                                    me.port_reuse.unregister(ip, me.listen_addr.port());
-                                    return Poll::Ready(Some(Ok(
-                                        TcpListenerEvent::AddressExpired(ma),
-                                    )));
-                                }
+                        }
+                        Ok(IfEvent::Down(inet)) => {
+                            let ip = inet.addr();
+                            if me.listen_addr.is_ipv4() == ip.is_ipv4() {
+                                let ma = ip_to_multiaddr(ip, me.listen_addr.port());
+                                log::debug!("Expired listen address: {}", ma);
+                                me.port_reuse.unregister(ip, me.listen_addr.port());
+                                return Poll::Ready(Some(Ok(TcpListenerEvent::AddressExpired(ma))));
                             }
-                            Err(err) => {
-                                log::debug! {
-                                    "Failure polling interfaces: {:?}. Scheduling retry.",
-                                    err
-                                };
-                                me.pause = Some(Delay::new(me.sleep_on_error));
-                                return Poll::Ready(Some(Ok(TcpListenerEvent::Error(err))));
-                            }
+                        }
+                        Err(err) => {
+                            log::debug! {
+                                "Failure polling interfaces: {:?}. Scheduling retry.",
+                                err
+                            };
+                            me.pause = Some(Delay::new(me.sleep_on_error));
+                            return Poll::Ready(Some(Ok(TcpListenerEvent::Error(err))));
                         }
                     }
                 }
-                // If the listener is bound to a single interface, make sure the
-                // address is registered for port reuse and reported once.
-                InAddr::One(out) => {
-                    if let Some(multiaddr) = out.take() {
-                        me.port_reuse
-                            .register(me.listen_addr.ip(), me.listen_addr.port());
-                        return Poll::Ready(Some(Ok(TcpListenerEvent::NewAddress(multiaddr))));
-                    }
+            }
+            // If the listener is bound to a single interface, make sure the
+            // address is registered for port reuse and reported once.
+            InAddr::One(out) => {
+                if let Some(multiaddr) = out.take() {
+                    me.port_reuse
+                        .register(me.listen_addr.ip(), me.listen_addr.port());
+                    return Poll::Ready(Some(Ok(TcpListenerEvent::NewAddress(multiaddr))));
                 }
             }
-
-            if let Some(mut pause) = me.pause.take() {
-                match Pin::new(&mut pause).poll(cx) {
-                    Poll::Ready(_) => {}
-                    Poll::Pending => {
-                        me.pause = Some(pause);
-                        return Poll::Pending;
-                    }
-                }
-            }
-
-            // Take the pending connection from the backlog.
-            let incoming = match T::poll_accept(&mut me.listener, cx) {
-                Poll::Pending => return Poll::Pending,
-                Poll::Ready(Ok(incoming)) => incoming,
-                Poll::Ready(Err(e)) => {
-                    // These errors are non-fatal for the listener stream.
-                    log::error!("error accepting incoming connection: {}", e);
-                    me.pause = Some(Delay::new(me.sleep_on_error));
-                    return Poll::Ready(Some(Ok(TcpListenerEvent::Error(e))));
-                }
-            };
-
-            let local_addr = ip_to_multiaddr(incoming.local_addr.ip(), incoming.local_addr.port());
-            let remote_addr =
-                ip_to_multiaddr(incoming.remote_addr.ip(), incoming.remote_addr.port());
-
-            log::debug!("Incoming connection from {} at {}", remote_addr, local_addr);
-
-            return Poll::Ready(Some(Ok(TcpListenerEvent::Upgrade {
-                upgrade: future::ok(incoming.stream),
-                local_addr,
-                remote_addr,
-            })));
         }
+
+        if let Some(mut pause) = me.pause.take() {
+            match Pin::new(&mut pause).poll(cx) {
+                Poll::Ready(_) => {}
+                Poll::Pending => {
+                    me.pause = Some(pause);
+                    return Poll::Pending;
+                }
+            }
+        }
+
+        // Take the pending connection from the backlog.
+        let incoming = match T::poll_accept(&mut me.listener, cx) {
+            Poll::Pending => return Poll::Pending,
+            Poll::Ready(Ok(incoming)) => incoming,
+            Poll::Ready(Err(e)) => {
+                // These errors are non-fatal for the listener stream.
+                log::error!("error accepting incoming connection: {}", e);
+                me.pause = Some(Delay::new(me.sleep_on_error));
+                return Poll::Ready(Some(Ok(TcpListenerEvent::Error(e))));
+            }
+        };
+
+        let local_addr = ip_to_multiaddr(incoming.local_addr.ip(), incoming.local_addr.port());
+        let remote_addr = ip_to_multiaddr(incoming.remote_addr.ip(), incoming.remote_addr.port());
+
+        log::debug!("Incoming connection from {} at {}", remote_addr, local_addr);
+
+        Poll::Ready(Some(Ok(TcpListenerEvent::Upgrade {
+            upgrade: future::ok(incoming.stream),
+            local_addr,
+            remote_addr,
+        })))
     }
 }
 
