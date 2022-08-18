@@ -153,14 +153,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     SwarmEvent::NewListenAddr { address, .. } => {
                         println!("Listening on {:?}", address);
                     }
-                    SwarmEvent::Behaviour(MyBehaviourEvent::Floodsub(event)) => {
-                        if let FloodsubEvent::Message(message) = event {
-                            println!(
+                    SwarmEvent::Behaviour(MyBehaviourEvent::Floodsub(FloodsubEvent::Message(message))) => {
+                        println!(
                                 "Received: '{:?}' from {:?}",
                                 String::from_utf8_lossy(&message.data),
                                 message.source
                             );
-                        }
                     }
                     SwarmEvent::Behaviour(MyBehaviourEvent::Mdns(event)) => {
                         match event {
