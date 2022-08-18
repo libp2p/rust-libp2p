@@ -113,7 +113,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut swarm = {
         let mdns = Mdns::new(Default::default()).await?;
         let mut behaviour = MyBehaviour {
-            floodsub: Floodsub::new(peer_id.clone()),
+            floodsub: Floodsub::new(peer_id),
             mdns,
         };
 
