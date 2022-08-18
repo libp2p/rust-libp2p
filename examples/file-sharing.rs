@@ -221,7 +221,7 @@ mod network {
     };
     use libp2p::swarm::{ConnectionHandlerUpgrErr, SwarmBuilder, SwarmEvent};
     use libp2p::{NetworkBehaviour, Swarm};
-    use std::collections::{HashMap, HashSet};
+    use std::collections::{hash_map, HashMap, HashSet};
     use std::iter;
 
     /// Creates the network components, namely:
@@ -524,9 +524,7 @@ mod network {
                     peer_addr,
                     sender,
                 } => {
-                    if self.pending_dial.contains_key(&peer_id) {
-                        todo!("Already dialing peer.");
-                    } else {
+                    if let hash_map::Entry::Vacant(e) = self.pending_dial.entry(peer_id) {
                         self.swarm
                             .behaviour_mut()
                             .kademlia
@@ -536,12 +534,14 @@ mod network {
                             .dial(peer_addr.with(Protocol::P2p(peer_id.into())))
                         {
                             Ok(()) => {
-                                self.pending_dial.insert(peer_id, sender);
+                                e.insert(sender);
                             }
                             Err(e) => {
                                 let _ = sender.send(Err(Box::new(e)));
                             }
                         }
+                    } else {
+                        todo!("Already dialing peer.");
                     }
                 }
                 Command::StartProviding { file_name, sender } => {
