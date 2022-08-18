@@ -52,6 +52,7 @@ mod behaviour;
 mod jobs;
 mod query;
 
+#[allow(clippy::derive_partial_eq_without_eq)]
 mod dht_proto {
     include!(concat!(env!("OUT_DIR"), "/dht.pb.rs"));
 }

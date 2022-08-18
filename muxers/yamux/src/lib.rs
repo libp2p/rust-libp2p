@@ -26,9 +26,8 @@ use futures::{
     prelude::*,
     stream::{BoxStream, LocalBoxStream},
 };
-use libp2p_core::muxing::StreamMuxer;
+use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
-use libp2p_core::Multiaddr;
 use std::{
     fmt, io, iter, mem,
     pin::Pin,
@@ -124,10 +123,10 @@ where
             .map_err(YamuxError)
     }
 
-    fn poll_address_change(
+    fn poll(
         self: Pin<&mut Self>,
         _: &mut Context<'_>,
-    ) -> Poll<Result<Multiaddr, Self::Error>> {
+    ) -> Poll<Result<StreamMuxerEvent, Self::Error>> {
         Poll::Pending
     }
 
