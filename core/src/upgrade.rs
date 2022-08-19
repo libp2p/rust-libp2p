@@ -69,6 +69,7 @@ mod transfer;
 
 use ::either::Either;
 use futures::future::Future;
+use std::borrow::Cow;
 
 pub use self::{
     apply::{apply, apply_inbound, apply_outbound, InboundUpgradeApply, OutboundUpgradeApply},
@@ -125,7 +126,13 @@ pub trait ProtocolName {
     fn protocol_name(&self) -> &[u8];
 }
 
-impl<T: AsRef<[u8]>> ProtocolName for T {
+impl ProtocolName for &'static [u8] {
+    fn protocol_name(&self) -> &[u8] {
+        self
+    }
+}
+
+impl ProtocolName for Cow<'static, [u8]> {
     fn protocol_name(&self) -> &[u8] {
         self.as_ref()
     }
