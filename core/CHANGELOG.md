@@ -6,6 +6,7 @@
 - Drop `Sync` requirement on `StreamMuxer` for constructing `StreamMuxerBox`. See [PR 2775].
 - Use `Pin<&mut Self>` as the receiver type for all `StreamMuxer` poll functions. See [PR 2765].
 - Remove `EitherName` in favor of `Either` from the `either` crate. See [PR 2798].
+- Replace blanket `ProtocolName` impl with specific ones on `&'static [u8]` and `Cow<'static, [u8]>`. See [PR 2798].
 
 [PR 2724]: https://github.com/libp2p/rust-libp2p/pull/2724
 [PR 2762]: https://github.com/libp2p/rust-libp2p/pull/2762
