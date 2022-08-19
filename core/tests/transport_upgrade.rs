@@ -32,11 +32,11 @@ use std::{io, pin::Pin};
 struct HelloUpgrade {}
 
 impl UpgradeInfo for HelloUpgrade {
-    type Info = &'static str;
+    type Info = &'static [u8];
     type InfoIter = std::iter::Once<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
-        std::iter::once("/hello/1")
+        std::iter::once(b"/hello/1")
     }
 }
 

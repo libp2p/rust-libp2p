@@ -19,14 +19,13 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
-use bytes::Bytes;
 use futures::prelude::*;
 use std::{iter, sync::Arc};
 
 /// Implementation of `ConnectionUpgrade`. Convenient to use with small protocols.
 #[derive(Debug)]
 pub struct SimpleProtocol<F> {
-    info: Bytes,
+    info: &'static [u8],
     // Note: we put the closure `F` in an `Arc` because Rust closures aren't automatically clonable
     // yet.
     upgrade: Arc<F>,
@@ -34,12 +33,9 @@ pub struct SimpleProtocol<F> {
 
 impl<F> SimpleProtocol<F> {
     /// Builds a `SimpleProtocol`.
-    pub fn new<N>(info: N, upgrade: F) -> SimpleProtocol<F>
-    where
-        N: Into<Bytes>,
-    {
+    pub fn new<N>(info: &'static [u8], upgrade: F) -> SimpleProtocol<F> {
         SimpleProtocol {
-            info: info.into(),
+            info,
             upgrade: Arc::new(upgrade),
         }
     }
@@ -55,7 +51,7 @@ impl<F> Clone for SimpleProtocol<F> {
 }
 
 impl<F> UpgradeInfo for SimpleProtocol<F> {
-    type Info = Bytes;
+    type Info = &'static [u8];
     type InfoIter = iter::Once<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
