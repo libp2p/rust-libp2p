@@ -729,7 +729,7 @@ where
 
         match &mut me.in_addr {
             InAddr::Any(if_watcher) => {
-                while let Poll::Ready(ev) = IfWatcher::poll_next(Pin::new(if_watcher), cx) {
+                while let Poll::Ready(ev) = if_watcher.as_mut().poll_if_event(cx) {
                     match ev {
                         Ok(IfEvent::Up(inet)) => {
                             let ip = inet.addr();
