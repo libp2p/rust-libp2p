@@ -458,7 +458,7 @@ mod tests {
                     local_addr: Multiaddr::empty(),
                     send_back_addr: Multiaddr::empty(),
                 },
-                PendingConnectionHandler::new("test".to_string()),
+                PendingConnectionHandler::new(b"test"),
                 None,
                 max_negotiating_inbound_streams,
             );

@@ -34,11 +34,11 @@ use void::Void;
 /// Implementation of [`ConnectionHandler`] that returns a pending upgrade.
 #[derive(Clone, Debug)]
 pub struct PendingConnectionHandler {
-    protocol_name: String,
+    protocol_name: &'static [u8],
 }
 
 impl PendingConnectionHandler {
-    pub fn new(protocol_name: String) -> Self {
+    pub fn new(protocol_name: &'static [u8]) -> Self {
         PendingConnectionHandler { protocol_name }
     }
 }
@@ -47,8 +47,8 @@ impl ConnectionHandler for PendingConnectionHandler {
     type InEvent = Void;
     type OutEvent = Void;
     type Error = Void;
-    type InboundProtocol = PendingUpgrade<String>;
-    type OutboundProtocol = PendingUpgrade<String>;
+    type InboundProtocol = PendingUpgrade<&'static [u8]>;
+    type OutboundProtocol = PendingUpgrade<&'static [u8]>;
     type OutboundOpenInfo = Void;
     type InboundOpenInfo = ();
 
