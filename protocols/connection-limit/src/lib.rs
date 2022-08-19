@@ -67,7 +67,6 @@ impl NetworkBehaviour for Behaviour {
         // TODO: Maybe an iterator is better?
         endpoint: &ConnectedPoint,
     ) -> Result<(), ReviewDenied> {
-        println!("review_established_connection");
         self.counters
             .check_max_established(endpoint)
             .map_err(|e| ReviewDenied::Error(e.into()))
@@ -90,8 +89,19 @@ impl NetworkBehaviour for Behaviour {
         _failed_addresses: Option<&Vec<Multiaddr>>,
         _other_established: usize,
     ) {
-        println!("inject_connection_established");
+        self.counters.dec_pending(endpoint);
         self.counters.inc_established(endpoint)
+    }
+
+    fn inject_connection_closed(
+        &mut self,
+        _: &PeerId,
+        _: &ConnectionId,
+        endpoint: &ConnectedPoint,
+        _: <Self::ConnectionHandler as IntoConnectionHandler>::Handler,
+        _remaining_established: usize,
+    ) {
+        self.counters.dec_established(endpoint)
     }
 
     fn inject_event(
@@ -188,12 +198,12 @@ impl ConnectionCounters {
         }
     }
 
-    fn dec_pending(&mut self, endpoint: &PendingPoint) {
-        match endpoint {
-            PendingPoint::Dialer { .. } => {
+    fn dec_pending(&mut self, endpoint: impl Into<Endpoint>) {
+        match endpoint.into() {
+            Endpoint::Dialer => {
                 self.pending_outgoing -= 1;
             }
-            PendingPoint::Listener { .. } => {
+            Endpoint::Listener => {
                 self.pending_incoming -= 1;
             }
         }

@@ -685,6 +685,8 @@ where
                 handler,
                 muxer,
             } => {
+                // TODO: Call `NetworkBehaviour::inject_connection_pending_closed` in case we don't
+                // accept the established connection.
                 if self.banned_peers.contains(&peer_id) {
                     // Mark the connection for the banned peer as banned, thus withholding any
                     // future events from the connection to the behaviour.

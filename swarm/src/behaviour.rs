@@ -220,6 +220,7 @@ pub trait NetworkBehaviour: 'static {
     ) {
     }
 
+    // TODO: We need a `inject_connection_pending_closed`
     /// Informs the behaviour about a newly established connection to a peer.
     fn inject_connection_established(
         &mut self,
