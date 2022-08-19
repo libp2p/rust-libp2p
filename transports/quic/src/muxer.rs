@@ -22,7 +22,7 @@ use crate::connection::{Connection, ConnectionEvent};
 use crate::error::Error;
 
 use futures::{AsyncRead, AsyncWrite};
-use libp2p_core::muxing::StreamMuxer;
+use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
 use parking_lot::Mutex;
 use std::{
     collections::HashMap,
@@ -54,62 +54,6 @@ struct Inner {
     poll_inbound_waker: Option<Waker>,
     /// Waker to wake if the connection is closed.
     poll_close_waker: Option<Waker>,
-}
-
-impl Inner {
-    fn poll_connection(&mut self, cx: &mut Context<'_>) {
-        while let Poll::Ready(event) = self.connection.poll_event(cx) {
-            match event {
-                ConnectionEvent::Connected => {
-                    tracing::warn!("Unexpected Connected event on established QUIC connection");
-                }
-                ConnectionEvent::ConnectionLost(_) => {
-                    if let Some(waker) = self.poll_close_waker.take() {
-                        waker.wake();
-                    }
-                    self.connection.close();
-                }
-
-                ConnectionEvent::StreamOpened => {
-                    if let Some(waker) = self.poll_outbound_waker.take() {
-                        waker.wake();
-                    }
-                }
-                ConnectionEvent::StreamReadable(substream) => {
-                    if let Some(substream) = self.substreams.get_mut(&substream) {
-                        if let Some(waker) = substream.read_waker.take() {
-                            waker.wake();
-                        }
-                    }
-                }
-                ConnectionEvent::StreamWritable(substream) => {
-                    if let Some(substream) = self.substreams.get_mut(&substream) {
-                        if let Some(waker) = substream.write_waker.take() {
-                            waker.wake();
-                        }
-                    }
-                }
-                ConnectionEvent::StreamFinished(substream) => {
-                    if let Some(substream) = self.substreams.get_mut(&substream) {
-                        substream.finished = true;
-                        if let Some(waker) = substream.finished_waker.take() {
-                            waker.wake();
-                        }
-                    }
-                }
-                ConnectionEvent::StreamStopped(substream) => {
-                    if let Some(substream) = self.substreams.get_mut(&substream) {
-                        substream.stopped = true;
-                    }
-                }
-                ConnectionEvent::StreamAvailable => {
-                    if let Some(waker) = self.poll_inbound_waker.take() {
-                        waker.wake();
-                    }
-                }
-            }
-        }
-    }
 }
 
 /// State of a single substream.
@@ -151,12 +95,63 @@ impl StreamMuxer for QuicMuxer {
     type Substream = Substream;
     type Error = Error;
 
-    fn poll_address_change(
+    fn poll(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> Poll<Result<libp2p_core::Multiaddr, Self::Error>> {
-        self.inner.lock().poll_connection(cx);
-        // TODO
+    ) -> Poll<Result<StreamMuxerEvent, Self::Error>> {
+        let mut inner = self.inner.lock();
+        while let Poll::Ready(event) = inner.connection.poll_event(cx) {
+            match event {
+                ConnectionEvent::Connected => {
+                    tracing::warn!("Unexpected Connected event on established QUIC connection");
+                }
+                ConnectionEvent::ConnectionLost(_) => {
+                    if let Some(waker) = inner.poll_close_waker.take() {
+                        waker.wake();
+                    }
+                    inner.connection.close();
+                }
+
+                ConnectionEvent::StreamOpened => {
+                    if let Some(waker) = inner.poll_outbound_waker.take() {
+                        waker.wake();
+                    }
+                }
+                ConnectionEvent::StreamReadable(substream) => {
+                    if let Some(substream) = inner.substreams.get_mut(&substream) {
+                        if let Some(waker) = substream.read_waker.take() {
+                            waker.wake();
+                        }
+                    }
+                }
+                ConnectionEvent::StreamWritable(substream) => {
+                    if let Some(substream) = inner.substreams.get_mut(&substream) {
+                        if let Some(waker) = substream.write_waker.take() {
+                            waker.wake();
+                        }
+                    }
+                }
+                ConnectionEvent::StreamFinished(substream) => {
+                    if let Some(substream) = inner.substreams.get_mut(&substream) {
+                        substream.finished = true;
+                        if let Some(waker) = substream.finished_waker.take() {
+                            waker.wake();
+                        }
+                    }
+                }
+                ConnectionEvent::StreamStopped(substream) => {
+                    if let Some(substream) = inner.substreams.get_mut(&substream) {
+                        substream.stopped = true;
+                    }
+                }
+                ConnectionEvent::StreamAvailable => {
+                    if let Some(waker) = inner.poll_inbound_waker.take() {
+                        waker.wake();
+                    }
+                }
+            }
+        }
+        // TODO: poll address change
         Poll::Pending
     }
 
@@ -165,13 +160,12 @@ impl StreamMuxer for QuicMuxer {
         cx: &mut Context<'_>,
     ) -> Poll<Result<Self::Substream, Self::Error>> {
         let mut inner = self.inner.lock();
-        inner.poll_connection(cx);
         let substream_id = match inner.connection.pop_incoming_substream() {
-        	Some(id) => id,
-        	None => {
-        		inner.poll_inbound_waker = Some(cx.waker().clone());
-        		return Poll::Pending;
-        	}
+            Some(id) => id,
+            None => {
+                inner.poll_inbound_waker = Some(cx.waker().clone());
+                return Poll::Pending;
+            }
         };
         inner.substreams.insert(substream_id, Default::default());
         let substream = Substream::new(substream_id, self.inner.clone());
@@ -183,13 +177,12 @@ impl StreamMuxer for QuicMuxer {
         cx: &mut Context<'_>,
     ) -> Poll<Result<Self::Substream, Self::Error>> {
         let mut inner = self.inner.lock();
-        inner.poll_connection(cx);
         let substream_id = match inner.connection.pop_outgoing_substream() {
-        	Some(id) => id,
-        	None => {
-        		inner.poll_outbound_waker = Some(cx.waker().clone());
-        		return Poll::Pending;
-        	}
+            Some(id) => id,
+            None => {
+                inner.poll_outbound_waker = Some(cx.waker().clone());
+                return Poll::Pending;
+            }
         };
         inner.substreams.insert(substream_id, Default::default());
         let substream = Substream::new(substream_id, self.inner.clone());
@@ -198,8 +191,6 @@ impl StreamMuxer for QuicMuxer {
 
     fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         let mut inner = self.inner.lock();
-        inner.poll_connection(cx);
-
         if inner.connection.connection.is_drained() {
             return Poll::Ready(Ok(()));
         }
