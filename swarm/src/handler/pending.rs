@@ -53,7 +53,7 @@ impl ConnectionHandler for PendingConnectionHandler {
     type InboundOpenInfo = ();
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
-        SubstreamProtocol::new(PendingUpgrade::new(self.protocol_name.clone()), ())
+        SubstreamProtocol::new(PendingUpgrade::new(self.protocol_name), ())
     }
 
     fn inject_fully_negotiated_inbound(
