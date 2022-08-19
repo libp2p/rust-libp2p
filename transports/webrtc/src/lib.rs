@@ -89,3 +89,42 @@ mod in_addr;
 mod sdp;
 mod udp_mux;
 mod webrtc_connection;
+
+mod message_proto {
+    include!(concat!(env!("OUT_DIR"), "/webrtc.pb.rs"));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use asynchronous_codec::Encoder;
+    use bytes::BytesMut;
+    use prost::Message;
+    use unsigned_varint::codec::UviBytes;
+
+    const MAX_MSG_LEN: usize = 16384; // 16kiB
+    const VARINT_LEN: usize = 2;
+    const PROTO_OVERHEAD: usize = 5;
+
+    #[test]
+    fn proto_size() {
+        let message = [0; MAX_MSG_LEN - VARINT_LEN - PROTO_OVERHEAD];
+
+        let protobuf = message_proto::Message {
+            flag: Some(message_proto::message::Flag::CloseWrite.into()),
+            message: Some(message.to_vec()),
+        };
+
+        let mut encoded_msg = BytesMut::new();
+        protobuf
+            .encode(&mut encoded_msg)
+            .expect("BytesMut to have sufficient capacity.");
+        assert_eq!(encoded_msg.len(), message.len() + PROTO_OVERHEAD);
+
+        let mut uvi = UviBytes::default();
+        let mut dst = BytesMut::new();
+        uvi.encode(encoded_msg.clone().freeze(), &mut dst).unwrap();
+        assert_eq!(dst.len(), MAX_MSG_LEN);
+        assert_eq!(dst.len() - encoded_msg.len(), VARINT_LEN);
+    }
+}

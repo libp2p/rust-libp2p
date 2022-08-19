@@ -1,0 +1,19 @@
+syntax = "proto2";
+
+package webrtc.pb;
+
+message Message {
+  enum Flag {
+    // The local endpoint will no longer send messages.
+    CLOSE_WRITE = 0;
+    // The local endpoint will no longer read messages.
+    CLOSE_READ = 1;
+    // The local endpoint abruptly terminates the stream. The remote endpoint
+    // may discard any in-flight data.
+    RESET = 2;
+  }
+
+  optional Flag flag=1;
+
+  optional bytes message = 2;
+}

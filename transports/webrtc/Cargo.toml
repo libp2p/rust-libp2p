@@ -23,6 +23,7 @@ libp2p-noise = { version = "0.38.0", path = "../../transports/noise" }
 log = "0.4"
 multihash = { version = "0.16", default-features = false, features = ["sha2"] }
 pin-project = "1.0.0"
+prost = "0.10"
 rand = "0.8"
 serde = { version = "1.0", features = ["derive"] }
 stun = "0.4"
@@ -35,6 +36,9 @@ webrtc-ice = "0.7.0"
 webrtc-sctp = "0.5.0"
 webrtc-util = { version = "0.5.4", default-features = false, features = ["conn", "vnet", "sync"] }
 
+[build-dependencies]
+prost-build = "0.10"
+
 [dev-dependencies]
 anyhow = "1.0"
 env_logger = "0.9"
@@ -43,3 +47,5 @@ libp2p-swarm = { version = "0.38.0", path = "../../swarm" }
 rand_core = "0.5"
 rcgen = "0.9"
 quickcheck = "1"
+unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
+asynchronous-codec = { version = "0.6" }
