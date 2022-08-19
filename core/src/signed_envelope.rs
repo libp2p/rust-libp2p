@@ -8,7 +8,7 @@ use unsigned_varint::encode::usize_buffer;
 /// A signed envelope contains an arbitrary byte string payload, a signature of the payload, and the public key that can be used to verify the signature.
 ///
 /// For more details see libp2p RFC0002: <https://github.com/libp2p/specs/blob/master/RFC/0002-signed-envelopes.md>
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SignedEnvelope {
     key: PublicKey,
     payload_type: Vec<u8>,

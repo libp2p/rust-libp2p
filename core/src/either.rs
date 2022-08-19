@@ -18,6 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::muxing::StreamMuxerEvent;
 use crate::{
     muxing::StreamMuxer,
     transport::{ListenerId, Transport, TransportError, TransportEvent},
@@ -236,22 +237,20 @@ where
         }
     }
 
-    fn poll_address_change(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<Multiaddr, Self::Error>> {
-        match self.project() {
-            EitherOutputProj::First(inner) => inner.poll_address_change(cx).map_err(EitherError::A),
-            EitherOutputProj::Second(inner) => {
-                inner.poll_address_change(cx).map_err(EitherError::B)
-            }
-        }
-    }
-
     fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         match self.project() {
             EitherOutputProj::First(inner) => inner.poll_close(cx).map_err(EitherError::A),
             EitherOutputProj::Second(inner) => inner.poll_close(cx).map_err(EitherError::B),
+        }
+    }
+
+    fn poll(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<StreamMuxerEvent, Self::Error>> {
+        match self.project() {
+            EitherOutputProj::First(inner) => inner.poll(cx).map_err(EitherError::A),
+            EitherOutputProj::Second(inner) => inner.poll(cx).map_err(EitherError::B),
         }
     }
 }

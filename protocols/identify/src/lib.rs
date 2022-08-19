@@ -51,6 +51,7 @@ mod handler;
 mod identify;
 mod protocol;
 
+#[allow(clippy::derive_partial_eq_without_eq)]
 mod structs_proto {
     include!(concat!(env!("OUT_DIR"), "/structs.rs"));
 }

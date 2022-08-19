@@ -38,7 +38,7 @@ use std::{
 };
 
 /// Inbound probe failed.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum InboundProbeError {
     /// Receiving the dial-back request or sending a response failed.
     InboundRequest(InboundFailure),
@@ -46,7 +46,7 @@ pub enum InboundProbeError {
     Response(ResponseError),
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum InboundProbeEvent {
     /// A dial-back request was received from a remote peer.
     Request {

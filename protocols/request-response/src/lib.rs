@@ -66,9 +66,8 @@ use futures::channel::oneshot;
 use handler::{RequestProtocol, RequestResponseHandler, RequestResponseHandlerEvent};
 use libp2p_core::{connection::ConnectionId, ConnectedPoint, Multiaddr, PeerId};
 use libp2p_swarm::{
-    dial_opts::{self, DialOpts},
-    DialError, IntoConnectionHandler, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
-    PollParameters,
+    dial_opts::DialOpts, DialError, IntoConnectionHandler, NetworkBehaviour,
+    NetworkBehaviourAction, NotifyHandler, PollParameters,
 };
 use smallvec::SmallVec;
 use std::{
@@ -148,7 +147,7 @@ pub enum RequestResponseEvent<TRequest, TResponse, TChannelResponse = TResponse>
 
 /// Possible failures occurring in the context of sending
 /// an outbound request and receiving the response.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OutboundFailure {
     /// The request could not be sent because a dialing attempt failed.
     DialFailure,
@@ -185,7 +184,7 @@ impl std::error::Error for OutboundFailure {}
 
 /// Possible failures occurring in the context of receiving an
 /// inbound request and sending a response.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum InboundFailure {
     /// The inbound request timed out, either while reading the
     /// incoming request or before a response is sent, e.g. if
@@ -385,9 +384,7 @@ where
         if let Some(request) = self.try_send_request(peer, request) {
             let handler = self.new_handler();
             self.pending_events.push_back(NetworkBehaviourAction::Dial {
-                opts: DialOpts::peer_id(*peer)
-                    .condition(dial_opts::PeerCondition::Disconnected)
-                    .build(),
+                opts: DialOpts::peer_id(*peer).build(),
                 handler,
             });
             self.pending_outbound_requests
