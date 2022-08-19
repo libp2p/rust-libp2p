@@ -64,6 +64,7 @@ use std::convert::{TryFrom, TryInto};
 /// ```
 ///
 #[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
 pub enum Keypair {
     /// An Ed25519 keypair.
     Ed25519(ed25519::Keypair),
