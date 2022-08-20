@@ -717,7 +717,7 @@ where
         let me = Pin::into_inner(self);
 
         if let Some(mut pause) = me.pause.take() {
-            match Pin::new(&mut pause).poll(cx) {
+            match pause.poll_unpin(cx) {
                 Poll::Ready(_) => {}
                 Poll::Pending => {
                     me.pause = Some(pause);
