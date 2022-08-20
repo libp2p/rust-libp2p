@@ -92,7 +92,7 @@ fn get_ipfs_path() -> Box<Path> {
 }
 
 /// Read the pre shared key file from the given ipfs directory
-fn get_psk(path: Box<Path>) -> std::io::Result<Option<String>> {
+fn get_psk(path: &Path) -> std::io::Result<Option<String>> {
     let swarm_key_file = path.join("swarm.key");
     match fs::read_to_string(swarm_key_file) {
         Ok(text) => Ok(Some(text)),
@@ -136,9 +136,9 @@ fn parse_legacy_multiaddr(text: &str) -> Result<Multiaddr, Box<dyn Error>> {
 async fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
-    let ipfs_path: Box<Path> = get_ipfs_path();
+    let ipfs_path = get_ipfs_path();
     println!("using IPFS_PATH {:?}", ipfs_path);
-    let psk: Option<PreSharedKey> = get_psk(ipfs_path)?
+    let psk: Option<PreSharedKey> = get_psk(&ipfs_path)?
         .map(|text| PreSharedKey::from_str(&text))
         .transpose()?;
 
@@ -146,7 +146,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
     println!("using random peer id: {:?}", local_peer_id);
-    for psk in psk {
+    if let Some(psk) = psk {
         println!("using swarm key with fingerprint: {}", psk.fingerprint());
     }
 
