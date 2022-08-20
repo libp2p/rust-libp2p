@@ -92,6 +92,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         ignored_member: bool,
     }
 
+    #[allow(clippy::large_enum_variant)]
     #[derive(Debug)]
     enum OutEvent {
         Floodsub(FloodsubEvent),
