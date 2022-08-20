@@ -633,7 +633,11 @@ where
     listen_addr: SocketAddr,
     /// The async listening socket for incoming connections.
     listener: T::Listener,
-
+    /// Watcher for network interface changes.
+    /// Reports [`IfEvent`]s for new / deleted ip-addresses when interfaces 
+    /// become or stop being available.
+    /// 
+    /// `None` if the socket is only listening on a single interface.
     if_watcher: Option<IfWatcher>,
     /// The port reuse configuration for outgoing connections.
     ///
