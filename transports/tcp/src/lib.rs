@@ -715,6 +715,17 @@ where
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         let me = Pin::into_inner(self);
+
+        if let Some(mut pause) = me.pause.take() {
+            match Pin::new(&mut pause).poll(cx) {
+                Poll::Ready(_) => {}
+                Poll::Pending => {
+                    me.pause = Some(pause);
+                    return Poll::Pending;
+                }
+            }
+        }
+
         if let Some(if_watcher) = me.if_watcher.as_mut() {
             loop {
                 match if_watcher.poll_if_event(cx) {
@@ -745,16 +756,6 @@ where
                         return Poll::Ready(Some(Ok(TcpListenerEvent::Error(err))));
                     }
                     Poll::Pending => break,
-                }
-            }
-        }
-
-        if let Some(mut pause) = me.pause.take() {
-            match Pin::new(&mut pause).poll(cx) {
-                Poll::Ready(_) => {}
-                Poll::Pending => {
-                    me.pause = Some(pause);
-                    return Poll::Pending;
                 }
             }
         }
