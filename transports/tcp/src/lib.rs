@@ -935,7 +935,7 @@ mod tests {
             #[cfg(feature = "tokio")]
             {
                 let (ready_tx, ready_rx) = mpsc::channel(1);
-                let listener = listener::<tokio::Tcp>(addr.clone(), ready_tx);
+                let listener = listener::<tokio::Tcp>(addr, ready_tx);
                 let dialer = dialer::<tokio::Tcp>(ready_rx);
                 let rt = tokio_crate::runtime::Builder::new_current_thread()
                     .enable_io()
@@ -1004,7 +1004,7 @@ mod tests {
             #[cfg(feature = "tokio")]
             {
                 let (ready_tx, ready_rx) = mpsc::channel(1);
-                let listener = listener::<tokio::Tcp>(addr.clone(), ready_tx);
+                let listener = listener::<tokio::Tcp>(addr, ready_tx);
                 let dialer = dialer::<tokio::Tcp>(ready_rx);
                 let rt = tokio_crate::runtime::Builder::new_current_thread()
                     .enable_io()
@@ -1112,7 +1112,7 @@ mod tests {
                 let (ready_tx, ready_rx) = mpsc::channel(1);
                 let (port_reuse_tx, port_reuse_rx) = oneshot::channel();
                 let listener = listener::<tokio::Tcp>(addr.clone(), ready_tx, port_reuse_rx);
-                let dialer = dialer::<tokio::Tcp>(addr.clone(), ready_rx, port_reuse_tx);
+                let dialer = dialer::<tokio::Tcp>(addr, ready_rx, port_reuse_tx);
                 let rt = tokio_crate::runtime::Builder::new_current_thread()
                     .enable_io()
                     .build()
@@ -1153,10 +1153,7 @@ mod tests {
                     match poll_fn(|cx| Pin::new(&mut tcp).poll(cx)).await {
                         TransportEvent::NewAddress {
                             listen_addr: addr2, ..
-                        } => {
-                            assert_eq!(addr1, addr2);
-                            return;
-                        }
+                        } => assert_eq!(addr1, addr2),
                         e => panic!("Unexpected transport event: {:?}", e),
                     }
                 }
@@ -1173,7 +1170,7 @@ mod tests {
 
             #[cfg(feature = "tokio")]
             {
-                let listener = listen_twice::<tokio::Tcp>(addr.clone());
+                let listener = listen_twice::<tokio::Tcp>(addr);
                 let rt = tokio_crate::runtime::Builder::new_current_thread()
                     .enable_io()
                     .build()
@@ -1211,7 +1208,7 @@ mod tests {
                     .enable_io()
                     .build()
                     .unwrap();
-                let new_addr = rt.block_on(listen::<tokio::Tcp>(addr.clone()));
+                let new_addr = rt.block_on(listen::<tokio::Tcp>(addr));
                 assert!(!new_addr.to_string().contains("tcp/0"));
             }
         }
@@ -1234,7 +1231,7 @@ mod tests {
             #[cfg(feature = "tokio")]
             {
                 let mut tcp = TokioTcpTransport::new(GenTcpConfig::new());
-                assert!(tcp.listen_on(addr.clone()).is_err());
+                assert!(tcp.listen_on(addr).is_err());
             }
         }
 
