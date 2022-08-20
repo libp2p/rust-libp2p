@@ -1,4 +1,4 @@
-# 0.2.0 [unreleased]
+# 0.2.0
 
 - Update to prost(-build) `v0.11`. See [PR 2788].
 
