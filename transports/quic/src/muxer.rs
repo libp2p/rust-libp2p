@@ -102,8 +102,11 @@ impl StreamMuxer for QuicMuxer {
         let mut inner = self.inner.lock();
         while let Poll::Ready(event) = inner.connection.poll_event(cx) {
             match event {
-                ConnectionEvent::Connected => {
-                    tracing::warn!("Unexpected Connected event on established QUIC connection");
+                ConnectionEvent::Connected | ConnectionEvent::HandshakeDataReady => {
+                    tracing::warn!(
+                        "Unexpected event {:?} on established QUIC connection",
+                        event
+                    );
                 }
                 ConnectionEvent::ConnectionLost(_) => {
                     if let Some(waker) = inner.poll_close_waker.take() {

@@ -91,7 +91,7 @@ pub struct Endpoint {
 
     /// Copy of [`Endpoint::to_endpoint`], except not behind a `Mutex`. Used if we want to be
     /// guaranteed a slot in the messages buffer.
-    to_endpoint2: mpsc::Sender<ToEndpoint>,
+    pub to_endpoint2: mpsc::Sender<ToEndpoint>,
 
     socket_addr: SocketAddr,
 }
@@ -172,45 +172,6 @@ impl Endpoint {
         rx.await.expect("background task has crashed")
     }
 
-    /// Asks the endpoint to send a UDP packet.
-    ///
-    /// Note that this method only queues the packet and returns as soon as the packet is in queue.
-    /// There is no guarantee that the packet will actually be sent, but considering that this is
-    /// a UDP packet, you cannot rely on the packet being delivered anyway.
-    pub async fn send_udp_packet(&self, destination: SocketAddr, data: impl Into<Vec<u8>>) {
-        let _ = self
-            .to_endpoint
-            .lock()
-            .await
-            .send(ToEndpoint::SendUdpPacket {
-                destination,
-                data: data.into(),
-            })
-            .await;
-    }
-
-    /// Report to the endpoint an event on a [`quinn_proto::Connection`].
-    ///
-    /// This is typically called by a [`Connection`].
-    ///
-    /// If `event.is_drained()` is true, the event indicates that the connection no longer exists.
-    /// This must therefore be the last event sent using this [`quinn_proto::ConnectionHandle`].
-    pub async fn report_quinn_event(
-        &self,
-        connection_id: quinn_proto::ConnectionHandle,
-        event: quinn_proto::EndpointEvent,
-    ) {
-        self.to_endpoint
-            .lock()
-            .await
-            .send(ToEndpoint::ProcessConnectionEvent {
-                connection_id,
-                event,
-            })
-            .await
-            .expect("background task has crashed");
-    }
-
     /// Similar to [`Endpoint::report_quinn_event`], except that the message sending is guaranteed
     /// to be instantaneous and to succeed.
     ///
@@ -235,7 +196,7 @@ impl Endpoint {
 }
 /// Message sent to the endpoint background task.
 #[derive(Debug)]
-enum ToEndpoint {
+pub enum ToEndpoint {
     /// Instruct the endpoint to start connecting to the given address.
     Dial {
         /// UDP address to connect to.

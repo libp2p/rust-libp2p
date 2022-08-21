@@ -26,7 +26,7 @@
 //! All interactions with a QUIC connection should be done through this struct.
 // TODO: docs
 
-use crate::endpoint::Endpoint;
+use crate::endpoint::{Endpoint, ToEndpoint};
 
 use async_io::Timer;
 use futures::{channel::mpsc, prelude::*};
@@ -34,7 +34,6 @@ use libp2p_core::PeerId;
 use std::{
     fmt,
     net::SocketAddr,
-    pin::Pin,
     sync::Arc,
     task::{Context, Poll},
     time::Instant,
@@ -48,7 +47,7 @@ pub struct Connection {
     /// Endpoint this connection belongs to.
     endpoint: Arc<Endpoint>,
     /// Future whose job is to send a message to the endpoint. Only one at a time.
-    pending_to_endpoint: Option<Pin<Box<dyn Future<Output = ()> + Send + Sync>>>,
+    pending_to_endpoint: Option<ToEndpoint>,
     /// Events that the endpoint will send in destination to our local [`quinn_proto::Connection`].
     /// Passed at initialization.
     from_endpoint: mpsc::Receiver<quinn_proto::ConnectionEvent>,
@@ -71,6 +70,8 @@ pub struct Connection {
     /// Contains `None` if it is still open.
     /// Contains `Some` if and only if a `ConnectionLost` event has been emitted.
     closed: Option<Error>,
+
+    to_endpoint: mpsc::Sender<ToEndpoint>,
 }
 
 /// Error on the connection as a whole.
@@ -110,6 +111,7 @@ impl Connection {
         let is_handshaking = connection.is_handshaking();
 
         Connection {
+            to_endpoint: endpoint.to_endpoint2.clone(),
             endpoint,
             pending_to_endpoint: None,
             connection,
@@ -227,158 +229,100 @@ impl Connection {
             return Poll::Pending;
         }
 
-        // Process events that the endpoint has sent to us.
         loop {
-            match Pin::new(&mut self.from_endpoint).poll_next(cx) {
-                Poll::Ready(Some(event)) => self.connection.handle_event(event),
+            match self.from_endpoint.poll_next_unpin(cx) {
+                Poll::Ready(Some(event)) => {
+                    self.connection.handle_event(event);
+                    continue;
+                }
                 Poll::Ready(None) => {
                     debug_assert!(self.closed.is_none());
                     let err = Error::ClosedChannel;
                     self.closed = Some(err.clone());
                     return Poll::Ready(ConnectionEvent::ConnectionLost(err));
                 }
-                Poll::Pending => break,
+                Poll::Pending => {}
             }
-        }
 
-        'send_pending: loop {
             // Sending the pending event to the endpoint. If the endpoint is too busy, we just
             // stop the processing here.
-            // There is a bit of a question in play here: should we continue to accept events
-            // through `from_endpoint` if `to_endpoint` is busy?
             // We need to be careful to avoid a potential deadlock if both `from_endpoint` and
             // `to_endpoint` are full. As such, we continue to transfer data from `from_endpoint`
             // to the `quinn_proto::Connection` (see above).
             // However we don't deliver substream-related events to the user as long as
             // `to_endpoint` is full. This should propagate the back-pressure of `to_endpoint`
             // being full to the user.
-            if let Some(pending_to_endpoint) = &mut self.pending_to_endpoint {
-                match Future::poll(Pin::new(pending_to_endpoint), cx) {
+            if self.pending_to_endpoint.is_some() {
+                match self.to_endpoint.poll_ready_unpin(cx) {
+                    Poll::Ready(Ok(())) => {
+                        self.to_endpoint
+                            .start_send(self.pending_to_endpoint.take().expect("is_some"))
+                            .expect("To be ready");
+                    }
+                    Poll::Ready(Err(_)) => todo!(),
                     Poll::Pending => return Poll::Pending,
-                    Poll::Ready(()) => self.pending_to_endpoint = None,
                 }
             }
-
-            let now = Instant::now();
 
             // Poll the connection for packets to send on the UDP socket and try to send them on
             // `to_endpoint`.
             // FIXME max_datagrams
-            if let Some(transmit) = self.connection.poll_transmit(now, 1) {
-                let endpoint = self.endpoint.clone();
-                debug_assert!(self.pending_to_endpoint.is_none());
-                self.pending_to_endpoint = Some(Box::pin(async move {
-                    // TODO: ECN bits not handled
-                    endpoint
-                        .send_udp_packet(transmit.destination, transmit.contents)
-                        .await;
-                }));
-                continue 'send_pending;
+            if let Some(transmit) = self.connection.poll_transmit(Instant::now(), 1) {
+                // TODO: ECN bits not handled
+                self.pending_to_endpoint = Some(ToEndpoint::SendUdpPacket {
+                    destination: transmit.destination,
+                    data: transmit.contents,
+                });
+                continue;
             }
 
             // Timeout system.
-            // We break out of the following loop until if `poll_timeout()` returns `None` or if
-            // polling `self.next_timeout` returns `Poll::Pending`.
-            loop {
-                if let Some(next_timeout) = &mut self.next_timeout {
-                    match Future::poll(Pin::new(next_timeout), cx) {
-                        Poll::Ready(when) => {
-                            self.connection.handle_timeout(when);
-                            self.next_timeout = None;
-                        }
-                        Poll::Pending => break,
+            if let Some(when) = self.connection.poll_timeout() {
+                let mut timer = Timer::at(when);
+                match timer.poll_unpin(cx) {
+                    Poll::Ready(when) => {
+                        self.connection.handle_timeout(when);
+                        continue;
                     }
+                    Poll::Pending => self.next_timeout = Some(timer),
                 }
-                if let Some(when) = self.connection.poll_timeout() {
-                    self.next_timeout = Some(Timer::at(when));
-                    continue;
-                }
-                break;
             }
 
             // The connection also needs to be able to send control messages to the endpoint. This is
             // handled here, and we try to send them on `to_endpoint` as well.
-            if let Some(endpoint_event) = self.connection.poll_endpoint_events() {
-                let endpoint = self.endpoint.clone();
+            if let Some(event) = self.connection.poll_endpoint_events() {
                 let connection_id = self.connection_id;
-                debug_assert!(self.pending_to_endpoint.is_none());
-                self.pending_to_endpoint = Some(Box::pin(async move {
-                    endpoint
-                        .report_quinn_event(connection_id, endpoint_event)
-                        .await;
-                }));
-                continue 'send_pending;
+                self.pending_to_endpoint = Some(ToEndpoint::ProcessConnectionEvent {
+                    connection_id,
+                    event,
+                });
+                continue;
             }
 
             // The final step consists in handling the events related to the various substreams.
-            while let Some(event) = self.connection.poll() {
-                match event {
-                    quinn_proto::Event::Stream(quinn_proto::StreamEvent::Opened {
-                        dir: quinn_proto::Dir::Uni,
-                    })
-                    | quinn_proto::Event::Stream(quinn_proto::StreamEvent::Available {
-                        dir: quinn_proto::Dir::Uni,
-                    })
-                    | quinn_proto::Event::DatagramReceived => {
-                        // We don't use datagrams or unidirectional streams. If these events
-                        // happen, it is by some code not compatible with libp2p-quic.
-                        self.connection
-                            .close(Instant::now(), From::from(0u32), Default::default());
-                    }
-                    quinn_proto::Event::Stream(quinn_proto::StreamEvent::Readable { id }) => {
-                        return Poll::Ready(ConnectionEvent::StreamReadable(id));
-                    }
-                    quinn_proto::Event::Stream(quinn_proto::StreamEvent::Writable { id }) => {
-                        return Poll::Ready(ConnectionEvent::StreamWritable(id));
-                    }
-                    quinn_proto::Event::Stream(quinn_proto::StreamEvent::Stopped {
-                        id, ..
-                    }) => {
-                        // The `Stop` QUIC event is more or less similar to a `Reset`, except that
-                        // it applies only on the writing side of the pipe.
-                        return Poll::Ready(ConnectionEvent::StreamStopped(id));
-                    }
-                    quinn_proto::Event::Stream(quinn_proto::StreamEvent::Available {
-                        dir: quinn_proto::Dir::Bi,
-                    }) => {
-                        return Poll::Ready(ConnectionEvent::StreamAvailable);
-                    }
-                    quinn_proto::Event::Stream(quinn_proto::StreamEvent::Opened {
-                        dir: quinn_proto::Dir::Bi,
-                    }) => {
-                        return Poll::Ready(ConnectionEvent::StreamOpened);
-                    }
-                    quinn_proto::Event::ConnectionLost { reason } => {
-                        debug_assert!(self.closed.is_none());
+            match self.connection.poll() {
+                Some(ev) => match ConnectionEvent::try_from(ev) {
+                    Ok(ConnectionEvent::ConnectionLost(err)) => {
                         self.is_handshaking = false;
-                        let err = Error::Quinn(reason);
                         self.closed = Some(err.clone());
-                        // self.close();
-                        // self.connection
-                        //    .close(Instant::now(), From::from(0u32), Default::default());
                         return Poll::Ready(ConnectionEvent::ConnectionLost(err));
                     }
-                    quinn_proto::Event::Stream(quinn_proto::StreamEvent::Finished { id }) => {
-                        return Poll::Ready(ConnectionEvent::StreamFinished(id));
-                    }
-                    quinn_proto::Event::Connected => {
+                    Ok(ConnectionEvent::Connected) => {
                         debug_assert!(self.is_handshaking);
                         debug_assert!(!self.connection.is_handshaking());
                         self.is_handshaking = false;
                         return Poll::Ready(ConnectionEvent::Connected);
                     }
-                    quinn_proto::Event::HandshakeDataReady => {
-                        if !self.is_handshaking {
-                            tracing::error!("Got HandshakeDataReady while not handshaking");
-                        }
+                    Ok(event) => return Poll::Ready(event),
+                    Err(_proto_ev) => {
+                        // unreachable: We don't use datagrams or unidirectional streams.
+                        continue;
                     }
-                }
+                },
+                None => {}
             }
-
-            break;
+            return Poll::Pending;
         }
-
-        Poll::Pending
     }
 }
 
@@ -423,4 +367,45 @@ pub enum ConnectionEvent {
     /// A substream has been stopped. This concept is similar to the concept of a substream being
     /// "reset", as in a TCP socket being reset for example.
     StreamStopped(quinn_proto::StreamId),
+
+    HandshakeDataReady,
+}
+
+impl TryFrom<quinn_proto::Event> for ConnectionEvent {
+    type Error = quinn_proto::Event;
+
+    fn try_from(event: quinn_proto::Event) -> Result<Self, Self::Error> {
+        match event {
+            quinn_proto::Event::Stream(quinn_proto::StreamEvent::Readable { id }) => {
+                Ok(ConnectionEvent::StreamReadable(id))
+            }
+            quinn_proto::Event::Stream(quinn_proto::StreamEvent::Writable { id }) => {
+                Ok(ConnectionEvent::StreamWritable(id))
+            }
+            quinn_proto::Event::Stream(quinn_proto::StreamEvent::Stopped { id, .. }) => {
+                Ok(ConnectionEvent::StreamStopped(id))
+            }
+            quinn_proto::Event::Stream(quinn_proto::StreamEvent::Available {
+                dir: quinn_proto::Dir::Bi,
+            }) => Ok(ConnectionEvent::StreamAvailable),
+            quinn_proto::Event::Stream(quinn_proto::StreamEvent::Opened {
+                dir: quinn_proto::Dir::Bi,
+            }) => Ok(ConnectionEvent::StreamOpened),
+            quinn_proto::Event::ConnectionLost { reason } => {
+                Ok(ConnectionEvent::ConnectionLost(Error::Quinn(reason)))
+            }
+            quinn_proto::Event::Stream(quinn_proto::StreamEvent::Finished { id }) => {
+                Ok(ConnectionEvent::StreamFinished(id))
+            }
+            quinn_proto::Event::Connected => Ok(ConnectionEvent::Connected),
+            quinn_proto::Event::HandshakeDataReady => Ok(ConnectionEvent::HandshakeDataReady),
+            ev @ quinn_proto::Event::Stream(quinn_proto::StreamEvent::Opened {
+                dir: quinn_proto::Dir::Uni,
+            })
+            | ev @ quinn_proto::Event::Stream(quinn_proto::StreamEvent::Available {
+                dir: quinn_proto::Dir::Uni,
+            })
+            | ev @ quinn_proto::Event::DatagramReceived => Err(ev),
+        }
+    }
 }
