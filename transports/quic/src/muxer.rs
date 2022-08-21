@@ -73,13 +73,7 @@ struct SubstreamState {
 
 impl QuicMuxer {
     /// Crate-internal function that builds a [`QuicMuxer`] from a raw connection.
-    ///
-    /// # Panic
-    ///
-    /// Panics if `connection.is_handshaking()` returns `true`.
     pub(crate) fn from_connection(connection: Connection) -> Self {
-        assert!(!connection.is_handshaking());
-
         QuicMuxer {
             inner: Arc::new(Mutex::new(Inner {
                 connection,

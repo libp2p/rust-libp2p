@@ -59,13 +59,6 @@ pub struct Connection {
     connection_id: quinn_proto::ConnectionHandle,
     /// `Future` that triggers at the `Instant` that `self.connection.poll_timeout()` indicates.
     next_timeout: Option<Timer>,
-
-    /// In other to avoid race conditions where a "connected" event happens if we were not
-    /// handshaking, we cache whether the connection is handshaking and only set this to true
-    /// after a "connected" event has been received.
-    ///
-    /// In other words, this flag indicates whether a "connected" hasn't been received yet.
-    is_handshaking: bool,
     /// Contains a `Some` if the connection is closed, with the reason of the closure.
     /// Contains `None` if it is still open.
     /// Contains `Some` if and only if a `ConnectionLost` event has been emitted.
@@ -108,8 +101,6 @@ impl Connection {
         from_endpoint: mpsc::Receiver<quinn_proto::ConnectionEvent>,
     ) -> Self {
         assert!(!connection.is_closed());
-        let is_handshaking = connection.is_handshaking();
-
         Connection {
             to_endpoint: endpoint.to_endpoint2.clone(),
             endpoint,
@@ -118,7 +109,6 @@ impl Connection {
             next_timeout: None,
             from_endpoint,
             connection_id,
-            is_handshaking,
             closed: None,
         }
     }
@@ -146,16 +136,9 @@ impl Connection {
         self.connection.remote_address()
     }
 
-    /// Returns `true` if this connection is still pending. Returns `false` if we are connected to
-    /// the remote or if the connection is closed.
-    pub fn is_handshaking(&self) -> bool {
-        self.is_handshaking
-    }
-
     /// Returns the address of the node we're connected to.
     /// Panics if the connection is still handshaking.
     pub fn remote_peer_id(&self) -> PeerId {
-        debug_assert!(!self.is_handshaking());
         let session = self.connection.crypto_session();
         let identity = session
             .peer_identity()
@@ -303,15 +286,8 @@ impl Connection {
             match self.connection.poll() {
                 Some(ev) => match ConnectionEvent::try_from(ev) {
                     Ok(ConnectionEvent::ConnectionLost(err)) => {
-                        self.is_handshaking = false;
                         self.closed = Some(err.clone());
                         return Poll::Ready(ConnectionEvent::ConnectionLost(err));
-                    }
-                    Ok(ConnectionEvent::Connected) => {
-                        debug_assert!(self.is_handshaking);
-                        debug_assert!(!self.connection.is_handshaking());
-                        self.is_handshaking = false;
-                        return Poll::Ready(ConnectionEvent::Connected);
                     }
                     Ok(event) => return Poll::Ready(event),
                     Err(_proto_ev) => {
