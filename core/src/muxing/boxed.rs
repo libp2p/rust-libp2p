@@ -1,6 +1,5 @@
-use crate::StreamMuxer;
+use crate::muxing::{StreamMuxer, StreamMuxerEvent};
 use futures::{AsyncRead, AsyncWrite};
-use multiaddr::Multiaddr;
 use pin_project::pin_project;
 use std::error::Error;
 use std::fmt;
@@ -38,11 +37,6 @@ where
     type Substream = SubstreamBox;
     type Error = io::Error;
 
-    #[inline]
-    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.project().inner.poll_close(cx).map_err(into_io_error)
-    }
-
     fn poll_inbound(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -65,14 +59,16 @@ where
             .map_err(into_io_error)
     }
 
-    fn poll_address_change(
+    #[inline]
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        self.project().inner.poll_close(cx).map_err(into_io_error)
+    }
+
+    fn poll(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> Poll<Result<Multiaddr, Self::Error>> {
-        self.project()
-            .inner
-            .poll_address_change(cx)
-            .map_err(into_io_error)
+    ) -> Poll<Result<StreamMuxerEvent, Self::Error>> {
+        self.project().inner.poll(cx).map_err(into_io_error)
     }
 }
 
@@ -109,11 +105,6 @@ impl StreamMuxer for StreamMuxerBox {
     type Substream = SubstreamBox;
     type Error = io::Error;
 
-    #[inline]
-    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.project().poll_close(cx)
-    }
-
     fn poll_inbound(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -128,11 +119,16 @@ impl StreamMuxer for StreamMuxerBox {
         self.project().poll_outbound(cx)
     }
 
-    fn poll_address_change(
+    #[inline]
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        self.project().poll_close(cx)
+    }
+
+    fn poll(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> Poll<Result<Multiaddr, Self::Error>> {
-        self.project().poll_address_change(cx)
+    ) -> Poll<Result<StreamMuxerEvent, Self::Error>> {
+        self.project().poll(cx)
     }
 }
 

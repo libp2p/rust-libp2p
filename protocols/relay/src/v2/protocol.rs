@@ -31,7 +31,7 @@ pub const STOP_PROTOCOL_NAME: &[u8; 32] = b"/libp2p/circuit/relay/0.2.0/stop";
 
 const MAX_MESSAGE_SIZE: usize = 4096;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Limit {
     duration: Option<Duration>,
     data_in_bytes: Option<u64>,
