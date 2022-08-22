@@ -4,6 +4,7 @@ package webrtc.pb;
 
 message Message {
   enum Flag {
+    // TODO: Change to sender
     // The local endpoint will no longer send messages.
     CLOSE_WRITE = 0;
     // The local endpoint will no longer read messages.

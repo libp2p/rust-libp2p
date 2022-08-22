@@ -10,6 +10,7 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
+asynchronous-codec = "0.6"
 async-trait = "0.1"
 bytes = "1"
 fnv = "1.0"
@@ -24,12 +25,15 @@ log = "0.4"
 multihash = { version = "0.16", default-features = false, features = ["sha2"] }
 pin-project = "1.0.0"
 prost = "0.10"
+prost-codec = { version = "0.1", path = "../../misc/prost-codec" }
 rand = "0.8"
 serde = { version = "1.0", features = ["derive"] }
 stun = "0.4"
 thiserror = "1"
 tinytemplate = "1.2"
 tokio-crate = { package = "tokio", version = "1.18", features = ["net"]}
+# TODO: Needed?
+tokio-util = { version = "0.7", features = ["compat"] }
 webrtc = { version = "0.4.0", git = "https://github.com/webrtc-rs/webrtc.git" }
 webrtc-data = { version = "0.4.0", git = "https://github.com/webrtc-rs/data.git" }
 webrtc-ice = "0.7.0"

@@ -18,7 +18,12 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use asynchronous_codec::Framed;
+use bytes::Bytes;
 use futures::prelude::*;
+use futures::ready;
+use tokio_util::compat::Compat;
+use tokio_util::compat::TokioAsyncReadCompatExt;
 use webrtc_data::data_channel::DataChannel;
 use webrtc_data::data_channel::PollDataChannel as RTCPollDataChannel;
 
@@ -28,65 +33,133 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 /// A wrapper around [`RTCPollDataChannel`] implementing futures [`AsyncRead`] / [`AsyncWrite`].
-#[derive(Debug)]
-pub struct PollDataChannel(RTCPollDataChannel);
+// TODO
+// #[derive(Debug)]
+pub struct PollDataChannel {
+    io: Framed<Compat<RTCPollDataChannel>, prost_codec::Codec<crate::message_proto::Message>>,
+    state: State,
+}
+
+enum State {
+    Open { read_buffer: Bytes },
+    WriteClosed { read_buffer: Bytes },
+    ReadClosed { read_buffer: Bytes },
+    ReadWriteClosed { read_buffer: Bytes },
+    Reset,
+    Poisoned,
+}
+
+impl State {
+    fn handle_flag(&mut self, flag: crate::message_proto::message::Flag) {
+        match (std::mem::replace(self, State::Poisoned), flag) {
+            (
+                State::Open { read_buffer } | State::WriteClosed { read_buffer },
+                crate::message_proto::message::Flag::CloseRead,
+            ) => {
+                *self = State::WriteClosed { read_buffer };
+            }
+            (
+                State::ReadClosed { read_buffer } | State::ReadWriteClosed { read_buffer },
+                crate::message_proto::message::Flag::CloseRead,
+            ) => {
+                *self = State::ReadWriteClosed { read_buffer };
+            }
+            (
+                State::Open { read_buffer } | State::ReadClosed { read_buffer },
+                crate::message_proto::message::Flag::CloseWrite,
+            ) => {
+                *self = State::ReadClosed { read_buffer };
+            }
+            (
+                State::WriteClosed { read_buffer } | State::ReadWriteClosed { read_buffer },
+                crate::message_proto::message::Flag::CloseWrite,
+            ) => {
+                *self = State::ReadWriteClosed { read_buffer };
+            }
+            // TODO: Or do we want to return an error?
+            (State::Reset, _) => *self = State::Reset,
+            (_, crate::message_proto::message::Flag::Reset) => *self = State::Reset,
+            (State::Poisoned, _) => unreachable!(),
+        }
+    }
+
+    fn read_buffer_mut(&mut self) -> Option<&mut Bytes> {
+        match self {
+            State::Open { read_buffer } => Some(read_buffer),
+            State::WriteClosed { read_buffer } => Some(read_buffer),
+            State::ReadClosed { read_buffer } => Some(read_buffer),
+            State::ReadWriteClosed { read_buffer } => Some(read_buffer),
+            State::Reset => None,
+            State::Poisoned => todo!(),
+        }
+    }
+}
 
 impl PollDataChannel {
     /// Constructs a new `PollDataChannel`.
     pub fn new(data_channel: Arc<DataChannel>) -> Self {
-        Self(RTCPollDataChannel::new(data_channel))
+        Self {
+            io: Framed::new(
+                RTCPollDataChannel::new(data_channel).compat(),
+                // TODO: Fix MAX
+                prost_codec::Codec::new(usize::MAX),
+            ),
+            state: State::Open {
+                read_buffer: Default::default(),
+            },
+        }
     }
 
     /// Get back the inner data_channel.
     pub fn into_inner(self) -> RTCPollDataChannel {
-        self.0
+        self.io.into_inner().into_inner()
     }
 
     /// Obtain a clone of the inner data_channel.
     pub fn clone_inner(&self) -> RTCPollDataChannel {
-        self.0.clone()
+        self.io.get_ref().clone()
     }
 
     /// MessagesSent returns the number of messages sent
     pub fn messages_sent(&self) -> usize {
-        self.0.messages_sent()
+        self.io.get_ref().messages_sent()
     }
 
     /// MessagesReceived returns the number of messages received
     pub fn messages_received(&self) -> usize {
-        self.0.messages_received()
+        self.io.get_ref().messages_received()
     }
 
     /// BytesSent returns the number of bytes sent
     pub fn bytes_sent(&self) -> usize {
-        self.0.bytes_sent()
+        self.io.get_ref().bytes_sent()
     }
 
     /// BytesReceived returns the number of bytes received
     pub fn bytes_received(&self) -> usize {
-        self.0.bytes_received()
+        self.io.get_ref().bytes_received()
     }
 
     /// StreamIdentifier returns the Stream identifier associated to the stream.
     pub fn stream_identifier(&self) -> u16 {
-        self.0.stream_identifier()
+        self.io.get_ref().stream_identifier()
     }
 
     /// BufferedAmount returns the number of bytes of data currently queued to be
     /// sent over this stream.
     pub fn buffered_amount(&self) -> usize {
-        self.0.buffered_amount()
+        self.io.get_ref().buffered_amount()
     }
 
     /// BufferedAmountLowThreshold returns the number of bytes of buffered outgoing
     /// data that is considered "low." Defaults to 0.
     pub fn buffered_amount_low_threshold(&self) -> usize {
-        self.0.buffered_amount_low_threshold()
+        self.io.get_ref().buffered_amount_low_threshold()
     }
 
     /// Set the capacity of the temporary read buffer (default: 8192).
     pub fn set_read_buf_capacity(&mut self, capacity: usize) {
-        self.0.set_read_buf_capacity(capacity)
+        self.io.get_mut().set_read_buf_capacity(capacity)
     }
 }
 
@@ -96,13 +169,84 @@ impl AsyncRead for PollDataChannel {
         cx: &mut Context<'_>,
         buf: &mut [u8],
     ) -> Poll<io::Result<usize>> {
-        let mut read_buf = tokio_crate::io::ReadBuf::new(buf);
-        futures::ready!(tokio_crate::io::AsyncRead::poll_read(
-            Pin::new(&mut self.0),
-            cx,
-            &mut read_buf
-        ))?;
-        Poll::Ready(Ok(read_buf.filled().len()))
+        loop {
+            if let Some(read_buffer) = self.state.read_buffer_mut() {
+                if !read_buffer.is_empty() {
+                    let n = std::cmp::min(read_buffer.len(), buf.len());
+                    let data = read_buffer.split_to(n);
+                    buf[0..n].copy_from_slice(&data[..]);
+
+                    return Poll::Ready(Ok(n));
+                }
+            }
+
+            match &mut *self {
+                PollDataChannel {
+                    state:
+                        State::Open {
+                            ref mut read_buffer,
+                        },
+                    io,
+                }
+                | PollDataChannel {
+                    state:
+                        State::WriteClosed {
+                            ref mut read_buffer,
+                        },
+                    io,
+                } => {
+                    match ready!(io.poll_next_unpin(cx))
+                        .transpose()
+                        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?
+                    {
+                        Some(crate::message_proto::Message { flag, message }) => {
+                            assert!(read_buffer.is_empty());
+                            if let Some(message) = message {
+                                *read_buffer = message.into();
+                            }
+
+                            if let Some(flag) = flag
+                                .map(|f| {
+                                    crate::message_proto::message::Flag::from_i32(f)
+                                        .ok_or(io::Error::new(io::ErrorKind::InvalidData, ""))
+                                })
+                                .transpose()?
+                            {
+                                self.state.handle_flag(flag)
+                            }
+
+                            continue;
+                        }
+                        None => {
+                            self.state
+                                .handle_flag(crate::message_proto::message::Flag::CloseWrite);
+                            return Poll::Ready(Ok(0));
+                        }
+                    }
+                }
+                PollDataChannel {
+                    state: State::ReadClosed { .. },
+                    ..
+                }
+                | PollDataChannel {
+                    state: State::ReadWriteClosed { .. },
+                    ..
+                } => return Poll::Ready(Ok(0)),
+                PollDataChannel {
+                    state: State::Reset,
+                    ..
+                } => {
+                    // TODO: Is `""` valid?
+                    return Poll::Ready(Err(io::Error::new(io::ErrorKind::ConnectionReset, "")));
+                }
+                PollDataChannel {
+                    state: State::Poisoned,
+                    ..
+                } => {
+                    todo!()
+                }
+            }
+        }
     }
 }
 
@@ -112,28 +256,59 @@ impl AsyncWrite for PollDataChannel {
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
-        tokio_crate::io::AsyncWrite::poll_write(Pin::new(&mut self.0), cx, buf)
+        match self.state {
+            State::WriteClosed { .. } | State::ReadWriteClosed { .. } => return Poll::Ready(Ok(0)),
+            State::Reset => {
+                return Poll::Ready(Err(io::Error::new(io::ErrorKind::ConnectionReset, "")));
+            }
+            State::Open { .. } => {}
+            State::ReadClosed { .. } => {}
+            State::Poisoned => todo!(),
+        }
+
+        ready!(self.io.poll_ready_unpin(cx))?;
+
+        Pin::new(&mut self.io).start_send(crate::message_proto::Message {
+            flag: None,
+            message: Some(buf.into()),
+        })?;
+
+        Poll::Ready(Ok(buf.len()))
     }
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        tokio_crate::io::AsyncWrite::poll_flush(Pin::new(&mut self.0), cx)
+        // TODO: Double check that we don't have to depend on self.state here.
+        self.io.poll_flush_unpin(cx).map_err(Into::into)
     }
 
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        tokio_crate::io::AsyncWrite::poll_shutdown(Pin::new(&mut self.0), cx)
-    }
+        match &self.state {
+            State::WriteClosed { .. } | State::ReadWriteClosed { .. } => {}
+            State::Open { .. } | State::ReadClosed { .. } => {
+                ready!(self.io.poll_ready_unpin(cx))?;
+                Pin::new(&mut self.io).start_send(crate::message_proto::Message {
+                    flag: Some(crate::message_proto::message::Flag::CloseWrite.into()),
+                    message: None,
+                })?;
 
-    fn poll_write_vectored(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        bufs: &[io::IoSlice<'_>],
-    ) -> Poll<io::Result<usize>> {
-        tokio_crate::io::AsyncWrite::poll_write_vectored(Pin::new(&mut self.0), cx, bufs)
-    }
-}
+                match std::mem::replace(&mut self.state, State::Poisoned) {
+                    State::Open { read_buffer } => self.state = State::WriteClosed { read_buffer },
+                    State::ReadClosed { read_buffer } => {
+                        self.state = State::ReadWriteClosed { read_buffer }
+                    }
+                    State::WriteClosed { .. }
+                    | State::ReadWriteClosed { .. }
+                    | State::Reset
+                    | State::Poisoned => unreachable!(),
+                }
+            }
+            State::Reset => {
+                return Poll::Ready(Err(io::Error::new(io::ErrorKind::ConnectionReset, "")));
+            }
+            State::Poisoned => todo!(),
+        }
 
-impl Clone for PollDataChannel {
-    fn clone(&self) -> PollDataChannel {
-        PollDataChannel(self.clone_inner())
+        // TODO: Is flush the correct thing here? We don't want the underlying layer to close both write and read.
+        self.io.poll_flush_unpin(cx).map_err(Into::into)
     }
 }

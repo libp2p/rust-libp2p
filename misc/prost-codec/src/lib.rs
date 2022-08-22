@@ -79,3 +79,12 @@ pub enum Error {
         std::io::Error,
     ),
 }
+
+impl From<Error> for std::io::Error {
+    fn from(e: Error) -> Self {
+        match e {
+            Error::Decode(e) => e.into(),
+            Error::Io(e) => e,
+        }
+    }
+}
