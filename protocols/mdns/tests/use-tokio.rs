@@ -50,9 +50,7 @@ async fn test_expired_tokio() -> Result<(), Box<dyn Error>> {
         ..Default::default()
     };
 
-    tokio::time::timeout(Duration::from_secs(6), run_peer_expiration_test(config))
-        .await
-        .unwrap()
+    run_peer_expiration_test(config).await
 }
 
 async fn create_swarm(config: MdnsConfig) -> Result<Swarm<TokioMdns>, Box<dyn Error>> {
@@ -108,14 +106,26 @@ async fn run_discovery_test(config: MdnsConfig) -> Result<(), Box<dyn Error>> {
 async fn run_peer_expiration_test(config: MdnsConfig) -> Result<(), Box<dyn Error>> {
     let mut a = create_swarm(config.clone()).await?;
     let mut b = create_swarm(config).await?;
+    let expired_at = tokio::time::sleep(Duration::from_secs(15));
+    tokio::pin!(expired_at);
 
     loop {
-        futures::select! {
+        tokio::select! {
+            _ev = &mut expired_at => {
+                panic!();
+            },
             ev = a.select_next_some() => match ev {
                 SwarmEvent::Behaviour(MdnsEvent::Expired(peers)) => {
                     for (peer, _addr) in peers {
                         if peer == *b.local_peer_id() {
                             return Ok(());
+                        }
+                    }
+                }
+                SwarmEvent::Behaviour(MdnsEvent::Discovered(peers)) => {
+                    for (peer, _addr) in peers {
+                        if peer == *b.local_peer_id() {
+                            expired_at.as_mut().reset(tokio::time::Instant::now() + tokio::time::Duration::from_secs(2));
                         }
                     }
                 }
@@ -129,9 +139,15 @@ async fn run_peer_expiration_test(config: MdnsConfig) -> Result<(), Box<dyn Erro
                         }
                     }
                 }
+                SwarmEvent::Behaviour(MdnsEvent::Discovered(peers)) => {
+                    for (peer, _addr) in peers {
+                        if peer == *a.local_peer_id() {
+                            expired_at.as_mut().reset(tokio::time::Instant::now() + tokio::time::Duration::from_secs(2));
+                        }
+                    }
+                }
                 _ => {}
             }
-
         }
     }
 }
