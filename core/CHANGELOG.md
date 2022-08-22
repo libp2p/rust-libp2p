@@ -1,4 +1,4 @@
-# 0.35.0 [unreleased]
+# 0.35.0
 
 - Drop `Unpin` requirement from `SubstreamBox`. See [PR 2762] and [PR 2776].
 - Drop `Sync` requirement on `StreamMuxer` for constructing `StreamMuxerBox`. See [PR 2775].
