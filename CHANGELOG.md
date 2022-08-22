@@ -43,7 +43,7 @@
 
 # `libp2p` facade crate
 
-# 0.47.0 [unreleased]
+# 0.47.0
 
 - Update to [`libp2p-dcutr` `v0.5.0`](protocols/dcutr/CHANGELOG.md#050).
 

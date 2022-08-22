@@ -1,4 +1,4 @@
-# 0.38.0 [unreleased]
+# 0.38.0
 
 - Deprecate `NetworkBehaviourEventProcess`. When deriving `NetworkBehaviour` on a custom `struct` users
   should either bring their own `OutEvent` via `#[behaviour(out_event = "MyBehaviourEvent")]` or,
