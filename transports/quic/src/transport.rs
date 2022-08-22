@@ -23,9 +23,11 @@
 //! Combines all the objects in the other modules to implement the trait.
 
 use crate::connection::Connection;
+use crate::endpoint::ToEndpoint;
 use crate::Config;
 use crate::{endpoint::Endpoint, in_addr::InAddr, muxer::QuicMuxer, upgrade::Upgrade};
 
+use futures::channel::oneshot;
 use futures::stream::StreamExt;
 use futures::{channel::mpsc, prelude::*, stream::SelectAll};
 
@@ -36,10 +38,11 @@ use libp2p_core::{
     transport::{ListenerId, TransportError, TransportEvent},
     PeerId, Transport,
 };
+use std::collections::VecDeque;
+use std::task::Waker;
 use std::{
     net::SocketAddr,
     pin::Pin,
-    sync::Arc,
     task::{Context, Poll},
 };
 
@@ -55,10 +58,10 @@ pub use quinn_proto::{
 pub struct QuicTransport {
     config: Config,
     listeners: SelectAll<Listener>,
-    /// Endpoints to use for dialing Ipv4 addresses if no matching listener exists.
-    ipv4_dialer: Option<Arc<Endpoint>>,
-    /// Endpoints to use for dialing Ipv6 addresses if no matching listener exists.
-    ipv6_dialer: Option<Arc<Endpoint>>,
+    /// Dialer for Ipv4 addresses if no matching listener exists.
+    ipv4_dialer: Option<Dialer>,
+    /// Dialer for Ipv6 addresses if no matching listener exists.
+    ipv6_dialer: Option<Dialer>,
 }
 
 impl QuicTransport {
@@ -132,38 +135,49 @@ impl Transport for QuicTransport {
             tracing::error!("multiaddr not supported");
             return Err(TransportError::MultiaddrNotSupported(addr));
         }
-        let listeners = self
+        let mut listeners = self
             .listeners
-            .iter()
+            .iter_mut()
             .filter(|l| {
-                let listen_addr = l.endpoint.socket_addr();
+                let listen_addr = l.endpoint.socket_addr;
                 listen_addr.is_ipv4() == socket_addr.is_ipv4()
                     && listen_addr.ip().is_loopback() == socket_addr.ip().is_loopback()
             })
             .collect::<Vec<_>>();
-        let endpoint = if listeners.is_empty() {
+
+        let (tx, rx) = oneshot::channel();
+        let to_endpoint = ToEndpoint::Dial {
+            addr: socket_addr,
+            result: tx,
+        };
+        if listeners.is_empty() {
             let dialer = match socket_addr {
                 SocketAddr::V4(_) => &mut self.ipv4_dialer,
                 SocketAddr::V6(_) => &mut self.ipv6_dialer,
             };
-            match dialer {
-                Some(endpoint) => endpoint.clone(),
-                None => {
-                    let endpoint = Endpoint::new_dialer(self.config.clone(), socket_addr.is_ipv6())
-                        .map_err(TransportError::Other)?;
-                    let _ = dialer.insert(endpoint.clone());
-                    endpoint
-                }
+            if dialer.is_none() {
+                let _ = dialer.insert(Dialer::new(self.config.clone(), socket_addr.is_ipv6())?);
             }
+            dialer
+                .as_mut()
+                .unwrap()
+                .pending_dials
+                .push_back(to_endpoint);
         } else {
             // Pick a random listener to use for dialing.
             let n = rand::random::<usize>() % listeners.len();
-            let listener = listeners.get(n).expect("Can not be out of bound.");
-            listener.endpoint.clone()
+            let listener = listeners.get_mut(n).expect("Can not be out of bound.");
+            listener.pending_dials.push_back(to_endpoint);
+            if let Some(waker) = listener.waker.take() {
+                waker.wake()
+            }
         };
 
         Ok(async move {
-            let connection = endpoint.dial(socket_addr).await.map_err(Error::Reach)?;
+            let connection = rx
+                .await
+                .expect("background task has crashed")
+                .map_err(Error::Reach)?;
             let final_connec = Upgrade::from_connection(connection).await?;
             Ok(final_connec)
         }
@@ -185,6 +199,12 @@ impl Transport for QuicTransport {
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
+        if let Some(dialer) = self.ipv4_dialer.as_mut() {
+            dialer.drive_dials(cx)
+        }
+        if let Some(dialer) = self.ipv6_dialer.as_mut() {
+            dialer.drive_dials(cx)
+        }
         match self.listeners.poll_next_unpin(cx) {
             Poll::Ready(Some(ev)) => Poll::Ready(ev),
             _ => Poll::Pending,
@@ -193,8 +213,40 @@ impl Transport for QuicTransport {
 }
 
 #[derive(Debug)]
+struct Dialer {
+    endpoint: Endpoint,
+    pending_dials: VecDeque<ToEndpoint>,
+}
+
+impl Dialer {
+    fn new(config: Config, is_ipv6: bool) -> Result<Self, TransportError<Error>> {
+        let endpoint = Endpoint::new_dialer(config, is_ipv6).map_err(TransportError::Other)?;
+        Ok(Dialer {
+            endpoint,
+            pending_dials: VecDeque::new(),
+        })
+    }
+
+    fn drive_dials(&mut self, cx: &mut Context<'_>) {
+        if !self.pending_dials.is_empty() {
+            match self.endpoint.to_endpoint.poll_ready_unpin(cx) {
+                Poll::Ready(Ok(())) => {
+                    let to_endpoint = self.pending_dials.pop_front().expect("!is_empty");
+                    self.endpoint
+                        .to_endpoint
+                        .start_send(to_endpoint)
+                        .expect("Channel is ready.");
+                }
+                Poll::Ready(Err(_)) => panic!("Background task crashed."),
+                Poll::Pending => {}
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
 struct Listener {
-    endpoint: Arc<Endpoint>,
+    endpoint: Endpoint,
 
     listener_id: ListenerId,
 
@@ -212,6 +264,10 @@ struct Listener {
     /// Optionally contains a [`TransportEvent::ListenerClosed`] that should be
     /// reported before the listener's stream is terminated.
     report_closed: Option<Option<<Self as Stream>::Item>>,
+
+    pending_dials: VecDeque<ToEndpoint>,
+
+    waker: Option<Waker>,
 }
 
 impl Listener {
@@ -228,6 +284,8 @@ impl Listener {
             new_connections_rx,
             in_addr,
             report_closed: None,
+            pending_dials: VecDeque::new(),
+            waker: None,
         })
     }
 
@@ -258,9 +316,9 @@ impl Listener {
                         match item {
                             Ok(IfEvent::Up(inet)) => {
                                 let ip = inet.addr();
-                                if self.endpoint.socket_addr().is_ipv4() == ip.is_ipv4() {
+                                if self.endpoint.socket_addr.is_ipv4() == ip.is_ipv4() {
                                     let socket_addr =
-                                        SocketAddr::new(ip, self.endpoint.socket_addr().port());
+                                        SocketAddr::new(ip, self.endpoint.socket_addr.port());
                                     let ma = socketaddr_to_multiaddr(&socket_addr);
                                     tracing::debug!("New listen address: {}", ma);
                                     return Some(TransportEvent::NewAddress {
@@ -271,9 +329,9 @@ impl Listener {
                             }
                             Ok(IfEvent::Down(inet)) => {
                                 let ip = inet.addr();
-                                if self.endpoint.socket_addr().is_ipv4() == ip.is_ipv4() {
+                                if self.endpoint.socket_addr.is_ipv4() == ip.is_ipv4() {
                                     let socket_addr =
-                                        SocketAddr::new(ip, self.endpoint.socket_addr().port());
+                                        SocketAddr::new(ip, self.endpoint.socket_addr.port());
                                     let ma = socketaddr_to_multiaddr(&socket_addr);
                                     tracing::debug!("Expired listen address: {}", ma);
                                     return Some(TransportEvent::AddressExpired {
@@ -304,32 +362,56 @@ impl Listener {
 impl Stream for Listener {
     type Item = TransportEvent<<QuicTransport as Transport>::ListenerUpgrade, Error>;
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        if let Some(closed) = self.report_closed.as_mut() {
-            // Listener was closed.
-            // Report the transport event if there is one. On the next iteration, return
-            // `Poll::Ready(None)` to terminate the stream.
-            return Poll::Ready(closed.take());
-        }
-        if let Some(event) = self.poll_if_addr(cx) {
-            return Poll::Ready(Some(event));
-        }
-        let connection = match futures::ready!(self.new_connections_rx.poll_next_unpin(cx)) {
-            Some(c) => c,
-            None => {
-                self.close(Err(Error::TaskCrashed));
-                return self.poll_next(cx);
+        loop {
+            if let Some(closed) = self.report_closed.as_mut() {
+                // Listener was closed.
+                // Report the transport event if there is one. On the next iteration, return
+                // `Poll::Ready(None)` to terminate the stream.
+                return Poll::Ready(closed.take());
             }
-        };
-
-        let local_addr = socketaddr_to_multiaddr(&connection.local_addr());
-        let send_back_addr = socketaddr_to_multiaddr(&connection.remote_addr());
-        let event = TransportEvent::Incoming {
-            upgrade: Upgrade::from_connection(connection),
-            local_addr,
-            send_back_addr,
-            listener_id: self.listener_id,
-        };
-        Poll::Ready(Some(event))
+            if let Some(event) = self.poll_if_addr(cx) {
+                return Poll::Ready(Some(event));
+            }
+            if !self.pending_dials.is_empty() {
+                match self.endpoint.to_endpoint.poll_ready_unpin(cx) {
+                    Poll::Ready(Ok(_)) => {
+                        let to_endpoint = self
+                            .pending_dials
+                            .pop_front()
+                            .expect("Pending dials is not empty.");
+                        self.endpoint
+                            .to_endpoint
+                            .start_send(to_endpoint)
+                            .expect("Channel is ready");
+                    }
+                    Poll::Ready(Err(_)) => {
+                        self.close(Err(Error::TaskCrashed));
+                        continue;
+                    }
+                    Poll::Pending => {}
+                }
+            }
+            match self.new_connections_rx.poll_next_unpin(cx) {
+                Poll::Ready(Some(connection)) => {
+                    let local_addr = socketaddr_to_multiaddr(&connection.local_addr());
+                    let send_back_addr = socketaddr_to_multiaddr(&connection.remote_addr());
+                    let event = TransportEvent::Incoming {
+                        upgrade: Upgrade::from_connection(connection),
+                        local_addr,
+                        send_back_addr,
+                        listener_id: self.listener_id,
+                    };
+                    return Poll::Ready(Some(event));
+                }
+                Poll::Ready(None) => {
+                    self.close(Err(Error::TaskCrashed));
+                    continue;
+                }
+                Poll::Pending => {}
+            };
+            self.waker = Some(cx.waker().clone());
+            return Poll::Pending;
+        }
     }
 }
 

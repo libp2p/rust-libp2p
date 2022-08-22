@@ -32,7 +32,6 @@ use crate::{connection::Connection, tls, transport};
 
 use futures::{
     channel::{mpsc, oneshot},
-    lock::Mutex,
     prelude::*,
 };
 use quinn_proto::{ClientConfig as QuinnClientConfig, ServerConfig as QuinnServerConfig};
@@ -40,7 +39,7 @@ use std::{
     collections::{HashMap, VecDeque},
     fmt,
     net::{Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket},
-    sync::{Arc, Weak},
+    sync::Arc,
     task::{Poll, Waker},
     time::{Duration, Instant},
 };
@@ -85,15 +84,12 @@ impl Config {
 // TODO: expand docs
 // TODO: Debug trait
 // TODO: remove useless fields
+#[derive(Clone)]
 pub struct Endpoint {
     /// Channel to the background of the endpoint.
-    to_endpoint: Mutex<mpsc::Sender<ToEndpoint>>,
+    pub to_endpoint: mpsc::Sender<ToEndpoint>,
 
-    /// Copy of [`Endpoint::to_endpoint`], except not behind a `Mutex`. Used if we want to be
-    /// guaranteed a slot in the messages buffer.
-    pub to_endpoint2: mpsc::Sender<ToEndpoint>,
-
-    socket_addr: SocketAddr,
+    pub socket_addr: SocketAddr,
 }
 
 impl Endpoint {
@@ -101,14 +97,14 @@ impl Endpoint {
     pub fn new_bidirectional(
         config: Config,
         socket_addr: SocketAddr,
-    ) -> Result<(Arc<Endpoint>, mpsc::Receiver<Connection>), transport::Error> {
+    ) -> Result<(Endpoint, mpsc::Receiver<Connection>), transport::Error> {
         let (new_connections_tx, new_connections_rx) = mpsc::channel(1);
         let endpoint = Self::new(config, socket_addr, Some(new_connections_tx))?;
         Ok((endpoint, new_connections_rx))
     }
 
     /// Builds a new [`Endpoint`] that only supports outbound connections.
-    pub fn new_dialer(config: Config, is_ipv6: bool) -> Result<Arc<Endpoint>, transport::Error> {
+    pub fn new_dialer(config: Config, is_ipv6: bool) -> Result<Endpoint, transport::Error> {
         let socket_addr = if is_ipv6 {
             SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0)
         } else {
@@ -121,17 +117,15 @@ impl Endpoint {
         config: Config,
         socket_addr: SocketAddr,
         new_connections: Option<mpsc::Sender<Connection>>,
-    ) -> Result<Arc<Endpoint>, transport::Error> {
+    ) -> Result<Endpoint, transport::Error> {
         // NOT blocking, as per man:bind(2), as we pass an IP address.
         let socket = std::net::UdpSocket::bind(&socket_addr)?;
         let (to_endpoint_tx, to_endpoint_rx) = mpsc::channel(32);
-        let to_endpoint2 = to_endpoint_tx.clone();
 
-        let endpoint = Arc::new(Endpoint {
-            to_endpoint: Mutex::new(to_endpoint_tx),
-            to_endpoint2,
+        let endpoint = Endpoint {
+            to_endpoint: to_endpoint_tx,
             socket_addr: socket.local_addr()?,
-        });
+        };
 
         let server_config = new_connections.map(|c| (c, config.server_config.clone()));
 
@@ -140,36 +134,13 @@ impl Endpoint {
             config.endpoint_config,
             config.client_config,
             server_config,
-            Arc::downgrade(&endpoint),
+            endpoint.clone(),
             async_io::Async::<UdpSocket>::new(socket)?,
             to_endpoint_rx.fuse(),
         ))
         .detach();
 
         Ok(endpoint)
-    }
-
-    pub fn socket_addr(&self) -> &SocketAddr {
-        &self.socket_addr
-    }
-
-    /// Asks the endpoint to start dialing the given address.
-    ///
-    /// Note that this method only *starts* the dialing. `Ok` is returned as soon as possible, even
-    /// when the remote might end up being unreachable.
-    pub async fn dial(&self, addr: SocketAddr) -> Result<Connection, quinn_proto::ConnectError> {
-        // The two `expect`s below can panic if the background task has stopped. The background
-        // task can stop only if the `Endpoint` is destroyed or if the task itself panics. In other
-        // words, we panic here iff a panic has already happened somewhere else, which is a
-        // reasonable thing to do.
-        let (tx, rx) = oneshot::channel();
-        self.to_endpoint
-            .lock()
-            .await
-            .send(ToEndpoint::Dial { addr, result: tx })
-            .await
-            .expect("background task has crashed");
-        rx.await.expect("background task has crashed")
     }
 }
 
@@ -274,7 +245,7 @@ pub enum ToEndpoint {
 /// The background task shuts down if `endpoint_weak`, `receiver` or `new_connections` become
 /// disconnected/invalid. This corresponds to the lifetime of the associated [`Endpoint`].
 ///
-/// Keep in mind that we pass an `Arc<Endpoint>` whenever we create a new connection, which
+/// Keep in mind that we pass an `Endpoint` whenever we create a new connection, which
 /// guarantees that the [`Endpoint`], and therefore the background task, is properly kept alive
 /// for as long as any QUIC connection is open.
 ///
@@ -282,7 +253,7 @@ async fn background_task(
     endpoint_config: Arc<quinn_proto::EndpointConfig>,
     client_config: quinn_proto::ClientConfig,
     server_config: Option<(mpsc::Sender<Connection>, Arc<quinn_proto::ServerConfig>)>,
-    endpoint_weak: Weak<Endpoint>,
+    endpoint: Endpoint,
     udp_socket: async_io::Async<UdpSocket>,
     mut receiver: stream::Fuse<mpsc::Receiver<ToEndpoint>>,
 ) {
@@ -292,7 +263,7 @@ async fn background_task(
     };
 
     // The actual QUIC state machine.
-    let mut endpoint = quinn_proto::Endpoint::new(endpoint_config.clone(), server_config);
+    let mut proto_endpoint = quinn_proto::Endpoint::new(endpoint_config.clone(), server_config);
 
     // List of all active connections, with a sender to notify them of events.
     let mut alive_connections = HashMap::<quinn_proto::ConnectionHandle, mpsc::Sender<_>>::new();
@@ -339,7 +310,7 @@ async fn background_task(
 
         // The endpoint might request packets to be sent out. This is handled in priority to avoid
         // buffering up packets.
-        if let Some(packet) = endpoint.poll_transmit() {
+        if let Some(packet) = proto_endpoint.poll_transmit() {
             debug_assert!(next_packet_out.is_none());
             next_packet_out = Some((packet.destination, packet.contents));
             continue;
@@ -358,7 +329,7 @@ async fn background_task(
                         // name. While we don't use domain names, the underlying rustls library
                         // is based upon the assumption that we do.
                         let (connection_id, connection) =
-                            match endpoint.connect(client_config.clone(), addr, "l") {
+                            match proto_endpoint.connect(client_config.clone(), addr, "l") {
                                 Ok(c) => c,
                                 Err(err) => {
                                     let _ = result.send(Err(err));
@@ -366,14 +337,9 @@ async fn background_task(
                                 }
                             };
 
-                        let endpoint_arc = match endpoint_weak.upgrade() {
-                            Some(ep) => ep,
-                            None => return, // Shut down the task if the endpoint is dead.
-                        };
-
                         debug_assert_eq!(connection.side(), quinn_proto::Side::Client);
                         let (tx, rx) = mpsc::channel(16);
-                        let connection = Connection::from_quinn_connection(endpoint_arc, connection, connection_id, rx);
+                        let connection = Connection::from_quinn_connection(endpoint.clone(), connection, connection_id, rx);
                         alive_connections.insert(connection_id, tx);
                         let _ = result.send(Ok(connection));
                     }
@@ -391,7 +357,7 @@ async fn background_task(
                             alive_connections.remove(&connection_id);
                         }
 
-                        let event_back = endpoint.handle_event(connection_id, event);
+                        let event_back = proto_endpoint.handle_event(connection_id, event);
 
                         if let Some(event_back) = event_back {
                             debug_assert!(!is_drained_event);
@@ -467,7 +433,7 @@ async fn background_task(
                 let packet = From::from(&socket_recv_buffer[..packet_len]);
                 let local_ip = udp_socket.get_ref().local_addr().ok().map(|a| a.ip());
                 // TODO: ECN bits aren't handled
-                let event = endpoint.handle(Instant::now(), packet_src, local_ip, None, packet);
+                let event = proto_endpoint.handle(Instant::now(), packet_src, local_ip, None, packet);
 
                 match event {
                     None => {},
@@ -485,11 +451,7 @@ async fn background_task(
                         debug_assert_eq!(connec.side(), quinn_proto::Side::Server);
                         let (tx, rx) = mpsc::channel(16);
                         alive_connections.insert(connec_id, tx);
-                        let endpoint_arc = match endpoint_weak.upgrade() {
-                            Some(ep) => ep,
-                            None => return, // Shut down the task if the endpoint is dead.
-                        };
-                        let connection = Connection::from_quinn_connection(endpoint_arc, connec, connec_id, rx);
+                        let connection = Connection::from_quinn_connection(endpoint.clone(), connec, connec_id, rx);
 
                         // As explained in the documentation, we put this new connection in an
                         // intermediary buffer. At the next loop iteration we will try to move it

@@ -34,7 +34,6 @@ use libp2p_core::PeerId;
 use std::{
     fmt,
     net::SocketAddr,
-    sync::Arc,
     task::{Context, Poll},
     time::Instant,
 };
@@ -45,7 +44,7 @@ use std::{
 /// Tied to a specific [`Endpoint`].
 pub struct Connection {
     /// Endpoint this connection belongs to.
-    endpoint: Arc<Endpoint>,
+    endpoint: Endpoint,
     /// Future whose job is to send a message to the endpoint. Only one at a time.
     pending_to_endpoint: Option<ToEndpoint>,
     /// Events that the endpoint will send in destination to our local [`quinn_proto::Connection`].
@@ -59,8 +58,6 @@ pub struct Connection {
     connection_id: quinn_proto::ConnectionHandle,
     /// `Future` that triggers at the `Instant` that `self.connection.poll_timeout()` indicates.
     next_timeout: Option<Timer>,
-
-    to_endpoint: mpsc::Sender<ToEndpoint>,
 }
 
 /// Error on the connection as a whole.
@@ -91,14 +88,13 @@ impl Connection {
     /// its methods has ever been called. Failure to comply might lead to logic errors and panics.
     // TODO: maybe abstract `to_endpoint` more and make it generic? dunno
     pub fn from_quinn_connection(
-        endpoint: Arc<Endpoint>,
+        endpoint: Endpoint,
         connection: quinn_proto::Connection,
         connection_id: quinn_proto::ConnectionHandle,
         from_endpoint: mpsc::Receiver<quinn_proto::ConnectionEvent>,
     ) -> Self {
         assert!(!connection.is_closed());
         Connection {
-            to_endpoint: endpoint.to_endpoint2.clone(),
             endpoint,
             pending_to_endpoint: None,
             connection,
@@ -113,7 +109,7 @@ impl Connection {
     /// Works for server connections only.
     pub fn local_addr(&self) -> SocketAddr {
         debug_assert_eq!(self.connection.side(), quinn_proto::Side::Server);
-        let endpoint_addr = self.endpoint.socket_addr();
+        let endpoint_addr = self.endpoint.socket_addr;
         self.connection
             .local_ip()
             .map(|ip| SocketAddr::new(ip, endpoint_addr.port()))
@@ -121,7 +117,7 @@ impl Connection {
                 // In a normal case scenario this should not happen, because
                 // we get want to get a local addr for a server connection only.
                 tracing::error!("trying to get quinn::local_ip for a client");
-                *endpoint_addr
+                endpoint_addr
             })
     }
 
@@ -219,14 +215,15 @@ impl Connection {
             // `to_endpoint` is full. This should propagate the back-pressure of `to_endpoint`
             // being full to the user.
             if self.pending_to_endpoint.is_some() {
-                match self.to_endpoint.poll_ready_unpin(cx) {
+                match self.endpoint.to_endpoint.poll_ready_unpin(cx) {
                     Poll::Ready(Ok(())) => {
-                        self.to_endpoint
-                            .start_send(self.pending_to_endpoint.take().expect("is_some"))
-                            .expect("To be ready");
-                        continue;
+                        let to_endpoint = self.pending_to_endpoint.take().expect("is some");
+                        self.endpoint
+                            .to_endpoint
+                            .start_send(to_endpoint)
+                            .expect("Channel is ready.");
                     }
-                    Poll::Ready(Err(_)) => todo!(),
+                    Poll::Ready(Err(_)) => panic!("Background task crashed"),
                     Poll::Pending => return Poll::Pending,
                 }
             }
