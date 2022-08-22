@@ -59,10 +59,6 @@ pub struct Connection {
     connection_id: quinn_proto::ConnectionHandle,
     /// `Future` that triggers at the `Instant` that `self.connection.poll_timeout()` indicates.
     next_timeout: Option<Timer>,
-    /// Contains a `Some` if the connection is closed, with the reason of the closure.
-    /// Contains `None` if it is still open.
-    /// Contains `Some` if and only if a `ConnectionLost` event has been emitted.
-    closed: Option<Error>,
 
     to_endpoint: mpsc::Sender<ToEndpoint>,
 }
@@ -109,7 +105,6 @@ impl Connection {
             next_timeout: None,
             from_endpoint,
             connection_id,
-            closed: None,
         }
     }
 
@@ -137,7 +132,6 @@ impl Connection {
     }
 
     /// Returns the address of the node we're connected to.
-    /// Panics if the connection is still handshaking.
     pub fn remote_peer_id(&self) -> PeerId {
         let session = self.connection.crypto_session();
         let identity = session
@@ -157,15 +151,10 @@ impl Connection {
     /// Start closing the connection. A [`ConnectionEvent::ConnectionLost`] event will be
     /// produced in the future.
     pub fn close(&mut self) {
-        // TODO: what if the user calls this multiple times?
         // We send a dummy `0` error code with no message, as the API of StreamMuxer doesn't
         // support this.
         self.connection
             .close(Instant::now(), From::from(0u32), Default::default());
-        self.endpoint.report_quinn_event_non_block(
-            self.connection_id,
-            quinn_proto::EndpointEvent::drained(),
-        );
     }
 
     /// Pops a new substream opened by the remote.
@@ -206,12 +195,7 @@ impl Connection {
 
     /// Polls the connection for an event that happend on it.
     pub fn poll_event(&mut self, cx: &mut Context<'_>) -> Poll<ConnectionEvent> {
-        // Nothing more can be done if the connection is closed.
-        // Return `Pending` without registering the waker, essentially freezing the task forever.
-        if self.closed.is_some() {
-            return Poll::Pending;
-        }
-
+        let mut closed = None;
         loop {
             match self.from_endpoint.poll_next_unpin(cx) {
                 Poll::Ready(Some(event)) => {
@@ -219,10 +203,9 @@ impl Connection {
                     continue;
                 }
                 Poll::Ready(None) => {
-                    debug_assert!(self.closed.is_none());
-                    let err = Error::ClosedChannel;
-                    self.closed = Some(err.clone());
-                    return Poll::Ready(ConnectionEvent::ConnectionLost(err));
+                    if closed.is_none() {
+                        return Poll::Ready(ConnectionEvent::ConnectionLost(Error::ClosedChannel));
+                    }
                 }
                 Poll::Pending => {}
             }
@@ -241,6 +224,7 @@ impl Connection {
                         self.to_endpoint
                             .start_send(self.pending_to_endpoint.take().expect("is_some"))
                             .expect("To be ready");
+                        continue;
                     }
                     Poll::Ready(Err(_)) => todo!(),
                     Poll::Pending => return Poll::Pending,
@@ -282,18 +266,21 @@ impl Connection {
                 continue;
             }
 
+            if let Some(closed) = closed {
+                return Poll::Ready(ConnectionEvent::ConnectionLost(closed));
+            }
+
             // The final step consists in handling the events related to the various substreams.
             match self.connection.poll() {
                 Some(ev) => match ConnectionEvent::try_from(ev) {
-                    Ok(ConnectionEvent::ConnectionLost(err)) => {
-                        self.closed = Some(err.clone());
-                        return Poll::Ready(ConnectionEvent::ConnectionLost(err));
-                    }
-                    Ok(event) => return Poll::Ready(event),
-                    Err(_proto_ev) => {
-                        // unreachable: We don't use datagrams or unidirectional streams.
+                    Ok(ConnectionEvent::ConnectionLost(reason)) => {
+                        // Continue in the loop once more so that we can send a
+                        // `EndpointEvent::drained` to the endpoint before returning.
+                        closed = Some(reason);
                         continue;
                     }
+                    Ok(event) => return Poll::Ready(event),
+                    Err(_) => unreachable!("We don't use datagrams or unidirectional streams."),
                 },
                 None => {}
             }
@@ -305,15 +292,6 @@ impl Connection {
 impl fmt::Debug for Connection {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_tuple("Connection").finish()
-    }
-}
-
-impl Drop for Connection {
-    fn drop(&mut self) {
-        let is_drained = self.connection.is_drained();
-        if !is_drained {
-            self.close();
-        }
     }
 }
 

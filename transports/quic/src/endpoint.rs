@@ -171,29 +171,8 @@ impl Endpoint {
             .expect("background task has crashed");
         rx.await.expect("background task has crashed")
     }
-
-    /// Similar to [`Endpoint::report_quinn_event`], except that the message sending is guaranteed
-    /// to be instantaneous and to succeed.
-    ///
-    /// This method bypasses back-pressure mechanisms and is meant to be called only from
-    /// destructors, where waiting is not advisable.
-    pub fn report_quinn_event_non_block(
-        &self,
-        connection_id: quinn_proto::ConnectionHandle,
-        event: quinn_proto::EndpointEvent,
-    ) {
-        // We implement this by cloning the `mpsc::Sender`. Since each sender is guaranteed a slot
-        // in the buffer, cloning the sender reserves the slot and sending thus always succeeds.
-        let result = self
-            .to_endpoint2
-            .clone()
-            .try_send(ToEndpoint::ProcessConnectionEvent {
-                connection_id,
-                event,
-            });
-        assert!(result.is_ok());
-    }
 }
+
 /// Message sent to the endpoint background task.
 #[derive(Debug)]
 pub enum ToEndpoint {

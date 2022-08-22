@@ -13,7 +13,7 @@ use libp2p::request_response::{
     RequestResponseEvent, RequestResponseMessage,
 };
 use libp2p::swarm::dial_opts::{DialOpts, PeerCondition};
-use libp2p::swarm::{DialError, Swarm, SwarmEvent};
+use libp2p::swarm::{ConnectionError, DialError, Swarm, SwarmEvent};
 use libp2p_quic::{Config as QuicConfig, QuicTransport};
 use rand::RngCore;
 use std::num::NonZeroU8;
@@ -176,6 +176,21 @@ async fn smoke() -> Result<()> {
                 },
             ..
         })) => assert_eq!(data, b"another substream".to_vec()),
+        e => panic!("{:?}", e),
+    }
+
+    a.disconnect_peer_id(*b.local_peer_id()).unwrap();
+
+    match a.next().await {
+        Some(SwarmEvent::ConnectionClosed { cause: None, .. }) => {}
+        e => panic!("{:?}", e),
+    }
+
+    match b.next().await {
+        Some(SwarmEvent::ConnectionClosed {
+            cause: Some(ConnectionError::IO(_)),
+            ..
+        }) => {}
         e => panic!("{:?}", e),
     }
 
