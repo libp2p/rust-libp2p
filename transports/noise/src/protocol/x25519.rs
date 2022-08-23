@@ -280,6 +280,9 @@ mod tests {
     use super::*;
     use ed25519_compact;
     use libp2p_core::identity::ed25519;
+    // Use the libsodium-sys-stable crypto_sign imports for testing
+    use libsodium_sys::crypto_sign_ed25519_pk_to_curve25519;
+    use libsodium_sys::crypto_sign_ed25519_sk_to_curve25519;
     use quickcheck::*;
     use x25519_dalek::StaticSecret;
 
@@ -331,9 +334,7 @@ mod tests {
     pub fn ed25519_pk_to_curve25519(k: &ed25519_compact::PublicKey) -> Option<[u8; 32]> {
         let mut out = [0u8; 32];
         unsafe {
-            if libsodium_sys::crypto_sign_ed25519_pk_to_curve25519(out.as_mut_ptr(), k.as_ptr())
-                == 0
-            {
+            if crypto_sign_ed25519_pk_to_curve25519(out.as_mut_ptr(), k.as_ptr()) == 0 {
                 Some(out)
             } else {
                 None
@@ -344,9 +345,7 @@ mod tests {
     pub fn ed25519_sk_to_curve25519(k: &ed25519_compact::SecretKey) -> Option<[u8; 32]> {
         let mut out = [0u8; 32];
         unsafe {
-            if libsodium_sys::crypto_sign_ed25519_sk_to_curve25519(out.as_mut_ptr(), k.as_ptr())
-                == 0
-            {
+            if crypto_sign_ed25519_sk_to_curve25519(out.as_mut_ptr(), k.as_ptr()) == 0 {
                 Some(out)
             } else {
                 None
