@@ -278,6 +278,7 @@ impl snow::types::Dh for Keypair<X25519> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    // Use the ed25519_compact for testing
     use ed25519_compact;
     use libp2p_core::identity::ed25519;
     // Use the libsodium-sys-stable crypto_sign imports for testing
