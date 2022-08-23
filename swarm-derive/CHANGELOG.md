@@ -1,4 +1,4 @@
-# 0.29.0 - [unreleased]
+# 0.29.0
 
 - Generate `NetworkBehaviour::OutEvent` if not provided through `#[behaviour(out_event =
   "MyOutEvent")]` and event processing is disabled (default).

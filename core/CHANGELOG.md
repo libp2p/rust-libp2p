@@ -1,4 +1,10 @@
-# 0.35.0 [unreleased]
+# 0.35.1
+
+- Update to `p256` `v0.11.0`. See [PR 2636].
+
+[PR 2636]: https://github.com/libp2p/rust-libp2p/pull/2636/
+
+# 0.35.0
 
 - Drop `Unpin` requirement from `SubstreamBox`. See [PR 2762] and [PR 2776].
 - Drop `Sync` requirement on `StreamMuxer` for constructing `StreamMuxerBox`. See [PR 2775].
