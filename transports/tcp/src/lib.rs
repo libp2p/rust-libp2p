@@ -731,9 +731,9 @@ where
         }
 
         if let Some(if_watcher) = me.if_watcher.as_mut() {
-            loop {
-                match if_watcher.poll_if_event(cx) {
-                    Poll::Ready(Ok(IfEvent::Up(inet))) => {
+            while let Poll::Ready(event) = if_watcher.poll_if_event(cx) {
+                match event {
+                    Ok(IfEvent::Up(inet)) => {
                         let ip = inet.addr();
                         if me.listen_addr.is_ipv4() == ip.is_ipv4() {
                             let ma = ip_to_multiaddr(ip, me.listen_addr.port());
@@ -742,7 +742,7 @@ where
                             return Poll::Ready(Some(Ok(TcpListenerEvent::NewAddress(ma))));
                         }
                     }
-                    Poll::Ready(Ok(IfEvent::Down(inet))) => {
+                    Ok(IfEvent::Down(inet)) => {
                         let ip = inet.addr();
                         if me.listen_addr.is_ipv4() == ip.is_ipv4() {
                             let ma = ip_to_multiaddr(ip, me.listen_addr.port());
@@ -751,7 +751,7 @@ where
                             return Poll::Ready(Some(Ok(TcpListenerEvent::AddressExpired(ma))));
                         }
                     }
-                    Poll::Ready(Err(err)) => {
+                    Err(err) => {
                         log::debug! {
                             "Failure polling interfaces: {:?}. Scheduling retry.",
                             err
@@ -759,7 +759,6 @@ where
                         me.pause = Some(Delay::new(me.sleep_on_error));
                         return Poll::Ready(Some(Ok(TcpListenerEvent::Error(err))));
                     }
-                    Poll::Pending => break,
                 }
             }
         }
