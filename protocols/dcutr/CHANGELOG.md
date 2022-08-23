@@ -1,4 +1,4 @@
-# 0.5.1 [unreleased]
+# 0.5.1
 
 - Make default features of `libp2p-core` optional. See [PR 2836].
 
