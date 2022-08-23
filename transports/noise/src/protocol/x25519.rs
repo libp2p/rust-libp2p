@@ -278,7 +278,7 @@ impl snow::types::Dh for Keypair<X25519> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ed25519_compact as test_sign;
+    use ed25519_compact;
     use libp2p_core::identity::ed25519;
     use quickcheck::*;
     use x25519_dalek::StaticSecret;
@@ -291,8 +291,9 @@ mod tests {
             let ed25519 = ed25519::Keypair::generate();
             let x25519 = Keypair::from(SecretKey::from_ed25519(&ed25519.secret()));
 
-            let sodium_sec = ed25519_sk_to_curve25519(&test_sign::SecretKey::new(ed25519.encode()));
-            let sodium_pub = ed25519_pk_to_curve25519(&test_sign::PublicKey::new(
+            let sodium_sec =
+                ed25519_sk_to_curve25519(&ed25519_compact::SecretKey::new(ed25519.encode()));
+            let sodium_pub = ed25519_pk_to_curve25519(&ed25519_compact::PublicKey::new(
                 ed25519.public().encode().clone(),
             ));
 
@@ -327,7 +328,7 @@ mod tests {
         quickcheck(prop as fn() -> _);
     }
 
-    pub fn ed25519_pk_to_curve25519(k: &test_sign::PublicKey) -> Option<[u8; 32]> {
+    pub fn ed25519_pk_to_curve25519(k: &ed25519_compact::PublicKey) -> Option<[u8; 32]> {
         let mut out = [0u8; 32];
         unsafe {
             if libsodium_sys::crypto_sign_ed25519_pk_to_curve25519(out.as_mut_ptr(), k.as_ptr())
@@ -340,7 +341,7 @@ mod tests {
         }
     }
 
-    pub fn ed25519_sk_to_curve25519(k: &test_sign::SecretKey) -> Option<[u8; 32]> {
+    pub fn ed25519_sk_to_curve25519(k: &ed25519_compact::SecretKey) -> Option<[u8; 32]> {
         let mut out = [0u8; 32];
         unsafe {
             if libsodium_sys::crypto_sign_ed25519_sk_to_curve25519(out.as_mut_ptr(), k.as_ptr())
