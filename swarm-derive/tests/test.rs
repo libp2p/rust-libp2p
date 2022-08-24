@@ -461,41 +461,6 @@ fn mixed_field_order() {
 }
 
 #[test]
-fn event_process() {
-    #[allow(dead_code)]
-    #[derive(NetworkBehaviour)]
-    #[behaviour(event_process = true)]
-    struct Foo {
-        ping: libp2p::ping::Ping,
-        identify: libp2p::identify::Identify,
-    }
-
-    impl libp2p::swarm::NetworkBehaviourEventProcess<libp2p::identify::IdentifyEvent> for Foo {
-        fn inject_event(&mut self, _: libp2p::identify::IdentifyEvent) {}
-    }
-
-    impl libp2p::swarm::NetworkBehaviourEventProcess<libp2p::ping::PingEvent> for Foo {
-        fn inject_event(&mut self, _: libp2p::ping::PingEvent) {}
-    }
-
-    #[allow(dead_code, unreachable_code)]
-    fn bar() {
-        require_net_behaviour::<Foo>();
-
-        let mut _swarm: libp2p::Swarm<Foo> = unimplemented!();
-
-        let _ = async {
-            loop {
-                match _swarm.select_next_some().await {
-                    SwarmEvent::Behaviour(()) => break,
-                    _ => {}
-                }
-            }
-        };
-    }
-}
-
-#[test]
 fn generated_out_event_derive_debug() {
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
