@@ -40,6 +40,7 @@
 
 mod dummy;
 pub mod either;
+mod from_fn;
 mod map_in;
 mod map_out;
 pub mod multi;
