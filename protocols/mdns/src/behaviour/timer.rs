@@ -102,7 +102,7 @@ pub mod tokio {
         }
 
         fn interval(duration: Duration) -> Self {
-            let mut inner = time::interval(duration);
+            let mut inner = time::interval_at(TokioInstant::now() + duration, duration);
             inner.set_missed_tick_behavior(MissedTickBehavior::Skip);
             Self { inner }
         }
