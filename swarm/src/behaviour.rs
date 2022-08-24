@@ -118,10 +118,6 @@ pub(crate) type THandlerOutEvent<THandler> =
 /// }
 /// ```
 ///
-/// Optionally one can provide a custom `poll` function through the `#[behaviour(poll_method =
-/// "poll")]` attribute. This function must have the same signature as the [`NetworkBehaviour#poll`]
-/// function and will be called last within the generated [`NetworkBehaviour`] implementation.
-///
 /// Struct members that don't implement [`NetworkBehaviour`] must be annotated with
 /// `#[behaviour(ignore)]`.
 ///

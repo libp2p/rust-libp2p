@@ -1,3 +1,7 @@
+# 0.30.0 - [unreleased]
+
+- Remove support for custom `poll` method on `NetworkBehaviour` via `#[behaviour(poll_method = "poll")]`.
+
 # 0.29.0
 
 - Generate `NetworkBehaviour::OutEvent` if not provided through `#[behaviour(out_event =
