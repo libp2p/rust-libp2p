@@ -1,4 +1,4 @@
-name: Continuous integration
+name: Pre testing
 
 on:
   workflow_dispatch
