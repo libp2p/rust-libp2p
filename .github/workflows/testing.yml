@@ -1,0 +1,134 @@
+name: Continuous integration
+
+on:
+  workflow_dispatch
+
+jobs:
+  testing-all-features:
+    name: Build and test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        args: [
+          "--no-default-features",
+          "--all-features",
+          "--benches --all-features",
+        ]
+    steps:
+
+    - name: Cancel Previous Runs
+      uses: styfle/cancel-workflow-action@bb6001c4ea612bf59c3abfc4756fbceee4f870c7 # 0.10.0
+      with:
+        access_token: ${{ github.token }}
+
+    - name: Install Protoc
+      uses: arduino/setup-protoc@v1
+
+    - uses: actions/checkout@v3
+
+    - uses: Swatinem/rust-cache@6720f05bc48b77f96918929a9019fb2203ff71f8 # v2.0.0
+      with:
+        key: ${{ matrix.args }}
+
+    - run: cargo test --workspace ${{ matrix.args }}
+
+  check-rustdoc-links:
+    name: Check rustdoc intra-doc links
+    runs-on: ubuntu-latest
+    steps:
+
+    - name: Cancel Previous Runs
+      uses: styfle/cancel-workflow-action@bb6001c4ea612bf59c3abfc4756fbceee4f870c7 # 0.10.0
+      with:
+        access_token: ${{ github.token }}
+
+    - name: Install Protoc
+      uses: arduino/setup-protoc@v1
+
+    - uses: actions/checkout@v3
+
+    - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
+      with:
+        profile: minimal
+        toolchain: stable
+        override: true
+
+    - uses: Swatinem/rust-cache@6720f05bc48b77f96918929a9019fb2203ff71f8 # v2.0.0
+
+    - name: Check rustdoc links
+      run: RUSTDOCFLAGS="--deny broken_intra_doc_links" cargo doc --verbose --workspace --no-deps --document-private-items --all-features
+
+  check-clippy:
+    runs-on: ubuntu-latest
+    steps:
+
+    - name: Cancel Previous Runs
+      uses: styfle/cancel-workflow-action@bb6001c4ea612bf59c3abfc4756fbceee4f870c7 # 0.10.0
+      with:
+        access_token: ${{ github.token }}
+
+    - name: Install Protoc
+      uses: arduino/setup-protoc@v1
+
+    - uses: actions/checkout@v3
+
+    - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
+      with:
+        profile: minimal
+        toolchain: stable
+        override: true
+        components: clippy
+
+    - uses: Swatinem/rust-cache@6720f05bc48b77f96918929a9019fb2203ff71f8 # v2.0.0
+
+    - name: Run cargo clippy
+      uses: actions-rs/cargo@844f36862e911db73fe0815f00a4a2602c279505 # v1.0.3
+      with:
+        command: custom-clippy # cargo alias to allow reuse of config locally
+
+  integration-test:
+    name: Integration tests
+    runs-on: ubuntu-latest
+    steps:
+
+    - name: Cancel Previous Runs
+      uses: styfle/cancel-workflow-action@bb6001c4ea612bf59c3abfc4756fbceee4f870c7 # 0.10.0
+      with:
+        access_token: ${{ github.token }}
+
+    - name: Install Protoc
+      uses: arduino/setup-protoc@v1
+
+    - uses: actions/checkout@v3
+
+    - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
+      with:
+        profile: minimal
+        toolchain: stable
+        override: true
+
+    - uses: Swatinem/rust-cache@6720f05bc48b77f96918929a9019fb2203ff71f8 # v2.0.0
+
+    - name: Run ipfs-kad example
+      run: RUST_LOG=libp2p_swarm=debug,libp2p_kad=trace,libp2p_tcp=debug cargo run --example ipfs-kad
+
+  rustfmt:
+    runs-on: ubuntu-latest
+    steps:
+
+    - name: Cancel Previous Runs
+      uses: styfle/cancel-workflow-action@bb6001c4ea612bf59c3abfc4756fbceee4f870c7 # 0.10.0
+      with:
+        access_token: ${{ github.token }}
+
+    - uses: actions/checkout@v3
+
+    - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
+      with:
+        profile: minimal
+        toolchain: stable
+        override: true
+        components: rustfmt
+
+    - name: Check formatting
+      run: cargo fmt -- --check
