@@ -10,6 +10,7 @@
     - [Bound everything](#bound-everything)
         - [Channels](#channels)
         - [Local queues](#local-queues)
+        - [Tasks](#tasks)
         - [Further reading](#further-reading)
     - [No premature optimizations](#no-premature-optimizations)
     - [Keep things sequential unless proven to be slow](#keep-things-sequential-unless-proven-to-be-slow)
