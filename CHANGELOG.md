@@ -43,6 +43,10 @@
 
 # `libp2p` facade crate
 
+# 0.48.0 [unreleased]
+
+- Update to `libp2p-swarm-derive` [`v0.30.0`](swarm-derive/CHANGELOG.md#0300).
+
 # 0.47.0
 
 - Update to [`libp2p-dcutr` `v0.5.0`](protocols/dcutr/CHANGELOG.md#050).

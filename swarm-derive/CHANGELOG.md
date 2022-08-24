@@ -1,3 +1,7 @@
+# 0.30.0 - [unreleased]
+
+- Remove support for non-`NetworkBehaviour` fields on main `struct` via `#[behaviour(ignore)]`.
+
 # 0.29.0
 
 - Generate `NetworkBehaviour::OutEvent` if not provided through `#[behaviour(out_event =

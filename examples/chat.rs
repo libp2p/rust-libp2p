@@ -85,11 +85,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     struct MyBehaviour {
         floodsub: Floodsub,
         mdns: Mdns,
-
-        // Struct fields which do not implement NetworkBehaviour need to be ignored
-        #[behaviour(ignore)]
-        #[allow(dead_code)]
-        ignored_member: bool,
     }
 
     #[allow(clippy::large_enum_variant)]
