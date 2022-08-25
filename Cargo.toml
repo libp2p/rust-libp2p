@@ -82,7 +82,7 @@ libp2p-core = { version = "0.35.0", path = "core",  default-features = false }
 libp2p-dcutr = { version = "0.5.0", path = "protocols/dcutr",  optional = true }
 libp2p-floodsub = { version = "0.38.0", path = "protocols/floodsub", optional = true }
 libp2p-identify = { version = "0.38.0", path = "protocols/identify", optional = true }
-libp2p-kad = { version = "0.39.0", path = "protocols/kad", optional = true }
+libp2p-kad = { version = "0.39.1", path = "protocols/kad", optional = true }
 libp2p-metrics = { version = "0.8.0", path = "misc/metrics", optional = true }
 libp2p-mplex = { version = "0.35.0", path = "muxers/mplex", optional = true }
 libp2p-noise = { version = "0.38.0", path = "transports/noise", optional = true }

@@ -36,6 +36,7 @@ use instant::Instant;
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_core::{Multiaddr, PeerId};
 use prost::Message;
+use smallvec::SmallVec;
 use std::{borrow::Cow, convert::TryFrom, time::Duration};
 use std::{io, iter};
 use unsigned_varint::codec;
@@ -142,21 +143,21 @@ impl From<KadPeer> for proto::message::Peer {
 //       `OutboundUpgrade` to be just a single message
 #[derive(Debug, Clone)]
 pub struct KademliaProtocolConfig {
-    protocol_name: Cow<'static, [u8]>,
+    protocol_names: SmallVec<[Cow<'static, [u8]>; 2]>,
     /// Maximum allowed size of a packet.
     max_packet_size: usize,
 }
 
 impl KademliaProtocolConfig {
     /// Returns the configured protocol name.
-    pub fn protocol_name(&self) -> &[u8] {
-        &self.protocol_name
+    pub fn protocol_names(&self) -> &[Cow<'static, [u8]>] {
+        &self.protocol_names
     }
 
     /// Modifies the protocol name used on the wire. Can be used to create incompatibilities
     /// between networks on purpose.
-    pub fn set_protocol_name(&mut self, name: impl Into<Cow<'static, [u8]>>) {
-        self.protocol_name = name.into();
+    pub fn set_protocol_names(&mut self, names: SmallVec<[Cow<'static, [u8]>; 2]>) {
+        self.protocol_names = names;
     }
 
     /// Modifies the maximum allowed size of a single Kademlia packet.
@@ -168,7 +169,7 @@ impl KademliaProtocolConfig {
 impl Default for KademliaProtocolConfig {
     fn default() -> Self {
         KademliaProtocolConfig {
-            protocol_name: Cow::Borrowed(DEFAULT_PROTO_NAME),
+            protocol_names: iter::once(Cow::Borrowed(DEFAULT_PROTO_NAME)).collect(),
             max_packet_size: DEFAULT_MAX_PACKET_SIZE,
         }
     }
@@ -176,10 +177,10 @@ impl Default for KademliaProtocolConfig {
 
 impl UpgradeInfo for KademliaProtocolConfig {
     type Info = Cow<'static, [u8]>;
-    type InfoIter = iter::Once<Self::Info>;
+    type InfoIter = smallvec::IntoIter<[Self::Info; 2]>;
 
     fn protocol_info(&self) -> Self::InfoIter {
-        iter::once(self.protocol_name.clone())
+        self.protocol_names.clone().into_iter()
     }
 }
 

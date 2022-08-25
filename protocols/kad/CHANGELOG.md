@@ -1,3 +1,9 @@
+# 0.39.1 [unreleased]
+
+- Add support for multiple protocol names. Update `Kademlia`, `KademliaConfig`,
+  and `KademliaProtocolConfig` accordingly.
+  See [issue 2837](https://github.com/libp2p/rust-libp2p/issues/2837).
+
 # 0.39.0
 
 - Update to `libp2p-swarm` `v0.38.0`.
