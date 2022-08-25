@@ -2,7 +2,7 @@ use libp2p_core::{
     identity::Keypair,
     multiaddr::{Multiaddr, Protocol},
     transport::{ListenerId, TransportError, TransportEvent},
-    PeerId, StreamMuxer, Transport,
+    PeerId, StreamMuxer, muxing::StreamMuxerEvent, Transport,
 };
 
 use std::{
@@ -121,10 +121,10 @@ impl StreamMuxer for QuicMuxer {
         }
     }
 
-    fn poll_address_change(
+    fn poll(
         self: Pin<&mut Self>,
         _cx: &mut Context<'_>,
-    ) -> Poll<Result<Multiaddr, Self::Error>> {
+    ) -> Poll<Result<StreamMuxerEvent, Self::Error>> {
         Poll::Pending
     }
 
