@@ -609,7 +609,7 @@ mod test {
         );
     }
 
-    #[tokio::test]
+    #[async_std::test]
     async fn close_listener() {
         let keypair = libp2p_core::identity::Keypair::generate_ed25519();
         let mut transport = QuicTransport::new(Config::new(&keypair).unwrap());

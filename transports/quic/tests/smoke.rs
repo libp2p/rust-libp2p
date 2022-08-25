@@ -47,7 +47,7 @@ async fn create_swarm(keylog: bool) -> Result<Swarm<RequestResponse<PingCodec>>>
     tracing::info!(?peer_id);
     let swarm = SwarmBuilder::new(transport, behaviour, peer_id)
         .executor(Box::new(|f| {
-            tokio::spawn(f);
+            async_std::task::spawn(f);
         }))
         .build();
     Ok(swarm)
@@ -61,7 +61,7 @@ fn setup_global_subscriber() {
         .ok();
 }
 
-#[tokio::test]
+#[async_std::test]
 async fn smoke() -> Result<()> {
     setup_global_subscriber();
     let mut rng = rand::thread_rng();
@@ -264,7 +264,7 @@ impl RequestResponseCodec for PingCodec {
     }
 }
 
-#[tokio::test]
+#[async_std::test]
 async fn dial_failure() -> Result<()> {
     setup_global_subscriber();
 
@@ -302,7 +302,7 @@ async fn dial_failure() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[async_std::test]
 async fn concurrent_connections_and_streams() {
     setup_global_subscriber();
 
@@ -326,7 +326,7 @@ async fn concurrent_connections_and_streams() {
 
         listeners.push((*listener.local_peer_id(), addr));
 
-        tokio::spawn(async move {
+        async_std::task::spawn(async move {
             loop {
                 match listener.next().await {
                     Some(SwarmEvent::ConnectionEstablished { .. }) => {
@@ -418,7 +418,7 @@ async fn concurrent_connections_and_streams() {
     }
 }
 
-#[tokio::test]
+#[async_std::test]
 async fn endpoint_reuse() -> Result<()> {
     setup_global_subscriber();
 
@@ -520,7 +520,7 @@ async fn endpoint_reuse() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[async_std::test]
 async fn ipv4_dial_ipv6() -> Result<()> {
     setup_global_subscriber();
 
