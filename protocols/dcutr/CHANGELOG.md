@@ -1,4 +1,10 @@
-# 0.5.0 [unreleased]
+# 0.5.1
+
+- Make default features of `libp2p-core` optional. See [PR 2836].
+
+[PR 2836]: https://github.com/libp2p/rust-libp2p/pull/2836/
+
+# 0.5.0
 
 - Update to `libp2p-swarm` `v0.38.0`.
 

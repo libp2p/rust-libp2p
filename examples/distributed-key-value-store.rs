@@ -50,7 +50,7 @@ use libp2p::kad::{
 use libp2p::{
     development_transport, identity,
     mdns::{Mdns, MdnsConfig, MdnsEvent},
-    swarm::{NetworkBehaviourEventProcess, SwarmEvent},
+    swarm::SwarmEvent,
     NetworkBehaviour, PeerId, Swarm,
 };
 use std::error::Error;
@@ -68,28 +68,60 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // We create a custom network behaviour that combines Kademlia and mDNS.
     #[derive(NetworkBehaviour)]
-    #[behaviour(event_process = true)]
+    #[behaviour(out_event = "MyBehaviourEvent")]
     struct MyBehaviour {
         kademlia: Kademlia<MemoryStore>,
         mdns: Mdns,
     }
 
-    impl NetworkBehaviourEventProcess<MdnsEvent> for MyBehaviour {
-        // Called when `mdns` produces an event.
-        fn inject_event(&mut self, event: MdnsEvent) {
-            if let MdnsEvent::Discovered(list) = event {
-                for (peer_id, multiaddr) in list {
-                    self.kademlia.add_address(&peer_id, multiaddr);
-                }
-            }
+    enum MyBehaviourEvent {
+        Kademlia(KademliaEvent),
+        Mdns(MdnsEvent),
+    }
+
+    impl From<KademliaEvent> for MyBehaviourEvent {
+        fn from(event: KademliaEvent) -> Self {
+            MyBehaviourEvent::Kademlia(event)
         }
     }
 
-    impl NetworkBehaviourEventProcess<KademliaEvent> for MyBehaviour {
-        // Called when `kademlia` produces an event.
-        fn inject_event(&mut self, message: KademliaEvent) {
-            match message {
-                KademliaEvent::OutboundQueryCompleted { result, .. } => match result {
+    impl From<MdnsEvent> for MyBehaviourEvent {
+        fn from(event: MdnsEvent) -> Self {
+            MyBehaviourEvent::Mdns(event)
+        }
+    }
+
+    // Create a swarm to manage peers and events.
+    let mut swarm = {
+        // Create a Kademlia behaviour.
+        let store = MemoryStore::new(local_peer_id);
+        let kademlia = Kademlia::new(local_peer_id, store);
+        let mdns = task::block_on(Mdns::new(MdnsConfig::default()))?;
+        let behaviour = MyBehaviour { kademlia, mdns };
+        Swarm::new(transport, behaviour, local_peer_id)
+    };
+
+    // Read full lines from stdin
+    let mut stdin = io::BufReader::new(io::stdin()).lines().fuse();
+
+    // Listen on all interfaces and whatever port the OS assigns.
+    swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
+
+    // Kick it off.
+    loop {
+        select! {
+        line = stdin.select_next_some() => handle_input_line(&mut swarm.behaviour_mut().kademlia, line.expect("Stdin not to close")),
+        event = swarm.select_next_some() => match event {
+            SwarmEvent::NewListenAddr { address, .. } => {
+                println!("Listening in {:?}", address);
+            },
+            SwarmEvent::Behaviour(MyBehaviourEvent::Mdns(MdnsEvent::Discovered(list))) => {
+                for (peer_id, multiaddr) in list {
+                    swarm.behaviour_mut().kademlia.add_address(&peer_id, multiaddr);
+                }
+            }
+            SwarmEvent::Behaviour(MyBehaviourEvent::Kademlia(KademliaEvent::OutboundQueryCompleted { result, ..})) => {
+                match result {
                     QueryResult::GetProviders(Ok(ok)) => {
                         for peer in ok.providers {
                             println!(
@@ -137,38 +169,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         eprintln!("Failed to put provider record: {:?}", err);
                     }
                     _ => {}
-                },
-                _ => {}
+                }
             }
+            _ => {}
         }
-    }
-
-    // Create a swarm to manage peers and events.
-    let mut swarm = {
-        // Create a Kademlia behaviour.
-        let store = MemoryStore::new(local_peer_id);
-        let kademlia = Kademlia::new(local_peer_id, store);
-        let mdns = task::block_on(Mdns::new(MdnsConfig::default()))?;
-        let behaviour = MyBehaviour { kademlia, mdns };
-        Swarm::new(transport, behaviour, local_peer_id)
-    };
-
-    // Read full lines from stdin
-    let mut stdin = io::BufReader::new(io::stdin()).lines().fuse();
-
-    // Listen on all interfaces and whatever port the OS assigns.
-    swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
-
-    // Kick it off.
-    loop {
-        select! {
-            line = stdin.select_next_some() => handle_input_line(&mut swarm.behaviour_mut().kademlia, line.expect("Stdin not to close")),
-            event = swarm.select_next_some() => match event {
-                SwarmEvent::NewListenAddr { address, .. } => {
-                    println!("Listening in {:?}", address);
-                },
-                _ => {}
-            }
         }
     }
 }
