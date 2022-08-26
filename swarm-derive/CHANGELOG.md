@@ -1,6 +1,11 @@
 # 0.30.0 - [unreleased]
 
-- Remove support for non-`NetworkBehaviour` fields on main `struct` via `#[behaviour(ignore)]`.
+- Remove support for removed `NetworkBehaviourEventProcess`.
+
+- Remove support for non-`NetworkBehaviour` fields on main `struct` via `#[behaviour(ignore)]`. See
+  [PR 2842].
+
+[PR 2842]: https://github.com/libp2p/rust-libp2p/pull/2842
 
 # 0.29.0
 
