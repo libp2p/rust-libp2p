@@ -1,2 +1,14 @@
 target
 Cargo.lock
+
+# VSCode & Idea settings
+.vscode/
+.idea/
+# Vim swap files
+*.swp
+*.swo
+# Emacs backup files
+*~
+.\#*
+.*\#
+\#*\#
