@@ -43,6 +43,28 @@
 
 # `libp2p` facade crate
 
+# 0.48.0 [unreleased]
+
+- Update to [`libp2p-dcutr` `v0.6.0`](protocols/dcutr/CHANGELOG.md#060).
+
+- Update to [`libp2p-rendezvous` `v0.9.0`](protocols/rendezvous/CHANGELOG.md#090).
+
+- Update to [`libp2p-ping` `v0.39.0`](protocols/ping/CHANGELOG.md#0390).
+
+- Update to [`libp2p-identify` `v0.39.0`](protocols/identify/CHANGELOG.md#0390).
+
+- Update to [`libp2p-floodsub` `v0.39.0`](protocols/floodsub/CHANGELOG.md#0390).
+
+- Update to [`libp2p-relay` `v0.12.0`](protocols/relay/CHANGELOG.md#0120).
+
+- Update to [`libp2p-metrics` `v0.9.0`](misc/metrics/CHANGELOG.md#090).
+
+- Update to [`libp2p-kad` `v0.40.0`](protocols/kad/CHANGELOG.md#0400).
+
+- Update to [`libp2p-autonat` `v0.7.0`](protocols/autonat/CHANGELOG.md#070).
+
+- Update to [`libp2p-request-response` `v0.21.0`](protocols/request-response/CHANGELOG.md#0210).
+
 # 0.47.0
 
 - Update to [`libp2p-dcutr` `v0.5.0`](protocols/dcutr/CHANGELOG.md#050).

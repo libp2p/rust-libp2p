@@ -1,3 +1,10 @@
+# 0.39.0 - [unreleased]
+
+- Remove deprecated `NetworkBehaviourEventProcess`. See [libp2p-swarm v0.38.0 changelog entry] for
+  migration path.
+
+[libp2p-swarm v0.38.0 changelog entry]: https://github.com/libp2p/rust-libp2p/blob/master/swarm/CHANGELOG.md#0380
+
 # 0.38.0
 
 - Deprecate `NetworkBehaviourEventProcess`. When deriving `NetworkBehaviour` on a custom `struct` users

@@ -1,3 +1,17 @@
+# 0.9.0 [unreleased]
+
+- Update to `libp2p-swarm` `v0.39.0`.
+
+- Update to `libp2p-dcutr` `v0.6.0`.
+
+- Update to `libp2p-ping` `v0.39.0`.
+
+- Update to `libp2p-identify` `v0.39.0`.
+
+- Update to `libp2p-relay` `v0.12.0`.
+
+- Update to `libp2p-kad` `v0.40.0`.
+
 # 0.8.0
 
 - Update to `libp2p-swarm` `v0.38.0`.
