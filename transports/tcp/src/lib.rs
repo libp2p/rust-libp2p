@@ -47,7 +47,6 @@ use futures::{
     prelude::*,
     ready,
 };
-use futures_timer::Delay;
 use libp2p_core::{
     address_translation,
     multiaddr::{Multiaddr, Protocol},
@@ -61,7 +60,6 @@ use std::{
     pin::Pin,
     sync::{Arc, RwLock},
     task::{Context, Poll},
-    time::Duration,
 };
 
 use provider::{IfEvent, Provider};
@@ -650,11 +648,6 @@ where
     /// as local addresses for the sockets of outgoing connections. They are
     /// unregistered when the stream encounters an error or is dropped.
     port_reuse: PortReuse,
-    /// How long to sleep after a (non-fatal) error while trying
-    /// to accept a new connection.
-    sleep_on_error: Duration,
-    /// The current pause, if any.
-    pause: Option<Delay>,
 }
 
 impl<T> TcpListenStream<T>
@@ -695,8 +688,6 @@ where
             listener_id,
             listen_addr,
             in_addr,
-            pause: None,
-            sleep_on_error: Duration::from_millis(100),
         })
     }
 
@@ -756,7 +747,6 @@ where
                                 err
                             };
                             *if_watch = IfWatch::Pending(T::if_watcher());
-                            me.pause = Some(Delay::new(me.sleep_on_error));
                             return Poll::Ready(Some(Ok(TcpListenerEvent::Error(err))));
                         }
                     },
@@ -793,7 +783,6 @@ where
                                         "Failure polling interfaces: {:?}. Scheduling retry.",
                                         err
                                     };
-                                    me.pause = Some(Delay::new(me.sleep_on_error));
                                     return Poll::Ready(Some(Ok(TcpListenerEvent::Error(err))));
                                 }
                             }
@@ -810,16 +799,6 @@ where
                 }
             }
 
-            if let Some(mut pause) = me.pause.take() {
-                match Pin::new(&mut pause).poll(cx) {
-                    Poll::Ready(_) => {}
-                    Poll::Pending => {
-                        me.pause = Some(pause);
-                        return Poll::Pending;
-                    }
-                }
-            }
-
             // Take the pending connection from the backlog.
             let incoming = match T::poll_accept(&mut me.listener, cx) {
                 Poll::Pending => return Poll::Pending,
@@ -827,7 +806,6 @@ where
                 Poll::Ready(Err(e)) => {
                     // These errors are non-fatal for the listener stream.
                     log::error!("error accepting incoming connection: {}", e);
-                    me.pause = Some(Delay::new(me.sleep_on_error));
                     return Poll::Ready(Some(Ok(TcpListenerEvent::Error(e))));
                 }
             };
