@@ -210,7 +210,7 @@ As an example, say we spawn one task per incoming request received from a
 socket. If the number of pending requests is not bounded by some limit, a
 misbehaving or malicious remote peer can send requests at a higher rate than the
 local node can respond at. This results in unbounded growth in the number of
-requests, and thus unbounded groth in the number of tasks and used memory.
+requests, and thus unbounded growth in the number of tasks and used memory.
 
 Simply put, rust-libp2p spawns one task per connection but limits the overall
 number of connections, thus adhering to this guideline.
