@@ -18,13 +18,12 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::handler::{IdentifyHandler, IdentifyHandlerEvent, IdentifyPush};
+use crate::handler::{IdentifyHandlerEvent, IdentifyHandlerProto, IdentifyPush};
 use crate::protocol::{IdentifyInfo, ReplySubstream, UpgradeError};
 use futures::prelude::*;
 use libp2p_core::{
-    connection::{ConnectionId, ListenerId},
-    multiaddr::Protocol,
-    ConnectedPoint, Multiaddr, PeerId, PublicKey,
+    connection::ConnectionId, multiaddr::Protocol, transport::ListenerId, ConnectedPoint,
+    Multiaddr, PeerId, PublicKey,
 };
 use libp2p_swarm::{
     dial_opts::{self, DialOpts},
@@ -54,7 +53,7 @@ pub struct Identify {
     /// Pending replies to send.
     pending_replies: VecDeque<Reply>,
     /// Pending events to be emitted when polled.
-    events: VecDeque<NetworkBehaviourAction<IdentifyEvent, IdentifyHandler>>,
+    events: VecDeque<NetworkBehaviourAction<IdentifyEvent, IdentifyHandlerProto>>,
     /// Peers to which an active push with current information about
     /// the local peer should be sent.
     pending_push: HashSet<PeerId>,
@@ -208,11 +207,11 @@ impl Identify {
 }
 
 impl NetworkBehaviour for Identify {
-    type ConnectionHandler = IdentifyHandler;
+    type ConnectionHandler = IdentifyHandlerProto;
     type OutEvent = IdentifyEvent;
 
     fn new_handler(&mut self) -> Self::ConnectionHandler {
-        IdentifyHandler::new(self.config.initial_delay, self.config.interval)
+        IdentifyHandlerProto::new(self.config.initial_delay, self.config.interval)
     }
 
     fn inject_connection_established(
@@ -296,7 +295,7 @@ impl NetworkBehaviour for Identify {
         &mut self,
         peer_id: PeerId,
         connection: ConnectionId,
-        event: <Self::ConnectionHandler as ConnectionHandler>::OutEvent,
+        event: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent,
     ) {
         match event {
             IdentifyHandlerEvent::Identified(mut info) => {
@@ -513,11 +512,12 @@ fn multiaddr_matches_peer_id(addr: &Multiaddr, peer_id: &PeerId) -> bool {
 mod tests {
     use super::*;
     use futures::pin_mut;
+    use libp2p::mplex::MplexConfig;
+    use libp2p::noise;
+    use libp2p::tcp::{GenTcpConfig, TcpTransport};
     use libp2p_core::{identity, muxing::StreamMuxerBox, transport, upgrade, PeerId, Transport};
-    use libp2p_mplex::MplexConfig;
-    use libp2p_noise as noise;
     use libp2p_swarm::{Swarm, SwarmEvent};
-    use libp2p_tcp::TcpConfig;
+    use std::time::Duration;
 
     fn transport() -> (
         identity::PublicKey,
@@ -528,8 +528,7 @@ mod tests {
             .into_authentic(&id_keys)
             .unwrap();
         let pubkey = id_keys.public();
-        let transport = TcpConfig::new()
-            .nodelay(true)
+        let transport = TcpTransport::new(GenTcpConfig::default().nodelay(true))
             .upgrade(upgrade::Version::V1)
             .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
             .multiplex(MplexConfig::new())
@@ -700,7 +699,14 @@ mod tests {
 
         let mut swarm1 = {
             let (pubkey, transport) = transport();
-            let protocol = Identify::new(IdentifyConfig::new("a".to_string(), pubkey.clone()));
+            let protocol = Identify::new(
+                IdentifyConfig::new("a".to_string(), pubkey.clone())
+                    // `swarm1` will set `KeepAlive::No` once it identified `swarm2` and thus
+                    // closes the connection. At this point in time `swarm2` might not yet have
+                    // identified `swarm1`. To give `swarm2` enough time, set an initial delay on
+                    // `swarm1`.
+                    .with_initial_delay(Duration::from_secs(10)),
+            );
 
             Swarm::new(transport, protocol, pubkey.to_peer_id())
         };

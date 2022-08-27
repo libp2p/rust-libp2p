@@ -52,7 +52,6 @@
 
 use futures::{task::Context, task::Poll, AsyncRead, AsyncWrite};
 use multiaddr::Multiaddr;
-use std::io;
 
 pub use self::boxed::StreamMuxerBox;
 pub use self::boxed::SubstreamBox;
@@ -76,7 +75,7 @@ pub trait StreamMuxer {
     type OutboundSubstream;
 
     /// Error type of the muxer
-    type Error: Into<io::Error>;
+    type Error: std::error::Error;
 
     /// Polls for a connection-wide event.
     ///

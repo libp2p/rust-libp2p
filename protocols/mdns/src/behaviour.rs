@@ -25,7 +25,7 @@ use crate::MdnsConfig;
 use async_io::Timer;
 use futures::prelude::*;
 use if_watch::{IfEvent, IfWatcher};
-use libp2p_core::connection::ListenerId;
+use libp2p_core::transport::ListenerId;
 use libp2p_core::{Multiaddr, PeerId};
 use libp2p_swarm::{
     handler::DummyConnectionHandler, ConnectionHandler, NetworkBehaviour, NetworkBehaviourAction,

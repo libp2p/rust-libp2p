@@ -27,6 +27,10 @@ A set of examples showcasing how to use rust-libp2p.
 
   A basic key value store demonstrating libp2p and the mDNS and Kademlia protocol.
 
+- [Identify](../protocols/identify/examples/identify.rs)
+
+  Demonstrates how to use identify protocol to query peer information.
+
 - [IPFS Kademlia](ipfs-kad.rs)
 
   Demonstrates how to perform Kademlia queries on the IPFS network.

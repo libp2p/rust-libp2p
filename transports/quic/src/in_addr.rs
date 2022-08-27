@@ -2,8 +2,7 @@ use if_watch::{IfEvent, IfWatcher};
 
 use futures::{
     future::{BoxFuture, FutureExt},
-    lock::Mutex,
-    stream::{Stream, StreamExt},
+    stream::Stream,
 };
 
 use std::{
@@ -11,40 +10,34 @@ use std::{
     net::IpAddr,
     ops::DerefMut,
     pin::Pin,
-    sync::Arc,
     task::{Context, Poll},
 };
 
 /// Watches for interface changes.
-#[derive(Clone, Debug)]
-pub(crate) struct InAddr(Arc<Mutex<InAddrInner>>);
-
-impl InAddr {
-    /// If ip is specified then only one `IfEvent::Up` with IpNet(ip)/32 will be generated.
-    /// If ip is unspecified then `IfEvent::Up/Down` events will be generated for all interfaces.
-    pub(crate) fn new(ip: IpAddr) -> Self {
-        let inner = if ip.is_unspecified() {
-            let watcher = IfWatch::Pending(IfWatcher::new().boxed());
-            InAddrInner::Any {
-                if_watch: Box::new(watcher),
-            }
-        } else {
-            InAddrInner::One { ip: Some(ip) }
-        };
-        Self(Arc::new(Mutex::new(inner)))
-    }
-}
-
-/// The listening addresses of a `UdpSocket`.
 #[derive(Debug)]
-enum InAddrInner {
+pub enum InAddr {
     /// The socket accepts connections on a single interface.
     One { ip: Option<IpAddr> },
     /// The socket accepts connections on all interfaces.
     Any { if_watch: Box<IfWatch> },
 }
 
-enum IfWatch {
+impl InAddr {
+    /// If ip is specified then only one `IfEvent::Up` with IpNet(ip)/32 will be generated.
+    /// If ip is unspecified then `IfEvent::Up/Down` events will be generated for all interfaces.
+    pub fn new(ip: IpAddr) -> Self {
+        if ip.is_unspecified() {
+            let watcher = IfWatch::Pending(IfWatcher::new().boxed());
+            InAddr::Any {
+                if_watch: Box::new(watcher),
+            }
+        } else {
+            InAddr::One { ip: Some(ip) }
+        }
+    }
+}
+
+pub enum IfWatch {
     Pending(BoxFuture<'static, std::io::Result<IfWatcher>>),
     Ready(Box<IfWatcher>),
 }
@@ -57,21 +50,7 @@ impl std::fmt::Debug for IfWatch {
         }
     }
 }
-
 impl Stream for InAddr {
-    type Item = Result<IfEvent>;
-
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        let me = Pin::into_inner(self);
-        let mut lock = me.0.lock();
-        let mut guard = futures::ready!(lock.poll_unpin(cx));
-        let inner = &mut *guard;
-
-        inner.poll_next_unpin(cx)
-    }
-}
-
-impl Stream for InAddrInner {
     type Item = Result<IfEvent>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
@@ -80,12 +59,12 @@ impl Stream for InAddrInner {
             match me {
                 // If the listener is bound to a single interface, make sure the
                 // address is reported once.
-                InAddrInner::One { ip } => {
+                InAddr::One { ip } => {
                     if let Some(ip) = ip.take() {
                         return Poll::Ready(Some(Ok(IfEvent::Up(ip.into()))));
                     }
                 }
-                InAddrInner::Any { if_watch } => {
+                InAddr::Any { if_watch } => {
                     match if_watch.deref_mut() {
                         // If we listen on all interfaces, wait for `if-watch` to be ready.
                         IfWatch::Pending(f) => match futures::ready!(f.poll_unpin(cx)) {

@@ -21,7 +21,7 @@
 use futures::future::poll_fn;
 use futures::{channel::oneshot, prelude::*};
 use libp2p_core::{upgrade, StreamMuxer, Transport};
-use libp2p_tcp::TcpConfig;
+use libp2p_tcp::TcpTransport;
 use std::sync::Arc;
 
 #[test]
@@ -33,29 +33,28 @@ fn client_to_server_outbound() {
     let bg_thread = async_std::task::spawn(async move {
         let mplex = libp2p_mplex::MplexConfig::new();
 
-        let mut transport = TcpConfig::new()
-            .and_then(move |c, e| upgrade::apply(c, mplex, e, upgrade::Version::V1));
+        let mut transport = TcpTransport::default()
+            .and_then(move |c, e| upgrade::apply(c, mplex, e, upgrade::Version::V1))
+            .boxed();
 
-        let mut listener = transport
+        transport
             .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
             .unwrap();
 
-        let addr = listener
+        let addr = transport
             .next()
             .await
             .expect("some event")
-            .expect("no error")
             .into_new_address()
             .expect("listen address");
 
         tx.send(addr).unwrap();
 
-        let client = listener
+        let client = transport
             .next()
             .await
-            .unwrap()
-            .unwrap()
-            .into_upgrade()
+            .expect("some event")
+            .into_incoming()
             .unwrap()
             .0
             .await
@@ -73,8 +72,9 @@ fn client_to_server_outbound() {
 
     async_std::task::block_on(async {
         let mplex = libp2p_mplex::MplexConfig::new();
-        let mut transport = TcpConfig::new()
-            .and_then(move |c, e| upgrade::apply(c, mplex, e, upgrade::Version::V1));
+        let mut transport = TcpTransport::default()
+            .and_then(move |c, e| upgrade::apply(c, mplex, e, upgrade::Version::V1))
+            .boxed();
 
         let client = Arc::new(transport.dial(rx.await.unwrap()).unwrap().await.unwrap());
         let mut inbound = loop {
@@ -102,30 +102,29 @@ fn client_to_server_inbound() {
     let bg_thread = async_std::task::spawn(async move {
         let mplex = libp2p_mplex::MplexConfig::new();
 
-        let mut transport = TcpConfig::new()
-            .and_then(move |c, e| upgrade::apply(c, mplex, e, upgrade::Version::V1));
+        let mut transport = TcpTransport::default()
+            .and_then(move |c, e| upgrade::apply(c, mplex, e, upgrade::Version::V1))
+            .boxed();
 
-        let mut listener = transport
+        transport
             .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
             .unwrap();
 
-        let addr = listener
+        let addr = transport
             .next()
             .await
             .expect("some event")
-            .expect("no error")
             .into_new_address()
             .expect("listen address");
 
         tx.send(addr).unwrap();
 
         let client = Arc::new(
-            listener
+            transport
                 .next()
                 .await
-                .unwrap()
-                .unwrap()
-                .into_upgrade()
+                .expect("some event")
+                .into_incoming()
                 .unwrap()
                 .0
                 .await
@@ -149,8 +148,9 @@ fn client_to_server_inbound() {
 
     async_std::task::block_on(async {
         let mplex = libp2p_mplex::MplexConfig::new();
-        let mut transport = TcpConfig::new()
-            .and_then(move |c, e| upgrade::apply(c, mplex, e, upgrade::Version::V1));
+        let mut transport = TcpTransport::default()
+            .and_then(move |c, e| upgrade::apply(c, mplex, e, upgrade::Version::V1))
+            .boxed();
 
         let client = transport.dial(rx.await.unwrap()).unwrap().await.unwrap();
 
@@ -172,29 +172,28 @@ fn protocol_not_match() {
     let _bg_thread = async_std::task::spawn(async move {
         let mplex = libp2p_mplex::MplexConfig::new();
 
-        let mut transport = TcpConfig::new()
-            .and_then(move |c, e| upgrade::apply(c, mplex, e, upgrade::Version::V1));
+        let mut transport = TcpTransport::default()
+            .and_then(move |c, e| upgrade::apply(c, mplex, e, upgrade::Version::V1))
+            .boxed();
 
-        let mut listener = transport
+        transport
             .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
             .unwrap();
 
-        let addr = listener
+        let addr = transport
             .next()
             .await
             .expect("some event")
-            .expect("no error")
             .into_new_address()
             .expect("listen address");
 
         tx.send(addr).unwrap();
 
-        let client = listener
+        let client = transport
             .next()
             .await
-            .unwrap()
-            .unwrap()
-            .into_upgrade()
+            .expect("some event")
+            .into_incoming()
             .unwrap()
             .0
             .await
@@ -214,8 +213,9 @@ fn protocol_not_match() {
         // Make sure they do not connect when protocols do not match
         let mut mplex = libp2p_mplex::MplexConfig::new();
         mplex.set_protocol_name(b"/mplextest/1.0.0");
-        let mut transport = TcpConfig::new()
-            .and_then(move |c, e| upgrade::apply(c, mplex, e, upgrade::Version::V1));
+        let mut transport = TcpTransport::default()
+            .and_then(move |c, e| upgrade::apply(c, mplex, e, upgrade::Version::V1))
+            .boxed();
         match transport.dial(rx.await.unwrap()).unwrap().await {
             Ok(_) => {
                 assert!(false, "Dialing should fail here as protocols do not match")

@@ -21,7 +21,7 @@ libc = "0.2.80"
 libp2p-core = { version = "0.34.0", path = "../../core", default-features = false  }
 log = "0.4.11"
 socket2 = { version = "0.4.0", features = ["all"] }
-tokio-crate = { package = "tokio", version = "1.0.1", default-features = false, features = ["net"], optional = true }
+tokio-crate = { package = "tokio", version = "1.19.0", default-features = false, features = ["net"], optional = true }
 
 [features]
 default = ["async-io"]

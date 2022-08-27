@@ -40,8 +40,7 @@ use crate::K_VALUE;
 use fnv::{FnvHashMap, FnvHashSet};
 use instant::Instant;
 use libp2p_core::{
-    connection::{ConnectionId, ListenerId},
-    ConnectedPoint, Multiaddr, PeerId,
+    connection::ConnectionId, transport::ListenerId, ConnectedPoint, Multiaddr, PeerId,
 };
 use libp2p_swarm::{
     dial_opts::{self, DialOpts},

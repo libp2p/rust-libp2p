@@ -80,7 +80,7 @@ impl QuicMuxer {
 
         QuicMuxer {
             inner: Arc::new(Mutex::new(QuicMuxerInner {
-                connection: connection,
+                connection,
                 substreams: Default::default(),
                 pending_substreams: Default::default(),
                 poll_close_waker: None,

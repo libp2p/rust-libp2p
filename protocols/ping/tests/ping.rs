@@ -31,7 +31,7 @@ use libp2p_mplex as mplex;
 use libp2p_noise as noise;
 use libp2p_ping as ping;
 use libp2p_swarm::{DummyBehaviour, KeepAlive, Swarm, SwarmEvent};
-use libp2p_tcp::TcpConfig;
+use libp2p_tcp::{GenTcpConfig, TcpTransport};
 use libp2p_yamux as yamux;
 use quickcheck::*;
 use rand::prelude::*;
@@ -248,8 +248,7 @@ fn mk_transport(muxer: MuxerChoice) -> (PeerId, transport::Boxed<(PeerId, Stream
         .unwrap();
     (
         peer_id,
-        TcpConfig::new()
-            .nodelay(true)
+        TcpTransport::new(GenTcpConfig::default().nodelay(true))
             .upgrade(upgrade::Version::V1)
             .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
             .multiplex(match muxer {
