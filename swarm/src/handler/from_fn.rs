@@ -15,24 +15,53 @@ use std::future::Future;
 use std::task::{Context, Poll, Waker};
 use void::Void;
 
-pub fn from_fn<TInbound, TOutbound, TOutboundOpenInfo, TInboundFuture, TOutboundFuture>(
+/// A low-level building block for protocols that can be expressed as async functions.
+///
+/// An async function in Rust is executed within an executor and thus only has access to its local state
+/// and by extension, the state that was available when the [`Future`] was constructed.
+///
+/// This [`ConnectionHandler`] aims to reduce the boilerplate for protocols which can be expressed as
+/// a static sequence of reads and writes to a socket where the response can be generated with limited
+/// "local" knowledge or in other words, the local state within the [`Future`].
+///
+/// For outbound substreams, arbitrary data can be supplied via [`InEvent::NewOutbound`] which will be
+/// made available to the callback once the stream is fully negotiated.
+///
+/// Inbound substreams may be opened at any time by the remote. To facilitate this one and more usecases,
+/// the supplied callbacks for inbound and outbound substream are given access to the handler's `state`
+/// field. This `state` field can contain arbitrary data and can be updated by the [`NetworkBehaviour`]
+/// via [`InEvent::UpdateState`].
+///
+/// The design of this [`ConnectionHandler`] trades boilerplate (you don't have to write your own handler)
+/// and simplicity (small API surface) for eventual consistency, depending on your protocol design:
+///
+/// Most likely, the [`NetworkBehaviour`] is the authoritive source of `TState` but updates to it have
+/// to be manually performed via [`InEvent::UpdateState`]. Thus, the state given to newly created
+/// substreams, may be outdated and only eventually-consistent.
+pub fn from_fn<TInbound, TOutbound, TOutboundOpenInfo, TState, TInboundFuture, TOutboundFuture>(
     protocol: &'static str,
-    on_new_inbound: impl Fn(NegotiatedSubstream) -> TInboundFuture + Send + 'static,
-    on_new_outbound: impl Fn(NegotiatedSubstream, TOutboundOpenInfo) -> TOutboundFuture + Send + 'static,
-) -> FromFn<TInbound, TOutbound, TOutboundOpenInfo>
+    on_new_inbound: impl Fn(NegotiatedSubstream, &mut TState) -> TInboundFuture + Send + 'static,
+    on_new_outbound: impl Fn(NegotiatedSubstream, &mut TState, TOutboundOpenInfo) -> TOutboundFuture
+        + Send
+        + 'static,
+) -> FromFn<TInbound, TOutbound, TOutboundOpenInfo, TState>
 where
     TInboundFuture: Future<Output = TInbound> + Send + 'static,
     TOutboundFuture: Future<Output = TOutbound> + Send + 'static,
+    TState: Default,
 {
     FromFn {
         protocol,
         inbound_streams: FuturesUnordered::default(),
         outbound_streams: FuturesUnordered::default(),
-        on_new_inbound: Box::new(move |stream| on_new_inbound(stream).boxed()),
-        on_new_outbound: Box::new(move |stream, info| on_new_outbound(stream, info).boxed()),
+        on_new_inbound: Box::new(move |stream, state| on_new_inbound(stream, state).boxed()),
+        on_new_outbound: Box::new(move |stream, state, info| {
+            on_new_outbound(stream, state, info).boxed()
+        }),
         idle_waker: None,
         pending_dials: VecDeque::default(),
         failed_open: VecDeque::default(),
+        state: TState::default(),
     }
 }
 
@@ -50,34 +79,44 @@ pub enum OpenError<OpenInfo> {
     NegotiationFailed(OpenInfo, NegotiationError),
 }
 
-#[derive(Default, Debug)]
-pub struct NewOutbound<I>(pub I);
+#[derive(Debug)]
+pub enum InEvent<TState, TOutboundOpenInfo> {
+    UpdateState(TState),
+    NewOutbound(TOutboundOpenInfo),
+}
 
-pub struct FromFn<TInbound, TOutbound, TOutboundInfo> {
+// TODO: Implement limit for max incoming streams
+pub struct FromFn<TInbound, TOutbound, TOutboundInfo, TState> {
     protocol: &'static str,
 
     inbound_streams: FuturesUnordered<BoxFuture<'static, TInbound>>,
     outbound_streams: FuturesUnordered<BoxFuture<'static, TOutbound>>,
 
-    on_new_inbound: Box<dyn Fn(NegotiatedSubstream) -> BoxFuture<'static, TInbound> + Send>,
-    on_new_outbound:
-        Box<dyn Fn(NegotiatedSubstream, TOutboundInfo) -> BoxFuture<'static, TOutbound> + Send>,
+    on_new_inbound:
+        Box<dyn Fn(NegotiatedSubstream, &mut TState) -> BoxFuture<'static, TInbound> + Send>,
+    on_new_outbound: Box<
+        dyn Fn(NegotiatedSubstream, &mut TState, TOutboundInfo) -> BoxFuture<'static, TOutbound>
+            + Send,
+    >,
 
     idle_waker: Option<Waker>,
 
     pending_dials: VecDeque<TOutboundInfo>,
 
     failed_open: VecDeque<OpenError<TOutboundInfo>>,
+
+    state: TState,
 }
 
-impl<TInbound, TOutbound, TOutboundInfo> ConnectionHandler
-    for FromFn<TInbound, TOutbound, TOutboundInfo>
+impl<TInbound, TOutbound, TOutboundInfo, TState> ConnectionHandler
+    for FromFn<TInbound, TOutbound, TOutboundInfo, TState>
 where
     TOutboundInfo: fmt::Debug + Send + 'static,
     TInbound: fmt::Debug + Send + 'static,
     TOutbound: fmt::Debug + Send + 'static,
+    TState: fmt::Debug + Send + 'static,
 {
-    type InEvent = NewOutbound<TOutboundInfo>;
+    type InEvent = InEvent<TState, TOutboundInfo>;
     type OutEvent = OutEvent<TInbound, TOutbound, TOutboundInfo>;
     type Error = Void;
     type InboundProtocol = ReadyUpgrade<&'static str>;
@@ -94,7 +133,8 @@ where
         protocol: <Self::InboundProtocol as InboundUpgradeSend>::Output,
         _: Self::InboundOpenInfo,
     ) {
-        self.inbound_streams.push((self.on_new_inbound)(protocol));
+        let inbound_future = (self.on_new_inbound)(protocol, &mut self.state);
+        self.inbound_streams.push(inbound_future);
 
         if let Some(waker) = self.idle_waker.take() {
             waker.wake();
@@ -106,8 +146,8 @@ where
         protocol: <Self::OutboundProtocol as OutboundUpgradeSend>::Output,
         info: Self::OutboundOpenInfo,
     ) {
-        self.outbound_streams
-            .push((self.on_new_outbound)(protocol, info));
+        let outbound_future = (self.on_new_outbound)(protocol, &mut self.state, info);
+        self.outbound_streams.push(outbound_future);
 
         if let Some(waker) = self.idle_waker.take() {
             waker.wake();
@@ -115,7 +155,10 @@ where
     }
 
     fn inject_event(&mut self, event: Self::InEvent) {
-        self.pending_dials.push_back(event.0);
+        match event {
+            InEvent::UpdateState(new_state) => self.state = new_state,
+            InEvent::NewOutbound(open_info) => self.pending_dials.push_back(open_info),
+        }
     }
 
     fn inject_dial_upgrade_error(
@@ -205,24 +248,26 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        IntoConnectionHandler, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
-        PollParameters,
-    };
+    use crate::{IntoConnectionHandler, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
     use libp2p_core::connection::ConnectionId;
     use libp2p_core::PeerId;
 
     struct MyBehaviour {}
 
+    #[derive(Debug, Default)]
+    struct ConnectionState {
+        _foo: (),
+    }
+
     impl NetworkBehaviour for MyBehaviour {
-        type ConnectionHandler = FromFn<(), (), ()>;
+        type ConnectionHandler = FromFn<(), (), (), ConnectionState>;
         type OutEvent = ();
 
         fn new_handler(&mut self) -> Self::ConnectionHandler {
             from_fn(
                 "/foo/bar/1.0.0",
-                |_stream| async move {},
-                |_stream, ()| async move {},
+                |_stream, _state| async move {},
+                |_stream, _state, ()| async move {},
             )
         }
 
@@ -236,7 +281,7 @@ mod tests {
                 OutEvent::InboundFinished(()) => {}
                 OutEvent::OutboundFinished(()) => {}
                 OutEvent::FailedToOpen(OpenError::Timeout(())) => {}
-                OutEvent::FailedToOpen(OpenError::NegotiationFailed((), neg_error)) => {}
+                OutEvent::FailedToOpen(OpenError::NegotiationFailed((), _neg_error)) => {}
             }
         }
 
@@ -245,11 +290,7 @@ mod tests {
             _cx: &mut Context<'_>,
             _params: &mut impl PollParameters,
         ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
-            Poll::Ready(NetworkBehaviourAction::NotifyHandler {
-                peer_id: PeerId::random(),
-                handler: NotifyHandler::Any,
-                event: NewOutbound::default(),
-            })
+            Poll::Pending
         }
     }
 }
