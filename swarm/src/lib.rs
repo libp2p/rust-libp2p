@@ -73,9 +73,9 @@ pub use connection::{
     PendingInboundConnectionError, PendingOutboundConnectionError,
 };
 pub use handler::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerSelect, ConnectionHandlerUpgrErr,
-    IntoConnectionHandler, IntoConnectionHandlerSelect, KeepAlive, OneShotHandler,
-    OneShotHandlerConfig, SubstreamProtocol,
+    from_fn::from_fn, ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerSelect,
+    ConnectionHandlerUpgrErr, IntoConnectionHandler, IntoConnectionHandlerSelect, KeepAlive,
+    OneShotHandler, OneShotHandlerConfig, SubstreamProtocol,
 };
 pub use registry::{AddAddressResult, AddressRecord, AddressScore};
 
