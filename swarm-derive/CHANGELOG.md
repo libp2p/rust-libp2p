@@ -1,6 +1,12 @@
 # 0.30.0 - [unreleased]
 
-- Remove support for removed `NetworkBehaviourEventProcess`.
+- Remove support for removed `NetworkBehaviourEventProcess`. See [PR 2840].
+
+- Remove support for custom `poll` method on `NetworkBehaviour` via `#[behaviour(poll_method =
+  "poll")]`. See [PR 2841].
+
+[PR 2840]: https://github.com/libp2p/rust-libp2p/pull/2840
+[PR 2841]: https://github.com/libp2p/rust-libp2p/pull/2841
 
 # 0.29.0
 

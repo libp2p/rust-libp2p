@@ -23,7 +23,7 @@
 use heck::ToUpperCamelCase;
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, Data, DataStruct, DeriveInput, Ident};
+use syn::{parse_macro_input, Data, DataStruct, DeriveInput};
 
 /// Generates a delegating `NetworkBehaviour` implementation for the struct this is used for. See
 /// the trait documentation for better description.
@@ -433,29 +433,6 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         out_handler.unwrap_or(quote! {()}) // TODO: See test `empty`.
     };
 
-    // The method to use to poll.
-    // If we find a `#[behaviour(poll_method = "poll")]` attribute on the struct, we call
-    // `self.poll()` at the end of the polling.
-    let poll_method = {
-        let mut poll_method = quote! {std::task::Poll::Pending};
-        for meta_items in ast.attrs.iter().filter_map(get_meta_items) {
-            for meta_item in meta_items {
-                match meta_item {
-                    syn::NestedMeta::Meta(syn::Meta::NameValue(ref m))
-                        if m.path.is_ident("poll_method") =>
-                    {
-                        if let syn::Lit::Str(ref s) = m.lit {
-                            let ident: Ident = syn::parse_str(&s.value()).unwrap();
-                            poll_method = quote! {#name::#ident(self, cx, poll_params)};
-                        }
-                    }
-                    _ => (),
-                }
-            }
-        }
-        poll_method
-    };
-
     // List of statements to put in `poll()`.
     //
     // We poll each child one by one and wrap around the output.
@@ -638,8 +615,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             fn poll(&mut self, cx: &mut std::task::Context, poll_params: &mut impl #poll_parameters) -> std::task::Poll<#network_behaviour_action<Self::OutEvent, Self::ConnectionHandler>> {
                 use libp2p::futures::prelude::*;
                 #(#poll_stmts)*
-                let f: std::task::Poll<#network_behaviour_action<Self::OutEvent, Self::ConnectionHandler>> = #poll_method;
-                f
+                std::task::Poll::Pending
             }
         }
     };
