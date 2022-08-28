@@ -38,6 +38,8 @@ use void::Void;
 /// Most likely, the [`NetworkBehaviour`] is the authoritive source of `TState` but updates to it have
 /// to be manually performed via [`InEvent::UpdateState`]. Thus, the state given to newly created
 /// substreams, may be outdated and only eventually-consistent.
+///
+/// [`NetworkBehaviour`]: crate::NetworkBehaviour
 pub fn from_fn<TInbound, TOutbound, TOutboundOpenInfo, TState, TInboundFuture, TOutboundFuture>(
     protocol: &'static str,
     on_new_inbound: impl Fn(NegotiatedSubstream, &mut TState) -> TInboundFuture + Send + 'static,
