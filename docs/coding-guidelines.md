@@ -10,6 +10,7 @@
     - [Bound everything](#bound-everything)
         - [Channels](#channels)
         - [Local queues](#local-queues)
+        - [Tasks](#tasks)
         - [Further reading](#further-reading)
     - [No premature optimizations](#no-premature-optimizations)
     - [Keep things sequential unless proven to be slow](#keep-things-sequential-unless-proven-to-be-slow)
@@ -200,6 +201,19 @@ growth and high latencies.
 
 Note that rust-libp2p fails at this guideline, i.e. still has many unbounded
 local queues.
+
+### Tasks
+
+Bound the number of
+[tasks](https://docs.rs/futures/latest/futures/task/index.html) being spawned.
+As an example, say we spawn one task per incoming request received from a
+socket. If the number of pending requests is not bounded by some limit, a
+misbehaving or malicious remote peer can send requests at a higher rate than the
+local node can respond at. This results in unbounded growth in the number of
+requests, and thus unbounded growth in the number of tasks and used memory.
+
+Simply put, rust-libp2p spawns one task per connection but limits the overall
+number of connections, thus adhering to this guideline.
 
 ### Further reading
 
