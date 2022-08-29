@@ -127,10 +127,7 @@ impl WebRTCConnection {
         return Ok(Self { peer_connection });
     }
 
-    pub async fn create_initial_upgrade_data_channel(
-        &self,
-        negotiated: bool,
-    ) -> Result<Arc<DataChannel>, Error> {
+    pub async fn create_initial_upgrade_data_channel(&self) -> Result<Arc<DataChannel>, Error> {
         // Open a data channel to do Noise on top and verify the remote.
         let data_channel = self
             .peer_connection
@@ -138,7 +135,7 @@ impl WebRTCConnection {
                 "data",
                 Some(RTCDataChannelInit {
                     id: Some(1),
-                    negotiated: if negotiated { Some(negotiated) } else { None },
+                    negotiated: Some(true),
                     ..RTCDataChannelInit::default()
                 }),
             )
