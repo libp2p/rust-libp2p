@@ -45,6 +45,8 @@
 
 # 0.48.0 [unreleased]
 
+- Update to [`libp2p-swarm-derive` `v0.30.0`](swarm-derive/CHANGELOG.md#0300).
+
 - Update to [`libp2p-dcutr` `v0.6.0`](protocols/dcutr/CHANGELOG.md#060).
 
 - Update to [`libp2p-rendezvous` `v0.9.0`](protocols/rendezvous/CHANGELOG.md#090).

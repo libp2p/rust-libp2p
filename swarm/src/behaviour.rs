@@ -117,45 +117,6 @@ pub(crate) type THandlerOutEvent<THandler> =
 ///   }
 /// }
 /// ```
-///
-/// Optionally one can provide a custom `poll` function through the `#[behaviour(poll_method =
-/// "poll")]` attribute. This function must have the same signature as the [`NetworkBehaviour#poll`]
-/// function and will be called last within the generated [`NetworkBehaviour`] implementation.
-///
-/// Struct members that don't implement [`NetworkBehaviour`] must be annotated with
-/// `#[behaviour(ignore)]`.
-///
-/// ``` rust
-/// # use libp2p::identify::{Identify, IdentifyEvent};
-/// # use libp2p::ping::{Ping, PingEvent};
-/// # use libp2p::NetworkBehaviour;
-/// #[derive(NetworkBehaviour)]
-/// #[behaviour(out_event = "Event")]
-/// struct MyBehaviour {
-///   identify: Identify,
-///   ping: Ping,
-///
-///   #[behaviour(ignore)]
-///   some_string: String,
-/// }
-/// #
-/// # enum Event {
-/// #   Identify(IdentifyEvent),
-/// #   Ping(PingEvent),
-/// # }
-/// #
-/// # impl From<IdentifyEvent> for Event {
-/// #   fn from(event: IdentifyEvent) -> Self {
-/// #     Self::Identify(event)
-/// #   }
-/// # }
-/// #
-/// # impl From<PingEvent> for Event {
-/// #   fn from(event: PingEvent) -> Self {
-/// #     Self::Ping(event)
-/// #   }
-/// # }
-/// ```
 pub trait NetworkBehaviour: 'static {
     /// Handler for all the protocols the network behaviour supports.
     type ConnectionHandler: IntoConnectionHandler;
