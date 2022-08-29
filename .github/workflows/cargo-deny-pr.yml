@@ -3,11 +3,9 @@ on:
   push:
     paths:
       - '**/Cargo.toml'
-      - '**/Cargo.lock'
   pull_request:
     paths:
       - '**/Cargo.toml'
-      - '**/Cargo.lock'
 jobs:
   cargo-deny:
     runs-on: ubuntu-latest
