@@ -1,4 +1,3 @@
-=======
 # 0.40.0 [unreleased]
 
 - Add support for multiple protocol names. Update `Kademlia`, `KademliaConfig`,
