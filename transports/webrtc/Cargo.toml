@@ -22,7 +22,6 @@ libp2p-core = { version = "0.35.0", path = "../../core", default-features = fals
 libp2p-noise = { version = "0.38.0", path = "../../transports/noise" }
 log = "0.4"
 multihash = { version = "0.16", default-features = false, features = ["sha2"] }
-pin-project = "1.0.0"
 rand = "0.8"
 serde = { version = "1.0", features = ["derive"] }
 stun = "0.4"
