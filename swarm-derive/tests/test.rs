@@ -83,8 +83,6 @@ fn three_fields() {
         ping: libp2p::ping::Ping,
         identify: libp2p::identify::Identify,
         kad: libp2p::kad::Kademlia<libp2p::kad::record::store::MemoryStore>,
-        #[behaviour(ignore)]
-        foo: String,
     }
 
     #[allow(dead_code)]
@@ -96,30 +94,6 @@ fn three_fields() {
             FooEvent::Identify(event) => {
                 let _: libp2p::identify::IdentifyEvent = event;
             }
-            FooEvent::Kad(event) => {
-                let _: libp2p::kad::KademliaEvent = event;
-            }
-        }
-    }
-}
-
-#[test]
-fn three_fields_non_last_ignored() {
-    #[allow(dead_code)]
-    #[derive(NetworkBehaviour)]
-    struct Foo {
-        ping: libp2p::ping::Ping,
-        #[behaviour(ignore)]
-        identify: String,
-        kad: libp2p::kad::Kademlia<libp2p::kad::record::store::MemoryStore>,
-    }
-
-    #[allow(dead_code)]
-    #[allow(unreachable_code)]
-    fn foo() {
-        let _out_event: <Foo as NetworkBehaviour>::OutEvent = unimplemented!();
-        match _out_event {
-            FooEvent::Ping(libp2p::ping::Event { .. }) => {}
             FooEvent::Kad(event) => {
                 let _: libp2p::kad::KademliaEvent = event;
             }
@@ -356,28 +330,6 @@ fn custom_event_with_either() {
     #[allow(dead_code)]
     fn foo() {
         require_net_behaviour::<Foo>();
-    }
-}
-
-#[test]
-fn mixed_field_order() {
-    struct Foo {}
-
-    #[derive(NetworkBehaviour)]
-    pub struct Behaviour {
-        #[behaviour(ignore)]
-        _foo: Foo,
-        _ping: libp2p::ping::Ping,
-        #[behaviour(ignore)]
-        _foo2: Foo,
-        _identify: libp2p::identify::Identify,
-        #[behaviour(ignore)]
-        _foo3: Foo,
-    }
-
-    #[allow(dead_code)]
-    fn behaviour() {
-        require_net_behaviour::<Behaviour>();
     }
 }
 

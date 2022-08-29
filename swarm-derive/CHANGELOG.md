@@ -8,6 +8,11 @@
 [PR 2840]: https://github.com/libp2p/rust-libp2p/pull/2840
 [PR 2841]: https://github.com/libp2p/rust-libp2p/pull/2841
 
+- Remove support for non-`NetworkBehaviour` fields on main `struct` via `#[behaviour(ignore)]`. See
+  [PR 2842].
+
+[PR 2842]: https://github.com/libp2p/rust-libp2p/pull/2842
+
 # 0.29.0
 
 - Generate `NetworkBehaviour::OutEvent` if not provided through `#[behaviour(out_event =
