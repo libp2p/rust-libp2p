@@ -28,8 +28,8 @@ use stun::{
 };
 use tokio::{io::ReadBuf, net::UdpSocket};
 use tokio_crate as tokio;
-use webrtc_ice::udp_mux::{UDPMux, UDPMuxConn, UDPMuxConnParams, UDPMuxWriter};
-use webrtc_util::{sync::RwLock, Conn, Error};
+use webrtc::ice::udp_mux::{UDPMux, UDPMuxConn, UDPMuxConnParams, UDPMuxWriter};
+use webrtc::util::{sync::RwLock, Conn, Error};
 
 use std::{
     collections::{HashMap, HashSet},

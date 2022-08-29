@@ -38,9 +38,9 @@ use libp2p_core::{
 use libp2p_noise::{Keypair, NoiseConfig, NoiseError, RemoteIdentity, X25519Spec};
 use log::{debug, trace};
 use tokio_crate::net::UdpSocket;
+use webrtc::ice::udp_mux::UDPMux;
 use webrtc::peer_connection::certificate::RTCCertificate;
 use webrtc::peer_connection::configuration::RTCConfiguration;
-use webrtc_ice::udp_mux::UDPMux;
 
 use std::{
     borrow::Cow,

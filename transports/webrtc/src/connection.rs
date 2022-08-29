@@ -31,9 +31,9 @@ use futures::{
 use futures_lite::StreamExt;
 use libp2p_core::{muxing::StreamMuxer, Multiaddr};
 use log::{debug, error, trace};
+use webrtc::data::data_channel::DataChannel as DetachedDataChannel;
 use webrtc::data_channel::RTCDataChannel;
 use webrtc::peer_connection::RTCPeerConnection;
-use webrtc_data::data_channel::DataChannel as DetachedDataChannel;
 
 use std::{
     pin::Pin,

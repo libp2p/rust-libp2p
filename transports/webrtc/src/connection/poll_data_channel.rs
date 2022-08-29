@@ -19,8 +19,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::prelude::*;
-use webrtc_data::data_channel::DataChannel;
-use webrtc_data::data_channel::PollDataChannel as RTCPollDataChannel;
+use webrtc::data::data_channel::DataChannel;
+use webrtc::data::data_channel::PollDataChannel as RTCPollDataChannel;
 
 use std::io;
 use std::pin::Pin;

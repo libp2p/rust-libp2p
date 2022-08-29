@@ -28,11 +28,7 @@ stun = "0.4"
 thiserror = "1"
 tinytemplate = "1.2"
 tokio-crate = { package = "tokio", version = "1.18", features = ["net"]}
-webrtc = { version = "0.4.0", git = "https://github.com/webrtc-rs/webrtc.git" }
-webrtc-data = { version = "0.4.0", git = "https://github.com/webrtc-rs/data.git" }
-webrtc-ice = "0.7.0"
-webrtc-sctp = "0.5.0"
-webrtc-util = { version = "0.5.4", default-features = false, features = ["conn", "vnet", "sync"] }
+webrtc = "0.4.0"
 
 [dev-dependencies]
 anyhow = "1.0"

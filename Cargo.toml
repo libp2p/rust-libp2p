@@ -118,7 +118,7 @@ libp2p-gossipsub = { version = "0.40.0", path = "protocols/gossipsub", optional 
 # TODO: use upstream once Protocol for WebRTC is there.
 [patch.crates-io]
 multiaddr = { version = "0.14.0", git = "https://github.com/melekes/rust-multiaddr.git", branch = "anton/x-webrtc" }
-webrtc-data = { version = "0.4.0", git = "https://github.com/webrtc-rs/data.git" }
+webrtc = { version = "0.4.0", git = "https://github.com/webrtc-rs/webrtc.git", rev = "8a570f2b650daac7e4455cc3d9ae094c56fbe037" }
 
 [dev-dependencies]
 async-std = { version = "1.6.2", features = ["attributes"] }
