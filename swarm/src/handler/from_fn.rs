@@ -10,6 +10,7 @@ use futures::StreamExt;
 use libp2p_core::upgrade::{NegotiationError, ReadyUpgrade};
 use libp2p_core::UpgradeError;
 use std::collections::VecDeque;
+use std::error::Error;
 use std::fmt;
 use std::future::Future;
 use std::task::{Context, Poll, Waker};
@@ -78,12 +79,34 @@ pub enum OutEvent<I, O, OpenInfo> {
     FailedToOpen(OpenError<OpenInfo>),
 }
 
-// TODO: Impl std::error::Error
 #[derive(Debug)]
 pub enum OpenError<OpenInfo> {
     Timeout(OpenInfo),
     LimitExceeded(OpenInfo),
     NegotiationFailed(OpenInfo, NegotiationError),
+}
+
+impl<OpenInfo> fmt::Display for OpenError<OpenInfo> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            OpenError::Timeout(_) => write!(f, "opening new substream timed out"),
+            OpenError::LimitExceeded(_) => write!(f, "limit for pending dials exceeded"),
+            OpenError::NegotiationFailed(_, _) => Ok(()), // Don't print anything to avoid double printing of error.
+        }
+    }
+}
+
+impl<OpenInfo> Error for OpenError<OpenInfo>
+where
+    OpenInfo: fmt::Debug,
+{
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            OpenError::Timeout(_) => None,
+            OpenError::LimitExceeded(_) => None,
+            OpenError::NegotiationFailed(_, source) => Some(source),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -320,4 +343,7 @@ mod tests {
             Poll::Pending
         }
     }
+
+    // TODO: Add test for max pending dials
+    // TODO: Add test for max inbound streams
 }
