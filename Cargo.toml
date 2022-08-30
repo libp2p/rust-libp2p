@@ -58,7 +58,7 @@ rendezvous = ["dep:libp2p-rendezvous"]
 tcp-async-io = ["dep:libp2p-tcp", "libp2p-tcp?/async-io"]
 tcp-tokio = ["dep:libp2p-tcp", "libp2p-tcp?/tokio"]
 uds = ["dep:libp2p-uds"]
-wasm-bindgen = ["futures-timer/wasm-bindgen", "instant/wasm-bindgen", "getrandom/js", "rand/wasm-bindgen"]
+wasm-bindgen = ["futures-timer/wasm-bindgen", "instant/wasm-bindgen", "getrandom/js"]
 wasm-ext = ["dep:libp2p-wasm-ext"]
 wasm-ext-websocket = ["wasm-ext", "libp2p-wasm-ext?/websocket"]
 websocket = ["dep:libp2p-websocket"]
@@ -100,7 +100,7 @@ libp2p-yamux = { version = "0.39.0", path = "muxers/yamux", optional = true }
 multiaddr = { version = "0.14.0" }
 parking_lot = "0.12.0"
 pin-project = "1.0.0"
-rand = "0.7.3" # Explicit dependency to be used in `wasm-bindgen` feature
+rand = "0.8" # Explicit dependency to be used in `wasm-bindgen` feature
 smallvec = "1.6.1"
 
 [target.'cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))'.dependencies]

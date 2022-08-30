@@ -21,7 +21,7 @@ log = "0.4"
 libp2p-core = { version = "0.35.0", path = "../../core", default-features = false }
 libp2p-swarm = { version = "0.39.0", path = "../../swarm" }
 prost = "0.11"
-rand = "0.7.2"
+rand = "0.8"
 sha2 = "0.10.0"
 smallvec = "1.6.1"
 uint = "0.9"

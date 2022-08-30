@@ -306,7 +306,7 @@ impl DerDecodable<'_> for Asn1SubjectPublicKeyInfo {
 mod tests {
     use super::*;
     use quickcheck::*;
-    use rand07::seq::SliceRandom;
+    use rand::seq::SliceRandom;
     use std::fmt;
 
     const KEY1: &'static [u8] = include_bytes!("test/rsa-2048.pk8");
