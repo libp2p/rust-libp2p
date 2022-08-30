@@ -35,7 +35,7 @@ use crate::IntoConnectionHandler;
 use handler_wrapper::HandlerWrapper;
 use libp2p_core::connection::ConnectedPoint;
 use libp2p_core::multiaddr::Multiaddr;
-use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerExt};
+use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerEvent, StreamMuxerExt};
 use libp2p_core::upgrade;
 use libp2p_core::PeerId;
 use std::collections::VecDeque;
@@ -153,27 +153,36 @@ where
                 }
             }
 
-            if !self.open_info.is_empty() {
-                if let Poll::Ready(substream) = self.muxing.poll_outbound_unpin(cx)? {
-                    let user_data = self
-                        .open_info
-                        .pop_front()
-                        .expect("`open_info` is not empty");
-                    let endpoint = SubstreamEndpoint::Dialer(user_data);
-                    self.handler.inject_substream(substream, endpoint);
-                    continue; // Go back to the top, handler can potentially make progress again.
+            match self.muxing.poll_unpin(cx)? {
+                Poll::Pending => {}
+                Poll::Ready(StreamMuxerEvent::AddressChange(address)) => {
+                    self.handler.inject_address_change(&address);
+                    return Poll::Ready(Ok(Event::AddressChange(address)));
                 }
             }
 
-            if let Poll::Ready(substream) = self.muxing.poll_inbound_unpin(cx)? {
-                self.handler
-                    .inject_substream(substream, SubstreamEndpoint::Listener);
-                continue; // Go back to the top, handler can potentially make progress again.
+            if !self.open_info.is_empty() {
+                match self.muxing.poll_outbound_unpin(cx)? {
+                    Poll::Pending => {}
+                    Poll::Ready(substream) => {
+                        let user_data = self
+                            .open_info
+                            .pop_front()
+                            .expect("`open_info` is not empty");
+                        let endpoint = SubstreamEndpoint::Dialer(user_data);
+                        self.handler.inject_substream(substream, endpoint);
+                        continue; // Go back to the top, handler can potentially make progress again.
+                    }
+                }
             }
 
-            if let Poll::Ready(address) = self.muxing.poll_address_change_unpin(cx)? {
-                self.handler.inject_address_change(&address);
-                return Poll::Ready(Ok(Event::AddressChange(address)));
+            match self.muxing.poll_inbound_unpin(cx)? {
+                Poll::Pending => {}
+                Poll::Ready(substream) => {
+                    self.handler
+                        .inject_substream(substream, SubstreamEndpoint::Listener);
+                    continue; // Go back to the top, handler can potentially make progress again.
+                }
             }
 
             return Poll::Pending; // Nothing can make progress, return `Pending`.

@@ -15,7 +15,7 @@ futures = "0.3.1"
 lazy_static = "1.2"
 libp2p-core = { version = "0.35.0", path = "../../core", default-features = false  }
 log = "0.4"
-prost = "0.10"
+prost = "0.11"
 rand = "0.8.3"
 sha2 = "0.10.0"
 static_assertions = "1"
@@ -37,4 +37,4 @@ libsodium-sys-stable = { version = "1.19.22", features = ["fetch-latest"] }
 ed25519-compact = "1.0.11"
 
 [build-dependencies]
-prost-build = "0.10"
+prost-build = "0.11"

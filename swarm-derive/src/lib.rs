@@ -23,7 +23,7 @@
 use heck::ToUpperCamelCase;
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, Data, DataStruct, DeriveInput, Ident};
+use syn::{parse_macro_input, Data, DataStruct, DeriveInput};
 
 /// Generates a delegating `NetworkBehaviour` implementation for the struct this is used for. See
 /// the trait documentation for better description.
@@ -48,7 +48,6 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     let (_, ty_generics, where_clause) = ast.generics.split_for_impl();
     let multiaddr = quote! {::libp2p::core::Multiaddr};
     let trait_to_impl = quote! {::libp2p::swarm::NetworkBehaviour};
-    let net_behv_event_proc = quote! {::libp2p::swarm::NetworkBehaviourEventProcess};
     let either_ident = quote! {::libp2p::core::either::EitherOutput};
     let network_behaviour_action = quote! {::libp2p::swarm::NetworkBehaviourAction};
     let into_connection_handler = quote! {::libp2p::swarm::IntoConnectionHandler};
@@ -71,35 +70,6 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         quote! {<#(#lf,)* #(#tp,)* #(#cst,)*>}
     };
 
-    // Whether or not we require the `NetworkBehaviourEventProcess` trait to be implemented.
-    let event_process = {
-        let mut event_process = false;
-
-        for meta_items in ast.attrs.iter().filter_map(get_meta_items) {
-            for meta_item in meta_items {
-                match meta_item {
-                    syn::NestedMeta::Meta(syn::Meta::NameValue(ref m))
-                        if m.path.is_ident("event_process") =>
-                    {
-                        if let syn::Lit::Bool(ref b) = m.lit {
-                            event_process = b.value
-                        }
-                    }
-                    _ => (),
-                }
-            }
-        }
-
-        event_process
-    };
-
-    // The fields of the struct we are interested in (no ignored fields).
-    let data_struct_fields = data_struct
-        .fields
-        .iter()
-        .filter(|f| !is_ignored(f))
-        .collect::<Vec<_>>();
-
     let (out_event_name, out_event_definition, out_event_from_clauses) = {
         // If we find a `#[behaviour(out_event = "Foo")]` attribute on the
         // struct, we set `Foo` as the out event. If not, the `OutEvent` is
@@ -121,11 +91,12 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             })
             .next();
 
-        match (user_provided_out_event_name, event_process) {
+        match user_provided_out_event_name {
             // User provided `OutEvent`.
-            (Some(name), false) => {
+            Some(name) => {
                 let definition = None;
-                let from_clauses = data_struct_fields
+                let from_clauses = data_struct
+                    .fields
                     .iter()
                     .map(|field| {
                         let ty = &field.ty;
@@ -135,10 +106,11 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 (name, definition, from_clauses)
             }
             // User did not provide `OutEvent`. Generate it.
-            (None, false) => {
+            None => {
                 let name: syn::Type = syn::parse_str(&(ast.ident.to_string() + "Event")).unwrap();
                 let definition = {
-                    let fields = data_struct_fields
+                    let fields = data_struct
+                        .fields
                         .iter()
                         .map(|field| {
                             let variant: syn::Variant = syn::parse_str(
@@ -159,7 +131,10 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                     let visibility = &ast.vis;
 
                     Some(quote! {
-                        #visibility enum #name #impl_generics {
+                        #[derive(::std::fmt::Debug)]
+                        #visibility enum #name #impl_generics
+                            #where_clause
+                        {
                             #(#fields),*
                         }
                     })
@@ -167,28 +142,13 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 let from_clauses = vec![];
                 (name, definition, from_clauses)
             }
-            // User uses `NetworkBehaviourEventProcess`.
-            (name, true) => {
-                let definition = None;
-                let from_clauses = data_struct_fields
-                    .iter()
-                    .map(|field| {
-                        let ty = &field.ty;
-                        quote! {Self: #net_behv_event_proc<<#ty as #trait_to_impl>::OutEvent>}
-                    })
-                    .collect::<Vec<_>>();
-                (
-                    name.unwrap_or_else(|| syn::parse_str("()").unwrap()),
-                    definition,
-                    from_clauses,
-                )
-            }
         }
     };
 
     // Build the `where ...` clause of the trait implementation.
     let where_clause = {
-        let additional = data_struct_fields
+        let additional = data_struct
+            .fields
             .iter()
             .map(|field| {
                 let ty = &field.ty;
@@ -210,7 +170,8 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
     // Build the list of statements to put in the body of `addresses_of_peer()`.
     let addresses_of_peer_stmts = {
-        data_struct_fields
+        data_struct
+            .fields
             .iter()
             .enumerate()
             .map(move |(field_n, field)| match field.ident {
@@ -221,7 +182,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
     // Build the list of statements to put in the body of `inject_connection_established()`.
     let inject_connection_established_stmts = {
-        data_struct_fields.iter().enumerate().map(move |(field_n, field)| {
+        data_struct.fields.iter().enumerate().map(move |(field_n, field)| {
             match field.ident {
                 Some(ref i) => quote!{ self.#i.inject_connection_established(peer_id, connection_id, endpoint, errors, other_established); },
                 None => quote!{ self.#field_n.inject_connection_established(peer_id, connection_id, endpoint, errors, other_established); },
@@ -231,7 +192,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
     // Build the list of statements to put in the body of `inject_address_change()`.
     let inject_address_change_stmts = {
-        data_struct_fields.iter().enumerate().map(move |(field_n, field)| {
+        data_struct.fields.iter().enumerate().map(move |(field_n, field)| {
             match field.ident {
                 Some(ref i) => quote!{ self.#i.inject_address_change(peer_id, connection_id, old, new); },
                 None => quote!{ self.#field_n.inject_address_change(peer_id, connection_id, old, new); },
@@ -241,7 +202,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
     // Build the list of statements to put in the body of `inject_connection_closed()`.
     let inject_connection_closed_stmts = {
-        data_struct_fields
+        data_struct.fields
             .iter()
             .enumerate()
             // The outmost handler belongs to the last behaviour.
@@ -270,7 +231,8 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
     // Build the list of statements to put in the body of `inject_dial_failure()`.
     let inject_dial_failure_stmts = {
-        data_struct_fields
+        data_struct
+            .fields
             .iter()
             .enumerate()
             // The outmost handler belongs to the last behaviour.
@@ -304,7 +266,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
     // Build the list of statements to put in the body of `inject_listen_failure()`.
     let inject_listen_failure_stmts = {
-        data_struct_fields
+        data_struct.fields
             .iter()
             .enumerate()
             .rev()
@@ -332,7 +294,8 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
     // Build the list of statements to put in the body of `inject_new_listener()`.
     let inject_new_listener_stmts = {
-        data_struct_fields
+        data_struct
+            .fields
             .iter()
             .enumerate()
             .map(move |(field_n, field)| match field.ident {
@@ -343,7 +306,8 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
     // Build the list of statements to put in the body of `inject_new_listen_addr()`.
     let inject_new_listen_addr_stmts = {
-        data_struct_fields
+        data_struct
+            .fields
             .iter()
             .enumerate()
             .map(move |(field_n, field)| match field.ident {
@@ -354,7 +318,8 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
     // Build the list of statements to put in the body of `inject_expired_listen_addr()`.
     let inject_expired_listen_addr_stmts = {
-        data_struct_fields
+        data_struct
+            .fields
             .iter()
             .enumerate()
             .map(move |(field_n, field)| match field.ident {
@@ -365,7 +330,8 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
     // Build the list of statements to put in the body of `inject_new_external_addr()`.
     let inject_new_external_addr_stmts = {
-        data_struct_fields
+        data_struct
+            .fields
             .iter()
             .enumerate()
             .map(move |(field_n, field)| match field.ident {
@@ -376,7 +342,8 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
     // Build the list of statements to put in the body of `inject_expired_external_addr()`.
     let inject_expired_external_addr_stmts = {
-        data_struct_fields
+        data_struct
+            .fields
             .iter()
             .enumerate()
             .map(move |(field_n, field)| match field.ident {
@@ -387,7 +354,8 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
     // Build the list of statements to put in the body of `inject_listener_error()`.
     let inject_listener_error_stmts = {
-        data_struct_fields
+        data_struct
+            .fields
             .iter()
             .enumerate()
             .map(move |(field_n, field)| match field.ident {
@@ -398,7 +366,8 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
     // Build the list of statements to put in the body of `inject_listener_closed()`.
     let inject_listener_closed_stmts = {
-        data_struct_fields
+        data_struct
+            .fields
             .iter()
             .enumerate()
             .map(move |(field_n, field)| match field.ident {
@@ -411,14 +380,14 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     //
     // The event type is a construction of nested `#either_ident`s of the events of the children.
     // We call `inject_event` on the corresponding child.
-    let inject_node_event_stmts = data_struct_fields.iter().enumerate().enumerate().map(|(enum_n, (field_n, field))| {
+    let inject_node_event_stmts = data_struct.fields.iter().enumerate().enumerate().map(|(enum_n, (field_n, field))| {
         let mut elem = if enum_n != 0 {
             quote!{ #either_ident::Second(ev) }
         } else {
             quote!{ ev }
         };
 
-        for _ in 0 .. data_struct_fields.len() - 1 - enum_n {
+        for _ in 0 .. data_struct.fields.len() - 1 - enum_n {
             elem = quote!{ #either_ident::First(#elem) };
         }
 
@@ -431,7 +400,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     // The [`ConnectionHandler`] associated type.
     let connection_handler_ty = {
         let mut ph_ty = None;
-        for field in data_struct_fields.iter() {
+        for field in data_struct.fields.iter() {
             let ty = &field.ty;
             let field_info = quote! { <#ty as #trait_to_impl>::ConnectionHandler };
             match ph_ty {
@@ -448,7 +417,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     let new_handler = {
         let mut out_handler = None;
 
-        for (field_n, field) in data_struct_fields.iter().enumerate() {
+        for (field_n, field) in data_struct.fields.iter().enumerate() {
             let field_name = match field.ident {
                 Some(ref i) => quote! { self.#i },
                 None => quote! { self.#field_n },
@@ -469,33 +438,10 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         out_handler.unwrap_or(quote! {()}) // TODO: See test `empty`.
     };
 
-    // The method to use to poll.
-    // If we find a `#[behaviour(poll_method = "poll")]` attribute on the struct, we call
-    // `self.poll()` at the end of the polling.
-    let poll_method = {
-        let mut poll_method = quote! {std::task::Poll::Pending};
-        for meta_items in ast.attrs.iter().filter_map(get_meta_items) {
-            for meta_item in meta_items {
-                match meta_item {
-                    syn::NestedMeta::Meta(syn::Meta::NameValue(ref m))
-                        if m.path.is_ident("poll_method") =>
-                    {
-                        if let syn::Lit::Str(ref s) = m.lit {
-                            let ident: Ident = syn::parse_str(&s.value()).unwrap();
-                            poll_method = quote! {#name::#ident(self, cx, poll_params)};
-                        }
-                    }
-                    _ => (),
-                }
-            }
-        }
-        poll_method
-    };
-
     // List of statements to put in `poll()`.
     //
     // We poll each child one by one and wrap around the output.
-    let poll_stmts = data_struct_fields.iter().enumerate().map(|(field_n, field)| {
+    let poll_stmts = data_struct.fields.iter().enumerate().map(|(field_n, field)| {
         let field = field
             .ident
             .clone()
@@ -506,7 +452,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         } else {
             quote!{ event }
         };
-        for _ in 0 .. data_struct_fields.len() - 1 - field_n {
+        for _ in 0 .. data_struct.fields.len() - 1 - field_n {
             wrapped_event = quote!{ #either_ident::First(#wrapped_event) };
         }
 
@@ -517,7 +463,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         let provided_handler_and_new_handlers = {
             let mut out_handler = None;
 
-            for (f_n, f) in data_struct_fields.iter().enumerate() {
+            for (f_n, f) in data_struct.fields.iter().enumerate() {
                 let f_name = match f.ident {
                     Some(ref i) => quote! { self.#i },
                     None => quote! { self.#f_n },
@@ -542,13 +488,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             out_handler.unwrap_or(quote! {()}) // TODO: See test `empty`.
         };
 
-        let generate_event_match_arm = if event_process {
-            quote! {
-                std::task::Poll::Ready(#network_behaviour_action::GenerateEvent(event)) => {
-                    #net_behv_event_proc::inject_event(self, event)
-                }
-            }
-        } else {
+        let generate_event_match_arm =  {
             // If the `NetworkBehaviour`'s `OutEvent` is generated by the derive macro, wrap the sub
             // `NetworkBehaviour` `OutEvent` in the variant of the generated `OutEvent`. If the
             // `NetworkBehaviour`'s `OutEvent` is provided by the user, use the corresponding `From`
@@ -680,8 +620,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             fn poll(&mut self, cx: &mut std::task::Context, poll_params: &mut impl #poll_parameters) -> std::task::Poll<#network_behaviour_action<Self::OutEvent, Self::ConnectionHandler>> {
                 use libp2p::futures::prelude::*;
                 #(#poll_stmts)*
-                let f: std::task::Poll<#network_behaviour_action<Self::OutEvent, Self::ConnectionHandler>> = #poll_method;
-                f
+                std::task::Poll::Pending
             }
         }
     };
@@ -702,20 +641,4 @@ fn get_meta_items(attr: &syn::Attribute) -> Option<Vec<syn::NestedMeta>> {
     } else {
         None
     }
-}
-
-/// Returns true if a field is marked as ignored by the user.
-fn is_ignored(field: &syn::Field) -> bool {
-    for meta_items in field.attrs.iter().filter_map(get_meta_items) {
-        for meta_item in meta_items {
-            match meta_item {
-                syn::NestedMeta::Meta(syn::Meta::Path(ref m)) if m.is_ident("ignore") => {
-                    return true;
-                }
-                _ => (),
-            }
-        }
-    }
-
-    false
 }
