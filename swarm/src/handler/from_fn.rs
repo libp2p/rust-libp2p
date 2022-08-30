@@ -42,6 +42,8 @@ use void::Void;
 /// [`NetworkBehaviour`]: crate::NetworkBehaviour
 pub fn from_fn<TInbound, TOutbound, TOutboundOpenInfo, TState, TInboundFuture, TOutboundFuture>(
     protocol: &'static str,
+    inbound_streams_limit: usize,
+    pending_dial_limit: usize,
     on_new_inbound: impl Fn(NegotiatedSubstream, &mut TState) -> TInboundFuture + Send + 'static,
     on_new_outbound: impl Fn(NegotiatedSubstream, &mut TState, TOutboundOpenInfo) -> TOutboundFuture
         + Send
@@ -54,6 +56,8 @@ where
 {
     FromFn {
         protocol,
+        inbound_streams_limit,
+        pending_dial_limit,
         inbound_streams: FuturesUnordered::default(),
         outbound_streams: FuturesUnordered::default(),
         on_new_inbound: Box::new(move |stream, state| on_new_inbound(stream, state).boxed()),
@@ -78,6 +82,7 @@ pub enum OutEvent<I, O, OpenInfo> {
 #[derive(Debug)]
 pub enum OpenError<OpenInfo> {
     Timeout(OpenInfo),
+    LimitExceeded(OpenInfo),
     NegotiationFailed(OpenInfo, NegotiationError),
 }
 
@@ -87,7 +92,6 @@ pub enum InEvent<TState, TOutboundOpenInfo> {
     NewOutbound(TOutboundOpenInfo),
 }
 
-// TODO: Implement limit for max incoming streams
 pub struct FromFn<TInbound, TOutbound, TOutboundInfo, TState> {
     protocol: &'static str,
 
@@ -103,7 +107,10 @@ pub struct FromFn<TInbound, TOutbound, TOutboundInfo, TState> {
 
     idle_waker: Option<Waker>,
 
+    inbound_streams_limit: usize,
+
     pending_dials: VecDeque<TOutboundInfo>,
+    pending_dial_limit: usize,
 
     failed_open: VecDeque<OpenError<TOutboundInfo>>,
 
@@ -135,6 +142,14 @@ where
         protocol: <Self::InboundProtocol as InboundUpgradeSend>::Output,
         _: Self::InboundOpenInfo,
     ) {
+        if self.inbound_streams.len() >= self.inbound_streams_limit {
+            log::debug!(
+                "Dropping inbound substream because limit ({}) would be exceeded",
+                self.inbound_streams_limit
+            );
+            return;
+        }
+
         let inbound_future = (self.on_new_inbound)(protocol, &mut self.state);
         self.inbound_streams.push(inbound_future);
 
@@ -159,7 +174,14 @@ where
     fn inject_event(&mut self, event: Self::InEvent) {
         match event {
             InEvent::UpdateState(new_state) => self.state = new_state,
-            InEvent::NewOutbound(open_info) => self.pending_dials.push_back(open_info),
+            InEvent::NewOutbound(open_info) => {
+                if self.pending_dials.len() >= self.pending_dial_limit {
+                    self.failed_open
+                        .push_back(OpenError::LimitExceeded(open_info));
+                } else {
+                    self.pending_dials.push_back(open_info);
+                }
+            }
         }
     }
 
@@ -268,6 +290,8 @@ mod tests {
         fn new_handler(&mut self) -> Self::ConnectionHandler {
             from_fn(
                 "/foo/bar/1.0.0",
+                5,
+                5,
                 |_stream, _state| async move {},
                 |_stream, _state, ()| async move {},
             )
@@ -284,6 +308,7 @@ mod tests {
                 OutEvent::OutboundFinished(()) => {}
                 OutEvent::FailedToOpen(OpenError::Timeout(())) => {}
                 OutEvent::FailedToOpen(OpenError::NegotiationFailed((), _neg_error)) => {}
+                OutEvent::FailedToOpen(OpenError::LimitExceeded(_)) => {}
             }
         }
 
