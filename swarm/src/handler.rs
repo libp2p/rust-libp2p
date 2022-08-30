@@ -46,6 +46,7 @@ pub mod multi;
 mod one_shot;
 mod pending;
 mod select;
+mod unit;
 
 pub use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper, UpgradeInfoSend};
 
