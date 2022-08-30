@@ -1,8 +1,8 @@
 # 0.35.2 [unreleased]
 
-- Add `ReadyUpgrade`. See [PR XXXX].
+- Add `ReadyUpgrade`. See [PR 2855].
 
-[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+[PR 2855]: https://github.com/libp2p/rust-libp2p/pull/2855
 
 # 0.35.1
 
