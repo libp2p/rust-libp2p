@@ -2302,8 +2302,8 @@ mod tests {
         // Checks whether dialing an address containing the wrong peer id raises an error
         // for the expected peer id instead of the obtained peer id.
 
-        let mut swarm1 = new_test_swarm::<_, ()>(DummyConnectionHandler::default()).build();
-        let mut swarm2 = new_test_swarm::<_, ()>(DummyConnectionHandler::default()).build();
+        let mut swarm1 = new_test_swarm::<_, ()>(()).build();
+        let mut swarm2 = new_test_swarm::<_, ()>(()).build();
 
         swarm1.listen_on("/memory/0".parse().unwrap()).unwrap();
 
@@ -2362,7 +2362,7 @@ mod tests {
         //
         // The last two can happen in any order.
 
-        let mut swarm = new_test_swarm::<_, ()>(DummyConnectionHandler::default()).build();
+        let mut swarm = new_test_swarm::<_, ()>(()).build();
         swarm.listen_on("/memory/0".parse().unwrap()).unwrap();
 
         let local_address =
@@ -2420,7 +2420,7 @@ mod tests {
     fn dial_self_by_id() {
         // Trying to dial self by passing the same `PeerId` shouldn't even be possible in the first
         // place.
-        let swarm = new_test_swarm::<_, ()>(DummyConnectionHandler::default()).build();
+        let swarm = new_test_swarm::<_, ()>(()).build();
         let peer_id = *swarm.local_peer_id();
         assert!(!swarm.is_connected(&peer_id));
     }
@@ -2431,7 +2431,7 @@ mod tests {
 
         let target = PeerId::random();
 
-        let mut swarm = new_test_swarm::<_, ()>(DummyConnectionHandler::default()).build();
+        let mut swarm = new_test_swarm::<_, ()>(()).build();
 
         let mut addresses = Vec::new();
         for _ in 0..3 {
@@ -2485,8 +2485,8 @@ mod tests {
     fn aborting_pending_connection_surfaces_error() {
         let _ = env_logger::try_init();
 
-        let mut dialer = new_test_swarm::<_, ()>(DummyConnectionHandler::default()).build();
-        let mut listener = new_test_swarm::<_, ()>(DummyConnectionHandler::default()).build();
+        let mut dialer = new_test_swarm::<_, ()>(()).build();
+        let mut listener = new_test_swarm::<_, ()>(()).build();
 
         let listener_peer_id = *listener.local_peer_id();
         listener.listen_on(multiaddr![Memory(0u64)]).unwrap();

@@ -27,10 +27,7 @@ use futures::prelude::*;
 use if_watch::{IfEvent, IfWatcher};
 use libp2p_core::transport::ListenerId;
 use libp2p_core::{Multiaddr, PeerId};
-use libp2p_swarm::{
-    handler::DummyConnectionHandler, ConnectionHandler, NetworkBehaviour, NetworkBehaviourAction,
-    PollParameters,
-};
+use libp2p_swarm::{ConnectionHandler, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use smallvec::SmallVec;
 use std::collections::hash_map::{Entry, HashMap};
 use std::{cmp, fmt, io, net::IpAddr, pin::Pin, task::Context, task::Poll, time::Instant};
@@ -96,12 +93,10 @@ impl Mdns {
 }
 
 impl NetworkBehaviour for Mdns {
-    type ConnectionHandler = DummyConnectionHandler;
+    type ConnectionHandler = ();
     type OutEvent = MdnsEvent;
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
-        DummyConnectionHandler::default()
-    }
+    fn new_handler(&mut self) -> Self::ConnectionHandler {}
 
     fn addresses_of_peer(&mut self, peer_id: &PeerId) -> Vec<Multiaddr> {
         self.discovered_nodes
@@ -144,7 +139,7 @@ impl NetworkBehaviour for Mdns {
         &mut self,
         cx: &mut Context<'_>,
         params: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, DummyConnectionHandler>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, ()>> {
         // Poll ifwatch.
         while let Poll::Ready(event) = Pin::new(&mut self.if_watch).poll(cx) {
             match event {
