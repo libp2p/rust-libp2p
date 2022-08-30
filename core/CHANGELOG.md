@@ -1,3 +1,9 @@
+# 0.35.2 [unreleased]
+
+- Add `ReadyUpgrade`. See [PR XXXX].
+
+[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+
 # 0.35.1
 
 - Update to `p256` `v0.11.0`. See [PR 2636].
