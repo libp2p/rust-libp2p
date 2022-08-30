@@ -36,7 +36,6 @@ use instant::Instant;
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_core::{Multiaddr, PeerId};
 use prost::Message;
-use smallvec::SmallVec;
 use std::{borrow::Cow, convert::TryFrom, time::Duration};
 use std::{io, iter};
 use unsigned_varint::codec;
@@ -143,7 +142,7 @@ impl From<KadPeer> for proto::message::Peer {
 //       `OutboundUpgrade` to be just a single message
 #[derive(Debug, Clone)]
 pub struct KademliaProtocolConfig {
-    protocol_names: SmallVec<[Cow<'static, [u8]>; 2]>,
+    protocol_names: Vec<Cow<'static, [u8]>>,
     /// Maximum allowed size of a packet.
     max_packet_size: usize,
 }
@@ -154,10 +153,17 @@ impl KademliaProtocolConfig {
         &self.protocol_names
     }
 
-    /// Modifies the protocol name used on the wire. Can be used to create incompatibilities
+    /// Modifies the protocol names used on the wire. Can be used to create incompatibilities
     /// between networks on purpose.
-    pub fn set_protocol_names(&mut self, names: SmallVec<[Cow<'static, [u8]>; 2]>) {
+    pub fn set_protocol_names(&mut self, names: Vec<Cow<'static, [u8]>>) {
         self.protocol_names = names;
+    }
+
+    /// Sets single protocol name used on the wire. Can be used to create incompatibilities
+    /// between networks on purpose.
+    #[deprecated(since = "0.40.0", note = "use `set_protocol_names()` instead")]
+    pub fn set_protocol_name(&mut self, name: impl Into<Cow<'static, [u8]>>) {
+        self.set_protocol_names(std::iter::once(name.into()).collect());
     }
 
     /// Modifies the maximum allowed size of a single Kademlia packet.
@@ -177,7 +183,7 @@ impl Default for KademliaProtocolConfig {
 
 impl UpgradeInfo for KademliaProtocolConfig {
     type Info = Cow<'static, [u8]>;
-    type InfoIter = smallvec::IntoIter<[Self::Info; 2]>;
+    type InfoIter = std::vec::IntoIter<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
         self.protocol_names.clone().into_iter()

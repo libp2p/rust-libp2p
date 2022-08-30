@@ -223,9 +223,19 @@ impl KademliaConfig {
     /// More than one protocol name can be supplied. In this case the node will
     /// be able to talk to other nodes supporting any of the provided names.
     /// Multiple names must be used with caution to avoid network partitioning.
-    pub fn set_protocol_names(&mut self, names: SmallVec<[Cow<'static, [u8]>; 2]>) -> &mut Self {
+    pub fn set_protocol_names(&mut self, names: Vec<Cow<'static, [u8]>>) -> &mut Self {
         self.protocol_config.set_protocol_names(names);
         self
+    }
+
+    /// Sets a custom protocol name.
+    ///
+    /// Kademlia nodes only communicate with other nodes using the same protocol
+    /// name. Using a custom name therefore allows to segregate the DHT from
+    /// others, if that is desired.
+    #[deprecated(since = "0.40.0", note = "use `set_protocol_names()` instead")]
+    pub fn set_protocol_name(&mut self, name: impl Into<Cow<'static, [u8]>>) -> &mut Self {
+        self.set_protocol_names(std::iter::once(name.into()).collect())
     }
 
     /// Sets the timeout for a single query.
