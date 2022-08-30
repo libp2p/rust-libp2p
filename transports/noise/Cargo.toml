@@ -33,7 +33,8 @@ async-io = "1.2.0"
 env_logger = "0.9.0"
 libp2p-tcp = { path = "../../transports/tcp" }
 quickcheck = "0.9.0"
-sodiumoxide = "0.2.5"
+libsodium-sys-stable = { version = "1.19.22", features = ["fetch-latest"] }
+ed25519-compact = "1.0.11"
 
 [build-dependencies]
 prost-build = "0.11"

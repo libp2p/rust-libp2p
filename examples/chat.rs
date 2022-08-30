@@ -85,11 +85,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     struct MyBehaviour {
         floodsub: Floodsub,
         mdns: Mdns,
-
-        // Struct fields which do not implement NetworkBehaviour need to be ignored
-        #[behaviour(ignore)]
-        #[allow(dead_code)]
-        ignored_member: bool,
     }
 
     #[allow(clippy::large_enum_variant)]
@@ -117,7 +112,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let mut behaviour = MyBehaviour {
             floodsub: Floodsub::new(local_peer_id),
             mdns,
-            ignored_member: false,
         };
 
         behaviour.floodsub.subscribe(floodsub_topic.clone());
