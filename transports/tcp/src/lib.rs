@@ -373,18 +373,23 @@ where
         socket.set_nonblocking(true)?;
         let listener: TcpListener = socket.into();
         let local_addr = listener.local_addr()?;
-        let if_watcher = if local_addr.ip().is_unspecified() {
-            Some(IfWatcher::new()?)
-        } else {
-            self.port_reuse.register(local_addr.ip(), local_addr.port());
-            let listen_addr = ip_to_multiaddr(local_addr.ip(), local_addr.port());
-            self.pending_events.push_back(TransportEvent::NewAddress {
-                listener_id: id,
-                listen_addr,
-            });
-            None
-        };
-        TcpListenStream::<T>::new(id, listener, if_watcher, self.port_reuse.clone())
+
+        if local_addr.ip().is_unspecified() {
+            return TcpListenStream::<T>::new(
+                id,
+                listener,
+                Some(IfWatcher::new()?),
+                self.port_reuse.clone(),
+            );
+        }
+
+        self.port_reuse.register(local_addr.ip(), local_addr.port());
+        let listen_addr = ip_to_multiaddr(local_addr.ip(), local_addr.port());
+        self.pending_events.push_back(TransportEvent::NewAddress {
+            listener_id: id,
+            listen_addr,
+        });
+        TcpListenStream::<T>::new(id, listener, None, self.port_reuse.clone())
     }
 }
 
