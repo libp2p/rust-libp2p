@@ -1,4 +1,19 @@
-# 0.29.0 - [unreleased]
+# 0.30.0 - [unreleased]
+
+- Remove support for removed `NetworkBehaviourEventProcess`. See [PR 2840].
+
+- Remove support for custom `poll` method on `NetworkBehaviour` via `#[behaviour(poll_method =
+  "poll")]`. See [PR 2841].
+
+[PR 2840]: https://github.com/libp2p/rust-libp2p/pull/2840
+[PR 2841]: https://github.com/libp2p/rust-libp2p/pull/2841
+
+- Remove support for non-`NetworkBehaviour` fields on main `struct` via `#[behaviour(ignore)]`. See
+  [PR 2842].
+
+[PR 2842]: https://github.com/libp2p/rust-libp2p/pull/2842
+
+# 0.29.0
 
 - Generate `NetworkBehaviour::OutEvent` if not provided through `#[behaviour(out_event =
   "MyOutEvent")]` and event processing is disabled (default).
