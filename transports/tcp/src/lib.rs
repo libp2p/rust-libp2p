@@ -757,10 +757,6 @@ where
                         }
                     }
                     Err(err) => {
-                        log::debug! {
-                            "Failure polling interfaces: {:?}. Scheduling retry.",
-                            err
-                        };
                         me.pause = Some(Delay::new(me.sleep_on_error));
                         return Poll::Ready(Some(Ok(TcpListenerEvent::Error(err))));
                     }
@@ -788,7 +784,6 @@ where
             }
             Poll::Ready(Err(e)) => {
                 // These errors are non-fatal for the listener stream.
-                log::error!("error accepting incoming connection: {}", e);
                 me.pause = Some(Delay::new(me.sleep_on_error));
                 return Poll::Ready(Some(Ok(TcpListenerEvent::Error(e))));
             }
