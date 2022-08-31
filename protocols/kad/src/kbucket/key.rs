@@ -197,17 +197,16 @@ mod tests {
     use super::*;
     use libp2p_core::multihash::Code;
     use quickcheck::*;
-    use rand::Rng;
 
     impl Arbitrary for Key<PeerId> {
-        fn arbitrary<G: Gen>(_: &mut G) -> Key<PeerId> {
+        fn arbitrary(_: &mut Gen) -> Key<PeerId> {
             Key::from(PeerId::random())
         }
     }
 
     impl Arbitrary for Key<Multihash> {
-        fn arbitrary<G: Gen>(_: &mut G) -> Key<Multihash> {
-            let hash = rand::thread_rng().gen::<[u8; 32]>();
+        fn arbitrary(g: &mut Gen) -> Key<Multihash> {
+            let hash: [u8; 32] = core::array::from_fn(|_| u8::arbitrary(g));
             Key::from(Multihash::wrap(Code::Sha2_256.into(), &hash).unwrap())
         }
     }

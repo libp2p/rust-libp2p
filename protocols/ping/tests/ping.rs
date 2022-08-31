@@ -34,7 +34,6 @@ use libp2p_swarm::{DummyBehaviour, KeepAlive, Swarm, SwarmEvent};
 use libp2p_tcp::{GenTcpConfig, TcpTransport};
 use libp2p_yamux as yamux;
 use quickcheck::*;
-use rand::prelude::*;
 use std::{num::NonZeroU8, time::Duration};
 
 #[test]
@@ -266,7 +265,7 @@ enum MuxerChoice {
 }
 
 impl Arbitrary for MuxerChoice {
-    fn arbitrary<G: Gen>(g: &mut G) -> MuxerChoice {
-        *[MuxerChoice::Mplex, MuxerChoice::Yamux].choose(g).unwrap()
+    fn arbitrary(g: &mut Gen) -> MuxerChoice {
+        *g.choose(&[MuxerChoice::Mplex, MuxerChoice::Yamux]).unwrap()
     }
 }

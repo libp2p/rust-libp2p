@@ -501,15 +501,15 @@ mod tests {
     }
 
     impl Arbitrary for ClosestPeersIter {
-        fn arbitrary<G: Gen>(g: &mut G) -> ClosestPeersIter {
-            let known_closest_peers = random_peers(g.gen_range(1, 60), g)
+        fn arbitrary(g: &mut Gen) -> ClosestPeersIter {
+            let known_closest_peers = random_peers(1 + usize::arbitrary(g) % 59, &mut rand::thread_rng())
                 .into_iter()
                 .map(Key::from);
             let target = Key::from(Into::<Multihash>::into(PeerId::random()));
             let config = ClosestPeersIterConfig {
-                parallelism: NonZeroUsize::new(g.gen_range(1, 10)).unwrap(),
-                num_results: NonZeroUsize::new(g.gen_range(1, 25)).unwrap(),
-                peer_timeout: Duration::from_secs(g.gen_range(10, 30)),
+                parallelism: NonZeroUsize::new(1 + usize::arbitrary(g) % 10).unwrap(),
+                num_results: NonZeroUsize::new(1 + usize::arbitrary(g) % 25).unwrap(),
+                peer_timeout: Duration::from_secs(10 + u64::arbitrary(g) % 20),
             };
             ClosestPeersIter::with_config(config, target, known_closest_peers)
         }
@@ -519,8 +519,9 @@ mod tests {
     struct Seed([u8; 32]);
 
     impl Arbitrary for Seed {
-        fn arbitrary<G: Gen>(g: &mut G) -> Seed {
-            Seed(g.gen())
+        fn arbitrary(g: &mut Gen) -> Seed {
+            let seed = core::array::from_fn(|_| u8::arbitrary(g));
+            Seed(seed)
         }
     }
 
@@ -612,7 +613,7 @@ mod tests {
                 // peers or an error, thus finishing the "in-flight requests".
                 for (i, k) in expected.iter().enumerate() {
                     if rng.gen_bool(0.75) {
-                        let num_closer = rng.gen_range(0, iter.config.num_results.get() + 1);
+                        let num_closer = rng.gen_range(0..iter.config.num_results.get() + 1);
                         let closer_peers = random_peers(num_closer, &mut rng);
                         remaining.extend(closer_peers.iter().cloned().map(Key::from));
                         iter.on_success(k.preimage(), closer_peers);
