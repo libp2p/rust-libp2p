@@ -180,30 +180,32 @@ where
             }
 
             // In case the [`ConnectionHandler`] can not make any more progress, poll the negotiating outbound streams.
-            if let Poll::Ready(Some((user_data, res))) = self.negotiating_out.poll_next_unpin(cx) {
-                match res {
-                    Ok(upgrade) => self
-                        .handler
-                        .inject_fully_negotiated_outbound(upgrade, user_data),
-                    Err(err) => self.handler.inject_dial_upgrade_error(user_data, err),
+            match self.negotiating_out.poll_next_unpin(cx) {
+                Poll::Pending | Poll::Ready(None) => {}
+                Poll::Ready(Some((user_data, Ok(upgrade)))) => {
+                    self.handler
+                        .inject_fully_negotiated_outbound(upgrade, user_data);
+                    continue;
                 }
-
-                // After the `inject_*` calls, the [`ConnectionHandler`] might be able to make progress.
-                continue;
+                Poll::Ready(Some((user_data, Err(err)))) => {
+                    self.handler.inject_dial_upgrade_error(user_data, err);
+                    continue;
+                }
             }
 
             // In case both the [`ConnectionHandler`] and the negotiating outbound streams can not
             // make any more progress, poll the negotiating inbound streams.
-            if let Poll::Ready(Some((user_data, res))) = self.negotiating_in.poll_next_unpin(cx) {
-                match res {
-                    Ok(upgrade) => self
-                        .handler
-                        .inject_fully_negotiated_inbound(upgrade, user_data),
-                    Err(err) => self.handler.inject_listen_upgrade_error(user_data, err),
+            match self.negotiating_in.poll_next_unpin(cx) {
+                Poll::Pending | Poll::Ready(None) => {}
+                Poll::Ready(Some((user_data, Ok(upgrade)))) => {
+                    self.handler
+                        .inject_fully_negotiated_inbound(upgrade, user_data);
+                    continue;
                 }
-
-                // After the `inject_*` calls, the [`ConnectionHandler`] might be able to make progress.
-                continue;
+                Poll::Ready(Some((user_data, Err(err)))) => {
+                    self.handler.inject_listen_upgrade_error(user_data, err);
+                    continue;
+                }
             }
 
             // Ask the handler whether it wants the connection (and the handler itself)
