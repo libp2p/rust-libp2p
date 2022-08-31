@@ -453,3 +453,116 @@ enum Shutdown {
     /// A shut down is planned for when a `Delay` has elapsed.
     Later(Delay, Instant),
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::handler::DummyConnectionHandler;
+    use futures::AsyncRead;
+    use futures::AsyncWrite;
+    use libp2p_core::StreamMuxer;
+    use quickcheck::*;
+    use std::sync::{Arc, Weak};
+    use void::Void;
+
+    #[test]
+    fn max_negotiating_inbound_streams() {
+        fn prop(max_negotiating_inbound_streams: u8) {
+            let max_negotiating_inbound_streams: usize = max_negotiating_inbound_streams.into();
+
+            let alive_substream_counter = Arc::new(());
+
+            let mut connection = Connection::new(
+                PeerId::random(),
+                ConnectedPoint::Listener {
+                    local_addr: Multiaddr::empty(),
+                    send_back_addr: Multiaddr::empty(),
+                },
+                StreamMuxerBox::new(DummyStreamMuxer {
+                    counter: alive_substream_counter.clone(),
+                }),
+                DummyConnectionHandler {
+                    keep_alive: KeepAlive::Yes,
+                },
+                None,
+                max_negotiating_inbound_streams,
+            );
+
+            let result = Pin::new(&mut connection)
+                .poll(&mut Context::from_waker(futures::task::noop_waker_ref()));
+
+            assert!(result.is_pending());
+            assert_eq!(
+                Arc::weak_count(&alive_substream_counter),
+                max_negotiating_inbound_streams,
+                "Expect no more than the maximum number of allowed streams"
+            );
+        }
+
+        QuickCheck::new().quickcheck(prop as fn(_));
+    }
+
+    struct DummyStreamMuxer {
+        counter: Arc<()>,
+    }
+
+    impl StreamMuxer for DummyStreamMuxer {
+        type Substream = PendingSubstream;
+        type Error = Void;
+
+        fn poll_inbound(
+            self: Pin<&mut Self>,
+            _: &mut Context<'_>,
+        ) -> Poll<Result<Self::Substream, Self::Error>> {
+            Poll::Ready(Ok(PendingSubstream(Arc::downgrade(&self.counter))))
+        }
+
+        fn poll_outbound(
+            self: Pin<&mut Self>,
+            _: &mut Context<'_>,
+        ) -> Poll<Result<Self::Substream, Self::Error>> {
+            Poll::Pending
+        }
+
+        fn poll_close(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+            Poll::Ready(Ok(()))
+        }
+
+        fn poll(
+            self: Pin<&mut Self>,
+            _: &mut Context<'_>,
+        ) -> Poll<Result<StreamMuxerEvent, Self::Error>> {
+            Poll::Pending
+        }
+    }
+
+    struct PendingSubstream(Weak<()>);
+
+    impl AsyncRead for PendingSubstream {
+        fn poll_read(
+            self: Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+            _buf: &mut [u8],
+        ) -> Poll<std::io::Result<usize>> {
+            Poll::Pending
+        }
+    }
+
+    impl AsyncWrite for PendingSubstream {
+        fn poll_write(
+            self: Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+            _buf: &[u8],
+        ) -> Poll<std::io::Result<usize>> {
+            Poll::Pending
+        }
+
+        fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+            Poll::Pending
+        }
+
+        fn poll_close(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+            Poll::Pending
+        }
+    }
+}
