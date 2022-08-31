@@ -169,11 +169,9 @@ where
     fn inject_outbound_substream(
         &mut self,
         substream: SubstreamBox,
-        (user_data, timeout, upgrade): (
-            <THandler as ConnectionHandler>::OutboundOpenInfo,
-            Duration,
-            <THandler as ConnectionHandler>::OutboundProtocol,
-        ),
+        user_data: <THandler as ConnectionHandler>::OutboundOpenInfo,
+        timeout: Duration,
+        upgrade: <THandler as ConnectionHandler>::OutboundProtocol,
     ) {
         let mut version = upgrade::Version::default();
         if let Some(v) = self.substream_upgrade_protocol_override {
@@ -322,11 +320,11 @@ where
                 match self.muxing.poll_outbound_unpin(cx)? {
                     Poll::Pending => {}
                     Poll::Ready(substream) => {
-                        let user_data = self
+                        let (open_info, timeout, upgrade) = self
                             .pending_dial_upgrades
                             .pop_front()
                             .expect("`open_info` is not empty");
-                        self.inject_outbound_substream(substream, user_data);
+                        self.inject_outbound_substream(substream, open_info, timeout, upgrade);
                         continue; // Go back to the top, handler can potentially make progress again.
                     }
                 }
