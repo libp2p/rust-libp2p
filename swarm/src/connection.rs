@@ -164,19 +164,18 @@ where
     ) -> Poll<Result<Event<THandler::OutEvent>, ConnectionError<THandler::Error>>> {
         loop {
             // Poll the [`ConnectionHandler`].
-            if let Poll::Ready(handler_event) = self.handler.poll(cx) {
-                match handler_event {
-                    ConnectionHandlerEvent::Custom(event) => {
-                        return Poll::Ready(Ok(Event::Handler(event)))
-                    }
-                    ConnectionHandlerEvent::Close(err) => {
-                        return Poll::Ready(Err(ConnectionError::Handler(err)))
-                    }
-                    ConnectionHandlerEvent::OutboundSubstreamRequest { protocol } => {
-                        self.pending_dial_upgrades.push_back(protocol);
+            match self.handler.poll(cx) {
+                Poll::Pending => {}
+                Poll::Ready(ConnectionHandlerEvent::Custom(event)) => {
+                    return Poll::Ready(Ok(Event::Handler(event)))
+                }
+                Poll::Ready(ConnectionHandlerEvent::Close(err)) => {
+                    return Poll::Ready(Err(ConnectionError::Handler(err)))
+                }
+                Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest { protocol }) => {
+                    self.pending_dial_upgrades.push_back(protocol);
 
-                        continue;
-                    }
+                    continue;
                 }
             }
 
