@@ -86,6 +86,7 @@ pub mod transport;
 
 mod fingerprint;
 mod in_addr;
+mod req_res_chan;
 mod sdp;
 mod udp_mux;
 mod webrtc_connection;

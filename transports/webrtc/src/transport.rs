@@ -169,7 +169,7 @@ impl Transport for WebRTCTransport {
             .iter()
             .next()
             .ok_or(TransportError::Other(Error::NoListeners))?;
-        let udp_mux = first_listener.udp_mux.clone();
+        let udp_mux = first_listener.udp_mux.udp_mux_handle();
 
         // [`Transport::dial`] should do no work unless the returned [`Future`] is polled. Thus
         // do the `set_remote_description` call within the [`Future`].
@@ -258,7 +258,7 @@ pub struct WebRTCListenStream {
     config: WebRTCConfiguration,
 
     /// The UDP muxer that manages all ICE connections.
-    udp_mux: Arc<UDPMuxNewAddr>,
+    udp_mux: UDPMuxNewAddr,
 
     /// `Keypair` identifying this peer
     id_keys: identity::Keypair,
@@ -276,7 +276,7 @@ impl WebRTCListenStream {
         listener_id: ListenerId,
         listen_addr: SocketAddr,
         config: WebRTCConfiguration,
-        udp_mux: Arc<UDPMuxNewAddr>,
+        udp_mux: UDPMuxNewAddr,
         id_keys: identity::Keypair,
     ) -> Self {
         let in_addr = InAddr::new(listen_addr.ip());
@@ -381,13 +381,13 @@ impl Stream for WebRTCListenStream {
             }
 
             // Poll UDP muxer for new addresses or incoming data for streams.
-            match ready!(self.udp_mux.as_ref().poll(cx)) {
+            match ready!(self.udp_mux.poll(cx)) {
                 UDPMuxEvent::NewAddr(new_addr) => {
                     let local_addr = socketaddr_to_multiaddr(&self.listen_addr);
                     let send_back_addr = socketaddr_to_multiaddr(&new_addr.addr);
                     let event = TransportEvent::Incoming {
                         upgrade: Box::pin(upgrade(
-                            self.udp_mux.clone(),
+                            self.udp_mux.udp_mux_handle(),
                             self.config.clone(),
                             new_addr.addr,
                             new_addr.ufrag,
