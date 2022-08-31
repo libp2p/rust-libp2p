@@ -586,6 +586,7 @@ where
         Ok(true)
     }
 
+    /// Publishes a message to a topic in the network.
     pub fn publish<H: Hasher>(
         &mut self,
         topic: Topic<H>,
@@ -594,7 +595,7 @@ where
         self.publish_to_topichash(topic.into(), data)
     }
 
-    /// Publishes a message with multiple topics to the network.
+    /// Publishes a message to a topic in the network using TopicHash.
     pub fn publish_to_topichash(
         &mut self,
         topic: TopicHash,
