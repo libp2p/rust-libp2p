@@ -171,10 +171,10 @@ where
                     continue; // Poll handler until exhausted.
                 }
                 Poll::Ready(ConnectionHandlerEvent::Custom(event)) => {
-                    return Poll::Ready(Ok(Event::Handler(event)))
+                    return Poll::Ready(Ok(Event::Handler(event)));
                 }
                 Poll::Ready(ConnectionHandlerEvent::Close(err)) => {
-                    return Poll::Ready(Err(ConnectionError::Handler(err)))
+                    return Poll::Ready(Err(ConnectionError::Handler(err)));
                 }
             }
 
