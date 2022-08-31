@@ -1,3 +1,9 @@
+# 0.35.2
+
+- Make `ring` dependency optional. See [PR 2860].
+
+[PR 2860]: https://github.com/libp2p/rust-libp2p/pull/2860/
+
 # 0.35.1
 
 - Update to `p256` `v0.11.0`. See [PR 2636].
