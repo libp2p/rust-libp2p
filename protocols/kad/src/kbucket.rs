@@ -530,7 +530,7 @@ mod tests {
     impl Arbitrary for TestTable {
         fn arbitrary(g: &mut Gen) -> TestTable {
             let local_key = Key::from(PeerId::random());
-            let timeout = Duration::from_secs(1+u64::arbitrary(g) % 360);
+            let timeout = Duration::from_secs(1 + u64::arbitrary(g) % 360);
             let mut table = TestTable::new(local_key.clone().into(), timeout);
             let mut num_total = usize::arbitrary(g) % 100;
             for (i, b) in &mut table.buckets.iter_mut().enumerate().rev() {

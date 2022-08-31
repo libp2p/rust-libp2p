@@ -342,7 +342,7 @@ mod tests {
 
     impl Arbitrary for AddressScore {
         fn arbitrary(g: &mut Gen) -> AddressScore {
-            if u8::arbitrary(g) % 10  == 0 {
+            if u8::arbitrary(g) % 10 == 0 {
                 // ~10% "Infinitely" scored addresses
                 AddressScore::Infinite
             } else {
