@@ -30,21 +30,11 @@ use libp2p_core::{
 use std::task::{Context, Poll};
 use void::Void;
 
-/// Implementation of [`ConnectionHandler`] that doesn't handle anything.
+/// Implementation of [`ConnectionHandler`] that doesn't handle anything but keeps the connection alive.
 #[derive(Clone, Debug)]
-pub struct DummyConnectionHandler {
-    pub keep_alive: KeepAlive,
-}
+pub struct KeepAliveConnectionHandler;
 
-impl Default for DummyConnectionHandler {
-    fn default() -> Self {
-        DummyConnectionHandler {
-            keep_alive: KeepAlive::No,
-        }
-    }
-}
-
-impl ConnectionHandler for DummyConnectionHandler {
+impl ConnectionHandler for KeepAliveConnectionHandler {
     type InEvent = Void;
     type OutEvent = Void;
     type Error = Void;
@@ -98,7 +88,7 @@ impl ConnectionHandler for DummyConnectionHandler {
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
-        self.keep_alive
+        KeepAlive::Yes
     }
 
     fn poll(

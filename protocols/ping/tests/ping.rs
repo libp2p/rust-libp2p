@@ -30,7 +30,7 @@ use libp2p_core::{
 use libp2p_mplex as mplex;
 use libp2p_noise as noise;
 use libp2p_ping as ping;
-use libp2p_swarm::{DummyBehaviour, KeepAlive, Swarm, SwarmEvent};
+use libp2p_swarm::{KeepAliveBehaviour, Swarm, SwarmEvent};
 use libp2p_tcp::{GenTcpConfig, TcpTransport};
 use libp2p_yamux as yamux;
 use quickcheck::*;
@@ -188,11 +188,7 @@ fn max_failures() {
 #[test]
 fn unsupported_doesnt_fail() {
     let (peer1_id, trans) = mk_transport(MuxerChoice::Mplex);
-    let mut swarm1 = Swarm::new(
-        trans,
-        DummyBehaviour::with_keep_alive(KeepAlive::Yes),
-        peer1_id.clone(),
-    );
+    let mut swarm1 = Swarm::new(trans, KeepAliveBehaviour, peer1_id.clone());
 
     let (peer2_id, trans) = mk_transport(MuxerChoice::Mplex);
     let mut swarm2 = Swarm::new(

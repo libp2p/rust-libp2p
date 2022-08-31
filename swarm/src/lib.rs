@@ -82,6 +82,7 @@ use connection::{EstablishedConnection, IncomingInfo};
 use dial_opts::{DialOpts, PeerCondition};
 use either::Either;
 use futures::{executor::ThreadPoolBuilder, prelude::*, stream::FusedStream};
+use handler::KeepAliveConnectionHandler;
 use libp2p_core::connection::{ConnectionId, PendingPoint};
 use libp2p_core::muxing::SubstreamBox;
 use libp2p_core::{
@@ -348,11 +349,11 @@ where
     /// # use libp2p_swarm::dial_opts::{DialOpts, PeerCondition};
     /// # use libp2p_core::{Multiaddr, PeerId, Transport};
     /// # use libp2p_core::transport::dummy::DummyTransport;
-    /// # use libp2p_swarm::DummyBehaviour;
+    /// # use libp2p_swarm::KeepAliveBehaviour;
     /// #
     /// let mut swarm = Swarm::new(
     ///   DummyTransport::new().boxed(),
-    ///   DummyBehaviour::default(),
+    ///   KeepAliveBehaviour,
     ///   PeerId::random(),
     /// );
     ///
@@ -1508,39 +1509,42 @@ impl error::Error for DialError {
     }
 }
 
-/// Dummy implementation of [`NetworkBehaviour`] that doesn't do anything.
+/// Implementation of [`NetworkBehaviour`] that doesn't do anything other than keep all connections alive.
 #[derive(Clone)]
-pub struct DummyBehaviour {
-    keep_alive: KeepAlive,
-}
+pub struct KeepAliveBehaviour;
 
-impl DummyBehaviour {
-    pub fn with_keep_alive(keep_alive: KeepAlive) -> Self {
-        Self { keep_alive }
-    }
-
-    pub fn keep_alive_mut(&mut self) -> &mut KeepAlive {
-        &mut self.keep_alive
-    }
-}
-
-impl Default for DummyBehaviour {
-    fn default() -> Self {
-        Self {
-            keep_alive: KeepAlive::No,
-        }
-    }
-}
-
-impl NetworkBehaviour for DummyBehaviour {
-    type ConnectionHandler = handler::DummyConnectionHandler;
+impl NetworkBehaviour for KeepAliveBehaviour {
+    type ConnectionHandler = KeepAliveConnectionHandler;
     type OutEvent = void::Void;
 
     fn new_handler(&mut self) -> Self::ConnectionHandler {
-        handler::DummyConnectionHandler {
-            keep_alive: self.keep_alive,
-        }
+        KeepAliveConnectionHandler
     }
+
+    fn inject_event(
+        &mut self,
+        _: PeerId,
+        _: ConnectionId,
+        event: <Self::ConnectionHandler as ConnectionHandler>::OutEvent,
+    ) {
+        void::unreachable(event)
+    }
+
+    fn poll(
+        &mut self,
+        _: &mut Context<'_>,
+        _: &mut impl PollParameters,
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+        Poll::Pending
+    }
+}
+
+/// Implementation of [`NetworkBehaviour`] that really doesn't do anything.
+impl NetworkBehaviour for () {
+    type ConnectionHandler = ();
+    type OutEvent = void::Void;
+
+    fn new_handler(&mut self) -> Self::ConnectionHandler {}
 
     fn inject_event(
         &mut self,
@@ -1611,7 +1615,7 @@ fn p2p_addr(peer: Option<PeerId>, addr: Multiaddr) -> Result<Multiaddr, Multiadd
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::handler::DummyConnectionHandler;
+    use crate::handler::KeepAliveConnectionHandler;
     use crate::test::{CallTraceBehaviour, MockBehaviour};
     use futures::executor::block_on;
     use futures::future::poll_fn;
@@ -1710,9 +1714,7 @@ mod tests {
     fn test_connect_disconnect_ban() {
         // Since the test does not try to open any substreams, we can
         // use the dummy protocols handler.
-        let handler_proto = DummyConnectionHandler {
-            keep_alive: KeepAlive::Yes,
-        };
+        let handler_proto = KeepAliveConnectionHandler;
 
         let mut swarm1 = new_test_swarm::<_, ()>(handler_proto.clone()).build();
         let mut swarm2 = new_test_swarm::<_, ()>(handler_proto).build();
@@ -1830,9 +1832,7 @@ mod tests {
     fn test_swarm_disconnect() {
         // Since the test does not try to open any substreams, we can
         // use the dummy protocols handler.
-        let handler_proto = DummyConnectionHandler {
-            keep_alive: KeepAlive::Yes,
-        };
+        let handler_proto = KeepAliveConnectionHandler;
 
         let mut swarm1 = new_test_swarm::<_, ()>(handler_proto.clone()).build();
         let mut swarm2 = new_test_swarm::<_, ()>(handler_proto).build();
@@ -1898,9 +1898,7 @@ mod tests {
     fn test_behaviour_disconnect_all() {
         // Since the test does not try to open any substreams, we can
         // use the dummy protocols handler.
-        let handler_proto = DummyConnectionHandler {
-            keep_alive: KeepAlive::Yes,
-        };
+        let handler_proto = KeepAliveConnectionHandler;
 
         let mut swarm1 = new_test_swarm::<_, ()>(handler_proto.clone()).build();
         let mut swarm2 = new_test_swarm::<_, ()>(handler_proto).build();
@@ -1968,9 +1966,7 @@ mod tests {
     fn test_behaviour_disconnect_one() {
         // Since the test does not try to open any substreams, we can
         // use the dummy protocols handler.
-        let handler_proto = DummyConnectionHandler {
-            keep_alive: KeepAlive::Yes,
-        };
+        let handler_proto = KeepAliveConnectionHandler;
 
         let mut swarm1 = new_test_swarm::<_, ()>(handler_proto.clone()).build();
         let mut swarm2 = new_test_swarm::<_, ()>(handler_proto).build();
@@ -2055,11 +2051,9 @@ mod tests {
 
         fn prop(concurrency_factor: DialConcurrencyFactor) {
             block_on(async {
-                let mut swarm = new_test_swarm::<_, ()>(DummyConnectionHandler {
-                    keep_alive: KeepAlive::Yes,
-                })
-                .dial_concurrency_factor(concurrency_factor.0)
-                .build();
+                let mut swarm = new_test_swarm::<_, ()>(KeepAliveConnectionHandler)
+                    .dial_concurrency_factor(concurrency_factor.0)
+                    .build();
 
                 // Listen on `concurrency_factor + 1` addresses.
                 //
@@ -2125,11 +2119,9 @@ mod tests {
         let outgoing_limit = rand::thread_rng().gen_range(1, 10);
 
         let limits = ConnectionLimits::default().with_max_pending_outgoing(Some(outgoing_limit));
-        let mut network = new_test_swarm::<_, ()>(DummyConnectionHandler {
-            keep_alive: KeepAlive::Yes,
-        })
-        .connection_limits(limits)
-        .build();
+        let mut network = new_test_swarm::<_, ()>(KeepAliveConnectionHandler)
+            .connection_limits(limits)
+            .build();
 
         let addr: Multiaddr = "/memory/1234".parse().unwrap();
 
@@ -2188,16 +2180,12 @@ mod tests {
         fn prop(limit: Limit) {
             let limit = limit.0;
 
-            let mut network1 = new_test_swarm::<_, ()>(DummyConnectionHandler {
-                keep_alive: KeepAlive::Yes,
-            })
-            .connection_limits(limits(limit))
-            .build();
-            let mut network2 = new_test_swarm::<_, ()>(DummyConnectionHandler {
-                keep_alive: KeepAlive::Yes,
-            })
-            .connection_limits(limits(limit))
-            .build();
+            let mut network1 = new_test_swarm::<_, ()>(KeepAliveConnectionHandler)
+                .connection_limits(limits(limit))
+                .build();
+            let mut network2 = new_test_swarm::<_, ()>(KeepAliveConnectionHandler)
+                .connection_limits(limits(limit))
+                .build();
 
             let _ = network1.listen_on(multiaddr![Memory(0u64)]).unwrap();
             let listen_addr = async_std::task::block_on(poll_fn(|cx| {
