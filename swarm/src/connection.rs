@@ -48,7 +48,6 @@ use libp2p_core::PeerId;
 use libp2p_core::{upgrade, UpgradeError};
 use std::collections::VecDeque;
 use std::future::Future;
-use std::time::Duration;
 use std::{fmt, io, pin::Pin, task::Context, task::Poll};
 
 /// Information about a successfully established connection.
@@ -164,46 +163,6 @@ where
         (self.handler, self.muxing.close())
     }
 
-    fn inject_outbound_substream(
-        &mut self,
-        substream: SubstreamBox,
-        user_data: <THandler as ConnectionHandler>::OutboundOpenInfo,
-        timeout: Duration,
-        upgrade: <THandler as ConnectionHandler>::OutboundProtocol,
-    ) {
-        let mut version = upgrade::Version::default();
-        if let Some(v) = self.substream_upgrade_protocol_override {
-            if v != version {
-                log::debug!(
-                    "Substream upgrade protocol override: {:?} -> {:?}",
-                    version,
-                    v
-                );
-                version = v;
-            }
-        }
-        let upgrade = upgrade::apply_outbound(substream, SendWrapper(upgrade), version);
-        let timeout = Delay::new(timeout);
-        self.negotiating_out.push(SubstreamUpgrade {
-            user_data: Some(user_data),
-            timeout,
-            upgrade,
-        });
-    }
-
-    fn inject_inbound_substream(&mut self, substream: SubstreamBox) {
-        let protocol = self.handler.listen_protocol();
-        let timeout = *protocol.timeout();
-        let (upgrade, user_data) = protocol.into_upgrade();
-        let upgrade = upgrade::apply_inbound(substream, SendWrapper(upgrade));
-        let timeout = Delay::new(timeout);
-        self.negotiating_in.push(SubstreamUpgrade {
-            user_data: Some(user_data),
-            timeout,
-            upgrade,
-        });
-    }
-
     /// Polls the handler and the substream, forwarding events from the former to the latter and
     /// vice versa.
     pub fn poll(
@@ -307,10 +266,27 @@ where
                             .pending_dial_upgrades
                             .pop_front()
                             .expect("`open_info` is not empty");
+
                         let timeout = *substream_upgrade.timeout();
                         let (upgrade, open_info) = substream_upgrade.into_upgrade();
 
-                        self.inject_outbound_substream(substream, open_info, timeout, upgrade);
+                        let mut version = upgrade::Version::default();
+                        if let Some(v) = self.substream_upgrade_protocol_override {
+                            if v != version {
+                                log::debug!(
+                                    "Substream upgrade protocol override: {:?} -> {:?}",
+                                    version,
+                                    v
+                                );
+                                version = v;
+                            }
+                        }
+
+                        self.negotiating_out.push(SubstreamUpgrade {
+                            user_data: Some(open_info),
+                            timeout: Delay::new(timeout),
+                            upgrade: upgrade::apply_outbound(substream, SendWrapper(upgrade), version),
+                        });
                         continue; // Go back to the top, handler can potentially make progress again.
                     }
                 }
@@ -320,7 +296,16 @@ where
                 match self.muxing.poll_inbound_unpin(cx)? {
                     Poll::Pending => {}
                     Poll::Ready(substream) => {
-                        self.inject_inbound_substream(substream);
+                        let protocol = self.handler.listen_protocol();
+
+                        let timeout = *protocol.timeout();
+                        let (upgrade, user_data) = protocol.into_upgrade();
+
+                        self.negotiating_in.push(SubstreamUpgrade {
+                            user_data: Some(user_data),
+                            timeout: Delay::new(timeout),
+                            upgrade: upgrade::apply_inbound(substream, SendWrapper(upgrade)),
+                        });
                         continue; // Go back to the top, handler can potentially make progress again.
                     }
                 }
