@@ -100,7 +100,6 @@ libp2p-yamux = { version = "0.39.0", path = "muxers/yamux", optional = true }
 multiaddr = { version = "0.14.0" }
 parking_lot = "0.12.0"
 pin-project = "1.0.0"
-rand = "0.8" # Explicit dependency to be used in `wasm-bindgen` feature
 smallvec = "1.6.1"
 
 [target.'cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))'.dependencies]
