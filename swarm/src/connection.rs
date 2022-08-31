@@ -106,8 +106,7 @@ where
     /// the total number of streams can be enforced at the
     /// [`StreamMuxerBox`](libp2p_core::muxing::StreamMuxerBox) level.
     max_negotiating_inbound_streams: usize,
-    /// For each outbound substream request, how to upgrade it. The first element of the tuple
-    /// is the unique identifier (see `unique_dial_upgrade_id`).
+    /// For each outbound substream request, how to upgrade it.
     pending_dial_upgrades:
         VecDeque<SubstreamProtocol<THandler::OutboundProtocol, THandler::OutboundOpenInfo>>,
 }
