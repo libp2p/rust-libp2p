@@ -105,12 +105,9 @@ where
     /// the total number of streams can be enforced at the
     /// [`StreamMuxerBox`](libp2p_core::muxing::StreamMuxerBox) level.
     max_negotiating_inbound_streams: usize,
-    /// Unique identifier assigned to each queued dial upgrade.
-    unique_dial_upgrade_id: u64,
     /// For each outbound substream request, how to upgrade it. The first element of the tuple
     /// is the unique identifier (see `unique_dial_upgrade_id`).
     pending_dial_upgrades: VecDeque<(
-        u64,
         <THandler as ConnectionHandler>::OutboundOpenInfo,
         Duration,
         <THandler as ConnectionHandler>::OutboundProtocol,
@@ -151,7 +148,6 @@ where
             handler: handler.into_handler(&peer_id, &endpoint),
             negotiating_in: Default::default(),
             negotiating_out: Default::default(),
-            unique_dial_upgrade_id: 0,
             shutdown: Shutdown::None,
             substream_upgrade_protocol_override,
             max_negotiating_inbound_streams,
@@ -173,10 +169,7 @@ where
     fn inject_outbound_substream(
         &mut self,
         substream: SubstreamBox,
-        // The first element of the tuple is the unique upgrade identifier
-        // (see `unique_dial_upgrade_id`).
-        (_, user_data, timeout, upgrade): (
-            u64,
+        (user_data, timeout, upgrade): (
             <THandler as ConnectionHandler>::OutboundOpenInfo,
             Duration,
             <THandler as ConnectionHandler>::OutboundProtocol,
@@ -243,13 +236,11 @@ where
                         return Poll::Ready(Err(ConnectionError::Handler(err)))
                     }
                     ConnectionHandlerEvent::OutboundSubstreamRequest { protocol } => {
-                        let id = self.unique_dial_upgrade_id;
                         let timeout = *protocol.timeout();
-                        self.unique_dial_upgrade_id += 1;
                         let (upgrade, info) = protocol.into_upgrade();
 
                         self.pending_dial_upgrades
-                            .push_back((id, info, timeout, upgrade));
+                            .push_back((info, timeout, upgrade));
 
                         continue;
                     }
