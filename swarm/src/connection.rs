@@ -77,7 +77,6 @@ where
     /// Node that handles the muxing.
     muxing: StreamMuxerBox,
 
-    remote_peer_id: PeerId,
     /// The underlying handler.
     handler: THandler,
     /// Futures that upgrade incoming substreams.
@@ -144,7 +143,6 @@ where
     ) -> Self {
         Connection {
             muxing: muxer,
-            remote_peer_id: peer_id,
             handler: handler.into_handler(&peer_id, &endpoint),
             negotiating_in: Default::default(),
             negotiating_out: Default::default(),
@@ -194,17 +192,6 @@ where
     }
 
     fn inject_inbound_substream(&mut self, substream: SubstreamBox) {
-        if self.negotiating_in.len() == self.max_negotiating_inbound_streams {
-            log::warn!(
-                "Incoming substream from {} exceeding maximum number \
-                         of negotiating inbound streams {} on connection. \
-                         Dropping. See PoolConfig::with_max_negotiating_inbound_streams.",
-                self.remote_peer_id,
-                self.max_negotiating_inbound_streams,
-            );
-            return;
-        }
-
         let protocol = self.handler.listen_protocol();
         let timeout = *protocol.timeout();
         let (upgrade, user_data) = protocol.into_upgrade();
@@ -329,11 +316,13 @@ where
                 }
             }
 
-            match self.muxing.poll_inbound_unpin(cx)? {
-                Poll::Pending => {}
-                Poll::Ready(substream) => {
-                    self.inject_inbound_substream(substream);
-                    continue; // Go back to the top, handler can potentially make progress again.
+            if self.negotiating_in.len() < self.max_negotiating_inbound_streams {
+                match self.muxing.poll_inbound_unpin(cx)? {
+                    Poll::Pending => {}
+                    Poll::Ready(substream) => {
+                        self.inject_inbound_substream(substream);
+                        continue; // Go back to the top, handler can potentially make progress again.
+                    }
                 }
             }
 
