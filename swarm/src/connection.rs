@@ -260,14 +260,14 @@ where
                 match self.muxing.poll_outbound_unpin(cx)? {
                     Poll::Pending => {}
                     Poll::Ready(substream) => {
-                        let substream_upgrade = self
+                        let protocol = self
                             .pending_dial_upgrades
                             .pop_front()
                             .expect("`open_info` is not empty");
 
                         self.negotiating_out.push(SubstreamUpgrade::new_outbound(
                             substream,
-                            substream_upgrade,
+                            protocol,
                             self.substream_upgrade_protocol_override,
                         ));
 
@@ -280,10 +280,10 @@ where
                 match self.muxing.poll_inbound_unpin(cx)? {
                     Poll::Pending => {}
                     Poll::Ready(substream) => {
-                        let substream_upgrade = self.handler.listen_protocol();
+                        let protocol = self.handler.listen_protocol();
 
                         self.negotiating_in
-                            .push(SubstreamUpgrade::new_inbound(substream, substream_upgrade));
+                            .push(SubstreamUpgrade::new_inbound(substream, protocol));
 
                         continue; // Go back to the top, handler can potentially make progress again.
                     }
