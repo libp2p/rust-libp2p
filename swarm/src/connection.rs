@@ -168,7 +168,7 @@ where
                 Poll::Pending => {}
                 Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest { protocol }) => {
                     self.pending_dial_upgrades.push_back(protocol);
-                    continue;
+                    continue; // Poll handler until exhausted.
                 }
                 Poll::Ready(ConnectionHandlerEvent::Custom(event)) => {
                     return Poll::Ready(Ok(Event::Handler(event)))
