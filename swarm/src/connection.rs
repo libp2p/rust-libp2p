@@ -166,16 +166,15 @@ where
             // Poll the [`ConnectionHandler`].
             match self.handler.poll(cx) {
                 Poll::Pending => {}
+                Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest { protocol }) => {
+                    self.pending_dial_upgrades.push_back(protocol);
+                    continue;
+                }
                 Poll::Ready(ConnectionHandlerEvent::Custom(event)) => {
                     return Poll::Ready(Ok(Event::Handler(event)))
                 }
                 Poll::Ready(ConnectionHandlerEvent::Close(err)) => {
                     return Poll::Ready(Err(ConnectionError::Handler(err)))
-                }
-                Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest { protocol }) => {
-                    self.pending_dial_upgrades.push_back(protocol);
-
-                    continue;
                 }
             }
 
