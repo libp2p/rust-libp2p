@@ -75,7 +75,6 @@ where
 {
     /// Node that handles the muxing.
     muxing: StreamMuxerBox,
-
     /// The underlying handler.
     handler: THandler,
     /// Futures that upgrade incoming substreams.
