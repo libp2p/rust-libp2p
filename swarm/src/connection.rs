@@ -30,7 +30,7 @@ pub use pool::{ConnectionCounters, ConnectionLimits};
 pub use pool::{EstablishedConnection, PendingConnection};
 
 use crate::handler::ConnectionHandler;
-use crate::upgrade::SendWrapper;
+use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper};
 use crate::{
     ConnectionHandlerEvent, ConnectionHandlerUpgrErr, IntoConnectionHandler, KeepAlive,
     SubstreamProtocol,
@@ -267,26 +267,12 @@ where
                             .pop_front()
                             .expect("`open_info` is not empty");
 
-                        let timeout = *substream_upgrade.timeout();
-                        let (upgrade, open_info) = substream_upgrade.into_upgrade();
+                        self.negotiating_out.push(SubstreamUpgrade::new_outbound(
+                            substream,
+                            substream_upgrade,
+                            self.substream_upgrade_protocol_override,
+                        ));
 
-                        let mut version = upgrade::Version::default();
-                        if let Some(v) = self.substream_upgrade_protocol_override {
-                            if v != version {
-                                log::debug!(
-                                    "Substream upgrade protocol override: {:?} -> {:?}",
-                                    version,
-                                    v
-                                );
-                                version = v;
-                            }
-                        }
-
-                        self.negotiating_out.push(SubstreamUpgrade {
-                            user_data: Some(open_info),
-                            timeout: Delay::new(timeout),
-                            upgrade: upgrade::apply_outbound(substream, SendWrapper(upgrade), version),
-                        });
                         continue; // Go back to the top, handler can potentially make progress again.
                     }
                 }
@@ -296,16 +282,11 @@ where
                 match self.muxing.poll_inbound_unpin(cx)? {
                     Poll::Pending => {}
                     Poll::Ready(substream) => {
-                        let protocol = self.handler.listen_protocol();
+                        let substream_upgrade = self.handler.listen_protocol();
 
-                        let timeout = *protocol.timeout();
-                        let (upgrade, user_data) = protocol.into_upgrade();
+                        self.negotiating_in
+                            .push(SubstreamUpgrade::new_inbound(substream, substream_upgrade));
 
-                        self.negotiating_in.push(SubstreamUpgrade {
-                            user_data: Some(user_data),
-                            timeout: Delay::new(timeout),
-                            upgrade: upgrade::apply_inbound(substream, SendWrapper(upgrade)),
-                        });
                         continue; // Go back to the top, handler can potentially make progress again.
                     }
                 }
@@ -357,6 +338,54 @@ struct SubstreamUpgrade<UserData, Upgrade> {
     user_data: Option<UserData>,
     timeout: Delay,
     upgrade: Upgrade,
+}
+
+impl<UserData, Upgrade>
+    SubstreamUpgrade<UserData, OutboundUpgradeApply<SubstreamBox, SendWrapper<Upgrade>>>
+where
+    Upgrade: Send + OutboundUpgradeSend,
+{
+    fn new_outbound(
+        substream: SubstreamBox,
+        protocol: SubstreamProtocol<Upgrade, UserData>,
+        version_override: Option<upgrade::Version>,
+    ) -> Self {
+        let timeout = *protocol.timeout();
+        let (upgrade, open_info) = protocol.into_upgrade();
+
+        let effective_version = match version_override {
+            Some(version_override) if version_override != upgrade::Version::default() => {
+                version_override
+            }
+            _ => upgrade::Version::default(),
+        };
+
+        Self {
+            user_data: Some(open_info),
+            timeout: Delay::new(timeout),
+            upgrade: upgrade::apply_outbound(substream, SendWrapper(upgrade), effective_version),
+        }
+    }
+}
+
+impl<UserData, Upgrade>
+    SubstreamUpgrade<UserData, InboundUpgradeApply<SubstreamBox, SendWrapper<Upgrade>>>
+where
+    Upgrade: Send + InboundUpgradeSend,
+{
+    fn new_inbound(
+        substream: SubstreamBox,
+        protocol: SubstreamProtocol<Upgrade, UserData>,
+    ) -> Self {
+        let timeout = *protocol.timeout();
+        let (upgrade, open_info) = protocol.into_upgrade();
+
+        Self {
+            user_data: Some(open_info),
+            timeout: Delay::new(timeout),
+            upgrade: upgrade::apply_inbound(substream, SendWrapper(upgrade)),
+        }
+    }
 }
 
 impl<UserData, Upgrade> Unpin for SubstreamUpgrade<UserData, Upgrade> {}
