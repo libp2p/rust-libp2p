@@ -12,12 +12,12 @@ use libp2p_request_response::{
 };
 use libp2p_swarm::{Swarm, SwarmBuilder, SwarmEvent};
 use libp2p_webrtc::transport::WebRTCTransport;
+use multihash::{Code, Multihash, MultihashDigest};
 use rand::RngCore;
 use rcgen::KeyPair;
 use tokio_crate as tokio;
 use webrtc::peer_connection::certificate::RTCCertificate;
 
-use std::borrow::Cow;
 use std::{io, iter};
 
 fn generate_certificate() -> RTCCertificate {
@@ -67,21 +67,15 @@ async fn smoke() -> Result<()> {
     let (mut a, a_fingerprint) = create_swarm().await?;
     let (mut b, _b_fingerprint) = create_swarm().await?;
 
-    Swarm::listen_on(&mut a, "/ip4/127.0.0.1/udp/0/x-webrtc/ACD1E533EC271FCDE0275947F4D62A2B2331FF10C9DDE0298EB7B399B4BFF60B".parse()?)?;
-    Swarm::listen_on(&mut b, "/ip4/127.0.0.1/udp/0/x-webrtc/ACD1E533EC271FCDE0275947F4D62A2B2331FF10C9DDE0298EB7B399B4BFF60B".parse()?)?;
+    Swarm::listen_on(&mut a, "/ip4/127.0.0.1/udp/0/webrtc".parse()?)?;
+    Swarm::listen_on(&mut b, "/ip4/127.0.0.1/udp/0/webrtc".parse()?)?;
 
     let addr = match a.next().await {
         Some(SwarmEvent::NewListenAddr { address, .. }) => address,
         e => panic!("{:?}", e),
     };
 
-    let addr = addr
-        .replace(2, |_| {
-            Some(Protocol::XWebRTC(hex_to_cow(
-                &a_fingerprint.replace(":", ""),
-            )))
-        })
-        .unwrap();
+    let addr = addr.with(Protocol::Certhash(fingerprint2multihash(&a_fingerprint)));
 
     let _ = match b.next().await {
         Some(SwarmEvent::NewListenAddr { address, .. }) => address,
@@ -301,21 +295,15 @@ async fn dial_failure() -> Result<()> {
     let (mut a, a_fingerprint) = create_swarm().await?;
     let (mut b, _b_fingerprint) = create_swarm().await?;
 
-    Swarm::listen_on(&mut a, "/ip4/127.0.0.1/udp/0/x-webrtc/ACD1E533EC271FCDE0275947F4D62A2B2331FF10C9DDE0298EB7B399B4BFF60B".parse()?)?;
-    Swarm::listen_on(&mut b, "/ip4/127.0.0.1/udp/0/x-webrtc/ACD1E533EC271FCDE0275947F4D62A2B2331FF10C9DDE0298EB7B399B4BFF60B".parse()?)?;
+    Swarm::listen_on(&mut a, "/ip4/127.0.0.1/udp/0/webrtc".parse()?)?;
+    Swarm::listen_on(&mut b, "/ip4/127.0.0.1/udp/0/webrtc".parse()?)?;
 
     let addr = match a.next().await {
         Some(SwarmEvent::NewListenAddr { address, .. }) => address,
         e => panic!("{:?}", e),
     };
 
-    let addr = addr
-        .replace(2, |_| {
-            Some(Protocol::XWebRTC(hex_to_cow(
-                &a_fingerprint.replace(":", ""),
-            )))
-        })
-        .unwrap();
+    let addr = addr.with(Protocol::Certhash(fingerprint2multihash(&a_fingerprint)));
 
     let _ = match b.next().await {
         Some(SwarmEvent::NewListenAddr { address, .. }) => address,
@@ -371,7 +359,11 @@ async fn concurrent_connections_and_streams() {
         // Spawn the listener nodes.
         for _ in 0..number_listeners {
             let (mut listener, fingerprint) = block_on(create_swarm()).unwrap();
-            Swarm::listen_on(&mut listener, "/ip4/127.0.0.1/udp/0/x-webrtc/ACD1E533EC271FCDE0275947F4D62A2B2331FF10C9DDE0298EB7B399B4BFF60B".parse().unwrap()).unwrap();
+            Swarm::listen_on(
+                &mut listener,
+                "/ip4/127.0.0.1/udp/0/webrtc".parse().unwrap(),
+            )
+            .unwrap();
 
             // Wait to listen on address.
             let addr = match block_on(listener.next()) {
@@ -379,11 +371,7 @@ async fn concurrent_connections_and_streams() {
                 e => panic!("{:?}", e),
             };
 
-            let addr = addr
-                .replace(2, |_| {
-                    Some(Protocol::XWebRTC(hex_to_cow(&fingerprint.replace(":", ""))))
-                })
-                .unwrap();
+            let addr = addr.with(Protocol::Certhash(fingerprint2multihash(&fingerprint)));
 
             listeners.push((*listener.local_peer_id(), addr));
 
@@ -435,7 +423,7 @@ async fn concurrent_connections_and_streams() {
         }
 
         let (mut dialer, _fingerprint) = block_on(create_swarm()).unwrap();
-        Swarm::listen_on(&mut dialer, "/ip4/127.0.0.1/udp/0/x-webrtc/ACD1E533EC271FCDE0275947F4D62A2B2331FF10C9DDE0298EB7B399B4BFF60B".parse().unwrap()).unwrap();
+        Swarm::listen_on(&mut dialer, "/ip4/127.0.0.1/udp/0/webrtc".parse().unwrap()).unwrap();
 
         // Wait to listen on address.
         match block_on(dialer.next()) {
@@ -507,8 +495,8 @@ async fn concurrent_connections_and_streams() {
     // QuickCheck::new().quickcheck(prop as fn(_, _) -> _);
 }
 
-fn hex_to_cow<'a>(s: &str) -> Cow<'a, [u8; 32]> {
+fn fingerprint2multihash(s: &str) -> Multihash {
     let mut buf = [0; 32];
-    hex::decode_to_slice(s, &mut buf).unwrap();
-    Cow::Owned(buf)
+    hex::decode_to_slice(s.replace(":", ""), &mut buf).unwrap();
+    Code::Sha2_256.wrap(&buf).unwrap()
 }

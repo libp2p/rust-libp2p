@@ -99,7 +99,7 @@ libp2p-uds = { version = "0.34.0", path = "transports/uds", optional = true }
 libp2p-wasm-ext = { version = "0.35.0", path = "transports/wasm-ext", default-features = false, optional = true }
 libp2p-webrtc = { version = "0.1.0", path = "transports/webrtc", optional = true }
 libp2p-yamux = { version = "0.39.0", path = "muxers/yamux", optional = true }
-multiaddr = { version = "0.14.0" }
+multiaddr = { version = "0.15.0" }
 parking_lot = "0.12.0"
 pin-project = "1.0.0"
 rand = "0.7.3" # Explicit dependency to be used in `wasm-bindgen` feature
@@ -117,7 +117,7 @@ libp2p-gossipsub = { version = "0.40.0", path = "protocols/gossipsub", optional 
 
 # TODO: use upstream once Protocol for WebRTC is there.
 [patch.crates-io]
-multiaddr = { version = "0.14.0", git = "https://github.com/melekes/rust-multiaddr.git", branch = "anton/x-webrtc" }
+multiaddr = { version = "0.15.0", git = "https://github.com/multiformats/rust-multiaddr.git", branch = "master" }
 webrtc = { version = "0.4.0", git = "https://github.com/webrtc-rs/webrtc.git", rev = "8a570f2b650daac7e4455cc3d9ae094c56fbe037" }
 
 [dev-dependencies]
