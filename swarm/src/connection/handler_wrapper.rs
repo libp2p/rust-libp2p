@@ -18,7 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::connection::SubstreamEndpoint;
 use crate::handler::{
     ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
 };
@@ -246,71 +245,68 @@ impl<TConnectionHandler> HandlerWrapper<TConnectionHandler>
 where
     TConnectionHandler: ConnectionHandler,
 {
-    pub fn inject_substream(
+    pub fn inject_outbound_substream(
         &mut self,
         substream: SubstreamBox,
         // The first element of the tuple is the unique upgrade identifier
         // (see `unique_dial_upgrade_id`).
-        endpoint: SubstreamEndpoint<OutboundOpenInfo<TConnectionHandler>>,
+        (upgrade_id, user_data, timeout): OutboundOpenInfo<TConnectionHandler>,
     ) {
-        match endpoint {
-            SubstreamEndpoint::Listener => {
-                if self.negotiating_in.len() == self.max_negotiating_inbound_streams {
-                    log::warn!(
-                        "Incoming substream from {} exceeding maximum number \
-                         of negotiating inbound streams {} on connection. \
-                         Dropping. See PoolConfig::with_max_negotiating_inbound_streams.",
-                        self.remote_peer_id,
-                        self.max_negotiating_inbound_streams,
-                    );
-                    return;
-                }
-
-                let protocol = self.handler.listen_protocol();
-                let timeout = *protocol.timeout();
-                let (upgrade, user_data) = protocol.into_upgrade();
-                let upgrade = upgrade::apply_inbound(substream, SendWrapper(upgrade));
-                let timeout = Delay::new(timeout);
-                self.negotiating_in.push(SubstreamUpgrade {
-                    user_data: Some(user_data),
-                    timeout,
-                    upgrade,
-                });
+        let pos = match self
+            .queued_dial_upgrades
+            .iter()
+            .position(|(id, _)| id == &upgrade_id)
+        {
+            Some(p) => p,
+            None => {
+                debug_assert!(false, "Received an upgrade with an invalid upgrade ID");
+                return;
             }
-            SubstreamEndpoint::Dialer((upgrade_id, user_data, timeout)) => {
-                let pos = match self
-                    .queued_dial_upgrades
-                    .iter()
-                    .position(|(id, _)| id == &upgrade_id)
-                {
-                    Some(p) => p,
-                    None => {
-                        debug_assert!(false, "Received an upgrade with an invalid upgrade ID");
-                        return;
-                    }
-                };
+        };
 
-                let (_, upgrade) = self.queued_dial_upgrades.remove(pos);
-                let mut version = upgrade::Version::default();
-                if let Some(v) = self.substream_upgrade_protocol_override {
-                    if v != version {
-                        log::debug!(
-                            "Substream upgrade protocol override: {:?} -> {:?}",
-                            version,
-                            v
-                        );
-                        version = v;
-                    }
-                }
-                let upgrade = upgrade::apply_outbound(substream, upgrade, version);
-                let timeout = Delay::new(timeout);
-                self.negotiating_out.push(SubstreamUpgrade {
-                    user_data: Some(user_data),
-                    timeout,
-                    upgrade,
-                });
+        let (_, upgrade) = self.queued_dial_upgrades.remove(pos);
+        let mut version = upgrade::Version::default();
+        if let Some(v) = self.substream_upgrade_protocol_override {
+            if v != version {
+                log::debug!(
+                    "Substream upgrade protocol override: {:?} -> {:?}",
+                    version,
+                    v
+                );
+                version = v;
             }
         }
+        let upgrade = upgrade::apply_outbound(substream, upgrade, version);
+        let timeout = Delay::new(timeout);
+        self.negotiating_out.push(SubstreamUpgrade {
+            user_data: Some(user_data),
+            timeout,
+            upgrade,
+        });
+    }
+
+    pub fn inject_inbound_substream(&mut self, substream: SubstreamBox) {
+        if self.negotiating_in.len() == self.max_negotiating_inbound_streams {
+            log::warn!(
+                "Incoming substream from {} exceeding maximum number \
+                         of negotiating inbound streams {} on connection. \
+                         Dropping. See PoolConfig::with_max_negotiating_inbound_streams.",
+                self.remote_peer_id,
+                self.max_negotiating_inbound_streams,
+            );
+            return;
+        }
+
+        let protocol = self.handler.listen_protocol();
+        let timeout = *protocol.timeout();
+        let (upgrade, user_data) = protocol.into_upgrade();
+        let upgrade = upgrade::apply_inbound(substream, SendWrapper(upgrade));
+        let timeout = Delay::new(timeout);
+        self.negotiating_in.push(SubstreamUpgrade {
+            user_data: Some(user_data),
+            timeout,
+            upgrade,
+        });
     }
 
     pub fn inject_event(&mut self, event: TConnectionHandler::InEvent) {
@@ -467,7 +463,7 @@ mod tests {
             for _ in 0..max_negotiating_inbound_streams {
                 let substream =
                     SubstreamBox::new(PendingSubstream(alive_substreams_counter.clone()));
-                wrapper.inject_substream(substream, SubstreamEndpoint::Listener);
+                wrapper.inject_inbound_substream(substream);
             }
 
             assert_eq!(
@@ -477,7 +473,7 @@ mod tests {
             );
 
             let substream = SubstreamBox::new(PendingSubstream(alive_substreams_counter.clone()));
-            wrapper.inject_substream(substream, SubstreamEndpoint::Listener);
+            wrapper.inject_inbound_substream(substream);
 
             assert_eq!(
                 Arc::strong_count(&alive_substreams_counter),
