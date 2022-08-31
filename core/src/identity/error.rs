@@ -74,6 +74,7 @@ impl SigningError {
         }
     }
 
+    #[allow(dead_code)]
     pub(crate) fn source(self, source: impl Error + Send + Sync + 'static) -> Self {
         Self {
             source: Some(Box::new(source)),
