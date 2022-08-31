@@ -31,7 +31,10 @@ pub use pool::{EstablishedConnection, PendingConnection};
 
 use crate::handler::ConnectionHandler;
 use crate::upgrade::SendWrapper;
-use crate::{ConnectionHandlerEvent, ConnectionHandlerUpgrErr, IntoConnectionHandler, KeepAlive};
+use crate::{
+    ConnectionHandlerEvent, ConnectionHandlerUpgrErr, IntoConnectionHandler, KeepAlive,
+    SubstreamProtocol,
+};
 use futures::stream::FuturesUnordered;
 use futures::FutureExt;
 use futures::StreamExt;
@@ -107,11 +110,8 @@ where
     max_negotiating_inbound_streams: usize,
     /// For each outbound substream request, how to upgrade it. The first element of the tuple
     /// is the unique identifier (see `unique_dial_upgrade_id`).
-    pending_dial_upgrades: VecDeque<(
-        <THandler as ConnectionHandler>::OutboundOpenInfo,
-        Duration,
-        <THandler as ConnectionHandler>::OutboundProtocol,
-    )>,
+    pending_dial_upgrades:
+        VecDeque<SubstreamProtocol<THandler::OutboundProtocol, THandler::OutboundOpenInfo>>,
 }
 
 impl<THandler> fmt::Debug for Connection<THandler>
@@ -234,11 +234,7 @@ where
                         return Poll::Ready(Err(ConnectionError::Handler(err)))
                     }
                     ConnectionHandlerEvent::OutboundSubstreamRequest { protocol } => {
-                        let timeout = *protocol.timeout();
-                        let (upgrade, info) = protocol.into_upgrade();
-
-                        self.pending_dial_upgrades
-                            .push_back((info, timeout, upgrade));
+                        self.pending_dial_upgrades.push_back(protocol);
 
                         continue;
                     }
@@ -320,10 +316,13 @@ where
                 match self.muxing.poll_outbound_unpin(cx)? {
                     Poll::Pending => {}
                     Poll::Ready(substream) => {
-                        let (open_info, timeout, upgrade) = self
+                        let substream_upgrade = self
                             .pending_dial_upgrades
                             .pop_front()
                             .expect("`open_info` is not empty");
+                        let timeout = *substream_upgrade.timeout();
+                        let (upgrade, open_info) = substream_upgrade.into_upgrade();
+
                         self.inject_outbound_substream(substream, open_info, timeout, upgrade);
                         continue; // Go back to the top, handler can potentially make progress again.
                     }
