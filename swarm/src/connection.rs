@@ -19,7 +19,6 @@
 // DEALINGS IN THE SOFTWARE.
 
 mod error;
-mod handler_wrapper;
 
 pub(crate) mod pool;
 
@@ -31,16 +30,23 @@ pub use pool::{ConnectionCounters, ConnectionLimits};
 pub use pool::{EstablishedConnection, PendingConnection};
 
 use crate::handler::ConnectionHandler;
-use crate::IntoConnectionHandler;
-use handler_wrapper::HandlerWrapper;
+use crate::upgrade::SendWrapper;
+use crate::{ConnectionHandlerEvent, ConnectionHandlerUpgrErr, IntoConnectionHandler, KeepAlive};
+use futures::stream::FuturesUnordered;
+use futures::FutureExt;
+use futures::StreamExt;
+use futures_timer::Delay;
+use instant::Instant;
 use libp2p_core::connection::ConnectedPoint;
 use libp2p_core::multiaddr::Multiaddr;
-use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerEvent, StreamMuxerExt};
-use libp2p_core::upgrade;
+use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerEvent, StreamMuxerExt, SubstreamBox};
+use libp2p_core::upgrade::{InboundUpgradeApply, OutboundUpgradeApply};
 use libp2p_core::PeerId;
+use libp2p_core::{upgrade, UpgradeError};
 use std::collections::VecDeque;
 use std::future::Future;
-use std::{error::Error, fmt, io, pin::Pin, task::Context, task::Poll};
+use std::time::Duration;
+use std::{fmt, io, pin::Pin, task::Context, task::Poll};
 
 /// Information about a successfully established connection.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -67,10 +73,48 @@ where
 {
     /// Node that handles the muxing.
     muxing: StreamMuxerBox,
-    /// Handler that processes substreams.
-    handler: HandlerWrapper<THandler>,
-    /// List of "open_info" that is waiting for new outbound substreams.
-    open_info: VecDeque<handler_wrapper::OutboundOpenInfo<THandler>>,
+
+    remote_peer_id: PeerId,
+    /// The underlying handler.
+    handler: THandler,
+    /// Futures that upgrade incoming substreams.
+    negotiating_in: FuturesUnordered<
+        SubstreamUpgrade<
+            THandler::InboundOpenInfo,
+            InboundUpgradeApply<SubstreamBox, SendWrapper<THandler::InboundProtocol>>,
+        >,
+    >,
+    /// Futures that upgrade outgoing substreams.
+    negotiating_out: FuturesUnordered<
+        SubstreamUpgrade<
+            THandler::OutboundOpenInfo,
+            OutboundUpgradeApply<SubstreamBox, SendWrapper<THandler::OutboundProtocol>>,
+        >,
+    >,
+    /// The currently planned connection & handler shutdown.
+    shutdown: Shutdown,
+    /// The substream upgrade protocol override, if any.
+    substream_upgrade_protocol_override: Option<upgrade::Version>,
+    /// The maximum number of inbound streams concurrently negotiating on a
+    /// connection. New inbound streams exceeding the limit are dropped and thus
+    /// reset.
+    ///
+    /// Note: This only enforces a limit on the number of concurrently
+    /// negotiating inbound streams. The total number of inbound streams on a
+    /// connection is the sum of negotiating and negotiated streams. A limit on
+    /// the total number of streams can be enforced at the
+    /// [`StreamMuxerBox`](libp2p_core::muxing::StreamMuxerBox) level.
+    max_negotiating_inbound_streams: usize,
+    /// Unique identifier assigned to each queued dial upgrade.
+    unique_dial_upgrade_id: u64,
+    /// For each outbound substream request, how to upgrade it. The first element of the tuple
+    /// is the unique identifier (see `unique_dial_upgrade_id`).
+    pending_dial_upgrades: VecDeque<(
+        u64,
+        <THandler as ConnectionHandler>::OutboundOpenInfo,
+        Duration,
+        <THandler as ConnectionHandler>::OutboundProtocol,
+    )>,
 }
 
 impl<THandler> fmt::Debug for Connection<THandler>
@@ -81,7 +125,6 @@ where
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Connection")
             .field("handler", &self.handler)
-            .field("open_info", &self.open_info)
             .finish()
     }
 }
@@ -102,17 +145,17 @@ where
         substream_upgrade_protocol_override: Option<upgrade::Version>,
         max_negotiating_inbound_streams: usize,
     ) -> Self {
-        let wrapped_handler = HandlerWrapper::new(
-            peer_id,
-            endpoint,
-            handler,
-            substream_upgrade_protocol_override,
-            max_negotiating_inbound_streams,
-        );
         Connection {
             muxing: muxer,
-            handler: wrapped_handler,
-            open_info: VecDeque::with_capacity(8),
+            remote_peer_id: peer_id,
+            handler: handler.into_handler(&peer_id, &endpoint),
+            negotiating_in: Default::default(),
+            negotiating_out: Default::default(),
+            unique_dial_upgrade_id: 0,
+            shutdown: Shutdown::None,
+            substream_upgrade_protocol_override,
+            max_negotiating_inbound_streams,
+            pending_dial_upgrades: VecDeque::with_capacity(8),
         }
     }
 
@@ -124,7 +167,63 @@ where
     /// Begins an orderly shutdown of the connection, returning the connection
     /// handler and a `Future` that resolves when connection shutdown is complete.
     pub fn close(self) -> (THandler, impl Future<Output = io::Result<()>>) {
-        (self.handler.into_connection_handler(), self.muxing.close())
+        (self.handler, self.muxing.close())
+    }
+
+    fn inject_outbound_substream(
+        &mut self,
+        substream: SubstreamBox,
+        // The first element of the tuple is the unique upgrade identifier
+        // (see `unique_dial_upgrade_id`).
+        (_, user_data, timeout, upgrade): (
+            u64,
+            <THandler as ConnectionHandler>::OutboundOpenInfo,
+            Duration,
+            <THandler as ConnectionHandler>::OutboundProtocol,
+        ),
+    ) {
+        let mut version = upgrade::Version::default();
+        if let Some(v) = self.substream_upgrade_protocol_override {
+            if v != version {
+                log::debug!(
+                    "Substream upgrade protocol override: {:?} -> {:?}",
+                    version,
+                    v
+                );
+                version = v;
+            }
+        }
+        let upgrade = upgrade::apply_outbound(substream, SendWrapper(upgrade), version);
+        let timeout = Delay::new(timeout);
+        self.negotiating_out.push(SubstreamUpgrade {
+            user_data: Some(user_data),
+            timeout,
+            upgrade,
+        });
+    }
+
+    fn inject_inbound_substream(&mut self, substream: SubstreamBox) {
+        if self.negotiating_in.len() == self.max_negotiating_inbound_streams {
+            log::warn!(
+                "Incoming substream from {} exceeding maximum number \
+                         of negotiating inbound streams {} on connection. \
+                         Dropping. See PoolConfig::with_max_negotiating_inbound_streams.",
+                self.remote_peer_id,
+                self.max_negotiating_inbound_streams,
+            );
+            return;
+        }
+
+        let protocol = self.handler.listen_protocol();
+        let timeout = *protocol.timeout();
+        let (upgrade, user_data) = protocol.into_upgrade();
+        let upgrade = upgrade::apply_inbound(substream, SendWrapper(upgrade));
+        let timeout = Delay::new(timeout);
+        self.negotiating_in.push(SubstreamUpgrade {
+            user_data: Some(user_data),
+            timeout,
+            upgrade,
+        });
     }
 
     /// Polls the handler and the substream, forwarding events from the former to the latter and
@@ -134,15 +233,89 @@ where
         cx: &mut Context<'_>,
     ) -> Poll<Result<Event<THandler::OutEvent>, ConnectionError<THandler::Error>>> {
         loop {
-            // Poll the handler for new events.
-            match self.handler.poll(cx)? {
-                Poll::Pending => {}
-                Poll::Ready(handler_wrapper::Event::OutboundSubstreamRequest(user_data)) => {
-                    self.open_info.push_back(user_data);
-                    continue; // Poll handler until exhausted.
+            // Poll the [`ConnectionHandler`].
+            if let Poll::Ready(handler_event) = self.handler.poll(cx) {
+                match handler_event {
+                    ConnectionHandlerEvent::Custom(event) => {
+                        return Poll::Ready(Ok(Event::Handler(event)))
+                    }
+                    ConnectionHandlerEvent::Close(err) => {
+                        return Poll::Ready(Err(ConnectionError::Handler(err)))
+                    }
+                    ConnectionHandlerEvent::OutboundSubstreamRequest { protocol } => {
+                        let id = self.unique_dial_upgrade_id;
+                        let timeout = *protocol.timeout();
+                        self.unique_dial_upgrade_id += 1;
+                        let (upgrade, info) = protocol.into_upgrade();
+
+                        self.pending_dial_upgrades
+                            .push_back((id, info, timeout, upgrade));
+
+                        continue;
+                    }
                 }
-                Poll::Ready(handler_wrapper::Event::Custom(event)) => {
-                    return Poll::Ready(Ok(Event::Handler(event)));
+            }
+
+            // In case the [`ConnectionHandler`] can not make any more progress, poll the negotiating outbound streams.
+            if let Poll::Ready(Some((user_data, res))) = self.negotiating_out.poll_next_unpin(cx) {
+                match res {
+                    Ok(upgrade) => self
+                        .handler
+                        .inject_fully_negotiated_outbound(upgrade, user_data),
+                    Err(err) => self.handler.inject_dial_upgrade_error(user_data, err),
+                }
+
+                // After the `inject_*` calls, the [`ConnectionHandler`] might be able to make progress.
+                continue;
+            }
+
+            // In case both the [`ConnectionHandler`] and the negotiating outbound streams can not
+            // make any more progress, poll the negotiating inbound streams.
+            if let Poll::Ready(Some((user_data, res))) = self.negotiating_in.poll_next_unpin(cx) {
+                match res {
+                    Ok(upgrade) => self
+                        .handler
+                        .inject_fully_negotiated_inbound(upgrade, user_data),
+                    Err(err) => self.handler.inject_listen_upgrade_error(user_data, err),
+                }
+
+                // After the `inject_*` calls, the [`ConnectionHandler`] might be able to make progress.
+                continue;
+            }
+
+            // Ask the handler whether it wants the connection (and the handler itself)
+            // to be kept alive, which determines the planned shutdown, if any.
+            let keep_alive = self.handler.connection_keep_alive();
+            match (&mut self.shutdown, keep_alive) {
+                (Shutdown::Later(timer, deadline), KeepAlive::Until(t)) => {
+                    if *deadline != t {
+                        *deadline = t;
+                        if let Some(dur) = deadline.checked_duration_since(Instant::now()) {
+                            timer.reset(dur)
+                        }
+                    }
+                }
+                (_, KeepAlive::Until(t)) => {
+                    if let Some(dur) = t.checked_duration_since(Instant::now()) {
+                        self.shutdown = Shutdown::Later(Delay::new(dur), t)
+                    }
+                }
+                (_, KeepAlive::No) => self.shutdown = Shutdown::Asap,
+                (_, KeepAlive::Yes) => self.shutdown = Shutdown::None,
+            };
+
+            // Check if the connection (and handler) should be shut down.
+            // As long as we're still negotiating substreams, shutdown is always postponed.
+            if self.negotiating_in.is_empty() && self.negotiating_out.is_empty() {
+                match self.shutdown {
+                    Shutdown::None => {}
+                    Shutdown::Asap => return Poll::Ready(Err(ConnectionError::KeepAliveTimeout)),
+                    Shutdown::Later(ref mut delay, _) => match Future::poll(Pin::new(delay), cx) {
+                        Poll::Ready(_) => {
+                            return Poll::Ready(Err(ConnectionError::KeepAliveTimeout))
+                        }
+                        Poll::Pending => {}
+                    },
                 }
             }
 
@@ -154,15 +327,15 @@ where
                 }
             }
 
-            if !self.open_info.is_empty() {
+            if !self.pending_dial_upgrades.is_empty() {
                 match self.muxing.poll_outbound_unpin(cx)? {
                     Poll::Pending => {}
                     Poll::Ready(substream) => {
                         let user_data = self
-                            .open_info
+                            .pending_dial_upgrades
                             .pop_front()
                             .expect("`open_info` is not empty");
-                        self.handler.inject_outbound_substream(substream, user_data);
+                        self.inject_outbound_substream(substream, user_data);
                         continue; // Go back to the top, handler can potentially make progress again.
                     }
                 }
@@ -171,7 +344,7 @@ where
             match self.muxing.poll_inbound_unpin(cx)? {
                 Poll::Pending => {}
                 Poll::Ready(substream) => {
-                    self.handler.inject_inbound_substream(substream);
+                    self.inject_inbound_substream(substream);
                     continue; // Go back to the top, handler can potentially make progress again.
                 }
             }
@@ -216,4 +389,72 @@ impl fmt::Display for ConnectionLimit {
 }
 
 /// A `ConnectionLimit` can represent an error if it has been exceeded.
-impl Error for ConnectionLimit {}
+impl std::error::Error for ConnectionLimit {}
+
+struct SubstreamUpgrade<UserData, Upgrade> {
+    user_data: Option<UserData>,
+    timeout: Delay,
+    upgrade: Upgrade,
+}
+
+impl<UserData, Upgrade> Unpin for SubstreamUpgrade<UserData, Upgrade> {}
+
+impl<UserData, Upgrade, UpgradeOutput, TUpgradeError> Future for SubstreamUpgrade<UserData, Upgrade>
+where
+    Upgrade: Future<Output = Result<UpgradeOutput, UpgradeError<TUpgradeError>>> + Unpin,
+{
+    type Output = (
+        UserData,
+        Result<UpgradeOutput, ConnectionHandlerUpgrErr<TUpgradeError>>,
+    );
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+        match self.timeout.poll_unpin(cx) {
+            Poll::Ready(()) => {
+                return Poll::Ready((
+                    self.user_data
+                        .take()
+                        .expect("Future not to be polled again once ready."),
+                    Err(ConnectionHandlerUpgrErr::Timeout),
+                ))
+            }
+
+            Poll::Pending => {}
+        }
+
+        match self.upgrade.poll_unpin(cx) {
+            Poll::Ready(Ok(upgrade)) => Poll::Ready((
+                self.user_data
+                    .take()
+                    .expect("Future not to be polled again once ready."),
+                Ok(upgrade),
+            )),
+            Poll::Ready(Err(err)) => Poll::Ready((
+                self.user_data
+                    .take()
+                    .expect("Future not to be polled again once ready."),
+                Err(ConnectionHandlerUpgrErr::Upgrade(err)),
+            )),
+            Poll::Pending => Poll::Pending,
+        }
+    }
+}
+
+/// The options for a planned connection & handler shutdown.
+///
+/// A shutdown is planned anew based on the the return value of
+/// [`ConnectionHandler::connection_keep_alive`] of the underlying handler
+/// after every invocation of [`ConnectionHandler::poll`].
+///
+/// A planned shutdown is always postponed for as long as there are ingoing
+/// or outgoing substreams being negotiated, i.e. it is a graceful, "idle"
+/// shutdown.
+#[derive(Debug)]
+enum Shutdown {
+    /// No shutdown is planned.
+    None,
+    /// A shut down is planned as soon as possible.
+    Asap,
+    /// A shut down is planned for when a `Delay` has elapsed.
+    Later(Delay, Instant),
+}
