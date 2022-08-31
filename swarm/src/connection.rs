@@ -31,10 +31,7 @@ pub use pool::{EstablishedConnection, PendingConnection};
 
 use crate::handler::ConnectionHandler;
 use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper};
-use crate::{
-    ConnectionHandlerEvent, ConnectionHandlerUpgrErr, IntoConnectionHandler, KeepAlive,
-    SubstreamProtocol,
-};
+use crate::{ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive, SubstreamProtocol};
 use futures::stream::FuturesUnordered;
 use futures::FutureExt;
 use futures::StreamExt;
@@ -131,16 +128,14 @@ where
     /// Builds a new `Connection` from the given substream multiplexer
     /// and connection handler.
     pub fn new(
-        peer_id: PeerId,
-        endpoint: ConnectedPoint,
         muxer: StreamMuxerBox,
-        handler: impl IntoConnectionHandler<Handler = THandler>,
+        handler: THandler,
         substream_upgrade_protocol_override: Option<upgrade::Version>,
         max_negotiating_inbound_streams: usize,
     ) -> Self {
         Connection {
             muxing: muxer,
-            handler: handler.into_handler(&peer_id, &endpoint),
+            handler,
             negotiating_in: Default::default(),
             negotiating_out: Default::default(),
             shutdown: Shutdown::None,
@@ -473,11 +468,6 @@ mod tests {
             let alive_substream_counter = Arc::new(());
 
             let mut connection = Connection::new(
-                PeerId::random(),
-                ConnectedPoint::Listener {
-                    local_addr: Multiaddr::empty(),
-                    send_back_addr: Multiaddr::empty(),
-                },
                 StreamMuxerBox::new(DummyStreamMuxer {
                     counter: alive_substream_counter.clone(),
                 }),
