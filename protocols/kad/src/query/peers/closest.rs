@@ -483,7 +483,8 @@ mod tests {
     use rand::{rngs::StdRng, Rng, SeedableRng};
     use std::{iter, time::Duration};
 
-    fn random_peers<R: Rng>(n: usize, g: &mut R) -> Vec<PeerId> {
+    fn random_peers(n: usize) -> Vec<PeerId> {
+        let mut g = rand::thread_rng();
         (0..n)
             .map(|_| {
                 PeerId::from_multihash(
@@ -502,10 +503,9 @@ mod tests {
 
     impl Arbitrary for ClosestPeersIter {
         fn arbitrary(g: &mut Gen) -> ClosestPeersIter {
-            let known_closest_peers =
-                random_peers(1 + usize::arbitrary(g) % 59, &mut rand::thread_rng())
-                    .into_iter()
-                    .map(Key::from);
+            let known_closest_peers = random_peers(1 + usize::arbitrary(g) % 59)
+                .into_iter()
+                .map(Key::from);
             let target = Key::from(Into::<Multihash>::into(PeerId::random()));
             let config = ClosestPeersIterConfig {
                 parallelism: NonZeroUsize::new(1 + usize::arbitrary(g) % 10).unwrap(),
@@ -615,7 +615,7 @@ mod tests {
                 for (i, k) in expected.iter().enumerate() {
                     if rng.gen_bool(0.75) {
                         let num_closer = rng.gen_range(0..iter.config.num_results.get() + 1);
-                        let closer_peers = random_peers(num_closer, &mut rng);
+                        let closer_peers = random_peers(num_closer);
                         remaining.extend(closer_peers.iter().cloned().map(Key::from));
                         iter.on_success(k.preimage(), closer_peers);
                     } else {
@@ -670,11 +670,10 @@ mod tests {
 
     #[test]
     fn no_duplicates() {
-        fn prop(mut iter: ClosestPeersIter, seed: Seed) -> bool {
+        fn prop(mut iter: ClosestPeersIter) -> bool {
             let now = Instant::now();
-            let mut rng = StdRng::from_seed(seed.0);
 
-            let closer = random_peers(1, &mut rng);
+            let closer = random_peers(1);
 
             // A first peer reports a "closer" peer.
             let peer1 = match iter.next(now) {
@@ -706,9 +705,7 @@ mod tests {
             true
         }
 
-        QuickCheck::new()
-            .tests(10)
-            .quickcheck(prop as fn(_, _) -> _)
+        QuickCheck::new().tests(10).quickcheck(prop as fn(_) -> _)
     }
 
     #[test]

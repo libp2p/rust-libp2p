@@ -455,10 +455,7 @@ mod tests {
         fn arbitrary(g: &mut Gen) -> Self {
             let target = Target::arbitrary(g).0;
             let num_closest_iters = usize::arbitrary(g) % (20 + 1);
-            let peers = random_peers(
-                usize::arbitrary(g) % (20 * num_closest_iters + 1),
-                &mut rand::thread_rng(),
-            );
+            let peers = random_peers(usize::arbitrary(g) % (20 * num_closest_iters + 1));
 
             let iters: Vec<_> = (0..num_closest_iters)
                 .map(|_| {
@@ -540,11 +537,12 @@ mod tests {
 
     impl Arbitrary for Target {
         fn arbitrary(_g: &mut Gen) -> Self {
-            Target(Key::from(random_peers(1, &mut rand::thread_rng()).pop().unwrap()).into())
+            Target(Key::from(random_peers(1).pop().unwrap()).into())
         }
     }
 
-    fn random_peers<R: Rng>(n: usize, g: &mut R) -> Vec<PeerId> {
+    fn random_peers(n: usize) -> Vec<PeerId> {
+        let mut g = rand::thread_rng();
         (0..n)
             .map(|_| {
                 PeerId::from_multihash(
@@ -747,13 +745,11 @@ mod tests {
 
     impl Arbitrary for Graph {
         fn arbitrary(g: &mut Gen) -> Self {
-            let mut peer_ids = random_peers(
-                K_VALUE.get() + (usize::arbitrary(g) % (200 - K_VALUE.get())),
-                &mut rand::thread_rng(),
-            )
-            .into_iter()
-            .map(|peer_id| (peer_id.clone(), Key::from(peer_id)))
-            .collect::<Vec<_>>();
+            let mut peer_ids =
+                random_peers(K_VALUE.get() + (usize::arbitrary(g) % (200 - K_VALUE.get())))
+                    .into_iter()
+                    .map(|peer_id| (peer_id.clone(), Key::from(peer_id)))
+                    .collect::<Vec<_>>();
 
             // Make each peer aware of its direct neighborhood.
             let mut peers = peer_ids
