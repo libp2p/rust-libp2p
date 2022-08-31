@@ -353,6 +353,12 @@ where
 
         let effective_version = match version_override {
             Some(version_override) if version_override != upgrade::Version::default() => {
+                log::debug!(
+                    "Substream upgrade protocol override: {:?} -> {:?}",
+                    upgrade::Version::default(),
+                    version_override
+                );
+
                 version_override
             }
             _ => upgrade::Version::default(),
