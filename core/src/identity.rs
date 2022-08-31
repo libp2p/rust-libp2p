@@ -68,8 +68,8 @@ use std::convert::{TryFrom, TryInto};
 pub enum Keypair {
     /// An Ed25519 keypair.
     Ed25519(ed25519::Keypair),
-    #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
     /// An RSA keypair.
+    #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
     Rsa(rsa::Keypair),
     /// A Secp256k1 keypair.
     #[cfg(feature = "secp256k1")]

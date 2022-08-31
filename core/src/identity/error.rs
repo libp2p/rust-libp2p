@@ -67,6 +67,7 @@ pub struct SigningError {
 
 /// An error during encoding of key material.
 impl SigningError {
+    #[allow(dead_code)]
     pub(crate) fn new<S: ToString>(msg: S) -> Self {
         Self {
             msg: msg.to_string(),

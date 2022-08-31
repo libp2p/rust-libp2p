@@ -1,6 +1,7 @@
-# 0.35.2
+# 0.36.0 [unreleased]
 
-- Make `ring` dependency optional. See [PR 2860].
+- Make RSA keypair support optional. To enable RSA support, `rsa` feature should be enabled.
+  See [PR 2860].
 
 [PR 2860]: https://github.com/libp2p/rust-libp2p/pull/2860/
 
