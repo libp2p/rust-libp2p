@@ -586,22 +586,14 @@ where
         Ok(true)
     }
 
-    /// Publishes a message to a topic in the network.
-    pub fn publish<H: Hasher>(
+    /// Publishes a message with multiple topics to the network.
+    pub fn publish(
         &mut self,
-        topic: Topic<H>,
-        data: impl Into<Vec<u8>>,
-    ) -> Result<MessageId, PublishError> {
-        self.publish_to_topichash(topic.into(), data)
-    }
-
-    /// Publishes a message to a topic in the network using TopicHash.
-    pub fn publish_to_topichash(
-        &mut self,
-        topic: TopicHash,
+        topic: impl Into<TopicHash>,
         data: impl Into<Vec<u8>>,
     ) -> Result<MessageId, PublishError> {
         let data = data.into();
+        let topic = topic.into();
 
         // Transform the data before building a raw_message.
         let transformed_data = self
