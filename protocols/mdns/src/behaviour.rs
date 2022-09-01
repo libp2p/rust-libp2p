@@ -19,10 +19,13 @@
 // DEALINGS IN THE SOFTWARE.
 
 mod iface;
+mod socket;
+mod timer;
 
 use self::iface::InterfaceState;
+use self::timer::{time::AsyncTimer, TimerBuilder};
+
 use crate::MdnsConfig;
-use async_io::Timer;
 use futures::prelude::*;
 use if_watch::{IfEvent, IfWatcher};
 use libp2p_core::transport::ListenerId;
@@ -57,7 +60,7 @@ pub struct Mdns {
     /// Future that fires when the TTL of at least one node in `discovered_nodes` expires.
     ///
     /// `None` if `discovered_nodes` is empty.
-    closest_expiration: Option<Timer>,
+    closest_expiration: Option<AsyncTimer>,
 }
 
 impl Mdns {
@@ -91,7 +94,7 @@ impl Mdns {
                 *expires = now;
             }
         }
-        self.closest_expiration = Some(Timer::at(now));
+        self.closest_expiration = Some(AsyncTimer::at(now));
     }
 }
 
@@ -219,8 +222,9 @@ impl NetworkBehaviour for Mdns {
             return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event));
         }
         if let Some(closest_expiration) = closest_expiration {
-            let mut timer = Timer::at(closest_expiration);
-            let _ = Pin::new(&mut timer).poll(cx);
+            let mut timer = AsyncTimer::at(closest_expiration);
+            let _ = Pin::new(&mut timer).poll_tick(cx);
+
             self.closest_expiration = Some(timer);
         }
         Poll::Pending
