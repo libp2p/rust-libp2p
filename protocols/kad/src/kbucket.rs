@@ -573,9 +573,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn bucket_contains_range() {
-        return todo!("test fails randomly");
         fn prop(ix: u8) {
             let index = BucketIndex(ix as usize);
             let mut bucket = KBucket::<Key<PeerId>, ()>::new(Duration::from_secs(0));
@@ -591,8 +589,13 @@ mod tests {
             assert!(bucket_ref.contains(&min));
             assert!(bucket_ref.contains(&max));
 
-            assert!(!bucket_ref.contains(&Distance(min.0 - 1)));
-            assert!(!bucket_ref.contains(&Distance(max.0 + 1)));
+            if min != Distance(0.into()) {
+                assert!(!bucket_ref.contains(&Distance(min.0 - 1)));
+            }
+
+            if max != Distance(U256::max_value()) {
+                assert!(!bucket_ref.contains(&Distance(max.0 + 1)));
+            }
         }
 
         quickcheck(prop as fn(_));
