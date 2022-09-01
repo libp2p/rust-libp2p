@@ -1,0 +1,8 @@
+# This file contains revisions that are to be ignored by git when running `git blame`.
+#
+# This does NOT work automatically, you first need to tell Git about this file.
+# To do so, run `git config --global blame.ignoreRevsFile .git-blame-ignore-revs`.
+# You may want to run this without `--global` if you have a different naming convention for this file in other repositories.
+# 
+# Format with rustfmt
+f701b24ec0f99be49444a6e7de950c66b01b2f3f
