@@ -597,7 +597,7 @@ mod tests {
 
     impl Arbitrary for NumResults {
         fn arbitrary(g: &mut Gen) -> Self {
-            NumResults(NonZeroUsize::new(1 + usize::arbitrary(g) % K_VALUE.get() - 1).unwrap())
+            NumResults(NonZeroUsize::new(1 + usize::arbitrary(g) % K_VALUE.get()).unwrap())
         }
     }
 
@@ -778,7 +778,7 @@ mod tests {
                 peer_ids.shuffle(&mut rand::thread_rng());
 
                 let num_peers =
-                    K_VALUE.get() + usize::arbitrary(g) % (peer_ids.len() - K_VALUE.get());
+                    K_VALUE.get() + usize::arbitrary(g) % (1 + peer_ids.len() - K_VALUE.get());
                 let mut random_peer_ids = peer_ids
                     .choose_multiple(&mut rand::thread_rng(), num_peers)
                     // Make sure not to include itself.
@@ -869,9 +869,7 @@ mod tests {
 
     /// Ensure [`ClosestPeersIter`] and [`ClosestDisjointPeersIter`] yield same closest peers.
     #[test]
-    #[ignore]
     fn closest_and_disjoint_closest_yield_same_result() {
-        return todo!("test fails randomly");
         fn prop(
             target: Target,
             graph: Graph,
