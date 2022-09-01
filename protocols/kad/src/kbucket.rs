@@ -599,10 +599,9 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn rand_distance() {
-        return todo!("test fails randomly");
         fn prop(ix: u8) -> bool {
+            let ix = ix.min(254); // avoid overflow in 2^ix
             let d = BucketIndex(ix as usize).rand_distance(&mut rand::thread_rng());
             let n = U256::from(<[u8; 32]>::from(d.0));
             let b = U256::from(2);
