@@ -79,8 +79,11 @@ pub use libp2p_identify as identify;
 #[cfg_attr(docsrs, doc(cfg(feature = "kad")))]
 #[doc(inline)]
 pub use libp2p_kad as kad;
-#[cfg(feature = "mdns")]
-#[cfg_attr(docsrs, doc(cfg(feature = "mdns")))]
+#[cfg(any(feature = "mdns-async-io", feature = "mdns-tokio"))]
+#[cfg_attr(
+    docsrs,
+    doc(cfg(any(feature = "mdns-tokio", feature = "mdns-async-io")))
+)]
 #[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
 #[doc(inline)]
 pub use libp2p_mdns as mdns;
