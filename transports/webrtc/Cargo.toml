@@ -33,8 +33,7 @@ webrtc = "0.4.0"
 [dev-dependencies]
 anyhow = "1.0"
 env_logger = "0.9"
-libp2p-request-response = { version = "0.20.0", path = "../../protocols/request-response" }
-libp2p-swarm = { version = "0.38.0", path = "../../swarm" }
+libp2p = { path = "../..", features = ["request-response"], default-features = false }
 rand_core = "0.5"
 rcgen = "0.9"
 quickcheck = "1"

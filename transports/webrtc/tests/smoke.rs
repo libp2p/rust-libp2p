@@ -5,12 +5,12 @@ use futures::{
     io::{AsyncRead, AsyncWrite, AsyncWriteExt},
     stream::StreamExt,
 };
-use libp2p_core::{identity, multiaddr::Protocol, muxing::StreamMuxerBox, upgrade, Transport};
-use libp2p_request_response::{
+use libp2p::request_response::{
     ProtocolName, ProtocolSupport, RequestResponse, RequestResponseCodec, RequestResponseConfig,
     RequestResponseEvent, RequestResponseMessage,
 };
-use libp2p_swarm::{Swarm, SwarmBuilder, SwarmEvent};
+use libp2p::swarm::{Swarm, SwarmBuilder, SwarmEvent};
+use libp2p_core::{identity, multiaddr::Protocol, muxing::StreamMuxerBox, upgrade, Transport};
 use libp2p_webrtc::transport::WebRTCTransport;
 use multihash::{Code, Multihash, MultihashDigest};
 use rand::RngCore;
