@@ -75,6 +75,10 @@ pub trait StreamMuxer {
     type Error: std::error::Error;
 
     /// Poll for new inbound substreams.
+    ///
+    /// This function should be called whenever callers are ready to accept more inbound streams. In
+    /// other words, callers may exercise back-pressure on incoming streams by not calling this
+    /// function if a certain limit is hit.
     fn poll_inbound(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -86,25 +90,33 @@ pub trait StreamMuxer {
         cx: &mut Context<'_>,
     ) -> Poll<Result<Self::Substream, Self::Error>>;
 
-    /// Poll for an address change of the underlying connection.
+    /// Poll to close this [`StreamMuxer`].
     ///
-    /// Not all implementations may support this feature.
-    fn poll_address_change(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<Multiaddr, Self::Error>>;
-
-    /// Closes this `StreamMuxer`.
-    ///
-    /// After this has returned `Poll::Ready(Ok(()))`, the muxer has become useless. All
-    /// subsequent reads must return either `EOF` or an error. All subsequent writes, shutdowns,
-    /// or polls must generate an error or be ignored.
+    /// After this has returned `Poll::Ready(Ok(()))`, the muxer has become useless and may be safely
+    /// dropped.
     ///
     /// > **Note**: You are encouraged to call this method and wait for it to return `Ready`, so
     /// >           that the remote is properly informed of the shutdown. However, apart from
     /// >           properly informing the remote, there is no difference between this and
     /// >           immediately dropping the muxer.
     fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>>;
+
+    /// Poll to allow the underlying connection to make progress.
+    ///
+    /// In contrast to all other `poll`-functions on [`StreamMuxer`], this function MUST be called
+    /// unconditionally. Because it will be called regardless, this function can be used by
+    /// implementations to return events about the underlying connection that the caller MUST deal
+    /// with.
+    fn poll(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<StreamMuxerEvent, Self::Error>>;
+}
+
+/// An event produced by a [`StreamMuxer`].
+pub enum StreamMuxerEvent {
+    /// The address of the remote has changed.
+    AddressChange(Multiaddr),
 }
 
 /// Extension trait for [`StreamMuxer`].
@@ -131,15 +143,12 @@ pub trait StreamMuxerExt: StreamMuxer + Sized {
         Pin::new(self).poll_outbound(cx)
     }
 
-    /// Convenience function for calling [`StreamMuxer::poll_address_change`] for [`StreamMuxer`]s that are `Unpin`.
-    fn poll_address_change_unpin(
-        &mut self,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<Multiaddr, Self::Error>>
+    /// Convenience function for calling [`StreamMuxer::poll`] for [`StreamMuxer`]s that are `Unpin`.
+    fn poll_unpin(&mut self, cx: &mut Context<'_>) -> Poll<Result<StreamMuxerEvent, Self::Error>>
     where
         Self: Unpin,
     {
-        Pin::new(self).poll_address_change(cx)
+        Pin::new(self).poll(cx)
     }
 
     /// Convenience function for calling [`StreamMuxer::poll_close`] for [`StreamMuxer`]s that are `Unpin`.

@@ -182,7 +182,7 @@ impl NewRegistration {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Registration {
     pub namespace: Namespace,
     pub record: PeerRecord,
@@ -594,6 +594,7 @@ impl From<UnmappableStatusCode> for ConversionError {
 #[error("The response code ({0:?}) cannot be mapped to our ErrorCode enum")]
 pub struct UnmappableStatusCode(wire::message::ResponseStatus);
 
+#[allow(clippy::derive_partial_eq_without_eq)]
 mod wire {
     include!(concat!(env!("OUT_DIR"), "/rendezvous.pb.rs"));
 }

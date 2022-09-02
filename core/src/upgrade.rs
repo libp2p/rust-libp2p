@@ -64,6 +64,7 @@ mod error;
 mod from_fn;
 mod map;
 mod optional;
+mod pending;
 mod select;
 mod transfer;
 
@@ -77,6 +78,7 @@ pub use self::{
     from_fn::{from_fn, FromFnUpgrade},
     map::{MapInboundUpgrade, MapInboundUpgradeErr, MapOutboundUpgrade, MapOutboundUpgradeErr},
     optional::OptionalUpgrade,
+    pending::PendingUpgrade,
     select::SelectUpgrade,
     transfer::{read_length_prefixed, read_varint, write_length_prefixed, write_varint},
 };

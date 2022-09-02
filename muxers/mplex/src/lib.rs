@@ -27,10 +27,8 @@ pub use config::{MaxBufferBehaviour, MplexConfig};
 use bytes::Bytes;
 use codec::LocalStreamId;
 use futures::{future, prelude::*, ready};
-use libp2p_core::{
-    upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo},
-    Multiaddr, StreamMuxer,
-};
+use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
+use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use parking_lot::Mutex;
 use std::{cmp, iter, pin::Pin, sync::Arc, task::Context, task::Poll};
 
@@ -105,10 +103,10 @@ where
             .map_ok(|stream_id| Substream::new(stream_id, self.io.clone()))
     }
 
-    fn poll_address_change(
+    fn poll(
         self: Pin<&mut Self>,
         _: &mut Context<'_>,
-    ) -> Poll<Result<Multiaddr, Self::Error>> {
+    ) -> Poll<Result<StreamMuxerEvent, Self::Error>> {
         Poll::Pending
     }
 
