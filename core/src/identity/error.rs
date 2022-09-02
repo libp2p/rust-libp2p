@@ -67,7 +67,7 @@ pub struct SigningError {
 
 /// An error during encoding of key material.
 impl SigningError {
-    #[allow(dead_code)]
+    #[cfg(any(feature = "secp256k1", feature = "rsa"))]
     pub(crate) fn new<S: ToString>(msg: S) -> Self {
         Self {
             msg: msg.to_string(),
@@ -75,7 +75,7 @@ impl SigningError {
         }
     }
 
-    #[allow(dead_code)]
+    #[cfg(feature = "rsa")]
     pub(crate) fn source(self, source: impl Error + Send + Sync + 'static) -> Self {
         Self {
             source: Some(Box::new(source)),
