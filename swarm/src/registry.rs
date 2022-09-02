@@ -378,11 +378,9 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn score_retention() {
-        return todo!("This test fails randomly");
         fn prop(first: AddressRecord, other: AddressRecord) -> TestResult {
-            if first.addr == other.addr {
+            if first.addr == other.addr || first.score.is_zero() {
                 return TestResult::discard();
             }
 
@@ -411,6 +409,33 @@ mod tests {
         }
 
         quickcheck(prop as fn(_, _) -> _);
+    }
+
+    #[test]
+    fn score_retention_finite_0() {
+        let first = {
+            let addr = Protocol::Tcp(42).into();
+            let score = AddressScore::Finite(0);
+            AddressRecord::new(addr, score)
+        };
+        let other = {
+            let addr = Protocol::Udp(42).into();
+            let score = AddressScore::Finite(42);
+            AddressRecord::new(addr, score)
+        };
+
+        let mut addresses = Addresses::default();
+
+        // Add the first address.
+        addresses.add(first.addr.clone(), first.score);
+        assert!(addresses.iter().any(|a| &a.addr == &first.addr));
+
+        // Add another address so the first will address be purged,
+        // because its score is finite(0)
+        addresses.add(other.addr.clone(), other.score);
+
+        assert!(addresses.iter().any(|a| &a.addr == &other.addr));
+        assert!(!addresses.iter().any(|a| &a.addr == &first.addr));
     }
 
     #[test]
