@@ -29,7 +29,7 @@ fn generate_tls_keypair() -> identity::Keypair {
     identity::Keypair::generate_ed25519()
 }
 
-async fn create_swarm() -> Result<(Swarm<RequestResponse<PingCodec>>, String)> {
+fn create_swarm() -> Result<(Swarm<RequestResponse<PingCodec>>, String)> {
     let cert = generate_certificate();
     let keypair = generate_tls_keypair();
     let peer_id = keypair.public().to_peer_id();
@@ -64,8 +64,8 @@ async fn smoke() -> Result<()> {
 
     let mut rng = rand::thread_rng();
 
-    let (mut a, a_fingerprint) = create_swarm().await?;
-    let (mut b, _b_fingerprint) = create_swarm().await?;
+    let (mut a, a_fingerprint) = create_swarm()?;
+    let (mut b, _b_fingerprint) = create_swarm()?;
 
     Swarm::listen_on(&mut a, "/ip4/127.0.0.1/udp/0/webrtc".parse()?)?;
     Swarm::listen_on(&mut b, "/ip4/127.0.0.1/udp/0/webrtc".parse()?)?;
@@ -292,8 +292,8 @@ impl RequestResponseCodec for PingCodec {
 async fn dial_failure() -> Result<()> {
     let _ = env_logger::builder().is_test(true).try_init();
 
-    let (mut a, a_fingerprint) = create_swarm().await?;
-    let (mut b, _b_fingerprint) = create_swarm().await?;
+    let (mut a, a_fingerprint) = create_swarm()?;
+    let (mut b, _b_fingerprint) = create_swarm()?;
 
     Swarm::listen_on(&mut a, "/ip4/127.0.0.1/udp/0/webrtc".parse()?)?;
     Swarm::listen_on(&mut b, "/ip4/127.0.0.1/udp/0/webrtc".parse()?)?;
@@ -358,7 +358,7 @@ async fn concurrent_connections_and_streams() {
 
         // Spawn the listener nodes.
         for _ in 0..number_listeners {
-            let (mut listener, fingerprint) = block_on(create_swarm()).unwrap();
+            let (mut listener, fingerprint) = create_swarm().unwrap();
             Swarm::listen_on(
                 &mut listener,
                 "/ip4/127.0.0.1/udp/0/webrtc".parse().unwrap(),
@@ -422,7 +422,7 @@ async fn concurrent_connections_and_streams() {
                 .unwrap();
         }
 
-        let (mut dialer, _fingerprint) = block_on(create_swarm()).unwrap();
+        let (mut dialer, _fingerprint) = create_swarm().unwrap();
         Swarm::listen_on(&mut dialer, "/ip4/127.0.0.1/udp/0/webrtc".parse().unwrap()).unwrap();
 
         // Wait to listen on address.
