@@ -589,11 +589,13 @@ mod tests {
             assert!(bucket_ref.contains(&min));
             assert!(bucket_ref.contains(&max));
 
-            if min != Distance(0.into()) { // avoid underflow
+            if min != Distance(0.into()) {
+                // ^ avoid underflow
                 assert!(!bucket_ref.contains(&Distance(min.0 - 1)));
             }
 
-            if max != Distance(U256::max_value()) { // avoid overflow
+            if max != Distance(U256::max_value()) {
+                // ^ avoid overflow
                 assert!(!bucket_ref.contains(&Distance(max.0 + 1)));
             }
         }
