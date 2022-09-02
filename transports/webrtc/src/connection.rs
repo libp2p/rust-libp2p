@@ -29,7 +29,7 @@ use futures::{
     {future::BoxFuture, prelude::*, ready},
 };
 use futures_lite::StreamExt;
-use libp2p_core::{muxing::StreamMuxer, Multiaddr};
+use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
 use log::{debug, error, trace};
 use webrtc::data::data_channel::DataChannel as DetachedDataChannel;
 use webrtc::data_channel::RTCDataChannel;
@@ -173,10 +173,10 @@ impl<'a> StreamMuxer for Connection {
         }
     }
 
-    fn poll_address_change(
+    fn poll(
         self: Pin<&mut Self>,
         _cx: &mut Context<'_>,
-    ) -> Poll<Result<Multiaddr, Self::Error>> {
+    ) -> Poll<Result<StreamMuxerEvent, Self::Error>> {
         return Poll::Pending;
     }
 
