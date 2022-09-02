@@ -19,7 +19,7 @@ default = [
     "identify",
     "kad",
     "gossipsub",
-    "mdns",
+    "mdns-async-io",
     "mplex",
     "noise",
     "ping",
@@ -46,7 +46,8 @@ identify = ["dep:libp2p-identify", "libp2p-metrics?/identify"]
 kad = ["dep:libp2p-kad", "libp2p-metrics?/kad"]
 gossipsub = ["dep:libp2p-gossipsub", "libp2p-metrics?/gossipsub"]
 metrics = ["dep:libp2p-metrics"]
-mdns = ["dep:libp2p-mdns"]
+mdns-async-io = ["dep:libp2p-mdns", "libp2p-mdns?/async-io"]
+mdns-tokio = ["dep:libp2p-mdns", "libp2p-mdns?/tokio"]
 mplex = ["dep:libp2p-mplex"]
 noise = ["dep:libp2p-noise"]
 ping = ["dep:libp2p-ping", "libp2p-metrics?/ping"]
@@ -106,7 +107,7 @@ smallvec = "1.6.1"
 [target.'cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))'.dependencies]
 libp2p-deflate = { version = "0.35.0", path = "transports/deflate", optional = true }
 libp2p-dns = { version = "0.35.0", path = "transports/dns", optional = true, default-features = false }
-libp2p-mdns = { version = "0.40.0", path = "protocols/mdns", optional = true }
+libp2p-mdns = { version = "0.40.0", path = "protocols/mdns", optional = true, default-features = false }
 libp2p-tcp = { version = "0.35.0", path = "transports/tcp", default-features = false, optional = true }
 libp2p-websocket = { version = "0.37.0", path = "transports/websocket", optional = true }
 
@@ -160,7 +161,7 @@ required-features = ["floodsub"]
 
 [[example]]
 name = "chat-tokio"
-required-features = ["tcp-tokio", "mdns"]
+required-features = ["tcp-tokio", "mdns-tokio"]
 
 [[example]]
 name = "file-sharing"
