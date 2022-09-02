@@ -1,7 +1,7 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use futures::{
-    future::{join, select, Either, FutureExt},
+    future::{select, Either, FutureExt},
     io::{AsyncRead, AsyncWrite, AsyncWriteExt},
     stream::StreamExt,
 };
@@ -95,19 +95,28 @@ async fn smoke() -> Result<()> {
         e => panic!("{:?}", e),
     }
 
-    match a.next().await {
-        Some(SwarmEvent::IncomingConnection { .. }) => {}
-        e => panic!("{:?}", e),
-    };
-
-    let pair = join(a.next(), b.next());
+    let pair = select(a.next(), b.next());
     match pair.await {
-        (
-            Some(SwarmEvent::ConnectionEstablished { .. }),
-            Some(SwarmEvent::ConnectionEstablished { .. }),
-        ) => {}
-        e => panic!("{:?}", e),
-    };
+        Either::Left((Some(SwarmEvent::IncomingConnection { .. }), _)) => {}
+        Either::Left((e, _)) => panic!("{:?}", e),
+        Either::Right(_) => panic!("b completed first"),
+    }
+
+    let pair = select(a.next(), b.next());
+    match pair.await {
+        Either::Left((Some(SwarmEvent::ConnectionEstablished { .. }), _)) => {}
+        Either::Left((e, _)) => panic!("{:?}", e),
+        Either::Right((Some(SwarmEvent::ConnectionEstablished { .. }), _)) => {}
+        Either::Right((e, _)) => panic!("{:?}", e),
+    }
+
+    let pair = select(a.next(), b.next());
+    match pair.await {
+        Either::Left((Some(SwarmEvent::ConnectionEstablished { .. }), _)) => {}
+        Either::Left((e, _)) => panic!("{:?}", e),
+        Either::Right((Some(SwarmEvent::ConnectionEstablished { .. }), _)) => {}
+        Either::Right((e, _)) => panic!("{:?}", e),
+    }
 
     assert!(b.next().now_or_never().is_none());
 
