@@ -1510,7 +1510,7 @@ impl error::Error for DialError {
 }
 
 /// Implementation of [`NetworkBehaviour`] that doesn't do anything other than keep all connections alive.
-#[derive(Clone)]
+#[derive(Default, Clone)]
 pub struct KeepAliveBehaviour;
 
 impl NetworkBehaviour for KeepAliveBehaviour {
