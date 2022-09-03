@@ -64,6 +64,29 @@ where
     }
 }
 
+// Taken from https://github.com/bluss/either.
+impl<L, R> IntoEitherHandler<L, R> {
+    /// Returns the left value.
+    pub fn unwrap_left(self) -> L {
+        match self {
+            IntoEitherHandler::Left(l) => l,
+            IntoEitherHandler::Right(_) => {
+                panic!("called `IntoEitherHandler::unwrap_left()` on a `Right` value.",)
+            }
+        }
+    }
+
+    /// Returns the right value.
+    pub fn unwrap_right(self) -> R {
+        match self {
+            IntoEitherHandler::Right(r) => r,
+            IntoEitherHandler::Left(_) => {
+                panic!("called `IntoEitherHandler::unwrap_right()` on a `Left` value.",)
+            }
+        }
+    }
+}
+
 /// Implementation of a [`ConnectionHandler`] that represents either of two [`ConnectionHandler`]
 /// implementations.
 impl<L, R> ConnectionHandler for Either<L, R>

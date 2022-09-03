@@ -63,6 +63,7 @@ pub mod behaviour;
 pub mod dial_opts;
 pub mod handler;
 
+use behaviour::InEvent;
 pub use behaviour::{
     CloseConnection, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
 };
@@ -327,6 +328,9 @@ where
     /// Depending on the underlying transport, one listener may have multiple listening addresses.
     pub fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<io::Error>> {
         let id = self.transport.listen_on(addr)?;
+        self.behaviour
+            .on_event(InEvent::NewListener { listener_id: id });
+        #[allow(deprecated)]
         self.behaviour.inject_new_listener(id);
         Ok(id)
     }
@@ -403,11 +407,11 @@ where
                         PeerCondition::Always => true,
                     };
                     if !condition_matched {
-                        self.behaviour.inject_dial_failure(
-                            Some(peer_id),
+                        self.behaviour.on_event(InEvent::DialFailure {
+                            peer_id: Some(peer_id),
                             handler,
-                            &DialError::DialPeerConditionFalse(condition),
-                        );
+                            error: &DialError::DialPeerConditionFalse(condition),
+                        });
 
                         return Err(DialError::DialPeerConditionFalse(condition));
                     }
@@ -415,8 +419,11 @@ where
                     // Check if peer is banned.
                     if self.banned_peers.contains(&peer_id) {
                         let error = DialError::Banned;
-                        self.behaviour
-                            .inject_dial_failure(Some(peer_id), handler, &error);
+                        self.behaviour.on_event(InEvent::DialFailure {
+                            peer_id: Some(peer_id),
+                            handler,
+                            error: &error,
+                        });
                         return Err(error);
                     }
 
@@ -452,8 +459,11 @@ where
 
                         if addresses.is_empty() {
                             let error = DialError::NoAddresses;
-                            self.behaviour
-                                .inject_dial_failure(Some(peer_id), handler, &error);
+                            self.behaviour.on_event(InEvent::DialFailure {
+                                peer_id: Some(peer_id),
+                                handler,
+                                error: &error,
+                            });
                             return Err(error);
                         };
 
@@ -535,7 +545,11 @@ where
             Ok(_connection_id) => Ok(()),
             Err((connection_limit, handler)) => {
                 let error = DialError::ConnectionLimit(connection_limit);
-                self.behaviour.inject_dial_failure(None, handler, &error);
+                self.behaviour.on_event(InEvent::DialFailure {
+                    peer_id: None,
+                    handler,
+                    error: &error,
+                });
                 Err(error)
             }
         }
@@ -576,12 +590,18 @@ where
         let result = self.external_addrs.add(a.clone(), s);
         let expired = match &result {
             AddAddressResult::Inserted { expired } => {
+                self.behaviour
+                    .on_event(InEvent::NewExternalAddr { addr: &a });
+                #[allow(deprecated)]
                 self.behaviour.inject_new_external_addr(&a);
                 expired
             }
             AddAddressResult::Updated { expired } => expired,
         };
         for a in expired {
+            self.behaviour
+                .on_event(InEvent::ExpiredExternalAddr { addr: &a.addr });
+            #[allow(deprecated)]
             self.behaviour.inject_expired_external_addr(&a.addr);
         }
         result
@@ -595,6 +615,9 @@ where
     /// otherwise.
     pub fn remove_external_address(&mut self, addr: &Multiaddr) -> bool {
         if self.external_addrs.remove(addr) {
+            self.behaviour
+                .on_event(InEvent::ExpiredExternalAddr { addr });
+            #[allow(deprecated)]
             self.behaviour.inject_expired_external_addr(addr);
             true
         } else {
@@ -701,6 +724,15 @@ where
                     let failed_addresses = concurrent_dial_errors
                         .as_ref()
                         .map(|es| es.iter().map(|(a, _)| a).cloned().collect());
+                    self.behaviour
+                        .on_event(behaviour::InEvent::ConnectionEstablished {
+                            peer_id,
+                            connection_id: id,
+                            endpoint: &endpoint,
+                            failed_addresses: failed_addresses.as_ref(),
+                            other_established: non_banned_established,
+                        });
+                    #[allow(deprecated)]
                     self.behaviour.inject_connection_established(
                         &peer_id,
                         &id,
@@ -724,7 +756,11 @@ where
             } => {
                 let error = error.into();
 
-                self.behaviour.inject_dial_failure(peer, handler, &error);
+                self.behaviour.on_event(InEvent::DialFailure {
+                    peer_id: peer,
+                    handler,
+                    error: &error,
+                });
 
                 if let Some(peer) = peer {
                     log::debug!("Connection attempt to {:?} failed with {:?}.", peer, error,);
@@ -745,8 +781,11 @@ where
                 handler,
             } => {
                 log::debug!("Incoming connection failed: {:?}", error);
-                self.behaviour
-                    .inject_listen_failure(&local_addr, &send_back_addr, handler);
+                self.behaviour.on_event(InEvent::ListenFailure {
+                    local_addr: &local_addr,
+                    send_back_addr: &send_back_addr,
+                    handler,
+                });
                 return Some(SwarmEvent::IncomingConnectionError {
                     local_addr,
                     send_back_addr,
@@ -785,13 +824,14 @@ where
                         .into_iter()
                         .filter(|conn_id| !self.banned_peer_connections.contains(conn_id))
                         .count();
-                    self.behaviour.inject_connection_closed(
-                        &peer_id,
-                        &id,
-                        &endpoint,
-                        handler,
-                        remaining_non_banned,
-                    );
+                    self.behaviour
+                        .on_event(behaviour::InEvent::ConnectionClosed {
+                            peer_id,
+                            connection_id: id,
+                            endpoint: &endpoint,
+                            handler,
+                            remaining_established: remaining_non_banned,
+                        });
                 }
                 return Some(SwarmEvent::ConnectionClosed {
                     peer_id,
@@ -804,7 +844,11 @@ where
                 if self.banned_peer_connections.contains(&id) {
                     log::debug!("Ignoring event from banned peer: {} {:?}.", peer_id, id);
                 } else {
-                    self.behaviour.inject_event(peer_id, id, event);
+                    self.behaviour.on_event(InEvent::ConnectionHandler {
+                        peer_id,
+                        connection: id,
+                        event,
+                    });
                 }
             }
             PoolEvent::AddressChange {
@@ -814,6 +858,13 @@ where
                 old_endpoint,
             } => {
                 if !self.banned_peer_connections.contains(&id) {
+                    self.behaviour.on_event(behaviour::InEvent::AddressChange {
+                        peer_id,
+                        connection_id: id,
+                        old: &old_endpoint,
+                        new: &new_endpoint,
+                    });
+                    #[allow(deprecated)]
                     self.behaviour.inject_address_change(
                         &peer_id,
                         &id,
@@ -857,8 +908,11 @@ where
                         });
                     }
                     Err((connection_limit, handler)) => {
-                        self.behaviour
-                            .inject_listen_failure(&local_addr, &send_back_addr, handler);
+                        self.behaviour.on_event(InEvent::ListenFailure {
+                            local_addr: &local_addr,
+                            send_back_addr: &send_back_addr,
+                            handler,
+                        });
                         log::warn!("Incoming connection rejected: {:?}", connection_limit);
                     }
                 };
@@ -872,6 +926,11 @@ where
                 if !addrs.contains(&listen_addr) {
                     addrs.push(listen_addr.clone())
                 }
+                self.behaviour.on_event(InEvent::NewListenAddr {
+                    listener_id,
+                    addr: &listen_addr,
+                });
+                #[allow(deprecated)]
                 self.behaviour
                     .inject_new_listen_addr(listener_id, &listen_addr);
                 return Some(SwarmEvent::NewListenAddr {
@@ -891,6 +950,11 @@ where
                 if let Some(addrs) = self.listened_addrs.get_mut(&listener_id) {
                     addrs.retain(|a| a != &listen_addr);
                 }
+                self.behaviour.on_event(InEvent::ExpiredListenAddr {
+                    listener_id,
+                    addr: &listen_addr,
+                });
+                #[allow(deprecated)]
                 self.behaviour
                     .inject_expired_listen_addr(listener_id, &listen_addr);
                 return Some(SwarmEvent::ExpiredListenAddr {
@@ -905,8 +969,19 @@ where
                 log::debug!("Listener {:?}; Closed by {:?}.", listener_id, reason);
                 let addrs = self.listened_addrs.remove(&listener_id).unwrap_or_default();
                 for addr in addrs.iter() {
+                    self.behaviour
+                        .on_event(InEvent::ExpiredListenAddr { listener_id, addr });
+                    #[allow(deprecated)]
                     self.behaviour.inject_expired_listen_addr(listener_id, addr);
                 }
+                self.behaviour.on_event(InEvent::ListenerClosed {
+                    listener_id,
+                    reason: match &reason {
+                        Ok(()) => Ok(()),
+                        Err(err) => Err(err),
+                    },
+                });
+                #[allow(deprecated)]
                 self.behaviour.inject_listener_closed(
                     listener_id,
                     match &reason {
@@ -921,6 +996,11 @@ where
                 });
             }
             TransportEvent::ListenerError { listener_id, error } => {
+                self.behaviour.on_event(InEvent::ListenerError {
+                    listener_id,
+                    err: &error,
+                });
+                #[allow(deprecated)]
                 self.behaviour.inject_listener_error(listener_id, &error);
                 return Some(SwarmEvent::ListenerError { listener_id, error });
             }
@@ -1542,13 +1622,63 @@ impl NetworkBehaviour for DummyBehaviour {
         }
     }
 
-    fn inject_event(
-        &mut self,
-        _: PeerId,
-        _: ConnectionId,
-        event: <Self::ConnectionHandler as ConnectionHandler>::OutEvent,
-    ) {
-        void::unreachable(event)
+    fn on_event(&mut self, event: InEvent<Self::ConnectionHandler>) {
+        match event {
+            InEvent::ConnectionHandler {
+                peer_id: _,
+                connection: _,
+                event,
+            } => void::unreachable(event),
+            InEvent::ConnectionEstablished {
+                peer_id: _,
+                connection_id: _,
+                endpoint: _,
+                failed_addresses: _,
+                other_established: _,
+            } => {}
+            InEvent::ConnectionClosed {
+                peer_id: _,
+                connection_id: _,
+                endpoint: _,
+                handler: _,
+                remaining_established: _,
+            } => {}
+            InEvent::AddressChange {
+                peer_id: _,
+                connection_id: _,
+                old: _,
+                new: _,
+            } => {}
+            InEvent::DialFailure {
+                peer_id: _,
+                handler: _,
+                error: _,
+            } => {}
+            InEvent::ListenFailure {
+                local_addr: _,
+                send_back_addr: _,
+                handler: _,
+            } => {}
+            InEvent::NewListener { listener_id: _ } => {}
+            InEvent::NewListenAddr {
+                listener_id: _,
+                addr: _,
+            } => {}
+            InEvent::ExpiredListenAddr {
+                listener_id: _,
+                addr: _,
+            } => {}
+            InEvent::ListenerError {
+                listener_id: _,
+                err: _,
+            } => {}
+            InEvent::ListenerClosed {
+                listener_id: _,
+                reason: _,
+            } => {}
+            InEvent::NewExternalAddr { addr: _ } => {}
+            InEvent::ExpiredExternalAddr { addr: _ } => {}
+        }
     }
 
     fn poll(

@@ -18,12 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::handler::{either::IntoEitherHandler, ConnectionHandler, IntoConnectionHandler};
-use crate::{DialError, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
+use crate::handler::either::IntoEitherHandler;
+use crate::{NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use either::Either;
-use libp2p_core::{
-    connection::ConnectionId, transport::ListenerId, ConnectedPoint, Multiaddr, PeerId,
-};
+use libp2p_core::{Multiaddr, PeerId};
 use std::{task::Context, task::Poll};
 
 /// Implementation of [`NetworkBehaviour`] that can be either of two implementations.
@@ -49,170 +47,24 @@ where
         }
     }
 
-    fn inject_connection_established(
-        &mut self,
-        peer_id: &PeerId,
-        connection: &ConnectionId,
-        endpoint: &ConnectedPoint,
-        errors: Option<&Vec<Multiaddr>>,
-        other_established: usize,
-    ) {
+    fn on_event(&mut self, event: super::InEvent<Self::ConnectionHandler>) {
         match self {
-            Either::Left(a) => a.inject_connection_established(
-                peer_id,
-                connection,
-                endpoint,
-                errors,
-                other_established,
-            ),
-            Either::Right(b) => b.inject_connection_established(
-                peer_id,
-                connection,
-                endpoint,
-                errors,
-                other_established,
-            ),
-        }
-    }
-
-    fn inject_connection_closed(
-        &mut self,
-        peer_id: &PeerId,
-        connection: &ConnectionId,
-        endpoint: &ConnectedPoint,
-        handler: <Self::ConnectionHandler as IntoConnectionHandler>::Handler,
-        remaining_established: usize,
-    ) {
-        match (self, handler) {
-            (Either::Left(behaviour), Either::Left(handler)) => behaviour.inject_connection_closed(
-                peer_id,
-                connection,
-                endpoint,
-                handler,
-                remaining_established,
-            ),
-            (Either::Right(behaviour), Either::Right(handler)) => behaviour
-                .inject_connection_closed(
-                    peer_id,
-                    connection,
-                    endpoint,
-                    handler,
-                    remaining_established,
-                ),
-            _ => unreachable!(),
-        }
-    }
-
-    fn inject_address_change(
-        &mut self,
-        peer_id: &PeerId,
-        connection: &ConnectionId,
-        old: &ConnectedPoint,
-        new: &ConnectedPoint,
-    ) {
-        match self {
-            Either::Left(a) => a.inject_address_change(peer_id, connection, old, new),
-            Either::Right(b) => b.inject_address_change(peer_id, connection, old, new),
-        }
-    }
-
-    fn inject_event(
-        &mut self,
-        peer_id: PeerId,
-        connection: ConnectionId,
-        event: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent,
-    ) {
-        match (self, event) {
-            (Either::Left(behaviour), Either::Left(event)) => {
-                behaviour.inject_event(peer_id, connection, event)
-            }
-            (Either::Right(behaviour), Either::Right(event)) => {
-                behaviour.inject_event(peer_id, connection, event)
-            }
-            _ => unreachable!(),
-        }
-    }
-
-    fn inject_dial_failure(
-        &mut self,
-        peer_id: Option<PeerId>,
-        handler: Self::ConnectionHandler,
-        error: &DialError,
-    ) {
-        match (self, handler) {
-            (Either::Left(behaviour), IntoEitherHandler::Left(handler)) => {
-                behaviour.inject_dial_failure(peer_id, handler, error)
-            }
-            (Either::Right(behaviour), IntoEitherHandler::Right(handler)) => {
-                behaviour.inject_dial_failure(peer_id, handler, error)
-            }
-            _ => unreachable!(),
-        }
-    }
-
-    fn inject_listen_failure(
-        &mut self,
-        local_addr: &Multiaddr,
-        send_back_addr: &Multiaddr,
-        handler: Self::ConnectionHandler,
-    ) {
-        match (self, handler) {
-            (Either::Left(behaviour), IntoEitherHandler::Left(handler)) => {
-                behaviour.inject_listen_failure(local_addr, send_back_addr, handler)
-            }
-            (Either::Right(behaviour), IntoEitherHandler::Right(handler)) => {
-                behaviour.inject_listen_failure(local_addr, send_back_addr, handler)
-            }
-            _ => unreachable!(),
-        }
-    }
-
-    fn inject_new_listener(&mut self, id: ListenerId) {
-        match self {
-            Either::Left(a) => a.inject_new_listener(id),
-            Either::Right(b) => b.inject_new_listener(id),
-        }
-    }
-
-    fn inject_new_listen_addr(&mut self, id: ListenerId, addr: &Multiaddr) {
-        match self {
-            Either::Left(a) => a.inject_new_listen_addr(id, addr),
-            Either::Right(b) => b.inject_new_listen_addr(id, addr),
-        }
-    }
-
-    fn inject_expired_listen_addr(&mut self, id: ListenerId, addr: &Multiaddr) {
-        match self {
-            Either::Left(a) => a.inject_expired_listen_addr(id, addr),
-            Either::Right(b) => b.inject_expired_listen_addr(id, addr),
-        }
-    }
-
-    fn inject_new_external_addr(&mut self, addr: &Multiaddr) {
-        match self {
-            Either::Left(a) => a.inject_new_external_addr(addr),
-            Either::Right(b) => b.inject_new_external_addr(addr),
-        }
-    }
-
-    fn inject_expired_external_addr(&mut self, addr: &Multiaddr) {
-        match self {
-            Either::Left(a) => a.inject_expired_external_addr(addr),
-            Either::Right(b) => b.inject_expired_external_addr(addr),
-        }
-    }
-
-    fn inject_listener_error(&mut self, id: ListenerId, err: &(dyn std::error::Error + 'static)) {
-        match self {
-            Either::Left(a) => a.inject_listener_error(id, err),
-            Either::Right(b) => b.inject_listener_error(id, err),
-        }
-    }
-
-    fn inject_listener_closed(&mut self, id: ListenerId, reason: Result<(), &std::io::Error>) {
-        match self {
-            Either::Left(a) => a.inject_listener_closed(id, reason),
-            Either::Right(b) => b.inject_listener_closed(id, reason),
+            Either::Left(b) => b.on_event(event.map_handler(
+                |h| h.unwrap_left(),
+                |h| match h {
+                    Either::Left(h) => h,
+                    Either::Right(_) => unreachable!(),
+                },
+                |e| e.unwrap_left(),
+            )),
+            Either::Right(b) => b.on_event(event.map_handler(
+                |h| h.unwrap_right(),
+                |h| match h {
+                    Either::Right(h) => h,
+                    Either::Left(_) => unreachable!(),
+                },
+                |e| e.unwrap_right(),
+            )),
         }
     }
 
