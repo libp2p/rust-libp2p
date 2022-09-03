@@ -1,4 +1,9 @@
-# 0.40.0 [unreleased]
+# 0.41.0 [unreleased]
+
+- Remove deprecated `set_protocol_name()` from `KademliaConfig` & `KademliaProtocolConfig`.
+  Use `set_protocol_names()` instead.
+
+# 0.40.0
 
 - Add support for multiple protocol names. Update `Kademlia`, `KademliaConfig`,
   and `KademliaProtocolConfig` accordingly. See [Issue 2837]. See [PR 2846].
