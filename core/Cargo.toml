@@ -59,10 +59,10 @@ serde_json = "1.0"
 prost-build = "0.11"
 
 [features]
-default = [ "secp256k1", "ecdsa", "rsa" ]
+default = [ "secp256k1", "ecdsa" ]
 secp256k1 = [ "libsecp256k1" ]
 ecdsa = [ "p256" ]
-rsa = [ "ring" ]
+rsa = [ "dep:ring" ]
 serde = ["multihash/serde-codec", "_serde"]
 
 [[bench]]
