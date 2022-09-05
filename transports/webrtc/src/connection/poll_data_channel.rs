@@ -45,40 +45,72 @@ enum State {
     WriteClosed { read_buffer: Bytes },
     ReadClosed { read_buffer: Bytes },
     ReadWriteClosed { read_buffer: Bytes },
-    Reset,
+    ReadReset,
+    ReadResetWriteClosed,
     Poisoned,
 }
 
 impl State {
     fn handle_flag(&mut self, flag: crate::message_proto::message::Flag) {
         match (std::mem::replace(self, State::Poisoned), flag) {
+            // StopSending
             (
                 State::Open { read_buffer } | State::WriteClosed { read_buffer },
-                crate::message_proto::message::Flag::CloseRead,
+                crate::message_proto::message::Flag::StopSending,
             ) => {
                 *self = State::WriteClosed { read_buffer };
             }
+
             (
                 State::ReadClosed { read_buffer } | State::ReadWriteClosed { read_buffer },
-                crate::message_proto::message::Flag::CloseRead,
+                crate::message_proto::message::Flag::StopSending,
             ) => {
                 *self = State::ReadWriteClosed { read_buffer };
             }
+
+            (
+                State::ReadReset | State::ReadResetWriteClosed,
+                crate::message_proto::message::Flag::StopSending,
+            ) => {
+                *self = State::ReadResetWriteClosed;
+            }
+
+            // Fin
             (
                 State::Open { read_buffer } | State::ReadClosed { read_buffer },
-                crate::message_proto::message::Flag::CloseWrite,
+                crate::message_proto::message::Flag::Fin,
             ) => {
                 *self = State::ReadClosed { read_buffer };
             }
+
             (
                 State::WriteClosed { read_buffer } | State::ReadWriteClosed { read_buffer },
-                crate::message_proto::message::Flag::CloseWrite,
+                crate::message_proto::message::Flag::Fin,
             ) => {
                 *self = State::ReadWriteClosed { read_buffer };
             }
-            // TODO: Or do we want to return an error?
-            (State::Reset, _) => *self = State::Reset,
-            (_, crate::message_proto::message::Flag::Reset) => *self = State::Reset,
+
+            (State::ReadReset, crate::message_proto::message::Flag::Fin) => {
+                *self = State::ReadReset
+            }
+
+            (State::ReadResetWriteClosed, crate::message_proto::message::Flag::Fin) => {
+                *self = State::ReadResetWriteClosed
+            }
+
+            // Reset
+            (
+                State::ReadClosed { .. } | State::ReadReset | State::Open { .. },
+                crate::message_proto::message::Flag::Reset,
+            ) => *self = State::ReadReset,
+
+            (
+                State::ReadWriteClosed { .. }
+                | State::WriteClosed { .. }
+                | State::ReadResetWriteClosed,
+                crate::message_proto::message::Flag::Reset,
+            ) => *self = State::ReadResetWriteClosed,
+
             (State::Poisoned, _) => unreachable!(),
         }
     }
@@ -89,7 +121,8 @@ impl State {
             State::WriteClosed { read_buffer } => Some(read_buffer),
             State::ReadClosed { read_buffer } => Some(read_buffer),
             State::ReadWriteClosed { read_buffer } => Some(read_buffer),
-            State::Reset => None,
+            State::ReadReset => None,
+            State::ReadResetWriteClosed => None,
             State::Poisoned => todo!(),
         }
     }
@@ -219,7 +252,7 @@ impl AsyncRead for PollDataChannel {
                         }
                         None => {
                             self.state
-                                .handle_flag(crate::message_proto::message::Flag::CloseWrite);
+                                .handle_flag(crate::message_proto::message::Flag::Fin);
                             return Poll::Ready(Ok(0));
                         }
                     }
@@ -233,7 +266,7 @@ impl AsyncRead for PollDataChannel {
                     ..
                 } => return Poll::Ready(Ok(0)),
                 PollDataChannel {
-                    state: State::Reset,
+                    state: State::ReadReset | State::ReadResetWriteClosed,
                     ..
                 } => {
                     // TODO: Is `""` valid?
@@ -257,11 +290,10 @@ impl AsyncWrite for PollDataChannel {
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
         match self.state {
-            State::WriteClosed { .. } | State::ReadWriteClosed { .. } => return Poll::Ready(Ok(0)),
-            State::Reset => {
-                return Poll::Ready(Err(io::Error::new(io::ErrorKind::ConnectionReset, "")));
-            }
-            State::Open { .. } => {}
+            State::WriteClosed { .. }
+            | State::ReadWriteClosed { .. }
+            | State::ReadResetWriteClosed => return Poll::Ready(Ok(0)),
+            State::Open { .. } | State::ReadReset => {}
             State::ReadClosed { .. } => {}
             State::Poisoned => todo!(),
         }
@@ -283,11 +315,14 @@ impl AsyncWrite for PollDataChannel {
 
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         match &self.state {
-            State::WriteClosed { .. } | State::ReadWriteClosed { .. } => {}
-            State::Open { .. } | State::ReadClosed { .. } => {
+            State::WriteClosed { .. }
+            | State::ReadWriteClosed { .. }
+            | State::ReadResetWriteClosed { .. } => {}
+
+            State::Open { .. } | State::ReadClosed { .. } | State::ReadReset => {
                 ready!(self.io.poll_ready_unpin(cx))?;
                 Pin::new(&mut self.io).start_send(crate::message_proto::Message {
-                    flag: Some(crate::message_proto::message::Flag::CloseWrite.into()),
+                    flag: Some(crate::message_proto::message::Flag::Fin.into()),
                     message: None,
                 })?;
 
@@ -296,15 +331,16 @@ impl AsyncWrite for PollDataChannel {
                     State::ReadClosed { read_buffer } => {
                         self.state = State::ReadWriteClosed { read_buffer }
                     }
+                    State::ReadReset => self.state = State::ReadResetWriteClosed,
                     State::WriteClosed { .. }
                     | State::ReadWriteClosed { .. }
-                    | State::Reset
-                    | State::Poisoned => unreachable!(),
+                    | State::ReadResetWriteClosed
+                    | State::Poisoned => {
+                        unreachable!()
+                    }
                 }
             }
-            State::Reset => {
-                return Poll::Ready(Err(io::Error::new(io::ErrorKind::ConnectionReset, "")));
-            }
+
             State::Poisoned => todo!(),
         }
 

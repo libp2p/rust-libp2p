@@ -4,12 +4,13 @@ package webrtc.pb;
 
 message Message {
   enum Flag {
-    // The sender will no longer send messages.
-    CLOSE_WRITE = 0;
-    // The sender will no longer read messages.
-    CLOSE_READ = 1;
-    // The local endpoint abruptly terminates the stream. The remote endpoint
-    // may discard any in-flight data.
+    // The sender will no longer send messages on the stream.
+    FIN = 0;
+    // The sender will no longer read messages on the stream. Incoming data is
+    // being discarded on receipt.
+    STOP_SENDING = 1;
+    // The sender abruptly terminates the sending part of the stream. The
+    // receiver can discard any data that it already received on that stream.
     RESET = 2;
   }
 
