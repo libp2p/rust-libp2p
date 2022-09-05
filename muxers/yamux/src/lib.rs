@@ -24,10 +24,12 @@
 use futures::{
     future,
     prelude::*,
+    ready,
     stream::{BoxStream, LocalBoxStream},
 };
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use std::collections::VecDeque;
 use std::{
     fmt, io, iter, mem,
     pin::Pin,
@@ -42,7 +44,19 @@ pub struct Yamux<S> {
     incoming: S,
     /// Handle to control the connection.
     control: yamux::Control,
+    /// Temporarily buffers inbound streams in case our node is performing backpressure on the remote.
+    ///
+    /// The only way how yamux can make progress is by driving the [`Incoming`] stream. However, the
+    /// [`StreamMuxer`] interface is designed to allow a caller to selectively make progress via
+    /// [`StreamMuxer::poll_inbound`] and [`StreamMuxer::poll_outbound`] whilst the move general
+    /// [`StreamMuxer::poll`] is designed to make progress on existing streams etc.
+    ///
+    /// This buffer stores inbound streams that are created whilst [`StreaMuxer::poll`] is called.
+    /// Once the buffer is full, new inbound streams are dropped.
+    inbound_stream_buffer: VecDeque<yamux::Stream>,
 }
+
+const MAX_BUFFERED_INBOUND_STREAMS: usize = 25;
 
 impl<S> fmt::Debug for Yamux<S> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -69,6 +83,7 @@ where
                 _marker: std::marker::PhantomData,
             },
             control: ctrl,
+            inbound_stream_buffer: VecDeque::default(),
         }
     }
 }
@@ -88,6 +103,7 @@ where
                 _marker: std::marker::PhantomData,
             },
             control: ctrl,
+            inbound_stream_buffer: VecDeque::default(),
         }
     }
 }
@@ -105,6 +121,10 @@ where
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Result<Self::Substream, Self::Error>> {
+        if let Some(stream) = self.inbound_stream_buffer.pop_front() {
+            return Poll::Ready(Ok(stream));
+        }
+
         self.incoming.poll_next_unpin(cx).map(|maybe_stream| {
             let stream = maybe_stream
                 .transpose()?
@@ -125,9 +145,18 @@ where
 
     fn poll(
         self: Pin<&mut Self>,
-        _: &mut Context<'_>,
+        cx: &mut Context<'_>,
     ) -> Poll<Result<StreamMuxerEvent, Self::Error>> {
-        Poll::Pending
+        loop {
+            let inbound_stream = ready!(self.poll_inbound(cx))?;
+
+            if self.inbound_stream_buffer.len() >= MAX_BUFFERED_INBOUND_STREAMS {
+                drop(inbound_stream);
+                continue;
+            }
+
+            self.inbound_stream_buffer.push_back(inbound_stream);
+        }
     }
 
     fn poll_close(mut self: Pin<&mut Self>, c: &mut Context<'_>) -> Poll<YamuxResult<()>> {
