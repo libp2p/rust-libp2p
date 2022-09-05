@@ -27,7 +27,7 @@ use futures::{
     ready,
     stream::{BoxStream, LocalBoxStream},
 };
-use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
+use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent, StreamMuxerExt};
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use std::collections::VecDeque;
 use std::{
@@ -147,15 +147,17 @@ where
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Result<StreamMuxerEvent, Self::Error>> {
-        loop {
-            let inbound_stream = ready!(self.poll_inbound(cx))?;
+        let this = self.get_mut();
 
-            if self.inbound_stream_buffer.len() >= MAX_BUFFERED_INBOUND_STREAMS {
+        loop {
+            let inbound_stream = ready!(this.poll_inbound_unpin(cx))?;
+
+            if this.inbound_stream_buffer.len() >= MAX_BUFFERED_INBOUND_STREAMS {
                 drop(inbound_stream);
                 continue;
             }
 
-            self.inbound_stream_buffer.push_back(inbound_stream);
+            this.inbound_stream_buffer.push_back(inbound_stream);
         }
     }
 
