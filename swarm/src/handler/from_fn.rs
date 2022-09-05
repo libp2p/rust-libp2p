@@ -43,6 +43,7 @@ use void::Void;
 /// [`NetworkBehaviour`]: crate::NetworkBehaviour
 pub fn from_fn<TInbound, TOutbound, TOutboundOpenInfo, TState, TInboundFuture, TOutboundFuture>(
     protocol: &'static str,
+    state: TState,
     inbound_streams_limit: usize,
     pending_dial_limit: usize,
     on_new_inbound: impl Fn(NegotiatedSubstream, &mut TState) -> TInboundFuture + Send + 'static,
@@ -53,7 +54,6 @@ pub fn from_fn<TInbound, TOutbound, TOutboundOpenInfo, TState, TInboundFuture, T
 where
     TInboundFuture: Future<Output = TInbound> + Send + 'static,
     TOutboundFuture: Future<Output = TOutbound> + Send + 'static,
-    TState: Default,
 {
     FromFn {
         protocol,
@@ -67,7 +67,7 @@ where
         }),
         pending_outbound_streams: VecDeque::default(),
         failed_open: VecDeque::default(),
-        state: TState::default(),
+        state,
     }
 }
 
@@ -304,6 +304,7 @@ mod tests {
         fn new_handler(&mut self) -> Self::ConnectionHandler {
             from_fn(
                 "/foo/bar/1.0.0",
+                ConnectionState::default(),
                 5,
                 5,
                 |_stream, _state| async move {},
