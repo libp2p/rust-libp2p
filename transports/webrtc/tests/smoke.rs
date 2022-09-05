@@ -75,12 +75,18 @@ async fn smoke() -> Result<()> {
         e => panic!("{:?}", e),
     };
 
+    // skip other interface addresses
+    while let Some(_) = a.next().now_or_never() {}
+
     let addr = addr.with(Protocol::Certhash(fingerprint2multihash(&a_fingerprint)));
 
     let _ = match b.next().await {
         Some(SwarmEvent::NewListenAddr { address, .. }) => address,
         e => panic!("{:?}", e),
     };
+
+    // skip other interface addresses
+    while let Some(_) = b.next().now_or_never() {}
 
     let mut data = vec![0; 4096];
     rng.fill_bytes(&mut data);
@@ -312,12 +318,18 @@ async fn dial_failure() -> Result<()> {
         e => panic!("{:?}", e),
     };
 
+    // skip other interface addresses
+    while let Some(_) = a.next().now_or_never() {}
+
     let addr = addr.with(Protocol::Certhash(fingerprint2multihash(&a_fingerprint)));
 
     let _ = match b.next().await {
         Some(SwarmEvent::NewListenAddr { address, .. }) => address,
         e => panic!("{:?}", e),
     };
+
+    // skip other interface addresses
+    while let Some(_) = b.next().now_or_never() {}
 
     let a_peer_id = &Swarm::local_peer_id(&a).clone();
     drop(a); // stop a swarm so b can never reach it
@@ -361,7 +373,7 @@ async fn concurrent_connections_and_streams() {
         }
 
         let mut pool = futures::executor::LocalPool::default();
-        let mut data = vec![0; 4096 * 10];
+        let mut data = vec![0; 4096];
         rand::thread_rng().fill_bytes(&mut data);
         let mut listeners = vec![];
 
@@ -416,6 +428,9 @@ async fn concurrent_connections_and_streams() {
                                     log::debug!("listener ResponseSent");
                                 }
                                 Some(SwarmEvent::ConnectionClosed { .. }) => {}
+                                Some(SwarmEvent::NewListenAddr { .. }) => {
+                                    log::debug!("listener NewListenAddr");
+                                }
                                 Some(e) => {
                                     panic!("unexpected event {:?}", e);
                                 }
@@ -488,6 +503,9 @@ async fn concurrent_connections_and_streams() {
                     }
                     Some(SwarmEvent::ConnectionClosed { .. }) => {
                         log::debug!("dialer ConnectionClosed");
+                    }
+                    Some(SwarmEvent::NewListenAddr { .. }) => {
+                        log::debug!("dialer NewListenAddr");
                     }
                     e => {
                         panic!("unexpected event {:?}", e);

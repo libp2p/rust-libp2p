@@ -28,7 +28,7 @@ use futures::{
     stream::Stream,
     TryFutureExt,
 };
-use if_watch::IfEvent;
+use if_watch::{IfEvent, IfWatcher};
 use libp2p_core::{
     identity,
     multiaddr::{Multiaddr, Protocol},
@@ -54,7 +54,6 @@ use crate::{
     connection::PollDataChannel,
     error::Error,
     fingerprint::Fingerprint,
-    in_addr::InAddr,
     udp_mux::{UDPMuxEvent, UDPMuxNewAddr},
     webrtc_connection::WebRTCConnection,
 };
@@ -107,13 +106,16 @@ impl WebRTCTransport {
 
         let udp_mux = UDPMuxNewAddr::new(socket);
 
-        Ok(WebRTCListenStream::new(
+        return Ok(WebRTCListenStream::new(
             listener_id,
             listen_addr,
             self.config.clone(),
             udp_mux,
             self.id_keys.clone(),
-        ))
+            IfWatcher::new()
+                .map_err(Error::IoError)
+                .map_err(TransportError::Other)?,
+        ));
     }
 }
 
@@ -247,13 +249,6 @@ pub struct WebRTCListenStream {
     /// when listening on all interfaces for IPv4 respectively IPv6 connections.
     listen_addr: SocketAddr,
 
-    /// The IP addresses of network interfaces on which the listening socket
-    /// is accepting connections.
-    ///
-    /// If the listen socket listens on all interfaces, these may change over
-    /// time as interfaces become available or unavailable.
-    in_addr: InAddr,
-
     /// The config which holds this peer's certificate(s).
     config: WebRTCConfiguration,
 
@@ -268,6 +263,13 @@ pub struct WebRTCListenStream {
     /// Optionally contains a [`TransportEvent::ListenerClosed`] that should be
     /// reported before the listener's stream is terminated.
     report_closed: Option<Option<<Self as Stream>::Item>>,
+
+    /// Watcher for network interface changes.
+    /// Reports [`IfEvent`]s for new / deleted ip-addresses when interfaces
+    /// become or stop being available.
+    ///
+    /// `None` if the socket is only listening on a single interface.
+    if_watcher: IfWatcher,
 }
 
 impl WebRTCListenStream {
@@ -278,17 +280,16 @@ impl WebRTCListenStream {
         config: WebRTCConfiguration,
         udp_mux: UDPMuxNewAddr,
         id_keys: identity::Keypair,
+        if_watcher: IfWatcher,
     ) -> Self {
-        let in_addr = InAddr::new(listen_addr.ip());
-
         WebRTCListenStream {
             listener_id,
             listen_addr,
-            in_addr,
             config,
             udp_mux,
             id_keys,
             report_closed: None,
+            if_watcher,
         }
     }
 
@@ -309,58 +310,48 @@ impl WebRTCListenStream {
         }
     }
 
-    /// Poll for a next If Event.
-    fn poll_if_addr(&mut self, cx: &mut Context<'_>) -> Poll<<Self as Stream>::Item> {
-        loop {
-            let mut item = ready!(self.in_addr.poll_next_unpin(cx));
-            if let Some(item) = item.take() {
-                // Consume all events for up/down interface changes.
-                match item {
-                    Ok(IfEvent::Up(inet)) => {
-                        let ip = inet.addr();
-                        if self.listen_addr.is_ipv4() == ip.is_ipv4()
-                            || self.listen_addr.is_ipv6() == ip.is_ipv6()
-                        {
-                            let socket_addr = SocketAddr::new(ip, self.listen_addr.port());
-                            let ma = socketaddr_to_multiaddr(&socket_addr);
-                            debug!("New listen address: {}", ma);
-                            return Poll::Ready(TransportEvent::NewAddress {
-                                listener_id: self.listener_id,
-                                listen_addr: ma,
-                            });
-                        } else {
-                            continue;
-                        }
-                    }
-                    Ok(IfEvent::Down(inet)) => {
-                        let ip = inet.addr();
-                        if self.listen_addr.is_ipv4() == ip.is_ipv4()
-                            || self.listen_addr.is_ipv6() == ip.is_ipv6()
-                        {
-                            let socket_addr = SocketAddr::new(ip, self.listen_addr.port());
-                            let ma = socketaddr_to_multiaddr(&socket_addr);
-                            debug!("Expired listen address: {}", ma);
-                            return Poll::Ready(TransportEvent::AddressExpired {
-                                listener_id: self.listener_id,
-                                listen_addr: ma,
-                            });
-                        } else {
-                            continue;
-                        }
-                    }
-                    Err(err) => {
-                        debug! {
-                            "Failure polling interfaces: {:?}.",
-                            err
-                        };
-                        return Poll::Ready(TransportEvent::ListenerError {
+    fn poll_if_watcher(&mut self, cx: &mut Context<'_>) -> Poll<<Self as Stream>::Item> {
+        while let Poll::Ready(event) = self.if_watcher.poll_if_event(cx) {
+            match event {
+                Ok(IfEvent::Up(inet)) => {
+                    let ip = inet.addr();
+                    if self.listen_addr.is_ipv4() == ip.is_ipv4()
+                        || self.listen_addr.is_ipv6() == ip.is_ipv6()
+                    {
+                        let socket_addr = SocketAddr::new(ip, self.listen_addr.port());
+                        let ma = socketaddr_to_multiaddr(&socket_addr);
+                        log::debug!("New listen address: {}", ma);
+                        return Poll::Ready(TransportEvent::NewAddress {
                             listener_id: self.listener_id,
-                            error: err.into(),
+                            listen_addr: ma,
                         });
                     }
                 }
+                Ok(IfEvent::Down(inet)) => {
+                    let ip = inet.addr();
+                    if self.listen_addr.is_ipv4() == ip.is_ipv4()
+                        || self.listen_addr.is_ipv6() == ip.is_ipv6()
+                    {
+                        let socket_addr = SocketAddr::new(ip, self.listen_addr.port());
+                        let ma = socketaddr_to_multiaddr(&socket_addr);
+                        log::debug!("Expired listen address: {}", ma);
+                        return Poll::Ready(TransportEvent::AddressExpired {
+                            listener_id: self.listener_id,
+                            listen_addr: ma,
+                        });
+                    }
+                }
+                Err(err) => {
+                    log::debug!("Error when polling network interfaces {}", err);
+                    return Poll::Ready(TransportEvent::ListenerError {
+                        listener_id: self.listener_id,
+                        error: err.into(),
+                    });
+                }
             }
         }
+
+        Poll::Pending
     }
 }
 
@@ -376,7 +367,7 @@ impl Stream for WebRTCListenStream {
                 return Poll::Ready(closed.take());
             }
 
-            if let Poll::Ready(event) = self.poll_if_addr(cx) {
+            if let Poll::Ready(event) = self.poll_if_watcher(cx) {
                 return Poll::Ready(Some(event));
             }
 
