@@ -258,7 +258,7 @@ where
                         let protocol = self
                             .pending_outbound_stream_upgrades
                             .pop_front()
-                            .expect("`open_info` is not empty");
+                            .expect("`pending_outbound_stream_upgrades` is not empty");
 
                         self.negotiating_out.push(SubstreamUpgrade::new_outbound(
                             substream,
