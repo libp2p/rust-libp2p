@@ -103,7 +103,7 @@ where
     /// [`StreamMuxerBox`](libp2p_core::muxing::StreamMuxerBox) level.
     max_negotiating_inbound_streams: usize,
     /// For each outbound substream request, how to upgrade it.
-    pending_dial_upgrades:
+    pending_outbound_stream_upgrades:
         VecDeque<SubstreamProtocol<THandler::OutboundProtocol, THandler::OutboundOpenInfo>>,
 }
 
@@ -141,7 +141,7 @@ where
             shutdown: Shutdown::None,
             substream_upgrade_protocol_override,
             max_negotiating_inbound_streams,
-            pending_dial_upgrades: VecDeque::with_capacity(8),
+            pending_outbound_stream_upgrades: VecDeque::with_capacity(8),
         }
     }
 
@@ -167,7 +167,7 @@ where
             match self.handler.poll(cx) {
                 Poll::Pending => {}
                 Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest { protocol }) => {
-                    self.pending_dial_upgrades.push_back(protocol);
+                    self.pending_outbound_stream_upgrades.push_back(protocol);
                     continue; // Poll handler until exhausted.
                 }
                 Poll::Ready(ConnectionHandlerEvent::Custom(event)) => {
@@ -251,12 +251,12 @@ where
                 }
             }
 
-            if !self.pending_dial_upgrades.is_empty() {
+            if !self.pending_outbound_stream_upgrades.is_empty() {
                 match self.muxing.poll_outbound_unpin(cx)? {
                     Poll::Pending => {}
                     Poll::Ready(substream) => {
                         let protocol = self
-                            .pending_dial_upgrades
+                            .pending_outbound_stream_upgrades
                             .pop_front()
                             .expect("`open_info` is not empty");
 
