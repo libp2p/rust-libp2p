@@ -58,7 +58,7 @@ where
     FromFn {
         protocol,
         inbound_streams_limit,
-        pending_dial_limit,
+        pending_outbound_streams_limit: pending_dial_limit,
         inbound_streams: FuturesUnordered::default(),
         outbound_streams: FuturesUnordered::default(),
         on_new_inbound: Box::new(move |stream, state| on_new_inbound(stream, state).boxed()),
@@ -66,7 +66,7 @@ where
             on_new_outbound(stream, state, info).boxed()
         }),
         idle_waker: None,
-        pending_dials: VecDeque::default(),
+        pending_outbound_streams: VecDeque::default(),
         failed_open: VecDeque::default(),
         state: TState::default(),
     }
@@ -132,8 +132,8 @@ pub struct FromFn<TInbound, TOutbound, TOutboundInfo, TState> {
 
     inbound_streams_limit: usize,
 
-    pending_dials: VecDeque<TOutboundInfo>,
-    pending_dial_limit: usize,
+    pending_outbound_streams: VecDeque<TOutboundInfo>,
+    pending_outbound_streams_limit: usize,
 
     failed_open: VecDeque<OpenError<TOutboundInfo>>,
 
@@ -198,11 +198,11 @@ where
         match event {
             InEvent::UpdateState(new_state) => self.state = new_state,
             InEvent::NewOutbound(open_info) => {
-                if self.pending_dials.len() >= self.pending_dial_limit {
+                if self.pending_outbound_streams.len() >= self.pending_outbound_streams_limit {
                     self.failed_open
                         .push_back(OpenError::LimitExceeded(open_info));
                 } else {
-                    self.pending_dials.push_back(open_info);
+                    self.pending_outbound_streams.push_back(open_info);
                 }
             }
         }
@@ -230,7 +230,7 @@ where
     fn connection_keep_alive(&self) -> KeepAlive {
         if self.inbound_streams.is_empty()
             && self.outbound_streams.is_empty()
-            && self.pending_dials.is_empty()
+            && self.pending_outbound_streams.is_empty()
         {
             return KeepAlive::No;
         }
@@ -255,7 +255,7 @@ where
             )));
         }
 
-        if let Some(outbound_open_info) = self.pending_dials.pop_front() {
+        if let Some(outbound_open_info) = self.pending_outbound_streams.pop_front() {
             return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
                 protocol: SubstreamProtocol::new(
                     ReadyUpgrade::new(self.protocol),
