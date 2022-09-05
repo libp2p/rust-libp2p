@@ -1,14 +1,14 @@
 use crate::handler::{InboundUpgradeSend, OutboundUpgradeSend};
 use crate::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
-    NegotiatedSubstream, SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, IntoConnectionHandler,
+    KeepAlive, NegotiatedSubstream, SubstreamProtocol,
 };
 use futures::future::BoxFuture;
 use futures::future::FutureExt;
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use libp2p_core::upgrade::{NegotiationError, ReadyUpgrade};
-use libp2p_core::UpgradeError;
+use libp2p_core::{ConnectedPoint, PeerId, UpgradeError};
 use std::collections::VecDeque;
 use std::error::Error;
 use std::fmt;
@@ -50,23 +50,19 @@ pub fn from_fn<TInbound, TOutbound, TOutboundOpenInfo, TState, TInboundFuture, T
     on_new_outbound: impl Fn(NegotiatedSubstream, &mut TState, TOutboundOpenInfo) -> TOutboundFuture
         + Send
         + 'static,
-) -> FromFn<TInbound, TOutbound, TOutboundOpenInfo, TState>
+) -> FromFnProto<TInbound, TOutbound, TOutboundOpenInfo, TState>
 where
     TInboundFuture: Future<Output = TInbound> + Send + 'static,
     TOutboundFuture: Future<Output = TOutbound> + Send + 'static,
 {
-    FromFn {
+    FromFnProto {
         protocol,
         inbound_streams_limit,
         pending_outbound_streams_limit: pending_dial_limit,
-        inbound_streams: FuturesUnordered::default(),
-        outbound_streams: FuturesUnordered::default(),
         on_new_inbound: Box::new(move |stream, state| on_new_inbound(stream, state).boxed()),
         on_new_outbound: Box::new(move |stream, state, info| {
             on_new_outbound(stream, state, info).boxed()
         }),
-        pending_outbound_streams: VecDeque::default(),
-        failed_open: VecDeque::default(),
         state,
     }
 }
@@ -114,8 +110,62 @@ pub enum InEvent<TState, TOutboundOpenInfo> {
     NewOutbound(TOutboundOpenInfo),
 }
 
+pub struct FromFnProto<TInbound, TOutbound, TOutboundOpenInfo, TState> {
+    protocol: &'static str,
+
+    on_new_inbound:
+        Box<dyn Fn(NegotiatedSubstream, &mut TState) -> BoxFuture<'static, TInbound> + Send>,
+    on_new_outbound: Box<
+        dyn Fn(NegotiatedSubstream, &mut TState, TOutboundOpenInfo) -> BoxFuture<'static, TOutbound>
+            + Send,
+    >,
+
+    inbound_streams_limit: usize,
+    pending_outbound_streams_limit: usize,
+
+    state: TState,
+}
+
+impl<TInbound, TOutbound, TOutboundOpenInfo, TState> IntoConnectionHandler
+    for FromFnProto<TInbound, TOutbound, TOutboundOpenInfo, TState>
+where
+    TInbound: fmt::Debug + Send + 'static,
+    TOutbound: fmt::Debug + Send + 'static,
+    TOutboundOpenInfo: fmt::Debug + Send + 'static,
+    TState: fmt::Debug + Send + 'static,
+{
+    type Handler = FromFn<TInbound, TOutbound, TOutboundOpenInfo, TState>;
+
+    fn into_handler(
+        self,
+        remote_peer_id: &PeerId,
+        connected_point: &ConnectedPoint,
+    ) -> Self::Handler {
+        FromFn {
+            protocol: self.protocol,
+            remote_peer_id: *remote_peer_id,
+            connected_point: connected_point.clone(),
+            inbound_streams: FuturesUnordered::default(),
+            outbound_streams: FuturesUnordered::default(),
+            on_new_inbound: self.on_new_inbound,
+            on_new_outbound: self.on_new_outbound,
+            inbound_streams_limit: self.inbound_streams_limit,
+            pending_outbound_streams: VecDeque::default(),
+            pending_outbound_streams_limit: self.pending_outbound_streams_limit,
+            failed_open: VecDeque::default(),
+            state: self.state,
+        }
+    }
+
+    fn inbound_protocol(&self) -> <Self::Handler as ConnectionHandler>::InboundProtocol {
+        ReadyUpgrade::new(self.protocol)
+    }
+}
+
 pub struct FromFn<TInbound, TOutbound, TOutboundInfo, TState> {
     protocol: &'static str,
+    remote_peer_id: PeerId,
+    connected_point: ConnectedPoint,
 
     inbound_streams: FuturesUnordered<BoxFuture<'static, TInbound>>,
     outbound_streams: FuturesUnordered<BoxFuture<'static, TOutbound>>,
@@ -298,7 +348,7 @@ mod tests {
     }
 
     impl NetworkBehaviour for MyBehaviour {
-        type ConnectionHandler = FromFn<(), (), (), ConnectionState>;
+        type ConnectionHandler = FromFnProto<(), (), (), ConnectionState>;
         type OutEvent = ();
 
         fn new_handler(&mut self) -> Self::ConnectionHandler {
