@@ -46,8 +46,16 @@ pub fn from_fn<TInbound, TOutbound, TOutboundOpenInfo, TState, TInboundFuture, T
     state: TState,
     inbound_streams_limit: usize,
     pending_dial_limit: usize,
-    on_new_inbound: impl Fn(NegotiatedSubstream, &mut TState) -> TInboundFuture + Send + 'static,
-    on_new_outbound: impl Fn(NegotiatedSubstream, &mut TState, TOutboundOpenInfo) -> TOutboundFuture
+    on_new_inbound: impl Fn(NegotiatedSubstream, PeerId, &ConnectedPoint, &mut TState) -> TInboundFuture
+        + Send
+        + 'static,
+    on_new_outbound: impl Fn(
+            NegotiatedSubstream,
+            PeerId,
+            &ConnectedPoint,
+            &mut TState,
+            TOutboundOpenInfo,
+        ) -> TOutboundFuture
         + Send
         + 'static,
 ) -> FromFnProto<TInbound, TOutbound, TOutboundOpenInfo, TState>
@@ -59,10 +67,14 @@ where
         protocol,
         inbound_streams_limit,
         pending_outbound_streams_limit: pending_dial_limit,
-        on_new_inbound: Box::new(move |stream, state| on_new_inbound(stream, state).boxed()),
-        on_new_outbound: Box::new(move |stream, state, info| {
-            on_new_outbound(stream, state, info).boxed()
+        on_new_inbound: Box::new(move |stream, remote_peer_id, connected_point, state| {
+            on_new_inbound(stream, remote_peer_id, connected_point, state).boxed()
         }),
+        on_new_outbound: Box::new(
+            move |stream, remote_peer_id, connected_point, state, info| {
+                on_new_outbound(stream, remote_peer_id, connected_point, state, info).boxed()
+            },
+        ),
         state,
     }
 }
@@ -113,10 +125,23 @@ pub enum InEvent<TState, TOutboundOpenInfo> {
 pub struct FromFnProto<TInbound, TOutbound, TOutboundOpenInfo, TState> {
     protocol: &'static str,
 
-    on_new_inbound:
-        Box<dyn Fn(NegotiatedSubstream, &mut TState) -> BoxFuture<'static, TInbound> + Send>,
+    on_new_inbound: Box<
+        dyn Fn(
+                NegotiatedSubstream,
+                PeerId,
+                &ConnectedPoint,
+                &mut TState,
+            ) -> BoxFuture<'static, TInbound>
+            + Send,
+    >,
     on_new_outbound: Box<
-        dyn Fn(NegotiatedSubstream, &mut TState, TOutboundOpenInfo) -> BoxFuture<'static, TOutbound>
+        dyn Fn(
+                NegotiatedSubstream,
+                PeerId,
+                &ConnectedPoint,
+                &mut TState,
+                TOutboundOpenInfo,
+            ) -> BoxFuture<'static, TOutbound>
             + Send,
     >,
 
@@ -170,10 +195,23 @@ pub struct FromFn<TInbound, TOutbound, TOutboundInfo, TState> {
     inbound_streams: FuturesUnordered<BoxFuture<'static, TInbound>>,
     outbound_streams: FuturesUnordered<BoxFuture<'static, TOutbound>>,
 
-    on_new_inbound:
-        Box<dyn Fn(NegotiatedSubstream, &mut TState) -> BoxFuture<'static, TInbound> + Send>,
+    on_new_inbound: Box<
+        dyn Fn(
+                NegotiatedSubstream,
+                PeerId,
+                &ConnectedPoint,
+                &mut TState,
+            ) -> BoxFuture<'static, TInbound>
+            + Send,
+    >,
     on_new_outbound: Box<
-        dyn Fn(NegotiatedSubstream, &mut TState, TOutboundInfo) -> BoxFuture<'static, TOutbound>
+        dyn Fn(
+                NegotiatedSubstream,
+                PeerId,
+                &ConnectedPoint,
+                &mut TState,
+                TOutboundInfo,
+            ) -> BoxFuture<'static, TOutbound>
             + Send,
     >,
 
@@ -220,7 +258,12 @@ where
             return;
         }
 
-        let inbound_future = (self.on_new_inbound)(protocol, &mut self.state);
+        let inbound_future = (self.on_new_inbound)(
+            protocol,
+            self.remote_peer_id,
+            &self.connected_point,
+            &mut self.state,
+        );
         self.inbound_streams.push(inbound_future);
     }
 
@@ -229,7 +272,13 @@ where
         protocol: <Self::OutboundProtocol as OutboundUpgradeSend>::Output,
         info: Self::OutboundOpenInfo,
     ) {
-        let outbound_future = (self.on_new_outbound)(protocol, &mut self.state, info);
+        let outbound_future = (self.on_new_outbound)(
+            protocol,
+            self.remote_peer_id,
+            &self.connected_point,
+            &mut self.state,
+            info,
+        );
         self.outbound_streams.push(outbound_future);
     }
 
@@ -357,8 +406,8 @@ mod tests {
                 ConnectionState::default(),
                 5,
                 5,
-                |_stream, _state| async move {},
-                |_stream, _state, ()| async move {},
+                |_stream, _remote_peer_id, _connected_point, _state| async move {},
+                |_stream, _remote_peer_id, _connected_point, _state, ()| async move {},
             )
         }
 
