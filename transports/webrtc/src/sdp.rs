@@ -26,6 +26,22 @@ use std::net::IpAddr;
 
 use crate::fingerprint::Fingerprint;
 
+pub(crate) fn render_server_session_description(
+    addr: SocketAddr,
+    fingerprint: &Fingerprint,
+    ufrag: &str,
+) -> String {
+    render_description(SERVER_SESSION_DESCRIPTION, addr, fingerprint, ufrag)
+}
+
+pub(crate) fn render_client_session_description(
+    addr: SocketAddr,
+    fingerprint: &Fingerprint,
+    ufrag: &str,
+) -> String {
+    render_description(CLIENT_SESSION_DESCRIPTION, addr, fingerprint, ufrag)
+}
+
 // An SDP message that constitutes the offer.
 //
 // Main RFC: <https://datatracker.ietf.org/doc/html/rfc8866>
@@ -187,22 +203,6 @@ struct DescriptionContext {
     pub fingerprint_value: String,
     pub ufrag: String,
     pub pwd: String,
-}
-
-pub(crate) fn render_server_session_description(
-    addr: SocketAddr,
-    fingerprint: &Fingerprint,
-    ufrag: &str,
-) -> String {
-    render_description(SERVER_SESSION_DESCRIPTION, addr, fingerprint, ufrag)
-}
-
-pub(crate) fn render_client_session_description(
-    addr: SocketAddr,
-    fingerprint: &Fingerprint,
-    ufrag: &str,
-) -> String {
-    render_description(CLIENT_SESSION_DESCRIPTION, addr, fingerprint, ufrag)
 }
 
 /// Renders a [`TinyTemplate`] description using the provided arguments.
