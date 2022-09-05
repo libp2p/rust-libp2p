@@ -1,8 +1,8 @@
 # 0.40.0 [unreleased]
 
-- Remove `OpenSubstreamToken` as it is dead code. See [PR XXXX].
+- Remove `OpenSubstreamToken` as it is dead code. See [PR 2873].
 
-[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX/
+[PR 2873]: https://github.com/libp2p/rust-libp2p/pull/2873/
 
 # 0.39.0
 
