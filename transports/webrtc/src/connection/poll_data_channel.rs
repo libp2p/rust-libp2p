@@ -24,8 +24,8 @@ use futures::prelude::*;
 use futures::ready;
 use tokio_util::compat::Compat;
 use tokio_util::compat::TokioAsyncReadCompatExt;
-use webrtc_data::data_channel::DataChannel;
-use webrtc_data::data_channel::PollDataChannel as RTCPollDataChannel;
+use webrtc::data::data_channel::DataChannel;
+use webrtc::data::data_channel::PollDataChannel as RTCPollDataChannel;
 
 use std::io;
 use std::pin::Pin;

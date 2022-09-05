@@ -23,31 +23,24 @@ libp2p-core = { version = "0.35.0", path = "../../core", default-features = fals
 libp2p-noise = { version = "0.38.0", path = "../../transports/noise" }
 log = "0.4"
 multihash = { version = "0.16", default-features = false, features = ["sha2"] }
-pin-project = "1.0.0"
-prost = "0.10"
-prost-codec = { version = "0.1", path = "../../misc/prost-codec" }
+prost = "0.11"
+prost-codec = { version = "0.2", path = "../../misc/prost-codec" }
 rand = "0.8"
 serde = { version = "1.0", features = ["derive"] }
 stun = "0.4"
 thiserror = "1"
 tinytemplate = "1.2"
 tokio-crate = { package = "tokio", version = "1.18", features = ["net"]}
-# TODO: Needed?
 tokio-util = { version = "0.7", features = ["compat"] }
-webrtc = { version = "0.4.0", git = "https://github.com/webrtc-rs/webrtc.git" }
-webrtc-data = { version = "0.4.0", git = "https://github.com/webrtc-rs/data.git" }
-webrtc-ice = "0.7.0"
-webrtc-sctp = "0.5.0"
-webrtc-util = { version = "0.5.4", default-features = false, features = ["conn", "vnet", "sync"] }
+webrtc = "0.4.0"
 
 [build-dependencies]
-prost-build = "0.10"
+prost-build = "0.11"
 
 [dev-dependencies]
 anyhow = "1.0"
 env_logger = "0.9"
-libp2p-request-response = { version = "0.20.0", path = "../../protocols/request-response" }
-libp2p-swarm = { version = "0.38.0", path = "../../swarm" }
+libp2p = { path = "../..", features = ["request-response"], default-features = false }
 rand_core = "0.5"
 rcgen = "0.9"
 quickcheck = "1"

@@ -24,6 +24,9 @@ jobs:
       with:
         access_token: ${{ github.token }}
 
+    - name: Install Protoc
+      uses: arduino/setup-protoc@v1
+
     - uses: actions/checkout@v3
 
     - uses: Swatinem/rust-cache@6720f05bc48b77f96918929a9019fb2203ff71f8 # v2.0.0
@@ -55,6 +58,9 @@ jobs:
       uses: styfle/cancel-workflow-action@bb6001c4ea612bf59c3abfc4756fbceee4f870c7 # 0.10.0
       with:
         access_token: ${{ github.token }}
+
+    - name: Install Protoc
+      uses: arduino/setup-protoc@v1
 
     - uses: actions/checkout@v3
 
@@ -91,6 +97,9 @@ jobs:
       with:
         access_token: ${{ github.token }}
 
+    - name: Install Protoc
+      uses: arduino/setup-protoc@v1
+
     - uses: actions/checkout@v3
 
     - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
@@ -112,6 +121,9 @@ jobs:
       uses: styfle/cancel-workflow-action@bb6001c4ea612bf59c3abfc4756fbceee4f870c7 # 0.10.0
       with:
         access_token: ${{ github.token }}
+
+    - name: Install Protoc
+      uses: arduino/setup-protoc@v1
 
     - uses: actions/checkout@v3
 
@@ -138,6 +150,9 @@ jobs:
       uses: styfle/cancel-workflow-action@bb6001c4ea612bf59c3abfc4756fbceee4f870c7 # 0.10.0
       with:
         access_token: ${{ github.token }}
+
+    - name: Install Protoc
+      uses: arduino/setup-protoc@v1
 
     - uses: actions/checkout@v3
 

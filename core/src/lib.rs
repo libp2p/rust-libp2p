@@ -38,6 +38,7 @@
 #[cfg(feature = "serde")]
 extern crate _serde as serde;
 
+#[allow(clippy::derive_partial_eq_without_eq)]
 mod keys_proto {
     include!(concat!(env!("OUT_DIR"), "/keys_proto.rs"));
 }
@@ -46,6 +47,7 @@ mod envelope_proto {
     include!(concat!(env!("OUT_DIR"), "/envelope_proto.rs"));
 }
 
+#[allow(clippy::derive_partial_eq_without_eq)]
 mod peer_record_proto {
     include!(concat!(env!("OUT_DIR"), "/peer_record_proto.rs"));
 }

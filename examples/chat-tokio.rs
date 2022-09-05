@@ -25,7 +25,7 @@
 //! The example is run per node as follows:
 //!
 //! ```sh
-//! cargo run --example chat-tokio --features="tcp-tokio mdns"
+//! cargo run --example chat-tokio --features="tcp-tokio mdns-tokio"
 //! ```
 //!
 //! Alternatively, to run with the minimal set of features and crates:
@@ -33,7 +33,7 @@
 //! ```sh
 //!cargo run --example chat-tokio \\
 //!    --no-default-features \\
-//!    --features="floodsub mplex noise tcp-tokio mdns"
+//!    --features="floodsub mplex noise tcp-tokio mdns-tokio"
 //! ```
 
 use futures::StreamExt;
@@ -41,10 +41,14 @@ use libp2p::{
     core::upgrade,
     floodsub::{self, Floodsub, FloodsubEvent},
     identity,
-    mdns::{Mdns, MdnsEvent},
+    mdns::{
+        MdnsEvent,
+        // `TokioMdns` is available through the `mdns-tokio` feature.
+        TokioMdns,
+    },
     mplex,
     noise,
-    swarm::{dial_opts::DialOpts, NetworkBehaviourEventProcess, SwarmBuilder, SwarmEvent},
+    swarm::{SwarmBuilder, SwarmEvent},
     // `TokioTcpTransport` is available through the `tcp-tokio` feature.
     tcp::TokioTcpTransport,
     Multiaddr,
@@ -82,55 +86,38 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Create a Floodsub topic
     let floodsub_topic = floodsub::Topic::new("chat");
 
-    // We create a custom network behaviour that combines floodsub and mDNS.
-    // The derive generates a delegating `NetworkBehaviour` impl which in turn
-    // requires the implementations of `NetworkBehaviourEventProcess` for
-    // the events of each behaviour.
+    // We create a custom  behaviour that combines floodsub and mDNS.
+    // The derive generates a delegating `NetworkBehaviour` impl.
     #[derive(NetworkBehaviour)]
-    #[behaviour(event_process = true)]
+    #[behaviour(out_event = "MyBehaviourEvent")]
     struct MyBehaviour {
         floodsub: Floodsub,
-        mdns: Mdns,
+        mdns: TokioMdns,
     }
 
-    impl NetworkBehaviourEventProcess<FloodsubEvent> for MyBehaviour {
-        // Called when `floodsub` produces an event.
-        fn inject_event(&mut self, message: FloodsubEvent) {
-            if let FloodsubEvent::Message(message) = message {
-                println!(
-                    "Received: '{:?}' from {:?}",
-                    String::from_utf8_lossy(&message.data),
-                    message.source
-                );
-            }
+    #[allow(clippy::large_enum_variant)]
+    enum MyBehaviourEvent {
+        Floodsub(FloodsubEvent),
+        Mdns(MdnsEvent),
+    }
+
+    impl From<FloodsubEvent> for MyBehaviourEvent {
+        fn from(event: FloodsubEvent) -> Self {
+            MyBehaviourEvent::Floodsub(event)
         }
     }
 
-    impl NetworkBehaviourEventProcess<MdnsEvent> for MyBehaviour {
-        // Called when `mdns` produces an event.
-        fn inject_event(&mut self, event: MdnsEvent) {
-            match event {
-                MdnsEvent::Discovered(list) => {
-                    for (peer, _) in list {
-                        self.floodsub.add_node_to_partial_view(peer);
-                    }
-                }
-                MdnsEvent::Expired(list) => {
-                    for (peer, _) in list {
-                        if !self.mdns.has_node(&peer) {
-                            self.floodsub.remove_node_from_partial_view(&peer);
-                        }
-                    }
-                }
-            }
+    impl From<MdnsEvent> for MyBehaviourEvent {
+        fn from(event: MdnsEvent) -> Self {
+            MyBehaviourEvent::Mdns(event)
         }
     }
 
     // Create a Swarm to manage peers and events.
     let mut swarm = {
-        let mdns = Mdns::new(Default::default()).await?;
+        let mdns = TokioMdns::new(Default::default()).await?;
         let mut behaviour = MyBehaviour {
-            floodsub: Floodsub::new(peer_id.clone()),
+            floodsub: Floodsub::new(peer_id),
             mdns,
         };
 
@@ -166,8 +153,34 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 swarm.behaviour_mut().floodsub.publish(floodsub_topic.clone(), line.as_bytes());
             }
             event = swarm.select_next_some() => {
-                if let SwarmEvent::NewListenAddr { address, .. } = event {
-                    println!("Listening on {:?}", address);
+                match event {
+                    SwarmEvent::NewListenAddr { address, .. } => {
+                        println!("Listening on {:?}", address);
+                    }
+                    SwarmEvent::Behaviour(MyBehaviourEvent::Floodsub(FloodsubEvent::Message(message))) => {
+                        println!(
+                                "Received: '{:?}' from {:?}",
+                                String::from_utf8_lossy(&message.data),
+                                message.source
+                            );
+                    }
+                    SwarmEvent::Behaviour(MyBehaviourEvent::Mdns(event)) => {
+                        match event {
+                            MdnsEvent::Discovered(list) => {
+                                for (peer, _) in list {
+                                    swarm.behaviour_mut().floodsub.add_node_to_partial_view(peer);
+                                }
+                            }
+                            MdnsEvent::Expired(list) => {
+                                for (peer, _) in list {
+                                    if !swarm.behaviour().mdns.has_node(&peer) {
+                                        swarm.behaviour_mut().floodsub.remove_node_from_partial_view(&peer);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
                 }
             }
         }

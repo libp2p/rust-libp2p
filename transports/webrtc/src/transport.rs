@@ -38,12 +38,11 @@ use libp2p_core::{
 use libp2p_noise::{Keypair, NoiseConfig, NoiseError, RemoteIdentity, X25519Spec};
 use log::{debug, trace};
 use tokio_crate::net::UdpSocket;
+use webrtc::ice::udp_mux::UDPMux;
 use webrtc::peer_connection::certificate::RTCCertificate;
 use webrtc::peer_connection::configuration::RTCConfiguration;
-use webrtc_ice::udp_mux::UDPMux;
 
 use std::{
-    borrow::Cow,
     net::SocketAddr,
     pin::Pin,
     sync::Arc,
@@ -170,7 +169,7 @@ impl Transport for WebRTCTransport {
             .iter()
             .next()
             .ok_or(TransportError::Other(Error::NoListeners))?;
-        let udp_mux = first_listener.udp_mux.clone();
+        let udp_mux = first_listener.udp_mux.udp_mux_handle();
 
         // [`Transport::dial`] should do no work unless the returned [`Future`] is polled. Thus
         // do the `set_remote_description` call within the [`Future`].
@@ -187,7 +186,7 @@ impl Transport for WebRTCTransport {
             .await?;
 
             // Open a data channel to do Noise on top and verify the remote.
-            let data_channel = conn.create_initial_upgrade_data_channel(false).await?;
+            let data_channel = conn.create_initial_upgrade_data_channel().await?;
 
             trace!("noise handshake with addr={}", remote);
             let peer_id = perform_noise_handshake_outbound(
@@ -259,7 +258,7 @@ pub struct WebRTCListenStream {
     config: WebRTCConfiguration,
 
     /// The UDP muxer that manages all ICE connections.
-    udp_mux: Arc<UDPMuxNewAddr>,
+    udp_mux: UDPMuxNewAddr,
 
     /// `Keypair` identifying this peer
     id_keys: identity::Keypair,
@@ -277,7 +276,7 @@ impl WebRTCListenStream {
         listener_id: ListenerId,
         listen_addr: SocketAddr,
         config: WebRTCConfiguration,
-        udp_mux: Arc<UDPMuxNewAddr>,
+        udp_mux: UDPMuxNewAddr,
         id_keys: identity::Keypair,
     ) -> Self {
         let in_addr = InAddr::new(listen_addr.ip());
@@ -382,13 +381,13 @@ impl Stream for WebRTCListenStream {
             }
 
             // Poll UDP muxer for new addresses or incoming data for streams.
-            match ready!(self.udp_mux.as_ref().poll(cx)) {
+            match ready!(self.udp_mux.poll(cx)) {
                 UDPMuxEvent::NewAddr(new_addr) => {
                     let local_addr = socketaddr_to_multiaddr(&self.listen_addr);
                     let send_back_addr = socketaddr_to_multiaddr(&new_addr.addr);
                     let event = TransportEvent::Incoming {
                         upgrade: Box::pin(upgrade(
-                            self.udp_mux.clone(),
+                            self.udp_mux.udp_mux_handle(),
                             self.config.clone(),
                             new_addr.addr,
                             new_addr.ufrag,
@@ -452,21 +451,12 @@ impl WebRTCConfiguration {
     }
 }
 
-// TODO: remove
-fn hex_to_cow<'a>(s: &str) -> Cow<'a, [u8; 32]> {
-    let mut buf = [0; 32];
-    hex::decode_to_slice(s, &mut buf).unwrap();
-    Cow::Owned(buf)
-}
-
 /// Turns an IP address and port into the corresponding WebRTC multiaddr.
 pub(crate) fn socketaddr_to_multiaddr(socket_addr: &SocketAddr) -> Multiaddr {
-    // TODO: remove
-    let f = "ACD1E533EC271FCDE0275947F4D62A2B2331FF10C9DDE0298EB7B399B4BFF60B";
     Multiaddr::empty()
         .with(socket_addr.ip().into())
         .with(Protocol::Udp(socket_addr.port()))
-        .with(Protocol::XWebRTC(hex_to_cow(&f)))
+        .with(Protocol::WebRTC)
 }
 
 /// Extracts a SHA-256 fingerprint from the given address. Returns `None` if the address does not
@@ -475,8 +465,8 @@ fn fingerprint_from_addr<'a>(addr: &'a Multiaddr) -> Option<Fingerprint> {
     let iter = addr.iter();
     for proto in iter {
         match proto {
-            // TODO: check hash is one of https://datatracker.ietf.org/doc/html/rfc8122#section-5
-            Protocol::XWebRTC(f) => return Some(Fingerprint::from(f.as_ref())),
+            // Only support SHA-256 (0x12) for now.
+            Protocol::Certhash(f) if f.code() == 0x12 => return Some(Fingerprint::from(f)),
             _ => continue,
         }
     }
@@ -491,18 +481,20 @@ fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Option<SocketAddr> {
     let proto2 = iter.next()?;
     let proto3 = iter.next()?;
 
+    // Return `None` if protocols other than `p2p` or `certhash` are present.
     for proto in iter {
         match proto {
-            Protocol::P2p(_) => {} // Ignore a `/p2p/...` prefix of possibly outer protocols, if present.
+            Protocol::P2p(_) => {}
+            Protocol::Certhash(_) => {}
             _ => return None,
         }
     }
 
     match (proto1, proto2, proto3) {
-        (Protocol::Ip4(ip), Protocol::Udp(port), Protocol::XWebRTC(_)) => {
+        (Protocol::Ip4(ip), Protocol::Udp(port), Protocol::WebRTC) => {
             Some(SocketAddr::new(ip.into(), port))
         }
-        (Protocol::Ip6(ip), Protocol::Udp(port), Protocol::XWebRTC(_)) => {
+        (Protocol::Ip6(ip), Protocol::Udp(port), Protocol::WebRTC) => {
             Some(SocketAddr::new(ip.into(), port))
         }
         _ => None,
@@ -577,8 +569,7 @@ async fn upgrade(
     .await?;
 
     // Open a data channel to do Noise on top and verify the remote.
-    // NOTE: channel is already negotiated by the client
-    let data_channel = conn.create_initial_upgrade_data_channel(true).await?;
+    let data_channel = conn.create_initial_upgrade_data_channel().await?;
 
     trace!(
         "noise handshake with addr={} (ufrag={})",
@@ -681,7 +672,7 @@ mod tests {
 
         assert_eq!(
             multiaddr_to_socketaddr(
-                &"/ip4/127.0.0.1/udp/12345/x-webrtc/ACD1E533EC271FCDE0275947F4D62A2B2331FF10C9DDE0298EB7B399B4BFF60B"
+                &"/ip4/127.0.0.1/udp/12345/webrtc/certhash/uEiDikp5KVUgkLta1EjUN-IKbHk-dUBg8VzKgf5nXxLK46w"
                     .parse::<Multiaddr>()
                     .unwrap()
             ),
@@ -693,14 +684,14 @@ mod tests {
 
         assert!(
             multiaddr_to_socketaddr(
-                &"/ip4/127.0.0.1/tcp/12345/x-webrtc/ACD1E533EC271FCDE0275947F4D62A2B2331FF10C9DDE0298EB7B399B4BFF60B"
+                &"/ip4/127.0.0.1/tcp/12345/webrtc/certhash/uEiDikp5KVUgkLta1EjUN-IKbHk-dUBg8VzKgf5nXxLK46w"
                     .parse::<Multiaddr>()
                     .unwrap()
             ).is_none()
         );
 
         assert!(multiaddr_to_socketaddr(
-            &"/ip4/127.0.0.1/udp/12345/x-webrtc/ACD1E533EC271FCDE0275947F4D62A2B2331FF10C9DDE0298EB7B399B4BFF60B/tcp/12345"
+            &"/ip4/127.0.0.1/udp/12345/webrtc/certhash/uEiDikp5KVUgkLta1EjUN-IKbHk-dUBg8VzKgf5nXxLK46w/tcp/12345"
                 .parse::<Multiaddr>()
                 .unwrap()
         )
@@ -708,7 +699,7 @@ mod tests {
 
         assert_eq!(
             multiaddr_to_socketaddr(
-                &"/ip4/255.255.255.255/udp/8080/x-webrtc/ACD1E533EC271FCDE0275947F4D62A2B2331FF10C9DDE0298EB7B399B4BFF60B"
+                &"/ip4/255.255.255.255/udp/8080/webrtc/certhash/uEiDikp5KVUgkLta1EjUN-IKbHk-dUBg8VzKgf5nXxLK46w"
                     .parse::<Multiaddr>()
                     .unwrap()
             ),
@@ -719,7 +710,7 @@ mod tests {
         );
         assert_eq!(
             multiaddr_to_socketaddr(
-                &"/ip6/::1/udp/12345/x-webrtc/ACD1E533EC271FCDE0275947F4D62A2B2331FF10C9DDE0298EB7B399B4BFF60B"
+                &"/ip6/::1/udp/12345/webrtc/certhash/uEiDikp5KVUgkLta1EjUN-IKbHk-dUBg8VzKgf5nXxLK46w"
                     .parse::<Multiaddr>()
                     .unwrap()
             ),
@@ -730,7 +721,7 @@ mod tests {
         );
         assert_eq!(
             multiaddr_to_socketaddr(
-                &"/ip6/ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff/udp/8080/x-webrtc/ACD1E533EC271FCDE0275947F4D62A2B2331FF10C9DDE0298EB7B399B4BFF60B"
+                &"/ip6/ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff/udp/8080/webrtc/certhash/uEiDikp5KVUgkLta1EjUN-IKbHk-dUBg8VzKgf5nXxLK46w"
                     .parse::<Multiaddr>()
                     .unwrap()
             ),
@@ -760,7 +751,7 @@ mod tests {
         // is temporarily empty.
         for _ in 0..2 {
             let listener = transport
-                .listen_on("/ip4/0.0.0.0/udp/0/x-webrtc/ACD1E533EC271FCDE0275947F4D62A2B2331FF10C9DDE0298EB7B399B4BFF60B".parse().unwrap())
+                .listen_on("/ip4/0.0.0.0/udp/0/webrtc".parse().unwrap())
                 .unwrap();
             match poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx)).await {
                 TransportEvent::NewAddress {
@@ -774,9 +765,7 @@ mod tests {
                     assert!(
                         matches!(listen_addr.iter().nth(1), Some(Protocol::Udp(port)) if port != 0)
                     );
-                    assert!(
-                        matches!(listen_addr.iter().nth(2), Some(Protocol::XWebRTC(f)) if !f.is_empty())
-                    );
+                    assert!(matches!(listen_addr.iter().nth(2), Some(Protocol::WebRTC)));
                 }
                 e => panic!("Unexpected event: {:?}", e),
             }

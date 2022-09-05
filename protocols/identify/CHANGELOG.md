@@ -1,4 +1,11 @@
-# 0.38.0 [unreleased]
+# 0.39.0 [unreleased]
+
+- Update to `libp2p-swarm` `v0.39.0`.
+
+# 0.38.0
+
+- Update prost requirement from 0.10 to 0.11 which no longer installs the protoc Protobuf compiler.
+  Thus you will need protoc installed locally. See [PR 2788].
 
 - Update to `libp2p-swarm` `v0.38.0`.
 
@@ -6,6 +13,7 @@
 
 - Update to `libp2p-core` `v0.35.0`.
 
+[PR 2788]: https://github.com/libp2p/rust-libp2p/pull/2788
 [PR 2734]: https://github.com/libp2p/rust-libp2p/pull/2734/
 
 # 0.37.0
