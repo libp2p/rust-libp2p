@@ -244,15 +244,6 @@ where
             )));
         }
 
-        if let Some(outbound_open_info) = self.pending_outbound_streams.pop_front() {
-            return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
-                protocol: SubstreamProtocol::new(
-                    ReadyUpgrade::new(self.protocol),
-                    outbound_open_info,
-                ),
-            });
-        }
-
         match self.outbound_streams.poll_next_unpin(cx) {
             Poll::Ready(Some(outbound_done)) => {
                 return Poll::Ready(ConnectionHandlerEvent::Custom(OutEvent::OutboundFinished(
@@ -278,6 +269,15 @@ where
             }
             Poll::Pending => {}
         };
+
+        if let Some(outbound_open_info) = self.pending_outbound_streams.pop_front() {
+            return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
+                protocol: SubstreamProtocol::new(
+                    ReadyUpgrade::new(self.protocol),
+                    outbound_open_info,
+                ),
+            });
+        }
 
         Poll::Pending
     }
