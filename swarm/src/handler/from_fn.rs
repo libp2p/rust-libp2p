@@ -13,7 +13,7 @@ use std::collections::VecDeque;
 use std::error::Error;
 use std::fmt;
 use std::future::Future;
-use std::task::{Context, Poll, Waker};
+use std::task::{Context, Poll};
 use void::Void;
 
 /// A low-level building block for protocols that can be expressed as async functions.
@@ -65,7 +65,6 @@ where
         on_new_outbound: Box::new(move |stream, state, info| {
             on_new_outbound(stream, state, info).boxed()
         }),
-        idle_waker: None,
         pending_outbound_streams: VecDeque::default(),
         failed_open: VecDeque::default(),
         state: TState::default(),
@@ -128,8 +127,6 @@ pub struct FromFn<TInbound, TOutbound, TOutboundInfo, TState> {
             + Send,
     >,
 
-    idle_waker: Option<Waker>,
-
     inbound_streams_limit: usize,
 
     pending_outbound_streams: VecDeque<TOutboundInfo>,
@@ -175,10 +172,6 @@ where
 
         let inbound_future = (self.on_new_inbound)(protocol, &mut self.state);
         self.inbound_streams.push(inbound_future);
-
-        if let Some(waker) = self.idle_waker.take() {
-            waker.wake();
-        }
     }
 
     fn inject_fully_negotiated_outbound(
@@ -188,10 +181,6 @@ where
     ) {
         let outbound_future = (self.on_new_outbound)(protocol, &mut self.state, info);
         self.outbound_streams.push(outbound_future);
-
-        if let Some(waker) = self.idle_waker.take() {
-            waker.wake();
-        }
     }
 
     fn inject_event(&mut self, event: Self::InEvent) {
@@ -271,7 +260,8 @@ where
                 )));
             }
             Poll::Ready(None) => {
-                self.idle_waker = Some(cx.waker().clone());
+                // Normally, we'd register a waker here but `Connection` polls us anyway again
+                // after calling `inject` on us which is where we'd use the waker.
             }
             Poll::Pending => {}
         };
@@ -283,7 +273,8 @@ where
                 )));
             }
             Poll::Ready(None) => {
-                self.idle_waker = Some(cx.waker().clone());
+                // Normally, we'd register a waker here but `Connection` polls us anyway again
+                // after calling `inject` on us which is where we'd use the waker.
             }
             Poll::Pending => {}
         };
