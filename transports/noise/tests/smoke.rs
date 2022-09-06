@@ -326,7 +326,7 @@ struct Message(Vec<u8>);
 
 impl Arbitrary for Message {
     fn arbitrary(g: &mut Gen) -> Self {
-        let s = 1 + usize::arbitrary(g) % (128 * 1024);
+        let s = g.gen_range(1..128 * 1024);
         let mut v = vec![0; s];
         for b in &mut v {
             *b = u8::arbitrary(g);

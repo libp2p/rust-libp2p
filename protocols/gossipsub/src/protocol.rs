@@ -587,7 +587,7 @@ mod tests {
                 config,
             )
             .unwrap();
-            let data = (0..(10 + usize::arbitrary(g) % 10014))
+            let data = (0..g.gen_range(10..10024))
                 .map(|_| u8::arbitrary(g))
                 .collect::<Vec<_>>();
             let topic_id = TopicId::arbitrary(g).0;
@@ -600,7 +600,7 @@ mod tests {
 
     impl Arbitrary for TopicId {
         fn arbitrary(g: &mut Gen) -> Self {
-            let topic_string: String = (0..(20 + usize::arbitrary(g) % 1004))
+            let topic_string: String = (0..g.gen_range(20..1024))
                 .map(|_| char::arbitrary(g))
                 .collect::<String>()
                 .into();

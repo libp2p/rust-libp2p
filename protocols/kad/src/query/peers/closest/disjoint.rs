@@ -454,12 +454,12 @@ mod tests {
     impl Arbitrary for ResultIter<std::vec::IntoIter<Key<PeerId>>> {
         fn arbitrary(g: &mut Gen) -> Self {
             let target = Target::arbitrary(g).0;
-            let num_closest_iters = usize::arbitrary(g) % (20 + 1);
-            let peers = random_peers(usize::arbitrary(g) % (20 * num_closest_iters + 1));
+            let num_closest_iters = g.gen_range(0..20 + 1);
+            let peers = random_peers(g.gen_range(0..20 * num_closest_iters + 1));
 
             let iters: Vec<_> = (0..num_closest_iters)
                 .map(|_| {
-                    let num_peers = usize::arbitrary(g) % (20 + 1);
+                    let num_peers = g.gen_range(0..20 + 1);
                     let mut peers = peers
                         .choose_multiple(&mut rand::thread_rng(), num_peers)
                         .cloned()
@@ -588,7 +588,7 @@ mod tests {
 
     impl Arbitrary for Parallelism {
         fn arbitrary(g: &mut Gen) -> Self {
-            Parallelism(NonZeroUsize::new(1 + usize::arbitrary(g) % 9).unwrap())
+            Parallelism(NonZeroUsize::new(g.gen_range(1..10)).unwrap())
         }
     }
 
@@ -597,7 +597,7 @@ mod tests {
 
     impl Arbitrary for NumResults {
         fn arbitrary(g: &mut Gen) -> Self {
-            NumResults(NonZeroUsize::new(1 + usize::arbitrary(g) % K_VALUE.get()).unwrap())
+            NumResults(NonZeroUsize::new(g.gen_range(1..K_VALUE.get())).unwrap())
         }
     }
 
@@ -617,7 +617,7 @@ mod tests {
     impl Arbitrary for PeerVec {
         fn arbitrary(g: &mut Gen) -> Self {
             PeerVec(
-                (0..(1 + usize::arbitrary(g) % 59))
+                (0..g.gen_range(1..60))
                     .map(|_| PeerId::random())
                     .map(Key::from)
                     .collect(),
@@ -746,7 +746,7 @@ mod tests {
     impl Arbitrary for Graph {
         fn arbitrary(g: &mut Gen) -> Self {
             let mut peer_ids =
-                random_peers(K_VALUE.get() + (usize::arbitrary(g) % (200 - K_VALUE.get())))
+                random_peers(g.gen_range(K_VALUE.get()..200))
                     .into_iter()
                     .map(|peer_id| (peer_id.clone(), Key::from(peer_id)))
                     .collect::<Vec<_>>();
@@ -777,8 +777,7 @@ mod tests {
             for (peer_id, peer) in peers.iter_mut() {
                 peer_ids.shuffle(&mut rand::thread_rng());
 
-                let num_peers =
-                    K_VALUE.get() + usize::arbitrary(g) % (1 + peer_ids.len() - K_VALUE.get());
+                let num_peers = g.gen_range(K_VALUE.get()..peer_ids.len() + 1);
                 let mut random_peer_ids = peer_ids
                     .choose_multiple(&mut rand::thread_rng(), num_peers)
                     // Make sure not to include itself.

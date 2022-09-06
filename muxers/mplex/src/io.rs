@@ -1120,10 +1120,10 @@ mod tests {
     impl Arbitrary for MplexConfig {
         fn arbitrary(g: &mut Gen) -> MplexConfig {
             MplexConfig {
-                max_substreams: 1 + usize::arbitrary(g) % 99,
-                max_buffer_len: 1 + usize::arbitrary(g) % 999,
+                max_substreams: g.gen_range(1..100),
+                max_buffer_len: g.gen_range(1..1000),
                 max_buffer_behaviour: MaxBufferBehaviour::arbitrary(g),
-                split_send_size: 1 + usize::arbitrary(g) % 9999,
+                split_send_size: g.gen_range(1..10000),
                 protocol_name: crate::config::DEFAULT_MPLEX_PROTOCOL_NAME,
             }
         }

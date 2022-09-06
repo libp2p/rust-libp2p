@@ -459,7 +459,7 @@ mod tests {
 
     impl Arbitrary for Protocol {
         fn arbitrary(g: &mut Gen) -> Protocol {
-            let n = 1 + usize::arbitrary(g) % g.size();
+            let n = g.gen_range(1..g.size());
             let p: String = iter::repeat(())
                 .map(|()| char::arbitrary(g))
                 .filter(|&c| c.is_ascii_alphanumeric())
@@ -471,7 +471,7 @@ mod tests {
 
     impl Arbitrary for Message {
         fn arbitrary(g: &mut Gen) -> Message {
-            match u8::arbitrary(g) % 5 {
+            match g.gen_range(0..5) {
                 0 => Message::Header(HeaderLine::V1),
                 1 => Message::NotAvailable,
                 2 => Message::ListProtocols,

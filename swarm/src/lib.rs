@@ -1623,7 +1623,7 @@ mod tests {
     use libp2p_core::multiaddr::multiaddr;
     use libp2p_core::transport::TransportEvent;
     use libp2p_core::Endpoint;
-    use quickcheck::{quickcheck, Arbitrary, Gen, QuickCheck};
+    use quickcheck::*;
     use rand::prelude::SliceRandom;
 
     // Test execution state.
@@ -2048,7 +2048,7 @@ mod tests {
 
         impl Arbitrary for DialConcurrencyFactor {
             fn arbitrary(g: &mut Gen) -> Self {
-                Self(NonZeroU8::new(1 + u8::arbitrary(g) % 10).unwrap())
+                Self(NonZeroU8::new(g.gen_range(1..11)).unwrap())
             }
         }
 
@@ -2174,7 +2174,7 @@ mod tests {
 
         impl Arbitrary for Limit {
             fn arbitrary(g: &mut Gen) -> Self {
-                Self(1 + u32::arbitrary(g) % 9)
+                Self(g.gen_range(1..10))
             }
         }
 

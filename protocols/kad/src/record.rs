@@ -183,7 +183,7 @@ mod tests {
                     None
                 },
                 expires: if bool::arbitrary(g) {
-                    Some(Instant::now() + Duration::from_secs(u64::arbitrary(g) % 60))
+                    Some(Instant::now() + Duration::from_secs(g.gen_range(0..60)))
                 } else {
                     None
                 },
@@ -197,7 +197,7 @@ mod tests {
                 key: Key::arbitrary(g),
                 provider: PeerId::random(),
                 expires: if bool::arbitrary(g) {
-                    Some(Instant::now() + Duration::from_secs(u64::arbitrary(g) % 60))
+                    Some(Instant::now() + Duration::from_secs(g.gen_range(0..60)))
                 } else {
                     None
                 },

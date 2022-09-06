@@ -503,14 +503,14 @@ mod tests {
 
     impl Arbitrary for ClosestPeersIter {
         fn arbitrary(g: &mut Gen) -> ClosestPeersIter {
-            let known_closest_peers = random_peers(1 + usize::arbitrary(g) % 59)
+            let known_closest_peers = random_peers(g.gen_range(1..60))
                 .into_iter()
                 .map(Key::from);
             let target = Key::from(Into::<Multihash>::into(PeerId::random()));
             let config = ClosestPeersIterConfig {
-                parallelism: NonZeroUsize::new(1 + usize::arbitrary(g) % 10).unwrap(),
-                num_results: NonZeroUsize::new(1 + usize::arbitrary(g) % 25).unwrap(),
-                peer_timeout: Duration::from_secs(10 + u64::arbitrary(g) % 20),
+                parallelism: NonZeroUsize::new(g.gen_range(1..10)).unwrap(),
+                num_results: NonZeroUsize::new(g.gen_range(1..25)).unwrap(),
+                peer_timeout: Duration::from_secs(g.gen_range(10..30)),
             };
             ClosestPeersIter::with_config(config, target, known_closest_peers)
         }

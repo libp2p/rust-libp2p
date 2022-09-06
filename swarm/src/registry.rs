@@ -342,7 +342,7 @@ mod tests {
 
     impl Arbitrary for AddressScore {
         fn arbitrary(g: &mut Gen) -> AddressScore {
-            if u8::arbitrary(g) % 10 == 0 {
+            if g.gen_range(0..10) == 0 {
                 // ~10% "Infinitely" scored addresses
                 AddressScore::Infinite
             } else {
@@ -353,7 +353,7 @@ mod tests {
 
     impl Arbitrary for AddressRecord {
         fn arbitrary(g: &mut Gen) -> Self {
-            let addr = Protocol::Tcp(u16::arbitrary(g) % 256).into();
+            let addr = Protocol::Tcp(g.gen_range(0..256)).into();
             let score = AddressScore::arbitrary(g);
             AddressRecord::new(addr, score)
         }

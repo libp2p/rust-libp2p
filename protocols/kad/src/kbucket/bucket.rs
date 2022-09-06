@@ -441,9 +441,9 @@ mod tests {
 
     impl Arbitrary for KBucket<Key<PeerId>, ()> {
         fn arbitrary(g: &mut Gen) -> KBucket<Key<PeerId>, ()> {
-            let timeout = Duration::from_secs(1 + u64::arbitrary(g) % g.size() as u64);
+            let timeout = Duration::from_secs(g.gen_range(1..g.size()) as u64);
             let mut bucket = KBucket::<Key<PeerId>, ()>::new(timeout);
-            let num_nodes = 1 + usize::arbitrary(g) % K_VALUE.get();
+            let num_nodes = g.gen_range(1..K_VALUE.get() + 1);
             for _ in 0..num_nodes {
                 let key = Key::from(PeerId::random());
                 let node = Node {
@@ -472,7 +472,7 @@ mod tests {
 
     impl Arbitrary for Position {
         fn arbitrary(g: &mut Gen) -> Position {
-            Position(usize::arbitrary(g) % K_VALUE.get())
+            Position(g.gen_range(0..K_VALUE.get()))
         }
     }
 

@@ -3705,13 +3705,13 @@ mod local_test {
         fn arbitrary(g: &mut Gen) -> Self {
             let mut rpc = empty_rpc();
 
-            for _ in 0..(u8::arbitrary(g) % 10) {
+            for _ in 0..g.gen_range(0..10) {
                 rpc.subscriptions.push(test_subscription());
             }
-            for _ in 0..(u8::arbitrary(g) % 10) {
+            for _ in 0..g.gen_range(0..10) {
                 rpc.messages.push(test_message());
             }
-            for _ in 0..(u8::arbitrary(g) % 10) {
+            for _ in 0..g.gen_range(0..10) {
                 rpc.control_msgs.push(test_control());
             }
             rpc
