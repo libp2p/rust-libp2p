@@ -1,18 +1,14 @@
 pub use quickcheck::*;
 
-use core::ops::{Add, Range, Rem, Sub};
+use core::ops::Range;
+use num_traits::sign::Unsigned;
 
 pub trait GenRange {
-    fn gen_range<T>(&mut self, _range: Range<T>) -> T
-    where
-        T: Arbitrary + Copy + Add<Output = T> + Rem<Output = T> + Sub<Output = T>;
+    fn gen_range<T: Unsigned + Arbitrary + Copy>(&mut self, _range: Range<T>) -> T;
 }
 
 impl GenRange for Gen {
-    fn gen_range<T>(&mut self, range: Range<T>) -> T
-    where
-        T: Arbitrary + Copy + Add<Output = T> + Rem<Output = T> + Sub<Output = T>,
-    {
+    fn gen_range<T: Unsigned + Arbitrary + Copy>(&mut self, range: Range<T>) -> T {
         <T as Arbitrary>::arbitrary(self) % (range.end - range.start) + range.start
     }
 }

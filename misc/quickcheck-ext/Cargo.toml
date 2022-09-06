@@ -7,3 +7,4 @@ license = "Unlicense/MIT"
 
 [dependencies]
 quickcheck = "1"
+num-traits = "0.2"
