@@ -128,6 +128,7 @@ members = [
     "misc/rw-stream-sink",
     "misc/keygen",
     "misc/prost-codec",
+    "misc/quickcheck-ext",
     "muxers/mplex",
     "muxers/yamux",
     "protocols/dcutr",

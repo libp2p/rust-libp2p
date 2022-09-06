@@ -26,4 +26,4 @@ libp2p-tcp = { path = "../../transports/tcp" }
 libp2p-noise = { path = "../../transports/noise" }
 libp2p-yamux = { path = "../../muxers/yamux" }
 libp2p-mplex = { path = "../../muxers/mplex" }
-quickcheck = "1"
+quickcheck = { package = "quickcheck-ext", path = "../../misc/quickcheck-ext" }

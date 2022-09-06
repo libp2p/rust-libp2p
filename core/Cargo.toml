@@ -50,7 +50,7 @@ libp2p-mplex = { path = "../muxers/mplex" }
 libp2p-noise = { path = "../transports/noise" }
 libp2p-tcp = { path = "../transports/tcp" }
 multihash = { version = "0.16", default-features = false, features = ["arb"] }
-quickcheck = "1"
+quickcheck = { package = "quickcheck-ext", path = "../misc/quickcheck-ext" }
 rmp-serde = "1.0"
 serde_json = "1.0"
 

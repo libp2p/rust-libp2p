@@ -22,7 +22,7 @@ void = "1.0.2"
 
 [dev-dependencies]
 env_logger = "0.9.0"
-quickcheck = "1"
+quickcheck = { package = "quickcheck-ext", path = "../../misc/quickcheck-ext" }
 rand = "0.8"
 
 [build-dependencies]

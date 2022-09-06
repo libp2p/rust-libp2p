@@ -25,6 +25,6 @@ libp2p-core = { path = "../../core", default-features = false }
 libp2p-swarm = { path = "../../swarm", default-features = false }
 libp2p-mplex = { path = "../../muxers/mplex" }
 libp2p-plaintext = { path = "../../transports/plaintext" }
-quickcheck = "1"
+quickcheck = { package = "quickcheck-ext", path = "../../misc/quickcheck-ext" }
 rand = "0.8"
 rw-stream-sink = { version = "0.3.0", path = "../../misc/rw-stream-sink" }

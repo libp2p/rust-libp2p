@@ -40,5 +40,5 @@ libp2p-kad = { path = "../kad" }
 libp2p-ping = { path = "../ping" }
 libp2p-plaintext = { path = "../../transports/plaintext" }
 libp2p-yamux = { path = "../../muxers/yamux" }
-quickcheck = "1"
+quickcheck = { package = "quickcheck-ext", path = "../../misc/quickcheck-ext" }
 clap = {version = "3.1.6", features = ["derive"]}
