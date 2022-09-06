@@ -745,11 +745,10 @@ mod tests {
 
     impl Arbitrary for Graph {
         fn arbitrary(g: &mut Gen) -> Self {
-            let mut peer_ids =
-                random_peers(g.gen_range(K_VALUE.get()..200))
-                    .into_iter()
-                    .map(|peer_id| (peer_id.clone(), Key::from(peer_id)))
-                    .collect::<Vec<_>>();
+            let mut peer_ids = random_peers(g.gen_range(K_VALUE.get()..200))
+                .into_iter()
+                .map(|peer_id| (peer_id.clone(), Key::from(peer_id)))
+                .collect::<Vec<_>>();
 
             // Make each peer aware of its direct neighborhood.
             let mut peers = peer_ids
