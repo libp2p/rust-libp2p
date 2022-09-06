@@ -617,7 +617,7 @@ mod tests {
     impl Arbitrary for PeerVec {
         fn arbitrary(g: &mut Gen) -> Self {
             PeerVec(
-                (0..g.gen_range(1..60))
+                (0..g.gen_range(1..60u8))
                     .map(|_| PeerId::random())
                     .map(Key::from)
                     .collect(),
