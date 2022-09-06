@@ -319,7 +319,7 @@ async fn dial_failure() -> Result<()> {
     };
 
     // skip other interface addresses
-    while let Some(_) = a.next().now_or_never() {}
+    while a.next().now_or_never().is_some() {}
 
     let addr = addr.with(Protocol::Certhash(fingerprint2multihash(&a_fingerprint)));
 
@@ -329,7 +329,7 @@ async fn dial_failure() -> Result<()> {
     };
 
     // skip other interface addresses
-    while let Some(_) = b.next().now_or_never() {}
+    while b.next().now_or_never().is_some() {}
 
     let a_peer_id = &Swarm::local_peer_id(&a).clone();
     drop(a); // stop a swarm so b can never reach it
