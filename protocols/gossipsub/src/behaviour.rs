@@ -587,19 +587,20 @@ where
     }
 
     /// Publishes a message with multiple topics to the network.
-    pub fn publish<H: Hasher>(
+    pub fn publish(
         &mut self,
-        topic: Topic<H>,
+        topic: impl Into<TopicHash>,
         data: impl Into<Vec<u8>>,
     ) -> Result<MessageId, PublishError> {
         let data = data.into();
+        let topic = topic.into();
 
         // Transform the data before building a raw_message.
         let transformed_data = self
             .data_transform
-            .outbound_transform(&topic.hash(), data.clone())?;
+            .outbound_transform(&topic, data.clone())?;
 
-        let raw_message = self.build_raw_message(topic.into(), transformed_data)?;
+        let raw_message = self.build_raw_message(topic, transformed_data)?;
 
         // calculate the message id from the un-transformed data
         let msg_id = self.config.message_id(&GossipsubMessage {

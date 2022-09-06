@@ -2,6 +2,10 @@
 
 - Update to `libp2p-swarm` `v0.39.0`.
 
+- Allow publishing with any `impl Into<TopicHash>` as a topic. See [PR 2862].
+
+[PR 2862]: https://github.com/libp2p/rust-libp2p/pull/2862
+
 # 0.40.0
 
 - Update prost requirement from 0.10 to 0.11 which no longer installs the protoc Protobuf compiler.
