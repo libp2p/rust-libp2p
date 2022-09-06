@@ -82,7 +82,7 @@ impl WebRTCConnection {
         // NOTE: this will start the gathering of ICE candidates
         peer_connection.set_remote_description(sdp).await?;
 
-        return Ok(Self { peer_connection });
+        Ok(Self { peer_connection })
     }
 
     pub async fn accept(
@@ -124,7 +124,7 @@ impl WebRTCConnection {
         log::debug!("ANSWER: {:?}", answer.sdp);
         peer_connection.set_local_description(answer).await?;
 
-        return Ok(Self { peer_connection });
+        Ok(Self { peer_connection })
     }
 
     pub async fn create_initial_upgrade_data_channel(&self) -> Result<Arc<DataChannel>, Error> {
@@ -148,9 +148,9 @@ impl WebRTCConnection {
         select! {
             res = rx => match res {
                 Ok(detached) => Ok(detached),
-                Err(e) => return Err(Error::InternalError(e.to_string())),
+                Err(e) => Err(Error::InternalError(e.to_string())),
             },
-            _ = Delay::new(Duration::from_secs(10)).fuse() => return Err(Error::InternalError(
+            _ = Delay::new(Duration::from_secs(10)).fuse() => Err(Error::InternalError(
                 "data channel opening took longer than 10 seconds (see logs)".into(),
             ))
         }

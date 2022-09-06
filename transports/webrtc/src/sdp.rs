@@ -114,7 +114,7 @@ pub(crate) fn render_client_session_description(
 // a=max-message-size:<value>
 //
 //     The maximum SCTP user message size (in bytes). (RFC8841)
-const CLIENT_SESSION_DESCRIPTION: &'static str = "v=0
+const CLIENT_SESSION_DESCRIPTION: &str = "v=0
 o=- 0 0 IN {ip_version} {target_ip}
 s=-
 c=IN {ip_version} {target_ip}
@@ -166,7 +166,7 @@ a=max-message-size:100000
 // a=candidate:<foundation> <component-id> <transport> <priority> <connection-address> <port> <cand-type>
 //
 //     A transport address for a candidate that can be used for connectivity checks (RFC8839).
-const SERVER_SESSION_DESCRIPTION: &'static str = "v=0
+const SERVER_SESSION_DESCRIPTION: &str = "v=0
 o=- 0 0 IN {ip_version} {target_ip}
 s=-
 t=0 0

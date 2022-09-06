@@ -83,8 +83,8 @@ impl WebRTCTransport {
         listener_id: ListenerId,
         addr: Multiaddr,
     ) -> Result<WebRTCListenStream, TransportError<Error>> {
-        let sock_addr = multiaddr_to_socketaddr(&addr)
-            .ok_or_else(|| TransportError::MultiaddrNotSupported(addr))?;
+        let sock_addr =
+            multiaddr_to_socketaddr(&addr).ok_or(TransportError::MultiaddrNotSupported(addr))?;
 
         // XXX: `UdpSocket::bind` is async, so use a std socket and convert
         let std_sock = std::net::UdpSocket::bind(sock_addr)
@@ -106,7 +106,7 @@ impl WebRTCTransport {
 
         let udp_mux = UDPMuxNewAddr::new(socket);
 
-        return Ok(WebRTCListenStream::new(
+        Ok(WebRTCListenStream::new(
             listener_id,
             listen_addr,
             self.config.clone(),
@@ -115,7 +115,7 @@ impl WebRTCTransport {
             IfWatcher::new()
                 .map_err(Error::IoError)
                 .map_err(TransportError::Other)?,
-        ));
+        ))
     }
 }
 
@@ -176,8 +176,8 @@ impl Transport for WebRTCTransport {
         // [`Transport::dial`] should do no work unless the returned [`Future`] is polled. Thus
         // do the `set_remote_description` call within the [`Future`].
         Ok(async move {
-            let remote_fingerprint =
-                fingerprint_from_addr(&addr).ok_or(Error::InvalidMultiaddr(addr.clone()))?;
+            let remote_fingerprint = fingerprint_from_addr(&addr)
+                .ok_or_else(|| Error::InvalidMultiaddr(addr.clone()))?;
 
             let conn = WebRTCConnection::connect(
                 sock_addr,
@@ -452,7 +452,7 @@ pub(crate) fn socketaddr_to_multiaddr(socket_addr: &SocketAddr) -> Multiaddr {
 
 /// Extracts a SHA-256 fingerprint from the given address. Returns `None` if the address does not
 /// contain one.
-fn fingerprint_from_addr<'a>(addr: &'a Multiaddr) -> Option<Fingerprint> {
+fn fingerprint_from_addr(addr: &Multiaddr) -> Option<Fingerprint> {
     let iter = addr.iter();
     for proto in iter {
         match proto {

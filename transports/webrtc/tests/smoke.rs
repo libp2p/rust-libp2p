@@ -76,7 +76,7 @@ async fn smoke() -> Result<()> {
     };
 
     // skip other interface addresses
-    while let Some(_) = a.next().now_or_never() {}
+    while a.next().now_or_never().is_some() {}
 
     let addr = addr.with(Protocol::Certhash(fingerprint2multihash(&a_fingerprint)));
 
@@ -86,15 +86,15 @@ async fn smoke() -> Result<()> {
     };
 
     // skip other interface addresses
-    while let Some(_) = b.next().now_or_never() {}
+    while b.next().now_or_never().is_some() {}
 
     let mut data = vec![0; 4096];
     rng.fill_bytes(&mut data);
 
     b.behaviour_mut()
-        .add_address(&Swarm::local_peer_id(&a), addr);
+        .add_address(Swarm::local_peer_id(&a), addr);
     b.behaviour_mut()
-        .send_request(&Swarm::local_peer_id(&a), Ping(data.clone()));
+        .send_request(Swarm::local_peer_id(&a), Ping(data.clone()));
 
     match b.next().await {
         Some(SwarmEvent::Dialing(_)) => {}
@@ -171,7 +171,7 @@ async fn smoke() -> Result<()> {
     }
 
     a.behaviour_mut().send_request(
-        &Swarm::local_peer_id(&b),
+        Swarm::local_peer_id(&b),
         Ping(b"another substream".to_vec()),
     );
 
@@ -463,9 +463,9 @@ async fn concurrent_connections_and_streams() {
         for (listener_peer_id, listener_addr) in &listeners {
             dialer
                 .behaviour_mut()
-                .add_address(&listener_peer_id, listener_addr.clone());
+                .add_address(listener_peer_id, listener_addr.clone());
 
-            dialer.dial(listener_peer_id.clone()).unwrap();
+            dialer.dial(*listener_peer_id).unwrap();
         }
 
         // Wait for responses to each request.
@@ -528,6 +528,6 @@ async fn concurrent_connections_and_streams() {
 
 fn fingerprint2multihash(s: &str) -> Multihash {
     let mut buf = [0; 32];
-    hex::decode_to_slice(s.replace(":", ""), &mut buf).unwrap();
+    hex::decode_to_slice(s.replace(':', ""), &mut buf).unwrap();
     Code::Sha2_256.wrap(&buf).unwrap()
 }

@@ -54,7 +54,7 @@ impl Fingerprint {
 
 impl From<&[u8; 32]> for Fingerprint {
     fn from(t: &[u8; 32]) -> Self {
-        let values: Vec<String> = t.into_iter().map(|x| format! {"{:02X}", x}).collect();
+        let values: Vec<String> = t.iter().map(|x| format! {"{:02X}", x}).collect();
         Self::new_sha256(values.join(":"))
     }
 }
@@ -63,11 +63,7 @@ impl From<Multihash> for Fingerprint {
     fn from(h: Multihash) -> Self {
         // Only support SHA-256 (0x12) for now.
         assert_eq!(h.code(), 0x12);
-        let values: Vec<String> = h
-            .digest()
-            .into_iter()
-            .map(|x| format! {"{:02X}", x})
-            .collect();
+        let values: Vec<String> = h.digest().iter().map(|x| format! {"{:02X}", x}).collect();
         Self::new_sha256(values.join(":"))
     }
 }

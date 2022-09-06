@@ -103,7 +103,6 @@ impl Connection {
                     data_channel.id()
                 );
 
-                let data_channel = data_channel.clone();
                 let mut tx = tx.clone();
 
                 Box::pin(async move {
@@ -148,7 +147,7 @@ impl Connection {
     }
 }
 
-impl<'a> StreamMuxer for Connection {
+impl StreamMuxer for Connection {
     type Substream = PollDataChannel;
     type Error = Error;
 
@@ -177,7 +176,7 @@ impl<'a> StreamMuxer for Connection {
         self: Pin<&mut Self>,
         _cx: &mut Context<'_>,
     ) -> Poll<Result<StreamMuxerEvent, Self::Error>> {
-        return Poll::Pending;
+        Poll::Pending
     }
 
     fn poll_outbound(
