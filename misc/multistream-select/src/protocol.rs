@@ -471,7 +471,7 @@ mod tests {
 
     impl Arbitrary for Message {
         fn arbitrary(g: &mut Gen) -> Message {
-            match g.gen_range(0..5) {
+            match g.gen_range(0..5u8) {
                 0 => Message::Header(HeaderLine::V1),
                 1 => Message::NotAvailable,
                 2 => Message::ListProtocols,
