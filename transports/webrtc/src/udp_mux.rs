@@ -59,8 +59,10 @@ pub enum UDPMuxEvent {
     NewAddr(NewAddr),
 }
 
-/// A modified version of [`webrtc_ice::udp_mux::UDPMuxDefault`], which reports previously unseen
-/// addresses instead of ignoring them.
+/// A modified version of [`webrtc::ice::udp_mux::UDPMuxDefault`].
+///
+/// - It has been rewritten to work without locks and channels instead.
+/// - It reports previously unseen addresses instead of ignoring them.
 pub struct UDPMuxNewAddr {
     udp_sock: UdpSocket,
 
