@@ -314,36 +314,32 @@ async fn dial_failure() -> Result<()> {
     Swarm::listen_on(&mut b, "/ip4/127.0.0.1/udp/0/webrtc".parse()?)?;
 
     let addr = match a.next().await {
-        Some(SwarmEvent::NewListenAddr { address, .. }) => {
-            address.with(Protocol::Certhash(fingerprint2multihash(&a_fingerprint)))
-        }
+        Some(SwarmEvent::NewListenAddr { address, .. }) => address,
         e => panic!("{:?}", e),
     };
 
-    let a_peer_id = *a.local_peer_id();
+    // skip other interface addresses
+    while let Some(_) = a.next().now_or_never() {}
+
+    let addr = addr.with(Protocol::Certhash(fingerprint2multihash(&a_fingerprint)));
+
+    let _ = match b.next().await {
+        Some(SwarmEvent::NewListenAddr { address, .. }) => address,
+        e => panic!("{:?}", e),
+    };
+
+    // skip other interface addresses
+    while let Some(_) = b.next().now_or_never() {}
+
+    let a_peer_id = &Swarm::local_peer_id(&a).clone();
     drop(a); // stop a swarm so b can never reach it
 
-    b.behaviour_mut().add_address(&a_peer_id, addr);
+    b.behaviour_mut().add_address(a_peer_id, addr);
     b.behaviour_mut()
-        .send_request(&a_peer_id, Ping(b"hello world".to_vec()));
+        .send_request(a_peer_id, Ping(b"hello world".to_vec()));
 
     match b.next().await {
         Some(SwarmEvent::Dialing(_)) => {}
-        e => panic!("{:?}", e),
-    }
-
-    match b.next().await {
-        Some(SwarmEvent::NewListenAddr { .. }) => {}
-        e => panic!("{:?}", e),
-    }
-
-    match b.next().await {
-        Some(SwarmEvent::NewListenAddr { .. }) => {}
-        e => panic!("{:?}", e),
-    }
-
-    match b.next().await {
-        Some(SwarmEvent::NewListenAddr { .. }) => {}
         e => panic!("{:?}", e),
     }
 
