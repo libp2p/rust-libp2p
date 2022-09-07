@@ -1,4 +1,4 @@
-# 0.36.0 [unreleased]
+# 0.36.0
 
 - Make RSA keypair support optional. To enable RSA support, `rsa` feature should be enabled.
   See [PR 2860].
