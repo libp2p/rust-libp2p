@@ -5,6 +5,8 @@
 
 - Update to `libp2p-swarm` `v0.39.0`.
 
+- Update to `libp2p-core` `v0.36.0`.
+
 [Issue 2837]: https://github.com/libp2p/rust-libp2p/issues/2837
 [PR 2846]: https://github.com/libp2p/rust-libp2p/pull/2846
 
