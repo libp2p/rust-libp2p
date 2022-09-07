@@ -152,7 +152,7 @@ pub trait NetworkBehaviour: 'static {
         vec![]
     }
 
-    /// Informs the behaviour about an event from the [Transport](libp2p_core::Transport) or the
+    /// Informs the behaviour about an event from the [`Transport`](libp2p_core::Transport) or the
     /// [`ConnectionHandler`].
     fn on_event(&mut self, _event: InEvent<Self::ConnectionHandler>);
 
@@ -851,7 +851,7 @@ pub enum InEvent<'a, Handler: IntoConnectionHandler> {
     },
     /// Informs the behaviour about a closed connection to a peer.
     ///
-    /// This event is always paired with an earlier call to
+    /// This event is always paired with an earlier
     /// [`InEvent::ConnectionEstablished`] with the same peer ID, connection ID
     /// and endpoint.
     ConnectionClosed {

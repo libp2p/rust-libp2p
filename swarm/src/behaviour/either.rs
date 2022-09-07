@@ -18,8 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::behaviour::{self, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use crate::handler::either::IntoEitherHandler;
-use crate::{NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use either::Either;
 use libp2p_core::{Multiaddr, PeerId};
 use std::{task::Context, task::Poll};
@@ -47,7 +47,7 @@ where
         }
     }
 
-    fn on_event(&mut self, event: super::InEvent<Self::ConnectionHandler>) {
+    fn on_event(&mut self, event: behaviour::InEvent<Self::ConnectionHandler>) {
         match self {
             Either::Left(b) => b.on_event(event.map_handler(
                 |h| h.unwrap_left(),
