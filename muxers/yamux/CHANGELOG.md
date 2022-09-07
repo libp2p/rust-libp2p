@@ -1,5 +1,7 @@
 # 0.40.0 [unreleased]
 
+- Update to `libp2p-core` `v0.36.0`
+
 - Remove `OpenSubstreamToken` as it is dead code. See [PR 2873].
 
 [PR 2873]: https://github.com/libp2p/rust-libp2p/pull/2873/

@@ -120,6 +120,7 @@ impl Protocol<X25519> for X25519 {
         Ok(PublicKey(X25519(pk)))
     }
 
+    #[allow(irrefutable_let_patterns)]
     fn linked(id_pk: &identity::PublicKey, dh_pk: &PublicKey<X25519>) -> bool {
         if let identity::PublicKey::Ed25519(ref p) = id_pk {
             PublicKey::from_ed25519(p).as_ref() == dh_pk.as_ref()
@@ -162,6 +163,7 @@ impl Keypair<X25519> {
     /// > See also:
     /// >
     /// >  * [Noise: Static Key Reuse](http://www.noiseprotocol.org/noise.html#security-considerations)
+    #[allow(unreachable_patterns)]
     pub fn from_identity(id_keys: &identity::Keypair) -> Option<AuthenticKeypair<X25519>> {
         match id_keys {
             identity::Keypair::Ed25519(p) => {
