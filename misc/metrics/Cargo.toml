@@ -19,7 +19,7 @@ relay = ["libp2p-relay"]
 dcutr = ["libp2p-dcutr"]
 
 [dependencies]
-libp2p-core = { version = "0.35.0", path = "../../core", default-features = false }
+libp2p-core = { version = "0.36.0", path = "../../core", default-features = false }
 libp2p-dcutr =  { version = "0.6.0", path = "../../protocols/dcutr", optional = true }
 libp2p-identify = { version = "0.39.0", path = "../../protocols/identify", optional = true }
 libp2p-kad = { version = "0.40.0", path = "../../protocols/kad", optional = true }

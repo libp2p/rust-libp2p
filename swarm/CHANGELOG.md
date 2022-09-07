@@ -3,6 +3,8 @@
 - Remove deprecated `NetworkBehaviourEventProcess`. See [libp2p-swarm v0.38.0 changelog entry] for
   migration path.
 
+- Update to `libp2p-core` `v0.36.0`.
+
 [libp2p-swarm v0.38.0 changelog entry]: https://github.com/libp2p/rust-libp2p/blob/master/swarm/CHANGELOG.md#0380
 
 # 0.38.0
