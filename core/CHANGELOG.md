@@ -3,6 +3,9 @@
 - Make RSA keypair support optional. To enable RSA support, `rsa` feature should be enabled.
   See [PR 2860].
 
+- Add `ReadyUpgrade`. See [PR 2855].
+
+[PR 2855]: https://github.com/libp2p/rust-libp2p/pull/2855
 [PR 2860]: https://github.com/libp2p/rust-libp2p/pull/2860/
 
 # 0.35.1
