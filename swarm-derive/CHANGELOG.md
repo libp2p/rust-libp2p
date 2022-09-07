@@ -1,4 +1,4 @@
-# 0.30.0 - [unreleased]
+# 0.30.0
 
 - Remove support for removed `NetworkBehaviourEventProcess`. See [PR 2840].
 
