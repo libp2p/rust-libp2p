@@ -51,7 +51,7 @@ pub struct Yamux<S> {
     /// [`StreamMuxer::poll_inbound`] and [`StreamMuxer::poll_outbound`] whilst the move general
     /// [`StreamMuxer::poll`] is designed to make progress on existing streams etc.
     ///
-    /// This buffer stores inbound streams that are created whilst [`StreaMuxer::poll`] is called.
+    /// This buffer stores inbound streams that are created whilst [`StreamMuxer::poll`] is called.
     /// Once the buffer is full, new inbound streams are dropped.
     inbound_stream_buffer: VecDeque<yamux::Stream>,
 }
