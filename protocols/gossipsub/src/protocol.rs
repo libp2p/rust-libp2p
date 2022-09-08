@@ -626,7 +626,7 @@ mod tests {
         }
 
         #[cfg(not(feature = "rsa"))]
-        fn arbitrary<G: Gen>(_g: &mut G) -> Self {
+        fn arbitrary(_g: &mut Gen) -> Self {
             // Small enough to be inlined.
             TestKeypair(Keypair::generate_ed25519())
         }
