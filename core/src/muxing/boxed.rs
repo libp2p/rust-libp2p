@@ -94,6 +94,18 @@ impl StreamMuxerBox {
         }
     }
 
+    /// Returns the number of active inbound streams i.e. streams that
+    /// have been returned from [`StreamMuxer::poll_inbound`] and have not been dropped since.
+    pub fn active_inbound_streams(&self) -> usize {
+        todo!()
+    }
+
+    /// Returns the number of active outbound streams i.e. streams that
+    /// have been returned from [`StreamMuxer::poll_outbound`] and have not been dropped since.
+    pub fn active_outbound_streams(&self) -> usize {
+        todo!()
+    }
+
     fn project(
         self: Pin<&mut Self>,
     ) -> Pin<&mut (dyn StreamMuxer<Substream = SubstreamBox, Error = io::Error> + Send)> {
@@ -203,5 +215,119 @@ impl AsyncWrite for SubstreamBox {
 
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
         self.0.as_mut().poll_close(cx)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::muxing::StreamMuxerExt;
+
+    #[async_std::test]
+    async fn stream_muxer_box_tracks_alive_inbound_streams() {
+        let mut muxer = StreamMuxerBox::new(DummyStreamMuxer);
+
+        let _stream1 = muxer.next_inbound().await.unwrap();
+        let _stream2 = muxer.next_inbound().await.unwrap();
+
+        assert_eq!(muxer.active_inbound_streams(), 2);
+
+        drop(_stream1);
+
+        assert_eq!(muxer.active_inbound_streams(), 1);
+    }
+
+    #[async_std::test]
+    async fn stream_muxer_box_tracks_alive_outbound_streams() {
+        let mut muxer = StreamMuxerBox::new(DummyStreamMuxer);
+
+        let _stream1 = muxer.next_outbound().await.unwrap();
+        let _stream2 = muxer.next_outbound().await.unwrap();
+
+        assert_eq!(muxer.active_outbound_streams(), 2);
+
+        drop(_stream1);
+
+        assert_eq!(muxer.active_outbound_streams(), 1);
+    }
+
+    #[test]
+    fn stream_muxer_box_starts_with_zero_active_inbound_streams() {
+        let muxer = StreamMuxerBox::new(DummyStreamMuxer);
+
+        let num_active_inbound_streams = muxer.active_inbound_streams();
+
+        assert_eq!(num_active_inbound_streams, 0);
+    }
+
+    #[test]
+    fn stream_muxer_box_starts_with_zero_active_outbound_streams() {
+        let muxer = StreamMuxerBox::new(DummyStreamMuxer);
+
+        let num_active_outbound_streams = muxer.active_outbound_streams();
+
+        assert_eq!(num_active_outbound_streams, 0);
+    }
+
+    struct DummyStreamMuxer;
+
+    impl StreamMuxer for DummyStreamMuxer {
+        type Substream = PendingSubstream;
+        type Error = void::Void;
+
+        fn poll_inbound(
+            self: Pin<&mut Self>,
+            _: &mut Context<'_>,
+        ) -> Poll<Result<Self::Substream, Self::Error>> {
+            Poll::Ready(Ok(PendingSubstream))
+        }
+
+        fn poll_outbound(
+            self: Pin<&mut Self>,
+            _: &mut Context<'_>,
+        ) -> Poll<Result<Self::Substream, Self::Error>> {
+            Poll::Ready(Ok(PendingSubstream))
+        }
+
+        fn poll_close(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+            Poll::Pending
+        }
+
+        fn poll(
+            self: Pin<&mut Self>,
+            _: &mut Context<'_>,
+        ) -> Poll<Result<StreamMuxerEvent, Self::Error>> {
+            Poll::Pending
+        }
+    }
+
+    struct PendingSubstream;
+
+    impl AsyncRead for PendingSubstream {
+        fn poll_read(
+            self: Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+            _buf: &mut [u8],
+        ) -> Poll<io::Result<usize>> {
+            Poll::Pending
+        }
+    }
+
+    impl AsyncWrite for PendingSubstream {
+        fn poll_write(
+            self: Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+            _buf: &[u8],
+        ) -> Poll<io::Result<usize>> {
+            Poll::Pending
+        }
+
+        fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+            Poll::Pending
+        }
+
+        fn poll_close(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+            Poll::Pending
+        }
     }
 }
