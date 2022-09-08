@@ -448,6 +448,8 @@ mod tests {
     use quickcheck::*;
     use std::sync::Arc;
 
+    // TODO: The implementation of this test is weird now.
+    // Merge https://github.com/libp2p/rust-libp2p/pull/2861 first which changes this test and we no longer rely on the `SubstreamBox::new` API.
     #[test]
     fn max_negotiating_inbound_streams() {
         fn prop(max_negotiating_inbound_streams: u8) {
@@ -465,8 +467,10 @@ mod tests {
             let alive_substreams_counter = Arc::new(());
 
             for _ in 0..max_negotiating_inbound_streams {
-                let substream =
-                    SubstreamBox::new(PendingSubstream(alive_substreams_counter.clone()));
+                let substream = SubstreamBox::new(
+                    PendingSubstream(alive_substreams_counter.clone()),
+                    Arc::downgrade(&Arc::new(())),
+                );
                 wrapper.inject_substream(substream, SubstreamEndpoint::Listener);
             }
 
@@ -476,7 +480,10 @@ mod tests {
                 "Expect none of the substreams up to the limit to be dropped."
             );
 
-            let substream = SubstreamBox::new(PendingSubstream(alive_substreams_counter.clone()));
+            let substream = SubstreamBox::new(
+                PendingSubstream(alive_substreams_counter.clone()),
+                Arc::downgrade(&Arc::new(())),
+            );
             wrapper.inject_substream(substream, SubstreamEndpoint::Listener);
 
             assert_eq!(

@@ -6,18 +6,27 @@ use std::fmt;
 use std::io;
 use std::io::{IoSlice, IoSliceMut};
 use std::pin::Pin;
+use std::sync::{Arc, Weak};
 use std::task::{Context, Poll};
 
 /// Abstract `StreamMuxer`.
 pub struct StreamMuxerBox {
-    inner: Pin<Box<dyn StreamMuxer<Substream = SubstreamBox, Error = io::Error> + Send>>,
+    inner: Pin<
+        Box<
+            dyn private::InstrumentedStreamMuxer<Substream = SubstreamBox, Error = io::Error>
+                + Send,
+        >,
+    >,
 }
 
 /// Abstract type for asynchronous reading and writing.
 ///
 /// A [`SubstreamBox`] erases the concrete type it is given and only retains its `AsyncRead`
 /// and `AsyncWrite` capabilities.
-pub struct SubstreamBox(Pin<Box<dyn AsyncReadWrite + Send>>);
+pub struct SubstreamBox {
+    inner: Pin<Box<dyn AsyncReadWrite + Send>>,
+    _counter: Weak<()>,
+}
 
 #[pin_project]
 struct Wrap<T>
@@ -26,49 +35,79 @@ where
 {
     #[pin]
     inner: T,
+    inbound_counter: Arc<()>,
+    outbound_counter: Arc<()>,
 }
 
-impl<T> StreamMuxer for Wrap<T>
-where
-    T: StreamMuxer,
-    T::Substream: Send + 'static,
-    T::Error: Send + Sync + 'static,
-{
-    type Substream = SubstreamBox;
-    type Error = io::Error;
+mod private {
+    use super::*;
 
-    fn poll_inbound(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<Self::Substream, Self::Error>> {
-        self.project()
-            .inner
-            .poll_inbound(cx)
-            .map_ok(SubstreamBox::new)
-            .map_err(into_io_error)
+    pub trait InstrumentedStreamMuxer: StreamMuxer {
+        fn active_inbound_streams(&self) -> usize;
+        fn active_outbound_streams(&self) -> usize;
     }
 
-    fn poll_outbound(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<Self::Substream, Self::Error>> {
-        self.project()
-            .inner
-            .poll_outbound(cx)
-            .map_ok(SubstreamBox::new)
-            .map_err(into_io_error)
+    impl<T> StreamMuxer for Wrap<T>
+    where
+        T: StreamMuxer,
+        T::Substream: Send + 'static,
+        T::Error: Send + Sync + 'static,
+    {
+        type Substream = SubstreamBox;
+        type Error = io::Error;
+
+        fn poll_inbound(
+            self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+        ) -> Poll<Result<Self::Substream, Self::Error>> {
+            let counter = Arc::downgrade(&self.inbound_counter);
+
+            self.project()
+                .inner
+                .poll_inbound(cx)
+                .map_ok(|stream| SubstreamBox::new(stream, counter))
+                .map_err(into_io_error)
+        }
+
+        fn poll_outbound(
+            self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+        ) -> Poll<Result<Self::Substream, Self::Error>> {
+            let counter = Arc::downgrade(&self.outbound_counter);
+
+            self.project()
+                .inner
+                .poll_outbound(cx)
+                .map_ok(|stream| SubstreamBox::new(stream, counter))
+                .map_err(into_io_error)
+        }
+
+        #[inline]
+        fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+            self.project().inner.poll_close(cx).map_err(into_io_error)
+        }
+
+        fn poll(
+            self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+        ) -> Poll<Result<StreamMuxerEvent, Self::Error>> {
+            self.project().inner.poll(cx).map_err(into_io_error)
+        }
     }
 
-    #[inline]
-    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.project().inner.poll_close(cx).map_err(into_io_error)
-    }
+    impl<T> InstrumentedStreamMuxer for Wrap<T>
+    where
+        T: StreamMuxer,
+        T::Substream: Send + 'static,
+        T::Error: Send + Sync + 'static,
+    {
+        fn active_inbound_streams(&self) -> usize {
+            Arc::weak_count(&self.inbound_counter)
+        }
 
-    fn poll(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<StreamMuxerEvent, Self::Error>> {
-        self.project().inner.poll(cx).map_err(into_io_error)
+        fn active_outbound_streams(&self) -> usize {
+            Arc::weak_count(&self.outbound_counter)
+        }
     }
 }
 
@@ -87,7 +126,11 @@ impl StreamMuxerBox {
         T::Substream: Send + 'static,
         T::Error: Send + Sync + 'static,
     {
-        let wrap = Wrap { inner: muxer };
+        let wrap = Wrap {
+            inner: muxer,
+            inbound_counter: Arc::new(()),
+            outbound_counter: Arc::new(()),
+        };
 
         StreamMuxerBox {
             inner: Box::pin(wrap),
@@ -97,18 +140,21 @@ impl StreamMuxerBox {
     /// Returns the number of active inbound streams i.e. streams that
     /// have been returned from [`StreamMuxer::poll_inbound`] and have not been dropped since.
     pub fn active_inbound_streams(&self) -> usize {
-        todo!()
+        self.inner.active_inbound_streams()
     }
 
     /// Returns the number of active outbound streams i.e. streams that
     /// have been returned from [`StreamMuxer::poll_outbound`] and have not been dropped since.
     pub fn active_outbound_streams(&self) -> usize {
-        todo!()
+        self.inner.active_outbound_streams()
     }
 
     fn project(
         self: Pin<&mut Self>,
-    ) -> Pin<&mut (dyn StreamMuxer<Substream = SubstreamBox, Error = io::Error> + Send)> {
+    ) -> Pin<
+        &mut (dyn private::InstrumentedStreamMuxer<Substream = SubstreamBox, Error = io::Error>
+                  + Send),
+    > {
         self.get_mut().inner.as_mut()
     }
 }
@@ -146,14 +192,19 @@ impl StreamMuxer for StreamMuxerBox {
 
 impl SubstreamBox {
     /// Construct a new [`SubstreamBox`] from something that implements [`AsyncRead`] and [`AsyncWrite`].
-    pub fn new<S: AsyncRead + AsyncWrite + Send + 'static>(stream: S) -> Self {
-        Self(Box::pin(stream))
+    ///
+    /// TOOD: Remove this constructor.
+    pub fn new<S: AsyncRead + AsyncWrite + Send + 'static>(stream: S, counter: Weak<()>) -> Self {
+        Self {
+            inner: Box::pin(stream),
+            _counter: counter,
+        }
     }
 }
 
 impl fmt::Debug for SubstreamBox {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "SubstreamBox({})", self.0.type_name())
+        write!(f, "SubstreamBox({})", self.inner.type_name())
     }
 }
 
@@ -180,7 +231,7 @@ impl AsyncRead for SubstreamBox {
         cx: &mut Context<'_>,
         buf: &mut [u8],
     ) -> Poll<std::io::Result<usize>> {
-        self.0.as_mut().poll_read(cx, buf)
+        self.inner.as_mut().poll_read(cx, buf)
     }
 
     fn poll_read_vectored(
@@ -188,7 +239,7 @@ impl AsyncRead for SubstreamBox {
         cx: &mut Context<'_>,
         bufs: &mut [IoSliceMut<'_>],
     ) -> Poll<std::io::Result<usize>> {
-        self.0.as_mut().poll_read_vectored(cx, bufs)
+        self.inner.as_mut().poll_read_vectored(cx, bufs)
     }
 }
 
@@ -198,7 +249,7 @@ impl AsyncWrite for SubstreamBox {
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<std::io::Result<usize>> {
-        self.0.as_mut().poll_write(cx, buf)
+        self.inner.as_mut().poll_write(cx, buf)
     }
 
     fn poll_write_vectored(
@@ -206,15 +257,15 @@ impl AsyncWrite for SubstreamBox {
         cx: &mut Context<'_>,
         bufs: &[IoSlice<'_>],
     ) -> Poll<std::io::Result<usize>> {
-        self.0.as_mut().poll_write_vectored(cx, bufs)
+        self.inner.as_mut().poll_write_vectored(cx, bufs)
     }
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
-        self.0.as_mut().poll_flush(cx)
+        self.inner.as_mut().poll_flush(cx)
     }
 
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
-        self.0.as_mut().poll_close(cx)
+        self.inner.as_mut().poll_close(cx)
     }
 }
 

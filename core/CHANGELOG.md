@@ -1,3 +1,9 @@
+# 0.36.1
+
+- Add `StreamMuxerBox::active_inbound_streams` and `StreamMuxerBox::active_outbound_streams`. See [PR XXXX]. 
+
+[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+
 # 0.36.0
 
 - Make RSA keypair support optional. To enable RSA support, `rsa` feature should be enabled.
