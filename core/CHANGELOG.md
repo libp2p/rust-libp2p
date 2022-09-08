@@ -1,8 +1,8 @@
 # 0.36.1
 
-- Add `StreamMuxerBox::active_inbound_streams` and `StreamMuxerBox::active_outbound_streams`. See [PR XXXX]. 
+- Add `StreamMuxerBox::active_inbound_streams` and `StreamMuxerBox::active_outbound_streams`. See [PR 2878]. 
 
-[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+[PR 2878]: https://github.com/libp2p/rust-libp2p/pull/2878
 
 # 0.36.0
 
