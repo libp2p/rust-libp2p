@@ -37,7 +37,7 @@ thiserror = "1.0"
 unsigned-varint = "0.7"
 void = "1"
 zeroize = "1"
-_serde = { package = "serde", version = "1", optional = true, features = ["derive"] }
+serde = { version = "1", optional = true, features = ["derive"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 ring = { version = "0.16.9", features = ["alloc", "std"], default-features = false, optional = true}
@@ -63,7 +63,7 @@ default = [ "secp256k1", "ecdsa" ]
 secp256k1 = [ "libsecp256k1" ]
 ecdsa = [ "p256" ]
 rsa = [ "dep:ring" ]
-serde = ["multihash/serde-codec", "_serde"]
+serde = ["multihash/serde-codec", "dep:serde"]
 
 [[bench]]
 name = "peer_id"
