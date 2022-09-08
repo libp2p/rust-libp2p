@@ -243,14 +243,6 @@ where
                 }
             }
 
-            match self.muxing.poll_unpin(cx)? {
-                Poll::Pending => {}
-                Poll::Ready(StreamMuxerEvent::AddressChange(address)) => {
-                    self.handler.inject_address_change(&address);
-                    return Poll::Ready(Ok(Event::AddressChange(address)));
-                }
-            }
-
             if !self.pending_outbound_stream_upgrades.is_empty() {
                 match self.muxing.poll_outbound_unpin(cx)? {
                     Poll::Pending => {}
@@ -282,6 +274,14 @@ where
 
                         continue; // Go back to the top, handler can potentially make progress again.
                     }
+                }
+            }
+
+            match self.muxing.poll_unpin(cx)? {
+                Poll::Pending => {}
+                Poll::Ready(StreamMuxerEvent::AddressChange(address)) => {
+                    self.handler.inject_address_change(&address);
+                    return Poll::Ready(Ok(Event::AddressChange(address)));
                 }
             }
 
