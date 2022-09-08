@@ -20,13 +20,10 @@
 
 use futures::prelude::*;
 use instant::Instant;
-use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
-use libp2p_swarm::NegotiatedSubstream;
 use rand::{distributions, prelude::*};
-use std::{io, iter, time::Duration};
-use void::Void;
+use std::{io, time::Duration};
 
-pub const PROTOCOL_NAME: &[u8; 16] = b"/ipfs/ping/1.0.0";
+pub const PROTOCOL_NAME: &[u8] = b"/ipfs/ping/1.0.0";
 
 /// The `Ping` protocol upgrade.
 ///
@@ -51,35 +48,6 @@ pub const PROTOCOL_NAME: &[u8; 16] = b"/ipfs/ping/1.0.0";
 pub struct Ping;
 
 const PING_SIZE: usize = 32;
-
-impl UpgradeInfo for Ping {
-    type Info = &'static [u8];
-    type InfoIter = iter::Once<Self::Info>;
-
-    fn protocol_info(&self) -> Self::InfoIter {
-        iter::once(PROTOCOL_NAME)
-    }
-}
-
-impl InboundUpgrade<NegotiatedSubstream> for Ping {
-    type Output = NegotiatedSubstream;
-    type Error = Void;
-    type Future = future::Ready<Result<Self::Output, Self::Error>>;
-
-    fn upgrade_inbound(self, stream: NegotiatedSubstream, _: Self::Info) -> Self::Future {
-        future::ok(stream)
-    }
-}
-
-impl OutboundUpgrade<NegotiatedSubstream> for Ping {
-    type Output = NegotiatedSubstream;
-    type Error = Void;
-    type Future = future::Ready<Result<Self::Output, Self::Error>>;
-
-    fn upgrade_outbound(self, stream: NegotiatedSubstream, _: Self::Info) -> Self::Future {
-        future::ok(stream)
-    }
-}
 
 /// Sends a ping and waits for the pong.
 pub async fn send_ping<S>(mut stream: S) -> io::Result<(S, Duration)>
