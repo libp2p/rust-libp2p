@@ -2461,7 +2461,6 @@ mod tests {
 
                 let failed_addresses = errors.into_iter().map(|(addr, _)| addr).collect::<Vec<_>>();
                 let expected_addresses = addresses
-                    .clone()
                     .into_iter()
                     .map(|addr| addr.with(Protocol::P2p(target.into())))
                     .collect::<Vec<_>>();
