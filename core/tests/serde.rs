@@ -4,8 +4,6 @@ use std::str::FromStr;
 
 use libp2p_core::PeerId;
 
-extern crate _serde as serde;
-
 #[test]
 pub fn serialize_peer_id_json() {
     let peer_id = PeerId::from_str("12D3KooWRNw2pJC9748Fmq4WNV27HoSTcX3r37132FLkQMrbKAiC").unwrap();
