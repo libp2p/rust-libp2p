@@ -1,5 +1,23 @@
-# 0.35.0 [unreleased]
+# 0.36.0
 
+- Make RSA keypair support optional. To enable RSA support, `rsa` feature should be enabled.
+  See [PR 2860].
+
+- Add `ReadyUpgrade`. See [PR 2855].
+
+[PR 2855]: https://github.com/libp2p/rust-libp2p/pull/2855
+[PR 2860]: https://github.com/libp2p/rust-libp2p/pull/2860/
+
+# 0.35.1
+
+- Update to `p256` `v0.11.0`. See [PR 2636].
+
+[PR 2636]: https://github.com/libp2p/rust-libp2p/pull/2636/
+
+# 0.35.0
+
+- Update prost requirement from 0.10 to 0.11 which no longer installs the protoc Protobuf compiler.
+  Thus you will need protoc installed locally. See [PR 2788].
 - Drop `Unpin` requirement from `SubstreamBox`. See [PR 2762] and [PR 2776].
 - Drop `Sync` requirement on `StreamMuxer` for constructing `StreamMuxerBox`. See [PR 2775].
 - Use `Pin<&mut Self>` as the receiver type for all `StreamMuxer` poll functions. See [PR 2765].
@@ -13,6 +31,7 @@
 [PR 2776]: https://github.com/libp2p/rust-libp2p/pull/2776
 [PR 2765]: https://github.com/libp2p/rust-libp2p/pull/2765
 [PR 2797]: https://github.com/libp2p/rust-libp2p/pull/2797
+[PR 2788]: https://github.com/libp2p/rust-libp2p/pull/2788
 
 # 0.34.0
 

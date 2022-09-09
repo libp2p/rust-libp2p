@@ -25,7 +25,7 @@
 //! The example is run per node as follows:
 //!
 //! ```sh
-//! cargo run --example chat-tokio --features="tcp-tokio mdns"
+//! cargo run --example chat-tokio --features="tcp-tokio mdns-tokio"
 //! ```
 //!
 //! Alternatively, to run with the minimal set of features and crates:
@@ -33,7 +33,7 @@
 //! ```sh
 //!cargo run --example chat-tokio \\
 //!    --no-default-features \\
-//!    --features="floodsub mplex noise tcp-tokio mdns"
+//!    --features="floodsub mplex noise tcp-tokio mdns-tokio"
 //! ```
 
 use futures::StreamExt;
@@ -41,7 +41,11 @@ use libp2p::{
     core::upgrade,
     floodsub::{self, Floodsub, FloodsubEvent},
     identity,
-    mdns::{Mdns, MdnsEvent},
+    mdns::{
+        MdnsEvent,
+        // `TokioMdns` is available through the `mdns-tokio` feature.
+        TokioMdns,
+    },
     mplex,
     noise,
     swarm::{SwarmBuilder, SwarmEvent},
@@ -88,9 +92,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     #[behaviour(out_event = "MyBehaviourEvent")]
     struct MyBehaviour {
         floodsub: Floodsub,
-        mdns: Mdns,
+        mdns: TokioMdns,
     }
 
+    #[allow(clippy::large_enum_variant)]
     enum MyBehaviourEvent {
         Floodsub(FloodsubEvent),
         Mdns(MdnsEvent),
@@ -110,9 +115,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Create a Swarm to manage peers and events.
     let mut swarm = {
-        let mdns = Mdns::new(Default::default()).await?;
+        let mdns = TokioMdns::new(Default::default()).await?;
         let mut behaviour = MyBehaviour {
-            floodsub: Floodsub::new(peer_id.clone()),
+            floodsub: Floodsub::new(peer_id),
             mdns,
         };
 
@@ -152,14 +157,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     SwarmEvent::NewListenAddr { address, .. } => {
                         println!("Listening on {:?}", address);
                     }
-                    SwarmEvent::Behaviour(MyBehaviourEvent::Floodsub(event)) => {
-                        if let FloodsubEvent::Message(message) = event {
-                            println!(
+                    SwarmEvent::Behaviour(MyBehaviourEvent::Floodsub(FloodsubEvent::Message(message))) => {
+                        println!(
                                 "Received: '{:?}' from {:?}",
                                 String::from_utf8_lossy(&message.data),
                                 message.source
                             );
-                        }
                     }
                     SwarmEvent::Behaviour(MyBehaviourEvent::Mdns(event)) => {
                         match event {
