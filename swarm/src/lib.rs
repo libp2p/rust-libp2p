@@ -1624,7 +1624,6 @@ mod tests {
     use libp2p_core::transport::TransportEvent;
     use libp2p_core::Endpoint;
     use quickcheck::{quickcheck, Arbitrary, Gen, QuickCheck};
-    use rand::prelude::SliceRandom;
     use rand::Rng;
 
     // Test execution state.
@@ -2433,19 +2432,18 @@ mod tests {
 
         let mut swarm = new_test_swarm::<_, ()>(DummyConnectionHandler::default()).build();
 
-        let mut addresses = Vec::new();
+        let mut addresses = HashSet::new();
         for _ in 0..3 {
-            addresses.push(multiaddr![Ip4([0, 0, 0, 0]), Tcp(rand::random::<u16>())]);
+            addresses.insert(multiaddr![Ip4([0, 0, 0, 0]), Tcp(rand::random::<u16>())]);
         }
         for _ in 0..5 {
-            addresses.push(multiaddr![Udp(rand::random::<u16>())]);
+            addresses.insert(multiaddr![Udp(rand::random::<u16>())]);
         }
-        addresses.shuffle(&mut rand::thread_rng());
 
         swarm
             .dial(
                 DialOpts::peer_id(target)
-                    .addresses(addresses.clone())
+                    .addresses(addresses.iter().cloned().collect())
                     .build(),
             )
             .unwrap();
