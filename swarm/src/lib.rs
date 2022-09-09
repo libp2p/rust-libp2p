@@ -2425,8 +2425,8 @@ mod tests {
         assert!(!swarm.is_connected(&peer_id));
     }
 
-    #[test]
-    fn multiple_addresses_err() {
+    #[async_std::test]
+    async fn multiple_addresses_err() {
         // Tries dialing multiple addresses, and makes sure there's one dialing error per address.
 
         let target = PeerId::random();
@@ -2450,35 +2450,26 @@ mod tests {
             )
             .unwrap();
 
-        futures::executor::block_on(future::poll_fn(|cx| -> Poll<Result<(), io::Error>> {
-            loop {
-                match swarm.poll_next_unpin(cx) {
-                    Poll::Ready(Some(SwarmEvent::OutgoingConnectionError {
-                        peer_id,
-                        // multiaddr,
-                        error: DialError::Transport(errors),
-                    })) => {
-                        assert_eq!(peer_id.unwrap(), target);
+        match swarm.next().await.unwrap() {
+            SwarmEvent::OutgoingConnectionError {
+                peer_id,
+                // multiaddr,
+                error: DialError::Transport(errors),
+            } => {
+                assert_eq!(peer_id.unwrap(), target);
 
-                        let failed_addresses =
-                            errors.into_iter().map(|(addr, _)| addr).collect::<Vec<_>>();
-                        assert_eq!(
-                            failed_addresses,
-                            addresses
-                                .clone()
-                                .into_iter()
-                                .map(|addr| addr.with(Protocol::P2p(target.into())))
-                                .collect::<Vec<_>>()
-                        );
-
-                        return Poll::Ready(Ok(()));
-                    }
-                    Poll::Ready(_) => unreachable!(),
-                    Poll::Pending => break Poll::Pending,
-                }
+                let failed_addresses = errors.into_iter().map(|(addr, _)| addr).collect::<Vec<_>>();
+                assert_eq!(
+                    failed_addresses,
+                    addresses
+                        .clone()
+                        .into_iter()
+                        .map(|addr| addr.with(Protocol::P2p(target.into())))
+                        .collect::<Vec<_>>()
+                );
             }
-        }))
-        .unwrap();
+            e => panic!("Unexpected event: {e:?}"),
+        }
     }
 
     #[test]
