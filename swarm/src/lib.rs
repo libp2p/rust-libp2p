@@ -2432,13 +2432,16 @@ mod tests {
 
         let mut swarm = new_test_swarm::<_, ()>(DummyConnectionHandler::default()).build();
 
-        let mut addresses = HashSet::new();
-        for _ in 0..3 {
-            addresses.insert(multiaddr![Ip4([0, 0, 0, 0]), Tcp(rand::random::<u16>())]);
-        }
-        for _ in 0..5 {
-            addresses.insert(multiaddr![Udp(rand::random::<u16>())]);
-        }
+        let addresses = HashSet::from([
+            multiaddr![Ip4([0, 0, 0, 0]), Tcp(rand::random::<u16>())],
+            multiaddr![Ip4([0, 0, 0, 0]), Tcp(rand::random::<u16>())],
+            multiaddr![Ip4([0, 0, 0, 0]), Tcp(rand::random::<u16>())],
+            multiaddr![Udp(rand::random::<u16>())],
+            multiaddr![Udp(rand::random::<u16>())],
+            multiaddr![Udp(rand::random::<u16>())],
+            multiaddr![Udp(rand::random::<u16>())],
+            multiaddr![Udp(rand::random::<u16>())],
+        ]);
 
         swarm
             .dial(
