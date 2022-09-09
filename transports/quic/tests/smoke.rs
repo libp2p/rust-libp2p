@@ -1,5 +1,6 @@
 use anyhow::Result;
 use async_trait::async_trait;
+use futures::channel::oneshot;
 use futures::future::{join, FutureExt};
 use futures::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use futures::select;
@@ -83,6 +84,8 @@ async fn smoke() -> Result<()> {
 
     let b_id = *b.local_peer_id();
 
+    let (sync_tx, sync_rx) = oneshot::channel();
+
     let fut_a = async move {
         match a.next().await {
             Some(SwarmEvent::IncomingConnection { .. }) => {}
@@ -132,6 +135,8 @@ async fn smoke() -> Result<()> {
             })) => assert_eq!(data, b"another substream".to_vec()),
             e => panic!("{:?}", e),
         }
+
+        sync_rx.await.unwrap();
 
         a.disconnect_peer_id(b_id).unwrap();
 
@@ -187,6 +192,8 @@ async fn smoke() -> Result<()> {
             Some(SwarmEvent::Behaviour(RequestResponseEvent::ResponseSent { .. })) => {}
             e => panic!("{:?}", e),
         }
+
+        sync_tx.send(()).unwrap();
 
         match b.next().await {
             Some(SwarmEvent::ConnectionClosed {
