@@ -2454,17 +2454,16 @@ mod tests {
                 // multiaddr,
                 error: DialError::Transport(errors),
             } => {
-                assert_eq!(peer_id.unwrap(), target);
+                assert_eq!(target, peer_id.unwrap());
 
                 let failed_addresses = errors.into_iter().map(|(addr, _)| addr).collect::<Vec<_>>();
-                assert_eq!(
-                    failed_addresses,
-                    addresses
-                        .clone()
-                        .into_iter()
-                        .map(|addr| addr.with(Protocol::P2p(target.into())))
-                        .collect::<Vec<_>>()
-                );
+                let expected_addresses = addresses
+                    .clone()
+                    .into_iter()
+                    .map(|addr| addr.with(Protocol::P2p(target.into())))
+                    .collect::<Vec<_>>();
+
+                assert_eq!(expected_addresses, failed_addresses);
             }
             e => panic!("Unexpected event: {e:?}"),
         }
