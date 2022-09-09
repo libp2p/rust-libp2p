@@ -77,10 +77,9 @@ async fn smoke() -> Result<()> {
     let mut data = vec![0; 4096 * 10];
     rng.fill_bytes(&mut data);
 
+    b.behaviour_mut().add_address(a.local_peer_id(), addr);
     b.behaviour_mut()
-        .add_address(&Swarm::local_peer_id(&a), addr);
-    b.behaviour_mut()
-        .send_request(&Swarm::local_peer_id(&a), Ping(data.clone()));
+        .send_request(a.local_peer_id(), Ping(data.clone()));
 
     let b_id = *b.local_peer_id();
 
@@ -405,9 +404,9 @@ fn concurrent_connections_and_streams() {
         for (listener_peer_id, listener_addr) in &listeners {
             dialer
                 .behaviour_mut()
-                .add_address(&listener_peer_id, listener_addr.clone());
+                .add_address(listener_peer_id, listener_addr.clone());
 
-            dialer.dial(listener_peer_id.clone()).unwrap();
+            dialer.dial(*listener_peer_id).unwrap();
         }
 
         // Wait for responses to each request.
@@ -543,8 +542,8 @@ async fn endpoint_reuse() -> Result<()> {
                 }
                 _ => {}
             },
-            ev = swarm_b.select_next_some() => match ev{
-                SwarmEvent::ConnectionEstablished { endpoint, ..} => {
+            ev = swarm_b.select_next_some() => {
+                if let SwarmEvent::ConnectionEstablished { endpoint, ..} = ev {
                     match endpoint {
                         ConnectedPoint::Dialer{..} => panic!("Unexpected outbound connection"),
                         ConnectedPoint::Listener {send_back_addr, local_addr} => {
@@ -555,7 +554,6 @@ async fn endpoint_reuse() -> Result<()> {
                         }
                     }
                 }
-                _ => {}
             },
         }
     }
