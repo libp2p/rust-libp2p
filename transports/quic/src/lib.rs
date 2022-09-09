@@ -55,7 +55,6 @@
 mod connection;
 mod endpoint;
 mod error;
-mod in_addr;
 mod muxer;
 mod tls;
 mod upgrade;
