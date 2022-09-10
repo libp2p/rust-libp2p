@@ -32,11 +32,14 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
+use crate::message_proto::message::Flag;
+use crate::message_proto::Message;
+
 /// A wrapper around [`RTCPollDataChannel`] implementing futures [`AsyncRead`] / [`AsyncWrite`].
 // TODO
 // #[derive(Debug)]
 pub struct PollDataChannel {
-    io: Framed<Compat<RTCPollDataChannel>, prost_codec::Codec<crate::message_proto::Message>>,
+    io: Framed<Compat<RTCPollDataChannel>, prost_codec::Codec<Message>>,
     state: State,
 }
 
@@ -51,64 +54,53 @@ enum State {
 }
 
 impl State {
-    fn handle_flag(&mut self, flag: crate::message_proto::message::Flag) {
+    fn handle_flag(&mut self, flag: Flag) {
         match (std::mem::replace(self, State::Poisoned), flag) {
             // StopSending
             (
                 State::Open { read_buffer } | State::WriteClosed { read_buffer },
-                crate::message_proto::message::Flag::StopSending,
+                Flag::StopSending,
             ) => {
                 *self = State::WriteClosed { read_buffer };
             }
 
             (
                 State::ReadClosed { read_buffer } | State::ReadWriteClosed { read_buffer },
-                crate::message_proto::message::Flag::StopSending,
+                Flag::StopSending,
             ) => {
                 *self = State::ReadWriteClosed { read_buffer };
             }
 
-            (
-                State::ReadReset | State::ReadResetWriteClosed,
-                crate::message_proto::message::Flag::StopSending,
-            ) => {
+            (State::ReadReset | State::ReadResetWriteClosed, Flag::StopSending) => {
                 *self = State::ReadResetWriteClosed;
             }
 
             // Fin
-            (
-                State::Open { read_buffer } | State::ReadClosed { read_buffer },
-                crate::message_proto::message::Flag::Fin,
-            ) => {
+            (State::Open { read_buffer } | State::ReadClosed { read_buffer }, Flag::Fin) => {
                 *self = State::ReadClosed { read_buffer };
             }
 
             (
                 State::WriteClosed { read_buffer } | State::ReadWriteClosed { read_buffer },
-                crate::message_proto::message::Flag::Fin,
+                Flag::Fin,
             ) => {
                 *self = State::ReadWriteClosed { read_buffer };
             }
 
-            (State::ReadReset, crate::message_proto::message::Flag::Fin) => {
-                *self = State::ReadReset
-            }
+            (State::ReadReset, Flag::Fin) => *self = State::ReadReset,
 
-            (State::ReadResetWriteClosed, crate::message_proto::message::Flag::Fin) => {
-                *self = State::ReadResetWriteClosed
-            }
+            (State::ReadResetWriteClosed, Flag::Fin) => *self = State::ReadResetWriteClosed,
 
             // Reset
-            (
-                State::ReadClosed { .. } | State::ReadReset | State::Open { .. },
-                crate::message_proto::message::Flag::Reset,
-            ) => *self = State::ReadReset,
+            (State::ReadClosed { .. } | State::ReadReset | State::Open { .. }, Flag::Reset) => {
+                *self = State::ReadReset
+            }
 
             (
                 State::ReadWriteClosed { .. }
                 | State::WriteClosed { .. }
                 | State::ReadResetWriteClosed,
-                crate::message_proto::message::Flag::Reset,
+                Flag::Reset,
             ) => *self = State::ReadResetWriteClosed,
 
             (State::Poisoned, _) => unreachable!(),
@@ -232,7 +224,7 @@ impl AsyncRead for PollDataChannel {
                         .transpose()
                         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?
                     {
-                        Some(crate::message_proto::Message { flag, message }) => {
+                        Some(Message { flag, message }) => {
                             assert!(read_buffer.is_empty());
                             if let Some(message) = message {
                                 *read_buffer = message.into();
@@ -240,7 +232,7 @@ impl AsyncRead for PollDataChannel {
 
                             if let Some(flag) = flag
                                 .map(|f| {
-                                    crate::message_proto::message::Flag::from_i32(f)
+                                    Flag::from_i32(f)
                                         .ok_or(io::Error::new(io::ErrorKind::InvalidData, ""))
                                 })
                                 .transpose()?
@@ -251,8 +243,7 @@ impl AsyncRead for PollDataChannel {
                             continue;
                         }
                         None => {
-                            self.state
-                                .handle_flag(crate::message_proto::message::Flag::Fin);
+                            self.state.handle_flag(Flag::Fin);
                             return Poll::Ready(Ok(0));
                         }
                     }
@@ -300,7 +291,7 @@ impl AsyncWrite for PollDataChannel {
 
         ready!(self.io.poll_ready_unpin(cx))?;
 
-        Pin::new(&mut self.io).start_send(crate::message_proto::Message {
+        Pin::new(&mut self.io).start_send(Message {
             flag: None,
             message: Some(buf.into()),
         })?;
@@ -321,8 +312,8 @@ impl AsyncWrite for PollDataChannel {
 
             State::Open { .. } | State::ReadClosed { .. } | State::ReadReset => {
                 ready!(self.io.poll_ready_unpin(cx))?;
-                Pin::new(&mut self.io).start_send(crate::message_proto::Message {
-                    flag: Some(crate::message_proto::message::Flag::Fin.into()),
+                Pin::new(&mut self.io).start_send(Message {
+                    flag: Some(Flag::Fin.into()),
                     message: None,
                 })?;
 
