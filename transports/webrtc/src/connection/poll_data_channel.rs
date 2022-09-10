@@ -205,69 +205,49 @@ impl AsyncRead for PollDataChannel {
                 }
             }
 
-            match &mut *self {
-                PollDataChannel {
-                    state:
-                        State::Open {
-                            ref mut read_buffer,
-                        },
-                    io,
-                }
-                | PollDataChannel {
-                    state:
-                        State::WriteClosed {
-                            ref mut read_buffer,
-                        },
-                    io,
-                } => {
-                    match ready!(io.poll_next_unpin(cx))
-                        .transpose()
-                        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?
-                    {
-                        Some(Message { flag, message }) => {
-                            assert!(read_buffer.is_empty());
-                            if let Some(message) = message {
-                                *read_buffer = message.into();
-                            }
+            let PollDataChannel { state, io } = &mut *self;
 
-                            if let Some(flag) = flag
-                                .map(|f| {
-                                    Flag::from_i32(f)
-                                        .ok_or(io::Error::new(io::ErrorKind::InvalidData, ""))
-                                })
-                                .transpose()?
-                            {
-                                self.state.handle_flag(flag)
-                            }
-
-                            continue;
-                        }
-                        None => {
-                            self.state.handle_flag(Flag::Fin);
-                            return Poll::Ready(Ok(0));
-                        }
-                    }
+            let read_buffer = match state {
+                State::Open {
+                    ref mut read_buffer,
                 }
-                PollDataChannel {
-                    state: State::ReadClosed { .. },
-                    ..
+                | State::WriteClosed {
+                    ref mut read_buffer,
+                } => read_buffer,
+                State::ReadClosed { .. } | State::ReadWriteClosed { .. } => {
+                    return Poll::Ready(Ok(0))
                 }
-                | PollDataChannel {
-                    state: State::ReadWriteClosed { .. },
-                    ..
-                } => return Poll::Ready(Ok(0)),
-                PollDataChannel {
-                    state: State::ReadReset | State::ReadResetWriteClosed,
-                    ..
-                } => {
+                State::ReadReset | State::ReadResetWriteClosed => {
                     // TODO: Is `""` valid?
                     return Poll::Ready(Err(io::Error::new(io::ErrorKind::ConnectionReset, "")));
                 }
-                PollDataChannel {
-                    state: State::Poisoned,
-                    ..
-                } => {
-                    todo!()
+                State::Poisoned => todo!(),
+            };
+
+            match ready!(io.poll_next_unpin(cx))
+                .transpose()
+                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?
+            {
+                Some(Message { flag, message }) => {
+                    assert!(read_buffer.is_empty());
+                    if let Some(message) = message {
+                        *read_buffer = message.into();
+                    }
+
+                    if let Some(flag) = flag
+                        .map(|f| {
+                            Flag::from_i32(f).ok_or(io::Error::new(io::ErrorKind::InvalidData, ""))
+                        })
+                        .transpose()?
+                    {
+                        self.state.handle_flag(flag)
+                    }
+
+                    continue;
+                }
+                None => {
+                    self.state.handle_flag(Flag::Fin);
+                    return Poll::Ready(Ok(0));
                 }
             }
         }
