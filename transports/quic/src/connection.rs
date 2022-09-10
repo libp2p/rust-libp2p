@@ -66,6 +66,9 @@ pub enum Error {
     /// Endpoint has force-killed this connection because it was too busy.
     #[error("Endpoint has force-killed our connection")]
     ClosedChannel,
+    /// The background task driving the endpoint has crashed.
+    #[error("Background task crashed.")]
+    TaskCrashed,
     /// Error in the inner state machine.
     #[error("{0}")]
     Quinn(#[from] quinn_proto::ConnectionError),
@@ -109,7 +112,7 @@ impl Connection {
     /// Works for server connections only.
     pub fn local_addr(&self) -> SocketAddr {
         debug_assert_eq!(self.connection.side(), quinn_proto::Side::Server);
-        let endpoint_addr = self.endpoint.socket_addr;
+        let endpoint_addr = self.endpoint.socket_addr();
         self.connection
             .local_ip()
             .map(|ip| SocketAddr::new(ip, endpoint_addr.port()))
@@ -117,7 +120,7 @@ impl Connection {
                 // In a normal case scenario this should not happen, because
                 // we get want to get a local addr for a server connection only.
                 tracing::error!("trying to get quinn::local_ip for a client");
-                endpoint_addr
+                *endpoint_addr
             })
     }
 
@@ -214,17 +217,17 @@ impl Connection {
             // However we don't deliver substream-related events to the user as long as
             // `to_endpoint` is full. This should propagate the back-pressure of `to_endpoint`
             // being full to the user.
-            if self.pending_to_endpoint.is_some() {
-                match self.endpoint.to_endpoint.poll_ready_unpin(cx) {
-                    Poll::Ready(Ok(())) => {
-                        let to_endpoint = self.pending_to_endpoint.take().expect("is some");
-                        self.endpoint
-                            .to_endpoint
-                            .start_send(to_endpoint)
-                            .expect("Channel is ready.");
+            if let Some(to_endpoint) = self.pending_to_endpoint.take() {
+                match self.endpoint.try_send(to_endpoint, cx) {
+                    Ok(Ok(())) => {}
+                    Ok(Err(to_endpoint)) => {
+                        self.pending_to_endpoint = Some(to_endpoint);
+                        return Poll::Pending;
                     }
-                    Poll::Ready(Err(_)) => panic!("Background task crashed"),
-                    Poll::Pending => return Poll::Pending,
+                    Err(_) => {
+                        tracing::error!("Background task crashed.");
+                        return Poll::Ready(ConnectionEvent::ConnectionLost(Error::TaskCrashed));
+                    }
                 }
             }
 

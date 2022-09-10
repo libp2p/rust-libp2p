@@ -27,6 +27,7 @@ use crate::endpoint::ToEndpoint;
 use crate::Config;
 use crate::{endpoint::Endpoint, muxer::QuicMuxer, upgrade::Upgrade};
 
+use futures::channel::mpsc::SendError;
 use futures::channel::oneshot;
 use futures::ready;
 use futures::stream::StreamExt;
@@ -140,7 +141,7 @@ impl Transport for QuicTransport {
             .listeners
             .iter_mut()
             .filter(|l| {
-                let listen_addr = l.endpoint.socket_addr;
+                let listen_addr = l.endpoint.socket_addr();
                 listen_addr.is_ipv4() == socket_addr.is_ipv4()
                     && listen_addr.ip().is_loopback() == socket_addr.ip().is_loopback()
             })
@@ -177,7 +178,7 @@ impl Transport for QuicTransport {
         Ok(async move {
             let connection = rx
                 .await
-                .expect("background task has crashed")
+                .map_err(|_| Error::TaskCrashed)?
                 .map_err(Error::Reach)?;
             let final_connec = Upgrade::from_connection(connection).await?;
             Ok(final_connec)
@@ -201,10 +202,18 @@ impl Transport for QuicTransport {
         cx: &mut Context<'_>,
     ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
         if let Some(dialer) = self.ipv4_dialer.as_mut() {
-            dialer.drive_dials(cx)
+            if dialer.drive_dials(cx).is_err() {
+                // Background task of dialer crashed.
+                // Drop dialer and all pending dials so that the connection receiver is notified.
+                self.ipv4_dialer = None;
+            }
         }
         if let Some(dialer) = self.ipv6_dialer.as_mut() {
-            dialer.drive_dials(cx)
+            if dialer.drive_dials(cx).is_err() {
+                // Background task of dialer crashed.
+                // Drop dialer and all pending dials so that the connection receiver is notified.
+                self.ipv4_dialer = None;
+            }
         }
         match self.listeners.poll_next_unpin(cx) {
             Poll::Ready(Some(ev)) => Poll::Ready(ev),
@@ -228,20 +237,18 @@ impl Dialer {
         })
     }
 
-    fn drive_dials(&mut self, cx: &mut Context<'_>) {
-        if !self.pending_dials.is_empty() {
-            match self.endpoint.to_endpoint.poll_ready_unpin(cx) {
-                Poll::Ready(Ok(())) => {
-                    let to_endpoint = self.pending_dials.pop_front().expect("!is_empty");
-                    self.endpoint
-                        .to_endpoint
-                        .start_send(to_endpoint)
-                        .expect("Channel is ready.");
+    fn drive_dials(&mut self, cx: &mut Context<'_>) -> Result<(), SendError> {
+        if let Some(to_endpoint) = self.pending_dials.pop_front() {
+            match self.endpoint.try_send(to_endpoint, cx) {
+                Ok(Ok(())) => {}
+                Ok(Err(to_endpoint)) => self.pending_dials.push_front(to_endpoint),
+                Err(err) => {
+                    tracing::error!("Background task of dialing endpoint crashed.");
+                    return Err(err);
                 }
-                Poll::Ready(Err(_)) => panic!("Background task crashed."),
-                Poll::Pending => {}
             }
         }
+        Ok(())
     }
 }
 
@@ -282,7 +289,7 @@ impl Listener {
             pending_event = None;
         } else {
             if_watcher = None;
-            let ma = socketaddr_to_multiaddr(&endpoint.socket_addr);
+            let ma = socketaddr_to_multiaddr(endpoint.socket_addr());
             pending_event = Some(TransportEvent::NewAddress {
                 listener_id,
                 listen_addr: ma,
@@ -324,8 +331,8 @@ impl Listener {
             match ready!(if_watcher.poll_if_event(cx)) {
                 Ok(IfEvent::Up(inet)) => {
                     let ip = inet.addr();
-                    if self.endpoint.socket_addr.is_ipv4() == ip.is_ipv4() {
-                        let socket_addr = SocketAddr::new(ip, self.endpoint.socket_addr.port());
+                    if self.endpoint.socket_addr().is_ipv4() == ip.is_ipv4() {
+                        let socket_addr = SocketAddr::new(ip, self.endpoint.socket_addr().port());
                         let ma = socketaddr_to_multiaddr(&socket_addr);
                         tracing::debug!("New listen address: {}", ma);
                         return Poll::Ready(TransportEvent::NewAddress {
@@ -336,8 +343,8 @@ impl Listener {
                 }
                 Ok(IfEvent::Down(inet)) => {
                     let ip = inet.addr();
-                    if self.endpoint.socket_addr.is_ipv4() == ip.is_ipv4() {
-                        let socket_addr = SocketAddr::new(ip, self.endpoint.socket_addr.port());
+                    if self.endpoint.socket_addr().is_ipv4() == ip.is_ipv4() {
+                        let socket_addr = SocketAddr::new(ip, self.endpoint.socket_addr().port());
                         let ma = socketaddr_to_multiaddr(&socket_addr);
                         tracing::debug!("Expired listen address: {}", ma);
                         return Poll::Ready(TransportEvent::AddressExpired {
@@ -371,23 +378,14 @@ impl Stream for Listener {
                 Poll::Ready(event) => return Poll::Ready(Some(event)),
                 Poll::Pending => {}
             }
-            if !self.pending_dials.is_empty() {
-                match self.endpoint.to_endpoint.poll_ready_unpin(cx) {
-                    Poll::Ready(Ok(_)) => {
-                        let to_endpoint = self
-                            .pending_dials
-                            .pop_front()
-                            .expect("Pending dials is not empty.");
-                        self.endpoint
-                            .to_endpoint
-                            .start_send(to_endpoint)
-                            .expect("Channel is ready");
-                    }
-                    Poll::Ready(Err(_)) => {
+            if let Some(to_endpoint) = self.pending_dials.pop_front() {
+                match self.endpoint.try_send(to_endpoint, cx) {
+                    Ok(Ok(())) => {}
+                    Ok(Err(to_endpoint)) => self.pending_dials.push_front(to_endpoint),
+                    Err(_) => {
                         self.close(Err(Error::TaskCrashed));
                         continue;
                     }
-                    Poll::Pending => {}
                 }
             }
             match self.new_connections_rx.poll_next_unpin(cx) {

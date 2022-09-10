@@ -31,7 +31,10 @@
 use crate::{connection::Connection, tls, transport};
 
 use futures::{
-    channel::{mpsc, oneshot},
+    channel::{
+        mpsc::{self, SendError},
+        oneshot,
+    },
     prelude::*,
 };
 use quinn_proto::{ClientConfig as QuinnClientConfig, ServerConfig as QuinnServerConfig};
@@ -40,7 +43,7 @@ use std::{
     fmt,
     net::{Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket},
     sync::Arc,
-    task::{Poll, Waker},
+    task::{Context, Poll, Waker},
     time::{Duration, Instant},
 };
 
@@ -87,9 +90,9 @@ impl Config {
 #[derive(Clone)]
 pub struct Endpoint {
     /// Channel to the background of the endpoint.
-    pub to_endpoint: mpsc::Sender<ToEndpoint>,
+    to_endpoint: mpsc::Sender<ToEndpoint>,
 
-    pub socket_addr: SocketAddr,
+    socket_addr: SocketAddr,
 }
 
 impl Endpoint {
@@ -141,6 +144,23 @@ impl Endpoint {
         .detach();
 
         Ok(endpoint)
+    }
+
+    pub fn socket_addr(&self) -> &SocketAddr {
+        &self.socket_addr
+    }
+
+    pub fn try_send(
+        &mut self,
+        to_endpoint: ToEndpoint,
+        cx: &mut Context<'_>,
+    ) -> Result<Result<(), ToEndpoint>, SendError> {
+        match self.to_endpoint.poll_ready_unpin(cx) {
+            Poll::Ready(Ok(())) => {}
+            Poll::Ready(Err(err)) => return Err(err),
+            Poll::Pending => return Ok(Err(to_endpoint)),
+        };
+        self.to_endpoint.start_send(to_endpoint).map(Ok)
     }
 }
 
