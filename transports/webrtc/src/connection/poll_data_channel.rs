@@ -186,6 +186,27 @@ impl PollDataChannel {
     pub fn set_read_buf_capacity(&mut self, capacity: usize) {
         self.io.get_mut().set_read_buf_capacity(capacity)
     }
+
+    fn io_poll_next(
+        io: &mut Framed<Compat<RTCPollDataChannel>, prost_codec::Codec<Message>>,
+        cx: &mut Context<'_>,
+    ) -> Poll<io::Result<Option<(Option<Flag>, Option<Vec<u8>>)>>> {
+        match ready!(io.poll_next_unpin(cx))
+            .transpose()
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?
+        {
+            Some(Message { flag, message }) => {
+                let flag = flag
+                    .map(|f| {
+                        Flag::from_i32(f).ok_or(io::Error::new(io::ErrorKind::InvalidData, ""))
+                    })
+                    .transpose()?;
+
+                Poll::Ready(Ok(Some((flag, message))))
+            }
+            None => Poll::Ready(Ok(None)),
+        }
+    }
 }
 
 impl AsyncRead for PollDataChannel {
@@ -214,8 +235,10 @@ impl AsyncRead for PollDataChannel {
                 | State::WriteClosed {
                     ref mut read_buffer,
                 } => read_buffer,
-                State::ReadClosed { .. } | State::ReadWriteClosed { .. } => {
-                    return Poll::Ready(Ok(0))
+                State::ReadClosed { read_buffer, .. }
+                | State::ReadWriteClosed { read_buffer, .. } => {
+                    assert!(read_buffer.is_empty());
+                    return Poll::Ready(Ok(0));
                 }
                 State::ReadReset | State::ReadResetWriteClosed => {
                     // TODO: Is `""` valid?
@@ -224,26 +247,16 @@ impl AsyncRead for PollDataChannel {
                 State::Poisoned => todo!(),
             };
 
-            match ready!(io.poll_next_unpin(cx))
-                .transpose()
-                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?
-            {
-                Some(Message { flag, message }) => {
+            match ready!(Self::io_poll_next(io, cx))? {
+                Some((flag, message)) => {
                     assert!(read_buffer.is_empty());
                     if let Some(message) = message {
                         *read_buffer = message.into();
                     }
 
-                    if let Some(flag) = flag
-                        .map(|f| {
-                            Flag::from_i32(f).ok_or(io::Error::new(io::ErrorKind::InvalidData, ""))
-                        })
-                        .transpose()?
-                    {
+                    if let Some(flag) = flag {
                         self.state.handle_flag(flag)
-                    }
-
-                    continue;
+                    };
                 }
                 None => {
                     self.state.handle_flag(Flag::Fin);
@@ -260,12 +273,33 @@ impl AsyncWrite for PollDataChannel {
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
+        // Handle flags iff read side closed.
+        loop {
+            match self.state {
+                State::ReadClosed { .. } | State::ReadReset =>
+                // TODO: In case AsyncRead::poll_read encountered an error or returned None earlier, we will poll the
+                // underlying I/O resource once more. Is that allowed? How about introducing a state IoReadClosed?
+                {
+                    match Self::io_poll_next(&mut self.io, cx)? {
+                        Poll::Ready(Some((Some(flag), message))) => {
+                            // Read side is closed. Discard any incoming messages.
+                            drop(message);
+                            // But still handle flags, e.g. a `Flag::StopSending`.
+                            self.state.handle_flag(flag)
+                        }
+                        Poll::Ready(Some((None, message))) => drop(message),
+                        Poll::Ready(None) | Poll::Pending => break,
+                    }
+                }
+                _ => break,
+            }
+        }
+
         match self.state {
             State::WriteClosed { .. }
             | State::ReadWriteClosed { .. }
             | State::ReadResetWriteClosed => return Poll::Ready(Ok(0)),
-            State::Open { .. } | State::ReadReset => {}
-            State::ReadClosed { .. } => {}
+            State::Open { .. } | State::ReadClosed { .. } | State::ReadReset => {}
             State::Poisoned => todo!(),
         }
 
