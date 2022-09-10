@@ -3,7 +3,7 @@ name = "libp2p"
 edition = "2021"
 rust-version = "1.60.0"
 description = "Peer-to-peer networking library"
-version = "0.48.0"
+version = "0.49.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -110,7 +110,7 @@ smallvec = "1.6.1"
 libp2p-deflate = { version = "0.36.0", path = "transports/deflate", optional = true }
 libp2p-dns = { version = "0.36.0", path = "transports/dns", optional = true, default-features = false }
 libp2p-mdns = { version = "0.40.0", path = "protocols/mdns", optional = true, default-features = false }
-libp2p-tcp = { version = "0.36.0", path = "transports/tcp", default-features = false, optional = true }
+libp2p-tcp = { version = "0.37.0", path = "transports/tcp", default-features = false, optional = true }
 libp2p-websocket = { version = "0.38.0", path = "transports/websocket", optional = true }
 
 [target.'cfg(not(target_os = "unknown"))'.dependencies]
