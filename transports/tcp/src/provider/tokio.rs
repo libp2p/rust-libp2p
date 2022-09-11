@@ -18,45 +18,24 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use super::{IfEvent, Incoming, Provider};
+use super::{Incoming, Provider};
 
 use futures::{
-    future::{self, BoxFuture, FutureExt},
+    future::{BoxFuture, FutureExt},
     prelude::*,
 };
-use futures_timer::Delay;
-use if_addrs::{get_if_addrs, IfAddr};
-use ipnet::{IpNet, Ipv4Net, Ipv6Net};
-use std::collections::HashSet;
 use std::convert::TryFrom;
 use std::io;
 use std::net;
 use std::pin::Pin;
 use std::task::{Context, Poll};
-use std::time::Duration;
 
 #[derive(Copy, Clone)]
 pub enum Tcp {}
 
-pub struct IfWatcher {
-    addrs: HashSet<IpNet>,
-    delay: Delay,
-    pending: Vec<IfEvent>,
-}
-
 impl Provider for Tcp {
     type Stream = TcpStream;
     type Listener = tokio_crate::net::TcpListener;
-    type IfWatcher = IfWatcher;
-
-    fn if_watcher() -> BoxFuture<'static, io::Result<Self::IfWatcher>> {
-        future::ready(Ok(IfWatcher {
-            addrs: HashSet::new(),
-            delay: Delay::new(Duration::from_secs(0)),
-            pending: Vec::new(),
-        }))
-        .boxed()
-    }
 
     fn new_listener(l: net::TcpListener) -> io::Result<Self::Listener> {
         tokio_crate::net::TcpListener::try_from(l)
@@ -103,51 +82,6 @@ impl Provider for Tcp {
             local_addr,
             remote_addr,
         }))
-    }
-
-    fn poll_interfaces(w: &mut Self::IfWatcher, cx: &mut Context<'_>) -> Poll<io::Result<IfEvent>> {
-        loop {
-            if let Some(event) = w.pending.pop() {
-                return Poll::Ready(Ok(event));
-            }
-
-            match Pin::new(&mut w.delay).poll(cx) {
-                Poll::Pending => return Poll::Pending,
-                Poll::Ready(()) => {
-                    let ifs = get_if_addrs()?;
-                    let addrs = ifs
-                        .into_iter()
-                        .map(|iface| match iface.addr {
-                            IfAddr::V4(ip4) => {
-                                let prefix_len =
-                                    (!u32::from_be_bytes(ip4.netmask.octets())).leading_zeros();
-                                let ipnet = Ipv4Net::new(ip4.ip, prefix_len as u8)
-                                    .expect("prefix_len can not exceed 32");
-                                IpNet::V4(ipnet)
-                            }
-                            IfAddr::V6(ip6) => {
-                                let prefix_len =
-                                    (!u128::from_be_bytes(ip6.netmask.octets())).leading_zeros();
-                                let ipnet = Ipv6Net::new(ip6.ip, prefix_len as u8)
-                                    .expect("prefix_len can not exceed 128");
-                                IpNet::V6(ipnet)
-                            }
-                        })
-                        .collect::<HashSet<_>>();
-
-                    for down in w.addrs.difference(&addrs) {
-                        w.pending.push(IfEvent::Down(*down));
-                    }
-
-                    for up in addrs.difference(&w.addrs) {
-                        w.pending.push(IfEvent::Up(*up));
-                    }
-
-                    w.addrs = addrs;
-                    w.delay.reset(Duration::from_secs(10));
-                }
-            }
-        }
     }
 }
 

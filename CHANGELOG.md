@@ -43,6 +43,10 @@
 
 # `libp2p` facade crate
 
+# 0.49.0 - [unreleased]
+
+- Update to [`libp2p-tcp` `v0.37.0`](transports/tcp/CHANGELOG.md#0370).
+
 # 0.48.0
 
 - Update to [`libp2p-core` `v0.36.0`](core/CHANGELOG.md#0360).
