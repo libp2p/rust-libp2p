@@ -35,6 +35,12 @@ use std::task::{Context, Poll};
 use crate::message_proto::message::Flag;
 use crate::message_proto::Message;
 
+// TODO: Document
+const MAX_MSG_LEN: usize = 16384; // 16kiB
+const VARINT_LEN: usize = 2;
+const PROTO_OVERHEAD: usize = 5;
+const MAX_DATA_LEN: usize = MAX_MSG_LEN - VARINT_LEN - PROTO_OVERHEAD;
+
 /// A wrapper around [`RTCPollDataChannel`] implementing futures [`AsyncRead`] / [`AsyncWrite`].
 // TODO
 // #[derive(Debug)]
@@ -305,12 +311,14 @@ impl AsyncWrite for PollDataChannel {
 
         ready!(self.io.poll_ready_unpin(cx))?;
 
+        let n = usize::min(buf.len(), MAX_DATA_LEN);
+
         Pin::new(&mut self.io).start_send(Message {
             flag: None,
-            message: Some(buf.into()),
+            message: Some(buf[0..n].into()),
         })?;
 
-        Poll::Ready(Ok(buf.len()))
+        Poll::Ready(Ok(n))
     }
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
@@ -351,5 +359,41 @@ impl AsyncWrite for PollDataChannel {
 
         // TODO: Is flush the correct thing here? We don't want the underlying layer to close both write and read.
         self.io.poll_flush_unpin(cx).map_err(Into::into)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use asynchronous_codec::Encoder;
+    use bytes::BytesMut;
+    use prost::Message;
+    use unsigned_varint::codec::UviBytes;
+
+    #[test]
+    fn max_data_len() {
+        // Largest possible message.
+        let message = [0; MAX_DATA_LEN];
+
+        let protobuf = crate::message_proto::Message {
+            flag: Some(crate::message_proto::message::Flag::Fin.into()),
+            message: Some(message.to_vec()),
+        };
+
+        let mut encoded_msg = BytesMut::new();
+        protobuf
+            .encode(&mut encoded_msg)
+            .expect("BytesMut to have sufficient capacity.");
+        assert_eq!(encoded_msg.len(), message.len() + PROTO_OVERHEAD);
+
+        let mut uvi = UviBytes::default();
+        let mut dst = BytesMut::new();
+        uvi.encode(encoded_msg.clone().freeze(), &mut dst).unwrap();
+
+        // Ensure the varint prefixed and protobuf encoded largest message is no longer than the
+        // maximum limit specified in the libp2p WebRTC specification.
+        assert_eq!(dst.len(), MAX_MSG_LEN);
+
+        assert_eq!(dst.len() - encoded_msg.len(), VARINT_LEN);
     }
 }
