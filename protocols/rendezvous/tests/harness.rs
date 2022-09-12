@@ -64,22 +64,6 @@ where
         .build()
 }
 
-pub async fn await_event_or_timeout<Event, Error>(
-    swarm: &mut (impl Stream<Item = SwarmEvent<Event, Error>> + FusedStream + Unpin),
-) -> SwarmEvent<Event, Error>
-where
-    SwarmEvent<Event, Error>: Debug,
-{
-    tokio::time::timeout(
-        Duration::from_secs(30),
-        swarm
-            .inspect(|event| log::debug!("Swarm emitted {:?}", event))
-            .select_next_some(),
-    )
-    .await
-    .expect("network behaviour to emit an event within 30 seconds")
-}
-
 pub async fn await_events_or_timeout<Event1, Event2, Error1, Error2>(
     swarm_1: &mut (impl Stream<Item = SwarmEvent<Event1, Error1>> + FusedStream + Unpin),
     swarm_2: &mut (impl Stream<Item = SwarmEvent<Event2, Error2>> + FusedStream + Unpin),
@@ -106,7 +90,7 @@ where
 #[macro_export]
 macro_rules! assert_behaviour_events {
     ($swarm: ident: $pat: pat, || $body: block) => {
-        match await_event_or_timeout(&mut $swarm).await {
+        match $swarm.next_within(30).await {
             libp2p::swarm::SwarmEvent::Behaviour($pat) => $body,
             _ => panic!("Unexpected combination of events emitted, check logs for details"),
         }

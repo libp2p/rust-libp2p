@@ -12,3 +12,4 @@ libp2p = { path = "..", default-features = false }
 futures = "0.3.24"
 log = "0.4.17"
 rand = "0.8.5"
+futures-timer = "3.0.2"

@@ -1,12 +1,22 @@
 use async_trait::async_trait;
+use futures::future::Either;
 use futures::StreamExt;
-use libp2p::swarm::{AddressScore, NetworkBehaviour, SwarmEvent};
+use libp2p::swarm::{
+    AddressScore, ConnectionHandler, IntoConnectionHandler, NetworkBehaviour, SwarmEvent,
+};
 use libp2p::{Multiaddr, Swarm};
 use std::fmt::Debug;
+use std::time::Duration;
+
+type THandler<TBehaviour> = <TBehaviour as NetworkBehaviour>::ConnectionHandler;
+type THandlerErr<TBehaviour> =
+    <<THandler<TBehaviour> as IntoConnectionHandler>::Handler as ConnectionHandler>::Error;
 
 /// An extension trait for [`Swarm`] that makes it easier to set up a network of [`Swarm`]s for tests.
 #[async_trait]
 pub trait SwarmExt {
+    type NB: NetworkBehaviour;
+
     /// Establishes a connection to the given [`Swarm`], polling both of them until the connection is established.
     async fn block_on_connection<T>(&mut self, other: &mut Swarm<T>)
     where
@@ -15,6 +25,11 @@ pub trait SwarmExt {
 
     /// Listens on a random memory address, polling the [`Swarm`] until the transport is ready to accept connections.
     async fn listen_on_random_memory_address(&mut self) -> Multiaddr;
+
+    async fn next_within(
+        &mut self,
+        seconds: u64,
+    ) -> SwarmEvent<<Self::NB as NetworkBehaviour>::OutEvent, THandlerErr<Self::NB>>;
 
     async fn loop_on_next(self);
 }
@@ -25,6 +40,8 @@ where
     B: NetworkBehaviour + Send,
     <B as NetworkBehaviour>::OutEvent: Debug,
 {
+    type NB = B;
+
     async fn block_on_connection<T>(&mut self, other: &mut Swarm<T>)
     where
         T: NetworkBehaviour + Send,
@@ -97,6 +114,25 @@ where
         self.add_external_address(multiaddr.clone(), AddressScore::Infinite);
 
         multiaddr
+    }
+
+    async fn next_within(
+        &mut self,
+        seconds: u64,
+    ) -> SwarmEvent<<Self::NB as NetworkBehaviour>::OutEvent, THandlerErr<Self::NB>> {
+        match futures::future::select(
+            futures_timer::Delay::new(Duration::from_secs(seconds)),
+            self.select_next_some(),
+        )
+        .await
+        {
+            Either::Left(((), _)) => panic!("Swarm did not emit an event within {seconds}s"),
+            Either::Right((event, _)) => {
+                log::trace!("Swarm produced: {:?}", event);
+
+                event
+            }
+        }
     }
 
     async fn loop_on_next(mut self) {

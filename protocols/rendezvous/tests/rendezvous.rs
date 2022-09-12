@@ -21,7 +21,7 @@
 #[macro_use]
 pub mod harness;
 
-use crate::harness::{await_event_or_timeout, await_events_or_timeout, new_swarm};
+use crate::harness::{await_events_or_timeout, new_swarm};
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use libp2p_core::identity;
