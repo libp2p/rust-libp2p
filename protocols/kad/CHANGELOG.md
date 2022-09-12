@@ -1,3 +1,9 @@
+# 0.40.1
+
+- Bump rand to 0.8 and quickcheck to 1. See [PR 2857].
+
+[PR 2857]: https://github.com/libp2p/rust-libp2p/pull/2857
+
 # 0.40.0
 
 - Add support for multiple protocol names. Update `Kademlia`, `KademliaConfig`,

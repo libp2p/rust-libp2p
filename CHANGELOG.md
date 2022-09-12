@@ -46,6 +46,13 @@
 # 0.49.0 - [unreleased]
 
 - Update to [`libp2p-tcp` `v0.37.0`](transports/tcp/CHANGELOG.md#0370).
+- Update individual crates.
+    - Update to [`libp2p-kad` `v0.40.1`](protocols/kad/CHANGELOG.md#???).
+    - Update to [`libp2p-ping` `v0.39.1`](protocols/ping/CHANGELOG.md#???).
+    - Update to [`libp2p-request-response` `v0.21.1`](protocols/request-response/CHANGELOG.md#???).
+    - Update to [`libp2p-pnet` `v0.22.1`](transports/pnet/CHANGELOG.md#???).
+    - Update to [`libp2p-mplex` `v0.36.1`](muxers/mplex/CHANGELOG.md#???).
+    - Update to [`libp2p-swarm` `v0.39.1`](swarm/CHANGELOG.md#???).
 
 # 0.48.0
 
