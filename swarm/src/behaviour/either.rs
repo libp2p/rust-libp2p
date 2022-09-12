@@ -19,8 +19,6 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::handler::{either::IntoEitherHandler, ConnectionHandler, IntoConnectionHandler};
-#[allow(deprecated)]
-pub use crate::NetworkBehaviourEventProcess;
 use crate::{DialError, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use either::Either;
 use libp2p_core::{
@@ -233,20 +231,5 @@ where
         };
 
         Poll::Ready(event)
-    }
-}
-
-#[allow(deprecated)]
-impl<TEvent, TBehaviourLeft, TBehaviourRight> NetworkBehaviourEventProcess<TEvent>
-    for Either<TBehaviourLeft, TBehaviourRight>
-where
-    TBehaviourLeft: NetworkBehaviourEventProcess<TEvent>,
-    TBehaviourRight: NetworkBehaviourEventProcess<TEvent>,
-{
-    fn inject_event(&mut self, event: TEvent) {
-        match self {
-            Either::Left(a) => a.inject_event(event),
-            Either::Right(b) => b.inject_event(event),
-        }
     }
 }
