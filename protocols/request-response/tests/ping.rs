@@ -22,17 +22,17 @@
 
 use async_trait::async_trait;
 use futures::{channel::mpsc, prelude::*, AsyncWriteExt};
-use libp2p::noise::{Keypair, NoiseConfig, X25519Spec};
-use libp2p::request_response::*;
-use libp2p::swarm::{Swarm, SwarmEvent};
-use libp2p::tcp::{GenTcpConfig, TcpTransport};
-use libp2p_core::{
+use libp2p::core::{
     identity,
     muxing::StreamMuxerBox,
     transport::{self, Transport},
     upgrade::{self, read_length_prefixed, write_length_prefixed},
     Multiaddr, PeerId,
 };
+use libp2p::noise::{Keypair, NoiseConfig, X25519Spec};
+use libp2p::request_response::*;
+use libp2p::swarm::{Swarm, SwarmEvent};
+use libp2p::tcp::{GenTcpConfig, TcpTransport};
 use rand::{self, Rng};
 use std::{io, iter};
 
