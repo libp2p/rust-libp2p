@@ -32,7 +32,6 @@ use std::hash::{Hash, Hasher};
 
 /// The (opaque) key of a record.
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-#[cfg_attr(feature = "serde", serde(crate = "_serde"))]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Key(Bytes);
 
