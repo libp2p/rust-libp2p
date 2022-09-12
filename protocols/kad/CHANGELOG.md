@@ -1,3 +1,7 @@
+# 0.41.0 [unreleased]
+
+- Update to `libp2p-swarm` `v0.40.0`.
+
 # 0.40.0
 
 - Add support for multiple protocol names. Update `Kademlia`, `KademliaConfig`,
