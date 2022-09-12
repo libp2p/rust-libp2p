@@ -183,7 +183,7 @@ impl From<PeerId> for Vec<u8> {
 impl Serialize for PeerId {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: _serde::Serializer,
+        S: serde::Serializer,
     {
         if serializer.is_human_readable() {
             serializer.serialize_str(&self.to_base58())

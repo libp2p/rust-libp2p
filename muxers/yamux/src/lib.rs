@@ -50,10 +50,6 @@ impl<S> fmt::Debug for Yamux<S> {
     }
 }
 
-/// A token to poll for an outbound substream.
-#[derive(Debug)]
-pub struct OpenSubstreamToken(());
-
 impl<C> Yamux<Incoming<C>>
 where
     C: AsyncRead + AsyncWrite + Send + Unpin + 'static,
