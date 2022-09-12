@@ -26,6 +26,9 @@ pub trait SwarmExt {
     /// Listens on a random memory address, polling the [`Swarm`] until the transport is ready to accept connections.
     async fn listen_on_random_memory_address(&mut self) -> Multiaddr;
 
+    /// Listens on a random memory address, polling the [`Swarm`] until the transport is ready to accept connections.
+    async fn listen_on_random_localhost_tcp_port(&mut self) -> Multiaddr;
+
     async fn next_within(
         &mut self,
         seconds: u64,
@@ -99,6 +102,35 @@ where
                     address,
                     listener_id,
                 } if listener_id == memory_addr_listener_id => {
+                    break address;
+                }
+                other => {
+                    log::debug!(
+                        "Ignoring {:?} while waiting for listening to succeed",
+                        other
+                    );
+                }
+            }
+        };
+
+        // Memory addresses are externally reachable because they all share the same memory-space.
+        self.add_external_address(multiaddr.clone(), AddressScore::Infinite);
+
+        multiaddr
+    }
+
+    async fn listen_on_random_localhost_tcp_port(&mut self) -> Multiaddr {
+        let tcp_listener_id = self
+            .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
+            .unwrap();
+
+        // block until we are actually listening
+        let multiaddr = loop {
+            match self.select_next_some().await {
+                SwarmEvent::NewListenAddr {
+                    address,
+                    listener_id,
+                } if listener_id == tcp_listener_id => {
                     break address;
                 }
                 other => {
