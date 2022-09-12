@@ -411,7 +411,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::handler::KeepAliveConnectionHandler;
+    use crate::handler::DummyConnectionHandler;
+    use crate::DummyNetworkBehaviour;
 
     /// A disabled [`ToggleConnectionHandler`] can receive listen upgrade errors in
     /// the following two cases:
@@ -429,7 +430,7 @@ mod tests {
     /// [`ToggleConnectionHandler`] should ignore the error in both of these cases.
     #[test]
     fn ignore_listen_upgrade_error_when_disabled() {
-        let mut handler = ToggleConnectionHandler::<KeepAliveConnectionHandler> { inner: None };
+        let mut handler = ToggleConnectionHandler::<DummyNetworkBehaviour> { inner: None };
 
         handler.inject_listen_upgrade_error(Either::Right(()), ConnectionHandlerUpgrErr::Timeout);
     }

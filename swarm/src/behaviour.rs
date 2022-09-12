@@ -62,9 +62,9 @@ pub(crate) type THandlerOutEvent<THandler> =
 /// [`Toggle`](crate::behaviour::toggle::Toggle) [`NetworkBehaviour`].
 ///
 /// ``` rust
-/// # use libp2p_swarm::KeepAliveBehaviour;
+/// # use libp2p_swarm::DummyNetworkBehaviour;
 /// # use libp2p_swarm::behaviour::toggle::Toggle;
-/// let my_behaviour = KeepAliveBehaviour::default();
+/// let my_behaviour = DummyNetworkBehaviour;
 /// let my_toggled_behaviour = Toggle::from(Some(my_behaviour));
 /// ```
 ///

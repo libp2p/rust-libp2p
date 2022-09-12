@@ -350,11 +350,11 @@ where
     /// # use libp2p_swarm::dial_opts::{DialOpts, PeerCondition};
     /// # use libp2p_core::{Multiaddr, PeerId, Transport};
     /// # use libp2p_core::transport::dummy::DummyTransport;
-    /// # use libp2p_swarm::KeepAliveBehaviour;
+    /// # use libp2p_swarm::DummyNetworkBehaviour;
     /// #
     /// let mut swarm = Swarm::new(
     ///   DummyTransport::new().boxed(),
-    ///   KeepAliveBehaviour,
+    ///   DummyNetworkBehaviour,
     ///   PeerId::random(),
     /// );
     ///
