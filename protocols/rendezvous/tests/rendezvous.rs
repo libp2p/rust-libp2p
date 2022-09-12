@@ -21,12 +21,13 @@
 #[macro_use]
 pub mod harness;
 
-use crate::harness::{await_event_or_timeout, await_events_or_timeout, new_swarm, SwarmExt};
+use crate::harness::{await_event_or_timeout, await_events_or_timeout, new_swarm};
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use libp2p_core::identity;
 use libp2p_rendezvous as rendezvous;
 use libp2p_swarm::{DialError, Swarm, SwarmEvent};
+use libp2p_swarm_test::SwarmExt;
 use std::convert::TryInto;
 use std::time::Duration;
 
@@ -164,7 +165,7 @@ async fn discover_allows_for_dial_by_peer_id() {
         new_server_with_connected_clients(rendezvous::server::Config::default()).await;
 
     let roberts_peer_id = *robert.local_peer_id();
-    robert.spawn_into_runtime();
+    tokio::spawn(robert.loop_on_next());
 
     alice
         .behaviour_mut()
@@ -272,7 +273,7 @@ async fn registration_on_clients_expire() {
             .await;
 
     let roberts_peer_id = *robert.local_peer_id();
-    robert.spawn_into_runtime();
+    tokio::spawn(robert.loop_on_next());
 
     let registration_ttl = 3;
 
