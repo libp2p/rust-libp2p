@@ -16,7 +16,7 @@ fnv = "1.0"
 futures = "0.3.1"
 futures-timer = "3.0.2"
 instant = "0.1.11"
-libp2p-core = { version = "0.35.0", path = "../core", default-features = false }
+libp2p-core = { version = "0.36.0", path = "../core", default-features = false }
 log = "0.4"
 pin-project = "1.0.0"
 rand = "0.7"
