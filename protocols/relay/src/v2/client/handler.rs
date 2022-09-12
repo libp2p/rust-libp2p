@@ -31,7 +31,9 @@ use instant::Instant;
 use libp2p_core::either::EitherError;
 use libp2p_core::multiaddr::Protocol;
 use libp2p_core::{upgrade, ConnectedPoint, Multiaddr, PeerId};
-use libp2p_swarm::handler::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper};
+use libp2p_swarm::handler::{
+    DummyConnectionHandler, InboundUpgradeSend, OutboundUpgradeSend, SendWrapper,
+};
 use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, IntoConnectionHandler,
     KeepAlive, NegotiatedSubstream, SubstreamProtocol,
@@ -123,7 +125,7 @@ impl Prototype {
 }
 
 impl IntoConnectionHandler for Prototype {
-    type Handler = Either<Handler, ()>;
+    type Handler = Either<Handler, DummyConnectionHandler>;
 
     fn into_handler(self, remote_peer_id: &PeerId, endpoint: &ConnectedPoint) -> Self::Handler {
         if endpoint.is_relayed() {
@@ -136,7 +138,7 @@ impl IntoConnectionHandler for Prototype {
             }
 
             // Deny all substreams on relayed connection.
-            Either::Right(())
+            Either::Right(DummyConnectionHandler)
         } else {
             let mut handler = Handler {
                 remote_peer_id: *remote_peer_id,

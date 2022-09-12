@@ -8,7 +8,11 @@ use libp2p_core::UpgradeError;
 use std::task::{Context, Poll};
 use void::Void;
 
-impl ConnectionHandler for () {
+/// An implementation of [`ConnectionHandler`] that neither handles any protocols nor does it keep the connection alive.
+#[derive(Clone)]
+pub struct DummyConnectionHandler;
+
+impl ConnectionHandler for DummyConnectionHandler {
     type InEvent = Void;
     type OutEvent = Void;
     type Error = Void;

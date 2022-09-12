@@ -30,6 +30,7 @@ use instant::Instant;
 use libp2p_core::connection::{ConnectedPoint, ConnectionId};
 use libp2p_core::multiaddr::Protocol;
 use libp2p_core::PeerId;
+use libp2p_swarm::handler::DummyConnectionHandler;
 use libp2p_swarm::{
     ConnectionHandlerUpgrErr, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
     PollParameters,
@@ -233,7 +234,7 @@ impl NetworkBehaviour for Relay {
         peer: &PeerId,
         connection: &ConnectionId,
         _: &ConnectedPoint,
-        _handler: Either<handler::Handler, ()>,
+        _handler: Either<handler::Handler, DummyConnectionHandler>,
         _remaining_established: usize,
     ) {
         if let hash_map::Entry::Occupied(mut peer) = self.reservations.entry(*peer) {

@@ -38,6 +38,7 @@
 //! >           the network as a whole, see the
 //! >           [`NetworkBehaviour`](crate::behaviour::NetworkBehaviour) trait.
 
+mod dummy;
 pub mod either;
 mod keep_alive;
 mod map_in;
@@ -46,7 +47,6 @@ pub mod multi;
 mod one_shot;
 mod pending;
 mod select;
-mod unit;
 
 pub use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper, UpgradeInfoSend};
 
@@ -54,6 +54,7 @@ use instant::Instant;
 use libp2p_core::{upgrade::UpgradeError, ConnectedPoint, Multiaddr, PeerId};
 use std::{cmp::Ordering, error, fmt, task::Context, task::Poll, time::Duration};
 
+pub use dummy::DummyConnectionHandler;
 pub use keep_alive::KeepAliveConnectionHandler;
 pub use map_in::MapInEvent;
 pub use map_out::MapOutEvent;

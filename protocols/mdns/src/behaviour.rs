@@ -30,6 +30,7 @@ use futures::Stream;
 use if_watch::{IfEvent, IfWatcher};
 use libp2p_core::transport::ListenerId;
 use libp2p_core::{Multiaddr, PeerId};
+use libp2p_swarm::handler::DummyConnectionHandler;
 use libp2p_swarm::{ConnectionHandler, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use smallvec::SmallVec;
 use std::collections::hash_map::{Entry, HashMap};
@@ -117,10 +118,12 @@ where
     T: Builder + Stream,
     S: AsyncSocket,
 {
-    type ConnectionHandler = ();
+    type ConnectionHandler = DummyConnectionHandler;
     type OutEvent = MdnsEvent;
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {}
+    fn new_handler(&mut self) -> Self::ConnectionHandler {
+        DummyConnectionHandler
+    }
 
     fn addresses_of_peer(&mut self, peer_id: &PeerId) -> Vec<Multiaddr> {
         self.discovered_nodes
@@ -163,7 +166,7 @@ where
         &mut self,
         cx: &mut Context<'_>,
         params: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, ()>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, DummyConnectionHandler>> {
         // Poll ifwatch.
         while let Poll::Ready(event) = Pin::new(&mut self.if_watch).poll(cx) {
             match event {

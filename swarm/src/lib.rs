@@ -77,6 +77,7 @@ pub use handler::{
 };
 pub use registry::{AddAddressResult, AddressRecord, AddressScore};
 
+use crate::handler::DummyConnectionHandler;
 use connection::pool::{Pool, PoolConfig, PoolEvent};
 use connection::{EstablishedConnection, IncomingInfo};
 use dial_opts::{DialOpts, PeerCondition};
@@ -1510,7 +1511,6 @@ impl error::Error for DialError {
 }
 
 /// Implementation of [`NetworkBehaviour`] that doesn't do anything other than keep all connections alive.
-#[derive(Default, Clone)]
 pub struct KeepAliveBehaviour;
 
 impl NetworkBehaviour for KeepAliveBehaviour {
@@ -1539,12 +1539,16 @@ impl NetworkBehaviour for KeepAliveBehaviour {
     }
 }
 
-/// Implementation of [`NetworkBehaviour`] that really doesn't do anything.
-impl NetworkBehaviour for () {
-    type ConnectionHandler = ();
+/// Implementation of [`NetworkBehaviour`] that doesn't do anything other than keep all connections alive.
+pub struct DummyNetworkBehaviour;
+
+impl NetworkBehaviour for DummyNetworkBehaviour {
+    type ConnectionHandler = DummyConnectionHandler;
     type OutEvent = void::Void;
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {}
+    fn new_handler(&mut self) -> Self::ConnectionHandler {
+        DummyConnectionHandler
+    }
 
     fn inject_event(
         &mut self,
@@ -2290,8 +2294,8 @@ mod tests {
         // Checks whether dialing an address containing the wrong peer id raises an error
         // for the expected peer id instead of the obtained peer id.
 
-        let mut swarm1 = new_test_swarm::<_, ()>(()).build();
-        let mut swarm2 = new_test_swarm::<_, ()>(()).build();
+        let mut swarm1 = new_test_swarm::<_, ()>(DummyConnectionHandler).build();
+        let mut swarm2 = new_test_swarm::<_, ()>(DummyConnectionHandler).build();
 
         swarm1.listen_on("/memory/0".parse().unwrap()).unwrap();
 
@@ -2350,7 +2354,7 @@ mod tests {
         //
         // The last two can happen in any order.
 
-        let mut swarm = new_test_swarm::<_, ()>(()).build();
+        let mut swarm = new_test_swarm::<_, ()>(DummyConnectionHandler).build();
         swarm.listen_on("/memory/0".parse().unwrap()).unwrap();
 
         let local_address =
@@ -2408,7 +2412,7 @@ mod tests {
     fn dial_self_by_id() {
         // Trying to dial self by passing the same `PeerId` shouldn't even be possible in the first
         // place.
-        let swarm = new_test_swarm::<_, ()>(()).build();
+        let swarm = new_test_swarm::<_, ()>(DummyConnectionHandler).build();
         let peer_id = *swarm.local_peer_id();
         assert!(!swarm.is_connected(&peer_id));
     }
@@ -2419,7 +2423,7 @@ mod tests {
 
         let target = PeerId::random();
 
-        let mut swarm = new_test_swarm::<_, ()>(()).build();
+        let mut swarm = new_test_swarm::<_, ()>(DummyConnectionHandler).build();
 
         let mut addresses = Vec::new();
         for _ in 0..3 {
@@ -2473,8 +2477,8 @@ mod tests {
     fn aborting_pending_connection_surfaces_error() {
         let _ = env_logger::try_init();
 
-        let mut dialer = new_test_swarm::<_, ()>(()).build();
-        let mut listener = new_test_swarm::<_, ()>(()).build();
+        let mut dialer = new_test_swarm::<_, ()>(DummyConnectionHandler).build();
+        let mut listener = new_test_swarm::<_, ()>(DummyConnectionHandler).build();
 
         let listener_peer_id = *listener.local_peer_id();
         listener.listen_on(multiaddr![Memory(0u64)]).unwrap();
