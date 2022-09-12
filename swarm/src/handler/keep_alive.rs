@@ -29,18 +29,18 @@ impl ConnectionHandler for KeepAliveConnectionHandler {
 
     fn inject_fully_negotiated_inbound(
         &mut self,
-        _: <Self::InboundProtocol as InboundUpgrade<NegotiatedSubstream>>::Output,
+        protocol: <Self::InboundProtocol as InboundUpgrade<NegotiatedSubstream>>::Output,
         _: Self::InboundOpenInfo,
     ) {
-        unreachable!("`DeniedUpgrade` is never successful.");
+        void::unreachable(protocol);
     }
 
     fn inject_fully_negotiated_outbound(
         &mut self,
-        _: <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Output,
-        v: Self::OutboundOpenInfo,
+        protocol: <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Output,
+        _: Self::OutboundOpenInfo,
     ) {
-        void::unreachable(v)
+        void::unreachable(protocol)
     }
 
     fn inject_event(&mut self, v: Self::InEvent) {
