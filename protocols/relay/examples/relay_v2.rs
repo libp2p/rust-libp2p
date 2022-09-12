@@ -48,13 +48,12 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let tcp_transport = TcpTransport::default();
 
-    let noise_keys = noise::Keypair::<noise::X25519Spec>::new()
-        .into_authentic(&local_key)
-        .expect("Signing libp2p-noise static DH keypair failed.");
-
     let transport = tcp_transport
         .upgrade(upgrade::Version::V1)
-        .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
+        .authenticate(
+            noise::NoiseAuthenticated::xx(&local_key)
+                .expect("Signing libp2p-noise static DH keypair failed."),
+        )
         .multiplex(libp2p_yamux::YamuxConfig::default())
         .boxed();
 

@@ -89,10 +89,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let (relay_transport, client) = Client::new_transport_and_behaviour(local_peer_id);
 
-    let noise_keys = noise::Keypair::<noise::X25519Spec>::new()
-        .into_authentic(&local_key)
-        .expect("Signing libp2p-noise static DH keypair failed.");
-
     let transport = OrTransport::new(
         relay_transport,
         block_on(DnsConfig::system(TcpTransport::new(
@@ -101,7 +97,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         .unwrap(),
     )
     .upgrade(upgrade::Version::V1)
-    .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
+    .authenticate(
+        noise::NoiseAuthenticated::xx(&local_key)
+            .expect("Signing libp2p-noise static DH keypair failed."),
+    )
     .multiplex(libp2p_yamux::YamuxConfig::default())
     .boxed();
 
