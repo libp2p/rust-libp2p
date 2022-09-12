@@ -1,8 +1,9 @@
 use libp2p_core::{
     identity::Keypair,
     multiaddr::{Multiaddr, Protocol},
+    muxing::StreamMuxerEvent,
     transport::{ListenerId, TransportError, TransportEvent},
-    PeerId, StreamMuxer, muxing::StreamMuxerEvent, Transport,
+    PeerId, StreamMuxer, Transport,
 };
 
 use std::{
@@ -261,7 +262,7 @@ impl Transport for QuicTransport {
             quinn::Endpoint::server(server_config, socket_addr).unwrap();
         endpoint.set_default_client_config(client_config);
 
-        let in_addr = InAddr::new(socket_addr.ip());
+        let in_addr = InAddr::new(socket_addr.ip()).map_err(TransportError::Other)?;
 
         let listener_id = ListenerId::new();
         let listener = Listener::new(listener_id, endpoint, new_connections, in_addr);
