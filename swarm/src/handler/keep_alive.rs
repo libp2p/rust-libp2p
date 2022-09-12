@@ -20,8 +20,8 @@ impl ConnectionHandler for KeepAliveConnectionHandler {
     type Error = Void;
     type InboundProtocol = DeniedUpgrade;
     type OutboundProtocol = DeniedUpgrade;
-    type OutboundOpenInfo = Void;
     type InboundOpenInfo = ();
+    type OutboundOpenInfo = Void;
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
         SubstreamProtocol::new(DeniedUpgrade, ())
