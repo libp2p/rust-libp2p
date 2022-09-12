@@ -134,8 +134,7 @@ impl WebRTCConnection {
             .create_data_channel(
                 "data",
                 Some(RTCDataChannelInit {
-                    id: Some(1),
-                    negotiated: Some(true),
+                    negotiated: Some(1),
                     ..RTCDataChannelInit::default()
                 }),
             )
