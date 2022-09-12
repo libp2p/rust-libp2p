@@ -22,6 +22,10 @@
 
 use async_trait::async_trait;
 use futures::{channel::mpsc, prelude::*, AsyncWriteExt};
+use libp2p::noise::{Keypair, NoiseConfig, X25519Spec};
+use libp2p::request_response::*;
+use libp2p::swarm::{Swarm, SwarmEvent};
+use libp2p::tcp::{GenTcpConfig, TcpTransport};
 use libp2p_core::{
     identity,
     muxing::StreamMuxerBox,
@@ -29,10 +33,6 @@ use libp2p_core::{
     upgrade::{self, read_length_prefixed, write_length_prefixed},
     Multiaddr, PeerId,
 };
-use libp2p_noise::{Keypair, NoiseConfig, X25519Spec};
-use libp2p_request_response::*;
-use libp2p_swarm::{Swarm, SwarmEvent};
-use libp2p_tcp::{GenTcpConfig, TcpTransport};
 use rand::{self, Rng};
 use std::{io, iter};
 
@@ -303,7 +303,7 @@ fn mk_transport() -> (PeerId, transport::Boxed<(PeerId, StreamMuxerBox)>) {
         TcpTransport::new(GenTcpConfig::default().nodelay(true))
             .upgrade(upgrade::Version::V1)
             .authenticate(NoiseConfig::xx(noise_keys).into_authenticated())
-            .multiplex(libp2p_yamux::YamuxConfig::default())
+            .multiplex(libp2p::yamux::YamuxConfig::default())
             .boxed(),
     )
 }

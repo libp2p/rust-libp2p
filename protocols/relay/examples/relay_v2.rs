@@ -55,7 +55,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let transport = tcp_transport
         .upgrade(upgrade::Version::V1)
         .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
-        .multiplex(libp2p_yamux::YamuxConfig::default())
+        .multiplex(libp2p::yamux::YamuxConfig::default())
         .boxed();
 
     let behaviour = Behaviour {

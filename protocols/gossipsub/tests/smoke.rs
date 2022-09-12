@@ -29,6 +29,9 @@ use std::{
 };
 
 use futures::StreamExt;
+use libp2p::plaintext::PlainText2Config;
+use libp2p::swarm::{Swarm, SwarmEvent};
+use libp2p::yamux;
 use libp2p_core::{
     identity, multiaddr::Protocol, transport::MemoryTransport, upgrade, Multiaddr, Transport,
 };
@@ -36,9 +39,6 @@ use libp2p_gossipsub::{
     Gossipsub, GossipsubConfigBuilder, GossipsubEvent, IdentTopic as Topic, MessageAuthenticity,
     ValidationMode,
 };
-use libp2p_plaintext::PlainText2Config;
-use libp2p_swarm::{Swarm, SwarmEvent};
-use libp2p_yamux as yamux;
 
 struct Graph {
     pub nodes: Vec<(Multiaddr, Swarm<Gossipsub>)>,
