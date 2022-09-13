@@ -147,6 +147,10 @@ pub use libp2p_websocket as websocket;
 #[cfg_attr(docsrs, doc(cfg(feature = "yamux")))]
 #[doc(inline)]
 pub use libp2p_yamux as yamux;
+#[cfg(feature = "onion")]
+#[cfg_attr(docsrs, doc(cfg(feature = "onion")))]
+#[doc(inline)]
+pub use libp2p_onion as onion;
 
 mod transport_ext;
 

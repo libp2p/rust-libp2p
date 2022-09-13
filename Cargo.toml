@@ -35,6 +35,9 @@ default = [
     "wasm-ext",
     "websocket",
     "yamux",
+    "onion",
+    "onion-async-std",
+    "onion-native-tls"
 ]
 
 autonat = ["dep:libp2p-autonat"]
@@ -68,6 +71,11 @@ yamux = ["dep:libp2p-yamux"]
 secp256k1 = ["libp2p-core/secp256k1"]
 rsa = ["libp2p-core/rsa"]
 serde = ["libp2p-core/serde", "libp2p-kad?/serde", "libp2p-gossipsub?/serde"]
+onion = ["dep:libp2p-onion"]
+onion-async-std = ["libp2p-onion?/async-std"]
+onion-tokio = ["libp2p-onion?/tokio"]
+onion-native-tls = ["libp2p-onion?/native-tls"]
+onion-rustls = ["libp2p-onion?/rustls"]
 
 [package.metadata.docs.rs]
 all-features = true
@@ -112,6 +120,7 @@ libp2p-dns = { version = "0.36.0", path = "transports/dns", optional = true, def
 libp2p-mdns = { version = "0.40.0", path = "protocols/mdns", optional = true, default-features = false }
 libp2p-tcp = { version = "0.37.0", path = "transports/tcp", default-features = false, optional = true }
 libp2p-websocket = { version = "0.38.0", path = "transports/websocket", optional = true }
+libp2p-onion = { version = "0.1.0", path = "transports/onion", default-features = false, optional = true }
 
 [target.'cfg(not(target_os = "unknown"))'.dependencies]
 libp2p-gossipsub = { version = "0.41.0", path = "protocols/gossipsub", optional = true }
@@ -177,3 +186,7 @@ required-features = ["gossipsub"]
 [[example]]
 name = "ipfs-private"
 required-features = ["gossipsub"]
+
+[[example]]
+name = "ping-onion"
+required-features = ["onion", "onion-async-std", "onion-native-tls", "tcp-async-io", "dns-async-std"]
