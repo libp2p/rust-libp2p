@@ -1,16 +1,7 @@
-#![cfg_attr(docsrs, feature(doc_cfg))]
+#![doc(html_logo_url = "https://libp2p.io/img/logo_small.png")]
+#![doc(html_favicon_url = "https://libp2p.io/img/favicon.png")]
 
-#[cfg(all(feature = "async-std", feature = "tokio"))]
-compile_error!("The features `async-std` and `tokio` are mutually exclusive");
-
-// this is somewhat unnecessary, since arti-client won't compile before this is evaluated.
-#[cfg(not(any(feature = "async-std", feature = "tokio")))]
-compile_error!("Either one of the features `async-std` or `tokio` have to be enabled");
-
-#[cfg(all(feature = "native-tls", feature = "rustls"))]
-compile_error!("The features `native-tls` and `tokio` are mutually exclusive");
-
-use core::pin::Pin;
+use std::pin::Pin;
 use std::sync::Arc;
 
 use address::dangerous_extract_tor_address;
@@ -20,21 +11,11 @@ use libp2p_core::{transport::TransportError, Multiaddr, Transport};
 use tor_rtcompat::PreferredRuntime;
 
 mod address;
+mod provider;
 
-#[cfg(feature = "async-std")]
-mod async_io;
-#[cfg(feature = "async-std")]
-#[doc(hidden)]
-pub use crate::async_io::OnionStream as PrivateOnionStream;
+#[doc(inline)]
+pub use provider::OnionStream;
 
-#[cfg(feature = "tokio")]
-mod tokio;
-#[cfg(feature = "tokio")]
-#[doc(hidden)]
-pub use crate::tokio::OnionStream as PrivateOnionStream;
-
-#[cfg(any(feature = "tokio", feature = "async-std", docsrs))]
-pub use PrivateOnionStream as OnionStream;
 
 #[derive(Debug, thiserror::Error)]
 pub enum OnionError {
