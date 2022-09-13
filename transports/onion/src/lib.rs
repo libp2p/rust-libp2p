@@ -16,7 +16,6 @@ mod provider;
 #[doc(inline)]
 pub use provider::OnionStream;
 
-
 #[derive(Debug, thiserror::Error)]
 pub enum OnionError {
     #[error("error during address translation")]

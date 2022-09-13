@@ -42,7 +42,10 @@
 
 use futures::prelude::*;
 use libp2p::swarm::{Swarm, SwarmEvent};
-use libp2p::{identity, ping, Multiaddr, PeerId, dns, tcp, onion, Transport, noise, yamux, mplex, core::upgrade};
+use libp2p::{
+    core::upgrade, dns, identity, mplex, noise, onion, ping, tcp, yamux, Multiaddr, PeerId,
+    Transport,
+};
 use std::error::Error;
 
 async fn onion_transport(
@@ -52,7 +55,6 @@ async fn onion_transport(
     Box<dyn Error>,
 > {
     use std::time::Duration;
-
 
     let transport = {
         let dns_tcp = dns::DnsConfig::system(tcp::TcpTransport::new(
