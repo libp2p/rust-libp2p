@@ -1,0 +1,30 @@
+[package]
+name = "libp2p-onion"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+resolver = "2"
+
+
+[dependencies]
+libp2p-core = { version = "0.36.0", path = "../../core", default-features = false }
+futures = "0.3"
+arti-client = { version = "0.6", default-features = false }
+thiserror = "1"
+tor-rtcompat = "0.6"
+tokio-crate = { package = "tokio", version = "1", optional = true, default-features = false }
+async-std-crate = { package = "async-std", version = "1", optional = true, default-features = false }
+
+[dev-dependencies]
+libp2p = { version = "0.49", path = "../../" }
+tokio-crate = { package = "tokio", version = "1", features = ["rt", "macros"] }
+async-std-crate = { package = "async-std", version = "1", features = ["attributes"] }
+
+
+[features]
+default = ["async-std", "native-tls"]
+tokio = ["arti-client/tokio", "dep:tokio-crate"]
+async-std = ["arti-client/async-std"]
+native-tls = ["arti-client/native-tls"]
+rustls = ["arti-client/rustls"]
+
