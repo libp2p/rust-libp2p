@@ -3,6 +3,7 @@ use std::pin::Pin;
 use arti_client::DataStream;
 use futures::{AsyncRead, AsyncWrite};
 
+#[derive(Debug)]
 pub struct OnionStream {
     inner: DataStream,
 }

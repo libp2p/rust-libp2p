@@ -27,6 +27,7 @@ pub enum OnionError {
     OnionServiceUnimplemented,
 }
 
+#[derive(Clone)]
 pub struct OnionClient {
     // client is in an Arc, because wihtout it the Transport::Dial method can't be implemented,
     // due to lifetime issues. With the, eventual, stabilization of static async traits this issue
