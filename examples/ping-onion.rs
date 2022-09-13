@@ -25,7 +25,7 @@
 //! In the first terminal window, run:
 //!
 //! ```sh
-//! cargo run --example ping
+//! cargo run --example ping-onion
 //! ```
 //!
 //! It will print the PeerId and the listening addresses, e.g. `Listening on
@@ -34,7 +34,7 @@
 //! In the second terminal window, start a new instance of the example with:
 //!
 //! ```sh
-//! cargo run --example ping -- /ip4/127.0.0.1/tcp/24915
+//! cargo run --example ping-onion -- /ip4/127.0.0.1/tcp/24915
 //! ```
 //!
 //! The two nodes establish a connection, negotiate the ping protocol
@@ -88,6 +88,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let local_peer_id = PeerId::from(local_key.public());
     println!("Local peer id: {:?}", local_peer_id);
 
+    // create a transport
     let transport = onion_transport(local_key).await?;
 
     // Create a ping network behaviour.
