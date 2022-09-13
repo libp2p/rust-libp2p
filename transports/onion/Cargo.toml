@@ -28,3 +28,6 @@ async-std = ["arti-client/async-std"]
 native-tls = ["arti-client/native-tls"]
 rustls = ["arti-client/rustls"]
 
+[package.metadata.docs.rs]
+rustdoc-args = ["--cfg", "docsrs"]
+rustc-args = ["--cfg", "docsrs"]

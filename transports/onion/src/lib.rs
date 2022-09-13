@@ -1,3 +1,5 @@
+#![cfg_attr(docsrs, feature(doc_cfg))]
+
 #[cfg(all(feature = "async-std", feature = "tokio"))]
 compile_error!("The features `async-std` and `tokio` are mutually exclusive");
 
@@ -20,14 +22,19 @@ use tor_rtcompat::PreferredRuntime;
 mod address;
 
 #[cfg(feature = "async-std")]
-pub mod async_io;
+mod async_io;
 #[cfg(feature = "async-std")]
-pub use crate::async_io::OnionStream;
+#[doc(hidden)]
+pub use crate::async_io::OnionStream as PrivateOnionStream;
 
 #[cfg(feature = "tokio")]
-pub mod tokio;
+mod tokio;
 #[cfg(feature = "tokio")]
-pub use crate::tokio::OnionStream;
+#[doc(hidden)]
+pub use crate::tokio::OnionStream as PrivateOnionStream;
+
+#[cfg(any(feature = "tokio", feature = "async-std", docsrs))]
+pub use PrivateOnionStream as OnionStream;
 
 #[derive(Debug, thiserror::Error)]
 pub enum OnionError {
@@ -40,6 +47,9 @@ pub enum OnionError {
 }
 
 pub struct OnionClient {
+    // client is in an Arc, because wihtout it the Transport::Dial method can't be implemented,
+    // due to lifetime issues. With the, eventual, stabilization of static async traits this issue
+    // will be resolved.
     client: Arc<TorClient<PreferredRuntime>>,
 }
 
@@ -81,16 +91,20 @@ impl Transport for OnionClient {
     type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
     type ListenerUpgrade = AlwaysErrorListenerUpgrade;
 
+    /// Always returns `TransportError::MultiaddrNotSupported`
     fn listen_on(
         &mut self,
-        _addr: libp2p_core::Multiaddr,
+        addr: libp2p_core::Multiaddr,
     ) -> Result<
         libp2p_core::transport::ListenerId,
         libp2p_core::transport::TransportError<Self::Error>,
     > {
-        Err(TransportError::Other(OnionError::OnionServiceUnimplemented))
+        // although this address might be supported, this is returned in order to not provoke an
+        // error when trying to listen on this transport.
+        Err(TransportError::MultiaddrNotSupported(addr))
     }
 
+    /// Always returns false
     fn remove_listener(&mut self, _id: libp2p_core::transport::ListenerId) -> bool {
         false
     }
@@ -103,6 +117,7 @@ impl Transport for OnionClient {
         Ok(async move { Ok(OnionStream::new(onion_client.connect(tor_address).await?)) }.boxed())
     }
 
+    /// Equivalent to `Transport::dial`
     fn dial_as_listener(
         &mut self,
         addr: Multiaddr,
@@ -110,15 +125,18 @@ impl Transport for OnionClient {
         self.dial(addr)
     }
 
+    /// always returns `None`
     fn address_translation(&self, _listen: &Multiaddr, _observed: &Multiaddr) -> Option<Multiaddr> {
         None
     }
 
+    /// always returns pending
     fn poll(
         self: Pin<&mut Self>,
         _cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<libp2p_core::transport::TransportEvent<Self::ListenerUpgrade, Self::Error>>
     {
+        // pending is returned here, because this won't panic an OrTransport.
         std::task::Poll::Pending
     }
 }
