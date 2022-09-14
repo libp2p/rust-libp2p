@@ -1,3 +1,9 @@
+# 0.39.1
+
+- Add `NoiseConfig::with_prologue` which allows users to set the noise prologue of the handshake. See [PR XXXX].
+
+[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXX
+
 # 0.39.0
 
 - Update to `libp2p-core` `v0.36.0`.

@@ -79,6 +79,7 @@ pub struct NoiseConfig<P, C: Zeroize, R = ()> {
     legacy: LegacyConfig,
     remote: R,
     _marker: std::marker::PhantomData<P>,
+    prologue: Vec<u8>,
 }
 
 impl<H, C: Zeroize, R> NoiseConfig<H, C, R> {
@@ -86,6 +87,15 @@ impl<H, C: Zeroize, R> NoiseConfig<H, C, R> {
     /// with a `Swarm`.
     pub fn into_authenticated(self) -> NoiseAuthenticated<H, C, R> {
         NoiseAuthenticated { config: self }
+    }
+
+    /// Set the noise prologue.
+    ///
+    /// The prologue can contain arbitrary data and will be hashed into the noise handshake.
+    /// For the handshake to succeed, both parties must set the same prologue.
+    pub fn with_prologue(&mut self, prologue: Vec<u8>) -> &mut Self {
+        self.prologue = prologue;
+        self
     }
 
     /// Sets the legacy configuration options to use, if any.
@@ -107,6 +117,7 @@ where
             legacy: LegacyConfig::default(),
             remote: (),
             _marker: std::marker::PhantomData,
+            prologue: Vec::default(),
         }
     }
 }
@@ -123,6 +134,7 @@ where
             legacy: LegacyConfig::default(),
             remote: (),
             _marker: std::marker::PhantomData,
+            prologue: Vec::default(),
         }
     }
 }
@@ -142,6 +154,7 @@ where
             legacy: LegacyConfig::default(),
             remote: (),
             _marker: std::marker::PhantomData,
+            prologue: Vec::default(),
         }
     }
 }
@@ -165,6 +178,7 @@ where
             legacy: LegacyConfig::default(),
             remote: (remote_dh, remote_id),
             _marker: std::marker::PhantomData,
+            prologue: Vec::default(),
         }
     }
 }
@@ -185,6 +199,7 @@ where
         let session = self
             .params
             .into_builder()
+            .prologue(self.prologue.as_ref())
             .local_private_key(self.dh_keys.secret().as_ref())
             .build_responder()
             .map_err(NoiseError::from);
@@ -212,6 +227,7 @@ where
         let session = self
             .params
             .into_builder()
+            .prologue(self.prologue.as_ref())
             .local_private_key(self.dh_keys.secret().as_ref())
             .build_initiator()
             .map_err(NoiseError::from);
@@ -241,6 +257,7 @@ where
         let session = self
             .params
             .into_builder()
+            .prologue(self.prologue.as_ref())
             .local_private_key(self.dh_keys.secret().as_ref())
             .build_responder()
             .map_err(NoiseError::from);
@@ -268,6 +285,7 @@ where
         let session = self
             .params
             .into_builder()
+            .prologue(self.prologue.as_ref())
             .local_private_key(self.dh_keys.secret().as_ref())
             .build_initiator()
             .map_err(NoiseError::from);
@@ -297,6 +315,7 @@ where
         let session = self
             .params
             .into_builder()
+            .prologue(self.prologue.as_ref())
             .local_private_key(self.dh_keys.secret().as_ref())
             .build_responder()
             .map_err(NoiseError::from);
@@ -324,6 +343,7 @@ where
         let session = self
             .params
             .into_builder()
+            .prologue(self.prologue.as_ref())
             .local_private_key(self.dh_keys.secret().as_ref())
             .remote_public_key(self.remote.0.as_ref())
             .build_initiator()
