@@ -61,7 +61,7 @@ async fn onion_transport(
             tcp::GenTcpConfig::new().nodelay(true),
         ))
         .await?;
-        let onion = onion::OnionClient::from_builder(onion::OnionClient::builder())?;
+        let onion = onion::OnionClient::from_builder(onion::OnionClient::builder(), false)?;
         println!("bootstrapping...");
         onion.bootstrap().await?;
         println!("bootstrapped!");
