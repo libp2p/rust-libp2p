@@ -18,7 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use multihash::Multihash;
+use multibase::Base;
+use multihash::{Code, Multihash, MultihashDigest};
 use webrtc::dtls_transport::dtls_fingerprint::RTCDtlsFingerprint;
 
 const SHA256: &str = "sha-256";
@@ -36,7 +37,14 @@ impl Fingerprint {
 
     /// Transforms this fingerprint into a ufrag.
     pub fn to_ufrag(&self) -> String {
-        self.0.value.replace(':', "").to_lowercase()
+        // Only support SHA-256 for now.
+        assert_eq!(self.algorithm(), SHA256.to_owned());
+        let mut buf = [0; 32];
+        hex::decode_to_slice(self.0.value.replace(':', ""), &mut buf).unwrap();
+        multibase::encode(
+            Base::Base64Url,
+            Code::Sha2_256.wrap(&buf).unwrap().to_bytes(),
+        )
     }
 
     /// Returns the upper-hex value, each byte separated by ":".
