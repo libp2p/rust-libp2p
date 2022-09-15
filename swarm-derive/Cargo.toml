@@ -22,3 +22,4 @@ syn = { version = "1.0.8", default-features = false, features = ["clone-impls", 
 libp2p = { path = "../", default-features = false, features = ["ping", "identify", "kad"] }
 either = "1.6.0"
 futures = "0.3.1"
+void = "1"
