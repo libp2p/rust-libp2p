@@ -447,7 +447,7 @@ mod tests {
     use crate::K_VALUE;
     use libp2p_core::multihash::{Code, Multihash};
     use quickcheck::*;
-    use rand::{seq::SliceRandom, Rng};
+    use rand::seq::SliceRandom;
     use std::collections::HashSet;
     use std::iter;
 
@@ -455,7 +455,7 @@ mod tests {
         fn arbitrary(g: &mut Gen) -> Self {
             let target = Target::arbitrary(g).0;
             let num_closest_iters = g.gen_range(0..20 + 1);
-            let peers = random_peers(g.gen_range(0..20 * num_closest_iters + 1));
+            let peers = random_peers(g.gen_range(0..20 * num_closest_iters + 1), g);
 
             let iters: Vec<_> = (0..num_closest_iters)
                 .map(|_| {
@@ -533,24 +533,30 @@ mod tests {
     }
 
     #[derive(Clone, Debug)]
-    struct Target(KeyBytes);
+    struct ArbitraryPeerId(PeerId);
 
-    impl Arbitrary for Target {
-        fn arbitrary(_g: &mut Gen) -> Self {
-            Target(Key::from(random_peers(1).pop().unwrap()).into())
+    impl Arbitrary for ArbitraryPeerId {
+        fn arbitrary(g: &mut Gen) -> ArbitraryPeerId {
+            let hash: [u8; 32] = core::array::from_fn(|_| u8::arbitrary(g));
+            let peer_id =
+                PeerId::from_multihash(Multihash::wrap(Code::Sha2_256.into(), &hash).unwrap())
+                    .unwrap();
+            ArbitraryPeerId(peer_id)
         }
     }
 
-    fn random_peers(n: usize) -> Vec<PeerId> {
-        let mut g = rand::thread_rng();
-        (0..n)
-            .map(|_| {
-                PeerId::from_multihash(
-                    Multihash::wrap(Code::Sha2_256.into(), &g.gen::<[u8; 32]>()).unwrap(),
-                )
-                .unwrap()
-            })
-            .collect()
+    #[derive(Clone, Debug)]
+    struct Target(KeyBytes);
+
+    impl Arbitrary for Target {
+        fn arbitrary(g: &mut Gen) -> Self {
+            let peer_id = ArbitraryPeerId::arbitrary(g).0;
+            Target(Key::from(peer_id).into())
+        }
+    }
+
+    fn random_peers(n: usize, g: &mut Gen) -> Vec<PeerId> {
+        (0..n).map(|_| ArbitraryPeerId::arbitrary(g).0).collect()
     }
 
     #[test]
@@ -745,7 +751,7 @@ mod tests {
 
     impl Arbitrary for Graph {
         fn arbitrary(g: &mut Gen) -> Self {
-            let mut peer_ids = random_peers(g.gen_range(K_VALUE.get()..200))
+            let mut peer_ids = random_peers(g.gen_range(K_VALUE.get()..200), g)
                 .into_iter()
                 .map(|peer_id| (peer_id.clone(), Key::from(peer_id)))
                 .collect::<Vec<_>>();
