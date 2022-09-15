@@ -25,6 +25,7 @@ use super::*;
 use crate::kbucket::Distance;
 use crate::record::{store::MemoryStore, Key};
 use crate::K_VALUE;
+use env_logger::init;
 use futures::{executor::block_on, future::poll_fn, prelude::*};
 use futures_timer::Delay;
 use libp2p_core::{
@@ -46,7 +47,6 @@ use std::{
     time::Duration,
     u64,
 };
-use env_logger::init;
 
 type TestSwarm = Swarm<Kademlia<MemoryStore>>;
 
@@ -854,8 +854,6 @@ fn get_record_many() {
 /// network where X is equal to the configured replication factor.
 #[test]
 fn add_provider() {
-    init();
-
     fn prop(keys: Vec<record::Key>, seed: Seed) {
         let mut rng = StdRng::from_seed(seed.0);
         let replication_factor =
