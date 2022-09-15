@@ -1,4 +1,4 @@
-# 0.30.1
+# 0.30.1 [unreleased]
 
 - Fix an issue where the derive would generate bad code if the type parameters between the behaviour and a custom
   out event differed. See [PR 2907].
