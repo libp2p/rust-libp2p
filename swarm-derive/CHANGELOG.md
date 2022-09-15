@@ -1,9 +1,9 @@
 # 0.30.1
 
 - Fix an issue where the derive would generate bad code if the type parameters between the behaviour and a custom
-  out event differed. See [PR XXXX].
+  out event differed. See [PR 2907].
 
-[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+[PR 2907]: https://github.com/libp2p/rust-libp2p/pull/2907
 
 # 0.30.0
 
