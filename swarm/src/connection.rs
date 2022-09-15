@@ -256,7 +256,7 @@ where
 
             // Check if the connection (and handler) should be shut down.
             // As long as we're still negotiating substreams, shutdown is always postponed.
-            if negotiating_in.is_empty() && negotiating_out.is_empty() {
+            if negotiating_in.is_empty() && negotiating_out.is_empty() && requested_substreams.is_empty() {
                 match shutdown {
                     Shutdown::None => {}
                     Shutdown::Asap => return Poll::Ready(Err(ConnectionError::KeepAliveTimeout)),
