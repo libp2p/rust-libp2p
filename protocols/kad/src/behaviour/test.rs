@@ -25,7 +25,6 @@ use super::*;
 use crate::kbucket::Distance;
 use crate::record::{store::MemoryStore, Key};
 use crate::K_VALUE;
-use env_logger::init;
 use futures::{executor::block_on, future::poll_fn, prelude::*};
 use futures_timer::Delay;
 use libp2p_core::{
