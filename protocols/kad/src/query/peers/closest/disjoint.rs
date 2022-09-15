@@ -447,7 +447,6 @@ mod tests {
     use crate::K_VALUE;
     use libp2p_core::multihash::{Code, Multihash};
     use quickcheck::*;
-    use rand::seq::SliceRandom;
     use std::collections::HashSet;
     use std::iter;
 
@@ -460,8 +459,9 @@ mod tests {
             let iters: Vec<_> = (0..num_closest_iters)
                 .map(|_| {
                     let num_peers = g.gen_range(0..20 + 1);
-                    let mut peers = peers
-                        .choose_multiple(&mut rand::thread_rng(), num_peers)
+                    let mut peers = g
+                        .choose_multiple(&peers, num_peers)
+                        .into_iter()
                         .cloned()
                         .map(Key::from)
                         .collect::<Vec<_>>();
@@ -780,11 +780,12 @@ mod tests {
 
             // Make each peer aware of a random set of other peers within the graph.
             for (peer_id, peer) in peers.iter_mut() {
-                peer_ids.shuffle(&mut rand::thread_rng());
+                g.shuffle(&mut peer_ids);
 
                 let num_peers = g.gen_range(K_VALUE.get()..peer_ids.len() + 1);
-                let mut random_peer_ids = peer_ids
-                    .choose_multiple(&mut rand::thread_rng(), num_peers)
+                let mut random_peer_ids = g
+                    .choose_multiple(&peer_ids, num_peers)
+                    .into_iter()
                     // Make sure not to include itself.
                     .filter(|(id, _)| peer_id != id)
                     .cloned()
