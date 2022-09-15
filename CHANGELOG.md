@@ -49,6 +49,8 @@
 - Update individual crates.
     - Update to [`libp2p-kad` `v0.40.1`](protocols/kad/CHANGELOG.md#???).
     - Update to [`libp2p-ping` `v0.39.1`](protocols/ping/CHANGELOG.md#???).
+    - Update to [`libp2p-floodsub` `v0.39.1`](protocols/floodsub/CHANGELOG.md#???).
+    - Update to [`libp2p-gossipsub` `v0.41.1`](protocols/gossipsub/CHANGELOG.md#???).
     - Update to [`libp2p-request-response` `v0.21.1`](protocols/request-response/CHANGELOG.md#???).
     - Update to [`libp2p-pnet` `v0.22.1`](transports/pnet/CHANGELOG.md#???).
     - Update to [`libp2p-mplex` `v0.36.1`](muxers/mplex/CHANGELOG.md#???).

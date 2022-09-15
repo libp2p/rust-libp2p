@@ -83,7 +83,7 @@ lazy_static = "1.2"
 libp2p-autonat = { version = "0.7.0", path = "protocols/autonat", optional = true }
 libp2p-core = { version = "0.36.0", path = "core",  default-features = false }
 libp2p-dcutr = { version = "0.6.0", path = "protocols/dcutr",  optional = true }
-libp2p-floodsub = { version = "0.39.0", path = "protocols/floodsub", optional = true }
+libp2p-floodsub = { version = "0.39.1", path = "protocols/floodsub", optional = true }
 libp2p-identify = { version = "0.39.0", path = "protocols/identify", optional = true }
 libp2p-kad = { version = "0.40.1", path = "protocols/kad", optional = true }
 libp2p-metrics = { version = "0.9.0", path = "misc/metrics", optional = true }
@@ -113,7 +113,7 @@ libp2p-tcp = { version = "0.37.0", path = "transports/tcp", default-features = f
 libp2p-websocket = { version = "0.38.0", path = "transports/websocket", optional = true }
 
 [target.'cfg(not(target_os = "unknown"))'.dependencies]
-libp2p-gossipsub = { version = "0.41.0", path = "protocols/gossipsub", optional = true }
+libp2p-gossipsub = { version = "0.41.1", path = "protocols/gossipsub", optional = true }
 
 [dev-dependencies]
 async-std = { version = "1.6.2", features = ["attributes"] }
