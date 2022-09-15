@@ -103,7 +103,10 @@ where
     /// the total number of streams can be enforced at the
     /// [`StreamMuxerBox`](libp2p_core::muxing::StreamMuxerBox) level.
     max_negotiating_inbound_streams: usize,
-    /// TODO
+    /// Contains all upgrades that are waiting for a new outbound substream.
+    ///
+    /// The upgrade timeout is already ticking here so this may fail in case the remote is not quick
+    /// enough in providing us with a new stream.
     requested_substreams: FuturesUnordered<
         SubstreamRequested<THandler::OutboundOpenInfo, THandler::OutboundProtocol>,
     >,
