@@ -27,7 +27,7 @@ use futures::{
     ready,
     stream::{BoxStream, LocalBoxStream},
 };
-use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent, StreamMuxerExt};
+use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use std::collections::VecDeque;
 use std::{
@@ -125,13 +125,7 @@ where
             return Poll::Ready(Ok(stream));
         }
 
-        self.incoming.poll_next_unpin(cx).map(|maybe_stream| {
-            let stream = maybe_stream
-                .transpose()?
-                .ok_or(YamuxError(ConnectionError::Closed))?;
-
-            Ok(stream)
-        })
+        self.poll_inner(cx)
     }
 
     fn poll_outbound(
@@ -150,9 +144,10 @@ where
         let this = self.get_mut();
 
         loop {
-            let inbound_stream = ready!(this.poll_inbound_unpin(cx))?;
+            let inbound_stream = ready!(this.poll_inner(cx))?;
 
             if this.inbound_stream_buffer.len() >= MAX_BUFFERED_INBOUND_STREAMS {
+                log::warn!("dropping {inbound_stream} because buffer is full");
                 drop(inbound_stream);
                 continue;
             }
@@ -177,6 +172,21 @@ where
         }
 
         Poll::Pending
+    }
+}
+
+impl<S> Yamux<S>
+where
+    S: Stream<Item = Result<yamux::Stream, YamuxError>> + Unpin,
+{
+    fn poll_inner(&mut self, cx: &mut Context<'_>) -> Poll<Result<yamux::Stream, YamuxError>> {
+        self.incoming.poll_next_unpin(cx).map(|maybe_stream| {
+            let stream = maybe_stream
+                .transpose()?
+                .ok_or(YamuxError(ConnectionError::Closed))?;
+
+            Ok(stream)
+        })
     }
 }
 

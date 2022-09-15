@@ -46,6 +46,7 @@ use std::{
     time::Duration,
     u64,
 };
+use env_logger::init;
 
 type TestSwarm = Swarm<Kademlia<MemoryStore>>;
 
@@ -853,6 +854,8 @@ fn get_record_many() {
 /// network where X is equal to the configured replication factor.
 #[test]
 fn add_provider() {
+    init();
+
     fn prop(keys: Vec<record::Key>, seed: Seed) {
         let mut rng = StdRng::from_seed(seed.0);
         let replication_factor =
