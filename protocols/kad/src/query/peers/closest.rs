@@ -483,8 +483,7 @@ mod tests {
     use rand::{rngs::StdRng, Rng, SeedableRng};
     use std::{iter, time::Duration};
 
-    fn random_peers(n: usize) -> Vec<PeerId> {
-        let mut g = rand::thread_rng();
+    fn random_peers<R: Rng>(n: usize, g: &mut R) -> Vec<PeerId> {
         (0..n)
             .map(|_| {
                 PeerId::from_multihash(
@@ -501,10 +500,25 @@ mod tests {
             .all(|w| w[0].distance(&target) < w[1].distance(&target))
     }
 
+    #[derive(Clone, Debug)]
+    struct ArbitraryPeerId(PeerId);
+
+    impl Arbitrary for ArbitraryPeerId {
+        fn arbitrary(g: &mut Gen) -> ArbitraryPeerId {
+            let hash: [u8; 32] = core::array::from_fn(|_| u8::arbitrary(g));
+            let peer_id =
+                PeerId::from_multihash(Multihash::wrap(Code::Sha2_256.into(), &hash).unwrap())
+                    .unwrap();
+            ArbitraryPeerId(peer_id)
+        }
+    }
+
     impl Arbitrary for ClosestPeersIter {
         fn arbitrary(g: &mut Gen) -> ClosestPeersIter {
-            let known_closest_peers = random_peers(g.gen_range(1..60)).into_iter().map(Key::from);
-            let target = Key::from(Into::<Multihash>::into(PeerId::random()));
+            let known_closest_peers = (0..g.gen_range(1..60u8))
+                .map(|_| Key::from(ArbitraryPeerId::arbitrary(g).0))
+                .collect::<Vec<_>>();
+            let target = Key::from(ArbitraryPeerId::arbitrary(g).0);
             let config = ClosestPeersIterConfig {
                 parallelism: NonZeroUsize::new(g.gen_range(1..10)).unwrap(),
                 num_results: NonZeroUsize::new(g.gen_range(1..25)).unwrap(),
@@ -613,7 +627,7 @@ mod tests {
                 for (i, k) in expected.iter().enumerate() {
                     if rng.gen_bool(0.75) {
                         let num_closer = rng.gen_range(0..iter.config.num_results.get() + 1);
-                        let closer_peers = random_peers(num_closer);
+                        let closer_peers = random_peers(num_closer, &mut rng);
                         remaining.extend(closer_peers.iter().cloned().map(Key::from));
                         iter.on_success(k.preimage(), closer_peers);
                     } else {
@@ -668,10 +682,10 @@ mod tests {
 
     #[test]
     fn no_duplicates() {
-        fn prop(mut iter: ClosestPeersIter) -> bool {
+        fn prop(mut iter: ClosestPeersIter, closer: ArbitraryPeerId) -> bool {
             let now = Instant::now();
 
-            let closer = random_peers(1);
+            let closer = vec![closer.0];
 
             // A first peer reports a "closer" peer.
             let peer1 = match iter.next(now) {
@@ -703,7 +717,9 @@ mod tests {
             true
         }
 
-        QuickCheck::new().tests(10).quickcheck(prop as fn(_) -> _)
+        QuickCheck::new()
+            .tests(10)
+            .quickcheck(prop as fn(_, _) -> _)
     }
 
     #[test]
