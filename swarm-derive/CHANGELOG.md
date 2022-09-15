@@ -1,3 +1,10 @@
+# 0.30.1
+
+- Fix an issue where the derive would generate bad code if the type parameters between the behaviour and a custom
+  out event differed. See [PR XXXX].
+
+[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+
 # 0.30.0
 
 - Remove support for removed `NetworkBehaviourEventProcess`. See [PR 2840].
