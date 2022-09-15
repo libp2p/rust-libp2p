@@ -44,6 +44,7 @@ use libp2p_core::upgrade::{InboundUpgradeApply, OutboundUpgradeApply};
 use libp2p_core::PeerId;
 use libp2p_core::{upgrade, UpgradeError};
 use std::future::Future;
+use std::task::Waker;
 use std::time::Duration;
 use std::{fmt, io, mem, pin::Pin, task::Context, task::Poll};
 
@@ -454,6 +455,7 @@ enum SubstreamRequested<UserData, Upgrade> {
         user_data: UserData,
         timeout: Delay,
         upgrade: Upgrade,
+        waker: Option<Waker>,
     },
     Done,
 }
@@ -464,6 +466,7 @@ impl<UserData, Upgrade> SubstreamRequested<UserData, Upgrade> {
             user_data,
             timeout: Delay::new(timeout),
             upgrade,
+            waker: None,
         }
     }
 
@@ -473,7 +476,14 @@ impl<UserData, Upgrade> SubstreamRequested<UserData, Upgrade> {
                 user_data,
                 timeout,
                 upgrade,
-            } => (user_data, timeout, upgrade),
+                waker,
+            } => {
+                if let Some(waker) = waker {
+                    waker.wake();
+                }
+
+                (user_data, timeout, upgrade)
+            }
             SubstreamRequested::Done => panic!("cannot extract from a completed future"),
         }
     }
@@ -484,8 +494,29 @@ impl<UserData, Upgrade> Unpin for SubstreamRequested<UserData, Upgrade> {}
 impl<UserData, Upgrade> Future for SubstreamRequested<UserData, Upgrade> {
     type Output = Result<(), UserData>;
 
-    fn poll(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
-        todo!()
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.get_mut();
+
+        match mem::replace(this, Self::Done) {
+            SubstreamRequested::Waiting {
+                user_data,
+                upgrade,
+                mut timeout,
+                ..
+            } => match timeout.poll_unpin(cx) {
+                Poll::Ready(()) => Poll::Ready(Err(user_data)),
+                Poll::Pending => {
+                    *this = Self::Waiting {
+                        user_data,
+                        upgrade,
+                        timeout,
+                        waker: Some(cx.waker().clone()),
+                    };
+                    Poll::Pending
+                }
+            },
+            SubstreamRequested::Done => Poll::Ready(Ok(())),
+        }
     }
 }
 
@@ -514,6 +545,7 @@ mod tests {
     use crate::handler::DummyConnectionHandler;
     use futures::AsyncRead;
     use futures::AsyncWrite;
+    use libp2p_core::upgrade::DeniedUpgrade;
     use libp2p_core::StreamMuxer;
     use quickcheck::*;
     use std::sync::{Arc, Weak};
@@ -553,7 +585,27 @@ mod tests {
 
     #[test]
     fn outbound_stream_timeout_starts_on_request() {
-        unimplemented!()
+        let upgrade_timeout = Duration::from_secs(1);
+        let mut connection = Connection::new(
+            StreamMuxerBox::new(PendingStreamMuxer),
+            MockConnectionHandler::new(upgrade_timeout.clone()),
+            None,
+            2,
+        );
+
+        connection.handler.open_new_outbound();
+        let _ = Pin::new(&mut connection)
+            .poll(&mut Context::from_waker(futures::task::noop_waker_ref()));
+
+        std::thread::sleep(upgrade_timeout + Duration::from_secs(1));
+
+        let _ = Pin::new(&mut connection)
+            .poll(&mut Context::from_waker(futures::task::noop_waker_ref()));
+
+        assert!(matches!(
+            connection.handler.error.unwrap(),
+            ConnectionHandlerUpgrErr::Timeout
+        ))
     }
 
     struct DummyStreamMuxer {
@@ -590,6 +642,39 @@ mod tests {
         }
     }
 
+    /// A [`StreamMuxer`] which never returns a stream.
+    struct PendingStreamMuxer;
+
+    impl StreamMuxer for PendingStreamMuxer {
+        type Substream = PendingSubstream;
+        type Error = Void;
+
+        fn poll_inbound(
+            self: Pin<&mut Self>,
+            _: &mut Context<'_>,
+        ) -> Poll<Result<Self::Substream, Self::Error>> {
+            Poll::Pending
+        }
+
+        fn poll_outbound(
+            self: Pin<&mut Self>,
+            _: &mut Context<'_>,
+        ) -> Poll<Result<Self::Substream, Self::Error>> {
+            Poll::Pending
+        }
+
+        fn poll_close(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+            Poll::Pending
+        }
+
+        fn poll(
+            self: Pin<&mut Self>,
+            _: &mut Context<'_>,
+        ) -> Poll<Result<StreamMuxerEvent, Self::Error>> {
+            Poll::Pending
+        }
+    }
+
     struct PendingSubstream(Weak<()>);
 
     impl AsyncRead for PendingSubstream {
@@ -616,6 +701,96 @@ mod tests {
         }
 
         fn poll_close(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+            Poll::Pending
+        }
+    }
+
+    struct MockConnectionHandler {
+        outbound_requested: bool,
+        error: Option<ConnectionHandlerUpgrErr<Void>>,
+        upgrade_timeout: Duration,
+    }
+
+    impl MockConnectionHandler {
+        fn new(upgrade_timeout: Duration) -> Self {
+            Self {
+                outbound_requested: false,
+                error: None,
+                upgrade_timeout,
+            }
+        }
+
+        fn open_new_outbound(&mut self) {
+            self.outbound_requested = true;
+        }
+    }
+
+    impl ConnectionHandler for MockConnectionHandler {
+        type InEvent = Void;
+        type OutEvent = Void;
+        type Error = Void;
+        type InboundProtocol = DeniedUpgrade;
+        type OutboundProtocol = DeniedUpgrade;
+        type InboundOpenInfo = ();
+        type OutboundOpenInfo = ();
+
+        fn listen_protocol(
+            &self,
+        ) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+            SubstreamProtocol::new(DeniedUpgrade, ()).with_timeout(self.upgrade_timeout)
+        }
+
+        fn inject_fully_negotiated_inbound(
+            &mut self,
+            protocol: <Self::InboundProtocol as InboundUpgradeSend>::Output,
+            _: Self::InboundOpenInfo,
+        ) {
+            void::unreachable(protocol)
+        }
+
+        fn inject_fully_negotiated_outbound(
+            &mut self,
+            protocol: <Self::OutboundProtocol as OutboundUpgradeSend>::Output,
+            _: Self::OutboundOpenInfo,
+        ) {
+            void::unreachable(protocol)
+        }
+
+        fn inject_event(&mut self, event: Self::InEvent) {
+            void::unreachable(event)
+        }
+
+        fn inject_dial_upgrade_error(
+            &mut self,
+            _: Self::OutboundOpenInfo,
+            error: ConnectionHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>,
+        ) {
+            self.error = Some(error)
+        }
+
+        fn connection_keep_alive(&self) -> KeepAlive {
+            KeepAlive::Yes
+        }
+
+        fn poll(
+            &mut self,
+            _: &mut Context<'_>,
+        ) -> Poll<
+            ConnectionHandlerEvent<
+                Self::OutboundProtocol,
+                Self::OutboundOpenInfo,
+                Self::OutEvent,
+                Self::Error,
+            >,
+        > {
+            if self.outbound_requested {
+                self.outbound_requested = false;
+                return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
+                    protocol: SubstreamProtocol::new(DeniedUpgrade, ())
+                        .with_timeout(self.upgrade_timeout),
+                });
+            }
+
             Poll::Pending
         }
     }
