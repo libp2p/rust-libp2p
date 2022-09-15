@@ -488,7 +488,7 @@ impl<UserData, Upgrade> SubstreamRequested<UserData, Upgrade> {
 
                 (user_data, timeout, upgrade)
             }
-            SubstreamRequested::Done => panic!("cannot extract from a completed future"),
+            SubstreamRequested::Done => panic!("cannot extract twice"),
         }
     }
 }
