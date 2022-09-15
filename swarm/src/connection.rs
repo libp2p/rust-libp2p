@@ -551,6 +551,11 @@ mod tests {
         QuickCheck::new().quickcheck(prop as fn(_));
     }
 
+    #[test]
+    fn outbound_stream_timeout_starts_on_request() {
+        unimplemented!()
+    }
+
     struct DummyStreamMuxer {
         counter: Arc<()>,
     }
