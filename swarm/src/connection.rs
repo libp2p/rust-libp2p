@@ -43,9 +43,9 @@ use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerEvent, StreamMuxerExt, Subs
 use libp2p_core::upgrade::{InboundUpgradeApply, OutboundUpgradeApply};
 use libp2p_core::PeerId;
 use libp2p_core::{upgrade, UpgradeError};
-use std::collections::VecDeque;
 use std::future::Future;
-use std::{fmt, io, pin::Pin, task::Context, task::Poll};
+use std::time::Duration;
+use std::{fmt, io, mem, pin::Pin, task::Context, task::Poll};
 
 /// Information about a successfully established connection.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -102,9 +102,10 @@ where
     /// the total number of streams can be enforced at the
     /// [`StreamMuxerBox`](libp2p_core::muxing::StreamMuxerBox) level.
     max_negotiating_inbound_streams: usize,
-    /// For each outbound substream request, how to upgrade it.
-    pending_outbound_stream_upgrades:
-        VecDeque<SubstreamProtocol<THandler::OutboundProtocol, THandler::OutboundOpenInfo>>,
+    /// TODO
+    requested_substreams: FuturesUnordered<
+        SubstreamRequested<THandler::OutboundOpenInfo, THandler::OutboundProtocol>,
+    >,
 }
 
 impl<THandler> fmt::Debug for Connection<THandler>
@@ -141,7 +142,7 @@ where
             shutdown: Shutdown::None,
             substream_upgrade_protocol_override,
             max_negotiating_inbound_streams,
-            pending_outbound_stream_upgrades: VecDeque::with_capacity(8),
+            requested_substreams: Default::default(),
         }
     }
 
@@ -159,15 +160,38 @@ where
     /// Polls the handler and the substream, forwarding events from the former to the latter and
     /// vice versa.
     pub fn poll(
-        mut self: Pin<&mut Self>,
+        self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Result<Event<THandler::OutEvent>, ConnectionError<THandler::Error>>> {
+        let Self {
+            requested_substreams,
+            muxing,
+            handler,
+            negotiating_out,
+            negotiating_in,
+            shutdown,
+            max_negotiating_inbound_streams,
+            substream_upgrade_protocol_override,
+        } = self.get_mut();
+
         loop {
+            match requested_substreams.poll_next_unpin(cx) {
+                Poll::Ready(Some(Ok(()))) => continue,
+                Poll::Ready(Some(Err(user_data))) => {
+                    handler.inject_dial_upgrade_error(user_data, ConnectionHandlerUpgrErr::Timeout);
+                    continue;
+                }
+                Poll::Ready(None) | Poll::Pending => {}
+            }
+
             // Poll the [`ConnectionHandler`].
-            match self.handler.poll(cx) {
+            match handler.poll(cx) {
                 Poll::Pending => {}
                 Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest { protocol }) => {
-                    self.pending_outbound_stream_upgrades.push_back(protocol);
+                    let timeout = *protocol.timeout();
+                    let (upgrade, user_data) = protocol.into_upgrade();
+
+                    requested_substreams.push(SubstreamRequested::new(user_data, timeout, upgrade));
                     continue; // Poll handler until exhausted.
                 }
                 Poll::Ready(ConnectionHandlerEvent::Custom(event)) => {
@@ -179,38 +203,36 @@ where
             }
 
             // In case the [`ConnectionHandler`] can not make any more progress, poll the negotiating outbound streams.
-            match self.negotiating_out.poll_next_unpin(cx) {
+            match negotiating_out.poll_next_unpin(cx) {
                 Poll::Pending | Poll::Ready(None) => {}
                 Poll::Ready(Some((user_data, Ok(upgrade)))) => {
-                    self.handler
-                        .inject_fully_negotiated_outbound(upgrade, user_data);
+                    handler.inject_fully_negotiated_outbound(upgrade, user_data);
                     continue;
                 }
                 Poll::Ready(Some((user_data, Err(err)))) => {
-                    self.handler.inject_dial_upgrade_error(user_data, err);
+                    handler.inject_dial_upgrade_error(user_data, err);
                     continue;
                 }
             }
 
             // In case both the [`ConnectionHandler`] and the negotiating outbound streams can not
             // make any more progress, poll the negotiating inbound streams.
-            match self.negotiating_in.poll_next_unpin(cx) {
+            match negotiating_in.poll_next_unpin(cx) {
                 Poll::Pending | Poll::Ready(None) => {}
                 Poll::Ready(Some((user_data, Ok(upgrade)))) => {
-                    self.handler
-                        .inject_fully_negotiated_inbound(upgrade, user_data);
+                    handler.inject_fully_negotiated_inbound(upgrade, user_data);
                     continue;
                 }
                 Poll::Ready(Some((user_data, Err(err)))) => {
-                    self.handler.inject_listen_upgrade_error(user_data, err);
+                    handler.inject_listen_upgrade_error(user_data, err);
                     continue;
                 }
             }
 
             // Ask the handler whether it wants the connection (and the handler itself)
             // to be kept alive, which determines the planned shutdown, if any.
-            let keep_alive = self.handler.connection_keep_alive();
-            match (&mut self.shutdown, keep_alive) {
+            let keep_alive = handler.connection_keep_alive();
+            match (&mut *shutdown, keep_alive) {
                 (Shutdown::Later(timer, deadline), KeepAlive::Until(t)) => {
                     if *deadline != t {
                         *deadline = t;
@@ -221,20 +243,20 @@ where
                 }
                 (_, KeepAlive::Until(t)) => {
                     if let Some(dur) = t.checked_duration_since(Instant::now()) {
-                        self.shutdown = Shutdown::Later(Delay::new(dur), t)
+                        *shutdown = Shutdown::Later(Delay::new(dur), t)
                     }
                 }
-                (_, KeepAlive::No) => self.shutdown = Shutdown::Asap,
-                (_, KeepAlive::Yes) => self.shutdown = Shutdown::None,
+                (_, KeepAlive::No) => *shutdown = Shutdown::Asap,
+                (_, KeepAlive::Yes) => *shutdown = Shutdown::None,
             };
 
             // Check if the connection (and handler) should be shut down.
             // As long as we're still negotiating substreams, shutdown is always postponed.
-            if self.negotiating_in.is_empty() && self.negotiating_out.is_empty() {
-                match self.shutdown {
+            if negotiating_in.is_empty() && negotiating_out.is_empty() {
+                match shutdown {
                     Shutdown::None => {}
                     Shutdown::Asap => return Poll::Ready(Err(ConnectionError::KeepAliveTimeout)),
-                    Shutdown::Later(ref mut delay, _) => match Future::poll(Pin::new(delay), cx) {
+                    Shutdown::Later(delay, _) => match Future::poll(Pin::new(delay), cx) {
                         Poll::Ready(_) => {
                             return Poll::Ready(Err(ConnectionError::KeepAliveTimeout))
                         }
@@ -243,27 +265,26 @@ where
                 }
             }
 
-            match self.muxing.poll_unpin(cx)? {
+            match muxing.poll_unpin(cx)? {
                 Poll::Pending => {}
                 Poll::Ready(StreamMuxerEvent::AddressChange(address)) => {
-                    self.handler.inject_address_change(&address);
+                    handler.inject_address_change(&address);
                     return Poll::Ready(Ok(Event::AddressChange(address)));
                 }
             }
 
-            if !self.pending_outbound_stream_upgrades.is_empty() {
-                match self.muxing.poll_outbound_unpin(cx)? {
+            if let Some(requested_substream) = requested_substreams.iter_mut().next() {
+                match muxing.poll_outbound_unpin(cx)? {
                     Poll::Pending => {}
                     Poll::Ready(substream) => {
-                        let protocol = self
-                            .pending_outbound_stream_upgrades
-                            .pop_front()
-                            .expect("`pending_outbound_stream_upgrades` is not empty");
+                        let (user_data, timeout, upgrade) = requested_substream.extract();
 
-                        self.negotiating_out.push(SubstreamUpgrade::new_outbound(
+                        negotiating_out.push(SubstreamUpgrade::new_outbound(
                             substream,
-                            protocol,
-                            self.substream_upgrade_protocol_override,
+                            user_data,
+                            timeout,
+                            upgrade,
+                            *substream_upgrade_protocol_override,
                         ));
 
                         continue; // Go back to the top, handler can potentially make progress again.
@@ -271,14 +292,13 @@ where
                 }
             }
 
-            if self.negotiating_in.len() < self.max_negotiating_inbound_streams {
-                match self.muxing.poll_inbound_unpin(cx)? {
+            if negotiating_in.len() < *max_negotiating_inbound_streams {
+                match muxing.poll_inbound_unpin(cx)? {
                     Poll::Pending => {}
                     Poll::Ready(substream) => {
-                        let protocol = self.handler.listen_protocol();
+                        let protocol = handler.listen_protocol();
 
-                        self.negotiating_in
-                            .push(SubstreamUpgrade::new_inbound(substream, protocol));
+                        negotiating_in.push(SubstreamUpgrade::new_inbound(substream, protocol));
 
                         continue; // Go back to the top, handler can potentially make progress again.
                     }
@@ -340,12 +360,11 @@ where
 {
     fn new_outbound(
         substream: SubstreamBox,
-        protocol: SubstreamProtocol<Upgrade, UserData>,
+        user_data: UserData,
+        timeout: Delay,
+        upgrade: Upgrade,
         version_override: Option<upgrade::Version>,
     ) -> Self {
-        let timeout = *protocol.timeout();
-        let (upgrade, open_info) = protocol.into_upgrade();
-
         let effective_version = match version_override {
             Some(version_override) if version_override != upgrade::Version::default() => {
                 log::debug!(
@@ -360,8 +379,8 @@ where
         };
 
         Self {
-            user_data: Some(open_info),
-            timeout: Delay::new(timeout),
+            user_data: Some(user_data),
+            timeout,
             upgrade: upgrade::apply_outbound(substream, SendWrapper(upgrade), effective_version),
         }
     }
@@ -427,6 +446,46 @@ where
             )),
             Poll::Pending => Poll::Pending,
         }
+    }
+}
+
+enum SubstreamRequested<UserData, Upgrade> {
+    Waiting {
+        user_data: UserData,
+        timeout: Delay,
+        upgrade: Upgrade,
+    },
+    Done,
+}
+
+impl<UserData, Upgrade> SubstreamRequested<UserData, Upgrade> {
+    fn new(user_data: UserData, timeout: Duration, upgrade: Upgrade) -> Self {
+        Self::Waiting {
+            user_data,
+            timeout: Delay::new(timeout),
+            upgrade,
+        }
+    }
+
+    fn extract(&mut self) -> (UserData, Delay, Upgrade) {
+        match mem::replace(self, Self::Done) {
+            SubstreamRequested::Waiting {
+                user_data,
+                timeout,
+                upgrade,
+            } => (user_data, timeout, upgrade),
+            SubstreamRequested::Done => panic!("cannot extract from a completed future"),
+        }
+    }
+}
+
+impl<UserData, Upgrade> Unpin for SubstreamRequested<UserData, Upgrade> {}
+
+impl<UserData, Upgrade> Future for SubstreamRequested<UserData, Upgrade> {
+    type Output = Result<(), UserData>;
+
+    fn poll(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Self::Output> {
+        todo!()
     }
 }
 
