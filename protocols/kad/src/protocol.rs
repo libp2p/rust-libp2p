@@ -159,13 +159,6 @@ impl KademliaProtocolConfig {
         self.protocol_names = names;
     }
 
-    /// Sets single protocol name used on the wire. Can be used to create incompatibilities
-    /// between networks on purpose.
-    #[deprecated(since = "0.40.0", note = "use `set_protocol_names()` instead")]
-    pub fn set_protocol_name(&mut self, name: impl Into<Cow<'static, [u8]>>) {
-        self.set_protocol_names(std::iter::once(name.into()).collect());
-    }
-
     /// Modifies the maximum allowed size of a single Kademlia packet.
     pub fn set_max_packet_size(&mut self, size: usize) {
         self.max_packet_size = size;
