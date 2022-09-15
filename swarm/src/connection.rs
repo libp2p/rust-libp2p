@@ -455,7 +455,11 @@ enum SubstreamRequested<UserData, Upgrade> {
         user_data: UserData,
         timeout: Delay,
         upgrade: Upgrade,
-        waker: Option<Waker>,
+        /// A waker to notify our [`FuturesUnordered`] that we have extracted the data.
+        ///
+        /// This will ensure that we will get polled again in the next iteration which allows us to
+        /// resolve with `Ok(())` and be removed from the [`FuturesUnordered`].
+        extracted_waker: Option<Waker>,
     },
     Done,
 }
@@ -466,7 +470,7 @@ impl<UserData, Upgrade> SubstreamRequested<UserData, Upgrade> {
             user_data,
             timeout: Delay::new(timeout),
             upgrade,
-            waker: None,
+            extracted_waker: None,
         }
     }
 
@@ -476,7 +480,7 @@ impl<UserData, Upgrade> SubstreamRequested<UserData, Upgrade> {
                 user_data,
                 timeout,
                 upgrade,
-                waker,
+                extracted_waker: waker,
             } => {
                 if let Some(waker) = waker {
                     waker.wake();
@@ -510,7 +514,7 @@ impl<UserData, Upgrade> Future for SubstreamRequested<UserData, Upgrade> {
                         user_data,
                         upgrade,
                         timeout,
-                        waker: Some(cx.waker().clone()),
+                        extracted_waker: Some(cx.waker().clone()),
                     };
                     Poll::Pending
                 }
