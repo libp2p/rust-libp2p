@@ -21,38 +21,9 @@
 use futures::stream::FusedStream;
 use futures::StreamExt;
 use futures::{future, Stream};
-use libp2p::core::transport::upgrade::Version;
-use libp2p::core::transport::MemoryTransport;
-use libp2p::core::{identity, PeerId, Transport};
-use libp2p::noise::NoiseAuthenticated;
-use libp2p::swarm::{NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent};
-use libp2p::yamux::YamuxConfig;
+use libp2p::swarm::SwarmEvent;
 use std::fmt::Debug;
 use std::time::Duration;
-
-pub fn new_swarm<B, F>(behaviour_fn: F) -> Swarm<B>
-where
-    B: NetworkBehaviour,
-    <B as NetworkBehaviour>::OutEvent: Debug,
-    B: NetworkBehaviour,
-    F: FnOnce(PeerId, identity::Keypair) -> B,
-{
-    let identity = identity::Keypair::generate_ed25519();
-    let peer_id = PeerId::from(identity.public());
-
-    let transport = MemoryTransport::default()
-        .upgrade(Version::V1)
-        .authenticate(NoiseAuthenticated::xx(&identity).unwrap())
-        .multiplex(YamuxConfig::default())
-        .timeout(Duration::from_secs(5))
-        .boxed();
-
-    SwarmBuilder::new(transport, behaviour_fn(peer_id, identity), peer_id)
-        .executor(Box::new(|future| {
-            let _ = tokio::spawn(future);
-        }))
-        .build()
-}
 
 pub async fn await_events_or_timeout<Event1, Event2, Error1, Error2>(
     swarm_1: &mut (impl Stream<Item = SwarmEvent<Event1, Error1>> + FusedStream + Unpin),

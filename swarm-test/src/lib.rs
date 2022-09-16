@@ -1,10 +1,14 @@
 use async_trait::async_trait;
 use futures::future::Either;
-use futures::StreamExt;
+use futures::{AsyncRead, AsyncWrite, StreamExt};
+use libp2p::core::upgrade::Version;
+use libp2p::identity::Keypair;
+use libp2p::noise::NoiseAuthenticated;
 use libp2p::swarm::{
     AddressScore, ConnectionHandler, IntoConnectionHandler, NetworkBehaviour, SwarmEvent,
 };
-use libp2p::{Multiaddr, Swarm};
+use libp2p::yamux::YamuxConfig;
+use libp2p::{Multiaddr, PeerId, Swarm, Transport};
 use std::fmt::Debug;
 use std::time::Duration;
 
@@ -16,6 +20,19 @@ type THandlerErr<TBehaviour> =
 #[async_trait]
 pub trait SwarmExt {
     type NB: NetworkBehaviour;
+
+    /// Create a new [`Swarm`] with an ephemeral identity.
+    fn new_ephemeral<T>(
+        transport: T,
+        behaviour_fn: impl FnOnce(PeerId, Keypair) -> Self::NB,
+    ) -> Self
+    where
+        T: Transport + Send + 'static + Unpin,
+        T::Dial: Send + 'static,
+        T::ListenerUpgrade: Send + 'static,
+        T::Error: Send + Sync,
+        T::Output: AsyncRead + AsyncWrite + Send + 'static + Unpin,
+        Self: Sized;
 
     /// Establishes a connection to the given [`Swarm`], polling both of them until the connection is established.
     async fn block_on_connection<T>(&mut self, other: &mut Swarm<T>)
@@ -44,6 +61,31 @@ where
     <B as NetworkBehaviour>::OutEvent: Debug,
 {
     type NB = B;
+
+    fn new_ephemeral<T>(
+        transport: T,
+        behaviour_fn: impl FnOnce(PeerId, Keypair) -> Self::NB,
+    ) -> Self
+    where
+        T: Transport + Send + 'static + Unpin,
+        T::Dial: Send + 'static,
+        T::ListenerUpgrade: Send + 'static,
+        T::Error: Send + Sync,
+        T::Output: AsyncRead + AsyncWrite + Send + 'static + Unpin,
+        Self: Sized,
+    {
+        let identity = Keypair::generate_ed25519();
+        let peer_id = PeerId::from(identity.public());
+
+        let transport = transport
+            .upgrade(Version::V1)
+            .authenticate(NoiseAuthenticated::xx(&identity).unwrap())
+            .multiplex(YamuxConfig::default())
+            .timeout(Duration::from_secs(20))
+            .boxed();
+
+        Swarm::new(transport, behaviour_fn(peer_id, identity), peer_id)
+    }
 
     async fn block_on_connection<T>(&mut self, other: &mut Swarm<T>)
     where
