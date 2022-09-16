@@ -116,7 +116,7 @@ pub struct IdentifyConfig {
     /// How many entries of discovered peers to keep before we discard
     /// the least-recently used one.
     ///
-    /// Disabled by default.
+    /// Defaults to 10. 
     pub cache_size: NonZeroUsize,
 }
 
