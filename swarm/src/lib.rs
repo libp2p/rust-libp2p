@@ -72,18 +72,16 @@ pub use connection::{
 };
 pub use handler::{
     ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerSelect, ConnectionHandlerUpgrErr,
-    IntoConnectionHandler, IntoConnectionHandlerSelect, KeepAlive, OneShotHandler,
-    OneShotHandlerConfig, SubstreamProtocol,
+    DummyConnectionHandler, IntoConnectionHandler, IntoConnectionHandlerSelect, KeepAlive,
+    OneShotHandler, OneShotHandlerConfig, SubstreamProtocol,
 };
 pub use registry::{AddAddressResult, AddressRecord, AddressScore};
 
-use crate::handler::DummyConnectionHandler;
 use connection::pool::{Pool, PoolConfig, PoolEvent};
 use connection::{EstablishedConnection, IncomingInfo};
 use dial_opts::{DialOpts, PeerCondition};
 use either::Either;
 use futures::{executor::ThreadPoolBuilder, prelude::*, stream::FusedStream};
-use handler::KeepAliveConnectionHandler;
 use libp2p_core::connection::{ConnectionId, PendingPoint};
 use libp2p_core::muxing::SubstreamBox;
 use libp2p_core::{
@@ -350,11 +348,11 @@ where
     /// # use libp2p_swarm::dial_opts::{DialOpts, PeerCondition};
     /// # use libp2p_core::{Multiaddr, PeerId, Transport};
     /// # use libp2p_core::transport::dummy::DummyTransport;
-    /// # use libp2p_swarm::DummyNetworkBehaviour;
+    /// # use libp2p_swarm::Dummy;
     /// #
     /// let mut swarm = Swarm::new(
     ///   DummyTransport::new().boxed(),
-    ///   DummyNetworkBehaviour,
+    ///   Dummy,
     ///   PeerId::random(),
     /// );
     ///
@@ -1507,64 +1505,6 @@ impl error::Error for DialError {
             DialError::ConnectionIo(_) => None,
             DialError::Transport(_) => None,
         }
-    }
-}
-
-/// Implementation of [`NetworkBehaviour`] that doesn't do anything other than keep all connections alive.
-pub struct KeepAliveBehaviour;
-
-impl NetworkBehaviour for KeepAliveBehaviour {
-    type ConnectionHandler = KeepAliveConnectionHandler;
-    type OutEvent = void::Void;
-
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
-        KeepAliveConnectionHandler
-    }
-
-    fn inject_event(
-        &mut self,
-        _: PeerId,
-        _: ConnectionId,
-        event: <Self::ConnectionHandler as ConnectionHandler>::OutEvent,
-    ) {
-        void::unreachable(event)
-    }
-
-    fn poll(
-        &mut self,
-        _: &mut Context<'_>,
-        _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
-        Poll::Pending
-    }
-}
-
-/// Implementation of [`NetworkBehaviour`] that doesn't do anything other than keep all connections alive.
-pub struct DummyNetworkBehaviour;
-
-impl NetworkBehaviour for DummyNetworkBehaviour {
-    type ConnectionHandler = DummyConnectionHandler;
-    type OutEvent = void::Void;
-
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
-        DummyConnectionHandler
-    }
-
-    fn inject_event(
-        &mut self,
-        _: PeerId,
-        _: ConnectionId,
-        event: <Self::ConnectionHandler as ConnectionHandler>::OutEvent,
-    ) {
-        void::unreachable(event)
-    }
-
-    fn poll(
-        &mut self,
-        _: &mut Context<'_>,
-        _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
-        Poll::Pending
     }
 }
 
