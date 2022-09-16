@@ -41,12 +41,11 @@
 //! ```
 //! use libp2p_core::{identity, Transport, upgrade};
 //! use libp2p_tcp::TcpTransport;
-//! use libp2p_noise::{Keypair, X25519Spec, NoiseConfig};
+//! use libp2p_noise::{Keypair, X25519Spec, NoiseAuthenticated};
 //!
 //! # fn main() {
 //! let id_keys = identity::Keypair::generate_ed25519();
-//! let dh_keys = Keypair::<X25519Spec>::new().into_authentic(&id_keys).unwrap();
-//! let noise = NoiseConfig::xx(dh_keys).into_authenticated();
+//! let noise = NoiseAuthenticated::xx(&id_keys).unwrap();
 //! let builder = TcpTransport::default().upgrade(upgrade::Version::V1).authenticate(noise);
 //! // let transport = builder.multiplex(...);
 //! # }
@@ -355,6 +354,19 @@ where
 #[derive(Clone)]
 pub struct NoiseAuthenticated<P, C: Zeroize, R> {
     config: NoiseConfig<P, C, R>,
+}
+
+impl NoiseAuthenticated<XX, X25519, ()> {
+    /// Create a new [`NoiseAuthenticated`] for the `XX` handshake pattern using X25519 DH keys.
+    ///
+    /// For now, this is the only combination that is guaranteed to be compatible with other libp2p implementations.
+    pub fn xx(id_keys: &identity::Keypair) -> Result<Self, NoiseError> {
+        let dh_keys = Keypair::<X25519>::new();
+        let noise_keys = dh_keys.into_authentic(id_keys)?;
+        let config = NoiseConfig::xx(noise_keys);
+
+        Ok(config.into_authenticated())
+    }
 }
 
 impl<P, C: Zeroize, R> UpgradeInfo for NoiseAuthenticated<P, C, R>

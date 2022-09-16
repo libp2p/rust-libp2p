@@ -27,7 +27,8 @@ use libp2p_core::identity;
 use libp2p_core::transport::{self, Transport};
 use libp2p_core::upgrade::{self, apply_inbound, apply_outbound, Negotiated};
 use libp2p_noise::{
-    Keypair, NoiseConfig, NoiseError, NoiseOutput, RemoteIdentity, X25519Spec, X25519,
+    Keypair, NoiseAuthenticated, NoiseConfig, NoiseError, NoiseOutput, RemoteIdentity, X25519Spec,
+    X25519,
 };
 use libp2p_tcp::TcpTransport;
 use log::info;
@@ -39,8 +40,7 @@ fn core_upgrade_compat() {
     // Tests API compaibility with the libp2p-core upgrade API,
     // i.e. if it compiles, the "test" is considered a success.
     let id_keys = identity::Keypair::generate_ed25519();
-    let dh_keys = Keypair::<X25519>::new().into_authentic(&id_keys).unwrap();
-    let noise = NoiseConfig::xx(dh_keys).into_authenticated();
+    let noise = NoiseAuthenticated::xx(&id_keys).unwrap();
     let _ = TcpTransport::default()
         .upgrade(upgrade::Version::V1)
         .authenticate(noise);

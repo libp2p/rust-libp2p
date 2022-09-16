@@ -79,12 +79,9 @@ where
 fn upgrade_pipeline() {
     let listener_keys = identity::Keypair::generate_ed25519();
     let listener_id = listener_keys.public().to_peer_id();
-    let listener_noise_keys = noise::Keypair::<noise::X25519Spec>::new()
-        .into_authentic(&listener_keys)
-        .unwrap();
     let mut listener_transport = MemoryTransport::default()
         .upgrade(upgrade::Version::V1)
-        .authenticate(noise::NoiseConfig::xx(listener_noise_keys).into_authenticated())
+        .authenticate(noise::NoiseAuthenticated::xx(&listener_keys).unwrap())
         .apply(HelloUpgrade {})
         .apply(HelloUpgrade {})
         .apply(HelloUpgrade {})
@@ -93,12 +90,9 @@ fn upgrade_pipeline() {
 
     let dialer_keys = identity::Keypair::generate_ed25519();
     let dialer_id = dialer_keys.public().to_peer_id();
-    let dialer_noise_keys = noise::Keypair::<noise::X25519Spec>::new()
-        .into_authentic(&dialer_keys)
-        .unwrap();
     let mut dialer_transport = MemoryTransport::default()
         .upgrade(upgrade::Version::V1)
-        .authenticate(noise::NoiseConfig::xx(dialer_noise_keys).into_authenticated())
+        .authenticate(noise::NoiseAuthenticated::xx(&dialer_keys).unwrap())
         .apply(HelloUpgrade {})
         .apply(HelloUpgrade {})
         .apply(HelloUpgrade {})
