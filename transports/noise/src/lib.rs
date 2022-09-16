@@ -198,14 +198,14 @@ where
     type Future = BoxFuture<'static, Result<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError>>;
 
     fn upgrade_inbound(self, socket: T, _: Self::Info) -> Self::Future {
-        let session = self
-            .params
-            .into_builder()
-            .local_private_key(self.dh_keys.secret().as_ref())
-            .build_responder()
-            .map_err(NoiseError::from);
-
         async move {
+            let session = self
+                .params
+                .into_builder()
+                .local_private_key(self.dh_keys.secret().as_ref())
+                .build_responder()
+                .map_err(NoiseError::from);
+
             let mut state = State::new(
                 socket,
                 session,
@@ -250,14 +250,14 @@ where
     type Future = BoxFuture<'static, Result<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError>>;
 
     fn upgrade_outbound(self, socket: T, _: Self::Info) -> Self::Future {
-        let session = self
-            .params
-            .into_builder()
-            .local_private_key(self.dh_keys.secret().as_ref())
-            .build_initiator()
-            .map_err(NoiseError::from);
-
         async move {
+            let session = self
+                .params
+                .into_builder()
+                .local_private_key(self.dh_keys.secret().as_ref())
+                .build_initiator()
+                .map_err(NoiseError::from);
+
             let mut state = State::new(
                 socket,
                 session,
@@ -303,14 +303,14 @@ where
     type Future = BoxFuture<'static, Result<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError>>;
 
     fn upgrade_inbound(self, socket: T, _: Self::Info) -> Self::Future {
-        let session = self
-            .params
-            .into_builder()
-            .local_private_key(self.dh_keys.secret().as_ref())
-            .build_responder()
-            .map_err(NoiseError::from);
-
         async move {
+            let session = self
+                .params
+                .into_builder()
+                .local_private_key(self.dh_keys.secret().as_ref())
+                .build_responder()
+                .map_err(NoiseError::from);
+
             let mut state = State::new(
                 socket,
                 session,
@@ -357,14 +357,14 @@ where
     type Future = BoxFuture<'static, Result<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError>>;
 
     fn upgrade_outbound(self, socket: T, _: Self::Info) -> Self::Future {
-        let session = self
-            .params
-            .into_builder()
-            .local_private_key(self.dh_keys.secret().as_ref())
-            .build_initiator()
-            .map_err(NoiseError::from);
-
         async move {
+            let session = self
+                .params
+                .into_builder()
+                .local_private_key(self.dh_keys.secret().as_ref())
+                .build_initiator()
+                .map_err(NoiseError::from);
+
             let mut state = State::new(
                 socket,
                 session,
@@ -409,14 +409,14 @@ where
     type Future = BoxFuture<'static, Result<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError>>;
 
     fn upgrade_inbound(self, socket: T, _: Self::Info) -> Self::Future {
-        let session = self
-            .params
-            .into_builder()
-            .local_private_key(self.dh_keys.secret().as_ref())
-            .build_responder()
-            .map_err(NoiseError::from);
-
         async move {
+            let session = self
+                .params
+                .into_builder()
+                .local_private_key(self.dh_keys.secret().as_ref())
+                .build_responder()
+                .map_err(NoiseError::from);
+
             let mut state = State::new(
                 socket,
                 session,
@@ -461,15 +461,15 @@ where
     type Future = BoxFuture<'static, Result<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError>>;
 
     fn upgrade_outbound(self, socket: T, _: Self::Info) -> Self::Future {
-        let session = self
-            .params
-            .into_builder()
-            .local_private_key(self.dh_keys.secret().as_ref())
-            .remote_public_key(self.remote.0.as_ref())
-            .build_initiator()
-            .map_err(NoiseError::from);
-
         async move {
+            let session = self
+                .params
+                .into_builder()
+                .local_private_key(self.dh_keys.secret().as_ref())
+                .remote_public_key(self.remote.0.as_ref())
+                .build_initiator()
+                .map_err(NoiseError::from);
+
             let mut state = State::new(
                 socket,
                 session,
