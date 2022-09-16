@@ -51,6 +51,8 @@
 
 - Update to [`libp2p-kad` `v0.41.0`](protocols/kad/CHANGELOG.md#0410).
 
+- Update to [`libp2p-noise` `v0.40.0`](protocols/kad/CHANGELOG.md#0400).
+
 # 0.48.0
 
 - Update to [`libp2p-core` `v0.36.0`](core/CHANGELOG.md#0360).

@@ -1,9 +1,12 @@
-# 0.39.1 [unreleased]
+# 0.40.0 [unreleased]
 
 - Introduce `NoiseAuthenticated::xx` constructor, assuming a X25519 DH key exchange. An XX key exchange and X25519 keys
   are the most common way of using noise in libp2p and thus deserve a convenience constructor. See [PR 2887].
+- Remove `Deref` implementation on `AuthenticKeypair`. See [PR XXXX].
+- Make `handshake` module private. See [PR XXXX].
 
 [PR 2887]: https://github.com/libp2p/rust-libp2p/pull/2887
+[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
 
 # 0.39.0
 
