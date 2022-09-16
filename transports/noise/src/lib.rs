@@ -67,6 +67,7 @@ pub use protocol::{Protocol, ProtocolParams, IK, IX, XX};
 
 use futures::prelude::*;
 use libp2p_core::{identity, InboundUpgrade, OutboundUpgrade, PeerId, UpgradeInfo};
+use snow::HandshakeState;
 use std::pin::Pin;
 use zeroize::Zeroize;
 
@@ -96,15 +97,43 @@ impl<H, C: Zeroize, R> NoiseConfig<H, C, R> {
     }
 
     /// Set the noise prologue.
-    pub fn with_prologue(&mut self, prologue: Vec<u8>) -> &mut Self {
-        self.prologue = prologue;
-        self
+    pub fn with_prologue(self, prologue: Vec<u8>) -> Self {
+        Self { prologue, ..self }
     }
 
     /// Sets the legacy configuration options to use, if any.
     pub fn set_legacy_config(&mut self, cfg: LegacyConfig) -> &mut Self {
         self.legacy = cfg;
         self
+    }
+}
+
+impl<H, C, R> NoiseConfig<H, C, R>
+where
+    C: Zeroize + AsRef<[u8]>,
+{
+    fn into_responder(self) -> Result<HandshakeState, NoiseError> {
+        let state = self
+            .params
+            .into_builder()
+            .prologue(self.prologue.as_ref())
+            .local_private_key(self.dh_keys.secret().as_ref())
+            .build_responder()
+            .map_err(NoiseError::from)?;
+
+        Ok(state)
+    }
+
+    fn into_initiator(self) -> Result<HandshakeState, NoiseError> {
+        let state = self
+            .params
+            .into_builder()
+            .prologue(self.prologue.as_ref())
+            .local_private_key(self.dh_keys.secret().as_ref())
+            .build_initiator()
+            .map_err(NoiseError::from)?;
+
+        Ok(state)
     }
 }
 
@@ -192,26 +221,22 @@ impl<T, C> InboundUpgrade<T> for NoiseConfig<IX, C>
 where
     NoiseConfig<IX, C>: UpgradeInfo,
     T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
-    C: Protocol<C> + AsRef<[u8]> + Zeroize + Send + 'static,
+    C: Protocol<C> + AsRef<[u8]> + Zeroize + Clone + Send + 'static,
 {
     type Output = (RemoteIdentity<C>, NoiseOutput<T>);
     type Error = NoiseError;
     type Future = Handshake<T, C>;
 
     fn upgrade_inbound(self, socket: T, _: Self::Info) -> Self::Future {
-        let session = self
-            .params
-            .into_builder()
-            .prologue(self.prologue.as_ref())
-            .local_private_key(self.dh_keys.secret().as_ref())
-            .build_responder()
-            .map_err(NoiseError::from);
+        let config = self.legacy;
+        let identity = self.dh_keys.clone().into_identity();
+
         handshake::rt1_responder(
             socket,
-            session,
-            self.dh_keys.into_identity(),
+            self.into_responder(),
+            identity,
             IdentityExchange::Mutual,
-            self.legacy,
+            config,
         )
     }
 }
@@ -220,26 +245,22 @@ impl<T, C> OutboundUpgrade<T> for NoiseConfig<IX, C>
 where
     NoiseConfig<IX, C>: UpgradeInfo,
     T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
-    C: Protocol<C> + AsRef<[u8]> + Zeroize + Send + 'static,
+    C: Protocol<C> + AsRef<[u8]> + Zeroize + Clone + Send + 'static,
 {
     type Output = (RemoteIdentity<C>, NoiseOutput<T>);
     type Error = NoiseError;
     type Future = Handshake<T, C>;
 
     fn upgrade_outbound(self, socket: T, _: Self::Info) -> Self::Future {
-        let session = self
-            .params
-            .into_builder()
-            .prologue(self.prologue.as_ref())
-            .local_private_key(self.dh_keys.secret().as_ref())
-            .build_initiator()
-            .map_err(NoiseError::from);
+        let legacy = self.legacy;
+        let identity = self.dh_keys.clone().into_identity();
+
         handshake::rt1_initiator(
             socket,
-            session,
-            self.dh_keys.into_identity(),
+            self.into_initiator(),
+            identity,
             IdentityExchange::Mutual,
-            self.legacy,
+            legacy,
         )
     }
 }
@@ -250,26 +271,22 @@ impl<T, C> InboundUpgrade<T> for NoiseConfig<XX, C>
 where
     NoiseConfig<XX, C>: UpgradeInfo,
     T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
-    C: Protocol<C> + AsRef<[u8]> + Zeroize + Send + 'static,
+    C: Protocol<C> + AsRef<[u8]> + Zeroize + Clone + Send + 'static,
 {
     type Output = (RemoteIdentity<C>, NoiseOutput<T>);
     type Error = NoiseError;
     type Future = Handshake<T, C>;
 
     fn upgrade_inbound(self, socket: T, _: Self::Info) -> Self::Future {
-        let session = self
-            .params
-            .into_builder()
-            .prologue(self.prologue.as_ref())
-            .local_private_key(self.dh_keys.secret().as_ref())
-            .build_responder()
-            .map_err(NoiseError::from);
+        let legacy = self.legacy;
+        let identity = self.dh_keys.clone().into_identity();
+
         handshake::rt15_responder(
             socket,
-            session,
-            self.dh_keys.into_identity(),
+            self.into_responder(),
+            identity,
             IdentityExchange::Mutual,
-            self.legacy,
+            legacy,
         )
     }
 }
@@ -278,26 +295,22 @@ impl<T, C> OutboundUpgrade<T> for NoiseConfig<XX, C>
 where
     NoiseConfig<XX, C>: UpgradeInfo,
     T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
-    C: Protocol<C> + AsRef<[u8]> + Zeroize + Send + 'static,
+    C: Protocol<C> + AsRef<[u8]> + Zeroize + Clone + Send + 'static,
 {
     type Output = (RemoteIdentity<C>, NoiseOutput<T>);
     type Error = NoiseError;
     type Future = Handshake<T, C>;
 
     fn upgrade_outbound(self, socket: T, _: Self::Info) -> Self::Future {
-        let session = self
-            .params
-            .into_builder()
-            .prologue(self.prologue.as_ref())
-            .local_private_key(self.dh_keys.secret().as_ref())
-            .build_initiator()
-            .map_err(NoiseError::from);
+        let legacy = self.legacy;
+        let identity = self.dh_keys.clone().into_identity();
+
         handshake::rt15_initiator(
             socket,
-            session,
-            self.dh_keys.into_identity(),
+            self.into_initiator(),
+            identity,
             IdentityExchange::Mutual,
-            self.legacy,
+            legacy,
         )
     }
 }
@@ -308,26 +321,22 @@ impl<T, C, R> InboundUpgrade<T> for NoiseConfig<IK, C, R>
 where
     NoiseConfig<IK, C, R>: UpgradeInfo,
     T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
-    C: Protocol<C> + AsRef<[u8]> + Zeroize + Send + 'static,
+    C: Protocol<C> + AsRef<[u8]> + Zeroize + Clone + Send + 'static,
 {
     type Output = (RemoteIdentity<C>, NoiseOutput<T>);
     type Error = NoiseError;
     type Future = Handshake<T, C>;
 
     fn upgrade_inbound(self, socket: T, _: Self::Info) -> Self::Future {
-        let session = self
-            .params
-            .into_builder()
-            .prologue(self.prologue.as_ref())
-            .local_private_key(self.dh_keys.secret().as_ref())
-            .build_responder()
-            .map_err(NoiseError::from);
+        let legacy = self.legacy;
+        let identity = self.dh_keys.clone().into_identity();
+
         handshake::rt1_responder(
             socket,
-            session,
-            self.dh_keys.into_identity(),
+            self.into_responder(),
+            identity,
             IdentityExchange::Receive,
-            self.legacy,
+            legacy,
         )
     }
 }
@@ -336,7 +345,7 @@ impl<T, C> OutboundUpgrade<T> for NoiseConfig<IK, C, (PublicKey<C>, identity::Pu
 where
     NoiseConfig<IK, C, (PublicKey<C>, identity::PublicKey)>: UpgradeInfo,
     T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
-    C: Protocol<C> + AsRef<[u8]> + Zeroize + Send + 'static,
+    C: Protocol<C> + AsRef<[u8]> + Zeroize + Clone + Send + 'static,
 {
     type Output = (RemoteIdentity<C>, NoiseOutput<T>);
     type Error = NoiseError;
@@ -351,6 +360,7 @@ where
             .remote_public_key(self.remote.0.as_ref())
             .build_initiator()
             .map_err(NoiseError::from);
+
         handshake::rt1_initiator(
             socket,
             session,
@@ -456,7 +466,7 @@ where
 }
 
 /// Legacy configuration options.
-#[derive(Clone, Default)]
+#[derive(Clone, Copy, Default)]
 pub struct LegacyConfig {
     /// Whether to continue sending legacy handshake payloads,
     /// i.e. length-prefixed protobuf payloads inside a length-prefixed
@@ -468,4 +478,52 @@ pub struct LegacyConfig {
     /// noise frame. These payloads are not interoperable with other
     /// libp2p implementations.
     pub recv_legacy_handshake: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn handshake_hashes_disagree_if_prologue_differs() {
+        let alice = new_xx_config()
+            .with_prologue(b"alice prologue".to_vec())
+            .into_initiator()
+            .unwrap();
+        let bob = new_xx_config()
+            .with_prologue(b"bob prologue".to_vec())
+            .into_responder()
+            .unwrap();
+
+        let alice_handshake_hash = alice.get_handshake_hash();
+        let bob_handshake_hash = bob.get_handshake_hash();
+
+        assert_ne!(alice_handshake_hash, bob_handshake_hash)
+    }
+
+    #[test]
+    fn handshake_hashes_agree_if_prologue_is_the_same() {
+        let alice = new_xx_config()
+            .with_prologue(b"shared knowledge".to_vec())
+            .into_initiator()
+            .unwrap();
+        let bob = new_xx_config()
+            .with_prologue(b"shared knowledge".to_vec())
+            .into_responder()
+            .unwrap();
+
+        let alice_handshake_hash = alice.get_handshake_hash();
+        let bob_handshake_hash = bob.get_handshake_hash();
+
+        assert_eq!(alice_handshake_hash, bob_handshake_hash)
+    }
+
+    fn new_xx_config() -> NoiseConfig<XX, X25519> {
+        let dh_keys = Keypair::<X25519>::new();
+        let noise_keys = dh_keys
+            .into_authentic(&identity::Keypair::generate_ed25519())
+            .unwrap();
+
+        NoiseConfig::xx(noise_keys)
+    }
 }
