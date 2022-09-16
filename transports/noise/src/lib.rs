@@ -170,18 +170,9 @@ where
     }
 }
 
-/// TODO: Adapt
-/// Creates an authenticated Noise handshake for the responder of a
-/// single roundtrip (2 message) handshake pattern.
+/// Implements the responder part of the `IX` noise handshake pattern.
 ///
-/// Subject to the chosen [`IdentityExchange`], this message sequence expects the
-/// remote to identify itself in the first message payload (i.e. unencrypted)
-/// and identifies the local node to the remote in the second message payload.
-///
-/// This message sequence is suitable for authenticated 2-message Noise handshake
-/// patterns where the static keys of the initiator and responder are either
-/// known (i.e. appear in the pre-message pattern) or are sent with the first
-/// and second message, respectively (e.g. `IK` or `IX`).
+/// `IX` is a single round-trip (2 messages) handshake in which each party sends their identity over to the other party.
 ///
 /// ```raw
 /// initiator -{id}-> responder
@@ -220,19 +211,9 @@ where
     }
 }
 
-/// TODO: Adapt
-/// Creates an authenticated Noise handshake for the initiator of a
-/// single roundtrip (2 message) handshake pattern.
+/// Implements the initiator part of the `IX` noise handshake pattern.
 ///
-/// Subject to the chosen [`IdentityExchange`], this message sequence
-/// identifies the local node to the remote with the first message payload
-/// (i.e. unencrypted) and expects the remote to identify itself in the
-/// second message payload.
-///
-/// This message sequence is suitable for authenticated 2-message Noise handshake
-/// patterns where the static keys of the initiator and responder are either
-/// known (i.e. appear in the pre-message pattern) or are sent with
-/// the first and second message, respectively (e.g. `IK` or `IX`).
+/// `IX` is a single round-trip (2 messages) handshake in which each party sends their identity over to the other party.
 ///
 /// ```raw
 /// initiator -{id}-> responder
@@ -271,19 +252,12 @@ where
     }
 }
 
-/// TODO: Adapt
-/// Creates an authenticated Noise handshake for the responder of a
-/// 1.5-roundtrip (3 message) handshake pattern.
+/// Implements the responder part of the `XX` noise handshake pattern.
 ///
-/// Subject to the chosen [`IdentityExchange`], this message sequence
-/// identifies the local node in the second message payload and expects
-/// the remote to identify itself in the third message payload. The first
-/// (unencrypted) message payload is always empty.
-///
-/// This message sequence is suitable for authenticated 3-message Noise handshake
-/// patterns where the static keys of the responder and initiator are either known
-/// (i.e. appear in the pre-message pattern) or are sent with the second and third
-/// message, respectively (e.g. `XX`).
+/// `XX` is a 1.5 round-trip (3 messages) handshake.
+/// The first message in a noise handshake is unencrypted. In the `XX` handshake pattern, that message
+/// is empty and thus does not leak and information. The identities are then exchanged in the second
+/// and third message.
 ///
 /// ```raw
 /// initiator --{}--> responder
@@ -324,19 +298,12 @@ where
     }
 }
 
-/// TODO: Adapt
-/// Creates an authenticated Noise handshake for the initiator of a
-/// 1.5-roundtrip (3 message) handshake pattern.
+/// Implements the initiator part of the `XX` noise handshake pattern.
 ///
-/// Subject to the chosen [`IdentityExchange`], this message sequence expects
-/// the remote to identify itself in the second message payload and
-/// identifies the local node to the remote in the third message payload.
-/// The first (unencrypted) message payload is always empty.
-///
-/// This message sequence is suitable for authenticated 3-message Noise handshake
-/// patterns where the static keys of the responder and initiator are either known
-/// (i.e. appear in the pre-message pattern) or are sent with the second and third
-/// message, respectively (e.g. `XX`).
+/// `XX` is a 1.5 round-trip (3 messages) handshake.
+/// The first message in a noise handshake is unencrypted. In the `XX` handshake pattern, that message
+/// is empty and thus does not leak and information. The identities are then exchanged in the second
+/// and third message.
 ///
 /// ```raw
 /// initiator --{}--> responder
@@ -377,18 +344,12 @@ where
     }
 }
 
-/// TODO: Adapt
-/// Creates an authenticated Noise handshake for the responder of a
-/// single roundtrip (2 message) handshake pattern.
+/// Implements the responder part of the `IK` handshake pattern.
 ///
-/// Subject to the chosen [`IdentityExchange`], this message sequence expects the
-/// remote to identify itself in the first message payload (i.e. unencrypted)
-/// and identifies the local node to the remote in the second message payload.
+/// `IK` is a single round-trip (2 messages) handshake.
 ///
-/// This message sequence is suitable for authenticated 2-message Noise handshake
-/// patterns where the static keys of the initiator and responder are either
-/// known (i.e. appear in the pre-message pattern) or are sent with the first
-/// and second message, respectively (e.g. `IK` or `IX`).
+/// In the `IK` handshake, the initiator is expected to know the responder's identity already, which
+/// is why the responder does not send it in the second message.
 ///
 /// ```raw
 /// initiator -{id}-> responder
@@ -427,19 +388,12 @@ where
     }
 }
 
-/// TODO: Adapt
-/// Creates an authenticated Noise handshake for the initiator of a
-/// single roundtrip (2 message) handshake pattern.
+/// Implements the initiator part of the `IK` handshake pattern.
 ///
-/// Subject to the chosen [`IdentityExchange`], this message sequence
-/// identifies the local node to the remote with the first message payload
-/// (i.e. unencrypted) and expects the remote to identify itself in the
-/// second message payload.
+/// `IK` is a single round-trip (2 messages) handshake.
 ///
-/// This message sequence is suitable for authenticated 2-message Noise handshake
-/// patterns where the static keys of the initiator and responder are either
-/// known (i.e. appear in the pre-message pattern) or are sent with
-/// the first and second message, respectively (e.g. `IK` or `IX`).
+/// In the `IK` handshake, the initiator knows and pre-configures the remote's identity in the
+/// [`HandshakeState`].
 ///
 /// ```raw
 /// initiator -{id}-> responder
