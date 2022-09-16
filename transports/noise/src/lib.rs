@@ -393,7 +393,7 @@ where
 /// `IK` is a single round-trip (2 messages) handshake.
 ///
 /// In the `IK` handshake, the initiator knows and pre-configures the remote's identity in the
-/// [`HandshakeState`].
+/// [`HandshakeState`](snow::HandshakeState).
 ///
 /// ```raw
 /// initiator -{id}-> responder
