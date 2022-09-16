@@ -47,6 +47,8 @@
 
 - Update to [`libp2p-tcp` `v0.37.0`](transports/tcp/CHANGELOG.md#0370).
 
+- Update to [`libp2p-swarm-derive` `v0.30.1`](swarm-derive/CHANGELOG.md#0301).
+
 - Update to [`libp2p-metrics` `v0.10.0`](misc/metrics/CHANGELOG.md#0100).
 
 - Update to [`libp2p-kad` `v0.41.0`](protocols/kad/CHANGELOG.md#0410).
