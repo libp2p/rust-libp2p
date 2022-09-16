@@ -70,16 +70,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let peer_id = PeerId::from(id_keys.public());
     println!("Local peer id: {:?}", peer_id);
 
-    // Create a keypair for authenticated encryption of the transport.
-    let noise_keys = noise::Keypair::<noise::X25519Spec>::new()
-        .into_authentic(&id_keys)
-        .expect("Signing libp2p-noise static DH keypair failed.");
-
     // Create a tokio-based TCP transport use noise for authenticated
     // encryption and Mplex for multiplexing of substreams on a TCP stream.
     let transport = TokioTcpTransport::new(GenTcpConfig::default().nodelay(true))
         .upgrade(upgrade::Version::V1)
-        .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
+        .authenticate(
+            noise::NoiseAuthenticated::xx(&id_keys)
+                .expect("Signing libp2p-noise static DH keypair failed."),
+        )
         .multiplex(mplex::MplexConfig::new())
         .boxed();
 

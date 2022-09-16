@@ -243,14 +243,11 @@ fn unsupported_doesnt_fail() {
 fn mk_transport(muxer: MuxerChoice) -> (PeerId, transport::Boxed<(PeerId, StreamMuxerBox)>) {
     let id_keys = identity::Keypair::generate_ed25519();
     let peer_id = id_keys.public().to_peer_id();
-    let noise_keys = noise::Keypair::<noise::X25519Spec>::new()
-        .into_authentic(&id_keys)
-        .unwrap();
     (
         peer_id,
         TcpTransport::new(GenTcpConfig::default().nodelay(true))
             .upgrade(upgrade::Version::V1)
-            .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
+            .authenticate(noise::NoiseAuthenticated::xx(&id_keys).unwrap())
             .multiplex(match muxer {
                 MuxerChoice::Yamux => upgrade::EitherUpgrade::A(yamux::YamuxConfig::default()),
                 MuxerChoice::Mplex => upgrade::EitherUpgrade::B(mplex::MplexConfig::default()),
