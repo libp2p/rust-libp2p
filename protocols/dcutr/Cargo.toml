@@ -29,7 +29,7 @@ void = "1"
 prost-build = "0.11"
 
 [dev-dependencies]
-env_logger = "0.8.3"
+env_logger = "0.9.0"
 libp2p = { path = "../..", default-features = false,  features = ["dcutr", "relay", "plaintext", "identify", "tcp-async-io", "ping", "noise", "dns-async-std"] }
 libp2p-identify = { path = "../identify" }
 libp2p-plaintext = { path = "../../transports/plaintext" }
