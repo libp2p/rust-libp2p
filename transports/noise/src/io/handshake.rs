@@ -31,10 +31,9 @@ use crate::protocol::{KeypairIdentity, Protocol, PublicKey};
 use crate::LegacyConfig;
 use bytes::Bytes;
 use futures::prelude::*;
-use futures::task;
 use libp2p_core::identity;
 use prost::Message;
-use std::{io, pin::Pin, task::Context};
+use std::io;
 
 /// The identity of the remote established during a handshake.
 pub enum RemoteIdentity<C> {
@@ -89,21 +88,6 @@ pub enum IdentityExchange {
     /// The remote identity is known, thus identities must be mutually known
     /// in order for the handshake to succeed.
     None { remote: identity::PublicKey },
-}
-
-/// A future performing a Noise handshake pattern.
-pub struct Handshake<T, C>(
-    pub(crate)  Pin<
-        Box<dyn Future<Output = Result<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError>> + Send>,
-    >,
-);
-
-impl<T, C> Future for Handshake<T, C> {
-    type Output = Result<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError>;
-
-    fn poll(mut self: Pin<&mut Self>, ctx: &mut Context<'_>) -> task::Poll<Self::Output> {
-        Pin::new(&mut self.0).poll(ctx)
-    }
 }
 
 //////////////////////////////////////////////////////////////////////////////

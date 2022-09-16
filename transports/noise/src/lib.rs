@@ -58,12 +58,13 @@ mod io;
 mod protocol;
 
 pub use error::NoiseError;
-pub use io::handshake::{Handshake, IdentityExchange, RemoteIdentity};
+pub use io::handshake::{IdentityExchange, RemoteIdentity};
 pub use io::NoiseOutput;
 pub use protocol::{x25519::X25519, x25519_spec::X25519Spec};
 pub use protocol::{AuthenticKeypair, Keypair, KeypairIdentity, PublicKey, SecretKey};
 pub use protocol::{Protocol, ProtocolParams, IK, IX, XX};
 
+use crate::future::BoxFuture;
 use crate::handshake::State;
 use crate::io::handshake;
 use futures::prelude::*;
@@ -194,7 +195,7 @@ where
 {
     type Output = (RemoteIdentity<C>, NoiseOutput<T>);
     type Error = NoiseError;
-    type Future = Handshake<T, C>;
+    type Future = BoxFuture<'static, Result<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError>>;
 
     fn upgrade_inbound(self, socket: T, _: Self::Info) -> Self::Future {
         let session = self
@@ -204,7 +205,7 @@ where
             .build_responder()
             .map_err(NoiseError::from);
 
-        Handshake(Box::pin(async move {
+        async move {
             let mut state = State::new(
                 socket,
                 session,
@@ -215,7 +216,8 @@ where
             handshake::recv_identity(&mut state).await?;
             handshake::send_identity(&mut state).await?;
             state.finish()
-        }))
+        }
+        .boxed()
     }
 }
 
@@ -245,7 +247,7 @@ where
 {
     type Output = (RemoteIdentity<C>, NoiseOutput<T>);
     type Error = NoiseError;
-    type Future = Handshake<T, C>;
+    type Future = BoxFuture<'static, Result<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError>>;
 
     fn upgrade_outbound(self, socket: T, _: Self::Info) -> Self::Future {
         let session = self
@@ -255,7 +257,7 @@ where
             .build_initiator()
             .map_err(NoiseError::from);
 
-        Handshake(Box::pin(async move {
+        async move {
             let mut state = State::new(
                 socket,
                 session,
@@ -266,7 +268,8 @@ where
             handshake::send_identity(&mut state).await?;
             handshake::recv_identity(&mut state).await?;
             state.finish()
-        }))
+        }
+        .boxed()
     }
 }
 
@@ -297,7 +300,7 @@ where
 {
     type Output = (RemoteIdentity<C>, NoiseOutput<T>);
     type Error = NoiseError;
-    type Future = Handshake<T, C>;
+    type Future = BoxFuture<'static, Result<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError>>;
 
     fn upgrade_inbound(self, socket: T, _: Self::Info) -> Self::Future {
         let session = self
@@ -307,7 +310,7 @@ where
             .build_responder()
             .map_err(NoiseError::from);
 
-        Handshake(Box::pin(async move {
+        async move {
             let mut state = State::new(
                 socket,
                 session,
@@ -319,7 +322,8 @@ where
             handshake::send_identity(&mut state).await?;
             handshake::recv_identity(&mut state).await?;
             state.finish()
-        }))
+        }
+        .boxed()
     }
 }
 
@@ -350,7 +354,7 @@ where
 {
     type Output = (RemoteIdentity<C>, NoiseOutput<T>);
     type Error = NoiseError;
-    type Future = Handshake<T, C>;
+    type Future = BoxFuture<'static, Result<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError>>;
 
     fn upgrade_outbound(self, socket: T, _: Self::Info) -> Self::Future {
         let session = self
@@ -360,7 +364,7 @@ where
             .build_initiator()
             .map_err(NoiseError::from);
 
-        Handshake(Box::pin(async move {
+        async move {
             let mut state = State::new(
                 socket,
                 session,
@@ -372,7 +376,8 @@ where
             handshake::recv_identity(&mut state).await?;
             handshake::send_identity(&mut state).await?;
             state.finish()
-        }))
+        }
+        .boxed()
     }
 }
 
@@ -401,7 +406,7 @@ where
 {
     type Output = (RemoteIdentity<C>, NoiseOutput<T>);
     type Error = NoiseError;
-    type Future = Handshake<T, C>;
+    type Future = BoxFuture<'static, Result<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError>>;
 
     fn upgrade_inbound(self, socket: T, _: Self::Info) -> Self::Future {
         let session = self
@@ -411,7 +416,7 @@ where
             .build_responder()
             .map_err(NoiseError::from);
 
-        Handshake(Box::pin(async move {
+        async move {
             let mut state = State::new(
                 socket,
                 session,
@@ -422,7 +427,8 @@ where
             handshake::recv_identity(&mut state).await?;
             handshake::send_identity(&mut state).await?;
             state.finish()
-        }))
+        }
+        .boxed()
     }
 }
 
@@ -452,7 +458,7 @@ where
 {
     type Output = (RemoteIdentity<C>, NoiseOutput<T>);
     type Error = NoiseError;
-    type Future = Handshake<T, C>;
+    type Future = BoxFuture<'static, Result<(RemoteIdentity<C>, NoiseOutput<T>), NoiseError>>;
 
     fn upgrade_outbound(self, socket: T, _: Self::Info) -> Self::Future {
         let session = self
@@ -463,7 +469,7 @@ where
             .build_initiator()
             .map_err(NoiseError::from);
 
-        Handshake(Box::pin(async move {
+        async move {
             let mut state = State::new(
                 socket,
                 session,
@@ -476,7 +482,8 @@ where
             handshake::send_identity(&mut state).await?;
             handshake::recv_identity(&mut state).await?;
             state.finish()
-        }))
+        }
+        .boxed()
     }
 }
 
