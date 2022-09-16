@@ -123,18 +123,14 @@ pub struct AuthenticKeypair<T: Zeroize> {
 }
 
 impl<T: Zeroize> AuthenticKeypair<T> {
+    pub fn dh_keypair(&self) -> &Keypair<T> {
+        &self.keypair
+    }
+
     /// Extract the public [`KeypairIdentity`] from this `AuthenticKeypair`,
     /// dropping the DH `Keypair`.
     pub fn into_identity(self) -> KeypairIdentity {
         self.identity
-    }
-}
-
-impl<T: Zeroize> std::ops::Deref for AuthenticKeypair<T> {
-    type Target = Keypair<T>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.keypair
     }
 }
 

@@ -202,7 +202,7 @@ where
             let session = self
                 .params
                 .into_builder()
-                .local_private_key(self.dh_keys.secret().as_ref())
+                .local_private_key(self.dh_keys.dh_keypair().secret().as_ref())
                 .build_responder()?;
 
             let mut state = State::new(
@@ -253,7 +253,7 @@ where
             let session = self
                 .params
                 .into_builder()
-                .local_private_key(self.dh_keys.secret().as_ref())
+                .local_private_key(self.dh_keys.dh_keypair().secret().as_ref())
                 .build_initiator()?;
 
             let mut state = State::new(
@@ -305,7 +305,7 @@ where
             let session = self
                 .params
                 .into_builder()
-                .local_private_key(self.dh_keys.secret().as_ref())
+                .local_private_key(self.dh_keys.dh_keypair().secret().as_ref())
                 .build_responder()?;
 
             let mut state = State::new(
@@ -358,7 +358,7 @@ where
             let session = self
                 .params
                 .into_builder()
-                .local_private_key(self.dh_keys.secret().as_ref())
+                .local_private_key(self.dh_keys.dh_keypair().secret().as_ref())
                 .build_initiator()?;
 
             let mut state = State::new(
@@ -409,7 +409,7 @@ where
             let session = self
                 .params
                 .into_builder()
-                .local_private_key(self.dh_keys.secret().as_ref())
+                .local_private_key(self.dh_keys.dh_keypair().secret().as_ref())
                 .build_responder()?;
 
             let mut state = State::new(
@@ -460,7 +460,7 @@ where
             let session = self
                 .params
                 .into_builder()
-                .local_private_key(self.dh_keys.secret().as_ref())
+                .local_private_key(self.dh_keys.dh_keypair().secret().as_ref())
                 .remote_public_key(self.remote.0.as_ref())
                 .build_initiator()?;
 
