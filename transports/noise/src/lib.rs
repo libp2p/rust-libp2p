@@ -58,13 +58,13 @@ mod io;
 mod protocol;
 
 pub use error::NoiseError;
-pub use io::handshake;
 pub use io::handshake::{Handshake, IdentityExchange, RemoteIdentity};
 pub use io::NoiseOutput;
 pub use protocol::{x25519::X25519, x25519_spec::X25519Spec};
 pub use protocol::{AuthenticKeypair, Keypair, KeypairIdentity, PublicKey, SecretKey};
 pub use protocol::{Protocol, ProtocolParams, IK, IX, XX};
 
+use crate::io::handshake;
 use futures::prelude::*;
 use libp2p_core::{identity, InboundUpgrade, OutboundUpgrade, PeerId, UpgradeInfo};
 use std::pin::Pin;
