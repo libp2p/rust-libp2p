@@ -31,6 +31,7 @@ use libp2p_swarm::{
     NotifyHandler, PollParameters,
 };
 use lru::LruCache;
+use std::num::NonZeroUsize;
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     iter::FromIterator,
@@ -116,7 +117,7 @@ pub struct IdentifyConfig {
     /// the least-recently used one.
     ///
     /// Disabled by default.
-    pub cache_size: usize,
+    pub cache_size: NonZeroUsize,
 }
 
 impl IdentifyConfig {
@@ -130,7 +131,7 @@ impl IdentifyConfig {
             initial_delay: Duration::from_millis(500),
             interval: Duration::from_secs(5 * 60),
             push_listen_addr_updates: false,
-            cache_size: 0,
+            cache_size: NonZeroUsize::new(10).expect("10 > 0"),
         }
     }
 
@@ -166,7 +167,7 @@ impl IdentifyConfig {
     ///
     /// The [`Swarm`](libp2p_swarm::Swarm) may extend the set of addresses of an outgoing connection attempt via
     ///  [`Identify::addresses_of_peer`].
-    pub fn with_cache_size(mut self, cache_size: usize) -> Self {
+    pub fn with_cache_size(mut self, cache_size: NonZeroUsize) -> Self {
         self.cache_size = cache_size;
         self
     }
@@ -713,7 +714,7 @@ mod tests {
             let (pubkey, transport) = transport();
             let protocol = Identify::new(
                 IdentifyConfig::new("a".to_string(), pubkey.clone())
-                    .with_cache_size(100)
+                    .with_cache_size(NonZeroUsize::new(100).unwrap())
                     .with_agent_version("b".to_string()),
             );
 

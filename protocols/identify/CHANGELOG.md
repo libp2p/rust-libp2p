@@ -1,3 +1,9 @@
+# 0.40.0 [unreleased]
+
+- Change default `IdentifyConfig::cache_size` to 10 and represent it as a `NonZeroUsize`. See [PR XXXX]. 
+
+[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+
 # 0.39.0
 
 - Update to `libp2p-swarm` `v0.39.0`.
