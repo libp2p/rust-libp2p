@@ -118,25 +118,26 @@ impl<T> State<T> {
     /// Noise handshake pattern.
     pub fn new(
         io: T,
-        session: Result<snow::HandshakeState, NoiseError>,
+        session: snow::HandshakeState,
         identity: KeypairIdentity,
         identity_x: IdentityExchange,
         legacy: LegacyConfig,
-    ) -> Result<Self, NoiseError> {
+    ) -> Self {
         let (id_remote_pubkey, send_identity) = match identity_x {
             IdentityExchange::Mutual => (None, true),
             IdentityExchange::Send { remote } => (Some(remote), true),
             IdentityExchange::Receive => (None, false),
             IdentityExchange::None { remote } => (Some(remote), false),
         };
-        session.map(|s| State {
+
+        Self {
             identity,
-            io: NoiseFramed::new(io, s),
+            io: NoiseFramed::new(io, session),
             dh_remote_pubkey_sig: None,
             id_remote_pubkey,
             send_identity,
             legacy,
-        })
+        }
     }
 }
 

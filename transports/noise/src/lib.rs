@@ -203,8 +203,7 @@ where
                 .params
                 .into_builder()
                 .local_private_key(self.dh_keys.secret().as_ref())
-                .build_responder()
-                .map_err(NoiseError::from);
+                .build_responder()?;
 
             let mut state = State::new(
                 socket,
@@ -212,7 +211,7 @@ where
                 self.dh_keys.into_identity(),
                 IdentityExchange::Mutual,
                 self.legacy,
-            )?;
+            );
             handshake::recv_identity(&mut state).await?;
             handshake::send_identity(&mut state).await?;
             state.finish()
@@ -255,8 +254,7 @@ where
                 .params
                 .into_builder()
                 .local_private_key(self.dh_keys.secret().as_ref())
-                .build_initiator()
-                .map_err(NoiseError::from);
+                .build_initiator()?;
 
             let mut state = State::new(
                 socket,
@@ -264,7 +262,7 @@ where
                 self.dh_keys.into_identity(),
                 IdentityExchange::Mutual,
                 self.legacy,
-            )?;
+            );
             handshake::send_identity(&mut state).await?;
             handshake::recv_identity(&mut state).await?;
             state.finish()
@@ -308,8 +306,7 @@ where
                 .params
                 .into_builder()
                 .local_private_key(self.dh_keys.secret().as_ref())
-                .build_responder()
-                .map_err(NoiseError::from);
+                .build_responder()?;
 
             let mut state = State::new(
                 socket,
@@ -317,7 +314,7 @@ where
                 self.dh_keys.into_identity(),
                 IdentityExchange::Mutual,
                 self.legacy,
-            )?;
+            );
             handshake::recv_empty(&mut state).await?;
             handshake::send_identity(&mut state).await?;
             handshake::recv_identity(&mut state).await?;
@@ -362,8 +359,7 @@ where
                 .params
                 .into_builder()
                 .local_private_key(self.dh_keys.secret().as_ref())
-                .build_initiator()
-                .map_err(NoiseError::from);
+                .build_initiator()?;
 
             let mut state = State::new(
                 socket,
@@ -371,7 +367,7 @@ where
                 self.dh_keys.into_identity(),
                 IdentityExchange::Mutual,
                 self.legacy,
-            )?;
+            );
             handshake::send_empty(&mut state).await?;
             handshake::recv_identity(&mut state).await?;
             handshake::send_identity(&mut state).await?;
@@ -414,8 +410,7 @@ where
                 .params
                 .into_builder()
                 .local_private_key(self.dh_keys.secret().as_ref())
-                .build_responder()
-                .map_err(NoiseError::from);
+                .build_responder()?;
 
             let mut state = State::new(
                 socket,
@@ -423,7 +418,7 @@ where
                 self.dh_keys.into_identity(),
                 IdentityExchange::Receive,
                 self.legacy,
-            )?;
+            );
             handshake::recv_identity(&mut state).await?;
             handshake::send_identity(&mut state).await?;
             state.finish()
@@ -467,8 +462,7 @@ where
                 .into_builder()
                 .local_private_key(self.dh_keys.secret().as_ref())
                 .remote_public_key(self.remote.0.as_ref())
-                .build_initiator()
-                .map_err(NoiseError::from);
+                .build_initiator()?;
 
             let mut state = State::new(
                 socket,
@@ -478,7 +472,7 @@ where
                     remote: self.remote.1,
                 },
                 self.legacy,
-            )?;
+            );
             handshake::send_identity(&mut state).await?;
             handshake::recv_identity(&mut state).await?;
             state.finish()
