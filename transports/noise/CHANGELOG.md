@@ -1,7 +1,10 @@
-# 0.39.1
+# 0.39.1 [unreleased]
 
+- Introduce `NoiseAuthenticated::xx` constructor, assuming a X25519 DH key exchange. An XX key exchange and X25519 keys
+  are the most common way of using noise in libp2p and thus deserve a convenience constructor. See [PR 2887].
 - Add `NoiseConfig::with_prologue` which allows users to set the noise prologue of the handshake. See [PR XXXX].
 
+[PR 2887]: https://github.com/libp2p/rust-libp2p/pull/2887
 [PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXX
 
 # 0.39.0
