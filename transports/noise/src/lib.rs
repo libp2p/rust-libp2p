@@ -394,9 +394,9 @@ where
 /// initiator -{id}-> responder
 /// initiator <-{id}- responder
 /// ```
-impl<T, C, R> InboundUpgrade<T> for NoiseConfig<IK, C, R>
+impl<T, C> InboundUpgrade<T> for NoiseConfig<IK, C>
 where
-    NoiseConfig<IK, C, R>: UpgradeInfo,
+    NoiseConfig<IK, C>: UpgradeInfo,
     T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     C: Protocol<C> + AsRef<[u8]> + Zeroize + Send + 'static,
 {
