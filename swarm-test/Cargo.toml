@@ -8,7 +8,7 @@ publish = false
 
 [dependencies]
 async-trait = "0.1.57"
-libp2p = { path = "..", default-features = false }
+libp2p = { path = "..", default-features = false, features = ["noise", "yamux"] }
 futures = "0.3.24"
 log = "0.4.17"
 rand = "0.8.5"
