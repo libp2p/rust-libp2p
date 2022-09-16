@@ -62,34 +62,6 @@ pub enum RemoteIdentity<C> {
     IdentityKey(identity::PublicKey),
 }
 
-/// The options for identity exchange in an authenticated handshake.
-///
-/// > **Note**: Even if a remote's public identity key is known a priori,
-/// > unless the authenticity of the key is [linked](Protocol::linked) to
-/// > the authenticity of a remote's static DH public key, an authenticated
-/// > handshake will still send the associated signature of the provided
-/// > local [`KeypairIdentity`] in order for the remote to verify that the static
-/// > DH public key is authentic w.r.t. the known public identity key.
-pub enum IdentityExchange {
-    /// Send the local public identity to the remote.
-    ///
-    /// The remote identity is unknown (i.e. expected to be received).
-    Mutual,
-    /// Send the local public identity to the remote.
-    ///
-    /// The remote identity is known.
-    Send { remote: identity::PublicKey },
-    /// Don't send the local public identity to the remote.
-    ///
-    /// The remote identity is unknown, i.e. expected to be received.
-    Receive,
-    /// Don't send the local public identity to the remote.
-    ///
-    /// The remote identity is known, thus identities must be mutually known
-    /// in order for the handshake to succeed.
-    None { remote: identity::PublicKey },
-}
-
 //////////////////////////////////////////////////////////////////////////////
 // Internal
 
@@ -104,8 +76,6 @@ pub struct State<T> {
     dh_remote_pubkey_sig: Option<Vec<u8>>,
     /// The known or received public identity key of the remote, if any.
     id_remote_pubkey: Option<identity::PublicKey>,
-    /// Whether to send the public identity key of the local node to the remote.
-    send_identity: bool,
     /// Legacy configuration parameters.
     legacy: LegacyConfig,
 }
@@ -120,22 +90,14 @@ impl<T> State<T> {
         io: T,
         session: snow::HandshakeState,
         identity: KeypairIdentity,
-        identity_x: IdentityExchange,
+        expected_remote_key: Option<identity::PublicKey>,
         legacy: LegacyConfig,
     ) -> Self {
-        let (id_remote_pubkey, send_identity) = match identity_x {
-            IdentityExchange::Mutual => (None, true),
-            IdentityExchange::Send { remote } => (Some(remote), true),
-            IdentityExchange::Receive => (None, false),
-            IdentityExchange::None { remote } => (Some(remote), false),
-        };
-
         Self {
             identity,
             io: NoiseFramed::new(io, session),
             dh_remote_pubkey_sig: None,
-            id_remote_pubkey,
-            send_identity,
+            id_remote_pubkey: expected_remote_key,
             legacy,
         }
     }
@@ -204,6 +166,9 @@ where
 
 /// A future for receiving a Noise handshake message with a payload
 /// identifying the remote.
+///
+/// In case `expected_key` is passed, this function will fail if the received key does not match the expected key.
+/// In case the remote does not send us a key, the expected key is assumed to be the remote's key.
 pub async fn recv_identity<T>(state: &mut State<T>) -> Result<(), NoiseError>
 where
     T: AsyncRead + Unpin,
@@ -267,9 +232,33 @@ where
 {
     let mut pb = payload_proto::NoiseHandshakePayload::default();
 
-    if state.send_identity {
-        pb.identity_key = state.identity.public.to_protobuf_encoding()
+    pb.identity_key = state.identity.public.to_protobuf_encoding();
+
+    if let Some(ref sig) = state.identity.signature {
+        pb.identity_sig = sig.clone()
     }
+
+    let mut msg = if state.legacy.send_legacy_handshake {
+        let mut msg = Vec::with_capacity(2 + pb.encoded_len());
+        msg.extend_from_slice(&(pb.encoded_len() as u16).to_be_bytes());
+        msg
+    } else {
+        Vec::with_capacity(pb.encoded_len())
+    };
+
+    pb.encode(&mut msg)
+        .expect("Vec<u8> provides capacity as needed");
+    state.io.send(&msg).await?;
+
+    Ok(())
+}
+
+/// Send a Noise handshake message with a payload identifying the local node to the remote.
+pub async fn send_signature_only<T>(state: &mut State<T>) -> Result<(), NoiseError>
+where
+    T: AsyncWrite + Unpin,
+{
+    let mut pb = payload_proto::NoiseHandshakePayload::default();
 
     if let Some(ref sig) = state.identity.signature {
         pb.identity_sig = sig.clone()

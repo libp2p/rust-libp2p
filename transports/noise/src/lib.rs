@@ -58,7 +58,7 @@ mod io;
 mod protocol;
 
 pub use error::NoiseError;
-pub use io::handshake::{IdentityExchange, RemoteIdentity};
+pub use io::handshake::RemoteIdentity;
 pub use io::NoiseOutput;
 pub use protocol::{x25519::X25519, x25519_spec::X25519Spec};
 pub use protocol::{AuthenticKeypair, Keypair, KeypairIdentity, PublicKey, SecretKey};
@@ -209,7 +209,7 @@ where
                 socket,
                 session,
                 self.dh_keys.into_identity(),
-                IdentityExchange::Mutual,
+                None,
                 self.legacy,
             );
             handshake::recv_identity(&mut state).await?;
@@ -260,7 +260,7 @@ where
                 socket,
                 session,
                 self.dh_keys.into_identity(),
-                IdentityExchange::Mutual,
+                None,
                 self.legacy,
             );
             handshake::send_identity(&mut state).await?;
@@ -312,7 +312,7 @@ where
                 socket,
                 session,
                 self.dh_keys.into_identity(),
-                IdentityExchange::Mutual,
+                None,
                 self.legacy,
             );
             handshake::recv_empty(&mut state).await?;
@@ -365,7 +365,7 @@ where
                 socket,
                 session,
                 self.dh_keys.into_identity(),
-                IdentityExchange::Mutual,
+                None,
                 self.legacy,
             );
             handshake::send_empty(&mut state).await?;
@@ -416,11 +416,11 @@ where
                 socket,
                 session,
                 self.dh_keys.into_identity(),
-                IdentityExchange::Receive,
+                None,
                 self.legacy,
             );
             handshake::recv_identity(&mut state).await?;
-            handshake::send_identity(&mut state).await?;
+            handshake::send_signature_only(&mut state).await?;
             state.finish()
         }
         .boxed()
@@ -468,9 +468,7 @@ where
                 socket,
                 session,
                 self.dh_keys.into_identity(),
-                IdentityExchange::Send {
-                    remote: self.remote.1,
-                },
+                Some(self.remote.1),
                 self.legacy,
             );
             handshake::send_identity(&mut state).await?;
