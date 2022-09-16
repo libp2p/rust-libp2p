@@ -230,9 +230,10 @@ pub async fn send_identity<T>(state: &mut State<T>) -> Result<(), NoiseError>
 where
     T: AsyncWrite + Unpin,
 {
-    let mut pb = payload_proto::NoiseHandshakePayload::default();
-
-    pb.identity_key = state.identity.public.to_protobuf_encoding();
+    let mut pb = payload_proto::NoiseHandshakePayload {
+        identity_key: state.identity.public.to_protobuf_encoding(),
+        ..Default::default()
+    };
 
     if let Some(ref sig) = state.identity.signature {
         pb.identity_sig = sig.clone()
