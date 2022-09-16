@@ -649,7 +649,7 @@ where
                     set.iter()
                         .filter(|p| {
                             self.explicit_peers.contains(*p)
-                                || !self.score_below_threshold(*p, |ts| ts.publish_threshold).0
+                                || !self.score_below_threshold(p, |ts| ts.publish_threshold).0
                         })
                         .cloned(),
                 );
@@ -946,14 +946,11 @@ where
             );
 
             // remove explicit peers, peers with negative scores, and backoffed peers
-            peers = peers
-                .into_iter()
-                .filter(|p| {
-                    !self.explicit_peers.contains(p)
-                        && !self.score_below_threshold(p, |_| 0.0).0
-                        && !self.backoffs.is_backoff_with_slack(topic_hash, p)
-                })
-                .collect();
+            peers.retain(|p| {
+                !self.explicit_peers.contains(p)
+                    && !self.score_below_threshold(p, |_| 0.0).0
+                    && !self.backoffs.is_backoff_with_slack(topic_hash, p)
+            });
 
             // Add up to mesh_n of them them to the mesh
             // NOTE: These aren't randomly added, currently FIFO
@@ -1625,7 +1622,7 @@ where
         //
         //TODO: Once signed records are spec'd: Can we use peerInfo without any IDs if they have a
         // signed peer record?
-        px = px.into_iter().filter(|p| p.peer_id.is_some()).collect();
+        px.retain(|p| p.peer_id.is_some());
         if px.len() > n {
             // only use at most prune_peers many random peers
             let mut rng = thread_rng();
@@ -3204,7 +3201,7 @@ where
             debug!("Peer disconnected: {}", peer_id);
             {
                 let topics = match self.peer_topics.get(peer_id) {
-                    Some(topics) => (topics),
+                    Some(topics) => topics,
                     None => {
                         debug_assert!(
                             self.blacklisted_peers.contains(peer_id),

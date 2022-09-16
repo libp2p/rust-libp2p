@@ -3,7 +3,7 @@ name = "libp2p-metrics"
 edition = "2021"
 rust-version = "1.56.1"
 description = "Metrics for libp2p"
-version = "0.9.0"
+version = "0.10.0"
 authors = ["Max Inden <mail@max-inden.de>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -22,7 +22,7 @@ dcutr = ["libp2p-dcutr"]
 libp2p-core = { version = "0.36.0", path = "../../core", default-features = false }
 libp2p-dcutr =  { version = "0.6.0", path = "../../protocols/dcutr", optional = true }
 libp2p-identify = { version = "0.39.0", path = "../../protocols/identify", optional = true }
-libp2p-kad = { version = "0.40.0", path = "../../protocols/kad", optional = true }
+libp2p-kad = { version = "0.41.0", path = "../../protocols/kad", optional = true }
 libp2p-ping = { version = "0.39.0", path = "../../protocols/ping", optional = true }
 libp2p-relay =  { version = "0.12.0", path = "../../protocols/relay", optional = true }
 libp2p-swarm = { version = "0.39.0", path = "../../swarm" }
