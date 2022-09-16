@@ -42,16 +42,19 @@ use std::{num::NonZeroU8, time::Duration};
 
 #[test]
 fn ping_pong() {
-    fn prop(count: NonZeroU8, muxer: MuxerChoice) {
+    fn prop(count: NonZeroU8) {
         let cfg = ping::Config::new()
             .with_keep_alive(true)
             .with_interval(Duration::from_millis(10));
 
-        let (peer1_id, trans) = mk_transport(muxer);
-        let mut swarm1 = Swarm::new(trans, ping::Behaviour::new(cfg.clone()), peer1_id.clone());
-
-        let (peer2_id, trans) = mk_transport(muxer);
-        let mut swarm2 = Swarm::new(trans, ping::Behaviour::new(cfg), peer2_id.clone());
+        let mut swarm1 = Swarm::new_ephemeral(
+            TcpTransport::new(GenTcpConfig::default().nodelay(true)),
+            |_, _| ping::Behaviour::new(cfg.clone()),
+        );
+        let mut swarm2 = Swarm::new_ephemeral(
+            TcpTransport::new(GenTcpConfig::default().nodelay(true)),
+            |_, _| ping::Behaviour::new(cfg.clone()),
+        );
 
         async_std::task::block_on(async {
             swarm1.listen_on_random_localhost_tcp_port().await;
@@ -64,8 +67,8 @@ fn ping_pong() {
                 let e1 = e1.try_into_behaviour_event().unwrap();
                 let e2 = e2.try_into_behaviour_event().unwrap();
 
-                assert_eq!(e1.peer, peer2_id);
-                assert_eq!(e2.peer, peer1_id);
+                assert_eq!(&e1.peer, swarm2.local_peer_id());
+                assert_eq!(&e2.peer, swarm1.local_peer_id());
 
                 let e1 = e1.result.expect("ping failure");
                 let e2 = e2.result.expect("ping failure");
@@ -84,7 +87,7 @@ fn ping_pong() {
         });
     }
 
-    QuickCheck::new().tests(10).quickcheck(prop as fn(_, _))
+    QuickCheck::new().tests(10).quickcheck(prop as fn(_))
 }
 
 /// Tests that the connection is closed upon a configurable
