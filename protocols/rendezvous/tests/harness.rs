@@ -26,7 +26,7 @@ use libp2p::core::transport::MemoryTransport;
 use libp2p::core::upgrade::SelectUpgrade;
 use libp2p::core::{identity, PeerId, Transport};
 use libp2p::mplex::MplexConfig;
-use libp2p::noise::{Keypair, NoiseConfig, X25519Spec};
+use libp2p::noise::NoiseAuthenticated;
 use libp2p::swarm::{NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent};
 use libp2p::yamux::YamuxConfig;
 use std::fmt::Debug;
@@ -42,14 +42,9 @@ where
     let identity = identity::Keypair::generate_ed25519();
     let peer_id = PeerId::from(identity.public());
 
-    let dh_keys = Keypair::<X25519Spec>::new()
-        .into_authentic(&identity)
-        .expect("failed to create dh_keys");
-    let noise = NoiseConfig::xx(dh_keys).into_authenticated();
-
     let transport = MemoryTransport::default()
         .upgrade(Version::V1)
-        .authenticate(noise)
+        .authenticate(NoiseAuthenticated::xx(&identity).unwrap())
         .multiplex(SelectUpgrade::new(
             YamuxConfig::default(),
             MplexConfig::new(),
