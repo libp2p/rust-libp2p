@@ -23,9 +23,7 @@ use futures::StreamExt;
 use futures::{future, Stream};
 use libp2p::core::transport::upgrade::Version;
 use libp2p::core::transport::MemoryTransport;
-use libp2p::core::upgrade::SelectUpgrade;
 use libp2p::core::{identity, PeerId, Transport};
-use libp2p::mplex::MplexConfig;
 use libp2p::noise::NoiseAuthenticated;
 use libp2p::swarm::{NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent};
 use libp2p::yamux::YamuxConfig;
@@ -45,10 +43,7 @@ where
     let transport = MemoryTransport::default()
         .upgrade(Version::V1)
         .authenticate(NoiseAuthenticated::xx(&identity).unwrap())
-        .multiplex(SelectUpgrade::new(
-            YamuxConfig::default(),
-            MplexConfig::new(),
-        ))
+        .multiplex(YamuxConfig::default())
         .timeout(Duration::from_secs(5))
         .boxed();
 
