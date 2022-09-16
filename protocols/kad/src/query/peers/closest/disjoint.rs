@@ -461,7 +461,6 @@ mod tests {
                     let num_peers = g.gen_range(0..20 + 1);
                     let mut peers = g
                         .choose_multiple(&peers, num_peers)
-                        .into_iter()
                         .cloned()
                         .map(Key::from)
                         .collect::<Vec<_>>();
@@ -785,7 +784,6 @@ mod tests {
                 let num_peers = g.gen_range(K_VALUE.get()..peer_ids.len() + 1);
                 let mut random_peer_ids = g
                     .choose_multiple(&peer_ids, num_peers)
-                    .into_iter()
                     // Make sure not to include itself.
                     .filter(|(id, _)| peer_id != id)
                     .cloned()

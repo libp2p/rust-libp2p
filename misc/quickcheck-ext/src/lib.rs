@@ -23,10 +23,14 @@ impl GenRange for Gen {
 
 pub trait SliceRandom {
     fn shuffle<T>(&mut self, arr: &mut [T]);
-    fn choose_multiple<'a, T>(&mut self, arr: &'a [T], amount: usize) -> Vec<&'a T> {
+    fn choose_multiple<'a, T>(
+        &mut self,
+        arr: &'a [T],
+        amount: usize,
+    ) -> std::iter::Take<std::vec::IntoIter<&'a T>> {
         let mut v: Vec<&T> = arr.iter().collect();
         self.shuffle(&mut v);
-        v.into_iter().take(amount).collect()
+        v.into_iter().take(amount)
     }
 }
 
