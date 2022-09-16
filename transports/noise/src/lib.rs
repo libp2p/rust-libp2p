@@ -79,6 +79,13 @@ pub struct NoiseConfig<P, C: Zeroize, R = ()> {
     legacy: LegacyConfig,
     remote: R,
     _marker: std::marker::PhantomData<P>,
+
+    /// Prologue to use in the noise handshake.
+    ///
+    /// The prologue can contain arbitrary data that will be hashed into the noise handshake.
+    /// For the handshake to succeed, both parties must set the same prologue.
+    ///
+    /// For further information, see <https://noiseprotocol.org/noise.html#prologue>.
     prologue: Vec<u8>,
 }
 
@@ -90,9 +97,6 @@ impl<H, C: Zeroize, R> NoiseConfig<H, C, R> {
     }
 
     /// Set the noise prologue.
-    ///
-    /// The prologue can contain arbitrary data and will be hashed into the noise handshake.
-    /// For the handshake to succeed, both parties must set the same prologue.
     pub fn with_prologue(&mut self, prologue: Vec<u8>) -> &mut Self {
         self.prologue = prologue;
         self
