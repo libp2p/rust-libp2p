@@ -64,6 +64,7 @@ pub use protocol::{x25519::X25519, x25519_spec::X25519Spec};
 pub use protocol::{AuthenticKeypair, Keypair, KeypairIdentity, PublicKey, SecretKey};
 pub use protocol::{Protocol, ProtocolParams, IK, IX, XX};
 
+use crate::handshake::State;
 use crate::io::handshake;
 use futures::prelude::*;
 use libp2p_core::{identity, InboundUpgrade, OutboundUpgrade, PeerId, UpgradeInfo};
@@ -168,8 +169,23 @@ where
     }
 }
 
-// Handshake pattern IX /////////////////////////////////////////////////////
-
+/// TODO: Adapt
+/// Creates an authenticated Noise handshake for the responder of a
+/// single roundtrip (2 message) handshake pattern.
+///
+/// Subject to the chosen [`IdentityExchange`], this message sequence expects the
+/// remote to identify itself in the first message payload (i.e. unencrypted)
+/// and identifies the local node to the remote in the second message payload.
+///
+/// This message sequence is suitable for authenticated 2-message Noise handshake
+/// patterns where the static keys of the initiator and responder are either
+/// known (i.e. appear in the pre-message pattern) or are sent with the first
+/// and second message, respectively (e.g. `IK` or `IX`).
+///
+/// ```raw
+/// initiator -{id}-> responder
+/// initiator <-{id}- responder
+/// ```
 impl<T, C> InboundUpgrade<T> for NoiseConfig<IX, C>
 where
     NoiseConfig<IX, C>: UpgradeInfo,
@@ -187,16 +203,40 @@ where
             .local_private_key(self.dh_keys.secret().as_ref())
             .build_responder()
             .map_err(NoiseError::from);
-        handshake::rt1_responder(
-            socket,
-            session,
-            self.dh_keys.into_identity(),
-            IdentityExchange::Mutual,
-            self.legacy,
-        )
+
+        Handshake(Box::pin(async move {
+            let mut state = State::new(
+                socket,
+                session,
+                self.dh_keys.into_identity(),
+                IdentityExchange::Mutual,
+                self.legacy,
+            )?;
+            handshake::recv_identity(&mut state).await?;
+            handshake::send_identity(&mut state).await?;
+            state.finish()
+        }))
     }
 }
 
+/// TODO: Adapt
+/// Creates an authenticated Noise handshake for the initiator of a
+/// single roundtrip (2 message) handshake pattern.
+///
+/// Subject to the chosen [`IdentityExchange`], this message sequence
+/// identifies the local node to the remote with the first message payload
+/// (i.e. unencrypted) and expects the remote to identify itself in the
+/// second message payload.
+///
+/// This message sequence is suitable for authenticated 2-message Noise handshake
+/// patterns where the static keys of the initiator and responder are either
+/// known (i.e. appear in the pre-message pattern) or are sent with
+/// the first and second message, respectively (e.g. `IK` or `IX`).
+///
+/// ```raw
+/// initiator -{id}-> responder
+/// initiator <-{id}- responder
+/// ```
 impl<T, C> OutboundUpgrade<T> for NoiseConfig<IX, C>
 where
     NoiseConfig<IX, C>: UpgradeInfo,
@@ -214,18 +254,41 @@ where
             .local_private_key(self.dh_keys.secret().as_ref())
             .build_initiator()
             .map_err(NoiseError::from);
-        handshake::rt1_initiator(
-            socket,
-            session,
-            self.dh_keys.into_identity(),
-            IdentityExchange::Mutual,
-            self.legacy,
-        )
+
+        Handshake(Box::pin(async move {
+            let mut state = State::new(
+                socket,
+                session,
+                self.dh_keys.into_identity(),
+                IdentityExchange::Mutual,
+                self.legacy,
+            )?;
+            handshake::send_identity(&mut state).await?;
+            handshake::recv_identity(&mut state).await?;
+            state.finish()
+        }))
     }
 }
 
-// Handshake pattern XX /////////////////////////////////////////////////////
-
+/// TODO: Adapt
+/// Creates an authenticated Noise handshake for the responder of a
+/// 1.5-roundtrip (3 message) handshake pattern.
+///
+/// Subject to the chosen [`IdentityExchange`], this message sequence
+/// identifies the local node in the second message payload and expects
+/// the remote to identify itself in the third message payload. The first
+/// (unencrypted) message payload is always empty.
+///
+/// This message sequence is suitable for authenticated 3-message Noise handshake
+/// patterns where the static keys of the responder and initiator are either known
+/// (i.e. appear in the pre-message pattern) or are sent with the second and third
+/// message, respectively (e.g. `XX`).
+///
+/// ```raw
+/// initiator --{}--> responder
+/// initiator <-{id}- responder
+/// initiator -{id}-> responder
+/// ```
 impl<T, C> InboundUpgrade<T> for NoiseConfig<XX, C>
 where
     NoiseConfig<XX, C>: UpgradeInfo,
@@ -243,16 +306,42 @@ where
             .local_private_key(self.dh_keys.secret().as_ref())
             .build_responder()
             .map_err(NoiseError::from);
-        handshake::rt15_responder(
-            socket,
-            session,
-            self.dh_keys.into_identity(),
-            IdentityExchange::Mutual,
-            self.legacy,
-        )
+
+        Handshake(Box::pin(async move {
+            let mut state = State::new(
+                socket,
+                session,
+                self.dh_keys.into_identity(),
+                IdentityExchange::Mutual,
+                self.legacy,
+            )?;
+            handshake::recv_empty(&mut state).await?;
+            handshake::send_identity(&mut state).await?;
+            handshake::recv_identity(&mut state).await?;
+            state.finish()
+        }))
     }
 }
 
+/// TODO: Adapt
+/// Creates an authenticated Noise handshake for the initiator of a
+/// 1.5-roundtrip (3 message) handshake pattern.
+///
+/// Subject to the chosen [`IdentityExchange`], this message sequence expects
+/// the remote to identify itself in the second message payload and
+/// identifies the local node to the remote in the third message payload.
+/// The first (unencrypted) message payload is always empty.
+///
+/// This message sequence is suitable for authenticated 3-message Noise handshake
+/// patterns where the static keys of the responder and initiator are either known
+/// (i.e. appear in the pre-message pattern) or are sent with the second and third
+/// message, respectively (e.g. `XX`).
+///
+/// ```raw
+/// initiator --{}--> responder
+/// initiator <-{id}- responder
+/// initiator -{id}-> responder
+/// ```
 impl<T, C> OutboundUpgrade<T> for NoiseConfig<XX, C>
 where
     NoiseConfig<XX, C>: UpgradeInfo,
@@ -270,18 +359,40 @@ where
             .local_private_key(self.dh_keys.secret().as_ref())
             .build_initiator()
             .map_err(NoiseError::from);
-        handshake::rt15_initiator(
-            socket,
-            session,
-            self.dh_keys.into_identity(),
-            IdentityExchange::Mutual,
-            self.legacy,
-        )
+
+        Handshake(Box::pin(async move {
+            let mut state = State::new(
+                socket,
+                session,
+                self.dh_keys.into_identity(),
+                IdentityExchange::Mutual,
+                self.legacy,
+            )?;
+            handshake::send_empty(&mut state).await?;
+            handshake::recv_identity(&mut state).await?;
+            handshake::send_identity(&mut state).await?;
+            state.finish()
+        }))
     }
 }
 
-// Handshake pattern IK /////////////////////////////////////////////////////
-
+/// TODO: Adapt
+/// Creates an authenticated Noise handshake for the responder of a
+/// single roundtrip (2 message) handshake pattern.
+///
+/// Subject to the chosen [`IdentityExchange`], this message sequence expects the
+/// remote to identify itself in the first message payload (i.e. unencrypted)
+/// and identifies the local node to the remote in the second message payload.
+///
+/// This message sequence is suitable for authenticated 2-message Noise handshake
+/// patterns where the static keys of the initiator and responder are either
+/// known (i.e. appear in the pre-message pattern) or are sent with the first
+/// and second message, respectively (e.g. `IK` or `IX`).
+///
+/// ```raw
+/// initiator -{id}-> responder
+/// initiator <-{id}- responder
+/// ```
 impl<T, C, R> InboundUpgrade<T> for NoiseConfig<IK, C, R>
 where
     NoiseConfig<IK, C, R>: UpgradeInfo,
@@ -299,16 +410,40 @@ where
             .local_private_key(self.dh_keys.secret().as_ref())
             .build_responder()
             .map_err(NoiseError::from);
-        handshake::rt1_responder(
-            socket,
-            session,
-            self.dh_keys.into_identity(),
-            IdentityExchange::Receive,
-            self.legacy,
-        )
+
+        Handshake(Box::pin(async move {
+            let mut state = State::new(
+                socket,
+                session,
+                self.dh_keys.into_identity(),
+                IdentityExchange::Receive,
+                self.legacy,
+            )?;
+            handshake::recv_identity(&mut state).await?;
+            handshake::send_identity(&mut state).await?;
+            state.finish()
+        }))
     }
 }
 
+/// TODO: Adapt
+/// Creates an authenticated Noise handshake for the initiator of a
+/// single roundtrip (2 message) handshake pattern.
+///
+/// Subject to the chosen [`IdentityExchange`], this message sequence
+/// identifies the local node to the remote with the first message payload
+/// (i.e. unencrypted) and expects the remote to identify itself in the
+/// second message payload.
+///
+/// This message sequence is suitable for authenticated 2-message Noise handshake
+/// patterns where the static keys of the initiator and responder are either
+/// known (i.e. appear in the pre-message pattern) or are sent with
+/// the first and second message, respectively (e.g. `IK` or `IX`).
+///
+/// ```raw
+/// initiator -{id}-> responder
+/// initiator <-{id}- responder
+/// ```
 impl<T, C> OutboundUpgrade<T> for NoiseConfig<IK, C, (PublicKey<C>, identity::PublicKey)>
 where
     NoiseConfig<IK, C, (PublicKey<C>, identity::PublicKey)>: UpgradeInfo,
@@ -327,15 +462,21 @@ where
             .remote_public_key(self.remote.0.as_ref())
             .build_initiator()
             .map_err(NoiseError::from);
-        handshake::rt1_initiator(
-            socket,
-            session,
-            self.dh_keys.into_identity(),
-            IdentityExchange::Send {
-                remote: self.remote.1,
-            },
-            self.legacy,
-        )
+
+        Handshake(Box::pin(async move {
+            let mut state = State::new(
+                socket,
+                session,
+                self.dh_keys.into_identity(),
+                IdentityExchange::Send {
+                    remote: self.remote.1,
+                },
+                self.legacy,
+            )?;
+            handshake::send_identity(&mut state).await?;
+            handshake::recv_identity(&mut state).await?;
+            state.finish()
+        }))
     }
 }
 
