@@ -47,6 +47,10 @@
 
 - Update to [`libp2p-tcp` `v0.37.0`](transports/tcp/CHANGELOG.md#0370).
 
+- Update to [`libp2p-metrics` `v0.10.0`](misc/metrics/CHANGELOG.md#0100).
+
+- Update to [`libp2p-kad` `v0.41.0`](protocols/kad/CHANGELOG.md#0410).
+
 # 0.48.0
 
 - Update to [`libp2p-core` `v0.36.0`](core/CHANGELOG.md#0360).
