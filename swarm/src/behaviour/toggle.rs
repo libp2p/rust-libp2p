@@ -82,11 +82,22 @@ where
             .unwrap_or_else(Vec::new)
     }
 
-    fn on_event(&mut self, event: super::InEvent<Self::ConnectionHandler>) {
+    fn on_swarm_event(&mut self, event: super::InEvent<Self::ConnectionHandler>) {
         if let Some(behaviour) = &mut self.inner {
-            if let Some(event) = event.try_map_handler(|h| h.inner, |h| h.inner, |e| Some(e)) {
-                behaviour.on_event(event);
+            if let Some(event) = event.try_map_handler(|h| h.inner, |h| h.inner) {
+                behaviour.on_swarm_event(event);
             }
+        }
+    }
+
+    fn on_connection_handler_event(
+        &mut self,
+        peer_id: PeerId,
+        connection_id: libp2p_core::connection::ConnectionId,
+        event: crate::THandlerOutEvent<Self>,
+    ) {
+        if let Some(behaviour) = &mut self.inner {
+            behaviour.on_connection_handler_event(peer_id, connection_id, event)
         }
     }
 

@@ -47,24 +47,39 @@ where
         }
     }
 
-    fn on_event(&mut self, event: behaviour::InEvent<Self::ConnectionHandler>) {
+    fn on_swarm_event(&mut self, event: behaviour::InEvent<Self::ConnectionHandler>) {
         match self {
-            Either::Left(b) => b.on_event(event.map_handler(
+            Either::Left(b) => b.on_swarm_event(event.map_handler(
                 |h| h.unwrap_left(),
                 |h| match h {
                     Either::Left(h) => h,
                     Either::Right(_) => unreachable!(),
                 },
-                |e| e.unwrap_left(),
             )),
-            Either::Right(b) => b.on_event(event.map_handler(
+            Either::Right(b) => b.on_swarm_event(event.map_handler(
                 |h| h.unwrap_right(),
                 |h| match h {
                     Either::Right(h) => h,
                     Either::Left(_) => unreachable!(),
                 },
-                |e| e.unwrap_right(),
             )),
+        }
+    }
+
+    fn on_connection_handler_event(
+        &mut self,
+        peer_id: PeerId,
+        connection_id: libp2p_core::connection::ConnectionId,
+        event: crate::THandlerOutEvent<Self>,
+    ) {
+        match (self, event) {
+            (Either::Left(left), Either::Left(event)) => {
+                left.on_connection_handler_event(peer_id, connection_id, event)
+            }
+            (Either::Right(right), Either::Right(event)) => {
+                right.on_connection_handler_event(peer_id, connection_id, event)
+            }
+            _ => unreachable!(),
         }
     }
 

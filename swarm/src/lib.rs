@@ -1563,13 +1563,8 @@ impl NetworkBehaviour for DummyBehaviour {
         }
     }
 
-    fn on_event(&mut self, event: InEvent<Self::ConnectionHandler>) {
+    fn on_swarm_event(&mut self, event: InEvent<Self::ConnectionHandler>) {
         match event {
-            InEvent::ConnectionHandler {
-                peer_id: _,
-                connection: _,
-                event,
-            } => void::unreachable(event),
             InEvent::ConnectionEstablished {
                 peer_id: _,
                 connection_id: _,
@@ -1620,6 +1615,15 @@ impl NetworkBehaviour for DummyBehaviour {
             InEvent::NewExternalAddr { addr: _ } => {}
             InEvent::ExpiredExternalAddr { addr: _ } => {}
         }
+    }
+
+    fn on_connection_handler_event(
+        &mut self,
+        _peer_id: PeerId,
+        _connection_id: ConnectionId,
+        event: crate::THandlerOutEvent<Self>,
+    ) {
+        void::unreachable(event)
     }
 
     fn poll(
