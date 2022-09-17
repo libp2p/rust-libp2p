@@ -938,11 +938,11 @@ impl<'a, Handler: IntoConnectionHandler> InEvent<'a, Handler> {
     where
         NewHandler: IntoConnectionHandler,
     {
-        self.try_map_handler(|h| Some(map_into_handler(h)), |h| Some(map_handler(h)))
+        self.maybe_map_handler(|h| Some(map_into_handler(h)), |h| Some(map_handler(h)))
             .expect("To return Some as all closures return Some.")
     }
 
-    fn try_map_handler<NewHandler>(
+    fn maybe_map_handler<NewHandler>(
         self,
         map_into_handler: impl FnOnce(Handler) -> Option<NewHandler>,
         map_handler: impl FnOnce(

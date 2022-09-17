@@ -84,7 +84,7 @@ where
 
     fn on_swarm_event(&mut self, event: super::InEvent<Self::ConnectionHandler>) {
         if let Some(behaviour) = &mut self.inner {
-            if let Some(event) = event.try_map_handler(|h| h.inner, |h| h.inner) {
+            if let Some(event) = event.maybe_map_handler(|h| h.inner, |h| h.inner) {
                 behaviour.on_swarm_event(event);
             }
         }
