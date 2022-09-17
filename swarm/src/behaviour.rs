@@ -188,7 +188,9 @@ pub trait NetworkBehaviour: 'static {
             peer_id: *peer_id,
             connection_id: *connection_id,
             endpoint,
-            failed_addresses,
+            failed_addresses: failed_addresses
+                .map(|v| v.as_slice())
+                .unwrap_or_else(|| &[]),
             other_established,
         });
     }
@@ -857,8 +859,7 @@ pub enum InEvent<'a, Handler: IntoConnectionHandler> {
         peer_id: PeerId,
         connection_id: ConnectionId,
         endpoint: &'a ConnectedPoint,
-        // TODO: Would a slice not be better?
-        failed_addresses: Option<&'a Vec<Multiaddr>>,
+        failed_addresses: &'a [Multiaddr],
         other_established: usize,
     },
     /// Informs the behaviour about a closed connection to a peer.
