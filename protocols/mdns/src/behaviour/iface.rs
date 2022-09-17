@@ -85,7 +85,7 @@ where
                 socket.bind(&SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 5353).into())?;
                 socket.set_multicast_loop_v4(true)?;
                 socket.set_multicast_ttl_v4(255)?;
-                socket.join_multicast_v4(&*crate::IPV4_MDNS_MULTICAST_ADDRESS, &addr)?;
+                socket.join_multicast_v4(&crate::IPV4_MDNS_MULTICAST_ADDRESS, &addr)?;
                 U::from_std(UdpSocket::from(socket))?
             }
             IpAddr::V6(_) => {
@@ -96,7 +96,7 @@ where
                 socket.bind(&SocketAddr::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), 5353).into())?;
                 socket.set_multicast_loop_v6(true)?;
                 // TODO: find interface matching addr.
-                socket.join_multicast_v6(&*crate::IPV6_MDNS_MULTICAST_ADDRESS, 0)?;
+                socket.join_multicast_v6(&crate::IPV6_MDNS_MULTICAST_ADDRESS, 0)?;
                 U::from_std(UdpSocket::from(socket))?
             }
         };
