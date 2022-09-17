@@ -23,7 +23,7 @@
 
 use std::collections::HashMap;
 
-use prometheus_client::encoding::text::Encode;
+use prometheus_client::encoding::Encode;
 use prometheus_client::metrics::counter::Counter;
 use prometheus_client::metrics::family::{Family, MetricConstructor};
 use prometheus_client::metrics::gauge::Gauge;

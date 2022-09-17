@@ -31,7 +31,8 @@ serde = { version = "1", optional = true, features = ["derive"] }
 wasm-timer = "0.2.5"
 instant = "0.1.11"
 # Metrics dependencies
-prometheus-client = "0.18.0"
+# TODO: Change to v0.19 once the version has been released.
+prometheus-client = { git = "https://github.com/ackintosh/client_rust.git", rev = "5e145bb0cb52ab4ff01c862a6117fb61ee107f17", features = ["protobuf"] }
 
 [dev-dependencies]
 async-std = "1.6.3"
