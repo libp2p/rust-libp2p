@@ -35,9 +35,6 @@
 //!   define how to upgrade each individual substream to use a protocol.
 //!   See the `upgrade` module.
 
-#[cfg(feature = "serde")]
-extern crate _serde as serde;
-
 #[allow(clippy::derive_partial_eq_without_eq)]
 mod keys_proto {
     include!(concat!(env!("OUT_DIR"), "/keys_proto.rs"));

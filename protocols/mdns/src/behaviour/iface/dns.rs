@@ -246,7 +246,7 @@ fn query_response_packet(id: u16, peer_id: &[u8], records: &[Vec<u8>], ttl: u32)
 fn duration_to_secs(duration: Duration) -> u32 {
     let secs = duration
         .as_secs()
-        .saturating_add(if duration.subsec_nanos() > 0 { 1 } else { 0 });
+        .saturating_add(u64::from(duration.subsec_nanos() > 0));
     cmp::min(secs, From::from(u32::max_value())) as u32
 }
 
