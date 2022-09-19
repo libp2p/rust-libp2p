@@ -9,6 +9,11 @@ pub fn dangerous_extract_tor_address(multiaddr: &Multiaddr) -> Result<TorAddr, T
 }
 
 pub fn safe_extract_tor_address(multiaddr: &mut Multiaddr) -> Result<TorAddr, TorAddrError> {
+    let tcp_variant = multiaddr.pop().ok_or(TorAddrError::NoPort)?;
+    let tcp_port = match tcp_variant {
+        Protocol::Tcp(p) => p,
+        _ => return Err(TorAddrError::NoPort),
+    };
     let dns_variant = multiaddr.pop().ok_or(TorAddrError::InvalidHostname)?;
     let dns_addr = match dns_variant {
         Protocol::Dns(dns) => dns,
@@ -16,26 +21,21 @@ pub fn safe_extract_tor_address(multiaddr: &mut Multiaddr) -> Result<TorAddr, To
         Protocol::Dns6(dns) => dns,
         _ => return Err(TorAddrError::InvalidHostname),
     };
-    let tcp_variant = multiaddr.pop().ok_or(TorAddrError::NoPort)?;
-    let tcp_port = match tcp_variant {
-        Protocol::Tcp(p) => p,
-        _ => return Err(TorAddrError::NoPort),
-    };
     let address_tuple = (dns_addr.as_ref(), tcp_port);
     address_tuple.into_tor_addr()
 }
 
 fn try_extract_socket_addr(multiaddr: &mut Multiaddr) -> Result<SocketAddr, TorAddrError> {
+    let tcp_variant = multiaddr.pop().ok_or(TorAddrError::NoPort)?;
+    let port = match tcp_variant {
+        Protocol::Tcp(p) => p,
+        _ => return Err(TorAddrError::NoPort),
+    };
     let ip_variant = multiaddr.pop().ok_or(TorAddrError::InvalidHostname)?;
     let ip = match ip_variant {
         Protocol::Ip4(ip4) => IpAddr::V4(ip4),
         Protocol::Ip6(ip6) => IpAddr::V6(ip6),
         _ => return Err(TorAddrError::InvalidHostname),
-    };
-    let tcp_variant = multiaddr.pop().ok_or(TorAddrError::NoPort)?;
-    let port = match tcp_variant {
-        Protocol::Tcp(p) => p,
-        _ => return Err(TorAddrError::NoPort),
     };
     Ok(SocketAddr::new(ip, port))
 }
@@ -96,7 +96,7 @@ mod tests {
         let without_dns_res = safe_extract_tor_address(&mut without_dns.clone());
         assert_eq!(
             without_dns_res,
-            Err(arti_client::TorAddrError::InvalidHostname)
+            Err(arti_client::TorAddrError::NoPort)
         );
 
         let host = Cow::Borrowed("ip.tld");
@@ -107,7 +107,7 @@ mod tests {
         let with_ip_addr_res = safe_extract_tor_address(&mut with_ip_addr.clone());
         assert_eq!(
             with_ip_addr_res,
-            Err(arti_client::TorAddrError::InvalidHostname)
+            Err(arti_client::TorAddrError::NoPort)
         );
     }
 }
