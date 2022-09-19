@@ -27,23 +27,29 @@ use tokio_util::compat::TokioAsyncReadCompatExt;
 use webrtc::data::data_channel::DataChannel;
 use webrtc::data::data_channel::PollDataChannel as RTCPollDataChannel;
 
-use std::io;
-use std::pin::Pin;
-use std::sync::Arc;
-use std::task::{Context, Poll};
+use std::{
+    io,
+    pin::Pin,
+    sync::Arc,
+    task::{Context, Poll},
+};
 
 use crate::message_proto::message::Flag;
 use crate::message_proto::Message;
 
-// TODO: Document
+/// Maximum length of a message, in bytes.
 const MAX_MSG_LEN: usize = 16384; // 16kiB
+/// Length of varint, in bytes.
 const VARINT_LEN: usize = 2;
+/// Overhead of the protobuf encoding, in bytes.
 const PROTO_OVERHEAD: usize = 5;
+/// Maximum length of data, in bytes.
 const MAX_DATA_LEN: usize = MAX_MSG_LEN - VARINT_LEN - PROTO_OVERHEAD;
 
-/// A wrapper around [`RTCPollDataChannel`] implementing futures [`AsyncRead`] / [`AsyncWrite`].
-// TODO
-// #[derive(Debug)]
+/// Substream is a wrapper around [`RTCPollDataChannel`] implementing futures [`AsyncRead`] /
+/// [`AsyncWrite`] and message framing (as per specification).
+///
+/// #[derive(Debug)]
 pub struct Substream {
     io: Framed<Compat<RTCPollDataChannel>, prost_codec::Codec<Message>>,
     state: State,
@@ -55,8 +61,7 @@ impl Substream {
         Self {
             io: Framed::new(
                 RTCPollDataChannel::new(data_channel).compat(),
-                // TODO: Fix MAX
-                prost_codec::Codec::new(usize::MAX),
+                prost_codec::Codec::new(MAX_MSG_LEN),
             ),
             state: State::Open {
                 read_buffer: Default::default(),
