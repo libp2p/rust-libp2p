@@ -23,21 +23,10 @@
 extern crate core;
 
 use futures::prelude::*;
-use libp2p_core::{
-    identity,
-    muxing::StreamMuxerBox,
-    transport::{self, Transport},
-    upgrade, PeerId,
-};
-use libp2p_mplex as mplex;
-use libp2p_noise as noise;
 use libp2p_ping as ping;
 use libp2p_swarm::{DummyBehaviour, KeepAlive, Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
-use libp2p_tcp::{GenTcpConfig, TcpTransport};
-use libp2p_yamux as yamux;
 use quickcheck::*;
-use rand::prelude::*;
 use std::{num::NonZeroU8, time::Duration};
 
 #[test]
