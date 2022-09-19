@@ -51,7 +51,7 @@ use std::{
 
 use crate::{
     connection::Connection,
-    connection::PollDataChannel,
+    connection::Substream,
     error::Error,
     fingerprint::Fingerprint,
     in_addr::InAddr,
@@ -191,7 +191,7 @@ impl Transport for WebRTCTransport {
             trace!("noise handshake with addr={}", remote);
             let peer_id = perform_noise_handshake_outbound(
                 id_keys,
-                PollDataChannel::new(data_channel.clone()),
+                Substream::new(data_channel.clone()),
                 our_fingerprint,
                 remote_fingerprint,
             )
@@ -579,7 +579,7 @@ async fn upgrade(
     let remote_fingerprint = conn.get_remote_fingerprint().await;
     let peer_id = perform_noise_handshake_inbound(
         id_keys,
-        PollDataChannel::new(data_channel.clone()),
+        Substream::new(data_channel.clone()),
         our_fingerprint,
         remote_fingerprint,
     )

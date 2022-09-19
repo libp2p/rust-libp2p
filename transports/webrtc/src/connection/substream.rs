@@ -44,90 +44,13 @@ const MAX_DATA_LEN: usize = MAX_MSG_LEN - VARINT_LEN - PROTO_OVERHEAD;
 /// A wrapper around [`RTCPollDataChannel`] implementing futures [`AsyncRead`] / [`AsyncWrite`].
 // TODO
 // #[derive(Debug)]
-pub struct PollDataChannel {
+pub struct Substream {
     io: Framed<Compat<RTCPollDataChannel>, prost_codec::Codec<Message>>,
     state: State,
 }
 
-enum State {
-    Open { read_buffer: Bytes },
-    WriteClosed { read_buffer: Bytes },
-    ReadClosed { read_buffer: Bytes },
-    ReadWriteClosed { read_buffer: Bytes },
-    ReadReset,
-    ReadResetWriteClosed,
-    Poisoned,
-}
-
-impl State {
-    fn handle_flag(&mut self, flag: Flag) {
-        match (std::mem::replace(self, State::Poisoned), flag) {
-            // StopSending
-            (
-                State::Open { read_buffer } | State::WriteClosed { read_buffer },
-                Flag::StopSending,
-            ) => {
-                *self = State::WriteClosed { read_buffer };
-            }
-
-            (
-                State::ReadClosed { read_buffer } | State::ReadWriteClosed { read_buffer },
-                Flag::StopSending,
-            ) => {
-                *self = State::ReadWriteClosed { read_buffer };
-            }
-
-            (State::ReadReset | State::ReadResetWriteClosed, Flag::StopSending) => {
-                *self = State::ReadResetWriteClosed;
-            }
-
-            // Fin
-            (State::Open { read_buffer } | State::ReadClosed { read_buffer }, Flag::Fin) => {
-                *self = State::ReadClosed { read_buffer };
-            }
-
-            (
-                State::WriteClosed { read_buffer } | State::ReadWriteClosed { read_buffer },
-                Flag::Fin,
-            ) => {
-                *self = State::ReadWriteClosed { read_buffer };
-            }
-
-            (State::ReadReset, Flag::Fin) => *self = State::ReadReset,
-
-            (State::ReadResetWriteClosed, Flag::Fin) => *self = State::ReadResetWriteClosed,
-
-            // Reset
-            (State::ReadClosed { .. } | State::ReadReset | State::Open { .. }, Flag::Reset) => {
-                *self = State::ReadReset
-            }
-
-            (
-                State::ReadWriteClosed { .. }
-                | State::WriteClosed { .. }
-                | State::ReadResetWriteClosed,
-                Flag::Reset,
-            ) => *self = State::ReadResetWriteClosed,
-
-            (State::Poisoned, _) => unreachable!(),
-        }
-    }
-
-    fn read_buffer_mut(&mut self) -> Option<&mut Bytes> {
-        match self {
-            State::Open { read_buffer } => Some(read_buffer),
-            State::WriteClosed { read_buffer } => Some(read_buffer),
-            State::ReadClosed { read_buffer } => Some(read_buffer),
-            State::ReadWriteClosed { read_buffer } => Some(read_buffer),
-            State::ReadReset => None,
-            State::ReadResetWriteClosed => None,
-            State::Poisoned => todo!(),
-        }
-    }
-}
-
-impl PollDataChannel {
-    /// Constructs a new `PollDataChannel`.
+impl Substream {
+    /// Constructs a new `Substream`.
     pub fn new(data_channel: Arc<DataChannel>) -> Self {
         Self {
             io: Framed::new(
@@ -213,7 +136,7 @@ fn io_poll_next(
     }
 }
 
-impl AsyncRead for PollDataChannel {
+impl AsyncRead for Substream {
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -263,7 +186,7 @@ impl AsyncRead for PollDataChannel {
     }
 }
 
-impl AsyncWrite for PollDataChannel {
+impl AsyncWrite for Substream {
     fn poll_write(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -349,6 +272,83 @@ impl AsyncWrite for PollDataChannel {
 
         // TODO: Is flush the correct thing here? We don't want the underlying layer to close both write and read.
         self.io.poll_flush_unpin(cx).map_err(Into::into)
+    }
+}
+
+enum State {
+    Open { read_buffer: Bytes },
+    WriteClosed { read_buffer: Bytes },
+    ReadClosed { read_buffer: Bytes },
+    ReadWriteClosed { read_buffer: Bytes },
+    ReadReset,
+    ReadResetWriteClosed,
+    Poisoned,
+}
+
+impl State {
+    fn handle_flag(&mut self, flag: Flag) {
+        match (std::mem::replace(self, State::Poisoned), flag) {
+            // StopSending
+            (
+                State::Open { read_buffer } | State::WriteClosed { read_buffer },
+                Flag::StopSending,
+            ) => {
+                *self = State::WriteClosed { read_buffer };
+            }
+
+            (
+                State::ReadClosed { read_buffer } | State::ReadWriteClosed { read_buffer },
+                Flag::StopSending,
+            ) => {
+                *self = State::ReadWriteClosed { read_buffer };
+            }
+
+            (State::ReadReset | State::ReadResetWriteClosed, Flag::StopSending) => {
+                *self = State::ReadResetWriteClosed;
+            }
+
+            // Fin
+            (State::Open { read_buffer } | State::ReadClosed { read_buffer }, Flag::Fin) => {
+                *self = State::ReadClosed { read_buffer };
+            }
+
+            (
+                State::WriteClosed { read_buffer } | State::ReadWriteClosed { read_buffer },
+                Flag::Fin,
+            ) => {
+                *self = State::ReadWriteClosed { read_buffer };
+            }
+
+            (State::ReadReset, Flag::Fin) => *self = State::ReadReset,
+
+            (State::ReadResetWriteClosed, Flag::Fin) => *self = State::ReadResetWriteClosed,
+
+            // Reset
+            (State::ReadClosed { .. } | State::ReadReset | State::Open { .. }, Flag::Reset) => {
+                *self = State::ReadReset
+            }
+
+            (
+                State::ReadWriteClosed { .. }
+                | State::WriteClosed { .. }
+                | State::ReadResetWriteClosed,
+                Flag::Reset,
+            ) => *self = State::ReadResetWriteClosed,
+
+            (State::Poisoned, _) => unreachable!(),
+        }
+    }
+
+    fn read_buffer_mut(&mut self) -> Option<&mut Bytes> {
+        match self {
+            State::Open { read_buffer } => Some(read_buffer),
+            State::WriteClosed { read_buffer } => Some(read_buffer),
+            State::ReadClosed { read_buffer } => Some(read_buffer),
+            State::ReadWriteClosed { read_buffer } => Some(read_buffer),
+            State::ReadReset => None,
+            State::ReadResetWriteClosed => None,
+            State::Poisoned => todo!(),
+        }
     }
 }
 

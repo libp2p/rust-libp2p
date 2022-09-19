@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-mod poll_data_channel;
+mod substream;
 
 use futures::{
     channel::{
@@ -42,7 +42,7 @@ use std::{
 };
 
 use crate::error::Error;
-pub(crate) use poll_data_channel::PollDataChannel;
+pub(crate) use substream::Substream;
 
 const MAX_DATA_CHANNELS_IN_FLIGHT: usize = 10;
 
@@ -57,7 +57,7 @@ pub struct Connection {
     incoming_data_channels_rx: mpsc::Receiver<Arc<DetachedDataChannel>>,
 
     /// Temporary read buffer's capacity (equal for all data channels).
-    /// See [`PollDataChannel`] `read_buf_cap`.
+    /// See [`Substream`] `read_buf_cap`.
     read_buf_cap: Option<usize>,
 
     /// Future, which, once polled, will result in an outbound substream.
@@ -149,7 +149,7 @@ impl Connection {
 }
 
 impl<'a> StreamMuxer for Connection {
-    type Substream = PollDataChannel;
+    type Substream = Substream;
     type Error = Error;
 
     fn poll_inbound(
@@ -160,7 +160,7 @@ impl<'a> StreamMuxer for Connection {
             Some(detached) => {
                 trace!("Incoming substream {}", detached.stream_identifier());
 
-                let mut ch = PollDataChannel::new(detached);
+                let mut ch = Substream::new(detached);
                 if let Some(cap) = self.read_buf_cap {
                     ch.set_read_buf_capacity(cap);
                 }
@@ -213,7 +213,7 @@ impl<'a> StreamMuxer for Connection {
 
         match ready!(fut.as_mut().poll(cx)) {
             Ok(detached) => {
-                let mut ch = PollDataChannel::new(detached);
+                let mut ch = Substream::new(detached);
                 if let Some(cap) = self.read_buf_cap {
                     ch.set_read_buf_capacity(cap);
                 }
