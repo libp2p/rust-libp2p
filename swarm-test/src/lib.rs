@@ -35,7 +35,7 @@ pub trait SwarmExt {
         Self: Sized;
 
     /// Establishes a connection to the given [`Swarm`], polling both of them until the connection is established.
-    async fn block_on_connection<T>(&mut self, other: &mut Swarm<T>)
+    async fn connect<T>(&mut self, other: &mut Swarm<T>)
     where
         T: NetworkBehaviour + Send,
         <T as NetworkBehaviour>::OutEvent: Debug;
@@ -87,7 +87,7 @@ where
         Swarm::new(transport, behaviour_fn(peer_id, identity), peer_id)
     }
 
-    async fn block_on_connection<T>(&mut self, other: &mut Swarm<T>)
+    async fn connect<T>(&mut self, other: &mut Swarm<T>)
     where
         T: NetworkBehaviour + Send,
         <T as NetworkBehaviour>::OutEvent: Debug,

@@ -58,7 +58,7 @@ fn ping_pong() {
 
         async_std::task::block_on(async {
             swarm1.listen_on_random_localhost_tcp_port().await;
-            swarm2.block_on_connection(&mut swarm1).await;
+            swarm2.connect(&mut swarm1).await;
 
             for _ in 0..count.get() {
                 let (e1, e2) =
@@ -109,7 +109,7 @@ fn max_failures() {
 
         async_std::task::block_on(async {
             swarm1.listen_on_random_localhost_tcp_port().await;
-            swarm2.block_on_connection(&mut swarm1).await;
+            swarm2.connect(&mut swarm1).await;
         });
 
         let future = future::join(
@@ -165,7 +165,7 @@ fn unsupported_doesnt_fail() {
 
     let result = async_std::task::block_on(async {
         swarm1.listen_on_random_localhost_tcp_port().await;
-        swarm2.block_on_connection(&mut swarm1).await;
+        swarm2.connect(&mut swarm1).await;
 
         loop {
             match swarm2.next_within(5).await {

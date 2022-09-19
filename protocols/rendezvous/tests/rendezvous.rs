@@ -218,7 +218,7 @@ async fn eve_cannot_register() {
     let namespace = rendezvous::Namespace::from_static("some-namespace");
     let mut robert = new_server(rendezvous::server::Config::default()).await;
     let mut eve = new_impersonating_client().await;
-    eve.block_on_connection(&mut robert).await;
+    eve.connect(&mut robert).await;
 
     eve.behaviour_mut()
         .register(namespace.clone(), *robert.local_peer_id(), None);
@@ -240,8 +240,8 @@ async fn can_combine_client_and_server() {
     let ([mut alice], mut robert) =
         new_server_with_connected_clients(rendezvous::server::Config::default()).await;
     let mut charlie = new_combined_node().await;
-    charlie.block_on_connection(&mut robert).await;
-    alice.block_on_connection(&mut charlie).await;
+    charlie.connect(&mut robert).await;
+    alice.connect(&mut charlie).await;
 
     charlie
         .behaviour_mut()
@@ -326,7 +326,7 @@ async fn new_server_with_connected_clients<const N: usize>(
     };
 
     for client in &mut clients {
-        client.block_on_connection(&mut server).await;
+        client.connect(&mut server).await;
     }
 
     (clients, server)
