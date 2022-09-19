@@ -31,31 +31,46 @@ pub struct OnionClient<R: Runtime> {
     // due to lifetime issues. With the, eventual, stabilization of static async traits this issue
     // will be resolved.
     client: Arc<TorClient<R>>,
-    safe_mode: bool,
+    pub conversion_mode: AddressConversion,
 }
 
 pub type OnionBuilder<R> = TorClientBuilder<R>;
 
+#[derive(Debug, Clone, Copy, Hash, Default, PartialEq, Eq, PartialOrd, Ord)]
+pub enum AddressConversion {
+    /// uses only dns for address resolution
+    #[default]
+    DnsOnly,
+    /// uses ip and dns for addresses
+    IpAndDns,
+}
+
 impl<R: Runtime> OnionClient<R> {
-    #[inline]
-    pub fn from_builder(builder: OnionBuilder<R>, safe_mode: bool) -> Result<Self, OnionError> {
+    pub fn from_builder(
+        builder: OnionBuilder<R>,
+        conversion_mode: AddressConversion,
+    ) -> Result<Self, OnionError> {
         let client = Arc::new(builder.create_unbootstrapped()?);
-        Ok(Self { client, safe_mode })
-    }
-
-    #[inline]
-    pub fn is_safe_mode(&self) -> bool {
-        self.safe_mode
-    }
-
-    #[inline]
-    pub fn set_safe_mode(&mut self, mode: bool) {
-        self.safe_mode = mode
+        Ok(Self {
+            client,
+            conversion_mode,
+        })
     }
 
     pub async fn bootstrap(&self) -> Result<(), OnionError> {
         self.client.bootstrap().await.map_err(OnionError::ArtiErr)
     }
+}
+
+macro_rules! default_constructor {
+    () => {
+        pub async fn default() -> Result<Self, OnionError> {
+            let builder = Self::builder();
+            let ret = Self::from_builder(builder, AddressConversion::DnsOnly)?;
+            ret.bootstrap().await?;
+            Ok(ret)
+        }
+    };
 }
 
 #[cfg(all(feature = "native-tls", feature = "async-std"))]
@@ -66,6 +81,7 @@ impl OnionClient<tor_rtcompat::async_std::AsyncStdNativeTlsRuntime> {
             .expect("Couldn't get the current async_std native-tls runtime");
         TorClient::with_runtime(runtime)
     }
+    default_constructor!();
 }
 
 #[cfg(all(feature = "rustls", feature = "async-std"))]
@@ -76,6 +92,7 @@ impl OnionClient<tor_rtcompat::async_std::AsyncStdRustlsRuntime> {
             .expect("Couldn't get the current async_std rustls runtime");
         TorClient::with_runtime(runtime)
     }
+    default_constructor!();
 }
 
 #[cfg(all(feature = "native-tls", feature = "tokio"))]
@@ -86,6 +103,7 @@ impl OnionClient<tor_rtcompat::tokio::TokioNativeTlsRuntime> {
             .expect("Couldn't get the current tokio native-tls runtime");
         TorClient::with_runtime(runtime)
     }
+    default_constructor!();
 }
 
 #[cfg(all(feature = "rustls", feature = "tokio"))]
@@ -96,6 +114,7 @@ impl OnionClient<tor_rtcompat::tokio::TokioRustlsRuntime> {
             .expect("Couldn't get the current tokio rustls runtime");
         TorClient::with_runtime(runtime)
     }
+    default_constructor!();
 }
 
 #[cfg(all(feature = "native-tls", feature = "async-std"))]
@@ -144,19 +163,17 @@ impl<R: Runtime> Transport for OnionClient<R> {
         Err(TransportError::MultiaddrNotSupported(addr))
     }
 
-    /// Always returns false
     fn remove_listener(&mut self, _id: libp2p_core::transport::ListenerId) -> bool {
         false
     }
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let tor_address = if !self.safe_mode {
-            safe_extract_tor_address(&addr).or_else(|_| dangerous_extract_tor_address(&addr))
+    fn dial(&mut self, mut addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        let tor_address = if self.conversion_mode == AddressConversion::IpAndDns {
+            safe_extract_tor_address(&mut addr).or_else(|_| dangerous_extract_tor_address(&addr))
         } else {
-            safe_extract_tor_address(&addr)
+            safe_extract_tor_address(&mut addr)
         }
-        .map_err(OnionError::from)
-        .map_err(TransportError::Other)?;
+        .map_err(|_| TransportError::MultiaddrNotSupported(addr))?;
         let onion_client = self.client.clone();
         Ok(async move {
             onion_client
@@ -168,7 +185,6 @@ impl<R: Runtime> Transport for OnionClient<R> {
         .boxed())
     }
 
-    /// Equivalent to `Transport::dial`
     fn dial_as_listener(
         &mut self,
         addr: Multiaddr,
@@ -176,18 +192,16 @@ impl<R: Runtime> Transport for OnionClient<R> {
         self.dial(addr)
     }
 
-    /// always returns `None`
     fn address_translation(&self, _listen: &Multiaddr, _observed: &Multiaddr) -> Option<Multiaddr> {
         None
     }
 
-    /// always returns pending
     fn poll(
         self: Pin<&mut Self>,
         _cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<libp2p_core::transport::TransportEvent<Self::ListenerUpgrade, Self::Error>>
     {
-        // pending is returned here, because this won't panic an OrTransport.
+        // pending is returned here because this transport doesn't support listening
         std::task::Poll::Pending
     }
 }

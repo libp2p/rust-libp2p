@@ -57,15 +57,11 @@ async fn onion_transport(
     use std::time::Duration;
 
     let transport = {
-        let dns_tcp = dns::DnsConfig::system(tcp::TcpTransport::new(
-            tcp::GenTcpConfig::new().nodelay(true),
-        ))
-        .await?;
         let onion = onion::OnionClient::from_builder(onion::OnionClient::builder(), false)?;
         println!("bootstrapping...");
         onion.bootstrap().await?;
         println!("bootstrapped!");
-        onion.or_transport(dns_tcp)
+        onion
     };
 
     let noise_keys = noise::Keypair::<noise::X25519Spec>::new()
@@ -84,6 +80,7 @@ async fn onion_transport(
 
 #[async_std::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    let addr = std::env::args().nth(1).expect("no multiaddr given");
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
     println!("Local peer id: {:?}", local_peer_id);
@@ -100,21 +97,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let mut swarm = Swarm::new(transport, behaviour, local_peer_id);
 
-    // Tell the swarm to listen on all interfaces and a random, OS-assigned
-    // port.
-    swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
-
     // Dial the peer identified by the multi-address given as the second
     // command-line argument, if any.
-    if let Some(addr) = std::env::args().nth(1) {
-        let remote: Multiaddr = addr.parse()?;
-        swarm.dial(remote)?;
-        println!("Dialed {}", addr)
-    }
+    let remote: Multiaddr = addr.parse()?;
+    swarm.dial(remote)?;
+    println!("Dialed {}", addr);
 
     loop {
         match swarm.select_next_some().await {
-            SwarmEvent::NewListenAddr { address, .. } => println!("Listening on {:?}", address),
+            SwarmEvent::ConnectionEstablished {  endpoint, .. } => {
+                let endpoint_addr = endpoint.get_remote_address();
+                println!("Connection established to {:?}", endpoint_addr);
+            },
+            SwarmEvent::OutgoingConnectionError { error, .. } => println!("Error establishing outgoing connection"),
             SwarmEvent::Behaviour(event) => println!("{:?}", event),
             _ => {}
         }
