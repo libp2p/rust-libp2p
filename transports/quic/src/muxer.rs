@@ -260,14 +260,8 @@ impl AsyncRead for Substream {
                     bytes += chunk.bytes.len();
                 }
                 Ok(None) => break,
-                Err(ReadError::Reset(error_code)) => {
-                    tracing::error!(
-                        "substream {} was reset with error code {}",
-                        self.id,
-                        error_code
-                    );
-                    bytes = 0;
-                    break;
+                Err(err @ ReadError::Reset(_)) => {
+                    return Poll::Ready(Err(io::Error::new(io::ErrorKind::ConnectionReset, err)))
                 }
                 Err(ReadError::Blocked) => {
                     pending = true;
