@@ -1,8 +1,13 @@
-# 0.39.1
+# 0.40.0
+
+- Update to `libp2p-core` `v0.36.0`
+
+- Remove `OpenSubstreamToken` as it is dead code. See [PR 2873].
 
 - Drive connection also via `StreamMuxer::poll`. Any received streams will be buffered up to a maximum of 25 streams.
   See [PR 2861].
 
+[PR 2873]: https://github.com/libp2p/rust-libp2p/pull/2873/
 [PR 2861]: https://github.com/libp2p/rust-libp2p/pull/2861/
 
 # 0.39.0

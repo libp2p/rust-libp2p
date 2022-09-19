@@ -79,8 +79,11 @@ pub use libp2p_identify as identify;
 #[cfg_attr(docsrs, doc(cfg(feature = "kad")))]
 #[doc(inline)]
 pub use libp2p_kad as kad;
-#[cfg(feature = "mdns")]
-#[cfg_attr(docsrs, doc(cfg(feature = "mdns")))]
+#[cfg(any(feature = "mdns-async-io", feature = "mdns-tokio"))]
+#[cfg_attr(
+    docsrs,
+    doc(cfg(any(feature = "mdns-tokio", feature = "mdns-async-io")))
+)]
 #[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
 #[doc(inline)]
 pub use libp2p_mdns as mdns;
@@ -214,13 +217,9 @@ pub async fn development_transport(
         dns_tcp.or_transport(ws_dns_tcp)
     };
 
-    let noise_keys = noise::Keypair::<noise::X25519Spec>::new()
-        .into_authentic(&keypair)
-        .expect("Signing libp2p-noise static DH keypair failed.");
-
     Ok(transport
         .upgrade(core::upgrade::Version::V1)
-        .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
+        .authenticate(noise::NoiseAuthenticated::xx(&keypair).unwrap())
         .multiplex(core::upgrade::SelectUpgrade::new(
             yamux::YamuxConfig::default(),
             mplex::MplexConfig::default(),
@@ -274,13 +273,9 @@ pub fn tokio_development_transport(
         dns_tcp.or_transport(ws_dns_tcp)
     };
 
-    let noise_keys = noise::Keypair::<noise::X25519Spec>::new()
-        .into_authentic(&keypair)
-        .expect("Signing libp2p-noise static DH keypair failed.");
-
     Ok(transport
         .upgrade(core::upgrade::Version::V1)
-        .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
+        .authenticate(noise::NoiseAuthenticated::xx(&keypair).unwrap())
         .multiplex(core::upgrade::SelectUpgrade::new(
             yamux::YamuxConfig::default(),
             mplex::MplexConfig::default(),

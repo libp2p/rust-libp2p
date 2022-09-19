@@ -214,13 +214,17 @@ impl Default for KademliaConfig {
 }
 
 impl KademliaConfig {
-    /// Sets a custom protocol name.
+    /// Sets custom protocol names.
     ///
     /// Kademlia nodes only communicate with other nodes using the same protocol
-    /// name. Using a custom name therefore allows to segregate the DHT from
+    /// name. Using custom name(s) therefore allows to segregate the DHT from
     /// others, if that is desired.
-    pub fn set_protocol_name(&mut self, name: impl Into<Cow<'static, [u8]>>) -> &mut Self {
-        self.protocol_config.set_protocol_name(name);
+    ///
+    /// More than one protocol name can be supplied. In this case the node will
+    /// be able to talk to other nodes supporting any of the provided names.
+    /// Multiple names must be used with caution to avoid network partitioning.
+    pub fn set_protocol_names(&mut self, names: Vec<Cow<'static, [u8]>>) -> &mut Self {
+        self.protocol_config.set_protocol_names(names);
         self
     }
 
@@ -403,8 +407,8 @@ where
     }
 
     /// Get the protocol name of this kademlia instance.
-    pub fn protocol_name(&self) -> &[u8] {
-        self.protocol_config.protocol_name()
+    pub fn protocol_names(&self) -> &[Cow<'static, [u8]>] {
+        self.protocol_config.protocol_names()
     }
 
     /// Creates a new `Kademlia` network behaviour with the given configuration.

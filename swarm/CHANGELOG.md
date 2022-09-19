@@ -1,7 +1,9 @@
-# 0.39.0 - [unreleased]
+# 0.39.0
 
 - Remove deprecated `NetworkBehaviourEventProcess`. See [libp2p-swarm v0.38.0 changelog entry] for
   migration path.
+
+- Update to `libp2p-core` `v0.36.0`.
 
 - Enforce backpressure on incoming streams via `StreamMuxer` interface. In case we hit the configured limit of maximum
   number of inbound streams, we will stop polling the `StreamMuxer` for new inbound streams. Depending on the muxer
