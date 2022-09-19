@@ -23,6 +23,10 @@ pub trait SwarmExt {
     type NB: NetworkBehaviour;
 
     /// Create a new [`Swarm`] with an ephemeral identity.
+    ///
+    /// The swarm will use a [`MemoryTransport`] together with a noise authentication layer and
+    /// yamux as the multiplexer. However, these details should not be relied upon by the test
+    /// and may change at any time.
     fn new_ephemeral(behaviour_fn: impl FnOnce(PeerId, Keypair) -> Self::NB) -> Self
     where
         Self: Sized;
