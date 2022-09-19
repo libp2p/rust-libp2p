@@ -217,13 +217,9 @@ pub async fn development_transport(
         dns_tcp.or_transport(ws_dns_tcp)
     };
 
-    let noise_keys = noise::Keypair::<noise::X25519Spec>::new()
-        .into_authentic(&keypair)
-        .expect("Signing libp2p-noise static DH keypair failed.");
-
     Ok(transport
         .upgrade(core::upgrade::Version::V1)
-        .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
+        .authenticate(noise::NoiseAuthenticated::xx(&keypair).unwrap())
         .multiplex(core::upgrade::SelectUpgrade::new(
             yamux::YamuxConfig::default(),
             mplex::MplexConfig::default(),
@@ -277,13 +273,9 @@ pub fn tokio_development_transport(
         dns_tcp.or_transport(ws_dns_tcp)
     };
 
-    let noise_keys = noise::Keypair::<noise::X25519Spec>::new()
-        .into_authentic(&keypair)
-        .expect("Signing libp2p-noise static DH keypair failed.");
-
     Ok(transport
         .upgrade(core::upgrade::Version::V1)
-        .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
+        .authenticate(noise::NoiseAuthenticated::xx(&keypair).unwrap())
         .multiplex(core::upgrade::SelectUpgrade::new(
             yamux::YamuxConfig::default(),
             mplex::MplexConfig::default(),
