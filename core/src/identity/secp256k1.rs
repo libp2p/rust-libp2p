@@ -23,6 +23,7 @@
 use super::error::{DecodingError, SigningError};
 use asn1_der::typed::{DerDecodable, Sequence};
 use core::fmt;
+use core::hash;
 use libsecp256k1::{Message, Signature};
 use sha2::{Digest as ShaDigestTrait, Sha256};
 use zeroize::Zeroize;
@@ -160,6 +161,12 @@ impl fmt::Debug for PublicKey {
             write!(f, "{:x}", byte)?;
         }
         Ok(())
+    }
+}
+
+impl hash::Hash for PublicKey {
+    fn hash<H: hash::Hasher>(&self, state: &mut H) {
+        self.encode().hash(state);
     }
 }
 

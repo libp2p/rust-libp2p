@@ -22,6 +22,7 @@
 
 use super::error::DecodingError;
 use core::fmt;
+use core::hash;
 use p256::{
     ecdsa::{
         signature::{Signer, Verifier},
@@ -219,6 +220,12 @@ impl fmt::Debug for PublicKey {
             write!(f, "{:x}", byte)?;
         }
         Ok(())
+    }
+}
+
+impl hash::Hash for PublicKey {
+    fn hash<H: hash::Hasher>(&self, state: &mut H) {
+        self.to_bytes().hash(state);
     }
 }
 
