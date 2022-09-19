@@ -658,14 +658,7 @@ where
                 let pos = self
                     .inbound_substreams
                     .iter()
-                    .position(|state| match state {
-                        InboundSubstreamState::WaitingUser(ref conn_id, _)
-                            if conn_id == &request_id.connec_unique_id =>
-                        {
-                            true
-                        }
-                        _ => false,
-                    });
+                    .position(|state| matches!(state, InboundSubstreamState::WaitingUser(ref conn_id, _) if conn_id == &request_id.connec_unique_id));
 
                 if let Some(pos) = pos {
                     let (conn_id, substream) = match self.inbound_substreams.remove(pos) {
@@ -737,14 +730,7 @@ where
                 let pos = self
                     .inbound_substreams
                     .iter()
-                    .position(|state| match state {
-                        InboundSubstreamState::WaitingUser(ref conn_id, _)
-                            if conn_id == &request_id.connec_unique_id =>
-                        {
-                            true
-                        }
-                        _ => false,
-                    });
+                    .position(|state| matches!(state, InboundSubstreamState::WaitingUser(ref conn_id, _) if conn_id == &request_id.connec_unique_id));
 
                 if let Some(pos) = pos {
                     let (conn_id, substream) = match self.inbound_substreams.remove(pos) {
