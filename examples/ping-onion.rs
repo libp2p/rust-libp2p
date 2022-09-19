@@ -105,11 +105,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     loop {
         match swarm.select_next_some().await {
-            SwarmEvent::ConnectionEstablished {  endpoint, .. } => {
+            SwarmEvent::ConnectionEstablished { endpoint, .. } => {
                 let endpoint_addr = endpoint.get_remote_address();
                 println!("Connection established to {:?}", endpoint_addr);
-            },
-            SwarmEvent::OutgoingConnectionError { error, .. } => println!("Error establishing outgoing connection"),
+            }
+            SwarmEvent::OutgoingConnectionError { error, .. } => {
+                println!("Error establishing outgoing connection")
+            }
             SwarmEvent::Behaviour(event) => println!("{:?}", event),
             _ => {}
         }

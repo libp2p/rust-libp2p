@@ -94,10 +94,7 @@ mod tests {
     fn detect_incorrect_address() {
         let without_dns = multiaddr!(Tcp(10u16), Udp(12u16));
         let without_dns_res = safe_extract_tor_address(&mut without_dns.clone());
-        assert_eq!(
-            without_dns_res,
-            Err(arti_client::TorAddrError::NoPort)
-        );
+        assert_eq!(without_dns_res, Err(arti_client::TorAddrError::NoPort));
 
         let host = Cow::Borrowed("ip.tld");
         let without_port = multiaddr!(Dns(host.clone()), Dns4(host.clone()), Dns6(host.clone()));
@@ -105,9 +102,6 @@ mod tests {
         assert_eq!(without_port_res, Err(arti_client::TorAddrError::NoPort));
         let with_ip_addr = multiaddr!(Tcp(10u16), Ip4("1.1.1.1".parse::<Ipv4Addr>().unwrap()));
         let with_ip_addr_res = safe_extract_tor_address(&mut with_ip_addr.clone());
-        assert_eq!(
-            with_ip_addr_res,
-            Err(arti_client::TorAddrError::NoPort)
-        );
+        assert_eq!(with_ip_addr_res, Err(arti_client::TorAddrError::NoPort));
     }
 }
