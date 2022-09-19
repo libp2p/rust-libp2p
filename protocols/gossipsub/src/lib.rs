@@ -97,10 +97,9 @@
 //!
 //! // Set up an encrypted TCP Transport over the Mplex
 //! // This is test transport (memory).
-//! let noise_keys = libp2p_noise::Keypair::<libp2p_noise::X25519Spec>::new().into_authentic(&local_key).unwrap();
 //! let transport = MemoryTransport::default()
 //!            .upgrade(libp2p_core::upgrade::Version::V1)
-//!            .authenticate(libp2p_noise::NoiseConfig::xx(noise_keys).into_authenticated())
+//!            .authenticate(libp2p_noise::NoiseAuthenticated::xx(&local_key).unwrap())
 //!            .multiplex(libp2p_mplex::MplexConfig::new())
 //!            .boxed();
 //!
