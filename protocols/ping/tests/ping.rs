@@ -42,8 +42,7 @@ fn ping_pong() {
             swarm2.connect(&mut swarm1).await;
 
             for _ in 0..count.get() {
-                let (e1, e2) =
-                    futures::future::join(swarm1.next_within(5), swarm2.next_within(5)).await;
+                let (e1, e2) = future::join(swarm1.next_within(5), swarm2.next_within(5)).await;
 
                 let e1 = e1.try_into_behaviour_event().unwrap();
                 let e2 = e2.try_into_behaviour_event().unwrap();
@@ -51,22 +50,21 @@ fn ping_pong() {
                 assert_eq!(&e1.peer, swarm2.local_peer_id());
                 assert_eq!(&e2.peer, swarm1.local_peer_id());
 
-                let e1 = e1.result.expect("ping failure");
-                let e2 = e2.result.expect("ping failure");
-
-                if let (
-                    ping::Success::Ping { rtt: peer1_rtt },
-                    ping::Success::Ping { rtt: peer2_rtt },
-                ) = (e1, e2)
-                {
-                    assert!(peer1_rtt < Duration::from_millis(50));
-                    assert!(peer2_rtt < Duration::from_millis(50));
-                }
+                assert_ping_rtt_less_than_50ms(e1);
+                assert_ping_rtt_less_than_50ms(e2);
             }
         });
     }
 
     QuickCheck::new().tests(10).quickcheck(prop as fn(_))
+}
+
+fn assert_ping_rtt_less_than_50ms(e: ping::Event) {
+    let success = e.result.expect("a ping success");
+
+    if let ping::Success::Ping { rtt } = success {
+        assert!(rtt < Duration::from_millis(50))
+    }
 }
 
 /// Tests that the connection is closed upon a configurable
@@ -83,25 +81,24 @@ fn max_failures() {
         let mut swarm1 = Swarm::new_ephemeral(|_, _| ping::Behaviour::new(cfg.clone()));
         let mut swarm2 = Swarm::new_ephemeral(|_, _| ping::Behaviour::new(cfg.clone()));
 
-        async_std::task::block_on(async {
+        let (count1, count2) = async_std::task::block_on(async {
             swarm1.listen_on_random_memory_address().await;
             swarm2.connect(&mut swarm1).await;
+
+            future::join(
+                count_ping_failures_until_connection_closed(swarm1),
+                count_ping_failures_until_connection_closed(swarm2),
+            )
+            .await
         });
 
-        let future = future::join(
-            count_consecutive_ping_failures_until_connection_closed(swarm1),
-            count_consecutive_ping_failures_until_connection_closed(swarm2),
-        );
-        let (count1, count2) = async_std::task::block_on(future);
         assert_eq!(u8::max(count1, count2), max_failures.get() - 1);
     }
 
     QuickCheck::new().tests(10).quickcheck(prop as fn(_))
 }
 
-async fn count_consecutive_ping_failures_until_connection_closed(
-    mut swarm: Swarm<ping::Behaviour>,
-) -> u8 {
+async fn count_ping_failures_until_connection_closed(mut swarm: Swarm<ping::Behaviour>) -> u8 {
     let mut failure_count = 0;
 
     loop {
