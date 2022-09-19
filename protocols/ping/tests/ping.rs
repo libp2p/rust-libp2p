@@ -47,17 +47,11 @@ fn ping_pong() {
             .with_keep_alive(true)
             .with_interval(Duration::from_millis(10));
 
-        let mut swarm1 = Swarm::new_ephemeral(
-            TcpTransport::new(GenTcpConfig::default().nodelay(true)),
-            |_, _| ping::Behaviour::new(cfg.clone()),
-        );
-        let mut swarm2 = Swarm::new_ephemeral(
-            TcpTransport::new(GenTcpConfig::default().nodelay(true)),
-            |_, _| ping::Behaviour::new(cfg.clone()),
-        );
+        let mut swarm1 = Swarm::new_ephemeral(|_, _| ping::Behaviour::new(cfg.clone()));
+        let mut swarm2 = Swarm::new_ephemeral(|_, _| ping::Behaviour::new(cfg.clone()));
 
         async_std::task::block_on(async {
-            swarm1.listen_on_random_localhost_tcp_port().await;
+            swarm1.listen_on_random_memory_address().await;
             swarm2.connect(&mut swarm1).await;
 
             for _ in 0..count.get() {
@@ -108,7 +102,7 @@ fn max_failures() {
         let mut swarm2 = Swarm::new(trans, ping::Behaviour::new(cfg), peer2_id.clone());
 
         async_std::task::block_on(async {
-            swarm1.listen_on_random_localhost_tcp_port().await;
+            swarm1.listen_on_random_memory_address().await;
             swarm2.connect(&mut swarm1).await;
         });
 
@@ -164,7 +158,7 @@ fn unsupported_doesnt_fail() {
     );
 
     let result = async_std::task::block_on(async {
-        swarm1.listen_on_random_localhost_tcp_port().await;
+        swarm1.listen_on_random_memory_address().await;
         swarm2.connect(&mut swarm1).await;
 
         loop {

@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use futures::future::Either;
-use futures::{AsyncRead, AsyncWrite, StreamExt};
+use futures::StreamExt;
+use libp2p::core::transport::MemoryTransport;
 use libp2p::core::upgrade::Version;
 use libp2p::identity::Keypair;
 use libp2p::noise::NoiseAuthenticated;
@@ -22,16 +23,8 @@ pub trait SwarmExt {
     type NB: NetworkBehaviour;
 
     /// Create a new [`Swarm`] with an ephemeral identity.
-    fn new_ephemeral<T>(
-        transport: T,
-        behaviour_fn: impl FnOnce(PeerId, Keypair) -> Self::NB,
-    ) -> Self
+    fn new_ephemeral(behaviour_fn: impl FnOnce(PeerId, Keypair) -> Self::NB) -> Self
     where
-        T: Transport + Send + 'static + Unpin,
-        T::Dial: Send + 'static,
-        T::ListenerUpgrade: Send + 'static,
-        T::Error: Send + Sync,
-        T::Output: AsyncRead + AsyncWrite + Send + 'static + Unpin,
         Self: Sized;
 
     /// Establishes a connection to the given [`Swarm`], polling both of them until the connection is established.
@@ -42,9 +35,6 @@ pub trait SwarmExt {
 
     /// Listens on a random memory address, polling the [`Swarm`] until the transport is ready to accept connections.
     async fn listen_on_random_memory_address(&mut self) -> Multiaddr;
-
-    /// Listens on a random tcp address, polling the [`Swarm`] until the transport is ready to accept connections.
-    async fn listen_on_random_localhost_tcp_port(&mut self) -> Multiaddr;
 
     async fn next_within(
         &mut self,
@@ -62,22 +52,14 @@ where
 {
     type NB = B;
 
-    fn new_ephemeral<T>(
-        transport: T,
-        behaviour_fn: impl FnOnce(PeerId, Keypair) -> Self::NB,
-    ) -> Self
+    fn new_ephemeral(behaviour_fn: impl FnOnce(PeerId, Keypair) -> Self::NB) -> Self
     where
-        T: Transport + Send + 'static + Unpin,
-        T::Dial: Send + 'static,
-        T::ListenerUpgrade: Send + 'static,
-        T::Error: Send + Sync,
-        T::Output: AsyncRead + AsyncWrite + Send + 'static + Unpin,
         Self: Sized,
     {
         let identity = Keypair::generate_ed25519();
         let peer_id = PeerId::from(identity.public());
 
-        let transport = transport
+        let transport = MemoryTransport::default()
             .upgrade(Version::V1)
             .authenticate(NoiseAuthenticated::xx(&identity).unwrap())
             .multiplex(YamuxConfig::default())
@@ -144,35 +126,6 @@ where
                     address,
                     listener_id,
                 } if listener_id == memory_addr_listener_id => {
-                    break address;
-                }
-                other => {
-                    log::debug!(
-                        "Ignoring {:?} while waiting for listening to succeed",
-                        other
-                    );
-                }
-            }
-        };
-
-        // Memory addresses are externally reachable because they all share the same memory-space.
-        self.add_external_address(multiaddr.clone(), AddressScore::Infinite);
-
-        multiaddr
-    }
-
-    async fn listen_on_random_localhost_tcp_port(&mut self) -> Multiaddr {
-        let tcp_listener_id = self
-            .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
-            .unwrap();
-
-        // block until we are actually listening
-        let multiaddr = loop {
-            match self.select_next_some().await {
-                SwarmEvent::NewListenAddr {
-                    address,
-                    listener_id,
-                } if listener_id == tcp_listener_id => {
                     break address;
                 }
                 other => {
