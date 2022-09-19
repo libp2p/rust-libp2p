@@ -27,11 +27,10 @@ use crate::endpoint::ToEndpoint;
 use crate::Config;
 use crate::{endpoint::Endpoint, muxer::QuicMuxer, upgrade::Upgrade};
 
-use futures::channel::mpsc::SendError;
-use futures::channel::oneshot;
+use futures::channel::{mpsc, oneshot};
 use futures::ready;
 use futures::stream::StreamExt;
-use futures::{channel::mpsc, prelude::*, stream::SelectAll};
+use futures::{prelude::*, stream::SelectAll};
 
 use if_watch::{IfEvent, IfWatcher};
 
@@ -134,7 +133,6 @@ impl Transport for QuicTransport {
         let socket_addr = multiaddr_to_socketaddr(&addr)
             .ok_or_else(|| TransportError::MultiaddrNotSupported(addr.clone()))?;
         if socket_addr.port() == 0 || socket_addr.ip().is_unspecified() {
-            tracing::error!("multiaddr not supported");
             return Err(TransportError::MultiaddrNotSupported(addr));
         }
         let mut listeners = self
@@ -237,13 +235,12 @@ impl Dialer {
         })
     }
 
-    fn drive_dials(&mut self, cx: &mut Context<'_>) -> Result<(), SendError> {
+    fn drive_dials(&mut self, cx: &mut Context<'_>) -> Result<(), mpsc::SendError> {
         if let Some(to_endpoint) = self.pending_dials.pop_front() {
             match self.endpoint.try_send(to_endpoint, cx) {
                 Ok(Ok(())) => {}
                 Ok(Err(to_endpoint)) => self.pending_dials.push_front(to_endpoint),
                 Err(err) => {
-                    tracing::error!("Background task of dialing endpoint crashed.");
                     return Err(err);
                 }
             }

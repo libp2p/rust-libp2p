@@ -67,7 +67,7 @@ pub enum Error {
     #[error("Endpoint has force-killed our connection")]
     ClosedChannel,
     /// The background task driving the endpoint has crashed.
-    #[error("Background task crashed.")]
+    #[error("Background task crashed")]
     TaskCrashed,
     /// Error in the inner state machine.
     #[error("{0}")]
@@ -225,7 +225,6 @@ impl Connection {
                         return Poll::Pending;
                     }
                     Err(_) => {
-                        tracing::error!("Background task crashed.");
                         return Poll::Ready(ConnectionEvent::ConnectionLost(Error::TaskCrashed));
                     }
                 }
