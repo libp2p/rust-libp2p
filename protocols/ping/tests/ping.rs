@@ -20,8 +20,6 @@
 
 //! Integration tests for the `Ping` network behaviour.
 
-extern crate core;
-
 use futures::prelude::*;
 use libp2p_ping as ping;
 use libp2p_swarm::{DummyBehaviour, KeepAlive, Swarm, SwarmEvent};
