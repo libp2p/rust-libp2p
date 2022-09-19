@@ -43,7 +43,7 @@ pub trait SwarmExt {
     /// Listens on a random memory address, polling the [`Swarm`] until the transport is ready to accept connections.
     async fn listen_on_random_memory_address(&mut self) -> Multiaddr;
 
-    /// Listens on a random memory address, polling the [`Swarm`] until the transport is ready to accept connections.
+    /// Listens on a random tcp address, polling the [`Swarm`] until the transport is ready to accept connections.
     async fn listen_on_random_localhost_tcp_port(&mut self) -> Multiaddr;
 
     async fn next_within(
