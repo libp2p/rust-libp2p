@@ -3,7 +3,7 @@ name = "libp2p-swarm-derive"
 edition = "2021"
 rust-version = "1.56.1"
 description = "Procedural macros of libp2p-core"
-version = "0.30.0"
+version = "0.30.1"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -22,3 +22,4 @@ syn = { version = "1.0.8", default-features = false, features = ["clone-impls", 
 libp2p = { path = "../", default-features = false, features = ["ping", "identify", "kad"] }
 either = "1.6.0"
 futures = "0.3.1"
+void = "1"
