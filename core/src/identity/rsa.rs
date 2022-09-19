@@ -70,7 +70,7 @@ impl Keypair {
 }
 
 /// An RSA public key.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct PublicKey(Vec<u8>);
 
 impl PublicKey {
@@ -305,27 +305,30 @@ impl DerDecodable<'_> for Asn1SubjectPublicKeyInfo {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test::*;
     use quickcheck::*;
     use rand07::seq::SliceRandom;
-    use std::fmt;
 
     const KEY1: &'static [u8] = include_bytes!("test/rsa-2048.pk8");
     const KEY2: &'static [u8] = include_bytes!("test/rsa-3072.pk8");
     const KEY3: &'static [u8] = include_bytes!("test/rsa-4096.pk8");
 
-    #[derive(Clone)]
+    #[derive(Clone, Debug)]
     struct SomeKeypair(Keypair);
-
-    impl fmt::Debug for SomeKeypair {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            write!(f, "SomeKeypair")
-        }
-    }
 
     impl Arbitrary for SomeKeypair {
         fn arbitrary<G: Gen>(g: &mut G) -> SomeKeypair {
             let mut key = [KEY1, KEY2, KEY3].choose(g).unwrap().to_vec();
             SomeKeypair(Keypair::from_pkcs8(&mut key).unwrap())
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    struct SomePublicKey(PublicKey);
+
+    impl Arbitrary for SomePublicKey {
+        fn arbitrary<G: Gen>(g: &mut G) -> SomePublicKey {
+            SomePublicKey(SomeKeypair::arbitrary(g).0.public())
         }
     }
 
@@ -354,6 +357,15 @@ mod tests {
         }
         QuickCheck::new()
             .tests(10)
+            .quickcheck(prop as fn(_, _) -> _);
+    }
+
+    #[test]
+    fn rsa_public_key_eq_implies_hash() {
+        fn prop(SomePublicKey(pub1): SomePublicKey, SomePublicKey(pub2): SomePublicKey) -> bool {
+            pub1 != pub2 || hash(&pub1) == hash(&pub2)
+        }
+        QuickCheck::new()
             .quickcheck(prop as fn(_, _) -> _);
     }
 }

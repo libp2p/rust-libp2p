@@ -223,6 +223,7 @@ impl fmt::Debug for PublicKey {
     }
 }
 
+#[allow(clippy::derive_hash_xor_eq)]
 impl hash::Hash for PublicKey {
     fn hash<H: hash::Hasher>(&self, state: &mut H) {
         self.to_bytes().hash(state);
@@ -232,6 +233,24 @@ impl hash::Hash for PublicKey {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test::*;
+    use quickcheck::*;
+
+    #[derive(Clone, Debug)]
+    struct SomePublicKey(PublicKey);
+
+    impl Arbitrary for SomePublicKey {
+        fn arbitrary<G: Gen>(g: &mut G) -> SomePublicKey {
+            loop {
+                let mut bytes = Vec::<u8>::arbitrary(g);
+                bytes.resize(33, 0);
+                let public_key = PublicKey::from_bytes(&bytes);
+                if let Ok(public_key) = public_key {
+                    return SomePublicKey(public_key);
+                }
+            }
+        }
+    }
 
     #[test]
     fn sign_verify() {
@@ -248,5 +267,14 @@ mod tests {
 
         let invalid_msg = "h3ll0 w0rld".as_bytes();
         assert!(!pk.verify(invalid_msg, &sig));
+    }
+
+    #[test]
+    fn ecdsa_public_key_eq_implies_hash() {
+        fn prop(SomePublicKey(pub1): SomePublicKey, SomePublicKey(pub2): SomePublicKey) -> bool {
+            pub1 != pub2 || hash(&pub1) == hash(&pub2)
+        }
+        QuickCheck::new()
+            .quickcheck(prop as fn(_, _) -> _);
     }
 }

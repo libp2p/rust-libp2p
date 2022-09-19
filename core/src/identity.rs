@@ -381,54 +381,20 @@ mod tests {
     }
 
     #[test]
-    fn public_key_hash() {
-        use std::collections::*;
+    fn public_key_implements_hash() {
+        use std::hash::Hash;
 
-        let mut keypairs = Vec::new();
+        fn assert_implements_hash<T: Hash>() {}
 
-        for _ in 0..8 {
-            keypairs.push(Keypair::generate_ed25519());
-            keypairs.push(Keypair::generate_secp256k1());
-            keypairs.push(Keypair::generate_ecdsa());
-        }
-
-        let public_keys: Vec<_> = keypairs
-            .iter()
-            .map(|k| k.public())
-            .collect();
-
-        let public_keys_hash_set: HashSet<PublicKey> = HashSet::from_iter(
-            public_keys
-                .iter()
-                .map(|p| p.clone())
-        );
-
-        assert_eq!(public_keys_hash_set.len(), public_keys.len());
+        assert_implements_hash::<PublicKey>();
     }
 
     #[test]
-    fn public_key_ord() {
-        use std::collections::*;
+    fn public_key_implements_ord() {
+        use std::cmp::Ord;
 
-        let mut keypairs = Vec::new();
+        fn assert_implements_ord<T: Ord>() {}
 
-        for _ in 0..8 {
-            keypairs.push(Keypair::generate_ed25519());
-            keypairs.push(Keypair::generate_secp256k1());
-            keypairs.push(Keypair::generate_ecdsa());
-        }
-
-        let public_keys: Vec<_> = keypairs
-            .iter()
-            .map(|k| k.public())
-            .collect();
-
-        let public_keys_b_tree_set: BTreeSet<PublicKey> = BTreeSet::from_iter(
-            public_keys
-                .iter()
-                .map(|p| p.clone())
-        );
-
-        assert_eq!(public_keys_b_tree_set.len(), public_keys.len());
+        assert_implements_ord::<PublicKey>();
     }
 }

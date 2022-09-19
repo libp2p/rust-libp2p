@@ -165,6 +165,7 @@ impl fmt::Debug for PublicKey {
     }
 }
 
+#[allow(clippy::derive_hash_xor_eq)]
 impl hash::Hash for PublicKey {
     fn hash<H: hash::Hasher>(&self, state: &mut H) {
         self.encode().hash(state);
@@ -219,6 +220,35 @@ impl PublicKey {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test::*;
+    use quickcheck::*;
+
+    #[derive(Clone, Debug)]
+    struct SomeSecretKey(SecretKey);
+
+    impl Arbitrary for SomeSecretKey {
+        fn arbitrary<G: Gen>(g: &mut G) -> SomeSecretKey {
+            loop {
+                let mut bytes = Vec::<u8>::arbitrary(g);
+                bytes.resize(32, 0);
+                let secret_key = SecretKey::from_bytes(&mut bytes);
+                if let Ok(secret_key) = secret_key {
+                    return SomeSecretKey(secret_key);
+                }
+            }
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    struct SomePublicKey(PublicKey);
+
+    impl Arbitrary for SomePublicKey {
+        fn arbitrary<G: Gen>(g: &mut G) -> SomePublicKey {
+            let secret_key = SomeSecretKey::arbitrary(g).0;
+            let keypair: Keypair = secret_key.into();
+            SomePublicKey(keypair.public().clone())
+        }
+    }
 
     #[test]
     fn secp256k1_secret_from_bytes() {
@@ -228,5 +258,14 @@ mod tests {
         let sk2 = SecretKey::from_bytes(&mut sk_bytes).unwrap();
         assert_eq!(sk1.0.serialize(), sk2.0.serialize());
         assert_eq!(sk_bytes, [0; 32]);
+    }
+
+    #[test]
+    fn ecdsa_public_key_eq_implies_hash() {
+        fn prop(SomePublicKey(pub1): SomePublicKey, SomePublicKey(pub2): SomePublicKey) -> bool {
+            pub1 != pub2 || hash(&pub1) == hash(&pub2)
+        }
+        QuickCheck::new()
+            .quickcheck(prop as fn(_, _) -> _);
     }
 }
