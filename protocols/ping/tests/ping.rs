@@ -56,15 +56,13 @@ fn ping_pong() {
                 let e1 = e1.result.expect("ping failure");
                 let e2 = e2.result.expect("ping failure");
 
-                match (e1, e2) {
-                    (
-                        ping::Success::Ping { rtt: peer1_rtt },
-                        ping::Success::Ping { rtt: peer2_rtt },
-                    ) => {
-                        assert!(peer1_rtt < Duration::from_millis(50));
-                        assert!(peer2_rtt < Duration::from_millis(50));
-                    }
-                    _ => {}
+                if let (
+                    ping::Success::Ping { rtt: peer1_rtt },
+                    ping::Success::Ping { rtt: peer2_rtt },
+                ) = (e1, e2)
+                {
+                    assert!(peer1_rtt < Duration::from_millis(50));
+                    assert!(peer2_rtt < Duration::from_millis(50));
                 }
             }
         });
