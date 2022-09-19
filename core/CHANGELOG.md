@@ -1,6 +1,6 @@
 # 0.36.1 - [unreleased]
 
-- Added `Hash` and `Ord` instances for `PublicKey`. See [PR 2915].
+- Implement `Hash` and `Ord` for `PublicKey`. See [PR 2915].
 
 [PR 2915]: https://github.com/libp2p/rust-libp2p/pull/2915
 
