@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - master
+      - new-ci
 
 jobs:
   test-desktop:
