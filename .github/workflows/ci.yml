@@ -29,7 +29,7 @@ jobs:
 
     - uses: actions/checkout@v3
 
-    - uses: Swatinem/rust-cache@6720f05bc48b77f96918929a9019fb2203ff71f8 # v2.0.0
+    - uses: Swatinem/rust-cache@v2
       with:
         key: ${{ matrix.args }}
 
@@ -48,7 +48,7 @@ jobs:
           - toolchain: wasm32-unknown-unknown
             args: "--features wasm-bindgen"
     env:
-      CC: clang-11
+      CC: clang-13
     defaults:
       run:
         shell: bash
@@ -65,20 +65,10 @@ jobs:
     - uses: actions/checkout@v3
 
     - name: Install Rust ${{ matrix.toolchain }}
-      uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
-      with:
-        toolchain: stable
-        target: ${{ matrix.toolchain }}
-        override: true
+      run: rustup target add ${{ matrix.toolchain }}
 
-    - name: Install a recent version of clang
-      run: |
-        sudo bash -c "$(wget -O - https://apt.llvm.org/llvm.sh)"
 
-    - name: Install CMake
-      run: sudo apt-get install -y cmake
-
-    - uses: Swatinem/rust-cache@6720f05bc48b77f96918929a9019fb2203ff71f8 # v2.0.0
+    - uses: Swatinem/rust-cache@v2
       with:
         key: ${{ matrix.toolchain }}
 
@@ -102,12 +92,6 @@ jobs:
 
     - uses: actions/checkout@v3
 
-    - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
-      with:
-        profile: minimal
-        toolchain: stable
-        override: true
-
     - uses: Swatinem/rust-cache@6720f05bc48b77f96918929a9019fb2203ff71f8 # v2.0.0
 
     - name: Check rustdoc links
@@ -127,19 +111,10 @@ jobs:
 
     - uses: actions/checkout@v3
 
-    - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
-      with:
-        profile: minimal
-        toolchain: stable
-        override: true
-        components: clippy
-
     - uses: Swatinem/rust-cache@6720f05bc48b77f96918929a9019fb2203ff71f8 # v2.0.0
 
-    - name: Run cargo clippy
-      uses: actions-rs/cargo@844f36862e911db73fe0815f00a4a2602c279505 # v1.0.3
-      with:
-        command: custom-clippy # cargo alias to allow reuse of config locally
+    - name: Run clippy
+      run: cargo clippy
 
   integration-test:
     name: Integration tests
@@ -156,12 +131,6 @@ jobs:
 
     - uses: actions/checkout@v3
 
-    - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
-      with:
-        profile: minimal
-        toolchain: stable
-        override: true
-
     - uses: Swatinem/rust-cache@6720f05bc48b77f96918929a9019fb2203ff71f8 # v2.0.0
 
     - name: Run ipfs-kad example
@@ -177,13 +146,6 @@ jobs:
         access_token: ${{ github.token }}
 
     - uses: actions/checkout@v3
-
-    - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
-      with:
-        profile: minimal
-        toolchain: stable
-        override: true
-        components: rustfmt
 
     - name: Check formatting
       run: cargo fmt -- --check
