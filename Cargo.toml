@@ -175,4 +175,4 @@ required-features = ["gossipsub"]
 
 [[example]]
 name = "ipfs-private"
-required-features = ["gossipsub"]
+required-features = ["gossipsub", "pnet", "yamux", "ping", "noise", "tcp-async-io", "identify"]

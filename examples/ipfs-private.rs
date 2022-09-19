@@ -33,6 +33,7 @@
 //! to work, the ipfs node needs to be configured to use gossipsub.
 use async_std::io;
 use futures::{prelude::*, select};
+use libp2p::tcp::GenTcpConfig;
 use libp2p::{
     core::{
         either::EitherTransport, muxing::StreamMuxerBox, transport, transport::upgrade::Version,
@@ -49,7 +50,6 @@ use libp2p::{
     yamux::YamuxConfig,
     Multiaddr, NetworkBehaviour, PeerId, Swarm, Transport,
 };
-use libp2p_tcp::GenTcpConfig;
 use std::{env, error::Error, fs, path::Path, str::FromStr, time::Duration};
 
 /// Builds the transport that serves as a common ground for all connections.

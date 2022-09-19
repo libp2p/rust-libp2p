@@ -26,13 +26,13 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughpu
 use futures::future::poll_fn;
 use futures::prelude::*;
 use futures::{channel::oneshot, future::join};
-use libp2p_core::muxing::StreamMuxerExt;
-use libp2p_core::{
+use libp2p::core::muxing::StreamMuxerExt;
+use libp2p::core::{
     identity, multiaddr::multiaddr, muxing, transport, upgrade, Multiaddr, PeerId, Transport,
 };
-use libp2p_mplex as mplex;
-use libp2p_plaintext::PlainText2Config;
-use libp2p_tcp::GenTcpConfig;
+use libp2p::mplex;
+use libp2p::plaintext::PlainText2Config;
+use libp2p::tcp::GenTcpConfig;
 use std::pin::Pin;
 use std::time::Duration;
 
@@ -166,7 +166,7 @@ fn tcp_transport(split_send_size: usize) -> BenchTransport {
     let mut mplex = mplex::MplexConfig::default();
     mplex.set_split_send_size(split_send_size);
 
-    libp2p_tcp::TcpTransport::new(GenTcpConfig::default().nodelay(true))
+    libp2p::tcp::TcpTransport::new(GenTcpConfig::default().nodelay(true))
         .upgrade(upgrade::Version::V1)
         .authenticate(PlainText2Config { local_public_key })
         .multiplex(mplex)

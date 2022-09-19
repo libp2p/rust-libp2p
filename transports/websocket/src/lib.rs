@@ -219,8 +219,8 @@ where
 mod tests {
     use super::WsConfig;
     use futures::prelude::*;
-    use libp2p_core::{multiaddr::Protocol, Multiaddr, PeerId, Transport};
-    use libp2p_tcp as tcp;
+    use libp2p::core::{multiaddr::Protocol, Multiaddr, PeerId, Transport};
+    use libp2p::tcp;
 
     #[test]
     fn dialer_connects_to_listener_ipv4() {
