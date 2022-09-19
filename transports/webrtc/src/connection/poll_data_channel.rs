@@ -192,26 +192,24 @@ impl PollDataChannel {
     pub fn set_read_buf_capacity(&mut self, capacity: usize) {
         self.io.get_mut().set_read_buf_capacity(capacity)
     }
+}
 
-    fn io_poll_next(
-        io: &mut Framed<Compat<RTCPollDataChannel>, prost_codec::Codec<Message>>,
-        cx: &mut Context<'_>,
-    ) -> Poll<io::Result<Option<(Option<Flag>, Option<Vec<u8>>)>>> {
-        match ready!(io.poll_next_unpin(cx))
-            .transpose()
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?
-        {
-            Some(Message { flag, message }) => {
-                let flag = flag
-                    .map(|f| {
-                        Flag::from_i32(f).ok_or(io::Error::new(io::ErrorKind::InvalidData, ""))
-                    })
-                    .transpose()?;
+fn io_poll_next(
+    io: &mut Framed<Compat<RTCPollDataChannel>, prost_codec::Codec<Message>>,
+    cx: &mut Context<'_>,
+) -> Poll<io::Result<Option<(Option<Flag>, Option<Vec<u8>>)>>> {
+    match ready!(io.poll_next_unpin(cx))
+        .transpose()
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?
+    {
+        Some(Message { flag, message }) => {
+            let flag = flag
+                .map(|f| Flag::from_i32(f).ok_or(io::Error::new(io::ErrorKind::InvalidData, "")))
+                .transpose()?;
 
-                Poll::Ready(Ok(Some((flag, message))))
-            }
-            None => Poll::Ready(Ok(None)),
+            Poll::Ready(Ok(Some((flag, message))))
         }
+        None => Poll::Ready(Ok(None)),
     }
 }
 
@@ -222,38 +220,30 @@ impl AsyncRead for PollDataChannel {
         buf: &mut [u8],
     ) -> Poll<io::Result<usize>> {
         loop {
-            if let Some(read_buffer) = self.state.read_buffer_mut() {
-                if !read_buffer.is_empty() {
-                    let n = std::cmp::min(read_buffer.len(), buf.len());
-                    let data = read_buffer.split_to(n);
-                    buf[0..n].copy_from_slice(&data[..]);
+            if let Some(read_buffer) = self.state.read_buffer_mut() && !read_buffer.is_empty() {
+                let n = std::cmp::min(read_buffer.len(), buf.len());
+                let data = read_buffer.split_to(n);
+                buf[0..n].copy_from_slice(&data[..]);
 
-                    return Poll::Ready(Ok(n));
-                }
+                return Poll::Ready(Ok(n));
             }
 
-            let PollDataChannel { state, io } = &mut *self;
+            let Self { state, io } = &mut *self;
 
             let read_buffer = match state {
-                State::Open {
-                    ref mut read_buffer,
-                }
-                | State::WriteClosed {
-                    ref mut read_buffer,
-                } => read_buffer,
+                State::Open { read_buffer } | State::WriteClosed { read_buffer } => read_buffer,
                 State::ReadClosed { read_buffer, .. }
                 | State::ReadWriteClosed { read_buffer, .. } => {
                     assert!(read_buffer.is_empty());
                     return Poll::Ready(Ok(0));
                 }
                 State::ReadReset | State::ReadResetWriteClosed => {
-                    // TODO: Is `""` valid?
-                    return Poll::Ready(Err(io::Error::new(io::ErrorKind::ConnectionReset, "")));
+                    return Poll::Ready(Err(io::Error::from(io::ErrorKind::ConnectionReset)));
                 }
-                State::Poisoned => todo!(),
+                State::Poisoned => unreachable!(),
             };
 
-            match ready!(Self::io_poll_next(io, cx))? {
+            match ready!(io_poll_next(io, cx))? {
                 Some((flag, message)) => {
                     assert!(read_buffer.is_empty());
                     if let Some(message) = message {
@@ -286,7 +276,7 @@ impl AsyncWrite for PollDataChannel {
                 // TODO: In case AsyncRead::poll_read encountered an error or returned None earlier, we will poll the
                 // underlying I/O resource once more. Is that allowed? How about introducing a state IoReadClosed?
                 {
-                    match Self::io_poll_next(&mut self.io, cx)? {
+                    match io_poll_next(&mut self.io, cx)? {
                         Poll::Ready(Some((Some(flag), message))) => {
                             // Read side is closed. Discard any incoming messages.
                             drop(message);
