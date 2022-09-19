@@ -118,7 +118,7 @@ impl fmt::Debug for SecretKey {
 }
 
 /// An ECDSA public key.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct PublicKey(VerifyingKey);
 
 impl PublicKey {

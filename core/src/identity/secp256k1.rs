@@ -24,6 +24,7 @@ use super::error::{DecodingError, SigningError};
 use asn1_der::typed::{DerDecodable, Sequence};
 use core::fmt;
 use core::hash;
+use core::cmp;
 use libsecp256k1::{Message, Signature};
 use sha2::{Digest as ShaDigestTrait, Sha256};
 use zeroize::Zeroize;
@@ -167,6 +168,18 @@ impl fmt::Debug for PublicKey {
 impl hash::Hash for PublicKey {
     fn hash<H: hash::Hasher>(&self, state: &mut H) {
         self.encode().hash(state);
+    }
+}
+
+impl cmp::PartialOrd for PublicKey {
+    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
+        self.encode().partial_cmp(&other.encode())
+    }
+}
+
+impl cmp::Ord for PublicKey {
+    fn cmp(&self, other: &Self) -> cmp::Ordering {
+        self.encode().cmp(&other.encode())
     }
 }
 

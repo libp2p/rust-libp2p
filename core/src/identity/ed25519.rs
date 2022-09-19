@@ -23,6 +23,7 @@
 use super::error::DecodingError;
 use core::fmt;
 use core::hash;
+use core::cmp;
 use ed25519_dalek::{self as ed25519, Signer as _, Verifier as _};
 use rand::RngCore;
 use std::convert::TryFrom;
@@ -132,6 +133,18 @@ impl fmt::Debug for PublicKey {
 impl hash::Hash for PublicKey {
     fn hash<H: hash::Hasher>(&self, state: &mut H) {
         self.0.as_bytes().hash(state);
+    }
+}
+
+impl cmp::PartialOrd for PublicKey {
+    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
+        self.0.as_bytes().partial_cmp(other.0.as_bytes())
+    }
+}
+
+impl cmp::Ord for PublicKey {
+    fn cmp(&self, other: &Self) -> cmp::Ordering {
+        self.0.as_bytes().cmp(other.0.as_bytes())
     }
 }
 
