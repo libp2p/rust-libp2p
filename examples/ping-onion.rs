@@ -1,4 +1,4 @@
-// Copyright 2018 Parity Technologies (UK) Ltd.
+// Copyright 2022 Hannes Furmans
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -18,33 +18,35 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Ping example
+//! Ping-Onion example
 //!
 //! See ../src/tutorial.rs for a step-by-step guide building the example below.
 //!
-//! In the first terminal window, run:
+//! This example requires two seperate computers, one of which has to be reachable from the
+//! internet.
 //!
+//! On the first computer run:
 //! ```sh
-//! cargo run --example ping-onion
+//! cargo run --example ping
 //! ```
 //!
 //! It will print the PeerId and the listening addresses, e.g. `Listening on
 //! "/ip4/0.0.0.0/tcp/24915"`
 //!
-//! In the second terminal window, start a new instance of the example with:
+//! Make sure that the first computer is reachable under one of these ip addresses and port.
 //!
+//! On the second computer run:
 //! ```sh
 //! cargo run --example ping-onion -- /ip4/127.0.0.1/tcp/24915
 //! ```
 //!
 //! The two nodes establish a connection, negotiate the ping protocol
-//! and begin pinging each other.
+//! and begin pinging each other over Tor.
 
 use futures::prelude::*;
 use libp2p::swarm::{Swarm, SwarmEvent};
 use libp2p::{
-    core::upgrade, dns, identity, mplex, noise, onion, ping, tcp, yamux, Multiaddr, PeerId,
-    Transport,
+    core::upgrade, identity, mplex, noise, onion, ping, yamux, Multiaddr, PeerId, Transport,
 };
 use std::error::Error;
 
@@ -56,20 +58,13 @@ async fn onion_transport(
 > {
     use std::time::Duration;
 
-    let transport = {
-        let onion = onion::OnionClient::from_builder(onion::OnionClient::builder(), false)?;
-        println!("bootstrapping...");
-        onion.bootstrap().await?;
-        println!("bootstrapped!");
-        onion
-    };
-
-    let noise_keys = noise::Keypair::<noise::X25519Spec>::new()
-        .into_authentic(&keypair)
-        .expect("Signing libp2p-noise static DH keypair failed.");
+    let transport = onion::OnionAsyncStdNativeTlsTransport::bootstrapped().await?;
     Ok(transport
         .upgrade(upgrade::Version::V1)
-        .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
+        .authenticate(
+            noise::NoiseAuthenticated::xx(&keypair)
+                .expect("Signing libp2p-noise static DH keypair failed."),
+        )
         .multiplex(upgrade::SelectUpgrade::new(
             yamux::YamuxConfig::default(),
             mplex::MplexConfig::default(),
@@ -110,7 +105,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 println!("Connection established to {:?}", endpoint_addr);
             }
             SwarmEvent::OutgoingConnectionError { error, .. } => {
-                println!("Error establishing outgoing connection")
+                println!("Error establishing outgoing connection: {:?}", error)
             }
             SwarmEvent::Behaviour(event) => println!("{:?}", event),
             _ => {}

@@ -1,23 +1,35 @@
+#[cfg(feature = "tokio")]
 use std::pin::Pin;
 
 use arti_client::DataStream;
 use futures::{AsyncRead, AsyncWrite};
 
+pub trait OnionStream: AsyncRead + AsyncWrite + From<DataStream> {}
+
+impl OnionStream for DataStream {}
+
+#[cfg(feature = "tokio")]
+#[cfg_attr(docsrs, doc(cfg(feature = "tokio")))]
 #[derive(Debug)]
-pub struct OnionStream {
+pub struct OnionTokioStream {
     inner: DataStream,
 }
 
-impl OnionStream {
-    #[inline]
-    pub(super) fn new(inner: DataStream) -> Self {
+#[cfg(feature = "tokio")]
+#[cfg_attr(docsrs, doc(cfg(feature = "tokio")))]
+impl From<DataStream> for OnionTokioStream {
+    fn from(inner: DataStream) -> Self {
         Self { inner }
     }
 }
 
 #[cfg(feature = "tokio")]
 #[cfg_attr(docsrs, doc(cfg(feature = "tokio")))]
-impl AsyncRead for OnionStream {
+impl OnionStream for OnionTokioStream {}
+
+#[cfg(feature = "tokio")]
+#[cfg_attr(docsrs, doc(cfg(feature = "tokio")))]
+impl AsyncRead for OnionTokioStream {
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
@@ -35,7 +47,7 @@ impl AsyncRead for OnionStream {
 
 #[cfg(feature = "tokio")]
 #[cfg_attr(docsrs, doc(cfg(feature = "tokio")))]
-impl AsyncWrite for OnionStream {
+impl AsyncWrite for OnionTokioStream {
     #[inline]
     fn poll_write(
         mut self: std::pin::Pin<&mut Self>,
@@ -68,65 +80,5 @@ impl AsyncWrite for OnionStream {
         bufs: &[std::io::IoSlice<'_>],
     ) -> std::task::Poll<std::io::Result<usize>> {
         tokio_crate::io::AsyncWrite::poll_write_vectored(Pin::new(&mut self.inner), cx, bufs)
-    }
-}
-
-#[cfg(all(feature = "async-std", not(feature = "tokio")))]
-#[cfg_attr(docsrs, doc(cfg(feature = "async-std")))]
-impl AsyncRead for OnionStream {
-    #[inline]
-    fn poll_read(
-        mut self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-        buf: &mut [u8],
-    ) -> std::task::Poll<std::io::Result<usize>> {
-        Pin::new(&mut self.inner).poll_read(cx, buf)
-    }
-
-    #[inline]
-    fn poll_read_vectored(
-        mut self: Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-        bufs: &mut [std::io::IoSliceMut<'_>],
-    ) -> std::task::Poll<std::io::Result<usize>> {
-        Pin::new(&mut self.inner).poll_read_vectored(cx, bufs)
-    }
-}
-
-#[cfg(all(feature = "async-std", not(feature = "tokio")))]
-#[cfg_attr(docsrs, doc(cfg(feature = "async-std")))]
-impl AsyncWrite for OnionStream {
-    #[inline]
-    fn poll_write(
-        mut self: Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-        buf: &[u8],
-    ) -> std::task::Poll<std::io::Result<usize>> {
-        Pin::new(&mut self.inner).poll_write(cx, buf)
-    }
-
-    #[inline]
-    fn poll_flush(
-        mut self: Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<std::io::Result<()>> {
-        Pin::new(&mut self.inner).poll_flush(cx)
-    }
-
-    #[inline]
-    fn poll_close(
-        mut self: Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<std::io::Result<()>> {
-        Pin::new(&mut self.inner).poll_close(cx)
-    }
-
-    #[inline]
-    fn poll_write_vectored(
-        mut self: Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-        bufs: &[std::io::IoSlice<'_>],
-    ) -> std::task::Poll<std::io::Result<usize>> {
-        Pin::new(&mut self).poll_write_vectored(cx, bufs)
     }
 }

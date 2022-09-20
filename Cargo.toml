@@ -187,5 +187,5 @@ required-features = ["gossipsub", "pnet", "yamux", "ping", "noise", "tcp-async-i
 
 [[example]]
 name = "ping-onion"
-required-features = ["onion", "onion-async-std", "onion-native-tls", "tcp-async-io", "dns-async-std"]
+required-features = ["onion-async-std", "onion-native-tls"]
 

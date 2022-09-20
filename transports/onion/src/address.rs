@@ -42,66 +42,42 @@ fn try_extract_socket_addr(multiaddr: &mut Multiaddr) -> Result<SocketAddr, TorA
 
 #[cfg(test)]
 mod tests {
-    use std::{borrow::Cow, net::Ipv4Addr, ops::Not};
-
-    use libp2p_core::{multiaddr::multiaddr, Multiaddr};
+    use std::ops::Not;
 
     use super::safe_extract_tor_address;
 
     #[test]
     fn extract_correct_address() {
-        let dns_test_addr = multiaddr!(Dns(Cow::Borrowed("ip.tld")), Tcp(10u16));
-        let dns_test_addr_res = safe_extract_tor_address(&mut dns_test_addr.clone());
-        assert!(dns_test_addr_res.is_ok());
-        assert!(dns_test_addr_res.unwrap().is_ip_address().not());
-
-        let dns_4_test_addr = multiaddr!(Dns4(Cow::Borrowed("dns.ip4.tld")), Tcp(11u16));
-        let dns_4_test_addr_res = safe_extract_tor_address(&mut dns_4_test_addr.clone());
-        assert!(dns_4_test_addr_res.is_ok());
-        assert!(dns_4_test_addr_res.unwrap().is_ip_address().not());
-
-        let dns_6_test_addr = multiaddr!(Dns6(Cow::Borrowed("dns.ip6.tld")), Tcp(12u16));
-        let dns_6_test_addr_res = safe_extract_tor_address(&mut dns_6_test_addr.clone());
-        assert!(dns_6_test_addr_res.is_ok());
-        assert!(dns_6_test_addr_res.unwrap().is_ip_address().not());
-
-        let addresses = [
-            dns_test_addr,
-            dns_4_test_addr,
-            dns_6_test_addr,
-            Multiaddr::empty(),
+        let mut addresses = [
+            "/dns/ip.tld/tcp/10".parse().unwrap(),
+            "/dns4/dns.ip4.tld/tcp/11".parse().unwrap(),
+            "/dns6/dns.ip6.tld/tcp/12".parse().unwrap(),
         ];
 
-        for (idx, a) in addresses.iter().enumerate() {
-            for (idy, b) in addresses.iter().enumerate() {
-                if idx == idy {
-                    continue;
-                }
-                let mut new = Multiaddr::empty();
-                a.iter().for_each(|e| {
-                    new.push(e);
-                });
-                b.iter().for_each(|e| {
-                    new.push(e);
-                });
-                let new_addr_res = safe_extract_tor_address(&mut new);
-                assert!(new_addr_res.is_ok());
-            }
-        }
+        let all_correct = addresses
+            .iter_mut()
+            .map(safe_extract_tor_address)
+            .all(|extract_res| extract_res.is_ok() && extract_res.unwrap().is_ip_address().not());
+
+        assert!(all_correct, "Not all addresses have been parsed correctly");
     }
 
     #[test]
     fn detect_incorrect_address() {
-        let without_dns = multiaddr!(Tcp(10u16), Udp(12u16));
-        let without_dns_res = safe_extract_tor_address(&mut without_dns.clone());
-        assert_eq!(without_dns_res, Err(arti_client::TorAddrError::NoPort));
+        let mut addresses = [
+            "/tcp/10/udp/12".parse().unwrap(),
+            "/dns/ip.tld/dns4/ip.tld/dns6/ip.tld".parse().unwrap(),
+            "/tcp/10/ip4/1.1.1.1".parse().unwrap(),
+        ];
 
-        let host = Cow::Borrowed("ip.tld");
-        let without_port = multiaddr!(Dns(host.clone()), Dns4(host.clone()), Dns6(host.clone()));
-        let without_port_res = safe_extract_tor_address(&mut without_port.clone());
-        assert_eq!(without_port_res, Err(arti_client::TorAddrError::NoPort));
-        let with_ip_addr = multiaddr!(Tcp(10u16), Ip4("1.1.1.1".parse::<Ipv4Addr>().unwrap()));
-        let with_ip_addr_res = safe_extract_tor_address(&mut with_ip_addr.clone());
-        assert_eq!(with_ip_addr_res, Err(arti_client::TorAddrError::NoPort));
+        let all_correct = addresses
+            .iter_mut()
+            .map(safe_extract_tor_address)
+            .all(|res| res == Err(arti_client::TorAddrError::NoPort));
+
+        assert!(
+            all_correct,
+            "During the parsing of the faulty addresses, there was an incorrectness"
+        );
     }
 }
