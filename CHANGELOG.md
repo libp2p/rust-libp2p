@@ -96,6 +96,8 @@
 
 - Update to [`libp2p-gossipsub` `v0.42.0`](protocols/gossipsub/CHANGELOG.md#0420).
 
+[PR 2918]: https://github.com/libp2p/rust-libp2p/pull/2918
+
 # 0.48.0
 
 - Update to [`libp2p-core` `v0.36.0`](core/CHANGELOG.md#0360).
