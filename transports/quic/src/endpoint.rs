@@ -47,7 +47,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-/// Represents the configuration for the [`Endpoint`].
+/// Represents the configuration for the QUIC endpoint.
 #[derive(Debug, Clone)]
 pub struct Config {
     /// The client configuration to pass to `quinn_proto`.
@@ -225,7 +225,7 @@ pub enum ToEndpoint {
 /// - One channel per each existing connection that communicates messages from the background
 ///   task to that [`Connection`].
 /// - One channel for the background task to send newly-opened connections to. The receiving
-///   side is processed by the [`crate::transport::Listener`].
+///   side is processed by the [`QuicTransport`][crate::QuicTransport].
 ///
 /// In order to avoid an unbounded buffering of events, we prioritize sending data on the UDP
 /// socket over everything else. If the network interface is too busy to process our packets,
