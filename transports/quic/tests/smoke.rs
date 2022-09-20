@@ -31,14 +31,6 @@ async fn create_swarm(keylog: bool) -> Result<Swarm<RequestResponse<PingCodec>>>
     let config = QuicConfig::new(&keypair).unwrap();
     let transport = QuicTransport::new(config);
 
-    // TODO:
-    // transport
-    //     .transport
-    //     .max_idle_timeout(Some(quinn_proto::VarInt::from_u32(1_000u32).into()));
-    // if keylog {
-    //     transport.enable_keylogger();
-    // }
-
     let transport = Transport::map(transport, |(peer, muxer), _| {
         (peer, StreamMuxerBox::new(muxer))
     })

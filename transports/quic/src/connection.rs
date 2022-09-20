@@ -89,7 +89,6 @@ impl Connection {
     ///
     /// This function assumes that the [`quinn_proto::Connection`] is completely fresh and none of
     /// its methods has ever been called. Failure to comply might lead to logic errors and panics.
-    // TODO: maybe abstract `to_endpoint` more and make it generic? dunno
     pub fn from_quinn_connection(
         endpoint: Endpoint,
         connection: quinn_proto::Connection,
@@ -128,7 +127,6 @@ impl Connection {
     }
 
     /// Returns the address of the node we're connected to.
-    // TODO: can change /!\
     pub fn remote_addr(&self) -> SocketAddr {
         self.connection.remote_address()
     }

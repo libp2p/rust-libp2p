@@ -88,14 +88,12 @@ impl Config {
 }
 
 /// Object containing all the QUIC resources shared between all connections.
-// TODO: expand docs
-// TODO: Debug trait
-// TODO: remove useless fields
 #[derive(Clone)]
 pub struct Endpoint {
     /// Channel to the background of the endpoint.
     to_endpoint: mpsc::Sender<ToEndpoint>,
-
+    /// Address that the socket is bound to.
+    /// Note: this may be a wildcard ip address.
     socket_addr: SocketAddr,
 }
 
@@ -201,7 +199,7 @@ pub enum ToEndpoint {
     },
 }
 
-/// Task that runs in the background for as long as the endpont is alive. Responsible for
+/// Task that runs in the background for as long as the endpoint is alive. Responsible for
 /// processing messages and the UDP socket.
 ///
 /// The `receiver` parameter must be the receiving side of the `Endpoint::to_endpoint` sender.
@@ -223,13 +221,11 @@ pub enum ToEndpoint {
 /// in play:
 ///
 /// - One channel, represented by `Endpoint::to_endpoint` and `receiver`, that communicates
-///   messages from [`Endpoint`] to the background task and from the [`Connection`] to the
-///   background task.
+///   messages from [`Endpoint`] to the background task.
 /// - One channel per each existing connection that communicates messages from the background
 ///   task to that [`Connection`].
 /// - One channel for the background task to send newly-opened connections to. The receiving
-///   side is normally processed by a "listener" as defined by the [`libp2p_core::Transport`]
-///   trait.
+///   side is processed by the [`crate::transport::Listener`].
 ///
 /// In order to avoid an unbounded buffering of events, we prioritize sending data on the UDP
 /// socket over everything else. If the network interface is too busy to process our packets,
@@ -342,7 +338,6 @@ async fn background_task(
         // The endpoint might request packets to be sent out. This is handled in priority to avoid
         // buffering up packets.
         if let Some(packet) = proto_endpoint.poll_transmit() {
-            debug_assert!(next_packet_out.is_none());
             next_packet_out = Some((packet.destination, packet.contents));
             continue;
         }
@@ -352,9 +347,7 @@ async fn background_task(
                 // Received a message from a different part of the code requesting us to
                 // do something.
                 match message {
-                    // Shut down if the endpoint has shut down.
-                    None => return,
-
+                    None => unreachable!("Sender side is never dropped or closed."),
                     Some(ToEndpoint::Dial { addr, result }) => {
                         // This `"l"` seems necessary because an empty string is an invalid domain
                         // name. While we don't use domain names, the underlying rustls library
@@ -501,6 +494,8 @@ async fn background_task(
 
 impl fmt::Debug for Endpoint {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_tuple("Endpoint").finish()
+        f.debug_struct("Endpoint")
+            .field("socket_addr", &self.socket_addr)
+            .finish()
     }
 }
