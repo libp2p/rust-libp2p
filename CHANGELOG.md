@@ -45,6 +45,8 @@
 
 # 0.49.0 - [unreleased]
 
+- Remove default features. You need to enable all features explicitly now. See [PR XXXX].
+
 - Update to [`libp2p-tcp` `v0.37.0`](transports/tcp/CHANGELOG.md#0370).
 
 - Update to [`libp2p-swarm-derive` `v0.30.1`](swarm-derive/CHANGELOG.md#0301).

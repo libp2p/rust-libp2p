@@ -11,32 +11,6 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [features]
-default = [
-    "autonat",
-    "deflate",
-    "dns-async-std",
-    "floodsub",
-    "identify",
-    "kad",
-    "gossipsub",
-    "mdns-async-io",
-    "mplex",
-    "noise",
-    "ping",
-    "plaintext",
-    "pnet",
-    "relay",
-    "request-response",
-    "rendezvous",
-    "rsa",
-    "secp256k1",
-    "tcp-async-io",
-    "uds",
-    "wasm-ext",
-    "websocket",
-    "yamux",
-]
-
 autonat = ["dep:libp2p-autonat"]
 dcutr = ["dep:libp2p-dcutr", "libp2p-metrics?/dcutr"]
 deflate = ["dep:libp2p-deflate"]
@@ -160,20 +134,36 @@ members = [
 
 [[example]]
 name = "chat"
-required-features = ["floodsub"]
+required-features = ["floodsub", "mdns-async-io", "tcp-async-io", "websocket", "mplex", "yamux", "noise", "dns-async-std"]
 
 [[example]]
 name = "chat-tokio"
-required-features = ["tcp-tokio", "mdns-tokio"]
+required-features = ["tcp-tokio", "mdns-tokio", "floodsub", "mplex", "noise"]
 
 [[example]]
 name = "file-sharing"
-required-features = ["request-response"]
+required-features = ["request-response", "kad", "tcp-async-io", "websocket", "mplex", "yamux", "noise", "dns-async-std"]
 
 [[example]]
 name = "gossipsub-chat"
-required-features = ["gossipsub"]
+required-features = ["gossipsub", "tcp-async-io", "websocket", "mplex", "yamux", "noise", "dns-async-std"]
 
 [[example]]
 name = "ipfs-private"
-required-features = ["gossipsub", "pnet", "yamux", "ping", "noise", "tcp-async-io", "identify"]
+required-features = ["gossipsub", "tcp-async-io", "identify", "noise", "ping", "pnet", "yamux"]
+
+[[example]]
+name = "ipfs-kad"
+required-features = ["kad", "tcp-async-io", "websocket", "mplex", "yamux", "noise", "dns-async-std"]
+
+[[example]]
+name = "ping"
+required-features = ["ping", "tcp-async-io", "websocket", "mplex", "yamux", "noise", "dns-async-std"]
+
+[[example]]
+name = "mdns-passive-discovery"
+required-features = ["mdns-async-io", "tcp-async-io", "websocket", "mplex", "yamux", "noise", "dns-async-std"]
+
+[[example]]
+name = "distributed-key-value-store"
+required-features = ["mdns-async-io", "kad", "tcp-async-io", "websocket", "mplex", "yamux", "noise", "dns-async-std"]
