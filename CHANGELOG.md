@@ -46,7 +46,7 @@
 # 0.49.0 - [unreleased]
 
 - Remove default features. You need to enable all features explicitly now. As a quick workaround, you may want to use the
-  new `full` feature which activates all features. See [PR XXXX].
+  new `full` feature which activates all features. See [PR 2918].
 
 - Update to [`libp2p-tcp` `v0.37.0`](transports/tcp/CHANGELOG.md#0370).
 

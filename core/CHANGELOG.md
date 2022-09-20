@@ -1,9 +1,9 @@
 # 0.37.0 [unreleased]
 
 - Remove default features. If you previously depended on `secp256k1` or `ecdsa` you need to enable these explicitly 
-  now. See [PR XXXX].
+  now. See [PR 2918].
 
-[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+[PR 2918]: https://github.com/libp2p/rust-libp2p/pull/2918
 
 # 0.36.0
 
