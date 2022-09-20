@@ -77,9 +77,6 @@ pub use translation::address_translation;
 pub use transport::Transport;
 pub use upgrade::{InboundUpgrade, OutboundUpgrade, ProtocolName, UpgradeError, UpgradeInfo};
 
-#[cfg(test)]
-mod test;
-
 use std::{future::Future, pin::Pin};
 
 /// Implemented on objects that can run a `Future` in the background.

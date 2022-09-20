@@ -115,7 +115,7 @@ impl From<SecretKey> for Keypair {
 }
 
 /// An Ed25519 public key.
-#[derive(PartialEq, Eq, Clone)]
+#[derive(Eq, Clone)]
 pub struct PublicKey(ed25519::PublicKey);
 
 impl fmt::Debug for PublicKey {
@@ -128,9 +128,12 @@ impl fmt::Debug for PublicKey {
     }
 }
 
-// Remove (derive instead) when this PR is merged:
-// https://github.com/dalek-cryptography/ed25519-dalek/pull/176
-#[allow(clippy::derive_hash_xor_eq)]
+impl cmp::PartialEq for PublicKey {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.as_bytes().eq(other.0.as_bytes())
+    }
+}
+
 impl hash::Hash for PublicKey {
     fn hash<H: hash::Hasher>(&self, state: &mut H) {
         self.0.as_bytes().hash(state);
@@ -221,24 +224,7 @@ impl SecretKey {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test::*;
     use quickcheck::*;
-
-    #[derive(Clone, Debug)]
-    struct SomePublicKey(PublicKey);
-
-    impl Arbitrary for SomePublicKey {
-        fn arbitrary<G: Gen>(g: &mut G) -> SomePublicKey {
-            loop {
-                let mut bytes = Vec::<u8>::arbitrary(g);
-                bytes.resize(32, 0);
-                let public_key = PublicKey::decode(&mut bytes);
-                if let Ok(public_key) = public_key {
-                    return SomePublicKey(public_key);
-                }
-            }
-        }
-    }
 
     fn eq_keypairs(kp1: &Keypair, kp2: &Keypair) -> bool {
         kp1.public() == kp2.public() && kp1.0.secret.as_bytes() == kp2.0.secret.as_bytes()
@@ -281,14 +267,5 @@ mod tests {
 
         let invalid_msg = "h3ll0 w0rld".as_bytes();
         assert!(!pk.verify(invalid_msg, &sig));
-    }
-
-    #[test]
-    fn ecdsa_public_key_eq_implies_hash() {
-        fn prop(SomePublicKey(pub1): SomePublicKey, SomePublicKey(pub2): SomePublicKey) -> bool {
-            pub1 != pub2 || hash(&pub1) == hash(&pub2)
-        }
-        QuickCheck::new()
-            .quickcheck(prop as fn(_, _) -> _);
     }
 }

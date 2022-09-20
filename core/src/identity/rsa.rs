@@ -305,7 +305,6 @@ impl DerDecodable<'_> for Asn1SubjectPublicKeyInfo {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test::*;
     use quickcheck::*;
     use rand07::seq::SliceRandom;
 
@@ -357,15 +356,6 @@ mod tests {
         }
         QuickCheck::new()
             .tests(10)
-            .quickcheck(prop as fn(_, _) -> _);
-    }
-
-    #[test]
-    fn rsa_public_key_eq_implies_hash() {
-        fn prop(SomePublicKey(pub1): SomePublicKey, SomePublicKey(pub2): SomePublicKey) -> bool {
-            pub1 != pub2 || hash(&pub1) == hash(&pub2)
-        }
-        QuickCheck::new()
             .quickcheck(prop as fn(_, _) -> _);
     }
 }
