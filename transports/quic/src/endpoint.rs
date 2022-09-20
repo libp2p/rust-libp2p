@@ -39,11 +39,11 @@ use futures::{
 };
 use quinn_proto::{ClientConfig as QuinnClientConfig, ServerConfig as QuinnServerConfig};
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::HashMap,
     fmt,
     net::{Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket},
     sync::Arc,
-    task::{Context, Poll, Waker},
+    task::{Context, Poll},
     time::{Duration, Instant},
 };
 
@@ -298,19 +298,10 @@ async fn background_task(
     // Buffer where we write packets received from the UDP socket.
     let mut socket_recv_buffer = vec![0; 65536];
 
-    // The quinn_proto endpoint can give us new connections for as long as its accept buffer
-    // isn't full. This buffer is used to push these new connections while we are waiting to
-    // send them on the `new_connections` channel. We only call `endpoint.accept()` when we remove
-    // an element from this list, which guarantees that it doesn't grow unbounded.
-    // TODO: with_capacity?
-    let mut queued_new_connections = VecDeque::new();
-
     // Next packet waiting to be transmitted on the UDP socket, if any.
-    // Note that this variable isn't strictly necessary, but it reduces code duplication in the
-    // code below.
     let mut next_packet_out: Option<(SocketAddr, Vec<u8>)> = None;
 
-    let mut new_connection_waker: Option<Waker> = None;
+    let mut is_orphaned = false;
 
     // Main loop of the task.
     loop {
@@ -343,7 +334,7 @@ async fn background_task(
         }
 
         futures::select! {
-            message = receiver.next().fuse() => {
+            message = receiver.next() => {
                 // Received a message from a different part of the code requesting us to
                 // do something.
                 match message {
@@ -379,6 +370,13 @@ async fn background_task(
                         let is_drained_event = event.is_drained();
                         if is_drained_event {
                             alive_connections.remove(&connection_id);
+                            if is_orphaned && alive_connections.is_empty() {
+                                tracing::info!(
+                                    "Listener closed and no active connections remain. Shutting down the background task."
+                                );
+                                return;
+                            }
+
                         }
 
                         let event_back = proto_endpoint.handle_event(connection_id, event);
@@ -401,46 +399,6 @@ async fn background_task(
                     }
                 }
             }
-
-            // The future we create here wakes up if two conditions are fulfilled:
-            //
-            // - The `new_connections` channel is ready to accept a new element.
-            // - `queued_new_connections` is not empty.
-            //
-            // When this happens, we pop an element from `queued_new_connections`, put it on the
-            // channel, and call `endpoint.accept()`, thereby allowing the QUIC state machine to
-            // feed a new incoming connection to us.
-            readiness = {
-                let active = !queued_new_connections.is_empty();
-                let new_connections = &mut new_connections;
-                let new_connection_waker = &mut new_connection_waker;
-                future::poll_fn(move |cx| {
-                    match new_connections.as_mut() {
-                        Some(ref mut c) if active => {
-                            c.poll_ready(cx)
-                        }
-                        _ =>  {
-                            let _ = new_connection_waker.insert(cx.waker().clone());
-                            Poll::Pending
-                        }
-                    }
-                })
-                .fuse()
-            } => {
-                if readiness.is_err() {
-                    // new_connections channel has been dropped, meaning that the endpoint has
-                    // been destroyed.
-                    return;
-                }
-
-                let elem = queued_new_connections.pop_front()
-                    .expect("if queue is empty, the future above is always Pending; qed");
-                let new_connections = new_connections.as_mut().expect("in case of None, the future above is always Pending; qed");
-                new_connections.start_send(elem)
-                    .expect("future is waken up only if poll_ready returned Ready; qed");
-                //endpoint.accept();
-            }
-
             result = udp_socket.recv_from(&mut socket_recv_buffer).fuse() => {
                 let (packet_len, packet_src) = match result {
                     Ok(v) => v,
@@ -473,17 +431,34 @@ async fn background_task(
                         // A new connection has been received. `connec_id` is a newly-allocated
                         // identifier.
                         debug_assert_eq!(connec.side(), quinn_proto::Side::Server);
-                        let (tx, rx) = mpsc::channel(16);
-                        alive_connections.insert(connec_id, tx);
-                        let connection = Connection::from_quinn_connection(endpoint.clone(), connec, connec_id, rx);
+                        let connection_tx = match new_connections.as_mut() {
+                            Some(tx) => tx,
+                            None => {
+                                tracing::warn!(
+                                    "Endpoint reported a new connection even though server capabilities are disabled."
+                                );
+                                continue
+                            }
+                        };
 
-                        // As explained in the documentation, we put this new connection in an
-                        // intermediary buffer. At the next loop iteration we will try to move it
-                        // to the `new_connections` channel. We call `endpoint.accept()` only once
-                        // the element has successfully been sent on `new_connections`.
-                        queued_new_connections.push_back(connection);
-                        if let Some(waker) = new_connection_waker.take() {
-                            waker.wake();
+                        let (tx, rx) = mpsc::channel(16);
+                        let connection = Connection::from_quinn_connection(endpoint.clone(), connec, connec_id, rx);
+                        match connection_tx.try_send(connection) {
+                            Ok(()) => {
+                                alive_connections.insert(connec_id, tx);
+                            }
+                            Err(e) if e.is_disconnected() => {
+                                // Listener was closed.
+                                proto_endpoint.reject_new_connections();
+                                new_connections = None;
+                                is_orphaned = true;
+                                if alive_connections.is_empty() {
+                                    return;
+                                }
+                            }
+                            _ => tracing::warn!(
+                                "Dropping new incoming connection because the channel to the listener is full."
+                            )
                         }
                     },
                 }
