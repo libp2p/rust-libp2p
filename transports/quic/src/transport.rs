@@ -40,6 +40,7 @@ use libp2p_core::{
     PeerId, Transport,
 };
 use std::collections::VecDeque;
+use std::net::IpAddr;
 use std::task::Waker;
 use std::{
     net::SocketAddr,
@@ -327,26 +328,20 @@ impl Listener {
         loop {
             match ready!(if_watcher.poll_if_event(cx)) {
                 Ok(IfEvent::Up(inet)) => {
-                    let ip = inet.addr();
-                    if self.endpoint.socket_addr().is_ipv4() == ip.is_ipv4() {
-                        let socket_addr = SocketAddr::new(ip, self.endpoint.socket_addr().port());
-                        let ma = socketaddr_to_multiaddr(&socket_addr);
-                        tracing::debug!("New listen address: {}", ma);
+                    if let Some(addr) = ip_to_listenaddr(&self.endpoint, inet.addr()) {
+                        tracing::debug!("New listen address: {}", addr);
                         return Poll::Ready(TransportEvent::NewAddress {
                             listener_id: self.listener_id,
-                            listen_addr: ma,
+                            listen_addr: addr,
                         });
                     }
                 }
                 Ok(IfEvent::Down(inet)) => {
-                    let ip = inet.addr();
-                    if self.endpoint.socket_addr().is_ipv4() == ip.is_ipv4() {
-                        let socket_addr = SocketAddr::new(ip, self.endpoint.socket_addr().port());
-                        let ma = socketaddr_to_multiaddr(&socket_addr);
-                        tracing::debug!("Expired listen address: {}", ma);
+                    if let Some(addr) = ip_to_listenaddr(&self.endpoint, inet.addr()) {
+                        tracing::debug!("Expired listen address: {}", addr);
                         return Poll::Ready(TransportEvent::AddressExpired {
                             listener_id: self.listener_id,
-                            listen_addr: ma,
+                            listen_addr: addr,
                         });
                     }
                 }
@@ -410,6 +405,20 @@ impl Stream for Listener {
             return Poll::Pending;
         }
     }
+}
+
+/// Turn an [`IpAddr`] into a listen-address for the endpoint.
+///
+/// Returns `None` if the address is not the same socket family as the
+/// address that the endpoint is bound to.
+pub fn ip_to_listenaddr(endpoint: &Endpoint, ip: IpAddr) -> Option<Multiaddr> {
+    // True if either both addresses are Ipv4 or both Ipv6.
+    let is_same_ip_family = endpoint.socket_addr().is_ipv4() == ip.is_ipv4();
+    if !is_same_ip_family {
+        return None;
+    }
+    let socket_addr = SocketAddr::new(ip, endpoint.socket_addr().port());
+    Some(socketaddr_to_multiaddr(&socket_addr))
 }
 
 /// Tries to turn a QUIC multiaddress into a UDP [`SocketAddr`]. Returns None if the format
