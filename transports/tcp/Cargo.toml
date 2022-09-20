@@ -22,7 +22,6 @@ socket2 = { version = "0.4.0", features = ["all"] }
 tokio-crate = { package = "tokio", version = "1.19.0", default-features = false, features = ["net"], optional = true }
 
 [features]
-default = ["async-io"]
 tokio = ["tokio-crate"]
 async-io = ["async-io-crate"]
 

@@ -5,6 +5,10 @@
 
 - Update to `libp2p-core` `v0.37.0`.
 
+- Remove default features. If you previously depended on `async-std` you need to enable this explicitly now. See [PR XXXX].
+
+[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+
 [PR 2813]: https://github.com/libp2p/rust-libp2p/pull/2813
 
 # 0.36.0
