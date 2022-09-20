@@ -387,7 +387,10 @@ impl Stream for Listener {
             }
             match self.new_connections_rx.poll_next_unpin(cx) {
                 Poll::Ready(Some(connection)) => {
-                    let local_addr = socketaddr_to_multiaddr(&connection.local_addr());
+                    let local_addr = connection
+                        .local_addr()
+                        .expect("exists for server connections.");
+                    let local_addr = socketaddr_to_multiaddr(&local_addr);
                     let send_back_addr = socketaddr_to_multiaddr(&connection.remote_addr());
                     let event = TransportEvent::Incoming {
                         upgrade: Upgrade::from_connection(connection),

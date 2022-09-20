@@ -82,6 +82,7 @@ impl QuicMuxer {
         }
     }
 }
+
 impl StreamMuxer for QuicMuxer {
     type Substream = Substream;
     type Error = Error;
@@ -94,7 +95,8 @@ impl StreamMuxer for QuicMuxer {
         while let Poll::Ready(event) = inner.connection.poll_event(cx) {
             match event {
                 ConnectionEvent::Connected | ConnectionEvent::HandshakeDataReady => {
-                    tracing::warn!(
+                    debug_assert!(
+                        false,
                         "Unexpected event {:?} on established QUIC connection",
                         event
                     );
@@ -143,7 +145,6 @@ impl StreamMuxer for QuicMuxer {
             }
         }
         inner.poll_connection_waker = Some(cx.waker().clone());
-        // TODO: poll address change
         Poll::Pending
     }
 
@@ -152,7 +153,7 @@ impl StreamMuxer for QuicMuxer {
         cx: &mut Context<'_>,
     ) -> Poll<Result<Self::Substream, Self::Error>> {
         let mut inner = self.inner.lock();
-        let substream_id = match inner.connection.pop_incoming_substream() {
+        let substream_id = match inner.connection.accept_substream() {
             Some(id) => {
                 inner.poll_outbound_waker = None;
                 id
@@ -172,7 +173,7 @@ impl StreamMuxer for QuicMuxer {
         cx: &mut Context<'_>,
     ) -> Poll<Result<Self::Substream, Self::Error>> {
         let mut inner = self.inner.lock();
-        let substream_id = match inner.connection.pop_outgoing_substream() {
+        let substream_id = match inner.connection.open_substream() {
             Some(id) => {
                 inner.poll_outbound_waker = None;
                 id
@@ -195,7 +196,7 @@ impl StreamMuxer for QuicMuxer {
 
         if inner.connection.connection.streams().send_streams() != 0 {
             for substream in inner.substreams.keys().cloned().collect::<Vec<_>>() {
-                if let Err(e) = inner.connection.shutdown_substream(substream) {
+                if let Err(e) = inner.connection.finish_substream(substream) {
                     tracing::warn!("substream finish error on muxer close: {}", e);
                 }
             }
@@ -321,7 +322,7 @@ impl AsyncWrite for Substream {
 
     fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
         let mut muxer = self.muxer.lock();
-        match muxer.connection.shutdown_substream(self.id) {
+        match muxer.connection.finish_substream(self.id) {
             Ok(()) => {
                 let substream_state = muxer
                     .substreams

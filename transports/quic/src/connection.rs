@@ -45,7 +45,7 @@ use std::{
 pub struct Connection {
     /// Endpoint this connection belongs to.
     endpoint: Endpoint,
-    /// Future whose job is to send a message to the endpoint. Only one at a time.
+    /// Pending message to be sent to the background task that is driving the endpoint.
     pending_to_endpoint: Option<ToEndpoint>,
     /// Events that the endpoint will send in destination to our local [`quinn_proto::Connection`].
     /// Passed at initialization.
@@ -96,7 +96,7 @@ impl Connection {
         connection_id: quinn_proto::ConnectionHandle,
         from_endpoint: mpsc::Receiver<quinn_proto::ConnectionEvent>,
     ) -> Self {
-        assert!(!connection.is_closed());
+        debug_assert!(!connection.is_closed());
         Connection {
             endpoint,
             pending_to_endpoint: None,
@@ -107,21 +107,24 @@ impl Connection {
         }
     }
 
-    /// The local address which was used when the peer established the connection.
+    /// The local address which was used when the remote established the connection to us.
     ///
-    /// Works for server connections only.
-    pub fn local_addr(&self) -> SocketAddr {
-        debug_assert_eq!(self.connection.side(), quinn_proto::Side::Server);
+    /// `None` for client connections.
+    pub fn local_addr(&self) -> Option<SocketAddr> {
+        if self.connection.side().is_client() {
+            return None;
+        }
         let endpoint_addr = self.endpoint.socket_addr();
-        self.connection
-            .local_ip()
-            .map(|ip| SocketAddr::new(ip, endpoint_addr.port()))
-            .unwrap_or_else(|| {
-                // In a normal case scenario this should not happen, because
-                // we get want to get a local addr for a server connection only.
-                tracing::error!("trying to get quinn::local_ip for a client");
-                *endpoint_addr
-            })
+
+        // Local address may differ from the socket address if the socket is
+        // bound to a wildcard address.
+        let addr = match self.connection.local_ip() {
+            Some(ip) => SocketAddr::new(ip, endpoint_addr.port()),
+            // TODO: `quinn_proto::Connection::local_ip` is only supported for linux,
+            // so for other platforms we currently still return the endpoint address.
+            None => *endpoint_addr,
+        };
+        Some(addr)
     }
 
     /// Returns the address of the node we're connected to.
@@ -160,7 +163,7 @@ impl Connection {
     ///
     /// If `None` is returned, then a [`ConnectionEvent::StreamAvailable`] event will later be
     /// produced when a substream is available.
-    pub fn pop_incoming_substream(&mut self) -> Option<quinn_proto::StreamId> {
+    pub fn accept_substream(&mut self) -> Option<quinn_proto::StreamId> {
         self.connection.streams().accept(quinn_proto::Dir::Bi)
     }
 
@@ -171,7 +174,7 @@ impl Connection {
     ///
     /// If `None` is returned, then a [`ConnectionEvent::StreamOpened`] event will later be
     /// produced when a substream is available.
-    pub fn pop_outgoing_substream(&mut self) -> Option<quinn_proto::StreamId> {
+    pub fn open_substream(&mut self) -> Option<quinn_proto::StreamId> {
         self.connection.streams().open(quinn_proto::Dir::Bi)
     }
 
@@ -183,16 +186,14 @@ impl Connection {
     /// On success, a [`quinn_proto::StreamEvent::Finished`] event will later be produced when the
     /// substream has been effectively closed. A [`ConnectionEvent::StreamStopped`] event can also
     /// be emitted.
-    pub fn shutdown_substream(
+    pub fn finish_substream(
         &mut self,
         id: quinn_proto::StreamId,
     ) -> Result<(), quinn_proto::FinishError> {
-        // closes the write end of the substream without waiting for the remote to receive the
-        // event. use flush substream to wait for the remote to receive the event.
         self.connection.send_stream(id).finish()
     }
 
-    /// Polls the connection for an event that happend on it.
+    /// Polls the connection for an event that happened on it.
     pub fn poll_event(&mut self, cx: &mut Context<'_>) -> Poll<ConnectionEvent> {
         let mut closed = None;
         loop {
@@ -303,10 +304,10 @@ pub enum ConnectionEvent {
     /// Connection has been closed and can no longer be used.
     ConnectionLost(Error),
 
-    /// Generated after [`Connection::pop_incoming_substream`] has been called and has returned
+    /// Generated after [`Connection::accept_substream`] has been called and has returned
     /// `None`. After this event has been generated, this method is guaranteed to return `Some`.
     StreamAvailable,
-    /// Generated after [`Connection::pop_outgoing_substream`] has been called and has returned
+    /// Generated after [`Connection::open_substream`] has been called and has returned
     /// `None`. After this event has been generated, this method is guaranteed to return `Some`.
     StreamOpened,
 
@@ -315,7 +316,7 @@ pub enum ConnectionEvent {
     /// Generated after `write_substream` has returned a `Blocked` error.
     StreamWritable(quinn_proto::StreamId),
 
-    /// Generated after [`Connection::shutdown_substream`] has been called.
+    /// Generated after [`Connection::finish_substream`] has been called.
     StreamFinished(quinn_proto::StreamId),
     /// A substream has been stopped. This concept is similar to the concept of a substream being
     /// "reset", as in a TCP socket being reset for example.
