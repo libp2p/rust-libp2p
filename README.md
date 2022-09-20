@@ -94,3 +94,4 @@ Conduct](https://github.com/ipfs/community/blob/master/code-of-conduct.md).
 - https://github.com/ipfs-rust/ipfs-embed
 - https://www.actyx.com/developers/
 - https://github.com/starcoinorg/starcoin
+- https://github.com/subspace/subspace
