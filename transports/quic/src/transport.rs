@@ -328,20 +328,20 @@ impl Listener {
         loop {
             match ready!(if_watcher.poll_if_event(cx)) {
                 Ok(IfEvent::Up(inet)) => {
-                    if let Some(addr) = ip_to_listenaddr(&self.endpoint, inet.addr()) {
-                        tracing::debug!("New listen address: {}", addr);
+                    if let Some(listen_addr) = ip_to_listenaddr(&self.endpoint, inet.addr()) {
+                        tracing::debug!("New listen address: {}", listen_addr);
                         return Poll::Ready(TransportEvent::NewAddress {
                             listener_id: self.listener_id,
-                            listen_addr: addr,
+                            listen_addr,
                         });
                     }
                 }
                 Ok(IfEvent::Down(inet)) => {
-                    if let Some(addr) = ip_to_listenaddr(&self.endpoint, inet.addr()) {
-                        tracing::debug!("Expired listen address: {}", addr);
+                    if let Some(listen_addr) = ip_to_listenaddr(&self.endpoint, inet.addr()) {
+                        tracing::debug!("Expired listen address: {}", listen_addr);
                         return Poll::Ready(TransportEvent::AddressExpired {
                             listener_id: self.listener_id,
-                            listen_addr: addr,
+                            listen_addr,
                         });
                     }
                 }
