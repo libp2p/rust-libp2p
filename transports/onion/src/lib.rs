@@ -1,6 +1,23 @@
 #![doc(html_logo_url = "https://libp2p.io/img/logo_small.png")]
 #![doc(html_favicon_url = "https://libp2p.io/img/favicon.png")]
 #![cfg_attr(docsrs, feature(doc_cfg))]
+//! Tor based transport for libp2p. Connect through the Tor network to TCP listeners.
+//!
+//! Main entrypoint of the crate: [OnionTransport]
+//!
+//! ## Example
+//! ```no_run
+//! # use async_std_crate as async_std;
+//! # use libp2p_core::Transport;
+//! # async fn test_func() -> Result<(), Box<dyn std::error::Error>> {
+//! let address = "/dns/www.torproject.org/tcp/1000".parse()?;
+//! let mut transport = libp2p_onion::OnionAsyncStdNativeTlsTransport::bootstrapped().await?;
+//! // we have achieved tor connection
+//! let _conn = transport.dial(address)?.await?;
+//! # Ok(())
+//! # }
+//! # async_std::task::block_on(async { test_func().await.unwrap() });
+//! ```
 
 use std::sync::Arc;
 use std::{marker::PhantomData, pin::Pin};
@@ -35,12 +52,13 @@ pub struct OnionTransport<R: Runtime, S> {
     phantom: PhantomData<S>,
 }
 
+/// Configure the onion transport from here.
 pub type OnionBuilder<R> = TorClientBuilder<R>;
 
 /// Mode of address conversion. Refer tor [arti_client::TorAddr](https://docs.rs/arti-client/latest/arti_client/struct.TorAddr.html) for details.
 #[derive(Debug, Clone, Copy, Hash, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub enum AddressConversion {
-    /// uses only dns for address resolution
+    /// uses only dns for address resolution (default)
     #[default]
     DnsOnly,
     /// uses ip and dns for addresses
