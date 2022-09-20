@@ -92,6 +92,8 @@ impl StreamMuxer for QuicMuxer {
         cx: &mut Context<'_>,
     ) -> Poll<Result<StreamMuxerEvent, Self::Error>> {
         let mut inner = self.inner.lock();
+        // Poll the inner [`quinn_proto::Connection`] for events and wake
+        // the wakers of related poll-based methods.
         while let Poll::Ready(event) = inner.connection.poll_event(cx) {
             match event {
                 ConnectionEvent::Connected | ConnectionEvent::HandshakeDataReady => {
@@ -145,6 +147,10 @@ impl StreamMuxer for QuicMuxer {
             }
         }
         inner.poll_connection_waker = Some(cx.waker().clone());
+
+        // TODO: If connection migration is enabled (currently disabled) address
+        // change on the connection needs to be handled.
+
         Poll::Pending
     }
 

@@ -72,6 +72,10 @@ impl Config {
 
         let mut server_config = QuinnServerConfig::with_crypto(Arc::new(server_tls_config));
         server_config.transport = Arc::clone(&transport);
+        // Disables connection migration.
+        // Long-term this should be enabled, however we then need to handle address change
+        // on connections in the `QuicMuxer`.
+        server_config.migration(false);
 
         let mut client_config = QuinnClientConfig::new(Arc::new(client_tls_config));
         client_config.transport = transport;
