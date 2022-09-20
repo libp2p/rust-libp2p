@@ -27,7 +27,7 @@ void = "1.0"
 [dev-dependencies]
 async-std = { version = "1.6.2", features = ["attributes"] }
 env_logger = "0.9"
-libp2p = { path = "../..", features = ["dns-async-std", "mplex", "noise", "tcp-async-io", "websocket", "yamux"] }
+libp2p = { path = "../..", features = ["full"] }
 
 [build-dependencies]
 prost-build = "0.11"

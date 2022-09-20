@@ -11,6 +11,40 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [features]
+full = [
+    "autonat",
+    "dcutr",
+    "deflate",
+    "dns-async-std",
+    "dns-tokio",
+    "ecdsa",
+    "floodsub",
+    "gossipsub",
+    "identify",
+    "kad",
+    "mdns-async-io",
+    "mdns-tokio",
+    "metrics",
+    "mplex",
+    "noise",
+    "ping",
+    "plaintext",
+    "pnet",
+    "relay",
+    "rendezvous",
+    "request-response",
+    "rsa",
+    "secp256k1",
+    "serde",
+    "tcp-async-io",
+    "tcp-tokio",
+    "uds",
+    "wasm-bindgen",
+    "wasm-ext",
+    "wasm-ext-websocket",
+    "websocket",
+    "yamux",
+]
 autonat = ["dep:libp2p-autonat"]
 dcutr = ["dep:libp2p-dcutr", "libp2p-metrics?/dcutr"]
 deflate = ["dep:libp2p-deflate"]

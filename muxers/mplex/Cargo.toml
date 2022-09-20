@@ -27,7 +27,7 @@ async-std = "1.7.0"
 criterion = "0.4"
 env_logger = "0.9"
 futures = "0.3"
-libp2p = { path = "../../", features = ["tcp-async-io", "plaintext", "mplex"] }
+libp2p = { path = "../../", features = ["full"] }
 quickcheck = "0.9"
 rand = "0.7"
 
