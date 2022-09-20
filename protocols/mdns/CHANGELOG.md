@@ -1,6 +1,10 @@
 # 0.41.0 [unreleased]
 
+- Remove default features. If you previously depended on `async-io` you need to enable this explicitly now. See [PR XXXX].
+
 - Update to `libp2p-core` `v0.37.0`.
+
+[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
 
 # 0.40.0
 
