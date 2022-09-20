@@ -1,3 +1,10 @@
+# 0.37.0 [unreleased]
+
+- Remove default features. If you previously depended on `secp256k1` or `ecdsa` you need to enable these explicitly 
+  now. See [PR XXXX].
+
+[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+
 # 0.36.0
 
 - Make RSA keypair support optional. To enable RSA support, `rsa` feature should be enabled.

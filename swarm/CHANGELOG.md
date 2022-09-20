@@ -1,3 +1,7 @@
+# 0.40.0 [unreleased]
+
+- Update to `libp2p-core` `v0.37.0`.
+
 # 0.39.0
 
 - Remove deprecated `NetworkBehaviourEventProcess`. See [libp2p-swarm v0.38.0 changelog entry] for

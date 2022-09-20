@@ -18,8 +18,8 @@ fnv = "1.0"
 asynchronous-codec = "0.6"
 futures = "0.3.1"
 log = "0.4"
-libp2p-core = { version = "0.36.0", path = "../../core" }
-libp2p-swarm = { version = "0.39.0", path = "../../swarm" }
+libp2p-core = { version = "0.37.0", path = "../../core" }
+libp2p-swarm = { version = "0.40.0", path = "../../swarm" }
 prost = "0.11"
 rand = "0.7.2"
 sha2 = "0.10.0"
