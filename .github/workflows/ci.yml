@@ -188,33 +188,6 @@ jobs:
     - name: Check formatting
       run: cargo fmt -- --check
 
-  examples:
-    runs-on: ubuntu-latest
-    steps:
-
-    - name: Cancel Previous Runs
-      uses: styfle/cancel-workflow-action@bb6001c4ea612bf59c3abfc4756fbceee4f870c7 # 0.10.0
-      with:
-        access_token: ${{ github.token }}
-
-    - uses: actions/checkout@v3
-
-    - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
-      with:
-        profile: minimal
-        toolchain: stable
-        override: true
-
-    - name: Ensure all examples compile with the specified feature set
-      run: |
-        cargo metadata --format-version=1 --no-deps | \
-        jq -r \
-          '.packages[] | select(.name == "libp2p") | # select the root crate 
-           .targets[] | select(.kind == ["example"]) | # find all examples
-          ."required-features" as $features | .name as $name | # extract interesting fields as variables
-          "cargo check --example " + $name + " --features \"" + ( $features | join(" ")) + "\"" # build `cargo check` command
-          ' | xargs -0 -I '{}' sh -c '{}' # run each command
-
   manifest_lint:
     runs-on: ubuntu-latest
     steps:
