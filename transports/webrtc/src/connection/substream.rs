@@ -28,7 +28,7 @@ use webrtc::data::data_channel::DataChannel;
 use webrtc::data::data_channel::PollDataChannel as RTCPollDataChannel;
 
 use std::{
-    io,
+    fmt, io,
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
@@ -156,6 +156,7 @@ impl AsyncRead for Substream {
                 return Poll::Ready(Ok(n));
             }
 
+            let substream_id = self.stream_identifier();
             let Self { state, io } = &mut *self;
 
             let read_buffer = match state {
@@ -179,11 +180,11 @@ impl AsyncRead for Substream {
                     }
 
                     if let Some(flag) = flag {
-                        self.state.handle_flag(flag)
+                        self.state.handle_flag(flag, substream_id)
                     };
                 }
                 None => {
-                    self.state.handle_flag(Flag::Fin);
+                    self.state.handle_flag(Flag::Fin, substream_id);
                     return Poll::Ready(Ok(0));
                 }
             }
@@ -197,6 +198,7 @@ impl AsyncWrite for Substream {
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
+        let substream_id = self.stream_identifier();
         // Handle flags iff read side closed.
         loop {
             match self.state {
@@ -209,7 +211,7 @@ impl AsyncWrite for Substream {
                             // Read side is closed. Discard any incoming messages.
                             drop(message);
                             // But still handle flags, e.g. a `Flag::StopSending`.
-                            self.state.handle_flag(flag)
+                            self.state.handle_flag(flag, substream_id)
                         }
                         Poll::Ready(Some((None, message))) => drop(message),
                         Poll::Ready(None) | Poll::Pending => break,
@@ -291,7 +293,8 @@ enum State {
 }
 
 impl State {
-    fn handle_flag(&mut self, flag: Flag) {
+    fn handle_flag(&mut self, flag: Flag, substream_id: u16) {
+        let old_state = format!("{}", self);
         match (std::mem::replace(self, State::Poisoned), flag) {
             // StopSending
             (
@@ -342,6 +345,14 @@ impl State {
 
             (State::Poisoned, _) => unreachable!(),
         }
+
+        log::debug!(
+            "substream={}: got flag {:?}, moved from {} to {}",
+            substream_id,
+            flag,
+            old_state,
+            *self
+        );
     }
 
     fn read_buffer_mut(&mut self) -> Option<&mut Bytes> {
@@ -353,6 +364,20 @@ impl State {
             State::ReadReset => None,
             State::ReadResetWriteClosed => None,
             State::Poisoned => todo!(),
+        }
+    }
+}
+
+impl fmt::Display for State {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            State::Open { .. } => write!(f, "Open"),
+            State::WriteClosed { .. } => write!(f, "WriteClosed"),
+            State::ReadClosed { .. } => write!(f, "ReadClosed"),
+            State::ReadWriteClosed { .. } => write!(f, "ReadWriteClosed"),
+            State::ReadReset => write!(f, "ReadReset"),
+            State::ReadResetWriteClosed => write!(f, "ReadResetWriteClosed"),
+            State::Poisoned => write!(f, "Poisoned"),
         }
     }
 }
