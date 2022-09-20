@@ -150,6 +150,13 @@ impl Endpoint {
         &self.socket_addr
     }
 
+    /// Try to send a message to the background task without blocking.
+    ///
+    /// This first polls the channel for capacity.
+    /// If the channel is full, the message is returned in `Ok(Err(_))`
+    /// and the context's waker is registered for wake-up.
+    ///
+    /// If the background task crashed `Err` is returned.
     pub fn try_send(
         &mut self,
         to_endpoint: ToEndpoint,
