@@ -322,15 +322,6 @@ mod tests {
         }
     }
 
-    #[derive(Clone, Debug)]
-    struct SomePublicKey(PublicKey);
-
-    impl Arbitrary for SomePublicKey {
-        fn arbitrary<G: Gen>(g: &mut G) -> SomePublicKey {
-            SomePublicKey(SomeKeypair::arbitrary(g).0.public())
-        }
-    }
-
     #[test]
     fn rsa_from_pkcs8() {
         assert!(Keypair::from_pkcs8(&mut KEY1.to_vec()).is_ok());
