@@ -46,9 +46,7 @@ ring = { version = "0.16.9", features = ["alloc", "std"], default-features = fal
 async-std = { version = "1.6.2", features = ["attributes"] }
 base64 = "0.13.0"
 criterion = "0.4"
-libp2p-mplex = { path = "../muxers/mplex" }
-libp2p-noise = { path = "../transports/noise" }
-libp2p-tcp = { path = "../transports/tcp" }
+libp2p = { path = "../", default-features = false, features = ["mplex", "noise"] }
 multihash = { version = "0.16", default-features = false, features = ["arb"] }
 quickcheck = { package = "quickcheck-ext", path = "../misc/quickcheck-ext" }
 rmp-serde = "1.0"
