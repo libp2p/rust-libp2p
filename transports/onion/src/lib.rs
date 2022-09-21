@@ -199,14 +199,15 @@ where
         false
     }
 
-    fn dial(&mut self, mut addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let tor_address = if self.conversion_mode == AddressConversion::IpAndDns {
-            safe_extract_tor_address(&mut addr).or_else(|_| dangerous_extract_tor_address(&addr))
-        } else {
-            safe_extract_tor_address(&mut addr)
-        }
-        .map_err(|_| TransportError::MultiaddrNotSupported(addr))?;
+    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        let maybe_tor_addr = match self.conversion_mode {
+            AddressConversion::DnsOnly => safe_extract_tor_address(&addr),
+            AddressConversion::IpAndDns => dangerous_extract_tor_address(&addr),
+        };
+
+        let tor_address = maybe_tor_addr.ok_or(TransportError::MultiaddrNotSupported(addr))?;
         let onion_client = self.client.clone();
+
         Ok(async move { onion_client.connect(tor_address).await.map(S::from) }.boxed())
     }
 
