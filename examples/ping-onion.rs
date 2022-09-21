@@ -59,7 +59,9 @@ async fn onion_transport(
 > {
     use std::time::Duration;
 
-    let transport = onion::AsyncStdNativeTlsOnionTransport::bootstrapped().await?.with_address_conversion(AddressConversion::IpAndDns);
+    let transport = onion::AsyncStdNativeTlsOnionTransport::bootstrapped()
+        .await?
+        .with_address_conversion(AddressConversion::IpAndDns);
     Ok(transport
         .upgrade(upgrade::Version::V1)
         .authenticate(
