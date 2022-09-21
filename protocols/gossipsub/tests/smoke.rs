@@ -29,16 +29,16 @@ use std::{
 };
 
 use futures::StreamExt;
-use libp2p_core::{
+use libp2p::core::{
     identity, multiaddr::Protocol, transport::MemoryTransport, upgrade, Multiaddr, Transport,
 };
-use libp2p_gossipsub::{
+use libp2p::gossipsub::{
     Gossipsub, GossipsubConfigBuilder, GossipsubEvent, IdentTopic as Topic, MessageAuthenticity,
     ValidationMode,
 };
-use libp2p_plaintext::PlainText2Config;
-use libp2p_swarm::{Swarm, SwarmEvent};
-use libp2p_yamux as yamux;
+use libp2p::plaintext::PlainText2Config;
+use libp2p::swarm::{Swarm, SwarmEvent};
+use libp2p::yamux;
 
 struct Graph {
     pub nodes: Vec<(Multiaddr, Swarm<Gossipsub>)>,
@@ -177,9 +177,7 @@ fn build_node() -> (Multiaddr, Swarm<Gossipsub>) {
     let mut addr: Multiaddr = Protocol::Memory(port).into();
     swarm.listen_on(addr.clone()).unwrap();
 
-    addr = addr.with(libp2p_core::multiaddr::Protocol::P2p(
-        public_key.to_peer_id().into(),
-    ));
+    addr = addr.with(Protocol::P2p(public_key.to_peer_id().into()));
 
     (addr, swarm)
 }

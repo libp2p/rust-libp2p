@@ -37,6 +37,7 @@
 //! ```
 
 use futures::StreamExt;
+use libp2p::tcp::GenTcpConfig;
 use libp2p::{
     core::upgrade,
     floodsub::{self, Floodsub, FloodsubEvent},
@@ -56,7 +57,6 @@ use libp2p::{
     PeerId,
     Transport,
 };
-use libp2p_tcp::GenTcpConfig;
 use std::error::Error;
 use tokio::io::{self, AsyncBufReadExt};
 
