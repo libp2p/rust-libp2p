@@ -149,15 +149,15 @@ pub type AsyncStdNativeTlsOnionTransport =
     OnionTransport<tor_rtcompat::async_std::AsyncStdNativeTlsRuntime, DataStream>;
 #[cfg(all(feature = "rustls", feature = "async-std"))]
 #[cfg_attr(docsrs, doc(cfg(all(feature = "rustls", feature = "async-std"))))]
-pub type OnionAsyncStdRustlsTransport =
+pub type AsyncStdRustlsOnionTransport =
     OnionTransport<tor_rtcompat::async_std::AsyncStdRustlsRuntime, DataStream>;
 #[cfg(all(feature = "native-tls", feature = "tokio"))]
 #[cfg_attr(docsrs, doc(cfg(all(feature = "native-tls", feature = "tokio"))))]
-pub type OnionTokioNativeTlsTransport =
+pub type TokioNativeTlsOnionTransport =
     OnionTransport<tor_rtcompat::tokio::TokioNativeTlsRuntime, OnionTokioStream>;
 #[cfg(all(feature = "rustls", feature = "tokio"))]
 #[cfg_attr(docsrs, doc(cfg(all(feature = "rustls", feature = "tokio"))))]
-pub type OnionTokioRustlsTransport =
+pub type TokioRustlsOnionTransport =
     OnionTransport<tor_rtcompat::tokio::TokioRustlsRuntime, OnionTokioStream>;
 
 #[derive(Debug, Clone, Copy, Default)]
