@@ -100,7 +100,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                     .iter()
                     .map(|field| {
                         let ty = &field.ty;
-                        quote! {#name #ty_generics: From< <#ty as #trait_to_impl>::OutEvent >}
+                        quote! {#name: From< <#ty as #trait_to_impl>::OutEvent >}
                     })
                     .collect::<Vec<_>>();
                 (name, definition, from_clauses)
@@ -537,6 +537,12 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         })
     });
 
+    let out_event_reference = if out_event_definition.is_some() {
+        quote! { #out_event_name #ty_generics }
+    } else {
+        quote! { #out_event_name }
+    };
+
     // Now the magic happens.
     let final_quote = quote! {
         #out_event_definition
@@ -545,7 +551,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         #where_clause
         {
             type ConnectionHandler = #connection_handler_ty;
-            type OutEvent = #out_event_name #ty_generics;
+            type OutEvent = #out_event_reference;
 
             fn new_handler(&mut self) -> Self::ConnectionHandler {
                 use #into_connection_handler;

@@ -21,10 +21,7 @@ unsigned-varint = "0.7"
 [dev-dependencies]
 async-std = "1.6.2"
 env_logger = "0.9"
-libp2p-core = { path = "../../core", default-features = false }
-libp2p-swarm = { path = "../../swarm", default-features = false }
-libp2p-mplex = { path = "../../muxers/mplex" }
-libp2p-plaintext = { path = "../../transports/plaintext" }
+libp2p = { path = "../../", default-features = false, features = ["mplex", "plaintext"] }
 quickcheck = "0.9.0"
 rand = "0.7.2"
 rw-stream-sink = { version = "0.3.0", path = "../../misc/rw-stream-sink" }
