@@ -40,7 +40,6 @@ use futures::{
 use quinn_proto::{ClientConfig as QuinnClientConfig, ServerConfig as QuinnServerConfig};
 use std::{
     collections::HashMap,
-    fmt,
     net::{Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket},
     sync::Arc,
     task::{Context, Poll},
@@ -88,7 +87,7 @@ impl Config {
 }
 
 /// Object containing all the QUIC resources shared between all connections.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Endpoint {
     /// Channel to the background of the endpoint.
     to_endpoint: mpsc::Sender<ToEndpoint>,
@@ -456,21 +455,14 @@ async fn background_task(
                                     return;
                                 }
                             }
-                            _ => tracing::warn!(
-                                "Dropping new incoming connection because the channel to the listener is full."
+                            Err(_) => tracing::warn!(
+                                "Dropping new incoming connection {:?} because the channel to the listener is full",
+                                connec_id
                             )
                         }
                     },
                 }
             }
         }
-    }
-}
-
-impl fmt::Debug for Endpoint {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("Endpoint")
-            .field("socket_addr", &self.socket_addr)
-            .finish()
     }
 }

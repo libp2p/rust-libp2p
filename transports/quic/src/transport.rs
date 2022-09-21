@@ -411,7 +411,7 @@ impl Stream for Listener {
 ///
 /// Returns `None` if the address is not the same socket family as the
 /// address that the endpoint is bound to.
-pub fn ip_to_listenaddr(endpoint: &Endpoint, ip: IpAddr) -> Option<Multiaddr> {
+fn ip_to_listenaddr(endpoint: &Endpoint, ip: IpAddr) -> Option<Multiaddr> {
     // True if either both addresses are Ipv4 or both Ipv6.
     let is_same_ip_family = endpoint.socket_addr().is_ipv4() == ip.is_ipv4();
     if !is_same_ip_family {

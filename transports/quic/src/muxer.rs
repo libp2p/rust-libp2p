@@ -195,25 +195,29 @@ impl StreamMuxer for QuicMuxer {
     }
 
     fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        let mut inner = self.inner.lock();
-        if inner.connection.connection.is_drained() {
+        let Inner {
+            substreams,
+            connection,
+            ..
+        } = &mut *self.inner.lock();
+        if connection.connection.is_drained() {
             return Poll::Ready(Ok(()));
         }
 
-        if inner.connection.connection.streams().send_streams() != 0 {
-            for substream in inner.substreams.keys().cloned().collect::<Vec<_>>() {
-                if let Err(e) = inner.connection.finish_substream(substream) {
+        if connection.connection.streams().send_streams() != 0 {
+            for substream in substreams.keys() {
+                if let Err(e) = connection.finish_substream(*substream) {
                     tracing::warn!("substream finish error on muxer close: {}", e);
                 }
             }
         }
         loop {
-            if inner.connection.connection.streams().send_streams() == 0
-                && !inner.connection.connection.is_closed()
+            if connection.connection.streams().send_streams() == 0
+                && !connection.connection.is_closed()
             {
-                inner.connection.close()
+                connection.close()
             }
-            match inner.connection.poll_event(cx) {
+            match connection.poll_event(cx) {
                 Poll::Ready(ConnectionEvent::ConnectionLost(_)) => return Poll::Ready(Ok(())),
                 Poll::Ready(_) => {}
                 Poll::Pending => break,
