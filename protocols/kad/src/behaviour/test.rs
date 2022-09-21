@@ -27,6 +27,9 @@ use crate::record::{store::MemoryStore, Key};
 use crate::K_VALUE;
 use futures::{executor::block_on, future::poll_fn, prelude::*};
 use futures_timer::Delay;
+use libp2p::noise;
+use libp2p::swarm::{Swarm, SwarmEvent};
+use libp2p::yamux;
 use libp2p_core::{
     connection::{ConnectedPoint, ConnectionId},
     identity,
@@ -35,9 +38,6 @@ use libp2p_core::{
     transport::MemoryTransport,
     upgrade, Endpoint, PeerId, Transport,
 };
-use libp2p_noise as noise;
-use libp2p_swarm::{Swarm, SwarmEvent};
-use libp2p_yamux as yamux;
 use quickcheck::*;
 use rand::{random, rngs::StdRng, thread_rng, Rng, SeedableRng};
 use std::{
@@ -56,12 +56,9 @@ fn build_node() -> (Multiaddr, TestSwarm) {
 fn build_node_with_config(cfg: KademliaConfig) -> (Multiaddr, TestSwarm) {
     let local_key = identity::Keypair::generate_ed25519();
     let local_public_key = local_key.public();
-    let noise_keys = noise::Keypair::<noise::X25519>::new()
-        .into_authentic(&local_key)
-        .unwrap();
     let transport = MemoryTransport::default()
         .upgrade(upgrade::Version::V1)
-        .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
+        .authenticate(noise::NoiseAuthenticated::xx(&local_key).unwrap())
         .multiplex(yamux::YamuxConfig::default())
         .boxed();
 

@@ -33,6 +33,7 @@
 //! to work, the ipfs node needs to be configured to use gossipsub.
 use async_std::io;
 use futures::{prelude::*, select};
+use libp2p::tcp::GenTcpConfig;
 use libp2p::{
     core::{
         either::EitherTransport, muxing::StreamMuxerBox, transport, transport::upgrade::Version,
@@ -49,7 +50,6 @@ use libp2p::{
     yamux::YamuxConfig,
     Multiaddr, NetworkBehaviour, PeerId, Swarm, Transport,
 };
-use libp2p_tcp::GenTcpConfig;
 use std::{env, error::Error, fs, path::Path, str::FromStr, time::Duration};
 
 /// Builds the transport that serves as a common ground for all connections.
@@ -57,10 +57,7 @@ pub fn build_transport(
     key_pair: identity::Keypair,
     psk: Option<PreSharedKey>,
 ) -> transport::Boxed<(PeerId, StreamMuxerBox)> {
-    let noise_keys = noise::Keypair::<noise::X25519Spec>::new()
-        .into_authentic(&key_pair)
-        .unwrap();
-    let noise_config = noise::NoiseConfig::xx(noise_keys).into_authenticated();
+    let noise_config = noise::NoiseAuthenticated::xx(&key_pair).unwrap();
     let yamux_config = YamuxConfig::default();
 
     let base_transport = TcpTransport::new(GenTcpConfig::default().nodelay(true));
