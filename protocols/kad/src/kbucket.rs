@@ -606,13 +606,12 @@ mod tests {
     #[test]
     fn rand_distance() {
         fn prop(ix: u8) -> bool {
-            let ix = ix.min(254); // avoid overflow in 2^ix
             let d = BucketIndex(ix as usize).rand_distance(&mut rand::thread_rng());
             let n = U256::from(<[u8; 32]>::from(d.0));
             let b = U256::from(2);
             let e = U256::from(ix);
             let lower = b.pow(e);
-            let upper = b.pow(e + U256::from(1)) - U256::from(1);
+            let upper = b.checked_pow(e + U256::from(1)).unwrap_or(U256::MAX) - U256::from(1);
             lower <= n && n <= upper
         }
         quickcheck(prop as fn(_) -> _);
