@@ -21,8 +21,8 @@
 //! ECDSA keys with secp256r1 curve support.
 
 use super::error::DecodingError;
-use core::fmt;
 use core::cmp;
+use core::fmt;
 use core::hash;
 use p256::{
     ecdsa::{

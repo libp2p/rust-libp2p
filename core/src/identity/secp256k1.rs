@@ -22,9 +22,9 @@
 
 use super::error::{DecodingError, SigningError};
 use asn1_der::typed::{DerDecodable, Sequence};
+use core::cmp;
 use core::fmt;
 use core::hash;
-use core::cmp;
 use libsecp256k1::{Message, Signature};
 use sha2::{Digest as ShaDigestTrait, Sha256};
 use zeroize::Zeroize;

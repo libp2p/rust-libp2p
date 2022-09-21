@@ -21,9 +21,9 @@
 //! Ed25519 keys.
 
 use super::error::DecodingError;
+use core::cmp;
 use core::fmt;
 use core::hash;
-use core::cmp;
 use ed25519_dalek::{self as ed25519, Signer as _, Verifier as _};
 use rand::RngCore;
 use std::convert::TryFrom;
