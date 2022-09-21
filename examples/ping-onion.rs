@@ -37,13 +37,14 @@
 //!
 //! On the second computer run:
 //! ```sh
-//! cargo run --example ping-onion -- /ip4/127.0.0.1/tcp/24915
+//! cargo run --example ping-onion -- /ip4/123.45.67.89/tcp/24915
 //! ```
 //!
 //! The two nodes establish a connection, negotiate the ping protocol
 //! and begin pinging each other over Tor.
 
 use futures::prelude::*;
+use libp2p::onion::AddressConversion;
 use libp2p::swarm::{Swarm, SwarmEvent};
 use libp2p::{
     core::upgrade, identity, mplex, noise, onion, ping, yamux, Multiaddr, PeerId, Transport,
@@ -58,7 +59,7 @@ async fn onion_transport(
 > {
     use std::time::Duration;
 
-    let transport = onion::OnionAsyncStdNativeTlsTransport::bootstrapped().await?;
+    let transport = onion::AsyncStdNativeTlsOnionTransport::bootstrapped().await?.with_address_conversion(AddressConversion::IpAndDns);
     Ok(transport
         .upgrade(upgrade::Version::V1)
         .authenticate(

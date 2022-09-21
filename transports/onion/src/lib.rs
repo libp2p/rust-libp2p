@@ -11,7 +11,7 @@
 //! # use libp2p_core::Transport;
 //! # async fn test_func() -> Result<(), Box<dyn std::error::Error>> {
 //! let address = "/dns/www.torproject.org/tcp/1000".parse()?;
-//! let mut transport = libp2p_onion::OnionAsyncStdNativeTlsTransport::bootstrapped().await?;
+//! let mut transport = libp2p_onion::AsyncStdNativeTlsOnionTransport::bootstrapped().await?;
 //! // we have achieved tor connection
 //! let _conn = transport.dial(address)?.await?;
 //! # Ok(())
@@ -82,7 +82,7 @@ impl<R: Runtime, S> OnionTransport<R, S> {
         self.client.bootstrap().await
     }
 
-    pub fn with_address_conversion(&mut self, conversion_mode: AddressConversion) -> &mut Self {
+    pub fn with_address_conversion(mut self, conversion_mode: AddressConversion) -> Self {
         self.conversion_mode = conversion_mode;
         self
     }
