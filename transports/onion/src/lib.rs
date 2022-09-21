@@ -145,7 +145,7 @@ impl<S> OnionTransport<tor_rtcompat::tokio::TokioRustlsRuntime, S> {
 
 #[cfg(all(feature = "native-tls", feature = "async-std"))]
 #[cfg_attr(docsrs, doc(cfg(all(feature = "native-tls", feature = "async-std"))))]
-pub type OnionAsyncStdNativeTlsTransport =
+pub type AsyncStdNativeTlsOnionTransport =
     OnionTransport<tor_rtcompat::async_std::AsyncStdNativeTlsRuntime, DataStream>;
 #[cfg(all(feature = "rustls", feature = "async-std"))]
 #[cfg_attr(docsrs, doc(cfg(all(feature = "rustls", feature = "async-std"))))]
