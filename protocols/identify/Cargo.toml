@@ -29,6 +29,7 @@ async-std = { version = "1.6.2", features = ["attributes"] }
 env_logger = "0.9"
 libp2p = { path = "../..", default-features = false, features = [
     "dns-async-std",
+    "identify",
     "mplex",
     "noise",
     "tcp-async-io",

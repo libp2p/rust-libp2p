@@ -112,8 +112,8 @@ impl Recorder<libp2p_gossipsub::GossipsubEvent> for Metrics {
 }
 
 #[cfg(feature = "identify")]
-impl Recorder<libp2p_identify::IdentifyEvent> for Metrics {
-    fn record(&self, event: &libp2p_identify::IdentifyEvent) {
+impl Recorder<libp2p_identify::Event> for Metrics {
+    fn record(&self, event: &libp2p_identify::Event) {
         self.identify.record(event)
     }
 }
