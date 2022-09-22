@@ -4,6 +4,7 @@ use futures::StreamExt;
 use libp2p::core::transport::MemoryTransport;
 use libp2p::core::upgrade::Version;
 use libp2p::identity::Keypair;
+use libp2p::multiaddr::Protocol;
 use libp2p::noise::NoiseAuthenticated;
 use libp2p::swarm::{
     AddressScore, ConnectionHandler, IntoConnectionHandler, NetworkBehaviour, SwarmEvent,
@@ -121,7 +122,7 @@ where
     }
 
     async fn listen_on_random_memory_address(&mut self) -> Multiaddr {
-        let memory_addr_listener_id = self.listen_on(get_rand_memory_address()).unwrap();
+        let memory_addr_listener_id = self.listen_on(Protocol::Memory(0).into()).unwrap();
 
         // block until we are actually listening
         let multiaddr = loop {
@@ -171,8 +172,4 @@ where
             log::debug!("Swarm produced: {:?}", event);
         }
     }
-}
-
-fn get_rand_memory_address() -> Multiaddr {
-    Protocol::Memory(0).into()
 }
