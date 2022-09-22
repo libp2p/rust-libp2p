@@ -174,10 +174,5 @@ where
 }
 
 fn get_rand_memory_address() -> Multiaddr {
-    let address_port = rand::random::<u64>();
-    let addr = format!("/memory/{}", address_port)
-        .parse::<Multiaddr>()
-        .unwrap();
-
-    addr
+    Protocol::Memory(0).into()
 }
