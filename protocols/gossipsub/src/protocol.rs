@@ -572,13 +572,12 @@ mod tests {
     use crate::IdentTopic as Topic;
     use libp2p_core::identity::Keypair;
     use quickcheck::*;
-    use rand::Rng;
 
     #[derive(Clone, Debug)]
     struct Message(RawGossipsubMessage);
 
     impl Arbitrary for Message {
-        fn arbitrary<G: Gen>(g: &mut G) -> Self {
+        fn arbitrary(g: &mut Gen) -> Self {
             let keypair = TestKeypair::arbitrary(g);
 
             // generate an arbitrary GossipsubMessage using the behaviour signing functionality
@@ -588,8 +587,8 @@ mod tests {
                 config,
             )
             .unwrap();
-            let data = (0..g.gen_range(10, 10024))
-                .map(|_| g.gen())
+            let data = (0..g.gen_range(10..10024u32))
+                .map(|_| u8::arbitrary(g))
                 .collect::<Vec<_>>();
             let topic_id = TopicId::arbitrary(g).0;
             Message(gs.build_raw_message(topic_id, data).unwrap())
@@ -600,9 +599,9 @@ mod tests {
     struct TopicId(TopicHash);
 
     impl Arbitrary for TopicId {
-        fn arbitrary<G: Gen>(g: &mut G) -> Self {
-            let topic_string: String = (0..g.gen_range(20, 1024))
-                .map(|_| g.gen::<char>())
+        fn arbitrary(g: &mut Gen) -> Self {
+            let topic_string: String = (0..g.gen_range(20..1024u32))
+                .map(|_| char::arbitrary(g))
                 .collect::<String>()
                 .into();
             TopicId(Topic::new(topic_string).into())
@@ -614,8 +613,8 @@ mod tests {
 
     impl Arbitrary for TestKeypair {
         #[cfg(feature = "rsa")]
-        fn arbitrary<G: Gen>(g: &mut G) -> Self {
-            let keypair = if g.gen() {
+        fn arbitrary(g: &mut Gen) -> Self {
+            let keypair = if bool::arbitrary(g) {
                 // Small enough to be inlined.
                 Keypair::generate_ed25519()
             } else {
@@ -627,7 +626,7 @@ mod tests {
         }
 
         #[cfg(not(feature = "rsa"))]
-        fn arbitrary<G: Gen>(_g: &mut G) -> Self {
+        fn arbitrary(_g: &mut Gen) -> Self {
             // Small enough to be inlined.
             TestKeypair(Keypair::generate_ed25519())
         }

@@ -32,7 +32,7 @@ use libp2p::noise::{
 };
 use libp2p::tcp::TcpTransport;
 use log::info;
-use quickcheck::QuickCheck;
+use quickcheck::*;
 use std::{convert::TryInto, io, net::TcpStream};
 
 #[allow(dead_code)]
@@ -324,11 +324,13 @@ fn expect_identity<C>(
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Message(Vec<u8>);
 
-impl quickcheck::Arbitrary for Message {
-    fn arbitrary<G: quickcheck::Gen>(g: &mut G) -> Self {
-        let s = 1 + g.next_u32() % (128 * 1024);
-        let mut v = vec![0; s.try_into().unwrap()];
-        g.fill_bytes(&mut v);
+impl Arbitrary for Message {
+    fn arbitrary(g: &mut Gen) -> Self {
+        let s = g.gen_range(1..128 * 1024);
+        let mut v = vec![0; s];
+        for b in &mut v {
+            *b = u8::arbitrary(g);
+        }
         Message(v)
     }
 }

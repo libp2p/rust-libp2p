@@ -1,6 +1,10 @@
 # 0.40.0 [unreleased]
 
+- Bump rand to 0.8 and quickcheck to 1. See [PR 2857].
+
 - Update to `libp2p-core` `v0.37.0`.
+
+[PR 2857]: https://github.com/libp2p/rust-libp2p/pull/2857
 
 # 0.39.0
 
@@ -9,7 +13,12 @@
 
 - Update to `libp2p-core` `v0.36.0`.
 
+- Enforce backpressure on incoming streams via `StreamMuxer` interface. In case we hit the configured limit of maximum
+  number of inbound streams, we will stop polling the `StreamMuxer` for new inbound streams. Depending on the muxer
+  implementation in use, this may lead to instant dropping of inbound streams. See [PR 2861].
+
 [libp2p-swarm v0.38.0 changelog entry]: https://github.com/libp2p/rust-libp2p/blob/master/swarm/CHANGELOG.md#0380
+[PR 2861]: https://github.com/libp2p/rust-libp2p/pull/2861/
 
 # 0.38.0
 

@@ -1,3 +1,9 @@
+# 0.22.1 [unreleased]
+
+- Bump rand to 0.8 and quickcheck to 1. See [PR 2857].
+
+[PR 2857]: https://github.com/libp2p/rust-libp2p/pull/2857
+
 # 0.22.0 [2021-11-01]
 
 - Update dependencies.
