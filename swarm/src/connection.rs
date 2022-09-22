@@ -299,7 +299,7 @@ where
                 }
             }
 
-            if negotiating_in.len() < *max_negotiating_inbound_streams {
+            if muxing.active_inbound_streams() < *max_negotiating_inbound_streams {
                 match muxing.poll_inbound_unpin(cx)? {
                     Poll::Pending => {}
                     Poll::Ready(substream) => {
@@ -558,7 +558,6 @@ mod tests {
     use libp2p_core::upgrade::DeniedUpgrade;
     use libp2p_core::StreamMuxer;
     use quickcheck::*;
-    use std::sync::{Arc, Weak};
     use void::Void;
 
     #[test]
@@ -566,12 +565,8 @@ mod tests {
         fn prop(max_negotiating_inbound_streams: u8) {
             let max_negotiating_inbound_streams: usize = max_negotiating_inbound_streams.into();
 
-            let alive_substream_counter = Arc::new(());
-
             let mut connection = Connection::new(
-                StreamMuxerBox::new(DummyStreamMuxer {
-                    counter: alive_substream_counter.clone(),
-                }),
+                StreamMuxerBox::new(InfiniteStreamMuxer),
                 DummyConnectionHandler {
                     keep_alive: KeepAlive::Yes,
                 },
@@ -584,7 +579,7 @@ mod tests {
 
             assert!(result.is_pending());
             assert_eq!(
-                Arc::weak_count(&alive_substream_counter),
+                connection.muxing.active_inbound_streams(),
                 max_negotiating_inbound_streams,
                 "Expect no more than the maximum number of allowed streams"
             );
@@ -618,11 +613,10 @@ mod tests {
         ))
     }
 
-    struct DummyStreamMuxer {
-        counter: Arc<()>,
-    }
+    /// A [`StreamMuxer`] which produces an infinite number of streams.
+    struct InfiniteStreamMuxer;
 
-    impl StreamMuxer for DummyStreamMuxer {
+    impl StreamMuxer for InfiniteStreamMuxer {
         type Substream = PendingSubstream;
         type Error = Void;
 
@@ -630,14 +624,14 @@ mod tests {
             self: Pin<&mut Self>,
             _: &mut Context<'_>,
         ) -> Poll<Result<Self::Substream, Self::Error>> {
-            Poll::Ready(Ok(PendingSubstream(Arc::downgrade(&self.counter))))
+            Poll::Ready(Ok(PendingSubstream))
         }
 
         fn poll_outbound(
             self: Pin<&mut Self>,
             _: &mut Context<'_>,
         ) -> Poll<Result<Self::Substream, Self::Error>> {
-            Poll::Pending
+            Poll::Ready(Ok(PendingSubstream))
         }
 
         fn poll_close(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
@@ -685,7 +679,7 @@ mod tests {
         }
     }
 
-    struct PendingSubstream(Weak<()>);
+    struct PendingSubstream;
 
     impl AsyncRead for PendingSubstream {
         fn poll_read(
