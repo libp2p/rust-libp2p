@@ -82,6 +82,8 @@
   }
   ```
 
+- `DialError::WrongPeerId` now uses `Multiaddr` instead of ambiguous `ConnectedPoint`
+
 - When deriving `NetworkBehaviour` on a custom `struct` where the user does not specify their own
   `OutEvent` via `#[behaviour(out_event = "MyBehaviourEvent")]` and where the user does not enable
   `#[behaviour(event_process = true)]`, then the derive macro generates an `OutEvent` definition for

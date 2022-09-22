@@ -1440,7 +1440,7 @@ pub enum DialError {
     /// The peer identity obtained on the connection did not match the one that was expected.
     WrongPeerId {
         obtained: PeerId,
-        endpoint: ConnectedPoint,
+        address: Multiaddr,
     },
     /// An I/O error occurred on the connection.
     ConnectionIo(io::Error),
@@ -1453,9 +1453,15 @@ impl From<PendingOutboundConnectionError<io::Error>> for DialError {
         match error {
             PendingConnectionError::ConnectionLimit(limit) => DialError::ConnectionLimit(limit),
             PendingConnectionError::Aborted => DialError::Aborted,
-            PendingConnectionError::WrongPeerId { obtained, endpoint } => {
-                DialError::WrongPeerId { obtained, endpoint }
-            }
+            PendingConnectionError::WrongPeerId { obtained, endpoint } => match endpoint {
+                ConnectedPoint::Dialer {
+                    address,
+                    role_override: _,
+                } => DialError::WrongPeerId { obtained, address },
+                ConnectedPoint::Listener { .. } => panic!(
+                    "`Listener` endpoint found in `PendingOutboundConnectionError::WrongPeerId`"
+                ),
+            },
             PendingConnectionError::IO(e) => DialError::ConnectionIo(e),
             PendingConnectionError::Transport(e) => DialError::Transport(e),
         }
@@ -1481,7 +1487,7 @@ impl fmt::Display for DialError {
                 "Dial error: Pending connection attempt has been aborted."
             ),
             DialError::InvalidPeerId(multihash) => write!(f, "Dial error: multihash {:?} is not a PeerId", multihash),
-            DialError::WrongPeerId { obtained, endpoint} => write!(f, "Dial error: Unexpected peer ID {} at {:?}.", obtained, endpoint),
+            DialError::WrongPeerId { obtained, address } => write!(f, "Dial error: Unexpected peer ID {} at {}.", obtained, address),
             DialError::ConnectionIo(e) => write!(
                 f,
                 "Dial error: An I/O error occurred on the connection: {:?}.", e
@@ -1622,7 +1628,6 @@ mod tests {
     use libp2p::yamux;
     use libp2p_core::multiaddr::multiaddr;
     use libp2p_core::transport::TransportEvent;
-    use libp2p_core::Endpoint;
     use quickcheck::{quickcheck, Arbitrary, Gen, QuickCheck};
     use rand::Rng;
 
@@ -2335,15 +2340,9 @@ mod tests {
         }));
         assert_eq!(peer_id.unwrap(), other_id);
         match error {
-            DialError::WrongPeerId { obtained, endpoint } => {
+            DialError::WrongPeerId { obtained, address } => {
                 assert_eq!(obtained, *swarm1.local_peer_id());
-                assert_eq!(
-                    endpoint,
-                    ConnectedPoint::Dialer {
-                        address: other_addr,
-                        role_override: Endpoint::Dialer,
-                    }
-                );
+                assert_eq!(address, other_addr);
             }
             x => panic!("wrong error {:?}", x),
         }
