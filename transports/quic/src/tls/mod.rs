@@ -38,9 +38,9 @@ use rustls::{
 // TLS 1.3 __and__ 1.2 cipher suites. But we don't need 1.2.
 static TLS13_CIPHERSUITES: &[SupportedCipherSuite] = &[
     // TLS1.3 suites
-    TLS13_CHACHA20_POLY1305_SHA256,
     TLS13_AES_256_GCM_SHA384,
     TLS13_AES_128_GCM_SHA256,
+    TLS13_CHACHA20_POLY1305_SHA256,
 ];
 
 const P2P_ALPN: [u8; 6] = *b"libp2p";
