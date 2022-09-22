@@ -33,8 +33,8 @@ use libp2p::dcutr;
 use libp2p::plaintext::PlainText2Config;
 use libp2p::relay::v2::client;
 use libp2p::relay::v2::relay;
+use libp2p::swarm::{AddressScore, NetworkBehaviour, Swarm, SwarmEvent};
 use libp2p::NetworkBehaviour;
-use libp2p_swarm::{AddressScore, NetworkBehaviour, Swarm, SwarmEvent};
 use std::time::Duration;
 
 #[test]
@@ -144,7 +144,7 @@ where
     let transport = transport
         .upgrade(Version::V1)
         .authenticate(PlainText2Config { local_public_key })
-        .multiplex(libp2p_yamux::YamuxConfig::default())
+        .multiplex(libp2p::yamux::YamuxConfig::default())
         .boxed();
 
     transport
