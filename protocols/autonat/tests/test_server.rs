@@ -20,6 +20,8 @@
 
 use futures::{channel::oneshot, Future, FutureExt, StreamExt};
 use futures_timer::Delay;
+use libp2p::core::{ConnectedPoint, Endpoint};
+use libp2p::swarm::DialError;
 use libp2p::{
     development_transport,
     identity::Keypair,
@@ -30,8 +32,6 @@ use libp2p::{
 use libp2p_autonat::{
     Behaviour, Config, Event, InboundProbeError, InboundProbeEvent, ResponseError,
 };
-use libp2p_core::{ConnectedPoint, Endpoint};
-use libp2p_swarm::DialError;
 use std::{num::NonZeroU32, time::Duration};
 
 async fn init_swarm(config: Config) -> Swarm<Behaviour> {
