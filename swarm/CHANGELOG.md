@@ -1,3 +1,16 @@
+# 0.40.0 [unreleased]
+
+- Use the total number of alive inbound streams for back-pressure. This can have a BIG impact on your application
+  depending on how it uses `libp2p`. Previously, the limit for inbound streams per connection only applied to the
+  _upgrade_ phase, i.e. for the time `InboundUpgrade` was running. Any stream being returned from `InboundUpgrade` and
+  given to the `ConnectionHandler` did not count towards that limit, essentially mitigating the back-pressure mechanism.
+  With this release, substreams count towards that limit until they are dropped and thus we actually enforce, how many
+  inbound streams can be active at one time _per connection_. `libp2p` will not accept any more incoming streams once
+  that limit is hit. If you experience stalls or unaccepted streams in your application, consider upping the limit via
+  `SwarmBuilder::max_negotiating_inbound_streams`. See [PR 2878].
+
+[PR 2878]: https://github.com/libp2p/rust-libp2p/pull/2878
+
 # 0.39.0
 
 - Remove deprecated `NetworkBehaviourEventProcess`. See [libp2p-swarm v0.38.0 changelog entry] for
