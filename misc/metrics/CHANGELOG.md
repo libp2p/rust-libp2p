@@ -1,4 +1,4 @@
-# 0.10.0 [unreleased]
+# 0.10.0
 
 - Update to `libp2p-kad` `v0.41.0`.
 

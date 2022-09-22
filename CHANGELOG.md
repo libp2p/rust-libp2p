@@ -43,7 +43,7 @@
 
 # `libp2p` facade crate
 
-# 0.49.0 - [unreleased]
+# 0.49.0
 
 - Update to [`libp2p-tcp` `v0.37.0`](transports/tcp/CHANGELOG.md#0370).
 - Update individual crates.
@@ -54,7 +54,7 @@
     - Update to [`libp2p-pnet` `v0.22.1`](transports/pnet/CHANGELOG.md#0221).
     - Update to [`libp2p-mplex` `v0.36.1`](muxers/mplex/CHANGELOG.md#0361).
     - Update to [`libp2p-swarm` `v0.39.1`](swarm/CHANGELOG.md#0391).
-- 
+-
 - Update to [`libp2p-noise` `v0.39.1`](transports/noise/CHANGELOG.md#0391).
 
 - Update to [`libp2p-swarm-derive` `v0.30.1`](swarm-derive/CHANGELOG.md#0301).
