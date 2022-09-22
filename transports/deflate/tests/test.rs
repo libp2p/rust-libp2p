@@ -19,10 +19,11 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::{future, prelude::*};
-use libp2p_core::{transport::Transport, upgrade};
-use libp2p_deflate::DeflateConfig;
-use libp2p_tcp::TcpTransport;
-use quickcheck::{QuickCheck, RngCore, TestResult};
+use libp2p::core::{transport::Transport, upgrade};
+use libp2p::deflate::DeflateConfig;
+use libp2p::tcp::TcpTransport;
+use quickcheck::{QuickCheck, TestResult};
+use rand::RngCore;
 
 #[test]
 fn deflate() {

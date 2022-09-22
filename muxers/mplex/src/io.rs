@@ -1105,27 +1105,25 @@ mod tests {
     use asynchronous_codec::{Decoder, Encoder};
     use bytes::BytesMut;
     use quickcheck::*;
-    use rand::prelude::*;
     use std::collections::HashSet;
     use std::num::NonZeroU8;
     use std::ops::DerefMut;
     use std::pin::Pin;
 
     impl Arbitrary for MaxBufferBehaviour {
-        fn arbitrary<G: Gen>(g: &mut G) -> MaxBufferBehaviour {
-            *[MaxBufferBehaviour::Block, MaxBufferBehaviour::ResetStream]
-                .choose(g)
+        fn arbitrary(g: &mut Gen) -> MaxBufferBehaviour {
+            *g.choose(&[MaxBufferBehaviour::Block, MaxBufferBehaviour::ResetStream])
                 .unwrap()
         }
     }
 
     impl Arbitrary for MplexConfig {
-        fn arbitrary<G: Gen>(g: &mut G) -> MplexConfig {
+        fn arbitrary(g: &mut Gen) -> MplexConfig {
             MplexConfig {
-                max_substreams: g.gen_range(1, 100),
-                max_buffer_len: g.gen_range(1, 1000),
+                max_substreams: g.gen_range(1..100),
+                max_buffer_len: g.gen_range(1..1000),
                 max_buffer_behaviour: MaxBufferBehaviour::arbitrary(g),
-                split_send_size: g.gen_range(1, 10000),
+                split_send_size: g.gen_range(1..10000),
                 protocol_name: crate::config::DEFAULT_MPLEX_PROTOCOL_NAME,
             }
         }
