@@ -2,6 +2,8 @@
 
 <a href="http://libp2p.io/"><img src="https://img.shields.io/badge/project-libp2p-yellow.svg?style=flat-square" /></a>
 [![dependency status](https://deps.rs/repo/github/libp2p/rust-libp2p/status.svg?style=flat-square)](https://deps.rs/repo/github/libp2p/rust-libp2p)
+[![Crates.io](https://img.shields.io/crates/v/libp2p.svg)](https://crates.io/crates/libp2p)
+[![docs.rs](https://img.shields.io/badge/api-rustdoc-blue.svg)](https://docs.rs/libp2p)
 
 This repository is the central place for Rust development of the [libp2p](https://libp2p.io) spec.
 
@@ -12,7 +14,7 @@ This repository is the central place for Rust development of the [libp2p](https:
 - The **[examples](examples)** folder contains small binaries showcasing the
   many protocols in this repository.
 
-- For **security related issues** please reach out to security@ipfs.io. Please
+- For **security related issues** please reach out to security@libp2p.io. Please
   do not file a public issue on GitHub.
 
 - To **report bugs, suggest improvements or request new features** please open a

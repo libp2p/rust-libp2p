@@ -41,8 +41,8 @@ use libp2p_core::{
     multiaddr::Protocol::Ip6, ConnectedPoint, Multiaddr, PeerId,
 };
 use libp2p_swarm::{
-    dial_opts::{self, DialOpts},
-    IntoConnectionHandler, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
+    dial_opts::DialOpts, IntoConnectionHandler, NetworkBehaviour, NetworkBehaviourAction,
+    NotifyHandler, PollParameters,
 };
 use wasm_timer::Instant;
 
@@ -587,19 +587,20 @@ where
     }
 
     /// Publishes a message with multiple topics to the network.
-    pub fn publish<H: Hasher>(
+    pub fn publish(
         &mut self,
-        topic: Topic<H>,
+        topic: impl Into<TopicHash>,
         data: impl Into<Vec<u8>>,
     ) -> Result<MessageId, PublishError> {
         let data = data.into();
+        let topic = topic.into();
 
         // Transform the data before building a raw_message.
         let transformed_data = self
             .data_transform
-            .outbound_transform(&topic.hash(), data.clone())?;
+            .outbound_transform(&topic, data.clone())?;
 
-        let raw_message = self.build_raw_message(topic.into(), transformed_data)?;
+        let raw_message = self.build_raw_message(topic, transformed_data)?;
 
         // calculate the message id from the un-transformed data
         let msg_id = self.config.message_id(&GossipsubMessage {
@@ -648,7 +649,7 @@ where
                     set.iter()
                         .filter(|p| {
                             self.explicit_peers.contains(*p)
-                                || !self.score_below_threshold(*p, |ts| ts.publish_threshold).0
+                                || !self.score_below_threshold(p, |ts| ts.publish_threshold).0
                         })
                         .cloned(),
                 );
@@ -945,14 +946,11 @@ where
             );
 
             // remove explicit peers, peers with negative scores, and backoffed peers
-            peers = peers
-                .into_iter()
-                .filter(|p| {
-                    !self.explicit_peers.contains(p)
-                        && !self.score_below_threshold(p, |_| 0.0).0
-                        && !self.backoffs.is_backoff_with_slack(topic_hash, p)
-                })
-                .collect();
+            peers.retain(|p| {
+                !self.explicit_peers.contains(p)
+                    && !self.score_below_threshold(p, |_| 0.0).0
+                    && !self.backoffs.is_backoff_with_slack(topic_hash, p)
+            });
 
             // Add up to mesh_n of them them to the mesh
             // NOTE: These aren't randomly added, currently FIFO
@@ -1143,9 +1141,7 @@ where
             debug!("Connecting to explicit peer {:?}", peer_id);
             let handler = self.new_handler();
             self.events.push_back(NetworkBehaviourAction::Dial {
-                opts: DialOpts::peer_id(*peer_id)
-                    .condition(dial_opts::PeerCondition::Disconnected)
-                    .build(),
+                opts: DialOpts::peer_id(*peer_id).build(),
                 handler,
             });
         }
@@ -1626,7 +1622,7 @@ where
         //
         //TODO: Once signed records are spec'd: Can we use peerInfo without any IDs if they have a
         // signed peer record?
-        px = px.into_iter().filter(|p| p.peer_id.is_some()).collect();
+        px.retain(|p| p.peer_id.is_some());
         if px.len() > n {
             // only use at most prune_peers many random peers
             let mut rng = thread_rng();
@@ -1644,9 +1640,7 @@ where
                 // dial peer
                 let handler = self.new_handler();
                 self.events.push_back(NetworkBehaviourAction::Dial {
-                    opts: DialOpts::peer_id(peer_id)
-                        .condition(dial_opts::PeerCondition::Disconnected)
-                        .build(),
+                    opts: DialOpts::peer_id(peer_id).build(),
                     handler,
                 });
             }
@@ -3207,7 +3201,7 @@ where
             debug!("Peer disconnected: {}", peer_id);
             {
                 let topics = match self.peer_topics.get(peer_id) {
-                    Some(topics) => (topics),
+                    Some(topics) => topics,
                     None => {
                         debug_assert!(
                             self.blacklisted_peers.contains(peer_id),
@@ -3339,7 +3333,7 @@ where
                     ));
                 } else if let Some(conn) = self.connected_peers.get_mut(&propagation_source) {
                     // Only change the value if the old value is Floodsub (the default set in
-                    // inject_connected). All other PeerKind changes are ignored.
+                    // inject_connection_established). All other PeerKind changes are ignored.
                     debug!(
                         "New peer type found: {} for peer: {}",
                         kind, propagation_source

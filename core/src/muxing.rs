@@ -52,6 +52,8 @@
 
 use futures::{task::Context, task::Poll, AsyncRead, AsyncWrite};
 use multiaddr::Multiaddr;
+use std::future::Future;
+use std::pin::Pin;
 
 pub use self::boxed::StreamMuxerBox;
 pub use self::boxed::SubstreamBox;
@@ -63,107 +65,153 @@ mod singleton;
 /// Provides multiplexing for a connection by allowing users to open substreams.
 ///
 /// A substream created by a [`StreamMuxer`] is a type that implements [`AsyncRead`] and [`AsyncWrite`].
-///
-/// Inbound substreams are reported via [`StreamMuxer::poll_event`].
-/// Outbound substreams can be opened via [`StreamMuxer::open_outbound`] and subsequent polling via
-/// [`StreamMuxer::poll_outbound`].
+/// The [`StreamMuxer`] itself is modelled closely after [`AsyncWrite`]. It features `poll`-style
+/// functions that allow the implementation to make progress on various tasks.
 pub trait StreamMuxer {
     /// Type of the object that represents the raw substream where data can be read and written.
     type Substream: AsyncRead + AsyncWrite;
 
-    /// Future that will be resolved when the outgoing substream is open.
-    type OutboundSubstream;
-
     /// Error type of the muxer
     type Error: std::error::Error;
 
-    /// Polls for a connection-wide event.
+    /// Poll for new inbound substreams.
     ///
-    /// This function behaves the same as a `Stream`.
-    ///
-    /// If `Pending` is returned, then the current task will be notified once the muxer
-    /// is ready to be polled, similar to the API of `Stream::poll()`.
-    /// Only the latest task that was used to call this method may be notified.
-    ///
-    /// It is permissible and common to use this method to perform background
-    /// work, such as processing incoming packets and polling timers.
-    ///
-    /// An error can be generated if the connection has been closed.
-    fn poll_event(
-        &self,
+    /// This function should be called whenever callers are ready to accept more inbound streams. In
+    /// other words, callers may exercise back-pressure on incoming streams by not calling this
+    /// function if a certain limit is hit.
+    fn poll_inbound(
+        self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> Poll<Result<StreamMuxerEvent<Self::Substream>, Self::Error>>;
-
-    /// Opens a new outgoing substream, and produces the equivalent to a future that will be
-    /// resolved when it becomes available.
-    ///
-    /// The API of `OutboundSubstream` is totally opaque, and the object can only be interfaced
-    /// through the methods on the `StreamMuxer` trait.
-    fn open_outbound(&self) -> Self::OutboundSubstream;
-
-    /// Polls the outbound substream.
-    ///
-    /// If `Pending` is returned, then the current task will be notified once the substream
-    /// is ready to be polled, similar to the API of `Future::poll()`.
-    /// However, for each individual outbound substream, only the latest task that was used to
-    /// call this method may be notified.
-    ///
-    /// May panic or produce an undefined result if an earlier polling of the same substream
-    /// returned `Ready` or `Err`.
-    fn poll_outbound(
-        &self,
-        cx: &mut Context<'_>,
-        s: &mut Self::OutboundSubstream,
     ) -> Poll<Result<Self::Substream, Self::Error>>;
 
-    /// Destroys an outbound substream future. Use this after the outbound substream has finished,
-    /// or if you want to interrupt it.
-    fn destroy_outbound(&self, s: Self::OutboundSubstream);
+    /// Poll for a new, outbound substream.
+    fn poll_outbound(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<Self::Substream, Self::Error>>;
 
-    /// Closes this `StreamMuxer`.
+    /// Poll to close this [`StreamMuxer`].
     ///
-    /// After this has returned `Poll::Ready(Ok(()))`, the muxer has become useless. All
-    /// subsequent reads must return either `EOF` or an error. All subsequent writes, shutdowns,
-    /// or polls must generate an error or be ignored.
+    /// After this has returned `Poll::Ready(Ok(()))`, the muxer has become useless and may be safely
+    /// dropped.
     ///
     /// > **Note**: You are encouraged to call this method and wait for it to return `Ready`, so
     /// >           that the remote is properly informed of the shutdown. However, apart from
     /// >           properly informing the remote, there is no difference between this and
     /// >           immediately dropping the muxer.
-    fn poll_close(&self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>>;
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>>;
+
+    /// Poll to allow the underlying connection to make progress.
+    ///
+    /// In contrast to all other `poll`-functions on [`StreamMuxer`], this function MUST be called
+    /// unconditionally. Because it will be called regardless, this function can be used by
+    /// implementations to return events about the underlying connection that the caller MUST deal
+    /// with.
+    fn poll(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<StreamMuxerEvent, Self::Error>>;
 }
 
-/// Event about a connection, reported by an implementation of [`StreamMuxer`].
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum StreamMuxerEvent<T> {
-    /// Remote has opened a new substream. Contains the substream in question.
-    InboundSubstream(T),
-
-    /// Address to the remote has changed. The previous one is now obsolete.
-    ///
-    /// > **Note**: This can for example happen when using the QUIC protocol, where the two nodes
-    /// >           can change their IP address while retaining the same QUIC connection.
+/// An event produced by a [`StreamMuxer`].
+pub enum StreamMuxerEvent {
+    /// The address of the remote has changed.
     AddressChange(Multiaddr),
 }
 
-impl<T> StreamMuxerEvent<T> {
-    /// If `self` is a [`StreamMuxerEvent::InboundSubstream`], returns the content. Otherwise
-    /// returns `None`.
-    pub fn into_inbound_substream(self) -> Option<T> {
-        if let StreamMuxerEvent::InboundSubstream(s) = self {
-            Some(s)
-        } else {
-            None
-        }
+/// Extension trait for [`StreamMuxer`].
+pub trait StreamMuxerExt: StreamMuxer + Sized {
+    /// Convenience function for calling [`StreamMuxer::poll_inbound`] for [`StreamMuxer`]s that are `Unpin`.
+    fn poll_inbound_unpin(
+        &mut self,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<Self::Substream, Self::Error>>
+    where
+        Self: Unpin,
+    {
+        Pin::new(self).poll_inbound(cx)
     }
 
-    /// Map the stream within [`StreamMuxerEvent::InboundSubstream`] to a new type.
-    pub fn map_inbound_stream<O>(self, map: impl FnOnce(T) -> O) -> StreamMuxerEvent<O> {
-        match self {
-            StreamMuxerEvent::InboundSubstream(stream) => {
-                StreamMuxerEvent::InboundSubstream(map(stream))
-            }
-            StreamMuxerEvent::AddressChange(addr) => StreamMuxerEvent::AddressChange(addr),
-        }
+    /// Convenience function for calling [`StreamMuxer::poll_outbound`] for [`StreamMuxer`]s that are `Unpin`.
+    fn poll_outbound_unpin(
+        &mut self,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<Self::Substream, Self::Error>>
+    where
+        Self: Unpin,
+    {
+        Pin::new(self).poll_outbound(cx)
+    }
+
+    /// Convenience function for calling [`StreamMuxer::poll`] for [`StreamMuxer`]s that are `Unpin`.
+    fn poll_unpin(&mut self, cx: &mut Context<'_>) -> Poll<Result<StreamMuxerEvent, Self::Error>>
+    where
+        Self: Unpin,
+    {
+        Pin::new(self).poll(cx)
+    }
+
+    /// Convenience function for calling [`StreamMuxer::poll_close`] for [`StreamMuxer`]s that are `Unpin`.
+    fn poll_close_unpin(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>>
+    where
+        Self: Unpin,
+    {
+        Pin::new(self).poll_close(cx)
+    }
+
+    /// Returns a future that resolves to the next inbound `Substream` opened by the remote.
+    fn next_inbound(&mut self) -> NextInbound<'_, Self> {
+        NextInbound(self)
+    }
+
+    /// Returns a future that opens a new outbound `Substream` with the remote.
+    fn next_outbound(&mut self) -> NextOutbound<'_, Self> {
+        NextOutbound(self)
+    }
+
+    /// Returns a future for closing this [`StreamMuxer`].
+    fn close(self) -> Close<Self> {
+        Close(self)
+    }
+}
+
+impl<S> StreamMuxerExt for S where S: StreamMuxer {}
+
+pub struct NextInbound<'a, S>(&'a mut S);
+
+pub struct NextOutbound<'a, S>(&'a mut S);
+
+pub struct Close<S>(S);
+
+impl<'a, S> Future for NextInbound<'a, S>
+where
+    S: StreamMuxer + Unpin,
+{
+    type Output = Result<S::Substream, S::Error>;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.0.poll_inbound_unpin(cx)
+    }
+}
+
+impl<'a, S> Future for NextOutbound<'a, S>
+where
+    S: StreamMuxer + Unpin,
+{
+    type Output = Result<S::Substream, S::Error>;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.0.poll_outbound_unpin(cx)
+    }
+}
+
+impl<S> Future for Close<S>
+where
+    S: StreamMuxer + Unpin,
+{
+    type Output = Result<(), S::Error>;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.0.poll_close_unpin(cx)
     }
 }

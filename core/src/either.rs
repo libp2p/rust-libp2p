@@ -18,8 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::muxing::StreamMuxerEvent;
 use crate::{
-    muxing::{StreamMuxer, StreamMuxerEvent},
+    muxing::StreamMuxer,
     transport::{ListenerId, Transport, TransportError, TransportEvent},
     Multiaddr, ProtocolName,
 };
@@ -202,76 +203,56 @@ where
     B: StreamMuxer,
 {
     type Substream = EitherOutput<A::Substream, B::Substream>;
-    type OutboundSubstream = EitherOutbound<A, B>;
     type Error = EitherError<A::Error, B::Error>;
 
-    fn poll_event(
-        &self,
+    fn poll_inbound(
+        self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> Poll<Result<StreamMuxerEvent<Self::Substream>, Self::Error>> {
-        match self {
-            EitherOutput::First(inner) => inner
-                .poll_event(cx)
-                .map_err(EitherError::A)
-                .map_ok(|event| event.map_inbound_stream(EitherOutput::First)),
-            EitherOutput::Second(inner) => inner
-                .poll_event(cx)
-                .map_err(EitherError::B)
-                .map_ok(|event| event.map_inbound_stream(EitherOutput::Second)),
-        }
-    }
-
-    fn open_outbound(&self) -> Self::OutboundSubstream {
-        match self {
-            EitherOutput::First(inner) => EitherOutbound::A(inner.open_outbound()),
-            EitherOutput::Second(inner) => EitherOutbound::B(inner.open_outbound()),
+    ) -> Poll<Result<Self::Substream, Self::Error>> {
+        match self.project() {
+            EitherOutputProj::First(inner) => inner
+                .poll_inbound(cx)
+                .map_ok(EitherOutput::First)
+                .map_err(EitherError::A),
+            EitherOutputProj::Second(inner) => inner
+                .poll_inbound(cx)
+                .map_ok(EitherOutput::Second)
+                .map_err(EitherError::B),
         }
     }
 
     fn poll_outbound(
-        &self,
+        self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-        substream: &mut Self::OutboundSubstream,
     ) -> Poll<Result<Self::Substream, Self::Error>> {
-        match (self, substream) {
-            (EitherOutput::First(ref inner), EitherOutbound::A(ref mut substream)) => inner
-                .poll_outbound(cx, substream)
-                .map(|p| p.map(EitherOutput::First))
+        match self.project() {
+            EitherOutputProj::First(inner) => inner
+                .poll_outbound(cx)
+                .map_ok(EitherOutput::First)
                 .map_err(EitherError::A),
-            (EitherOutput::Second(ref inner), EitherOutbound::B(ref mut substream)) => inner
-                .poll_outbound(cx, substream)
-                .map(|p| p.map(EitherOutput::Second))
+            EitherOutputProj::Second(inner) => inner
+                .poll_outbound(cx)
+                .map_ok(EitherOutput::Second)
                 .map_err(EitherError::B),
-            _ => panic!("Wrong API usage"),
         }
     }
 
-    fn destroy_outbound(&self, substream: Self::OutboundSubstream) {
-        match self {
-            EitherOutput::First(inner) => match substream {
-                EitherOutbound::A(substream) => inner.destroy_outbound(substream),
-                _ => panic!("Wrong API usage"),
-            },
-            EitherOutput::Second(inner) => match substream {
-                EitherOutbound::B(substream) => inner.destroy_outbound(substream),
-                _ => panic!("Wrong API usage"),
-            },
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        match self.project() {
+            EitherOutputProj::First(inner) => inner.poll_close(cx).map_err(EitherError::A),
+            EitherOutputProj::Second(inner) => inner.poll_close(cx).map_err(EitherError::B),
         }
     }
 
-    fn poll_close(&self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        match self {
-            EitherOutput::First(inner) => inner.poll_close(cx).map_err(EitherError::A),
-            EitherOutput::Second(inner) => inner.poll_close(cx).map_err(EitherError::B),
+    fn poll(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<StreamMuxerEvent, Self::Error>> {
+        match self.project() {
+            EitherOutputProj::First(inner) => inner.poll(cx).map_err(EitherError::A),
+            EitherOutputProj::Second(inner) => inner.poll(cx).map_err(EitherError::B),
         }
     }
-}
-
-#[derive(Debug, Copy, Clone)]
-#[must_use = "futures do nothing unless polled"]
-pub enum EitherOutbound<A: StreamMuxer, B: StreamMuxer> {
-    A(A::OutboundSubstream),
-    B(B::OutboundSubstream),
 }
 
 /// Implements `Future` and dispatches all method calls to either `First` or `Second`.

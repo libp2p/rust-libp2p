@@ -86,7 +86,7 @@ declare_message_id_type!(MessageId, "MessageId");
 // filter duplicates quickly without performing the overhead of decompression.
 declare_message_id_type!(FastMessageId, "FastMessageId");
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PeerConnections {
     /// The kind of protocol the peer supports.
     pub kind: PeerKind,

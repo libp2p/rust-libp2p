@@ -44,7 +44,7 @@ pub enum Command {
     },
     AcceptInboundConnect {
         obs_addrs: Vec<Multiaddr>,
-        inbound_connect: protocol::inbound::PendingConnect,
+        inbound_connect: Box<protocol::inbound::PendingConnect>,
     },
     /// Upgrading the relayed connection to a direct connection either failed for good or succeeded.
     /// There is no need to keep the relayed connection alive for the sake of upgrading to a direct
@@ -76,7 +76,7 @@ impl fmt::Debug for Command {
 
 pub enum Event {
     InboundConnectRequest {
-        inbound_connect: protocol::inbound::PendingConnect,
+        inbound_connect: Box<protocol::inbound::PendingConnect>,
         remote_addr: Multiaddr,
     },
     InboundNegotiationFailed {
@@ -201,7 +201,7 @@ impl ConnectionHandler for Handler {
                 };
                 self.queued_events.push_back(ConnectionHandlerEvent::Custom(
                     Event::InboundConnectRequest {
-                        inbound_connect,
+                        inbound_connect: Box::new(inbound_connect),
                         remote_addr,
                     },
                 ));
@@ -245,9 +245,10 @@ impl ConnectionHandler for Handler {
                 inbound_connect,
                 obs_addrs,
             } => {
-                if let Some(_) = self
+                if self
                     .inbound_connect
                     .replace(inbound_connect.accept(obs_addrs).boxed())
+                    .is_some()
                 {
                     log::warn!(
                         "New inbound connect stream while still upgrading previous one. \
@@ -337,8 +338,7 @@ impl ConnectionHandler for Handler {
             _ => {
                 // Anything else is considered a fatal error or misbehaviour of
                 // the remote peer and results in closing the connection.
-                self.pending_error =
-                    Some(error.map_upgrade_err(|e| e.map_err(|e| EitherError::B(e))));
+                self.pending_error = Some(error.map_upgrade_err(|e| e.map_err(EitherError::B)));
             }
         }
     }

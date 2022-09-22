@@ -26,7 +26,7 @@ use crate::{
     transport,
 };
 
-use futures::prelude::*;
+use futures::{prelude::*, ready};
 use libp2p_core::PeerId;
 use std::{
     fmt,
@@ -57,29 +57,25 @@ impl Future for Upgrade {
             .as_mut()
             .expect("Future polled after it has completed");
 
-        let event = Connection::poll_event(connection, cx);
-        match event {
-            Poll::Pending => Poll::Pending,
-            Poll::Ready(ConnectionEvent::Connected) => {
-                let peer_id = connection.remote_peer_id();
-                let muxer = QuicMuxer::from_connection(self.connection.take().unwrap());
-                Poll::Ready(Ok((peer_id, muxer)))
-            }
-            Poll::Ready(ConnectionEvent::ConnectionLost(err)) => {
-                Poll::Ready(Err(transport::Error::Established(err)))
-            }
-            // Other items are:
-            // - StreamAvailable
-            // - StreamOpened
-            // - StreamReadable
-            // - StreamWritable
-            // - StreamFinished
-            // - StreamStopped
-            Poll::Ready(_) => {
-                // They can happen only after we finished handshake and connected to the peer.
-                // But for `Upgrade` we get `Connected` event, wrap connection into a muxer
-                // and pass it to the result Stream of muxers.
-                unreachable!()
+        loop {
+            match ready!(connection.poll_event(cx)) {
+                ConnectionEvent::Connected => {
+                    let peer_id = connection.remote_peer_id();
+                    let muxer = QuicMuxer::from_connection(self.connection.take().unwrap());
+                    return Poll::Ready(Ok((peer_id, muxer)));
+                }
+                ConnectionEvent::ConnectionLost(err) => {
+                    return Poll::Ready(Err(transport::Error::Established(err)))
+                }
+                // Other items are:
+                // - HandshakeDataReady
+                // - StreamAvailable
+                // - StreamOpened
+                // - StreamReadable
+                // - StreamWritable
+                // - StreamFinished
+                // - StreamStopped
+                _ => {}
             }
         }
     }

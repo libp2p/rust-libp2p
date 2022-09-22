@@ -92,17 +92,17 @@ impl Metrics {
     }
 }
 
-impl super::Recorder<libp2p_ping::PingEvent> for super::Metrics {
+impl super::Recorder<libp2p_ping::PingEvent> for Metrics {
     fn record(&self, event: &libp2p_ping::PingEvent) {
         match &event.result {
             Ok(libp2p_ping::PingSuccess::Pong) => {
-                self.ping.pong_received.inc();
+                self.pong_received.inc();
             }
             Ok(libp2p_ping::PingSuccess::Ping { rtt }) => {
-                self.ping.rtt.observe(rtt.as_secs_f64());
+                self.rtt.observe(rtt.as_secs_f64());
             }
             Err(failure) => {
-                self.ping.failure.get_or_create(&failure.into()).inc();
+                self.failure.get_or_create(&failure.into()).inc();
             }
         }
     }

@@ -23,10 +23,7 @@ use crate::handler::{
     KeepAlive, SubstreamProtocol,
 };
 use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper};
-use crate::{
-    DialError, NetworkBehaviour, NetworkBehaviourAction, NetworkBehaviourEventProcess,
-    PollParameters,
-};
+use crate::{DialError, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use either::Either;
 use libp2p_core::{
     connection::ConnectionId,
@@ -229,17 +226,6 @@ where
             })
         } else {
             Poll::Pending
-        }
-    }
-}
-
-impl<TEvent, TBehaviour> NetworkBehaviourEventProcess<TEvent> for Toggle<TBehaviour>
-where
-    TBehaviour: NetworkBehaviourEventProcess<TEvent>,
-{
-    fn inject_event(&mut self, event: TEvent) {
-        if let Some(inner) = self.inner.as_mut() {
-            inner.inject_event(event);
         }
     }
 }

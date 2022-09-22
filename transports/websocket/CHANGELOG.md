@@ -1,3 +1,11 @@
+# 0.38.0
+
+- Update to `libp2p-core` `v0.36.0`.
+
+# 0.37.0
+
+- Update to `libp2p-core` `v0.35.0`.
+
 # 0.36.0
 
 - Update to `libp2p-core` `v0.34.0`.

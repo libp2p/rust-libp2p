@@ -26,9 +26,9 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughpu
 use futures::future::poll_fn;
 use futures::prelude::*;
 use futures::{channel::oneshot, future::join};
+use libp2p_core::muxing::StreamMuxerExt;
 use libp2p_core::{
-    identity, multiaddr::multiaddr, muxing, transport, upgrade, Multiaddr, PeerId, StreamMuxer,
-    Transport,
+    identity, multiaddr::multiaddr, muxing, transport, upgrade, Multiaddr, PeerId, Transport,
 };
 use libp2p_mplex as mplex;
 use libp2p_plaintext::PlainText2Config;
@@ -113,12 +113,8 @@ fn run(
                     addr_sender.take().unwrap().send(listen_addr).unwrap();
                 }
                 transport::TransportEvent::Incoming { upgrade, .. } => {
-                    let (_peer, conn) = upgrade.await.unwrap();
-                    let mut s = poll_fn(|cx| conn.poll_event(cx))
-                        .await
-                        .expect("unexpected error")
-                        .into_inbound_substream()
-                        .expect("Unexpected muxer event");
+                    let (_peer, mut conn) = upgrade.await.unwrap();
+                    let mut s = conn.next_inbound().await.expect("unexpected error");
 
                     let mut buf = vec![0u8; payload_len];
                     let mut off = 0;
@@ -142,11 +138,8 @@ fn run(
     // Spawn and block on the sender, i.e. until all data is sent.
     let sender = async move {
         let addr = addr_receiver.await.unwrap();
-        let (_peer, conn) = sender_trans.dial(addr).unwrap().await.unwrap();
-        let mut handle = conn.open_outbound();
-        let mut stream = poll_fn(|cx| conn.poll_outbound(cx, &mut handle))
-            .await
-            .unwrap();
+        let (_peer, mut conn) = sender_trans.dial(addr).unwrap().await.unwrap();
+        let mut stream = conn.next_outbound().await.unwrap();
         let mut off = 0;
         loop {
             let n = poll_fn(|cx| Pin::new(&mut stream).poll_write(cx, &payload[off..]))

@@ -1,3 +1,20 @@
+# 0.37.0 - [unreleased]
+
+- Update to `if-watch` `v2.0.0`. Simplify `IfWatcher` integration.
+  Use `if_watch::IfWatcher` for all runtimes. See [PR 2813].
+
+[PR 2813]: https://github.com/libp2p/rust-libp2p/pull/2813
+
+# 0.36.0
+
+- Update to `libp2p-core` `v0.36.0`.
+
+# 0.35.0
+
+- Update to `libp2p-core` `v0.35.0`.
+
+- Update to `if-watch` `v1.1.1`.
+
 # 0.34.0
 
 - Update to `libp2p-core` `v0.34.0`.

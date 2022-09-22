@@ -1,4 +1,24 @@
-# 0.8.0 [unreleased]
+# 0.10.0 [unreleased]
+
+- Update to `libp2p-kad` `v0.41.0`.
+
+# 0.9.0
+
+- Update to `libp2p-swarm` `v0.39.0`.
+
+- Update to `libp2p-dcutr` `v0.6.0`.
+
+- Update to `libp2p-ping` `v0.39.0`.
+
+- Update to `libp2p-identify` `v0.39.0`.
+
+- Update to `libp2p-relay` `v0.12.0`.
+
+- Update to `libp2p-kad` `v0.40.0`.
+
+- Update to `libp2p-core` `v0.36.0`.
+
+# 0.8.0
 
 - Update to `libp2p-swarm` `v0.38.0`.
 
@@ -11,6 +31,16 @@
 - Update to `libp2p-relay` `v0.11.0`.
 
 - Update to `libp2p-kad` `v0.39.0`.
+
+- Track number of connected nodes supporting a specific protocol via the identify protocol. See [PR 2734].
+
+- Update to `libp2p-core` `v0.35.0`.
+
+- Update to `prometheus-client` `v0.18.0`. See [PR 2822].
+
+[PR 2822]: https://github.com/libp2p/rust-libp2p/pull/2761/
+
+[PR 2734]: https://github.com/libp2p/rust-libp2p/pull/2734/
 
 # 0.7.0
 

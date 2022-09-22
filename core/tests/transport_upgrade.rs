@@ -18,8 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-mod util;
-
 use futures::prelude::*;
 use libp2p_core::identity;
 use libp2p_core::transport::{MemoryTransport, Transport};
@@ -81,40 +79,24 @@ where
 fn upgrade_pipeline() {
     let listener_keys = identity::Keypair::generate_ed25519();
     let listener_id = listener_keys.public().to_peer_id();
-    let listener_noise_keys = noise::Keypair::<noise::X25519Spec>::new()
-        .into_authentic(&listener_keys)
-        .unwrap();
     let mut listener_transport = MemoryTransport::default()
         .upgrade(upgrade::Version::V1)
-        .authenticate(noise::NoiseConfig::xx(listener_noise_keys).into_authenticated())
+        .authenticate(noise::NoiseAuthenticated::xx(&listener_keys).unwrap())
         .apply(HelloUpgrade {})
         .apply(HelloUpgrade {})
         .apply(HelloUpgrade {})
         .multiplex(MplexConfig::default())
-        .and_then(|(peer, mplex), _| {
-            // Gracefully close the connection to allow protocol
-            // negotiation to complete.
-            util::CloseMuxer::new(mplex).map_ok(move |mplex| (peer, mplex))
-        })
         .boxed();
 
     let dialer_keys = identity::Keypair::generate_ed25519();
     let dialer_id = dialer_keys.public().to_peer_id();
-    let dialer_noise_keys = noise::Keypair::<noise::X25519Spec>::new()
-        .into_authentic(&dialer_keys)
-        .unwrap();
     let mut dialer_transport = MemoryTransport::default()
         .upgrade(upgrade::Version::V1)
-        .authenticate(noise::NoiseConfig::xx(dialer_noise_keys).into_authenticated())
+        .authenticate(noise::NoiseAuthenticated::xx(&dialer_keys).unwrap())
         .apply(HelloUpgrade {})
         .apply(HelloUpgrade {})
         .apply(HelloUpgrade {})
         .multiplex(MplexConfig::default())
-        .and_then(|(peer, mplex), _| {
-            // Gracefully close the connection to allow protocol
-            // negotiation to complete.
-            util::CloseMuxer::new(mplex).map_ok(move |mplex| (peer, mplex))
-        })
         .boxed();
 
     let listen_addr1 = Multiaddr::from(Protocol::Memory(random::<u64>()));

@@ -1,6 +1,7 @@
 use anyhow::Result;
 use async_trait::async_trait;
-use futures::future::FutureExt;
+use futures::channel::oneshot;
+use futures::future::{join, FutureExt};
 use futures::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use futures::select;
 use futures::stream::StreamExt;
@@ -13,7 +14,7 @@ use libp2p::request_response::{
     RequestResponseEvent, RequestResponseMessage,
 };
 use libp2p::swarm::dial_opts::{DialOpts, PeerCondition};
-use libp2p::swarm::{DialError, Swarm, SwarmEvent};
+use libp2p::swarm::{ConnectionError, DialError, Swarm, SwarmEvent};
 use libp2p_quic::{Config as QuicConfig, QuicTransport};
 use rand::RngCore;
 use std::num::NonZeroU8;
@@ -29,14 +30,6 @@ async fn create_swarm(keylog: bool) -> Result<Swarm<RequestResponse<PingCodec>>>
     let peer_id = keypair.public().to_peer_id();
     let config = QuicConfig::new(&keypair).unwrap();
     let transport = QuicTransport::new(config);
-
-    // TODO:
-    // transport
-    //     .transport
-    //     .max_idle_timeout(Some(quinn_proto::VarInt::from_u32(1_000u32).into()));
-    // if keylog {
-    //     transport.enable_keylogger();
-    // }
 
     let transport = Transport::map(transport, |(peer, muxer), _| {
         (peer, StreamMuxerBox::new(muxer))
@@ -77,108 +70,133 @@ async fn smoke() -> Result<()> {
     let mut data = vec![0; 4096 * 10];
     rng.fill_bytes(&mut data);
 
+    b.behaviour_mut().add_address(a.local_peer_id(), addr);
     b.behaviour_mut()
-        .add_address(&Swarm::local_peer_id(&a), addr);
-    b.behaviour_mut()
-        .send_request(&Swarm::local_peer_id(&a), Ping(data.clone()));
+        .send_request(a.local_peer_id(), Ping(data.clone()));
 
-    match b.next().await {
-        Some(SwarmEvent::Dialing(_)) => {}
-        e => panic!("{:?}", e),
-    }
+    let b_id = *b.local_peer_id();
 
-    match a.next().await {
-        Some(SwarmEvent::IncomingConnection { .. }) => {}
-        e => panic!("{:?}", e),
-    };
+    let (sync_tx, sync_rx) = oneshot::channel();
 
-    match b.next().await {
-        Some(SwarmEvent::ConnectionEstablished { .. }) => {}
-        e => panic!("{:?}", e),
-    };
+    let fut_a = async move {
+        match a.next().await {
+            Some(SwarmEvent::IncomingConnection { .. }) => {}
+            e => panic!("{:?}", e),
+        };
 
-    match a.next().await {
-        Some(SwarmEvent::ConnectionEstablished { .. }) => {}
-        e => panic!("{:?}", e),
-    };
+        match a.next().await {
+            Some(SwarmEvent::ConnectionEstablished { .. }) => {}
+            e => panic!("{:?}", e),
+        };
 
-    assert!(b.next().now_or_never().is_none());
-
-    match a.next().await {
-        Some(SwarmEvent::Behaviour(RequestResponseEvent::Message {
-            message:
-                RequestResponseMessage::Request {
-                    request: Ping(ping),
-                    channel,
-                    ..
-                },
-            ..
-        })) => {
-            a.behaviour_mut()
-                .send_response(channel, Pong(ping))
-                .unwrap();
+        match a.next().await {
+            Some(SwarmEvent::Behaviour(RequestResponseEvent::Message {
+                message:
+                    RequestResponseMessage::Request {
+                        request: Ping(ping),
+                        channel,
+                        ..
+                    },
+                ..
+            })) => {
+                a.behaviour_mut()
+                    .send_response(channel, Pong(ping))
+                    .unwrap();
+            }
+            e => panic!("{:?}", e),
         }
-        e => panic!("{:?}", e),
-    }
 
-    match a.next().await {
-        Some(SwarmEvent::Behaviour(RequestResponseEvent::ResponseSent { .. })) => {}
-        e => panic!("{:?}", e),
-    }
-
-    match b.next().await {
-        Some(SwarmEvent::Behaviour(RequestResponseEvent::Message {
-            message:
-                RequestResponseMessage::Response {
-                    response: Pong(pong),
-                    ..
-                },
-            ..
-        })) => assert_eq!(data, pong),
-        e => panic!("{:?}", e),
-    }
-
-    a.behaviour_mut().send_request(
-        &Swarm::local_peer_id(&b),
-        Ping(b"another substream".to_vec()),
-    );
-
-    assert!(a.next().now_or_never().is_none());
-
-    match b.next().await {
-        Some(SwarmEvent::Behaviour(RequestResponseEvent::Message {
-            message:
-                RequestResponseMessage::Request {
-                    request: Ping(data),
-                    channel,
-                    ..
-                },
-            ..
-        })) => {
-            b.behaviour_mut()
-                .send_response(channel, Pong(data))
-                .unwrap();
+        match a.next().await {
+            Some(SwarmEvent::Behaviour(RequestResponseEvent::ResponseSent { .. })) => {}
+            e => panic!("{:?}", e),
         }
-        e => panic!("{:?}", e),
-    }
 
-    match b.next().await {
-        Some(SwarmEvent::Behaviour(RequestResponseEvent::ResponseSent { .. })) => {}
-        e => panic!("{:?}", e),
-    }
+        a.behaviour_mut()
+            .send_request(&b_id, Ping(b"another substream".to_vec()));
 
-    match a.next().await {
-        Some(SwarmEvent::Behaviour(RequestResponseEvent::Message {
-            message:
-                RequestResponseMessage::Response {
-                    response: Pong(data),
-                    ..
-                },
-            ..
-        })) => assert_eq!(data, b"another substream".to_vec()),
-        e => panic!("{:?}", e),
-    }
+        assert!(a.next().now_or_never().is_none());
 
+        match a.next().await {
+            Some(SwarmEvent::Behaviour(RequestResponseEvent::Message {
+                message:
+                    RequestResponseMessage::Response {
+                        response: Pong(data),
+                        ..
+                    },
+                ..
+            })) => assert_eq!(data, b"another substream".to_vec()),
+            e => panic!("{:?}", e),
+        }
+
+        sync_rx.await.unwrap();
+
+        a.disconnect_peer_id(b_id).unwrap();
+
+        match a.next().await {
+            Some(SwarmEvent::ConnectionClosed { cause: None, .. }) => {}
+            e => panic!("{:?}", e),
+        }
+    };
+
+    let fut_b = async {
+        match b.next().await {
+            Some(SwarmEvent::Dialing(_)) => {}
+            e => panic!("{:?}", e),
+        }
+
+        match b.next().await {
+            Some(SwarmEvent::ConnectionEstablished { .. }) => {}
+            e => panic!("{:?}", e),
+        };
+
+        assert!(b.next().now_or_never().is_none());
+
+        match b.next().await {
+            Some(SwarmEvent::Behaviour(RequestResponseEvent::Message {
+                message:
+                    RequestResponseMessage::Response {
+                        response: Pong(pong),
+                        ..
+                    },
+                ..
+            })) => assert_eq!(data, pong),
+            e => panic!("{:?}", e),
+        }
+
+        match b.next().await {
+            Some(SwarmEvent::Behaviour(RequestResponseEvent::Message {
+                message:
+                    RequestResponseMessage::Request {
+                        request: Ping(data),
+                        channel,
+                        ..
+                    },
+                ..
+            })) => {
+                b.behaviour_mut()
+                    .send_response(channel, Pong(data))
+                    .unwrap();
+            }
+            e => panic!("{:?}", e),
+        }
+
+        match b.next().await {
+            Some(SwarmEvent::Behaviour(RequestResponseEvent::ResponseSent { .. })) => {}
+            e => panic!("{:?}", e),
+        }
+
+        sync_tx.send(()).unwrap();
+
+        match b.next().await {
+            Some(SwarmEvent::ConnectionClosed {
+                cause: Some(ConnectionError::IO(_)),
+                ..
+            }) => {}
+            e => panic!("{:?}", e),
+        }
+    };
+
+    join(fut_a, fut_b).await;
     Ok(())
 }
 
@@ -385,9 +403,9 @@ fn concurrent_connections_and_streams() {
         for (listener_peer_id, listener_addr) in &listeners {
             dialer
                 .behaviour_mut()
-                .add_address(&listener_peer_id, listener_addr.clone());
+                .add_address(listener_peer_id, listener_addr.clone());
 
-            dialer.dial(listener_peer_id.clone()).unwrap();
+            dialer.dial(*listener_peer_id).unwrap();
         }
 
         // Wait for responses to each request.
@@ -523,8 +541,8 @@ async fn endpoint_reuse() -> Result<()> {
                 }
                 _ => {}
             },
-            ev = swarm_b.select_next_some() => match ev{
-                SwarmEvent::ConnectionEstablished { endpoint, ..} => {
+            ev = swarm_b.select_next_some() => {
+                if let SwarmEvent::ConnectionEstablished { endpoint, ..} = ev {
                     match endpoint {
                         ConnectedPoint::Dialer{..} => panic!("Unexpected outbound connection"),
                         ConnectedPoint::Listener {send_back_addr, local_addr} => {
@@ -535,7 +553,6 @@ async fn endpoint_reuse() -> Result<()> {
                         }
                     }
                 }
-                _ => {}
             },
         }
     }

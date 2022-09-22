@@ -21,6 +21,7 @@
 //! Implementation of the [libp2p circuit relay v2
 //! specification](https://github.com/libp2p/specs/issues/314).
 
+#[allow(clippy::derive_partial_eq_without_eq)]
 mod message_proto {
     include!(concat!(env!("OUT_DIR"), "/message_v2.pb.rs"));
 }
@@ -34,7 +35,8 @@ pub use protocol::{
     inbound_hop::FatalUpgradeError as InboundHopFatalUpgradeError,
     inbound_stop::FatalUpgradeError as InboundStopFatalUpgradeError,
     outbound_hop::FatalUpgradeError as OutboundHopFatalUpgradeError,
-    outbound_stop::FatalUpgradeError as OutboundStopFatalUpgradeError,
+    outbound_stop::FatalUpgradeError as OutboundStopFatalUpgradeError, HOP_PROTOCOL_NAME,
+    STOP_PROTOCOL_NAME,
 };
 
 /// The ID of an outgoing / incoming, relay / destination request.

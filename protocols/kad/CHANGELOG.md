@@ -1,6 +1,32 @@
-# 0.39.0 [unreleased]
+# 0.41.0 [unreleased]
+
+- Remove deprecated `set_protocol_name()` from `KademliaConfig` & `KademliaProtocolConfig`.
+  Use `set_protocol_names()` instead. See [PR 2866].
+
+[PR 2866]: https://github.com/libp2p/rust-libp2p/pull/2866
+
+# 0.40.0
+
+- Add support for multiple protocol names. Update `Kademlia`, `KademliaConfig`,
+  and `KademliaProtocolConfig` accordingly. See [Issue 2837]. See [PR 2846].
+
+- Update to `libp2p-swarm` `v0.39.0`.
+
+- Update to `libp2p-core` `v0.36.0`.
+
+[Issue 2837]: https://github.com/libp2p/rust-libp2p/issues/2837
+[PR 2846]: https://github.com/libp2p/rust-libp2p/pull/2846
+
+# 0.39.0
+
+- Update prost requirement from 0.10 to 0.11 which no longer installs the protoc Protobuf compiler.
+  Thus you will need protoc installed locally. See [PR 2788].
 
 - Update to `libp2p-swarm` `v0.38.0`.
+
+- Update to `libp2p-core` `v0.35.0`.
+
+[PR 2788]: https://github.com/libp2p/rust-libp2p/pull/2788
 
 # 0.38.0
 
