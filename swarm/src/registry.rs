@@ -338,23 +338,22 @@ mod tests {
     use super::*;
     use libp2p_core::multiaddr::{Multiaddr, Protocol};
     use quickcheck::*;
-    use rand::Rng;
     use std::num::{NonZeroU8, NonZeroUsize};
 
     impl Arbitrary for AddressScore {
-        fn arbitrary<G: Gen>(g: &mut G) -> AddressScore {
-            if g.gen_range(0, 10) == 0 {
+        fn arbitrary(g: &mut Gen) -> AddressScore {
+            if g.gen_range(0..10u8) == 0 {
                 // ~10% "Infinitely" scored addresses
                 AddressScore::Infinite
             } else {
-                AddressScore::Finite(g.gen())
+                AddressScore::Finite(Arbitrary::arbitrary(g))
             }
         }
     }
 
     impl Arbitrary for AddressRecord {
-        fn arbitrary<G: Gen>(g: &mut G) -> Self {
-            let addr = Protocol::Tcp(g.gen::<u16>() % 256).into();
+        fn arbitrary(g: &mut Gen) -> Self {
+            let addr = Protocol::Tcp(g.gen_range(0..256)).into();
             let score = AddressScore::arbitrary(g);
             AddressRecord::new(addr, score)
         }
@@ -381,7 +380,7 @@ mod tests {
     #[test]
     fn score_retention() {
         fn prop(first: AddressRecord, other: AddressRecord) -> TestResult {
-            if first.addr == other.addr {
+            if first.addr == other.addr || first.score.is_zero() {
                 return TestResult::discard();
             }
 
@@ -410,6 +409,33 @@ mod tests {
         }
 
         quickcheck(prop as fn(_, _) -> _);
+    }
+
+    #[test]
+    fn score_retention_finite_0() {
+        let first = {
+            let addr = Protocol::Tcp(42).into();
+            let score = AddressScore::Finite(0);
+            AddressRecord::new(addr, score)
+        };
+        let other = {
+            let addr = Protocol::Udp(42).into();
+            let score = AddressScore::Finite(42);
+            AddressRecord::new(addr, score)
+        };
+
+        let mut addresses = Addresses::default();
+
+        // Add the first address.
+        addresses.add(first.addr.clone(), first.score);
+        assert!(addresses.iter().any(|a| &a.addr == &first.addr));
+
+        // Add another address so the first will address be purged,
+        // because its score is finite(0)
+        addresses.add(other.addr.clone(), other.score);
+
+        assert!(addresses.iter().any(|a| &a.addr == &other.addr));
+        assert!(!addresses.iter().any(|a| &a.addr == &first.addr));
     }
 
     #[test]

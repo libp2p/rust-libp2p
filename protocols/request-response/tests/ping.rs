@@ -127,7 +127,7 @@ fn ping_protocol() {
         }
     };
 
-    let num_pings: u8 = rand::thread_rng().gen_range(1, 100);
+    let num_pings: u8 = rand::thread_rng().gen_range(1..100);
 
     let peer2 = async move {
         let mut count = 0;
