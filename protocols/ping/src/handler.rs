@@ -56,7 +56,7 @@ pub struct Config {
 }
 
 impl Config {
-    /// Creates a new `PingConfig` with the following default settings:
+    /// Creates a new [`Config`] with the following default settings:
     ///
     ///   * [`Config::with_interval`] 15s
     ///   * [`Config::with_timeout`] 20s
