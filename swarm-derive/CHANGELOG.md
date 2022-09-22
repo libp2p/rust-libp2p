@@ -2,6 +2,7 @@
 
 - Fix an issue where the derive would generate bad code if the type parameters between the behaviour and a custom
   out event differed. See [PR 2907].
+- Fix an issue where the derive would generate incorrect code depending on available imports [#2921]
 
 [PR 2907]: https://github.com/libp2p/rust-libp2p/pull/2907
 
