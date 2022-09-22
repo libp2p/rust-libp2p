@@ -1,3 +1,9 @@
+# 0.39.1 [unreleased]
+
+- Bump rand to 0.8 and quickcheck to 1. See [PR 2857].
+
+[PR 2857]: https://github.com/libp2p/rust-libp2p/pull/2857
+
 # 0.39.0
 
 - Remove deprecated `NetworkBehaviourEventProcess`. See [libp2p-swarm v0.38.0 changelog entry] for

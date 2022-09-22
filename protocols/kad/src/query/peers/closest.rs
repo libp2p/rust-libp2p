@@ -500,16 +500,29 @@ mod tests {
             .all(|w| w[0].distance(&target) < w[1].distance(&target))
     }
 
+    #[derive(Clone, Debug)]
+    struct ArbitraryPeerId(PeerId);
+
+    impl Arbitrary for ArbitraryPeerId {
+        fn arbitrary(g: &mut Gen) -> ArbitraryPeerId {
+            let hash: [u8; 32] = core::array::from_fn(|_| u8::arbitrary(g));
+            let peer_id =
+                PeerId::from_multihash(Multihash::wrap(Code::Sha2_256.into(), &hash).unwrap())
+                    .unwrap();
+            ArbitraryPeerId(peer_id)
+        }
+    }
+
     impl Arbitrary for ClosestPeersIter {
-        fn arbitrary<G: Gen>(g: &mut G) -> ClosestPeersIter {
-            let known_closest_peers = random_peers(g.gen_range(1, 60), g)
-                .into_iter()
-                .map(Key::from);
-            let target = Key::from(Into::<Multihash>::into(PeerId::random()));
+        fn arbitrary(g: &mut Gen) -> ClosestPeersIter {
+            let known_closest_peers = (0..g.gen_range(1..60u8))
+                .map(|_| Key::from(ArbitraryPeerId::arbitrary(g).0))
+                .collect::<Vec<_>>();
+            let target = Key::from(ArbitraryPeerId::arbitrary(g).0);
             let config = ClosestPeersIterConfig {
-                parallelism: NonZeroUsize::new(g.gen_range(1, 10)).unwrap(),
-                num_results: NonZeroUsize::new(g.gen_range(1, 25)).unwrap(),
-                peer_timeout: Duration::from_secs(g.gen_range(10, 30)),
+                parallelism: NonZeroUsize::new(g.gen_range(1..10)).unwrap(),
+                num_results: NonZeroUsize::new(g.gen_range(1..25)).unwrap(),
+                peer_timeout: Duration::from_secs(g.gen_range(10..30)),
             };
             ClosestPeersIter::with_config(config, target, known_closest_peers)
         }
@@ -519,8 +532,9 @@ mod tests {
     struct Seed([u8; 32]);
 
     impl Arbitrary for Seed {
-        fn arbitrary<G: Gen>(g: &mut G) -> Seed {
-            Seed(g.gen())
+        fn arbitrary(g: &mut Gen) -> Seed {
+            let seed = core::array::from_fn(|_| u8::arbitrary(g));
+            Seed(seed)
         }
     }
 
@@ -612,7 +626,7 @@ mod tests {
                 // peers or an error, thus finishing the "in-flight requests".
                 for (i, k) in expected.iter().enumerate() {
                     if rng.gen_bool(0.75) {
-                        let num_closer = rng.gen_range(0, iter.config.num_results.get() + 1);
+                        let num_closer = rng.gen_range(0..iter.config.num_results.get() + 1);
                         let closer_peers = random_peers(num_closer, &mut rng);
                         remaining.extend(closer_peers.iter().cloned().map(Key::from));
                         iter.on_success(k.preimage(), closer_peers);
@@ -668,11 +682,10 @@ mod tests {
 
     #[test]
     fn no_duplicates() {
-        fn prop(mut iter: ClosestPeersIter, seed: Seed) -> bool {
+        fn prop(mut iter: ClosestPeersIter, closer: ArbitraryPeerId) -> bool {
             let now = Instant::now();
-            let mut rng = StdRng::from_seed(seed.0);
 
-            let closer = random_peers(1, &mut rng);
+            let closer = vec![closer.0];
 
             // A first peer reports a "closer" peer.
             let peer1 = match iter.next(now) {

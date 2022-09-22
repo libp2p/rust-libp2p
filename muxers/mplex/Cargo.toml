@@ -3,7 +3,7 @@ name = "libp2p-mplex"
 edition = "2021"
 rust-version = "1.56.1"
 description = "Mplex multiplexing protocol for libp2p"
-version = "0.36.0"
+version = "0.36.1"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -18,7 +18,7 @@ libp2p-core = { version = "0.36.0", path = "../../core", default-features = fals
 log = "0.4"
 nohash-hasher = "0.2"
 parking_lot = "0.12"
-rand = "0.7"
+rand = "0.8"
 smallvec = "1.6.1"
 unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
 
@@ -28,8 +28,7 @@ criterion = "0.4"
 env_logger = "0.9"
 futures = "0.3"
 libp2p = { path = "../../", default-features = false, features = ["tcp-async-io", "plaintext", "mplex"] }
-quickcheck = "0.9"
-rand = "0.7"
+quickcheck = { package = "quickcheck-ext", path = "../../misc/quickcheck-ext" }
 
 [[bench]]
 name = "split_send_size"

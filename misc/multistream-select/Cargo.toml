@@ -22,6 +22,6 @@ unsigned-varint = "0.7"
 async-std = "1.6.2"
 env_logger = "0.9"
 libp2p = { path = "../../", default-features = false, features = ["mplex", "plaintext"] }
-quickcheck = "0.9.0"
-rand = "0.7.2"
+quickcheck = { package = "quickcheck-ext", path = "../../misc/quickcheck-ext" }
+rand = "0.8"
 rw-stream-sink = { version = "0.3.0", path = "../../misc/rw-stream-sink" }
