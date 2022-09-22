@@ -371,7 +371,7 @@ fn custom_out_event_no_type_parameters() {
         type OutEvent = void::Void;
 
         fn new_handler(&mut self) -> Self::ConnectionHandler {
-            DummyConnectionHandler::default()
+            DummyConnectionHandler
         }
 
         fn inject_event(

@@ -19,6 +19,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::connection::Connection;
 use crate::{
     behaviour::{THandlerInEvent, THandlerOutEvent},
     connection::{
@@ -89,7 +90,7 @@ where
 
     /// The maximum number of inbound streams concurrently negotiating on a connection.
     ///
-    /// See [`super::handler_wrapper::HandlerWrapper::max_negotiating_inbound_streams`].
+    /// See [`Connection::max_negotiating_inbound_streams`].
     max_negotiating_inbound_streams: usize,
 
     /// The executor to use for running the background tasks. If `None`,
@@ -746,11 +747,9 @@ where
                         },
                     );
 
-                    let connection = super::Connection::new(
-                        obtained_peer_id,
-                        endpoint,
+                    let connection = Connection::new(
                         muxer,
-                        handler,
+                        handler.into_handler(&obtained_peer_id, &endpoint),
                         self.substream_upgrade_protocol_override,
                         self.max_negotiating_inbound_streams,
                     );
@@ -1165,7 +1164,7 @@ pub struct PoolConfig {
 
     /// The maximum number of inbound streams concurrently negotiating on a connection.
     ///
-    /// See [super::handler_wrapper::HandlerWrapper::max_negotiating_inbound_streams].
+    /// See [`Connection::max_negotiating_inbound_streams`].
     max_negotiating_inbound_streams: usize,
 }
 
@@ -1240,7 +1239,7 @@ impl PoolConfig {
 
     /// The maximum number of inbound streams concurrently negotiating on a connection.
     ///
-    /// See [`super::handler_wrapper::HandlerWrapper::max_negotiating_inbound_streams`].
+    /// See [`Connection::max_negotiating_inbound_streams`].
     pub fn with_max_negotiating_inbound_streams(mut self, v: usize) -> Self {
         self.max_negotiating_inbound_streams = v;
         self
