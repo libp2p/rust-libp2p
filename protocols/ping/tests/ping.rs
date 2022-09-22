@@ -21,8 +21,8 @@
 //! Integration tests for the `Ping` network behaviour.
 
 use futures::prelude::*;
-use libp2p_ping as ping;
-use libp2p_swarm::{DummyBehaviour, KeepAlive, Swarm, SwarmEvent};
+use libp2p::ping;
+use libp2p::swarm::{DummyBehaviour, KeepAlive, Swarm, SwarmEvent};
 use libp2p_swarm_test::SwarmExt;
 use quickcheck::*;
 use std::{num::NonZeroU8, time::Duration};
