@@ -11,8 +11,8 @@ use libp2p::request_response::{
 };
 use libp2p::swarm::{Swarm, SwarmBuilder, SwarmEvent};
 use libp2p_core::{identity, multiaddr::Protocol, muxing::StreamMuxerBox, upgrade, Transport};
+use libp2p_webrtc::fingerprint::Fingerprint;
 use libp2p_webrtc::transport::WebRTCTransport;
-use multihash::{Code, Multihash, MultihashDigest};
 use rand::RngCore;
 use rcgen::KeyPair;
 use tokio_crate as tokio;
@@ -29,7 +29,7 @@ fn generate_tls_keypair() -> identity::Keypair {
     identity::Keypair::generate_ed25519()
 }
 
-fn create_swarm() -> Result<(Swarm<RequestResponse<PingCodec>>, String)> {
+fn create_swarm() -> Result<(Swarm<RequestResponse<PingCodec>>, Fingerprint)> {
     let cert = generate_certificate();
     let keypair = generate_tls_keypair();
     let peer_id = keypair.public().to_peer_id();
@@ -54,7 +54,7 @@ fn create_swarm() -> Result<(Swarm<RequestResponse<PingCodec>>, String)> {
                 tokio::spawn(fut);
             }))
             .build(),
-        fingerprint,
+        Fingerprint::new_sha256(fingerprint),
     ))
 }
 
@@ -78,7 +78,7 @@ async fn smoke() -> Result<()> {
     // skip other interface addresses
     while a.next().now_or_never().is_some() {}
 
-    let addr = addr.with(Protocol::Certhash(fingerprint2multihash(&a_fingerprint)));
+    let addr = addr.with(Protocol::Certhash(a_fingerprint.into()));
 
     let _ = match b.next().await {
         Some(SwarmEvent::NewListenAddr { address, .. }) => address,
@@ -321,7 +321,7 @@ async fn dial_failure() -> Result<()> {
     // skip other interface addresses
     while a.next().now_or_never().is_some() {}
 
-    let addr = addr.with(Protocol::Certhash(fingerprint2multihash(&a_fingerprint)));
+    let addr = addr.with(Protocol::Certhash(a_fingerprint.into()));
 
     let _ = match b.next().await {
         Some(SwarmEvent::NewListenAddr { address, .. }) => address,
@@ -382,7 +382,7 @@ async fn concurrent_connections_and_streams() {
             e => panic!("{:?}", e),
         };
 
-        let addr = addr.with(Protocol::Certhash(fingerprint2multihash(&fingerprint)));
+        let addr = addr.with(Protocol::Certhash(fingerprint.into()));
 
         listeners.push((*listener.local_peer_id(), addr));
 
@@ -493,10 +493,4 @@ async fn concurrent_connections_and_streams() {
             }
         }
     }
-}
-
-fn fingerprint2multihash(s: &str) -> Multihash {
-    let mut buf = [0; 32];
-    hex::decode_to_slice(s.replace(':', ""), &mut buf).unwrap();
-    Code::Sha2_256.wrap(&buf).unwrap()
 }

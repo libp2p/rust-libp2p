@@ -82,9 +82,9 @@
 
 pub mod connection;
 pub mod error;
+pub mod fingerprint;
 pub mod transport;
 
-mod fingerprint;
 mod req_res_chan;
 mod sdp;
 mod udp_mux;

@@ -21,7 +21,7 @@
 use futures::{
     future,
     future::BoxFuture,
-    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
+    io::{AsyncRead, AsyncWrite},
     prelude::*,
     ready,
     stream::SelectAll,
@@ -37,6 +37,7 @@ use libp2p_core::{
 };
 use libp2p_noise::{Keypair, NoiseConfig, NoiseError, RemoteIdentity, X25519Spec};
 use log::{debug, trace};
+use multihash::Multihash;
 use tokio_crate::net::UdpSocket;
 use webrtc::ice::udp_mux::UDPMux;
 use webrtc::peer_connection::certificate::RTCCertificate;
@@ -504,37 +505,16 @@ where
     let dh_keys = Keypair::<X25519Spec>::new()
         .into_authentic(&id_keys)
         .unwrap();
-    let noise = NoiseConfig::xx(dh_keys);
+    let noise =
+        NoiseConfig::xx(dh_keys).with_prologue(noise_prologue(our_fingerprint, remote_fingerprint));
     let info = noise.protocol_info().next().unwrap();
-    let (peer_id, mut noise_io) = noise
+    let (peer_id, _noise_io) = noise
         .upgrade_outbound(poll_data_channel, info)
         .and_then(|(remote, io)| match remote {
             RemoteIdentity::IdentityKey(pk) => future::ok((pk.to_peer_id(), io)),
             _ => future::err(NoiseError::AuthenticationFailed),
         })
         .await?;
-
-    // Exchange TLS certificate fingerprints to prevent MiM attacks.
-    debug!(
-        "exchanging TLS certificate fingerprints with peer_id={}",
-        peer_id
-    );
-    debug_assert_eq!("sha-256", our_fingerprint.algorithm());
-    let n = noise_io
-        .write(&our_fingerprint.value().into_bytes())
-        .await?;
-    noise_io.flush().await?;
-    let mut buf = vec![0; n]; // ASSERT: fingerprint's format is the same.
-    noise_io.read_exact(buf.as_mut_slice()).await?;
-    let fingerprint_from_noise = Fingerprint::new_sha256(
-        String::from_utf8(buf).map_err(|_| Error::Noise(NoiseError::AuthenticationFailed))?,
-    );
-    if fingerprint_from_noise != remote_fingerprint {
-        return Err(Error::InvalidFingerprint {
-            expected: remote_fingerprint.value(),
-            got: fingerprint_from_noise.value(),
-        });
-    }
 
     Ok(peer_id)
 }
@@ -602,43 +582,29 @@ where
     let dh_keys = Keypair::<X25519Spec>::new()
         .into_authentic(&id_keys)
         .unwrap();
-    let noise = NoiseConfig::xx(dh_keys);
+    let noise =
+        NoiseConfig::xx(dh_keys).with_prologue(noise_prologue(our_fingerprint, remote_fingerprint));
     let info = noise.protocol_info().next().unwrap();
-    let (peer_id, mut noise_io) = noise
+    let (peer_id, _noise_io) = noise
         .upgrade_inbound(poll_data_channel, info)
         .and_then(|(remote, io)| match remote {
             RemoteIdentity::IdentityKey(pk) => future::ok((pk.to_peer_id(), io)),
             _ => future::err(NoiseError::AuthenticationFailed),
         })
         .await?;
-
-    // Exchange TLS certificate fingerprints to prevent MiM attacks.
-    debug!(
-        "exchanging TLS certificate fingerprints with peer_id={}",
-        peer_id
-    );
-
-    // 1. Submit SHA-256 fingerprint
-    debug_assert_eq!("sha-256", our_fingerprint.algorithm());
-    let n = noise_io
-        .write(&our_fingerprint.value().into_bytes())
-        .await?;
-    noise_io.flush().await?;
-
-    // 2. Receive one too and compare it to the fingerprint of the remote DTLS certificate.
-    let mut buf = vec![0; n]; // ASSERT: fingerprint's format is the same.
-    noise_io.read_exact(buf.as_mut_slice()).await?;
-    let fingerprint_from_noise = Fingerprint::new_sha256(
-        String::from_utf8(buf).map_err(|_| Error::Noise(NoiseError::AuthenticationFailed))?,
-    );
-    if fingerprint_from_noise != remote_fingerprint {
-        return Err(Error::InvalidFingerprint {
-            expected: remote_fingerprint.value(),
-            got: fingerprint_from_noise.value(),
-        });
-    }
-
     Ok(peer_id)
+}
+
+fn noise_prologue(our_fingerprint: Fingerprint, remote_fingerprint: Fingerprint) -> Vec<u8> {
+    let (a, b): (Multihash, Multihash) = (our_fingerprint.into(), remote_fingerprint.into());
+    let (a, b) = (a.to_bytes(), b.to_bytes());
+    let (first, second) = if a < b { (a, b) } else { (b, a) };
+    const PREFIX: &[u8] = b"libp2p-webrtc-noise:";
+    let mut out = Vec::with_capacity(PREFIX.len() + first.len() + second.len());
+    out.extend_from_slice(PREFIX);
+    out.extend_from_slice(&first);
+    out.extend_from_slice(&second);
+    out
 }
 
 // Tests //////////////////////////////////////////////////////////////////////////////////////////

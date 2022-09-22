@@ -24,7 +24,7 @@ use webrtc::dtls_transport::dtls_fingerprint::RTCDtlsFingerprint;
 
 const SHA256: &str = "sha-256";
 
-pub(crate) struct Fingerprint(RTCDtlsFingerprint);
+pub struct Fingerprint(RTCDtlsFingerprint);
 
 impl Fingerprint {
     /// Creates new `Fingerprint` w/ "sha-256" hash function.
@@ -73,6 +73,16 @@ impl From<Multihash> for Fingerprint {
         assert_eq!(h.code(), 0x12);
         let values: Vec<String> = h.digest().iter().map(|x| format! {"{:02X}", x}).collect();
         Self::new_sha256(values.join(":"))
+    }
+}
+
+impl Into<Multihash> for Fingerprint {
+    fn into(self) -> Multihash {
+        // Only support SHA-256 for now.
+        assert_eq!(self.algorithm(), SHA256.to_owned());
+        let mut buf = [0; 32];
+        hex::decode_to_slice(self.0.value.replace(':', ""), &mut buf).unwrap();
+        Code::Sha2_256.wrap(&buf).unwrap()
     }
 }
 
