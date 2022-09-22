@@ -350,3 +350,65 @@ fn generated_out_event_derive_debug() {
 
     require_debug::<Foo>();
 }
+
+#[test]
+fn custom_out_event_no_type_parameters() {
+    use libp2p::core::connection::ConnectionId;
+    use libp2p::swarm::handler::DummyConnectionHandler;
+    use libp2p::swarm::{
+        ConnectionHandler, IntoConnectionHandler, NetworkBehaviourAction, PollParameters,
+    };
+    use libp2p::PeerId;
+    use std::task::Context;
+    use std::task::Poll;
+
+    pub struct TemplatedBehaviour<T: 'static> {
+        _data: T,
+    }
+
+    impl<T> NetworkBehaviour for TemplatedBehaviour<T> {
+        type ConnectionHandler = DummyConnectionHandler;
+        type OutEvent = void::Void;
+
+        fn new_handler(&mut self) -> Self::ConnectionHandler {
+            DummyConnectionHandler::default()
+        }
+
+        fn inject_event(
+            &mut self,
+            _peer: PeerId,
+            _connection: ConnectionId,
+            message: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent,
+        ) {
+            void::unreachable(message);
+        }
+
+        fn poll(
+            &mut self,
+            _ctx: &mut Context,
+            _: &mut impl PollParameters,
+        ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+            Poll::Pending
+        }
+    }
+
+    #[derive(NetworkBehaviour)]
+    #[behaviour(out_event = "OutEvent")]
+    struct Behaviour<T: 'static + Send> {
+        custom: TemplatedBehaviour<T>,
+    }
+
+    #[derive(Debug)]
+    enum OutEvent {
+        None,
+    }
+
+    impl From<void::Void> for OutEvent {
+        fn from(_e: void::Void) -> Self {
+            Self::None
+        }
+    }
+
+    require_net_behaviour::<Behaviour<String>>();
+    require_net_behaviour::<Behaviour<()>>();
+}

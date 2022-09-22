@@ -1,3 +1,10 @@
+# 0.41.0 [unreleased]
+
+- Remove deprecated `set_protocol_name()` from `KademliaConfig` & `KademliaProtocolConfig`.
+  Use `set_protocol_names()` instead. See [PR 2866].
+
+[PR 2866]: https://github.com/libp2p/rust-libp2p/pull/2866
+
 # 0.40.0
 
 - Add support for multiple protocol names. Update `Kademlia`, `KademliaConfig`,
