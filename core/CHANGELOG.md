@@ -1,6 +1,7 @@
-# 0.36.1
+# 0.37.0
 
 - Add `StreamMuxerBox::active_inbound_streams` and `StreamMuxerBox::active_outbound_streams`. See [PR 2878]. 
+- Make `SubstreamBox::new` constructor module private. See [PR 2878].
 
 [PR 2878]: https://github.com/libp2p/rust-libp2p/pull/2878
 

@@ -191,10 +191,7 @@ impl StreamMuxer for StreamMuxerBox {
 }
 
 impl SubstreamBox {
-    /// Construct a new [`SubstreamBox`] from something that implements [`AsyncRead`] and [`AsyncWrite`].
-    ///
-    /// TOOD: Remove this constructor.
-    pub fn new<S: AsyncRead + AsyncWrite + Send + 'static>(stream: S, counter: Weak<()>) -> Self {
+    fn new<S: AsyncRead + AsyncWrite + Send + 'static>(stream: S, counter: Weak<()>) -> Self {
         Self {
             inner: Box::pin(stream),
             _counter: counter,
