@@ -201,7 +201,7 @@ fn unsupported_doesnt_fail() {
     let mut swarm1 = Swarm::new(trans, behaviour::KeepAlive, peer1_id.clone());
 
     let (peer2_id, trans) = mk_transport(MuxerChoice::Mplex);
-    let mut swarm2 = Swarm::new(trans, Behaviour::new(ping::Config::new()), peer2_id.clone());
+    let mut swarm2 = Swarm::new(trans, Behaviour::default(), peer2_id.clone());
 
     let (mut tx, mut rx) = mpsc::channel::<Multiaddr>(1);
 
@@ -270,7 +270,7 @@ impl Arbitrary for MuxerChoice {
     }
 }
 
-#[derive(NetworkBehaviour)]
+#[derive(NetworkBehaviour, Default)]
 struct Behaviour {
     keep_alive: behaviour::KeepAlive,
     ping: ping::Behaviour,
