@@ -2,6 +2,10 @@
 
 - Update to `libp2p-swarm` `v0.40.0`.
 
+- Deprecate `Config::with_keep_alive`. See [PR 2859].
+
+[PR 2859]: https://github.com/libp2p/rust-libp2p/pull/2859/
+
 # 0.39.0
 
 - Update to `libp2p-swarm` `v0.39.0`.

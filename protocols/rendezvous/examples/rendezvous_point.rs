@@ -29,6 +29,8 @@ use libp2p::ping::{Ping, PingEvent};
 use libp2p::swarm::{Swarm, SwarmEvent};
 use libp2p::NetworkBehaviour;
 use libp2p::{development_transport, rendezvous};
+use libp2p_swarm::behaviour;
+use void::Void;
 
 /// Examples for the rendezvous protocol:
 ///
@@ -54,7 +56,8 @@ async fn main() {
                 identity.public(),
             )),
             rendezvous: rendezvous::server::Behaviour::new(rendezvous::server::Config::default()),
-            ping: Ping::new(ping::Config::new().with_keep_alive(true)),
+            ping: Ping::new(ping::Config::new()),
+            keep_alive: behaviour::KeepAlive,
         },
         PeerId::from(identity.public()),
     );
@@ -126,6 +129,12 @@ impl From<IdentifyEvent> for MyEvent {
     }
 }
 
+impl From<Void> for MyEvent {
+    fn from(event: Void) -> Self {
+        void::unreachable(event)
+    }
+}
+
 #[derive(NetworkBehaviour)]
 #[behaviour(event_process = false)]
 #[behaviour(out_event = "MyEvent")]
@@ -133,4 +142,5 @@ struct MyBehaviour {
     identify: Identify,
     rendezvous: rendezvous::server::Behaviour,
     ping: Ping,
+    keep_alive: behaviour::KeepAlive,
 }

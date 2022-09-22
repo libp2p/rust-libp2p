@@ -111,6 +111,10 @@ impl Config {
     /// If the maximum number of allowed ping failures is reached, the
     /// connection is always terminated as a result of [`ConnectionHandler::poll`]
     /// returning an error, regardless of the keep-alive setting.
+    #[deprecated(
+        since = "0.40.0",
+        note = "Use `libp2p::swarm::behaviour::KeepAlive` if you need to keep connections alive unconditionally."
+    )]
     pub fn with_keep_alive(mut self, b: bool) -> Self {
         self.keep_alive = b;
         self
