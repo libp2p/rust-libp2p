@@ -19,14 +19,12 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::{
-    future,
     future::BoxFuture,
     io::{AsyncRead, AsyncWrite},
     prelude::*,
     ready,
     stream::SelectAll,
     stream::Stream,
-    TryFutureExt,
 };
 use if_watch::{IfEvent, IfWatcher};
 use libp2p_core::{
@@ -35,7 +33,7 @@ use libp2p_core::{
     transport::{ListenerId, TransportError, TransportEvent},
     InboundUpgrade, OutboundUpgrade, PeerId, Transport, UpgradeInfo,
 };
-use libp2p_noise::{Keypair, NoiseConfig, NoiseError, RemoteIdentity, X25519Spec};
+use libp2p_noise::{Keypair, NoiseConfig, X25519Spec};
 use log::{debug, trace};
 use multihash::Multihash;
 use tokio_crate::net::UdpSocket;
@@ -509,11 +507,8 @@ where
         NoiseConfig::xx(dh_keys).with_prologue(noise_prologue(our_fingerprint, remote_fingerprint));
     let info = noise.protocol_info().next().unwrap();
     let (peer_id, _noise_io) = noise
+        .into_authenticated()
         .upgrade_outbound(poll_data_channel, info)
-        .and_then(|(remote, io)| match remote {
-            RemoteIdentity::IdentityKey(pk) => future::ok((pk.to_peer_id(), io)),
-            _ => future::err(NoiseError::AuthenticationFailed),
-        })
         .await?;
 
     Ok(peer_id)
@@ -586,11 +581,8 @@ where
         NoiseConfig::xx(dh_keys).with_prologue(noise_prologue(our_fingerprint, remote_fingerprint));
     let info = noise.protocol_info().next().unwrap();
     let (peer_id, _noise_io) = noise
+        .into_authenticated()
         .upgrade_inbound(poll_data_channel, info)
-        .and_then(|(remote, io)| match remote {
-            RemoteIdentity::IdentityKey(pk) => future::ok((pk.to_peer_id(), io)),
-            _ => future::err(NoiseError::AuthenticationFailed),
-        })
         .await?;
     Ok(peer_id)
 }
