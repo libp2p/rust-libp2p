@@ -632,7 +632,7 @@ mod tests {
         let prologue1 = noise_prologue(a, b);
         let prologue2 = noise_prologue(b, a);
 
-        assert_eq!(hex::encode(prologue1), "6c69627032702d7765627274632d6e6f6973653a122030fc9f469c207419dfdd0aab5f27a86c973c94e40548db9375cca2e915973b9912203e79af40d6059617a0d83b83a52ce73b0c1f37a72c6043ad2969e2351bdca870");
+        assert_eq!(hex::encode(&prologue1), "6c69627032702d7765627274632d6e6f6973653a122030fc9f469c207419dfdd0aab5f27a86c973c94e40548db9375cca2e915973b9912203e79af40d6059617a0d83b83a52ce73b0c1f37a72c6043ad2969e2351bdca870");
         assert_eq!(
             prologue1, prologue2,
             "order of fingerprints does not matter"
