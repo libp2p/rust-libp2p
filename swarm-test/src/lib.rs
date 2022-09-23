@@ -6,6 +6,7 @@ use libp2p::core::upgrade::Version;
 use libp2p::identity::Keypair;
 use libp2p::multiaddr::Protocol;
 use libp2p::noise::NoiseAuthenticated;
+use libp2p::swarm::dial_opts::DialOpts;
 use libp2p::swarm::{
     AddressScore, ConnectionHandler, IntoConnectionHandler, NetworkBehaviour, SwarmEvent,
 };
@@ -81,9 +82,17 @@ where
         T: NetworkBehaviour + Send,
         <T as NetworkBehaviour>::OutEvent: Debug,
     {
-        let addr_to_dial = other.external_addresses().next().unwrap().addr.clone();
+        let external_addresses = other
+            .external_addresses()
+            .cloned()
+            .map(|r| r.addr)
+            .collect();
 
-        self.dial(addr_to_dial.clone()).unwrap();
+        let dial_opts = DialOpts::peer_id(*other.local_peer_id())
+            .addresses(external_addresses)
+            .build();
+
+        self.dial(dial_opts).unwrap();
 
         let mut dialer_done = false;
         let mut listener_done = false;
