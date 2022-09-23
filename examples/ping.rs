@@ -78,7 +78,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 /// Our network behaviour.
 ///
-/// For illustrative purposes, this includes the `KeepAlive` behaviour so a continuous sequence of
+/// For illustrative purposes, this includes the [`KeepAlive`](behaviour::KeepAlive) behaviour so a continuous sequence of
 /// pings can be observed.
 #[derive(NetworkBehaviour, Default)]
 struct Behaviour {

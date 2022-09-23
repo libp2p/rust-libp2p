@@ -106,7 +106,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 /// Our network behaviour.
 ///
-/// For illustrative purposes, this includes the `KeepAlive` behaviour so the ping actually happen
+/// For illustrative purposes, this includes the [`KeepAlive`](behaviour::KeepAlive) behaviour so the ping actually happen
 /// and can be observed via the metrics.
 #[derive(NetworkBehaviour, Default)]
 struct Behaviour {
