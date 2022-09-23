@@ -269,8 +269,8 @@ impl Connection {
             }
 
             // The final step consists in handling the events related to the various substreams.
-            match self.connection.poll() {
-                Some(ev) => match ConnectionEvent::try_from(ev) {
+            if let Some(ev) = self.connection.poll() {
+                match ConnectionEvent::try_from(ev) {
                     Ok(ConnectionEvent::ConnectionLost(reason)) => {
                         // Continue in the loop once more so that we can send a
                         // `EndpointEvent::drained` to the endpoint before returning.
@@ -279,9 +279,9 @@ impl Connection {
                     }
                     Ok(event) => return Poll::Ready(event),
                     Err(_) => unreachable!("We don't use datagrams or unidirectional streams."),
-                },
-                None => {}
+                }
             }
+
             return Poll::Pending;
         }
     }
