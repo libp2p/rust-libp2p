@@ -37,7 +37,7 @@ impl Fingerprint {
 
     pub fn from_certificate(bytes: &[u8]) -> Self {
         let mut h = multihash::Sha2_256::default();
-        h.update(&bytes);
+        h.update(bytes);
 
         let mut bytes: [u8; 32] = [0; 32];
         bytes.copy_from_slice(h.finalize());
