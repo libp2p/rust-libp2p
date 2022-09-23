@@ -59,7 +59,7 @@ pub struct Identify {
     /// the local peer should be sent.
     pending_push: HashSet<PeerId>,
     /// The addresses of all peers that we have discovered.
-    discovered_peers: LruCache<PeerId, HashSet<Multiaddr>>,
+    discovered_peers: PeerCache,
 }
 
 /// A pending reply to an inbound identification request.
@@ -117,7 +117,7 @@ pub struct IdentifyConfig {
     /// the least-recently used one.
     ///
     /// Defaults to 100.
-    pub cache_size: NonZeroUsize,
+    pub cache_size: Option<NonZeroUsize>,
 }
 
 impl IdentifyConfig {
@@ -132,7 +132,7 @@ impl IdentifyConfig {
             interval: Duration::from_secs(5 * 60),
             push_listen_addr_updates: false,
             // This is going to be max 400kb, considering the max message size of 4096 bytes.
-            cache_size: NonZeroUsize::new(100).expect("100 > 0"),
+            cache_size: Some(NonZeroUsize::new(100).expect("100 > 0")),
         }
     }
 
@@ -169,7 +169,13 @@ impl IdentifyConfig {
     /// The [`Swarm`](libp2p_swarm::Swarm) may extend the set of addresses of an outgoing connection attempt via
     ///  [`Identify::addresses_of_peer`].
     pub fn with_cache_size(mut self, cache_size: NonZeroUsize) -> Self {
-        self.cache_size = cache_size;
+        self.cache_size = Some(cache_size);
+        self
+    }
+
+    /// Disables the cache for addresses of discovered peers.
+    pub fn disable_peer_cache(mut self) -> Self {
+        self.cache_size = None;
         self
     }
 }
@@ -177,7 +183,10 @@ impl IdentifyConfig {
 impl Identify {
     /// Creates a new `Identify` network behaviour.
     pub fn new(config: IdentifyConfig) -> Self {
-        let discovered_peers = LruCache::new(config.cache_size);
+        let discovered_peers = match config.cache_size {
+            None => PeerCache::disabled(),
+            Some(size) => PeerCache::enabled(size),
+        };
 
         Identify {
             config,
@@ -305,7 +314,7 @@ impl NetworkBehaviour for Identify {
 
                 // Replace existing addresses to prevent other peer from filling up our memory.
                 self.discovered_peers
-                    .put(peer_id, HashSet::from_iter(info.listen_addrs.clone()));
+                    .put(peer_id, info.listen_addrs.iter().cloned());
 
                 let observed = info.observed_addr.clone();
                 self.events.push_back(NetworkBehaviourAction::GenerateEvent(
@@ -443,11 +452,7 @@ impl NetworkBehaviour for Identify {
     }
 
     fn addresses_of_peer(&mut self, peer: &PeerId) -> Vec<Multiaddr> {
-        self.discovered_peers
-            .get(peer)
-            .cloned()
-            .map(Vec::from_iter)
-            .unwrap_or_default()
+        self.discovered_peers.get(peer)
     }
 }
 
@@ -506,6 +511,44 @@ fn multiaddr_matches_peer_id(addr: &Multiaddr, peer_id: &PeerId) -> bool {
         return multi_addr_peer_id == *peer_id.as_ref();
     }
     true
+}
+
+struct PeerCache(Option<LruCache<PeerId, HashSet<Multiaddr>>>);
+
+impl PeerCache {
+    fn disabled() -> Self {
+        Self(None)
+    }
+
+    fn enabled(size: NonZeroUsize) -> Self {
+        Self(Some(LruCache::new(size)))
+    }
+
+    fn get_mut(&mut self, peer: &PeerId) -> Option<&mut HashSet<Multiaddr>> {
+        self.0.as_mut()?.get_mut(peer)
+    }
+
+    fn put(&mut self, peer: PeerId, addresses: impl Iterator<Item = Multiaddr>) {
+        let cache = match self.0.as_mut() {
+            None => return,
+            Some(cache) => cache,
+        };
+
+        cache.put(peer, HashSet::from_iter(addresses));
+    }
+
+    fn get(&mut self, peer: &PeerId) -> Vec<Multiaddr> {
+        let cache = match self.0.as_mut() {
+            None => return Vec::new(),
+            Some(cache) => cache,
+        };
+
+        cache
+            .get(peer)
+            .cloned()
+            .map(Vec::from_iter)
+            .unwrap_or_default()
+    }
 }
 
 #[cfg(test)]
