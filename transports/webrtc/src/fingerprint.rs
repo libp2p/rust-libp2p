@@ -25,7 +25,7 @@ use webrtc::dtls_transport::dtls_fingerprint::RTCDtlsFingerprint;
 const SHA256: &str = "sha-256";
 
 /// A certificate fingerprint that is assumed to be created using the SHA256 hash algorithm.
-#[derive(Eq, PartialEq)]
+#[derive(Eq, PartialEq, Copy, Clone)]
 pub struct Fingerprint([u8; 32]);
 
 impl Fingerprint {
@@ -51,7 +51,7 @@ impl Fingerprint {
         }
 
         let mut buf = [0; 32];
-        hex::decode_to_slice(fp.value.replace(':', ""), &mut buf).ok()?;
+        hex::decode_to_slice(dbg!(fp.value.replace(':', "")), &mut buf).ok()?;
 
         Some(Self(buf))
     }
