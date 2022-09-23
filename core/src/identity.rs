@@ -214,7 +214,7 @@ impl zeroize::Zeroize for keys_proto::PrivateKey {
 }
 
 /// The public key of a node's identity keypair.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum PublicKey {
     /// A public Ed25519 key.
     Ed25519(ed25519::PublicKey),
@@ -378,5 +378,23 @@ mod tests {
         let peer_id = keypair.public().to_peer_id();
 
         assert_eq!(expected_peer_id, peer_id);
+    }
+
+    #[test]
+    fn public_key_implements_hash() {
+        use std::hash::Hash;
+
+        fn assert_implements_hash<T: Hash>() {}
+
+        assert_implements_hash::<PublicKey>();
+    }
+
+    #[test]
+    fn public_key_implements_ord() {
+        use std::cmp::Ord;
+
+        fn assert_implements_ord<T: Ord>() {}
+
+        assert_implements_ord::<PublicKey>();
     }
 }

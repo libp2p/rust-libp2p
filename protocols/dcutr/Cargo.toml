@@ -31,5 +31,5 @@ prost-build = "0.11"
 [dev-dependencies]
 env_logger = "0.9.0"
 libp2p = { path = "../..", default-features = false,  features = ["dcutr", "relay", "plaintext", "identify", "tcp-async-io", "ping", "noise", "dns-async-std", "yamux"] }
-rand = "0.7"
+rand = "0.8"
 clap = {version = "3.1.6", features = ["derive"]}
