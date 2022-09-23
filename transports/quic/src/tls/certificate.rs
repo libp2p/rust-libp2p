@@ -179,16 +179,14 @@ pub fn parse_certificate(der_input: &[u8]) -> Result<P2pCertificate, webpki::Err
         // Implementations MUST ignore non-critical extensions with unknown OIDs.
     }
 
-    if let Some(extension) = libp2p_extension {
-        Ok(P2pCertificate {
-            certificate: x509,
-            extension,
-        })
-    } else {
-        // The certificate MUST contain the libp2p Public Key Extension.
-        // If this extension is missing, endpoints MUST abort the connection attempt.
-        Err(Error::BadDer)
-    }
+    // The certificate MUST contain the libp2p Public Key Extension.
+    // If this extension is missing, endpoints MUST abort the connection attempt.
+    let extension = libp2p_extension.ok_or(Error::BadDer)?;
+
+    Ok(P2pCertificate {
+        certificate: x509,
+        extension,
+    })
 }
 
 impl P2pCertificate<'_> {
