@@ -117,7 +117,7 @@ pub struct IdentifyConfig {
     /// the least-recently used one.
     ///
     /// Defaults to 100.
-    pub cache_size: Option<NonZeroUsize>,
+    pub cache_size: usize,
 }
 
 impl IdentifyConfig {
@@ -169,7 +169,7 @@ impl IdentifyConfig {
     /// The [`Swarm`](libp2p_swarm::Swarm) may extend the set of addresses of an outgoing connection attempt via
     ///  [`Identify::addresses_of_peer`].
     pub fn with_cache_size(mut self, cache_size: usize) -> Self {
-        self.cache_size = NonZeroUsize::new(cache_size);
+        self.cache_size = cache_size;
         self
     }
 }
@@ -177,7 +177,7 @@ impl IdentifyConfig {
 impl Identify {
     /// Creates a new `Identify` network behaviour.
     pub fn new(config: IdentifyConfig) -> Self {
-        let discovered_peers = match config.cache_size {
+        let discovered_peers = match NonZeroUsize::new(config.cache_size) {
             None => PeerCache::disabled(),
             Some(size) => PeerCache::enabled(size),
         };
