@@ -73,9 +73,8 @@ impl WebRTCConnection {
 
         // 2. ANSWER
         // Set the remote description to the predefined SDP.
-        let remote_ufrag = remote_fingerprint.to_ufrag();
         let server_session_description =
-            crate::sdp::render_server_session_description(addr, remote_fingerprint, &remote_ufrag);
+            crate::sdp::render_server_session_description(addr, remote_fingerprint);
         log::debug!("ANSWER: {:?}", server_session_description);
         let sdp = RTCSessionDescription::answer(server_session_description).unwrap();
         // NOTE: this will start the gathering of ICE candidates

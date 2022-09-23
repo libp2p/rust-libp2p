@@ -29,9 +29,13 @@ use crate::fingerprint::Fingerprint;
 pub(crate) fn render_server_session_description(
     addr: SocketAddr,
     fingerprint: &Fingerprint,
-    ufrag: &str,
 ) -> String {
-    render_description(SERVER_SESSION_DESCRIPTION, addr, fingerprint, ufrag)
+    render_description(
+        SERVER_SESSION_DESCRIPTION,
+        addr,
+        fingerprint,
+        &fingerprint.to_ufrag(),
+    )
 }
 
 /// Renders the SDP client session description.
