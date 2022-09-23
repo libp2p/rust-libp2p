@@ -51,7 +51,7 @@ impl Fingerprint {
         }
 
         let mut buf = [0; 32];
-        hex::decode_to_slice(dbg!(fp.value.replace(':', "")), &mut buf).ok()?;
+        hex::decode_to_slice(fp.value.replace(':', ""), &mut buf).ok()?;
 
         Some(Self(buf))
     }
