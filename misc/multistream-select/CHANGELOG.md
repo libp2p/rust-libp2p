@@ -1,6 +1,8 @@
 # 0.12.0 [Unreleased]
 
-- Remove parallel dialing optimization, to avoid requiring the use of the `ls` command.
+- Remove parallel dialing optimization, to avoid requiring the use of the `ls` command. See [PR 2934].
+
+[PR 2934]: https://github.com/libp2p/rust-libp2p/pull/2934
 
 # 0.11.0 [2022-01-27]
 
