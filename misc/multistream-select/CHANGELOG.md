@@ -1,4 +1,4 @@
-# Unreleased
+# 0.12.0 [Unreleased]
 
 - Remove parallel dialing optimization, to avoid requiring the use of the `ls` command.
 
