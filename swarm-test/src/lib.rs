@@ -41,9 +41,11 @@ pub trait SwarmExt {
     /// Listens on a random memory address, polling the [`Swarm`] until the transport is ready to accept connections.
     async fn listen_on_random_memory_address(&mut self) -> Multiaddr;
 
-    async fn next_within(
+    /// Returns the next [`SwarmEvent`] or times out after 10 seconds.
+    ///
+    /// If the 10s timeout does not fit your usecase, please fall back to `StreamExt::next`.
+    async fn next_or_timeout(
         &mut self,
-        seconds: u64,
     ) -> SwarmEvent<<Self::NB as NetworkBehaviour>::OutEvent, THandlerErr<Self::NB>>;
 
     async fn loop_on_next(self);
@@ -148,17 +150,16 @@ where
         multiaddr
     }
 
-    async fn next_within(
+    async fn next_or_timeout(
         &mut self,
-        seconds: u64,
     ) -> SwarmEvent<<Self::NB as NetworkBehaviour>::OutEvent, THandlerErr<Self::NB>> {
         match futures::future::select(
-            futures_timer::Delay::new(Duration::from_secs(seconds)),
+            futures_timer::Delay::new(Duration::from_secs(10)),
             self.select_next_some(),
         )
         .await
         {
-            Either::Left(((), _)) => panic!("Swarm did not emit an event within {seconds}s"),
+            Either::Left(((), _)) => panic!("Swarm did not emit an event within 10s"),
             Either::Right((event, _)) => {
                 log::trace!("Swarm produced: {:?}", event);
 

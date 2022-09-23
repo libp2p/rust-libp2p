@@ -51,7 +51,7 @@ where
 #[macro_export]
 macro_rules! assert_behaviour_events {
     ($swarm: ident: $pat: pat, || $body: block) => {
-        match $swarm.next_within(30).await {
+        match $swarm.next_or_timeout().await {
             libp2p::swarm::SwarmEvent::Behaviour($pat) => $body,
             _ => panic!("Unexpected combination of events emitted, check logs for details"),
         }
