@@ -3293,12 +3293,12 @@ mod tests {
         *seq += 1;
         RawGossipsubMessage {
             source: Some(PeerId::random()),
-            data: (0..rng.gen_range(10, 30))
+            data: (0..rng.gen_range(10..30))
                 .into_iter()
                 .map(|_| rng.gen())
                 .collect(),
             sequence_number: Some(*seq),
-            topic: topics[rng.gen_range(0, topics.len())].clone(),
+            topic: topics[rng.gen_range(0..topics.len())].clone(),
             signature: None,
             key: None,
             validated: true,
