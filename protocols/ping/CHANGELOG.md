@@ -1,9 +1,12 @@
 # 0.40.0 [unreleased]
 
+- Bump rand to 0.8 and quickcheck to 1. See [PR 2857].
+
 - Update to `libp2p-swarm` `v0.40.0`.
 
 - Deprecate `Config::with_keep_alive`. See [PR 2859].
 
+[PR 2857]: https://github.com/libp2p/rust-libp2p/pull/2857
 [PR 2859]: https://github.com/libp2p/rust-libp2p/pull/2859/
 
 # 0.39.0

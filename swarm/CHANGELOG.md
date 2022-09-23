@@ -1,9 +1,12 @@
 # 0.40.0 [unreleased]
 
+- Bump rand to 0.8 and quickcheck to 1. See [PR 2857].
+
 - Introduce `KeepAliveConnectionHandler` in favor of removing `keep_alive` from `DummyConnectionHandler`.
   `DummyConnectionHandler` now literally does not do anything. In the same spirit, introduce `KeepAliveNetworkBehaviour`
   and `DummyNetworkBehaviour`. See [PR 2859].
 
+[PR 2857]: https://github.com/libp2p/rust-libp2p/pull/2857
 [PR 2859]: https://github.com/libp2p/rust-libp2p/pull/2859/
 
 # 0.39.0

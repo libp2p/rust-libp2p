@@ -35,7 +35,6 @@ use libp2p::tcp::{GenTcpConfig, TcpTransport};
 use libp2p::yamux;
 use libp2p::NetworkBehaviour;
 use quickcheck::*;
-use rand::prelude::*;
 use std::{num::NonZeroU8, time::Duration};
 
 #[test]
@@ -265,8 +264,8 @@ enum MuxerChoice {
 }
 
 impl Arbitrary for MuxerChoice {
-    fn arbitrary<G: Gen>(g: &mut G) -> MuxerChoice {
-        *[MuxerChoice::Mplex, MuxerChoice::Yamux].choose(g).unwrap()
+    fn arbitrary(g: &mut Gen) -> MuxerChoice {
+        *g.choose(&[MuxerChoice::Mplex, MuxerChoice::Yamux]).unwrap()
     }
 }
 
