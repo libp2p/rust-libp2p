@@ -2,12 +2,6 @@
 
 - Update dependencies.
 
-# 0.39.0
-
-- Update to `libp2p-swarm` `v0.39.0`.
-
-- Update to `libp2p-core` `v0.36.0`.
-
 - Rename types as per [discussion 2174].
   `Identify` has been renamed to `Behaviour`.
   The `Identify` prefix has been removed from various types like `IdentifyEvent`.
@@ -15,6 +9,18 @@
   and refer to its types via `identify::`. For example: `identify::Behaviour` or `identify::Event`.
 
   [discussion 2174]: https://github.com/libp2p/rust-libp2p/discussions/2174
+
+# 0.39.0
+
+- Update to `libp2p-swarm` `v0.39.0`.
+
+- Update to `libp2p-core` `v0.36.0`.
+
+# 0.39.0
+
+- Update to `libp2p-swarm` `v0.39.0`.
+
+- Update to `libp2p-core` `v0.36.0`.
 
 # 0.38.0
 

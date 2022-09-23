@@ -77,7 +77,7 @@ enum Reply {
     },
 }
 
-/// Configuration for the [`Behaviour`] [`NetworkBehaviour`].
+/// Configuration for the [`identify::Behaviour`](Behaviour).
 #[non_exhaustive]
 #[derive(Debug, Clone)]
 pub struct Config {

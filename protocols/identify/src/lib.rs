@@ -35,7 +35,7 @@
 //!
 //! # Usage
 //!
-//! The [`Behaviour`] struct implements a `NetworkBehaviour` that negotiates
+//! The [`Behaviour`] struct implements a [`NetworkBehaviour`] that negotiates
 //! and executes the protocol on every established connection, emitting
 //! [`Event`]s.
 //!
@@ -48,18 +48,18 @@ pub use self::behaviour::{Behaviour, Config, Event};
 pub use self::protocol::{Info, UpgradeError, PROTOCOL_NAME, PUSH_PROTOCOL_NAME};
 
 #[deprecated(
-    since = "0.39.0",
+    since = "0.40.0",
     note = "Use re-exports that omit `Identify` prefix, i.e. `libp2p::identify::Config`"
 )]
 pub type IdentifyConfig = Config;
 
 #[deprecated(
-    since = "0.39.0",
+    since = "0.40.0",
     note = "Use re-exports that omit `Identify` prefix, i.e. `libp2p::identify::Event`"
 )]
 pub type IdentifyEvent = Event;
 
-#[deprecated(since = "0.39.0", note = "Use libp2p::identify::Behaviour instead.")]
+#[deprecated(since = "0.40.0", note = "Use libp2p::identify::Behaviour instead.")]
 pub type Identify = Behaviour;
 
 mod behaviour;
