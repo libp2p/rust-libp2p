@@ -21,7 +21,7 @@
 //! Implementation of the [Identify] protocol.
 //!
 //! This implementation of the protocol periodically exchanges
-//! [`IdentifyInfo`] messages between the peers on an established connection.
+//! [`identify::Info`] messages between the peers on an established connection.
 //!
 //! At least one identification request is sent on a newly established
 //! connection, beyond which the behaviour does not keep connections alive.
@@ -61,6 +61,12 @@ pub type IdentifyEvent = Event;
 
 #[deprecated(since = "0.40.0", note = "Use libp2p::identify::Behaviour instead.")]
 pub type Identify = Behaviour;
+
+#[deprecated(
+    since = "0.40.0",
+    note = "Use re-exports that omit `Identify` prefix, i.e. `libp2p::identify::Info`"
+)]
+pub type IdentifyInfo = Info;
 
 mod behaviour;
 mod handler;

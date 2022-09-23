@@ -314,7 +314,7 @@ fn custom_event_with_either() {
     }
 
     impl From<Either<libp2p::ping::PingEvent, libp2p::identify::Event>> for BehaviourOutEvent {
-        fn from(event: Either<libp2p::ping::PingEvent, libp2p::identify::IdentifyEvent>) -> Self {
+        fn from(event: Either<libp2p::ping::PingEvent, libp2p::identify::Event>) -> Self {
             BehaviourOutEvent::PingOrIdentify(event)
         }
     }

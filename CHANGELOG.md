@@ -71,6 +71,8 @@
 
 - Update to [`libp2p-swarm` `v0.39.1`](swarm/CHANGELOG.md#0391).
 
+- Update to [`libp2p-identify` `v0.39.1`](protocols/identify/CHANGELOG.md#0391).
+
 # 0.48.0
 
 - Update to [`libp2p-core` `v0.36.0`](core/CHANGELOG.md#0360).
