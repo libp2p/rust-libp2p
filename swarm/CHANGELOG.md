@@ -4,7 +4,7 @@
 
 [PR 2857]: https://github.com/libp2p/rust-libp2p/pull/2857
 
-- Fixed panic caused by `None` being passed into `NetworkBehaviour::inject_dial_failure` on `DialError::ConnectionLimit`.
+- Pass actual `PeerId` of dial to `NetworkBehaviour::inject_dial_failure` on `DialError::ConnectionLimit`. See [PR 2928].
 
 [PR 2928]: https://github.com/libp2p/rust-libp2p/pull/2928
 
