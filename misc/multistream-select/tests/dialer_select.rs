@@ -20,7 +20,6 @@
 
 //! Integration tests for protocol negotiation.
 
-#![cfg(test)]
 
 use async_std::net::{TcpListener, TcpStream};
 use futures::prelude::*;
