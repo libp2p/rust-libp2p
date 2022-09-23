@@ -51,7 +51,7 @@
 //! The [`ConnectionHandler`] trait defines how each active connection to a
 //! remote should behave: how to handle incoming substreams, which protocols
 //! are supported, when to open a new outbound substream, etc.
-//!
+#![allow(rustdoc::private_intra_doc_links)]
 
 mod connection;
 mod registry;
