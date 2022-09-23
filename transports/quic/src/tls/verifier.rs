@@ -76,7 +76,9 @@ impl ServerCertVerifier for Libp2pCertificateVerifier {
         _ocsp_response: &[u8],
         _now: std::time::SystemTime,
     ) -> Result<ServerCertVerified, rustls::Error> {
-        verify_presented_certs(end_entity, intermediates).map(|_| ServerCertVerified::assertion())
+        verify_presented_certs(end_entity, intermediates)?;
+
+        Ok(ServerCertVerified::assertion())
     }
 
     fn verify_tls12_signature(
@@ -128,7 +130,9 @@ impl ClientCertVerifier for Libp2pCertificateVerifier {
         intermediates: &[Certificate],
         _now: std::time::SystemTime,
     ) -> Result<ClientCertVerified, rustls::Error> {
-        verify_presented_certs(end_entity, intermediates).map(|_| ClientCertVerified::assertion())
+        verify_presented_certs(end_entity, intermediates)?;
+
+        Ok(ClientCertVerified::assertion())
     }
 
     fn verify_tls12_signature(
@@ -173,9 +177,13 @@ fn verify_presented_certs(
             "libp2p-tls requires exactly one certificate".into(),
         ));
     }
+
     parse_certificate(end_entity.as_ref())
-        .and_then(|cert| cert.verify())
-        .map_err(pki_error)
+        .map_err(pki_error)?
+        .verify()
+        .map_err(pki_error)?;
+
+    Ok(())
 }
 
 fn verify_tls13_signature(
@@ -185,9 +193,11 @@ fn verify_tls13_signature(
     signature: &[u8],
 ) -> Result<HandshakeSignatureValid, rustls::Error> {
     parse_certificate(cert.as_ref())
-        .and_then(|cert| cert.verify_signature(signature_scheme, message, signature))
-        .map(|()| HandshakeSignatureValid::assertion())
-        .map_err(pki_error)
+        .map_err(pki_error)?
+        .verify_signature(signature_scheme, message, signature)
+        .map_err(pki_error)?;
+
+    Ok(HandshakeSignatureValid::assertion())
 }
 
 fn pki_error(error: webpki::Error) -> rustls::Error {
