@@ -132,7 +132,7 @@ impl IdentifyConfig {
             interval: Duration::from_secs(5 * 60),
             push_listen_addr_updates: false,
             // This is going to be max 400kb, considering the max message size of 4096 bytes.
-            cache_size: Some(NonZeroUsize::new(100).expect("100 > 0")),
+            cache_size: 100,
         }
     }
 
@@ -752,7 +752,7 @@ mod tests {
             let (pubkey, transport) = transport();
             let protocol = Identify::new(
                 IdentifyConfig::new("a".to_string(), pubkey.clone())
-                    .with_cache_size(NonZeroUsize::new(100).unwrap())
+                    .with_cache_size(100)
                     .with_agent_version("b".to_string()),
             );
 
