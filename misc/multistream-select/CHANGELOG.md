@@ -1,3 +1,7 @@
+# Unreleased
+
+- Remove parallel dialing optimization, to avoid requiring the use of the `ls` command.
+
 # 0.11.0 [2022-01-27]
 
 - Migrate to Rust edition 2021 (see [PR 2339]).
