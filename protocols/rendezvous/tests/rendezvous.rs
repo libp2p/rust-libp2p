@@ -27,7 +27,7 @@ use futures::StreamExt;
 use libp2p::core::identity;
 use libp2p::rendezvous;
 use libp2p::swarm::{DialError, Swarm, SwarmEvent};
-use libp2p_swarm_test::SwarmExt;
+use libp2p_swarm_test::{SwarmExt, Swarms};
 use std::convert::TryInto;
 use std::time::Duration;
 

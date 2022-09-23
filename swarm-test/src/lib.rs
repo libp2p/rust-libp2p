@@ -49,6 +49,11 @@ pub trait SwarmExt {
         &mut self,
     ) -> SwarmEvent<<Self::NB as NetworkBehaviour>::OutEvent, THandlerErr<Self::NB>>;
 
+    /// Returns the next behaviour event or times out after 10 seconds.
+    ///
+    /// If the 10s timeout does not fit your usecase, please fall back to `StreamExt::next`.
+    async fn next_behaviour_event(&mut self) -> <Self::NB as NetworkBehaviour>::OutEvent;
+
     async fn loop_on_next(self);
 }
 
@@ -173,6 +178,14 @@ where
                 log::trace!("Swarm produced: {:?}", event);
 
                 event
+            }
+        }
+    }
+
+    async fn next_behaviour_event(&mut self) -> <Self::NB as NetworkBehaviour>::OutEvent {
+        loop {
+            if let Ok(event) = self.next_or_timeout().await.try_into_behaviour_event() {
+                return event;
             }
         }
     }
