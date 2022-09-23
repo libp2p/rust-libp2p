@@ -20,7 +20,6 @@
 
 //! Integration tests for protocol negotiation.
 
-
 use async_std::net::{TcpListener, TcpStream};
 use futures::prelude::*;
 use multistream_select::{dialer_select_proto, listener_select_proto, NegotiationError, Version};
