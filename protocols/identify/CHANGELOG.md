@@ -1,6 +1,6 @@
 # 0.40.0 [unreleased]
 
-- Change default `IdentifyConfig::cache_size` to 10 and represent it as a `NonZeroUsize`. See [PR XXXX]. 
+- Change default `IdentifyConfig::cache_size` to 100. See [PR XXXX]. 
 
 [PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
 

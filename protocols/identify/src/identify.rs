@@ -168,14 +168,8 @@ impl IdentifyConfig {
     ///
     /// The [`Swarm`](libp2p_swarm::Swarm) may extend the set of addresses of an outgoing connection attempt via
     ///  [`Identify::addresses_of_peer`].
-    pub fn with_cache_size(mut self, cache_size: NonZeroUsize) -> Self {
-        self.cache_size = Some(cache_size);
-        self
-    }
-
-    /// Disables the cache for addresses of discovered peers.
-    pub fn disable_peer_cache(mut self) -> Self {
-        self.cache_size = None;
+    pub fn with_cache_size(mut self, cache_size: usize) -> Self {
+        self.cache_size = NonZeroUsize::new(cache_size);
         self
     }
 }
