@@ -52,16 +52,25 @@ use std::{
     task::{Context, Poll},
 };
 
-#[deprecated(
-    since = "0.30.0",
-    note = "Use re-exports that omit `Ping` prefix, i.e. `libp2p::ping::Config` etc"
-)]
-pub use self::{
-    protocol::PROTOCOL_NAME, Config as PingConfig, Event as PingEvent, Failure as PingFailure,
-    Result as PingResult, Success as PingSuccess,
-};
-#[deprecated(since = "0.30.0", note = "Use libp2p::ping::Behaviour instead.")]
-pub use Behaviour as Ping;
+#[deprecated(since = "0.39.1", note = "Use libp2p::ping::Config instead.")]
+pub type PingConfig = Config;
+
+#[deprecated(since = "0.39.1", note = "Use libp2p::ping::Event instead.")]
+pub type PingEvent = Event;
+
+#[deprecated(since = "0.39.1", note = "Use libp2p::ping::Success instead.")]
+pub type PingSuccess = Success;
+
+#[deprecated(since = "0.39.1", note = "Use libp2p::ping::Failure instead.")]
+pub type PingFailure = Failure;
+
+#[deprecated(since = "0.39.1", note = "Use libp2p::ping::Result instead.")]
+pub type PingResult = Result;
+
+#[deprecated(since = "0.39.1", note = "Use libp2p::ping::Behaviour instead.")]
+pub type Ping = Behaviour;
+
+pub use self::protocol::PROTOCOL_NAME;
 
 /// The result of an inbound or outbound ping.
 pub type Result = std::result::Result<Success, Failure>;
