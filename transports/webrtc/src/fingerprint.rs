@@ -19,77 +19,88 @@
 // DEALINGS IN THE SOFTWARE.
 
 use multibase::Base;
-use multihash::{Code, Multihash, MultihashDigest};
+use multihash::{Code, Hasher, Multihash, MultihashDigest};
 use webrtc::dtls_transport::dtls_fingerprint::RTCDtlsFingerprint;
 
 const SHA256: &str = "sha-256";
 
-pub struct Fingerprint(RTCDtlsFingerprint);
+/// A certificate fingerprint that is assumed to be created using the SHA256 hash algorithm.
+#[derive(Eq, PartialEq)]
+pub struct Fingerprint([u8; 32]);
 
 impl Fingerprint {
-    /// Creates new `Fingerprint` w/ "sha-256" hash function.
-    pub fn new_sha256(value: String) -> Self {
-        Self(RTCDtlsFingerprint {
-            algorithm: SHA256.to_owned(),
-            value,
-        })
+    pub(crate) const FF: Fingerprint = Fingerprint([0xFF; 32]);
+
+    pub fn raw(bytes: [u8; 32]) -> Self {
+        Self(bytes)
+    }
+
+    pub fn from_certificate(bytes: &[u8]) -> Self {
+        let mut h = multihash::Sha2_256::default();
+        h.update(&bytes);
+
+        let mut bytes: [u8; 32] = [0; 32];
+        bytes.copy_from_slice(h.finalize());
+
+        Fingerprint(bytes)
+    }
+
+    pub fn try_from_rtc_dtls(fp: RTCDtlsFingerprint) -> Option<Self> {
+        if fp.algorithm != SHA256 {
+            return None;
+        }
+
+        let mut buf = [0; 32];
+        hex::decode_to_slice(fp.value.replace(':', ""), &mut buf).ok()?;
+
+        Some(Self(buf))
+    }
+
+    pub fn try_from_multihash(hash: Multihash) -> Option<Self> {
+        if hash.code() != 0x12 {
+            // Only support SHA256 for now.
+            return None;
+        }
+
+        let bytes = hash.digest().try_into().ok()?;
+
+        Some(Self(bytes))
+    }
+
+    pub fn to_multi_hash(&self) -> Multihash {
+        Code::Sha2_256.wrap(&self.0).unwrap()
     }
 
     /// Transforms this fingerprint into a ufrag.
     pub fn to_ufrag(&self) -> String {
-        // Only support SHA-256 for now.
-        assert_eq!(self.algorithm(), SHA256.to_owned());
-        let mut buf = [0; 32];
-        hex::decode_to_slice(self.0.value.replace(':', ""), &mut buf).unwrap();
         multibase::encode(
             Base::Base64Url,
-            Code::Sha2_256.wrap(&buf).unwrap().to_bytes(),
+            Code::Sha2_256.wrap(&self.0).unwrap().to_bytes(),
         )
     }
 
-    /// Returns the upper-hex value, each byte separated by ":".
-    /// E.g. "7D:E3:D8:3F:81:A6:80:59:2A:47:1E:6B:6A:BB:07:47:AB:D3:53:85:A8:09:3F:DF:E1:12:C1:EE:BB:6C:C6:AC"
-    pub fn value(&self) -> String {
-        self.0.value.clone()
+    /// Formats this fingerprint as uppercase hex, separated by colons (`:`).
+    ///
+    /// This is the format described in <https://www.rfc-editor.org/rfc/rfc4572#section-5>.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use hex_literal::hex;
+    /// # use libp2p_webrtc::Fingerprint;
+    /// let fp = Fingerprint::raw(hex!("7DE3D83F81A680592A471E6B6ABB0747ABD35385A8093FDFE112C1EEBB6CC6AC"));
+    ///
+    /// let sdp_format = fp.to_sdp_format();
+    ///
+    /// assert_eq!(sdp_format, "7D:E3:D8:3F:81:A6:80:59:2A:47:1E:6B:6A:BB:07:47:AB:D3:53:85:A8:09:3F:DF:E1:12:C1:EE:BB:6C:C6:AC")
+    /// ```
+    pub fn to_sdp_format(&self) -> String {
+        self.0.map(|byte| format!("{:02X}", byte)).join(":")
     }
 
     /// Returns the algorithm used (e.g. "sha-256").
     /// See https://datatracker.ietf.org/doc/html/rfc8122#section-5
     pub fn algorithm(&self) -> String {
-        self.0.algorithm.clone()
+        SHA256.to_owned()
     }
 }
-
-impl From<&[u8; 32]> for Fingerprint {
-    fn from(t: &[u8; 32]) -> Self {
-        let values: Vec<String> = t.iter().map(|x| format! {"{:02X}", x}).collect();
-        Self::new_sha256(values.join(":"))
-    }
-}
-
-impl From<Multihash> for Fingerprint {
-    fn from(h: Multihash) -> Self {
-        // Only support SHA-256 (0x12) for now.
-        assert_eq!(h.code(), 0x12);
-        let values: Vec<String> = h.digest().iter().map(|x| format! {"{:02X}", x}).collect();
-        Self::new_sha256(values.join(":"))
-    }
-}
-
-impl Into<Multihash> for Fingerprint {
-    fn into(self) -> Multihash {
-        // Only support SHA-256 for now.
-        assert_eq!(self.algorithm(), SHA256.to_owned());
-        let mut buf = [0; 32];
-        hex::decode_to_slice(self.0.value.replace(':', ""), &mut buf).unwrap();
-        Code::Sha2_256.wrap(&buf).unwrap()
-    }
-}
-
-// TODO: derive when RTCDtlsFingerprint implements Eq.
-impl PartialEq for Fingerprint {
-    fn eq(&self, other: &Self) -> bool {
-        self.0.algorithm == other.algorithm() && self.0.value == other.value()
-    }
-}
-impl Eq for Fingerprint {}

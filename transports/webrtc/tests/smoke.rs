@@ -33,13 +33,7 @@ fn create_swarm() -> Result<(Swarm<RequestResponse<PingCodec>>, Fingerprint)> {
     let cert = generate_certificate();
     let keypair = generate_tls_keypair();
     let peer_id = keypair.public().to_peer_id();
-    let fingerprint = cert
-        .get_fingerprints()
-        .unwrap()
-        .first()
-        .unwrap()
-        .value
-        .to_uppercase();
+    let fingerprint = cert.get_fingerprints().unwrap().first().unwrap().clone();
     let transport = WebRTCTransport::new(cert, keypair);
     let protocols = iter::once((PingProtocol(), ProtocolSupport::Full));
     let cfg = RequestResponseConfig::default();
@@ -54,7 +48,7 @@ fn create_swarm() -> Result<(Swarm<RequestResponse<PingCodec>>, Fingerprint)> {
                 tokio::spawn(fut);
             }))
             .build(),
-        Fingerprint::new_sha256(fingerprint),
+        Fingerprint::try_from_rtc_dtls(fingerprint).unwrap(),
     ))
 }
 
@@ -78,7 +72,7 @@ async fn smoke() -> Result<()> {
     // skip other interface addresses
     while a.next().now_or_never().is_some() {}
 
-    let addr = addr.with(Protocol::Certhash(a_fingerprint.into()));
+    let addr = addr.with(Protocol::Certhash(a_fingerprint.to_multi_hash()));
 
     let _ = match b.next().await {
         Some(SwarmEvent::NewListenAddr { address, .. }) => address,
@@ -321,7 +315,7 @@ async fn dial_failure() -> Result<()> {
     // skip other interface addresses
     while a.next().now_or_never().is_some() {}
 
-    let addr = addr.with(Protocol::Certhash(a_fingerprint.into()));
+    let addr = addr.with(Protocol::Certhash(a_fingerprint.to_multi_hash()));
 
     let _ = match b.next().await {
         Some(SwarmEvent::NewListenAddr { address, .. }) => address,
@@ -382,7 +376,7 @@ async fn concurrent_connections_and_streams() {
             e => panic!("{:?}", e),
         };
 
-        let addr = addr.with(Protocol::Certhash(fingerprint.into()));
+        let addr = addr.with(Protocol::Certhash(fingerprint.to_multi_hash()));
 
         listeners.push((*listener.local_peer_id(), addr));
 

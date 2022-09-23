@@ -38,12 +38,7 @@ pub(crate) fn render_server_session_description(
 ///
 /// Certificate verification is disabled which is why we hardcode a dummy fingerprint here.
 pub(crate) fn render_client_session_description(addr: SocketAddr, ufrag: &str) -> String {
-    render_description(
-        CLIENT_SESSION_DESCRIPTION,
-        addr,
-        &Fingerprint::new_sha256("FF".to_owned()),
-        ufrag,
-    )
+    render_description(CLIENT_SESSION_DESCRIPTION, addr, &Fingerprint::FF, ufrag)
 }
 
 // An SDP message that constitutes the offer.
@@ -230,7 +225,7 @@ fn render_description(
         target_ip: addr.ip(),
         target_port: addr.port(),
         fingerprint_algorithm: fingerprint.algorithm(),
-        fingerprint_value: fingerprint.value(),
+        fingerprint_value: fingerprint.to_sdp_format(),
         // NOTE: ufrag is equal to pwd.
         ufrag: ufrag.to_owned(),
         pwd: ufrag.to_owned(),

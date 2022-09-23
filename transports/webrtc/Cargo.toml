@@ -38,3 +38,4 @@ libp2p = { path = "../..", features = ["request-response"], default-features = f
 rand_core = "0.5"
 rcgen = "0.9"
 quickcheck = "1"
+hex-literal = "0.3"

@@ -20,7 +20,6 @@
 
 use futures::{channel::oneshot, prelude::*, select};
 use futures_timer::Delay;
-use multihash::Hasher;
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use webrtc::api::setting_engine::SettingEngine;
@@ -164,11 +163,8 @@ impl WebRTCConnection {
             .transport()
             .get_remote_certificate()
             .await;
-        let mut h = multihash::Sha2_256::default();
-        h.update(&cert_bytes);
-        let mut bytes: [u8; 32] = [0; 32];
-        bytes.copy_from_slice(h.finalize());
-        Fingerprint::from(&bytes)
+
+        Fingerprint::from_certificate(&cert_bytes)
     }
 
     fn setting_engine(

@@ -421,18 +421,18 @@ impl WebRTCConfiguration {
     /// Panics if the config does not contain any certificates.
     pub fn fingerprint_of_first_certificate(&self) -> Fingerprint {
         // safe to unwrap here because we require a certificate during construction.
-        let fingerprints = self
+        let fingerprint = self
             .inner
             .certificates
             .first()
             .expect("at least one certificate")
             .get_fingerprints()
-            .expect("get_fingerprints to succeed");
-        // TODO:
-        //   modify webrtc-rs to return value in upper-hex rather than lower-hex
-        //   Fingerprint::from(fingerprints.first().unwrap())
-        debug_assert_eq!("sha-256", fingerprints.first().unwrap().algorithm);
-        Fingerprint::new_sha256(fingerprints.first().unwrap().value.to_uppercase())
+            .expect("get_fingerprints to succeed")
+            .first()
+            .expect("at least one certificate")
+            .clone();
+
+        Fingerprint::try_from_rtc_dtls(fingerprint).expect("a sha256 fingerprint")
     }
 
     /// Consumes the `WebRTCConfiguration`, returning its inner configuration.
@@ -456,7 +456,13 @@ fn fingerprint_from_addr(addr: &Multiaddr) -> Option<Fingerprint> {
     for proto in iter {
         match proto {
             // Only support SHA-256 (0x12) for now.
-            Protocol::Certhash(f) if f.code() == 0x12 => return Some(Fingerprint::from(f)),
+            Protocol::Certhash(hash) => {
+                if let Some(fp) = Fingerprint::try_from_multihash(hash) {
+                    return Some(fp);
+                } else {
+                    continue;
+                }
+            }
             _ => continue,
         }
     }
@@ -588,7 +594,10 @@ where
 }
 
 fn noise_prologue(our_fingerprint: Fingerprint, remote_fingerprint: Fingerprint) -> Vec<u8> {
-    let (a, b): (Multihash, Multihash) = (our_fingerprint.into(), remote_fingerprint.into());
+    let (a, b): (Multihash, Multihash) = (
+        our_fingerprint.to_multi_hash(),
+        remote_fingerprint.to_multi_hash(),
+    );
     let (a, b) = (a.to_bytes(), b.to_bytes());
     let (first, second) = if a < b { (a, b) } else { (b, a) };
     const PREFIX: &[u8] = b"libp2p-webrtc-noise:";
