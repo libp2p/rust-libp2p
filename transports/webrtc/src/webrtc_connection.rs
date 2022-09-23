@@ -109,11 +109,8 @@ impl WebRTCConnection {
         let api = APIBuilder::new().with_setting_engine(se).build();
         let peer_connection = api.new_peer_connection(config).await?;
 
-        let client_session_description = crate::sdp::render_client_session_description(
-            addr,
-            &Fingerprint::new_sha256("NONE".to_owned()), // certificate verification is disabled, so any value is okay.
-            remote_ufrag,
-        );
+        let client_session_description =
+            crate::sdp::render_client_session_description(addr, remote_ufrag);
         log::debug!("OFFER: {:?}", client_session_description);
         let sdp = RTCSessionDescription::offer(client_session_description).unwrap();
         peer_connection.set_remote_description(sdp).await?;
