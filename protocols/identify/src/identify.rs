@@ -116,7 +116,7 @@ pub struct IdentifyConfig {
     /// How many entries of discovered peers to keep before we discard
     /// the least-recently used one.
     ///
-    /// Defaults to 100.
+    /// Disabled by default.
     pub cache_size: usize,
 }
 
@@ -131,8 +131,7 @@ impl IdentifyConfig {
             initial_delay: Duration::from_millis(500),
             interval: Duration::from_secs(5 * 60),
             push_listen_addr_updates: false,
-            // This is going to be max 400kb, considering the max message size of 4096 bytes.
-            cache_size: 100,
+            cache_size: 0,
         }
     }
 

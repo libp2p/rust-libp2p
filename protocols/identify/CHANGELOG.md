@@ -1,8 +1,6 @@
-# 0.40.0 [unreleased]
+# 0.39.1 [unreleased]
 
-- Change default `IdentifyConfig::cache_size` to 100. See [PR 2908]. 
-
-[PR 2908]: https://github.com/libp2p/rust-libp2p/pull/2908
+- Update dependencies.
 
 # 0.39.0
 
