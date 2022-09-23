@@ -57,7 +57,7 @@ impl Fingerprint {
     }
 
     pub fn try_from_multihash(hash: Multihash) -> Option<Self> {
-        if hash.code() != 0x12 {
+        if hash.code() != u64::from(Code::Sha2_256) {
             // Only support SHA256 for now.
             return None;
         }
