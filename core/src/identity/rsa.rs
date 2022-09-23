@@ -70,7 +70,7 @@ impl Keypair {
 }
 
 /// An RSA public key.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct PublicKey(Vec<u8>);
 
 impl PublicKey {
@@ -306,20 +306,13 @@ impl DerDecodable<'_> for Asn1SubjectPublicKeyInfo {
 mod tests {
     use super::*;
     use quickcheck::*;
-    use std::fmt;
 
     const KEY1: &'static [u8] = include_bytes!("test/rsa-2048.pk8");
     const KEY2: &'static [u8] = include_bytes!("test/rsa-3072.pk8");
     const KEY3: &'static [u8] = include_bytes!("test/rsa-4096.pk8");
 
-    #[derive(Clone)]
+    #[derive(Clone, Debug)]
     struct SomeKeypair(Keypair);
-
-    impl fmt::Debug for SomeKeypair {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            write!(f, "SomeKeypair")
-        }
-    }
 
     impl Arbitrary for SomeKeypair {
         fn arbitrary(g: &mut Gen) -> SomeKeypair {
