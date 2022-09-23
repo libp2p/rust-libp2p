@@ -11,8 +11,8 @@ use libp2p::request_response::{
 };
 use libp2p::swarm::{Swarm, SwarmBuilder, SwarmEvent};
 use libp2p_core::{identity, multiaddr::Protocol, muxing::StreamMuxerBox, upgrade, Transport};
-use libp2p_webrtc::fingerprint::Fingerprint;
-use libp2p_webrtc::transport::WebRTCTransport;
+use libp2p_webrtc::Fingerprint;
+use libp2p_webrtc::WebRTCTransport;
 use rand::RngCore;
 use rcgen::KeyPair;
 use tokio_crate as tokio;

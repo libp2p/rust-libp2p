@@ -80,12 +80,16 @@
 //! is to make the hash a part of the remote's multiaddr. On the server side, we turn
 //! certificate verification off.
 
-pub mod connection;
-pub mod error;
-pub mod fingerprint;
-pub mod transport;
-
+mod connection;
+mod error;
+mod fingerprint;
 mod req_res_chan;
 mod sdp;
+mod transport;
 mod udp_mux;
 mod webrtc_connection;
+
+pub use connection::Connection;
+pub use error::Error;
+pub use fingerprint::Fingerprint;
+pub use transport::{WebRTCListenStream, WebRTCTransport};
