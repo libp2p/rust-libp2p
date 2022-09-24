@@ -159,6 +159,14 @@ pub trait ConnectionHandler: Send + 'static {
     ) {
     }
 
+    /// Indicates to the handler that the error occurred during the multistream select protocol execution.
+    fn inject_listen_negotiation_error(
+        &mut self,
+        _: Self::InboundOpenInfo,
+        _: ConnectionHandlerUpgrErr<<Self::InboundProtocol as InboundUpgradeSend>::Error>,
+    ){
+    }
+
     /// Returns until when the connection should be kept alive.
     ///
     /// This method is called by the `Swarm` after each invocation of
