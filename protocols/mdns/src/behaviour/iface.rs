@@ -200,51 +200,55 @@ where
         cx: &mut Context,
         params: &impl PollParameters,
     ) -> Option<(PeerId, Multiaddr, Instant)> {
-        // Poll receive socket.
-        while let Poll::Ready(data) =
-            Pin::new(&mut self.recv_socket).poll_read(cx, &mut self.recv_buffer)
-        {
-            match data {
-                Ok((len, from)) => {
-                    if let Some(packet) = MdnsPacket::new_from_bytes(&self.recv_buffer[..len], from)
-                    {
-                        self.inject_mdns_packet(packet, params);
+        loop {
+            if let Poll::Ready(data) =
+                Pin::new(&mut self.recv_socket).poll_read(cx, &mut self.recv_buffer)
+            {
+                match data {
+                    Ok((len, from)) => {
+                        if let Some(packet) =
+                            MdnsPacket::new_from_bytes(&self.recv_buffer[..len], from)
+                        {
+                            self.inject_mdns_packet(packet, params);
+                            continue;
+                        }
+                    }
+                    Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                        // No more bytes available on the socket to read
+                    }
+                    Err(err) => {
+                        log::error!("failed reading datagram: {}", err);
                     }
                 }
-                Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
-                    // No more bytes available on the socket to read
-                    break;
-                }
-                Err(err) => {
-                    log::error!("failed reading datagram: {}", err);
+            }
+
+            if let Some(packet) = self.send_buffer.pop_front() {
+                match Pin::new(&mut self.send_socket).poll_write(
+                    cx,
+                    &packet,
+                    SocketAddr::new(self.multicast_addr, 5353),
+                ) {
+                    Poll::Ready(Ok(_)) => {
+                        log::trace!("sent packet on iface {}", self.addr);
+                        continue;
+                    }
+                    Poll::Ready(Err(err)) => {
+                        log::error!("error sending packet on iface {} {}", self.addr, err);
+                    }
+                    Poll::Pending => {
+                        self.send_buffer.push_front(packet);
+                    }
                 }
             }
-        }
 
-        // Send responses.
-        while let Some(packet) = self.send_buffer.pop_front() {
-            match Pin::new(&mut self.send_socket).poll_write(
-                cx,
-                &packet,
-                SocketAddr::new(self.multicast_addr, 5353),
-            ) {
-                Poll::Ready(Ok(_)) => log::trace!("sent packet on iface {}", self.addr),
-                Poll::Ready(Err(err)) => {
-                    log::error!("error sending packet on iface {} {}", self.addr, err);
-                }
-                Poll::Pending => {
-                    self.send_buffer.push_front(packet);
-                    break;
-                }
+            if Pin::new(&mut self.timeout).poll_next(cx).is_ready() {
+                log::trace!("sending query on iface {}", self.addr);
+                self.send_buffer.push_back(build_query());
+                continue;
             }
-        }
 
-        if Pin::new(&mut self.timeout).poll_next(cx).is_ready() {
-            log::trace!("sending query on iface {}", self.addr);
-            self.send_buffer.push_back(build_query());
+            // Emit discovered event.
+            return self.discovered.pop_front();
         }
-
-        // Emit discovered event.
-        self.discovered.pop_front()
     }
 }
