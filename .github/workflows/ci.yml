@@ -25,11 +25,11 @@ jobs:
         access_token: ${{ github.token }}
 
     - name: Install Protoc
-      uses: arduino/setup-protoc@v1
+      uses: arduino/setup-protoc@31a047f6ff1b725b36c561770f81012e2f165926
 
     - uses: actions/checkout@v3
 
-    - uses: Swatinem/rust-cache@v2
+    - uses: Swatinem/rust-cache@76686c56f2b581d1bb5bda44b51f7e24bd9b8b8e
       with:
         key: ${{ matrix.args }}
 
@@ -60,7 +60,7 @@ jobs:
         access_token: ${{ github.token }}
 
     - name: Install Protoc
-      uses: arduino/setup-protoc@v1
+      uses: arduino/setup-protoc@31a047f6ff1b725b36c561770f81012e2f165926
 
     - uses: actions/checkout@v3
 
@@ -68,7 +68,7 @@ jobs:
       run: rustup target add ${{ matrix.toolchain }}
 
 
-    - uses: Swatinem/rust-cache@v2
+    - uses: Swatinem/rust-cache@76686c56f2b581d1bb5bda44b51f7e24bd9b8b8e
       with:
         key: ${{ matrix.toolchain }}
 
@@ -88,11 +88,11 @@ jobs:
         access_token: ${{ github.token }}
 
     - name: Install Protoc
-      uses: arduino/setup-protoc@v1
+      uses: arduino/setup-protoc@31a047f6ff1b725b36c561770f81012e2f165926
 
     - uses: actions/checkout@v3
 
-    - uses: Swatinem/rust-cache@v2 # v2.0.0
+    - uses: Swatinem/rust-cache@76686c56f2b581d1bb5bda44b51f7e24bd9b8b8e
 
     - name: Check rustdoc links
       run: RUSTDOCFLAGS="--deny broken_intra_doc_links" cargo doc --verbose --workspace --no-deps --document-private-items --all-features
@@ -107,11 +107,11 @@ jobs:
         access_token: ${{ github.token }}
 
     - name: Install Protoc
-      uses: arduino/setup-protoc@v1
+      uses: arduino/setup-protoc@31a047f6ff1b725b36c561770f81012e2f165926
 
     - uses: actions/checkout@v3
 
-    - uses: Swatinem/rust-cache@v2 # v2.0.0
+    - uses: Swatinem/rust-cache@76686c56f2b581d1bb5bda44b51f7e24bd9b8b8e
 
     - name: Run clippy
       run: cargo clippy
@@ -127,11 +127,11 @@ jobs:
         access_token: ${{ github.token }}
 
     - name: Install Protoc
-      uses: arduino/setup-protoc@v1
+      uses: arduino/setup-protoc@31a047f6ff1b725b36c561770f81012e2f165926
 
     - uses: actions/checkout@v3
 
-    - uses: Swatinem/rust-cache@v2 # v2
+    - uses: Swatinem/rust-cache@76686c56f2b581d1bb5bda44b51f7e24bd9b8b8e
 
     - name: Run ipfs-kad example
       run: RUST_LOG=libp2p_swarm=debug,libp2p_kad=trace,libp2p_tcp=debug cargo run --example ipfs-kad
