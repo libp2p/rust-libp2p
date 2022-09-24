@@ -201,6 +201,33 @@ where
         params: &impl PollParameters,
     ) -> Option<(PeerId, Multiaddr, Instant)> {
         loop {
+            // 1st priority: Low latency: Create packet ASAP after timeout.
+            if Pin::new(&mut self.timeout).poll_next(cx).is_ready() {
+                log::trace!("sending query on iface {}", self.addr);
+                self.send_buffer.push_back(build_query());
+            }
+
+            // 2nd priority: Keep local buffers small: Empty buffers ASAP.
+            if let Some(packet) = self.send_buffer.pop_front() {
+                match Pin::new(&mut self.send_socket).poll_write(
+                    cx,
+                    &packet,
+                    SocketAddr::new(self.multicast_addr, 5353),
+                ) {
+                    Poll::Ready(Ok(_)) => {
+                        log::trace!("sent packet on iface {}", self.addr);
+                        continue;
+                    }
+                    Poll::Ready(Err(err)) => {
+                        log::error!("error sending packet on iface {} {}", self.addr, err);
+                    }
+                    Poll::Pending => {
+                        self.send_buffer.push_front(packet);
+                    }
+                }
+            }
+
+            // 3rd priority: Remote work: Answer incoming requests.
             if let Poll::Ready(data) =
                 Pin::new(&mut self.recv_socket).poll_read(cx, &mut self.recv_buffer)
             {
@@ -222,32 +249,7 @@ where
                 }
             }
 
-            if let Some(packet) = self.send_buffer.pop_front() {
-                match Pin::new(&mut self.send_socket).poll_write(
-                    cx,
-                    &packet,
-                    SocketAddr::new(self.multicast_addr, 5353),
-                ) {
-                    Poll::Ready(Ok(_)) => {
-                        log::trace!("sent packet on iface {}", self.addr);
-                        continue;
-                    }
-                    Poll::Ready(Err(err)) => {
-                        log::error!("error sending packet on iface {} {}", self.addr, err);
-                    }
-                    Poll::Pending => {
-                        self.send_buffer.push_front(packet);
-                    }
-                }
-            }
-
-            if Pin::new(&mut self.timeout).poll_next(cx).is_ready() {
-                log::trace!("sending query on iface {}", self.addr);
-                self.send_buffer.push_back(build_query());
-                continue;
-            }
-
-            // Emit discovered event.
+            // 4th priority: Emit event only if nothing else can make progress.
             return self.discovered.pop_front();
         }
     }
