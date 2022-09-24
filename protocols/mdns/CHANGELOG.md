@@ -1,8 +1,8 @@
 # 0.40.1 [unreleased]
 
-- Fix a bug that could cause a delay of ~10s until peers would get discovered when using the tokio runtime. See [PR XXXX].
+- Fix a bug that could cause a delay of ~10s until peers would get discovered when using the tokio runtime. See [PR 2939].
 
-[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+[PR 2939]: https://github.com/libp2p/rust-libp2p/pull/2939
 
 # 0.40.0
 
