@@ -68,6 +68,8 @@
 - Update to [`libp2p-noise` `v0.39.1`](transports/noise/CHANGELOG.md#0391).
 
 - Update to [`libp2p-swarm` `v0.39.1`](swarm/CHANGELOG.md#0391).
+- 
+- Update to [`libp2p-mdns` `v0.40.1`](protocols/mdns/CHANGELOG.md#0401).
 
 # 0.48.0
 
