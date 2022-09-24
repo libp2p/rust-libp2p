@@ -220,6 +220,7 @@ where
                     }
                     Poll::Ready(Err(err)) => {
                         log::error!("error sending packet on iface {} {}", self.addr, err);
+                        continue;
                     }
                     Poll::Pending => {
                         self.send_buffer.push_front(packet);
