@@ -19,6 +19,7 @@ default = [
     "identify",
     "kad",
     "gossipsub",
+    "tls",
     "mdns-async-io",
     "mplex",
     "noise",
@@ -46,6 +47,7 @@ floodsub = ["dep:libp2p-floodsub"]
 identify = ["dep:libp2p-identify", "libp2p-metrics?/identify"]
 kad = ["dep:libp2p-kad", "libp2p-metrics?/kad"]
 gossipsub = ["dep:libp2p-gossipsub", "libp2p-metrics?/gossipsub"]
+tls = ["dep:libp2p-tls"]
 metrics = ["dep:libp2p-metrics"]
 mdns-async-io = ["dep:libp2p-mdns", "libp2p-mdns?/async-io"]
 mdns-tokio = ["dep:libp2p-mdns", "libp2p-mdns?/tokio"]
@@ -86,6 +88,7 @@ libp2p-dcutr = { version = "0.6.0", path = "protocols/dcutr",  optional = true }
 libp2p-floodsub = { version = "0.39.1", path = "protocols/floodsub", optional = true }
 libp2p-identify = { version = "0.39.0", path = "protocols/identify", optional = true }
 libp2p-kad = { version = "0.41.0", path = "protocols/kad", optional = true }
+libp2p-tls = { version = "0.1.0", path = "transports/tls", optional = true }
 libp2p-metrics = { version = "0.10.0", path = "misc/metrics", optional = true }
 libp2p-mplex = { version = "0.36.1", path = "muxers/mplex", optional = true }
 libp2p-noise = { version = "0.39.1", path = "transports/noise", optional = true }
@@ -149,6 +152,7 @@ members = [
     "transports/deflate",
     "transports/dns",
     "transports/noise",
+    "transports/tls",
     "transports/plaintext",
     "transports/pnet",
     "transports/tcp",
