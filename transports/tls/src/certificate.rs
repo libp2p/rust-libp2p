@@ -121,10 +121,9 @@ pub struct P2pCertificate<'a> {
 /// Parse TLS certificate from DER input that includes a libp2p-specific
 /// certificate extension containing a public key of a peer.
 pub fn parse_certificate(der_input: &[u8]) -> Result<P2pCertificate, webpki::Error> {
-    use webpki::Error;
     let x509 = X509Certificate::from_der(der_input)
         .map(|(_rest_input, x509)| x509)
-        .map_err(|_| Error::BadDer)?;
+        .map_err(|_| webpki::Error::BadDer)?;
 
     let p2p_ext_oid = der_parser::oid::Oid::from(&P2P_EXT_OID)
         .expect("This is a valid OID of p2p extension; qed");
@@ -239,6 +238,7 @@ impl P2pCertificate<'_> {
         if !user_owns_sk {
             return Err(Error::UnknownIssuer);
         }
+
         Ok(())
     }
 
@@ -250,7 +250,7 @@ impl P2pCertificate<'_> {
         // Endpoints MUST abort the connection attempt if it is not used.
         use oid_registry::*;
         use rustls::SignatureScheme::*;
-        use webpki::Error;
+
         let signature_algorithm = &self.certificate.signature_algorithm;
         let pki_algorithm = &self.certificate.tbs_certificate.subject_pki.algorithm;
 
@@ -383,6 +383,7 @@ impl P2pCertificate<'_> {
         let spki = &self.certificate.tbs_certificate.subject_pki;
         let key =
             signature::UnparsedPublicKey::new(verification_algorithm, spki.subject_public_key.data);
+
         Ok(key)
     }
     /// Verify the `signature` of the `message` signed by the private key corresponding to the public key stored
@@ -396,6 +397,7 @@ impl P2pCertificate<'_> {
         let pk = self.public_key(signature_scheme)?;
         pk.verify(message, signature)
             .map_err(|_| webpki::Error::InvalidSignatureForPublicKey)?;
+
         Ok(())
     }
 }
@@ -406,10 +408,12 @@ mod tests {
 
     #[test]
     fn sanity_check() {
-        let keypair = libp2p_core::identity::Keypair::generate_ed25519();
+        let keypair = identity::Keypair::generate_ed25519();
         let cert = make_certificate(&keypair).unwrap();
+
         let cert_der = cert.serialize_der().unwrap();
         let parsed_cert = parse_certificate(&cert_der).unwrap();
+
         assert!(parsed_cert.verify().is_ok());
         assert_eq!(keypair.public(), parsed_cert.extension.public_key);
     }

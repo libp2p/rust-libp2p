@@ -61,16 +61,17 @@ pub fn make_client_config(
     keypair: &libp2p_core::identity::Keypair,
 ) -> Result<rustls::ClientConfig, ConfigError> {
     let (certificate, key) = make_cert_key(keypair)?;
-    let verifier = Arc::new(verifier::Libp2pCertificateVerifier);
+
     let mut crypto = rustls::ClientConfig::builder()
         .with_cipher_suites(TLS13_CIPHERSUITES)
         .with_safe_default_kx_groups()
         .with_protocol_versions(&[&rustls::version::TLS13])
         .expect("Cipher suites and kx groups are configured; qed")
-        .with_custom_certificate_verifier(verifier)
+        .with_custom_certificate_verifier(Arc::new(verifier::Libp2pCertificateVerifier))
         .with_single_cert(vec![certificate], key)
         .expect("Client cert key DER is valid; qed");
     crypto.alpn_protocols = vec![P2P_ALPN.to_vec()];
+
     Ok(crypto)
 }
 
@@ -79,16 +80,17 @@ pub fn make_server_config(
     keypair: &libp2p_core::identity::Keypair,
 ) -> Result<rustls::ServerConfig, ConfigError> {
     let (certificate, key) = make_cert_key(keypair)?;
-    let verifier = Arc::new(verifier::Libp2pCertificateVerifier);
+
     let mut crypto = rustls::ServerConfig::builder()
         .with_cipher_suites(TLS13_CIPHERSUITES)
         .with_safe_default_kx_groups()
         .with_protocol_versions(&[&rustls::version::TLS13])
         .expect("Cipher suites and kx groups are configured; qed")
-        .with_client_cert_verifier(verifier)
+        .with_client_cert_verifier(Arc::new(verifier::Libp2pCertificateVerifier))
         .with_single_cert(vec![certificate], key)
         .expect("Server cert key DER is valid; qed");
     crypto.alpn_protocols = vec![P2P_ALPN.to_vec()];
+
     Ok(crypto)
 }
 
@@ -98,7 +100,9 @@ fn make_cert_key(
 ) -> Result<(rustls::Certificate, rustls::PrivateKey), ConfigError> {
     let cert = certificate::make_certificate(keypair)?;
     let private_key = cert.serialize_private_key_der();
+
     let cert = rustls::Certificate(cert.serialize_der()?);
     let key = rustls::PrivateKey(private_key);
+
     Ok((cert, key))
 }
