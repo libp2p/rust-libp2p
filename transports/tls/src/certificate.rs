@@ -43,9 +43,7 @@ static P2P_SIGNATURE_ALGORITHM: &rcgen::SignatureAlgorithm = &rcgen::PKCS_ECDSA_
 
 /// Generates a self-signed TLS certificate that includes a libp2p-specific
 /// certificate extension containing the public key of the given keypair.
-pub fn generate(
-    identity_keypair: &identity::Keypair,
-) -> Result<rcgen::Certificate, rcgen::RcgenError> {
+pub fn generate(identity_keypair: &identity::Keypair) -> Result<rcgen::Certificate, GenError> {
     // Keypair used to sign the certificate.
     // SHOULD NOT be related to the host's key.
     // Endpoints MAY generate a new key and certificate
@@ -55,6 +53,10 @@ pub fn generate(
 
     _generate(identity_keypair, certificate_keypair)
 }
+
+#[derive(Debug, thiserror::Error)]
+#[error(transparent)]
+pub struct GenError(#[from] rcgen::RcgenError);
 
 /// Attempts to parse the provided bytes as a [`P2pCertificate`].
 ///
@@ -92,7 +94,7 @@ pub struct P2pExtension {
 fn _generate(
     identity_keypair: &identity::Keypair,
     certificate_keypair: rcgen::KeyPair,
-) -> Result<rcgen::Certificate, rcgen::RcgenError> {
+) -> Result<rcgen::Certificate, GenError> {
     // Generate the libp2p-specific extension.
     // The certificate MUST contain the libp2p Public Key Extension.
     let libp2p_extension: rcgen::CustomExtension = {

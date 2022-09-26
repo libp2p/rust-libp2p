@@ -12,7 +12,7 @@ use std::sync::Arc;
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
     #[error("Failed to generate certificate")]
-    CertificateGeneration(#[from] rcgen::RcgenError), // TODO: This leaks `rcgen` dependency.
+    CertificateGeneration(#[from] certificate::GenError),
     #[error("Failed to upgrade server connection")]
     ServerUpgrade(std::io::Error),
     #[error("Failed to upgrade client connection")]
@@ -28,7 +28,7 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn new(identity: &identity::Keypair) -> Result<Self, Error> {
+    pub fn new(identity: &identity::Keypair) -> Result<Self, certificate::GenError> {
         Ok(Self {
             server: crate::make_server_config(identity)?,
             client: crate::make_client_config(identity)?,

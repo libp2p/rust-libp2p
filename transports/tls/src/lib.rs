@@ -53,7 +53,7 @@ const P2P_ALPN: [u8; 6] = *b"libp2p";
 /// Create a TLS client configuration for libp2p.
 pub fn make_client_config(
     keypair: &libp2p_core::identity::Keypair,
-) -> Result<rustls::ClientConfig, rcgen::RcgenError> {
+) -> Result<rustls::ClientConfig, certificate::GenError> {
     let (certificate, key) = make_cert_key(keypair)?;
 
     let mut crypto = rustls::ClientConfig::builder()
@@ -72,7 +72,7 @@ pub fn make_client_config(
 /// Create a TLS server configuration for libp2p.
 pub fn make_server_config(
     keypair: &libp2p_core::identity::Keypair,
-) -> Result<rustls::ServerConfig, rcgen::RcgenError> {
+) -> Result<rustls::ServerConfig, certificate::GenError> {
     let (certificate, key) = make_cert_key(keypair)?;
 
     let mut crypto = rustls::ServerConfig::builder()
@@ -91,7 +91,7 @@ pub fn make_server_config(
 /// Create a random private key and certificate signed with this key for rustls.
 fn make_cert_key(
     keypair: &libp2p_core::identity::Keypair,
-) -> Result<(rustls::Certificate, rustls::PrivateKey), rcgen::RcgenError> {
+) -> Result<(rustls::Certificate, rustls::PrivateKey), certificate::GenError> {
     let cert = certificate::generate(keypair)?;
     let private_key = cert.serialize_private_key_der();
 
