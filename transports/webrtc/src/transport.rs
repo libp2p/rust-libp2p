@@ -35,7 +35,6 @@ use libp2p_core::{
 };
 use libp2p_noise::{Keypair, NoiseConfig, X25519Spec};
 use log::{debug, trace};
-use multihash::Multihash;
 use tokio_crate::net::UdpSocket;
 use webrtc::ice::udp_mux::UDPMux;
 use webrtc::peer_connection::certificate::RTCCertificate;
@@ -162,7 +161,7 @@ impl Transport for WebRTCTransport {
         trace!("dialing addr={}", remote);
 
         let config = self.config.clone();
-        let our_fingerprint = self.config.fingerprint_of_first_certificate();
+        let client_fingerprint = self.config.fingerprint_of_first_certificate();
         let id_keys = self.id_keys.clone();
 
         let first_listener = self
@@ -175,14 +174,14 @@ impl Transport for WebRTCTransport {
         // [`Transport::dial`] should do no work unless the returned [`Future`] is polled. Thus
         // do the `set_remote_description` call within the [`Future`].
         Ok(async move {
-            let remote_fingerprint = fingerprint_from_addr(&addr)
+            let server_fingerprint = fingerprint_from_addr(&addr)
                 .ok_or_else(|| Error::InvalidMultiaddr(addr.clone()))?;
 
             let conn = WebRTCConnection::connect(
                 sock_addr,
                 config.into_inner(),
                 udp_mux,
-                &remote_fingerprint,
+                &server_fingerprint,
             )
             .await?;
 
@@ -193,8 +192,8 @@ impl Transport for WebRTCTransport {
             let peer_id = perform_noise_handshake_outbound(
                 id_keys,
                 PollDataChannel::new(data_channel.clone()),
-                our_fingerprint,
-                remote_fingerprint,
+                client_fingerprint,
+                server_fingerprint,
             )
             .await?;
 
@@ -500,8 +499,8 @@ fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Option<SocketAddr> {
 async fn perform_noise_handshake_outbound<T>(
     id_keys: identity::Keypair,
     poll_data_channel: T,
-    our_fingerprint: Fingerprint,
-    remote_fingerprint: Fingerprint,
+    client_fingerprint: Fingerprint,
+    server_fingerprint: Fingerprint,
 ) -> Result<PeerId, Error>
 where
     T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
@@ -509,8 +508,8 @@ where
     let dh_keys = Keypair::<X25519Spec>::new()
         .into_authentic(&id_keys)
         .unwrap();
-    let noise =
-        NoiseConfig::xx(dh_keys).with_prologue(noise_prologue(our_fingerprint, remote_fingerprint));
+    let noise = NoiseConfig::xx(dh_keys)
+        .with_prologue(noise_prologue(client_fingerprint, server_fingerprint));
     let info = noise.protocol_info().next().unwrap();
     let (peer_id, _noise_io) = noise
         .into_authenticated()
@@ -529,13 +528,13 @@ async fn upgrade(
 ) -> Result<(PeerId, Connection), Error> {
     trace!("upgrading addr={} (ufrag={})", socket_addr, ufrag);
 
-    let our_fingerprint = config.fingerprint_of_first_certificate();
+    let server_fingerprint = config.fingerprint_of_first_certificate();
 
     let conn = WebRTCConnection::accept(
         socket_addr,
         config.into_inner(),
         udp_mux,
-        &our_fingerprint,
+        &server_fingerprint,
         &ufrag,
     )
     .await?;
@@ -548,12 +547,13 @@ async fn upgrade(
         socket_addr,
         ufrag
     );
-    let remote_fingerprint = conn.get_remote_fingerprint().await;
+    let client_fingerprint = conn.get_remote_fingerprint().await;
+
     let peer_id = perform_noise_handshake_inbound(
         id_keys,
         PollDataChannel::new(data_channel.clone()),
-        our_fingerprint,
-        remote_fingerprint,
+        client_fingerprint,
+        server_fingerprint,
     )
     .await?;
 
@@ -574,8 +574,8 @@ async fn upgrade(
 async fn perform_noise_handshake_inbound<T>(
     id_keys: identity::Keypair,
     poll_data_channel: T,
-    our_fingerprint: Fingerprint,
-    remote_fingerprint: Fingerprint,
+    client_fingerprint: Fingerprint,
+    server_fingerprint: Fingerprint,
 ) -> Result<PeerId, Error>
 where
     T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
@@ -583,8 +583,8 @@ where
     let dh_keys = Keypair::<X25519Spec>::new()
         .into_authentic(&id_keys)
         .unwrap();
-    let noise =
-        NoiseConfig::xx(dh_keys).with_prologue(noise_prologue(our_fingerprint, remote_fingerprint));
+    let noise = NoiseConfig::xx(dh_keys)
+        .with_prologue(noise_prologue(client_fingerprint, server_fingerprint));
     let info = noise.protocol_info().next().unwrap();
     let (peer_id, _noise_io) = noise
         .into_authenticated()
@@ -593,18 +593,17 @@ where
     Ok(peer_id)
 }
 
-fn noise_prologue(our_fingerprint: Fingerprint, remote_fingerprint: Fingerprint) -> Vec<u8> {
-    let (a, b): (Multihash, Multihash) = (
-        our_fingerprint.to_multi_hash(),
-        remote_fingerprint.to_multi_hash(),
-    );
-    let (a, b) = (a.to_bytes(), b.to_bytes());
-    let (first, second) = if a < b { (a, b) } else { (b, a) };
+fn noise_prologue(client: Fingerprint, server: Fingerprint) -> Vec<u8> {
+    let server = server.to_multi_hash().to_bytes();
+    let client = client.to_multi_hash().to_bytes();
+
     const PREFIX: &[u8] = b"libp2p-webrtc-noise:";
-    let mut out = Vec::with_capacity(PREFIX.len() + first.len() + second.len());
+
+    let mut out = Vec::with_capacity(PREFIX.len() + server.len() + client.len());
     out.extend_from_slice(PREFIX);
-    out.extend_from_slice(&first);
-    out.extend_from_slice(&second);
+    out.extend_from_slice(&server);
+    out.extend_from_slice(&client);
+
     out
 }
 
@@ -633,10 +632,7 @@ mod tests {
         let prologue2 = noise_prologue(b, a);
 
         assert_eq!(hex::encode(&prologue1), "6c69627032702d7765627274632d6e6f6973653a122030fc9f469c207419dfdd0aab5f27a86c973c94e40548db9375cca2e915973b9912203e79af40d6059617a0d83b83a52ce73b0c1f37a72c6043ad2969e2351bdca870");
-        assert_eq!(
-            prologue1, prologue2,
-            "order of fingerprints does not matter"
-        );
+        assert_eq!(hex::encode(&prologue2), "6c69627032702d7765627274632d6e6f6973653a12203e79af40d6059617a0d83b83a52ce73b0c1f37a72c6043ad2969e2351bdca870122030fc9f469c207419dfdd0aab5f27a86c973c94e40548db9375cca2e915973b99");
     }
 
     #[test]
