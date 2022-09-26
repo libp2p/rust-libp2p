@@ -4,8 +4,6 @@ version = "0.1.0"
 edition = "2021"
 license = "MIT"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 futures = { version = "0.3.24", default-features = false }
 futures-rustls = "0.22.2"
