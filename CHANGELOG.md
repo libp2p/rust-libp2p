@@ -45,6 +45,8 @@
 
 # 0.49.0 - [unreleased]
 
+- Update to [`libp2p-core` `v0.36.1`](core/CHANGELOG.md#0361).
+
 - Update to [`libp2p-tcp` `v0.37.0`](transports/tcp/CHANGELOG.md#0370).
 - Update individual crates.
     - Update to [`libp2p-ping` `v0.39.1`](protocols/ping/CHANGELOG.md#0391).
@@ -66,6 +68,8 @@
 - Update to [`libp2p-identify` `v0.39.1`](protocols/identify/CHANGELOG.md#0400).
 
 - Update to [`libp2p-noise` `v0.39.1`](transports/noise/CHANGELOG.md#0391).
+
+- Update to [`libp2p-swarm` `v0.39.1`](swarm/CHANGELOG.md#0391).
 
 # 0.48.0
 
