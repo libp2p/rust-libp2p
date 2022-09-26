@@ -6,11 +6,8 @@ use futures::{AsyncRead, FutureExt};
 use futures_rustls::TlsStream;
 use libp2p_core::{identity, InboundUpgrade, OutboundUpgrade, PeerId, UpgradeInfo};
 use rustls::{CommonState, ServerName};
-use std::io::{IoSlice, IoSliceMut};
 use std::net::{IpAddr, Ipv4Addr};
-use std::pin::Pin;
 use std::sync::Arc;
-use std::task::{Context, Poll};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -48,15 +45,11 @@ impl UpgradeInfo for Config {
     }
 }
 
-pub struct Stream<C> {
-    inner: TlsStream<C>,
-}
-
 impl<C> InboundUpgrade<C> for Config
 where
     C: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
-    type Output = (PeerId, Stream<C>);
+    type Output = (PeerId, TlsStream<C>);
     type Error = Error;
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
@@ -71,9 +64,7 @@ where
 
             Ok((
                 peer_id,
-                Stream {
-                    inner: stream.into(),
-                },
+                stream.into(),
             ))
         }
         .boxed()
@@ -84,7 +75,7 @@ impl<C> OutboundUpgrade<C> for Config
 where
     C: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
-    type Output = (PeerId, Stream<C>);
+    type Output = (PeerId, TlsStream<C>);
     type Error = Error;
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
@@ -103,62 +94,10 @@ where
 
             Ok((
                 peer_id,
-                Stream {
-                    inner: stream.into(),
-                },
+                stream.into(),
             ))
         }
         .boxed()
-    }
-}
-
-impl<C> AsyncRead for Stream<C>
-where
-    C: AsyncRead + AsyncWrite + Unpin,
-{
-    fn poll_read(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &mut [u8],
-    ) -> Poll<std::io::Result<usize>> {
-        Pin::new(&mut self.inner).poll_read(cx, buf)
-    }
-
-    fn poll_read_vectored(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        bufs: &mut [IoSliceMut<'_>],
-    ) -> Poll<std::io::Result<usize>> {
-        Pin::new(&mut self.inner).poll_read_vectored(cx, bufs)
-    }
-}
-
-impl<C> AsyncWrite for Stream<C>
-where
-    C: AsyncRead + AsyncWrite + Unpin,
-{
-    fn poll_write(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &[u8],
-    ) -> Poll<std::io::Result<usize>> {
-        Pin::new(&mut self.inner).poll_write(cx, buf)
-    }
-
-    fn poll_write_vectored(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        bufs: &[IoSlice<'_>],
-    ) -> Poll<std::io::Result<usize>> {
-        Pin::new(&mut self.inner).poll_write_vectored(cx, bufs)
-    }
-
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
-        Pin::new(&mut self.inner).poll_flush(cx)
-    }
-
-    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
-        Pin::new(&mut self.inner).poll_close(cx)
     }
 }
 

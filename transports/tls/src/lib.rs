@@ -35,7 +35,8 @@ use rustls::{
     SupportedCipherSuite,
 };
 
-pub use upgrade::{Config, Error, Stream};
+pub use futures_rustls::TlsStream;
+pub use upgrade::{Config, Error};
 
 /// A list of the TLS 1.3 cipher suites supported by rustls.
 // By default rustls creates client/server configs with both
