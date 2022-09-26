@@ -125,7 +125,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                             )
                             .unwrap();
                             let ty = &field.ty;
-                            quote! {#variant(<#ty as ::libp2p::swarm::NetworkBehaviour>::OutEvent)}
+                            quote! {#variant(<#ty as #trait_to_impl>::OutEvent)}
                         })
                         .collect::<Vec<_>>();
                     let visibility = &ast.vis;
