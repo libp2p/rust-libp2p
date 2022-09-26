@@ -436,7 +436,7 @@ mod tests {
             fn $name() {
                 let cert: &[u8] = include_bytes!($path);
 
-                let cert = parse_certificate(cert).unwrap();
+                let cert = parse(cert).unwrap();
                 assert!(cert.verify().is_err()); // Because p2p extension
                                                  // was not signed with the private key
                                                  // of the certificate.
