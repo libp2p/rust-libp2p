@@ -62,10 +62,7 @@ where
 
             let peer_id = extract_single_certificate(stream.get_ref().1)?.peer_id();
 
-            Ok((
-                peer_id,
-                stream.into(),
-            ))
+            Ok((peer_id, stream.into()))
         }
         .boxed()
     }
@@ -92,10 +89,7 @@ where
 
             let peer_id = extract_single_certificate(stream.get_ref().1)?.peer_id();
 
-            Ok((
-                peer_id,
-                stream.into(),
-            ))
+            Ok((peer_id, stream.into()))
         }
         .boxed()
     }
