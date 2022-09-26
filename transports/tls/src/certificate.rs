@@ -212,14 +212,75 @@ fn parse_unverified(der_input: &[u8]) -> Result<P2pCertificate, webpki::Error> {
     Ok(certificate)
 }
 
-impl<'a> P2pCertificate<'a> {
+impl P2pCertificate<'_> {
     /// The [`PeerId`] of the remote peer.
     pub fn peer_id(&self) -> PeerId {
         self.extension.public_key.to_peer_id()
     }
-}
 
-impl P2pCertificate<'_> {
+    /// Verify the `signature` of the `message` signed by the private key corresponding to the public key stored
+    /// in the certificate.
+    pub fn verify_signature(
+        &self,
+        signature_scheme: rustls::SignatureScheme,
+        message: &[u8],
+        signature: &[u8],
+    ) -> Result<(), webpki::Error> {
+        let pk = self.public_key(signature_scheme)?;
+        pk.verify(message, signature)
+            .map_err(|_| webpki::Error::InvalidSignatureForPublicKey)?;
+
+        Ok(())
+    }
+
+    /// Get a [`ring::signature::UnparsedPublicKey`] for this `signature_scheme`.
+    /// Return `Error` if the `signature_scheme` does not match the public key signature
+    /// and hashing algorithm or if the `signature_scheme` is not supported.
+    fn public_key(
+        &self,
+        signature_scheme: rustls::SignatureScheme,
+    ) -> Result<ring::signature::UnparsedPublicKey<&[u8]>, webpki::Error> {
+        use ring::signature;
+        use rustls::SignatureScheme::*;
+
+        let current_signature_scheme = self.signature_scheme()?;
+        if signature_scheme != current_signature_scheme {
+            // This certificate was signed with a different signature scheme
+            return Err(webpki::Error::UnsupportedSignatureAlgorithmForPublicKey);
+        }
+
+        let verification_algorithm: &dyn signature::VerificationAlgorithm = match signature_scheme {
+            RSA_PKCS1_SHA256 => &signature::RSA_PKCS1_2048_8192_SHA256,
+            RSA_PKCS1_SHA384 => &signature::RSA_PKCS1_2048_8192_SHA384,
+            RSA_PKCS1_SHA512 => &signature::RSA_PKCS1_2048_8192_SHA512,
+            ECDSA_NISTP256_SHA256 => &signature::ECDSA_P256_SHA256_ASN1,
+            ECDSA_NISTP384_SHA384 => &signature::ECDSA_P384_SHA384_ASN1,
+            ECDSA_NISTP521_SHA512 => {
+                // See https://github.com/briansmith/ring/issues/824
+                return Err(webpki::Error::UnsupportedSignatureAlgorithm);
+            }
+            RSA_PSS_SHA256 => &signature::RSA_PSS_2048_8192_SHA256,
+            RSA_PSS_SHA384 => &signature::RSA_PSS_2048_8192_SHA384,
+            RSA_PSS_SHA512 => &signature::RSA_PSS_2048_8192_SHA512,
+            ED25519 => &signature::ED25519,
+            ED448 => {
+                // See https://github.com/briansmith/ring/issues/463
+                return Err(webpki::Error::UnsupportedSignatureAlgorithm);
+            }
+            // Similarly, hash functions with an output length less than 256 bits
+            // MUST NOT be used, due to the possibility of collision attacks.
+            // In particular, MD5 and SHA1 MUST NOT be used.
+            RSA_PKCS1_SHA1 => return Err(webpki::Error::UnsupportedSignatureAlgorithm),
+            ECDSA_SHA1_Legacy => return Err(webpki::Error::UnsupportedSignatureAlgorithm),
+            Unknown(_) => return Err(webpki::Error::UnsupportedSignatureAlgorithm),
+        };
+        let spki = &self.certificate.tbs_certificate.subject_pki;
+        let key =
+            signature::UnparsedPublicKey::new(verification_algorithm, spki.subject_public_key.data);
+
+        Ok(key)
+    }
+
     /// This method validates the certificate according to libp2p TLS 1.3 specs.
     /// The certificate MUST:
     /// 1. be valid at the time it is received by the peer;
@@ -276,7 +337,7 @@ impl P2pCertificate<'_> {
     /// Return the signature scheme corresponding to [`AlgorithmIdentifier`]s
     /// of `subject_pki` and `signature_algorithm`
     /// according to `<https://tools.ietf.org/id/draft-ietf-tls-tls13-21.html#rfc.section.4.2.3>`.
-    pub fn signature_scheme(&self) -> Result<rustls::SignatureScheme, webpki::Error> {
+    fn signature_scheme(&self) -> Result<rustls::SignatureScheme, webpki::Error> {
         // Certificates MUST use the NamedCurve encoding for elliptic curve parameters.
         // Endpoints MUST abort the connection attempt if it is not used.
         use oid_registry::*;
@@ -368,69 +429,6 @@ impl P2pCertificate<'_> {
         }
 
         Err(webpki::Error::UnsupportedSignatureAlgorithm)
-    }
-
-    /// Get a [`ring::signature::UnparsedPublicKey`] for this `signature_scheme`.
-    /// Return `Error` if the `signature_scheme` does not match the public key signature
-    /// and hashing algorithm or if the `signature_scheme` is not supported.
-    pub fn public_key(
-        &self,
-        signature_scheme: rustls::SignatureScheme,
-    ) -> Result<ring::signature::UnparsedPublicKey<&[u8]>, webpki::Error> {
-        use ring::signature;
-        use rustls::SignatureScheme::*;
-
-        let current_signature_scheme = self.signature_scheme()?;
-        if signature_scheme != current_signature_scheme {
-            // This certificate was signed with a different signature scheme
-            return Err(webpki::Error::UnsupportedSignatureAlgorithmForPublicKey);
-        }
-
-        let verification_algorithm: &dyn signature::VerificationAlgorithm = match signature_scheme {
-            RSA_PKCS1_SHA256 => &signature::RSA_PKCS1_2048_8192_SHA256,
-            RSA_PKCS1_SHA384 => &signature::RSA_PKCS1_2048_8192_SHA384,
-            RSA_PKCS1_SHA512 => &signature::RSA_PKCS1_2048_8192_SHA512,
-            ECDSA_NISTP256_SHA256 => &signature::ECDSA_P256_SHA256_ASN1,
-            ECDSA_NISTP384_SHA384 => &signature::ECDSA_P384_SHA384_ASN1,
-            ECDSA_NISTP521_SHA512 => {
-                // See https://github.com/briansmith/ring/issues/824
-                return Err(webpki::Error::UnsupportedSignatureAlgorithm);
-            }
-            RSA_PSS_SHA256 => &signature::RSA_PSS_2048_8192_SHA256,
-            RSA_PSS_SHA384 => &signature::RSA_PSS_2048_8192_SHA384,
-            RSA_PSS_SHA512 => &signature::RSA_PSS_2048_8192_SHA512,
-            ED25519 => &signature::ED25519,
-            ED448 => {
-                // See https://github.com/briansmith/ring/issues/463
-                return Err(webpki::Error::UnsupportedSignatureAlgorithm);
-            }
-            // Similarly, hash functions with an output length less than 256 bits
-            // MUST NOT be used, due to the possibility of collision attacks.
-            // In particular, MD5 and SHA1 MUST NOT be used.
-            RSA_PKCS1_SHA1 => return Err(webpki::Error::UnsupportedSignatureAlgorithm),
-            ECDSA_SHA1_Legacy => return Err(webpki::Error::UnsupportedSignatureAlgorithm),
-            Unknown(_) => return Err(webpki::Error::UnsupportedSignatureAlgorithm),
-        };
-        let spki = &self.certificate.tbs_certificate.subject_pki;
-        let key =
-            signature::UnparsedPublicKey::new(verification_algorithm, spki.subject_public_key.data);
-
-        Ok(key)
-    }
-
-    /// Verify the `signature` of the `message` signed by the private key corresponding to the public key stored
-    /// in the certificate.
-    pub fn verify_signature(
-        &self,
-        signature_scheme: rustls::SignatureScheme,
-        message: &[u8],
-        signature: &[u8],
-    ) -> Result<(), webpki::Error> {
-        let pk = self.public_key(signature_scheme)?;
-        pk.verify(message, signature)
-            .map_err(|_| webpki::Error::InvalidSignatureForPublicKey)?;
-
-        Ok(())
     }
 }
 
