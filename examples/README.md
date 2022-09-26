@@ -9,7 +9,7 @@ A set of examples showcasing how to use rust-libp2p.
   Small `ping` clone, sending a ping to a peer, expecting a pong as a response. See
   [tutorial](../src/tutorials/ping.rs) for a step-by-step guide building the example.
 
-## Individual libp2p protocols
+## Individual libp2p features
 
 - [Chat](./chat.rs)
 
@@ -43,6 +43,10 @@ A set of examples showcasing how to use rust-libp2p.
 - [Passive Discovery via MDNS](mdns-passive-discovery.rs)
 
   Discover peers on the same network via the MDNS protocol.
+  
+- [Hole punching tutorial](https://docs.rs/libp2p/latest/libp2p/tutorials/hole_punching/index.html)
+
+  Tutorial on how to overcome firewalls and NATs with libp2p’s hole punching mechanism.
 
 ## Integration into a larger application
 
