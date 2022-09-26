@@ -23,7 +23,7 @@
 //! This module handles generation, signing, and verification of certificates.
 
 use libp2p_core::{identity, PeerId};
-use x509_parser::prelude::*;
+use x509_parser::{prelude::*, signature_algorithm::SignatureAlgorithm};
 
 /// The libp2p Public Key Extension is a X.509 extension
 /// with the Object Identier 1.3.6.1.4.1.53594.1.1,
@@ -285,8 +285,10 @@ impl P2pCertificate<'_> {
             Unknown(_) => return Err(webpki::Error::UnsupportedSignatureAlgorithm),
         };
         let spki = &self.certificate.tbs_certificate.subject_pki;
-        let key =
-            signature::UnparsedPublicKey::new(verification_algorithm, spki.subject_public_key.data);
+        let key = signature::UnparsedPublicKey::new(
+            verification_algorithm,
+            spki.subject_public_key.as_ref(),
+        );
 
         Ok(key)
     }
@@ -315,7 +317,7 @@ impl P2pCertificate<'_> {
         // Endpoints MUST abort the connection attempt if the certificate’s
         // self-signature is not valid.
         let raw_certificate = self.certificate.tbs_certificate.as_ref();
-        let signature = self.certificate.signature_value.data;
+        let signature = self.certificate.signature_value.as_ref();
         // check if self signed
         self.verify_signature(signature_scheme, raw_certificate, signature)
             .map_err(|_| Error::SignatureAlgorithmMismatch)?;
@@ -374,30 +376,21 @@ impl P2pCertificate<'_> {
                 // - Salt Length
                 // - Trailer Field
 
-                // We are interested in Hash Algorithm only, however the der parser parses
-                // params into a mess, so here is a workaround to fix it:
-                fn get_hash_oid<'a>(
-                    signature_algorithm: &'a AlgorithmIdentifier,
-                ) -> Option<Oid<'a>> {
-                    let params = signature_algorithm.parameters.as_ref()?;
-                    let params = params.as_sequence().ok()?;
-                    let first_param = params.get(0)?;
-                    let hash_oid_der = first_param.as_slice().ok()?;
-                    let (_, obj) = der_parser::parse_der(hash_oid_der).ok()?;
-                    let hash_oid = obj.as_sequence().ok()?.get(0)?.as_oid_val().ok()?;
-                    Some(hash_oid)
-                }
+                // We are interested in Hash Algorithm only
 
-                let hash_oid = get_hash_oid(signature_algorithm).ok_or(webpki::Error::BadDer)?;
-
-                if hash_oid == OID_NIST_HASH_SHA256 {
-                    return Ok(RSA_PSS_SHA256);
-                }
-                if hash_oid == OID_NIST_HASH_SHA384 {
-                    return Ok(RSA_PSS_SHA384);
-                }
-                if hash_oid == OID_NIST_HASH_SHA512 {
-                    return Ok(RSA_PSS_SHA512);
+                if let Ok(SignatureAlgorithm::RSASSA_PSS(params)) =
+                    SignatureAlgorithm::try_from(signature_algorithm)
+                {
+                    let hash_oid = params.hash_algorithm_oid();
+                    if hash_oid == &OID_NIST_HASH_SHA256 {
+                        return Ok(RSA_PSS_SHA256);
+                    }
+                    if hash_oid == &OID_NIST_HASH_SHA384 {
+                        return Ok(RSA_PSS_SHA384);
+                    }
+                    if hash_oid == &OID_NIST_HASH_SHA512 {
+                        return Ok(RSA_PSS_SHA512);
+                    }
                 }
 
                 // Default hash algo is SHA-1, however:
@@ -411,7 +404,7 @@ impl P2pCertificate<'_> {
                 .parameters
                 .as_ref()
                 .ok_or(webpki::Error::BadDer)?
-                .as_oid_val()
+                .as_oid()
                 .map_err(|_| webpki::Error::BadDer)?;
             if signature_param == OID_EC_P256
                 && signature_algorithm.algorithm == OID_SIG_ECDSA_WITH_SHA256
