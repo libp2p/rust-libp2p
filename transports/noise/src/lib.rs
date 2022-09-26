@@ -69,7 +69,6 @@ use crate::handshake::State;
 use crate::io::handshake;
 use futures::prelude::*;
 use libp2p_core::{identity, InboundUpgrade, OutboundUpgrade, PeerId, UpgradeInfo};
-use snow::HandshakeState;
 use std::pin::Pin;
 use zeroize::Zeroize;
 
@@ -107,35 +106,6 @@ impl<H, C: Zeroize, R> NoiseConfig<H, C, R> {
     pub fn set_legacy_config(&mut self, cfg: LegacyConfig) -> &mut Self {
         self.legacy = cfg;
         self
-    }
-}
-
-impl<H, C, R> NoiseConfig<H, C, R>
-where
-    C: Zeroize + AsRef<[u8]>,
-{
-    fn into_responder(self) -> Result<HandshakeState, NoiseError> {
-        let state = self
-            .params
-            .into_builder()
-            .prologue(self.prologue.as_ref())
-            .local_private_key(self.dh_keys.dh_keypair().secret().as_ref())
-            .build_responder()
-            .map_err(NoiseError::from)?;
-
-        Ok(state)
-    }
-
-    fn into_initiator(self) -> Result<HandshakeState, NoiseError> {
-        let state = self
-            .params
-            .into_builder()
-            .prologue(self.prologue.as_ref())
-            .local_private_key(self.dh_keys.dh_keypair().secret().as_ref())
-            .build_initiator()
-            .map_err(NoiseError::from)?;
-
-        Ok(state)
     }
 }
 
@@ -237,11 +207,11 @@ where
 
     fn upgrade_inbound(self, socket: T, _: Self::Info) -> Self::Future {
         async move {
-            let session = self
-                .params
-                .into_builder()
-                .local_private_key(self.dh_keys.dh_keypair().secret().as_ref())
-                .build_responder()?;
+            let session = self.params.into_responder(
+                &self.prologue,
+                self.dh_keys.dh_keypair().secret(),
+                None,
+            )?;
 
             let mut state = State::new(
                 socket,
@@ -278,11 +248,11 @@ where
 
     fn upgrade_outbound(self, socket: T, _: Self::Info) -> Self::Future {
         async move {
-            let session = self
-                .params
-                .into_builder()
-                .local_private_key(self.dh_keys.dh_keypair().secret().as_ref())
-                .build_initiator()?;
+            let session = self.params.into_responder(
+                &self.prologue,
+                self.dh_keys.dh_keypair().secret(),
+                None,
+            )?;
 
             let mut state = State::new(
                 socket,
@@ -323,11 +293,11 @@ where
 
     fn upgrade_inbound(self, socket: T, _: Self::Info) -> Self::Future {
         async move {
-            let session = self
-                .params
-                .into_builder()
-                .local_private_key(self.dh_keys.dh_keypair().secret().as_ref())
-                .build_responder()?;
+            let session = self.params.into_responder(
+                &self.prologue,
+                self.dh_keys.dh_keypair().secret(),
+                None,
+            )?;
 
             let mut state = State::new(
                 socket,
@@ -369,11 +339,11 @@ where
 
     fn upgrade_outbound(self, socket: T, _: Self::Info) -> Self::Future {
         async move {
-            let session = self
-                .params
-                .into_builder()
-                .local_private_key(self.dh_keys.dh_keypair().secret().as_ref())
-                .build_initiator()?;
+            let session = self.params.into_responder(
+                &self.prologue,
+                self.dh_keys.dh_keypair().secret(),
+                None,
+            )?;
 
             let mut state = State::new(
                 socket,
@@ -414,11 +384,11 @@ where
 
     fn upgrade_inbound(self, socket: T, _: Self::Info) -> Self::Future {
         async move {
-            let session = self
-                .params
-                .into_builder()
-                .local_private_key(self.dh_keys.dh_keypair().secret().as_ref())
-                .build_responder()?;
+            let session = self.params.into_responder(
+                &self.prologue,
+                self.dh_keys.dh_keypair().secret(),
+                None,
+            )?;
 
             let mut state = State::new(
                 socket,
@@ -458,13 +428,11 @@ where
 
     fn upgrade_outbound(self, socket: T, _: Self::Info) -> Self::Future {
         async move {
-            let session = self
-                .params
-                .into_builder()
-                .prologue(self.prologue.as_ref())
-                .local_private_key(self.dh_keys.dh_keypair().secret().as_ref())
-                .remote_public_key(self.remote.0.as_ref())
-                .build_initiator()?;
+            let session = self.params.into_initiator(
+                &self.prologue,
+                self.dh_keys.dh_keypair().secret(),
+                Some(&self.remote.0),
+            )?;
 
             let mut state = State::new(
                 socket,
@@ -586,52 +554,4 @@ pub struct LegacyConfig {
     /// noise frame. These payloads are not interoperable with other
     /// libp2p implementations.
     pub recv_legacy_handshake: bool,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn handshake_hashes_disagree_if_prologue_differs() {
-        let alice = new_xx_config()
-            .with_prologue(b"alice prologue".to_vec())
-            .into_initiator()
-            .unwrap();
-        let bob = new_xx_config()
-            .with_prologue(b"bob prologue".to_vec())
-            .into_responder()
-            .unwrap();
-
-        let alice_handshake_hash = alice.get_handshake_hash();
-        let bob_handshake_hash = bob.get_handshake_hash();
-
-        assert_ne!(alice_handshake_hash, bob_handshake_hash)
-    }
-
-    #[test]
-    fn handshake_hashes_agree_if_prologue_is_the_same() {
-        let alice = new_xx_config()
-            .with_prologue(b"shared knowledge".to_vec())
-            .into_initiator()
-            .unwrap();
-        let bob = new_xx_config()
-            .with_prologue(b"shared knowledge".to_vec())
-            .into_responder()
-            .unwrap();
-
-        let alice_handshake_hash = alice.get_handshake_hash();
-        let bob_handshake_hash = bob.get_handshake_hash();
-
-        assert_eq!(alice_handshake_hash, bob_handshake_hash)
-    }
-
-    fn new_xx_config() -> NoiseConfig<XX, X25519> {
-        let dh_keys = Keypair::<X25519>::new();
-        let noise_keys = dh_keys
-            .into_authentic(&identity::Keypair::generate_ed25519())
-            .unwrap();
-
-        NoiseConfig::xx(noise_keys)
-    }
 }
