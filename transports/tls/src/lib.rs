@@ -18,7 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! TLS configuration for QUIC based on libp2p TLS specs.
+//! TLS configuration based on libp2p TLS specs.
+//!
+//! See <https://github.com/libp2p/specs/blob/master/tls/tls.md>.
 
 mod certificate;
 mod upgrade;
