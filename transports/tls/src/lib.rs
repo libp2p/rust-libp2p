@@ -21,6 +21,7 @@
 //! TLS configuration for QUIC based on libp2p TLS specs.
 
 mod certificate;
+mod upgrade;
 mod verifier;
 
 use std::sync::Arc;
@@ -31,6 +32,8 @@ use rustls::{
     },
     SupportedCipherSuite,
 };
+
+pub use upgrade::{Config, Error, Stream};
 
 /// A list of the TLS 1.3 cipher suites supported by rustls.
 // By default rustls creates client/server configs with both

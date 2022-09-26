@@ -22,7 +22,7 @@
 //!
 //! This module handles generation, signing, and verification of certificates.
 
-use libp2p_core::identity;
+use libp2p_core::{identity, PeerId};
 use x509_parser::prelude::*;
 
 /// The libp2p Public Key Extension is a X.509 extension
@@ -116,6 +116,13 @@ pub struct P2pCertificate<'a> {
     /// * the public host key
     /// * a signature performed using the private host key
     extension: P2pExtension,
+}
+
+impl<'a> P2pCertificate<'a> {
+    /// The [`PeerId`] of the remote peer.
+    pub fn peer_id(&self) -> PeerId {
+        self.extension.public_key.to_peer_id()
+    }
 }
 
 /// Parse TLS certificate from DER input that includes a libp2p-specific

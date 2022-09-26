@@ -13,3 +13,11 @@ webpki = "0.22.0"
 rcgen = "0.9.2"
 yasna = "0.5.0"
 ring = "0.16.20"
+futures = { version = "0.3.24", default-features = false }
+thiserror = "1.0.36"
+futures-rustls = "0.22.2"
+either = "1.8.0"
+
+[dev-dependencies]
+libp2p = { path = "../..", features = ["yamux"], default-features = false }
+tokio = { version = "1.21.1", features = ["full"] }
