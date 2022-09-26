@@ -20,7 +20,7 @@
 
 //! TLS configuration for QUIC based on libp2p TLS specs.
 
-pub(crate) mod certificate;
+mod certificate;
 mod verifier;
 
 use std::sync::Arc;

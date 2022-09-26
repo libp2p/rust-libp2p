@@ -102,7 +102,7 @@ pub fn make_certificate(
 /// The contents of the specific libp2p extension, containing the public host key
 /// and a signature performed using the private host key.
 pub struct P2pExtension {
-    pub(crate) public_key: identity::PublicKey,
+    public_key: identity::PublicKey,
     /// This signature provides cryptographic proof that the peer was
     /// in possession of the private host key at the time the certificate was signed.
     signature: Vec<u8>,
@@ -115,7 +115,7 @@ pub struct P2pCertificate<'a> {
     /// This is a specific libp2p Public Key Extension with two values:
     /// * the public host key
     /// * a signature performed using the private host key
-    pub(crate) extension: P2pExtension,
+    extension: P2pExtension,
 }
 
 /// Parse TLS certificate from DER input that includes a libp2p-specific

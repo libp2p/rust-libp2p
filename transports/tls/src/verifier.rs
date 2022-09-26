@@ -34,7 +34,7 @@ use rustls::{
 /// Implementation of the `rustls` certificate verification traits for libp2p.
 ///
 /// Only TLS 1.3 is supported. TLS 1.2 should be disabled in the configuration of `rustls`.
-pub(crate) struct Libp2pCertificateVerifier;
+pub struct Libp2pCertificateVerifier;
 
 /// libp2p requires the following of X.509 server certificate chains:
 ///
