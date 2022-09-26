@@ -99,8 +99,8 @@
 //! // This is test transport (memory).
 //! let transport = MemoryTransport::default()
 //!            .upgrade(libp2p_core::upgrade::Version::V1)
-//!            .authenticate(libp2p_noise::NoiseAuthenticated::xx(&local_key).unwrap())
-//!            .multiplex(libp2p_mplex::MplexConfig::new())
+//!            .authenticate(libp2p::noise::NoiseAuthenticated::xx(&local_key).unwrap())
+//!            .multiplex(libp2p::mplex::MplexConfig::new())
 //!            .boxed();
 //!
 //! // Create a Gossipsub topic

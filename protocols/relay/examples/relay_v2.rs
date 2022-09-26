@@ -54,7 +54,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             noise::NoiseAuthenticated::xx(&local_key)
                 .expect("Signing libp2p-noise static DH keypair failed."),
         )
-        .multiplex(libp2p_yamux::YamuxConfig::default())
+        .multiplex(libp2p::yamux::YamuxConfig::default())
         .boxed();
 
     let behaviour = Behaviour {

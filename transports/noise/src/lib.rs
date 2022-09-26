@@ -40,8 +40,8 @@
 //!
 //! ```
 //! use libp2p_core::{identity, Transport, upgrade};
-//! use libp2p_tcp::TcpTransport;
-//! use libp2p_noise::{Keypair, X25519Spec, NoiseAuthenticated};
+//! use libp2p::tcp::TcpTransport;
+//! use libp2p::noise::{Keypair, X25519Spec, NoiseAuthenticated};
 //!
 //! # fn main() {
 //! let id_keys = identity::Keypair::generate_ed25519();
@@ -69,6 +69,7 @@ use crate::handshake::State;
 use crate::io::handshake;
 use futures::prelude::*;
 use libp2p_core::{identity, InboundUpgrade, OutboundUpgrade, PeerId, UpgradeInfo};
+use snow::HandshakeState;
 use std::pin::Pin;
 use zeroize::Zeroize;
 
@@ -80,6 +81,14 @@ pub struct NoiseConfig<P, C: Zeroize, R = ()> {
     legacy: LegacyConfig,
     remote: R,
     _marker: std::marker::PhantomData<P>,
+
+    /// Prologue to use in the noise handshake.
+    ///
+    /// The prologue can contain arbitrary data that will be hashed into the noise handshake.
+    /// For the handshake to succeed, both parties must set the same prologue.
+    ///
+    /// For further information, see <https://noiseprotocol.org/noise.html#prologue>.
+    prologue: Vec<u8>,
 }
 
 impl<H, C: Zeroize, R> NoiseConfig<H, C, R> {
@@ -89,10 +98,44 @@ impl<H, C: Zeroize, R> NoiseConfig<H, C, R> {
         NoiseAuthenticated { config: self }
     }
 
+    /// Set the noise prologue.
+    pub fn with_prologue(self, prologue: Vec<u8>) -> Self {
+        Self { prologue, ..self }
+    }
+
     /// Sets the legacy configuration options to use, if any.
     pub fn set_legacy_config(&mut self, cfg: LegacyConfig) -> &mut Self {
         self.legacy = cfg;
         self
+    }
+}
+
+impl<H, C, R> NoiseConfig<H, C, R>
+where
+    C: Zeroize + AsRef<[u8]>,
+{
+    fn into_responder(self) -> Result<HandshakeState, NoiseError> {
+        let state = self
+            .params
+            .into_builder()
+            .prologue(self.prologue.as_ref())
+            .local_private_key(self.dh_keys.dh_keypair().secret().as_ref())
+            .build_responder()
+            .map_err(NoiseError::from)?;
+
+        Ok(state)
+    }
+
+    fn into_initiator(self) -> Result<HandshakeState, NoiseError> {
+        let state = self
+            .params
+            .into_builder()
+            .prologue(self.prologue.as_ref())
+            .local_private_key(self.dh_keys.dh_keypair().secret().as_ref())
+            .build_initiator()
+            .map_err(NoiseError::from)?;
+
+        Ok(state)
     }
 }
 
@@ -108,6 +151,7 @@ where
             legacy: LegacyConfig::default(),
             remote: (),
             _marker: std::marker::PhantomData,
+            prologue: Vec::default(),
         }
     }
 }
@@ -124,6 +168,7 @@ where
             legacy: LegacyConfig::default(),
             remote: (),
             _marker: std::marker::PhantomData,
+            prologue: Vec::default(),
         }
     }
 }
@@ -143,6 +188,7 @@ where
             legacy: LegacyConfig::default(),
             remote: (),
             _marker: std::marker::PhantomData,
+            prologue: Vec::default(),
         }
     }
 }
@@ -166,6 +212,7 @@ where
             legacy: LegacyConfig::default(),
             remote: (remote_dh, remote_id),
             _marker: std::marker::PhantomData,
+            prologue: Vec::default(),
         }
     }
 }
@@ -182,7 +229,7 @@ impl<T, C> InboundUpgrade<T> for NoiseConfig<IX, C>
 where
     NoiseConfig<IX, C>: UpgradeInfo,
     T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
-    C: Protocol<C> + AsRef<[u8]> + Zeroize + Send + 'static,
+    C: Protocol<C> + AsRef<[u8]> + Zeroize + Clone + Send + 'static,
 {
     type Output = (RemoteIdentity<C>, NoiseOutput<T>);
     type Error = NoiseError;
@@ -223,7 +270,7 @@ impl<T, C> OutboundUpgrade<T> for NoiseConfig<IX, C>
 where
     NoiseConfig<IX, C>: UpgradeInfo,
     T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
-    C: Protocol<C> + AsRef<[u8]> + Zeroize + Send + 'static,
+    C: Protocol<C> + AsRef<[u8]> + Zeroize + Clone + Send + 'static,
 {
     type Output = (RemoteIdentity<C>, NoiseOutput<T>);
     type Error = NoiseError;
@@ -268,7 +315,7 @@ impl<T, C> InboundUpgrade<T> for NoiseConfig<XX, C>
 where
     NoiseConfig<XX, C>: UpgradeInfo,
     T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
-    C: Protocol<C> + AsRef<[u8]> + Zeroize + Send + 'static,
+    C: Protocol<C> + AsRef<[u8]> + Zeroize + Clone + Send + 'static,
 {
     type Output = (RemoteIdentity<C>, NoiseOutput<T>);
     type Error = NoiseError;
@@ -314,7 +361,7 @@ impl<T, C> OutboundUpgrade<T> for NoiseConfig<XX, C>
 where
     NoiseConfig<XX, C>: UpgradeInfo,
     T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
-    C: Protocol<C> + AsRef<[u8]> + Zeroize + Send + 'static,
+    C: Protocol<C> + AsRef<[u8]> + Zeroize + Clone + Send + 'static,
 {
     type Output = (RemoteIdentity<C>, NoiseOutput<T>);
     type Error = NoiseError;
@@ -359,7 +406,7 @@ impl<T, C> InboundUpgrade<T> for NoiseConfig<IK, C>
 where
     NoiseConfig<IK, C>: UpgradeInfo,
     T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
-    C: Protocol<C> + AsRef<[u8]> + Zeroize + Send + 'static,
+    C: Protocol<C> + AsRef<[u8]> + Zeroize + Clone + Send + 'static,
 {
     type Output = (RemoteIdentity<C>, NoiseOutput<T>);
     type Error = NoiseError;
@@ -403,7 +450,7 @@ impl<T, C> OutboundUpgrade<T> for NoiseConfig<IK, C, (PublicKey<C>, identity::Pu
 where
     NoiseConfig<IK, C, (PublicKey<C>, identity::PublicKey)>: UpgradeInfo,
     T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
-    C: Protocol<C> + AsRef<[u8]> + Zeroize + Send + 'static,
+    C: Protocol<C> + AsRef<[u8]> + Zeroize + Clone + Send + 'static,
 {
     type Output = (RemoteIdentity<C>, NoiseOutput<T>);
     type Error = NoiseError;
@@ -414,6 +461,7 @@ where
             let session = self
                 .params
                 .into_builder()
+                .prologue(self.prologue.as_ref())
                 .local_private_key(self.dh_keys.dh_keypair().secret().as_ref())
                 .remote_public_key(self.remote.0.as_ref())
                 .build_initiator()?;
@@ -526,7 +574,7 @@ where
 }
 
 /// Legacy configuration options.
-#[derive(Clone, Default)]
+#[derive(Clone, Copy, Default)]
 pub struct LegacyConfig {
     /// Whether to continue sending legacy handshake payloads,
     /// i.e. length-prefixed protobuf payloads inside a length-prefixed
@@ -538,4 +586,52 @@ pub struct LegacyConfig {
     /// noise frame. These payloads are not interoperable with other
     /// libp2p implementations.
     pub recv_legacy_handshake: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn handshake_hashes_disagree_if_prologue_differs() {
+        let alice = new_xx_config()
+            .with_prologue(b"alice prologue".to_vec())
+            .into_initiator()
+            .unwrap();
+        let bob = new_xx_config()
+            .with_prologue(b"bob prologue".to_vec())
+            .into_responder()
+            .unwrap();
+
+        let alice_handshake_hash = alice.get_handshake_hash();
+        let bob_handshake_hash = bob.get_handshake_hash();
+
+        assert_ne!(alice_handshake_hash, bob_handshake_hash)
+    }
+
+    #[test]
+    fn handshake_hashes_agree_if_prologue_is_the_same() {
+        let alice = new_xx_config()
+            .with_prologue(b"shared knowledge".to_vec())
+            .into_initiator()
+            .unwrap();
+        let bob = new_xx_config()
+            .with_prologue(b"shared knowledge".to_vec())
+            .into_responder()
+            .unwrap();
+
+        let alice_handshake_hash = alice.get_handshake_hash();
+        let bob_handshake_hash = bob.get_handshake_hash();
+
+        assert_eq!(alice_handshake_hash, bob_handshake_hash)
+    }
+
+    fn new_xx_config() -> NoiseConfig<XX, X25519> {
+        let dh_keys = Keypair::<X25519>::new();
+        let noise_keys = dh_keys
+            .into_authentic(&identity::Keypair::generate_ed25519())
+            .unwrap();
+
+        NoiseConfig::xx(noise_keys)
+    }
 }
