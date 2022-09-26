@@ -134,7 +134,7 @@ pub fn parse_certificate(der_input: &[u8]) -> Result<P2pCertificate, webpki::Err
         let oid = &ext.oid;
         if oid == &p2p_ext_oid && libp2p_extension.is_some() {
             // The extension was already parsed
-            return Err(Error::BadDer);
+            return Err(webpki::Error::BadDer);
         }
 
         if oid == &p2p_ext_oid {
@@ -146,7 +146,7 @@ pub fn parse_certificate(der_input: &[u8]) -> Result<P2pCertificate, webpki::Err
             //    signature OCTET STRING
             // }
             let (public_key, signature): (Vec<u8>, Vec<u8>) =
-                yasna::decode_der(ext.value).map_err(|_| Error::ExtensionValueInvalid)?;
+                yasna::decode_der(ext.value).map_err(|_| webpki::Error::ExtensionValueInvalid)?;
             // The publicKey field of SignedKey contains the public host key
             // of the endpoint, encoded using the following protobuf:
             // enum KeyType {
@@ -160,7 +160,7 @@ pub fn parse_certificate(der_input: &[u8]) -> Result<P2pCertificate, webpki::Err
             //    required bytes Data = 2;
             // }
             let public_key = identity::PublicKey::from_protobuf_encoding(&public_key)
-                .map_err(|_| Error::UnknownIssuer)?;
+                .map_err(|_| webpki::Error::UnknownIssuer)?;
             let ext = P2pExtension {
                 public_key,
                 signature,
@@ -172,7 +172,7 @@ pub fn parse_certificate(der_input: &[u8]) -> Result<P2pCertificate, webpki::Err
         if ext.critical {
             // Endpoints MUST abort the connection attempt if the certificate
             // contains critical extensions that the endpoint does not understand.
-            return Err(Error::UnsupportedCriticalExtension);
+            return Err(webpki::Error::UnsupportedCriticalExtension);
         }
 
         // Implementations MUST ignore non-critical extensions with unknown OIDs.
@@ -180,7 +180,7 @@ pub fn parse_certificate(der_input: &[u8]) -> Result<P2pCertificate, webpki::Err
 
     // The certificate MUST contain the libp2p Public Key Extension.
     // If this extension is missing, endpoints MUST abort the connection attempt.
-    let extension = libp2p_extension.ok_or(Error::BadDer)?;
+    let extension = libp2p_extension.ok_or(webpki::Error::BadDer)?;
 
     Ok(P2pCertificate {
         certificate: x509,
@@ -300,7 +300,7 @@ impl P2pCertificate<'_> {
 
                 // Default hash algo is SHA-1, however:
                 // In particular, MD5 and SHA1 MUST NOT be used.
-                return Err(Error::UnsupportedSignatureAlgorithm);
+                return Err(webpki::Error::UnsupportedSignatureAlgorithm);
             }
         }
 

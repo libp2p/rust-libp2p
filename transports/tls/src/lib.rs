@@ -24,7 +24,6 @@ pub(crate) mod certificate;
 mod verifier;
 
 use std::sync::Arc;
-use thiserror::Error;
 
 use rustls::{
     cipher_suite::{
@@ -45,21 +44,10 @@ static TLS13_CIPHERSUITES: &[SupportedCipherSuite] = &[
 
 const P2P_ALPN: [u8; 6] = *b"libp2p";
 
-/// Error creating a configuration
-#[derive(Debug, Error)]
-pub enum ConfigError {
-    /// TLS private key or certificate rejected
-    #[error("TLS private or certificate key rejected: {0}")]
-    TLSError(#[from] rustls::Error),
-    /// Certificate generation error
-    #[error("Certificate generation error: {0}")]
-    RcgenError(#[from] rcgen::RcgenError),
-}
-
 /// Create a TLS client configuration for libp2p.
 pub fn make_client_config(
     keypair: &libp2p_core::identity::Keypair,
-) -> Result<rustls::ClientConfig, ConfigError> {
+) -> Result<rustls::ClientConfig, rcgen::RcgenError> {
     let (certificate, key) = make_cert_key(keypair)?;
 
     let mut crypto = rustls::ClientConfig::builder()
@@ -78,7 +66,7 @@ pub fn make_client_config(
 /// Create a TLS server configuration for libp2p.
 pub fn make_server_config(
     keypair: &libp2p_core::identity::Keypair,
-) -> Result<rustls::ServerConfig, ConfigError> {
+) -> Result<rustls::ServerConfig, rcgen::RcgenError> {
     let (certificate, key) = make_cert_key(keypair)?;
 
     let mut crypto = rustls::ServerConfig::builder()
@@ -97,7 +85,7 @@ pub fn make_server_config(
 /// Create a random private key and certificate signed with this key for rustls.
 fn make_cert_key(
     keypair: &libp2p_core::identity::Keypair,
-) -> Result<(rustls::Certificate, rustls::PrivateKey), ConfigError> {
+) -> Result<(rustls::Certificate, rustls::PrivateKey), rcgen::RcgenError> {
     let cert = certificate::make_certificate(keypair)?;
     let private_key = cert.serialize_private_key_der();
 
