@@ -111,6 +111,17 @@ fn _generate(
 /// For this to succeed, the certificate must contain the specified extension and the signature must
 /// match the embedded public key.
 pub fn parse(der_input: &[u8]) -> Result<P2pCertificate, webpki::Error> {
+    let certificate = parse_unverified(der_input)?;
+
+    certificate.verify()?;
+
+    Ok(certificate)
+}
+
+/// Internal function that only parses but does not verify the certificate.
+///
+/// Useful for testing but unsuitable for production.
+fn parse_unverified(der_input: &[u8]) -> Result<P2pCertificate, webpki::Error> {
     let x509 = X509Certificate::from_der(der_input)
         .map(|(_rest_input, x509)| x509)
         .map_err(|_| webpki::Error::BadDer)?;
@@ -176,8 +187,6 @@ pub fn parse(der_input: &[u8]) -> Result<P2pCertificate, webpki::Error> {
         certificate: x509,
         extension,
     };
-
-    certificate.verify()?;
 
     Ok(certificate)
 }
@@ -445,7 +454,7 @@ mod tests {
             fn $name() {
                 let cert: &[u8] = include_bytes!($path);
 
-                let cert = parse(cert).unwrap();
+                let cert = parse_unverified(cert).unwrap();
                 assert!(cert.verify().is_err()); // Because p2p extension
                                                  // was not signed with the private key
                                                  // of the certificate.
@@ -468,7 +477,6 @@ mod tests {
         let cert: &[u8] = include_bytes!("./test_assets/rsa_pss_sha384.der");
 
         let cert = parse(cert).unwrap();
-        cert.verify().unwrap(); // that was a fairly generated certificate.
 
         assert_eq!(
             cert.signature_scheme(),
@@ -480,7 +488,7 @@ mod tests {
     fn nistp384_sha256() {
         let cert: &[u8] = include_bytes!("./test_assets/nistp384_sha256.der");
 
-        let cert = parse(cert).unwrap();
+        let cert = parse_unverified(cert).unwrap();
 
         assert!(cert.signature_scheme().is_err());
     }
