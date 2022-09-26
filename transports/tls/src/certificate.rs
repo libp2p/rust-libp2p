@@ -56,6 +56,39 @@ pub fn generate(
     _generate(identity_keypair, certificate_keypair)
 }
 
+/// Attempts to parse the provided bytes as a [`P2pCertificate`].
+///
+/// For this to succeed, the certificate must contain the specified extension and the signature must
+/// match the embedded public key.
+pub fn parse(der_input: &[u8]) -> Result<P2pCertificate, webpki::Error> {
+    let certificate = parse_unverified(der_input)?;
+
+    certificate.verify()?;
+
+    Ok(certificate)
+}
+
+/// An X.509 certificate with a libp2p-specific extension
+/// is used to secure libp2p connections.
+#[derive(Debug)]
+pub struct P2pCertificate<'a> {
+    certificate: X509Certificate<'a>,
+    /// This is a specific libp2p Public Key Extension with two values:
+    /// * the public host key
+    /// * a signature performed using the private host key
+    extension: P2pExtension,
+}
+
+/// The contents of the specific libp2p extension, containing the public host key
+/// and a signature performed using the private host key.
+#[derive(Debug)]
+pub struct P2pExtension {
+    public_key: identity::PublicKey,
+    /// This signature provides cryptographic proof that the peer was
+    /// in possession of the private host key at the time the certificate was signed.
+    signature: Vec<u8>,
+}
+
 fn _generate(
     identity_keypair: &identity::Keypair,
     certificate_keypair: rcgen::KeyPair,
@@ -102,18 +135,6 @@ fn _generate(
         params.key_pair = Some(certificate_keypair);
         rcgen::Certificate::from_params(params)?
     };
-
-    Ok(certificate)
-}
-
-/// Attempts to parse the provided bytes as a [`P2pCertificate`].
-///
-/// For this to succeed, the certificate must contain the specified extension and the signature must
-/// match the embedded public key.
-pub fn parse(der_input: &[u8]) -> Result<P2pCertificate, webpki::Error> {
-    let certificate = parse_unverified(der_input)?;
-
-    certificate.verify()?;
 
     Ok(certificate)
 }
@@ -189,27 +210,6 @@ fn parse_unverified(der_input: &[u8]) -> Result<P2pCertificate, webpki::Error> {
     };
 
     Ok(certificate)
-}
-
-/// The contents of the specific libp2p extension, containing the public host key
-/// and a signature performed using the private host key.
-#[derive(Debug)]
-pub struct P2pExtension {
-    public_key: identity::PublicKey,
-    /// This signature provides cryptographic proof that the peer was
-    /// in possession of the private host key at the time the certificate was signed.
-    signature: Vec<u8>,
-}
-
-/// An X.509 certificate with a libp2p-specific extension
-/// is used to secure libp2p connections.
-#[derive(Debug)]
-pub struct P2pCertificate<'a> {
-    certificate: X509Certificate<'a>,
-    /// This is a specific libp2p Public Key Extension with two values:
-    /// * the public host key
-    /// * a signature performed using the private host key
-    extension: P2pExtension,
 }
 
 impl<'a> P2pCertificate<'a> {
