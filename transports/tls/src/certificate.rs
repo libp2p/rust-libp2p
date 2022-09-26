@@ -163,10 +163,14 @@ pub fn parse(der_input: &[u8]) -> Result<P2pCertificate, webpki::Error> {
     // If this extension is missing, endpoints MUST abort the connection attempt.
     let extension = libp2p_extension.ok_or(webpki::Error::BadDer)?;
 
-    Ok(P2pCertificate {
+    let certificate = P2pCertificate {
         certificate: x509,
         extension,
-    })
+    };
+
+    certificate.verify()?;
+
+    Ok(certificate)
 }
 
 /// The contents of the specific libp2p extension, containing the public host key
@@ -203,7 +207,7 @@ impl P2pCertificate<'_> {
     /// 3. use hash functions with an output length not less than 256 bits;
     /// 4. be self signed;
     /// 5. contain a valid signature in the specific libp2p extension.
-    pub fn verify(&self) -> Result<(), webpki::Error> {
+    fn verify(&self) -> Result<(), webpki::Error> {
         use webpki::Error;
         // The certificate MUST have NotBefore and NotAfter fields set
         // such that the certificate is valid at the time it is received by the peer.
@@ -393,6 +397,7 @@ impl P2pCertificate<'_> {
 
         Ok(key)
     }
+
     /// Verify the `signature` of the `message` signed by the private key corresponding to the public key stored
     /// in the certificate.
     pub fn verify_signature(

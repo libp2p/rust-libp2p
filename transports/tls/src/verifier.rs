@@ -23,7 +23,7 @@
 //! This module handles a verification of a client/server certificate chain
 //! and signatures allegedly by the given certificates.
 
-use crate::certificate::parse;
+use crate::certificate;
 use rustls::{
     client::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
     internal::msgs::handshake::DigitallySignedStruct,
@@ -178,10 +178,7 @@ fn verify_presented_certs(
         ));
     }
 
-    parse(end_entity.as_ref())
-        .map_err(pki_error)?
-        .verify()
-        .map_err(pki_error)?;
+    certificate::parse(end_entity.as_ref()).map_err(pki_error)?;
 
     Ok(())
 }
@@ -192,7 +189,7 @@ fn verify_tls13_signature(
     message: &[u8],
     signature: &[u8],
 ) -> Result<HandshakeSignatureValid, rustls::Error> {
-    parse(cert.as_ref())
+    certificate::parse(cert.as_ref())
         .map_err(pki_error)?
         .verify_signature(signature_scheme, message, signature)
         .map_err(pki_error)?;
