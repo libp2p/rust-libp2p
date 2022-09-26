@@ -22,8 +22,8 @@
 //!
 //! See <https://github.com/libp2p/specs/blob/master/tls/tls.md>.
 
-mod certificate;
-mod upgrade;
+pub mod certificate;
+pub mod upgrade;
 mod verifier;
 
 use std::sync::Arc;
@@ -36,7 +36,6 @@ use rustls::{
 };
 
 pub use futures_rustls::TlsStream;
-pub use upgrade::{Config, Error};
 
 /// A list of the TLS 1.3 cipher suites supported by rustls.
 // By default rustls creates client/server configs with both

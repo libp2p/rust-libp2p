@@ -178,7 +178,7 @@ fn verify_presented_certs(
         ));
     }
 
-    certificate::parse(end_entity.as_ref()).map_err(pki_error)?;
+    certificate::parse(end_entity.as_ref())?;
 
     Ok(())
 }
@@ -189,22 +189,29 @@ fn verify_tls13_signature(
     message: &[u8],
     signature: &[u8],
 ) -> Result<HandshakeSignatureValid, rustls::Error> {
-    certificate::parse(cert.as_ref())
-        .map_err(pki_error)?
-        .verify_signature(signature_scheme, message, signature)
-        .map_err(pki_error)?;
+    certificate::parse(cert.as_ref())?.verify_signature(signature_scheme, message, signature)?;
 
     Ok(HandshakeSignatureValid::assertion())
 }
 
-fn pki_error(error: webpki::Error) -> rustls::Error {
-    use webpki::Error::*;
-    match error {
-        BadDer | BadDerTime => rustls::Error::InvalidCertificateEncoding,
-        InvalidSignatureForPublicKey => rustls::Error::InvalidCertificateSignature,
-        UnsupportedSignatureAlgorithm | UnsupportedSignatureAlgorithmForPublicKey => {
-            rustls::Error::InvalidCertificateSignatureType
+impl From<certificate::ParseError> for rustls::Error {
+    fn from(certificate::ParseError(e): certificate::ParseError) -> Self {
+        use webpki::Error::*;
+        match e {
+            BadDer => rustls::Error::InvalidCertificateEncoding,
+            e => rustls::Error::InvalidCertificateData(format!("invalid peer certificate: {}", e)),
         }
-        e => rustls::Error::InvalidCertificateData(format!("invalid peer certificate: {}", e)),
+    }
+}
+impl From<certificate::VerificationError> for rustls::Error {
+    fn from(certificate::VerificationError(e): certificate::VerificationError) -> Self {
+        use webpki::Error::*;
+        match e {
+            InvalidSignatureForPublicKey => rustls::Error::InvalidCertificateSignature,
+            UnsupportedSignatureAlgorithm | UnsupportedSignatureAlgorithmForPublicKey => {
+                rustls::Error::InvalidCertificateSignatureType
+            }
+            e => rustls::Error::InvalidCertificateData(format!("invalid peer certificate: {}", e)),
+        }
     }
 }

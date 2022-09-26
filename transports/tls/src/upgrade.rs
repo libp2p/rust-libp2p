@@ -18,7 +18,7 @@ pub enum Error {
     #[error("Failed to upgrade client connection")]
     ClientUpgrade(std::io::Error),
     #[error("Failed to parse certificate")]
-    BadCertificate(#[from] webpki::Error), // TODO: This leaks `webpki` dependency.
+    BadCertificate(#[from] certificate::ParseError),
 }
 
 #[derive(Clone)]
@@ -95,7 +95,9 @@ where
     }
 }
 
-fn extract_single_certificate(state: &CommonState) -> Result<P2pCertificate<'_>, webpki::Error> {
+fn extract_single_certificate(
+    state: &CommonState,
+) -> Result<P2pCertificate<'_>, certificate::ParseError> {
     let cert = match state
         .peer_certificates()
         .expect("config enforces presence of certificates")

@@ -58,11 +58,19 @@ pub fn generate(identity_keypair: &identity::Keypair) -> Result<rcgen::Certifica
 #[error(transparent)]
 pub struct GenError(#[from] rcgen::RcgenError);
 
+#[derive(Debug, thiserror::Error)]
+#[error(transparent)]
+pub struct ParseError(#[from] pub(crate) webpki::Error);
+
+#[derive(Debug, thiserror::Error)]
+#[error(transparent)]
+pub struct VerificationError(#[from] pub(crate) webpki::Error);
+
 /// Attempts to parse the provided bytes as a [`P2pCertificate`].
 ///
 /// For this to succeed, the certificate must contain the specified extension and the signature must
 /// match the embedded public key.
-pub fn parse(der_input: &[u8]) -> Result<P2pCertificate, webpki::Error> {
+pub fn parse(der_input: &[u8]) -> Result<P2pCertificate, ParseError> {
     let certificate = parse_unverified(der_input)?;
 
     certificate.verify()?;
@@ -227,7 +235,7 @@ impl P2pCertificate<'_> {
         signature_scheme: rustls::SignatureScheme,
         message: &[u8],
         signature: &[u8],
-    ) -> Result<(), webpki::Error> {
+    ) -> Result<(), VerificationError> {
         let pk = self.public_key(signature_scheme)?;
         pk.verify(message, signature)
             .map_err(|_| webpki::Error::InvalidSignatureForPublicKey)?;
