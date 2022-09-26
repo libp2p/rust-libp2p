@@ -43,14 +43,23 @@ static P2P_SIGNATURE_ALGORITHM: &rcgen::SignatureAlgorithm = &rcgen::PKCS_ECDSA_
 
 /// Generates a self-signed TLS certificate that includes a libp2p-specific
 /// certificate extension containing the public key of the given keypair.
-pub fn generate(keypair: &identity::Keypair) -> Result<rcgen::Certificate, rcgen::RcgenError> {
+pub fn generate(
+    identity_keypair: &identity::Keypair,
+) -> Result<rcgen::Certificate, rcgen::RcgenError> {
     // Keypair used to sign the certificate.
     // SHOULD NOT be related to the host's key.
     // Endpoints MAY generate a new key and certificate
     // for every connection attempt, or they MAY reuse the same key
     // and certificate for multiple connections.
-    let certif_keypair = rcgen::KeyPair::generate(P2P_SIGNATURE_ALGORITHM)?;
+    let certificate_keypair = rcgen::KeyPair::generate(P2P_SIGNATURE_ALGORITHM)?;
 
+    _generate(identity_keypair, certificate_keypair)
+}
+
+fn _generate(
+    identity_keypair: &identity::Keypair,
+    certificate_keypair: rcgen::KeyPair,
+) -> Result<rcgen::Certificate, rcgen::RcgenError> {
     // Generate the libp2p-specific extension.
     // The certificate MUST contain the libp2p Public Key Extension.
     let libp2p_extension: rcgen::CustomExtension = {
@@ -60,9 +69,9 @@ pub fn generate(keypair: &identity::Keypair) -> Result<rcgen::Certificate, rcgen
         let signature = {
             let mut msg = vec![];
             msg.extend(P2P_SIGNING_PREFIX);
-            msg.extend(certif_keypair.public_key_der());
+            msg.extend(certificate_keypair.public_key_der());
 
-            keypair
+            identity_keypair
                 .sign(&msg)
                 .map_err(|_| rcgen::RcgenError::RingUnspecified)?
         };
@@ -75,7 +84,7 @@ pub fn generate(keypair: &identity::Keypair) -> Result<rcgen::Certificate, rcgen
         //    signature OCTET STRING
         // }
         let extension_content = {
-            let serialized_pubkey = keypair.public().to_protobuf_encoding();
+            let serialized_pubkey = identity_keypair.public().to_protobuf_encoding();
             yasna::encode_der(&(serialized_pubkey, signature))
         };
 
@@ -90,7 +99,7 @@ pub fn generate(keypair: &identity::Keypair) -> Result<rcgen::Certificate, rcgen
         params.distinguished_name = rcgen::DistinguishedName::new();
         params.custom_extensions.push(libp2p_extension);
         params.alg = P2P_SIGNATURE_ALGORITHM;
-        params.key_pair = Some(certif_keypair);
+        params.key_pair = Some(certificate_keypair);
         rcgen::Certificate::from_params(params)?
     };
 

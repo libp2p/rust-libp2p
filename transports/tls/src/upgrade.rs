@@ -1,4 +1,5 @@
 use crate::certificate;
+use crate::certificate::P2pCertificate;
 use futures::future::BoxFuture;
 use futures::AsyncWrite;
 use futures::{AsyncRead, FutureExt};
@@ -10,7 +11,6 @@ use std::net::{IpAddr, Ipv4Addr};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
-use crate::certificate::P2pCertificate;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
