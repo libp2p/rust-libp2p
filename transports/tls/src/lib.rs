@@ -91,7 +91,7 @@ pub fn make_server_config(
 fn make_cert_key(
     keypair: &libp2p_core::identity::Keypair,
 ) -> Result<(rustls::Certificate, rustls::PrivateKey), rcgen::RcgenError> {
-    let cert = certificate::make_certificate(keypair)?;
+    let cert = certificate::generate(keypair)?;
     let private_key = cert.serialize_private_key_der();
 
     let cert = rustls::Certificate(cert.serialize_der()?);

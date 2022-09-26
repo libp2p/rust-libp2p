@@ -43,9 +43,7 @@ static P2P_SIGNATURE_ALGORITHM: &rcgen::SignatureAlgorithm = &rcgen::PKCS_ECDSA_
 
 /// Generates a self-signed TLS certificate that includes a libp2p-specific
 /// certificate extension containing the public key of the given keypair.
-pub fn make_certificate(
-    keypair: &identity::Keypair,
-) -> Result<rcgen::Certificate, rcgen::RcgenError> {
+pub fn generate(keypair: &identity::Keypair) -> Result<rcgen::Certificate, rcgen::RcgenError> {
     // Keypair used to sign the certificate.
     // SHOULD NOT be related to the host's key.
     // Endpoints MAY generate a new key and certificate
@@ -99,35 +97,11 @@ pub fn make_certificate(
     Ok(certificate)
 }
 
-/// The contents of the specific libp2p extension, containing the public host key
-/// and a signature performed using the private host key.
-pub struct P2pExtension {
-    public_key: identity::PublicKey,
-    /// This signature provides cryptographic proof that the peer was
-    /// in possession of the private host key at the time the certificate was signed.
-    signature: Vec<u8>,
-}
-
-/// An X.509 certificate with a libp2p-specific extension
-/// is used to secure libp2p connections.
-pub struct P2pCertificate<'a> {
-    certificate: X509Certificate<'a>,
-    /// This is a specific libp2p Public Key Extension with two values:
-    /// * the public host key
-    /// * a signature performed using the private host key
-    extension: P2pExtension,
-}
-
-impl<'a> P2pCertificate<'a> {
-    /// The [`PeerId`] of the remote peer.
-    pub fn peer_id(&self) -> PeerId {
-        self.extension.public_key.to_peer_id()
-    }
-}
-
-/// Parse TLS certificate from DER input that includes a libp2p-specific
-/// certificate extension containing a public key of a peer.
-pub fn parse_certificate(der_input: &[u8]) -> Result<P2pCertificate, webpki::Error> {
+/// Attempts to parse the provided bytes as a [`P2pCertificate`].
+///
+/// For this to succeed, the certificate must contain the specified extension and the signature must
+/// match the embedded public key.
+pub fn parse(der_input: &[u8]) -> Result<P2pCertificate, webpki::Error> {
     let x509 = X509Certificate::from_der(der_input)
         .map(|(_rest_input, x509)| x509)
         .map_err(|_| webpki::Error::BadDer)?;
@@ -193,6 +167,32 @@ pub fn parse_certificate(der_input: &[u8]) -> Result<P2pCertificate, webpki::Err
         certificate: x509,
         extension,
     })
+}
+
+/// The contents of the specific libp2p extension, containing the public host key
+/// and a signature performed using the private host key.
+pub struct P2pExtension {
+    public_key: identity::PublicKey,
+    /// This signature provides cryptographic proof that the peer was
+    /// in possession of the private host key at the time the certificate was signed.
+    signature: Vec<u8>,
+}
+
+/// An X.509 certificate with a libp2p-specific extension
+/// is used to secure libp2p connections.
+pub struct P2pCertificate<'a> {
+    certificate: X509Certificate<'a>,
+    /// This is a specific libp2p Public Key Extension with two values:
+    /// * the public host key
+    /// * a signature performed using the private host key
+    extension: P2pExtension,
+}
+
+impl<'a> P2pCertificate<'a> {
+    /// The [`PeerId`] of the remote peer.
+    pub fn peer_id(&self) -> PeerId {
+        self.extension.public_key.to_peer_id()
+    }
 }
 
 impl P2pCertificate<'_> {
@@ -416,10 +416,10 @@ mod tests {
     #[test]
     fn sanity_check() {
         let keypair = identity::Keypair::generate_ed25519();
-        let cert = make_certificate(&keypair).unwrap();
+        let cert = generate(&keypair).unwrap();
 
         let cert_der = cert.serialize_der().unwrap();
-        let parsed_cert = parse_certificate(&cert_der).unwrap();
+        let parsed_cert = parse(&cert_der).unwrap();
 
         assert!(parsed_cert.verify().is_ok());
         assert_eq!(keypair.public(), parsed_cert.extension.public_key);
@@ -453,7 +453,7 @@ mod tests {
     fn rsa_pss_sha384() {
         let cert: &[u8] = include_bytes!("./test_assets/rsa_pss_sha384.der");
 
-        let cert = parse_certificate(cert).unwrap();
+        let cert = parse(cert).unwrap();
         cert.verify().unwrap(); // that was a fairly generated certificate.
 
         assert_eq!(
@@ -466,7 +466,7 @@ mod tests {
     fn nistp384_sha256() {
         let cert: &[u8] = include_bytes!("./test_assets/nistp384_sha256.der");
 
-        let cert = parse_certificate(cert).unwrap();
+        let cert = parse(cert).unwrap();
 
         assert!(cert.signature_scheme().is_err());
     }

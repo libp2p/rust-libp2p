@@ -1,4 +1,4 @@
-use crate::certificate::{parse_certificate, P2pCertificate};
+use crate::certificate;
 use futures::future::BoxFuture;
 use futures::AsyncWrite;
 use futures::{AsyncRead, FutureExt};
@@ -10,6 +10,7 @@ use std::net::{IpAddr, Ipv4Addr};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
+use crate::certificate::P2pCertificate;
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -170,5 +171,5 @@ fn extract_single_certificate(state: &CommonState) -> Result<P2pCertificate<'_>,
         _ => panic!("config enforces exactly one certificate"),
     };
 
-    parse_certificate(cert.as_ref())
+    certificate::parse(cert.as_ref())
 }
