@@ -72,8 +72,7 @@ impl Substream {
         }
     }
 
-    /// StreamIdentifier returns the Stream identifier associated to the stream.
-    pub fn stream_identifier(&self) -> u16 {
+    fn stream_identifier(&self) -> u16 {
         self.io.get_ref().stream_identifier()
     }
 }
