@@ -31,7 +31,7 @@ impl Config {
     pub fn new(identity: &identity::Keypair) -> Result<Self, certificate::GenError> {
         Ok(Self {
             server: crate::make_server_config(identity)?,
-            client: crate::make_client_config(identity)?,
+            client: crate::make_client_config(identity, None)?,
         })
     }
 }

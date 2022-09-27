@@ -24,6 +24,7 @@
 //! and signatures allegedly by the given certificates.
 
 use crate::certificate;
+use libp2p_core::PeerId;
 use rustls::{
     client::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
     internal::msgs::handshake::DigitallySignedStruct,
@@ -34,7 +35,10 @@ use rustls::{
 /// Implementation of the `rustls` certificate verification traits for libp2p.
 ///
 /// Only TLS 1.3 is supported. TLS 1.2 should be disabled in the configuration of `rustls`.
-pub struct Libp2pCertificateVerifier;
+pub struct Libp2pCertificateVerifier {
+    /// The peer ID we intend to connect to
+    remote_peer_id: Option<PeerId>,
+}
 
 /// libp2p requires the following of X.509 server certificate chains:
 ///
@@ -43,6 +47,15 @@ pub struct Libp2pCertificateVerifier;
 /// - The certificate must have a valid libp2p extension that includes a
 ///   signature of its public key.
 impl Libp2pCertificateVerifier {
+    pub fn new() -> Self {
+        Self {
+            remote_peer_id: None,
+        }
+    }
+    pub fn with_remote_peer_id(remote_peer_id: Option<PeerId>) -> Self {
+        Self { remote_peer_id }
+    }
+
     /// Return the list of SignatureSchemes that this verifier will handle,
     /// in `verify_tls12_signature` and `verify_tls13_signature` calls.
     ///
@@ -76,7 +89,19 @@ impl ServerCertVerifier for Libp2pCertificateVerifier {
         _ocsp_response: &[u8],
         _now: std::time::SystemTime,
     ) -> Result<ServerCertVerified, rustls::Error> {
-        verify_presented_certs(end_entity, intermediates)?;
+        let peer_id = verify_presented_certs(end_entity, intermediates)?;
+
+        if let Some(remote_peer_id) = self.remote_peer_id {
+            // The public host key allows the peer to calculate the peer ID of the peer
+            // it is connecting to. Clients MUST verify that the peer ID derived from
+            // the certificate matches the peer ID they intended to connect to,
+            // and MUST abort the connection if there is a mismatch.
+            if remote_peer_id != peer_id {
+                return Err(rustls::Error::PeerMisbehavedError(
+                    "Wrong peer ID in p2p extension".to_string(),
+                ));
+            }
+        }
 
         Ok(ServerCertVerified::assertion())
     }
@@ -171,16 +196,16 @@ impl ClientCertVerifier for Libp2pCertificateVerifier {
 fn verify_presented_certs(
     end_entity: &Certificate,
     intermediates: &[Certificate],
-) -> Result<(), rustls::Error> {
+) -> Result<PeerId, rustls::Error> {
     if !intermediates.is_empty() {
         return Err(rustls::Error::General(
             "libp2p-tls requires exactly one certificate".into(),
         ));
     }
 
-    certificate::parse(end_entity)?;
+    let cert = certificate::parse(end_entity)?;
 
-    Ok(())
+    Ok(cert.peer_id())
 }
 
 fn verify_tls13_signature(

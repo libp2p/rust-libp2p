@@ -26,6 +26,7 @@ pub mod certificate;
 pub mod upgrade;
 mod verifier;
 
+use libp2p_core::{identity::Keypair, PeerId};
 use std::sync::Arc;
 
 use rustls::{
@@ -51,7 +52,8 @@ const P2P_ALPN: [u8; 6] = *b"libp2p";
 
 /// Create a TLS client configuration for libp2p.
 pub fn make_client_config(
-    keypair: &libp2p_core::identity::Keypair,
+    keypair: &Keypair,
+    remote_peer_id: Option<PeerId>,
 ) -> Result<rustls::ClientConfig, certificate::GenError> {
     let (certificate, private_key) = certificate::generate(keypair)?;
 
@@ -60,7 +62,9 @@ pub fn make_client_config(
         .with_safe_default_kx_groups()
         .with_protocol_versions(&[&rustls::version::TLS13])
         .expect("Cipher suites and kx groups are configured; qed")
-        .with_custom_certificate_verifier(Arc::new(verifier::Libp2pCertificateVerifier))
+        .with_custom_certificate_verifier(Arc::new(
+            verifier::Libp2pCertificateVerifier::with_remote_peer_id(remote_peer_id),
+        ))
         .with_single_cert(vec![certificate], private_key)
         .expect("Client cert key DER is valid; qed");
     crypto.alpn_protocols = vec![P2P_ALPN.to_vec()];
@@ -70,7 +74,7 @@ pub fn make_client_config(
 
 /// Create a TLS server configuration for libp2p.
 pub fn make_server_config(
-    keypair: &libp2p_core::identity::Keypair,
+    keypair: &Keypair,
 ) -> Result<rustls::ServerConfig, certificate::GenError> {
     let (certificate, private_key) = certificate::generate(keypair)?;
 
@@ -79,7 +83,7 @@ pub fn make_server_config(
         .with_safe_default_kx_groups()
         .with_protocol_versions(&[&rustls::version::TLS13])
         .expect("Cipher suites and kx groups are configured; qed")
-        .with_client_cert_verifier(Arc::new(verifier::Libp2pCertificateVerifier))
+        .with_client_cert_verifier(Arc::new(verifier::Libp2pCertificateVerifier::new()))
         .with_single_cert(vec![certificate], private_key)
         .expect("Server cert key DER is valid; qed");
     crypto.alpn_protocols = vec![P2P_ALPN.to_vec()];
