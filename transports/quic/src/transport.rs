@@ -27,6 +27,15 @@ use crate::endpoint::ToEndpoint;
 use crate::Config;
 use crate::{endpoint::Endpoint, muxer::QuicMuxer, upgrade::Upgrade};
 
+#[cfg(feature = "async-std")]
+mod async_std;
+#[cfg(feature = "tokio")]
+mod tokio;
+#[cfg(feature = "async-std")]
+pub use async_std::{AsyncStd, AsyncStdTransport};
+#[cfg(feature = "tokio")]
+pub use tokio::{Tokio, TokioTransport};
+
 use futures::channel::{mpsc, oneshot};
 use futures::ready;
 use futures::stream::StreamExt;
@@ -40,7 +49,9 @@ use libp2p_core::{
     PeerId, Transport,
 };
 use std::collections::VecDeque;
-use std::net::IpAddr;
+use std::io;
+use std::marker::PhantomData;
+use std::net::{IpAddr, UdpSocket};
 use std::task::Waker;
 use std::{
     net::SocketAddr,
@@ -57,22 +68,25 @@ pub use quinn_proto::{
 };
 
 #[derive(Debug)]
-pub struct QuicTransport {
+pub struct QuicTransport<P> {
     config: Config,
     listeners: SelectAll<Listener>,
     /// Dialer for Ipv4 addresses if no matching listener exists.
     ipv4_dialer: Option<Dialer>,
     /// Dialer for Ipv6 addresses if no matching listener exists.
     ipv6_dialer: Option<Dialer>,
+
+    _marker: PhantomData<P>,
 }
 
-impl QuicTransport {
+impl<P> QuicTransport<P> {
     pub fn new(config: Config) -> Self {
         Self {
             listeners: SelectAll::new(),
             config,
             ipv4_dialer: None,
             ipv6_dialer: None,
+            _marker: Default::default(),
         }
     }
 }
@@ -94,7 +108,7 @@ pub enum Error {
     TaskCrashed,
 }
 
-impl Transport for QuicTransport {
+impl<P: Provider> Transport for QuicTransport<P> {
     type Output = (PeerId, QuicMuxer);
     type Error = Error;
     type ListenerUpgrade = Upgrade;
@@ -104,7 +118,7 @@ impl Transport for QuicTransport {
         let socket_addr =
             multiaddr_to_socketaddr(&addr).ok_or(TransportError::MultiaddrNotSupported(addr))?;
         let listener_id = ListenerId::new();
-        let listener = Listener::new(listener_id, socket_addr, self.config.clone())
+        let listener = Listener::new::<P>(listener_id, socket_addr, self.config.clone())
             .map_err(TransportError::Other)?;
         self.listeners.push(listener);
         // Drop reference to dialer endpoint so that the endpoint is dropped once the last
@@ -157,7 +171,10 @@ impl Transport for QuicTransport {
                 SocketAddr::V6(_) => &mut self.ipv6_dialer,
             };
             if dialer.is_none() {
-                let _ = dialer.insert(Dialer::new(self.config.clone(), socket_addr.is_ipv6())?);
+                let _ = dialer.insert(Dialer::new::<P>(
+                    self.config.clone(),
+                    socket_addr.is_ipv6(),
+                )?);
             }
             dialer
                 .as_mut()
@@ -228,8 +245,8 @@ struct Dialer {
 }
 
 impl Dialer {
-    fn new(config: Config, is_ipv6: bool) -> Result<Self, TransportError<Error>> {
-        let endpoint = Endpoint::new_dialer(config, is_ipv6).map_err(TransportError::Other)?;
+    fn new<P: Provider>(config: Config, is_ipv6: bool) -> Result<Self, TransportError<Error>> {
+        let endpoint = Endpoint::new_dialer::<P>(config, is_ipv6).map_err(TransportError::Other)?;
         Ok(Dialer {
             endpoint,
             pending_dials: VecDeque::new(),
@@ -273,12 +290,12 @@ struct Listener {
 }
 
 impl Listener {
-    fn new(
+    fn new<P: Provider>(
         listener_id: ListenerId,
         socket_addr: SocketAddr,
         config: Config,
     ) -> Result<Self, Error> {
-        let (endpoint, new_connections_rx) = Endpoint::new_bidirectional(config, socket_addr)?;
+        let (endpoint, new_connections_rx) = Endpoint::new_bidirectional::<P>(config, socket_addr)?;
 
         let if_watcher;
         let pending_event;
@@ -357,7 +374,7 @@ impl Listener {
 }
 
 impl Stream for Listener {
-    type Item = TransportEvent<<QuicTransport as Transport>::ListenerUpgrade, Error>;
+    type Item = TransportEvent<Upgrade, Error>;
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         loop {
             if let Some(event) = self.pending_event.take() {
@@ -405,6 +422,26 @@ impl Stream for Listener {
             return Poll::Pending;
         }
     }
+}
+#[async_trait::async_trait]
+pub trait Provider: Unpin + Send + 'static {
+    // Wrapped socket for non-blocking I/O operations.
+    type Socket: Send + Sync + Unpin;
+
+    // Wrap a socket.
+    // Note: The socket must be set to non-blocking.
+    fn from_socket(socket: UdpSocket) -> io::Result<Self::Socket>;
+
+    // Receive a single datagram message.
+    // Return the number of bytes read and the address the message came from.
+    async fn recv_from(socket: &Self::Socket, buf: &mut [u8]) -> io::Result<(usize, SocketAddr)>;
+
+    // Send data on the socket to the specified address.
+    // Return the number of bytes written.
+    async fn send_to(socket: &Self::Socket, buf: &[u8], addr: SocketAddr) -> io::Result<usize>;
+
+    // Run the given future in the background until it ends.
+    fn spawn(future: impl Future<Output = ()> + Send + 'static);
 }
 
 /// Turn an [`IpAddr`] into a listen-address for the endpoint.
@@ -456,10 +493,15 @@ pub(crate) fn socketaddr_to_multiaddr(socket_addr: &SocketAddr) -> Multiaddr {
 }
 
 #[cfg(test)]
+#[cfg(any(feature = "async-std", feature = "tokio"))]
 mod test {
 
+    #[cfg(feature = "async-std")]
+    use async_std_crate as async_std;
     use futures::future::poll_fn;
     use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+    #[cfg(feature = "tokio")]
+    use tokio_crate as tokio;
 
     use super::*;
 
@@ -525,11 +567,25 @@ mod test {
         );
     }
 
-    #[async_std::test]
-    async fn close_listener() {
+    #[cfg(feature = "tokio")]
+    #[tokio::test]
+    async fn tokio_close_listener() {
         let keypair = libp2p_core::identity::Keypair::generate_ed25519();
-        let mut transport = QuicTransport::new(Config::new(&keypair).unwrap());
+        let config = Config::new(&keypair).unwrap();
+        let transport = TokioTransport::new(config.clone());
+        test_close_listener(transport).await
+    }
 
+    #[cfg(feature = "async-std")]
+    #[async_std::test]
+    async fn async_std_close_listener() {
+        let keypair = libp2p_core::identity::Keypair::generate_ed25519();
+        let config = Config::new(&keypair).unwrap();
+        let transport = AsyncStdTransport::new(config.clone());
+        test_close_listener(transport).await
+    }
+
+    async fn test_close_listener<P: Provider>(mut transport: QuicTransport<P>) {
         assert!(poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx))
             .now_or_never()
             .is_none());

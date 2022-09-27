@@ -28,8 +28,8 @@
 
 use crate::endpoint::{Endpoint, ToEndpoint};
 
-use async_io::Timer;
 use futures::{channel::mpsc, prelude::*};
+use futures_timer::Delay;
 use libp2p_core::PeerId;
 use std::{
     fmt,
@@ -57,7 +57,7 @@ pub struct Connection {
     /// the endpoint.
     connection_id: quinn_proto::ConnectionHandle,
     /// `Future` that triggers at the `Instant` that `self.connection.poll_timeout()` indicates.
-    next_timeout: Option<Timer>,
+    next_timeout: Option<(Delay, Instant)>,
 }
 
 /// Error on the connection as a whole.
@@ -241,15 +241,24 @@ impl Connection {
                 continue;
             }
 
-            // Timeout system.
-            if let Some(when) = self.connection.poll_timeout() {
-                let mut timer = Timer::at(when);
-                match timer.poll_unpin(cx) {
-                    Poll::Ready(when) => {
-                        self.connection.handle_timeout(when);
-                        continue;
+            match self.connection.poll_timeout() {
+                Some(timeout) => match self.next_timeout {
+                    Some((_, when)) if when == timeout => {}
+                    _ => {
+                        let now = Instant::now();
+                        // 0ns if now > when
+                        let duration = timeout.duration_since(now);
+                        let next_timeout = Delay::new(duration);
+                        self.next_timeout = Some((next_timeout, timeout))
                     }
-                    Poll::Pending => self.next_timeout = Some(timer),
+                },
+                None => self.next_timeout = None,
+            }
+
+            if let Some((timeout, when)) = self.next_timeout.as_mut() {
+                if timeout.poll_unpin(cx).is_ready() {
+                    self.connection.handle_timeout(*when);
+                    continue;
                 }
             }
 

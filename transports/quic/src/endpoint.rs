@@ -28,7 +28,11 @@
 //! the rest of the code only happens through channels. See the documentation of the
 //! [`background_task`] for a thorough description.
 
-use crate::{connection::Connection, tls, transport};
+use crate::{
+    connection::Connection,
+    tls,
+    transport::{self, Provider},
+};
 
 use futures::{
     channel::{
@@ -40,7 +44,7 @@ use futures::{
 use quinn_proto::{ClientConfig as QuinnClientConfig, ServerConfig as QuinnServerConfig};
 use std::{
     collections::HashMap,
-    net::{Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket},
+    net::{Ipv4Addr, Ipv6Addr, SocketAddr},
     sync::Arc,
     task::{Context, Poll},
     time::{Duration, Instant},
@@ -98,32 +102,36 @@ pub struct Endpoint {
 
 impl Endpoint {
     /// Builds a new [`Endpoint`] that is listening on the [`SocketAddr`].
-    pub fn new_bidirectional(
+    pub fn new_bidirectional<P: Provider>(
         config: Config,
         socket_addr: SocketAddr,
     ) -> Result<(Endpoint, mpsc::Receiver<Connection>), transport::Error> {
         let (new_connections_tx, new_connections_rx) = mpsc::channel(1);
-        let endpoint = Self::new(config, socket_addr, Some(new_connections_tx))?;
+        let endpoint = Self::new::<P>(config, socket_addr, Some(new_connections_tx))?;
         Ok((endpoint, new_connections_rx))
     }
 
     /// Builds a new [`Endpoint`] that only supports outbound connections.
-    pub fn new_dialer(config: Config, is_ipv6: bool) -> Result<Endpoint, transport::Error> {
+    pub fn new_dialer<P: Provider>(
+        config: Config,
+        is_ipv6: bool,
+    ) -> Result<Endpoint, transport::Error> {
         let socket_addr = if is_ipv6 {
             SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0)
         } else {
             SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0)
         };
-        Self::new(config, socket_addr, None)
+        Self::new::<P>(config, socket_addr, None)
     }
 
-    fn new(
+    fn new<P: Provider>(
         config: Config,
         socket_addr: SocketAddr,
         new_connections: Option<mpsc::Sender<Connection>>,
     ) -> Result<Endpoint, transport::Error> {
         // NOT blocking, as per man:bind(2), as we pass an IP address.
         let socket = std::net::UdpSocket::bind(&socket_addr)?;
+        socket.set_nonblocking(true)?;
         let (to_endpoint_tx, to_endpoint_rx) = mpsc::channel(32);
 
         let endpoint = Endpoint {
@@ -133,16 +141,16 @@ impl Endpoint {
 
         let server_config = new_connections.map(|c| (c, config.server_config.clone()));
 
-        // TODO: just for testing, do proper task spawning
-        async_global_executor::spawn(background_task(
+        let socket = P::from_socket(socket)?;
+
+        P::spawn(background_task::<P>(
             config.endpoint_config,
             config.client_config,
             server_config,
             endpoint.clone(),
-            async_io::Async::<UdpSocket>::new(socket)?,
+            socket,
             to_endpoint_rx.fuse(),
-        ))
-        .detach();
+        ));
 
         Ok(endpoint)
     }
@@ -275,12 +283,12 @@ pub enum ToEndpoint {
 /// guarantees that the [`Endpoint`], and therefore the background task, is properly kept alive
 /// for as long as any QUIC connection is open.
 ///
-async fn background_task(
+async fn background_task<P: Provider>(
     endpoint_config: Arc<quinn_proto::EndpointConfig>,
     client_config: quinn_proto::ClientConfig,
     server_config: Option<(mpsc::Sender<Connection>, Arc<quinn_proto::ServerConfig>)>,
     endpoint: Endpoint,
-    udp_socket: async_io::Async<UdpSocket>,
+    udp_socket: P::Socket,
     mut receiver: stream::Fuse<mpsc::Receiver<ToEndpoint>>,
 ) {
     let (mut new_connections, server_config) = match server_config {
@@ -310,7 +318,7 @@ async fn background_task(
             // network interface is too busy, we back-pressure all of our internal
             // channels.
             // TODO: set ECN bits; there is no support for them in the ecosystem right now
-            match udp_socket.send_to(&data, destination).await {
+            match P::send_to(&udp_socket, &data, destination).await {
                 Ok(n) if n == data.len() => {}
                 Ok(_) => tracing::error!(
                     "QUIC UDP socket violated expectation that packets are always fully \
@@ -398,7 +406,7 @@ async fn background_task(
                     }
                 }
             }
-            result = udp_socket.recv_from(&mut socket_recv_buffer).fuse() => {
+            result = P::recv_from(&udp_socket, &mut socket_recv_buffer).fuse() => {
                 let (packet_len, packet_src) = match result {
                     Ok(v) => v,
                     // Errors on the socket are expected to never happen, and we handle them by
@@ -412,9 +420,9 @@ async fn background_task(
                 // Received a UDP packet from the socket.
                 debug_assert!(packet_len <= socket_recv_buffer.len());
                 let packet = From::from(&socket_recv_buffer[..packet_len]);
-                let local_ip = udp_socket.get_ref().local_addr().ok().map(|a| a.ip());
+                let local_ip = endpoint.socket_addr.ip();
                 // TODO: ECN bits aren't handled
-                let event = proto_endpoint.handle(Instant::now(), packet_src, local_ip, None, packet);
+                let event = proto_endpoint.handle(Instant::now(), packet_src, Some(local_ip), None, packet);
 
                 match event {
                     None => {},

@@ -25,14 +25,25 @@
 //! Example:
 //!
 //! ```
-//! use libp2p_quic::{Config, QuicTransport};
+//! # #[cfg(not(feature = "async-std"))]
+//! # fn main() {}
+//! #
+//! # #[cfg(feature = "async-std")]
+//! # fn main() -> std::io::Result<()> {
+//! #
+//! use libp2p_quic::{AsyncStdTransport, Config};
 //! use libp2p_core::{Multiaddr, Transport};
 //!
 //! let keypair = libp2p_core::identity::Keypair::generate_ed25519();
 //! let quic_config = Config::new(&keypair).expect("could not make config");
-//! let mut quic_transport = QuicTransport::new(quic_config);
+//!
+//! let mut quic_transport = AsyncStdTransport::new(quic_config);
+//!
 //! let addr = "/ip4/127.0.0.1/udp/12345/quic".parse().expect("bad address?");
 //! quic_transport.listen_on(addr).expect("listen error.");
+//! #
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! The `Endpoint` struct implements the `Transport` trait of the `core` library. See the
@@ -64,5 +75,9 @@ pub mod transport;
 pub use endpoint::Config;
 pub use error::Error;
 pub use muxer::QuicMuxer;
-pub use transport::QuicTransport;
+#[cfg(feature = "async-std")]
+pub use transport::{AsyncStd, AsyncStdTransport};
+pub use transport::{Provider, QuicTransport};
+#[cfg(feature = "tokio")]
+pub use transport::{Tokio, TokioTransport};
 pub use upgrade::Upgrade;

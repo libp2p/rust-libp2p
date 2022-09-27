@@ -25,7 +25,7 @@ default = [
     "ping",
     "plaintext",
     "pnet",
-    "quic",
+    "quic-async-std",
     "relay",
     "request-response",
     "rendezvous",
@@ -55,7 +55,8 @@ noise = ["dep:libp2p-noise"]
 ping = ["dep:libp2p-ping", "libp2p-metrics?/ping"]
 plaintext = ["dep:libp2p-plaintext"]
 pnet = ["dep:libp2p-pnet"]
-quic = ["dep:libp2p-quic"]
+quic-async-std = ["dep:libp2p-quic", "libp2p-quic?/async-std"]
+quic-tokio = ["dep:libp2p-quic", "libp2p-quic?/tokio"]
 relay = ["dep:libp2p-relay", "libp2p-metrics?/relay"]
 request-response = ["dep:libp2p-request-response"]
 rendezvous = ["dep:libp2p-rendezvous"]
@@ -111,7 +112,7 @@ smallvec = "1.6.1"
 libp2p-deflate = { version = "0.36.0", path = "transports/deflate", optional = true }
 libp2p-dns = { version = "0.36.0", path = "transports/dns", optional = true, default-features = false }
 libp2p-mdns = { version = "0.40.0", path = "protocols/mdns", optional = true, default-features = false }
-libp2p-quic = { version = "0.7.0", path = "transports/quic", optional = true }
+libp2p-quic = { version = "0.7.0", path = "transports/quic", default-features = false, optional = true }
 libp2p-tcp = { version = "0.37.0", path = "transports/tcp", default-features = false, optional = true }
 libp2p-websocket = { version = "0.38.0", path = "transports/websocket", optional = true }
 
