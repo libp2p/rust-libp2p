@@ -136,24 +136,18 @@ impl AsyncWrite for Substream {
     ) -> Poll<io::Result<usize>> {
         let substream_id = self.stream_identifier();
         // Handle flags iff read side closed.
-        loop {
-            match self.state {
-                State::ReadClosed { .. } | State::ReadReset =>
-                // TODO: In case AsyncRead::poll_read encountered an error or returned None earlier, we will poll the
-                // underlying I/O resource once more. Is that allowed? How about introducing a state IoReadClosed?
-                {
-                    match io_poll_next(&mut self.io, cx)? {
-                        Poll::Ready(Some((Some(flag), message))) => {
-                            // Read side is closed. Discard any incoming messages.
-                            drop(message);
-                            // But still handle flags, e.g. a `Flag::StopSending`.
-                            self.state.handle_flag(flag, substream_id)
-                        }
-                        Poll::Ready(Some((None, message))) => drop(message),
-                        Poll::Ready(None) | Poll::Pending => break,
-                    }
+        while let State::ReadClosed { .. } | State::ReadReset = self.state {
+            // TODO: In case AsyncRead::poll_read encountered an error or returned None earlier, we will poll the
+            // underlying I/O resource once more. Is that allowed? How about introducing a state IoReadClosed?
+            match io_poll_next(&mut self.io, cx)? {
+                Poll::Ready(Some((Some(flag), message))) => {
+                    // Read side is closed. Discard any incoming messages.
+                    drop(message);
+                    // But still handle flags, e.g. a `Flag::StopSending`.
+                    self.state.handle_flag(flag, substream_id)
                 }
-                _ => break,
+                Poll::Ready(Some((None, message))) => drop(message),
+                Poll::Ready(None) | Poll::Pending => break,
             }
         }
 
@@ -228,7 +222,9 @@ fn io_poll_next(
     {
         Some(Message { flag, message }) => {
             let flag = flag
-                .map(|f| Flag::from_i32(f).ok_or(io::Error::new(io::ErrorKind::InvalidData, "")))
+                .map(|f| {
+                    Flag::from_i32(f).ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, ""))
+                })
                 .transpose()?;
 
             Poll::Ready(Ok(Some((flag, message))))
