@@ -46,8 +46,10 @@ const PROTO_OVERHEAD: usize = 5;
 /// Maximum length of data, in bytes.
 const MAX_DATA_LEN: usize = MAX_MSG_LEN - VARINT_LEN - PROTO_OVERHEAD;
 
-/// Substream is a wrapper around [`RTCPollDataChannel`] implementing futures [`AsyncRead`] /
-/// [`AsyncWrite`] and message framing (as per specification).
+/// A substream on top of a WebRTC data channel.
+///
+/// To be a proper libp2p substream, we need to implement [`AsyncRead`] and [`AsyncWrite`] as well
+/// as support a half-closed state which we do by framing messages in a protobuf envelope.
 pub struct Substream {
     io: Framed<Compat<PollDataChannel>, prost_codec::Codec<Message>>,
     state: State,
