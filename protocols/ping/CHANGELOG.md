@@ -2,10 +2,10 @@
 
 - Bump rand to 0.8 and quickcheck to 1. See [PR 2857].
 - Deprecate types with `Ping` prefix. Prefer importing them via the `ping` namespace, i.e. `libp2p::ping::Event` instead
-  of `libp2p::ping::PingEvent`. See [PR XXXX].
+  of `libp2p::ping::PingEvent`. See [PR 2937].
 
 [PR 2857]: https://github.com/libp2p/rust-libp2p/pull/2857
-[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+[PR 2937]: https://github.com/libp2p/rust-libp2p/pull/2937
 
 # 0.39.0
 
