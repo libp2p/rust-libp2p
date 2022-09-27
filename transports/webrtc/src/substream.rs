@@ -48,8 +48,6 @@ const MAX_DATA_LEN: usize = MAX_MSG_LEN - VARINT_LEN - PROTO_OVERHEAD;
 
 /// Substream is a wrapper around [`RTCPollDataChannel`] implementing futures [`AsyncRead`] /
 /// [`AsyncWrite`] and message framing (as per specification).
-///
-/// #[derive(Debug)]
 pub struct Substream {
     io: Framed<Compat<PollDataChannel>, prost_codec::Codec<Message>>,
     state: State,
