@@ -148,7 +148,7 @@ impl AsyncRead for Substream {
         buf: &mut [u8],
     ) -> Poll<io::Result<usize>> {
         loop {
-            if let Some(read_buffer) = self.state.read_buffer_mut() && !read_buffer.is_empty() {
+            if let Some(read_buffer) = self.state.non_empty_read_buffer_mut() {
                 let n = std::cmp::min(read_buffer.len(), buf.len());
                 let data = read_buffer.split_to(n);
                 buf[0..n].copy_from_slice(&data[..]);
@@ -355,15 +355,19 @@ impl State {
         );
     }
 
-    fn read_buffer_mut(&mut self) -> Option<&mut Bytes> {
+    /// Returns a reference to the underlying buffer if possible and the buffer is not empty.
+    fn non_empty_read_buffer_mut(&mut self) -> Option<&mut Bytes> {
         match self {
-            State::Open { read_buffer } => Some(read_buffer),
-            State::WriteClosed { read_buffer } => Some(read_buffer),
-            State::ReadClosed { read_buffer } => Some(read_buffer),
-            State::ReadWriteClosed { read_buffer } => Some(read_buffer),
-            State::ReadReset => None,
-            State::ReadResetWriteClosed => None,
-            State::Poisoned => todo!(),
+            State::Open { read_buffer }
+            | State::WriteClosed { read_buffer }
+            | State::ReadClosed { read_buffer }
+            | State::ReadWriteClosed { read_buffer }
+                if !read_buffer.is_empty() =>
+            {
+                Some(read_buffer)
+            }
+            State::Poisoned => unreachable!(),
+            _ => None,
         }
     }
 }
