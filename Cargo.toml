@@ -84,7 +84,7 @@ libp2p-autonat = { version = "0.7.0", path = "protocols/autonat", optional = tru
 libp2p-core = { version = "0.36.1", path = "core",  default-features = false }
 libp2p-dcutr = { version = "0.6.0", path = "protocols/dcutr",  optional = true }
 libp2p-floodsub = { version = "0.39.1", path = "protocols/floodsub", optional = true }
-libp2p-identify = { version = "0.39.0", path = "protocols/identify", optional = true }
+libp2p-identify = { version = "0.39.1", path = "protocols/identify", optional = true }
 libp2p-kad = { version = "0.41.0", path = "protocols/kad", optional = true }
 libp2p-metrics = { version = "0.10.0", path = "misc/metrics", optional = true }
 libp2p-mplex = { version = "0.36.1", path = "muxers/mplex", optional = true }

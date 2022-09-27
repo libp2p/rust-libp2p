@@ -1,6 +1,8 @@
 # 0.10.0 [unreleased]
 
 - Update to `libp2p-kad` `v0.41.0`.
+- 
+- Update to `libp2p-identify` `v0.39.1`.
 
 # 0.9.0
 
