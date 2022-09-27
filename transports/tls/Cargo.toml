@@ -3,6 +3,7 @@ name = "libp2p-tls"
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
+exclude = ["src/test_assets"]
 
 [dependencies]
 futures = { version = "0.3.24", default-features = false }
