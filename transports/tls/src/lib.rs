@@ -53,7 +53,7 @@ const P2P_ALPN: [u8; 6] = *b"libp2p";
 pub fn make_client_config(
     keypair: &libp2p_core::identity::Keypair,
 ) -> Result<rustls::ClientConfig, certificate::GenError> {
-    let (certificate, key) = make_cert_key(keypair)?;
+    let (certificate, private_key) = certificate::generate(keypair)?;
 
     let mut crypto = rustls::ClientConfig::builder()
         .with_cipher_suites(TLS13_CIPHERSUITES)
@@ -61,7 +61,7 @@ pub fn make_client_config(
         .with_protocol_versions(&[&rustls::version::TLS13])
         .expect("Cipher suites and kx groups are configured; qed")
         .with_custom_certificate_verifier(Arc::new(verifier::Libp2pCertificateVerifier))
-        .with_single_cert(vec![certificate], key)
+        .with_single_cert(vec![certificate], private_key)
         .expect("Client cert key DER is valid; qed");
     crypto.alpn_protocols = vec![P2P_ALPN.to_vec()];
 
@@ -72,7 +72,7 @@ pub fn make_client_config(
 pub fn make_server_config(
     keypair: &libp2p_core::identity::Keypair,
 ) -> Result<rustls::ServerConfig, certificate::GenError> {
-    let (certificate, key) = make_cert_key(keypair)?;
+    let (certificate, private_key) = certificate::generate(keypair)?;
 
     let mut crypto = rustls::ServerConfig::builder()
         .with_cipher_suites(TLS13_CIPHERSUITES)
@@ -80,22 +80,9 @@ pub fn make_server_config(
         .with_protocol_versions(&[&rustls::version::TLS13])
         .expect("Cipher suites and kx groups are configured; qed")
         .with_client_cert_verifier(Arc::new(verifier::Libp2pCertificateVerifier))
-        .with_single_cert(vec![certificate], key)
+        .with_single_cert(vec![certificate], private_key)
         .expect("Server cert key DER is valid; qed");
     crypto.alpn_protocols = vec![P2P_ALPN.to_vec()];
 
     Ok(crypto)
-}
-
-/// Create a random private key and certificate signed with this key for rustls.
-fn make_cert_key(
-    keypair: &libp2p_core::identity::Keypair,
-) -> Result<(rustls::Certificate, rustls::PrivateKey), certificate::GenError> {
-    let cert = certificate::generate(keypair)?;
-    let private_key = cert.serialize_private_key_der();
-
-    let cert = rustls::Certificate(cert.serialize_der()?);
-    let key = rustls::PrivateKey(private_key);
-
-    Ok((cert, key))
 }

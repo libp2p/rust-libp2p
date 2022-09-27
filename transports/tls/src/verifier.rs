@@ -178,7 +178,7 @@ fn verify_presented_certs(
         ));
     }
 
-    certificate::parse(end_entity.as_ref())?;
+    certificate::parse(end_entity)?;
 
     Ok(())
 }
@@ -189,7 +189,7 @@ fn verify_tls13_signature(
     message: &[u8],
     signature: &[u8],
 ) -> Result<HandshakeSignatureValid, rustls::Error> {
-    certificate::parse(cert.as_ref())?.verify_signature(signature_scheme, message, signature)?;
+    certificate::parse(cert)?.verify_signature(signature_scheme, message, signature)?;
 
     Ok(HandshakeSignatureValid::assertion())
 }

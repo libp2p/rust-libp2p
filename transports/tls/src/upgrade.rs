@@ -106,5 +106,5 @@ fn extract_single_certificate(
         _ => panic!("config enforces exactly one certificate"),
     };
 
-    certificate::parse(cert.as_ref())
+    certificate::parse(cert)
 }
