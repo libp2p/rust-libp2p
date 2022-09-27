@@ -64,6 +64,8 @@
 - Update to [`libp2p-metrics` `v0.10.0`](misc/metrics/CHANGELOG.md#0100).
 
 - Update to [`libp2p-kad` `v0.41.0`](protocols/kad/CHANGELOG.md#0410).
+- 
+- Update to [`libp2p-identify` `v0.39.1`](protocols/identify/CHANGELOG.md#0400).
 
 - Update to [`libp2p-noise` `v0.39.1`](transports/noise/CHANGELOG.md#0391).
 

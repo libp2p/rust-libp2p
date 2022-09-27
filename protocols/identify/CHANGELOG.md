@@ -1,3 +1,7 @@
+# 0.39.1 [unreleased]
+
+- Update dependencies.
+
 # 0.39.0
 
 - Update to `libp2p-swarm` `v0.39.0`.
