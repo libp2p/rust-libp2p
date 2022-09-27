@@ -212,11 +212,7 @@ impl Transport for WebRTCTransport {
                 .await
                 .map_err(|e| Error::WebRTC(webrtc::Error::Data(e)))?;
 
-            let mut c = Connection::new(conn.into_inner()).await;
-            // TODO: default buffer size is too small to fit some messages. Possibly remove once
-            // https://github.com/webrtc-rs/sctp/issues/28 is fixed.
-            c.set_data_channels_read_buf_capacity(8192 * 10);
-            Ok((peer_id, c))
+            Ok((peer_id, Connection::new(conn.into_inner()).await))
         }
         .boxed())
     }
@@ -563,12 +559,7 @@ async fn upgrade(
         .await
         .map_err(|e| Error::WebRTC(webrtc::Error::Data(e)))?;
 
-    let mut c = Connection::new(conn.into_inner()).await;
-    // TODO: default buffer size is too small to fit some messages. Possibly remove once
-    // https://github.com/webrtc-rs/sctp/issues/28 is fixed.
-    c.set_data_channels_read_buf_capacity(8192 * 10);
-
-    Ok((peer_id, c))
+    Ok((peer_id, Connection::new(conn.into_inner()).await))
 }
 
 async fn perform_noise_handshake_inbound<T>(

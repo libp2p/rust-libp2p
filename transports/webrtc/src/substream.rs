@@ -58,11 +58,14 @@ pub struct Substream {
 impl Substream {
     /// Constructs a new `Substream`.
     pub(crate) fn new(data_channel: Arc<DataChannel>) -> Self {
+        let mut inner = PollDataChannel::new(data_channel);
+
+        // TODO: default buffer size is too small to fit some messages. Possibly remove once
+        // https://github.com/webrtc-rs/webrtc/issues/273 is fixed.
+        inner.set_read_buf_capacity(8192 * 10);
+
         Self {
-            io: Framed::new(
-                PollDataChannel::new(data_channel).compat(),
-                prost_codec::Codec::new(MAX_MSG_LEN),
-            ),
+            io: Framed::new(inner.compat(), prost_codec::Codec::new(MAX_MSG_LEN)),
             state: State::Open {
                 read_buffer: Default::default(),
             },
@@ -72,11 +75,6 @@ impl Substream {
     /// StreamIdentifier returns the Stream identifier associated to the stream.
     pub fn stream_identifier(&self) -> u16 {
         self.io.get_ref().stream_identifier()
-    }
-
-    /// Set the capacity of the temporary read buffer (default: 8192).
-    pub fn set_read_buf_capacity(&mut self, capacity: usize) {
-        self.io.get_mut().set_read_buf_capacity(capacity)
     }
 }
 

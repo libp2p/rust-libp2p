@@ -54,10 +54,6 @@ pub struct Connection {
     /// Channel onto which incoming data channels are put.
     incoming_data_channels_rx: mpsc::Receiver<Arc<DetachedDataChannel>>,
 
-    /// Temporary read buffer's capacity (equal for all data channels).
-    /// See [`Substream`] `read_buf_cap`.
-    read_buf_cap: Option<usize>,
-
     /// Future, which, once polled, will result in an outbound substream.
     outbound_fut: Option<BoxFuture<'static, Result<Arc<DetachedDataChannel>, Error>>>,
 
@@ -77,15 +73,9 @@ impl Connection {
         Self {
             peer_conn: Arc::new(FutMutex::new(rtc_conn)),
             incoming_data_channels_rx: data_channel_rx,
-            read_buf_cap: None,
             outbound_fut: None,
             close_fut: None,
         }
-    }
-
-    /// Set the capacity of a data channel's temporary read buffer (equal for all data channels; default: 8192).
-    pub fn set_data_channels_read_buf_capacity(&mut self, cap: usize) {
-        self.read_buf_cap = Some(cap);
     }
 
     /// Registers a handler for incoming data channels.
@@ -157,12 +147,7 @@ impl StreamMuxer for Connection {
             Some(detached) => {
                 trace!("Incoming substream {}", detached.stream_identifier());
 
-                let mut ch = Substream::new(detached);
-                if let Some(cap) = self.read_buf_cap {
-                    ch.set_read_buf_capacity(cap);
-                }
-
-                Poll::Ready(Ok(ch))
+                Poll::Ready(Ok(Substream::new(detached)))
             }
             None => Poll::Ready(Err(Error::InternalError(
                 "incoming_data_channels_rx is closed (no messages left)".to_string(),
@@ -210,12 +195,8 @@ impl StreamMuxer for Connection {
 
         match ready!(fut.as_mut().poll(cx)) {
             Ok(detached) => {
-                let mut ch = Substream::new(detached);
-                if let Some(cap) = self.read_buf_cap {
-                    ch.set_read_buf_capacity(cap);
-                }
                 self.outbound_fut = None;
-                Poll::Ready(Ok(ch))
+                Poll::Ready(Ok(Substream::new(detached)))
             }
             Err(e) => {
                 self.outbound_fut = None;
