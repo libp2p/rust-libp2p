@@ -77,25 +77,6 @@ impl Substream {
     }
 }
 
-fn io_poll_next(
-    io: &mut Framed<Compat<PollDataChannel>, prost_codec::Codec<Message>>,
-    cx: &mut Context<'_>,
-) -> Poll<io::Result<Option<(Option<Flag>, Option<Vec<u8>>)>>> {
-    match ready!(io.poll_next_unpin(cx))
-        .transpose()
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?
-    {
-        Some(Message { flag, message }) => {
-            let flag = flag
-                .map(|f| Flag::from_i32(f).ok_or(io::Error::new(io::ErrorKind::InvalidData, "")))
-                .transpose()?;
-
-            Poll::Ready(Ok(Some((flag, message))))
-        }
-        None => Poll::Ready(Ok(None)),
-    }
-}
-
 impl AsyncRead for Substream {
     fn poll_read(
         mut self: Pin<&mut Self>,
@@ -234,6 +215,25 @@ impl AsyncWrite for Substream {
 
         // TODO: Is flush the correct thing here? We don't want the underlying layer to close both write and read.
         self.io.poll_flush_unpin(cx).map_err(Into::into)
+    }
+}
+
+fn io_poll_next(
+    io: &mut Framed<Compat<PollDataChannel>, prost_codec::Codec<Message>>,
+    cx: &mut Context<'_>,
+) -> Poll<io::Result<Option<(Option<Flag>, Option<Vec<u8>>)>>> {
+    match ready!(io.poll_next_unpin(cx))
+        .transpose()
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?
+    {
+        Some(Message { flag, message }) => {
+            let flag = flag
+                .map(|f| Flag::from_i32(f).ok_or(io::Error::new(io::ErrorKind::InvalidData, "")))
+                .transpose()?;
+
+            Poll::Ready(Ok(Some((flag, message))))
+        }
+        None => Poll::Ready(Ok(None)),
     }
 }
 
