@@ -57,7 +57,7 @@ pub struct Substream {
 
 impl Substream {
     /// Constructs a new `Substream`.
-    pub fn new(data_channel: Arc<DataChannel>) -> Self {
+    pub(crate) fn new(data_channel: Arc<DataChannel>) -> Self {
         Self {
             io: Framed::new(
                 PollDataChannel::new(data_channel).compat(),
