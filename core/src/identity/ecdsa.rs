@@ -21,7 +21,9 @@
 //! ECDSA keys with secp256r1 curve support.
 
 use super::error::DecodingError;
+use core::cmp;
 use core::fmt;
+use core::hash;
 use p256::{
     ecdsa::{
         signature::{Signer, Verifier},
@@ -117,7 +119,7 @@ impl fmt::Debug for SecretKey {
 }
 
 /// An ECDSA public key.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialOrd, Ord)]
 pub struct PublicKey(VerifyingKey);
 
 impl PublicKey {
@@ -219,6 +221,18 @@ impl fmt::Debug for PublicKey {
             write!(f, "{:x}", byte)?;
         }
         Ok(())
+    }
+}
+
+impl cmp::PartialEq for PublicKey {
+    fn eq(&self, other: &Self) -> bool {
+        self.to_bytes().eq(&other.to_bytes())
+    }
+}
+
+impl hash::Hash for PublicKey {
+    fn hash<H: hash::Hasher>(&self, state: &mut H) {
+        self.to_bytes().hash(state);
     }
 }
 

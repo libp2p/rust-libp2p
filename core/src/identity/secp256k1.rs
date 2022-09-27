@@ -22,7 +22,9 @@
 
 use super::error::{DecodingError, SigningError};
 use asn1_der::typed::{DerDecodable, Sequence};
+use core::cmp;
 use core::fmt;
+use core::hash;
 use libsecp256k1::{Message, Signature};
 use sha2::{Digest as ShaDigestTrait, Sha256};
 use zeroize::Zeroize;
@@ -150,7 +152,7 @@ impl SecretKey {
 }
 
 /// A Secp256k1 public key.
-#[derive(PartialEq, Eq, Clone)]
+#[derive(Eq, Clone)]
 pub struct PublicKey(libsecp256k1::PublicKey);
 
 impl fmt::Debug for PublicKey {
@@ -160,6 +162,30 @@ impl fmt::Debug for PublicKey {
             write!(f, "{:x}", byte)?;
         }
         Ok(())
+    }
+}
+
+impl cmp::PartialEq for PublicKey {
+    fn eq(&self, other: &Self) -> bool {
+        self.encode().eq(&other.encode())
+    }
+}
+
+impl hash::Hash for PublicKey {
+    fn hash<H: hash::Hasher>(&self, state: &mut H) {
+        self.encode().hash(state);
+    }
+}
+
+impl cmp::PartialOrd for PublicKey {
+    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
+        self.encode().partial_cmp(&other.encode())
+    }
+}
+
+impl cmp::Ord for PublicKey {
+    fn cmp(&self, other: &Self) -> cmp::Ordering {
+        self.encode().cmp(&other.encode())
     }
 }
 
