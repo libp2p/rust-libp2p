@@ -17,7 +17,7 @@ either = "1.6.0"
 futures = "0.3.1"
 futures-timer = "3"
 instant = "0.1.11"
-libp2p-core = { version = "0.35.0", path = "../../core", default-features = false }
+libp2p-core = { version = "0.36.0", path = "../../core", default-features = false }
 libp2p-swarm = { version = "0.39.0", path = "../../swarm" }
 log = "0.4"
 pin-project = "1"
@@ -34,11 +34,6 @@ prost-build = "0.11"
 
 [dev-dependencies]
 env_logger = "0.9.0"
-libp2p = { path = "../..", default-features = false, features = ["identify", "relay", "ping", "noise", "plaintext", "tcp-async-io"] }
-libp2p-identify = { path = "../identify" }
-libp2p-kad = { path = "../kad" }
-libp2p-ping = { path = "../ping" }
-libp2p-plaintext = { path = "../../transports/plaintext" }
-libp2p-yamux = { path = "../../muxers/yamux" }
+libp2p = { path = "../..", default-features = false, features = ["identify", "kad", "ping", "plaintext", "tcp-async-io", "relay", "noise", "yamux"] }
 quickcheck = "1"
 clap = {version = "3.1.6", features = ["derive"]}

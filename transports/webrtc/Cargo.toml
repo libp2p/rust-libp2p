@@ -18,11 +18,12 @@ futures = "0.3"
 futures-lite = "1"
 futures-timer = "3"
 hex = "0.4"
-if-watch = "0.2"
-libp2p-core = { version = "0.35.0", path = "../../core", default-features = false  }
-libp2p-noise = { version = "0.38.0", path = "../../transports/noise" }
+if-watch = "2.0"
+libp2p-core = { version = "0.36.0", path = "../../core", default-features = false  }
+libp2p-noise = { version = "0.39.0", path = "../../transports/noise" }
 log = "0.4"
 multihash = { version = "0.16", default-features = false, features = ["sha2"] }
+multibase = "0.9"
 prost = "0.11"
 prost-codec = { version = "0.2", path = "../../misc/prost-codec" }
 rand = "0.8"
@@ -32,7 +33,7 @@ thiserror = "1"
 tinytemplate = "1.2"
 tokio-crate = { package = "tokio", version = "1.18", features = ["net"]}
 tokio-util = { version = "0.7", features = ["compat"] }
-webrtc = "0.4.0"
+webrtc = "0.5.0"
 
 [build-dependencies]
 prost-build = "0.11"
@@ -44,5 +45,6 @@ libp2p = { path = "../..", features = ["request-response"], default-features = f
 rand_core = "0.5"
 rcgen = "0.9"
 quickcheck = "1"
+hex-literal = "0.3"
 unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
 asynchronous-codec = { version = "0.6" }

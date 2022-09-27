@@ -11,8 +11,8 @@ use libp2p::request_response::{
 };
 use libp2p::swarm::{Swarm, SwarmBuilder, SwarmEvent};
 use libp2p_core::{identity, multiaddr::Protocol, muxing::StreamMuxerBox, upgrade, Transport};
-use libp2p_webrtc::transport::WebRTCTransport;
-use multihash::{Code, Multihash, MultihashDigest};
+use libp2p_webrtc::Fingerprint;
+use libp2p_webrtc::WebRTCTransport;
 use rand::RngCore;
 use rcgen::KeyPair;
 use tokio_crate as tokio;
@@ -29,17 +29,11 @@ fn generate_tls_keypair() -> identity::Keypair {
     identity::Keypair::generate_ed25519()
 }
 
-fn create_swarm() -> Result<(Swarm<RequestResponse<PingCodec>>, String)> {
+fn create_swarm() -> Result<(Swarm<RequestResponse<PingCodec>>, Fingerprint)> {
     let cert = generate_certificate();
     let keypair = generate_tls_keypair();
     let peer_id = keypair.public().to_peer_id();
-    let fingerprint = cert
-        .get_fingerprints()
-        .unwrap()
-        .first()
-        .unwrap()
-        .value
-        .to_uppercase();
+    let fingerprint = cert.get_fingerprints().unwrap().first().unwrap().clone();
     let transport = WebRTCTransport::new(cert, keypair);
     let protocols = iter::once((PingProtocol(), ProtocolSupport::Full));
     let cfg = RequestResponseConfig::default();
@@ -54,7 +48,7 @@ fn create_swarm() -> Result<(Swarm<RequestResponse<PingCodec>>, String)> {
                 tokio::spawn(fut);
             }))
             .build(),
-        fingerprint,
+        Fingerprint::try_from_rtc_dtls(fingerprint).unwrap(),
     ))
 }
 
@@ -75,20 +69,26 @@ async fn smoke() -> Result<()> {
         e => panic!("{:?}", e),
     };
 
-    let addr = addr.with(Protocol::Certhash(fingerprint2multihash(&a_fingerprint)));
+    // skip other interface addresses
+    while a.next().now_or_never().is_some() {}
+
+    let addr = addr.with(Protocol::Certhash(a_fingerprint.to_multi_hash()));
 
     let _ = match b.next().await {
         Some(SwarmEvent::NewListenAddr { address, .. }) => address,
         e => panic!("{:?}", e),
     };
 
+    // skip other interface addresses
+    while b.next().now_or_never().is_some() {}
+
     let mut data = vec![0; 4096];
     rng.fill_bytes(&mut data);
 
     b.behaviour_mut()
-        .add_address(&Swarm::local_peer_id(&a), addr);
+        .add_address(Swarm::local_peer_id(&a), addr);
     b.behaviour_mut()
-        .send_request(&Swarm::local_peer_id(&a), Ping(data.clone()));
+        .send_request(Swarm::local_peer_id(&a), Ping(data.clone()));
 
     match b.next().await {
         Some(SwarmEvent::Dialing(_)) => {}
@@ -165,7 +165,7 @@ async fn smoke() -> Result<()> {
     }
 
     a.behaviour_mut().send_request(
-        &Swarm::local_peer_id(&b),
+        Swarm::local_peer_id(&b),
         Ping(b"another substream".to_vec()),
     );
 
@@ -312,12 +312,18 @@ async fn dial_failure() -> Result<()> {
         e => panic!("{:?}", e),
     };
 
-    let addr = addr.with(Protocol::Certhash(fingerprint2multihash(&a_fingerprint)));
+    // skip other interface addresses
+    while a.next().now_or_never().is_some() {}
+
+    let addr = addr.with(Protocol::Certhash(a_fingerprint.to_multi_hash()));
 
     let _ = match b.next().await {
         Some(SwarmEvent::NewListenAddr { address, .. }) => address,
         e => panic!("{:?}", e),
     };
+
+    // skip other interface addresses
+    while b.next().now_or_never().is_some() {}
 
     let a_peer_id = &Swarm::local_peer_id(&a).clone();
     drop(a); // stop a swarm so b can never reach it
@@ -348,164 +354,137 @@ async fn dial_failure() -> Result<()> {
 async fn concurrent_connections_and_streams() {
     let _ = env_logger::builder().is_test(true).try_init();
 
-    use futures::executor::block_on;
-    use futures::task::Spawn;
-    use quickcheck::*;
-    use std::num::NonZeroU8;
+    let num_listeners = 3usize;
+    let num_streams = 8usize;
 
-    fn prop(number_listeners: NonZeroU8, number_streams: NonZeroU8) -> TestResult {
-        let (number_listeners, number_streams): (u8, u8) =
-            (number_listeners.into(), number_streams.into());
-        if number_listeners > 10 || number_streams > 10 {
-            return TestResult::discard();
-        }
+    let mut data = vec![0; 4096];
+    rand::thread_rng().fill_bytes(&mut data);
+    let mut listeners = vec![];
 
-        let mut pool = futures::executor::LocalPool::default();
-        let mut data = vec![0; 4096 * 10];
-        rand::thread_rng().fill_bytes(&mut data);
-        let mut listeners = vec![];
-
-        // Spawn the listener nodes.
-        for _ in 0..number_listeners {
-            let (mut listener, fingerprint) = create_swarm().unwrap();
-            Swarm::listen_on(
-                &mut listener,
-                "/ip4/127.0.0.1/udp/0/webrtc".parse().unwrap(),
-            )
-            .unwrap();
-
-            // Wait to listen on address.
-            let addr = match block_on(listener.next()) {
-                Some(SwarmEvent::NewListenAddr { address, .. }) => address,
-                e => panic!("{:?}", e),
-            };
-
-            let addr = addr.with(Protocol::Certhash(fingerprint2multihash(&fingerprint)));
-
-            listeners.push((*listener.local_peer_id(), addr));
-
-            pool.spawner()
-                .spawn_obj(
-                    async move {
-                        loop {
-                            match listener.next().await {
-                                Some(SwarmEvent::IncomingConnection { .. }) => {
-                                    log::debug!("listener IncomingConnection");
-                                }
-                                Some(SwarmEvent::ConnectionEstablished { .. }) => {
-                                    log::debug!("listener ConnectionEstablished");
-                                }
-                                Some(SwarmEvent::Behaviour(RequestResponseEvent::Message {
-                                    message:
-                                        RequestResponseMessage::Request {
-                                            request: Ping(ping),
-                                            channel,
-                                            ..
-                                        },
-                                    ..
-                                })) => {
-                                    log::debug!("listener got Message");
-                                    listener
-                                        .behaviour_mut()
-                                        .send_response(channel, Pong(ping))
-                                        .unwrap();
-                                }
-                                Some(SwarmEvent::Behaviour(
-                                    RequestResponseEvent::ResponseSent { .. },
-                                )) => {
-                                    log::debug!("listener ResponseSent");
-                                }
-                                Some(SwarmEvent::ConnectionClosed { .. }) => {}
-                                Some(e) => {
-                                    panic!("unexpected event {:?}", e);
-                                }
-                                None => {
-                                    panic!("listener stopped");
-                                }
-                            }
-                        }
-                    }
-                    .boxed()
-                    .into(),
-                )
-                .unwrap();
-        }
-
-        let (mut dialer, _fingerprint) = create_swarm().unwrap();
-        Swarm::listen_on(&mut dialer, "/ip4/127.0.0.1/udp/0/webrtc".parse().unwrap()).unwrap();
+    // Spawn the listener nodes.
+    for _ in 0..num_listeners {
+        let (mut listener, fingerprint) = create_swarm().unwrap();
+        Swarm::listen_on(
+            &mut listener,
+            "/ip4/127.0.0.1/udp/0/webrtc".parse().unwrap(),
+        )
+        .unwrap();
 
         // Wait to listen on address.
-        match block_on(dialer.next()) {
+        let addr = match listener.next().await {
             Some(SwarmEvent::NewListenAddr { address, .. }) => address,
             e => panic!("{:?}", e),
         };
 
-        // For each listener node start `number_streams` requests.
-        for (listener_peer_id, listener_addr) in &listeners {
-            dialer
-                .behaviour_mut()
-                .add_address(&listener_peer_id, listener_addr.clone());
+        let addr = addr.with(Protocol::Certhash(fingerprint.to_multi_hash()));
 
-            dialer.dial(listener_peer_id.clone()).unwrap();
-        }
+        listeners.push((*listener.local_peer_id(), addr));
 
-        // Wait for responses to each request.
-        pool.run_until(async {
-            let mut num_responses = 0;
+        tokio::spawn(async move {
             loop {
-                match dialer.next().await {
-                    Some(SwarmEvent::Dialing(_)) => {
-                        log::debug!("dialer Dialing");
+                match listener.next().await {
+                    Some(SwarmEvent::IncomingConnection { .. }) => {
+                        log::debug!("listener IncomingConnection");
                     }
-                    Some(SwarmEvent::ConnectionEstablished { peer_id, .. }) => {
-                        log::debug!("dialer Connection established");
-                        for _ in 0..number_streams {
-                            dialer
-                                .behaviour_mut()
-                                .send_request(&peer_id, Ping(data.clone()));
-                        }
+                    Some(SwarmEvent::ConnectionEstablished { .. }) => {
+                        log::debug!("listener ConnectionEstablished");
                     }
                     Some(SwarmEvent::Behaviour(RequestResponseEvent::Message {
                         message:
-                            RequestResponseMessage::Response {
-                                response: Pong(pong),
+                            RequestResponseMessage::Request {
+                                request: Ping(ping),
+                                channel,
                                 ..
                             },
                         ..
                     })) => {
-                        log::debug!("dialer got Message");
-                        num_responses += 1;
-                        assert_eq!(data, pong);
-                        let should_be = number_listeners as usize * (number_streams) as usize;
-                        log::debug!(
-                            "num of responses: {}, num of listeners * num of streams: {}",
-                            num_responses,
-                            should_be
-                        );
-                        if num_responses == should_be {
-                            break;
-                        }
+                        log::debug!("listener got Message");
+                        listener
+                            .behaviour_mut()
+                            .send_response(channel, Pong(ping))
+                            .unwrap();
                     }
-                    Some(SwarmEvent::ConnectionClosed { .. }) => {
-                        log::debug!("dialer ConnectionClosed");
+                    Some(SwarmEvent::Behaviour(RequestResponseEvent::ResponseSent { .. })) => {
+                        log::debug!("listener ResponseSent");
                     }
-                    e => {
+                    Some(SwarmEvent::ConnectionClosed { .. }) => {}
+                    Some(SwarmEvent::NewListenAddr { .. }) => {
+                        log::debug!("listener NewListenAddr");
+                    }
+                    Some(e) => {
                         panic!("unexpected event {:?}", e);
+                    }
+                    None => {
+                        panic!("listener stopped");
                     }
                 }
             }
         });
-
-        TestResult::passed()
     }
 
-    prop(NonZeroU8::new(3).unwrap(), NonZeroU8::new(8).unwrap());
+    let (mut dialer, _fingerprint) = create_swarm().unwrap();
+    Swarm::listen_on(&mut dialer, "/ip4/127.0.0.1/udp/0/webrtc".parse().unwrap()).unwrap();
 
-    // QuickCheck::new().quickcheck(prop as fn(_, _) -> _);
-}
+    // Wait to listen on address.
+    match dialer.next().await {
+        Some(SwarmEvent::NewListenAddr { address, .. }) => address,
+        e => panic!("{:?}", e),
+    };
 
-fn fingerprint2multihash(s: &str) -> Multihash {
-    let mut buf = [0; 32];
-    hex::decode_to_slice(s.replace(":", ""), &mut buf).unwrap();
-    Code::Sha2_256.wrap(&buf).unwrap()
+    // For each listener node start `number_streams` requests.
+    for (listener_peer_id, listener_addr) in &listeners {
+        dialer
+            .behaviour_mut()
+            .add_address(listener_peer_id, listener_addr.clone());
+
+        dialer.dial(*listener_peer_id).unwrap();
+    }
+
+    // Wait for responses to each request.
+    let mut num_responses = 0;
+    loop {
+        match dialer.next().await {
+            Some(SwarmEvent::Dialing(_)) => {
+                log::debug!("dialer Dialing");
+            }
+            Some(SwarmEvent::ConnectionEstablished { peer_id, .. }) => {
+                log::debug!("dialer Connection established");
+                for _ in 0..num_streams {
+                    dialer
+                        .behaviour_mut()
+                        .send_request(&peer_id, Ping(data.clone()));
+                }
+            }
+            Some(SwarmEvent::Behaviour(RequestResponseEvent::Message {
+                message:
+                    RequestResponseMessage::Response {
+                        response: Pong(pong),
+                        ..
+                    },
+                ..
+            })) => {
+                log::debug!("dialer got Message");
+                num_responses += 1;
+                assert_eq!(data, pong);
+                let should_be = num_listeners * num_streams;
+                log::debug!(
+                    "num of responses: {}, num of listeners * num of streams: {}",
+                    num_responses,
+                    should_be
+                );
+                if num_responses == should_be {
+                    break;
+                }
+            }
+            Some(SwarmEvent::ConnectionClosed { .. }) => {
+                log::debug!("dialer ConnectionClosed");
+            }
+            Some(SwarmEvent::NewListenAddr { .. }) => {
+                log::debug!("dialer NewListenAddr");
+            }
+            e => {
+                panic!("unexpected event {:?}", e);
+            }
+        }
+    }
 }

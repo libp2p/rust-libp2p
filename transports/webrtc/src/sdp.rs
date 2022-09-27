@@ -26,6 +26,25 @@ use std::net::IpAddr;
 
 use crate::fingerprint::Fingerprint;
 
+pub(crate) fn render_server_session_description(
+    addr: SocketAddr,
+    fingerprint: &Fingerprint,
+) -> String {
+    render_description(
+        SERVER_SESSION_DESCRIPTION,
+        addr,
+        fingerprint,
+        &fingerprint.to_ufrag(),
+    )
+}
+
+/// Renders the SDP client session description.
+///
+/// Certificate verification is disabled which is why we hardcode a dummy fingerprint here.
+pub(crate) fn render_client_session_description(addr: SocketAddr, ufrag: &str) -> String {
+    render_description(CLIENT_SESSION_DESCRIPTION, addr, &Fingerprint::FF, ufrag)
+}
+
 // An SDP message that constitutes the offer.
 //
 // Main RFC: <https://datatracker.ietf.org/doc/html/rfc8866>
@@ -98,7 +117,7 @@ use crate::fingerprint::Fingerprint;
 // a=max-message-size:<value>
 //
 //     The maximum SCTP user message size (in bytes). (RFC8841)
-const CLIENT_SESSION_DESCRIPTION: &'static str = "v=0
+const CLIENT_SESSION_DESCRIPTION: &str = "v=0
 o=- 0 0 IN {ip_version} {target_ip}
 s=-
 c=IN {ip_version} {target_ip}
@@ -150,7 +169,7 @@ a=max-message-size:100000
 // a=candidate:<foundation> <component-id> <transport> <priority> <connection-address> <port> <cand-type>
 //
 //     A transport address for a candidate that can be used for connectivity checks (RFC8839).
-const SERVER_SESSION_DESCRIPTION: &'static str = "v=0
+const SERVER_SESSION_DESCRIPTION: &str = "v=0
 o=- 0 0 IN {ip_version} {target_ip}
 s=-
 t=0 0
@@ -189,22 +208,6 @@ struct DescriptionContext {
     pub pwd: String,
 }
 
-pub(crate) fn render_server_session_description(
-    addr: SocketAddr,
-    fingerprint: &Fingerprint,
-    ufrag: &str,
-) -> String {
-    render_description(SERVER_SESSION_DESCRIPTION, addr, fingerprint, ufrag)
-}
-
-pub(crate) fn render_client_session_description(
-    addr: SocketAddr,
-    fingerprint: &Fingerprint,
-    ufrag: &str,
-) -> String {
-    render_description(CLIENT_SESSION_DESCRIPTION, addr, fingerprint, ufrag)
-}
-
 /// Renders a [`TinyTemplate`] description using the provided arguments.
 fn render_description(
     description: &str,
@@ -226,7 +229,7 @@ fn render_description(
         target_ip: addr.ip(),
         target_port: addr.port(),
         fingerprint_algorithm: fingerprint.algorithm(),
-        fingerprint_value: fingerprint.value(),
+        fingerprint_value: fingerprint.to_sdp_format(),
         // NOTE: ufrag is equal to pwd.
         ufrag: ufrag.to_owned(),
         pwd: ufrag.to_owned(),

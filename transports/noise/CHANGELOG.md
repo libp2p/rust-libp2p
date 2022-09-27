@@ -1,3 +1,16 @@
+# 0.39.1 [unreleased]
+
+- Introduce `NoiseAuthenticated::xx` constructor, assuming a X25519 DH key exchange. An XX key exchange and X25519 keys
+  are the most common way of using noise in libp2p and thus deserve a convenience constructor. See [PR 2887].
+- Add `NoiseConfig::with_prologue` which allows users to set the noise prologue of the handshake. See [PR 2903].
+
+[PR 2887]: https://github.com/libp2p/rust-libp2p/pull/2887
+[PR 2903]: https://github.com/libp2p/rust-libp2p/pull/2903
+
+# 0.39.0
+
+- Update to `libp2p-core` `v0.36.0`.
+
 # 0.38.0
 
 - Update prost requirement from 0.10 to 0.11 which no longer installs the protoc Protobuf compiler.

@@ -18,10 +18,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::protocol;
+use crate::{protocol, PROTOCOL_NAME};
 use futures::future::BoxFuture;
 use futures::prelude::*;
 use futures_timer::Delay;
+use libp2p_core::upgrade::ReadyUpgrade;
 use libp2p_core::{upgrade::NegotiationError, UpgradeError};
 use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
@@ -225,13 +226,13 @@ impl ConnectionHandler for Handler {
     type InEvent = Void;
     type OutEvent = crate::Result;
     type Error = Failure;
-    type InboundProtocol = protocol::Ping;
-    type OutboundProtocol = protocol::Ping;
+    type InboundProtocol = ReadyUpgrade<&'static [u8]>;
+    type OutboundProtocol = ReadyUpgrade<&'static [u8]>;
     type OutboundOpenInfo = ();
     type InboundOpenInfo = ();
 
-    fn listen_protocol(&self) -> SubstreamProtocol<protocol::Ping, ()> {
-        SubstreamProtocol::new(protocol::Ping, ())
+    fn listen_protocol(&self) -> SubstreamProtocol<ReadyUpgrade<&'static [u8]>, ()> {
+        SubstreamProtocol::new(ReadyUpgrade::new(PROTOCOL_NAME), ())
     }
 
     fn inject_fully_negotiated_inbound(&mut self, stream: NegotiatedSubstream, (): ()) {
@@ -274,7 +275,8 @@ impl ConnectionHandler for Handler {
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<ConnectionHandlerEvent<protocol::Ping, (), crate::Result, Self::Error>> {
+    ) -> Poll<ConnectionHandlerEvent<ReadyUpgrade<&'static [u8]>, (), crate::Result, Self::Error>>
+    {
         match self.state {
             State::Inactive { reported: true } => {
                 return Poll::Pending; // nothing to do on this connection
@@ -366,7 +368,7 @@ impl ConnectionHandler for Handler {
                 }
                 None => {
                     self.outbound = Some(PingState::OpenStream);
-                    let protocol = SubstreamProtocol::new(protocol::Ping, ())
+                    let protocol = SubstreamProtocol::new(ReadyUpgrade::new(PROTOCOL_NAME), ())
                         .with_timeout(self.config.timeout);
                     return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
                         protocol,

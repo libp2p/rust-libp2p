@@ -19,23 +19,21 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::{
-    future,
     future::BoxFuture,
-    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
+    io::{AsyncRead, AsyncWrite},
     prelude::*,
     ready,
     stream::SelectAll,
     stream::Stream,
-    TryFutureExt,
 };
-use if_watch::IfEvent;
+use if_watch::{IfEvent, IfWatcher};
 use libp2p_core::{
     identity,
     multiaddr::{Multiaddr, Protocol},
     transport::{ListenerId, TransportError, TransportEvent},
     InboundUpgrade, OutboundUpgrade, PeerId, Transport, UpgradeInfo,
 };
-use libp2p_noise::{Keypair, NoiseConfig, NoiseError, RemoteIdentity, X25519Spec};
+use libp2p_noise::{Keypair, NoiseConfig, X25519Spec};
 use log::{debug, trace};
 use tokio_crate::net::UdpSocket;
 use webrtc::ice::udp_mux::UDPMux;
@@ -53,7 +51,6 @@ use crate::{
     connection::Connection,
     error::Error,
     fingerprint::Fingerprint,
-    in_addr::InAddr,
     substream::Substream,
     udp_mux::{UDPMuxEvent, UDPMuxNewAddr},
     webrtc_connection::WebRTCConnection,
@@ -84,8 +81,8 @@ impl WebRTCTransport {
         listener_id: ListenerId,
         addr: Multiaddr,
     ) -> Result<WebRTCListenStream, TransportError<Error>> {
-        let sock_addr = multiaddr_to_socketaddr(&addr)
-            .ok_or_else(|| TransportError::MultiaddrNotSupported(addr))?;
+        let sock_addr =
+            multiaddr_to_socketaddr(&addr).ok_or(TransportError::MultiaddrNotSupported(addr))?;
 
         // XXX: `UdpSocket::bind` is async, so use a std socket and convert
         let std_sock = std::net::UdpSocket::bind(sock_addr)
@@ -113,6 +110,9 @@ impl WebRTCTransport {
             self.config.clone(),
             udp_mux,
             self.id_keys.clone(),
+            IfWatcher::new()
+                .map_err(Error::IoError)
+                .map_err(TransportError::Other)?,
         ))
     }
 }
@@ -161,7 +161,7 @@ impl Transport for WebRTCTransport {
         trace!("dialing addr={}", remote);
 
         let config = self.config.clone();
-        let our_fingerprint = self.config.fingerprint_of_first_certificate();
+        let client_fingerprint = self.config.fingerprint_of_first_certificate();
         let id_keys = self.id_keys.clone();
 
         let first_listener = self
@@ -174,14 +174,14 @@ impl Transport for WebRTCTransport {
         // [`Transport::dial`] should do no work unless the returned [`Future`] is polled. Thus
         // do the `set_remote_description` call within the [`Future`].
         Ok(async move {
-            let remote_fingerprint =
-                fingerprint_from_addr(&addr).ok_or(Error::InvalidMultiaddr(addr.clone()))?;
+            let server_fingerprint = fingerprint_from_addr(&addr)
+                .ok_or_else(|| Error::InvalidMultiaddr(addr.clone()))?;
 
             let conn = WebRTCConnection::connect(
                 sock_addr,
                 config.into_inner(),
                 udp_mux,
-                &remote_fingerprint,
+                &server_fingerprint,
             )
             .await?;
 
@@ -192,8 +192,8 @@ impl Transport for WebRTCTransport {
             let peer_id = perform_noise_handshake_outbound(
                 id_keys,
                 Substream::new(data_channel.clone()),
-                our_fingerprint,
-                remote_fingerprint,
+                client_fingerprint,
+                server_fingerprint,
             )
             .await?;
 
@@ -247,13 +247,6 @@ pub struct WebRTCListenStream {
     /// when listening on all interfaces for IPv4 respectively IPv6 connections.
     listen_addr: SocketAddr,
 
-    /// The IP addresses of network interfaces on which the listening socket
-    /// is accepting connections.
-    ///
-    /// If the listen socket listens on all interfaces, these may change over
-    /// time as interfaces become available or unavailable.
-    in_addr: InAddr,
-
     /// The config which holds this peer's certificate(s).
     config: WebRTCConfiguration,
 
@@ -268,6 +261,13 @@ pub struct WebRTCListenStream {
     /// Optionally contains a [`TransportEvent::ListenerClosed`] that should be
     /// reported before the listener's stream is terminated.
     report_closed: Option<Option<<Self as Stream>::Item>>,
+
+    /// Watcher for network interface changes.
+    /// Reports [`IfEvent`]s for new / deleted ip-addresses when interfaces
+    /// become or stop being available.
+    ///
+    /// `None` if the socket is only listening on a single interface.
+    if_watcher: IfWatcher,
 }
 
 impl WebRTCListenStream {
@@ -278,17 +278,16 @@ impl WebRTCListenStream {
         config: WebRTCConfiguration,
         udp_mux: UDPMuxNewAddr,
         id_keys: identity::Keypair,
+        if_watcher: IfWatcher,
     ) -> Self {
-        let in_addr = InAddr::new(listen_addr.ip());
-
         WebRTCListenStream {
             listener_id,
             listen_addr,
-            in_addr,
             config,
             udp_mux,
             id_keys,
             report_closed: None,
+            if_watcher,
         }
     }
 
@@ -309,58 +308,48 @@ impl WebRTCListenStream {
         }
     }
 
-    /// Poll for a next If Event.
-    fn poll_if_addr(&mut self, cx: &mut Context<'_>) -> Poll<<Self as Stream>::Item> {
-        loop {
-            let mut item = ready!(self.in_addr.poll_next_unpin(cx));
-            if let Some(item) = item.take() {
-                // Consume all events for up/down interface changes.
-                match item {
-                    Ok(IfEvent::Up(inet)) => {
-                        let ip = inet.addr();
-                        if self.listen_addr.is_ipv4() == ip.is_ipv4()
-                            || self.listen_addr.is_ipv6() == ip.is_ipv6()
-                        {
-                            let socket_addr = SocketAddr::new(ip, self.listen_addr.port());
-                            let ma = socketaddr_to_multiaddr(&socket_addr);
-                            debug!("New listen address: {}", ma);
-                            return Poll::Ready(TransportEvent::NewAddress {
-                                listener_id: self.listener_id,
-                                listen_addr: ma,
-                            });
-                        } else {
-                            continue;
-                        }
-                    }
-                    Ok(IfEvent::Down(inet)) => {
-                        let ip = inet.addr();
-                        if self.listen_addr.is_ipv4() == ip.is_ipv4()
-                            || self.listen_addr.is_ipv6() == ip.is_ipv6()
-                        {
-                            let socket_addr = SocketAddr::new(ip, self.listen_addr.port());
-                            let ma = socketaddr_to_multiaddr(&socket_addr);
-                            debug!("Expired listen address: {}", ma);
-                            return Poll::Ready(TransportEvent::AddressExpired {
-                                listener_id: self.listener_id,
-                                listen_addr: ma,
-                            });
-                        } else {
-                            continue;
-                        }
-                    }
-                    Err(err) => {
-                        debug! {
-                            "Failure polling interfaces: {:?}.",
-                            err
-                        };
-                        return Poll::Ready(TransportEvent::ListenerError {
+    fn poll_if_watcher(&mut self, cx: &mut Context<'_>) -> Poll<<Self as Stream>::Item> {
+        while let Poll::Ready(event) = self.if_watcher.poll_if_event(cx) {
+            match event {
+                Ok(IfEvent::Up(inet)) => {
+                    let ip = inet.addr();
+                    if self.listen_addr.is_ipv4() == ip.is_ipv4()
+                        || self.listen_addr.is_ipv6() == ip.is_ipv6()
+                    {
+                        let socket_addr = SocketAddr::new(ip, self.listen_addr.port());
+                        let ma = socketaddr_to_multiaddr(&socket_addr);
+                        log::debug!("New listen address: {}", ma);
+                        return Poll::Ready(TransportEvent::NewAddress {
                             listener_id: self.listener_id,
-                            error: err.into(),
+                            listen_addr: ma,
                         });
                     }
                 }
+                Ok(IfEvent::Down(inet)) => {
+                    let ip = inet.addr();
+                    if self.listen_addr.is_ipv4() == ip.is_ipv4()
+                        || self.listen_addr.is_ipv6() == ip.is_ipv6()
+                    {
+                        let socket_addr = SocketAddr::new(ip, self.listen_addr.port());
+                        let ma = socketaddr_to_multiaddr(&socket_addr);
+                        log::debug!("Expired listen address: {}", ma);
+                        return Poll::Ready(TransportEvent::AddressExpired {
+                            listener_id: self.listener_id,
+                            listen_addr: ma,
+                        });
+                    }
+                }
+                Err(err) => {
+                    log::debug!("Error when polling network interfaces {}", err);
+                    return Poll::Ready(TransportEvent::ListenerError {
+                        listener_id: self.listener_id,
+                        error: err.into(),
+                    });
+                }
             }
         }
+
+        Poll::Pending
     }
 }
 
@@ -376,7 +365,7 @@ impl Stream for WebRTCListenStream {
                 return Poll::Ready(closed.take());
             }
 
-            if let Poll::Ready(event) = self.poll_if_addr(cx) {
+            if let Poll::Ready(event) = self.poll_if_watcher(cx) {
                 return Poll::Ready(Some(event));
             }
 
@@ -431,18 +420,18 @@ impl WebRTCConfiguration {
     /// Panics if the config does not contain any certificates.
     pub fn fingerprint_of_first_certificate(&self) -> Fingerprint {
         // safe to unwrap here because we require a certificate during construction.
-        let fingerprints = self
+        let fingerprint = self
             .inner
             .certificates
             .first()
             .expect("at least one certificate")
             .get_fingerprints()
-            .expect("get_fingerprints to succeed");
-        // TODO:
-        //   modify webrtc-rs to return value in upper-hex rather than lower-hex
-        //   Fingerprint::from(fingerprints.first().unwrap())
-        debug_assert_eq!("sha-256", fingerprints.first().unwrap().algorithm);
-        Fingerprint::new_sha256(fingerprints.first().unwrap().value.to_uppercase())
+            .expect("get_fingerprints to succeed")
+            .first()
+            .expect("at least one certificate")
+            .clone();
+
+        Fingerprint::try_from_rtc_dtls(fingerprint).expect("a sha256 fingerprint")
     }
 
     /// Consumes the `WebRTCConfiguration`, returning its inner configuration.
@@ -461,12 +450,18 @@ pub(crate) fn socketaddr_to_multiaddr(socket_addr: &SocketAddr) -> Multiaddr {
 
 /// Extracts a SHA-256 fingerprint from the given address. Returns `None` if the address does not
 /// contain one.
-fn fingerprint_from_addr<'a>(addr: &'a Multiaddr) -> Option<Fingerprint> {
+fn fingerprint_from_addr(addr: &Multiaddr) -> Option<Fingerprint> {
     let iter = addr.iter();
     for proto in iter {
         match proto {
             // Only support SHA-256 (0x12) for now.
-            Protocol::Certhash(f) if f.code() == 0x12 => return Some(Fingerprint::from(f)),
+            Protocol::Certhash(hash) => {
+                if let Some(fp) = Fingerprint::try_from_multihash(hash) {
+                    return Some(fp);
+                } else {
+                    continue;
+                }
+            }
             _ => continue,
         }
     }
@@ -504,8 +499,8 @@ fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Option<SocketAddr> {
 async fn perform_noise_handshake_outbound<T>(
     id_keys: identity::Keypair,
     poll_data_channel: T,
-    our_fingerprint: Fingerprint,
-    remote_fingerprint: Fingerprint,
+    client_fingerprint: Fingerprint,
+    server_fingerprint: Fingerprint,
 ) -> Result<PeerId, Error>
 where
     T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
@@ -513,37 +508,13 @@ where
     let dh_keys = Keypair::<X25519Spec>::new()
         .into_authentic(&id_keys)
         .unwrap();
-    let noise = NoiseConfig::xx(dh_keys);
+    let noise = NoiseConfig::xx(dh_keys)
+        .with_prologue(noise_prologue(client_fingerprint, server_fingerprint));
     let info = noise.protocol_info().next().unwrap();
-    let (peer_id, mut noise_io) = noise
+    let (peer_id, _noise_io) = noise
+        .into_authenticated()
         .upgrade_outbound(poll_data_channel, info)
-        .and_then(|(remote, io)| match remote {
-            RemoteIdentity::IdentityKey(pk) => future::ok((pk.to_peer_id(), io)),
-            _ => future::err(NoiseError::AuthenticationFailed),
-        })
         .await?;
-
-    // Exchange TLS certificate fingerprints to prevent MiM attacks.
-    debug!(
-        "exchanging TLS certificate fingerprints with peer_id={}",
-        peer_id
-    );
-    debug_assert_eq!("sha-256", our_fingerprint.algorithm());
-    let n = noise_io
-        .write(&our_fingerprint.value().into_bytes())
-        .await?;
-    noise_io.flush().await?;
-    let mut buf = vec![0; n]; // ASSERT: fingerprint's format is the same.
-    noise_io.read_exact(buf.as_mut_slice()).await?;
-    let fingerprint_from_noise = Fingerprint::new_sha256(
-        String::from_utf8(buf).map_err(|_| Error::Noise(NoiseError::AuthenticationFailed))?,
-    );
-    if fingerprint_from_noise != remote_fingerprint {
-        return Err(Error::InvalidFingerprint {
-            expected: remote_fingerprint.value(),
-            got: fingerprint_from_noise.value(),
-        });
-    }
 
     Ok(peer_id)
 }
@@ -557,13 +528,13 @@ async fn upgrade(
 ) -> Result<(PeerId, Connection), Error> {
     trace!("upgrading addr={} (ufrag={})", socket_addr, ufrag);
 
-    let our_fingerprint = config.fingerprint_of_first_certificate();
+    let server_fingerprint = config.fingerprint_of_first_certificate();
 
     let conn = WebRTCConnection::accept(
         socket_addr,
         config.into_inner(),
         udp_mux,
-        &our_fingerprint,
+        &server_fingerprint,
         &ufrag,
     )
     .await?;
@@ -576,12 +547,13 @@ async fn upgrade(
         socket_addr,
         ufrag
     );
-    let remote_fingerprint = conn.get_remote_fingerprint().await;
+    let client_fingerprint = conn.get_remote_fingerprint().await;
+
     let peer_id = perform_noise_handshake_inbound(
         id_keys,
         Substream::new(data_channel.clone()),
-        our_fingerprint,
-        remote_fingerprint,
+        client_fingerprint,
+        server_fingerprint,
     )
     .await?;
 
@@ -602,8 +574,8 @@ async fn upgrade(
 async fn perform_noise_handshake_inbound<T>(
     id_keys: identity::Keypair,
     poll_data_channel: T,
-    our_fingerprint: Fingerprint,
-    remote_fingerprint: Fingerprint,
+    client_fingerprint: Fingerprint,
+    server_fingerprint: Fingerprint,
 ) -> Result<PeerId, Error>
 where
     T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
@@ -611,57 +583,57 @@ where
     let dh_keys = Keypair::<X25519Spec>::new()
         .into_authentic(&id_keys)
         .unwrap();
-    let noise = NoiseConfig::xx(dh_keys);
+    let noise = NoiseConfig::xx(dh_keys)
+        .with_prologue(noise_prologue(client_fingerprint, server_fingerprint));
     let info = noise.protocol_info().next().unwrap();
-    let (peer_id, mut noise_io) = noise
+    let (peer_id, _noise_io) = noise
+        .into_authenticated()
         .upgrade_inbound(poll_data_channel, info)
-        .and_then(|(remote, io)| match remote {
-            RemoteIdentity::IdentityKey(pk) => future::ok((pk.to_peer_id(), io)),
-            _ => future::err(NoiseError::AuthenticationFailed),
-        })
         .await?;
-
-    // Exchange TLS certificate fingerprints to prevent MiM attacks.
-    debug!(
-        "exchanging TLS certificate fingerprints with peer_id={}",
-        peer_id
-    );
-
-    // 1. Submit SHA-256 fingerprint
-    debug_assert_eq!("sha-256", our_fingerprint.algorithm());
-    let n = noise_io
-        .write(&our_fingerprint.value().into_bytes())
-        .await?;
-    noise_io.flush().await?;
-
-    // 2. Receive one too and compare it to the fingerprint of the remote DTLS certificate.
-    let mut buf = vec![0; n]; // ASSERT: fingerprint's format is the same.
-    noise_io.read_exact(buf.as_mut_slice()).await?;
-    let fingerprint_from_noise = Fingerprint::new_sha256(
-        String::from_utf8(buf).map_err(|_| Error::Noise(NoiseError::AuthenticationFailed))?,
-    );
-    if fingerprint_from_noise != remote_fingerprint {
-        return Err(Error::InvalidFingerprint {
-            expected: remote_fingerprint.value(),
-            got: fingerprint_from_noise.value(),
-        });
-    }
-
     Ok(peer_id)
+}
+
+fn noise_prologue(client: Fingerprint, server: Fingerprint) -> Vec<u8> {
+    let server = server.to_multi_hash().to_bytes();
+    let client = client.to_multi_hash().to_bytes();
+
+    const PREFIX: &[u8] = b"libp2p-webrtc-noise:";
+
+    let mut out = Vec::with_capacity(PREFIX.len() + server.len() + client.len());
+    out.extend_from_slice(PREFIX);
+    out.extend_from_slice(&server);
+    out.extend_from_slice(&client);
+
+    out
 }
 
 // Tests //////////////////////////////////////////////////////////////////////////////////////////
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use futures::future::poll_fn;
+    use hex_literal::hex;
     use libp2p_core::{multiaddr::Protocol, Multiaddr};
     use rcgen::KeyPair;
+    use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
     use tokio_crate as tokio;
 
-    use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+    #[test]
+    fn noise_prologue_tests() {
+        let a = Fingerprint::raw(hex!(
+            "3e79af40d6059617a0d83b83a52ce73b0c1f37a72c6043ad2969e2351bdca870"
+        ));
+        let b = Fingerprint::raw(hex!(
+            "30fc9f469c207419dfdd0aab5f27a86c973c94e40548db9375cca2e915973b99"
+        ));
 
-    use super::*;
+        let prologue1 = noise_prologue(a, b);
+        let prologue2 = noise_prologue(b, a);
+
+        assert_eq!(hex::encode(&prologue1), "6c69627032702d7765627274632d6e6f6973653a122030fc9f469c207419dfdd0aab5f27a86c973c94e40548db9375cca2e915973b9912203e79af40d6059617a0d83b83a52ce73b0c1f37a72c6043ad2969e2351bdca870");
+        assert_eq!(hex::encode(&prologue2), "6c69627032702d7765627274632d6e6f6973653a12203e79af40d6059617a0d83b83a52ce73b0c1f37a72c6043ad2969e2351bdca870122030fc9f469c207419dfdd0aab5f27a86c973c94e40548db9375cca2e915973b99");
+    }
 
     #[test]
     fn multiaddr_to_socketaddr_conversion() {

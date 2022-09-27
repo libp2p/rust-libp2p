@@ -19,9 +19,9 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::{channel::oneshot, prelude::*};
-use libp2p_core::muxing::StreamMuxerExt;
-use libp2p_core::{upgrade, Transport};
-use libp2p_tcp::TcpTransport;
+use libp2p::core::muxing::StreamMuxerExt;
+use libp2p::core::{upgrade, Transport};
+use libp2p::tcp::TcpTransport;
 
 #[test]
 fn async_write() {
@@ -30,7 +30,7 @@ fn async_write() {
     let (tx, rx) = oneshot::channel();
 
     let bg_thread = async_std::task::spawn(async move {
-        let mplex = libp2p_mplex::MplexConfig::new();
+        let mplex = libp2p::mplex::MplexConfig::new();
 
         let mut transport = TcpTransport::default()
             .and_then(move |c, e| upgrade::apply(c, mplex, e, upgrade::Version::V1))
@@ -67,7 +67,7 @@ fn async_write() {
     });
 
     async_std::task::block_on(async {
-        let mplex = libp2p_mplex::MplexConfig::new();
+        let mplex = libp2p::mplex::MplexConfig::new();
         let mut transport = TcpTransport::default()
             .and_then(move |c, e| upgrade::apply(c, mplex, e, upgrade::Version::V1));
 

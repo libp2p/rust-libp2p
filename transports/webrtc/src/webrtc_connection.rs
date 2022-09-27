@@ -20,7 +20,6 @@
 
 use futures::{channel::oneshot, prelude::*, select};
 use futures_timer::Delay;
-use multihash::Hasher;
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use webrtc::api::setting_engine::SettingEngine;
@@ -74,15 +73,14 @@ impl WebRTCConnection {
 
         // 2. ANSWER
         // Set the remote description to the predefined SDP.
-        let remote_ufrag = remote_fingerprint.to_ufrag();
         let server_session_description =
-            crate::sdp::render_server_session_description(addr, remote_fingerprint, &remote_ufrag);
+            crate::sdp::render_server_session_description(addr, remote_fingerprint);
         log::debug!("ANSWER: {:?}", server_session_description);
         let sdp = RTCSessionDescription::answer(server_session_description).unwrap();
         // NOTE: this will start the gathering of ICE candidates
         peer_connection.set_remote_description(sdp).await?;
 
-        return Ok(Self { peer_connection });
+        Ok(Self { peer_connection })
     }
 
     pub async fn accept(
@@ -109,11 +107,8 @@ impl WebRTCConnection {
         let api = APIBuilder::new().with_setting_engine(se).build();
         let peer_connection = api.new_peer_connection(config).await?;
 
-        let client_session_description = crate::sdp::render_client_session_description(
-            addr,
-            &Fingerprint::new_sha256("NONE".to_owned()), // certificate verification is disabled, so any value is okay.
-            remote_ufrag,
-        );
+        let client_session_description =
+            crate::sdp::render_client_session_description(addr, remote_ufrag);
         log::debug!("OFFER: {:?}", client_session_description);
         let sdp = RTCSessionDescription::offer(client_session_description).unwrap();
         peer_connection.set_remote_description(sdp).await?;
@@ -124,7 +119,7 @@ impl WebRTCConnection {
         log::debug!("ANSWER: {:?}", answer.sdp);
         peer_connection.set_local_description(answer).await?;
 
-        return Ok(Self { peer_connection });
+        Ok(Self { peer_connection })
     }
 
     pub async fn create_initial_upgrade_data_channel(&self) -> Result<Arc<DataChannel>, Error> {
@@ -134,8 +129,7 @@ impl WebRTCConnection {
             .create_data_channel(
                 "data",
                 Some(RTCDataChannelInit {
-                    id: Some(1),
-                    negotiated: Some(true),
+                    negotiated: Some(1),
                     ..RTCDataChannelInit::default()
                 }),
             )
@@ -148,9 +142,9 @@ impl WebRTCConnection {
         select! {
             res = rx => match res {
                 Ok(detached) => Ok(detached),
-                Err(e) => return Err(Error::InternalError(e.to_string())),
+                Err(e) => Err(Error::InternalError(e.to_string())),
             },
-            _ = Delay::new(Duration::from_secs(10)).fuse() => return Err(Error::InternalError(
+            _ = Delay::new(Duration::from_secs(10)).fuse() => Err(Error::InternalError(
                 "data channel opening took longer than 10 seconds (see logs)".into(),
             ))
         }
@@ -168,11 +162,8 @@ impl WebRTCConnection {
             .transport()
             .get_remote_certificate()
             .await;
-        let mut h = multihash::Sha2_256::default();
-        h.update(&cert_bytes);
-        let mut bytes: [u8; 32] = [0; 32];
-        bytes.copy_from_slice(h.finalize());
-        Fingerprint::from(&bytes)
+
+        Fingerprint::from_certificate(&cert_bytes)
     }
 
     fn setting_engine(
