@@ -51,41 +51,13 @@ pub fn generate(identity_keypair: &identity::Keypair) -> Result<rcgen::Certifica
     // and certificate for multiple connections.
     let certificate_keypair = rcgen::KeyPair::generate(P2P_SIGNATURE_ALGORITHM)?;
 
-    let libp2p_extension: rcgen::CustomExtension = {
-        // The peer signs the concatenation of the string `libp2p-tls-handshake:`
-        // and the public key that it used to generate the certificate carrying
-        // the libp2p Public Key Extension, using its private host key.
-        let signature = {
-            let mut msg = vec![];
-            msg.extend(P2P_SIGNING_PREFIX);
-            msg.extend(certificate_keypair.public_key_der());
-
-            identity_keypair
-                .sign(&msg)
-                .map_err(|_| rcgen::RcgenError::RingUnspecified)?
-        };
-
-        // The public host key and the signature are ANS.1-encoded
-        // into the SignedKey data structure, which is carried
-        // in the libp2p Public Key Extension.
-        // SignedKey ::= SEQUENCE {
-        //    publicKey OCTET STRING,
-        //    signature OCTET STRING
-        // }
-        let extension_content = {
-            let serialized_pubkey = identity_keypair.public().to_protobuf_encoding();
-            yasna::encode_der(&(serialized_pubkey, signature))
-        };
-
-        // This extension MAY be marked critical.
-        let mut ext = rcgen::CustomExtension::from_oid_content(&P2P_EXT_OID, extension_content);
-        ext.set_criticality(true);
-        ext
-    };
     let certificate = {
         let mut params = rcgen::CertificateParams::new(vec![]);
         params.distinguished_name = rcgen::DistinguishedName::new();
-        params.custom_extensions.push(libp2p_extension);
+        params.custom_extensions.push(make_libp2p_extension(
+            identity_keypair,
+            &certificate_keypair,
+        )?);
         params.alg = P2P_SIGNATURE_ALGORITHM;
         params.key_pair = Some(certificate_keypair);
         rcgen::Certificate::from_params(params)?
@@ -210,6 +182,42 @@ fn parse_unverified(der_input: &[u8]) -> Result<P2pCertificate, webpki::Error> {
     };
 
     Ok(certificate)
+}
+
+fn make_libp2p_extension(
+    identity_keypair: &identity::Keypair,
+    certificate_keypair: &rcgen::KeyPair,
+) -> Result<rcgen::CustomExtension, rcgen::RcgenError> {
+    // The peer signs the concatenation of the string `libp2p-tls-handshake:`
+    // and the public key that it used to generate the certificate carrying
+    // the libp2p Public Key Extension, using its private host key.
+    let signature = {
+        let mut msg = vec![];
+        msg.extend(P2P_SIGNING_PREFIX);
+        msg.extend(certificate_keypair.public_key_der());
+
+        identity_keypair
+            .sign(&msg)
+            .map_err(|_| rcgen::RcgenError::RingUnspecified)?
+    };
+
+    // The public host key and the signature are ANS.1-encoded
+    // into the SignedKey data structure, which is carried
+    // in the libp2p Public Key Extension.
+    // SignedKey ::= SEQUENCE {
+    //    publicKey OCTET STRING,
+    //    signature OCTET STRING
+    // }
+    let extension_content = {
+        let serialized_pubkey = identity_keypair.public().to_protobuf_encoding();
+        yasna::encode_der(&(serialized_pubkey, signature))
+    };
+
+    // This extension MAY be marked critical.
+    let mut ext = rcgen::CustomExtension::from_oid_content(&P2P_EXT_OID, extension_content);
+    ext.set_criticality(true);
+
+    Ok(ext)
 }
 
 impl P2pCertificate<'_> {
