@@ -30,9 +30,8 @@ use instant::Instant;
 use libp2p_core::connection::{ConnectedPoint, ConnectionId};
 use libp2p_core::multiaddr::Protocol;
 use libp2p_core::PeerId;
-use libp2p_swarm::handler::DummyConnectionHandler;
 use libp2p_swarm::{
-    ConnectionHandlerUpgrErr, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
+    dummy, ConnectionHandlerUpgrErr, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
     PollParameters,
 };
 use std::collections::{hash_map, HashMap, HashSet, VecDeque};
@@ -234,7 +233,7 @@ impl NetworkBehaviour for Relay {
         peer: &PeerId,
         connection: &ConnectionId,
         _: &ConnectedPoint,
-        _handler: Either<handler::Handler, DummyConnectionHandler>,
+        _handler: Either<handler::Handler, dummy::ConnectionHandler>,
         _remaining_established: usize,
     ) {
         if let hash_map::Entry::Occupied(mut peer) = self.reservations.entry(*peer) {
@@ -283,7 +282,7 @@ impl NetworkBehaviour for Relay {
 
                 assert!(
                     !endpoint.is_relayed(),
-                    "`DummyConnectionHandler` handles relayed connections. It \
+                    "`dummy::ConnectionHandler` handles relayed connections. It \
                      denies all inbound substreams."
                 );
 
@@ -410,7 +409,7 @@ impl NetworkBehaviour for Relay {
 
                 assert!(
                     !endpoint.is_relayed(),
-                    "`DummyConnectionHandler` handles relayed connections. It \
+                    "`dummy::ConnectionHandler` handles relayed connections. It \
                      denies all inbound substreams."
                 );
 

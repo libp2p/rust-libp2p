@@ -26,7 +26,7 @@ use libp2p::ping::{Ping, PingConfig, PingEvent, PingSuccess};
 use libp2p::swarm::SwarmEvent;
 use libp2p::Swarm;
 use libp2p::{development_transport, rendezvous, Multiaddr};
-use libp2p_swarm::behaviour::keep_alive;
+use libp2p_swarm::keep_alive;
 use std::time::Duration;
 use void::Void;
 

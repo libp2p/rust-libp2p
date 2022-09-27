@@ -34,7 +34,7 @@ use libp2p::swarm::{NetworkBehaviour, Swarm, SwarmEvent};
 use libp2p::tcp::{GenTcpConfig, TcpTransport};
 use libp2p::yamux;
 use libp2p::NetworkBehaviour;
-use libp2p_swarm::behaviour::keep_alive;
+use libp2p_swarm::keep_alive;
 use quickcheck::*;
 use std::{num::NonZeroU8, time::Duration};
 

@@ -43,7 +43,7 @@
 use futures::prelude::*;
 use libp2p::swarm::{NetworkBehaviour, Swarm, SwarmEvent};
 use libp2p::{identity, ping, Multiaddr, NetworkBehaviour, PeerId};
-use libp2p_swarm::behaviour::keep_alive;
+use libp2p_swarm::keep_alive;
 use std::error::Error;
 
 #[async_std::main]

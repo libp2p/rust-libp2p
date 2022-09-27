@@ -1,18 +1,42 @@
+use crate::behaviour::{NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use crate::handler::{InboundUpgradeSend, OutboundUpgradeSend};
-use crate::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
-    SubstreamProtocol,
-};
+use crate::{ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive, SubstreamProtocol};
+use libp2p_core::connection::ConnectionId;
 use libp2p_core::upgrade::DeniedUpgrade;
+use libp2p_core::PeerId;
 use libp2p_core::UpgradeError;
 use std::task::{Context, Poll};
 use void::Void;
 
+/// Implementation of [`NetworkBehaviour`] that doesn't do anything other than keep all connections alive.
+pub struct Behaviour;
+
+impl NetworkBehaviour for Behaviour {
+    type ConnectionHandler = ConnectionHandler;
+    type OutEvent = Void;
+
+    fn new_handler(&mut self) -> Self::ConnectionHandler {
+        ConnectionHandler
+    }
+
+    fn inject_event(&mut self, _: PeerId, _: ConnectionId, event: Void) {
+        void::unreachable(event)
+    }
+
+    fn poll(
+        &mut self,
+        _: &mut Context<'_>,
+        _: &mut impl PollParameters,
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+        Poll::Pending
+    }
+}
+
 /// An implementation of [`ConnectionHandler`] that neither handles any protocols nor does it keep the connection alive.
 #[derive(Clone)]
-pub struct DummyConnectionHandler;
+pub struct ConnectionHandler;
 
-impl ConnectionHandler for DummyConnectionHandler {
+impl crate::handler::ConnectionHandler for ConnectionHandler {
     type InEvent = Void;
     type OutEvent = Void;
     type Error = Void;

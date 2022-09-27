@@ -55,7 +55,7 @@ use libp2p::core::Multiaddr;
 use libp2p::metrics::{Metrics, Recorder};
 use libp2p::swarm::{NetworkBehaviour, SwarmEvent};
 use libp2p::{identity, ping, NetworkBehaviour, PeerId, Swarm};
-use libp2p_swarm::behaviour::keep_alive;
+use libp2p_swarm::keep_alive;
 use log::info;
 use prometheus_client::registry::Registry;
 use std::error::Error;

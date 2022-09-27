@@ -29,7 +29,7 @@ use libp2p::ping::{Ping, PingEvent};
 use libp2p::swarm::{Swarm, SwarmEvent};
 use libp2p::NetworkBehaviour;
 use libp2p::{development_transport, rendezvous};
-use libp2p_swarm::behaviour::keep_alive;
+use libp2p_swarm::keep_alive;
 use void::Void;
 
 /// Examples for the rendezvous protocol:

@@ -18,9 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-pub mod dummy;
 mod either;
-pub mod keep_alive;
 pub mod toggle;
 
 use crate::dial_opts::DialOpts;
@@ -64,7 +62,7 @@ pub(crate) type THandlerOutEvent<THandler> =
 /// [`Toggle`](crate::behaviour::toggle::Toggle) [`NetworkBehaviour`].
 ///
 /// ``` rust
-/// # use libp2p_swarm::behaviour::dummy;
+/// # use libp2p_swarm::dummy;
 /// # use libp2p_swarm::behaviour::toggle::Toggle;
 /// let my_behaviour = dummy::Behaviour;
 /// let my_toggled_behaviour = Toggle::from(Some(my_behaviour));

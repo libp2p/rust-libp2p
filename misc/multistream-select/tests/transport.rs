@@ -28,8 +28,7 @@ use libp2p::core::{
 };
 use libp2p::mplex::MplexConfig;
 use libp2p::plaintext::PlainText2Config;
-use libp2p::swarm::behaviour::dummy;
-use libp2p::swarm::{Swarm, SwarmEvent};
+use libp2p::swarm::{dummy, Swarm, SwarmEvent};
 use rand::random;
 use std::task::Poll;
 

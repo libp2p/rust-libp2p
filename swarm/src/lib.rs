@@ -61,7 +61,9 @@ mod upgrade;
 
 pub mod behaviour;
 pub mod dial_opts;
+pub mod dummy;
 pub mod handler;
+pub mod keep_alive;
 
 pub use behaviour::{
     CloseConnection, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
@@ -72,8 +74,8 @@ pub use connection::{
 };
 pub use handler::{
     ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerSelect, ConnectionHandlerUpgrErr,
-    DummyConnectionHandler, IntoConnectionHandler, IntoConnectionHandlerSelect, KeepAlive,
-    OneShotHandler, OneShotHandlerConfig, SubstreamProtocol,
+    IntoConnectionHandler, IntoConnectionHandlerSelect, KeepAlive, OneShotHandler,
+    OneShotHandlerConfig, SubstreamProtocol,
 };
 pub use registry::{AddAddressResult, AddressRecord, AddressScore};
 
@@ -1559,7 +1561,6 @@ fn p2p_addr(peer: Option<PeerId>, addr: Multiaddr) -> Result<Multiaddr, Multiadd
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::handler::KeepAliveConnectionHandler;
     use crate::test::{CallTraceBehaviour, MockBehaviour};
     use futures::executor::block_on;
     use futures::future::poll_fn;
@@ -1656,7 +1657,7 @@ mod tests {
     fn test_connect_disconnect_ban() {
         // Since the test does not try to open any substreams, we can
         // use the dummy protocols handler.
-        let handler_proto = KeepAliveConnectionHandler;
+        let handler_proto = keep_alive::ConnectionHandler;
 
         let mut swarm1 = new_test_swarm::<_, ()>(handler_proto.clone()).build();
         let mut swarm2 = new_test_swarm::<_, ()>(handler_proto).build();
@@ -1774,7 +1775,7 @@ mod tests {
     fn test_swarm_disconnect() {
         // Since the test does not try to open any substreams, we can
         // use the dummy protocols handler.
-        let handler_proto = KeepAliveConnectionHandler;
+        let handler_proto = keep_alive::ConnectionHandler;
 
         let mut swarm1 = new_test_swarm::<_, ()>(handler_proto.clone()).build();
         let mut swarm2 = new_test_swarm::<_, ()>(handler_proto).build();
@@ -1840,7 +1841,7 @@ mod tests {
     fn test_behaviour_disconnect_all() {
         // Since the test does not try to open any substreams, we can
         // use the dummy protocols handler.
-        let handler_proto = KeepAliveConnectionHandler;
+        let handler_proto = keep_alive::ConnectionHandler;
 
         let mut swarm1 = new_test_swarm::<_, ()>(handler_proto.clone()).build();
         let mut swarm2 = new_test_swarm::<_, ()>(handler_proto).build();
@@ -1908,7 +1909,7 @@ mod tests {
     fn test_behaviour_disconnect_one() {
         // Since the test does not try to open any substreams, we can
         // use the dummy protocols handler.
-        let handler_proto = KeepAliveConnectionHandler;
+        let handler_proto = keep_alive::ConnectionHandler;
 
         let mut swarm1 = new_test_swarm::<_, ()>(handler_proto.clone()).build();
         let mut swarm2 = new_test_swarm::<_, ()>(handler_proto).build();
@@ -1993,7 +1994,7 @@ mod tests {
 
         fn prop(concurrency_factor: DialConcurrencyFactor) {
             block_on(async {
-                let mut swarm = new_test_swarm::<_, ()>(KeepAliveConnectionHandler)
+                let mut swarm = new_test_swarm::<_, ()>(keep_alive::ConnectionHandler)
                     .dial_concurrency_factor(concurrency_factor.0)
                     .build();
 
@@ -2061,7 +2062,7 @@ mod tests {
         let outgoing_limit = rand::thread_rng().gen_range(1..10);
 
         let limits = ConnectionLimits::default().with_max_pending_outgoing(Some(outgoing_limit));
-        let mut network = new_test_swarm::<_, ()>(KeepAliveConnectionHandler)
+        let mut network = new_test_swarm::<_, ()>(keep_alive::ConnectionHandler)
             .connection_limits(limits)
             .build();
 
@@ -2120,10 +2121,10 @@ mod tests {
         fn prop(limit: Limit) {
             let limit = limit.0;
 
-            let mut network1 = new_test_swarm::<_, ()>(KeepAliveConnectionHandler)
+            let mut network1 = new_test_swarm::<_, ()>(keep_alive::ConnectionHandler)
                 .connection_limits(limits(limit))
                 .build();
-            let mut network2 = new_test_swarm::<_, ()>(KeepAliveConnectionHandler)
+            let mut network2 = new_test_swarm::<_, ()>(keep_alive::ConnectionHandler)
                 .connection_limits(limits(limit))
                 .build();
 
@@ -2230,8 +2231,8 @@ mod tests {
         // Checks whether dialing an address containing the wrong peer id raises an error
         // for the expected peer id instead of the obtained peer id.
 
-        let mut swarm1 = new_test_swarm::<_, ()>(DummyConnectionHandler).build();
-        let mut swarm2 = new_test_swarm::<_, ()>(DummyConnectionHandler).build();
+        let mut swarm1 = new_test_swarm::<_, ()>(dummy::ConnectionHandler).build();
+        let mut swarm2 = new_test_swarm::<_, ()>(dummy::ConnectionHandler).build();
 
         swarm1.listen_on("/memory/0".parse().unwrap()).unwrap();
 
@@ -2290,7 +2291,7 @@ mod tests {
         //
         // The last two can happen in any order.
 
-        let mut swarm = new_test_swarm::<_, ()>(DummyConnectionHandler).build();
+        let mut swarm = new_test_swarm::<_, ()>(dummy::ConnectionHandler).build();
         swarm.listen_on("/memory/0".parse().unwrap()).unwrap();
 
         let local_address =
@@ -2348,7 +2349,7 @@ mod tests {
     fn dial_self_by_id() {
         // Trying to dial self by passing the same `PeerId` shouldn't even be possible in the first
         // place.
-        let swarm = new_test_swarm::<_, ()>(DummyConnectionHandler).build();
+        let swarm = new_test_swarm::<_, ()>(dummy::ConnectionHandler).build();
         let peer_id = *swarm.local_peer_id();
         assert!(!swarm.is_connected(&peer_id));
     }
@@ -2359,7 +2360,7 @@ mod tests {
 
         let target = PeerId::random();
 
-        let mut swarm = new_test_swarm::<_, ()>(DummyConnectionHandler).build();
+        let mut swarm = new_test_swarm::<_, ()>(dummy::ConnectionHandler).build();
 
         let addresses = HashSet::from([
             multiaddr![Ip4([0, 0, 0, 0]), Tcp(rand::random::<u16>())],
@@ -2404,8 +2405,8 @@ mod tests {
     fn aborting_pending_connection_surfaces_error() {
         let _ = env_logger::try_init();
 
-        let mut dialer = new_test_swarm::<_, ()>(DummyConnectionHandler).build();
-        let mut listener = new_test_swarm::<_, ()>(DummyConnectionHandler).build();
+        let mut dialer = new_test_swarm::<_, ()>(dummy::ConnectionHandler).build();
+        let mut listener = new_test_swarm::<_, ()>(dummy::ConnectionHandler).build();
 
         let listener_peer_id = *listener.local_peer_id();
         listener.listen_on(multiaddr![Memory(0u64)]).unwrap();
