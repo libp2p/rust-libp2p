@@ -54,18 +54,6 @@ pub fn generate(identity_keypair: &identity::Keypair) -> Result<rcgen::Certifica
     _generate(identity_keypair, certificate_keypair)
 }
 
-#[derive(Debug, thiserror::Error)]
-#[error(transparent)]
-pub struct GenError(#[from] rcgen::RcgenError);
-
-#[derive(Debug, thiserror::Error)]
-#[error(transparent)]
-pub struct ParseError(#[from] pub(crate) webpki::Error);
-
-#[derive(Debug, thiserror::Error)]
-#[error(transparent)]
-pub struct VerificationError(#[from] pub(crate) webpki::Error);
-
 /// Attempts to parse the provided bytes as a [`P2pCertificate`].
 ///
 /// For this to succeed, the certificate must contain the specified extension and the signature must
@@ -98,6 +86,18 @@ pub struct P2pExtension {
     /// in possession of the private host key at the time the certificate was signed.
     signature: Vec<u8>,
 }
+
+#[derive(Debug, thiserror::Error)]
+#[error(transparent)]
+pub struct GenError(#[from] rcgen::RcgenError);
+
+#[derive(Debug, thiserror::Error)]
+#[error(transparent)]
+pub struct ParseError(#[from] pub(crate) webpki::Error);
+
+#[derive(Debug, thiserror::Error)]
+#[error(transparent)]
+pub struct VerificationError(#[from] pub(crate) webpki::Error);
 
 fn _generate(
     identity_keypair: &identity::Keypair,
