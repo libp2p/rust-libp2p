@@ -18,8 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-mod substream;
-
 use futures::{
     channel::{
         mpsc,
@@ -42,7 +40,7 @@ use std::{
 };
 
 use crate::error::Error;
-pub(crate) use substream::Substream;
+use crate::substream::Substream;
 
 const MAX_DATA_CHANNELS_IN_FLIGHT: usize = 10;
 

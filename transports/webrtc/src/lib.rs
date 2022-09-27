@@ -88,6 +88,7 @@ mod fingerprint;
 mod in_addr;
 mod req_res_chan;
 mod sdp;
+mod substream;
 mod udp_mux;
 mod webrtc_connection;
 

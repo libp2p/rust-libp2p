@@ -51,10 +51,10 @@ use std::{
 
 use crate::{
     connection::Connection,
-    connection::Substream,
     error::Error,
     fingerprint::Fingerprint,
     in_addr::InAddr,
+    substream::Substream,
     udp_mux::{UDPMuxEvent, UDPMuxNewAddr},
     webrtc_connection::WebRTCConnection,
 };
