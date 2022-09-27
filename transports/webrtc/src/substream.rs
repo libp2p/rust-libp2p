@@ -69,51 +69,9 @@ impl Substream {
         }
     }
 
-    /// Get back the inner data_channel.
-    pub fn into_inner(self) -> PollDataChannel {
-        self.io.into_inner().into_inner()
-    }
-
-    /// Obtain a clone of the inner data_channel.
-    pub fn clone_inner(&self) -> PollDataChannel {
-        self.io.get_ref().clone()
-    }
-
-    /// MessagesSent returns the number of messages sent
-    pub fn messages_sent(&self) -> usize {
-        self.io.get_ref().messages_sent()
-    }
-
-    /// MessagesReceived returns the number of messages received
-    pub fn messages_received(&self) -> usize {
-        self.io.get_ref().messages_received()
-    }
-
-    /// BytesSent returns the number of bytes sent
-    pub fn bytes_sent(&self) -> usize {
-        self.io.get_ref().bytes_sent()
-    }
-
-    /// BytesReceived returns the number of bytes received
-    pub fn bytes_received(&self) -> usize {
-        self.io.get_ref().bytes_received()
-    }
-
     /// StreamIdentifier returns the Stream identifier associated to the stream.
     pub fn stream_identifier(&self) -> u16 {
         self.io.get_ref().stream_identifier()
-    }
-
-    /// BufferedAmount returns the number of bytes of data currently queued to be
-    /// sent over this stream.
-    pub fn buffered_amount(&self) -> usize {
-        self.io.get_ref().buffered_amount()
-    }
-
-    /// BufferedAmountLowThreshold returns the number of bytes of buffered outgoing
-    /// data that is considered "low." Defaults to 0.
-    pub fn buffered_amount_low_threshold(&self) -> usize {
-        self.io.get_ref().buffered_amount_low_threshold()
     }
 
     /// Set the capacity of the temporary read buffer (default: 8192).
