@@ -25,7 +25,7 @@ use futures::ready;
 use tokio_util::compat::Compat;
 use tokio_util::compat::TokioAsyncReadCompatExt;
 use webrtc::data::data_channel::DataChannel;
-use webrtc::data::data_channel::PollDataChannel as RTCPollDataChannel;
+use webrtc::data::data_channel::PollDataChannel;
 
 use std::{
     fmt, io,
@@ -51,7 +51,7 @@ const MAX_DATA_LEN: usize = MAX_MSG_LEN - VARINT_LEN - PROTO_OVERHEAD;
 ///
 /// #[derive(Debug)]
 pub struct Substream {
-    io: Framed<Compat<RTCPollDataChannel>, prost_codec::Codec<Message>>,
+    io: Framed<Compat<PollDataChannel>, prost_codec::Codec<Message>>,
     state: State,
 }
 
@@ -60,7 +60,7 @@ impl Substream {
     pub fn new(data_channel: Arc<DataChannel>) -> Self {
         Self {
             io: Framed::new(
-                RTCPollDataChannel::new(data_channel).compat(),
+                PollDataChannel::new(data_channel).compat(),
                 prost_codec::Codec::new(MAX_MSG_LEN),
             ),
             state: State::Open {
@@ -70,12 +70,12 @@ impl Substream {
     }
 
     /// Get back the inner data_channel.
-    pub fn into_inner(self) -> RTCPollDataChannel {
+    pub fn into_inner(self) -> PollDataChannel {
         self.io.into_inner().into_inner()
     }
 
     /// Obtain a clone of the inner data_channel.
-    pub fn clone_inner(&self) -> RTCPollDataChannel {
+    pub fn clone_inner(&self) -> PollDataChannel {
         self.io.get_ref().clone()
     }
 
@@ -123,7 +123,7 @@ impl Substream {
 }
 
 fn io_poll_next(
-    io: &mut Framed<Compat<RTCPollDataChannel>, prost_codec::Codec<Message>>,
+    io: &mut Framed<Compat<PollDataChannel>, prost_codec::Codec<Message>>,
     cx: &mut Context<'_>,
 ) -> Poll<io::Result<Option<(Option<Flag>, Option<Vec<u8>>)>>> {
     match ready!(io.poll_next_unpin(cx))
