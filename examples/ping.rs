@@ -41,8 +41,9 @@
 //! and begin pinging each other.
 
 use futures::prelude::*;
-use libp2p::swarm::{behaviour, NetworkBehaviour, Swarm, SwarmEvent};
+use libp2p::swarm::{NetworkBehaviour, Swarm, SwarmEvent};
 use libp2p::{identity, ping, Multiaddr, NetworkBehaviour, PeerId};
+use libp2p_swarm::behaviour::keep_alive;
 use std::error::Error;
 
 #[async_std::main]
@@ -82,6 +83,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
 /// pings can be observed.
 #[derive(NetworkBehaviour, Default)]
 struct Behaviour {
-    keep_alive: behaviour::KeepAlive,
+    keep_alive: keep_alive::Behaviour,
     ping: ping::Behaviour,
 }

@@ -30,10 +30,11 @@ use libp2p::core::{
 use libp2p::mplex;
 use libp2p::noise;
 use libp2p::ping;
-use libp2p::swarm::{behaviour, NetworkBehaviour, Swarm, SwarmEvent};
+use libp2p::swarm::{NetworkBehaviour, Swarm, SwarmEvent};
 use libp2p::tcp::{GenTcpConfig, TcpTransport};
 use libp2p::yamux;
 use libp2p::NetworkBehaviour;
+use libp2p_swarm::behaviour::keep_alive;
 use quickcheck::*;
 use std::{num::NonZeroU8, time::Duration};
 
@@ -197,7 +198,7 @@ fn max_failures() {
 #[test]
 fn unsupported_doesnt_fail() {
     let (peer1_id, trans) = mk_transport(MuxerChoice::Mplex);
-    let mut swarm1 = Swarm::new(trans, behaviour::KeepAlive, peer1_id.clone());
+    let mut swarm1 = Swarm::new(trans, keep_alive::Behaviour, peer1_id.clone());
 
     let (peer2_id, trans) = mk_transport(MuxerChoice::Mplex);
     let mut swarm2 = Swarm::new(trans, Behaviour::default(), peer2_id.clone());
@@ -271,14 +272,14 @@ impl Arbitrary for MuxerChoice {
 
 #[derive(NetworkBehaviour, Default)]
 struct Behaviour {
-    keep_alive: behaviour::KeepAlive,
+    keep_alive: keep_alive::Behaviour,
     ping: ping::Behaviour,
 }
 
 impl Behaviour {
     fn new(config: ping::Config) -> Self {
         Self {
-            keep_alive: behaviour::KeepAlive,
+            keep_alive: keep_alive::Behaviour,
             ping: ping::Behaviour::new(config),
         }
     }

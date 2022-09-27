@@ -53,8 +53,9 @@ use futures::executor::block_on;
 use futures::stream::StreamExt;
 use libp2p::core::Multiaddr;
 use libp2p::metrics::{Metrics, Recorder};
-use libp2p::swarm::{behaviour, NetworkBehaviour, SwarmEvent};
+use libp2p::swarm::{NetworkBehaviour, SwarmEvent};
 use libp2p::{identity, ping, NetworkBehaviour, PeerId, Swarm};
+use libp2p_swarm::behaviour::keep_alive;
 use log::info;
 use prometheus_client::registry::Registry;
 use std::error::Error;
@@ -106,10 +107,10 @@ fn main() -> Result<(), Box<dyn Error>> {
 
 /// Our network behaviour.
 ///
-/// For illustrative purposes, this includes the [`KeepAlive`](behaviour::KeepAlive) behaviour so the ping actually happen
+/// For illustrative purposes, this includes the [`keep_alive::Behaviour`]) behaviour so the ping actually happen
 /// and can be observed via the metrics.
 #[derive(NetworkBehaviour, Default)]
 struct Behaviour {
-    keep_alive: behaviour::KeepAlive,
+    keep_alive: keep_alive::Behaviour,
     ping: ping::Behaviour,
 }

@@ -6,9 +6,9 @@ use libp2p_core::PeerId;
 use std::task::{Context, Poll};
 
 /// Implementation of [`NetworkBehaviour`] that doesn't do anything other than keep all connections alive.
-pub struct Dummy;
+pub struct Behaviour;
 
-impl NetworkBehaviour for Dummy {
+impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = DummyConnectionHandler;
     type OutEvent = void::Void;
 

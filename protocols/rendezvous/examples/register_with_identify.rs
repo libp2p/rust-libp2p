@@ -26,7 +26,7 @@ use libp2p::ping::{Ping, PingConfig, PingEvent, PingSuccess};
 use libp2p::swarm::{Swarm, SwarmEvent};
 use libp2p::{development_transport, rendezvous};
 use libp2p::{Multiaddr, NetworkBehaviour};
-use libp2p_swarm::behaviour;
+use libp2p_swarm::behaviour::keep_alive;
 use std::time::Duration;
 use void::Void;
 
@@ -50,7 +50,7 @@ async fn main() {
             )),
             rendezvous: rendezvous::client::Behaviour::new(identity.clone()),
             ping: Ping::new(PingConfig::new().with_interval(Duration::from_secs(1))),
-            keep_alive: behaviour::KeepAlive,
+            keep_alive: keep_alive::Behaviour,
         },
         PeerId::from(identity.public()),
     );
@@ -150,5 +150,5 @@ struct MyBehaviour {
     identify: Identify,
     rendezvous: rendezvous::client::Behaviour,
     ping: Ping,
-    keep_alive: behaviour::KeepAlive,
+    keep_alive: keep_alive::Behaviour,
 }

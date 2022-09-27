@@ -12,9 +12,9 @@ use std::task::{Context, Poll};
 /// they are not in use. Connections can also fail at any time so really, your application should be
 /// designed to establish them when necessary, making the use of this behaviour likely redundant.
 #[derive(Default)]
-pub struct KeepAlive;
+pub struct Behaviour;
 
-impl NetworkBehaviour for KeepAlive {
+impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = KeepAliveConnectionHandler;
     type OutEvent = void::Void;
 

@@ -18,9 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-mod dummy;
+pub mod dummy;
 mod either;
-mod keep_alive;
+pub mod keep_alive;
 pub mod toggle;
 
 use crate::dial_opts::DialOpts;
@@ -30,9 +30,6 @@ use libp2p_core::{
     connection::ConnectionId, transport::ListenerId, ConnectedPoint, Multiaddr, PeerId,
 };
 use std::{task::Context, task::Poll};
-
-pub use dummy::Dummy;
-pub use keep_alive::KeepAlive;
 
 /// Custom event that can be received by the [`ConnectionHandler`].
 pub(crate) type THandlerInEvent<THandler> =
@@ -67,9 +64,9 @@ pub(crate) type THandlerOutEvent<THandler> =
 /// [`Toggle`](crate::behaviour::toggle::Toggle) [`NetworkBehaviour`].
 ///
 /// ``` rust
-/// # use libp2p_swarm::behaviour;
+/// # use libp2p_swarm::behaviour::dummy;
 /// # use libp2p_swarm::behaviour::toggle::Toggle;
-/// let my_behaviour = behaviour::Dummy;
+/// let my_behaviour = dummy::Behaviour;
 /// let my_toggled_behaviour = Toggle::from(Some(my_behaviour));
 /// ```
 ///
