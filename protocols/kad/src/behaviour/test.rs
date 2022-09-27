@@ -444,9 +444,7 @@ fn get_record_not_found() {
         .collect::<Vec<_>>();
 
     let target_key = record::Key::from(random_multihash());
-    let qid = swarms[0]
-        .behaviour_mut()
-        .get_record(target_key.clone(), Quorum::One);
+    let qid = swarms[0].behaviour_mut().get_record(target_key.clone());
 
     block_on(poll_fn(move |ctx| {
         for swarm in &mut swarms {
@@ -762,9 +760,7 @@ fn get_record() {
     let expected_cache_candidate = *Swarm::local_peer_id(&swarms[1]);
 
     swarms[2].behaviour_mut().store.put(record.clone()).unwrap();
-    let qid = swarms[0]
-        .behaviour_mut()
-        .get_record(record.key.clone(), Quorum::One);
+    let qid = swarms[0].behaviour_mut().get_record(record.key.clone());
 
     block_on(poll_fn(move |ctx| {
         for swarm in &mut swarms {
@@ -775,20 +771,28 @@ fn get_record() {
                             id,
                             result:
                                 QueryResult::GetRecord(Ok(GetRecordOk {
-                                    records,
+                                    record: r,
                                     cache_candidates,
                                 })),
+                            step: ProgressStep { count, last },
                             ..
                         },
                     ))) => {
                         assert_eq!(id, qid);
-                        assert_eq!(records.len(), 1);
-                        assert_eq!(records.first().unwrap().record, record);
-                        assert_eq!(cache_candidates.len(), 1);
-                        assert_eq!(
-                            cache_candidates.values().next(),
-                            Some(&expected_cache_candidate)
-                        );
+                        if count == 1 {
+                            assert!(r.is_none());
+                        }
+                        if count == 2 {
+                            assert_eq!(r.expect("missing record").record, record);
+                        }
+                        if last {
+                            assert_eq!(count, 3);
+                            assert_eq!(cache_candidates.len(), 1);
+                            assert_eq!(
+                                cache_candidates.values().next(),
+                                Some(&expected_cache_candidate)
+                            );
+                        }
                         return Poll::Ready(());
                     }
                     // Ignore any other event.
@@ -805,7 +809,6 @@ fn get_record() {
 
 #[test]
 fn get_record_many() {
-    // TODO: Randomise
     let num_nodes = 12;
     let mut swarms = build_connected_nodes(num_nodes, 3)
         .into_iter()
@@ -820,25 +823,36 @@ fn get_record_many() {
     }
 
     let quorum = Quorum::N(NonZeroUsize::new(num_results).unwrap());
-    let qid = swarms[0]
-        .behaviour_mut()
-        .get_record(record.key.clone(), quorum);
+    let qid = swarms[0].behaviour_mut().get_record(record.key.clone());
 
     block_on(poll_fn(move |ctx| {
-        for swarm in &mut swarms {
+        for (i, swarm) in swarms.iter_mut().enumerate() {
+            let mut records = Vec::new();
+            let quorum = quorum.eval(swarm.behaviour().replication_factor());
             loop {
+                if i == 0 {
+                    if records.len() >= quorum.get() {
+                        swarm.behaviour_mut().query_mut(&qid).unwrap().finish();
+                    }
+                }
                 match swarm.poll_next_unpin(ctx) {
                     Poll::Ready(Some(SwarmEvent::Behaviour(
                         KademliaEvent::OutboundQueryProgressed {
                             id,
-                            result: QueryResult::GetRecord(Ok(GetRecordOk { records, .. })),
+                            result: QueryResult::GetRecord(Ok(GetRecordOk { record: r, .. })),
+                            step: ProgressStep { count: _, last },
                             ..
                         },
                     ))) => {
                         assert_eq!(id, qid);
-                        assert!(records.len() >= num_results);
-                        assert!(records.into_iter().all(|r| r.record == record));
-                        return Poll::Ready(());
+                        if let Some(r) = r {
+                            assert_eq!(r.record, record);
+                            records.push(r);
+                        }
+
+                        if last {
+                            return Poll::Ready(());
+                        }
                     }
                     // Ignore any other event.
                     Poll::Ready(Some(_)) => (),
@@ -1122,7 +1136,7 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
     let (mut alice, mut bob, mut trudy) = (alice.1, bob.1, trudy.1);
 
     // Have `alice` query the Dht for `key` with a quorum of 1.
-    alice.behaviour_mut().get_record(key, Quorum::One);
+    alice.behaviour_mut().get_record(key);
 
     // The default peer timeout is 10 seconds. Choosing 1 seconds here should
     // give enough head room to prevent connections to `bob` to time out.
@@ -1130,6 +1144,7 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
 
     // Poll only `alice` and `trudy` expecting `alice` not yet to return a query
     // result as it is not able to connect to `bob` just yet.
+    let addr_trudy = Swarm::local_peer_id(&trudy).clone();
     block_on(poll_fn(|ctx| {
         for (i, swarm) in [&mut alice, &mut trudy].iter_mut().enumerate() {
             loop {
@@ -1137,18 +1152,25 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
                     Poll::Ready(Some(SwarmEvent::Behaviour(
                         KademliaEvent::OutboundQueryProgressed {
                             result: QueryResult::GetRecord(result),
+                            step,
                             ..
                         },
                     ))) => {
                         if i != 0 {
                             panic!("Expected `QueryResult` from Alice.")
                         }
-
-                        match result {
-                            Ok(_) => panic!(
+                        if step.last {
+                            panic!(
                                 "Expected query not to finish until all \
-                                     disjoint paths have been explored.",
-                            ),
+                                 disjoint paths have been explored.",
+                            );
+                        }
+                        match result {
+                            Ok(GetRecordOk { record, .. }) => {
+                                if let Some(record) = record {
+                                    assert_eq!(record.peer, Some(addr_trudy));
+                                }
+                            }
                             Err(e) => panic!("{:?}", e),
                         }
                     }
@@ -1166,19 +1188,19 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
 
     // Make sure `alice` has exactly one query with `trudy`'s record only.
     assert_eq!(1, alice.behaviour().queries.iter().count());
+
     alice
         .behaviour()
         .queries
         .iter()
         .for_each(|q| match &q.inner.info {
-            QueryInfo::GetRecord { records, .. } => {
-                assert_eq!(
-                    *records,
-                    vec![PeerRecord {
-                        peer: Some(*Swarm::local_peer_id(&trudy)),
-                        record: record_trudy.clone(),
-                    }],
-                );
+            QueryInfo::GetRecord {
+                count,
+                record_to_cache,
+                ..
+            } => {
+                assert_eq!(*count, 2);
+                assert_eq!(record_to_cache.as_ref().unwrap(), &record_trudy);
             }
             i => panic!("Unexpected query info: {:?}", i),
         });
@@ -1186,21 +1208,32 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
     // Poll `alice` and `bob` expecting `alice` to return a successful query
     // result as it is now able to explore the second disjoint path.
     let records = block_on(poll_fn(|ctx| {
+        let mut records = Vec::new();
         for (i, swarm) in [&mut alice, &mut bob].iter_mut().enumerate() {
             loop {
                 match swarm.poll_next_unpin(ctx) {
                     Poll::Ready(Some(SwarmEvent::Behaviour(
                         KademliaEvent::OutboundQueryProgressed {
                             result: QueryResult::GetRecord(result),
+                            step,
                             ..
                         },
                     ))) => {
                         if i != 0 {
                             panic!("Expected `QueryResult` from Alice.")
                         }
-
                         match result {
-                            Ok(ok) => return Poll::Ready(ok.records),
+                            Ok(ok) => {
+                                if let Some(record) = ok.record {
+                                    records.push(record);
+                                }
+                                if records.len() == 1 {
+                                    return Poll::Ready(records);
+                                }
+                                if step.last {
+                                    break;
+                                }
+                            }
                             Err(e) => unreachable!("{:?}", e),
                         }
                     }
@@ -1215,13 +1248,13 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
         Poll::Pending
     }));
 
-    assert_eq!(2, records.len());
+    assert_eq!(1, records.len());
     assert!(records.contains(&PeerRecord {
         peer: Some(*Swarm::local_peer_id(&bob)),
         record: record_bob,
     }));
     assert!(records.contains(&PeerRecord {
-        peer: Some(*Swarm::local_peer_id(&trudy)),
+        peer: Some(Swarm::local_peer_id(&trudy)),
         record: record_trudy,
     }));
 }

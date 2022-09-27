@@ -452,6 +452,11 @@ where
         }
     }
 
+    /// Returns the currently configured `replication_factor`.
+    pub fn replication_factor(&self) -> NonZeroUsize {
+        self.queries.config().replication_factor
+    }
+
     /// Gets an iterator over immutable references to all running queries.
     pub fn iter_queries(&self) -> impl Iterator<Item = QueryRef<'_>> {
         self.queries.iter().filter_map(|query| {
@@ -682,37 +687,50 @@ where
     ///
     /// The result of this operation is delivered in a
     /// [`KademliaEvent::OutboundQueryCompleted{QueryResult::GetRecord}`].
-    pub fn get_record(&mut self, key: record::Key, quorum: Quorum) -> QueryId {
-        let quorum = quorum.eval(self.queries.config().replication_factor);
-        let mut records = Vec::with_capacity(quorum.get());
-
-        if let Some(record) = self.store.get(&key) {
+    pub fn get_record(&mut self, key: record::Key) -> QueryId {
+        let record = if let Some(record) = self.store.get(&key) {
             if record.is_expired(Instant::now()) {
-                self.store.remove(&key)
+                self.store.remove(&key);
+                None
             } else {
-                records.push(PeerRecord {
+                Some(PeerRecord {
                     peer: None,
                     record: record.into_owned(),
-                });
+                })
             }
-        }
+        } else {
+            None
+        };
 
-        let done = records.len() >= quorum.get();
         let target = kbucket::Key::new(key.clone());
         let info = QueryInfo::GetRecord {
             key,
-            records,
-            quorum,
+            count: 1,
+            record_to_cache: record.as_ref().map(|r| r.record.clone()),
             cache_candidates: BTreeMap::new(),
         };
         let peers = self.kbuckets.closest_keys(&target);
         let inner = QueryInner::new(info);
         let id = self.queries.add_iter_closest(target.clone(), peers, inner); // (*)
 
-        // Instantly finish the query if we already have enough records.
-        if done {
-            self.queries.get_mut(&id).expect("by (*)").finish();
-        }
+        // No queries were actually done for the results yet.
+        let stats = QueryStats::empty();
+
+        self.queued_events
+            .push_back(NetworkBehaviourAction::GenerateEvent(
+                KademliaEvent::OutboundQueryProgressed {
+                    id,
+                    result: QueryResult::GetRecord(Ok(GetRecordOk {
+                        record,
+                        cache_candidates: Default::default(),
+                    })),
+                    step: ProgressStep {
+                        count: 1,
+                        last: false,
+                    },
+                    stats,
+                },
+            ));
 
         id
     }
@@ -1302,22 +1320,20 @@ where
                 count,
                 providers_found,
                 ..
-            } => {
-                Some(KademliaEvent::OutboundQueryProgressed {
-                    id: query_id,
-                    stats: result.stats,
-                    result: QueryResult::GetProviders(Ok(GetProvidersOk {
-                        key,
-                        providers: Default::default(),
-                        providers_so_far: providers_found,
-                        closest_peers: result.peers.collect(),
-                    })),
-                    step: ProgressStep {
-                        count, // FIXME: count?
-                        last: true,
-                    },
-                })
-            }
+            } => Some(KademliaEvent::OutboundQueryProgressed {
+                id: query_id,
+                stats: result.stats,
+                result: QueryResult::GetProviders(Ok(GetProvidersOk {
+                    key,
+                    providers: Default::default(),
+                    providers_so_far: providers_found,
+                    closest_peers: result.peers.collect(),
+                })),
+                step: ProgressStep {
+                    count: count + 1,
+                    last: true,
+                },
+            }),
 
             QueryInfo::AddProvider {
                 context,
@@ -1364,16 +1380,15 @@ where
 
             QueryInfo::GetRecord {
                 key,
-                records,
-                quorum,
+                count,
+                record_to_cache,
                 cache_candidates,
             } => {
-                let results = if records.len() >= quorum.get() {
+                let results = if let Some(record) = record_to_cache {
                     // [not empty]
-                    if quorum.get() == 1 && !cache_candidates.is_empty() {
+                    if !cache_candidates.is_empty() {
                         // Cache the record at the closest node(s) to the key that
                         // did not return the record.
-                        let record = records.first().expect("[not empty]").record.clone();
                         let quorum = NonZeroUsize::new(1).expect("1 > 0");
                         let context = PutRecordContext::Cache;
                         let info = QueryInfo::PutRecord {
@@ -1390,26 +1405,23 @@ where
                             .add_fixed(cache_candidates.values().copied(), inner);
                     }
                     Ok(GetRecordOk {
-                        records,
+                        record: Default::default(),
                         cache_candidates,
                     })
-                } else if records.is_empty() {
+                } else {
                     Err(GetRecordError::NotFound {
                         key,
                         closest_peers: result.peers.collect(),
-                    })
-                } else {
-                    Err(GetRecordError::QuorumFailed {
-                        key,
-                        records,
-                        quorum,
                     })
                 };
                 Some(KademliaEvent::OutboundQueryProgressed {
                     id: query_id,
                     stats: result.stats,
                     result: QueryResult::GetRecord(results),
-                    step: ProgressStep::single(),
+                    step: ProgressStep {
+                        count: count + 1,
+                        last: true,
+                    },
                 })
             }
 
@@ -1598,31 +1610,32 @@ where
                 }
             }
 
-            QueryInfo::GetRecord {
-                key,
-                records,
-                quorum,
-                ..
-            } => Some(KademliaEvent::OutboundQueryProgressed {
-                id: query_id,
-                stats: result.stats,
-                result: QueryResult::GetRecord(Err(GetRecordError::Timeout {
-                    key,
-                    records,
-                    quorum,
-                })),
-                step: ProgressStep::single(),
-            }),
+            QueryInfo::GetRecord { key, count, .. } => {
+                Some(KademliaEvent::OutboundQueryProgressed {
+                    id: query_id,
+                    stats: result.stats,
+                    result: QueryResult::GetRecord(Err(GetRecordError::Timeout { key })),
+                    step: ProgressStep {
+                        count: count + 1,
+                        last: true,
+                    },
+                })
+            }
 
-            QueryInfo::GetProviders { key, .. } => Some(KademliaEvent::OutboundQueryProgressed {
-                id: query_id,
-                stats: result.stats,
-                result: QueryResult::GetProviders(Err(GetProvidersError::Timeout {
-                    key,
-                    closest_peers: result.peers.collect(),
-                })),
-                step: ProgressStep::single(),
-            }),
+            QueryInfo::GetProviders { key, count, .. } => {
+                Some(KademliaEvent::OutboundQueryProgressed {
+                    id: query_id,
+                    stats: result.stats,
+                    result: QueryResult::GetProviders(Err(GetProvidersError::Timeout {
+                        key,
+                        closest_peers: result.peers.collect(),
+                    })),
+                    step: ProgressStep {
+                        count: count + 1,
+                        last: true,
+                    },
+                })
+            }
         }
     }
 
@@ -2220,40 +2233,39 @@ where
                 user_data,
             } => {
                 if let Some(query) = self.queries.get_mut(&user_data) {
+                    let stats = query.stats().clone();
                     if let QueryInfo::GetRecord {
                         key,
-                        records,
-                        quorum,
+                        ref mut count,
                         cache_candidates,
+                        ref mut record_to_cache,
                     } = &mut query.inner.info
                     {
                         if let Some(record) = record {
-                            records.push(PeerRecord {
+                            if record_to_cache.is_none() {
+                                *record_to_cache = Some(record.clone());
+                            }
+                            let record = PeerRecord {
                                 peer: Some(source),
                                 record,
-                            });
+                            };
 
-                            let quorum = quorum.get();
-                            if records.len() >= quorum {
-                                // Desired quorum reached. The query may finish. See
-                                // [`Query::try_finish`] for details.
-                                let peers = records
-                                    .iter()
-                                    .filter_map(|PeerRecord { peer, .. }| peer.as_ref())
-                                    .cloned()
-                                    .collect::<Vec<_>>();
-                                let finished = query.try_finish(peers.iter());
-                                if !finished {
-                                    debug!(
-                                        "GetRecord query ({:?}) reached quorum ({}/{}) with \
-                                         response from peer {} but could not yet finish.",
-                                        user_data,
-                                        peers.len(),
-                                        quorum,
-                                        source,
-                                    );
-                                }
-                            }
+                            *count += 1;
+                            self.queued_events
+                                .push_back(NetworkBehaviourAction::GenerateEvent(
+                                    KademliaEvent::OutboundQueryProgressed {
+                                        id: user_data,
+                                        result: QueryResult::GetRecord(Ok(GetRecordOk {
+                                            record: Some(record),
+                                            cache_candidates: cache_candidates.clone(),
+                                        })),
+                                        step: ProgressStep {
+                                            count: *count,
+                                            last: false,
+                                        },
+                                        stats,
+                                    },
+                                ));
                         } else {
                             log::trace!("Record with key {:?} not found at {}", key, source);
                             if let KademliaCaching::Enabled { max_peers } = self.caching {
@@ -2663,8 +2675,8 @@ pub type GetRecordResult = Result<GetRecordOk, GetRecordError>;
 /// The successful result of [`Kademlia::get_record`].
 #[derive(Debug, Clone)]
 pub struct GetRecordOk {
-    /// The records found, including the peer that returned them.
-    pub records: Vec<PeerRecord>,
+    /// The record found in this iteration, including the peer that returned them.
+    pub record: Option<PeerRecord>,
     /// If caching is enabled, these are the peers closest
     /// _to the record key_ (not the local node) that were queried but
     /// did not return the record, sorted by distance to the record key
@@ -2692,11 +2704,7 @@ pub enum GetRecordError {
         quorum: NonZeroUsize,
     },
     #[error("the request timed out")]
-    Timeout {
-        key: record::Key,
-        records: Vec<PeerRecord>,
-        quorum: NonZeroUsize,
-    },
+    Timeout { key: record::Key },
 }
 
 impl GetRecordError {
@@ -2982,7 +2990,7 @@ pub enum QueryInfo {
     /// A query initiated by [`Kademlia::get_closest_peers`].
     GetClosestPeers { key: Vec<u8> },
 
-    /// A query initiated by [`Kademlia::get_providers`].
+    /// A (repeated) query initiated by [`Kademlia::get_providers`].
     GetProviders {
         /// The key for which to search for providers.
         key: record::Key,
@@ -3013,15 +3021,14 @@ pub enum QueryInfo {
         context: PutRecordContext,
     },
 
-    /// A query initiated by [`Kademlia::get_record`].
+    /// A (repeated) query initiated by [`Kademlia::get_record`].
     GetRecord {
         /// The key to look for.
         key: record::Key,
-        /// The records with the id of the peer that returned them. `None` when
-        /// the record was found in the local store.
-        records: Vec<PeerRecord>,
-        /// The number of records to look for.
-        quorum: NonZeroUsize,
+        /// Current index of events.
+        count: usize,
+        /// The record that is to be cached in the `cache_candidates`.
+        record_to_cache: Option<Record>,
         /// The peers closest to the `key` that were queried but did not return a record,
         /// i.e. the peers that are candidates for caching the record.
         cache_candidates: BTreeMap<kbucket::Distance, PeerId>,
