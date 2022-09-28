@@ -31,7 +31,6 @@ use crate::endpoint::{EndpointChannel, ToEndpoint};
 use futures::{channel::mpsc, prelude::*};
 use futures_timer::Delay;
 use libp2p_core::PeerId;
-use quinn_proto::{RecvStream, SendStream};
 use std::{
     fmt,
     net::SocketAddr,
@@ -63,10 +62,10 @@ pub struct Connection {
 
 /// Error on the connection as a whole.
 #[derive(Debug, Clone, thiserror::Error)]
-pub enum Error {
-    /// The background task driving the endpoint has crashed.
-    #[error("Background task crashed")]
-    TaskCrashed,
+pub enum ConnectionError {
+    /// The [`EndpointDriver`] has crashed.
+    #[error("Endpoint driver crashed")]
+    EndpointDriverCrashed,
     /// Error in the inner state machine.
     #[error("{0}")]
     Quinn(#[from] quinn_proto::ConnectionError),
@@ -75,8 +74,8 @@ pub enum Error {
 impl Connection {
     /// Crate-internal function that builds a [`Connection`] from raw components.
     ///
-    /// This function assumes that there exists a background task that will process the messages
-    /// sent to `Endpoint::to_endpoint` and send us messages on `from_endpoint`.
+    /// This function assumes that there exists a [`EndpointDriver`] that will process the messages
+    /// sent to `EndpointChannel::to_endpoint` and send us messages on `from_endpoint`.
     ///
     /// `connection_id` is used to identify the local connection in the messages sent to
     /// `to_endpoint`.
@@ -169,12 +168,12 @@ impl Connection {
     }
 
     /// Control over the stream for reading.
-    pub fn recv_stream(&mut self, id: quinn_proto::StreamId) -> RecvStream<'_> {
+    pub fn recv_stream(&mut self, id: quinn_proto::StreamId) -> quinn_proto::RecvStream<'_> {
         self.connection.recv_stream(id)
     }
 
     /// Control over the stream for writing.
-    pub fn send_stream(&mut self, id: quinn_proto::StreamId) -> SendStream<'_> {
+    pub fn send_stream(&mut self, id: quinn_proto::StreamId) -> quinn_proto::SendStream<'_> {
         self.connection.send_stream(id)
     }
 
@@ -209,7 +208,9 @@ impl Connection {
                 }
                 Poll::Ready(None) => {
                     if closed.is_none() {
-                        return Poll::Ready(ConnectionEvent::ConnectionLost(Error::TaskCrashed));
+                        return Poll::Ready(ConnectionEvent::ConnectionLost(
+                            ConnectionError::EndpointDriverCrashed,
+                        ));
                     }
                 }
                 Poll::Pending => {}
@@ -231,7 +232,9 @@ impl Connection {
                         return Poll::Pending;
                     }
                     Err(_) => {
-                        return Poll::Ready(ConnectionEvent::ConnectionLost(Error::TaskCrashed));
+                        return Poll::Ready(ConnectionEvent::ConnectionLost(
+                            ConnectionError::EndpointDriverCrashed,
+                        ));
                     }
                 }
             }
@@ -317,7 +320,7 @@ pub enum ConnectionEvent {
     Connected,
 
     /// Connection has been closed and can no longer be used.
-    ConnectionLost(Error),
+    ConnectionLost(ConnectionError),
 
     /// Generated after [`Connection::accept_substream`] has been called and has returned
     /// `None`. After this event has been generated, this method is guaranteed to return `Some`.
@@ -360,9 +363,9 @@ impl TryFrom<quinn_proto::Event> for ConnectionEvent {
             quinn_proto::Event::Stream(quinn_proto::StreamEvent::Opened {
                 dir: quinn_proto::Dir::Bi,
             }) => Ok(ConnectionEvent::StreamOpened),
-            quinn_proto::Event::ConnectionLost { reason } => {
-                Ok(ConnectionEvent::ConnectionLost(Error::Quinn(reason)))
-            }
+            quinn_proto::Event::ConnectionLost { reason } => Ok(ConnectionEvent::ConnectionLost(
+                ConnectionError::Quinn(reason),
+            )),
             quinn_proto::Event::Stream(quinn_proto::StreamEvent::Finished { id }) => {
                 Ok(ConnectionEvent::StreamFinished(id))
             }

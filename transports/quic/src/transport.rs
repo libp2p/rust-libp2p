@@ -24,8 +24,8 @@
 
 use crate::connection::Connection;
 use crate::endpoint::ToEndpoint;
-use crate::Config;
 use crate::{endpoint::EndpointChannel, muxer::QuicMuxer, upgrade::Upgrade};
+use crate::{Config, ConnectionError};
 
 #[cfg(feature = "async-std")]
 mod async_std;
@@ -45,7 +45,7 @@ use if_watch::{IfEvent, IfWatcher};
 
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
-    transport::{ListenerId, TransportError, TransportEvent},
+    transport::{ListenerId, TransportError as CoreTransportError, TransportEvent},
     PeerId, Transport,
 };
 use std::collections::VecDeque;
@@ -57,14 +57,6 @@ use std::{
     net::SocketAddr,
     pin::Pin,
     task::{Context, Poll},
-};
-
-// We reexport the errors that are exposed in the API.
-// All of these types use one another.
-pub use crate::connection::Error as Libp2pQuicConnectionError;
-pub use quinn_proto::{
-    ApplicationClose, ConfigError, ConnectError, ConnectionClose, ConnectionError,
-    TransportError as QuinnTransportError, TransportErrorCode,
 };
 
 #[derive(Debug)]
@@ -93,33 +85,37 @@ impl<P> QuicTransport<P> {
 
 /// Error that can happen on the transport.
 #[derive(Debug, thiserror::Error)]
-pub enum Error {
+pub enum TransportError {
     /// Error while trying to reach a remote.
     #[error("{0}")]
-    Reach(ConnectError),
+    Reach(quinn_proto::ConnectError),
     /// Error after the remote has been reached.
     #[error("{0}")]
-    Established(Libp2pQuicConnectionError),
+    Established(ConnectionError),
 
     #[error("{0}")]
     Io(#[from] std::io::Error),
 
-    #[error("Background task crashed.")]
-    TaskCrashed,
+    /// The [`EndpointDriver`] has crashed.
+    #[error("Endpoint driver crashed")]
+    EndpointDriverCrashed,
 }
 
 impl<P: Provider> Transport for QuicTransport<P> {
     type Output = (PeerId, QuicMuxer);
-    type Error = Error;
+    type Error = TransportError;
     type ListenerUpgrade = Upgrade;
     type Dial = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-    fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
-        let socket_addr =
-            multiaddr_to_socketaddr(&addr).ok_or(TransportError::MultiaddrNotSupported(addr))?;
+    fn listen_on(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<ListenerId, CoreTransportError<Self::Error>> {
+        let socket_addr = multiaddr_to_socketaddr(&addr)
+            .ok_or(CoreTransportError::MultiaddrNotSupported(addr))?;
         let listener_id = ListenerId::new();
         let listener = Listener::new::<P>(listener_id, socket_addr, self.config.clone())
-            .map_err(TransportError::Other)?;
+            .map_err(CoreTransportError::Other)?;
         self.listeners.push(listener);
         // Drop reference to dialer endpoint so that the endpoint is dropped once the last
         // connection that uses it is closed.
@@ -144,11 +140,11 @@ impl<P: Provider> Transport for QuicTransport<P> {
         Some(observed.clone())
     }
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, CoreTransportError<Self::Error>> {
         let socket_addr = multiaddr_to_socketaddr(&addr)
-            .ok_or_else(|| TransportError::MultiaddrNotSupported(addr.clone()))?;
+            .ok_or_else(|| CoreTransportError::MultiaddrNotSupported(addr.clone()))?;
         if socket_addr.port() == 0 || socket_addr.ip().is_unspecified() {
-            return Err(TransportError::MultiaddrNotSupported(addr));
+            return Err(CoreTransportError::MultiaddrNotSupported(addr));
         }
         let mut listeners = self
             .listeners
@@ -194,8 +190,8 @@ impl<P: Provider> Transport for QuicTransport<P> {
         Ok(async move {
             let connection = rx
                 .await
-                .map_err(|_| Error::TaskCrashed)?
-                .map_err(Error::Reach)?;
+                .map_err(|_| TransportError::EndpointDriverCrashed)?
+                .map_err(TransportError::Reach)?;
             let final_connec = Upgrade::from_connection(connection).await?;
             Ok(final_connec)
         }
@@ -205,7 +201,7 @@ impl<P: Provider> Transport for QuicTransport<P> {
     fn dial_as_listener(
         &mut self,
         addr: Multiaddr,
-    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+    ) -> Result<Self::Dial, CoreTransportError<Self::Error>> {
         // TODO: As the listener of a QUIC hole punch, we need to send a random UDP packet to the
         // `addr`. See DCUtR specification below.
         //
@@ -245,9 +241,12 @@ struct Dialer {
 }
 
 impl Dialer {
-    fn new<P: Provider>(config: Config, is_ipv6: bool) -> Result<Self, TransportError<Error>> {
+    fn new<P: Provider>(
+        config: Config,
+        is_ipv6: bool,
+    ) -> Result<Self, CoreTransportError<TransportError>> {
         let endpoint_channel =
-            EndpointChannel::new_dialer::<P>(config, is_ipv6).map_err(TransportError::Other)?;
+            EndpointChannel::new_dialer::<P>(config, is_ipv6).map_err(CoreTransportError::Other)?;
         Ok(Dialer {
             endpoint_channel,
             pending_dials: VecDeque::new(),
@@ -295,7 +294,7 @@ impl Listener {
         listener_id: ListenerId,
         socket_addr: SocketAddr,
         config: Config,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self, TransportError> {
         let (endpoint_channel, new_connections_rx) =
             EndpointChannel::new_bidirectional::<P>(config, socket_addr)?;
 
@@ -327,7 +326,7 @@ impl Listener {
 
     /// Report the listener as closed in a [`TransportEvent::ListenerClosed`] and
     /// terminate the stream.
-    fn close(&mut self, reason: Result<(), Error>) {
+    fn close(&mut self, reason: Result<(), TransportError>) {
         if self.is_closed {
             return;
         }
@@ -380,7 +379,7 @@ impl Listener {
 }
 
 impl Stream for Listener {
-    type Item = TransportEvent<Upgrade, Error>;
+    type Item = TransportEvent<Upgrade, TransportError>;
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         loop {
             if let Some(event) = self.pending_event.take() {
@@ -398,7 +397,7 @@ impl Stream for Listener {
                     Ok(Ok(())) => {}
                     Ok(Err(to_endpoint)) => self.pending_dials.push_front(to_endpoint),
                     Err(_) => {
-                        self.close(Err(Error::TaskCrashed));
+                        self.close(Err(TransportError::EndpointDriverCrashed));
                         continue;
                     }
                 }
@@ -416,7 +415,7 @@ impl Stream for Listener {
                     return Poll::Ready(Some(event));
                 }
                 Poll::Ready(None) => {
-                    self.close(Err(Error::TaskCrashed));
+                    self.close(Err(TransportError::EndpointDriverCrashed));
                     continue;
                 }
                 Poll::Pending => {}

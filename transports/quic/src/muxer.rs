@@ -18,13 +18,14 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::connection::{Connection, ConnectionEvent};
-use crate::error::Error;
+use crate::{
+    connection::{Connection, ConnectionEvent},
+    ConnectionError,
+};
 
 use futures::{AsyncRead, AsyncWrite};
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
 use parking_lot::Mutex;
-use quinn_proto::FinishError;
 use std::{
     collections::HashMap,
     io::{self, Write},
@@ -36,9 +37,6 @@ use std::{
 /// State for a single opened QUIC connection.
 #[derive(Debug)]
 pub struct QuicMuxer {
-    // Note: This could theoretically be an asynchronous future, in order to yield the current
-    // task if a task running in parallel is already holding the lock. However, using asynchronous
-    // mutexes without async/await is extremely tedious and maybe not worth the effort.
     inner: Arc<Mutex<Inner>>,
 }
 
@@ -85,7 +83,7 @@ impl QuicMuxer {
 
 impl StreamMuxer for QuicMuxer {
     type Substream = Substream;
-    type Error = Error;
+    type Error = ConnectionError;
 
     fn poll(
         self: Pin<&mut Self>,
@@ -103,9 +101,7 @@ impl StreamMuxer for QuicMuxer {
                         event
                     );
                 }
-                ConnectionEvent::ConnectionLost(err) => {
-                    return Poll::Ready(Err(Error::ConnectionLost(err)))
-                }
+                ConnectionEvent::ConnectionLost(err) => return Poll::Ready(Err(err)),
                 ConnectionEvent::StreamOpened => {
                     if let Some(waker) = inner.poll_outbound_waker.take() {
                         waker.wake();
@@ -242,16 +238,15 @@ impl AsyncRead for Substream {
         cx: &mut Context<'_>,
         mut buf: &mut [u8],
     ) -> Poll<io::Result<usize>> {
-        use quinn_proto::{ReadError, ReadableError};
         let mut muxer = self.muxer.lock();
 
         let mut stream = muxer.connection.recv_stream(self.id);
         let mut chunks = match stream.read(true) {
             Ok(chunks) => chunks,
-            Err(ReadableError::UnknownStream) => {
+            Err(quinn_proto::ReadableError::UnknownStream) => {
                 return Poll::Ready(Ok(0));
             }
-            Err(ReadableError::IllegalOrderedRead) => {
+            Err(quinn_proto::ReadableError::IllegalOrderedRead) => {
                 unreachable!(
                     "Illegal ordered read can only happen if `stream.read(false)` is used."
                 );
@@ -269,10 +264,10 @@ impl AsyncRead for Substream {
                     bytes += chunk.bytes.len();
                 }
                 Ok(None) => break,
-                Err(err @ ReadError::Reset(_)) => {
+                Err(err @ quinn_proto::ReadError::Reset(_)) => {
                     return Poll::Ready(Err(io::Error::new(io::ErrorKind::ConnectionReset, err)))
                 }
-                Err(ReadError::Blocked) => {
+                Err(quinn_proto::ReadError::Blocked) => {
                     pending = true;
                     break;
                 }
@@ -356,8 +351,8 @@ impl Drop for Substream {
         match send_stream.finish() {
             Ok(()) => {}
             // Already finished or reset, which is fine.
-            Err(FinishError::UnknownStream) => {}
-            Err(FinishError::Stopped(reason)) => {
+            Err(quinn_proto::FinishError::UnknownStream) => {}
+            Err(quinn_proto::FinishError::Stopped(reason)) => {
                 let _ = send_stream.reset(reason);
             }
         }

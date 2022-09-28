@@ -39,7 +39,6 @@ use futures::{
     prelude::*,
     ready,
 };
-use quinn_proto::{ClientConfig as QuinnClientConfig, ServerConfig as QuinnServerConfig, Transmit};
 use std::{
     collections::HashMap,
     io,
@@ -75,14 +74,14 @@ impl Config {
         let client_tls_config = tls::make_client_config(keypair).unwrap();
         let server_tls_config = tls::make_server_config(keypair).unwrap();
 
-        let mut server_config = QuinnServerConfig::with_crypto(Arc::new(server_tls_config));
+        let mut server_config = quinn_proto::ServerConfig::with_crypto(Arc::new(server_tls_config));
         server_config.transport = Arc::clone(&transport);
         // Disables connection migration.
         // Long-term this should be enabled, however we then need to handle address change
         // on connections in the `QuicMuxer`.
         server_config.migration(false);
 
-        let mut client_config = QuinnClientConfig::new(Arc::new(client_tls_config));
+        let mut client_config = quinn_proto::ClientConfig::new(Arc::new(client_tls_config));
         client_config.transport = transport;
         Ok(Self {
             client_config,
@@ -107,7 +106,7 @@ impl EndpointChannel {
     pub fn new_bidirectional<P: Provider>(
         config: Config,
         socket_addr: SocketAddr,
-    ) -> Result<(EndpointChannel, mpsc::Receiver<Connection>), transport::Error> {
+    ) -> Result<(EndpointChannel, mpsc::Receiver<Connection>), transport::TransportError> {
         let (new_connections_tx, new_connections_rx) = mpsc::channel(1);
         let endpoint = Self::new::<P>(config, socket_addr, Some(new_connections_tx))?;
         Ok((endpoint, new_connections_rx))
@@ -117,7 +116,7 @@ impl EndpointChannel {
     pub fn new_dialer<P: Provider>(
         config: Config,
         is_ipv6: bool,
-    ) -> Result<EndpointChannel, transport::Error> {
+    ) -> Result<EndpointChannel, transport::TransportError> {
         let socket_addr = if is_ipv6 {
             SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0)
         } else {
@@ -130,7 +129,7 @@ impl EndpointChannel {
         config: Config,
         socket_addr: SocketAddr,
         new_connections: Option<mpsc::Sender<Connection>>,
-    ) -> Result<EndpointChannel, transport::Error> {
+    ) -> Result<EndpointChannel, transport::TransportError> {
         // NOT blocking, as per man:bind(2), as we pass an IP address.
         let socket = std::net::UdpSocket::bind(&socket_addr)?;
         socket.set_nonblocking(true)?;
@@ -338,7 +337,7 @@ impl<P: Provider> EndpointDriver<P> {
     }
 
     /// Insert future to send a datagram on the socket.
-    fn send_packet_out(&mut self, transmit: Transmit) {
+    fn send_packet_out(&mut self, transmit: quinn_proto::Transmit) {
         let len = transmit.contents.len();
         let socket = self.socket.clone();
         let send =

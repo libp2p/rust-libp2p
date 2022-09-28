@@ -49,7 +49,7 @@ impl Upgrade {
 }
 
 impl Future for Upgrade {
-    type Output = Result<(PeerId, QuicMuxer), transport::Error>;
+    type Output = Result<(PeerId, QuicMuxer), transport::TransportError>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let connection = self
@@ -65,7 +65,7 @@ impl Future for Upgrade {
                     return Poll::Ready(Ok((peer_id, muxer)));
                 }
                 ConnectionEvent::ConnectionLost(err) => {
-                    return Poll::Ready(Err(transport::Error::Established(err)))
+                    return Poll::Ready(Err(transport::TransportError::Established(err)))
                 }
                 // Other items are:
                 // - HandshakeDataReady
