@@ -3,7 +3,7 @@ name = "libp2p-ping"
 edition = "2021"
 rust-version = "1.56.1"
 description = "Ping protocol for libp2p"
-version = "0.39.0"
+version = "0.39.1"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -17,10 +17,10 @@ instant = "0.1.11"
 libp2p-core = { version = "0.36.0", path = "../../core", default-features = false }
 libp2p-swarm = { version = "0.39.0", path = "../../swarm" }
 log = "0.4.1"
-rand = "0.7.2"
+rand = "0.8"
 void = "1.0"
 
 [dev-dependencies]
 async-std = "1.6.2"
 libp2p = { path = "../../", default-features = false, features = ["tcp-async-io", "noise", "mplex", "yamux", "ping"] }
-quickcheck = "0.9.0"
+quickcheck = { package = "quickcheck-ext", path = "../../misc/quickcheck-ext" }

@@ -31,6 +31,7 @@ use libp2p_swarm::{
     NotifyHandler, PollParameters,
 };
 use lru::LruCache;
+use std::num::NonZeroUsize;
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     iter::FromIterator,
@@ -58,7 +59,7 @@ pub struct Identify {
     /// the local peer should be sent.
     pending_push: HashSet<PeerId>,
     /// The addresses of all peers that we have discovered.
-    discovered_peers: LruCache<PeerId, HashSet<Multiaddr>>,
+    discovered_peers: PeerCache,
 }
 
 /// A pending reply to an inbound identification request.
@@ -175,7 +176,10 @@ impl IdentifyConfig {
 impl Identify {
     /// Creates a new `Identify` network behaviour.
     pub fn new(config: IdentifyConfig) -> Self {
-        let discovered_peers = LruCache::new(config.cache_size);
+        let discovered_peers = match NonZeroUsize::new(config.cache_size) {
+            None => PeerCache::disabled(),
+            Some(size) => PeerCache::enabled(size),
+        };
 
         Identify {
             config,
@@ -303,7 +307,7 @@ impl NetworkBehaviour for Identify {
 
                 // Replace existing addresses to prevent other peer from filling up our memory.
                 self.discovered_peers
-                    .put(peer_id, HashSet::from_iter(info.listen_addrs.clone()));
+                    .put(peer_id, info.listen_addrs.iter().cloned());
 
                 let observed = info.observed_addr.clone();
                 self.events.push_back(NetworkBehaviourAction::GenerateEvent(
@@ -441,11 +445,7 @@ impl NetworkBehaviour for Identify {
     }
 
     fn addresses_of_peer(&mut self, peer: &PeerId) -> Vec<Multiaddr> {
-        self.discovered_peers
-            .get(peer)
-            .cloned()
-            .map(Vec::from_iter)
-            .unwrap_or_default()
+        self.discovered_peers.get(peer)
     }
 }
 
@@ -504,6 +504,44 @@ fn multiaddr_matches_peer_id(addr: &Multiaddr, peer_id: &PeerId) -> bool {
         return multi_addr_peer_id == *peer_id.as_ref();
     }
     true
+}
+
+struct PeerCache(Option<LruCache<PeerId, HashSet<Multiaddr>>>);
+
+impl PeerCache {
+    fn disabled() -> Self {
+        Self(None)
+    }
+
+    fn enabled(size: NonZeroUsize) -> Self {
+        Self(Some(LruCache::new(size)))
+    }
+
+    fn get_mut(&mut self, peer: &PeerId) -> Option<&mut HashSet<Multiaddr>> {
+        self.0.as_mut()?.get_mut(peer)
+    }
+
+    fn put(&mut self, peer: PeerId, addresses: impl Iterator<Item = Multiaddr>) {
+        let cache = match self.0.as_mut() {
+            None => return,
+            Some(cache) => cache,
+        };
+
+        cache.put(peer, HashSet::from_iter(addresses));
+    }
+
+    fn get(&mut self, peer: &PeerId) -> Vec<Multiaddr> {
+        let cache = match self.0.as_mut() {
+            None => return Vec::new(),
+            Some(cache) => cache,
+        };
+
+        cache
+            .get(peer)
+            .cloned()
+            .map(Vec::from_iter)
+            .unwrap_or_default()
+    }
 }
 
 #[cfg(test)]
