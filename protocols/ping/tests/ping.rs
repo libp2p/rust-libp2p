@@ -207,9 +207,8 @@ fn unsupported_doesnt_fail() {
 
     async_std::task::spawn(async move {
         loop {
-            match swarm1.select_next_some().await {
-                SwarmEvent::NewListenAddr { address, .. } => tx.send(address).await.unwrap(),
-                _ => {}
+            if let SwarmEvent::NewListenAddr { address, .. } = swarm1.select_next_some().await {
+                tx.send(address).await.unwrap()
             }
         }
     });

@@ -374,6 +374,7 @@ struct CombinedBehaviour {
 }
 
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 enum CombinedEvent {
     Client(rendezvous::client::Event),
     Server(rendezvous::server::Event),

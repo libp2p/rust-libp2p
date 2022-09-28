@@ -510,11 +510,11 @@ fn put_record() {
 
             let mut single_swarm = build_node_with_config(config);
             // Connect `single_swarm` to three bootnodes.
-            for i in 0..3 {
-                single_swarm.1.behaviour_mut().add_address(
-                    fully_connected_swarms[i].1.local_peer_id(),
-                    fully_connected_swarms[i].0.clone(),
-                );
+            for swarm in fully_connected_swarms.iter().take(3) {
+                single_swarm
+                    .1
+                    .behaviour_mut()
+                    .add_address(swarm.1.local_peer_id(), swarm.0.clone());
             }
 
             let mut swarms = vec![single_swarm];
@@ -527,6 +527,7 @@ fn put_record() {
                 .collect::<Vec<_>>()
         };
 
+        #[allow(clippy::mutable_key_type)] // False positive, we never modify `Bytes`.
         let records = records
             .into_iter()
             .take(num_total)
@@ -810,8 +811,8 @@ fn get_record_many() {
 
     let record = Record::new(random_multihash(), vec![4, 5, 6]);
 
-    for i in 0..num_nodes {
-        swarms[i].behaviour_mut().store.put(record.clone()).unwrap();
+    for swarm in swarms.iter_mut().take(num_nodes) {
+        swarm.behaviour_mut().store.put(record.clone()).unwrap();
     }
 
     let quorum = Quorum::N(NonZeroUsize::new(num_results).unwrap());
@@ -870,11 +871,11 @@ fn add_provider() {
 
             let mut single_swarm = build_node_with_config(config);
             // Connect `single_swarm` to three bootnodes.
-            for i in 0..3 {
-                single_swarm.1.behaviour_mut().add_address(
-                    fully_connected_swarms[i].1.local_peer_id(),
-                    fully_connected_swarms[i].0.clone(),
-                );
+            for swarm in fully_connected_swarms.iter().take(3) {
+                single_swarm
+                    .1
+                    .behaviour_mut()
+                    .add_address(swarm.1.local_peer_id(), swarm.0.clone());
             }
 
             let mut swarms = vec![single_swarm];
@@ -887,6 +888,7 @@ fn add_provider() {
                 .collect::<Vec<_>>()
         };
 
+        #[allow(clippy::mutable_key_type)] // False positive, we never modify `Bytes`.
         let keys: HashSet<_> = keys.into_iter().take(num_total).collect();
 
         // Each test run publishes all records twice.

@@ -279,10 +279,7 @@ mod generic {
                 }
 
                 let mut now = Instant::now();
-                let mut l = RateLimiter::new(RateLimiterConfig {
-                    limit: limit.try_into().unwrap(),
-                    interval,
-                });
+                let mut l = RateLimiter::new(RateLimiterConfig { limit, interval });
 
                 for (id, d) in events {
                     now = if let Some(now) = now.checked_add(d) {

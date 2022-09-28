@@ -275,18 +275,11 @@ mod tests {
 
         mc.put(&id, m.clone());
 
-        assert!(mc.history[0].len() == 1);
+        assert_eq!(mc.history[0].len(), 1);
 
         let fetched = mc.get(&id);
 
-        assert_eq!(fetched.is_none(), false);
-        assert_eq!(fetched.is_some(), true);
-
-        // Make sure it is the same fetched message
-        match fetched {
-            Some(x) => assert_eq!(*x, m),
-            _ => assert!(false),
-        }
+        assert_eq!(fetched.unwrap(), &m);
     }
 
     #[test]
@@ -302,7 +295,7 @@ mod tests {
         // Try to get an incorrect ID
         let wrong_id = MessageId::new(b"wrongid");
         let fetched = mc.get(&wrong_id);
-        assert_eq!(fetched.is_none(), true);
+        assert!(fetched.is_none());
     }
 
     #[test]
@@ -313,7 +306,7 @@ mod tests {
         // Try to get an incorrect ID
         let wrong_string = MessageId::new(b"imempty");
         let fetched = mc.get(&wrong_string);
-        assert_eq!(fetched.is_none(), true);
+        assert!(fetched.is_none());
     }
 
     #[test]

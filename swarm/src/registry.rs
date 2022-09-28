@@ -388,7 +388,7 @@ mod tests {
 
             // Add the first address.
             addresses.add(first.addr.clone(), first.score);
-            assert!(addresses.iter().any(|a| &a.addr == &first.addr));
+            assert!(addresses.iter().any(|a| a.addr == first.addr));
 
             // Add another address so often that the initial report of
             // the first address may be purged and, since it was the
@@ -397,7 +397,7 @@ mod tests {
                 addresses.add(other.addr.clone(), other.score);
             }
 
-            let exists = addresses.iter().any(|a| &a.addr == &first.addr);
+            let exists = addresses.iter().any(|a| a.addr == first.addr);
 
             match (first.score, other.score) {
                 // Only finite scores push out other finite scores.
@@ -428,14 +428,14 @@ mod tests {
 
         // Add the first address.
         addresses.add(first.addr.clone(), first.score);
-        assert!(addresses.iter().any(|a| &a.addr == &first.addr));
+        assert!(addresses.iter().any(|a| a.addr == first.addr));
 
         // Add another address so the first will address be purged,
         // because its score is finite(0)
         addresses.add(other.addr.clone(), other.score);
 
-        assert!(addresses.iter().any(|a| &a.addr == &other.addr));
-        assert!(!addresses.iter().any(|a| &a.addr == &first.addr));
+        assert!(addresses.iter().any(|a| a.addr == other.addr));
+        assert!(!addresses.iter().any(|a| a.addr == first.addr));
     }
 
     #[test]
@@ -451,12 +451,14 @@ mod tests {
             // Count the finitely scored addresses.
             let num_finite = addresses
                 .iter()
-                .filter(|r| match r {
-                    AddressRecord {
-                        score: AddressScore::Finite(_),
-                        ..
-                    } => true,
-                    _ => false,
+                .filter(|r| {
+                    matches!(
+                        r,
+                        AddressRecord {
+                            score: AddressScore::Finite(_),
+                            ..
+                        }
+                    )
                 })
                 .count();
 
@@ -482,7 +484,7 @@ mod tests {
             // Check that each address in the registry has the expected score.
             for r in &addresses.registry {
                 let expected_score = records.iter().fold(None::<AddressScore>, |sum, rec| {
-                    if &rec.addr == &r.addr {
+                    if rec.addr == r.addr {
                         sum.map_or(Some(rec.score), |s| Some(s + rec.score))
                     } else {
                         sum

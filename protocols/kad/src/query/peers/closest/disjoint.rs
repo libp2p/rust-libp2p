@@ -456,22 +456,20 @@ mod tests {
             let num_closest_iters = g.gen_range(0..20 + 1);
             let peers = random_peers(g.gen_range(0..20 * num_closest_iters + 1), g);
 
-            let iters: Vec<_> = (0..num_closest_iters)
-                .map(|_| {
-                    let num_peers = g.gen_range(0..20 + 1);
-                    let mut peers = g
-                        .choose_multiple(&peers, num_peers)
-                        .cloned()
-                        .map(Key::from)
-                        .collect::<Vec<_>>();
+            let iters = (0..num_closest_iters).map(|_| {
+                let num_peers = g.gen_range(0..20 + 1);
+                let mut peers = g
+                    .choose_multiple(&peers, num_peers)
+                    .cloned()
+                    .map(Key::from)
+                    .collect::<Vec<_>>();
 
-                    peers.sort_unstable_by_key(|a| target.distance(a));
+                peers.sort_unstable_by_key(|a| target.distance(a));
 
-                    peers.into_iter()
-                })
-                .collect();
+                peers.into_iter()
+            });
 
-            ResultIter::new(target, iters.into_iter())
+            ResultIter::new(target.clone(), iters)
         }
 
         fn shrink(&self) -> Box<dyn Iterator<Item = Self>> {
@@ -514,20 +512,15 @@ mod tests {
             // The peer that should not be included.
             let peer = self.peers.pop()?;
 
-            let iters = self
-                .iters
-                .clone()
-                .into_iter()
-                .filter_map(|mut iter| {
-                    iter.retain(|p| p != &peer);
-                    if iter.is_empty() {
-                        return None;
-                    }
-                    Some(iter.into_iter())
-                })
-                .collect::<Vec<_>>();
+            let iters = self.iters.clone().into_iter().filter_map(|mut iter| {
+                iter.retain(|p| p != &peer);
+                if iter.is_empty() {
+                    return None;
+                }
+                Some(iter.into_iter())
+            });
 
-            Some(ResultIter::new(self.target.clone(), iters.into_iter()))
+            Some(ResultIter::new(self.target.clone(), iters))
         }
     }
 

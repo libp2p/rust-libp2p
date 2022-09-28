@@ -494,7 +494,7 @@ mod tests {
             .collect()
     }
 
-    fn sorted<T: AsRef<KeyBytes>>(target: &T, peers: &Vec<Key<PeerId>>) -> bool {
+    fn sorted<T: AsRef<KeyBytes>>(target: &T, peers: &[Key<PeerId>]) -> bool {
         peers
             .windows(2)
             .all(|w| w[0].distance(&target) < w[1].distance(&target))
@@ -549,10 +549,7 @@ mod tests {
                 .map(|e| (e.key.clone(), &e.state))
                 .unzip();
 
-            let none_contacted = states.iter().all(|s| match s {
-                PeerState::NotContacted => true,
-                _ => false,
-            });
+            let none_contacted = states.iter().all(|s| matches!(s, PeerState::NotContacted));
 
             assert!(none_contacted, "Unexpected peer state in new iterator.");
             assert!(
@@ -650,10 +647,10 @@ mod tests {
             // Determine if all peers have been contacted by the iterator. This _must_ be
             // the case if the iterator finished with fewer than the requested number
             // of results.
-            let all_contacted = iter.closest_peers.values().all(|e| match e.state {
-                PeerState::NotContacted | PeerState::Waiting { .. } => false,
-                _ => true,
-            });
+            let all_contacted = iter
+                .closest_peers
+                .values()
+                .all(|e| !matches!(e.state, PeerState::NotContacted | PeerState::Waiting { .. }));
 
             let target = iter.target.clone();
             let num_results = iter.config.num_results;

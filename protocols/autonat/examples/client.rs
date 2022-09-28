@@ -117,6 +117,7 @@ impl Behaviour {
 }
 
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 enum Event {
     AutoNat(autonat::Event),
     Identify(IdentifyEvent),

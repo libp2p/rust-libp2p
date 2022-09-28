@@ -58,9 +58,8 @@ async fn spawn_server(kill: oneshot::Receiver<()>) -> (PeerId, Multiaddr) {
             .listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap())
             .unwrap();
         let addr = loop {
-            match server.select_next_some().await {
-                SwarmEvent::NewListenAddr { address, .. } => break address,
-                _ => {}
+            if let SwarmEvent::NewListenAddr { address, .. } = server.select_next_some().await {
+                break address;
             };
         };
         tx.send((peer_id, addr)).unwrap();
@@ -78,11 +77,8 @@ async fn spawn_server(kill: oneshot::Receiver<()>) -> (PeerId, Multiaddr) {
 
 async fn next_event(swarm: &mut Swarm<Behaviour>) -> Event {
     loop {
-        match swarm.select_next_some().await {
-            SwarmEvent::Behaviour(event) => {
-                break event;
-            }
-            _ => {}
+        if let SwarmEvent::Behaviour(event) = swarm.select_next_some().await {
+            break event;
         }
     }
 }
@@ -177,9 +173,8 @@ async fn test_auto_probe() {
             .listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap())
             .unwrap();
         loop {
-            match client.select_next_some().await {
-                SwarmEvent::NewListenAddr { .. } => break,
-                _ => {}
+            if let SwarmEvent::NewListenAddr { .. } = client.select_next_some().await {
+                break;
             }
         }
 
@@ -269,9 +264,8 @@ async fn test_confidence() {
                 .listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap())
                 .unwrap();
             loop {
-                match client.select_next_some().await {
-                    SwarmEvent::NewListenAddr { .. } => break,
-                    _ => {}
+                if let SwarmEvent::NewListenAddr { .. } = client.select_next_some().await {
+                    break;
                 }
             }
         } else {
@@ -357,9 +351,8 @@ async fn test_throttle_server_period() {
             .listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap())
             .unwrap();
         loop {
-            match client.select_next_some().await {
-                SwarmEvent::NewListenAddr { .. } => break,
-                _ => {}
+            if let SwarmEvent::NewListenAddr { .. } = client.select_next_some().await {
+                break;
             }
         }
 
@@ -477,9 +470,8 @@ async fn test_outbound_failure() {
             .unwrap();
 
         loop {
-            match client.select_next_some().await {
-                SwarmEvent::NewListenAddr { .. } => break,
-                _ => {}
+            if let SwarmEvent::NewListenAddr { .. } = client.select_next_some().await {
+                break;
             }
         }
         // First probe should be successful and flip status to public.
@@ -497,7 +489,8 @@ async fn test_outbound_failure() {
         }
 
         let inactive = servers.split_off(1);
-        // Drop the handles of the inactive servers to kill them.
+
+        #[allow(clippy::needless_collect)] // Drop the handles of the inactive servers to kill them.
         let inactive_ids: Vec<_> = inactive.into_iter().map(|(id, _handle)| id).collect();
 
         // Expect to retry on outbound failure
@@ -541,9 +534,8 @@ async fn test_global_ips_config() {
             .listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap())
             .unwrap();
         loop {
-            match client.select_next_some().await {
-                SwarmEvent::NewListenAddr { .. } => break,
-                _ => {}
+            if let SwarmEvent::NewListenAddr { .. } = client.select_next_some().await {
+                break;
             }
         }
 

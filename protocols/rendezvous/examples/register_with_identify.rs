@@ -114,6 +114,7 @@ async fn main() {
 }
 
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 enum MyEvent {
     Rendezvous(rendezvous::client::Event),
     Identify(IdentifyEvent),

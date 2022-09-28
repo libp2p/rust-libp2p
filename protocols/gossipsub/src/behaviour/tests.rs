@@ -21,26 +21,23 @@
 // Collection of tests for the gossipsub network behaviour
 
 mod tests {
-    use byteorder::{BigEndian, ByteOrder};
-    use std::thread::sleep;
-    use std::time::Duration;
-
-    use async_std::net::Ipv4Addr;
-    use rand::Rng;
-
-    use crate::{
-        GossipsubConfig, GossipsubConfigBuilder, GossipsubMessage, IdentTopic as Topic,
-        TopicScoreParams,
-    };
-
     use super::super::*;
     use crate::error::ValidationError;
     use crate::subscription_filter::WhitelistSubscriptionFilter;
     use crate::transform::{DataTransform, IdentityTransform};
     use crate::types::FastMessageId;
+    use crate::{
+        GossipsubConfig, GossipsubConfigBuilder, GossipsubMessage, IdentTopic as Topic,
+        TopicScoreParams,
+    };
+    use async_std::net::Ipv4Addr;
+    use byteorder::{BigEndian, ByteOrder};
     use libp2p_core::Endpoint;
+    use rand::Rng;
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
+    use std::thread::sleep;
+    use std::time::Duration;
 
     #[derive(Default, Builder, Debug)]
     #[builder(default)]
@@ -313,10 +310,10 @@ mod tests {
                         info.peer_id
                             .and_then(|id| PeerId::from_bytes(&id).ok())
                             .map(|peer_id|
-                                    //TODO signedPeerRecord, see https://github.com/libp2p/specs/pull/217
-                                    PeerInfo {
-                                        peer_id: Some(peer_id),
-                                    })
+                                //TODO signedPeerRecord, see https://github.com/libp2p/specs/pull/217
+                                PeerInfo {
+                                    peer_id: Some(peer_id),
+                                })
                     })
                     .collect::<Vec<PeerInfo>>();
 
@@ -380,9 +377,8 @@ mod tests {
                     NetworkBehaviourAction::NotifyHandler { event, .. } => match **event {
                         GossipsubHandlerIn::Message(ref message) => {
                             for s in &message.subscriptions {
-                                match s.subscribe {
-                                    Some(true) => collected_subscriptions.push(s.clone()),
-                                    _ => {}
+                                if let Some(true) = s.subscribe {
+                                    collected_subscriptions.push(s.clone())
                                 };
                             }
                             collected_subscriptions
@@ -449,9 +445,8 @@ mod tests {
                     NetworkBehaviourAction::NotifyHandler { event, .. } => match **event {
                         GossipsubHandlerIn::Message(ref message) => {
                             for s in &message.subscriptions {
-                                match s.subscribe {
-                                    Some(true) => collected_subscriptions.push(s.clone()),
-                                    _ => {}
+                                if let Some(true) = s.subscribe {
+                                    collected_subscriptions.push(s.clone())
                                 };
                             }
                             collected_subscriptions
@@ -527,11 +522,8 @@ mod tests {
             (_, controls): (&PeerId, &Vec<GossipsubControlAction>),
         ) -> Vec<GossipsubControlAction> {
             for c in controls.iter() {
-                match c {
-                    GossipsubControlAction::Graft { topic_hash: _ } => {
-                        collected_grafts.push(c.clone())
-                    }
-                    _ => {}
+                if let GossipsubControlAction::Graft { topic_hash: _ } = c {
+                    collected_grafts.push(c.clone())
                 }
             }
             collected_grafts
@@ -793,16 +785,13 @@ mod tests {
 
         // check that there are two subscriptions sent to each peer
         for sevent in send_events.clone() {
-            match sevent {
-                NetworkBehaviourAction::NotifyHandler { event, .. } => {
-                    if let GossipsubHandlerIn::Message(ref m) = **event {
-                        assert!(
-                            m.subscriptions.len() == 2,
-                            "There should be two subscriptions sent to each peer (1 for each topic)."
-                        );
-                    }
+            if let NetworkBehaviourAction::NotifyHandler { event, .. } = sevent {
+                if let GossipsubHandlerIn::Message(ref m) = **event {
+                    assert!(
+                        m.subscriptions.len() == 2,
+                        "There should be two subscriptions sent to each peer (1 for each topic)."
+                    );
                 }
-                _ => {}
             };
         }
 
@@ -1274,9 +1263,9 @@ mod tests {
 
         gs.handle_graft(&peers[7], their_topics.clone());
 
-        for i in 0..2 {
+        for hash in topic_hashes.iter().take(2) {
             assert!(
-                gs.mesh.get(&topic_hashes[i]).unwrap().contains(&peers[7]),
+                gs.mesh.get(hash).unwrap().contains(&peers[7]),
                 "Expected peer to be in the mesh for the first 2 topics"
             );
         }
@@ -1365,7 +1354,7 @@ mod tests {
         //add peer as explicit peer
         gs.add_explicit_peer(&peer);
 
-        let dial_events: Vec<_> = gs
+        let num_events = gs
             .events
             .iter()
             .filter(|e| match e {
@@ -1374,11 +1363,10 @@ mod tests {
                 }
                 _ => false,
             })
-            .collect();
+            .count();
 
         assert_eq!(
-            dial_events.len(),
-            1,
+            num_events, 1,
             "There was no dial peer event for the explicit peer"
         );
     }
@@ -1489,10 +1477,7 @@ mod tests {
         //assert that graft gets created to non-explicit peer
         assert!(
             count_control_msgs(&gs, |peer_id, m| peer_id == &peers[1]
-                && match m {
-                    GossipsubControlAction::Graft { .. } => true,
-                    _ => false,
-                })
+                && matches!(m, GossipsubControlAction::Graft { .. }))
                 >= 1,
             "No graft message got created to non-explicit peer"
         );
@@ -1500,10 +1485,7 @@ mod tests {
         //assert that no graft gets created to explicit peer
         assert_eq!(
             count_control_msgs(&gs, |peer_id, m| peer_id == &peers[0]
-                && match m {
-                    GossipsubControlAction::Graft { .. } => true,
-                    _ => false,
-                }),
+                && matches!(m, GossipsubControlAction::Graft { .. })),
             0,
             "A graft message got created to an explicit peer"
         );
@@ -1527,10 +1509,7 @@ mod tests {
         //assert that no graft gets created to explicit peer
         assert_eq!(
             count_control_msgs(&gs, |peer_id, m| peer_id == &others[0]
-                && match m {
-                    GossipsubControlAction::Graft { .. } => true,
-                    _ => false,
-                }),
+                && matches!(m, GossipsubControlAction::Graft { .. })),
             0,
             "A graft message got created to an explicit peer"
         );
@@ -1598,13 +1577,13 @@ mod tests {
         //create new topic, both peers subscribing to it but we do not subscribe to it
         let topic = Topic::new(String::from("t"));
         let topic_hash = topic.hash();
-        for i in 0..2 {
+        for peer in peers.iter().take(2) {
             gs.handle_received_subscriptions(
                 &[GossipsubSubscription {
                     action: GossipsubSubscriptionAction::Subscribe,
                     topic_hash: topic_hash.clone(),
                 }],
-                &peers[i],
+                peer,
             );
         }
 
@@ -1617,10 +1596,7 @@ mod tests {
         //assert that graft gets created to non-explicit peer
         assert!(
             count_control_msgs(&gs, |peer_id, m| peer_id == &peers[1]
-                && match m {
-                    GossipsubControlAction::Graft { .. } => true,
-                    _ => false,
-                })
+                && matches!(m, GossipsubControlAction::Graft { .. }))
                 > 0,
             "No graft message got created to non-explicit peer"
         );
@@ -1628,10 +1604,7 @@ mod tests {
         //assert that no graft gets created to explicit peer
         assert_eq!(
             count_control_msgs(&gs, |peer_id, m| peer_id == &peers[0]
-                && match m {
-                    GossipsubControlAction::Graft { .. } => true,
-                    _ => false,
-                }),
+                && matches!(m, GossipsubControlAction::Graft { .. })),
             0,
             "A graft message got created to an explicit peer"
         );
@@ -1650,13 +1623,13 @@ mod tests {
         //create new topic, both peers subscribing to it but we do not subscribe to it
         let topic = Topic::new(String::from("t"));
         let topic_hash = topic.hash();
-        for i in 0..2 {
+        for peer in peers.iter().take(2) {
             gs.handle_received_subscriptions(
                 &[GossipsubSubscription {
                     action: GossipsubSubscriptionAction::Subscribe,
                     topic_hash: topic_hash.clone(),
                 }],
-                &peers[i],
+                peer,
             );
         }
 
@@ -1672,10 +1645,7 @@ mod tests {
         //assert that graft gets created to non-explicit peer
         assert!(
             count_control_msgs(&gs, |peer_id, m| peer_id == &peers[1]
-                && match m {
-                    GossipsubControlAction::Graft { .. } => true,
-                    _ => false,
-                })
+                && matches!(m, GossipsubControlAction::Graft { .. }))
                 >= 1,
             "No graft message got created to non-explicit peer"
         );
@@ -1683,10 +1653,7 @@ mod tests {
         //assert that no graft gets created to explicit peer
         assert_eq!(
             count_control_msgs(&gs, |peer_id, m| peer_id == &peers[0]
-                && match m {
-                    GossipsubControlAction::Graft { .. } => true,
-                    _ => false,
-                }),
+                && matches!(m, GossipsubControlAction::Graft { .. })),
             0,
             "A graft message got created to an explicit peer"
         );
@@ -1728,10 +1695,7 @@ mod tests {
                 .get(&peers[0])
                 .unwrap_or(&Vec::new())
                 .iter()
-                .filter(|m| match m {
-                    GossipsubControlAction::IHave { .. } => true,
-                    _ => false,
-                })
+                .filter(|m| matches!(m, GossipsubControlAction::IHave { .. }))
                 .count(),
             0,
             "Gossip got emitted to explicit peer"
@@ -1752,9 +1716,9 @@ mod tests {
 
         let to_remove_peers = config.mesh_n() + 1 - config.mesh_n_low() - 1;
 
-        for index in 0..to_remove_peers {
+        for peer in peers.iter().take(to_remove_peers) {
             gs.handle_prune(
-                &peers[index],
+                peer,
                 topics.iter().map(|h| (h.clone(), vec![], None)).collect(),
             );
         }
@@ -1885,11 +1849,11 @@ mod tests {
                         backoff,
                     } =>
                         topic_hash == &topics[0] &&
-                peers.len() == config.prune_peers() &&
-                //all peers are different
-                peers.iter().collect::<HashSet<_>>().len() ==
-                    config.prune_peers() &&
-                backoff.unwrap() == config.prune_backoff().as_secs(),
+                        peers.len() == config.prune_peers() &&
+                        //all peers are different
+                        peers.iter().collect::<HashSet<_>>().len() ==
+                            config.prune_peers() &&
+                        backoff.unwrap() == config.prune_backoff().as_secs(),
                     _ => false,
                 }),
             1
@@ -1933,9 +1897,9 @@ mod tests {
                         backoff,
                     } =>
                         topic_hash == &topics[0] &&
-                //no px in this case
-                peers.is_empty() &&
-                backoff.unwrap() == config.prune_backoff().as_secs(),
+                        //no px in this case
+                        peers.is_empty() &&
+                        backoff.unwrap() == config.prune_backoff().as_secs(),
                     _ => false,
                 }),
             1
@@ -1975,10 +1939,10 @@ mod tests {
         //Check that no graft got created (we have backoff_slack = 1 therefore one more heartbeat
         // is needed).
         assert_eq!(
-            count_control_msgs(&gs, |_, m| match m {
-                GossipsubControlAction::Graft { .. } => true,
-                _ => false,
-            }),
+            count_control_msgs(&gs, |_, m| matches!(
+                m,
+                GossipsubControlAction::Graft { .. }
+            )),
             0,
             "Graft message created too early within backoff period"
         );
@@ -1989,10 +1953,10 @@ mod tests {
 
         //check that graft got created
         assert!(
-            count_control_msgs(&gs, |_, m| match m {
-                GossipsubControlAction::Graft { .. } => true,
-                _ => false,
-            }) > 0,
+            count_control_msgs(&gs, |_, m| matches!(
+                m,
+                GossipsubControlAction::Graft { .. }
+            )) > 0,
             "No graft message was created after backoff period"
         );
     }
@@ -2030,10 +1994,10 @@ mod tests {
         //Check that no graft got created (we have backoff_slack = 1 therefore one more heartbeat
         // is needed).
         assert_eq!(
-            count_control_msgs(&gs, |_, m| match m {
-                GossipsubControlAction::Graft { .. } => true,
-                _ => false,
-            }),
+            count_control_msgs(&gs, |_, m| matches!(
+                m,
+                GossipsubControlAction::Graft { .. }
+            )),
             0,
             "Graft message created too early within backoff period"
         );
@@ -2044,10 +2008,10 @@ mod tests {
 
         //check that graft got created
         assert!(
-            count_control_msgs(&gs, |_, m| match m {
-                GossipsubControlAction::Graft { .. } => true,
-                _ => false,
-            }) > 0,
+            count_control_msgs(&gs, |_, m| matches!(
+                m,
+                GossipsubControlAction::Graft { .. }
+            )) > 0,
             "No graft message was created after backoff period"
         );
     }
@@ -2101,10 +2065,10 @@ mod tests {
         // Check that no graft got created (we have backoff_slack = 1 therefore one more heartbeat
         // is needed).
         assert_eq!(
-            count_control_msgs(&gs, |_, m| match m {
-                GossipsubControlAction::Graft { .. } => true,
-                _ => false,
-            }),
+            count_control_msgs(&gs, |_, m| matches!(
+                m,
+                GossipsubControlAction::Graft { .. }
+            )),
             0,
             "Graft message created too early within backoff period"
         );
@@ -2115,10 +2079,10 @@ mod tests {
 
         // check that graft got created
         assert!(
-            count_control_msgs(&gs, |_, m| match m {
-                GossipsubControlAction::Graft { .. } => true,
-                _ => false,
-            }) > 0,
+            count_control_msgs(&gs, |_, m| matches!(
+                m,
+                GossipsubControlAction::Graft { .. }
+            )) > 0,
             "No graft message was created after backoff period"
         );
     }
@@ -2517,10 +2481,7 @@ mod tests {
         assert_eq!(
             gs.events
                 .iter()
-                .filter(|e| match e {
-                    NetworkBehaviourAction::Dial { .. } => true,
-                    _ => false,
-                })
+                .filter(|e| matches!(e, NetworkBehaviourAction::Dial { .. }))
                 .count(),
             0
         );
@@ -2582,8 +2543,10 @@ mod tests {
     fn test_do_not_gossip_to_peers_below_gossip_threshold() {
         let config = GossipsubConfig::default();
         let peer_score_params = PeerScoreParams::default();
-        let mut peer_score_thresholds = PeerScoreThresholds::default();
-        peer_score_thresholds.gossip_threshold = 3.0 * peer_score_params.behaviour_penalty_weight;
+        let peer_score_thresholds = PeerScoreThresholds {
+            gossip_threshold: 3.0 * peer_score_params.behaviour_penalty_weight,
+            ..PeerScoreThresholds::default()
+        };
 
         // Build full mesh
         let (mut gs, peers, topics) = inject_nodes1()
@@ -2655,8 +2618,10 @@ mod tests {
     fn test_iwant_msg_from_peer_below_gossip_threshold_gets_ignored() {
         let config = GossipsubConfig::default();
         let peer_score_params = PeerScoreParams::default();
-        let mut peer_score_thresholds = PeerScoreThresholds::default();
-        peer_score_thresholds.gossip_threshold = 3.0 * peer_score_params.behaviour_penalty_weight;
+        let peer_score_thresholds = PeerScoreThresholds {
+            gossip_threshold: 3.0 * peer_score_params.behaviour_penalty_weight,
+            ..PeerScoreThresholds::default()
+        };
 
         // Build full mesh
         let (mut gs, peers, topics) = inject_nodes1()
@@ -2730,7 +2695,7 @@ mod tests {
                 peer_id,
                 gs.data_transform.inbound_transform(msg.clone()).unwrap()
             ))
-            .any(|(peer_id, msg)| peer_id == &p2 && &gs.config.message_id(&msg) == &msg_id));
+            .any(|(peer_id, msg)| peer_id == &p2 && gs.config.message_id(&msg) == msg_id));
         //the message got not sent to p1
         assert!(sent_messages
             .iter()
@@ -2738,16 +2703,17 @@ mod tests {
                 peer_id,
                 gs.data_transform.inbound_transform(msg.clone()).unwrap()
             ))
-            .all(|(peer_id, msg)| !(peer_id == &p1 && &gs.config.message_id(&msg) == &msg_id)));
+            .all(|(peer_id, msg)| !(peer_id == &p1 && gs.config.message_id(&msg) == msg_id)));
     }
 
     #[test]
     fn test_ihave_msg_from_peer_below_gossip_threshold_gets_ignored() {
         let config = GossipsubConfig::default();
         let peer_score_params = PeerScoreParams::default();
-        let mut peer_score_thresholds = PeerScoreThresholds::default();
-        peer_score_thresholds.gossip_threshold = 3.0 * peer_score_params.behaviour_penalty_weight;
-
+        let peer_score_thresholds = PeerScoreThresholds {
+            gossip_threshold: 3.0 * peer_score_params.behaviour_penalty_weight,
+            ..PeerScoreThresholds::default()
+        };
         //build full mesh
         let (mut gs, peers, topics) = inject_nodes1()
             .peer_no(config.mesh_n_high())
@@ -2818,9 +2784,11 @@ mod tests {
             .build()
             .unwrap();
         let peer_score_params = PeerScoreParams::default();
-        let mut peer_score_thresholds = PeerScoreThresholds::default();
-        peer_score_thresholds.gossip_threshold = 0.5 * peer_score_params.behaviour_penalty_weight;
-        peer_score_thresholds.publish_threshold = 3.0 * peer_score_params.behaviour_penalty_weight;
+        let peer_score_thresholds = PeerScoreThresholds {
+            gossip_threshold: 0.5 * peer_score_params.behaviour_penalty_weight,
+            publish_threshold: 3.0 * peer_score_params.behaviour_penalty_weight,
+            ..PeerScoreThresholds::default()
+        };
 
         //build mesh with no peers and no subscribed topics
         let (mut gs, _, _) = inject_nodes1()
@@ -2877,10 +2845,11 @@ mod tests {
     fn test_do_not_flood_publish_to_peer_below_publish_threshold() {
         let config = GossipsubConfig::default();
         let peer_score_params = PeerScoreParams::default();
-        let mut peer_score_thresholds = PeerScoreThresholds::default();
-        peer_score_thresholds.gossip_threshold = 0.5 * peer_score_params.behaviour_penalty_weight;
-        peer_score_thresholds.publish_threshold = 3.0 * peer_score_params.behaviour_penalty_weight;
-
+        let peer_score_thresholds = PeerScoreThresholds {
+            gossip_threshold: 0.5 * peer_score_params.behaviour_penalty_weight,
+            publish_threshold: 3.0 * peer_score_params.behaviour_penalty_weight,
+            ..PeerScoreThresholds::default()
+        };
         //build mesh with no peers
         let (mut gs, _, topics) = inject_nodes1()
             .topics(vec!["test".into()])
@@ -2933,10 +2902,12 @@ mod tests {
     fn test_ignore_rpc_from_peers_below_graylist_threshold() {
         let config = GossipsubConfig::default();
         let peer_score_params = PeerScoreParams::default();
-        let mut peer_score_thresholds = PeerScoreThresholds::default();
-        peer_score_thresholds.gossip_threshold = 0.5 * peer_score_params.behaviour_penalty_weight;
-        peer_score_thresholds.publish_threshold = 0.5 * peer_score_params.behaviour_penalty_weight;
-        peer_score_thresholds.graylist_threshold = 3.0 * peer_score_params.behaviour_penalty_weight;
+        let peer_score_thresholds = PeerScoreThresholds {
+            gossip_threshold: 0.5 * peer_score_params.behaviour_penalty_weight,
+            publish_threshold: 0.5 * peer_score_params.behaviour_penalty_weight,
+            graylist_threshold: 3.0 * peer_score_params.behaviour_penalty_weight,
+            ..PeerScoreThresholds::default()
+        };
 
         //build mesh with no peers
         let (mut gs, _, topics) = inject_nodes1()
@@ -3032,13 +3003,10 @@ mod tests {
 
         //only the subscription event gets processed, the rest is dropped
         assert_eq!(gs.events.len(), 1);
-        assert!(match &gs.events[0] {
-            NetworkBehaviourAction::GenerateEvent(event) => match event {
-                GossipsubEvent::Subscribed { .. } => true,
-                _ => false,
-            },
-            _ => false,
-        });
+        assert!(matches!(
+            gs.events[0],
+            NetworkBehaviourAction::GenerateEvent(GossipsubEvent::Subscribed { .. })
+        ));
 
         let control_action = GossipsubControlAction::IHave {
             topic_hash: topics[0].clone(),
@@ -3070,9 +3038,10 @@ mod tests {
             .build()
             .unwrap();
         let peer_score_params = PeerScoreParams::default();
-        let mut peer_score_thresholds = PeerScoreThresholds::default();
-        peer_score_thresholds.accept_px_threshold = peer_score_params.app_specific_weight;
-
+        let peer_score_thresholds = PeerScoreThresholds {
+            accept_px_threshold: peer_score_params.app_specific_weight,
+            ..PeerScoreThresholds::default()
+        };
         // Build mesh with two peers
         let (mut gs, peers, topics) = inject_nodes1()
             .peer_no(2)
@@ -3105,10 +3074,7 @@ mod tests {
         assert_eq!(
             gs.events
                 .iter()
-                .filter(|e| match e {
-                    NetworkBehaviourAction::Dial { .. } => true,
-                    _ => false,
-                })
+                .filter(|e| matches!(e, NetworkBehaviourAction::Dial { .. }))
                 .count(),
             0
         );
@@ -3130,10 +3096,7 @@ mod tests {
         assert!(
             gs.events
                 .iter()
-                .filter(|e| match e {
-                    NetworkBehaviourAction::Dial { .. } => true,
-                    _ => false,
-                })
+                .filter(|e| matches!(e, NetworkBehaviourAction::Dial { .. }))
                 .count()
                 > 0
         );
@@ -3198,11 +3161,13 @@ mod tests {
         let mut peer_score_params = PeerScoreParams::default();
         let topic = Topic::new("test");
         let topic_hash = topic.hash();
-        let mut topic_params = TopicScoreParams::default();
-        topic_params.time_in_mesh_weight = 2.0;
-        topic_params.time_in_mesh_quantum = Duration::from_millis(50);
-        topic_params.time_in_mesh_cap = 10.0;
-        topic_params.topic_weight = 0.7;
+        let topic_params = TopicScoreParams {
+            time_in_mesh_weight: 2.0,
+            time_in_mesh_quantum: Duration::from_millis(50),
+            time_in_mesh_cap: 10.0,
+            topic_weight: 0.7,
+            ..TopicScoreParams::default()
+        };
         peer_score_params
             .topics
             .insert(topic_hash, topic_params.clone());
@@ -3280,12 +3245,14 @@ mod tests {
         let mut peer_score_params = PeerScoreParams::default();
         let topic = Topic::new("test");
         let topic_hash = topic.hash();
-        let mut topic_params = TopicScoreParams::default();
-        topic_params.time_in_mesh_weight = 0.0; //deactivate time in mesh
-        topic_params.first_message_deliveries_weight = 2.0;
-        topic_params.first_message_deliveries_cap = 10.0;
-        topic_params.first_message_deliveries_decay = 0.9;
-        topic_params.topic_weight = 0.7;
+        let topic_params = TopicScoreParams {
+            time_in_mesh_weight: 0.0, //deactivate time in mesh
+            first_message_deliveries_weight: 2.0,
+            first_message_deliveries_cap: 10.0,
+            first_message_deliveries_decay: 0.9,
+            topic_weight: 0.7,
+            ..TopicScoreParams::default()
+        };
         peer_score_params
             .topics
             .insert(topic_hash, topic_params.clone());
@@ -3376,16 +3343,18 @@ mod tests {
         let mut peer_score_params = PeerScoreParams::default();
         let topic = Topic::new("test");
         let topic_hash = topic.hash();
-        let mut topic_params = TopicScoreParams::default();
-        topic_params.time_in_mesh_weight = 0.0; //deactivate time in mesh
-        topic_params.first_message_deliveries_weight = 0.0; //deactivate first time deliveries
-        topic_params.mesh_message_deliveries_weight = -2.0;
-        topic_params.mesh_message_deliveries_decay = 0.9;
-        topic_params.mesh_message_deliveries_cap = 10.0;
-        topic_params.mesh_message_deliveries_threshold = 5.0;
-        topic_params.mesh_message_deliveries_activation = Duration::from_secs(1);
-        topic_params.mesh_message_deliveries_window = Duration::from_millis(100);
-        topic_params.topic_weight = 0.7;
+        let topic_params = TopicScoreParams {
+            time_in_mesh_weight: 0.0,             //deactivate time in mesh
+            first_message_deliveries_weight: 0.0, //deactivate first time deliveries
+            mesh_message_deliveries_weight: -2.0,
+            mesh_message_deliveries_decay: 0.9,
+            mesh_message_deliveries_cap: 0.0,
+            mesh_message_deliveries_threshold: 5.0,
+            mesh_message_deliveries_activation: Duration::from_secs(1),
+            mesh_message_deliveries_window: Duration::from_millis(100),
+            topic_weight: 0.7,
+            ..TopicScoreParams::default()
+        };
         peer_score_params.topics.insert(topic_hash, topic_params);
         let peer_score_thresholds = PeerScoreThresholds::default();
 
@@ -3472,18 +3441,20 @@ mod tests {
         let mut peer_score_params = PeerScoreParams::default();
         let topic = Topic::new("test");
         let topic_hash = topic.hash();
-        let mut topic_params = TopicScoreParams::default();
-        topic_params.time_in_mesh_weight = 0.0; //deactivate time in mesh
-        topic_params.first_message_deliveries_weight = 0.0; //deactivate first time deliveries
-        topic_params.mesh_message_deliveries_weight = -2.0;
-        topic_params.mesh_message_deliveries_decay = 0.9;
-        topic_params.mesh_message_deliveries_cap = 10.0;
-        topic_params.mesh_message_deliveries_threshold = 5.0;
-        topic_params.mesh_message_deliveries_activation = Duration::from_secs(1);
-        topic_params.mesh_message_deliveries_window = Duration::from_millis(100);
-        topic_params.mesh_failure_penalty_weight = -3.0;
-        topic_params.mesh_failure_penalty_decay = 0.95;
-        topic_params.topic_weight = 0.7;
+        let topic_params = TopicScoreParams {
+            time_in_mesh_weight: 0.0,             //deactivate time in mesh
+            first_message_deliveries_weight: 0.0, //deactivate first time deliveries
+            mesh_message_deliveries_weight: -2.0,
+            mesh_message_deliveries_decay: 0.9,
+            mesh_message_deliveries_cap: 10.0,
+            mesh_message_deliveries_threshold: 5.0,
+            mesh_message_deliveries_activation: Duration::from_secs(1),
+            mesh_message_deliveries_window: Duration::from_millis(100),
+            mesh_failure_penalty_weight: -3.0,
+            mesh_failure_penalty_decay: 0.95,
+            topic_weight: 0.7,
+            ..Default::default()
+        };
         peer_score_params.topics.insert(topic_hash, topic_params);
         peer_score_params.app_specific_weight = 1.0;
         let peer_score_thresholds = PeerScoreThresholds::default();
@@ -3567,14 +3538,16 @@ mod tests {
         let mut peer_score_params = PeerScoreParams::default();
         let topic = Topic::new("test");
         let topic_hash = topic.hash();
-        let mut topic_params = TopicScoreParams::default();
-        topic_params.time_in_mesh_weight = 0.0; //deactivate time in mesh
-        topic_params.first_message_deliveries_weight = 0.0; //deactivate first time deliveries
-        topic_params.mesh_message_deliveries_weight = 0.0; //deactivate message deliveries
-        topic_params.mesh_failure_penalty_weight = 0.0; //deactivate mesh failure penalties
-        topic_params.invalid_message_deliveries_weight = -2.0;
-        topic_params.invalid_message_deliveries_decay = 0.9;
-        topic_params.topic_weight = 0.7;
+        let topic_params = TopicScoreParams {
+            time_in_mesh_weight: 0.0,             //deactivate time in mesh
+            first_message_deliveries_weight: 0.0, //deactivate first time deliveries
+            mesh_message_deliveries_weight: 0.0,  //deactivate message deliveries
+            mesh_failure_penalty_weight: 0.0,     //deactivate mesh failure penalties
+            invalid_message_deliveries_weight: -2.0,
+            invalid_message_deliveries_decay: 0.9,
+            topic_weight: 0.7,
+            ..Default::default()
+        };
         peer_score_params.topics.insert(topic_hash, topic_params);
         peer_score_params.app_specific_weight = 1.0;
         let peer_score_thresholds = PeerScoreThresholds::default();
@@ -3624,14 +3597,16 @@ mod tests {
         let mut peer_score_params = PeerScoreParams::default();
         let topic = Topic::new("test");
         let topic_hash = topic.hash();
-        let mut topic_params = TopicScoreParams::default();
-        topic_params.time_in_mesh_weight = 0.0; //deactivate time in mesh
-        topic_params.first_message_deliveries_weight = 0.0; //deactivate first time deliveries
-        topic_params.mesh_message_deliveries_weight = 0.0; //deactivate message deliveries
-        topic_params.mesh_failure_penalty_weight = 0.0; //deactivate mesh failure penalties
-        topic_params.invalid_message_deliveries_weight = -2.0;
-        topic_params.invalid_message_deliveries_decay = 0.9;
-        topic_params.topic_weight = 0.7;
+        let topic_params = TopicScoreParams {
+            time_in_mesh_weight: 0.0,             //deactivate time in mesh
+            first_message_deliveries_weight: 0.0, //deactivate first time deliveries
+            mesh_message_deliveries_weight: 0.0,  //deactivate message deliveries
+            mesh_failure_penalty_weight: 0.0,     //deactivate mesh failure penalties
+            invalid_message_deliveries_weight: -2.0,
+            invalid_message_deliveries_decay: 0.9,
+            topic_weight: 0.7,
+            ..Default::default()
+        };
         peer_score_params.topics.insert(topic_hash, topic_params);
         peer_score_params.app_specific_weight = 1.0;
         let peer_score_thresholds = PeerScoreThresholds::default();
@@ -3680,14 +3655,16 @@ mod tests {
         let mut peer_score_params = PeerScoreParams::default();
         let topic = Topic::new("test");
         let topic_hash = topic.hash();
-        let mut topic_params = TopicScoreParams::default();
-        topic_params.time_in_mesh_weight = 0.0; //deactivate time in mesh
-        topic_params.first_message_deliveries_weight = 0.0; //deactivate first time deliveries
-        topic_params.mesh_message_deliveries_weight = 0.0; //deactivate message deliveries
-        topic_params.mesh_failure_penalty_weight = 0.0; //deactivate mesh failure penalties
-        topic_params.invalid_message_deliveries_weight = -2.0;
-        topic_params.invalid_message_deliveries_decay = 0.9;
-        topic_params.topic_weight = 0.7;
+        let topic_params = TopicScoreParams {
+            time_in_mesh_weight: 0.0,             //deactivate time in mesh
+            first_message_deliveries_weight: 0.0, //deactivate first time deliveries
+            mesh_message_deliveries_weight: 0.0,  //deactivate message deliveries
+            mesh_failure_penalty_weight: 0.0,     //deactivate mesh failure penalties
+            invalid_message_deliveries_weight: -2.0,
+            invalid_message_deliveries_decay: 0.9,
+            topic_weight: 0.7,
+            ..Default::default()
+        };
         peer_score_params.topics.insert(topic_hash, topic_params);
         peer_score_params.app_specific_weight = 1.0;
         let peer_score_thresholds = PeerScoreThresholds::default();
@@ -3728,14 +3705,16 @@ mod tests {
         let mut peer_score_params = PeerScoreParams::default();
         let topic = Topic::new("test");
         let topic_hash = topic.hash();
-        let mut topic_params = TopicScoreParams::default();
-        topic_params.time_in_mesh_weight = 0.0; //deactivate time in mesh
-        topic_params.first_message_deliveries_weight = 0.0; //deactivate first time deliveries
-        topic_params.mesh_message_deliveries_weight = 0.0; //deactivate message deliveries
-        topic_params.mesh_failure_penalty_weight = 0.0; //deactivate mesh failure penalties
-        topic_params.invalid_message_deliveries_weight = -2.0;
-        topic_params.invalid_message_deliveries_decay = 0.9;
-        topic_params.topic_weight = 0.7;
+        let topic_params = TopicScoreParams {
+            time_in_mesh_weight: 0.0,             //deactivate time in mesh
+            first_message_deliveries_weight: 0.0, //deactivate first time deliveries
+            mesh_message_deliveries_weight: 0.0,  //deactivate message deliveries
+            mesh_failure_penalty_weight: 0.0,     //deactivate mesh failure penalties
+            invalid_message_deliveries_weight: -2.0,
+            invalid_message_deliveries_decay: 0.9,
+            topic_weight: 0.7,
+            ..Default::default()
+        };
         peer_score_params.topics.insert(topic_hash, topic_params);
         peer_score_params.app_specific_weight = 1.0;
         let peer_score_thresholds = PeerScoreThresholds::default();
@@ -3785,14 +3764,16 @@ mod tests {
         let mut peer_score_params = PeerScoreParams::default();
         let topic = Topic::new("test");
         let topic_hash = topic.hash();
-        let mut topic_params = TopicScoreParams::default();
-        topic_params.time_in_mesh_weight = 0.0; //deactivate time in mesh
-        topic_params.first_message_deliveries_weight = 0.0; //deactivate first time deliveries
-        topic_params.mesh_message_deliveries_weight = 0.0; //deactivate message deliveries
-        topic_params.mesh_failure_penalty_weight = 0.0; //deactivate mesh failure penalties
-        topic_params.invalid_message_deliveries_weight = -2.0;
-        topic_params.invalid_message_deliveries_decay = 0.9;
-        topic_params.topic_weight = 0.7;
+        let topic_params = TopicScoreParams {
+            time_in_mesh_weight: 0.0,             //deactivate time in mesh
+            first_message_deliveries_weight: 0.0, //deactivate first time deliveries
+            mesh_message_deliveries_weight: 0.0,  //deactivate message deliveries
+            mesh_failure_penalty_weight: 0.0,     //deactivate mesh failure penalties
+            invalid_message_deliveries_weight: -2.0,
+            invalid_message_deliveries_decay: 0.9,
+            topic_weight: 0.7,
+            ..Default::default()
+        };
         peer_score_params.topics.insert(topic_hash, topic_params);
         peer_score_params.app_specific_weight = 1.0;
         let peer_score_thresholds = PeerScoreThresholds::default();
@@ -3845,14 +3826,16 @@ mod tests {
         let mut peer_score_params = PeerScoreParams::default();
         let topic = Topic::new("test");
         let topic_hash = topic.hash();
-        let mut topic_params = TopicScoreParams::default();
-        topic_params.time_in_mesh_weight = 0.0; //deactivate time in mesh
-        topic_params.first_message_deliveries_weight = 0.0; //deactivate first time deliveries
-        topic_params.mesh_message_deliveries_weight = 0.0; //deactivate message deliveries
-        topic_params.mesh_failure_penalty_weight = 0.0; //deactivate mesh failure penalties
-        topic_params.invalid_message_deliveries_weight = -2.0;
-        topic_params.invalid_message_deliveries_decay = 0.9;
-        topic_params.topic_weight = 0.7;
+        let topic_params = TopicScoreParams {
+            time_in_mesh_weight: 0.0,             //deactivate time in mesh
+            first_message_deliveries_weight: 0.0, //deactivate first time deliveries
+            mesh_message_deliveries_weight: 0.0,  //deactivate message deliveries
+            mesh_failure_penalty_weight: 0.0,     //deactivate mesh failure penalties
+            invalid_message_deliveries_weight: -2.0,
+            invalid_message_deliveries_decay: 0.9,
+            topic_weight: 0.7,
+            ..Default::default()
+        };
         peer_score_params.topics.insert(topic_hash, topic_params);
         peer_score_params.app_specific_weight = 1.0;
         let peer_score_thresholds = PeerScoreThresholds::default();
@@ -3913,14 +3896,16 @@ mod tests {
         let mut peer_score_params = PeerScoreParams::default();
         let topic = Topic::new("test");
         let topic_hash = topic.hash();
-        let mut topic_params = TopicScoreParams::default();
-        topic_params.time_in_mesh_weight = 0.0; //deactivate time in mesh
-        topic_params.first_message_deliveries_weight = 0.0; //deactivate first time deliveries
-        topic_params.mesh_message_deliveries_weight = 0.0; //deactivate message deliveries
-        topic_params.mesh_failure_penalty_weight = 0.0; //deactivate mesh failure penalties
-        topic_params.invalid_message_deliveries_weight = -2.0;
-        topic_params.invalid_message_deliveries_decay = 0.9;
-        topic_params.topic_weight = 0.7;
+        let topic_params = TopicScoreParams {
+            time_in_mesh_weight: 0.0,             //deactivate time in mesh
+            first_message_deliveries_weight: 0.0, //deactivate first time deliveries
+            mesh_message_deliveries_weight: 0.0,  //deactivate message deliveries
+            mesh_failure_penalty_weight: 0.0,     //deactivate mesh failure penalties
+            invalid_message_deliveries_weight: -2.0,
+            invalid_message_deliveries_decay: 0.9,
+            topic_weight: 0.7,
+            ..Default::default()
+        };
         peer_score_params.topics.insert(topic_hash, topic_params);
         peer_score_params.app_specific_weight = 1.0;
         let peer_score_thresholds = PeerScoreThresholds::default();
@@ -3995,14 +3980,16 @@ mod tests {
         let mut peer_score_params = PeerScoreParams::default();
         let topic = Topic::new("test");
         let topic_hash = topic.hash();
-        let mut topic_params = TopicScoreParams::default();
-        topic_params.time_in_mesh_weight = 0.0; //deactivate time in mesh
-        topic_params.first_message_deliveries_weight = 0.0; //deactivate first time deliveries
-        topic_params.mesh_message_deliveries_weight = 0.0; //deactivate message deliveries
-        topic_params.mesh_failure_penalty_weight = 0.0; //deactivate mesh failure penalties
-        topic_params.invalid_message_deliveries_weight = -2.0;
-        topic_params.invalid_message_deliveries_decay = 0.9;
-        topic_params.topic_weight = 0.7;
+        let topic_params = TopicScoreParams {
+            time_in_mesh_weight: 0.0,             //deactivate time in mesh
+            first_message_deliveries_weight: 0.0, //deactivate first time deliveries
+            mesh_message_deliveries_weight: 0.0,  //deactivate message deliveries
+            mesh_failure_penalty_weight: 0.0,     //deactivate mesh failure penalties
+            invalid_message_deliveries_weight: -2.0,
+            invalid_message_deliveries_decay: 0.9,
+            topic_weight: 0.7,
+            ..Default::default()
+        };
         peer_score_params.topics.insert(topic_hash, topic_params);
         peer_score_params.app_specific_weight = 1.0;
         let peer_score_thresholds = PeerScoreThresholds::default();
@@ -4056,8 +4043,10 @@ mod tests {
 
     #[test]
     fn test_scoring_p5() {
-        let mut peer_score_params = PeerScoreParams::default();
-        peer_score_params.app_specific_weight = 2.0;
+        let peer_score_params = PeerScoreParams {
+            app_specific_weight: 2.0,
+            ..PeerScoreParams::default()
+        };
 
         //build mesh with one peer
         let (mut gs, peers, _) = inject_nodes1()
@@ -4080,9 +4069,11 @@ mod tests {
 
     #[test]
     fn test_scoring_p6() {
-        let mut peer_score_params = PeerScoreParams::default();
-        peer_score_params.ip_colocation_factor_threshold = 5.0;
-        peer_score_params.ip_colocation_factor_weight = -2.0;
+        let peer_score_params = PeerScoreParams {
+            ip_colocation_factor_threshold: 5.0,
+            ip_colocation_factor_weight: -2.0,
+            ..Default::default()
+        };
 
         let (mut gs, _, _) = inject_nodes1()
             .peer_no(0)
@@ -4119,9 +4110,9 @@ mod tests {
         }
 
         //add additional connection for 3 others with addr
-        for i in 0..3 {
+        for id in others.iter().take(3) {
             gs.inject_connection_established(
-                &others[i],
+                id,
                 &ConnectionId::new(0),
                 &ConnectedPoint::Dialer {
                     address: addr.clone(),
@@ -4140,9 +4131,9 @@ mod tests {
         assert_eq!(gs.peer_score.as_ref().unwrap().0.score(&others[3]), 0.0);
 
         //add additional connection for 3 of the peers to addr2
-        for i in 0..3 {
+        for peer in peers.iter().take(3) {
             gs.inject_connection_established(
-                &peers[i],
+                peer,
                 &ConnectionId::new(0),
                 &ConnectedPoint::Dialer {
                     address: addr2.clone(),
@@ -4208,9 +4199,11 @@ mod tests {
             .graft_flood_threshold(Duration::from_millis(100))
             .build()
             .unwrap();
-        let mut peer_score_params = PeerScoreParams::default();
-        peer_score_params.behaviour_penalty_weight = -2.0;
-        peer_score_params.behaviour_penalty_decay = 0.9;
+        let peer_score_params = PeerScoreParams {
+            behaviour_penalty_weight: -2.0,
+            behaviour_penalty_decay: 0.9,
+            ..Default::default()
+        };
 
         let (mut gs, peers, topics) = inject_nodes1()
             .peer_no(2)
@@ -4223,13 +4216,11 @@ mod tests {
             .create_network();
 
         //remove peers from mesh and send prune to them => this adds a backoff for the peers
-        for i in 0..2 {
-            gs.mesh.get_mut(&topics[0]).unwrap().remove(&peers[i]);
+        for peer in peers.iter().take(2) {
+            gs.mesh.get_mut(&topics[0]).unwrap().remove(peer);
             gs.send_graft_prune(
                 HashMap::new(),
-                vec![(peers[i], vec![topics[0].clone()])]
-                    .into_iter()
-                    .collect(),
+                HashMap::from([(*peer, vec![topics[0].clone()])]),
                 HashSet::new(),
             );
         }
@@ -4282,10 +4273,14 @@ mod tests {
             .opportunistic_graft_peers(2)
             .build()
             .unwrap();
-        let mut peer_score_params = PeerScoreParams::default();
-        peer_score_params.app_specific_weight = 1.0;
-        let mut thresholds = PeerScoreThresholds::default();
-        thresholds.opportunistic_graft_threshold = 2.0;
+        let peer_score_params = PeerScoreParams {
+            app_specific_weight: 1.0,
+            ..Default::default()
+        };
+        let thresholds = PeerScoreThresholds {
+            opportunistic_graft_threshold: 2.0,
+            ..Default::default()
+        };
 
         let (mut gs, peers, topics) = inject_nodes1()
             .peer_no(5)
@@ -4312,13 +4307,13 @@ mod tests {
         assert_eq!(gs.mesh[&topics[0]], peers.iter().cloned().collect());
 
         //give others high scores (but the first two have not high enough scores)
-        for i in 0..5 {
-            gs.set_application_score(&peers[i], 0.0 + i as f64);
+        for (i, peer) in peers.iter().enumerate().take(5) {
+            gs.set_application_score(peer, 0.0 + i as f64);
         }
 
         //set scores for peers in the mesh
-        for i in 0..5 {
-            gs.set_application_score(&others[i], 0.0 + i as f64);
+        for (i, peer) in others.iter().enumerate().take(5) {
+            gs.set_application_score(peer, 0.0 + i as f64);
         }
 
         //this gives a median of exactly 2.0 => should not apply opportunistic grafting
@@ -4376,10 +4371,10 @@ mod tests {
 
         //assert that no prune got created
         assert_eq!(
-            count_control_msgs(&gs, |_, a| match a {
-                GossipsubControlAction::Prune { .. } => true,
-                _ => false,
-            }),
+            count_control_msgs(&gs, |_, a| matches!(
+                a,
+                GossipsubControlAction::Prune { .. }
+            )),
             0,
             "we should not prune after graft in unknown topic"
         );
@@ -4482,22 +4477,8 @@ mod tests {
 
         //we send iwant only for the first 10 messages
         assert_eq!(
-            count_control_msgs(&gs, |p, action| match action {
-                GossipsubControlAction::IWant { message_ids } =>
-                    p == &peer && {
-                        assert_eq!(
-                            message_ids.len(),
-                            1,
-                            "each iwant should have one message \
-                corresponding to one ihave"
-                        );
-
-                        assert!(first_ten.contains(&message_ids[0]));
-
-                        true
-                    },
-                _ => false,
-            }),
+            count_control_msgs(&gs, |p, action| p == &peer
+                && matches!(action, GossipsubControlAction::IWant { message_ids } if message_ids.len() == 1 && first_ten.contains(&message_ids[0]))),
             10,
             "exactly the first ten ihaves should be processed and one iwant for each created"
         );
@@ -4519,19 +4500,8 @@ mod tests {
 
         //we sent iwant for all 20 messages
         assert_eq!(
-            count_control_msgs(&gs, |p, action| match action {
-                GossipsubControlAction::IWant { message_ids } =>
-                    p == &peer && {
-                        assert_eq!(
-                            message_ids.len(),
-                            1,
-                            "each iwant should have one message \
-                corresponding to one ihave"
-                        );
-                        true
-                    },
-                _ => false,
-            }),
+            count_control_msgs(&gs, |p, action| p == &peer
+                && matches!(action, GossipsubControlAction::IWant { message_ids } if message_ids.len() == 1)),
             20,
             "all 20 should get sent"
         );
@@ -4706,8 +4676,10 @@ mod tests {
             .iwant_followup_time(Duration::from_secs(4))
             .build()
             .unwrap();
-        let mut peer_score_params = PeerScoreParams::default();
-        peer_score_params.behaviour_penalty_weight = -1.0;
+        let peer_score_params = PeerScoreParams {
+            behaviour_penalty_weight: -1.0,
+            ..Default::default()
+        };
 
         // fill the mesh
         let (mut gs, peers, topics) = inject_nodes1()
@@ -4807,7 +4779,7 @@ mod tests {
             } else {
                 println!("{}", peer);
                 println!("{}", score);
-                assert!(false, "Invalid score of peer")
+                panic!("Invalid score of peer");
             }
         }
 
@@ -5229,7 +5201,7 @@ mod tests {
             //collect messages to p1
             let messages_to_p1 = gs2.events.drain(..).filter_map(|e| match e {
                 NetworkBehaviourAction::NotifyHandler { peer_id, event, .. } => {
-                    if &peer_id == &p1 {
+                    if peer_id == p1 {
                         if let GossipsubHandlerIn::Message(m) = Arc::try_unwrap(event).unwrap() {
                             Some(m)
                         } else {
