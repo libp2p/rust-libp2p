@@ -96,7 +96,7 @@ pub enum TransportError {
     #[error("{0}")]
     Io(#[from] std::io::Error),
 
-    /// The [`EndpointDriver`] has crashed.
+    /// The [`EndpointDriver`](super::endpoint::EndpointDriver) has crashed.
     #[error("Endpoint driver crashed")]
     EndpointDriverCrashed,
 }

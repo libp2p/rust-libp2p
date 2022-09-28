@@ -63,7 +63,7 @@ pub struct Connection {
 /// Error on the connection as a whole.
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum ConnectionError {
-    /// The [`EndpointDriver`] has crashed.
+    /// The [`EndpointDriver`](super::endpoint::EndpointDriver) has crashed.
     #[error("Endpoint driver crashed")]
     EndpointDriverCrashed,
     /// Error in the inner state machine.
@@ -74,8 +74,9 @@ pub enum ConnectionError {
 impl Connection {
     /// Crate-internal function that builds a [`Connection`] from raw components.
     ///
-    /// This function assumes that there exists a [`EndpointDriver`] that will process the messages
-    /// sent to `EndpointChannel::to_endpoint` and send us messages on `from_endpoint`.
+    /// This function assumes that there exists a [`EndpointDriver`](super::endpoint::EndpointDriver)
+    /// that will process the messages sent to `EndpointChannel::to_endpoint` and send us messages 
+    /// on `from_endpoint`.
     ///
     /// `connection_id` is used to identify the local connection in the messages sent to
     /// `to_endpoint`.
