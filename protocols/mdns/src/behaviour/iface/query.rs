@@ -60,8 +60,11 @@ impl MdnsPacket {
                 from,
                 query_id: packet.header.id,
             });
-            Ok(Some(query))
-        } else if packet
+
+            return Ok(Some(query));
+        }
+
+        if packet
             .questions
             .iter()
             .any(|q| q.qname.to_string().as_bytes() == META_QUERY_SERVICE)
@@ -71,10 +74,10 @@ impl MdnsPacket {
                 from,
                 query_id: packet.header.id,
             });
-            Ok(Some(discovery))
-        } else {
-            Ok(None)
+            return Ok(Some(discovery));
         }
+
+        Ok(None)
     }
 }
 
