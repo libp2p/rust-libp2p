@@ -167,6 +167,15 @@ impl MdnsResponse {
         MdnsResponse { peers, from }
     }
 
+    pub fn observed_address(&self) -> Multiaddr {
+        // We replace the IP address with the address we observe the
+        // remote as and the address they listen on.
+        let obs_ip = Protocol::from(self.remote_addr().ip());
+        let obs_port = Protocol::Udp(self.remote_addr().port());
+
+        Multiaddr::empty().with(obs_ip).with(obs_port)
+    }
+
     /// Returns the list of peers that have been reported in this packet.
     ///
     /// > **Note**: Keep in mind that this will also contain the responses we sent ourselves.
@@ -175,8 +184,7 @@ impl MdnsResponse {
     }
 
     /// Source address of the packet.
-    #[inline]
-    pub fn remote_addr(&self) -> &SocketAddr {
+    fn remote_addr(&self) -> &SocketAddr {
         &self.from
     }
 }
