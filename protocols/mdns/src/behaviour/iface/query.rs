@@ -56,12 +56,10 @@ impl MdnsPacket {
             .iter()
             .any(|q| q.qname.to_string().as_bytes() == SERVICE_NAME)
         {
-            let query = MdnsPacket::Query(MdnsQuery {
+            return Ok(Some(MdnsPacket::Query(MdnsQuery {
                 from,
                 query_id: packet.header.id,
-            });
-
-            return Ok(Some(query));
+            })));
         }
 
         if packet
@@ -70,11 +68,10 @@ impl MdnsPacket {
             .any(|q| q.qname.to_string().as_bytes() == META_QUERY_SERVICE)
         {
             // TODO: what if multiple questions, one with SERVICE_NAME and one with META_QUERY_SERVICE?
-            let discovery = MdnsPacket::ServiceDiscovery(MdnsServiceDiscovery {
+            return Ok(Some(MdnsPacket::ServiceDiscovery(MdnsServiceDiscovery {
                 from,
                 query_id: packet.header.id,
-            });
-            return Ok(Some(discovery));
+            })));
         }
 
         Ok(None)
