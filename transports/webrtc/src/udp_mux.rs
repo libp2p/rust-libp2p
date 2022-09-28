@@ -24,6 +24,7 @@ use stun::{
     attributes::ATTR_USERNAME,
     message::{is_message as is_stun_message, Message as STUNMessage},
 };
+use thiserror::Error;
 use tokio::{io::ReadBuf, net::UdpSocket};
 use tokio_crate as tokio;
 use webrtc::ice::udp_mux::{UDPMux, UDPMuxConn, UDPMuxConnParams, UDPMuxWriter};
@@ -140,9 +141,24 @@ impl UDPMuxNewAddr {
 
     /// Returns a muxed connection if the `ufrag` from the given STUN message matches an existing
     /// connection.
-    fn conn_from_stun_message(&self, buffer: &[u8], addr: &SocketAddr) -> Option<UDPMuxConn> {
+    fn conn_from_stun_message(
+        &self,
+        buffer: &[u8],
+        addr: &SocketAddr,
+    ) -> Option<Result<UDPMuxConn, ConnQueryError>> {
         match ufrag_from_stun_message(buffer, true) {
-            Ok(ufrag) => self.conns.get(&ufrag).map(Clone::clone),
+            Ok(ufrag) => {
+                if let Some(conn) = self.conns.get(&ufrag) {
+                    let associated_addrs = conn.get_addresses();
+                    // This basically ensures only one address is registered per ufrag.
+                    if associated_addrs.is_empty() || associated_addrs.contains(addr) {
+                        return Some(Ok(conn.clone()));
+                    } else {
+                        return Some(Err(ConnQueryError::UfragAlreadyTaken { associated_addrs }));
+                    }
+                }
+                None
+            }
             Err(e) => {
                 log::debug!("{} (addr={})", e, addr);
                 None
@@ -297,7 +313,14 @@ impl UDPMuxNewAddr {
                                 // If we couldn't find the connection based on source address, see if
                                 // this is a STUN mesage and if so if we can find the connection based on ufrag.
                                 None if is_stun_message(read.filled()) => {
-                                    self.conn_from_stun_message(read.filled(), &addr)
+                                    match self.conn_from_stun_message(read.filled(), &addr) {
+                                        Some(Ok(s)) => Some(s),
+                                        Some(Err(e)) => {
+                                            log::debug!("addr={}: Error when querying existing connections: {}", &addr, e);
+                                            continue;
+                                        }
+                                        None => None,
+                                    }
                                 }
                                 Some(s) => Some(s.to_owned()),
                                 _ => None,
@@ -513,4 +536,10 @@ fn ufrag_from_stun_message(buffer: &[u8], local_ufrag: bool) -> Result<String, E
             }
         }
     }
+}
+
+#[derive(Error, Debug)]
+enum ConnQueryError {
+    #[error("ufrag is already taken (associated_addrs={associated_addrs:?})")]
+    UfragAlreadyTaken { associated_addrs: Vec<SocketAddr> },
 }
