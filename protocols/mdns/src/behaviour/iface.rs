@@ -190,35 +190,32 @@ where
             {
                 match data {
                     Ok((len, from)) => {
-                        if let Some(packet) =
-                            MdnsPacket::new_from_bytes(&self.recv_buffer[..len], from)
-                        {
-                            match packet {
-                                MdnsPacket::Query(query) => {
-                                    self.reset_timer();
-                                    log::trace!("sending response on iface {}", self.addr);
+                        match MdnsPacket::new_from_bytes(&self.recv_buffer[..len], from) {
+                            Some(MdnsPacket::Query(query)) => {
+                                self.reset_timer();
+                                log::trace!("sending response on iface {}", self.addr);
 
-                                    self.send_buffer.extend(build_query_response(
-                                        query.query_id(),
-                                        *params.local_peer_id(),
-                                        params.listened_addresses(),
-                                        self.ttl,
-                                    ));
-                                }
-                                MdnsPacket::Response(response) => {
-                                    self.discovered.extend(extract_discovered(
-                                        &response,
-                                        params.local_peer_id(),
-                                    ));
-                                }
-                                MdnsPacket::ServiceDiscovery(disc) => {
-                                    self.send_buffer.push_back(build_service_discovery_response(
-                                        disc.query_id(),
-                                        self.ttl,
-                                    ));
-                                }
-                            };
-                            continue;
+                                self.send_buffer.extend(build_query_response(
+                                    query.query_id(),
+                                    *params.local_peer_id(),
+                                    params.listened_addresses(),
+                                    self.ttl,
+                                ));
+                                continue;
+                            }
+                            Some(MdnsPacket::Response(response)) => {
+                                self.discovered
+                                    .extend(extract_discovered(&response, params.local_peer_id()));
+                                continue;
+                            }
+                            Some(MdnsPacket::ServiceDiscovery(disc)) => {
+                                self.send_buffer.push_back(build_service_discovery_response(
+                                    disc.query_id(),
+                                    self.ttl,
+                                ));
+                                continue;
+                            }
+                            None => {}
                         }
                     }
                     Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
