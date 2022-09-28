@@ -24,7 +24,7 @@ async-std-crate = { package = "async-std", version = "1", features = ["attribute
 [features]
 default = ["async-std", "native-tls"]
 tokio = ["arti-client/tokio", "dep:tokio-crate"]
-async-std = ["arti-client/async-std"]
+async-std = ["arti-client/async-std", "dep:async-std-crate"]
 native-tls = ["arti-client/native-tls"]
 rustls = ["arti-client/rustls"]
 

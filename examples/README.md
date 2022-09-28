@@ -44,6 +44,12 @@ A set of examples showcasing how to use rust-libp2p.
 
   Discover peers on the same network via the MDNS protocol.
 
+## Special transports
+
+- [Ping over Onion](ping-onion.rs)
+  
+  Client counterpart to normal ping, that routes traffic over Tor.
+
 ## Integration into a larger application
 
 - [File sharing application](./file-sharing.rs)
