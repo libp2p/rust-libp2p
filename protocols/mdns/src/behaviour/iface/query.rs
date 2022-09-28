@@ -22,9 +22,11 @@ use super::dns;
 use crate::{META_QUERY_SERVICE, SERVICE_NAME};
 use dns_parser::{Packet, RData};
 use libp2p_core::{
+    address_translation,
     multiaddr::{Multiaddr, Protocol},
     PeerId,
 };
+use std::time::Instant;
 use std::{convert::TryFrom, fmt, net::SocketAddr, str, time::Duration};
 
 /// A valid mDNS packet received by the service.
@@ -167,7 +169,25 @@ impl MdnsResponse {
         MdnsResponse { peers, from }
     }
 
-    pub fn observed_address(&self) -> Multiaddr {
+    pub fn extract_discovered(
+        &self,
+        local_peer_id: PeerId,
+    ) -> impl Iterator<Item = (PeerId, Multiaddr, Instant)> + '_ {
+        self.discovered_peers()
+            .filter(move |peer| peer.id() != &local_peer_id)
+            .flat_map(|peer| {
+                let observed = self.observed_address();
+                let new_expiration = Instant::now() + peer.ttl();
+
+                peer.addresses().iter().filter_map(move |address| {
+                    let new_addr = address_translation(address, &observed)?;
+
+                    Some((*peer.id(), new_addr.clone(), new_expiration))
+                })
+            })
+    }
+
+    fn observed_address(&self) -> Multiaddr {
         // We replace the IP address with the address we observe the
         // remote as and the address they listen on.
         let obs_ip = Protocol::from(self.remote_addr().ip());
@@ -179,7 +199,7 @@ impl MdnsResponse {
     /// Returns the list of peers that have been reported in this packet.
     ///
     /// > **Note**: Keep in mind that this will also contain the responses we sent ourselves.
-    pub fn discovered_peers(&self) -> impl Iterator<Item = &MdnsPeer> {
+    fn discovered_peers(&self) -> impl Iterator<Item = &MdnsPeer> {
         self.peers.iter()
     }
 

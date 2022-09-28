@@ -23,10 +23,9 @@ mod query;
 
 use self::dns::{build_query, build_query_response, build_service_discovery_response};
 use self::query::MdnsPacket;
-use crate::behaviour::iface::query::MdnsResponse;
 use crate::behaviour::{socket::AsyncSocket, timer::Builder};
 use crate::MdnsConfig;
-use libp2p_core::{address_translation, Multiaddr, PeerId};
+use libp2p_core::{Multiaddr, PeerId};
 use libp2p_swarm::PollParameters;
 use socket2::{Domain, Socket, Type};
 use std::{
@@ -203,7 +202,7 @@ where
                 }
                 Poll::Ready(Ok(Some(MdnsPacket::Response(response)))) => {
                     self.discovered
-                        .extend(extract_discovered(&response, params.local_peer_id()));
+                        .extend(response.extract_discovered(*params.local_peer_id()));
                     continue;
                 }
                 Poll::Ready(Ok(Some(MdnsPacket::ServiceDiscovery(disc)))) => {
@@ -223,23 +222,4 @@ where
             return Poll::Pending;
         }
     }
-}
-
-fn extract_discovered<'r>(
-    response: &'r MdnsResponse,
-    local_peer_id: &'r PeerId,
-) -> impl Iterator<Item = (PeerId, Multiaddr, Instant)> + 'r {
-    response
-        .discovered_peers()
-        .filter(move |peer| peer.id() != local_peer_id)
-        .flat_map(|peer| {
-            let observed = response.observed_address();
-            let new_expiration = Instant::now() + peer.ttl();
-
-            peer.addresses().iter().filter_map(move |address| {
-                let new_addr = address_translation(address, &observed)?;
-
-                Some((*peer.id(), new_addr.clone(), new_expiration))
-            })
-        })
 }
