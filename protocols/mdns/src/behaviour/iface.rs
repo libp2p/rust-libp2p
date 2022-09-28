@@ -193,7 +193,31 @@ where
                         if let Some(packet) =
                             MdnsPacket::new_from_bytes(&self.recv_buffer[..len], from)
                         {
-                            self.inject_mdns_packet(packet, params);
+                            match packet {
+                                MdnsPacket::Query(query) => {
+                                    self.reset_timer();
+                                    log::trace!("sending response on iface {}", self.addr);
+
+                                    self.send_buffer.extend(build_query_response(
+                                        query.query_id(),
+                                        *params.local_peer_id(),
+                                        params.listened_addresses(),
+                                        self.ttl,
+                                    ));
+                                }
+                                MdnsPacket::Response(response) => {
+                                    self.discovered.extend(extract_discovered(
+                                        &response,
+                                        params.local_peer_id(),
+                                    ));
+                                }
+                                MdnsPacket::ServiceDiscovery(disc) => {
+                                    self.send_buffer.push_back(build_service_discovery_response(
+                                        disc.query_id(),
+                                        self.ttl,
+                                    ));
+                                }
+                            };
                             continue;
                         }
                     }
@@ -207,32 +231,6 @@ where
             }
 
             return Poll::Pending;
-        }
-    }
-
-    fn inject_mdns_packet(&mut self, packet: MdnsPacket, params: &impl PollParameters) {
-        log::trace!("received packet on iface {} {:?}", self.addr, packet);
-
-        match packet {
-            MdnsPacket::Query(query) => {
-                self.reset_timer();
-                log::trace!("sending response on iface {}", self.addr);
-
-                self.send_buffer.extend(build_query_response(
-                    query.query_id(),
-                    *params.local_peer_id(),
-                    params.listened_addresses(),
-                    self.ttl,
-                ));
-            }
-            MdnsPacket::Response(response) => {
-                self.discovered
-                    .extend(extract_discovered(&response, params.local_peer_id()));
-            }
-            MdnsPacket::ServiceDiscovery(disc) => {
-                self.send_buffer
-                    .push_back(build_service_discovery_response(disc.query_id(), self.ttl));
-            }
         }
     }
 }
