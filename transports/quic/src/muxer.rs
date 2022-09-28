@@ -200,11 +200,11 @@ impl StreamMuxer for QuicMuxer {
             connection,
             ..
         } = &mut *self.inner.lock();
-        if connection.connection.is_drained() {
+        if connection.is_drained() {
             return Poll::Ready(Ok(()));
         }
 
-        if connection.connection.streams().send_streams() != 0 {
+        if connection.send_stream_count() != 0 {
             for substream in substreams.keys() {
                 if let Err(e) = connection.finish_substream(*substream) {
                     tracing::warn!("substream finish error on muxer close: {}", e);
@@ -212,9 +212,7 @@ impl StreamMuxer for QuicMuxer {
             }
         }
         loop {
-            if connection.connection.streams().send_streams() == 0
-                && !connection.connection.is_closed()
-            {
+            if connection.send_stream_count() == 0 && !connection.is_closed() {
                 connection.close()
             }
             match connection.poll_event(cx) {
@@ -247,7 +245,7 @@ impl AsyncRead for Substream {
         use quinn_proto::{ReadError, ReadableError};
         let mut muxer = self.muxer.lock();
 
-        let mut stream = muxer.connection.connection.recv_stream(self.id);
+        let mut stream = muxer.connection.recv_stream(self.id);
         let mut chunks = match stream.read(true) {
             Ok(chunks) => chunks,
             Err(ReadableError::UnknownStream) => {
@@ -306,7 +304,7 @@ impl AsyncWrite for Substream {
     ) -> Poll<std::io::Result<usize>> {
         let mut muxer = self.muxer.lock();
 
-        match muxer.connection.connection.send_stream(self.id).write(buf) {
+        match muxer.connection.send_stream(self.id).write(buf) {
             Ok(bytes) => Poll::Ready(Ok(bytes)),
             Err(quinn_proto::WriteError::Blocked) => {
                 let substream = muxer
@@ -353,12 +351,8 @@ impl Drop for Substream {
     fn drop(&mut self) {
         let mut muxer = self.muxer.lock();
         muxer.substreams.remove(&self.id);
-        let _ = muxer
-            .connection
-            .connection
-            .recv_stream(self.id)
-            .stop(0u32.into());
-        let mut send_stream = muxer.connection.connection.send_stream(self.id);
+        let _ = muxer.connection.recv_stream(self.id).stop(0u32.into());
+        let mut send_stream = muxer.connection.send_stream(self.id);
         match send_stream.finish() {
             Ok(()) => {}
             // Already finished or reset, which is fine.

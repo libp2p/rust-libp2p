@@ -31,6 +31,7 @@ use crate::endpoint::{Endpoint, ToEndpoint};
 use futures::{channel::mpsc, prelude::*};
 use futures_timer::Delay;
 use libp2p_core::PeerId;
+use quinn_proto::{RecvStream, SendStream};
 use std::{
     fmt,
     net::SocketAddr,
@@ -52,7 +53,7 @@ pub struct Connection {
     from_endpoint: mpsc::Receiver<quinn_proto::ConnectionEvent>,
 
     /// The QUIC state machine for this specific connection.
-    pub connection: quinn_proto::Connection,
+    connection: quinn_proto::Connection,
     /// Identifier for this connection according to the endpoint. Used when sending messages to
     /// the endpoint.
     connection_id: quinn_proto::ConnectionHandle,
@@ -63,9 +64,6 @@ pub struct Connection {
 /// Error on the connection as a whole.
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum Error {
-    /// Endpoint has force-killed this connection because it was too busy.
-    #[error("Endpoint has force-killed our connection")]
-    ClosedChannel,
     /// The background task driving the endpoint has crashed.
     #[error("Background task crashed")]
     TaskCrashed,
@@ -78,11 +76,7 @@ impl Connection {
     /// Crate-internal function that builds a [`Connection`] from raw components.
     ///
     /// This function assumes that there exists a background task that will process the messages
-    /// sent to `to_endpoint` and send us messages on `from_endpoint`.
-    ///
-    /// The `from_endpoint` can be purposefully closed by the endpoint if the connection is too
-    /// slow to process.
-    // TODO: is this necessary ^? figure out if quinn_proto doesn't forbid that situation in the first place
+    /// sent to `Endpoint::to_endpoint` and send us messages on `from_endpoint`.
     ///
     /// `connection_id` is used to identify the local connection in the messages sent to
     /// `to_endpoint`.
@@ -106,24 +100,9 @@ impl Connection {
         }
     }
 
-    /// The local address which was used when the remote established the connection to us.
-    ///
-    /// `None` for client connections.
-    pub fn local_addr(&self) -> Option<SocketAddr> {
-        if self.connection.side().is_client() {
-            return None;
-        }
-        let endpoint_addr = self.endpoint.socket_addr();
-
-        // Local address may differ from the socket address if the socket is
-        // bound to a wildcard address.
-        let addr = match self.connection.local_ip() {
-            Some(ip) => SocketAddr::new(ip, endpoint_addr.port()),
-            // TODO: `quinn_proto::Connection::local_ip` is only supported for linux,
-            // so for other platforms we currently still return the endpoint address.
-            None => *endpoint_addr,
-        };
-        Some(addr)
+    /// The address that the local socket is bound to.
+    pub fn local_addr(&self) -> &SocketAddr {
+        self.endpoint.socket_addr()
     }
 
     /// Returns the address of the node we're connected to.
@@ -131,7 +110,7 @@ impl Connection {
         self.connection.remote_address()
     }
 
-    /// Returns the address of the node we're connected to.
+    /// Returns the ID of the node we're connected to.
     pub fn remote_peer_id(&self) -> PeerId {
         let session = self.connection.crypto_session();
         let identity = session
@@ -157,6 +136,19 @@ impl Connection {
             .close(Instant::now(), From::from(0u32), Default::default());
     }
 
+    /// Whether the connection is closed.
+    /// A [`ConnectionEvent::ConnectionLost`] event is emitted with details when the
+    /// connection becomes closed.
+    pub fn is_closed(&self) -> bool {
+        self.connection.is_closed()
+    }
+
+    /// Whether there is no longer any need to keep the connection around.
+    /// All drained connections have been closed.
+    pub fn is_drained(&self) -> bool {
+        self.connection.is_drained()
+    }
+
     /// Pops a new substream opened by the remote.
     ///
     /// If `None` is returned, then a [`ConnectionEvent::StreamAvailable`] event will later be
@@ -174,6 +166,21 @@ impl Connection {
     /// produced when a substream is available.
     pub fn open_substream(&mut self) -> Option<quinn_proto::StreamId> {
         self.connection.streams().open(quinn_proto::Dir::Bi)
+    }
+
+    /// Control over the stream for reading.
+    pub fn recv_stream(&mut self, id: quinn_proto::StreamId) -> RecvStream<'_> {
+        self.connection.recv_stream(id)
+    }
+
+    /// Control over the stream for writing.
+    pub fn send_stream(&mut self, id: quinn_proto::StreamId) -> SendStream<'_> {
+        self.connection.send_stream(id)
+    }
+
+    /// Number of streams that may have unacknowledged data.
+    pub fn send_stream_count(&mut self) -> usize {
+        self.connection.streams().send_streams()
     }
 
     /// Closes the given substream.
@@ -202,7 +209,7 @@ impl Connection {
                 }
                 Poll::Ready(None) => {
                     if closed.is_none() {
-                        return Poll::Ready(ConnectionEvent::ConnectionLost(Error::ClosedChannel));
+                        return Poll::Ready(ConnectionEvent::ConnectionLost(Error::TaskCrashed));
                     }
                 }
                 Poll::Pending => {}
@@ -229,10 +236,14 @@ impl Connection {
                 }
             }
 
+            // The maximum amount of segments which can be transmitted in a single Transmit
+            // if a platform supports Generic Send Offload (GSO).
+            // Set to 1 for now since not all platforms support GSO.
+            // TODO: Fix for platforms that support GSO.
+            let max_datagrams = 1;
             // Poll the connection for packets to send on the UDP socket and try to send them on
             // `to_endpoint`.
-            // FIXME max_datagrams
-            if let Some(transmit) = self.connection.poll_transmit(Instant::now(), 1) {
+            if let Some(transmit) = self.connection.poll_transmit(Instant::now(), max_datagrams) {
                 // TODO: ECN bits not handled
                 self.pending_to_endpoint = Some(ToEndpoint::SendUdpPacket {
                     destination: transmit.destination,

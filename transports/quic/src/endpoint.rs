@@ -282,7 +282,6 @@ pub enum ToEndpoint {
 /// Keep in mind that we pass an `Endpoint` whenever we create a new connection, which
 /// guarantees that the [`Endpoint`], and therefore the background task, is properly kept alive
 /// for as long as any QUIC connection is open.
-///
 async fn background_task<P: Provider>(
     endpoint_config: Arc<quinn_proto::EndpointConfig>,
     client_config: quinn_proto::ClientConfig,
@@ -308,6 +307,7 @@ async fn background_task<P: Provider>(
     // Next packet waiting to be transmitted on the UDP socket, if any.
     let mut next_packet_out: Option<(SocketAddr, Vec<u8>)> = None;
 
+    // Whether the transport dropped its handle for this endpoint.
     let mut is_orphaned = false;
 
     // Main loop of the task.
@@ -391,7 +391,12 @@ async fn background_task<P: Provider>(
                         if let Some(event_back) = event_back {
                             debug_assert!(!is_drained_event);
                             if let Some(sender) = alive_connections.get_mut(&connection_id) {
-                                let _ = sender.send(event_back).await; // TODO: don't await here /!\
+                                // We clone the sender to guarantee that there will be at least one
+                                // free slot to send the event.
+                                // The channel can not grow out of bound because an `event_back` is
+                                // only sent if we prior received an event from the same connection.
+                                // If the connection is busy, it won't sent us any more events to handle.
+                                let _ = sender.clone().start_send(event_back);
                             } else {
                                 tracing::error!("State mismatch: event for closed connection");
                             }
@@ -427,9 +432,12 @@ async fn background_task<P: Provider>(
                 match event {
                     None => {},
                     Some((connec_id, quinn_proto::DatagramEvent::ConnectionEvent(event))) => {
-                        // Event to send to an existing connection.
+                        // Redirect the datagram to its connection.
                         if let Some(sender) = alive_connections.get_mut(&connec_id) {
-                            let _ = sender.send(event).await; // TODO: don't await here /!\
+                            // Try to send the redirected datagramm event to the connection.
+                            // If the connection is too busy we drop the datagram to back-pressure
+                            // the remote.
+                            let _ = sender.try_send(event);
                         } else {
                             tracing::error!("State mismatch: event for closed connection");
                         }
