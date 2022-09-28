@@ -41,43 +41,40 @@ pub enum MdnsPacket {
 }
 
 impl MdnsPacket {
-    pub fn new_from_bytes(buf: &[u8], from: SocketAddr) -> Option<MdnsPacket> {
-        match Packet::parse(buf) {
-            Ok(packet) => {
-                if packet.header.query {
-                    if packet
-                        .questions
-                        .iter()
-                        .any(|q| q.qname.to_string().as_bytes() == SERVICE_NAME)
-                    {
-                        let query = MdnsPacket::Query(MdnsQuery {
-                            from,
-                            query_id: packet.header.id,
-                        });
-                        Some(query)
-                    } else if packet
-                        .questions
-                        .iter()
-                        .any(|q| q.qname.to_string().as_bytes() == META_QUERY_SERVICE)
-                    {
-                        // TODO: what if multiple questions, one with SERVICE_NAME and one with META_QUERY_SERVICE?
-                        let discovery = MdnsPacket::ServiceDiscovery(MdnsServiceDiscovery {
-                            from,
-                            query_id: packet.header.id,
-                        });
-                        Some(discovery)
-                    } else {
-                        None
-                    }
-                } else {
-                    let resp = MdnsPacket::Response(MdnsResponse::new(packet, from));
-                    Some(resp)
-                }
+    pub fn new_from_bytes(
+        buf: &[u8],
+        from: SocketAddr,
+    ) -> Result<Option<MdnsPacket>, dns_parser::Error> {
+        let packet = Packet::parse(buf)?;
+
+        if packet.header.query {
+            if packet
+                .questions
+                .iter()
+                .any(|q| q.qname.to_string().as_bytes() == SERVICE_NAME)
+            {
+                let query = MdnsPacket::Query(MdnsQuery {
+                    from,
+                    query_id: packet.header.id,
+                });
+                Ok(Some(query))
+            } else if packet
+                .questions
+                .iter()
+                .any(|q| q.qname.to_string().as_bytes() == META_QUERY_SERVICE)
+            {
+                // TODO: what if multiple questions, one with SERVICE_NAME and one with META_QUERY_SERVICE?
+                let discovery = MdnsPacket::ServiceDiscovery(MdnsServiceDiscovery {
+                    from,
+                    query_id: packet.header.id,
+                });
+                Ok(Some(discovery))
+            } else {
+                Ok(None)
             }
-            Err(err) => {
-                log::debug!("Parsing mdns packet failed: {:?}", err);
-                None
-            }
+        } else {
+            let resp = MdnsPacket::Response(MdnsResponse::new(packet, from));
+            Ok(Some(resp))
         }
     }
 }
