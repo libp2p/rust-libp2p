@@ -140,7 +140,7 @@ impl EndpointChannel {
             socket_addr: socket.local_addr()?,
         };
 
-        let server_config = new_connections.is_some().then(|| config.server_config);
+        let server_config = new_connections.is_some().then_some(config.server_config);
         let socket = P::from_socket(socket)?;
 
         let driver = EndpointDriver::<P>::new(
