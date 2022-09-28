@@ -145,56 +145,6 @@ where
         self.timeout = T::interval_at(Instant::now(), self.query_interval);
     }
 
-    fn inject_mdns_packet(&mut self, packet: MdnsPacket, params: &impl PollParameters) {
-        log::trace!("received packet on iface {} {:?}", self.addr, packet);
-        match packet {
-            MdnsPacket::Query(query) => {
-                self.reset_timer();
-                log::trace!("sending response on iface {}", self.addr);
-                for packet in build_query_response(
-                    query.query_id(),
-                    *params.local_peer_id(),
-                    params.listened_addresses(),
-                    self.ttl,
-                ) {
-                    self.send_buffer.push_back(packet);
-                }
-            }
-            MdnsPacket::Response(response) => {
-                // We replace the IP address with the address we observe the
-                // remote as and the address they listen on.
-                let obs_ip = Protocol::from(response.remote_addr().ip());
-                let obs_port = Protocol::Udp(response.remote_addr().port());
-                let observed: Multiaddr = iter::once(obs_ip).chain(iter::once(obs_port)).collect();
-
-                for peer in response.discovered_peers() {
-                    if peer.id() == params.local_peer_id() {
-                        continue;
-                    }
-
-                    let new_expiration = Instant::now() + peer.ttl();
-
-                    for addr in peer.addresses() {
-                        if let Some(new_addr) = address_translation(addr, &observed) {
-                            self.discovered.push_back((
-                                *peer.id(),
-                                new_addr.clone(),
-                                new_expiration,
-                            ));
-                        }
-
-                        self.discovered
-                            .push_back((*peer.id(), addr.clone(), new_expiration));
-                    }
-                }
-            }
-            MdnsPacket::ServiceDiscovery(disc) => {
-                let resp = build_service_discovery_response(disc.query_id(), self.ttl);
-                self.send_buffer.push_back(resp);
-            }
-        }
-    }
-
     pub fn poll(
         &mut self,
         cx: &mut Context,
@@ -252,6 +202,56 @@ where
 
             // 4th priority: Emit event only if nothing else can make progress.
             return self.discovered.pop_front();
+        }
+    }
+
+    fn inject_mdns_packet(&mut self, packet: MdnsPacket, params: &impl PollParameters) {
+        log::trace!("received packet on iface {} {:?}", self.addr, packet);
+        match packet {
+            MdnsPacket::Query(query) => {
+                self.reset_timer();
+                log::trace!("sending response on iface {}", self.addr);
+                for packet in build_query_response(
+                    query.query_id(),
+                    *params.local_peer_id(),
+                    params.listened_addresses(),
+                    self.ttl,
+                ) {
+                    self.send_buffer.push_back(packet);
+                }
+            }
+            MdnsPacket::Response(response) => {
+                // We replace the IP address with the address we observe the
+                // remote as and the address they listen on.
+                let obs_ip = Protocol::from(response.remote_addr().ip());
+                let obs_port = Protocol::Udp(response.remote_addr().port());
+                let observed: Multiaddr = iter::once(obs_ip).chain(iter::once(obs_port)).collect();
+
+                for peer in response.discovered_peers() {
+                    if peer.id() == params.local_peer_id() {
+                        continue;
+                    }
+
+                    let new_expiration = Instant::now() + peer.ttl();
+
+                    for addr in peer.addresses() {
+                        if let Some(new_addr) = address_translation(addr, &observed) {
+                            self.discovered.push_back((
+                                *peer.id(),
+                                new_addr.clone(),
+                                new_expiration,
+                            ));
+                        }
+
+                        self.discovered
+                            .push_back((*peer.id(), addr.clone(), new_expiration));
+                    }
+                }
+            }
+            MdnsPacket::ServiceDiscovery(disc) => {
+                let resp = build_service_discovery_response(disc.query_id(), self.ttl);
+                self.send_buffer.push_back(resp);
+            }
         }
     }
 }
