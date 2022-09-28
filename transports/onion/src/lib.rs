@@ -3,7 +3,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 //! Tor based transport for libp2p. Connect through the Tor network to TCP listeners.
 //!
-//! Main entrypoint of the crate: [OnionTransport]
+//! Main entrypoint of the crate: [`OnionTransport`]
 //!
 //! ## Example
 //! ```no_run
@@ -42,7 +42,7 @@ pub type OnionError = arti_client::Error;
 
 #[derive(Clone)]
 pub struct OnionTransport<R: Runtime, S> {
-    // client is in an Arc, because wihtout it the Transport::Dial method can't be implemented,
+    // client is in an Arc, because without it the [`Transport::dial`] method can't be implemented,
     // due to lifetime issues. With the, eventual, stabilization of static async traits this issue
     // will be resolved.
     client: Arc<TorClient<R>>,
@@ -58,7 +58,7 @@ pub type OnionBuilder<R> = TorClientBuilder<R>;
 /// Mode of address conversion. Refer tor [arti_client::TorAddr](https://docs.rs/arti-client/latest/arti_client/struct.TorAddr.html) for details.
 #[derive(Debug, Clone, Copy, Hash, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub enum AddressConversion {
-    /// uses only dns for address resolution (default)
+    /// Uses only dns for address resolution (default).
     #[default]
     DnsOnly,
     /// uses ip and dns for addresses
