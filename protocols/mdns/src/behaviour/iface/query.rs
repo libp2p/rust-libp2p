@@ -184,6 +184,11 @@ impl MdnsResponse {
             })
     }
 
+    /// Source address of the packet.
+    pub fn remote_addr(&self) -> &SocketAddr {
+        &self.from
+    }
+
     fn observed_address(&self) -> Multiaddr {
         // We replace the IP address with the address we observe the
         // remote as and the address they listen on.
@@ -198,11 +203,6 @@ impl MdnsResponse {
     /// > **Note**: Keep in mind that this will also contain the responses we sent ourselves.
     fn discovered_peers(&self) -> impl Iterator<Item = &MdnsPeer> {
         self.peers.iter()
-    }
-
-    /// Source address of the packet.
-    fn remote_addr(&self) -> &SocketAddr {
-        &self.from
     }
 }
 

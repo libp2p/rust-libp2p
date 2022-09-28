@@ -190,7 +190,11 @@ where
             {
                 Poll::Ready(Ok(Ok(Some(MdnsPacket::Query(query))))) => {
                     self.reset_timer();
-                    log::trace!("sending response on iface {}", self.addr);
+                    log::trace!(
+                        "received query from {} on {}",
+                        query.remote_addr(),
+                        self.addr
+                    );
 
                     self.send_buffer.extend(build_query_response(
                         query.query_id(),
@@ -201,12 +205,24 @@ where
                     continue;
                 }
                 Poll::Ready(Ok(Ok(Some(MdnsPacket::Response(response))))) => {
+                    log::trace!(
+                        "received response from {} on {}",
+                        response.remote_addr(),
+                        self.addr
+                    );
+
                     self.discovered.extend(
                         response.extract_discovered(Instant::now(), *params.local_peer_id()),
                     );
                     continue;
                 }
                 Poll::Ready(Ok(Ok(Some(MdnsPacket::ServiceDiscovery(disc))))) => {
+                    log::trace!(
+                        "received service discovery from {} on {}",
+                        disc.remote_addr(),
+                        self.addr
+                    );
+
                     self.send_buffer
                         .push_back(build_service_discovery_response(disc.query_id(), self.ttl));
                     continue;
