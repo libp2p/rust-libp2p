@@ -171,13 +171,14 @@ impl MdnsResponse {
 
     pub fn extract_discovered(
         &self,
+        now: Instant,
         local_peer_id: PeerId,
     ) -> impl Iterator<Item = (PeerId, Multiaddr, Instant)> + '_ {
         self.discovered_peers()
             .filter(move |peer| peer.id() != &local_peer_id)
-            .flat_map(|peer| {
+            .flat_map(move |peer| {
                 let observed = self.observed_address();
-                let new_expiration = Instant::now() + peer.ttl();
+                let new_expiration = now + peer.ttl();
 
                 peer.addresses().iter().filter_map(move |address| {
                     let new_addr = address_translation(address, &observed)?;

@@ -201,8 +201,9 @@ where
                     continue;
                 }
                 Poll::Ready(Ok(Some(MdnsPacket::Response(response)))) => {
-                    self.discovered
-                        .extend(response.extract_discovered(*params.local_peer_id()));
+                    self.discovered.extend(
+                        response.extract_discovered(Instant::now(), *params.local_peer_id()),
+                    );
                     continue;
                 }
                 Poll::Ready(Ok(Some(MdnsPacket::ServiceDiscovery(disc)))) => {
