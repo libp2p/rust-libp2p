@@ -47,34 +47,33 @@ impl MdnsPacket {
     ) -> Result<Option<MdnsPacket>, dns_parser::Error> {
         let packet = Packet::parse(buf)?;
 
-        if packet.header.query {
-            if packet
-                .questions
-                .iter()
-                .any(|q| q.qname.to_string().as_bytes() == SERVICE_NAME)
-            {
-                let query = MdnsPacket::Query(MdnsQuery {
-                    from,
-                    query_id: packet.header.id,
-                });
-                Ok(Some(query))
-            } else if packet
-                .questions
-                .iter()
-                .any(|q| q.qname.to_string().as_bytes() == META_QUERY_SERVICE)
-            {
-                // TODO: what if multiple questions, one with SERVICE_NAME and one with META_QUERY_SERVICE?
-                let discovery = MdnsPacket::ServiceDiscovery(MdnsServiceDiscovery {
-                    from,
-                    query_id: packet.header.id,
-                });
-                Ok(Some(discovery))
-            } else {
-                Ok(None)
-            }
+        if !packet.header.query {
+            return Ok(Some(MdnsPacket::Response(MdnsResponse::new(packet, from))));
+        }
+
+        if packet
+            .questions
+            .iter()
+            .any(|q| q.qname.to_string().as_bytes() == SERVICE_NAME)
+        {
+            let query = MdnsPacket::Query(MdnsQuery {
+                from,
+                query_id: packet.header.id,
+            });
+            Ok(Some(query))
+        } else if packet
+            .questions
+            .iter()
+            .any(|q| q.qname.to_string().as_bytes() == META_QUERY_SERVICE)
+        {
+            // TODO: what if multiple questions, one with SERVICE_NAME and one with META_QUERY_SERVICE?
+            let discovery = MdnsPacket::ServiceDiscovery(MdnsServiceDiscovery {
+                from,
+                query_id: packet.header.id,
+            });
+            Ok(Some(discovery))
         } else {
-            let resp = MdnsPacket::Response(MdnsResponse::new(packet, from));
-            Ok(Some(resp))
+            Ok(None)
         }
     }
 }
