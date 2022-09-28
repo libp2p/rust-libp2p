@@ -476,7 +476,7 @@ mod tests {
 
             // Add all address reports to the collection.
             for r in records.iter() {
-                addresses.add(r.addr.clone(), r.score.clone());
+                addresses.add(r.addr.clone(), r.score);
             }
 
             // Check that each address in the registry has the expected score.

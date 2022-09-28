@@ -533,7 +533,7 @@ mod tests {
             // All nodes before the first connected node must be disconnected and
             // in insertion order. Similarly, all remaining nodes must be connected
             // and in insertion order.
-            nodes == Vec::from(disconnected) && tail == Vec::from(connected)
+            disconnected == nodes && connected == tail
         }
 
         quickcheck(prop as fn(_) -> _);

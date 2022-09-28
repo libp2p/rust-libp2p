@@ -51,7 +51,6 @@ fn reservation() {
     spawn_swarm_on_pool(&pool, relay);
 
     let client_addr = relay_addr
-        .clone()
         .with(Protocol::P2p(relay_peer_id.into()))
         .with(Protocol::P2pCircuit);
     let mut client = build_client();
@@ -97,7 +96,6 @@ fn new_reservation_to_same_relay_replaces_old() {
     let mut client = build_client();
     let client_peer_id = *client.local_peer_id();
     let client_addr = relay_addr
-        .clone()
         .with(Protocol::P2p(relay_peer_id.into()))
         .with(Protocol::P2pCircuit);
     let client_addr_with_peer_id = client_addr
@@ -118,7 +116,7 @@ fn new_reservation_to_same_relay_replaces_old() {
     ));
 
     // Trigger new reservation.
-    let new_listener = client.listen_on(client_addr.clone()).unwrap();
+    let new_listener = client.listen_on(client_addr).unwrap();
 
     // Wait for
     // - listener of old reservation to close
@@ -191,7 +189,6 @@ fn connect() {
     let mut dst = build_client();
     let dst_peer_id = *dst.local_peer_id();
     let dst_addr = relay_addr
-        .clone()
         .with(Protocol::P2p(relay_peer_id.into()))
         .with(Protocol::P2pCircuit)
         .with(Protocol::P2p(dst_peer_id.into()));
@@ -247,12 +244,11 @@ fn handle_dial_failure() {
     let mut client = build_client();
     let client_peer_id = *client.local_peer_id();
     let client_addr = relay_addr
-        .clone()
         .with(Protocol::P2p(relay_peer_id.into()))
         .with(Protocol::P2pCircuit)
         .with(Protocol::P2p(client_peer_id.into()));
 
-    client.listen_on(client_addr.clone()).unwrap();
+    client.listen_on(client_addr).unwrap();
     assert!(!pool.run_until(wait_for_dial(&mut client, relay_peer_id)));
 }
 
@@ -292,7 +288,7 @@ fn reuse_connection() {
 fn build_relay() -> Swarm<Relay> {
     let local_key = identity::Keypair::generate_ed25519();
     let local_public_key = local_key.public();
-    let local_peer_id = local_public_key.clone().to_peer_id();
+    let local_peer_id = local_public_key.to_peer_id();
 
     let transport = upgrade_transport(MemoryTransport::default().boxed(), local_public_key);
 
@@ -315,7 +311,7 @@ fn build_relay() -> Swarm<Relay> {
 fn build_client() -> Swarm<Client> {
     let local_key = identity::Keypair::generate_ed25519();
     let local_public_key = local_key.public();
-    let local_peer_id = local_public_key.clone().to_peer_id();
+    let local_peer_id = local_public_key.to_peer_id();
 
     let (relay_transport, behaviour) = client::Client::new_transport_and_behaviour(local_peer_id);
     let transport = upgrade_transport(

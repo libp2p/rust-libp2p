@@ -276,7 +276,7 @@ async fn test_confidence() {
             }
         } else {
             let unreachable_addr: Multiaddr = "/ip4/127.0.0.1/tcp/42".parse().unwrap();
-            client.add_external_address(unreachable_addr.clone(), AddressScore::Infinite);
+            client.add_external_address(unreachable_addr, AddressScore::Infinite);
         }
 
         for i in 0..MAX_CONFIDENCE + 1 {

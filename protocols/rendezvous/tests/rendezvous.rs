@@ -37,7 +37,7 @@ async fn given_successful_registration_then_successful_discovery() {
     let ([mut alice, mut bob], mut robert) =
         new_server_with_connected_clients(rendezvous::server::Config::default()).await;
 
-    let _ = alice
+    alice
         .behaviour_mut()
         .register(namespace.clone(), *robert.local_peer_id(), None);
 
@@ -86,7 +86,7 @@ async fn given_successful_registration_then_refresh_ttl() {
     let roberts_peer_id = *robert.local_peer_id();
     let refresh_ttl = 10_000;
 
-    let _ = alice
+    alice
         .behaviour_mut()
         .register(namespace.clone(), roberts_peer_id, None);
 

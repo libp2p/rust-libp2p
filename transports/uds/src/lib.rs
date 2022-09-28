@@ -264,7 +264,6 @@ mod tests {
         Transport,
     };
     use std::{self, borrow::Cow, path::Path};
-    use tempfile;
 
     #[test]
     fn multiaddr_to_path_conversion() {

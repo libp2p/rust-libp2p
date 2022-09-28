@@ -835,7 +835,7 @@ mod tests {
         let addr_without_peer_id: Multiaddr = addr.clone();
         let mut addr_with_other_peer_id = addr.clone();
 
-        addr.push(Protocol::P2p(peer_id.clone().into()));
+        addr.push(Protocol::P2p(peer_id.into()));
         addr_with_other_peer_id.push(Protocol::P2p(other_peer_id.into()));
 
         assert!(multiaddr_matches_peer_id(&addr, &peer_id));

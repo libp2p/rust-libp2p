@@ -593,7 +593,7 @@ mod tests {
             let mut num_failures = 0;
 
             'finished: loop {
-                if expected.len() == 0 {
+                if expected.is_empty() {
                     break;
                 }
                 // Split off the next up to `parallelism` expected peers.
@@ -742,7 +742,7 @@ mod tests {
             }
 
             // Artificially advance the clock.
-            now = now + iter.config.peer_timeout;
+            now += iter.config.peer_timeout;
 
             // Advancing the iterator again should mark the first peer as unresponsive.
             let _ = iter.next(now);

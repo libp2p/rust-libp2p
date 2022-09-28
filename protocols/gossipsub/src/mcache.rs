@@ -270,7 +270,7 @@ mod tests {
     fn test_put_get_one() {
         let mut mc = new_cache(10, 15);
 
-        let topic1_hash = Topic::new("topic1").hash().clone();
+        let topic1_hash = Topic::new("topic1").hash();
         let (id, m) = gen_testm(10, topic1_hash);
 
         mc.put(&id, m.clone());
@@ -294,10 +294,10 @@ mod tests {
     fn test_get_wrong() {
         let mut mc = new_cache(10, 15);
 
-        let topic1_hash = Topic::new("topic1").hash().clone();
+        let topic1_hash = Topic::new("topic1").hash();
         let (id, m) = gen_testm(10, topic1_hash);
 
-        mc.put(&id, m.clone());
+        mc.put(&id, m);
 
         // Try to get an incorrect ID
         let wrong_id = MessageId::new(b"wrongid");
@@ -321,7 +321,7 @@ mod tests {
     fn test_shift() {
         let mut mc = new_cache(1, 5);
 
-        let topic1_hash = Topic::new("topic1").hash().clone();
+        let topic1_hash = Topic::new("topic1").hash();
 
         // Build the message
         for i in 0..10 {
@@ -332,7 +332,7 @@ mod tests {
         mc.shift();
 
         // Ensure the shift occurred
-        assert!(mc.history[0].len() == 0);
+        assert!(mc.history[0].is_empty());
         assert!(mc.history[1].len() == 10);
 
         // Make sure no messages deleted
@@ -344,7 +344,7 @@ mod tests {
     fn test_empty_shift() {
         let mut mc = new_cache(1, 5);
 
-        let topic1_hash = Topic::new("topic1").hash().clone();
+        let topic1_hash = Topic::new("topic1").hash();
 
         // Build the message
         for i in 0..10 {
@@ -355,14 +355,14 @@ mod tests {
         mc.shift();
 
         // Ensure the shift occurred
-        assert!(mc.history[0].len() == 0);
+        assert!(mc.history[0].is_empty());
         assert!(mc.history[1].len() == 10);
 
         mc.shift();
 
         assert!(mc.history[2].len() == 10);
-        assert!(mc.history[1].len() == 0);
-        assert!(mc.history[0].len() == 0);
+        assert!(mc.history[1].is_empty());
+        assert!(mc.history[0].is_empty());
     }
 
     #[test]
@@ -370,7 +370,7 @@ mod tests {
     fn test_remove_last_from_shift() {
         let mut mc = new_cache(4, 5);
 
-        let topic1_hash = Topic::new("topic1").hash().clone();
+        let topic1_hash = Topic::new("topic1").hash();
 
         // Build the message
         for i in 0..10 {
