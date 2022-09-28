@@ -369,23 +369,23 @@ fn test_subscribe() {
     );
 
     // collect all the subscriptions
-    let subscriptions =
-        gs.events
-            .iter()
-            .fold(vec![], |mut collected_subscriptions, e| match e {
-                NetworkBehaviourAction::NotifyHandler { event, .. } => match **event {
-                    GossipsubHandlerIn::Message(ref message) => {
-                        for s in &message.subscriptions {
-                            if let Some(true) = s.subscribe {
-                                collected_subscriptions.push(s.clone())
-                            };
-                        }
-                        collected_subscriptions
+    let subscriptions = gs
+        .events
+        .iter()
+        .fold(vec![], |mut collected_subscriptions, e| match e {
+            NetworkBehaviourAction::NotifyHandler { event, .. } => match **event {
+                GossipsubHandlerIn::Message(ref message) => {
+                    for s in &message.subscriptions {
+                        if let Some(true) = s.subscribe {
+                            collected_subscriptions.push(s.clone())
+                        };
                     }
-                    _ => collected_subscriptions,
-                },
+                    collected_subscriptions
+                }
                 _ => collected_subscriptions,
-            });
+            },
+            _ => collected_subscriptions,
+        });
 
     // we sent a subscribe to all known peers
     assert!(
@@ -437,23 +437,23 @@ fn test_unsubscribe() {
     );
 
     // collect all the subscriptions
-    let subscriptions =
-        gs.events
-            .iter()
-            .fold(vec![], |mut collected_subscriptions, e| match e {
-                NetworkBehaviourAction::NotifyHandler { event, .. } => match **event {
-                    GossipsubHandlerIn::Message(ref message) => {
-                        for s in &message.subscriptions {
-                            if let Some(true) = s.subscribe {
-                                collected_subscriptions.push(s.clone())
-                            };
-                        }
-                        collected_subscriptions
+    let subscriptions = gs
+        .events
+        .iter()
+        .fold(vec![], |mut collected_subscriptions, e| match e {
+            NetworkBehaviourAction::NotifyHandler { event, .. } => match **event {
+                GossipsubHandlerIn::Message(ref message) => {
+                    for s in &message.subscriptions {
+                        if let Some(true) = s.subscribe {
+                            collected_subscriptions.push(s.clone())
+                        };
                     }
-                    _ => collected_subscriptions,
-                },
+                    collected_subscriptions
+                }
                 _ => collected_subscriptions,
-            });
+            },
+            _ => collected_subscriptions,
+        });
 
     // we sent a unsubscribe to all known peers, for two topics
     assert!(
@@ -974,10 +974,9 @@ fn test_get_random_peers() {
             false
         });
     assert!(random_peers.is_empty(), "Expected 0 peers to be returned");
-    let random_peers =
-        get_random_peers(&gs.topic_peers, &gs.connected_peers, &topic_hash, 10, {
-            |peer| peers.contains(peer)
-        });
+    let random_peers = get_random_peers(&gs.topic_peers, &gs.connected_peers, &topic_hash, 10, {
+        |peer| peers.contains(peer)
+    });
     assert!(random_peers.len() == 10, "Expected 10 peers to be returned");
 }
 
@@ -1357,9 +1356,7 @@ fn test_explicit_peer_gets_connected() {
         .events
         .iter()
         .filter(|e| match e {
-            NetworkBehaviourAction::Dial { opts, handler: _ } => {
-                opts.get_peer_id() == Some(peer)
-            }
+            NetworkBehaviourAction::Dial { opts, handler: _ } => opts.get_peer_id() == Some(peer),
             _ => false,
         })
         .count();
@@ -2195,8 +2192,7 @@ fn test_gossip_to_at_most_gossip_factor_peers() {
     let config: GossipsubConfig = GossipsubConfig::default();
 
     //add a lot of peers
-    let m =
-        config.mesh_n_low() + config.gossip_lazy() * (2.0 / config.gossip_factor()) as usize;
+    let m = config.mesh_n_low() + config.gossip_lazy() * (2.0 / config.gossip_factor()) as usize;
     let (mut gs, _, topic_hashes) = inject_nodes1()
         .peer_no(m)
         .topics(vec!["topic".into()])
@@ -3523,8 +3519,7 @@ fn test_scoring_p3b() {
 
     assert_eq!(
         gs.peer_score.as_ref().unwrap().0.score(&peers[0]),
-        100.0
-            + (expected_b3 * -3.0 + (5f64 - expected_message_deliveries).powi(2) * -2.0) * 0.7
+        100.0 + (expected_b3 * -3.0 + (5f64 - expected_message_deliveries).powi(2) * -2.0) * 0.7
     );
 }
 
@@ -4809,8 +4804,7 @@ fn test_publish_to_floodsub_peers_without_flood_publish() {
         Multiaddr::empty(),
         Some(PeerKind::Floodsub),
     );
-    let p2 =
-        add_peer_with_addr_and_kind(&mut gs, &topics, false, false, Multiaddr::empty(), None);
+    let p2 = add_peer_with_addr_and_kind(&mut gs, &topics, false, false, Multiaddr::empty(), None);
 
     //p1 and p2 are not in the mesh
     assert!(!gs.mesh[&topics[0]].contains(&p1) && !gs.mesh[&topics[0]].contains(&p2));
@@ -4870,8 +4864,7 @@ fn test_do_not_use_floodsub_in_fanout() {
         Multiaddr::empty(),
         Some(PeerKind::Floodsub),
     );
-    let p2 =
-        add_peer_with_addr_and_kind(&mut gs, &topics, false, false, Multiaddr::empty(), None);
+    let p2 = add_peer_with_addr_and_kind(&mut gs, &topics, false, false, Multiaddr::empty(), None);
 
     //publish a message
     let publish_data = vec![0; 42];
@@ -4928,8 +4921,7 @@ fn test_dont_add_floodsub_peers_to_mesh_on_join() {
         Multiaddr::empty(),
         Some(PeerKind::Floodsub),
     );
-    let _p2 =
-        add_peer_with_addr_and_kind(&mut gs, &topics, false, false, Multiaddr::empty(), None);
+    let _p2 = add_peer_with_addr_and_kind(&mut gs, &topics, false, false, Multiaddr::empty(), None);
 
     gs.join(&topics[0]);
 
@@ -4993,8 +4985,7 @@ fn test_dont_send_floodsub_peers_in_px() {
         Multiaddr::empty(),
         Some(PeerKind::Floodsub),
     );
-    let _p2 =
-        add_peer_with_addr_and_kind(&mut gs, &topics, false, false, Multiaddr::empty(), None);
+    let _p2 = add_peer_with_addr_and_kind(&mut gs, &topics, false, false, Multiaddr::empty(), None);
 
     //prune only mesh node
     gs.send_graft_prune(
@@ -5031,8 +5022,7 @@ fn test_dont_add_floodsub_peers_to_mesh_in_heartbeat() {
         Multiaddr::empty(),
         Some(PeerKind::Floodsub),
     );
-    let _p2 =
-        add_peer_with_addr_and_kind(&mut gs, &topics, true, false, Multiaddr::empty(), None);
+    let _p2 = add_peer_with_addr_and_kind(&mut gs, &topics, true, false, Multiaddr::empty(), None);
 
     gs.heartbeat();
 
