@@ -179,8 +179,8 @@ where
             }
 
             // 3rd priority: Keep local buffers small: Return discovered addresses.
-            if let Some(packet) = self.discovered.pop_front() {
-                return Poll::Ready(packet);
+            if let Some(discovered) = self.discovered.pop_front() {
+                return Poll::Ready(discovered);
             }
 
             // 4th priority: Remote work: Answer incoming requests.
