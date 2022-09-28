@@ -157,7 +157,7 @@ where
                 self.send_buffer.push_back(build_query());
             }
 
-            // 2nd priority: Keep local buffers small: Empty buffers ASAP.
+            // 2nd priority: Keep local buffers small: Send packets to remote.
             if let Some(packet) = self.send_buffer.pop_front() {
                 match Pin::new(&mut self.send_socket).poll_write(
                     cx,
@@ -178,7 +178,12 @@ where
                 }
             }
 
-            // 3rd priority: Remote work: Answer incoming requests.
+            // 3rd priority: Keep local buffers small: Return discovered addresses.
+            if let Some(packet) = self.discovered.pop_front() {
+                return Some(packet);
+            }
+
+            // 4th priority: Remote work: Answer incoming requests.
             if let Poll::Ready(data) =
                 Pin::new(&mut self.recv_socket).poll_read(cx, &mut self.recv_buffer)
             {
@@ -200,8 +205,7 @@ where
                 }
             }
 
-            // 4th priority: Emit event only if nothing else can make progress.
-            return self.discovered.pop_front();
+            return None;
         }
     }
 
