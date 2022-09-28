@@ -1223,7 +1223,7 @@ impl PoolConfig {
     }
 
     /// Number of addresses concurrently dialed for a single outbound connection attempt.
-    pub fn with_dial_concurrency_factor(mut self, factor: NonZeroU8) -> Self {
+    pub fn with_dial_concurrenrescy_factor(mut self, factor: NonZeroU8) -> Self {
         self.dial_concurrency_factor = factor;
         self
     }
