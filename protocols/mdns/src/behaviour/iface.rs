@@ -149,7 +149,7 @@ where
         &mut self,
         cx: &mut Context,
         params: &impl PollParameters,
-    ) -> Option<(PeerId, Multiaddr, Instant)> {
+    ) -> Poll<(PeerId, Multiaddr, Instant)> {
         loop {
             // 1st priority: Low latency: Create packet ASAP after timeout.
             if Pin::new(&mut self.timeout).poll_next(cx).is_ready() {
@@ -180,7 +180,7 @@ where
 
             // 3rd priority: Keep local buffers small: Return discovered addresses.
             if let Some(packet) = self.discovered.pop_front() {
-                return Some(packet);
+                return Poll::Ready(packet);
             }
 
             // 4th priority: Remote work: Answer incoming requests.
@@ -205,7 +205,7 @@ where
                 }
             }
 
-            return None;
+            return Poll::Pending;
         }
     }
 
