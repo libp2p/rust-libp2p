@@ -215,14 +215,13 @@ where
             MdnsPacket::Query(query) => {
                 self.reset_timer();
                 log::trace!("sending response on iface {}", self.addr);
-                for packet in build_query_response(
+                let responses = build_query_response(
                     query.query_id(),
                     *params.local_peer_id(),
                     params.listened_addresses(),
                     self.ttl,
-                ) {
-                    self.send_buffer.push_back(packet);
-                }
+                );
+                self.send_buffer.extend(responses);
             }
             MdnsPacket::Response(response) => {
                 // We replace the IP address with the address we observe the
