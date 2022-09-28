@@ -50,7 +50,7 @@
 
 - Update individual crates.
     - Update to [`libp2p-autonat` `v0.8.0`](protocols/autonat/CHANGELOG.md#0080).
-    - Update to [`libp2p-core` `v0.37.0`](core/CHANGELOG.md#0361).
+    - Update to [`libp2p-core` `v0.37.0`](core/CHANGELOG.md#0370).
     - Update to [`libp2p-dcutr` `v0.7.0`](protocols/dcutr/CHANGELOG.md#0070).
     - Update to [`libp2p-deflate` `v0.37.0`](transports/deflate/CHANGELOG.md#0370).
     - Update to [`libp2p-dns` `v0.37.0`](transports/dns/CHANGELOG.md#0370).
