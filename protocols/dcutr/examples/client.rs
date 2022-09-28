@@ -25,15 +25,14 @@ use futures::stream::StreamExt;
 use libp2p::core::multiaddr::{Multiaddr, Protocol};
 use libp2p::core::transport::OrTransport;
 use libp2p::core::upgrade;
-use libp2p::dcutr;
 use libp2p::dns::DnsConfig;
 use libp2p::identify::{Identify, IdentifyConfig, IdentifyEvent, IdentifyInfo};
 use libp2p::noise;
-use libp2p::ping::{Ping, PingConfig, PingEvent};
 use libp2p::relay::v2::client::{self, Client};
 use libp2p::swarm::{SwarmBuilder, SwarmEvent};
 use libp2p::tcp::{GenTcpConfig, TcpTransport};
 use libp2p::Transport;
+use libp2p::{dcutr, ping};
 use libp2p::{identity, NetworkBehaviour, PeerId};
 use log::info;
 use std::convert::TryInto;
@@ -108,21 +107,21 @@ fn main() -> Result<(), Box<dyn Error>> {
     #[behaviour(out_event = "Event", event_process = false)]
     struct Behaviour {
         relay_client: Client,
-        ping: Ping,
+        ping: ping::Behaviour,
         identify: Identify,
         dcutr: dcutr::behaviour::Behaviour,
     }
 
     #[derive(Debug)]
     enum Event {
-        Ping(PingEvent),
+        Ping(ping::Event),
         Identify(IdentifyEvent),
         Relay(client::Event),
         Dcutr(dcutr::behaviour::Event),
     }
 
-    impl From<PingEvent> for Event {
-        fn from(e: PingEvent) -> Self {
+    impl From<ping::Event> for Event {
+        fn from(e: ping::Event) -> Self {
             Event::Ping(e)
         }
     }
@@ -147,7 +146,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let behaviour = Behaviour {
         relay_client: client,
-        ping: Ping::new(PingConfig::new()),
+        ping: ping::Behaviour::new(ping::Config::new()),
         identify: Identify::new(IdentifyConfig::new(
             "/TODO/0.0.1".to_string(),
             local_key.public(),

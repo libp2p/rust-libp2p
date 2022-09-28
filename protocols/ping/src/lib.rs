@@ -26,16 +26,16 @@
 //!
 //! # Usage
 //!
-//! The [`Ping`] struct implements the [`NetworkBehaviour`] trait. When used with a [`Swarm`],
+//! The [`Behaviour`] struct implements the [`NetworkBehaviour`] trait. When used with a [`Swarm`],
 //! it will respond to inbound ping requests and as necessary periodically send outbound
 //! ping requests on every established connection. If a configurable number of consecutive
 //! pings fail, the connection will be closed.
 //!
-//! The `Ping` network behaviour produces [`PingEvent`]s, which may be consumed from the `Swarm`
+//! The [`Behaviour`] network behaviour produces [`Event`]s, which may be consumed from the [`Swarm`]
 //! by an application, e.g. to collect statistics.
 //!
 //! > **Note**: The ping protocol does not keep otherwise idle connections alive
-//! > by default, see [`PingConfig::with_keep_alive`] for changing this behaviour.
+//! > by default, see [`Config::with_keep_alive`] for changing this behaviour.
 //!
 //! [`Swarm`]: libp2p_swarm::Swarm
 //! [`Transport`]: libp2p_core::Transport
