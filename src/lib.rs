@@ -111,8 +111,11 @@ pub use libp2p_plaintext as plaintext;
 #[cfg_attr(docsrs, doc(cfg(feature = "pnet")))]
 #[doc(inline)]
 pub use libp2p_pnet as pnet;
-#[cfg(feature = "quic")]
-#[cfg_attr(docsrs, doc(cfg(feature = "quic")))]
+#[cfg(any(feature = "quic-async-std", feature = "quic-tokio"))]
+#[cfg_attr(
+    docsrs,
+    doc(cfg(any(feature = "quic-async-std", feature = "quic-tokio")))
+)]
 #[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
 #[doc(inline)]
 pub use libp2p_quic as quic;
