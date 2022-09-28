@@ -26,7 +26,7 @@
 //! All interactions with a QUIC connection should be done through this struct.
 // TODO: docs
 
-use crate::endpoint::{Endpoint, ToEndpoint};
+use crate::endpoint::{EndpointChannel, ToEndpoint};
 
 use futures::{channel::mpsc, prelude::*};
 use futures_timer::Delay;
@@ -42,10 +42,10 @@ use std::{
 /// Underlying structure for both [`crate::QuicMuxer`] and [`crate::Upgrade`].
 ///
 /// Contains everything needed to process a connection with a remote.
-/// Tied to a specific [`Endpoint`].
+/// Tied to a specific endpoint.
 pub struct Connection {
-    /// Endpoint this connection belongs to.
-    endpoint: Endpoint,
+    /// Channel to the endpoint this connection belongs to.
+    endpoint_channel: EndpointChannel,
     /// Pending message to be sent to the background task that is driving the endpoint.
     pending_to_endpoint: Option<ToEndpoint>,
     /// Events that the endpoint will send in destination to our local [`quinn_proto::Connection`].
@@ -84,14 +84,14 @@ impl Connection {
     /// This function assumes that the [`quinn_proto::Connection`] is completely fresh and none of
     /// its methods has ever been called. Failure to comply might lead to logic errors and panics.
     pub fn from_quinn_connection(
-        endpoint: Endpoint,
+        endpoint_channel: EndpointChannel,
         connection: quinn_proto::Connection,
         connection_id: quinn_proto::ConnectionHandle,
         from_endpoint: mpsc::Receiver<quinn_proto::ConnectionEvent>,
     ) -> Self {
         debug_assert!(!connection.is_closed());
         Connection {
-            endpoint,
+            endpoint_channel,
             pending_to_endpoint: None,
             connection,
             next_timeout: None,
@@ -102,7 +102,7 @@ impl Connection {
 
     /// The address that the local socket is bound to.
     pub fn local_addr(&self) -> &SocketAddr {
-        self.endpoint.socket_addr()
+        self.endpoint_channel.socket_addr()
     }
 
     /// Returns the address of the node we're connected to.
@@ -224,7 +224,7 @@ impl Connection {
             // `to_endpoint` is full. This should propagate the back-pressure of `to_endpoint`
             // being full to the user.
             if let Some(to_endpoint) = self.pending_to_endpoint.take() {
-                match self.endpoint.try_send(to_endpoint, cx) {
+                match self.endpoint_channel.try_send(to_endpoint, cx) {
                     Ok(Ok(())) => {}
                     Ok(Err(to_endpoint)) => {
                         self.pending_to_endpoint = Some(to_endpoint);
@@ -245,10 +245,7 @@ impl Connection {
             // `to_endpoint`.
             if let Some(transmit) = self.connection.poll_transmit(Instant::now(), max_datagrams) {
                 // TODO: ECN bits not handled
-                self.pending_to_endpoint = Some(ToEndpoint::SendUdpPacket {
-                    destination: transmit.destination,
-                    data: transmit.contents,
-                });
+                self.pending_to_endpoint = Some(ToEndpoint::SendUdpPacket(transmit));
                 continue;
             }
 

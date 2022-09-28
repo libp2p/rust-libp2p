@@ -25,7 +25,7 @@
 use crate::connection::Connection;
 use crate::endpoint::ToEndpoint;
 use crate::Config;
-use crate::{endpoint::Endpoint, muxer::QuicMuxer, upgrade::Upgrade};
+use crate::{endpoint::EndpointChannel, muxer::QuicMuxer, upgrade::Upgrade};
 
 #[cfg(feature = "async-std")]
 mod async_std;
@@ -154,7 +154,7 @@ impl<P: Provider> Transport for QuicTransport<P> {
             .listeners
             .iter_mut()
             .filter(|l| {
-                let listen_addr = l.endpoint.socket_addr();
+                let listen_addr = l.endpoint_channel.socket_addr();
                 listen_addr.is_ipv4() == socket_addr.is_ipv4()
                     && listen_addr.ip().is_loopback() == socket_addr.ip().is_loopback()
             })
@@ -240,22 +240,23 @@ impl<P: Provider> Transport for QuicTransport<P> {
 
 #[derive(Debug)]
 struct Dialer {
-    endpoint: Endpoint,
+    endpoint_channel: EndpointChannel,
     pending_dials: VecDeque<ToEndpoint>,
 }
 
 impl Dialer {
     fn new<P: Provider>(config: Config, is_ipv6: bool) -> Result<Self, TransportError<Error>> {
-        let endpoint = Endpoint::new_dialer::<P>(config, is_ipv6).map_err(TransportError::Other)?;
+        let endpoint_channel =
+            EndpointChannel::new_dialer::<P>(config, is_ipv6).map_err(TransportError::Other)?;
         Ok(Dialer {
-            endpoint,
+            endpoint_channel,
             pending_dials: VecDeque::new(),
         })
     }
 
     fn drive_dials(&mut self, cx: &mut Context<'_>) -> Result<(), mpsc::SendError> {
         if let Some(to_endpoint) = self.pending_dials.pop_front() {
-            match self.endpoint.try_send(to_endpoint, cx) {
+            match self.endpoint_channel.try_send(to_endpoint, cx) {
                 Ok(Ok(())) => {}
                 Ok(Err(to_endpoint)) => self.pending_dials.push_front(to_endpoint),
                 Err(err) => {
@@ -269,7 +270,7 @@ impl Dialer {
 
 #[derive(Debug)]
 struct Listener {
-    endpoint: Endpoint,
+    endpoint_channel: EndpointChannel,
 
     listener_id: ListenerId,
 
@@ -295,7 +296,8 @@ impl Listener {
         socket_addr: SocketAddr,
         config: Config,
     ) -> Result<Self, Error> {
-        let (endpoint, new_connections_rx) = Endpoint::new_bidirectional::<P>(config, socket_addr)?;
+        let (endpoint_channel, new_connections_rx) =
+            EndpointChannel::new_bidirectional::<P>(config, socket_addr)?;
 
         let if_watcher;
         let pending_event;
@@ -304,7 +306,7 @@ impl Listener {
             pending_event = None;
         } else {
             if_watcher = None;
-            let ma = socketaddr_to_multiaddr(endpoint.socket_addr());
+            let ma = socketaddr_to_multiaddr(endpoint_channel.socket_addr());
             pending_event = Some(TransportEvent::NewAddress {
                 listener_id,
                 listen_addr: ma,
@@ -312,7 +314,7 @@ impl Listener {
         }
 
         Ok(Listener {
-            endpoint,
+            endpoint_channel,
             listener_id,
             new_connections_rx,
             if_watcher,
@@ -345,7 +347,9 @@ impl Listener {
         loop {
             match ready!(if_watcher.poll_if_event(cx)) {
                 Ok(IfEvent::Up(inet)) => {
-                    if let Some(listen_addr) = ip_to_listenaddr(&self.endpoint, inet.addr()) {
+                    if let Some(listen_addr) =
+                        ip_to_listenaddr(self.endpoint_channel.socket_addr(), inet.addr())
+                    {
                         tracing::debug!("New listen address: {}", listen_addr);
                         return Poll::Ready(TransportEvent::NewAddress {
                             listener_id: self.listener_id,
@@ -354,7 +358,9 @@ impl Listener {
                     }
                 }
                 Ok(IfEvent::Down(inet)) => {
-                    if let Some(listen_addr) = ip_to_listenaddr(&self.endpoint, inet.addr()) {
+                    if let Some(listen_addr) =
+                        ip_to_listenaddr(self.endpoint_channel.socket_addr(), inet.addr())
+                    {
                         tracing::debug!("Expired listen address: {}", listen_addr);
                         return Poll::Ready(TransportEvent::AddressExpired {
                             listener_id: self.listener_id,
@@ -388,7 +394,7 @@ impl Stream for Listener {
                 Poll::Pending => {}
             }
             if let Some(to_endpoint) = self.pending_dials.pop_front() {
-                match self.endpoint.try_send(to_endpoint, cx) {
+                match self.endpoint_channel.try_send(to_endpoint, cx) {
                     Ok(Ok(())) => {}
                     Ok(Err(to_endpoint)) => self.pending_dials.push_front(to_endpoint),
                     Err(_) => {
@@ -446,13 +452,13 @@ pub trait Provider: Unpin + Send + 'static {
 ///
 /// Returns `None` if the address is not the same socket family as the
 /// address that the endpoint is bound to.
-fn ip_to_listenaddr(endpoint: &Endpoint, ip: IpAddr) -> Option<Multiaddr> {
+fn ip_to_listenaddr(endpoint_addr: &SocketAddr, ip: IpAddr) -> Option<Multiaddr> {
     // True if either both addresses are Ipv4 or both Ipv6.
-    let is_same_ip_family = endpoint.socket_addr().is_ipv4() == ip.is_ipv4();
+    let is_same_ip_family = endpoint_addr.is_ipv4() == ip.is_ipv4();
     if !is_same_ip_family {
         return None;
     }
-    let socket_addr = SocketAddr::new(ip, endpoint.socket_addr().port());
+    let socket_addr = SocketAddr::new(ip, endpoint_addr.port());
     Some(socketaddr_to_multiaddr(&socket_addr))
 }
 
