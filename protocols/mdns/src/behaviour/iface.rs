@@ -185,43 +185,39 @@ where
             }
 
             // 4th priority: Remote work: Answer incoming requests.
-            match Pin::new(&mut self.recv_socket).poll_read(cx, &mut self.recv_buffer) {
-                Poll::Ready(Ok((len, from))) => {
-                    match MdnsPacket::new_from_bytes(&self.recv_buffer[..len], from) {
-                        Some(MdnsPacket::Query(query)) => {
-                            self.reset_timer();
-                            log::trace!("sending response on iface {}", self.addr);
+            match Pin::new(&mut self.recv_socket)
+                .poll_read(cx, &mut self.recv_buffer)
+                .map_ok(|(len, from)| MdnsPacket::new_from_bytes(&self.recv_buffer[..len], from))
+            {
+                Poll::Ready(Ok(Some(MdnsPacket::Query(query)))) => {
+                    self.reset_timer();
+                    log::trace!("sending response on iface {}", self.addr);
 
-                            self.send_buffer.extend(build_query_response(
-                                query.query_id(),
-                                *params.local_peer_id(),
-                                params.listened_addresses(),
-                                self.ttl,
-                            ));
-                            continue;
-                        }
-                        Some(MdnsPacket::Response(response)) => {
-                            self.discovered
-                                .extend(extract_discovered(&response, params.local_peer_id()));
-                            continue;
-                        }
-                        Some(MdnsPacket::ServiceDiscovery(disc)) => {
-                            self.send_buffer.push_back(build_service_discovery_response(
-                                disc.query_id(),
-                                self.ttl,
-                            ));
-                            continue;
-                        }
-                        None => {}
-                    }
+                    self.send_buffer.extend(build_query_response(
+                        query.query_id(),
+                        *params.local_peer_id(),
+                        params.listened_addresses(),
+                        self.ttl,
+                    ));
+                    continue;
+                }
+                Poll::Ready(Ok(Some(MdnsPacket::Response(response)))) => {
+                    self.discovered
+                        .extend(extract_discovered(&response, params.local_peer_id()));
+                    continue;
+                }
+                Poll::Ready(Ok(Some(MdnsPacket::ServiceDiscovery(disc)))) => {
+                    self.send_buffer
+                        .push_back(build_service_discovery_response(disc.query_id(), self.ttl));
+                    continue;
                 }
                 Poll::Ready(Err(err)) if err.kind() == std::io::ErrorKind::WouldBlock => {
                     // No more bytes available on the socket to read
                 }
+                Poll::Ready(Ok(None)) | Poll::Pending => {}
                 Poll::Ready(Err(err)) => {
                     log::error!("failed reading datagram: {}", err);
                 }
-                Poll::Pending => {}
             }
 
             return Poll::Pending;
