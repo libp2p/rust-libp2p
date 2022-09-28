@@ -20,8 +20,7 @@
 
 // Collection of tests for the gossipsub network behaviour
 
-mod tests {
-use super::super::*;
+use super::*;
 use crate::error::ValidationError;
 use crate::subscription_filter::WhitelistSubscriptionFilter;
 use crate::transform::{DataTransform, IdentityTransform};
@@ -5269,5 +5268,4 @@ fn test_graft_without_subscribe() {
 
     // We unsubscribe from the topic.
     let _ = gs.unsubscribe(&Topic::new(topic));
-}
 }
