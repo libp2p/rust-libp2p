@@ -179,7 +179,7 @@ impl MdnsResponse {
                 peer.addresses().iter().filter_map(move |address| {
                     let new_addr = address_translation(address, &observed)?;
 
-                    Some((*peer.id(), new_addr.clone(), new_expiration))
+                    Some((*peer.id(), new_addr, new_expiration))
                 })
             })
     }
