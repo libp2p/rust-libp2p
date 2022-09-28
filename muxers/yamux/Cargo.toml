@@ -17,3 +17,7 @@ parking_lot = "0.12"
 thiserror = "1.0"
 yamux = "0.10.0"
 log = "0.4"
+
+[dev-dependencies]
+async-std = { version = "1.7.0", features = ["attributes"] }
+libp2p-muxer-test-harness = { path = "../test-harness" }
