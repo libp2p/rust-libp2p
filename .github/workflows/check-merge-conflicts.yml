@@ -1,0 +1,16 @@
+name: "Check merge conflicts"
+on:
+  push:
+  pull_request_target:
+    types: [synchronize]
+
+jobs:
+  main:
+    runs-on: ubuntu-latest
+    steps:
+      - name: check if prs are dirty
+        uses: eps1lon/actions-label-merge-conflict@releases/2.x
+        with:
+          dirtyLabel: "merge-conflicts"
+          repoToken: "${{ secrets.GITHUB_TOKEN }}"
+          commentOnDirty: "Hey ${{ github.event.pull_request.user.login }} This pull request has conflicts, please resolve the merge conflicts with the base branch before we can continue reviewing. Thanks!"
