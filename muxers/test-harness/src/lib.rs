@@ -62,7 +62,7 @@ where
     S: AsyncRead + AsyncWrite + Send + Unpin + 'static,
     E: fmt::Debug,
 {
-    run(
+    run_commutative(
         alice,
         bob,
         |mut stream| async move {
@@ -87,7 +87,7 @@ where
     S: AsyncRead + AsyncWrite + Send + Unpin + 'static,
     E: fmt::Debug,
 {
-    run(
+    run_commutative(
         alice,
         bob,
         |mut stream| async move {
@@ -104,16 +104,31 @@ where
     .await;
 }
 
-/// Runs the given protocol between the two parties.
+/// Runs the given protocol between the two parties, ensuring commutativity, i.e. either party can be the dialer and listener.
+async fn run_commutative<A, B, S, E, F1, F2>(
+    mut alice: A,
+    mut bob: B,
+    alice_proto: impl Fn(S) -> F1 + Clone + 'static,
+    bob_proto: impl Fn(S) -> F2 + Clone + 'static,
+) where
+    A: StreamMuxer<Substream = S, Error = E> + Unpin,
+    B: StreamMuxer<Substream = S, Error = E> + Unpin,
+    S: AsyncRead + AsyncWrite + Send + Unpin + 'static,
+    E: fmt::Debug,
+    F1: Future<Output = ()> + Send + 'static,
+    F2: Future<Output = ()> + Send + 'static,
+{
+    run(&mut alice, &mut bob, alice_proto.clone(), bob_proto.clone()).await;
+    run(&mut bob, &mut alice, alice_proto, bob_proto).await;
+}
+
+/// Runs a given protocol between the two parties.
 ///
-/// The protocol always starts with Alice opening a substream to Bob.
-/// After that, both muxers are polled until both parties complete the protocol.
-///
-/// Esp. the latter is important. The contract of [`StreamMuxer`] states that we must call [`StreamMuxer::poll`]
-/// for the underlying connection to make progress.
+/// The first party will open a new substream and the second party will wait for this.
+/// The [`StreamMuxer`] is polled until both parties have completed the protocol to ensure that the underlying connection can make progress at all times.
 async fn run<A, B, S, E, F1, F2>(
-    alice: A,
-    bob: B,
+    dialer: &mut A,
+    listener: &mut B,
     alice_proto: impl Fn(S) -> F1 + 'static,
     bob_proto: impl Fn(S) -> F2 + 'static,
 ) where
@@ -124,61 +139,61 @@ async fn run<A, B, S, E, F1, F2>(
     F1: Future<Output = ()> + Send + 'static,
     F2: Future<Output = ()> + Send + 'static,
 {
-    let mut alice = Harness::OutboundSetup {
-        muxer: alice,
+    let mut dialer = Harness::OutboundSetup {
+        muxer: dialer,
         proto_fn: Box::new(move |s| alice_proto(s).boxed()),
     };
-    let mut bob = Harness::InboundSetup {
-        muxer: bob,
+    let mut listener = Harness::InboundSetup {
+        muxer: listener,
         proto_fn: Box::new(move |s| bob_proto(s).boxed()),
     };
 
-    let mut alice_complete = false;
-    let mut bob_complete = false;
+    let mut dialer_complete = false;
+    let mut listener_complete = false;
 
     loop {
-        match futures::future::select(alice.next(), bob.next()).await {
+        match futures::future::select(dialer.next(), listener.next()).await {
             Either::Left((Some(Event::SetupComplete), _)) => {
-                log::info!("Alice opened outbound stream");
+                log::info!("Dialer opened outbound stream");
             }
             Either::Left((Some(Event::ProtocolComplete), _)) => {
-                log::info!("Alice completed protocol");
-                alice_complete = true
+                log::info!("Dialer completed protocol");
+                dialer_complete = true
             }
             Either::Right((Some(Event::SetupComplete), _)) => {
-                log::info!("Bob received inbound stream");
+                log::info!("Listener received inbound stream");
             }
             Either::Right((Some(Event::ProtocolComplete), _)) => {
-                log::info!("Bob completed protocol");
-                bob_complete = true
+                log::info!("Listener completed protocol");
+                listener_complete = true
             }
             _ => unreachable!(),
         }
 
-        if alice_complete && bob_complete {
+        if dialer_complete && listener_complete {
             break;
         }
     }
 }
 
-enum Harness<M>
+enum Harness<'m, M>
 where
     M: StreamMuxer,
 {
     InboundSetup {
-        muxer: M,
+        muxer: &'m mut M,
         proto_fn: Box<dyn FnOnce(M::Substream) -> BoxFuture<'static, ()>>,
     },
     OutboundSetup {
-        muxer: M,
+        muxer: &'m mut M,
         proto_fn: Box<dyn FnOnce(M::Substream) -> BoxFuture<'static, ()>>,
     },
     Running {
-        muxer: M,
+        muxer: &'m mut M,
         proto: BoxFuture<'static, ()>,
     },
     Complete {
-        muxer: M,
+        muxer: &'m mut M,
     },
     Poisoned,
 }
@@ -188,7 +203,7 @@ enum Event {
     ProtocolComplete,
 }
 
-impl<M> Stream for Harness<M>
+impl<'m, M> Stream for Harness<'m, M>
 where
     M: StreamMuxer + Unpin,
 {
@@ -199,10 +214,7 @@ where
 
         loop {
             match mem::replace(this, Self::Poisoned) {
-                Harness::InboundSetup {
-                    mut muxer,
-                    proto_fn,
-                } => {
+                Harness::InboundSetup { muxer, proto_fn } => {
                     if let Poll::Ready(stream) = muxer.poll_inbound_unpin(cx) {
                         *this = Harness::Running {
                             muxer,
@@ -221,10 +233,7 @@ where
                     *this = Harness::InboundSetup { muxer, proto_fn };
                     return Poll::Pending;
                 }
-                Harness::OutboundSetup {
-                    mut muxer,
-                    proto_fn,
-                } => {
+                Harness::OutboundSetup { muxer, proto_fn } => {
                     if let Poll::Ready(stream) = muxer.poll_outbound_unpin(cx) {
                         *this = Harness::Running {
                             muxer,
@@ -243,10 +252,7 @@ where
                     *this = Harness::OutboundSetup { muxer, proto_fn };
                     return Poll::Pending;
                 }
-                Harness::Running {
-                    mut muxer,
-                    mut proto,
-                } => {
+                Harness::Running { muxer, mut proto } => {
                     if let Poll::Ready(event) = muxer.poll_unpin(cx) {
                         event.unwrap();
 
@@ -262,7 +268,7 @@ where
                     *this = Harness::Running { muxer, proto };
                     return Poll::Pending;
                 }
-                Harness::Complete { mut muxer } => {
+                Harness::Complete { muxer } => {
                     if let Poll::Ready(event) = muxer.poll_unpin(cx) {
                         event.unwrap();
 
