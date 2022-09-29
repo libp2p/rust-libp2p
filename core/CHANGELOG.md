@@ -2,7 +2,10 @@
 
 - Implement `Hash` and `Ord` for `PublicKey`. See [PR 2915].
 
+- Deprecate `StreamMuxerExt::next_{inbound,outbound}`. See [PR XXXX].
+
 [PR 2915]: https://github.com/libp2p/rust-libp2p/pull/2915
+[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
 
 # 0.36.0
 
