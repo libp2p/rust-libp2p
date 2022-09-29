@@ -38,11 +38,6 @@
 //! The [`Behaviour`] struct implements a [`NetworkBehaviour`] that negotiates
 //! and executes the protocol on every established connection, emitting
 //! [`Event`]s.
-//!
-//! [Identify]: https://github.com/libp2p/specs/tree/master/identify
-//! [`Behaviour`]: self::Behaviour
-//! [`Event`]: self::Event
-//! [`Info`]: self::Info
 
 pub use self::behaviour::{Behaviour, Config, Event};
 pub use self::protocol::{Info, UpgradeError, PROTOCOL_NAME, PUSH_PROTOCOL_NAME};
