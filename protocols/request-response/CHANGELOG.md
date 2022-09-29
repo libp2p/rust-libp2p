@@ -1,6 +1,10 @@
-# 0.21.1 [unreleased]
+# 0.22.0 [unreleased]
 
 - Bump rand to 0.8 and quickcheck to 1. See [PR 2857].
+
+- Update to `libp2p-core` `v0.37.0`.
+
+- Update to `libp2p-swarm` `v0.40.0`.
 
 [PR 2857]: https://github.com/libp2p/rust-libp2p/pull/2857
 
