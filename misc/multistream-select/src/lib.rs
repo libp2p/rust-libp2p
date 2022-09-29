@@ -92,7 +92,6 @@ mod length_delimited;
 mod listener_select;
 mod negotiated;
 mod protocol;
-mod tests;
 
 pub use self::dialer_select::{dialer_select_proto, DialerSelectFuture};
 pub use self::listener_select::{listener_select_proto, ListenerSelectFuture};

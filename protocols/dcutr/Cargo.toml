@@ -17,7 +17,7 @@ either = "1.6.0"
 futures = "0.3.1"
 futures-timer = "3.0"
 instant = "0.1.11"
-libp2p-core = { version = "0.36.0", path = "../../core", default-features = false }
+libp2p-core = { version = "0.37.0", path = "../../core" }
 libp2p-swarm = { version = "0.40.0", path = "../../swarm" }
 log = "0.4"
 prost-codec = { version = "0.2", path = "../../misc/prost-codec" }
@@ -30,6 +30,6 @@ prost-build = "0.11"
 
 [dev-dependencies]
 env_logger = "0.9.0"
-libp2p = { path = "../..", default-features = false,  features = ["dcutr", "relay", "plaintext", "identify", "tcp-async-io", "ping", "noise", "dns-async-std", "yamux"] }
+libp2p = { path = "../..", features = ["full"] }
 rand = "0.8"
 clap = {version = "3.1.6", features = ["derive"]}

@@ -6,6 +6,8 @@
 
 - Deprecate `Config::with_keep_alive`. See [PR 2859].
 
+- Update to `libp2p-core` `v0.37.0`.
+
 [PR 2857]: https://github.com/libp2p/rust-libp2p/pull/2857
 [PR 2859]: https://github.com/libp2p/rust-libp2p/pull/2859/
 

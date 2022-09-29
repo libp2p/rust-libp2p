@@ -41,7 +41,7 @@
 //! and begin pinging each other.
 
 use futures::prelude::*;
-use libp2p::swarm::{NetworkBehaviour, Swarm, SwarmEvent};
+use libp2p::swarm::{Swarm, SwarmEvent};
 use libp2p::{identity, ping, Multiaddr, NetworkBehaviour, PeerId};
 use libp2p_swarm::keep_alive;
 use std::error::Error;
