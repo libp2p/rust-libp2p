@@ -608,15 +608,20 @@ where
                     output: (obtained_peer_id, mut muxer),
                     outgoing,
                 } => {
+                    let pending_connection =
+                        if let Some(pending_connection) = self.pending.remove(&id) {
+                            pending_connection
+                        } else {
+                            log::error!("Failed to get an entry in `self.pending` for {:?}", id,);
+                            continue;
+                        };
+
                     let PendingConnectionInfo {
                         peer_id: expected_peer_id,
                         handler,
                         endpoint,
                         abort_notifier: _,
-                    } = self
-                        .pending
-                        .remove(&id)
-                        .expect("Entry in `self.pending` for previously pending connection.");
+                    } = pending_connection;
 
                     self.counters.dec_pending(&endpoint);
 
