@@ -79,6 +79,31 @@ where
     .await;
 }
 
+/// Verifies that the dialer of a substream can receive a message.
+pub async fn dialer_can_receive<A, B, S, E>(alice: A, bob: B)
+where
+    A: StreamMuxer<Substream = S, Error = E> + Unpin,
+    B: StreamMuxer<Substream = S, Error = E> + Unpin,
+    S: AsyncRead + AsyncWrite + Send + Unpin + 'static,
+    E: fmt::Debug,
+{
+    run(
+        alice,
+        bob,
+        |mut stream| async move {
+            let mut buf = Vec::new();
+            stream.read_to_end(&mut buf).await.unwrap();
+
+            assert_eq!(buf, b"PING");
+        },
+        |mut stream| async move {
+            stream.write_all(b"PING").await.unwrap();
+            stream.close().await.unwrap();
+        },
+    )
+    .await;
+}
+
 /// Runs the given protocol between the two parties.
 ///
 /// The protocol always starts with Alice opening a substream to Bob.
