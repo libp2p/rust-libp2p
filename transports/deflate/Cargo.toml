@@ -3,7 +3,7 @@ name = "libp2p-deflate"
 edition = "2021"
 rust-version = "1.56.1"
 description = "Deflate encryption protocol for libp2p"
-version = "0.36.0"
+version = "0.37.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -12,11 +12,11 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 futures = "0.3.1"
-libp2p-core = { version = "0.36.0", path = "../../core", default-features = false  }
+libp2p-core = { version = "0.37.0", path = "../../core" }
 flate2 = "1.0"
 
 [dev-dependencies]
 async-std = "1.6.2"
-libp2p = { path = "../../", default-features = false, features = ["tcp-async-io", "deflate"] }
+libp2p = { path = "../..", features = ["full"] }
 quickcheck = { package = "quickcheck-ext", path = "../../misc/quickcheck-ext" }
 rand = "0.8"
