@@ -27,3 +27,12 @@ async fn read_after_close() {
 
     libp2p_muxer_test_harness::read_after_close(alice, bob).await;
 }
+
+#[async_std::test]
+async fn write_to_remote_closed() {
+    let (alice, bob) =
+        libp2p_muxer_test_harness::connected_muxers_on_memory_transport::<YamuxConfig, _, _>()
+            .await;
+
+    libp2p_muxer_test_harness::write_to_remote_closed(alice, bob).await;
+}
