@@ -89,8 +89,6 @@ where
     substream_upgrade_protocol_override: Option<libp2p_core::upgrade::Version>,
 
     /// The maximum number of inbound streams concurrently negotiating on a connection.
-    ///
-    /// See [`Connection::max_negotiating_inbound_streams`].
     legacy_max_negotiating_inbound_streams: Option<usize>,
 
     /// The executor to use for running the background tasks. If `None`,
@@ -1163,8 +1161,6 @@ pub struct PoolConfig {
     substream_upgrade_protocol_override: Option<libp2p_core::upgrade::Version>,
 
     /// The maximum number of inbound streams concurrently negotiating on a connection.
-    ///
-    /// See [`Connection::max_negotiating_inbound_streams`].
     legacy_max_negotiating_inbound_streams: Option<usize>,
 }
 
@@ -1238,8 +1234,6 @@ impl PoolConfig {
     }
 
     /// The maximum number of inbound streams concurrently negotiating on a connection.
-    ///
-    /// See [`Connection::max_negotiating_inbound_streams`].
     pub fn with_max_negotiating_inbound_streams(mut self, v: usize) -> Self {
         self.legacy_max_negotiating_inbound_streams = Some(v);
         self
