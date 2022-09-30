@@ -30,8 +30,8 @@ use libp2p::core::muxing::StreamMuxerExt;
 use libp2p::core::{
     identity, multiaddr::multiaddr, muxing, transport, upgrade, Multiaddr, PeerId, Transport,
 };
-use libp2p::{mplex, tcp};
 use libp2p::plaintext::PlainText2Config;
+use libp2p::{mplex, tcp};
 use std::pin::Pin;
 use std::time::Duration;
 

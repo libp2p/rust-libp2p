@@ -30,7 +30,7 @@ use std::net;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-pub type Transport = crate::GenTcpTransport<Tcp>;
+pub type Transport = crate::Transport<Tcp>;
 
 #[derive(Copy, Clone)]
 pub enum Tcp {}
