@@ -7,7 +7,7 @@
 
 - Remove default features. If you previously depended on `async-std` you need to enable this explicitly now. See [PR 2918].
 
-- Deprecate types with `Tcp` prefix (`GenTcpConfig`, `TcpTransport` and `TokioTcpTransport`) in favor of referencing them by module / crate. See [PR XXXX].
+- Deprecate types with `Tcp` prefix (`GenTcpConfig`, `TcpTransport` and `TokioTcpTransport`) in favor of referencing them by module / crate. See [PR 2961].
 
 - Remove `TcpListenStream` and `TcpListenerEvent` from public API. See [PR 2961].
 
