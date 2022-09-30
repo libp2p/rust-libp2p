@@ -1,5 +1,7 @@
 # 0.40.0 [unreleased]
 
+- Update to `libp2p-core` `v0.37.0`.
+
 - Introduce `NoiseAuthenticated::xx` constructor, assuming a X25519 DH key exchange. An XX key exchange and X25519 keys
   are the most common way of using noise in libp2p and thus deserve a convenience constructor. See [PR 2887].
 - Add `NoiseConfig::with_prologue` which allows users to set the noise prologue of the handshake. See [PR 2903].
