@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-quic"
-version = "0.7.0"
+version = "0.7.0-alpha"
 authors = ["David Craven <david@craven.ch>", "Parity Technologies <admin@parity.io>"]
 edition = "2021"
 description = "TLS based QUIC transport implementation for libp2p"
