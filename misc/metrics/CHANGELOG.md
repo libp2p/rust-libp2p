@@ -4,6 +4,20 @@
 - 
 - Update to `libp2p-identify` `v0.39.1`.
 
+- Update to `libp2p-swarm` `v0.40.0`.
+
+- Update to `libp2p-dcutr` `v0.7.0`.
+
+- Update to `libp2p-ping` `v0.40.0`.
+
+- Update to `libp2p-identify` `v0.40.0`.
+
+- Update to `libp2p-relay` `v0.13.0`.
+
+- Update to `libp2p-core` `v0.37.0`.
+
+- Update to `libp2p-gossipsub` `v0.42.0`.
+
 # 0.9.0
 
 - Update to `libp2p-swarm` `v0.39.0`.

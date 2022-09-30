@@ -1,10 +1,14 @@
-# 0.36.1 - [unreleased]
+# 0.37.0 [unreleased]
 
 - Implement `Hash` and `Ord` for `PublicKey`. See [PR 2915].
+
+- Remove default features. If you previously depended on `secp256k1` or `ecdsa` you need to enable these explicitly 
+  now. See [PR 2918].
 
 - Deprecate `StreamMuxerExt::next_{inbound,outbound}`. See [PR XXXX].
 
 [PR 2915]: https://github.com/libp2p/rust-libp2p/pull/2915
+[PR 2918]: https://github.com/libp2p/rust-libp2p/pull/2918
 [PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
 
 # 0.36.0
