@@ -34,8 +34,8 @@ fn ping_pong() {
             .with_keep_alive(true)
             .with_interval(Duration::from_millis(10));
 
-        let mut swarm1 = Swarm::new_ephemeral(|_, _| ping::Behaviour::new(cfg.clone()));
-        let mut swarm2 = Swarm::new_ephemeral(|_, _| ping::Behaviour::new(cfg.clone()));
+        let mut swarm1 = Swarm::new_ephemeral(|_| ping::Behaviour::new(cfg.clone()));
+        let mut swarm2 = Swarm::new_ephemeral(|_| ping::Behaviour::new(cfg.clone()));
 
         async_std::task::block_on(async {
             swarm1.listen_on_random_memory_address().await;
@@ -79,8 +79,8 @@ fn max_failures() {
             .with_timeout(Duration::from_millis(0))
             .with_max_failures(max_failures.into());
 
-        let mut swarm1 = Swarm::new_ephemeral(|_, _| ping::Behaviour::new(cfg.clone()));
-        let mut swarm2 = Swarm::new_ephemeral(|_, _| ping::Behaviour::new(cfg.clone()));
+        let mut swarm1 = Swarm::new_ephemeral(|_| ping::Behaviour::new(cfg.clone()));
+        let mut swarm2 = Swarm::new_ephemeral(|_| ping::Behaviour::new(cfg.clone()));
 
         let (count1, count2) = async_std::task::block_on(async {
             swarm1.listen_on_random_memory_address().await;
@@ -123,10 +123,9 @@ async fn count_ping_failures_until_connection_closed(mut swarm: Swarm<ping::Beha
 
 #[test]
 fn unsupported_doesnt_fail() {
-    let mut swarm1 = Swarm::new_ephemeral(|_, _| DummyBehaviour::with_keep_alive(KeepAlive::Yes));
-    let mut swarm2 = Swarm::new_ephemeral(|_, _| {
-        ping::Behaviour::new(ping::Config::new().with_keep_alive(true))
-    });
+    let mut swarm1 = Swarm::new_ephemeral(|_| DummyBehaviour::with_keep_alive(KeepAlive::Yes));
+    let mut swarm2 =
+        Swarm::new_ephemeral(|_| ping::Behaviour::new(ping::Config::new().with_keep_alive(true)));
 
     let result = async_std::task::block_on(async {
         swarm1.listen_on_random_memory_address().await;

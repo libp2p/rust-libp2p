@@ -332,15 +332,14 @@ async fn new_server_with_connected_clients<const N: usize>(
 }
 
 async fn new_client() -> Swarm<rendezvous::client::Behaviour> {
-    let mut client =
-        Swarm::new_ephemeral(|_, identity| rendezvous::client::Behaviour::new(identity));
+    let mut client = Swarm::new_ephemeral(rendezvous::client::Behaviour::new);
     client.listen_on_random_memory_address().await; // we need to listen otherwise we don't have addresses to register
 
     client
 }
 
 async fn new_server(config: rendezvous::server::Config) -> Swarm<rendezvous::server::Behaviour> {
-    let mut server = Swarm::new_ephemeral(|_, _| rendezvous::server::Behaviour::new(config));
+    let mut server = Swarm::new_ephemeral(|_| rendezvous::server::Behaviour::new(config));
 
     server.listen_on_random_memory_address().await;
 
@@ -348,7 +347,7 @@ async fn new_server(config: rendezvous::server::Config) -> Swarm<rendezvous::ser
 }
 
 async fn new_combined_node() -> Swarm<CombinedBehaviour> {
-    let mut node = Swarm::new_ephemeral(|_, identity| CombinedBehaviour {
+    let mut node = Swarm::new_ephemeral(|identity| CombinedBehaviour {
         client: rendezvous::client::Behaviour::new(identity),
         server: rendezvous::server::Behaviour::new(rendezvous::server::Config::default()),
     });
@@ -362,8 +361,7 @@ async fn new_impersonating_client() -> Swarm<rendezvous::client::Behaviour> {
     // Due to the type-safe API of the `Rendezvous` behaviour and `PeerRecord`, we actually cannot construct a bad `PeerRecord` (i.e. one that is claims to be someone else).
     // As such, the best we can do is hand eve a completely different keypair from what she is using to authenticate her connection.
     let someone_else = identity::Keypair::generate_ed25519();
-    let mut eve =
-        Swarm::new_ephemeral(move |_, _| rendezvous::client::Behaviour::new(someone_else));
+    let mut eve = Swarm::new_ephemeral(move |_| rendezvous::client::Behaviour::new(someone_else));
     eve.listen_on_random_memory_address().await;
 
     eve

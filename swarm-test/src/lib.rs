@@ -29,7 +29,7 @@ pub trait SwarmExt {
     /// The swarm will use a [`MemoryTransport`] together with a noise authentication layer and
     /// yamux as the multiplexer. However, these details should not be relied upon by the test
     /// and may change at any time.
-    fn new_ephemeral(behaviour_fn: impl FnOnce(PeerId, Keypair) -> Self::NB) -> Self
+    fn new_ephemeral(behaviour_fn: impl FnOnce(Keypair) -> Self::NB) -> Self
     where
         Self: Sized;
 
@@ -65,7 +65,7 @@ where
 {
     type NB = B;
 
-    fn new_ephemeral(behaviour_fn: impl FnOnce(PeerId, Keypair) -> Self::NB) -> Self
+    fn new_ephemeral(behaviour_fn: impl FnOnce(Keypair) -> Self::NB) -> Self
     where
         Self: Sized,
     {
@@ -79,7 +79,7 @@ where
             .timeout(Duration::from_secs(20))
             .boxed();
 
-        Swarm::new(transport, behaviour_fn(peer_id, identity), peer_id)
+        Swarm::new(transport, behaviour_fn(identity), peer_id)
     }
 
     async fn connect<T>(&mut self, other: &mut Swarm<T>)
