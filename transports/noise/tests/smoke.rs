@@ -23,15 +23,16 @@ use futures::{
     future::{self, Either},
     prelude::*,
 };
-use libp2p_core::identity;
-use libp2p_core::transport::{self, Transport};
-use libp2p_core::upgrade::{self, apply_inbound, apply_outbound, Negotiated};
-use libp2p_noise::{
-    Keypair, NoiseConfig, NoiseError, NoiseOutput, RemoteIdentity, X25519Spec, X25519,
+use libp2p::core::identity;
+use libp2p::core::transport::{self, Transport};
+use libp2p::core::upgrade::{self, apply_inbound, apply_outbound, Negotiated};
+use libp2p::noise::{
+    Keypair, NoiseAuthenticated, NoiseConfig, NoiseError, NoiseOutput, RemoteIdentity, X25519Spec,
+    X25519,
 };
-use libp2p_tcp::TcpTransport;
+use libp2p::tcp::TcpTransport;
 use log::info;
-use quickcheck::QuickCheck;
+use quickcheck::*;
 use std::{convert::TryInto, io, net::TcpStream};
 
 #[allow(dead_code)]
@@ -39,8 +40,7 @@ fn core_upgrade_compat() {
     // Tests API compaibility with the libp2p-core upgrade API,
     // i.e. if it compiles, the "test" is considered a success.
     let id_keys = identity::Keypair::generate_ed25519();
-    let dh_keys = Keypair::<X25519>::new().into_authentic(&id_keys).unwrap();
-    let noise = NoiseConfig::xx(dh_keys).into_authenticated();
+    let noise = NoiseAuthenticated::xx(&id_keys).unwrap();
     let _ = TcpTransport::default()
         .upgrade(upgrade::Version::V1)
         .authenticate(noise);
@@ -324,11 +324,13 @@ fn expect_identity<C>(
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Message(Vec<u8>);
 
-impl quickcheck::Arbitrary for Message {
-    fn arbitrary<G: quickcheck::Gen>(g: &mut G) -> Self {
-        let s = 1 + g.next_u32() % (128 * 1024);
-        let mut v = vec![0; s.try_into().unwrap()];
-        g.fill_bytes(&mut v);
+impl Arbitrary for Message {
+    fn arbitrary(g: &mut Gen) -> Self {
+        let s = g.gen_range(1..128 * 1024);
+        let mut v = vec![0; s];
+        for b in &mut v {
+            *b = u8::arbitrary(g);
+        }
         Message(v)
     }
 }

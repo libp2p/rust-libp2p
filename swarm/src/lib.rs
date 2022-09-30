@@ -535,7 +535,7 @@ where
             Ok(_connection_id) => Ok(()),
             Err((connection_limit, handler)) => {
                 let error = DialError::ConnectionLimit(connection_limit);
-                self.behaviour.inject_dial_failure(None, handler, &error);
+                self.behaviour.inject_dial_failure(peer_id, handler, &error);
                 Err(error)
             }
         }
@@ -1623,9 +1623,7 @@ mod tests {
     use libp2p_core::multiaddr::multiaddr;
     use libp2p_core::transport::TransportEvent;
     use libp2p_core::Endpoint;
-    use quickcheck::{quickcheck, Arbitrary, Gen, QuickCheck};
-    use rand::prelude::SliceRandom;
-    use rand::Rng;
+    use quickcheck::*;
 
     // Test execution state.
     // Connection => Disconnecting => Connecting.
@@ -2048,8 +2046,8 @@ mod tests {
         struct DialConcurrencyFactor(NonZeroU8);
 
         impl Arbitrary for DialConcurrencyFactor {
-            fn arbitrary<G: Gen>(g: &mut G) -> Self {
-                Self(NonZeroU8::new(g.gen_range(1, 11)).unwrap())
+            fn arbitrary(g: &mut Gen) -> Self {
+                Self(NonZeroU8::new(g.gen_range(1..11)).unwrap())
             }
         }
 
@@ -2122,7 +2120,7 @@ mod tests {
     fn max_outgoing() {
         use rand::Rng;
 
-        let outgoing_limit = rand::thread_rng().gen_range(1, 10);
+        let outgoing_limit = rand::thread_rng().gen_range(1..10);
 
         let limits = ConnectionLimits::default().with_max_pending_outgoing(Some(outgoing_limit));
         let mut network = new_test_swarm::<_, ()>(DummyConnectionHandler {
@@ -2170,14 +2168,12 @@ mod tests {
 
     #[test]
     fn max_established_incoming() {
-        use rand::Rng;
-
         #[derive(Debug, Clone)]
         struct Limit(u32);
 
         impl Arbitrary for Limit {
-            fn arbitrary<G: Gen>(g: &mut G) -> Self {
-                Self(g.gen_range(1, 10))
+            fn arbitrary(g: &mut Gen) -> Self {
+                Self(g.gen_range(1..10))
             }
         }
 
@@ -2425,60 +2421,51 @@ mod tests {
         assert!(!swarm.is_connected(&peer_id));
     }
 
-    #[test]
-    fn multiple_addresses_err() {
+    #[async_std::test]
+    async fn multiple_addresses_err() {
         // Tries dialing multiple addresses, and makes sure there's one dialing error per address.
 
         let target = PeerId::random();
 
         let mut swarm = new_test_swarm::<_, ()>(DummyConnectionHandler::default()).build();
 
-        let mut addresses = Vec::new();
-        for _ in 0..3 {
-            addresses.push(multiaddr![Ip4([0, 0, 0, 0]), Tcp(rand::random::<u16>())]);
-        }
-        for _ in 0..5 {
-            addresses.push(multiaddr![Udp(rand::random::<u16>())]);
-        }
-        addresses.shuffle(&mut rand::thread_rng());
+        let addresses = HashSet::from([
+            multiaddr![Ip4([0, 0, 0, 0]), Tcp(rand::random::<u16>())],
+            multiaddr![Ip4([0, 0, 0, 0]), Tcp(rand::random::<u16>())],
+            multiaddr![Ip4([0, 0, 0, 0]), Tcp(rand::random::<u16>())],
+            multiaddr![Udp(rand::random::<u16>())],
+            multiaddr![Udp(rand::random::<u16>())],
+            multiaddr![Udp(rand::random::<u16>())],
+            multiaddr![Udp(rand::random::<u16>())],
+            multiaddr![Udp(rand::random::<u16>())],
+        ]);
 
         swarm
             .dial(
                 DialOpts::peer_id(target)
-                    .addresses(addresses.clone())
+                    .addresses(addresses.iter().cloned().collect())
                     .build(),
             )
             .unwrap();
 
-        futures::executor::block_on(future::poll_fn(|cx| -> Poll<Result<(), io::Error>> {
-            loop {
-                match swarm.poll_next_unpin(cx) {
-                    Poll::Ready(Some(SwarmEvent::OutgoingConnectionError {
-                        peer_id,
-                        // multiaddr,
-                        error: DialError::Transport(errors),
-                    })) => {
-                        assert_eq!(peer_id.unwrap(), target);
+        match swarm.next().await.unwrap() {
+            SwarmEvent::OutgoingConnectionError {
+                peer_id,
+                // multiaddr,
+                error: DialError::Transport(errors),
+            } => {
+                assert_eq!(target, peer_id.unwrap());
 
-                        let failed_addresses =
-                            errors.into_iter().map(|(addr, _)| addr).collect::<Vec<_>>();
-                        assert_eq!(
-                            failed_addresses,
-                            addresses
-                                .clone()
-                                .into_iter()
-                                .map(|addr| addr.with(Protocol::P2p(target.into())))
-                                .collect::<Vec<_>>()
-                        );
+                let failed_addresses = errors.into_iter().map(|(addr, _)| addr).collect::<Vec<_>>();
+                let expected_addresses = addresses
+                    .into_iter()
+                    .map(|addr| addr.with(Protocol::P2p(target.into())))
+                    .collect::<Vec<_>>();
 
-                        return Poll::Ready(Ok(()));
-                    }
-                    Poll::Ready(_) => unreachable!(),
-                    Poll::Pending => break Poll::Pending,
-                }
+                assert_eq!(expected_addresses, failed_addresses);
             }
-        }))
-        .unwrap();
+            e => panic!("Unexpected event: {e:?}"),
+        }
     }
 
     #[test]

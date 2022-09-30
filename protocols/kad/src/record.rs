@@ -32,7 +32,6 @@ use std::hash::{Hash, Hasher};
 
 /// The (opaque) key of a record.
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-#[cfg_attr(feature = "serde", serde(crate = "_serde"))]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Key(Bytes);
 
@@ -163,28 +162,27 @@ mod tests {
     use super::*;
     use libp2p_core::multihash::Code;
     use quickcheck::*;
-    use rand::Rng;
     use std::time::Duration;
 
     impl Arbitrary for Key {
-        fn arbitrary<G: Gen>(_: &mut G) -> Key {
-            let hash = rand::thread_rng().gen::<[u8; 32]>();
+        fn arbitrary(g: &mut Gen) -> Key {
+            let hash: [u8; 32] = core::array::from_fn(|_| u8::arbitrary(g));
             Key::from(Multihash::wrap(Code::Sha2_256.into(), &hash).unwrap())
         }
     }
 
     impl Arbitrary for Record {
-        fn arbitrary<G: Gen>(g: &mut G) -> Record {
+        fn arbitrary(g: &mut Gen) -> Record {
             Record {
                 key: Key::arbitrary(g),
                 value: Vec::arbitrary(g),
-                publisher: if g.gen() {
+                publisher: if bool::arbitrary(g) {
                     Some(PeerId::random())
                 } else {
                     None
                 },
-                expires: if g.gen() {
-                    Some(Instant::now() + Duration::from_secs(g.gen_range(0, 60)))
+                expires: if bool::arbitrary(g) {
+                    Some(Instant::now() + Duration::from_secs(g.gen_range(0..60)))
                 } else {
                     None
                 },
@@ -193,12 +191,12 @@ mod tests {
     }
 
     impl Arbitrary for ProviderRecord {
-        fn arbitrary<G: Gen>(g: &mut G) -> ProviderRecord {
+        fn arbitrary(g: &mut Gen) -> ProviderRecord {
             ProviderRecord {
                 key: Key::arbitrary(g),
                 provider: PeerId::random(),
-                expires: if g.gen() {
-                    Some(Instant::now() + Duration::from_secs(g.gen_range(0, 60)))
+                expires: if bool::arbitrary(g) {
+                    Some(Instant::now() + Duration::from_secs(g.gen_range(0..60)))
                 } else {
                     None
                 },

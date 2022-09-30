@@ -22,17 +22,17 @@
 
 use async_trait::async_trait;
 use futures::{channel::mpsc, prelude::*, AsyncWriteExt};
-use libp2p_core::{
+use libp2p::core::{
     identity,
     muxing::StreamMuxerBox,
     transport::{self, Transport},
     upgrade::{self, read_length_prefixed, write_length_prefixed},
     Multiaddr, PeerId,
 };
-use libp2p_noise::{Keypair, NoiseConfig, X25519Spec};
-use libp2p_request_response::*;
-use libp2p_swarm::{Swarm, SwarmEvent};
-use libp2p_tcp::{GenTcpConfig, TcpTransport};
+use libp2p::noise::NoiseAuthenticated;
+use libp2p::request_response::*;
+use libp2p::swarm::{Swarm, SwarmEvent};
+use libp2p::tcp::{GenTcpConfig, TcpTransport};
 use rand::{self, Rng};
 use std::{io, iter};
 
@@ -127,7 +127,7 @@ fn ping_protocol() {
         }
     };
 
-    let num_pings: u8 = rand::thread_rng().gen_range(1, 100);
+    let num_pings: u8 = rand::thread_rng().gen_range(1..100);
 
     let peer2 = async move {
         let mut count = 0;
@@ -295,15 +295,13 @@ fn emits_inbound_connection_closed_if_channel_is_dropped() {
 fn mk_transport() -> (PeerId, transport::Boxed<(PeerId, StreamMuxerBox)>) {
     let id_keys = identity::Keypair::generate_ed25519();
     let peer_id = id_keys.public().to_peer_id();
-    let noise_keys = Keypair::<X25519Spec>::new()
-        .into_authentic(&id_keys)
-        .unwrap();
+
     (
         peer_id,
         TcpTransport::new(GenTcpConfig::default().nodelay(true))
             .upgrade(upgrade::Version::V1)
-            .authenticate(NoiseConfig::xx(noise_keys).into_authenticated())
-            .multiplex(libp2p_yamux::YamuxConfig::default())
+            .authenticate(NoiseAuthenticated::xx(&id_keys).unwrap())
+            .multiplex(libp2p::yamux::YamuxConfig::default())
             .boxed(),
     )
 }

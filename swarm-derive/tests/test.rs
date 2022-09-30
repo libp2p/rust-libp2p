@@ -83,8 +83,6 @@ fn three_fields() {
         ping: libp2p::ping::Ping,
         identify: libp2p::identify::Identify,
         kad: libp2p::kad::Kademlia<libp2p::kad::record::store::MemoryStore>,
-        #[behaviour(ignore)]
-        foo: String,
     }
 
     #[allow(dead_code)]
@@ -104,62 +102,7 @@ fn three_fields() {
 }
 
 #[test]
-fn three_fields_non_last_ignored() {
-    #[allow(dead_code)]
-    #[derive(NetworkBehaviour)]
-    struct Foo {
-        ping: libp2p::ping::Ping,
-        #[behaviour(ignore)]
-        identify: String,
-        kad: libp2p::kad::Kademlia<libp2p::kad::record::store::MemoryStore>,
-    }
-
-    #[allow(dead_code)]
-    #[allow(unreachable_code)]
-    fn foo() {
-        let _out_event: <Foo as NetworkBehaviour>::OutEvent = unimplemented!();
-        match _out_event {
-            FooEvent::Ping(libp2p::ping::Event { .. }) => {}
-            FooEvent::Kad(event) => {
-                let _: libp2p::kad::KademliaEvent = event;
-            }
-        }
-    }
-}
-
-#[test]
-fn custom_polling() {
-    #[allow(dead_code)]
-    #[derive(NetworkBehaviour)]
-    #[behaviour(poll_method = "foo")]
-    struct Foo {
-        ping: libp2p::ping::Ping,
-        identify: libp2p::identify::Identify,
-    }
-
-    impl Foo {
-        fn foo(
-            &mut self,
-            _: &mut std::task::Context,
-            _: &mut impl libp2p::swarm::PollParameters,
-        ) -> std::task::Poll<
-            libp2p::swarm::NetworkBehaviourAction<
-                <Self as NetworkBehaviour>::OutEvent,
-                <Self as NetworkBehaviour>::ConnectionHandler,
-            >,
-        > {
-            std::task::Poll::Pending
-        }
-    }
-
-    #[allow(dead_code)]
-    fn foo() {
-        require_net_behaviour::<Foo>();
-    }
-}
-
-#[test]
-fn custom_event_no_polling() {
+fn custom_event() {
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
     #[behaviour(out_event = "MyEvent")]
@@ -182,54 +125,6 @@ fn custom_event_no_polling() {
     impl From<libp2p::identify::IdentifyEvent> for MyEvent {
         fn from(event: libp2p::identify::IdentifyEvent) -> Self {
             MyEvent::Identify(event)
-        }
-    }
-
-    #[allow(dead_code)]
-    fn foo() {
-        require_net_behaviour::<Foo>();
-    }
-}
-
-#[test]
-fn custom_event_and_polling() {
-    #[allow(dead_code)]
-    #[derive(NetworkBehaviour)]
-    #[behaviour(poll_method = "foo", out_event = "MyEvent")]
-    struct Foo {
-        ping: libp2p::ping::Ping,
-        identify: libp2p::identify::Identify,
-    }
-
-    enum MyEvent {
-        Ping(libp2p::ping::PingEvent),
-        Identify(libp2p::identify::IdentifyEvent),
-    }
-
-    impl From<libp2p::ping::PingEvent> for MyEvent {
-        fn from(event: libp2p::ping::PingEvent) -> Self {
-            MyEvent::Ping(event)
-        }
-    }
-
-    impl From<libp2p::identify::IdentifyEvent> for MyEvent {
-        fn from(event: libp2p::identify::IdentifyEvent) -> Self {
-            MyEvent::Identify(event)
-        }
-    }
-
-    impl Foo {
-        fn foo(
-            &mut self,
-            _: &mut std::task::Context,
-            _: &mut impl libp2p::swarm::PollParameters,
-        ) -> std::task::Poll<
-            libp2p::swarm::NetworkBehaviourAction<
-                <Self as NetworkBehaviour>::OutEvent,
-                <Self as NetworkBehaviour>::ConnectionHandler,
-            >,
-        > {
-            std::task::Poll::Pending
         }
     }
 
@@ -439,28 +334,6 @@ fn custom_event_with_either() {
 }
 
 #[test]
-fn mixed_field_order() {
-    struct Foo {}
-
-    #[derive(NetworkBehaviour)]
-    pub struct Behaviour {
-        #[behaviour(ignore)]
-        _foo: Foo,
-        _ping: libp2p::ping::Ping,
-        #[behaviour(ignore)]
-        _foo2: Foo,
-        _identify: libp2p::identify::Identify,
-        #[behaviour(ignore)]
-        _foo3: Foo,
-    }
-
-    #[allow(dead_code)]
-    fn behaviour() {
-        require_net_behaviour::<Behaviour>();
-    }
-}
-
-#[test]
 fn generated_out_event_derive_debug() {
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
@@ -476,4 +349,66 @@ fn generated_out_event_derive_debug() {
     }
 
     require_debug::<Foo>();
+}
+
+#[test]
+fn custom_out_event_no_type_parameters() {
+    use libp2p::core::connection::ConnectionId;
+    use libp2p::swarm::handler::DummyConnectionHandler;
+    use libp2p::swarm::{
+        ConnectionHandler, IntoConnectionHandler, NetworkBehaviourAction, PollParameters,
+    };
+    use libp2p::PeerId;
+    use std::task::Context;
+    use std::task::Poll;
+
+    pub struct TemplatedBehaviour<T: 'static> {
+        _data: T,
+    }
+
+    impl<T> NetworkBehaviour for TemplatedBehaviour<T> {
+        type ConnectionHandler = DummyConnectionHandler;
+        type OutEvent = void::Void;
+
+        fn new_handler(&mut self) -> Self::ConnectionHandler {
+            DummyConnectionHandler::default()
+        }
+
+        fn inject_event(
+            &mut self,
+            _peer: PeerId,
+            _connection: ConnectionId,
+            message: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent,
+        ) {
+            void::unreachable(message);
+        }
+
+        fn poll(
+            &mut self,
+            _ctx: &mut Context,
+            _: &mut impl PollParameters,
+        ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+            Poll::Pending
+        }
+    }
+
+    #[derive(NetworkBehaviour)]
+    #[behaviour(out_event = "OutEvent")]
+    struct Behaviour<T: 'static + Send> {
+        custom: TemplatedBehaviour<T>,
+    }
+
+    #[derive(Debug)]
+    enum OutEvent {
+        None,
+    }
+
+    impl From<void::Void> for OutEvent {
+        fn from(_e: void::Void) -> Self {
+            Self::None
+        }
+    }
+
+    require_net_behaviour::<Behaviour<String>>();
+    require_net_behaviour::<Behaviour<()>>();
 }

@@ -1,6 +1,26 @@
-# 0.40.0 [unreleased]
+# 0.41.0 [unreleased]
+
+- Remove default features. If you previously depended on `async-io` you need to enable this explicitly now. See [PR 2918].
+
+- Update to `libp2p-core` `v0.37.0`.
+
+- Update to `libp2p-swarm` `v0.40.0`.
+ 
+[PR 2918]: https://github.com/libp2p/rust-libp2p/pull/2918
+
+# 0.40.0
 
 - Update to `libp2p-swarm` `v0.39.0`.
+
+- Allow users to choose between async-io and tokio runtime
+  in the mdns protocol implementation. `async-io` is a default
+  feature, with an additional `tokio` feature  (see [PR 2748])
+
+- Fix high CPU usage with Tokio library (see [PR 2748]).
+
+- Update to `libp2p-core` `v0.36.0`.
+
+[PR 2748]: https://github.com/libp2p/rust-libp2p/pull/2748
 
 # 0.39.0
 

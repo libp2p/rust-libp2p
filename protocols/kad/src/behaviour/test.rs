@@ -27,6 +27,9 @@ use crate::record::{store::MemoryStore, Key};
 use crate::K_VALUE;
 use futures::{executor::block_on, future::poll_fn, prelude::*};
 use futures_timer::Delay;
+use libp2p::noise;
+use libp2p::swarm::{Swarm, SwarmEvent};
+use libp2p::yamux;
 use libp2p_core::{
     connection::{ConnectedPoint, ConnectionId},
     identity,
@@ -35,9 +38,6 @@ use libp2p_core::{
     transport::MemoryTransport,
     upgrade, Endpoint, PeerId, Transport,
 };
-use libp2p_noise as noise;
-use libp2p_swarm::{Swarm, SwarmEvent};
-use libp2p_yamux as yamux;
 use quickcheck::*;
 use rand::{random, rngs::StdRng, thread_rng, Rng, SeedableRng};
 use std::{
@@ -56,12 +56,9 @@ fn build_node() -> (Multiaddr, TestSwarm) {
 fn build_node_with_config(cfg: KademliaConfig) -> (Multiaddr, TestSwarm) {
     let local_key = identity::Keypair::generate_ed25519();
     let local_public_key = local_key.public();
-    let noise_keys = noise::Keypair::<noise::X25519>::new()
-        .into_authentic(&local_key)
-        .unwrap();
     let transport = MemoryTransport::default()
         .upgrade(upgrade::Version::V1)
-        .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
+        .authenticate(noise::NoiseAuthenticated::xx(&local_key).unwrap())
         .multiplex(yamux::YamuxConfig::default())
         .boxed();
 
@@ -147,8 +144,9 @@ fn random_multihash() -> Multihash {
 struct Seed([u8; 32]);
 
 impl Arbitrary for Seed {
-    fn arbitrary<G: Gen>(g: &mut G) -> Seed {
-        Seed(g.gen())
+    fn arbitrary(g: &mut Gen) -> Seed {
+        let seed = core::array::from_fn(|_| u8::arbitrary(g));
+        Seed(seed)
     }
 }
 
@@ -157,14 +155,14 @@ fn bootstrap() {
     fn prop(seed: Seed) {
         let mut rng = StdRng::from_seed(seed.0);
 
-        let num_total = rng.gen_range(2, 20);
+        let num_total = rng.gen_range(2..20);
         // When looking for the closest node to a key, Kademlia considers
         // K_VALUE nodes to query at initialization. If `num_group` is larger
         // than K_VALUE the remaining locally known nodes will not be
         // considered. Given that no other node is aware of them, they would be
         // lost entirely. To prevent the above restrict `num_group` to be equal
         // or smaller than K_VALUE.
-        let num_group = rng.gen_range(1, (num_total % K_VALUE.get()) + 2);
+        let num_group = rng.gen_range(1..(num_total % K_VALUE.get()) + 2);
 
         let mut cfg = KademliaConfig::default();
         if rng.gen() {
@@ -244,7 +242,7 @@ fn query_iter() {
     }
 
     fn run(rng: &mut impl Rng) {
-        let num_total = rng.gen_range(2, 20);
+        let num_total = rng.gen_range(2..20);
         let mut swarms = build_connected_nodes(num_total, 1)
             .into_iter()
             .map(|(_a, s)| s)
@@ -492,7 +490,7 @@ fn put_record() {
     fn prop(records: Vec<Record>, seed: Seed, filter_records: bool, drop_records: bool) {
         let mut rng = StdRng::from_seed(seed.0);
         let replication_factor =
-            NonZeroUsize::new(rng.gen_range(1, (K_VALUE.get() / 2) + 1)).unwrap();
+            NonZeroUsize::new(rng.gen_range(1..(K_VALUE.get() / 2) + 1)).unwrap();
         // At least 4 nodes, 1 under test + 3 bootnodes.
         let num_total = usize::max(4, replication_factor.get() * 2);
 
@@ -856,7 +854,7 @@ fn add_provider() {
     fn prop(keys: Vec<record::Key>, seed: Seed) {
         let mut rng = StdRng::from_seed(seed.0);
         let replication_factor =
-            NonZeroUsize::new(rng.gen_range(1, (K_VALUE.get() / 2) + 1)).unwrap();
+            NonZeroUsize::new(rng.gen_range(1..(K_VALUE.get() / 2) + 1)).unwrap();
         // At least 4 nodes, 1 under test + 3 bootnodes.
         let num_total = usize::max(4, replication_factor.get() * 2);
 
