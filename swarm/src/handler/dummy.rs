@@ -57,10 +57,6 @@ impl ConnectionHandler for DummyConnectionHandler {
         SubstreamProtocol::new(DeniedUpgrade, ())
     }
 
-    fn max_inbound_streams(&self) -> usize {
-        0
-    }
-
     fn inject_fully_negotiated_inbound(
         &mut self,
         _: <Self::InboundProtocol as InboundUpgrade<NegotiatedSubstream>>::Output,
