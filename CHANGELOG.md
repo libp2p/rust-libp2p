@@ -56,7 +56,7 @@
   - `mdns-async-io` in favor of `mdns` + `async-std`
   - `dns-async-std` in favor of `dns` + `async-std`
   
-  See [PR XXXX].
+  See [PR 2962].
 
 - Update individual crates.
     - Update to [`libp2p-autonat` `v0.8.0`](protocols/autonat/CHANGELOG.md#0080).
@@ -86,7 +86,7 @@
     - Update to [`libp2p-yamux` `v0.41.0`](muxers/mplex/CHANGELOG.md#0410).
 
 [PR 2918]: https://github.com/libp2p/rust-libp2p/pull/2918
-[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+[PR 2962]: https://github.com/libp2p/rust-libp2p/pull/2962
 
 # 0.48.0
 
