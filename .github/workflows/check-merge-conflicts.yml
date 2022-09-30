@@ -13,4 +13,4 @@ jobs:
         with:
           dirtyLabel: "merge-conflicts"
           repoToken: "${{ secrets.GITHUB_TOKEN }}"
-          commentOnDirty: "Hey ${{ github.event.pull_request.user.login }} This pull request has conflicts, please resolve the merge conflicts with the base branch before we can continue reviewing. Thanks!"
+          commentOnDirty: "Hey this pull request has conflicts. Please resolve the merge conflicts with the base branch before we can continue reviewing. Thanks!"
