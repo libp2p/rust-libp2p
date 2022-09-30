@@ -46,8 +46,8 @@
 //! # }
 //! ```
 //!
-//! The `Endpoint` struct implements the `Transport` trait of the `core` library. See the
-//! documentation of `core` and of libp2p in general to learn how to use the `Transport` trait.
+//! The [`Endpoint`] struct implements the [`Transport`] trait of the [`libp2p_core`] library. See the
+//! documentation of [`libp2p_core`] and of libp2p in general to learn how to use the [`Transport`] trait.
 //!
 //! Note that QUIC provides transport, security, and multiplexing in a single protocol.  Therefore,
 //! QUIC connections do not need to be upgraded. You will get a compile-time error if you try.

@@ -56,7 +56,7 @@ pub struct Connection {
     /// Identifier for this connection according to the endpoint. Used when sending messages to
     /// the endpoint.
     connection_id: quinn_proto::ConnectionHandle,
-    /// `Future` that triggers at the `Instant` that `self.connection.poll_timeout()` indicates.
+    /// `Future` that triggers at the [`Instant`] that `self.connection.poll_timeout()` indicates.
     next_timeout: Option<(Delay, Instant)>,
 }
 
