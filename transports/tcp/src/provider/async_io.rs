@@ -26,6 +26,7 @@ use std::io;
 use std::net;
 use std::task::{Context, Poll};
 
+/// A TCP [`Transport`](libp2p_core::Transport) that works with the `async-std` ecosystem.
 pub type Transport = crate::Transport<Tcp>;
 
 #[derive(Copy, Clone)]

@@ -18,12 +18,12 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Implementation of the libp2p `Transport` trait for TCP/IP.
+//! Implementation of the libp2p [`libp2p_core::Transport`] trait for TCP/IP.
 //!
 //! # Usage
 //!
-//! This crate provides a `TcpTransport` and `TokioTcpTransport`, depending on
-//! the enabled features, which implement the `Transport` trait for use as a
+//! This crate provides a [`async_io::Transport`] and [`tokio::Transport`], depending on
+//! the enabled features, which implement the [`libp2p_core::Transport`] trait for use as a
 //! transport with `libp2p-core` or `libp2p-swarm`.
 
 mod provider;
@@ -32,7 +32,7 @@ use if_watch::{IfEvent, IfWatcher};
 #[cfg(feature = "async-io")]
 pub use provider::async_io;
 
-/// The type of a [`Transport`] using the `async-io` implementation.
+/// The type of a [`Transport`](libp2p_core::Transport) using the `async-io` implementation.
 #[cfg(feature = "async-io")]
 #[deprecated(since = "0.37.0", note = "Use `async_io::Transport` instead.")]
 pub type TcpTransport = Transport<async_io::Tcp>;
@@ -40,7 +40,7 @@ pub type TcpTransport = Transport<async_io::Tcp>;
 #[cfg(feature = "tokio")]
 pub use provider::tokio;
 
-/// The type of a [`Transport`] using the `tokio` implementation.
+/// The type of a [`Transport`](libp2p_core::Transport) using the `tokio` implementation.
 #[cfg(feature = "tokio")]
 #[deprecated(since = "0.37.0", note = "Use `tokio::Transport` instead.")]
 pub type TokioTcpTransport = Transport<tokio::Tcp>;
@@ -68,6 +68,7 @@ use std::{
 
 use provider::{Incoming, Provider};
 
+/// The configuration for a TCP/IP transport capability for libp2p.
 #[deprecated(since = "0.37.0", note = "Use `Config` instead.")]
 pub type GenTcpConfig = Config;
 
@@ -237,10 +238,10 @@ impl Config {
     /// > a single outgoing connection to a particular address and port
     /// > of a peer per local listening socket address.
     ///
-    /// [`GenTcpTransport`] keeps track of the listen socket addresses as they
+    /// [`Transport`] keeps track of the listen socket addresses as they
     /// are reported by polling it. It is possible to listen on multiple
     /// addresses, enabling port reuse for each, knowing exactly which listen
-    /// address is reused when dialing with a specific [`GenTcpTransport`], as in the
+    /// address is reused when dialing with a specific [`Transport`], as in the
     /// following example:
     ///
     /// ```no_run
@@ -288,7 +289,7 @@ impl Config {
     /// case, one is chosen whose IP protocol version and loopback status is the
     /// same as that of the remote address. Consequently, for maximum control of
     /// the local listening addresses and ports that are used for outgoing
-    /// connections, a new [`GenTcpTransport`] should be created for each listening
+    /// connections, a new [`Transport`] should be created for each listening
     /// socket, avoiding the use of wildcard addresses which bind a socket to
     /// all network interfaces.
     ///

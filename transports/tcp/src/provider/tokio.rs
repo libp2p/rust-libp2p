@@ -30,6 +30,7 @@ use std::net;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
+/// A TCP [`Transport`](libp2p_core::Transport) that works with the `tokio` ecosystem.
 pub type Transport = crate::Transport<Tcp>;
 
 #[derive(Copy, Clone)]
