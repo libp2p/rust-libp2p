@@ -33,6 +33,7 @@ mod async_std;
 mod tokio;
 #[cfg(feature = "async-std")]
 pub use async_std::{AsyncStd, AsyncStdTransport};
+use futures::future::BoxFuture;
 #[cfg(feature = "tokio")]
 pub use tokio::{Tokio, TokioTransport};
 
@@ -105,7 +106,7 @@ impl<P: Provider> Transport for QuicTransport<P> {
     type Output = (PeerId, QuicMuxer);
     type Error = TransportError;
     type ListenerUpgrade = Upgrade;
-    type Dial = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
+    type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
     fn listen_on(
         &mut self,

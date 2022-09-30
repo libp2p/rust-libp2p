@@ -67,15 +67,13 @@ impl Future for Upgrade {
                 ConnectionEvent::ConnectionLost(err) => {
                     return Poll::Ready(Err(transport::TransportError::Established(err)))
                 }
-                // Other items are:
-                // - HandshakeDataReady
-                // - StreamAvailable
-                // - StreamOpened
-                // - StreamReadable
-                // - StreamWritable
-                // - StreamFinished
-                // - StreamStopped
-                _ => {}
+                ConnectionEvent::HandshakeDataReady
+                | ConnectionEvent::StreamAvailable
+                | ConnectionEvent::StreamOpened
+                | ConnectionEvent::StreamReadable(_)
+                | ConnectionEvent::StreamWritable(_)
+                | ConnectionEvent::StreamFinished(_)
+                | ConnectionEvent::StreamStopped(_) => {}
             }
         }
     }
