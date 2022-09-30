@@ -228,7 +228,7 @@ fn test_score_first_message_deliveries_cap() {
     let topic_params = TopicScoreParams {
         topic_weight: 1.0,
         first_message_deliveries_weight: 1.0,
-        first_message_deliveries_decay: 1.0,
+        first_message_deliveries_decay: 1.0, // test without decay
         first_message_deliveries_cap: 50.0,
         time_in_mesh_weight: 0.0,
         ..Default::default()
@@ -274,7 +274,7 @@ fn test_score_first_message_deliveries_decay() {
     let topic_params = TopicScoreParams {
         topic_weight: 1.0,
         first_message_deliveries_weight: 1.0,
-        first_message_deliveries_decay: 0.9,
+        first_message_deliveries_decay: 0.9, // decay 10% per decay interval
         first_message_deliveries_cap: 2000.0,
         time_in_mesh_weight: 0.0,
         ..Default::default()

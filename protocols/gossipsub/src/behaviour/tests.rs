@@ -3343,7 +3343,7 @@ fn test_scoring_p3() {
         first_message_deliveries_weight: 0.0, //deactivate first time deliveries
         mesh_message_deliveries_weight: -2.0,
         mesh_message_deliveries_decay: 0.9,
-        mesh_message_deliveries_cap: 0.0,
+        mesh_message_deliveries_cap: 10.0,
         mesh_message_deliveries_threshold: 5.0,
         mesh_message_deliveries_activation: Duration::from_secs(1),
         mesh_message_deliveries_window: Duration::from_millis(100),
