@@ -26,6 +26,8 @@ use std::io;
 use std::net;
 use std::task::{Context, Poll};
 
+pub type Transport = crate::GenTcpTransport<Tcp>;
+
 #[derive(Copy, Clone)]
 pub enum Tcp {}
 

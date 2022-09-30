@@ -34,6 +34,7 @@ pub use provider::async_io;
 
 /// The type of a [`GenTcpTransport`] using the `async-io` implementation.
 #[cfg(feature = "async-io")]
+#[deprecated(since = "0.37.0", note = "Use `async_io::Transport` instead.")]
 pub type TcpTransport = GenTcpTransport<async_io::Tcp>;
 
 #[cfg(feature = "tokio")]
@@ -41,6 +42,7 @@ pub use provider::tokio;
 
 /// The type of a [`GenTcpTransport`] using the `tokio` implementation.
 #[cfg(feature = "tokio")]
+#[deprecated(since = "0.37.0", note = "Use `tokio::Transport` instead.")]
 pub type TokioTcpTransport = GenTcpTransport<tokio::Tcp>;
 
 use futures::{
@@ -66,9 +68,12 @@ use std::{
 
 use provider::{Incoming, Provider};
 
+#[deprecated(since = "0.37.0", note = "Use `Config` instead.")]
+pub type GenTcpConfig = Config;
+
 /// The configuration for a TCP/IP transport capability for libp2p.
 #[derive(Clone, Debug)]
-pub struct GenTcpConfig {
+pub struct Config {
     /// TTL to set for opened sockets, or `None` to keep default.
     ttl: Option<u32>,
     /// `TCP_NODELAY` to set for opened sockets, or `None` to keep default.
@@ -157,7 +162,7 @@ impl PortReuse {
     }
 }
 
-impl GenTcpConfig {
+impl Config {
     /// Creates a new configuration for a TCP/IP transport:
     ///
     ///   * Nagle's algorithm, i.e. `TCP_NODELAY`, is _enabled_.
@@ -249,12 +254,11 @@ impl GenTcpConfig {
     /// #[cfg(feature = "async-io")]
     /// #[async_std::main]
     /// async fn main() -> std::io::Result<()> {
-    /// use libp2p_tcp::{GenTcpConfig, TcpTransport};
     ///
     /// let listen_addr1: Multiaddr = "/ip4/127.0.0.1/tcp/9001".parse().unwrap();
     /// let listen_addr2: Multiaddr = "/ip4/127.0.0.1/tcp/9002".parse().unwrap();
     ///
-    /// let mut tcp1 = TcpTransport::new(GenTcpConfig::new().port_reuse(true)).boxed();
+    /// let mut tcp1 = libp2p_tcp::async_io::Transport::new(libp2p_tcp::Config::new().port_reuse(true)).boxed();
     /// tcp1.listen_on( listen_addr1.clone()).expect("listener");
     /// match tcp1.select_next_some().await {
     ///     TransportEvent::NewAddress { listen_addr, .. } => {
@@ -265,7 +269,7 @@ impl GenTcpConfig {
     ///     _ => {}
     /// }
     ///
-    /// let mut tcp2 = TcpTransport::new(GenTcpConfig::new().port_reuse(true)).boxed();
+    /// let mut tcp2 = libp2p_tcp::async_io::Transport::new(libp2p_tcp::Config::new().port_reuse(true)).boxed();
     /// tcp2.listen_on( listen_addr2).expect("listener");
     /// match tcp2.select_next_some().await {
     ///     TransportEvent::NewAddress { listen_addr, .. } => {
@@ -297,7 +301,7 @@ impl GenTcpConfig {
     }
 }
 
-impl Default for GenTcpConfig {
+impl Default for Config {
     fn default() -> Self {
         Self::new()
     }
@@ -307,7 +311,7 @@ pub struct GenTcpTransport<T>
 where
     T: Provider + Send,
 {
-    config: GenTcpConfig,
+    config: Config,
 
     /// The configuration of port reuse when dialing.
     port_reuse: PortReuse,
@@ -323,7 +327,7 @@ impl<T> GenTcpTransport<T>
 where
     T: Provider + Send,
 {
-    pub fn new(config: GenTcpConfig) -> Self {
+    pub fn new(config: Config) -> Self {
         let port_reuse = if config.enable_port_reuse {
             PortReuse::Enabled {
                 listen_addrs: Arc::new(RwLock::new(HashSet::new())),
@@ -398,7 +402,7 @@ where
     T: Provider + Send,
 {
     fn default() -> Self {
-        let config = GenTcpConfig::default();
+        let config = Config::default();
         let port_reuse = if config.enable_port_reuse {
             PortReuse::Enabled {
                 listen_addrs: Arc::new(RwLock::new(HashSet::new())),
@@ -891,7 +895,7 @@ mod tests {
         env_logger::try_init().ok();
 
         async fn listener<T: Provider>(addr: Multiaddr, mut ready_tx: mpsc::Sender<Multiaddr>) {
-            let mut tcp = GenTcpTransport::<T>::new(GenTcpConfig::new()).boxed();
+            let mut tcp = GenTcpTransport::<T>::new(Config::new()).boxed();
             tcp.listen_on(addr).unwrap();
             loop {
                 match tcp.select_next_some().await {
@@ -913,7 +917,7 @@ mod tests {
 
         async fn dialer<T: Provider>(mut ready_rx: mpsc::Receiver<Multiaddr>) {
             let addr = ready_rx.next().await.unwrap();
-            let mut tcp = GenTcpTransport::<T>::new(GenTcpConfig::new());
+            let mut tcp = GenTcpTransport::<T>::new(Config::new());
 
             // Obtain a future socket through dialing
             let mut socket = tcp.dial(addr.clone()).unwrap().await.unwrap();
@@ -960,7 +964,7 @@ mod tests {
         env_logger::try_init().ok();
 
         async fn listener<T: Provider>(addr: Multiaddr, mut ready_tx: mpsc::Sender<Multiaddr>) {
-            let mut tcp = GenTcpTransport::<T>::new(GenTcpConfig::new()).boxed();
+            let mut tcp = GenTcpTransport::<T>::new(Config::new()).boxed();
             tcp.listen_on(addr).unwrap();
 
             loop {
@@ -989,7 +993,7 @@ mod tests {
 
         async fn dialer<T: Provider>(mut ready_rx: mpsc::Receiver<Multiaddr>) {
             let dest_addr = ready_rx.next().await.unwrap();
-            let mut tcp = GenTcpTransport::<T>::new(GenTcpConfig::new());
+            let mut tcp = GenTcpTransport::<T>::new(Config::new());
             tcp.dial(dest_addr).unwrap().await.unwrap();
         }
 
@@ -1033,7 +1037,7 @@ mod tests {
             mut ready_tx: mpsc::Sender<Multiaddr>,
             port_reuse_rx: oneshot::Receiver<Protocol<'_>>,
         ) {
-            let mut tcp = GenTcpTransport::<T>::new(GenTcpConfig::new()).boxed();
+            let mut tcp = GenTcpTransport::<T>::new(Config::new()).boxed();
             tcp.listen_on(addr).unwrap();
             loop {
                 match tcp.select_next_some().await {
@@ -1068,7 +1072,7 @@ mod tests {
             port_reuse_tx: oneshot::Sender<Protocol<'_>>,
         ) {
             let dest_addr = ready_rx.next().await.unwrap();
-            let mut tcp = GenTcpTransport::<T>::new(GenTcpConfig::new().port_reuse(true));
+            let mut tcp = GenTcpTransport::<T>::new(Config::new().port_reuse(true));
             tcp.listen_on(addr).unwrap();
             match poll_fn(|cx| Pin::new(&mut tcp).poll(cx)).await {
                 TransportEvent::NewAddress { .. } => {
@@ -1136,7 +1140,7 @@ mod tests {
         env_logger::try_init().ok();
 
         async fn listen_twice<T: Provider>(addr: Multiaddr) {
-            let mut tcp = GenTcpTransport::<T>::new(GenTcpConfig::new().port_reuse(true));
+            let mut tcp = GenTcpTransport::<T>::new(Config::new().port_reuse(true));
             tcp.listen_on(addr).unwrap();
             match poll_fn(|cx| Pin::new(&mut tcp).poll(cx)).await {
                 TransportEvent::NewAddress {
@@ -1190,7 +1194,7 @@ mod tests {
         env_logger::try_init().ok();
 
         async fn listen<T: Provider>(addr: Multiaddr) -> Multiaddr {
-            let mut tcp = GenTcpTransport::<T>::new(GenTcpConfig::new()).boxed();
+            let mut tcp = GenTcpTransport::<T>::new(Config::new()).boxed();
             tcp.listen_on(addr).unwrap();
             tcp.select_next_some()
                 .await
@@ -1227,13 +1231,13 @@ mod tests {
         fn test(addr: Multiaddr) {
             #[cfg(feature = "async-io")]
             {
-                let mut tcp = TcpTransport::new(GenTcpConfig::new());
+                let mut tcp = async_io::Transport::new(Config::new());
                 assert!(tcp.listen_on(addr.clone()).is_err());
             }
 
             #[cfg(feature = "tokio")]
             {
-                let mut tcp = TokioTcpTransport::new(GenTcpConfig::new());
+                let mut tcp = tokio::Transport::new(Config::new());
                 assert!(tcp.listen_on(addr).is_err());
             }
         }
