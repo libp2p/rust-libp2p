@@ -6,7 +6,9 @@
 #
 # `cargo run --package libp2p-tcp --example tokio_dial --features tokio -- /ip4/127.0.0.1/tcp/9999`
 
-FILE_DESC_LIMIT=12
+cargo build --example tokio_listen --package libp2p-tcp --features tokio
+
+FILE_DESC_LIMIT=13
 
 stop_container() {
   docker rm -f "$LISTEN_CONTAINER";
