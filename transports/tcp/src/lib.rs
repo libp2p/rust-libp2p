@@ -616,7 +616,7 @@ where
 
 /// Event produced by a [`TcpListenStream`].
 #[derive(Debug)]
-pub enum TcpListenerEvent<S> {
+enum TcpListenerEvent<S> {
     /// The listener is listening on a new additional [`Multiaddr`].
     NewAddress(Multiaddr),
     /// An upgrade, consisting of the upgrade future, the listener address and the remote address.
@@ -638,7 +638,7 @@ pub enum TcpListenerEvent<S> {
 }
 
 /// A stream of incoming connections on one or more interfaces.
-pub struct TcpListenStream<T>
+struct TcpListenStream<T>
 where
     T: Provider,
 {

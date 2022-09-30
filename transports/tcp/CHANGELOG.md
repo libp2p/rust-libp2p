@@ -9,6 +9,8 @@
 
 - Deprecate types with `Tcp` prefix (`GenTcpConfig`, `TcpTransport` and `TokioTcpTransport`) in favor of referencing them by module / crate. See [PR XXXX].
 
+- Remove `TcpListenStream` and `TcpListenerEvent` from public API. See [PR XXXX].
+
 [PR 2813]: https://github.com/libp2p/rust-libp2p/pull/2813
 [PR 2918]: https://github.com/libp2p/rust-libp2p/pull/2918
 [PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
