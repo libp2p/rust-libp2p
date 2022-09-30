@@ -36,8 +36,6 @@ full = [
     "secp256k1",
     "serde",
     "tcp",
-    "tcp-async-io",
-    "tcp-tokio",
     "tokio",
     "uds",
     "wasm-bindgen",
