@@ -313,6 +313,7 @@ impl Default for Config {
 ///
 /// - [`tokio::Transport`]
 /// - [`async_io::Transport`]
+#[doc(hidden)]
 pub struct Transport<T>
 where
     T: Provider + Send,

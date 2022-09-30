@@ -33,6 +33,7 @@ use std::task::{Context, Poll};
 pub type Transport = crate::Transport<Tcp>;
 
 #[derive(Copy, Clone)]
+#[doc(hidden)]
 pub enum Tcp {}
 
 impl Provider for Tcp {
