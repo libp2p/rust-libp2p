@@ -1,4 +1,4 @@
-# 0.39.1 [unreleased]
+# 0.40.0 [unreleased]
 
 - Update dependencies.
 
@@ -9,6 +9,10 @@
   and refer to its types via `identify::`. For example: `identify::Behaviour` or `identify::Event`.
 
   [discussion 2174]: https://github.com/libp2p/rust-libp2p/discussions/2174
+
+- Update to `libp2p-core` `v0.37.0`.
+
+- Update to `libp2p-swarm` `v0.40.0`.
 
 # 0.39.0
 

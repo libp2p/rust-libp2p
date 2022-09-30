@@ -1,3 +1,9 @@
+# 0.12.0 [unreleased]
+
+- Remove parallel dialing optimization, to avoid requiring the use of the `ls` command. See [PR 2934].
+
+[PR 2934]: https://github.com/libp2p/rust-libp2p/pull/2934
+
 # 0.11.0 [2022-01-27]
 
 - Migrate to Rust edition 2021 (see [PR 2339]).
