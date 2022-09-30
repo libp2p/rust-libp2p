@@ -59,6 +59,10 @@ where
         self.inner.listen_protocol()
     }
 
+    fn max_inbound_streams(&self) -> usize {
+        self.inner.max_inbound_streams()
+    }
+
     fn inject_fully_negotiated_inbound(
         &mut self,
         protocol: <Self::InboundProtocol as InboundUpgradeSend>::Output,

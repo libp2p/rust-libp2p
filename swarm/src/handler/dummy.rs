@@ -50,11 +50,15 @@ impl ConnectionHandler for DummyConnectionHandler {
     type Error = Void;
     type InboundProtocol = DeniedUpgrade;
     type OutboundProtocol = DeniedUpgrade;
-    type OutboundOpenInfo = Void;
     type InboundOpenInfo = ();
+    type OutboundOpenInfo = Void;
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
         SubstreamProtocol::new(DeniedUpgrade, ())
+    }
+
+    fn max_inbound_streams(&self) -> usize {
+        0
     }
 
     fn inject_fully_negotiated_inbound(

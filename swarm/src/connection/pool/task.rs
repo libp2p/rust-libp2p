@@ -22,6 +22,7 @@
 //! Async functions driving pending and established connections in the form of a task.
 
 use super::concurrent_dial::ConcurrentDial;
+use crate::connection::Event;
 use crate::{
     connection::{
         self, ConnectionError, PendingInboundConnectionError, PendingOutboundConnectionError,
@@ -247,6 +248,14 @@ pub async fn new_for_established_connection<THandler>(
                             })
                             .await;
                         return;
+                    }
+                    Ok(Event::SubstreamLimitHit { num_streams }) => {
+                        // A handler might completely deny inbound streams at which point this would spam the logs.
+                        // Very likely, this log is only useful if we configured a limit > 0.
+                        if num_streams > 0 {
+                            // This is not necessarily bad but an indication that we have a remote peer that is keeping us very busy.
+                            log::info!("Connection {connection_id} to peer {peer_id} has is operating at the limit of allowed substeams ({num_streams})");
+                        }
                     }
                 }
             }

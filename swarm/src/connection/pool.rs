@@ -91,7 +91,7 @@ where
     /// The maximum number of inbound streams concurrently negotiating on a connection.
     ///
     /// See [`Connection::max_negotiating_inbound_streams`].
-    max_negotiating_inbound_streams: usize,
+    legacy_max_negotiating_inbound_streams: Option<usize>,
 
     /// The executor to use for running the background tasks. If `None`,
     /// the tasks are kept in `local_spawns` instead and polled on the
@@ -269,7 +269,7 @@ where
             task_command_buffer_size: config.task_command_buffer_size,
             dial_concurrency_factor: config.dial_concurrency_factor,
             substream_upgrade_protocol_override: config.substream_upgrade_protocol_override,
-            max_negotiating_inbound_streams: config.max_negotiating_inbound_streams,
+            legacy_max_negotiating_inbound_streams: config.legacy_max_negotiating_inbound_streams,
             executor: config.executor,
             local_spawns: FuturesUnordered::new(),
             pending_connection_events_tx,
@@ -751,7 +751,7 @@ where
                         muxer,
                         handler.into_handler(&obtained_peer_id, &endpoint),
                         self.substream_upgrade_protocol_override,
-                        self.max_negotiating_inbound_streams,
+                        self.legacy_max_negotiating_inbound_streams,
                     );
                     self.spawn(
                         task::new_for_established_connection(
@@ -1165,7 +1165,7 @@ pub struct PoolConfig {
     /// The maximum number of inbound streams concurrently negotiating on a connection.
     ///
     /// See [`Connection::max_negotiating_inbound_streams`].
-    max_negotiating_inbound_streams: usize,
+    legacy_max_negotiating_inbound_streams: Option<usize>,
 }
 
 impl Default for PoolConfig {
@@ -1177,7 +1177,7 @@ impl Default for PoolConfig {
             // Set to a default of 8 based on frequency of dialer connections
             dial_concurrency_factor: NonZeroU8::new(8).expect("8 > 0"),
             substream_upgrade_protocol_override: None,
-            max_negotiating_inbound_streams: 128,
+            legacy_max_negotiating_inbound_streams: None,
         }
     }
 }
@@ -1241,7 +1241,7 @@ impl PoolConfig {
     ///
     /// See [`Connection::max_negotiating_inbound_streams`].
     pub fn with_max_negotiating_inbound_streams(mut self, v: usize) -> Self {
-        self.max_negotiating_inbound_streams = v;
+        self.legacy_max_negotiating_inbound_streams = Some(v);
         self
     }
 }

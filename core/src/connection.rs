@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::multiaddr::{Multiaddr, Protocol};
+use std::fmt;
 
 /// Connection identifier.
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
@@ -32,6 +33,12 @@ impl ConnectionId {
     /// that all connection IDs are based on non-negative integers.
     pub fn new(id: usize) -> Self {
         Self(id)
+    }
+}
+
+impl fmt::Display for ConnectionId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 

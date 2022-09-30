@@ -29,6 +29,7 @@ use libp2p_core::{
     upgrade::{EitherUpgrade, NegotiationError, ProtocolError, SelectUpgrade, UpgradeError},
     ConnectedPoint, Multiaddr, PeerId,
 };
+use std::cmp::max;
 use std::{cmp, task::Context, task::Poll};
 
 /// Implementation of `IntoConnectionHandler` that combines two protocols into one.
@@ -113,8 +114,8 @@ where
         SendWrapper<TProto1::OutboundProtocol>,
         SendWrapper<TProto2::OutboundProtocol>,
     >;
-    type OutboundOpenInfo = EitherOutput<TProto1::OutboundOpenInfo, TProto2::OutboundOpenInfo>;
     type InboundOpenInfo = (TProto1::InboundOpenInfo, TProto2::InboundOpenInfo);
+    type OutboundOpenInfo = EitherOutput<TProto1::OutboundOpenInfo, TProto2::OutboundOpenInfo>;
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
         let proto1 = self.proto1.listen_protocol();
@@ -124,6 +125,28 @@ where
         let (u2, i2) = proto2.into_upgrade();
         let choice = SelectUpgrade::new(SendWrapper(u1), SendWrapper(u2));
         SubstreamProtocol::new(choice, (i1, i2)).with_timeout(timeout)
+    }
+
+    fn max_inbound_streams(&self) -> usize {
+        max(
+            self.proto1.max_inbound_streams(),
+            self.proto2.max_inbound_streams(),
+        )
+    }
+
+    fn inject_fully_negotiated_inbound(
+        &mut self,
+        protocol: <Self::InboundProtocol as InboundUpgradeSend>::Output,
+        (i1, i2): Self::InboundOpenInfo,
+    ) {
+        match protocol {
+            EitherOutput::First(protocol) => {
+                self.proto1.inject_fully_negotiated_inbound(protocol, i1)
+            }
+            EitherOutput::Second(protocol) => {
+                self.proto2.inject_fully_negotiated_inbound(protocol, i2)
+            }
+        }
     }
 
     fn inject_fully_negotiated_outbound(
@@ -143,21 +166,6 @@ where
             }
             (EitherOutput::Second(_), EitherOutput::First(_)) => {
                 panic!("wrong API usage: the protocol doesn't match the upgrade info")
-            }
-        }
-    }
-
-    fn inject_fully_negotiated_inbound(
-        &mut self,
-        protocol: <Self::InboundProtocol as InboundUpgradeSend>::Output,
-        (i1, i2): Self::InboundOpenInfo,
-    ) {
-        match protocol {
-            EitherOutput::First(protocol) => {
-                self.proto1.inject_fully_negotiated_inbound(protocol, i1)
-            }
-            EitherOutput::Second(protocol) => {
-                self.proto2.inject_fully_negotiated_inbound(protocol, i2)
             }
         }
     }

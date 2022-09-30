@@ -60,6 +60,8 @@ pub use one_shot::{OneShotHandler, OneShotHandlerConfig};
 pub use pending::PendingConnectionHandler;
 pub use select::{ConnectionHandlerSelect, IntoConnectionHandlerSelect};
 
+pub const DEFAULT_MAX_INBOUND_STREAMS: usize = 128;
+
 /// A handler for a set of protocols used on a connection with a remote.
 ///
 /// This trait should be implemented for a type that maintains the state for
@@ -116,6 +118,13 @@ pub trait ConnectionHandler: Send + 'static {
     /// >           not supported, (eg. when only allowing one substream at a time for a protocol).
     /// >           This allows a remote to put the list of supported protocols in a cache.
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo>;
+
+    /// The maximum number of inbound substreams allowed on the underlying connection.
+    ///
+    /// Once this limit is hit, we will stop accepting new inbound streams from the remote.
+    fn max_inbound_streams(&self) -> usize {
+        DEFAULT_MAX_INBOUND_STREAMS
+    }
 
     /// Injects the output of a successful upgrade on a new inbound substream.
     ///

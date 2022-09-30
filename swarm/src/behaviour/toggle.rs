@@ -277,8 +277,8 @@ where
     type InboundProtocol =
         EitherUpgrade<SendWrapper<TInner::InboundProtocol>, SendWrapper<DeniedUpgrade>>;
     type OutboundProtocol = TInner::OutboundProtocol;
-    type OutboundOpenInfo = TInner::OutboundOpenInfo;
     type InboundOpenInfo = Either<TInner::InboundOpenInfo, ()>;
+    type OutboundOpenInfo = TInner::OutboundOpenInfo;
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
         if let Some(inner) = self.inner.as_ref() {
@@ -292,6 +292,13 @@ where
                 Either::Right(()),
             )
         }
+    }
+
+    fn max_inbound_streams(&self) -> usize {
+        self.inner
+            .as_ref()
+            .map(|h| h.max_inbound_streams())
+            .unwrap_or(0)
     }
 
     fn inject_fully_negotiated_inbound(

@@ -121,6 +121,14 @@ where
         SubstreamProtocol::new(upgrade, info).with_timeout(timeout)
     }
 
+    fn max_inbound_streams(&self) -> usize {
+        self.handlers
+            .values()
+            .map(|h| h.max_inbound_streams())
+            .max()
+            .unwrap_or(0) // No handlers? No substreams.
+    }
+
     fn inject_fully_negotiated_outbound(
         &mut self,
         protocol: <Self::OutboundProtocol as OutboundUpgradeSend>::Output,

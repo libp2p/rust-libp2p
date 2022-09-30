@@ -94,20 +94,8 @@ where
         }
     }
 
-    fn inject_fully_negotiated_outbound(
-        &mut self,
-        output: <Self::OutboundProtocol as OutboundUpgradeSend>::Output,
-        info: Self::OutboundOpenInfo,
-    ) {
-        match (self, output, info) {
-            (Either::Left(handler), EitherOutput::First(output), Either::Left(info)) => {
-                handler.inject_fully_negotiated_outbound(output, info)
-            }
-            (Either::Right(handler), EitherOutput::Second(output), Either::Right(info)) => {
-                handler.inject_fully_negotiated_outbound(output, info)
-            }
-            _ => unreachable!(),
-        }
+    fn max_inbound_streams(&self) -> usize {
+        either::for_both!(self, inner => inner.max_inbound_streams())
     }
 
     fn inject_fully_negotiated_inbound(
@@ -121,6 +109,22 @@ where
             }
             (Either::Right(handler), EitherOutput::Second(output), Either::Right(info)) => {
                 handler.inject_fully_negotiated_inbound(output, info)
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    fn inject_fully_negotiated_outbound(
+        &mut self,
+        output: <Self::OutboundProtocol as OutboundUpgradeSend>::Output,
+        info: Self::OutboundOpenInfo,
+    ) {
+        match (self, output, info) {
+            (Either::Left(handler), EitherOutput::First(output), Either::Left(info)) => {
+                handler.inject_fully_negotiated_outbound(output, info)
+            }
+            (Either::Right(handler), EitherOutput::Second(output), Either::Right(info)) => {
+                handler.inject_fully_negotiated_outbound(output, info)
             }
             _ => unreachable!(),
         }

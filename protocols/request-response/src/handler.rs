@@ -62,6 +62,8 @@ where
     substream_timeout: Duration,
     /// The current connection keep-alive.
     keep_alive: KeepAlive,
+    /// The maximum number of allowed inbound streams.
+    max_inbound_streams: usize,
     /// A pending fatal error that results in the connection being closed.
     pending_error: Option<ConnectionHandlerUpgrErr<io::Error>>,
     /// Queue of events to emit in `poll()`.
@@ -93,6 +95,7 @@ where
         codec: TCodec,
         keep_alive_timeout: Duration,
         substream_timeout: Duration,
+        max_inbound_streams: usize,
         inbound_request_id: Arc<AtomicU64>,
     ) -> Self {
         Self {
@@ -101,6 +104,7 @@ where
             keep_alive: KeepAlive::Yes,
             keep_alive_timeout,
             substream_timeout,
+            max_inbound_streams,
             outbound: VecDeque::new(),
             inbound: FuturesUnordered::new(),
             pending_events: VecDeque::new(),
@@ -199,8 +203,8 @@ where
     type Error = ConnectionHandlerUpgrErr<io::Error>;
     type InboundProtocol = ResponseProtocol<TCodec>;
     type OutboundProtocol = RequestProtocol<TCodec>;
-    type OutboundOpenInfo = RequestId;
     type InboundOpenInfo = RequestId;
+    type OutboundOpenInfo = RequestId;
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
         // A channel for notifying the handler when the inbound
@@ -234,6 +238,10 @@ where
             .push(rq_recv.map_ok(move |rq| (rq, rs_send)).boxed());
 
         SubstreamProtocol::new(proto, request_id).with_timeout(self.substream_timeout)
+    }
+
+    fn max_inbound_streams(&self) -> usize {
+        self.max_inbound_streams
     }
 
     fn inject_fully_negotiated_inbound(&mut self, sent: bool, request_id: RequestId) {

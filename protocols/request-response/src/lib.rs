@@ -267,6 +267,7 @@ impl fmt::Display for RequestId {
 pub struct RequestResponseConfig {
     request_timeout: Duration,
     connection_keep_alive: Duration,
+    max_pending_inbound_requests: usize,
 }
 
 impl Default for RequestResponseConfig {
@@ -274,6 +275,7 @@ impl Default for RequestResponseConfig {
         Self {
             connection_keep_alive: Duration::from_secs(10),
             request_timeout: Duration::from_secs(10),
+            max_pending_inbound_requests: libp2p_swarm::handler::DEFAULT_MAX_INBOUND_STREAMS,
         }
     }
 }
@@ -288,6 +290,16 @@ impl RequestResponseConfig {
     /// Sets the timeout for inbound and outbound requests.
     pub fn set_request_timeout(&mut self, v: Duration) -> &mut Self {
         self.request_timeout = v;
+        self
+    }
+
+    /// Sets the maximum number of pending inbound requests.
+    ///
+    /// Once this limit is hit, we will stop accepting requests from the remote until an
+    /// inbound substream is closed. Either because you send a response, a timeout is hit or
+    /// the remote closed the stream.
+    pub fn set_max_pending_inbound_requests(&mut self, n: usize) -> &mut Self {
+        self.max_pending_inbound_requests = n;
         self
     }
 }
@@ -573,6 +585,7 @@ where
             self.codec.clone(),
             self.config.connection_keep_alive,
             self.config.request_timeout,
+            self.config.max_pending_inbound_requests,
             self.next_inbound_id.clone(),
         )
     }

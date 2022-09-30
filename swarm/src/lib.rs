@@ -1371,6 +1371,10 @@ where
     /// The maximum number of inbound streams concurrently negotiating on a connection.
     ///
     /// See [`PoolConfig::with_max_negotiating_inbound_streams`].
+    #[deprecated(
+        since = "0.40.0",
+        note = "Override `ConnectionHandler::max_inbound_streams instead.`"
+    )]
     pub fn max_negotiating_inbound_streams(mut self, v: usize) -> Self {
         self.pool_config = self.pool_config.with_max_negotiating_inbound_streams(v);
         self
