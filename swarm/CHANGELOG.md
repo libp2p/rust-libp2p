@@ -1,8 +1,15 @@
-# 0.39.1 [unreleased]
+# 0.40.0 [unreleased]
 
 - Bump rand to 0.8 and quickcheck to 1. See [PR 2857].
 
+- Update to `libp2p-core` `v0.37.0`.
+
 [PR 2857]: https://github.com/libp2p/rust-libp2p/pull/2857
+
+- Pass actual `PeerId` of dial to `NetworkBehaviour::inject_dial_failure` on `DialError::ConnectionLimit`. See [PR 2928].
+
+[PR 2928]: https://github.com/libp2p/rust-libp2p/pull/2928
+
 
 # 0.39.0
 
