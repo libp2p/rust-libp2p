@@ -41,8 +41,7 @@ use libp2p::{
     identify::{Identify, IdentifyConfig, IdentifyEvent},
     identity,
     multiaddr::Protocol,
-    noise,
-    ping::{self, PingEvent},
+    noise, ping,
     pnet::{PnetConfig, PreSharedKey},
     swarm::SwarmEvent,
     tcp,
@@ -164,7 +163,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     enum MyBehaviourEvent {
         Gossipsub(GossipsubEvent),
         Identify(IdentifyEvent),
-        Ping(PingEvent),
+        Ping(ping::Event),
     }
 
     impl From<GossipsubEvent> for MyBehaviourEvent {
@@ -179,8 +178,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    impl From<PingEvent> for MyBehaviourEvent {
-        fn from(event: PingEvent) -> Self {
+    impl From<ping::Event> for MyBehaviourEvent {
+        fn from(event: ping::Event) -> Self {
             MyBehaviourEvent::Ping(event)
         }
     }
