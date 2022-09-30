@@ -29,6 +29,11 @@ tokio = ["tokio-crate", "if-addrs"]
 async-io = ["async-io-crate", "if-watch"]
 
 [dev-dependencies]
+anyhow = "1.0.65"
 async-std = { version = "1.6.5", features = ["attributes"] }
-tokio-crate = { package = "tokio", version = "1.0.1", default-features = false, features = ["net", "rt"] }
+tokio-crate = { package = "tokio", version = "1.0.1", features = ["full"] }
 env_logger = "0.9.0"
+
+[[example]]
+name = "tokio_listen"
+required-features = ["tokio"]
