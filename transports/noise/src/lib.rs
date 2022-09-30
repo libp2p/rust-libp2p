@@ -273,7 +273,7 @@ where
 ///
 /// `XX` is a 1.5 round-trip (3 messages) handshake.
 /// The first message in a noise handshake is unencrypted. In the `XX` handshake pattern, that message
-/// is empty and thus does not leak and information. The identities are then exchanged in the second
+/// is empty and thus does not leak any information. The identities are then exchanged in the second
 /// and third message.
 ///
 /// ```raw
@@ -319,7 +319,7 @@ where
 ///
 /// `XX` is a 1.5 round-trip (3 messages) handshake.
 /// The first message in a noise handshake is unencrypted. In the `XX` handshake pattern, that message
-/// is empty and thus does not leak and information. The identities are then exchanged in the second
+/// is empty and thus does not leak any information. The identities are then exchanged in the second
 /// and third message.
 ///
 /// ```raw
