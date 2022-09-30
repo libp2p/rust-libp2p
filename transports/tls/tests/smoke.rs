@@ -61,7 +61,7 @@ fn make_swarm() -> Swarm<DummyBehaviour> {
 
     let transport = MemoryTransport::default()
         .upgrade(Version::V1)
-        .authenticate(libp2p_tls::upgrade::Config::new(&identity).unwrap())
+        .authenticate(libp2p_tls::Config::new(&identity).unwrap())
         .multiplex(libp2p::yamux::YamuxConfig::default())
         .boxed();
 
