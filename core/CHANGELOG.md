@@ -1,8 +1,16 @@
-# 0.37.0
+# 0.37.0 [unreleased]
 
-- Add `StreamMuxerBox::active_inbound_streams` and `StreamMuxerBox::active_outbound_streams`. See [PR 2878]. 
+- Implement `Hash` and `Ord` for `PublicKey`. See [PR 2915].
+
+- Remove default features. If you previously depended on `secp256k1` or `ecdsa` you need to enable these explicitly 
+  now. See [PR 2918].
+
+- Add `StreamMuxerBox::active_inbound_streams` and `StreamMuxerBox::active_outbound_streams`. See [PR 2878].
+
 - Make `SubstreamBox::new` constructor module private. See [PR 2878].
 
+[PR 2915]: https://github.com/libp2p/rust-libp2p/pull/2915
+[PR 2918]: https://github.com/libp2p/rust-libp2p/pull/2918
 [PR 2878]: https://github.com/libp2p/rust-libp2p/pull/2878
 
 # 0.36.0

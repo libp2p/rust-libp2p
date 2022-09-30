@@ -535,7 +535,7 @@ where
             Ok(_connection_id) => Ok(()),
             Err((connection_limit, handler)) => {
                 let error = DialError::ConnectionLimit(connection_limit);
-                self.behaviour.inject_dial_failure(None, handler, &error);
+                self.behaviour.inject_dial_failure(peer_id, handler, &error);
                 Err(error)
             }
         }
@@ -1627,8 +1627,7 @@ mod tests {
     use libp2p_core::multiaddr::multiaddr;
     use libp2p_core::transport::TransportEvent;
     use libp2p_core::Endpoint;
-    use quickcheck::{quickcheck, Arbitrary, Gen, QuickCheck};
-    use rand::Rng;
+    use quickcheck::*;
 
     // Test execution state.
     // Connection => Disconnecting => Connecting.
@@ -2051,8 +2050,8 @@ mod tests {
         struct DialConcurrencyFactor(NonZeroU8);
 
         impl Arbitrary for DialConcurrencyFactor {
-            fn arbitrary<G: Gen>(g: &mut G) -> Self {
-                Self(NonZeroU8::new(g.gen_range(1, 11)).unwrap())
+            fn arbitrary(g: &mut Gen) -> Self {
+                Self(NonZeroU8::new(g.gen_range(1..11)).unwrap())
             }
         }
 
@@ -2125,7 +2124,7 @@ mod tests {
     fn max_outgoing() {
         use rand::Rng;
 
-        let outgoing_limit = rand::thread_rng().gen_range(1, 10);
+        let outgoing_limit = rand::thread_rng().gen_range(1..10);
 
         let limits = ConnectionLimits::default().with_max_pending_outgoing(Some(outgoing_limit));
         let mut network = new_test_swarm::<_, ()>(DummyConnectionHandler {
@@ -2173,14 +2172,12 @@ mod tests {
 
     #[test]
     fn max_established_incoming() {
-        use rand::Rng;
-
         #[derive(Debug, Clone)]
         struct Limit(u32);
 
         impl Arbitrary for Limit {
-            fn arbitrary<G: Gen>(g: &mut G) -> Self {
-                Self(g.gen_range(1, 10))
+            fn arbitrary(g: &mut Gen) -> Self {
+                Self(g.gen_range(1..10))
             }
         }
 

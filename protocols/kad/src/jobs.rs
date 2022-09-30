@@ -335,15 +335,15 @@ mod tests {
     fn rand_put_record_job() -> PutRecordJob {
         let mut rng = rand::thread_rng();
         let id = PeerId::random();
-        let replicate_interval = Duration::from_secs(rng.gen_range(1, 60));
-        let publish_interval = Some(replicate_interval * rng.gen_range(1, 10));
-        let record_ttl = Some(Duration::from_secs(rng.gen_range(1, 600)));
+        let replicate_interval = Duration::from_secs(rng.gen_range(1..60));
+        let publish_interval = Some(replicate_interval * rng.gen_range(1..10));
+        let record_ttl = Some(Duration::from_secs(rng.gen_range(1..600)));
         PutRecordJob::new(id.clone(), replicate_interval, publish_interval, record_ttl)
     }
 
     fn rand_add_provider_job() -> AddProviderJob {
         let mut rng = rand::thread_rng();
-        let interval = Duration::from_secs(rng.gen_range(1, 60));
+        let interval = Duration::from_secs(rng.gen_range(1..60));
         AddProviderJob::new(interval)
     }
 

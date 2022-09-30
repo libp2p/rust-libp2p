@@ -1,5 +1,11 @@
 # 0.40.0 [unreleased]
 
+- Bump rand to 0.8 and quickcheck to 1. See [PR 2857].
+
+- Update to `libp2p-core` `v0.37.0`.
+
+- Pass actual `PeerId` of dial to `NetworkBehaviour::inject_dial_failure` on `DialError::ConnectionLimit`. See [PR 2928].
+
 - Use the total number of alive inbound streams for back-pressure. This can have a BIG impact on your application
   depending on how it uses `libp2p`. Previously, the limit for inbound streams per connection only applied to the
   _upgrade_ phase, i.e. for the time `InboundUpgrade` was running. Any stream being returned from `InboundUpgrade` and
@@ -9,6 +15,8 @@
   that limit is hit. You can configure the number of allowed substreams by overriding
   `ConnectionHandler::max_inbound_streams`. See [PR 2878].
 
+[PR 2857]: https://github.com/libp2p/rust-libp2p/pull/2857
+[PR 2928]: https://github.com/libp2p/rust-libp2p/pull/2928
 [PR 2878]: https://github.com/libp2p/rust-libp2p/pull/2878
 
 # 0.39.0

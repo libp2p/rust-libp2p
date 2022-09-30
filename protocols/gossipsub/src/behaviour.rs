@@ -3664,7 +3664,6 @@ mod local_test {
     use crate::IdentTopic;
     use asynchronous_codec::Encoder;
     use quickcheck::*;
-    use rand::Rng;
 
     fn empty_rpc() -> GossipsubRpc {
         GossipsubRpc {
@@ -3701,16 +3700,16 @@ mod local_test {
     }
 
     impl Arbitrary for GossipsubRpc {
-        fn arbitrary<G: Gen>(g: &mut G) -> Self {
+        fn arbitrary(g: &mut Gen) -> Self {
             let mut rpc = empty_rpc();
 
-            for _ in 0..g.gen_range(0, 10) {
+            for _ in 0..g.gen_range(0..10u8) {
                 rpc.subscriptions.push(test_subscription());
             }
-            for _ in 0..g.gen_range(0, 10) {
+            for _ in 0..g.gen_range(0..10u8) {
                 rpc.messages.push(test_message());
             }
-            for _ in 0..g.gen_range(0, 10) {
+            for _ in 0..g.gen_range(0..10u8) {
                 rpc.control_msgs.push(test_control());
             }
             rpc
