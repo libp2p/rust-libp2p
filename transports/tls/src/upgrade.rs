@@ -10,7 +10,7 @@ use std::net::{IpAddr, Ipv4Addr};
 use std::sync::Arc;
 
 #[derive(thiserror::Error, Debug)]
-pub enum Error {
+pub enum UpgradeError {
     #[error("Failed to generate certificate")]
     CertificateGeneration(#[from] certificate::GenError),
     #[error("Failed to upgrade server connection")]
@@ -50,7 +50,7 @@ where
     C: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
     type Output = (PeerId, TlsStream<C>);
-    type Error = Error;
+    type Error = UpgradeError;
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
     fn upgrade_inbound(self, socket: C, _: Self::Info) -> Self::Future {
@@ -58,7 +58,7 @@ where
             let stream = futures_rustls::TlsAcceptor::from(Arc::new(self.server))
                 .accept(socket)
                 .await
-                .map_err(Error::ServerUpgrade)?;
+                .map_err(UpgradeError::ServerUpgrade)?;
 
             let peer_id = extract_single_certificate(stream.get_ref().1)?.peer_id();
 
@@ -73,7 +73,7 @@ where
     C: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
     type Output = (PeerId, TlsStream<C>);
-    type Error = Error;
+    type Error = UpgradeError;
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
     fn upgrade_outbound(self, socket: C, _: Self::Info) -> Self::Future {
@@ -85,7 +85,7 @@ where
             let stream = futures_rustls::TlsConnector::from(Arc::new(self.client))
                 .connect(name, socket)
                 .await
-                .map_err(Error::ClientUpgrade)?;
+                .map_err(UpgradeError::ClientUpgrade)?;
 
             let peer_id = extract_single_certificate(stream.get_ref().1)?.peer_id();
 

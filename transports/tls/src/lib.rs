@@ -23,20 +23,21 @@
 //! See <https://github.com/libp2p/specs/blob/master/tls/tls.md>.
 
 pub mod certificate;
-pub mod upgrade;
+mod upgrade;
 mod verifier;
 
 use libp2p_core::{identity::Keypair, PeerId};
-use std::sync::Arc;
-
 use rustls::{
     cipher_suite::{
         TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384, TLS13_CHACHA20_POLY1305_SHA256,
     },
     SupportedCipherSuite,
 };
+use std::sync::Arc;
 
 pub use futures_rustls::TlsStream;
+pub use upgrade::Config;
+pub use upgrade::UpgradeError;
 
 /// A list of the TLS 1.3 cipher suites supported by rustls.
 // By default rustls creates client/server configs with both
