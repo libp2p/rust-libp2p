@@ -203,7 +203,7 @@ impl StreamMuxer for QuicMuxer {
         if connection.send_stream_count() != 0 {
             for substream in substreams.keys() {
                 if let Err(e) = connection.finish_substream(*substream) {
-                    tracing::warn!("substream finish error on muxer close: {}", e);
+                    log::warn!("substream finish error on muxer close: {}", e);
                 }
             }
         }

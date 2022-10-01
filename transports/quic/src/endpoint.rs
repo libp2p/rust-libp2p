@@ -389,7 +389,7 @@ impl<P: Provider> EndpointDriver<P> {
                 if is_drained_event {
                     self.alive_connections.remove(&connection_id);
                     if self.is_orphaned && self.alive_connections.is_empty() {
-                        tracing::info!(
+                        log::info!(
                             "Listener closed and no active connections remain. Shutting down the background task."
                         );
                         return ControlFlow::Break(());
@@ -408,7 +408,7 @@ impl<P: Provider> EndpointDriver<P> {
                         // If the connection is busy, it won't sent us any more events to handle.
                         let _ = sender.clone().start_send(event_back);
                     } else {
-                        tracing::error!("State mismatch: event for closed connection");
+                        log::error!("State mismatch: event for closed connection");
                     }
                 }
             }
@@ -442,7 +442,7 @@ impl<P: Provider> EndpointDriver<P> {
                     // the remote.
                     let _ = sender.try_send(event);
                 } else {
-                    tracing::error!("State mismatch: event for closed connection");
+                    log::error!("State mismatch: event for closed connection");
                 }
             }
             quinn_proto::DatagramEvent::NewConnection(connec) => {
@@ -452,7 +452,7 @@ impl<P: Provider> EndpointDriver<P> {
                 let connection_tx = match self.new_connection_tx.as_mut() {
                     Some(tx) => tx,
                     None => {
-                        tracing::warn!(
+                        log::warn!(
                             "Endpoint reported a new connection even though server capabilities are disabled."
                         );
                         return ControlFlow::Continue(());
@@ -475,7 +475,7 @@ impl<P: Provider> EndpointDriver<P> {
                         self.new_connection_tx = None;
                         self.is_orphaned = true;
                     }
-                    Err(_) => tracing::warn!(
+                    Err(_) => log::warn!(
                         "Dropping new incoming connection {:?} because the channel to the listener is full",
                         connec_id
                     )
@@ -493,7 +493,7 @@ impl<P: Provider> Future for EndpointDriver<P> {
             if let Some((send_packet, len)) = self.next_packet_out.as_mut() {
                 match ready!(send_packet.poll_unpin(cx)) {
                     Ok(n) if n == *len => {}
-                    Ok(_) => tracing::error!(
+                    Ok(_) => log::error!(
                         "QUIC UDP socket violated expectation that packets are always fully \
                         transferred"
                     ),
@@ -502,7 +502,7 @@ impl<P: Provider> Future for EndpointDriver<P> {
                     // robust to packet losses and it is consequently not a logic error to process with
                     // normal operations.
                     Err(err) => {
-                        tracing::error!("Error while sending on QUIC UDP socket: {:?}", err)
+                        log::error!("Error while sending on QUIC UDP socket: {:?}", err)
                     }
                 }
                 self.next_packet_out = None;
@@ -536,7 +536,7 @@ impl<P: Provider> Future for EndpointDriver<P> {
                 // Errors on the socket are expected to never happen, and we handle them by
                 // simply printing a log message.
                 Poll::Ready(Some(Err(err))) => {
-                    tracing::error!("Error while receive on QUIC UDP socket: {:?}", err);
+                    log::error!("Error while receive on QUIC UDP socket: {:?}", err);
                     continue;
                 }
                 Poll::Ready(None) => {

@@ -14,6 +14,7 @@ futures = "0.3.15"
 futures-timer = "3.0.2"
 if-watch = "2.0.0"
 libp2p-core = { version = "0.37.0", path = "../../core" }
+log = "0.4"
 parking_lot = "0.12.0"
 quinn-proto = { version = "0.8.2", default-features = false, features = ["tls-rustls"] }
 rand = "0.8.5"
@@ -22,7 +23,6 @@ ring = "0.16.20"
 rustls = { version = "0.20.2", default-features = false, features = ["dangerous_configuration"] }
 thiserror = "1.0.26"
 tokio-crate = { package = "tokio", version = "1.21.1", default-features = false, features = ["net", "rt"], optional = true }
-tracing = "0.1.30"
 webpki = "0.22.0"
 x509-parser = "0.13.0"
 yasna = "0.5.0"

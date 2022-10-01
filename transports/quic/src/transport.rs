@@ -350,7 +350,7 @@ impl Listener {
                     if let Some(listen_addr) =
                         ip_to_listenaddr(self.endpoint_channel.socket_addr(), inet.addr())
                     {
-                        tracing::debug!("New listen address: {}", listen_addr);
+                        log::debug!("New listen address: {}", listen_addr);
                         return Poll::Ready(TransportEvent::NewAddress {
                             listener_id: self.listener_id,
                             listen_addr,
@@ -361,7 +361,7 @@ impl Listener {
                     if let Some(listen_addr) =
                         ip_to_listenaddr(self.endpoint_channel.socket_addr(), inet.addr())
                     {
-                        tracing::debug!("Expired listen address: {}", listen_addr);
+                        log::debug!("Expired listen address: {}", listen_addr);
                         return Poll::Ready(TransportEvent::AddressExpired {
                             listener_id: self.listener_id,
                             listen_addr,
