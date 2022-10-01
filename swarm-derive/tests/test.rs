@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::prelude::*;
+use libp2p::ping;
 use libp2p::swarm::{NetworkBehaviour, SwarmEvent};
 use libp2p_swarm_derive::*;
 use std::fmt::Debug;
@@ -40,7 +41,7 @@ fn one_field() {
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
     struct Foo {
-        ping: libp2p::ping::Ping,
+        ping: ping::Behaviour,
     }
 
     #[allow(dead_code)]
@@ -48,7 +49,7 @@ fn one_field() {
     fn foo() {
         let _out_event: <Foo as NetworkBehaviour>::OutEvent = unimplemented!();
         match _out_event {
-            FooEvent::Ping(libp2p::ping::Event { .. }) => {}
+            FooEvent::Ping(ping::Event { .. }) => {}
         }
     }
 }
@@ -58,7 +59,7 @@ fn two_fields() {
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
     struct Foo {
-        ping: libp2p::ping::Ping,
+        ping: ping::Behaviour,
         identify: libp2p::identify::Identify,
     }
 
@@ -67,7 +68,7 @@ fn two_fields() {
     fn foo() {
         let _out_event: <Foo as NetworkBehaviour>::OutEvent = unimplemented!();
         match _out_event {
-            FooEvent::Ping(libp2p::ping::Event { .. }) => {}
+            FooEvent::Ping(ping::Event { .. }) => {}
             FooEvent::Identify(event) => {
                 let _: libp2p::identify::IdentifyEvent = event;
             }
@@ -80,7 +81,7 @@ fn three_fields() {
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
     struct Foo {
-        ping: libp2p::ping::Ping,
+        ping: ping::Behaviour,
         identify: libp2p::identify::Identify,
         kad: libp2p::kad::Kademlia<libp2p::kad::record::store::MemoryStore>,
     }
@@ -90,7 +91,7 @@ fn three_fields() {
     fn foo() {
         let _out_event: <Foo as NetworkBehaviour>::OutEvent = unimplemented!();
         match _out_event {
-            FooEvent::Ping(libp2p::ping::Event { .. }) => {}
+            FooEvent::Ping(ping::Event { .. }) => {}
             FooEvent::Identify(event) => {
                 let _: libp2p::identify::IdentifyEvent = event;
             }
@@ -107,17 +108,17 @@ fn custom_event() {
     #[derive(NetworkBehaviour)]
     #[behaviour(out_event = "MyEvent")]
     struct Foo {
-        ping: libp2p::ping::Ping,
+        ping: ping::Behaviour,
         identify: libp2p::identify::Identify,
     }
 
     enum MyEvent {
-        Ping(libp2p::ping::PingEvent),
+        Ping(ping::Event),
         Identify(libp2p::identify::IdentifyEvent),
     }
 
-    impl From<libp2p::ping::PingEvent> for MyEvent {
-        fn from(event: libp2p::ping::PingEvent) -> Self {
+    impl From<ping::Event> for MyEvent {
+        fn from(event: ping::Event) -> Self {
             MyEvent::Ping(event)
         }
     }
@@ -140,17 +141,17 @@ fn custom_event_mismatching_field_names() {
     #[derive(NetworkBehaviour)]
     #[behaviour(out_event = "MyEvent")]
     struct Foo {
-        a: libp2p::ping::Ping,
+        a: ping::Behaviour,
         b: libp2p::identify::Identify,
     }
 
     enum MyEvent {
-        Ping(libp2p::ping::PingEvent),
+        Ping(ping::Event),
         Identify(libp2p::identify::IdentifyEvent),
     }
 
-    impl From<libp2p::ping::PingEvent> for MyEvent {
-        fn from(event: libp2p::ping::PingEvent) -> Self {
+    impl From<ping::Event> for MyEvent {
+        fn from(event: ping::Event) -> Self {
             MyEvent::Ping(event)
         }
     }
@@ -175,7 +176,7 @@ fn bound() {
     where
         <T as NetworkBehaviour>::OutEvent: Debug,
     {
-        ping: libp2p::ping::Ping,
+        ping: ping::Behaviour,
         bar: T,
     }
 }
@@ -189,7 +190,7 @@ fn where_clause() {
         T: Copy + NetworkBehaviour,
         <T as NetworkBehaviour>::OutEvent: Debug,
     {
-        ping: libp2p::ping::Ping,
+        ping: ping::Behaviour,
         bar: T,
     }
 }
@@ -199,7 +200,7 @@ fn nested_derives_with_import() {
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
     struct Foo {
-        ping: libp2p::ping::Ping,
+        ping: ping::Behaviour,
     }
 
     #[allow(dead_code)]
@@ -213,7 +214,7 @@ fn nested_derives_with_import() {
     fn foo() {
         let _out_event: <Bar as NetworkBehaviour>::OutEvent = unimplemented!();
         match _out_event {
-            BarEvent::Foo(FooEvent::Ping(libp2p::ping::Event { .. })) => {}
+            BarEvent::Foo(FooEvent::Ping(ping::Event { .. })) => {}
         }
     }
 }
@@ -221,12 +222,12 @@ fn nested_derives_with_import() {
 #[test]
 fn custom_event_emit_event_through_poll() {
     enum BehaviourOutEvent {
-        Ping(libp2p::ping::PingEvent),
+        Ping(ping::Event),
         Identify(libp2p::identify::IdentifyEvent),
     }
 
-    impl From<libp2p::ping::PingEvent> for BehaviourOutEvent {
-        fn from(event: libp2p::ping::PingEvent) -> Self {
+    impl From<ping::Event> for BehaviourOutEvent {
+        fn from(event: ping::Event) -> Self {
             BehaviourOutEvent::Ping(event)
         }
     }
@@ -241,7 +242,7 @@ fn custom_event_emit_event_through_poll() {
     #[derive(NetworkBehaviour)]
     #[behaviour(out_event = "BehaviourOutEvent")]
     struct Foo {
-        ping: libp2p::ping::Ping,
+        ping: ping::Behaviour,
         identify: libp2p::identify::Identify,
     }
 
@@ -272,7 +273,7 @@ fn with_toggle() {
     #[derive(NetworkBehaviour)]
     struct Foo {
         identify: libp2p::identify::Identify,
-        ping: Toggle<libp2p::ping::Ping>,
+        ping: Toggle<ping::Behaviour>,
     }
 
     #[allow(dead_code)]
@@ -289,7 +290,7 @@ fn with_either() {
     #[derive(NetworkBehaviour)]
     struct Foo {
         kad: libp2p::kad::Kademlia<libp2p::kad::record::store::MemoryStore>,
-        ping_or_identify: Either<libp2p::ping::Ping, libp2p::identify::Identify>,
+        ping_or_identify: Either<ping::Behaviour, libp2p::identify::Identify>,
     }
 
     #[allow(dead_code)]
@@ -304,7 +305,7 @@ fn custom_event_with_either() {
 
     enum BehaviourOutEvent {
         Kad(libp2p::kad::KademliaEvent),
-        PingOrIdentify(Either<libp2p::ping::PingEvent, libp2p::identify::IdentifyEvent>),
+        PingOrIdentify(Either<ping::Event, libp2p::identify::IdentifyEvent>),
     }
 
     impl From<libp2p::kad::KademliaEvent> for BehaviourOutEvent {
@@ -313,8 +314,8 @@ fn custom_event_with_either() {
         }
     }
 
-    impl From<Either<libp2p::ping::PingEvent, libp2p::identify::IdentifyEvent>> for BehaviourOutEvent {
-        fn from(event: Either<libp2p::ping::PingEvent, libp2p::identify::IdentifyEvent>) -> Self {
+    impl From<Either<ping::Event, libp2p::identify::IdentifyEvent>> for BehaviourOutEvent {
+        fn from(event: Either<ping::Event, libp2p::identify::IdentifyEvent>) -> Self {
             BehaviourOutEvent::PingOrIdentify(event)
         }
     }
@@ -324,7 +325,7 @@ fn custom_event_with_either() {
     #[behaviour(out_event = "BehaviourOutEvent")]
     struct Foo {
         kad: libp2p::kad::Kademlia<libp2p::kad::record::store::MemoryStore>,
-        ping_or_identify: Either<libp2p::ping::Ping, libp2p::identify::Identify>,
+        ping_or_identify: Either<ping::Behaviour, libp2p::identify::Identify>,
     }
 
     #[allow(dead_code)]
@@ -338,7 +339,7 @@ fn generated_out_event_derive_debug() {
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
     struct Foo {
-        ping: libp2p::ping::Ping,
+        ping: ping::Behaviour,
     }
 
     fn require_debug<T>()

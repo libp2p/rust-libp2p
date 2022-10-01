@@ -91,18 +91,18 @@ pub(crate) type THandlerOutEvent<THandler> =
 ///
 /// ``` rust
 /// # use libp2p::identify::{Identify, IdentifyEvent};
-/// # use libp2p::ping::{Ping, PingEvent};
+/// # use libp2p::ping;
 /// # use libp2p::NetworkBehaviour;
 /// #[derive(NetworkBehaviour)]
 /// #[behaviour(out_event = "Event")]
 /// struct MyBehaviour {
 ///   identify: Identify,
-///   ping: Ping,
+///   ping: ping::Behaviour,
 /// }
 ///
 /// enum Event {
 ///   Identify(IdentifyEvent),
-///   Ping(PingEvent),
+///   Ping(ping::Event),
 /// }
 ///
 /// impl From<IdentifyEvent> for Event {
@@ -111,8 +111,8 @@ pub(crate) type THandlerOutEvent<THandler> =
 ///   }
 /// }
 ///
-/// impl From<PingEvent> for Event {
-///   fn from(event: PingEvent) -> Self {
+/// impl From<ping::Event> for Event {
+///   fn from(event: ping::Event) -> Self {
 ///     Self::Ping(event)
 ///   }
 /// }
