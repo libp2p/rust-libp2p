@@ -63,9 +63,10 @@ pub struct Connection {
 /// Error on the connection as a whole.
 #[derive(Debug, Clone, thiserror::Error)]
 pub enum ConnectionError {
-    /// The [`EndpointDriver`](super::endpoint::EndpointDriver) has crashed.
+    /// The task driving the endpoint has crashed.
     #[error("Endpoint driver crashed")]
     EndpointDriverCrashed,
+
     /// Error in the inner state machine.
     #[error("{0}")]
     Quinn(#[from] quinn_proto::ConnectionError),
