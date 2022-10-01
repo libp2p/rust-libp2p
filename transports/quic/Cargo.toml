@@ -37,5 +37,4 @@ async-std-crate = { package = "async-std", version = "1.12.0", features = ["attr
 libp2p = { version = "0.49.0", default-features = false, features = ["request-response"], path = "../.." }
 rand = "0.8.4"
 tokio-crate = { package = "tokio", version = "1.21.1", features = ["macros", "rt-multi-thread"] }
-tracing-subscriber = {version = "0.3.8", features = ["env-filter"] }
 quickcheck = "1"

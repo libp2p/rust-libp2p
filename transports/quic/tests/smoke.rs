@@ -36,8 +36,7 @@ fn generate_tls_keypair() -> libp2p::identity::Keypair {
     libp2p::identity::Keypair::generate_ed25519()
 }
 
-#[tracing::instrument]
-async fn create_swarm<P: Provider>(keylog: bool) -> Swarm<RequestResponse<PingCodec>> {
+async fn create_swarm<P: Provider>() -> Swarm<RequestResponse<PingCodec>> {
     let keypair = generate_tls_keypair();
     let peer_id = keypair.public().to_peer_id();
     let config = quic::Config::new(&keypair).unwrap();
@@ -51,7 +50,6 @@ async fn create_swarm<P: Provider>(keylog: bool) -> Swarm<RequestResponse<PingCo
     let protocols = iter::once((PingProtocol(), ProtocolSupport::Full));
     let cfg = RequestResponseConfig::default();
     let behaviour = RequestResponse::new(PingCodec(), protocols, cfg);
-    tracing::info!(?peer_id);
     Swarm::new(transport, behaviour, peer_id)
 }
 
@@ -61,14 +59,6 @@ async fn start_listening(swarm: &mut Swarm<RequestResponse<PingCodec>>, addr: &s
         Some(SwarmEvent::NewListenAddr { address, .. }) => address,
         e => panic!("{:?}", e),
     }
-}
-
-fn setup_global_subscriber() {
-    let filter_layer = tracing_subscriber::EnvFilter::from_default_env();
-    tracing_subscriber::fmt()
-        .with_env_filter(filter_layer)
-        .try_init()
-        .ok();
 }
 
 #[cfg(feature = "tokio")]
@@ -84,15 +74,12 @@ async fn async_std_smoke() {
 }
 
 async fn smoke<P: Provider>() {
-    setup_global_subscriber();
     let mut rng = rand::thread_rng();
 
-    let mut a = create_swarm::<P>(true).await;
-    let mut b = create_swarm::<P>(false).await;
+    let mut a = create_swarm::<P>().await;
+    let mut b = create_swarm::<P>().await;
 
     let addr = start_listening(&mut a, "/ip4/127.0.0.1/udp/0/quic").await;
-
-    tracing::info!(?addr);
 
     let mut data = vec![0; 4096 * 10];
     rng.fill_bytes(&mut data);
@@ -308,10 +295,8 @@ impl RequestResponseCodec for PingCodec {
 #[cfg(feature = "async-std")]
 #[async_std::test]
 async fn dial_failure() {
-    setup_global_subscriber();
-
-    let mut a = create_swarm::<AsyncStd>(false).await;
-    let mut b = create_swarm::<AsyncStd>(true).await;
+    let mut a = create_swarm::<AsyncStd>().await;
+    let mut b = create_swarm::<AsyncStd>().await;
 
     let addr = start_listening(&mut a, "/ip4/127.0.0.1/udp/0/quic").await;
 
@@ -342,9 +327,6 @@ async fn dial_failure() {
 fn concurrent_connections_and_streams() {
     use quickcheck::*;
 
-    setup_global_subscriber();
-
-    #[tracing::instrument]
     async fn prop<P: Provider>(
         number_listeners: NonZeroU8,
         number_streams: NonZeroU8,
@@ -362,7 +344,7 @@ fn concurrent_connections_and_streams() {
 
         // Spawn the listener nodes.
         for _ in 0..number_listeners {
-            let mut listener = create_swarm::<P>(true).await;
+            let mut listener = create_swarm::<P>().await;
             let addr = start_listening(&mut listener, "/ip4/127.0.0.1/udp/0/quic").await;
 
             listeners.push((*listener.local_peer_id(), addr));
@@ -372,12 +354,6 @@ fn concurrent_connections_and_streams() {
                     async move {
                         loop {
                             match listener.next().await {
-                                Some(SwarmEvent::ConnectionEstablished { .. }) => {
-                                    tracing::info!("listener ConnectionEstablished");
-                                }
-                                Some(SwarmEvent::IncomingConnection { .. }) => {
-                                    tracing::info!("listener IncomingConnection");
-                                }
                                 Some(SwarmEvent::Behaviour(RequestResponseEvent::Message {
                                     message:
                                         RequestResponseMessage::Request {
@@ -387,7 +363,6 @@ fn concurrent_connections_and_streams() {
                                         },
                                     ..
                                 })) => {
-                                    tracing::info!("listener got Message");
                                     listener
                                         .behaviour_mut()
                                         .send_response(channel, Pong(ping))
@@ -395,10 +370,10 @@ fn concurrent_connections_and_streams() {
                                 }
                                 Some(SwarmEvent::Behaviour(
                                     RequestResponseEvent::ResponseSent { .. },
-                                )) => {
-                                    tracing::info!("listener ResponseSent");
-                                }
-                                Some(SwarmEvent::ConnectionClosed { .. }) => {}
+                                ))
+                                | Some(SwarmEvent::ConnectionEstablished { .. })
+                                | Some(SwarmEvent::IncomingConnection { .. })
+                                | Some(SwarmEvent::ConnectionClosed { .. }) => {}
                                 Some(e) => {
                                     panic!("unexpected event {:?}", e);
                                 }
@@ -414,7 +389,7 @@ fn concurrent_connections_and_streams() {
                 .unwrap();
         }
 
-        let mut dialer = create_swarm::<P>(true).await;
+        let mut dialer = create_swarm::<P>().await;
 
         // For each listener node start `number_streams` requests.
         for (listener_peer_id, listener_addr) in &listeners {
@@ -430,11 +405,8 @@ fn concurrent_connections_and_streams() {
             let mut num_responses = 0;
             loop {
                 match dialer.next().await {
-                    Some(SwarmEvent::Dialing(_)) => {
-                        tracing::info!("dialer Dialing");
-                    }
+                    Some(SwarmEvent::Dialing(_)) => {}
                     Some(SwarmEvent::ConnectionEstablished { peer_id, .. }) => {
-                        tracing::info!("dialer Connection established");
                         for _ in 0..number_streams {
                             dialer
                                 .behaviour_mut()
@@ -449,18 +421,14 @@ fn concurrent_connections_and_streams() {
                             },
                         ..
                     })) => {
-                        tracing::info!("dialer got Message");
                         num_responses += 1;
                         assert_eq!(data, pong);
                         let should_be = number_listeners as usize * (number_streams) as usize;
-                        tracing::info!(?num_responses, ?should_be);
                         if num_responses == should_be {
                             break;
                         }
                     }
-                    Some(SwarmEvent::ConnectionClosed { .. }) => {
-                        tracing::info!("dialer ConnectionClosed");
-                    }
+                    Some(SwarmEvent::ConnectionClosed { .. }) => {}
                     e => {
                         panic!("unexpected event {:?}", e);
                     }
@@ -488,10 +456,8 @@ fn concurrent_connections_and_streams() {
 #[cfg(feature = "tokio")]
 #[tokio::test]
 async fn endpoint_reuse() {
-    setup_global_subscriber();
-
-    let mut swarm_a = create_swarm::<Tokio>(false).await;
-    let mut swarm_b = create_swarm::<Tokio>(false).await;
+    let mut swarm_a = create_swarm::<Tokio>().await;
+    let mut swarm_b = create_swarm::<Tokio>().await;
     let b_peer_id = *swarm_b.local_peer_id();
 
     let a_addr = start_listening(&mut swarm_a, "/ip4/127.0.0.1/udp/0/quic").await;
@@ -581,10 +547,8 @@ async fn endpoint_reuse() {
 #[cfg(feature = "async-std")]
 #[async_std::test]
 async fn ipv4_dial_ipv6() {
-    setup_global_subscriber();
-
-    let mut swarm_a = create_swarm::<AsyncStd>(false).await;
-    let mut swarm_b = create_swarm::<AsyncStd>(false).await;
+    let mut swarm_a = create_swarm::<AsyncStd>().await;
+    let mut swarm_b = create_swarm::<AsyncStd>().await;
 
     let a_addr = start_listening(&mut swarm_a, "/ip6/::1/udp/0/quic").await;
 
