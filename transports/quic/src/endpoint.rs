@@ -34,6 +34,7 @@ use crate::{
     transport::{self, Provider},
 };
 
+use bytes::BytesMut;
 use futures::{
     channel::{mpsc, oneshot},
     prelude::*,
@@ -41,10 +42,8 @@ use futures::{
 };
 use std::{
     collections::HashMap,
-    io,
     net::{Ipv4Addr, Ipv6Addr, SocketAddr},
     ops::ControlFlow,
-    pin::Pin,
     sync::Arc,
     task::{Context, Poll},
     time::{Duration, Instant},
@@ -292,14 +291,9 @@ pub struct EndpointDriver<P: Provider> {
     rx: mpsc::Receiver<ToEndpoint>,
 
     // Socket for sending and receiving datagrams.
-    socket: Arc<P::Socket>,
+    socket: P,
     // Future for writing the next packet to the socket.
-    next_packet_out: Option<(
-        Pin<Box<dyn Future<Output = Result<usize, io::Error>> + Send>>,
-        usize,
-    )>,
-    // Stream of inbound datagrams.
-    receive_stream: ReceiveStream<P>,
+    next_packet_out: Option<quinn_proto::Transmit>,
 
     // List of all active connections, with a sender to notify them of events.
     alive_connections:
@@ -318,32 +312,20 @@ impl<P: Provider> EndpointDriver<P> {
         new_connection_tx: Option<mpsc::Sender<Connection>>,
         server_config: Option<Arc<quinn_proto::ServerConfig>>,
         channel: EndpointChannel,
-        socket: P::Socket,
+        socket: P,
         rx: mpsc::Receiver<ToEndpoint>,
     ) -> Self {
-        let socket = Arc::new(socket);
         EndpointDriver {
             endpoint: quinn_proto::Endpoint::new(endpoint_config, server_config),
             client_config,
             channel,
             rx,
-            socket: socket.clone(),
+            socket,
             next_packet_out: None,
-            receive_stream: ReceiveStream::new(socket),
             alive_connections: HashMap::new(),
             new_connection_tx,
             is_orphaned: false,
         }
-    }
-
-    /// Insert future to send a datagram on the socket.
-    fn send_packet_out(&mut self, transmit: quinn_proto::Transmit) {
-        let len = transmit.contents.len();
-        let socket = self.socket.clone();
-        let send =
-            async move { P::send_to(&socket, &transmit.contents, transmit.destination).await }
-                .boxed();
-        self.next_packet_out = Some((send, len));
     }
 
     /// Handle a message sent from either the [`QuicTransport`](super::QuicTransport) or a [`Connection`].
@@ -414,15 +396,14 @@ impl<P: Provider> EndpointDriver<P> {
             }
 
             // Data needs to be sent on the UDP socket.
-            ToEndpoint::SendUdpPacket(transmit) => self.send_packet_out(transmit),
+            ToEndpoint::SendUdpPacket(transmit) => self.next_packet_out = Some(transmit),
         }
         ControlFlow::Continue(())
     }
 
     /// Handle datagram received on the socket.
     /// The datagram content was written into the `socket_recv_buffer`.
-    fn handle_datagram(&mut self, bytes: Vec<u8>, packet_src: SocketAddr) -> ControlFlow<()> {
-        let packet = From::from(bytes.as_bytes());
+    fn handle_datagram(&mut self, packet: BytesMut, packet_src: SocketAddr) -> ControlFlow<()> {
         let local_ip = self.channel.socket_addr.ip();
         // TODO: ECN bits aren't handled
         let (connec_id, event) =
@@ -490,28 +471,27 @@ impl<P: Provider> Future for EndpointDriver<P> {
     type Output = ();
     fn poll(mut self: std::pin::Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         loop {
-            if let Some((send_packet, len)) = self.next_packet_out.as_mut() {
-                match ready!(send_packet.poll_unpin(cx)) {
-                    Ok(n) if n == *len => {}
-                    Ok(_) => log::error!(
-                        "QUIC UDP socket violated expectation that packets are always fully \
-                        transferred"
-                    ),
-                    // Errors on the socket are expected to never happen, and we handle them by simply
-                    // printing a log message. The packet gets discarded in case of error, but we are
-                    // robust to packet losses and it is consequently not a logic error to process with
-                    // normal operations.
-                    Err(err) => {
-                        log::error!("Error while sending on QUIC UDP socket: {:?}", err)
-                    }
+            match ready!(self.socket.poll_send_flush(cx)) {
+                Ok(_) => {}
+                // Errors on the socket are expected to never happen, and we handle them by simply
+                // printing a log message. The packet gets discarded in case of error, but we are
+                // robust to packet losses and it is consequently not a logic error to process with
+                // normal operations.
+                Err(err) => {
+                    log::error!("Error while sending on QUIC UDP socket: {:?}", err)
                 }
-                self.next_packet_out = None;
+            }
+
+            if let Some(transmit) = self.next_packet_out.take() {
+                self.socket
+                    .start_send(transmit.contents, transmit.destination);
+                continue;
             }
 
             // The endpoint might request packets to be sent out. This is handled in priority to avoid
             // buffering up packets.
             if let Some(transmit) = self.endpoint.poll_transmit() {
-                self.send_packet_out(transmit);
+                self.next_packet_out = Some(transmit);
                 continue;
             }
 
@@ -526,21 +506,19 @@ impl<P: Provider> Future for EndpointDriver<P> {
                 Poll::Pending => {}
             }
 
-            match self.receive_stream.poll_next_unpin(cx) {
-                Poll::Ready(Some(Ok((bytes, packet_src)))) => {
-                    match self.handle_datagram(bytes, packet_src) {
+            match self.socket.poll_recv_from(cx) {
+                Poll::Ready(Ok((bytes, packet_src))) => {
+                    let bytes_mut = bytes.as_bytes().into();
+                    match self.handle_datagram(bytes_mut, packet_src) {
                         ControlFlow::Continue(()) => continue,
                         ControlFlow::Break(()) => break,
                     }
                 }
                 // Errors on the socket are expected to never happen, and we handle them by
                 // simply printing a log message.
-                Poll::Ready(Some(Err(err))) => {
+                Poll::Ready(Err(err)) => {
                     log::error!("Error while receive on QUIC UDP socket: {:?}", err);
                     continue;
-                }
-                Poll::Ready(None) => {
-                    unreachable!("ReceiveStream::poll_next never returns Poll::Ready(None)")
                 }
                 Poll::Pending => {}
             }
@@ -548,51 +526,5 @@ impl<P: Provider> Future for EndpointDriver<P> {
         }
 
         Poll::Ready(())
-    }
-}
-
-/// Wrapper around the socket to implement `Stream` on it socket.
-/// This is needed since not all [`Provider`]s provide a poll-based receive method for their socket.
-struct ReceiveStream<P: Provider> {
-    fut: Pin<
-        Box<
-            dyn Future<
-                    Output = (
-                        Result<(usize, SocketAddr), io::Error>,
-                        Arc<P::Socket>,
-                        Vec<u8>,
-                    ),
-                > + Send,
-        >,
-    >,
-}
-
-impl<P: Provider> ReceiveStream<P> {
-    fn new(socket: Arc<P::Socket>) -> Self {
-        let mut socket_recv_buffer = vec![0; 65536];
-        let fut = async move {
-            let recv = P::recv_from(&socket, &mut socket_recv_buffer).await;
-            (recv, socket, socket_recv_buffer)
-        };
-        Self { fut: fut.boxed() }
-    }
-}
-
-impl<P: Provider> Stream for ReceiveStream<P> {
-    type Item = Result<(Vec<u8>, SocketAddr), io::Error>;
-
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let (result, socket, mut buffer) = ready!(self.fut.poll_unpin(cx));
-        let result = result.map(|(packet_len, packet_src)| {
-            debug_assert!(packet_len <= buffer.len());
-            // Copies the bytes from the `socket_recv_buffer` they were written into.
-            (buffer[..packet_len].into(), packet_src)
-        });
-        self.fut = async move {
-            let recv = P::recv_from(&socket, &mut buffer).await;
-            (recv, socket, buffer)
-        }
-        .boxed();
-        Poll::Ready(Some(result))
     }
 }

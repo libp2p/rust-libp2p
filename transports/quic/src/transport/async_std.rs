@@ -18,35 +18,116 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::{io, net::SocketAddr};
+use std::{
+    io,
+    net::SocketAddr,
+    pin::Pin,
+    sync::Arc,
+    task::{Context, Poll},
+};
 
 use async_std_crate::{net::UdpSocket, task::spawn};
-use futures::Future;
+use futures::{future::BoxFuture, ready, Future, FutureExt, Stream, StreamExt};
 
 use crate::QuicTransport;
 
 use super::Provider;
 
 pub type AsyncStdTransport = QuicTransport<AsyncStd>;
-pub struct AsyncStd;
+pub struct AsyncStd {
+    socket: Arc<UdpSocket>,
+    send_packet: Option<BoxFuture<'static, Result<(), io::Error>>>,
+    recv_stream: ReceiveStream,
+}
 
-#[async_trait::async_trait]
 impl Provider for AsyncStd {
-    type Socket = UdpSocket;
-
-    fn from_socket(socket: std::net::UdpSocket) -> std::io::Result<Self::Socket> {
-        Ok(socket.into())
+    fn from_socket(socket: std::net::UdpSocket) -> io::Result<Self> {
+        let socket = Arc::new(socket.into());
+        let recv_stream = ReceiveStream::new(Arc::clone(&socket));
+        Ok(AsyncStd {
+            socket,
+            send_packet: None,
+            recv_stream,
+        })
     }
 
-    async fn recv_from(socket: &Self::Socket, buf: &mut [u8]) -> io::Result<(usize, SocketAddr)> {
-        socket.recv_from(buf).await
+    fn poll_recv_from(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<(Vec<u8>, SocketAddr)>> {
+        match self.recv_stream.poll_next_unpin(cx) {
+            Poll::Ready(ready) => {
+                Poll::Ready(ready.expect("ReceiveStream::poll_next never returns None."))
+            }
+            Poll::Pending => Poll::Pending,
+        }
     }
 
-    async fn send_to(socket: &Self::Socket, buf: &[u8], addr: SocketAddr) -> io::Result<usize> {
-        socket.send_to(buf, addr).await
+    fn start_send(&mut self, data: Vec<u8>, addr: SocketAddr) {
+        let _len = data.len();
+        let socket = self.socket.clone();
+        let send = async move {
+            let _send_len = socket.send_to(&data, addr).await?;
+            Ok(())
+        }
+        .boxed();
+        self.send_packet = Some(send)
+    }
+
+    fn poll_send_flush(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+        let pending = match self.send_packet.as_mut() {
+            Some(pending) => pending,
+            None => return Poll::Ready(Ok(())),
+        };
+        match pending.poll_unpin(cx) {
+            Poll::Ready(result) => {
+                self.send_packet = None;
+                Poll::Ready(result)
+            }
+            Poll::Pending => Poll::Pending,
+        }
     }
 
     fn spawn(future: impl Future<Output = ()> + Send + 'static) {
         spawn(future);
+    }
+}
+
+/// Wrapper around the socket to implement `Stream` on it.
+struct ReceiveStream {
+    fut: BoxFuture<
+        'static,
+        (
+            Result<(usize, SocketAddr), io::Error>,
+            Arc<UdpSocket>,
+            Vec<u8>,
+        ),
+    >,
+}
+
+impl ReceiveStream {
+    fn new(socket: Arc<UdpSocket>) -> Self {
+        let mut socket_recv_buffer = vec![0; 65536];
+        let fut = async move {
+            let recv = socket.recv_from(&mut socket_recv_buffer).await;
+            (recv, socket, socket_recv_buffer)
+        };
+        Self { fut: fut.boxed() }
+    }
+}
+
+impl Stream for ReceiveStream {
+    type Item = Result<(Vec<u8>, SocketAddr), io::Error>;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let (result, socket, mut buffer) = ready!(self.fut.poll_unpin(cx));
+        let result = result.map(|(packet_len, packet_src)| {
+            debug_assert!(packet_len <= buffer.len());
+            // Copies the bytes from the `socket_recv_buffer` they were written into.
+            (buffer[..packet_len].into(), packet_src)
+        });
+        self.fut = async move {
+            let recv = socket.recv_from(&mut buffer).await;
+            (recv, socket, buffer)
+        }
+        .boxed();
+        Poll::Ready(Some(result))
     }
 }

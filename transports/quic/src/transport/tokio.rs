@@ -18,32 +18,65 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::{io, net::SocketAddr};
+use std::{
+    io,
+    net::SocketAddr,
+    task::{Context, Poll},
+};
 
-use futures::Future;
-use tokio_crate::net::UdpSocket;
+use futures::{ready, Future};
+use tokio_crate::{io::ReadBuf, net::UdpSocket};
+use x509_parser::nom::AsBytes;
 
 use crate::QuicTransport;
 
 use super::Provider;
 
 pub type TokioTransport = QuicTransport<Tokio>;
-pub struct Tokio;
+pub struct Tokio {
+    socket: UdpSocket,
+    socket_recv_buffer: Vec<u8>,
+    next_packet_out: Option<(Vec<u8>, SocketAddr)>,
+}
 
-#[async_trait::async_trait]
 impl Provider for Tokio {
-    type Socket = UdpSocket;
-
-    fn from_socket(socket: std::net::UdpSocket) -> std::io::Result<Self::Socket> {
-        UdpSocket::from_std(socket)
+    fn from_socket(socket: std::net::UdpSocket) -> std::io::Result<Self> {
+        let socket = UdpSocket::from_std(socket)?;
+        Ok(Tokio {
+            socket,
+            socket_recv_buffer: vec![0; 65536],
+            next_packet_out: None,
+        })
     }
 
-    async fn recv_from(socket: &Self::Socket, buf: &mut [u8]) -> io::Result<(usize, SocketAddr)> {
-        socket.recv_from(buf).await
+    fn poll_send_flush(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+        let (data, addr) = match self.next_packet_out.as_ref() {
+            Some(pending) => pending,
+            None => return Poll::Ready(Ok(())),
+        };
+        match self.socket.poll_send_to(cx, data.as_bytes(), *addr) {
+            Poll::Ready(result) => {
+                self.next_packet_out = None;
+                Poll::Ready(result.map(|_| ()))
+            }
+            Poll::Pending => Poll::Pending,
+        }
     }
 
-    async fn send_to(socket: &Self::Socket, buf: &[u8], addr: SocketAddr) -> io::Result<usize> {
-        socket.send_to(buf, addr).await
+    fn poll_recv_from(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<(Vec<u8>, SocketAddr)>> {
+        let Self {
+            socket,
+            socket_recv_buffer,
+            ..
+        } = self;
+        let mut read_buf = ReadBuf::new(socket_recv_buffer.as_mut_slice());
+        let packet_src = ready!(socket.poll_recv_from(cx, &mut read_buf)?);
+        let bytes = read_buf.filled().to_vec();
+        Poll::Ready(Ok((bytes, packet_src)))
+    }
+
+    fn start_send(&mut self, data: Vec<u8>, addr: SocketAddr) {
+        self.next_packet_out = Some((data, addr));
     }
 
     fn spawn(future: impl Future<Output = ()> + Send + 'static) {

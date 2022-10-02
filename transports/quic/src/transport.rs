@@ -427,22 +427,24 @@ impl Stream for Listener {
     }
 }
 
-#[async_trait::async_trait]
-pub trait Provider: Unpin + Send + 'static {
-    // Wrapped socket for non-blocking I/O operations.
-    type Socket: Send + Sync + Unpin;
-
+// Wrapped socket for non-blocking I/O operations.
+pub trait Provider: Unpin + Send + Sized + 'static {
     // Wrap a socket.
     // Note: The socket must be set to non-blocking.
-    fn from_socket(socket: UdpSocket) -> io::Result<Self::Socket>;
+    fn from_socket(socket: UdpSocket) -> io::Result<Self>;
 
     // Receive a single datagram message.
-    // Return the number of bytes read and the address the message came from.
-    async fn recv_from(socket: &Self::Socket, buf: &mut [u8]) -> io::Result<(usize, SocketAddr)>;
+    // Returns the message and the address the message came from.
+    fn poll_recv_from(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<(Vec<u8>, SocketAddr)>>;
 
-    // Send data on the socket to the specified address.
-    // Return the number of bytes written.
-    async fn send_to(socket: &Self::Socket, buf: &[u8], addr: SocketAddr) -> io::Result<usize>;
+    // Set sending the packet on the socket.
+    // Since only one packet may be sent at a time, this may only be called if a preceding call
+    // to [`Provider::poll_send_flush`] returned [`Poll::Ready`].
+    fn start_send(&mut self, data: Vec<u8>, addr: SocketAddr);
+
+    // Flush a packet send in [`Provider::start_send`].
+    // If [`Poll::Ready`] is returned the socket is ready for sending a new packet.
+    fn poll_send_flush(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>>;
 
     // Run the given future in the background until it ends.
     fn spawn(future: impl Future<Output = ()> + Send + 'static);
