@@ -58,7 +58,7 @@ impl Error for NoiseError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             NoiseError::Io(e) => Some(e),
-            NoiseError::Noise(_) => None, // TODO: `SnowError` should implement `Error`.
+            NoiseError::Noise(e) => Some(e),
             NoiseError::InvalidKey => None,
             NoiseError::AuthenticationFailed => None,
             NoiseError::InvalidPayload(e) => Some(e),
