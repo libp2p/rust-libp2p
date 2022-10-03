@@ -323,7 +323,7 @@ impl TryFrom<keys_proto::PublicKey> for PublicKey {
             #[cfg(any(not(feature = "rsa"), target_arch = "wasm32"))]
             keys_proto::KeyType::Rsa => {
                 log::debug!("support for RSA was disabled at compile-time");
-                Err(DecodingError::new("Unsupported"))
+                Err(DecodingError::new("RSA keys are unsupported"))
             }
             #[cfg(feature = "secp256k1")]
             keys_proto::KeyType::Secp256k1 => {
@@ -332,7 +332,7 @@ impl TryFrom<keys_proto::PublicKey> for PublicKey {
             #[cfg(not(feature = "secp256k1"))]
             keys_proto::KeyType::Secp256k1 => {
                 log::debug!("support for secp256k1 was disabled at compile-time");
-                Err(DecodingError::new("Unsupported"))
+                Err(DecodingError::new("secp256k1 keys are unsupported"))
             }
             #[cfg(feature = "ecdsa")]
             keys_proto::KeyType::Ecdsa => {
@@ -341,7 +341,7 @@ impl TryFrom<keys_proto::PublicKey> for PublicKey {
             #[cfg(not(feature = "ecdsa"))]
             keys_proto::KeyType::Ecdsa => {
                 log::debug!("support for ECDSA was disabled at compile-time");
-                Err(DecodingError::new("Unsupported"))
+                Err(DecodingError::new("ECDSA keys are unsupported"))
             }
         }
     }
