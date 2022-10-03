@@ -28,7 +28,6 @@ x509-parser = "0.13.0"
 yasna = "0.5.0"
 
 [features]
-default = ["async-std"]
 tokio = ["tokio-crate"]
 async-std = ["async-std-crate"]
 
