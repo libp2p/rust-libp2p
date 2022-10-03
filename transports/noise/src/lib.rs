@@ -223,6 +223,8 @@ pub enum NoiseError {
     Noise(#[from] snow::Error),
     #[error("Invalid public key")]
     InvalidKey,
+    #[error("The signature of the remote identity's public key does not verify")]
+    BadSignature,
     #[error("Authentication failed")]
     AuthenticationFailed,
     #[error(transparent)]

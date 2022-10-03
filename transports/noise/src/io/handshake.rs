@@ -316,7 +316,7 @@ impl<T> State<T> {
                 if C::verify(&id_pk, &dh_pk, &self.dh_remote_pubkey_sig) {
                     RemoteIdentity::IdentityKey(id_pk)
                 } else {
-                    return Err(NoiseError::InvalidKey);
+                    return Err(NoiseError::BadSignature);
                 }
             }
         };
