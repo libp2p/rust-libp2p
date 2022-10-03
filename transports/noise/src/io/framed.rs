@@ -96,10 +96,7 @@ impl<T> NoiseFramed<T, snow::HandshakeState> {
     {
         let dh_remote_pubkey = match self.session.get_remote_static() {
             None => None,
-            Some(k) => match C::public_from_bytes(k) {
-                Err(e) => return Err(e),
-                Ok(dh_pk) => Some(dh_pk),
-            },
+            Some(k) => Some(C::public_from_bytes(k)?),
         };
         let io = NoiseFramed {
             session: self.session.into_transport_mode()?,
