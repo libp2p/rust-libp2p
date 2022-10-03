@@ -22,3 +22,7 @@ tempfile = "3.0"
 
 [features]
 default = ["async-std"]
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+rustc-args = ["--cfg", "docsrs"]

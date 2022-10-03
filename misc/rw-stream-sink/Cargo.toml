@@ -16,3 +16,7 @@ static_assertions = "1"
 
 [dev-dependencies]
 async-std = "1.0"
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+rustc-args = ["--cfg", "docsrs"]

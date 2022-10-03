@@ -25,3 +25,7 @@ libp2p = { path = "../../", default-features = false, features = ["mplex", "plai
 quickcheck = "0.9.0"
 rand = "0.7.2"
 rw-stream-sink = { version = "0.3.0", path = "../../misc/rw-stream-sink" }
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+rustc-args = ["--cfg", "docsrs"]

@@ -35,3 +35,7 @@ tokio = { version = "1.15", features = [ "rt-multi-thread", "time", "macros", "s
 
 [build-dependencies]
 prost-build = "0.11"
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+rustc-args = ["--cfg", "docsrs"]

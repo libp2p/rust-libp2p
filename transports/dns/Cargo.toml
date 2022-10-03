@@ -33,3 +33,7 @@ tokio = ["trust-dns-resolver/tokio-runtime"]
 # available for `tokio`.
 tokio-dns-over-rustls = ["tokio", "trust-dns-resolver/dns-over-rustls"]
 tokio-dns-over-https-rustls = ["tokio", "trust-dns-resolver/dns-over-https-rustls"]
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+rustc-args = ["--cfg", "docsrs"]

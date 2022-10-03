@@ -25,3 +25,7 @@ webpki-roots = "0.22"
 
 [dev-dependencies]
 libp2p = { path = "../../", default-features = false, features = ["tcp-async-io"] }
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+rustc-args = ["--cfg", "docsrs"]

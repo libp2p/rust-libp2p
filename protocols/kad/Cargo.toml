@@ -43,3 +43,7 @@ prost-build = "0.11"
 
 [features]
 serde = ["dep:serde", "bytes/serde"]
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+rustc-args = ["--cfg", "docsrs"]

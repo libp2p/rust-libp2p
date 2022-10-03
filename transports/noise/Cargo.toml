@@ -38,3 +38,7 @@ ed25519-compact = "1.0.11"
 
 [build-dependencies]
 prost-build = "0.11"
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+rustc-args = ["--cfg", "docsrs"]

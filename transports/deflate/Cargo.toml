@@ -20,3 +20,7 @@ async-std = "1.6.2"
 libp2p = { path = "../../", default-features = false, features = ["tcp-async-io", "deflate"] }
 quickcheck = "0.9"
 rand = "0.7"
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+rustc-args = ["--cfg", "docsrs"]
