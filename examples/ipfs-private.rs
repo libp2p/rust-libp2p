@@ -41,8 +41,7 @@ use libp2p::{
     gossipsub::{self, Gossipsub, GossipsubConfigBuilder, GossipsubEvent, MessageAuthenticity},
     identify, identity,
     multiaddr::Protocol,
-    noise,
-    ping::{self, PingEvent},
+    noise, ping,
     pnet::{PnetConfig, PreSharedKey},
     swarm::SwarmEvent,
     tcp::TcpTransport,
@@ -164,7 +163,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     enum MyBehaviourEvent {
         Gossipsub(GossipsubEvent),
         Identify(identify::Event),
-        Ping(PingEvent),
+        Ping(ping::Event),
     }
 
     impl From<GossipsubEvent> for MyBehaviourEvent {
@@ -179,8 +178,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    impl From<PingEvent> for MyBehaviourEvent {
-        fn from(event: PingEvent) -> Self {
+    impl From<ping::Event> for MyBehaviourEvent {
+        fn from(event: ping::Event) -> Self {
             MyBehaviourEvent::Ping(event)
         }
     }

@@ -126,8 +126,8 @@ impl Recorder<libp2p_kad::KademliaEvent> for Metrics {
 }
 
 #[cfg(feature = "ping")]
-impl Recorder<libp2p_ping::PingEvent> for Metrics {
-    fn record(&self, event: &libp2p_ping::PingEvent) {
+impl Recorder<libp2p_ping::Event> for Metrics {
+    fn record(&self, event: &libp2p_ping::Event) {
         self.ping.record(event)
     }
 }

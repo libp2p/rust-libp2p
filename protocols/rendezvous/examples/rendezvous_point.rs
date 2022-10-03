@@ -23,7 +23,6 @@ use libp2p::core::identity;
 use libp2p::core::PeerId;
 use libp2p::identify;
 use libp2p::ping;
-use libp2p::ping::{Ping, PingEvent};
 use libp2p::swarm::{Swarm, SwarmEvent};
 use libp2p::NetworkBehaviour;
 use libp2p::{development_transport, rendezvous};
@@ -52,7 +51,7 @@ async fn main() {
                 identity.public(),
             )),
             rendezvous: rendezvous::server::Behaviour::new(rendezvous::server::Config::default()),
-            ping: Ping::new(ping::Config::new().with_keep_alive(true)),
+            ping: ping::Behaviour::new(ping::Config::new().with_keep_alive(true)),
         },
         PeerId::from(identity.public()),
     );
@@ -102,7 +101,7 @@ async fn main() {
 #[derive(Debug)]
 enum MyEvent {
     Rendezvous(rendezvous::server::Event),
-    Ping(PingEvent),
+    Ping(ping::Event),
     Identify(identify::Event),
 }
 
@@ -112,8 +111,8 @@ impl From<rendezvous::server::Event> for MyEvent {
     }
 }
 
-impl From<PingEvent> for MyEvent {
-    fn from(event: PingEvent) -> Self {
+impl From<ping::Event> for MyEvent {
+    fn from(event: ping::Event) -> Self {
         MyEvent::Ping(event)
     }
 }
@@ -130,5 +129,5 @@ impl From<identify::Event> for MyEvent {
 struct MyBehaviour {
     identify: identify::Behaviour,
     rendezvous: rendezvous::server::Behaviour,
-    ping: Ping,
+    ping: ping::Behaviour,
 }
