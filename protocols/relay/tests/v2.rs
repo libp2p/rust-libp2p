@@ -29,12 +29,11 @@ use libp2p::core::transport::choice::OrTransport;
 use libp2p::core::transport::{Boxed, MemoryTransport, Transport};
 use libp2p::core::PublicKey;
 use libp2p::core::{identity, upgrade, PeerId};
-use libp2p::ping::{Ping, PingConfig, PingEvent};
 use libp2p::plaintext::PlainText2Config;
 use libp2p::relay::v2::client;
 use libp2p::relay::v2::relay;
 use libp2p::swarm::{AddressScore, NetworkBehaviour, Swarm, SwarmEvent};
-use libp2p::NetworkBehaviour;
+use libp2p::{ping, NetworkBehaviour};
 use std::time::Duration;
 
 #[test]
@@ -217,7 +216,7 @@ fn connect() {
             match src.select_next_some().await {
                 SwarmEvent::Dialing(peer_id) if peer_id == relay_peer_id => {}
                 SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == relay_peer_id => {}
-                SwarmEvent::Behaviour(ClientEvent::Ping(PingEvent { peer, .. }))
+                SwarmEvent::Behaviour(ClientEvent::Ping(ping::Event { peer, .. }))
                     if peer == dst_peer_id =>
                 {
                     break
@@ -225,7 +224,7 @@ fn connect() {
                 SwarmEvent::Behaviour(ClientEvent::Relay(
                     client::Event::OutboundCircuitEstablished { .. },
                 )) => {}
-                SwarmEvent::Behaviour(ClientEvent::Ping(PingEvent { peer, .. }))
+                SwarmEvent::Behaviour(ClientEvent::Ping(ping::Event { peer, .. }))
                     if peer == relay_peer_id => {}
                 SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == dst_peer_id => {
                     break
@@ -299,7 +298,7 @@ fn build_relay() -> Swarm<Relay> {
     Swarm::new(
         transport,
         Relay {
-            ping: Ping::new(PingConfig::new()),
+            ping: ping::Behaviour::new(ping::Config::new()),
             relay: relay::Relay::new(
                 local_peer_id,
                 relay::Config {
@@ -326,7 +325,7 @@ fn build_client() -> Swarm<Client> {
     Swarm::new(
         transport,
         Client {
-            ping: Ping::new(PingConfig::new()),
+            ping: ping::Behaviour::new(ping::Config::new()),
             relay: behaviour,
         },
         local_peer_id,
@@ -351,13 +350,13 @@ where
 #[behaviour(out_event = "RelayEvent", event_process = false)]
 struct Relay {
     relay: relay::Relay,
-    ping: Ping,
+    ping: ping::Behaviour,
 }
 
 #[derive(Debug)]
 enum RelayEvent {
     Relay(relay::Event),
-    Ping(PingEvent),
+    Ping(ping::Event),
 }
 
 impl From<relay::Event> for RelayEvent {
@@ -366,8 +365,8 @@ impl From<relay::Event> for RelayEvent {
     }
 }
 
-impl From<PingEvent> for RelayEvent {
-    fn from(event: PingEvent) -> Self {
+impl From<ping::Event> for RelayEvent {
+    fn from(event: ping::Event) -> Self {
         RelayEvent::Ping(event)
     }
 }
@@ -376,13 +375,13 @@ impl From<PingEvent> for RelayEvent {
 #[behaviour(out_event = "ClientEvent", event_process = false)]
 struct Client {
     relay: client::Client,
-    ping: Ping,
+    ping: ping::Behaviour,
 }
 
 #[derive(Debug)]
 enum ClientEvent {
     Relay(client::Event),
-    Ping(PingEvent),
+    Ping(ping::Event),
 }
 
 impl From<client::Event> for ClientEvent {
@@ -391,8 +390,8 @@ impl From<client::Event> for ClientEvent {
     }
 }
 
-impl From<PingEvent> for ClientEvent {
-    fn from(event: PingEvent) -> Self {
+impl From<ping::Event> for ClientEvent {
+    fn from(event: ping::Event) -> Self {
         ClientEvent::Ping(event)
     }
 }

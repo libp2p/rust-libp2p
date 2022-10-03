@@ -3,7 +3,7 @@ name = "libp2p-swarm"
 edition = "2021"
 rust-version = "1.56.1"
 description = "The libp2p swarm"
-version = "0.39.1"
+version = "0.40.1"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -16,7 +16,7 @@ fnv = "1.0"
 futures = "0.3.1"
 futures-timer = "3.0.2"
 instant = "0.1.11"
-libp2p-core = { version = "0.36.0", path = "../core", default-features = false }
+libp2p-core = { version = "0.37.0", path = "../core" }
 log = "0.4"
 pin-project = "1.0.0"
 rand = "0.8"
@@ -27,5 +27,5 @@ void = "1"
 [dev-dependencies]
 async-std = { version = "1.6.2", features = ["attributes"] }
 env_logger = "0.9"
-libp2p = { path = "../", default-features = false, features = ["plaintext", "identify", "ping", "noise", "yamux", "mplex", "tcp-async-io"] }
+libp2p = { path = "..", features = ["full"] }
 quickcheck = { package = "quickcheck-ext", path = "../misc/quickcheck-ext" }
