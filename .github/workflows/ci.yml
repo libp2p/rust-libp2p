@@ -165,7 +165,7 @@ jobs:
     - uses: Swatinem/rust-cache@6720f05bc48b77f96918929a9019fb2203ff71f8 # v2.0.0
 
     - name: Run ipfs-kad example
-      run: RUST_LOG=libp2p_swarm=debug,libp2p_kad=trace,libp2p_tcp=debug cargo run --example ipfs-kad
+      run: RUST_LOG=libp2p_swarm=debug,libp2p_kad=trace,libp2p_tcp=debug cargo run --example ipfs-kad --features full
 
   rustfmt:
     runs-on: ubuntu-latest
@@ -187,3 +187,27 @@ jobs:
 
     - name: Check formatting
       run: cargo fmt -- --check
+
+  manifest_lint:
+    runs-on: ubuntu-latest
+    steps:
+
+    - name: Cancel Previous Runs
+      uses: styfle/cancel-workflow-action@bb6001c4ea612bf59c3abfc4756fbceee4f870c7 # 0.10.0
+      with:
+        access_token: ${{ github.token }}
+
+    - uses: actions/checkout@v3
+
+    - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
+      with:
+        profile: minimal
+        toolchain: stable
+        override: true
+
+    - name: Ensure `full` feature contains all features
+      run: |
+        ALL_FEATURES=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[] | select(.name == "libp2p") | .features | keys | map(select(. != "full")) | sort | join(" ")')
+        FULL_FEATURE=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[] | select(.name == "libp2p") | .features["full"] | sort | join(" ")')
+        
+        test "$ALL_FEATURES = $FULL_FEATURE"
