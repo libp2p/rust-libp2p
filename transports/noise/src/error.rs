@@ -19,74 +19,22 @@
 // DEALINGS IN THE SOFTWARE.
 
 use libp2p_core::identity;
-use snow::error::Error as SnowError;
-use std::{error::Error, fmt, io};
+use std::io;
 
 /// libp2p_noise error type.
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum NoiseError {
-    /// An I/O error has been encountered.
-    Io(io::Error),
-    /// An noise framework error has been encountered.
-    Noise(SnowError),
-    /// A public key is invalid.
+    #[error(transparent)]
+    Io(#[from] io::Error),
+    #[error(transparent)]
+    Noise(#[from] snow::Error),
+    #[error("Invalid public key")]
     InvalidKey,
-    /// Authentication in a [`NoiseAuthenticated`](crate::NoiseAuthenticated)
-    /// upgrade failed.
+    #[error("Authentication failed")]
     AuthenticationFailed,
-    /// A handshake payload is invalid.
-    InvalidPayload(prost::DecodeError),
-    /// A signature was required and could not be created.
-    SigningError(identity::error::SigningError),
-}
-
-impl fmt::Display for NoiseError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            NoiseError::Io(e) => write!(f, "{}", e),
-            NoiseError::Noise(e) => write!(f, "{}", e),
-            NoiseError::InvalidKey => f.write_str("invalid public key"),
-            NoiseError::InvalidPayload(e) => write!(f, "{}", e),
-            NoiseError::AuthenticationFailed => f.write_str("Authentication failed"),
-            NoiseError::SigningError(e) => write!(f, "{}", e),
-        }
-    }
-}
-
-impl Error for NoiseError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match self {
-            NoiseError::Io(e) => Some(e),
-            NoiseError::Noise(e) => Some(e),
-            NoiseError::InvalidKey => None,
-            NoiseError::AuthenticationFailed => None,
-            NoiseError::InvalidPayload(e) => Some(e),
-            NoiseError::SigningError(e) => Some(e),
-        }
-    }
-}
-
-impl From<io::Error> for NoiseError {
-    fn from(e: io::Error) -> Self {
-        NoiseError::Io(e)
-    }
-}
-
-impl From<SnowError> for NoiseError {
-    fn from(e: SnowError) -> Self {
-        NoiseError::Noise(e)
-    }
-}
-
-impl From<prost::DecodeError> for NoiseError {
-    fn from(e: prost::DecodeError) -> Self {
-        NoiseError::InvalidPayload(e)
-    }
-}
-
-impl From<identity::error::SigningError> for NoiseError {
-    fn from(e: identity::error::SigningError) -> Self {
-        NoiseError::SigningError(e)
-    }
+    #[error(transparent)]
+    InvalidPayload(#[from] prost::DecodeError),
+    #[error(transparent)]
+    SigningError(#[from] identity::error::SigningError),
 }
