@@ -7,7 +7,7 @@ resolver = "2"
 
 
 [dependencies]
-libp2p-core = { version = "0.36.0", path = "../../core", default-features = false }
+libp2p-core = { version = "0.37", path = "../../core" }
 futures = "0.3"
 arti-client = { version = "0.6", default-features = false }
 thiserror = "1"
@@ -22,7 +22,6 @@ async-std-crate = { package = "async-std", version = "1", features = ["attribute
 
 
 [features]
-default = ["async-std", "native-tls"]
 tokio = ["arti-client/tokio", "dep:tokio-crate"]
 async-std = ["arti-client/async-std", "dep:async-std-crate"]
 native-tls = ["arti-client/native-tls"]

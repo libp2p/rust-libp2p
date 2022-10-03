@@ -29,6 +29,7 @@
 - [`libp2p-uds` CHANGELOG](transports/uds/CHANGELOG.md)
 - [`libp2p-wasm-ext` CHANGELOG](transports/wasm-ext/CHANGELOG.md)
 - [`libp2p-websocket` CHANGELOG](transports/websocket/CHANGELOG.md)
+- [`libp2p-onion` CHANGELOG](transports/onion/CHANGELOG.md)
 
 ## Multiplexers
 
@@ -47,6 +48,9 @@
 
 - Remove default features. You need to enable required features explicitly now. As a quick workaround, you may want to use the
   new `full` feature which activates all features. See [PR 2918].
+
+- New `libp2p-onion` crate
+  ([PR 2899](https://github.com/libp2p/rust-libp2p/pull/2899)).
 
 - Update individual crates.
     - Update to [`libp2p-autonat` `v0.8.0`](protocols/autonat/CHANGELOG.md#0080).
