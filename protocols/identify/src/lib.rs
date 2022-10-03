@@ -21,7 +21,7 @@
 //! Implementation of the [Identify] protocol.
 //!
 //! This implementation of the protocol periodically exchanges
-//! [`identify::Info`] messages between the peers on an established connection.
+//! [`Info`] messages between the peers on an established connection.
 //!
 //! At least one identification request is sent on a newly established
 //! connection, beyond which the behaviour does not keep connections alive.
@@ -35,8 +35,8 @@
 //!
 //! # Usage
 //!
-//! The [`Behaviour`] struct implements a [`NetworkBehaviour`] that negotiates
-//! and executes the protocol on every established connection, emitting
+//! The [`Behaviour`] struct implements a [`NetworkBehaviour`](libp2p_swarm::NetworkBehaviour)
+//! that negotiates and executes the protocol on every established connection, emitting
 //! [`Event`]s.
 
 pub use self::behaviour::{Behaviour, Config, Event};

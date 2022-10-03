@@ -166,7 +166,7 @@ impl Config {
     /// Configures the size of the LRU cache, caching addresses of discovered peers.
     ///
     /// The [`Swarm`](libp2p_swarm::Swarm) may extend the set of addresses of an outgoing connection attempt via
-    ///  [`Identify::addresses_of_peer`].
+    ///  [`Behaviour::addresses_of_peer`].
     pub fn with_cache_size(mut self, cache_size: usize) -> Self {
         self.cache_size = cache_size;
         self
