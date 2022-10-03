@@ -222,7 +222,7 @@ pub enum NoiseError {
     #[error(transparent)]
     Noise(#[from] snow::Error),
     #[error("Invalid public key")]
-    InvalidKey,
+    InvalidKey(#[from] identity::error::DecodingError),
     #[error("Only keys of length 32 bytes are supported")]
     InvalidLength,
     #[error("Remote authenticated with an unexpected public key")]

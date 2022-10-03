@@ -403,8 +403,7 @@ where
     let pb = pb_result?;
 
     if !pb.identity_key.is_empty() {
-        let pk = identity::PublicKey::from_protobuf_encoding(&pb.identity_key)
-            .map_err(|_| NoiseError::InvalidKey)?;
+        let pk = identity::PublicKey::from_protobuf_encoding(&pb.identity_key)?;
         if let Some(ref k) = state.id_remote_pubkey {
             if k != &pk {
                 return Err(NoiseError::UnexpectedKey);
