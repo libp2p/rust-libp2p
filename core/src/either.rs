@@ -311,13 +311,13 @@ where
 }
 
 #[derive(Debug, Clone)]
-pub enum EitherName<A, B> {
-    A(A),
-    B(B),
+pub enum EitherName {
+    A(ProtocolName),
+    B(ProtocolName),
 }
 
-impl<A: ProtocolName, B: ProtocolName> ProtocolName for EitherName<A, B> {
-    fn protocol_name(&self) -> &[u8] {
+impl EitherName {
+    fn protocol_name(&self) -> &str {
         match self {
             EitherName::A(a) => a.protocol_name(),
             EitherName::B(b) => b.protocol_name(),

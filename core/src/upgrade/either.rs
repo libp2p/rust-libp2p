@@ -20,7 +20,7 @@
 
 use crate::{
     either::{EitherError, EitherFuture2, EitherName, EitherOutput},
-    upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo},
+    upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, ProtocolName},
 };
 
 /// A type to represent two possible upgrade types (inbound or outbound).
@@ -35,7 +35,6 @@ where
     A: UpgradeInfo,
     B: UpgradeInfo,
 {
-    type Info = EitherName<A::Info, B::Info>;
     type InfoIter = EitherIter<
         <A::InfoIter as IntoIterator>::IntoIter,
         <B::InfoIter as IntoIterator>::IntoIter,
@@ -58,7 +57,7 @@ where
     type Error = EitherError<EA, EB>;
     type Future = EitherFuture2<A::Future, B::Future>;
 
-    fn upgrade_inbound(self, sock: C, info: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, sock: C, info: ProtocolName) -> Self::Future {
         match (self, info) {
             (EitherUpgrade::A(a), EitherName::A(info)) => {
                 EitherFuture2::A(a.upgrade_inbound(sock, info))
@@ -80,7 +79,7 @@ where
     type Error = EitherError<EA, EB>;
     type Future = EitherFuture2<A::Future, B::Future>;
 
-    fn upgrade_outbound(self, sock: C, info: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, sock: C, info: EitherName) -> Self::Future {
         match (self, info) {
             (EitherUpgrade::A(a), EitherName::A(info)) => {
                 EitherFuture2::A(a.upgrade_outbound(sock, info))
@@ -105,7 +104,7 @@ where
     A: Iterator,
     B: Iterator,
 {
-    type Item = EitherName<A::Item, B::Item>;
+    type Item = EitherName;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self {

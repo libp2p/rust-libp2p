@@ -52,10 +52,9 @@ use std::iter;
 ///     });
 /// ```
 ///
-pub fn from_fn<P, F, C, Fut, Out, Err>(protocol_name: P, fun: F) -> FromFnUpgrade<P, F>
+pub fn from_fn<F, C, Fut, Out, Err>(protocol_name: ProtocolName, fun: F) -> FromFnUpgrade<F>
 where
     // Note: these bounds are there in order to help the compiler infer types
-    P: ProtocolName + Clone,
     F: FnOnce(C, Endpoint) -> Fut,
     Fut: Future<Output = Result<Out, Err>>,
 {
@@ -66,26 +65,22 @@ where
 ///
 /// The upgrade consists in calling the function passed when creating this struct.
 #[derive(Debug, Clone)]
-pub struct FromFnUpgrade<P, F> {
-    protocol_name: P,
+pub struct FromFnUpgrade<F> {
+    protocol_name: ProtocolName,
     fun: F,
 }
 
-impl<P, F> UpgradeInfo for FromFnUpgrade<P, F>
-where
-    P: ProtocolName + Clone,
+impl<F> UpgradeInfo for FromFnUpgrade<F>
 {
-    type Info = P;
-    type InfoIter = iter::Once<P>;
+    type InfoIter = iter::Once<ProtocolName>;
 
     fn protocol_info(&self) -> Self::InfoIter {
         iter::once(self.protocol_name.clone())
     }
 }
 
-impl<C, P, F, Fut, Err, Out> InboundUpgrade<C> for FromFnUpgrade<P, F>
+impl<C, F, Fut, Err, Out> InboundUpgrade<C> for FromFnUpgrade<F>
 where
-    P: ProtocolName + Clone,
     F: FnOnce(C, Endpoint) -> Fut,
     Fut: Future<Output = Result<Out, Err>>,
 {
@@ -93,14 +88,13 @@ where
     type Error = Err;
     type Future = Fut;
 
-    fn upgrade_inbound(self, sock: C, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, sock: C, _: ProtocolName) -> Self::Future {
         (self.fun)(sock, Endpoint::Listener)
     }
 }
 
-impl<C, P, F, Fut, Err, Out> OutboundUpgrade<C> for FromFnUpgrade<P, F>
+impl<C, F, Fut, Err, Out> OutboundUpgrade<C> for FromFnUpgrade<F>
 where
-    P: ProtocolName + Clone,
     F: FnOnce(C, Endpoint) -> Fut,
     Fut: Future<Output = Result<Out, Err>>,
 {
@@ -108,7 +102,7 @@ where
     type Error = Err;
     type Future = Fut;
 
-    fn upgrade_outbound(self, sock: C, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, sock: C, _: ProtocolName) -> Self::Future {
         (self.fun)(sock, Endpoint::Dialer)
     }
 }

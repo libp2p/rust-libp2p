@@ -44,7 +44,6 @@ where
     A: UpgradeInfo,
     B: UpgradeInfo,
 {
-    type Info = EitherName<A::Info, B::Info>;
     type InfoIter = InfoIterChain<
         <A::InfoIter as IntoIterator>::IntoIter,
         <B::InfoIter as IntoIterator>::IntoIter,
@@ -67,7 +66,7 @@ where
     type Error = EitherError<EA, EB>;
     type Future = EitherFuture2<A::Future, B::Future>;
 
-    fn upgrade_inbound(self, sock: C, info: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, sock: C, info: EitherName) -> Self::Future {
         match info {
             EitherName::A(info) => EitherFuture2::A(self.0.upgrade_inbound(sock, info)),
             EitherName::B(info) => EitherFuture2::B(self.1.upgrade_inbound(sock, info)),
@@ -84,7 +83,7 @@ where
     type Error = EitherError<EA, EB>;
     type Future = EitherFuture2<A::Future, B::Future>;
 
-    fn upgrade_outbound(self, sock: C, info: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, sock: C, info: EitherName) -> Self::Future {
         match info {
             EitherName::A(info) => EitherFuture2::A(self.0.upgrade_outbound(sock, info)),
             EitherName::B(info) => EitherFuture2::B(self.1.upgrade_outbound(sock, info)),
@@ -101,7 +100,7 @@ where
     A: Iterator,
     B: Iterator,
 {
-    type Item = EitherName<A::Item, B::Item>;
+    type Item = EitherName;
 
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(info) = self.0.next() {

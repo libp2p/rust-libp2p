@@ -25,51 +25,44 @@ use std::iter;
 use void::Void;
 
 /// Implementation of [`UpgradeInfo`], [`InboundUpgrade`] and [`OutboundUpgrade`] that directly yields the substream.
-#[derive(Debug, Copy, Clone)]
-pub struct ReadyUpgrade<P> {
-    protocol_name: P,
+#[derive(Debug, Clone)]
+pub struct ReadyUpgrade {
+    protocol_name: ProtocolName,
 }
 
-impl<P> ReadyUpgrade<P> {
-    pub fn new(protocol_name: P) -> Self {
+impl ReadyUpgrade {
+    pub fn new(protocol_name: ProtocolName) -> Self {
         Self { protocol_name }
     }
 }
 
-impl<P> UpgradeInfo for ReadyUpgrade<P>
-where
-    P: ProtocolName + Clone,
+impl UpgradeInfo for ReadyUpgrade
 {
-    type Info = P;
-    type InfoIter = iter::Once<P>;
+    type InfoIter = iter::Once<ProtocolName>;
 
     fn protocol_info(&self) -> Self::InfoIter {
         iter::once(self.protocol_name.clone())
     }
 }
 
-impl<C, P> InboundUpgrade<C> for ReadyUpgrade<P>
-where
-    P: ProtocolName + Clone,
+impl<C> InboundUpgrade<C> for ReadyUpgrade
 {
     type Output = C;
     type Error = Void;
     type Future = future::Ready<Result<Self::Output, Self::Error>>;
 
-    fn upgrade_inbound(self, stream: C, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, stream: C, _: ProtocolName) -> Self::Future {
         future::ready(Ok(stream))
     }
 }
 
-impl<C, P> OutboundUpgrade<C> for ReadyUpgrade<P>
-where
-    P: ProtocolName + Clone,
+impl<C> OutboundUpgrade<C> for ReadyUpgrade
 {
     type Output = C;
     type Error = Void;
     type Future = future::Ready<Result<Self::Output, Self::Error>>;
 
-    fn upgrade_outbound(self, stream: C, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, stream: C, _: ProtocolName) -> Self::Future {
         future::ready(Ok(stream))
     }
 }

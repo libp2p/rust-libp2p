@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
+use crate::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo, ProtocolName};
 use futures::future;
 use std::iter;
 use void::Void;
@@ -29,8 +29,7 @@ use void::Void;
 pub struct DeniedUpgrade;
 
 impl UpgradeInfo for DeniedUpgrade {
-    type Info = &'static [u8];
-    type InfoIter = iter::Empty<Self::Info>;
+    type InfoIter = iter::Empty<ProtocolName>;
 
     fn protocol_info(&self) -> Self::InfoIter {
         iter::empty()
@@ -42,7 +41,7 @@ impl<C> InboundUpgrade<C> for DeniedUpgrade {
     type Error = Void;
     type Future = future::Pending<Result<Self::Output, Self::Error>>;
 
-    fn upgrade_inbound(self, _: C, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, _: C, _: ProtocolName) -> Self::Future {
         future::pending()
     }
 }
@@ -52,7 +51,7 @@ impl<C> OutboundUpgrade<C> for DeniedUpgrade {
     type Error = Void;
     type Future = future::Pending<Result<Self::Output, Self::Error>>;
 
-    fn upgrade_outbound(self, _: C, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, _: C, _: ProtocolName) -> Self::Future {
         future::pending()
     }
 }

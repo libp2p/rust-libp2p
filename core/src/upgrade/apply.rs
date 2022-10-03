@@ -100,7 +100,7 @@ where
     U: InboundUpgrade<Negotiated<C>>,
 {
     Init {
-        future: ListenerSelectFuture<C, NameWrap<U::Info>>,
+        future: ListenerSelectFuture<C, NameWrap<ProtocolName>>,
         upgrade: U,
     },
     Upgrade {
@@ -251,8 +251,8 @@ type NameWrapIter<I> = iter::Map<I, fn(<I as Iterator>::Item) -> NameWrap<<I as 
 #[derive(Clone)]
 struct NameWrap<N>(N);
 
-impl<N: ProtocolName> AsRef<[u8]> for NameWrap<N> {
+impl<N> AsRef<[u8]> for NameWrap<N> {
     fn as_ref(&self) -> &[u8] {
-        self.0.protocol_name()
+        self.0.protocol_name().as_bytes()
     }
 }

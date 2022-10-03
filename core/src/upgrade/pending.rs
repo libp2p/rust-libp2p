@@ -26,51 +26,44 @@ use void::Void;
 
 /// Implementation of [`UpgradeInfo`], [`InboundUpgrade`] and [`OutboundUpgrade`] that always
 /// returns a pending upgrade.
-#[derive(Debug, Copy, Clone)]
-pub struct PendingUpgrade<P> {
-    protocol_name: P,
+#[derive(Debug, Clone)]
+pub struct PendingUpgrade {
+    protocol_name: ProtocolName,
 }
 
-impl<P> PendingUpgrade<P> {
-    pub fn new(protocol_name: P) -> Self {
+impl PendingUpgrade {
+    pub fn new(protocol_name: ProtocolName) -> Self {
         Self { protocol_name }
     }
 }
 
-impl<P> UpgradeInfo for PendingUpgrade<P>
-where
-    P: ProtocolName + Clone,
+impl UpgradeInfo for PendingUpgrade
 {
-    type Info = P;
-    type InfoIter = iter::Once<P>;
+    type InfoIter = iter::Once<ProtocolName>;
 
     fn protocol_info(&self) -> Self::InfoIter {
         iter::once(self.protocol_name.clone())
     }
 }
 
-impl<C, P> InboundUpgrade<C> for PendingUpgrade<P>
-where
-    P: ProtocolName + Clone,
+impl<C> InboundUpgrade<C> for PendingUpgrade
 {
     type Output = Void;
     type Error = Void;
     type Future = future::Pending<Result<Self::Output, Self::Error>>;
 
-    fn upgrade_inbound(self, _: C, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, _: C, _: ProtocolName) -> Self::Future {
         future::pending()
     }
 }
 
-impl<C, P> OutboundUpgrade<C> for PendingUpgrade<P>
-where
-    P: ProtocolName + Clone,
+impl<C> OutboundUpgrade<C> for PendingUpgrade
 {
     type Output = Void;
     type Error = Void;
     type Future = future::Pending<Result<Self::Output, Self::Error>>;
 
-    fn upgrade_outbound(self, _: C, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, _: C, _: ProtocolName) -> Self::Future {
         future::pending()
     }
 }

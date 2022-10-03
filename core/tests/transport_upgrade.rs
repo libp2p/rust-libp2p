@@ -32,8 +32,7 @@ use std::{io, pin::Pin};
 struct HelloUpgrade {}
 
 impl UpgradeInfo for HelloUpgrade {
-    type Info = &'static str;
-    type InfoIter = std::iter::Once<Self::Info>;
+    type InfoIter = std::iter::Once<ProtocolName>;
 
     fn protocol_info(&self) -> Self::InfoIter {
         std::iter::once("/hello/1")
@@ -48,7 +47,7 @@ where
     type Error = io::Error;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-    fn upgrade_inbound(self, mut socket: C, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, mut socket: C, _: ProtocolName) -> Self::Future {
         Box::pin(async move {
             let mut buf = [0u8; 5];
             socket.read_exact(&mut buf).await.unwrap();
@@ -66,7 +65,7 @@ where
     type Error = io::Error;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-    fn upgrade_outbound(self, mut socket: C, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, mut socket: C, _: ProtocolName) -> Self::Future {
         Box::pin(async move {
             socket.write_all(b"hello").await.unwrap();
             socket.flush().await.unwrap();
