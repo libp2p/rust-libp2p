@@ -407,7 +407,7 @@ where
             .map_err(|_| NoiseError::InvalidKey)?;
         if let Some(ref k) = state.id_remote_pubkey {
             if k != &pk {
-                return Err(NoiseError::InvalidKey);
+                return Err(NoiseError::UnexpectedKey);
             }
         }
         state.id_remote_pubkey = Some(pk);
