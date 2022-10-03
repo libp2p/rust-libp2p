@@ -131,7 +131,7 @@ impl IdentifyConfig {
             initial_delay: Duration::from_millis(500),
             interval: Duration::from_secs(5 * 60),
             push_listen_addr_updates: false,
-            cache_size: 0,
+            cache_size: 100,
         }
     }
 
