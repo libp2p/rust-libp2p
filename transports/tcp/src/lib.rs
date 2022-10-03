@@ -521,7 +521,7 @@ where
     /// address.
     fn address_translation(&self, listen: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
         if !is_tcp_addr(listen) || !is_tcp_addr(observed) {
-            return None
+            return None;
         }
         match &self.port_reuse {
             PortReuse::Disabled => address_translation(listen, observed),
@@ -834,12 +834,13 @@ fn ip_to_multiaddr(ip: IpAddr, port: u16) -> Multiaddr {
 
 fn is_tcp_addr(addr: &Multiaddr) -> bool {
     let mut iter = addr.iter();
-    let mut is_tcp = matches!(iter.next(),
-        Some(Protocol::Ip4(_)) 
-        | Some(Protocol::Ip6(_))
-        | Some(Protocol::Dns(_))
-        | Some(Protocol::Dns4(_)) 
-        | Some(Protocol::Dns6(_)) 
+    let mut is_tcp = matches!(
+        iter.next(),
+        Some(Protocol::Ip4(_))
+            | Some(Protocol::Ip6(_))
+            | Some(Protocol::Dns(_))
+            | Some(Protocol::Dns4(_))
+            | Some(Protocol::Dns6(_))
     );
     is_tcp &= matches!(iter.next(), Some(Protocol::Tcp(_)));
     is_tcp
@@ -1258,7 +1259,6 @@ mod tests {
         test("/ip4/127.0.0.1/tcp/12345/tcp/12345".parse().unwrap());
     }
 
-
     #[cfg(any(feature = "async-io", feature = "tcp"))]
     #[test]
     fn test_address_translation() {
@@ -1269,23 +1269,32 @@ mod tests {
 
         let port = 42;
         let tcp_listen_addr = Multiaddr::empty()
-            .with(Protocol::Ip4(Ipv4Addr::new(127,0,0,1)))
+            .with(Protocol::Ip4(Ipv4Addr::new(127, 0, 0, 1)))
             .with(Protocol::Tcp(port));
-        let observed_ip = Ipv4Addr::new(123,45,67,8);
+        let observed_ip = Ipv4Addr::new(123, 45, 67, 8);
         let tcp_observed_addr = Multiaddr::empty()
             .with(Protocol::Ip4(observed_ip))
             .with(Protocol::Tcp(1))
             .with(Protocol::P2p(PeerId::random().into()));
 
-        let translated = transport.address_translation(&tcp_listen_addr, &tcp_observed_addr).unwrap();
+        let translated = transport
+            .address_translation(&tcp_listen_addr, &tcp_observed_addr)
+            .unwrap();
         let mut iter = translated.iter();
         assert_eq!(iter.next(), Some(Protocol::Ip4(observed_ip)));
         assert_eq!(iter.next(), Some(Protocol::Tcp(port)));
         assert_eq!(iter.next(), None);
-        
-        let quic_addr = Multiaddr::empty().with(Protocol::Ip4(Ipv4Addr::new(87, 65, 43, 21))).with(Protocol::Udp(1)).with(Protocol::Quic);
 
-        assert!(transport.address_translation(&tcp_listen_addr, &quic_addr).is_none());
-        assert!(transport.address_translation(&quic_addr, &tcp_observed_addr).is_none());
+        let quic_addr = Multiaddr::empty()
+            .with(Protocol::Ip4(Ipv4Addr::new(87, 65, 43, 21)))
+            .with(Protocol::Udp(1))
+            .with(Protocol::Quic);
+
+        assert!(transport
+            .address_translation(&tcp_listen_addr, &quic_addr)
+            .is_none());
+        assert!(transport
+            .address_translation(&quic_addr, &tcp_observed_addr)
+            .is_none());
     }
 }
