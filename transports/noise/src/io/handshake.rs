@@ -25,10 +25,10 @@ mod payload_proto {
     include!(concat!(env!("OUT_DIR"), "/payload.proto.rs"));
 }
 
-use crate::error::NoiseError;
 use crate::io::{framed::NoiseFramed, NoiseOutput};
 use crate::protocol::{KeypairIdentity, Protocol, PublicKey};
 use crate::LegacyConfig;
+use crate::NoiseError;
 use bytes::Bytes;
 use futures::prelude::*;
 use futures::task;

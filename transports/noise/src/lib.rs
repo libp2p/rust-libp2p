@@ -53,11 +53,9 @@
 //!
 //! [noise]: http://noiseprotocol.org/
 
-mod error;
 mod io;
 mod protocol;
 
-pub use error::NoiseError;
 pub use io::handshake;
 pub use io::handshake::{Handshake, IdentityExchange, RemoteIdentity};
 pub use io::NoiseOutput;
@@ -213,6 +211,24 @@ where
             prologue: Vec::default(),
         }
     }
+}
+
+/// libp2p_noise error type.
+#[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
+pub enum NoiseError {
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+    #[error(transparent)]
+    Noise(#[from] snow::Error),
+    #[error("Invalid public key")]
+    InvalidKey,
+    #[error("Authentication failed")]
+    AuthenticationFailed,
+    #[error(transparent)]
+    InvalidPayload(#[from] prost::DecodeError),
+    #[error(transparent)]
+    SigningError(#[from] identity::error::SigningError),
 }
 
 // Handshake pattern IX /////////////////////////////////////////////////////
