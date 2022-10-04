@@ -138,8 +138,9 @@ pub struct AuthenticKeypair<T: Zeroize> {
 }
 
 impl<T: Zeroize> AuthenticKeypair<T> {
-    pub fn dh_keypair(&self) -> &Keypair<T> {
-        &self.keypair
+    /// Returns the public DH key of this keypair.
+    pub fn public_dh_key(&self) -> &PublicKey<T> {
+        &self.keypair.public
     }
 
     /// Extract the public [`KeypairIdentity`] from this `AuthenticKeypair`,
