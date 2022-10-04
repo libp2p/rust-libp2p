@@ -31,6 +31,7 @@
 //! The `UdsConfig` structs implements the `Transport` trait of the `core` library. See the
 //! documentation of `core` and of libp2p in general to learn how to use the `Transport` trait.
 
+#![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg(all(
     unix,
     not(target_os = "emscripten"),
