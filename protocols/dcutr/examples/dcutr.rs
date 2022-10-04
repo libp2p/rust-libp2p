@@ -26,7 +26,7 @@ use libp2p::core::multiaddr::{Multiaddr, Protocol};
 use libp2p::core::transport::OrTransport;
 use libp2p::core::upgrade;
 use libp2p::dns::DnsConfig;
-use libp2p::identify::{Identify, IdentifyConfig, IdentifyEvent, IdentifyInfo};
+use libp2p::identify;
 use libp2p::noise;
 use libp2p::relay::v2::client::{self, Client};
 use libp2p::swarm::{SwarmBuilder, SwarmEvent};
@@ -108,14 +108,14 @@ fn main() -> Result<(), Box<dyn Error>> {
     struct Behaviour {
         relay_client: Client,
         ping: ping::Behaviour,
-        identify: Identify,
+        identify: identify::Behaviour,
         dcutr: dcutr::behaviour::Behaviour,
     }
 
     #[derive(Debug)]
     enum Event {
         Ping(ping::Event),
-        Identify(IdentifyEvent),
+        Identify(identify::Event),
         Relay(client::Event),
         Dcutr(dcutr::behaviour::Event),
     }
@@ -126,8 +126,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    impl From<IdentifyEvent> for Event {
-        fn from(e: IdentifyEvent) -> Self {
+    impl From<identify::Event> for Event {
+        fn from(e: identify::Event) -> Self {
             Event::Identify(e)
         }
     }
@@ -147,7 +147,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let behaviour = Behaviour {
         relay_client: client,
         ping: ping::Behaviour::new(ping::Config::new()),
-        identify: Identify::new(IdentifyConfig::new(
+        identify: identify::Behaviour::new(identify::Config::new(
             "/TODO/0.0.1".to_string(),
             local_key.public(),
         )),
@@ -200,12 +200,12 @@ fn main() -> Result<(), Box<dyn Error>> {
                 SwarmEvent::Dialing { .. } => {}
                 SwarmEvent::ConnectionEstablished { .. } => {}
                 SwarmEvent::Behaviour(Event::Ping(_)) => {}
-                SwarmEvent::Behaviour(Event::Identify(IdentifyEvent::Sent { .. })) => {
+                SwarmEvent::Behaviour(Event::Identify(identify::Event::Sent { .. })) => {
                     info!("Told relay its public address.");
                     told_relay_observed_addr = true;
                 }
-                SwarmEvent::Behaviour(Event::Identify(IdentifyEvent::Received {
-                    info: IdentifyInfo { observed_addr, .. },
+                SwarmEvent::Behaviour(Event::Identify(identify::Event::Received {
+                    info: identify::Info { observed_addr, .. },
                     ..
                 })) => {
                     info!("Relay told us our public address: {:?}", observed_addr);

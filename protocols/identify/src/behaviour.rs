@@ -18,8 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::handler::{IdentifyHandlerEvent, IdentifyHandlerProto, IdentifyPush};
-use crate::protocol::{IdentifyInfo, ReplySubstream, UpgradeError};
+use crate::handler::{self, Proto, Push};
+use crate::protocol::{Info, ReplySubstream, UpgradeError};
 use futures::prelude::*;
 use libp2p_core::{
     connection::ConnectionId, multiaddr::Protocol, transport::ListenerId, ConnectedPoint,
@@ -47,14 +47,14 @@ use std::{
 /// All external addresses of the local node supposedly observed by remotes
 /// are reported via [`NetworkBehaviourAction::ReportObservedAddr`] with a
 /// [score](AddressScore) of `1`.
-pub struct Identify {
-    config: IdentifyConfig,
+pub struct Behaviour {
+    config: Config,
     /// For each peer we're connected to, the observed address to send back to it.
     connected: HashMap<PeerId, HashMap<ConnectionId, Multiaddr>>,
     /// Pending replies to send.
     pending_replies: VecDeque<Reply>,
     /// Pending events to be emitted when polled.
-    events: VecDeque<NetworkBehaviourAction<IdentifyEvent, IdentifyHandlerProto>>,
+    events: VecDeque<NetworkBehaviourAction<Event, Proto>>,
     /// Peers to which an active push with current information about
     /// the local peer should be sent.
     pending_push: HashSet<PeerId>,
@@ -77,10 +77,10 @@ enum Reply {
     },
 }
 
-/// Configuration for the [`Identify`] [`NetworkBehaviour`].
+/// Configuration for the [`identify::Behaviour`](Behaviour).
 #[non_exhaustive]
 #[derive(Debug, Clone)]
-pub struct IdentifyConfig {
+pub struct Config {
     /// Application-specific version of the protocol family used by the peer,
     /// e.g. `ipfs/1.0.0` or `polkadot/1.0.0`.
     pub protocol_version: String,
@@ -120,11 +120,11 @@ pub struct IdentifyConfig {
     pub cache_size: usize,
 }
 
-impl IdentifyConfig {
-    /// Creates a new configuration for the `Identify` behaviour that
+impl Config {
+    /// Creates a new configuration for the identify [`Behaviour`] that
     /// advertises the given protocol version and public key.
     pub fn new(protocol_version: String, local_public_key: PublicKey) -> Self {
-        IdentifyConfig {
+        Self {
             protocol_version,
             agent_version: format!("rust-libp2p/{}", env!("CARGO_PKG_VERSION")),
             local_public_key,
@@ -166,22 +166,22 @@ impl IdentifyConfig {
     /// Configures the size of the LRU cache, caching addresses of discovered peers.
     ///
     /// The [`Swarm`](libp2p_swarm::Swarm) may extend the set of addresses of an outgoing connection attempt via
-    ///  [`Identify::addresses_of_peer`].
+    ///  [`Behaviour::addresses_of_peer`].
     pub fn with_cache_size(mut self, cache_size: usize) -> Self {
         self.cache_size = cache_size;
         self
     }
 }
 
-impl Identify {
-    /// Creates a new `Identify` network behaviour.
-    pub fn new(config: IdentifyConfig) -> Self {
+impl Behaviour {
+    /// Creates a new identify [`Behaviour`].
+    pub fn new(config: Config) -> Self {
         let discovered_peers = match NonZeroUsize::new(config.cache_size) {
             None => PeerCache::disabled(),
             Some(size) => PeerCache::enabled(size),
         };
 
-        Identify {
+        Self {
             config,
             connected: HashMap::new(),
             pending_replies: VecDeque::new(),
@@ -208,12 +208,12 @@ impl Identify {
     }
 }
 
-impl NetworkBehaviour for Identify {
-    type ConnectionHandler = IdentifyHandlerProto;
-    type OutEvent = IdentifyEvent;
+impl NetworkBehaviour for Behaviour {
+    type ConnectionHandler = Proto;
+    type OutEvent = Event;
 
     fn new_handler(&mut self) -> Self::ConnectionHandler {
-        IdentifyHandlerProto::new(self.config.initial_delay, self.config.interval)
+        Proto::new(self.config.initial_delay, self.config.interval)
     }
 
     fn inject_connection_established(
@@ -300,7 +300,7 @@ impl NetworkBehaviour for Identify {
         event: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent,
     ) {
         match event {
-            IdentifyHandlerEvent::Identified(mut info) => {
+            handler::Event::Identified(mut info) => {
                 // Remove invalid multiaddrs.
                 info.listen_addrs
                     .retain(|addr| multiaddr_matches_peer_id(addr, &peer_id));
@@ -310,21 +310,24 @@ impl NetworkBehaviour for Identify {
                     .put(peer_id, info.listen_addrs.iter().cloned());
 
                 let observed = info.observed_addr.clone();
-                self.events.push_back(NetworkBehaviourAction::GenerateEvent(
-                    IdentifyEvent::Received { peer_id, info },
-                ));
+                self.events
+                    .push_back(NetworkBehaviourAction::GenerateEvent(Event::Received {
+                        peer_id,
+                        info,
+                    }));
                 self.events
                     .push_back(NetworkBehaviourAction::ReportObservedAddr {
                         address: observed,
                         score: AddressScore::Finite(1),
                     });
             }
-            IdentifyHandlerEvent::IdentificationPushed => {
-                self.events.push_back(NetworkBehaviourAction::GenerateEvent(
-                    IdentifyEvent::Pushed { peer_id },
-                ));
+            handler::Event::IdentificationPushed => {
+                self.events
+                    .push_back(NetworkBehaviourAction::GenerateEvent(Event::Pushed {
+                        peer_id,
+                    }));
             }
-            IdentifyHandlerEvent::Identify(sender) => {
+            handler::Event::Identify(sender) => {
                 let observed = self
                     .connected
                     .get(&peer_id)
@@ -339,10 +342,12 @@ impl NetworkBehaviour for Identify {
                     observed: observed.clone(),
                 });
             }
-            IdentifyHandlerEvent::IdentificationError(error) => {
-                self.events.push_back(NetworkBehaviourAction::GenerateEvent(
-                    IdentifyEvent::Error { peer_id, error },
-                ));
+            handler::Event::IdentificationError(error) => {
+                self.events
+                    .push_back(NetworkBehaviourAction::GenerateEvent(Event::Error {
+                        peer_id,
+                        error,
+                    }));
             }
         }
     }
@@ -368,7 +373,7 @@ impl NetworkBehaviour for Identify {
                 let listen_addrs = listen_addrs(params);
                 let protocols = supported_protocols(params);
 
-                let info = IdentifyInfo {
+                let info = Info {
                     public_key: self.config.local_public_key.clone(),
                     protocol_version: self.config.protocol_version.clone(),
                     agent_version: self.config.agent_version.clone(),
@@ -377,7 +382,7 @@ impl NetworkBehaviour for Identify {
                     observed_addr,
                 };
 
-                (*peer, IdentifyPush(info))
+                (*peer, Push(info))
             })
         });
 
@@ -398,7 +403,7 @@ impl NetworkBehaviour for Identify {
             loop {
                 match reply {
                     Some(Reply::Queued { peer, io, observed }) => {
-                        let info = IdentifyInfo {
+                        let info = Info {
                             listen_addrs: listen_addrs(params),
                             protocols: supported_protocols(params),
                             public_key: self.config.local_public_key.clone(),
@@ -413,7 +418,7 @@ impl NetworkBehaviour for Identify {
                         sending += 1;
                         match Future::poll(Pin::new(&mut io), cx) {
                             Poll::Ready(Ok(())) => {
-                                let event = IdentifyEvent::Sent { peer_id: peer };
+                                let event = Event::Sent { peer_id: peer };
                                 return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event));
                             }
                             Poll::Pending => {
@@ -426,7 +431,7 @@ impl NetworkBehaviour for Identify {
                                 }
                             }
                             Poll::Ready(Err(err)) => {
-                                let event = IdentifyEvent::Error {
+                                let event = Event::Error {
                                     peer_id: peer,
                                     error: ConnectionHandlerUpgrErr::Upgrade(
                                         libp2p_core::upgrade::UpgradeError::Apply(err),
@@ -452,13 +457,13 @@ impl NetworkBehaviour for Identify {
 /// Event emitted  by the `Identify` behaviour.
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
-pub enum IdentifyEvent {
+pub enum Event {
     /// Identification information has been received from a peer.
     Received {
         /// The peer that has been identified.
         peer_id: PeerId,
         /// The information provided by the peer.
-        info: IdentifyInfo,
+        info: Info,
     },
     /// Identification information of the local node has been sent to a peer in
     /// response to an identification request.
@@ -576,9 +581,8 @@ mod tests {
     fn periodic_identify() {
         let (mut swarm1, pubkey1) = {
             let (pubkey, transport) = transport();
-            let protocol = Identify::new(
-                IdentifyConfig::new("a".to_string(), pubkey.clone())
-                    .with_agent_version("b".to_string()),
+            let protocol = Behaviour::new(
+                Config::new("a".to_string(), pubkey.clone()).with_agent_version("b".to_string()),
             );
             let swarm = Swarm::new(transport, protocol, pubkey.to_peer_id());
             (swarm, pubkey)
@@ -586,9 +590,8 @@ mod tests {
 
         let (mut swarm2, pubkey2) = {
             let (pubkey, transport) = transport();
-            let protocol = Identify::new(
-                IdentifyConfig::new("c".to_string(), pubkey.clone())
-                    .with_agent_version("d".to_string()),
+            let protocol = Behaviour::new(
+                Config::new("c".to_string(), pubkey.clone()).with_agent_version("d".to_string()),
             );
             let swarm = Swarm::new(transport, protocol, pubkey.to_peer_id());
             (swarm, pubkey)
@@ -626,9 +629,8 @@ mod tests {
                     .factor_second()
                     .0
                 {
-                    future::Either::Left(SwarmEvent::Behaviour(IdentifyEvent::Received {
-                        info,
-                        ..
+                    future::Either::Left(SwarmEvent::Behaviour(Event::Received {
+                        info, ..
                     })) => {
                         assert_eq!(info.public_key, pubkey2);
                         assert_eq!(info.protocol_version, "c");
@@ -637,9 +639,8 @@ mod tests {
                         assert!(info.listen_addrs.is_empty());
                         return;
                     }
-                    future::Either::Right(SwarmEvent::Behaviour(IdentifyEvent::Received {
-                        info,
-                        ..
+                    future::Either::Right(SwarmEvent::Behaviour(Event::Received {
+                        info, ..
                     })) => {
                         assert_eq!(info.public_key, pubkey1);
                         assert_eq!(info.protocol_version, "a");
@@ -660,16 +661,15 @@ mod tests {
 
         let (mut swarm1, pubkey1) = {
             let (pubkey, transport) = transport();
-            let protocol = Identify::new(IdentifyConfig::new("a".to_string(), pubkey.clone()));
+            let protocol = Behaviour::new(Config::new("a".to_string(), pubkey.clone()));
             let swarm = Swarm::new(transport, protocol, pubkey.to_peer_id());
             (swarm, pubkey)
         };
 
         let (mut swarm2, pubkey2) = {
             let (pubkey, transport) = transport();
-            let protocol = Identify::new(
-                IdentifyConfig::new("a".to_string(), pubkey.clone())
-                    .with_agent_version("b".to_string()),
+            let protocol = Behaviour::new(
+                Config::new("a".to_string(), pubkey.clone()).with_agent_version("b".to_string()),
             );
             let swarm = Swarm::new(transport, protocol, pubkey.to_peer_id());
             (swarm, pubkey)
@@ -703,7 +703,7 @@ mod tests {
                         .factor_second()
                         .0
                     {
-                        future::Either::Left(SwarmEvent::Behaviour(IdentifyEvent::Received {
+                        future::Either::Left(SwarmEvent::Behaviour(Event::Received {
                             info,
                             ..
                         })) => {
@@ -735,8 +735,8 @@ mod tests {
 
         let mut swarm1 = {
             let (pubkey, transport) = transport();
-            let protocol = Identify::new(
-                IdentifyConfig::new("a".to_string(), pubkey.clone())
+            let protocol = Behaviour::new(
+                Config::new("a".to_string(), pubkey.clone())
                     // `swarm1` will set `KeepAlive::No` once it identified `swarm2` and thus
                     // closes the connection. At this point in time `swarm2` might not yet have
                     // identified `swarm1`. To give `swarm2` enough time, set an initial delay on
@@ -749,8 +749,8 @@ mod tests {
 
         let mut swarm2 = {
             let (pubkey, transport) = transport();
-            let protocol = Identify::new(
-                IdentifyConfig::new("a".to_string(), pubkey.clone())
+            let protocol = Behaviour::new(
+                Config::new("a".to_string(), pubkey.clone())
                     .with_cache_size(100)
                     .with_agent_version("b".to_string()),
             );
@@ -787,7 +787,7 @@ mod tests {
         // Wait until we identified.
         async_std::task::block_on(async {
             loop {
-                if let SwarmEvent::Behaviour(IdentifyEvent::Received { .. }) =
+                if let SwarmEvent::Behaviour(Event::Received { .. }) =
                     swarm2.select_next_some().await
                 {
                     break;
