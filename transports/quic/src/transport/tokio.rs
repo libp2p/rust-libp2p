@@ -28,21 +28,21 @@ use futures::{ready, Future};
 use tokio_crate::{io::ReadBuf, net::UdpSocket};
 use x509_parser::nom::AsBytes;
 
-use crate::QuicTransport;
+use crate::GenTransport;
 
-use super::Provider;
+use super::Provider as ProviderTrait;
 
-pub type TokioTransport = QuicTransport<Tokio>;
-pub struct Tokio {
+pub type Transport = GenTransport<Provider>;
+pub struct Provider {
     socket: UdpSocket,
     socket_recv_buffer: Vec<u8>,
     next_packet_out: Option<(Vec<u8>, SocketAddr)>,
 }
 
-impl Provider for Tokio {
+impl ProviderTrait for Provider {
     fn from_socket(socket: std::net::UdpSocket) -> std::io::Result<Self> {
         let socket = UdpSocket::from_std(socket)?;
-        Ok(Tokio {
+        Ok(Provider {
             socket,
             socket_recv_buffer: vec![0; 65536],
             next_packet_out: None,

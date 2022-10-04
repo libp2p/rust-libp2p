@@ -29,22 +29,23 @@ use std::{
 use async_std_crate::{net::UdpSocket, task::spawn};
 use futures::{future::BoxFuture, ready, Future, FutureExt, Stream, StreamExt};
 
-use crate::QuicTransport;
+use crate::GenTransport;
 
-use super::Provider;
+use super::Provider as ProviderTrait;
 
-pub type AsyncStdTransport = QuicTransport<AsyncStd>;
-pub struct AsyncStd {
+pub type Transport = GenTransport<Provider>;
+
+pub struct Provider {
     socket: Arc<UdpSocket>,
     send_packet: Option<BoxFuture<'static, Result<(), io::Error>>>,
     recv_stream: ReceiveStream,
 }
 
-impl Provider for AsyncStd {
+impl ProviderTrait for Provider {
     fn from_socket(socket: std::net::UdpSocket) -> io::Result<Self> {
         let socket = Arc::new(socket.into());
         let recv_stream = ReceiveStream::new(Arc::clone(&socket));
-        Ok(AsyncStd {
+        Ok(Provider {
             socket,
             send_packet: None,
             recv_stream,

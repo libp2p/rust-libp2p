@@ -208,7 +208,7 @@ pub enum ToEndpoint {
     },
     /// Instruct the endpoint to send a packet of data on its UDP socket.
     SendUdpPacket(quinn_proto::Transmit),
-    /// The [`QuicTransport`] [`Dialer`] or [`Listener`] coupled to this endpoint was dropped.
+    /// The [`GenTransport`] [`Dialer`] or [`Listener`] coupled to this endpoint was dropped.
     /// Once all pending connection closed the [`EndpointDriver`] should shut down.
     Decoupled,
 }
@@ -239,7 +239,7 @@ pub enum ToEndpoint {
 /// - One channel per each existing connection that communicates messages from the  [`EndpointDriver`]
 ///   to that [`Connection`].
 /// - One channel for the  [`EndpointDriver`] to send newly-opened connections to. The receiving
-///   side is processed by the [`QuicTransport`][crate::QuicTransport].
+///   side is processed by the [`GenTransport`][crate::GenTransport].
 ///
 /// In order to avoid an unbounded buffering of events, we prioritize sending data on the UDP
 /// socket over everything else. If the network interface is too busy to process our packets,
@@ -338,7 +338,7 @@ impl<P: Provider> EndpointDriver<P> {
         }
     }
 
-    /// Handle a message sent from either the [`QuicTransport`](super::QuicTransport) or a [`Connection`].
+    /// Handle a message sent from either the [`GenTransport`](super::GenTransport) or a [`Connection`].
     fn handle_message(&mut self, to_endpoint: ToEndpoint) -> ControlFlow<()> {
         match to_endpoint {
             ToEndpoint::Dial { addr, result } => {

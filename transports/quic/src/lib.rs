@@ -31,13 +31,13 @@
 //! # #[cfg(feature = "async-std")]
 //! # fn main() -> std::io::Result<()> {
 //! #
-//! use libp2p_quic::{AsyncStdTransport, Config};
+//! use libp2p_quic as quic;
 //! use libp2p_core::{Multiaddr, Transport};
 //!
 //! let keypair = libp2p_core::identity::Keypair::generate_ed25519();
-//! let quic_config = Config::new(&keypair).expect("could not make config");
+//! let quic_config = quic::Config::new(&keypair).expect("could not make config");
 //!
-//! let mut quic_transport = AsyncStdTransport::new(quic_config);
+//! let mut quic_transport = quic::async_std::Transport::new(quic_config);
 //!
 //! let addr = "/ip4/127.0.0.1/udp/12345/quic".parse().expect("bad address?");
 //! quic_transport.listen_on(addr).expect("listen error.");
@@ -46,7 +46,7 @@
 //! # }
 //! ```
 //!
-//! The [`QuicTransport`] struct implements the [`libp2p_core::Transport`]. See the
+//! The [`GenTransport`] struct implements the [`libp2p_core::Transport`]. See the
 //! documentation of [`libp2p_core`] and of libp2p in general to learn how to use the
 //! [`Transport`][libp2p_core::Transport] trait.
 //!
@@ -69,8 +69,8 @@ pub use endpoint::Config;
 pub use muxer::QuicMuxer;
 pub use quinn_proto::ConnectError as DialError;
 #[cfg(feature = "async-std")]
-pub use transport::{AsyncStd, AsyncStdTransport};
-pub use transport::{Provider, QuicTransport, TransportError};
+pub use transport::async_std;
 #[cfg(feature = "tokio")]
-pub use transport::{Tokio, TokioTransport};
+pub use transport::tokio;
+pub use transport::{GenTransport, Provider, TransportError};
 pub use upgrade::Upgrade;

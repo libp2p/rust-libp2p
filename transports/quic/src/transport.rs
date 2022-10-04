@@ -28,14 +28,10 @@ use crate::{endpoint::EndpointChannel, muxer::QuicMuxer, upgrade::Upgrade};
 use crate::{Config, ConnectionError};
 
 #[cfg(feature = "async-std")]
-mod async_std;
+pub mod async_std;
 #[cfg(feature = "tokio")]
-mod tokio;
-#[cfg(feature = "async-std")]
-pub use async_std::{AsyncStd, AsyncStdTransport};
+pub mod tokio;
 use futures::future::BoxFuture;
-#[cfg(feature = "tokio")]
-pub use tokio::{Tokio, TokioTransport};
 
 use futures::channel::{mpsc, oneshot};
 use futures::ready;
@@ -61,7 +57,7 @@ use std::{
 };
 
 #[derive(Debug)]
-pub struct QuicTransport<P> {
+pub struct GenTransport<P> {
     config: Config,
     listeners: SelectAll<Listener>,
     /// Dialer for Ipv4 addresses if no matching listener exists.
@@ -72,7 +68,7 @@ pub struct QuicTransport<P> {
     _marker: PhantomData<P>,
 }
 
-impl<P> QuicTransport<P> {
+impl<P> GenTransport<P> {
     pub fn new(config: Config) -> Self {
         Self {
             listeners: SelectAll::new(),
@@ -102,7 +98,7 @@ pub enum TransportError {
     EndpointDriverCrashed,
 }
 
-impl<P: Provider> Transport for QuicTransport<P> {
+impl<P: Provider> Transport for GenTransport<P> {
     type Output = (PeerId, QuicMuxer);
     type Error = TransportError;
     type ListenerUpgrade = Upgrade;
@@ -615,7 +611,7 @@ mod test {
     async fn tokio_close_listener() {
         let keypair = libp2p_core::identity::Keypair::generate_ed25519();
         let config = Config::new(&keypair).unwrap();
-        let transport = TokioTransport::new(config.clone());
+        let transport = super::tokio::Transport::new(config.clone());
         test_close_listener(transport).await
     }
 
@@ -624,16 +620,16 @@ mod test {
     async fn async_std_close_listener() {
         let keypair = libp2p_core::identity::Keypair::generate_ed25519();
         let config = Config::new(&keypair).unwrap();
-        let transport = AsyncStdTransport::new(config.clone());
+        let transport = super::async_std::Transport::new(config.clone());
         test_close_listener(transport).await
     }
 
-    async fn test_close_listener<P: Provider>(mut transport: QuicTransport<P>) {
+    async fn test_close_listener<P: Provider>(mut transport: GenTransport<P>) {
         assert!(poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx))
             .now_or_never()
             .is_none());
 
-        // Run test twice to check that there is no unexpected behaviour if `QuicTransport.listener`
+        // Run test twice to check that there is no unexpected behaviour if `GenTransport.listener`
         // is temporarily empty.
         for _ in 0..2 {
             let listener = transport

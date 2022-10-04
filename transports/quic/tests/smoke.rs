@@ -25,10 +25,6 @@ use std::{io, iter};
 
 #[cfg(feature = "async-std")]
 use async_std_crate as async_std;
-#[cfg(feature = "async-std")]
-use libp2p_quic::AsyncStd;
-#[cfg(feature = "tokio")]
-use libp2p_quic::Tokio;
 #[cfg(feature = "tokio")]
 use tokio_crate as tokio;
 
@@ -40,7 +36,7 @@ async fn create_swarm<P: Provider>() -> Swarm<RequestResponse<PingCodec>> {
     let keypair = generate_tls_keypair();
     let peer_id = keypair.public().to_peer_id();
     let config = quic::Config::new(&keypair).unwrap();
-    let transport = quic::QuicTransport::<P>::new(config);
+    let transport = quic::GenTransport::<P>::new(config);
 
     let transport = Transport::map(transport, |(peer, muxer), _| {
         (peer, StreamMuxerBox::new(muxer))
@@ -64,13 +60,13 @@ async fn start_listening(swarm: &mut Swarm<RequestResponse<PingCodec>>, addr: &s
 #[cfg(feature = "tokio")]
 #[tokio::test]
 async fn tokio_smoke() {
-    smoke::<Tokio>().await
+    smoke::<quic::tokio::Provider>().await
 }
 
 #[cfg(feature = "async-std")]
 #[async_std::test]
 async fn async_std_smoke() {
-    smoke::<AsyncStd>().await
+    smoke::<quic::async_std::Provider>().await
 }
 
 async fn smoke<P: Provider>() {
@@ -295,8 +291,8 @@ impl RequestResponseCodec for PingCodec {
 #[cfg(feature = "async-std")]
 #[async_std::test]
 async fn dial_failure() {
-    let mut a = create_swarm::<AsyncStd>().await;
-    let mut b = create_swarm::<AsyncStd>().await;
+    let mut a = create_swarm::<quic::async_std::Provider>().await;
+    let mut b = create_swarm::<quic::async_std::Provider>().await;
 
     let addr = start_listening(&mut a, "/ip4/127.0.0.1/udp/0/quic").await;
 
@@ -445,10 +441,10 @@ fn concurrent_connections_and_streams() {
     #[cfg(feature = "tokio")]
     tokio::runtime::Runtime::new()
         .unwrap()
-        .block_on(prop::<Tokio>(num_listener, num_streams));
+        .block_on(prop::<quic::tokio::Provider>(num_listener, num_streams));
 
     #[cfg(feature = "async-std")]
-    async_std::task::block_on(prop::<AsyncStd>(num_listener, num_streams));
+    async_std::task::block_on(prop::<quic::async_std::Provider>(num_listener, num_streams));
 
     // QuickCheck::new().quickcheck(prop as fn(_, _) -> _);
 }
@@ -456,8 +452,8 @@ fn concurrent_connections_and_streams() {
 #[cfg(feature = "tokio")]
 #[tokio::test]
 async fn endpoint_reuse() {
-    let mut swarm_a = create_swarm::<Tokio>().await;
-    let mut swarm_b = create_swarm::<Tokio>().await;
+    let mut swarm_a = create_swarm::<quic::tokio::Provider>().await;
+    let mut swarm_b = create_swarm::<quic::tokio::Provider>().await;
     let b_peer_id = *swarm_b.local_peer_id();
 
     let a_addr = start_listening(&mut swarm_a, "/ip4/127.0.0.1/udp/0/quic").await;
@@ -547,8 +543,8 @@ async fn endpoint_reuse() {
 #[cfg(feature = "async-std")]
 #[async_std::test]
 async fn ipv4_dial_ipv6() {
-    let mut swarm_a = create_swarm::<AsyncStd>().await;
-    let mut swarm_b = create_swarm::<AsyncStd>().await;
+    let mut swarm_a = create_swarm::<quic::async_std::Provider>().await;
+    let mut swarm_b = create_swarm::<quic::async_std::Provider>().await;
 
     let a_addr = start_listening(&mut swarm_a, "/ip6/::1/udp/0/quic").await;
 
