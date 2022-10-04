@@ -41,6 +41,9 @@ use libp2p_core::{
     transport::{ListenerId, TransportError as CoreTransportError, TransportEvent},
     PeerId, Transport,
 };
+use rand::prelude::SliceRandom;
+use rand::thread_rng;
+use std::collections::hash_map::Entry;
 use std::collections::{HashMap, VecDeque};
 use std::marker::PhantomData;
 use std::net::IpAddr;
@@ -146,32 +149,23 @@ impl<P: Provider> Transport for GenTransport<P> {
             })
             .collect::<Vec<_>>();
 
-        let (tx, rx) = oneshot::channel();
-        let to_endpoint = ToEndpoint::Dial {
-            addr: socket_addr,
-            result: tx,
-        };
-        let (pending_dials, waker) = if listeners.is_empty() {
-            let socket_family = socket_addr.ip().into();
-            let dialer = match self.dialer.get_mut(&socket_family) {
-                Some(dialer) => dialer,
-                None => {
-                    let dialer = Dialer::new::<P>(self.config.clone(), socket_family)?;
-                    self.dialer.entry(socket_family).or_insert(dialer)
-                }
-            };
-            (&mut dialer.pending_dials, &mut dialer.waker)
-        } else {
-            // Pick a random listener to use for dialing.
-            let n = rand::random::<usize>() % listeners.len();
-            let listener = listeners.get_mut(n).expect("Can not be out of bound.");
-            (&mut listener.pending_dials, &mut listener.waker)
-        };
+        // Try to use pick a random listener to use for dialing.
+        let rx = match listeners.choose_mut(&mut thread_rng()) {
+            Some(listener) => listener.dial(socket_addr),
+            None => {
+                // No listener? Get or create an explicit dialer.
 
-        pending_dials.push_back(to_endpoint);
-        if let Some(waker) = waker.take() {
-            waker.wake()
-        }
+                let socket_family = socket_addr.ip().into();
+                let dialer = match self.dialer.entry(socket_family) {
+                    Entry::Occupied(occupied) => occupied.into_mut(),
+                    Entry::Vacant(vacant) => {
+                        vacant.insert(Dialer::new::<P>(self.config.clone(), socket_family)?)
+                    }
+                };
+
+                dialer.dial(socket_addr)
+            }
+        };
 
         Ok(async move {
             let connection = rx
@@ -241,6 +235,26 @@ impl Dialer {
             pending_dials: VecDeque::new(),
             waker: None,
         })
+    }
+
+    fn dial(
+        &mut self,
+        address: SocketAddr,
+    ) -> oneshot::Receiver<Result<Connection, quinn_proto::ConnectError>> {
+        let (rx, tx) = oneshot::channel();
+
+        let message = ToEndpoint::Dial {
+            addr: address,
+            result: rx,
+        };
+
+        self.pending_dials.push_back(message);
+
+        if let Some(waker) = self.waker.take() {
+            waker.wake();
+        }
+
+        tx
     }
 
     fn drive_dials(&mut self, cx: &mut Context<'_>) -> Result<(), mpsc::SendError> {
@@ -320,6 +334,24 @@ impl Listener {
             pending_dials: VecDeque::new(),
             waker: None,
         })
+    }
+
+    fn dial(
+        &mut self,
+        address: SocketAddr,
+    ) -> oneshot::Receiver<Result<Connection, quinn_proto::ConnectError>> {
+        let (rx, tx) = oneshot::channel();
+
+        self.pending_dials.push_back(ToEndpoint::Dial {
+            addr: address,
+            result: rx,
+        });
+
+        if let Some(waker) = self.waker.take() {
+            waker.wake();
+        }
+
+        tx
     }
 
     /// Report the listener as closed in a [`TransportEvent::ListenerClosed`] and
