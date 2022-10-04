@@ -24,16 +24,12 @@
 
 use crate::connection::Connection;
 use crate::endpoint::ToEndpoint;
+use crate::provider::Provider;
 use crate::{endpoint::EndpointChannel, muxer::QuicMuxer, upgrade::Connecting};
 use crate::{Config, ConnectionError};
 
-#[cfg(feature = "async-std")]
-pub mod async_std;
-#[cfg(feature = "tokio")]
-pub mod tokio;
-use futures::future::BoxFuture;
-
 use futures::channel::{mpsc, oneshot};
+use futures::future::BoxFuture;
 use futures::ready;
 use futures::stream::StreamExt;
 use futures::{prelude::*, stream::SelectAll};
@@ -46,9 +42,8 @@ use libp2p_core::{
     PeerId, Transport,
 };
 use std::collections::VecDeque;
-use std::io;
 use std::marker::PhantomData;
-use std::net::{IpAddr, UdpSocket};
+use std::net::IpAddr;
 use std::task::Waker;
 use std::{
     net::SocketAddr,
@@ -445,29 +440,6 @@ impl Drop for Listener {
     }
 }
 
-// Wrapped socket for non-blocking I/O operations.
-pub trait Provider: Unpin + Send + Sized + 'static {
-    // Wrap a socket.
-    // Note: The socket must be set to non-blocking.
-    fn from_socket(socket: UdpSocket) -> io::Result<Self>;
-
-    // Receive a single datagram message.
-    // Returns the message and the address the message came from.
-    fn poll_recv_from(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<(Vec<u8>, SocketAddr)>>;
-
-    // Set sending the packet on the socket.
-    // Since only one packet may be sent at a time, this may only be called if a preceding call
-    // to [`Provider::poll_send_flush`] returned [`Poll::Ready`].
-    fn start_send(&mut self, data: Vec<u8>, addr: SocketAddr);
-
-    // Flush a packet send in [`Provider::start_send`].
-    // If [`Poll::Ready`] is returned the socket is ready for sending a new packet.
-    fn poll_send_flush(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>>;
-
-    // Run the given future in the background until it ends.
-    fn spawn(future: impl Future<Output = ()> + Send + 'static);
-}
-
 /// Turn an [`IpAddr`] into a listen-address for the endpoint.
 ///
 /// Returns `None` if the address is not the same socket family as the
@@ -615,7 +587,7 @@ mod test {
     async fn tokio_close_listener() {
         let keypair = libp2p_core::identity::Keypair::generate_ed25519();
         let config = Config::new(&keypair).unwrap();
-        let transport = super::tokio::Transport::new(config.clone());
+        let transport = crate::tokio::Transport::new(config.clone());
         test_close_listener(transport).await
     }
 
@@ -624,7 +596,7 @@ mod test {
     async fn async_std_close_listener() {
         let keypair = libp2p_core::identity::Keypair::generate_ed25519();
         let config = Config::new(&keypair).unwrap();
-        let transport = super::async_std::Transport::new(config.clone());
+        let transport = crate::async_std::Transport::new(config.clone());
         test_close_listener(transport).await
     }
 

@@ -28,11 +28,7 @@
 //! the rest of the code only happens through channels. See the documentation of the
 //! [`EndpointDriver`] for a thorough description.
 
-use crate::{
-    connection::Connection,
-    tls,
-    transport::{self, Provider},
-};
+use crate::{connection::Connection, provider::Provider, tls, transport};
 
 use bytes::BytesMut;
 use futures::{

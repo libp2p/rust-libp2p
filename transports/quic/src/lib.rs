@@ -60,6 +60,7 @@
 mod connection;
 mod endpoint;
 mod muxer;
+mod provider;
 mod tls;
 mod transport;
 mod upgrade;
@@ -67,10 +68,11 @@ mod upgrade;
 pub use connection::ConnectionError;
 pub use endpoint::Config;
 pub use muxer::QuicMuxer;
-pub use quinn_proto::ConnectError as DialError;
 #[cfg(feature = "async-std")]
-pub use transport::async_std;
+pub use provider::async_std;
 #[cfg(feature = "tokio")]
-pub use transport::tokio;
-pub use transport::{GenTransport, Provider, TransportError};
+pub use provider::tokio;
+pub use provider::Provider;
+pub use quinn_proto::ConnectError as DialError;
+pub use transport::{GenTransport, TransportError};
 pub use upgrade::Connecting;
