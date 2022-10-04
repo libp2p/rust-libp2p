@@ -25,12 +25,12 @@ use self::dns::{build_query, build_query_response, build_service_discovery_respo
 use self::query::MdnsPacket;
 use crate::behaviour::{socket::AsyncSocket, timer::Builder};
 use crate::MdnsConfig;
-use libp2p_core::{address_translation, multiaddr::Protocol, Multiaddr, PeerId};
+use libp2p_core::{Multiaddr, PeerId};
 use libp2p_swarm::PollParameters;
 use socket2::{Domain, Socket, Type};
 use std::{
     collections::VecDeque,
-    io, iter,
+    io,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket},
     pin::Pin,
     task::{Context, Poll},
@@ -145,106 +145,101 @@ where
         self.timeout = T::interval_at(Instant::now(), self.query_interval);
     }
 
-    fn inject_mdns_packet(&mut self, packet: MdnsPacket, params: &impl PollParameters) {
-        log::trace!("received packet on iface {} {:?}", self.addr, packet);
-        match packet {
-            MdnsPacket::Query(query) => {
-                self.reset_timer();
-                log::trace!("sending response on iface {}", self.addr);
-                for packet in build_query_response(
-                    query.query_id(),
-                    *params.local_peer_id(),
-                    params.listened_addresses(),
-                    self.ttl,
-                ) {
-                    self.send_buffer.push_back(packet);
-                }
-            }
-            MdnsPacket::Response(response) => {
-                // We replace the IP address with the address we observe the
-                // remote as and the address they listen on.
-                let obs_ip = Protocol::from(response.remote_addr().ip());
-                let obs_port = Protocol::Udp(response.remote_addr().port());
-                let observed: Multiaddr = iter::once(obs_ip).chain(iter::once(obs_port)).collect();
-
-                for peer in response.discovered_peers() {
-                    if peer.id() == params.local_peer_id() {
-                        continue;
-                    }
-
-                    let new_expiration = Instant::now() + peer.ttl();
-
-                    for addr in peer.addresses() {
-                        if let Some(new_addr) = address_translation(addr, &observed) {
-                            self.discovered.push_back((
-                                *peer.id(),
-                                new_addr.clone(),
-                                new_expiration,
-                            ));
-                        }
-
-                        self.discovered
-                            .push_back((*peer.id(), addr.clone(), new_expiration));
-                    }
-                }
-            }
-            MdnsPacket::ServiceDiscovery(disc) => {
-                let resp = build_service_discovery_response(disc.query_id(), self.ttl);
-                self.send_buffer.push_back(resp);
-            }
-        }
-    }
-
     pub fn poll(
         &mut self,
         cx: &mut Context,
         params: &impl PollParameters,
-    ) -> Option<(PeerId, Multiaddr, Instant)> {
-        // Poll receive socket.
-        while let Poll::Ready(data) =
-            Pin::new(&mut self.recv_socket).poll_read(cx, &mut self.recv_buffer)
-        {
-            match data {
-                Ok((len, from)) => {
-                    if let Some(packet) = MdnsPacket::new_from_bytes(&self.recv_buffer[..len], from)
-                    {
-                        self.inject_mdns_packet(packet, params);
+    ) -> Poll<(PeerId, Multiaddr, Instant)> {
+        loop {
+            // 1st priority: Low latency: Create packet ASAP after timeout.
+            if Pin::new(&mut self.timeout).poll_next(cx).is_ready() {
+                log::trace!("sending query on iface {}", self.addr);
+                self.send_buffer.push_back(build_query());
+            }
+
+            // 2nd priority: Keep local buffers small: Send packets to remote.
+            if let Some(packet) = self.send_buffer.pop_front() {
+                match Pin::new(&mut self.send_socket).poll_write(
+                    cx,
+                    &packet,
+                    SocketAddr::new(self.multicast_addr, 5353),
+                ) {
+                    Poll::Ready(Ok(_)) => {
+                        log::trace!("sent packet on iface {}", self.addr);
+                        continue;
+                    }
+                    Poll::Ready(Err(err)) => {
+                        log::error!("error sending packet on iface {} {}", self.addr, err);
+                        continue;
+                    }
+                    Poll::Pending => {
+                        self.send_buffer.push_front(packet);
                     }
                 }
-                Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => {
-                    // No more bytes available on the socket to read
-                    break;
+            }
+
+            // 3rd priority: Keep local buffers small: Return discovered addresses.
+            if let Some(discovered) = self.discovered.pop_front() {
+                return Poll::Ready(discovered);
+            }
+
+            // 4th priority: Remote work: Answer incoming requests.
+            match Pin::new(&mut self.recv_socket)
+                .poll_read(cx, &mut self.recv_buffer)
+                .map_ok(|(len, from)| MdnsPacket::new_from_bytes(&self.recv_buffer[..len], from))
+            {
+                Poll::Ready(Ok(Ok(Some(MdnsPacket::Query(query))))) => {
+                    self.reset_timer();
+                    log::trace!(
+                        "received query from {} on {}",
+                        query.remote_addr(),
+                        self.addr
+                    );
+
+                    self.send_buffer.extend(build_query_response(
+                        query.query_id(),
+                        *params.local_peer_id(),
+                        params.listened_addresses(),
+                        self.ttl,
+                    ));
+                    continue;
                 }
-                Err(err) => {
+                Poll::Ready(Ok(Ok(Some(MdnsPacket::Response(response))))) => {
+                    log::trace!(
+                        "received response from {} on {}",
+                        response.remote_addr(),
+                        self.addr
+                    );
+
+                    self.discovered.extend(
+                        response.extract_discovered(Instant::now(), *params.local_peer_id()),
+                    );
+                    continue;
+                }
+                Poll::Ready(Ok(Ok(Some(MdnsPacket::ServiceDiscovery(disc))))) => {
+                    log::trace!(
+                        "received service discovery from {} on {}",
+                        disc.remote_addr(),
+                        self.addr
+                    );
+
+                    self.send_buffer
+                        .push_back(build_service_discovery_response(disc.query_id(), self.ttl));
+                    continue;
+                }
+                Poll::Ready(Err(err)) if err.kind() == std::io::ErrorKind::WouldBlock => {
+                    // No more bytes available on the socket to read
+                }
+                Poll::Ready(Err(err)) => {
                     log::error!("failed reading datagram: {}", err);
                 }
-            }
-        }
-
-        // Send responses.
-        while let Some(packet) = self.send_buffer.pop_front() {
-            match Pin::new(&mut self.send_socket).poll_write(
-                cx,
-                &packet,
-                SocketAddr::new(self.multicast_addr, 5353),
-            ) {
-                Poll::Ready(Ok(_)) => log::trace!("sent packet on iface {}", self.addr),
-                Poll::Ready(Err(err)) => {
-                    log::error!("error sending packet on iface {} {}", self.addr, err);
+                Poll::Ready(Ok(Err(err))) => {
+                    log::debug!("Parsing mdns packet failed: {:?}", err);
                 }
-                Poll::Pending => {
-                    self.send_buffer.push_front(packet);
-                    break;
-                }
+                Poll::Ready(Ok(Ok(None))) | Poll::Pending => {}
             }
-        }
 
-        if Pin::new(&mut self.timeout).poll_next(cx).is_ready() {
-            log::trace!("sending query on iface {}", self.addr);
-            self.send_buffer.push_back(build_query());
+            return Poll::Pending;
         }
-
-        // Emit discovered event.
-        self.discovered.pop_front()
     }
 }
