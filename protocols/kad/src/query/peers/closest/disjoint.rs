@@ -456,22 +456,20 @@ mod tests {
             let num_closest_iters = g.gen_range(0..20 + 1);
             let peers = random_peers(g.gen_range(0..20 * num_closest_iters + 1), g);
 
-            let iters: Vec<_> = (0..num_closest_iters)
-                .map(|_| {
-                    let num_peers = g.gen_range(0..20 + 1);
-                    let mut peers = g
-                        .choose_multiple(&peers, num_peers)
-                        .cloned()
-                        .map(Key::from)
-                        .collect::<Vec<_>>();
+            let iters = (0..num_closest_iters).map(|_| {
+                let num_peers = g.gen_range(0..20 + 1);
+                let mut peers = g
+                    .choose_multiple(&peers, num_peers)
+                    .cloned()
+                    .map(Key::from)
+                    .collect::<Vec<_>>();
 
-                    peers.sort_unstable_by(|a, b| target.distance(a).cmp(&target.distance(b)));
+                peers.sort_unstable_by_key(|a| target.distance(a));
 
-                    peers.into_iter()
-                })
-                .collect();
+                peers.into_iter()
+            });
 
-            ResultIter::new(target, iters.into_iter())
+            ResultIter::new(target.clone(), iters)
         }
 
         fn shrink(&self) -> Box<dyn Iterator<Item = Self>> {
@@ -514,20 +512,15 @@ mod tests {
             // The peer that should not be included.
             let peer = self.peers.pop()?;
 
-            let iters = self
-                .iters
-                .clone()
-                .into_iter()
-                .filter_map(|mut iter| {
-                    iter.retain(|p| p != &peer);
-                    if iter.is_empty() {
-                        return None;
-                    }
-                    Some(iter.into_iter())
-                })
-                .collect::<Vec<_>>();
+            let iters = self.iters.clone().into_iter().filter_map(|mut iter| {
+                iter.retain(|p| p != &peer);
+                if iter.is_empty() {
+                    return None;
+                }
+                Some(iter.into_iter())
+            });
 
-            Some(ResultIter::new(self.target.clone(), iters.into_iter()))
+            Some(ResultIter::new(self.target.clone(), iters))
         }
     }
 
@@ -640,7 +633,7 @@ mod tests {
             .map(|_| Key::from(PeerId::random()))
             .collect::<Vec<_>>();
 
-        pool.sort_unstable_by(|a, b| target.distance(a).cmp(&target.distance(b)));
+        pool.sort_unstable_by_key(|a| target.distance(a));
 
         let known_closest_peers = pool.split_off(pool.len() - 3);
 
@@ -650,11 +643,8 @@ mod tests {
             ..ClosestPeersIterConfig::default()
         };
 
-        let mut peers_iter = ClosestDisjointPeersIter::with_config(
-            config.clone(),
-            target,
-            known_closest_peers.clone(),
-        );
+        let mut peers_iter =
+            ClosestDisjointPeersIter::with_config(config, target, known_closest_peers.clone());
 
         ////////////////////////////////////////////////////////////////////////
         // First round.
@@ -681,19 +671,19 @@ mod tests {
             malicious_response_1
                 .clone()
                 .into_iter()
-                .map(|k| k.preimage().clone()),
+                .map(|k| *k.preimage()),
         );
 
         // Response from peer 2.
         peers_iter.on_success(
             known_closest_peers[1].preimage(),
-            response_2.clone().into_iter().map(|k| k.preimage().clone()),
+            response_2.clone().into_iter().map(|k| *k.preimage()),
         );
 
         // Response from peer 3.
         peers_iter.on_success(
             known_closest_peers[2].preimage(),
-            response_3.clone().into_iter().map(|k| k.preimage().clone()),
+            response_3.clone().into_iter().map(|k| *k.preimage()),
         );
 
         ////////////////////////////////////////////////////////////////////////
@@ -752,7 +742,7 @@ mod tests {
         fn arbitrary(g: &mut Gen) -> Self {
             let mut peer_ids = random_peers(g.gen_range(K_VALUE.get()..200), g)
                 .into_iter()
-                .map(|peer_id| (peer_id.clone(), Key::from(peer_id)))
+                .map(|peer_id| (peer_id, Key::from(peer_id)))
                 .collect::<Vec<_>>();
 
             // Make each peer aware of its direct neighborhood.
@@ -790,7 +780,7 @@ mod tests {
                     .collect::<Vec<_>>();
 
                 peer.known_peers.append(&mut random_peer_ids);
-                peer.known_peers = std::mem::replace(&mut peer.known_peers, vec![])
+                peer.known_peers = std::mem::take(&mut peer.known_peers)
                     // Deduplicate peer ids.
                     .into_iter()
                     .collect::<HashSet<_>>()
@@ -804,7 +794,8 @@ mod tests {
 
     impl Graph {
         fn get_closest_peer(&self, target: &KeyBytes) -> PeerId {
-            self.0
+            *self
+                .0
                 .iter()
                 .map(|(peer_id, _)| (target.distance(&Key::from(*peer_id)), peer_id))
                 .fold(None, |acc, (distance_b, peer_id_b)| match acc {
@@ -819,7 +810,6 @@ mod tests {
                 })
                 .expect("Graph to have at least one peer.")
                 .1
-                .clone()
         }
     }
 
@@ -892,8 +882,7 @@ mod tests {
                 .take(K_VALUE.get())
                 .map(|(key, _peers)| Key::from(*key))
                 .collect::<Vec<_>>();
-            known_closest_peers
-                .sort_unstable_by(|a, b| target.distance(a).cmp(&target.distance(b)));
+            known_closest_peers.sort_unstable_by_key(|a| target.distance(a));
 
             let cfg = ClosestPeersIterConfig {
                 parallelism: parallelism.0,
@@ -917,7 +906,7 @@ mod tests {
                     target.clone(),
                     known_closest_peers.clone(),
                 )),
-                graph.clone(),
+                graph,
                 &target,
             );
 
@@ -964,11 +953,8 @@ mod tests {
                 match iter.next(now) {
                     PeersIterState::Waiting(Some(peer_id)) => {
                         let peer_id = peer_id.clone().into_owned();
-                        let closest_peers = graph
-                            .0
-                            .get_mut(&peer_id)
-                            .unwrap()
-                            .get_closest_peers(&target);
+                        let closest_peers =
+                            graph.0.get_mut(&peer_id).unwrap().get_closest_peers(target);
                         iter.on_success(&peer_id, closest_peers);
                     }
                     PeersIterState::WaitingAtCapacity | PeersIterState::Waiting(None) => {
@@ -983,7 +969,7 @@ mod tests {
                 .into_iter()
                 .map(Key::from)
                 .collect::<Vec<_>>();
-            result.sort_unstable_by(|a, b| target.distance(a).cmp(&target.distance(b)));
+            result.sort_unstable_by_key(|a| target.distance(a));
             result.into_iter().map(|k| k.into_preimage()).collect()
         }
 
@@ -998,7 +984,7 @@ mod tests {
         let peer = PeerId::random();
         let mut iter = ClosestDisjointPeersIter::new(
             Key::from(PeerId::random()).into(),
-            iter::once(Key::from(peer.clone())),
+            iter::once(Key::from(peer)),
         );
 
         assert!(matches!(iter.next(now), PeersIterState::Waiting(Some(_))));
