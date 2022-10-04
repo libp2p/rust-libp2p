@@ -5,7 +5,6 @@ edition = "2021"
 license = "MIT"
 resolver = "2"
 
-
 [dependencies]
 libp2p-core = { version = "0.37", path = "../../core" }
 futures = "0.3"
@@ -19,7 +18,6 @@ async-std-crate = { package = "async-std", version = "1", optional = true, defau
 libp2p = { version = "0.49", path = "../../" }
 tokio-crate = { package = "tokio", version = "1", features = ["rt", "macros"] }
 async-std-crate = { package = "async-std", version = "1", features = ["attributes"] }
-
 
 [features]
 tokio = ["arti-client/tokio", "dep:tokio-crate"]
