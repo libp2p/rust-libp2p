@@ -84,13 +84,13 @@ impl<P> GenTransport<P> {
 #[derive(Debug, thiserror::Error)]
 pub enum TransportError {
     /// Error while trying to reach a remote.
-    #[error("{0}")]
-    Reach(quinn_proto::ConnectError),
+    #[error(transparent)]
+    Reach(#[from] quinn_proto::ConnectError),
     /// Error after the remote has been reached.
-    #[error("{0}")]
-    Established(ConnectionError),
+    #[error(transparent)]
+    Established(#[from] ConnectionError),
 
-    #[error("{0}")]
+    #[error(transparent)]
     Io(#[from] std::io::Error),
 
     /// The task driving the endpoint has crashed.
@@ -111,8 +111,7 @@ impl<P: Provider> Transport for GenTransport<P> {
         let socket_addr = multiaddr_to_socketaddr(&addr)
             .ok_or(CoreTransportError::MultiaddrNotSupported(addr))?;
         let listener_id = ListenerId::new();
-        let listener = Listener::new::<P>(listener_id, socket_addr, self.config.clone())
-            .map_err(CoreTransportError::Other)?;
+        let listener = Listener::new::<P>(listener_id, socket_addr, self.config.clone())?;
         self.listeners.push(listener);
 
         // Drop reference to dialer endpoint so that the endpoint is dropped once the last
@@ -193,8 +192,7 @@ impl<P: Provider> Transport for GenTransport<P> {
         Ok(async move {
             let connection = rx
                 .await
-                .map_err(|_| TransportError::EndpointDriverCrashed)?
-                .map_err(TransportError::Reach)?;
+                .map_err(|_| TransportError::EndpointDriverCrashed)??;
             let final_connec = Connecting::from_connection(connection).await?;
             Ok(final_connec)
         }
@@ -234,6 +232,12 @@ impl<P: Provider> Transport for GenTransport<P> {
             Poll::Ready(Some(ev)) => Poll::Ready(ev),
             _ => Poll::Pending,
         }
+    }
+}
+
+impl From<TransportError> for CoreTransportError<TransportError> {
+    fn from(err: TransportError) -> Self {
+        CoreTransportError::Other(err)
     }
 }
 

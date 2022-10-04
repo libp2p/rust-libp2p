@@ -23,7 +23,7 @@ use crate::{
     ConnectionError,
 };
 
-use futures::{AsyncRead, AsyncWrite};
+use futures::{ready, AsyncRead, AsyncWrite};
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
 use parking_lot::Mutex;
 use std::{
@@ -212,13 +212,10 @@ impl StreamMuxer for QuicMuxer {
             if connection.send_stream_count() == 0 && !connection.is_closed() {
                 connection.close()
             }
-            match connection.poll_event(cx) {
-                Poll::Ready(ConnectionEvent::ConnectionLost(_)) => return Poll::Ready(Ok(())),
-                Poll::Ready(_) => {}
-                Poll::Pending => break,
+            if let ConnectionEvent::ConnectionLost(_) = ready!(connection.poll_event(cx)) {
+                return Poll::Ready(Ok(()));
             }
         }
-        Poll::Pending
     }
 }
 

@@ -64,9 +64,7 @@ impl Future for Connecting {
                     let muxer = QuicMuxer::from_connection(self.connection.take().unwrap());
                     return Poll::Ready(Ok((peer_id, muxer)));
                 }
-                ConnectionEvent::ConnectionLost(err) => {
-                    return Poll::Ready(Err(transport::TransportError::Established(err)))
-                }
+                ConnectionEvent::ConnectionLost(err) => return Poll::Ready(Err(err.into())),
                 ConnectionEvent::HandshakeDataReady
                 | ConnectionEvent::StreamAvailable
                 | ConnectionEvent::StreamOpened

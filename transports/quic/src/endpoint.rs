@@ -208,7 +208,7 @@ pub enum ToEndpoint {
     },
     /// Instruct the endpoint to send a packet of data on its UDP socket.
     SendUdpPacket(quinn_proto::Transmit),
-    /// The [`GenTransport`][transport::GenTransport] dialer or listener coupled to this endpoint 
+    /// The [`GenTransport`][transport::GenTransport] dialer or listener coupled to this endpoint
     /// was dropped.
     /// Once all pending connection closed the [`EndpointDriver`] should shut down.
     Decoupled,
