@@ -76,9 +76,9 @@
     - Update to [`libp2p-websocket` `v0.39.0`](transports/websocket/CHANGELOG.md#0390).
     - Update to [`libp2p-yamux` `v0.41.0`](muxers/mplex/CHANGELOG.md#0410).
 
-- [PR 2918]: https://github.com/libp2p/rust-libp2p/pull/2918
-
 - Introduce [`libp2p-tls` `v0.1.0`](transports/tls/CHANGELOG.md#010).
+
+- [PR 2918]: https://github.com/libp2p/rust-libp2p/pull/2918
 
 # 0.48.0
 

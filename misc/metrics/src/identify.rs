@@ -112,16 +112,16 @@ impl Metrics {
     }
 }
 
-impl super::Recorder<libp2p_identify::IdentifyEvent> for Metrics {
-    fn record(&self, event: &libp2p_identify::IdentifyEvent) {
+impl super::Recorder<libp2p_identify::Event> for Metrics {
+    fn record(&self, event: &libp2p_identify::Event) {
         match event {
-            libp2p_identify::IdentifyEvent::Error { .. } => {
+            libp2p_identify::Event::Error { .. } => {
                 self.error.inc();
             }
-            libp2p_identify::IdentifyEvent::Pushed { .. } => {
+            libp2p_identify::Event::Pushed { .. } => {
                 self.pushed.inc();
             }
-            libp2p_identify::IdentifyEvent::Received { peer_id, info, .. } => {
+            libp2p_identify::Event::Received { peer_id, info, .. } => {
                 {
                     let mut protocols: Vec<String> = info
                         .protocols
@@ -168,7 +168,7 @@ impl super::Recorder<libp2p_identify::IdentifyEvent> for Metrics {
                 self.received_info_listen_addrs
                     .observe(info.listen_addrs.len() as f64);
             }
-            libp2p_identify::IdentifyEvent::Sent { .. } => {
+            libp2p_identify::Event::Sent { .. } => {
                 self.sent.inc();
             }
         }
