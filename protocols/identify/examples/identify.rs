@@ -37,8 +37,7 @@
 //! and will send each other identify info which is then printed to the console.
 
 use futures::prelude::*;
-use libp2p::{identity, Multiaddr, PeerId};
-use libp2p_identify::{Identify, IdentifyConfig, IdentifyEvent};
+use libp2p::{identify, identity, Multiaddr, PeerId};
 use libp2p_swarm::{Swarm, SwarmEvent};
 use std::error::Error;
 
@@ -51,7 +50,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let transport = libp2p::development_transport(local_key.clone()).await?;
 
     // Create a identify network behaviour.
-    let behaviour = Identify::new(IdentifyConfig::new(
+    let behaviour = identify::Behaviour::new(identify::Config::new(
         "/ipfs/id/1.0.0".to_string(),
         local_key.public(),
     ));
@@ -74,11 +73,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
         match swarm.select_next_some().await {
             SwarmEvent::NewListenAddr { address, .. } => println!("Listening on {:?}", address),
             // Prints peer id identify info is being sent to.
-            SwarmEvent::Behaviour(IdentifyEvent::Sent { peer_id, .. }) => {
+            SwarmEvent::Behaviour(identify::Event::Sent { peer_id, .. }) => {
                 println!("Sent identify info to {:?}", peer_id)
             }
             // Prints out the info received via the identify event
-            SwarmEvent::Behaviour(IdentifyEvent::Received { info, .. }) => {
+            SwarmEvent::Behaviour(identify::Event::Received { info, .. }) => {
                 println!("Received {:?}", info)
             }
             _ => {}

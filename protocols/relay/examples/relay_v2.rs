@@ -23,7 +23,7 @@ use clap::Parser;
 use futures::executor::block_on;
 use futures::stream::StreamExt;
 use libp2p::core::upgrade;
-use libp2p::identify::{Identify, IdentifyConfig, IdentifyEvent};
+use libp2p::identify;
 use libp2p::multiaddr::Protocol;
 use libp2p::relay::v2::relay::{self, Relay};
 use libp2p::swarm::{Swarm, SwarmEvent};
@@ -59,7 +59,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let behaviour = Behaviour {
         relay: Relay::new(local_peer_id, Default::default()),
         ping: ping::Behaviour::new(ping::Config::new()),
-        identify: Identify::new(IdentifyConfig::new(
+        identify: identify::Behaviour::new(identify::Config::new(
             "/TODO/0.0.1".to_string(),
             local_key.public(),
         )),
@@ -96,13 +96,13 @@ fn main() -> Result<(), Box<dyn Error>> {
 struct Behaviour {
     relay: Relay,
     ping: ping::Behaviour,
-    identify: Identify,
+    identify: identify::Behaviour,
 }
 
 #[derive(Debug)]
 enum Event {
     Ping(ping::Event),
-    Identify(IdentifyEvent),
+    Identify(identify::Event),
     Relay(relay::Event),
 }
 
@@ -112,8 +112,8 @@ impl From<ping::Event> for Event {
     }
 }
 
-impl From<IdentifyEvent> for Event {
-    fn from(e: IdentifyEvent) -> Self {
+impl From<identify::Event> for Event {
+    fn from(e: identify::Event) -> Self {
         Event::Identify(e)
     }
 }
