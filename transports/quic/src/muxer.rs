@@ -45,7 +45,7 @@ pub struct QuicMuxer {
 struct Inner {
     /// Inner connection object that yields events.
     connection: Connection,
-    // /// State of all the substreams that the muxer reports as open.
+    /// State of all the substreams that the muxer reports as open.
     substreams: HashMap<quinn_proto::StreamId, SubstreamState>,
     /// Waker to wake if a new outbound substream is opened.
     poll_outbound_waker: Option<Waker>,
@@ -142,11 +142,10 @@ impl StreamMuxer for QuicMuxer {
                 }
             }
         }
-        inner.poll_connection_waker = Some(cx.waker().clone());
-
         // TODO: If connection migration is enabled (currently disabled) address
         // change on the connection needs to be handled.
 
+        inner.poll_connection_waker = Some(cx.waker().clone());
         Poll::Pending
     }
 
@@ -155,6 +154,7 @@ impl StreamMuxer for QuicMuxer {
         cx: &mut Context<'_>,
     ) -> Poll<Result<Self::Substream, Self::Error>> {
         let mut inner = self.inner.lock();
+        
         let substream_id = match inner.connection.accept_substream() {
             Some(id) => {
                 inner.poll_outbound_waker = None;
@@ -167,6 +167,7 @@ impl StreamMuxer for QuicMuxer {
         };
         inner.substreams.insert(substream_id, Default::default());
         let substream = Substream::new(substream_id, self.inner.clone());
+        
         Poll::Ready(Ok(substream))
     }
 
@@ -258,11 +259,8 @@ impl AsyncRead for Substream {
             if buf.is_empty() {
                 break;
             }
-            match chunks.next(buf.len()) {
-                Ok(Some(chunk)) => {
-                    buf.write_all(&chunk.bytes).expect("enough buffer space");
-                    bytes += chunk.bytes.len();
-                }
+            let chunk = match chunks.next(buf.len()) {
+                Ok(Some(chunk)) => chunk,
                 Ok(None) => break,
                 Err(err @ quinn_proto::ReadError::Reset(_)) => {
                     return Poll::Ready(Err(io::Error::new(io::ErrorKind::ConnectionReset, err)))
@@ -271,7 +269,10 @@ impl AsyncRead for Substream {
                     pending = true;
                     break;
                 }
-            }
+            };
+
+            buf.write_all(&chunk.bytes).expect("enough buffer space");
+            bytes += chunk.bytes.len();
         }
         if chunks.finalize().should_transmit() {
             if let Some(waker) = muxer.poll_connection_waker.take() {

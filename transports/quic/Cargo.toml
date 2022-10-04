@@ -29,12 +29,12 @@ x509-parser = "0.13.0"
 yasna = "0.5.0"
 
 [features]
-tokio = ["tokio-crate"]
-async-std = ["async-std-crate"]
+tokio = ["dep:tokio-crate"]
+async-std = ["dep:async-std-crate"]
 
 [dev-dependencies]
 async-std-crate = { package = "async-std", version = "1.12.0", features = ["attributes"] }
-libp2p = { version = "0.49.0", default-features = false, features = ["request-response"], path = "../.." }
+libp2p = { path = "../..", features = ["request-response"] }
 rand = "0.8.4"
 tokio-crate = { package = "tokio", version = "1.21.1", features = ["macros", "rt-multi-thread"] }
 quickcheck = "1"
