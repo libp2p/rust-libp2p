@@ -180,7 +180,7 @@ impl EndpointChannel {
         self.to_endpoint.start_send(to_endpoint).map(Ok)
     }
 
-    /// Send a message to inform the [`ConnectionDriver`] about an
+    /// Send a message to inform the [`EndpointDriver`] about an
     /// event caused by the owner of this [`EndpointChannel`] dropping.
     /// This clones the sender to the endpoint to guarantee delivery.
     /// It this should *not* be called for regular messages.
@@ -208,7 +208,8 @@ pub enum ToEndpoint {
     },
     /// Instruct the endpoint to send a packet of data on its UDP socket.
     SendUdpPacket(quinn_proto::Transmit),
-    /// The [`GenTransport`] [`Dialer`] or [`Listener`] coupled to this endpoint was dropped.
+    /// The [`GenTransport`][transport::GenTransport] dialer or listener coupled to this endpoint 
+    /// was dropped.
     /// Once all pending connection closed the [`EndpointDriver`] should shut down.
     Decoupled,
 }
