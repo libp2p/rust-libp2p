@@ -8,7 +8,7 @@ use libp2p_core::UpgradeError;
 use std::task::{Context, Poll};
 use void::Void;
 
-/// Implementation of [`NetworkBehaviour`] that doesn't do anything other than keep all connections alive.
+/// Implementation of [`NetworkBehaviour`] that doesn't do anything.
 pub struct Behaviour;
 
 impl NetworkBehaviour for Behaviour {
