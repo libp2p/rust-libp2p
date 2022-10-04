@@ -8,8 +8,11 @@
 
 - Fix a bug that could cause a delay of ~10s until peers would get discovered when using the tokio runtime. See [PR 2939].
 
+- Update to `if-watch` `v2.0.0`. See [PR 2978].
+
 [PR 2918]: https://github.com/libp2p/rust-libp2p/pull/2918
 [PR 2939]: https://github.com/libp2p/rust-libp2p/pull/2939
+[PR 2978]: https://github.com/libp2p/rust-libp2p/pull/2978
 
 # 0.40.0
 
