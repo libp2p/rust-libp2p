@@ -151,7 +151,7 @@ impl<P: Provider> Transport for GenTransport<P> {
             addr: socket_addr,
             result: tx,
         };
-        if listeners.is_empty() {
+        let (pending_dials, waker) = if listeners.is_empty() {
             let socket_family = socket_addr.ip().into();
             let dialer = match self.dialer.get_mut(&socket_family) {
                 Some(dialer) => dialer,
@@ -160,16 +160,18 @@ impl<P: Provider> Transport for GenTransport<P> {
                     self.dialer.entry(socket_family).or_insert(dialer)
                 }
             };
-            dialer.pending_dials.push_back(to_endpoint);
+            (&mut dialer.pending_dials, &mut dialer.waker)
         } else {
             // Pick a random listener to use for dialing.
             let n = rand::random::<usize>() % listeners.len();
             let listener = listeners.get_mut(n).expect("Can not be out of bound.");
-            listener.pending_dials.push_back(to_endpoint);
-            if let Some(waker) = listener.waker.take() {
-                waker.wake()
-            }
+            (&mut listener.pending_dials, &mut listener.waker)
         };
+
+        pending_dials.push_back(to_endpoint);
+        if let Some(waker) = waker.take() {
+            waker.wake()
+        }
 
         Ok(async move {
             let connection = rx
@@ -203,7 +205,7 @@ impl<P: Provider> Transport for GenTransport<P> {
             }
         }
         for key in errored {
-            // Background task of dialer crashed.
+            // Endpoint driver of dialer crashed.
             // Drop dialer and all pending dials so that the connection receiver is notified.
             self.dialer.remove(&key);
         }
@@ -224,6 +226,7 @@ impl From<TransportError> for CoreTransportError<TransportError> {
 struct Dialer {
     endpoint_channel: EndpointChannel,
     pending_dials: VecDeque<ToEndpoint>,
+    waker: Option<Waker>,
 }
 
 impl Dialer {
@@ -236,19 +239,22 @@ impl Dialer {
         Ok(Dialer {
             endpoint_channel,
             pending_dials: VecDeque::new(),
+            waker: None,
         })
     }
 
     fn drive_dials(&mut self, cx: &mut Context<'_>) -> Result<(), mpsc::SendError> {
-        if let Some(to_endpoint) = self.pending_dials.pop_front() {
+        while let Some(to_endpoint) = self.pending_dials.pop_front() {
             match self.endpoint_channel.try_send(to_endpoint, cx) {
                 Ok(Ok(())) => {}
-                Ok(Err(to_endpoint)) => self.pending_dials.push_front(to_endpoint),
-                Err(err) => {
-                    return Err(err);
+                Ok(Err(to_endpoint)) => {
+                    self.pending_dials.push_front(to_endpoint);
+                    break;
                 }
+                Err(err) => return Err(err),
             }
         }
+        self.waker = Some(cx.waker().clone());
         Ok(())
     }
 }
@@ -432,11 +438,10 @@ pub enum SocketFamily {
 
 impl SocketFamily {
     fn is_same(a: &IpAddr, b: &IpAddr) -> bool {
-        match (a, b) {
-            (IpAddr::V4(_), IpAddr::V4(_)) => true,
-            (IpAddr::V6(_), IpAddr::V6(_)) => true,
-            _ => false,
-        }
+        matches!(
+            (a, b),
+            (IpAddr::V4(_), IpAddr::V4(_)) | (IpAddr::V6(_), IpAddr::V6(_))
+        )
     }
 }
 

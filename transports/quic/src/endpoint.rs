@@ -384,7 +384,7 @@ impl<P: Provider> EndpointDriver<P> {
                     self.alive_connections.remove(&connection_id);
                     if self.is_decoupled && self.alive_connections.is_empty() {
                         log::info!(
-                            "Listener closed and no active connections remain. Shutting down the background task."
+                            "Driver is decoupled and no active connections remain. Shutting down."
                         );
                         return ControlFlow::Break(());
                     }
