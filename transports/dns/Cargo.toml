@@ -3,7 +3,7 @@ name = "libp2p-dns"
 edition = "2021"
 rust-version = "1.56.1"
 description = "DNS transport implementation for libp2p"
-version = "0.36.0"
+version = "0.37.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -11,7 +11,7 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-libp2p-core = { version = "0.36.0", path = "../../core", default-features = false  }
+libp2p-core = { version = "0.37.0", path = "../../core" }
 log = "0.4.1"
 futures = "0.3.1"
 async-std-resolver = { version = "0.21", optional = true }
@@ -25,7 +25,6 @@ tokio-crate = { package = "tokio", version = "1.0", default-features = false, fe
 async-std-crate = { package = "async-std", version = "1.6" }
 
 [features]
-default = ["async-std"]
 async-std = ["async-std-resolver"]
 tokio = ["trust-dns-resolver/tokio-runtime"]
 # The `tokio-` prefix and feature dependency is just to be explicit,

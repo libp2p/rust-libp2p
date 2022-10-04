@@ -265,7 +265,6 @@ mod tests {
         Transport,
     };
     use std::{self, borrow::Cow, path::Path};
-    use tempfile;
 
     #[test]
     fn multiaddr_to_path_conversion() {
@@ -321,7 +320,7 @@ mod tests {
             let mut uds = UdsConfig::new();
             let addr = rx.await.unwrap();
             let mut socket = uds.dial(addr).unwrap().await.unwrap();
-            socket.write(&[1, 2, 3]).await.unwrap();
+            let _ = socket.write(&[1, 2, 3]).await.unwrap();
         });
     }
 

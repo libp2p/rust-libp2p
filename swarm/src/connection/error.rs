@@ -18,7 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use super::handler_wrapper;
 use crate::transport::TransportError;
 use crate::Multiaddr;
 use crate::{connection::ConnectionLimit, ConnectedPoint, PeerId};
@@ -62,15 +61,6 @@ where
             ConnectionError::IO(err) => Some(err),
             ConnectionError::KeepAliveTimeout => None,
             ConnectionError::Handler(err) => Some(err),
-        }
-    }
-}
-
-impl<THandlerErr> From<handler_wrapper::Error<THandlerErr>> for ConnectionError<THandlerErr> {
-    fn from(error: handler_wrapper::Error<THandlerErr>) -> Self {
-        match error {
-            handler_wrapper::Error::Handler(e) => Self::Handler(e),
-            handler_wrapper::Error::KeepAliveTimeout => Self::KeepAliveTimeout,
         }
     }
 }

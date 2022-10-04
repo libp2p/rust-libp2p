@@ -19,7 +19,7 @@ quote = "1.0"
 syn = { version = "1.0.8", default-features = false, features = ["clone-impls", "derive", "parsing", "printing", "proc-macro"] }
 
 [dev-dependencies]
-libp2p = { path = "../", default-features = false, features = ["ping", "identify", "kad"] }
+libp2p = { path = "..", features = ["full"] }
 either = "1.6.0"
 futures = "0.3.1"
 void = "1"

@@ -83,14 +83,15 @@ Conduct](https://github.com/ipfs/community/blob/master/code-of-conduct.md).
 
 (open a pull request if you want your project to be added here)
 
-- https://github.com/paritytech/polkadot
-- https://github.com/paritytech/substrate
-- https://github.com/sigp/lighthouse
-- https://github.com/golemfactory/golem-libp2p
-- https://github.com/comit-network
-- https://github.com/rs-ipfs/rust-ipfs
-- https://github.com/marcopoloprotocol/marcopolo
-- https://github.com/ChainSafe/forest
-- https://github.com/ipfs-rust/ipfs-embed
-- https://www.actyx.com/developers/
-- https://github.com/starcoinorg/starcoin
+- [COMIT](https://github.com/comit-network/xmr-btc-swap) - Bitcoin–Monero Cross-chain Atomic Swap.
+- [Forest](https://github.com/ChainSafe/forest) - An implementation of Filecoin written in Rust.
+- [ipfs-embed](https://github.com/ipfs-rust/ipfs-embed) - A small embeddable ipfs implementation
+used and maintained by [Actyx][https://www.actyx.com].
+- [iroh](https://github.com/n0-computer/iroh) - Next-generation implementation of IPFS for Cloud & Mobile platforms.
+- [Lighthouse](https://github.com/sigp/lighthouse) - Ethereum consensus client in Rust.
+- [Locutus](https://github.com/freenet/locutus) - Global, observable, decentralized key-value store.
+- [rust-ipfs](https://github.com/rs-ipfs/rust-ipfs) - IPFS implementation in Rust.
+- [Starcoin](https://github.com/starcoinorg/starcoin) - A smart contract blockchain network that scales by layering.
+- [Subspace](https://github.com/subspace/subspace) - Subspace Network reference implementation
+- [Substrate](https://github.com/paritytech/substrate) - Framework for blockchain innovation,
+used by [Polkadot](https://www.parity.io/technologies/polkadot/).

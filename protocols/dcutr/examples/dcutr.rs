@@ -25,15 +25,14 @@ use futures::stream::StreamExt;
 use libp2p::core::multiaddr::{Multiaddr, Protocol};
 use libp2p::core::transport::OrTransport;
 use libp2p::core::upgrade;
-use libp2p::dcutr;
 use libp2p::dns::DnsConfig;
-use libp2p::identify::{Identify, IdentifyConfig, IdentifyEvent, IdentifyInfo};
+use libp2p::identify;
 use libp2p::noise;
-use libp2p::ping::{Ping, PingConfig, PingEvent};
 use libp2p::relay::v2::client::{self, Client};
 use libp2p::swarm::{SwarmBuilder, SwarmEvent};
 use libp2p::tcp::{GenTcpConfig, TcpTransport};
 use libp2p::Transport;
+use libp2p::{dcutr, ping};
 use libp2p::{identity, NetworkBehaviour, PeerId};
 use log::info;
 use std::convert::TryInto;
@@ -108,27 +107,28 @@ fn main() -> Result<(), Box<dyn Error>> {
     #[behaviour(out_event = "Event", event_process = false)]
     struct Behaviour {
         relay_client: Client,
-        ping: Ping,
-        identify: Identify,
+        ping: ping::Behaviour,
+        identify: identify::Behaviour,
         dcutr: dcutr::behaviour::Behaviour,
     }
 
     #[derive(Debug)]
+    #[allow(clippy::large_enum_variant)]
     enum Event {
-        Ping(PingEvent),
-        Identify(IdentifyEvent),
+        Ping(ping::Event),
+        Identify(identify::Event),
         Relay(client::Event),
         Dcutr(dcutr::behaviour::Event),
     }
 
-    impl From<PingEvent> for Event {
-        fn from(e: PingEvent) -> Self {
+    impl From<ping::Event> for Event {
+        fn from(e: ping::Event) -> Self {
             Event::Ping(e)
         }
     }
 
-    impl From<IdentifyEvent> for Event {
-        fn from(e: IdentifyEvent) -> Self {
+    impl From<identify::Event> for Event {
+        fn from(e: identify::Event) -> Self {
             Event::Identify(e)
         }
     }
@@ -147,8 +147,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let behaviour = Behaviour {
         relay_client: client,
-        ping: Ping::new(PingConfig::new()),
-        identify: Identify::new(IdentifyConfig::new(
+        ping: ping::Behaviour::new(ping::Config::new()),
+        identify: identify::Behaviour::new(identify::Config::new(
             "/TODO/0.0.1".to_string(),
             local_key.public(),
         )),
@@ -201,12 +201,12 @@ fn main() -> Result<(), Box<dyn Error>> {
                 SwarmEvent::Dialing { .. } => {}
                 SwarmEvent::ConnectionEstablished { .. } => {}
                 SwarmEvent::Behaviour(Event::Ping(_)) => {}
-                SwarmEvent::Behaviour(Event::Identify(IdentifyEvent::Sent { .. })) => {
+                SwarmEvent::Behaviour(Event::Identify(identify::Event::Sent { .. })) => {
                     info!("Told relay its public address.");
                     told_relay_observed_addr = true;
                 }
-                SwarmEvent::Behaviour(Event::Identify(IdentifyEvent::Received {
-                    info: IdentifyInfo { observed_addr, .. },
+                SwarmEvent::Behaviour(Event::Identify(identify::Event::Received {
+                    info: identify::Info { observed_addr, .. },
                     ..
                 })) => {
                     info!("Relay told us our public address: {:?}", observed_addr);

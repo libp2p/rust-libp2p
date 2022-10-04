@@ -24,7 +24,7 @@
 //! # Overview
 //!
 //! *Note: The gossipsub protocol specifications
-//! (https://github.com/libp2p/specs/tree/master/pubsub/gossipsub) provide an outline for the
+//! (<https://github.com/libp2p/specs/tree/master/pubsub/gossipsub>) provide an outline for the
 //! routing protocol. They should be consulted for further detail.*
 //!
 //! Gossipsub  is a blend of meshsub for data and randomsub for mesh metadata. It provides bounded
