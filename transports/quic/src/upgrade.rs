@@ -35,20 +35,20 @@ use std::{
 };
 
 /// A QUIC connection currently being negotiated.
-pub struct Upgrade {
+pub struct Connecting {
     connection: Option<Connection>,
 }
 
-impl Upgrade {
-    /// Builds an [`Upgrade`] that wraps around a [`Connection`].
+impl Connecting {
+    /// Builds an [`Connecting`] that wraps around a [`Connection`].
     pub(crate) fn from_connection(connection: Connection) -> Self {
-        Upgrade {
+        Connecting {
             connection: Some(connection),
         }
     }
 }
 
-impl Future for Upgrade {
+impl Future for Connecting {
     type Output = Result<(PeerId, QuicMuxer), transport::TransportError>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -79,7 +79,7 @@ impl Future for Upgrade {
     }
 }
 
-impl fmt::Debug for Upgrade {
+impl fmt::Debug for Connecting {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Debug::fmt(&self.connection, f)
     }

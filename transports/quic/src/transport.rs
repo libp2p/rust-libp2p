@@ -24,7 +24,7 @@
 
 use crate::connection::Connection;
 use crate::endpoint::ToEndpoint;
-use crate::{endpoint::EndpointChannel, muxer::QuicMuxer, upgrade::Upgrade};
+use crate::{endpoint::EndpointChannel, muxer::QuicMuxer, upgrade::Connecting};
 use crate::{Config, ConnectionError};
 
 #[cfg(feature = "async-std")]
@@ -101,7 +101,7 @@ pub enum TransportError {
 impl<P: Provider> Transport for GenTransport<P> {
     type Output = (PeerId, QuicMuxer);
     type Error = TransportError;
-    type ListenerUpgrade = Upgrade;
+    type ListenerUpgrade = Connecting;
     type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
     fn listen_on(
@@ -195,7 +195,7 @@ impl<P: Provider> Transport for GenTransport<P> {
                 .await
                 .map_err(|_| TransportError::EndpointDriverCrashed)?
                 .map_err(TransportError::Reach)?;
-            let final_connec = Upgrade::from_connection(connection).await?;
+            let final_connec = Connecting::from_connection(connection).await?;
             Ok(final_connec)
         }
         .boxed())
@@ -388,7 +388,7 @@ impl Listener {
 }
 
 impl Stream for Listener {
-    type Item = TransportEvent<Upgrade, TransportError>;
+    type Item = TransportEvent<Connecting, TransportError>;
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         loop {
             if let Some(event) = self.pending_event.take() {
@@ -416,7 +416,7 @@ impl Stream for Listener {
                     let local_addr = socketaddr_to_multiaddr(connection.local_addr());
                     let send_back_addr = socketaddr_to_multiaddr(&connection.remote_addr());
                     let event = TransportEvent::Incoming {
-                        upgrade: Upgrade::from_connection(connection),
+                        upgrade: Connecting::from_connection(connection),
                         local_addr,
                         send_back_addr,
                         listener_id: self.listener_id,

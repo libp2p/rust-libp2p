@@ -38,7 +38,7 @@ use std::{
     time::Instant,
 };
 
-/// Underlying structure for both [`crate::QuicMuxer`] and [`crate::Upgrade`].
+/// Underlying structure for both [`crate::QuicMuxer`] and [`crate::Connecting`].
 ///
 /// Contains everything needed to process a connection with a remote.
 /// Tied to a specific endpoint.

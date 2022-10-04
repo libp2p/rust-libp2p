@@ -73,4 +73,4 @@ pub use transport::async_std;
 #[cfg(feature = "tokio")]
 pub use transport::tokio;
 pub use transport::{GenTransport, Provider, TransportError};
-pub use upgrade::Upgrade;
+pub use upgrade::Connecting;
