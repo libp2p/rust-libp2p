@@ -80,8 +80,6 @@ exceptions = [
     { allow = ["MIT", "Apache-2.0", "Unicode-DFS-2016"], name = "unicode-ident" },
     # libp2p is not re-distributing unicode tables data by iteself
     { allow = ["Unicode-DFS-2016"], name = "tinystr"},
-    # exception for strange license in arti dependency
-    { allow = ["GPL-3.0", "BSD-3-Clause"], name = "bounded-vec-deque" },
 ]
 
 # Some crates don't have (easily) machine readable licensing information,
