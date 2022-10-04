@@ -109,10 +109,11 @@ libp2p-swarm-derive = { version = "0.30.1", path = "swarm-derive" }
 libp2p-uds = { version = "0.36.0", path = "transports/uds", optional = true }
 libp2p-wasm-ext = { version = "0.37.0", path = "transports/wasm-ext", optional = true }
 libp2p-yamux = { version = "0.41.0", path = "muxers/yamux", optional = true }
-multiaddr = { version = "0.14.0" }
+multiaddr = { path = "../rust-multiaddr" }
 parking_lot = "0.12.0"
 pin-project = "1.0.0"
 smallvec = "1.6.1"
+
 
 [target.'cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))'.dependencies]
 libp2p-deflate = { version = "0.37.0", path = "transports/deflate", optional = true }

@@ -27,6 +27,7 @@ use prometheus_client::registry::Registry;
 use std::collections::HashMap;
 use std::iter;
 use std::sync::{Arc, Mutex};
+use prometheus_client::metrics::family::Family;
 
 pub struct Metrics {
     protocols: Protocols,
@@ -36,6 +37,7 @@ pub struct Metrics {
     received_info_listen_addrs: Histogram,
     received_info_protocols: Histogram,
     sent: Counter,
+    listen_addresses: Family<Vec<&'static str>, Counter>,
 }
 
 impl Metrics {
@@ -100,6 +102,13 @@ impl Metrics {
             Box::new(sent.clone()),
         );
 
+        let listen_addresses = Family::default();
+        sub_registry.register(
+            "listen_addresses",
+            "Number of listen addresses for remote peer per protocol stack",
+            Box::new(listen_addresses.clone())
+        );
+
         Self {
             protocols,
             error,
@@ -108,6 +117,7 @@ impl Metrics {
             received_info_listen_addrs,
             received_info_protocols,
             sent,
+            listen_addresses
         }
     }
 }
@@ -167,6 +177,10 @@ impl super::Recorder<libp2p_identify::IdentifyEvent> for Metrics {
                     .observe(info.protocols.len() as f64);
                 self.received_info_listen_addrs
                     .observe(info.listen_addrs.len() as f64);
+                for listen_addr in &info.listen_addrs {
+                    let key : Vec<&'static str> = listen_addr.protocol_stack().collect();
+                    self.listen_addresses.get_or_create(&key).inc();
+                }
             }
             libp2p_identify::IdentifyEvent::Sent { .. } => {
                 self.sent.inc();

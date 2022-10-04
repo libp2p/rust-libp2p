@@ -52,9 +52,8 @@ use futures::executor::block_on;
 use futures::stream::StreamExt;
 use libp2p::core::Multiaddr;
 use libp2p::metrics::{Metrics, Recorder};
-use libp2p::ping;
 use libp2p::swarm::SwarmEvent;
-use libp2p::{identity, PeerId, Swarm};
+use libp2p::{identify, identity, NetworkBehaviour, PeerId, ping, Swarm};
 use prometheus_client::registry::Registry;
 use std::error::Error;
 use std::thread;
@@ -71,8 +70,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     info!("Local peer id: {:?}", local_peer_id);
 
     let mut swarm = Swarm::new(
-        block_on(libp2p::development_transport(local_key))?,
-        ping::Behaviour::new(ping::Config::new().with_keep_alive(true)),
+        block_on(libp2p::development_transport(local_key.clone()))?,
+        // ping::Behaviour::new(ping::Config::new().with_keep_alive(true)),
+        MyBehaviour::new(local_key),
         local_peer_id,
     );
 
@@ -91,9 +91,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     block_on(async {
         loop {
             match swarm.select_next_some().await {
-                SwarmEvent::Behaviour(ping_event) => {
+                SwarmEvent::Behaviour(Event::Ping(ping_event)) => {
                     info!("{:?}", ping_event);
                     metrics.record(&ping_event);
+                }
+                SwarmEvent::Behaviour(Event::Identify(identify_event)) => {
+                    info!("{:?}", identify_event);
+                    metrics.record(&identify_event);
                 }
                 swarm_event => {
                     info!("{:?}", swarm_event);
@@ -103,4 +107,38 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     });
     Ok(())
+}
+
+#[derive(NetworkBehaviour)]
+#[behaviour(out_event = "Event")]
+struct MyBehaviour {
+    identify: identify::Identify,
+    ping: ping::Behaviour,
+}
+
+#[derive(Debug)]
+enum Event {
+    Identify(identify::IdentifyEvent),
+    Ping(ping::Event),
+}
+impl From<identify::IdentifyEvent> for Event {
+    fn from(event: identify::IdentifyEvent) -> Self {
+        Self::Identify(event)
+    }
+}
+impl From<ping::Event> for Event {
+    fn from(event: ping::Event) -> Self {
+        Self::Ping(event)
+    }
+}
+impl MyBehaviour{
+    fn new(local_key: libp2p::identity::Keypair) -> Self {
+        Self{
+            ping: ping::Behaviour::new(ping::Config::new().with_keep_alive(true)),
+            identify: identify::Identify::new( identify::IdentifyConfig::new(
+                "/ipfs/0.1.0".into(),
+                local_key.public(),
+            )),
+        }
+    }
 }

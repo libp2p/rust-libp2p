@@ -24,7 +24,7 @@ use prometheus_client::metrics::family::Family;
 use prometheus_client::registry::Registry;
 
 pub struct Metrics {
-    connections_incoming: Counter,
+    connections_incoming: Family<Vec<&'static str>, Counter>,
     connections_incoming_error: Family<IncomingConnectionErrorLabels, Counter>,
 
     connections_established: Family<ConnectionEstablishedLabels, Counter>,
@@ -45,10 +45,10 @@ impl Metrics {
     pub fn new(registry: &mut Registry) -> Self {
         let sub_registry = registry.sub_registry_with_prefix("swarm");
 
-        let connections_incoming = Counter::default();
+        let connections_incoming = Family::default();
         sub_registry.register(
             "connections_incoming",
-            "Number of incoming connections",
+            "Number of incoming connections per address stack",
             Box::new(connections_incoming.clone()),
         );
 
@@ -156,8 +156,9 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
                     })
                     .inc();
             }
-            libp2p_swarm::SwarmEvent::IncomingConnection { .. } => {
-                self.connections_incoming.inc();
+            libp2p_swarm::SwarmEvent::IncomingConnection { send_back_addr, .. } => {
+                let labels : Vec<&'static str> = send_back_addr.protocol_stack().collect();
+                self.connections_incoming.get_or_create(&labels).inc();
             }
             libp2p_swarm::SwarmEvent::IncomingConnectionError { error, .. } => {
                 self.connections_incoming_error
@@ -246,6 +247,7 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
 #[derive(Encode, Hash, Clone, Eq, PartialEq)]
 struct ConnectionEstablishedLabels {
     role: Role,
+
 }
 
 #[derive(Encode, Hash, Clone, Eq, PartialEq)]
