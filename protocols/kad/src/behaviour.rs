@@ -706,12 +706,12 @@ where
         let info = QueryInfo::GetRecord {
             key,
             count: 1,
-            record_to_cache: record.as_ref().map(|r| r.record.clone()),
+            found_a_record: record.is_some(),
             cache_candidates: BTreeMap::new(),
         };
         let peers = self.kbuckets.closest_keys(&target);
         let inner = QueryInner::new(info);
-        let id = self.queries.add_iter_closest(target.clone(), peers, inner); // (*)
+        let id = self.queries.add_iter_closest(target.clone(), peers, inner);
 
         // No queries were actually done for the results yet.
         let stats = QueryStats::empty();
@@ -1381,29 +1381,10 @@ where
             QueryInfo::GetRecord {
                 key,
                 count,
-                record_to_cache,
+                found_a_record,
                 cache_candidates,
             } => {
-                let results = if let Some(record) = record_to_cache {
-                    // [not empty]
-                    if !cache_candidates.is_empty() {
-                        // Cache the record at the closest node(s) to the key that
-                        // did not return the record.
-                        let quorum = NonZeroUsize::new(1).expect("1 > 0");
-                        let context = PutRecordContext::Cache;
-                        let info = QueryInfo::PutRecord {
-                            context,
-                            record,
-                            quorum,
-                            phase: PutRecordPhase::PutRecord {
-                                success: vec![],
-                                get_closest_peers_stats: QueryStats::empty(),
-                            },
-                        };
-                        let inner = QueryInner::new(info);
-                        self.queries
-                            .add_fixed(cache_candidates.values().copied(), inner);
-                    }
+                let results = if found_a_record {
                     Ok(GetRecordOk {
                         record: Default::default(),
                         cache_candidates,
@@ -2238,13 +2219,11 @@ where
                         key,
                         ref mut count,
                         cache_candidates,
-                        ref mut record_to_cache,
+                        ref mut found_a_record,
                     } = &mut query.inner.info
                     {
                         if let Some(record) = record {
-                            if record_to_cache.is_none() {
-                                *record_to_cache = Some(record.clone());
-                            }
+                            *found_a_record = true;
                             let record = PeerRecord {
                                 peer: Some(source),
                                 record,
@@ -2675,7 +2654,7 @@ pub type GetRecordResult = Result<GetRecordOk, GetRecordError>;
 /// The successful result of [`Kademlia::get_record`].
 #[derive(Debug, Clone)]
 pub struct GetRecordOk {
-    /// The record found in this iteration, including the peer that returned them.
+    /// The record found in this iteration, including the peer that returned it.
     pub record: Option<PeerRecord>,
     /// If caching is enabled, these are the peers closest
     /// _to the record key_ (not the local node) that were queried but
@@ -3027,8 +3006,8 @@ pub enum QueryInfo {
         key: record::Key,
         /// Current index of events.
         count: usize,
-        /// The record that is to be cached in the `cache_candidates`.
-        record_to_cache: Option<Record>,
+        /// Did we find at least one record?
+        found_a_record: bool,
         /// The peers closest to the `key` that were queried but did not return a record,
         /// i.e. the peers that are candidates for caching the record.
         cache_candidates: BTreeMap<kbucket::Distance, PeerId>,
