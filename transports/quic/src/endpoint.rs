@@ -28,7 +28,12 @@
 //! the rest of the code only happens through channels. See the documentation of the
 //! [`EndpointDriver`] for a thorough description.
 
-use crate::{connection::Connection, provider::Provider, tls, transport};
+use crate::{
+    connection::Connection,
+    provider::Provider,
+    tls,
+    transport::{self, SocketFamily},
+};
 
 use bytes::BytesMut;
 use futures::{
@@ -109,12 +114,11 @@ impl EndpointChannel {
     /// Builds a new endpoint that only supports outbound connections.
     pub fn new_dialer<P: Provider>(
         config: Config,
-        is_ipv6: bool,
+        socket_family: SocketFamily,
     ) -> Result<EndpointChannel, transport::TransportError> {
-        let socket_addr = if is_ipv6 {
-            SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0)
-        } else {
-            SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0)
+        let socket_addr = match socket_family {
+            SocketFamily::Ipv4 => SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0),
+            SocketFamily::Ipv6 => SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0),
         };
         Self::new::<P>(config, socket_addr, None)
     }

@@ -41,7 +41,7 @@ use libp2p_core::{
     transport::{ListenerId, TransportError as CoreTransportError, TransportEvent},
     PeerId, Transport,
 };
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::marker::PhantomData;
 use std::net::IpAddr;
 use std::task::Waker;
@@ -55,10 +55,8 @@ use std::{
 pub struct GenTransport<P> {
     config: Config,
     listeners: SelectAll<Listener>,
-    /// Dialer for Ipv4 addresses if no matching listener exists.
-    ipv4_dialer: Option<Dialer>,
-    /// Dialer for Ipv6 addresses if no matching listener exists.
-    ipv6_dialer: Option<Dialer>,
+    /// Dialer for each socket family if no matching listener exists.
+    dialer: HashMap<SocketFamily, Dialer>,
 
     _marker: PhantomData<P>,
 }
@@ -68,8 +66,7 @@ impl<P> GenTransport<P> {
         Self {
             listeners: SelectAll::new(),
             config,
-            ipv4_dialer: None,
-            ipv6_dialer: None,
+            dialer: HashMap::new(),
             _marker: Default::default(),
         }
     }
@@ -109,14 +106,10 @@ impl<P: Provider> Transport for GenTransport<P> {
         let listener = Listener::new::<P>(listener_id, socket_addr, self.config.clone())?;
         self.listeners.push(listener);
 
-        // Drop reference to dialer endpoint so that the endpoint is dropped once the last
+        // Remove dialer endpoint so that the endpoint is dropped once the last
         // connection that uses it is closed.
         // New outbound connections will use a bidirectional (listener) endpoint.
-        let dialer = match socket_addr {
-            SocketAddr::V4(_) => self.ipv4_dialer.take(),
-            SocketAddr::V6(_) => self.ipv6_dialer.take(),
-        };
-        std::mem::drop(dialer);
+        self.dialer.remove(&socket_addr.ip().into());
 
         Ok(listener_id)
     }
@@ -148,7 +141,7 @@ impl<P: Provider> Transport for GenTransport<P> {
             .iter_mut()
             .filter(|l| {
                 let listen_addr = l.endpoint_channel.socket_addr();
-                listen_addr.is_ipv4() == socket_addr.is_ipv4()
+                SocketFamily::is_same(&listen_addr.ip(), &socket_addr.ip())
                     && listen_addr.ip().is_loopback() == socket_addr.ip().is_loopback()
             })
             .collect::<Vec<_>>();
@@ -159,21 +152,15 @@ impl<P: Provider> Transport for GenTransport<P> {
             result: tx,
         };
         if listeners.is_empty() {
-            let dialer = match socket_addr {
-                SocketAddr::V4(_) => &mut self.ipv4_dialer,
-                SocketAddr::V6(_) => &mut self.ipv6_dialer,
+            let socket_family = socket_addr.ip().into();
+            let dialer = match self.dialer.get_mut(&socket_family) {
+                Some(dialer) => dialer,
+                None => {
+                    let dialer = Dialer::new::<P>(self.config.clone(), socket_family)?;
+                    self.dialer.entry(socket_family).or_insert(dialer)
+                }
             };
-            if dialer.is_none() {
-                let _ = dialer.insert(Dialer::new::<P>(
-                    self.config.clone(),
-                    socket_addr.is_ipv6(),
-                )?);
-            }
-            dialer
-                .as_mut()
-                .unwrap()
-                .pending_dials
-                .push_back(to_endpoint);
+            dialer.pending_dials.push_back(to_endpoint);
         } else {
             // Pick a random listener to use for dialing.
             let n = rand::random::<usize>() % listeners.len();
@@ -209,19 +196,16 @@ impl<P: Provider> Transport for GenTransport<P> {
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
-        if let Some(dialer) = self.ipv4_dialer.as_mut() {
+        let mut errored = Vec::new();
+        for (key, dialer) in &mut self.dialer {
             if dialer.drive_dials(cx).is_err() {
-                // Background task of dialer crashed.
-                // Drop dialer and all pending dials so that the connection receiver is notified.
-                self.ipv4_dialer = None;
+                errored.push(*key);
             }
         }
-        if let Some(dialer) = self.ipv6_dialer.as_mut() {
-            if dialer.drive_dials(cx).is_err() {
-                // Background task of dialer crashed.
-                // Drop dialer and all pending dials so that the connection receiver is notified.
-                self.ipv4_dialer = None;
-            }
+        for key in errored {
+            // Background task of dialer crashed.
+            // Drop dialer and all pending dials so that the connection receiver is notified.
+            self.dialer.remove(&key);
         }
         match self.listeners.poll_next_unpin(cx) {
             Poll::Ready(Some(ev)) => Poll::Ready(ev),
@@ -245,10 +229,10 @@ struct Dialer {
 impl Dialer {
     fn new<P: Provider>(
         config: Config,
-        is_ipv6: bool,
+        socket_family: SocketFamily,
     ) -> Result<Self, CoreTransportError<TransportError>> {
-        let endpoint_channel =
-            EndpointChannel::new_dialer::<P>(config, is_ipv6).map_err(CoreTransportError::Other)?;
+        let endpoint_channel = EndpointChannel::new_dialer::<P>(config, socket_family)
+            .map_err(CoreTransportError::Other)?;
         Ok(Dialer {
             endpoint_channel,
             pending_dials: VecDeque::new(),
@@ -440,14 +424,38 @@ impl Drop for Listener {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SocketFamily {
+    Ipv4,
+    Ipv6,
+}
+
+impl SocketFamily {
+    fn is_same(a: &IpAddr, b: &IpAddr) -> bool {
+        match (a, b) {
+            (IpAddr::V4(_), IpAddr::V4(_)) => true,
+            (IpAddr::V6(_), IpAddr::V6(_)) => true,
+            _ => false,
+        }
+    }
+}
+
+impl From<IpAddr> for SocketFamily {
+    fn from(ip: IpAddr) -> Self {
+        match ip {
+            IpAddr::V4(_) => SocketFamily::Ipv4,
+            IpAddr::V6(_) => SocketFamily::Ipv6,
+        }
+    }
+}
+
 /// Turn an [`IpAddr`] into a listen-address for the endpoint.
 ///
 /// Returns `None` if the address is not the same socket family as the
 /// address that the endpoint is bound to.
 fn ip_to_listenaddr(endpoint_addr: &SocketAddr, ip: IpAddr) -> Option<Multiaddr> {
     // True if either both addresses are Ipv4 or both Ipv6.
-    let is_same_ip_family = endpoint_addr.is_ipv4() == ip.is_ipv4();
-    if !is_same_ip_family {
+    if !SocketFamily::is_same(&endpoint_addr.ip(), &ip) {
         return None;
     }
     let socket_addr = SocketAddr::new(ip, endpoint_addr.port());
