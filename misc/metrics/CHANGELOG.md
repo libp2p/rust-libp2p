@@ -13,7 +13,7 @@
 - Update to `libp2p-relay` `v0.12.0`.
 
 - Update to `libp2p-kad` `v0.41.0`.
-- 
+
 - Update to `libp2p-identify` `v0.39.1`.
 
 - Update to `libp2p-swarm` `v0.40.0`.

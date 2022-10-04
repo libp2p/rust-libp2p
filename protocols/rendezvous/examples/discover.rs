@@ -22,7 +22,7 @@ use futures::StreamExt;
 use libp2p::core::identity;
 use libp2p::core::PeerId;
 use libp2p::multiaddr::Protocol;
-use libp2p::ping::{Ping, PingConfig, PingEvent, PingSuccess};
+use libp2p::ping;
 use libp2p::swarm::SwarmEvent;
 use libp2p::Swarm;
 use libp2p::{development_transport, rendezvous, Multiaddr};
@@ -46,7 +46,7 @@ async fn main() {
         development_transport(identity.clone()).await.unwrap(),
         MyBehaviour {
             rendezvous: rendezvous::client::Behaviour::new(identity.clone()),
-            ping: Ping::new(PingConfig::new().with_interval(Duration::from_secs(1))),
+            ping: ping::Behaviour::new(ping::Config::new().with_interval(Duration::from_secs(1))),
             keep_alive: keep_alive::Behaviour,
         },
         PeerId::from(identity.public()),
@@ -99,9 +99,9 @@ async fn main() {
                             }
                         }
                     }
-                    SwarmEvent::Behaviour(MyEvent::Ping(PingEvent {
+                    SwarmEvent::Behaviour(MyEvent::Ping(ping::Event {
                         peer,
-                        result: Ok(PingSuccess::Ping { rtt }),
+                        result: Ok(ping::Success::Ping { rtt }),
                     })) if peer != rendezvous_point => {
                         log::info!("Ping to {} is {}ms", peer, rtt.as_millis())
                     }
@@ -123,7 +123,7 @@ async fn main() {
 #[derive(Debug)]
 enum MyEvent {
     Rendezvous(rendezvous::client::Event),
-    Ping(PingEvent),
+    Ping(ping::Event),
 }
 
 impl From<rendezvous::client::Event> for MyEvent {
@@ -132,8 +132,8 @@ impl From<rendezvous::client::Event> for MyEvent {
     }
 }
 
-impl From<PingEvent> for MyEvent {
-    fn from(event: PingEvent) -> Self {
+impl From<ping::Event> for MyEvent {
+    fn from(event: ping::Event) -> Self {
         MyEvent::Ping(event)
     }
 }
@@ -149,6 +149,6 @@ impl From<Void> for MyEvent {
 #[behaviour(out_event = "MyEvent")]
 struct MyBehaviour {
     rendezvous: rendezvous::client::Behaviour,
-    ping: Ping,
+    ping: ping::Behaviour,
     keep_alive: keep_alive::Behaviour,
 }
