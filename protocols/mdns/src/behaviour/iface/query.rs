@@ -22,9 +22,11 @@ use super::dns;
 use crate::{META_QUERY_SERVICE, SERVICE_NAME};
 use dns_parser::{Packet, RData};
 use libp2p_core::{
+    address_translation,
     multiaddr::{Multiaddr, Protocol},
     PeerId,
 };
+use std::time::Instant;
 use std::{convert::TryFrom, fmt, net::SocketAddr, str, time::Duration};
 
 /// A valid mDNS packet received by the service.
@@ -39,44 +41,40 @@ pub enum MdnsPacket {
 }
 
 impl MdnsPacket {
-    pub fn new_from_bytes(buf: &[u8], from: SocketAddr) -> Option<MdnsPacket> {
-        match Packet::parse(buf) {
-            Ok(packet) => {
-                if packet.header.query {
-                    if packet
-                        .questions
-                        .iter()
-                        .any(|q| q.qname.to_string().as_bytes() == SERVICE_NAME)
-                    {
-                        let query = MdnsPacket::Query(MdnsQuery {
-                            from,
-                            query_id: packet.header.id,
-                        });
-                        Some(query)
-                    } else if packet
-                        .questions
-                        .iter()
-                        .any(|q| q.qname.to_string().as_bytes() == META_QUERY_SERVICE)
-                    {
-                        // TODO: what if multiple questions, one with SERVICE_NAME and one with META_QUERY_SERVICE?
-                        let discovery = MdnsPacket::ServiceDiscovery(MdnsServiceDiscovery {
-                            from,
-                            query_id: packet.header.id,
-                        });
-                        Some(discovery)
-                    } else {
-                        None
-                    }
-                } else {
-                    let resp = MdnsPacket::Response(MdnsResponse::new(packet, from));
-                    Some(resp)
-                }
-            }
-            Err(err) => {
-                log::debug!("Parsing mdns packet failed: {:?}", err);
-                None
-            }
+    pub fn new_from_bytes(
+        buf: &[u8],
+        from: SocketAddr,
+    ) -> Result<Option<MdnsPacket>, dns_parser::Error> {
+        let packet = Packet::parse(buf)?;
+
+        if !packet.header.query {
+            return Ok(Some(MdnsPacket::Response(MdnsResponse::new(packet, from))));
         }
+
+        if packet
+            .questions
+            .iter()
+            .any(|q| q.qname.to_string().as_bytes() == SERVICE_NAME)
+        {
+            return Ok(Some(MdnsPacket::Query(MdnsQuery {
+                from,
+                query_id: packet.header.id,
+            })));
+        }
+
+        if packet
+            .questions
+            .iter()
+            .any(|q| q.qname.to_string().as_bytes() == META_QUERY_SERVICE)
+        {
+            // TODO: what if multiple questions, one with SERVICE_NAME and one with META_QUERY_SERVICE?
+            return Ok(Some(MdnsPacket::ServiceDiscovery(MdnsServiceDiscovery {
+                from,
+                query_id: packet.header.id,
+            })));
+        }
+
+        Ok(None)
     }
 }
 
@@ -167,17 +165,44 @@ impl MdnsResponse {
         MdnsResponse { peers, from }
     }
 
-    /// Returns the list of peers that have been reported in this packet.
-    ///
-    /// > **Note**: Keep in mind that this will also contain the responses we sent ourselves.
-    pub fn discovered_peers(&self) -> impl Iterator<Item = &MdnsPeer> {
-        self.peers.iter()
+    pub fn extract_discovered(
+        &self,
+        now: Instant,
+        local_peer_id: PeerId,
+    ) -> impl Iterator<Item = (PeerId, Multiaddr, Instant)> + '_ {
+        self.discovered_peers()
+            .filter(move |peer| peer.id() != &local_peer_id)
+            .flat_map(move |peer| {
+                let observed = self.observed_address();
+                let new_expiration = now + peer.ttl();
+
+                peer.addresses().iter().filter_map(move |address| {
+                    let new_addr = address_translation(address, &observed)?;
+
+                    Some((*peer.id(), new_addr, new_expiration))
+                })
+            })
     }
 
     /// Source address of the packet.
-    #[inline]
     pub fn remote_addr(&self) -> &SocketAddr {
         &self.from
+    }
+
+    fn observed_address(&self) -> Multiaddr {
+        // We replace the IP address with the address we observe the
+        // remote as and the address they listen on.
+        let obs_ip = Protocol::from(self.remote_addr().ip());
+        let obs_port = Protocol::Udp(self.remote_addr().port());
+
+        Multiaddr::empty().with(obs_ip).with(obs_port)
+    }
+
+    /// Returns the list of peers that have been reported in this packet.
+    ///
+    /// > **Note**: Keep in mind that this will also contain the responses we sent ourselves.
+    fn discovered_peers(&self) -> impl Iterator<Item = &MdnsPeer> {
+        self.peers.iter()
     }
 }
 
