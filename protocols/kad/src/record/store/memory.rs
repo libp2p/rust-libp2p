@@ -267,7 +267,7 @@ mod tests {
                 assert!(store.add_provider(r.clone()).is_ok());
             }
 
-            records.sort_by(|r1, r2| distance(r1).cmp(&distance(r2)));
+            records.sort_by_key(distance);
             records.truncate(store.config.max_providers_per_key);
 
             records == store.providers(&key).to_vec()
@@ -279,9 +279,9 @@ mod tests {
     #[test]
     fn provided() {
         let id = PeerId::random();
-        let mut store = MemoryStore::new(id.clone());
+        let mut store = MemoryStore::new(id);
         let key = random_multihash();
-        let rec = ProviderRecord::new(key, id.clone(), Vec::new());
+        let rec = ProviderRecord::new(key, id, Vec::new());
         assert!(store.add_provider(rec.clone()).is_ok());
         assert_eq!(
             vec![Cow::Borrowed(&rec)],

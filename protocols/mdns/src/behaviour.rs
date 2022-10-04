@@ -203,7 +203,7 @@ where
         // Emit discovered event.
         let mut discovered = SmallVec::<[(PeerId, Multiaddr); 4]>::new();
         for iface_state in self.iface_states.values_mut() {
-            while let Some((peer, addr, expiration)) = iface_state.poll(cx, params) {
+            while let Poll::Ready((peer, addr, expiration)) = iface_state.poll(cx, params) {
                 if let Some((_, _, cur_expires)) = self
                     .discovered_nodes
                     .iter_mut()

@@ -53,7 +53,7 @@ const BENCH_SIZES: [usize; 8] = [
 fn prepare(c: &mut Criterion) {
     let _ = env_logger::try_init();
 
-    let payload: Vec<u8> = vec![1; 1024 * 1024 * 1];
+    let payload: Vec<u8> = vec![1; 1024 * 1024];
 
     let mut tcp = c.benchmark_group("tcp");
     let tcp_addr = multiaddr![Ip4(std::net::Ipv4Addr::new(127, 0, 0, 1)), Tcp(0u16)];
