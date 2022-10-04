@@ -23,10 +23,9 @@ use libp2p::core::identity;
 use libp2p::core::PeerId;
 use libp2p::multiaddr::Protocol;
 use libp2p::ping;
-use libp2p::swarm::SwarmEvent;
+use libp2p::swarm::{keep_alive, SwarmEvent};
 use libp2p::Swarm;
 use libp2p::{development_transport, rendezvous, Multiaddr};
-use libp2p_swarm::keep_alive;
 use std::time::Duration;
 use void::Void;
 
