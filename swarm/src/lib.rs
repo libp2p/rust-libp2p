@@ -1497,7 +1497,7 @@ impl fmt::Display for DialError {
                 write!(f, "Failed to negotiate transport protocol(s): [")?;
 
                 for (addr, error) in errors {
-                    write!(f, "({addr})")?;
+                    write!(f, "({addr}")?;
                     print_error_chain(f, error)?;
                     write!(f, ")")?;
                 }
@@ -2550,6 +2550,6 @@ mod tests {
         let string = format!("{error}");
 
         // Unfortunately, we have some "empty" errors that lead to multiple colons without text but that is the best we can do.
-        assert_eq!("Failed to negotiate transport protocol(s): [(/ip4/127.0.0.1/tcp/80): : Handshake failed: No listener on the given port.)]", string)
+        assert_eq!("Failed to negotiate transport protocol(s): [(/ip4/127.0.0.1/tcp/80: : Handshake failed: No listener on the given port.)]", string)
     }
 }
