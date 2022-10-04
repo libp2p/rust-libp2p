@@ -140,7 +140,10 @@ impl<P: Provider> Transport for QuicTransport<P> {
         }
     }
 
-    fn address_translation(&self, _server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
+    fn address_translation(&self, listen: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
+        if !is_quic_addr(listen) || !is_quic_addr(observed) {
+            return None;
+        }
         Some(observed.clone())
     }
 
@@ -503,6 +506,26 @@ pub fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Option<SocketAddr> {
         }
         _ => None,
     }
+}
+
+pub fn is_quic_addr(addr: &Multiaddr) -> bool {
+    use Protocol::*;
+    let mut iter = addr.iter();
+    let first = match iter.next() {
+        Some(p) => p,
+        None => return false,
+    };
+    let second = match iter.next() {
+        Some(p) => p,
+        None => return false,
+    };
+    let third = match iter.next() {
+        Some(p) => p,
+        None => return false,
+    };
+    matches!(first, Ip4(_) | Ip6(_) | Dns(_) | Dns4(_) | Dns6(_))
+        && matches!(second, Udp(_))
+        && matches!(third, Quic)
 }
 
 /// Turns an IP address and port into the corresponding QUIC multiaddr.
