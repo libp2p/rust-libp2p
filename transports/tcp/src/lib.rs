@@ -833,17 +833,20 @@ fn ip_to_multiaddr(ip: IpAddr, port: u16) -> Multiaddr {
 }
 
 fn is_tcp_addr(addr: &Multiaddr) -> bool {
+    use Protocol::*;
+
     let mut iter = addr.iter();
-    let mut is_tcp = matches!(
-        iter.next(),
-        Some(Protocol::Ip4(_))
-            | Some(Protocol::Ip6(_))
-            | Some(Protocol::Dns(_))
-            | Some(Protocol::Dns4(_))
-            | Some(Protocol::Dns6(_))
-    );
-    is_tcp &= matches!(iter.next(), Some(Protocol::Tcp(_)));
-    is_tcp
+
+    let first = match iter.next() {
+        None => return false,
+        Some(p) => p,
+    };
+    let second = match iter.next() {
+        None => return false,
+        Some(p) => p,
+    };
+
+    matches!(first, Ip4(_) | Ip6(_) | Dns(_) | Dns4(_) | Dns6(_)) && matches!(second, Tcp(_))
 }
 
 #[cfg(test)]
