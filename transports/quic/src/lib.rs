@@ -47,7 +47,7 @@
 //! ```
 //!
 //! The [`QuicTransport`] struct implements the [`libp2p_core::Transport`]. See the
-//! documentation of [`libp2p_core`] and of libp2p in general to learn how to use the 
+//! documentation of [`libp2p_core`] and of libp2p in general to learn how to use the
 //! [`Transport`][libp2p_core::Transport] trait.
 //!
 //! Note that QUIC provides transport, security, and multiplexing in a single protocol.  Therefore,
