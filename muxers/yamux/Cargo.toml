@@ -18,7 +18,3 @@ thiserror = "1.0"
 yamux = "0.10.0"
 log = "0.4"
 
-[package.metadata.docs.rs]
-all-features = true
-rustdoc-args = ["--cfg", "docsrs"]
-rustc-args = ["--cfg", "docsrs"]

@@ -30,8 +30,3 @@ async-std = { version = "1.10", features = ["attributes"] }
 env_logger = "0.9"
 clap = {version = "3.1.6", features = ["derive"]}
 libp2p = { path = "../..", features = ["full"] }
-
-[package.metadata.docs.rs]
-all-features = true
-rustdoc-args = ["--cfg", "docsrs"]
-rustc-args = ["--cfg", "docsrs"]

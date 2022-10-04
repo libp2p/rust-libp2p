@@ -25,6 +25,8 @@
 //!
 //! See `examples` directory for more.
 
+#![cfg_attr(docsrs, feature(doc_cfg))]
+
 #[cfg(feature = "dcutr")]
 mod dcutr;
 #[cfg(feature = "gossipsub")]
@@ -96,15 +98,16 @@ pub trait Recorder<Event> {
     fn record(&self, event: &Event);
 }
 
-#[cfg(feature = "dcutr")]
+#[cfg(feature = "dctur")]
+#[cfg_attr(docsrs, doc(cfg(feature = "dctur")))]
 impl Recorder<libp2p_dcutr::behaviour::Event> for Metrics {
     fn record(&self, event: &libp2p_dcutr::behaviour::Event) {
         self.dcutr.record(event)
     }
 }
 
-#[cfg(feature = "gossipsub")]
-#[cfg(not(target_os = "unknown"))]
+#[cfg(all(feature = "gossipsub", not(target_os = "unknown")))]
+#[cfg_attr(docsrs, doc(cfg(all(feature = "gossipsub", not(target_os = "unknown")))))]
 impl Recorder<libp2p_gossipsub::GossipsubEvent> for Metrics {
     fn record(&self, event: &libp2p_gossipsub::GossipsubEvent) {
         self.gossipsub.record(event)
@@ -112,6 +115,7 @@ impl Recorder<libp2p_gossipsub::GossipsubEvent> for Metrics {
 }
 
 #[cfg(feature = "identify")]
+#[cfg_attr(docsrs, doc(cfg(feature = "identify")))]
 impl Recorder<libp2p_identify::Event> for Metrics {
     fn record(&self, event: &libp2p_identify::Event) {
         self.identify.record(event)
@@ -119,20 +123,23 @@ impl Recorder<libp2p_identify::Event> for Metrics {
 }
 
 #[cfg(feature = "kad")]
+#[cfg_attr(docsrs, doc(cfg(feature = "kad")))]
 impl Recorder<libp2p_kad::KademliaEvent> for Metrics {
     fn record(&self, event: &libp2p_kad::KademliaEvent) {
         self.kad.record(event)
     }
 }
 
-#[cfg(feature = "ping")]
+#[cfg(any(feature = "ping", docsrs))]
+#[cfg_attr(docsrs, doc(cfg(feature = "ping")))]
 impl Recorder<libp2p_ping::Event> for Metrics {
     fn record(&self, event: &libp2p_ping::Event) {
         self.ping.record(event)
     }
 }
 
-#[cfg(feature = "relay")]
+#[cfg(any(feature = "relay", docsrs))]
+#[cfg_attr(docsrs, doc(cfg(feature = "relay")))]
 impl Recorder<libp2p_relay::v2::relay::Event> for Metrics {
     fn record(&self, event: &libp2p_relay::v2::relay::Event) {
         self.relay.record(event)
