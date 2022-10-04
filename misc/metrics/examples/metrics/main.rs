@@ -52,7 +52,7 @@ use futures::executor::block_on;
 use futures::stream::StreamExt;
 use libp2p::core::Multiaddr;
 use libp2p::metrics::{Metrics, Recorder};
-use libp2p::ping::{Ping, PingConfig};
+use libp2p::ping;
 use libp2p::swarm::SwarmEvent;
 use libp2p::{identity, PeerId, Swarm};
 use prometheus_client::registry::Registry;
@@ -72,7 +72,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut swarm = Swarm::new(
         block_on(libp2p::development_transport(local_key))?,
-        Ping::new(PingConfig::new().with_keep_alive(true)),
+        ping::Behaviour::new(ping::Config::new().with_keep_alive(true)),
         local_peer_id,
     );
 
