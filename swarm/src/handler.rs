@@ -39,7 +39,6 @@
 //! >           [`NetworkBehaviour`](crate::behaviour::NetworkBehaviour) trait.
 
 pub mod either;
-mod keep_alive;
 mod map_in;
 mod map_out;
 pub mod multi;
