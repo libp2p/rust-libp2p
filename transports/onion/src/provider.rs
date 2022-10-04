@@ -18,9 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-#[cfg(feature = "tokio")]
-use std::pin::Pin;
-
 use arti_client::DataStream;
 use futures::{AsyncRead, AsyncWrite};
 
@@ -51,13 +48,13 @@ impl OnionStream for OnionTokioStream {}
 #[cfg_attr(docsrs, doc(cfg(feature = "tokio")))]
 impl AsyncRead for OnionTokioStream {
     fn poll_read(
-        mut self: Pin<&mut Self>,
+        mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
         buf: &mut [u8],
     ) -> std::task::Poll<std::io::Result<usize>> {
         let mut read_buf = tokio_crate::io::ReadBuf::new(buf);
         futures::ready!(tokio_crate::io::AsyncRead::poll_read(
-            Pin::new(&mut self.inner),
+            std::pin::Pin::new(&mut self.inner),
             cx,
             &mut read_buf
         ))?;
@@ -95,7 +92,7 @@ impl AsyncWrite for OnionTokioStream {
 
     #[inline]
     fn poll_write_vectored(
-        mut self: Pin<&mut Self>,
+        mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
         bufs: &[std::io::IoSlice<'_>],
     ) -> std::task::Poll<std::io::Result<usize>> {
