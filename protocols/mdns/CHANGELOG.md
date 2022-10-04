@@ -8,8 +8,11 @@
 
 - Fix a bug that could cause a delay of ~10s until peers would get discovered when using the tokio runtime. See [PR 2939].
 
+- Removed the `lazy_static` dependency. See [PR 2977].
+
 [PR 2918]: https://github.com/libp2p/rust-libp2p/pull/2918
 [PR 2939]: https://github.com/libp2p/rust-libp2p/pull/2939
+[PR 2977]: https://github.com/libp2p/rust-libp2p/pull/2977
 
 # 0.40.0
 
