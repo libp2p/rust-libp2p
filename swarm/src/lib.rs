@@ -1480,11 +1480,18 @@ impl fmt::Display for DialError {
                 f,
                 "Dial error: Pending connection attempt has been aborted."
             ),
-            DialError::InvalidPeerId(multihash) => write!(f, "Dial error: multihash {:?} is not a PeerId", multihash),
-            DialError::WrongPeerId { obtained, endpoint} => write!(f, "Dial error: Unexpected peer ID {} at {:?}.", obtained, endpoint),
+            DialError::InvalidPeerId(multihash) => {
+                write!(f, "Dial error: multihash {:?} is not a PeerId", multihash)
+            }
+            DialError::WrongPeerId { obtained, endpoint } => write!(
+                f,
+                "Dial error: Unexpected peer ID {} at {:?}.",
+                obtained, endpoint
+            ),
             DialError::ConnectionIo(e) => write!(
                 f,
-                "Dial error: An I/O error occurred on the connection: {:?}.", e
+                "Dial error: An I/O error occurred on the connection: {:?}.",
+                e
             ),
             DialError::Transport(errors) => {
                 write!(f, "Failed to negotiate transport protocol(s): [")?;
