@@ -39,11 +39,9 @@ use libp2p::{
         either::EitherTransport, muxing::StreamMuxerBox, transport, transport::upgrade::Version,
     },
     gossipsub::{self, Gossipsub, GossipsubConfigBuilder, GossipsubEvent, MessageAuthenticity},
-    identify::{Identify, IdentifyConfig, IdentifyEvent},
-    identity,
+    identify, identity,
     multiaddr::Protocol,
-    noise,
-    ping::{self, PingEvent},
+    noise, ping,
     pnet::{PnetConfig, PreSharedKey},
     swarm::SwarmEvent,
     tcp::TcpTransport,
@@ -158,14 +156,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
     #[behaviour(out_event = "MyBehaviourEvent")]
     struct MyBehaviour {
         gossipsub: Gossipsub,
-        identify: Identify,
+        identify: identify::Behaviour,
         ping: ping::Behaviour,
     }
 
     enum MyBehaviourEvent {
         Gossipsub(GossipsubEvent),
-        Identify(IdentifyEvent),
-        Ping(PingEvent),
+        Identify(identify::Event),
+        Ping(ping::Event),
     }
 
     impl From<GossipsubEvent> for MyBehaviourEvent {
@@ -174,14 +172,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    impl From<IdentifyEvent> for MyBehaviourEvent {
-        fn from(event: IdentifyEvent) -> Self {
+    impl From<identify::Event> for MyBehaviourEvent {
+        fn from(event: identify::Event) -> Self {
             MyBehaviourEvent::Identify(event)
         }
     }
 
-    impl From<PingEvent> for MyBehaviourEvent {
-        fn from(event: PingEvent) -> Self {
+    impl From<ping::Event> for MyBehaviourEvent {
+        fn from(event: ping::Event) -> Self {
             MyBehaviourEvent::Ping(event)
         }
     }
@@ -198,7 +196,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 gossipsub_config,
             )
             .expect("Valid configuration"),
-            identify: Identify::new(IdentifyConfig::new(
+            identify: identify::Behaviour::new(identify::Config::new(
                 "/ipfs/0.1.0".into(),
                 local_key.public(),
             )),

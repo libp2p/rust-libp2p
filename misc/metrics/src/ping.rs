@@ -29,16 +29,16 @@ struct FailureLabels {
     reason: Failure,
 }
 
-impl From<&libp2p_ping::PingFailure> for FailureLabels {
-    fn from(failure: &libp2p_ping::PingFailure) -> Self {
+impl From<&libp2p_ping::Failure> for FailureLabels {
+    fn from(failure: &libp2p_ping::Failure) -> Self {
         match failure {
-            libp2p_ping::PingFailure::Timeout => FailureLabels {
+            libp2p_ping::Failure::Timeout => FailureLabels {
                 reason: Failure::Timeout,
             },
-            libp2p_ping::PingFailure::Unsupported => FailureLabels {
+            libp2p_ping::Failure::Unsupported => FailureLabels {
                 reason: Failure::Unsupported,
             },
-            libp2p_ping::PingFailure::Other { .. } => FailureLabels {
+            libp2p_ping::Failure::Other { .. } => FailureLabels {
                 reason: Failure::Other,
             },
         }
@@ -92,13 +92,13 @@ impl Metrics {
     }
 }
 
-impl super::Recorder<libp2p_ping::PingEvent> for Metrics {
-    fn record(&self, event: &libp2p_ping::PingEvent) {
+impl super::Recorder<libp2p_ping::Event> for Metrics {
+    fn record(&self, event: &libp2p_ping::Event) {
         match &event.result {
-            Ok(libp2p_ping::PingSuccess::Pong) => {
+            Ok(libp2p_ping::Success::Pong) => {
                 self.pong_received.inc();
             }
-            Ok(libp2p_ping::PingSuccess::Ping { rtt }) => {
+            Ok(libp2p_ping::Success::Ping { rtt }) => {
                 self.rtt.observe(rtt.as_secs_f64());
             }
             Err(failure) => {
