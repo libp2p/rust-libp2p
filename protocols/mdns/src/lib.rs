@@ -30,6 +30,9 @@
 //! implements the `NetworkBehaviour` trait. This struct will automatically discover other
 //! libp2p nodes on the local network.
 //!
+
+#![cfg_attr(docsrs, feature(doc_cfg))]
+
 use lazy_static::lazy_static;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::time::Duration;
@@ -38,9 +41,11 @@ mod behaviour;
 pub use crate::behaviour::{GenMdns, MdnsEvent};
 
 #[cfg(feature = "async-io")]
+#[cfg_attr(docsrs, doc(cfg(feature = "async-io")))]
 pub use crate::behaviour::Mdns;
 
 #[cfg(feature = "tokio")]
+#[cfg_attr(docsrs, doc(cfg(feature = "tokio")))]
 pub use crate::behaviour::TokioMdns;
 
 /// The DNS service name for all libp2p peers used to query for addresses.

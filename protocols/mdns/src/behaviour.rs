@@ -39,17 +39,21 @@ use std::collections::hash_map::{Entry, HashMap};
 use std::{cmp, fmt, io, net::IpAddr, pin::Pin, task::Context, task::Poll, time::Instant};
 
 #[cfg(feature = "async-io")]
+#[cfg_attr(docsrs, doc(cfg(feature = "async-io")))]
 use crate::behaviour::{socket::asio::AsyncUdpSocket, timer::asio::AsyncTimer};
 
 /// The type of a [`GenMdns`] using the `async-io` implementation.
 #[cfg(feature = "async-io")]
+#[cfg_attr(docsrs, doc(cfg(feature = "async-io")))]
 pub type Mdns = GenMdns<AsyncUdpSocket, AsyncTimer>;
 
 #[cfg(feature = "tokio")]
+#[cfg_attr(docsrs, doc(cfg(feature = "tokio")))]
 use crate::behaviour::{socket::tokio::TokioUdpSocket, timer::tokio::TokioTimer};
 
 /// The type of a [`GenMdns`] using the `tokio` implementation.
 #[cfg(feature = "tokio")]
+#[cfg_attr(docsrs, doc(cfg(feature = "tokio")))]
 pub type TokioMdns = GenMdns<TokioUdpSocket, TokioTimer>;
 
 /// A `NetworkBehaviour` for mDNS. Automatically discovers peers on the local network and adds

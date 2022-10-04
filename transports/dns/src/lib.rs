@@ -54,6 +54,8 @@
 //!
 //![trust-dns-resolver]: https://docs.rs/trust-dns-resolver/latest/trust_dns_resolver/#dns-over-tls-and-dns-over-https
 
+#![cfg_attr(docsrs, feature(doc_cfg))]
+
 #[cfg(feature = "async-std")]
 use async_std_resolver::{AsyncStdConnection, AsyncStdConnectionProvider};
 use futures::{future::BoxFuture, prelude::*};
@@ -107,11 +109,13 @@ const MAX_TXT_RECORDS: usize = 16;
 /// A `Transport` wrapper for performing DNS lookups when dialing `Multiaddr`esses
 /// using `async-std` for all async I/O.
 #[cfg(feature = "async-std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "async-std")))]
 pub type DnsConfig<T> = GenDnsConfig<T, AsyncStdConnection, AsyncStdConnectionProvider>;
 
 /// A `Transport` wrapper for performing DNS lookups when dialing `Multiaddr`esses
 /// using `tokio` for all async I/O.
 #[cfg(feature = "tokio")]
+#[cfg_attr(docsrs, doc(cfg(feature = "tokio")))]
 pub type TokioDnsConfig<T> = GenDnsConfig<T, TokioConnection, TokioConnectionProvider>;
 
 /// A `Transport` wrapper for performing DNS lookups when dialing `Multiaddr`esses.
@@ -127,6 +131,7 @@ where
 }
 
 #[cfg(feature = "async-std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "async-std")))]
 impl<T> DnsConfig<T> {
     /// Creates a new [`DnsConfig`] from the OS's DNS configuration and defaults.
     pub async fn system(inner: T) -> Result<DnsConfig<T>, io::Error> {
@@ -148,6 +153,7 @@ impl<T> DnsConfig<T> {
 }
 
 #[cfg(feature = "tokio")]
+#[cfg_attr(docsrs, doc(cfg(feature = "tokio")))]
 impl<T> TokioDnsConfig<T> {
     /// Creates a new [`TokioDnsConfig`] from the OS's DNS configuration and defaults.
     pub fn system(inner: T) -> Result<TokioDnsConfig<T>, io::Error> {

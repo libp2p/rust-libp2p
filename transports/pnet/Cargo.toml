@@ -20,8 +20,3 @@ pin-project = "1.0.2"
 
 [dev-dependencies]
 quickcheck = { package = "quickcheck-ext", path = "../../misc/quickcheck-ext" }
-
-[package.metadata.docs.rs]
-all-features = true
-rustdoc-args = ["--cfg", "docsrs"]
-rustc-args = ["--cfg", "docsrs"]

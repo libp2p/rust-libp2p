@@ -44,6 +44,7 @@ pub trait Builder: Send + Unpin + 'static {
 }
 
 #[cfg(feature = "async-io")]
+#[cfg_attr(docsrs, doc(cfg(feature = "async-io")))]
 pub mod asio {
     use super::*;
     use async_io::Timer as AsioTimer;
@@ -82,6 +83,7 @@ pub mod asio {
 }
 
 #[cfg(feature = "tokio")]
+#[cfg_attr(docsrs, doc(cfg(feature = "tokio")))]
 pub mod tokio {
     use super::*;
     use ::tokio::time::{self, Instant as TokioInstant, Interval, MissedTickBehavior};

@@ -32,6 +32,8 @@
 //! module.
 //!
 
+#![cfg_attr(docsrs, feature(doc_cfg))]
+
 use futures::{future::Ready, prelude::*, ready, stream::SelectAll};
 use libp2p_core::{
     connection::Endpoint,
@@ -137,6 +139,7 @@ pub mod ffi {
     }
 
     #[cfg(feature = "websocket")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "websocket")))]
     #[wasm_bindgen(module = "/src/websockets.js")]
     extern "C" {
         /// Returns a `Transport` implemented using websockets.

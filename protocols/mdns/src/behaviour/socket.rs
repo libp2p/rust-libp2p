@@ -49,6 +49,7 @@ pub trait AsyncSocket: Unpin + Send + 'static {
 }
 
 #[cfg(feature = "async-io")]
+#[cfg_attr(docsrs, doc(cfg(feature = "async-io")))]
 pub mod asio {
     use super::*;
     use async_io::Async;
@@ -92,6 +93,7 @@ pub mod asio {
 }
 
 #[cfg(feature = "tokio")]
+#[cfg_attr(docsrs, doc(cfg(feature = "tokio")))]
 pub mod tokio {
     use super::*;
     use ::tokio::{io::ReadBuf, net::UdpSocket as TkUdpSocket};

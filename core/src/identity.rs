@@ -32,14 +32,14 @@
 //! (e.g. [ed25519 binary format](https://datatracker.ietf.org/doc/html/rfc8032#section-5.1.5)).
 //! All key types have functions to enable conversion to/from their binary representations.
 
-#[cfg(any(feature = "ecdsa", docsrs))]
+#[cfg(feature = "ecdsa")]
 #[cfg_attr(docsrs, doc(cfg(feature = "ecdsa")))]
 pub mod ecdsa;
 pub mod ed25519;
-#[cfg(any(all(feature = "rsa", not(target_arch = "wasm32")), docsrs))]
+#[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
 #[cfg_attr(docsrs, doc(cfg(all(feature = "rsa", not(target_arch = "wasm32")))))]
 pub mod rsa;
-#[cfg(any(feature = "secp256k1", docsrs))]
+#[cfg(feature = "secp256k1")]
 #[cfg_attr(docsrs, doc(cfg(feature = "secp256k1")))]
 pub mod secp256k1;
 
@@ -72,15 +72,15 @@ pub enum Keypair {
     /// An Ed25519 keypair.
     Ed25519(ed25519::Keypair),
     /// An RSA keypair.
-    #[cfg(any(all(feature = "rsa", not(target_arch = "wasm32")), docsrs))]
+    #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
     #[cfg_attr(docsrs, doc(cfg(all(feature = "rsa", not(target_arch = "wasm32")))))]
     Rsa(rsa::Keypair),
     /// A Secp256k1 keypair.
-    #[cfg(any(feature = "secp256k1", docsrs))]
+    #[cfg(feature = "secp256k1")]
     #[cfg_attr(docsrs, doc(cfg(feature = "secp256k1")))]
     Secp256k1(secp256k1::Keypair),
     /// An ECDSA keypair.
-    #[cfg(any(feature = "ecdsa", docsrs))]
+    #[cfg(feature = "ecdsa")]
     #[cfg_attr(docsrs, doc(cfg(feature = "ecdsa")))]
     Ecdsa(ecdsa::Keypair),
 }
@@ -92,14 +92,14 @@ impl Keypair {
     }
 
     /// Generate a new Secp256k1 keypair.
-    #[cfg(any(feature = "secp256k1", docsrs))]
+    #[cfg(feature = "secp256k1")]
     #[cfg_attr(docsrs, doc(cfg(feature = "secp256k1")))]
     pub fn generate_secp256k1() -> Keypair {
         Keypair::Secp256k1(secp256k1::Keypair::generate())
     }
 
     /// Generate a new ECDSA keypair.
-    #[cfg(any(feature = "ecdsa", docsrs))]
+    #[cfg(feature = "ecdsa")]
     #[cfg_attr(docsrs, doc(cfg(feature = "ecdsa")))]
     pub fn generate_ecdsa() -> Keypair {
         Keypair::Ecdsa(ecdsa::Keypair::generate())
@@ -109,7 +109,7 @@ impl Keypair {
     /// format (i.e. unencrypted) as defined in [RFC5208].
     ///
     /// [RFC5208]: https://tools.ietf.org/html/rfc5208#section-5
-    #[cfg(any(all(feature = "rsa", not(target_arch = "wasm32")), docsrs))]
+    #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
     #[cfg_attr(docsrs, doc(cfg(all(feature = "rsa", not(target_arch = "wasm32")))))]
     pub fn rsa_from_pkcs8(pkcs8_der: &mut [u8]) -> Result<Keypair, DecodingError> {
         rsa::Keypair::from_pkcs8(pkcs8_der).map(Keypair::Rsa)
@@ -119,7 +119,7 @@ impl Keypair {
     /// structure as defined in [RFC5915].
     ///
     /// [RFC5915]: https://tools.ietf.org/html/rfc5915
-    #[cfg(any(feature = "secp256k1", docsrs))]
+    #[cfg(feature = "secp256k1")]
     #[cfg_attr(docsrs, doc(cfg(feature = "secp256k1")))]
     pub fn secp256k1_from_der(der: &mut [u8]) -> Result<Keypair, DecodingError> {
         secp256k1::SecretKey::from_der(der)
@@ -229,15 +229,15 @@ pub enum PublicKey {
     /// A public Ed25519 key.
     Ed25519(ed25519::PublicKey),
     /// A public RSA key.
-    #[cfg(any(all(feature = "rsa", not(target_arch = "wasm32")), docsrs))]
+    #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
     #[cfg_attr(docsrs, doc(cfg(all(feature = "rsa", not(target_arch = "wasm32")))))]
     Rsa(rsa::PublicKey),
     /// A public Secp256k1 key.
-    #[cfg(any(feature = "secp256k1", docsrs))]
+    #[cfg(feature = "secp256k1")]
     #[cfg_attr(docsrs, doc(cfg(feature = "secp256k1")))]
     Secp256k1(secp256k1::PublicKey),
     /// A public ECDSA key.
-    #[cfg(any(feature = "ecdsa", docsrs))]
+    #[cfg(feature = "ecdsa")]
     #[cfg_attr(docsrs, doc(cfg(feature = "ecdsa")))]
     Ecdsa(ecdsa::PublicKey),
 }

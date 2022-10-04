@@ -26,21 +26,27 @@
 //! the enabled features, which implement the `Transport` trait for use as a
 //! transport with `libp2p-core` or `libp2p-swarm`.
 
+#![cfg_attr(docsrs, feature(doc_cfg))]
+
 mod provider;
 
 use if_watch::{IfEvent, IfWatcher};
 #[cfg(feature = "async-io")]
+#[cfg_attr(docsrs, doc(cfg(feature = "async-io")))]
 pub use provider::async_io;
 
 /// The type of a [`GenTcpTransport`] using the `async-io` implementation.
 #[cfg(feature = "async-io")]
+#[cfg_attr(docsrs, doc(cfg(feature = "async-io")))]
 pub type TcpTransport = GenTcpTransport<async_io::Tcp>;
 
 #[cfg(feature = "tokio")]
+#[cfg_attr(docsrs, doc(cfg(feature = "tokio")))]
 pub use provider::tokio;
 
 /// The type of a [`GenTcpTransport`] using the `tokio` implementation.
 #[cfg(feature = "tokio")]
+#[cfg_attr(docsrs, doc(cfg(feature = "tokio")))]
 pub type TokioTcpTransport = GenTcpTransport<tokio::Tcp>;
 
 use futures::{

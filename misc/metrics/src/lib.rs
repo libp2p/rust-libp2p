@@ -98,8 +98,8 @@ pub trait Recorder<Event> {
     fn record(&self, event: &Event);
 }
 
-#[cfg(feature = "dctur")]
-#[cfg_attr(docsrs, doc(cfg(feature = "dctur")))]
+#[cfg(feature = "dcutr")]
+#[cfg_attr(docsrs, doc(cfg(feature = "dcutr")))]
 impl Recorder<libp2p_dcutr::behaviour::Event> for Metrics {
     fn record(&self, event: &libp2p_dcutr::behaviour::Event) {
         self.dcutr.record(event)
@@ -107,7 +107,10 @@ impl Recorder<libp2p_dcutr::behaviour::Event> for Metrics {
 }
 
 #[cfg(all(feature = "gossipsub", not(target_os = "unknown")))]
-#[cfg_attr(docsrs, doc(cfg(all(feature = "gossipsub", not(target_os = "unknown")))))]
+#[cfg_attr(
+    docsrs,
+    doc(cfg(all(feature = "gossipsub", not(target_os = "unknown"))))
+)]
 impl Recorder<libp2p_gossipsub::GossipsubEvent> for Metrics {
     fn record(&self, event: &libp2p_gossipsub::GossipsubEvent) {
         self.gossipsub.record(event)

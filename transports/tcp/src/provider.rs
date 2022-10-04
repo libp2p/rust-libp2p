@@ -21,9 +21,11 @@
 //! The interface for providers of non-blocking TCP implementations.
 
 #[cfg(feature = "async-io")]
+#[cfg_attr(docsrs, doc(cfg(feature = "async-io")))]
 pub mod async_io;
 
 #[cfg(feature = "tokio")]
+#[cfg_attr(docsrs, doc(cfg(feature = "tokio")))]
 pub mod tokio;
 
 use futures::future::BoxFuture;

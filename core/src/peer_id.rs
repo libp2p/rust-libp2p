@@ -25,7 +25,7 @@ use rand::Rng;
 use std::{convert::TryFrom, fmt, str::FromStr};
 use thiserror::Error;
 
-#[cfg(any(feature = "serde", docsrs))]
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
 /// Public keys with byte-lengths smaller than `MAX_INLINE_KEY_LENGTH` will be
@@ -179,7 +179,7 @@ impl From<PeerId> for Vec<u8> {
     }
 }
 
-#[cfg(any(feature = "serde", docsrs))]
+#[cfg(feature = "serde")]
 #[cfg_attr(docsrs, doc(cfg(feature = "serde")))]
 impl Serialize for PeerId {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -194,7 +194,7 @@ impl Serialize for PeerId {
     }
 }
 
-#[cfg(any(feature = "serde", docsrs))]
+#[cfg(feature = "serde")]
 #[cfg_attr(docsrs, doc(cfg(feature = "serde")))]
 impl<'de> Deserialize<'de> for PeerId {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
