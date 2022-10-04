@@ -6,13 +6,13 @@ license = "MIT"
 resolver = "2"
 
 [dependencies]
-libp2p-core = { version = "0.37", path = "../../core" }
-futures = "0.3"
 arti-client = { version = "0.7", default-features = false }
-thiserror = "1"
-tor-rtcompat = "0.7"
-tokio-crate = { package = "tokio", version = "1", optional = true, default-features = false }
 async-std-crate = { package = "async-std", version = "1", optional = true, default-features = false }
+futures = "0.3"
+libp2p-core = { version = "0.37", path = "../../core" }
+thiserror = "1"
+tokio-crate = { package = "tokio", version = "1", optional = true, default-features = false }
+tor-rtcompat = "0.7"
 
 [dev-dependencies]
 libp2p = { version = "0.49", path = "../../" }
