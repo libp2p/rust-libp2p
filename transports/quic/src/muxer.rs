@@ -154,7 +154,7 @@ impl StreamMuxer for QuicMuxer {
         cx: &mut Context<'_>,
     ) -> Poll<Result<Self::Substream, Self::Error>> {
         let mut inner = self.inner.lock();
-        
+
         let substream_id = match inner.connection.accept_substream() {
             Some(id) => {
                 inner.poll_outbound_waker = None;
@@ -167,7 +167,7 @@ impl StreamMuxer for QuicMuxer {
         };
         inner.substreams.insert(substream_id, Default::default());
         let substream = Substream::new(substream_id, self.inner.clone());
-        
+
         Poll::Ready(Ok(substream))
     }
 

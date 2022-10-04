@@ -90,7 +90,6 @@ impl Config {
     }
 }
 
-/// Object containing all the QUIC resources shared between all connections.
 #[derive(Debug, Clone)]
 pub struct EndpointChannel {
     /// Channel to the background of the endpoint.

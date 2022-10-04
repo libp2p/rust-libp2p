@@ -46,20 +46,14 @@
 //! # }
 //! ```
 //!
-//! The [`Endpoint`] struct implements the [`Transport`] trait of the [`libp2p_core`] library. See the
-//! documentation of [`libp2p_core`] and of libp2p in general to learn how to use the [`Transport`] trait.
+//! The [`QuicTransport`] struct implements the [`libp2p_core::Transport`]. See the
+//! documentation of [`libp2p_core`] and of libp2p in general to learn how to use the 
+//! [`Transport`][libp2p_core::Transport] trait.
 //!
 //! Note that QUIC provides transport, security, and multiplexing in a single protocol.  Therefore,
 //! QUIC connections do not need to be upgraded. You will get a compile-time error if you try.
 //! Instead, you must pass all needed configuration into the constructor.
 //!
-//! # Design Notes
-//!
-//! The entry point is the `Endpoint` struct.  It represents a single QUIC endpoint.  You
-//! should generally have one of these per process.
-//!
-//! `Endpoint` manages a background task that processes all incoming packets.  Each
-//! `QuicConnection` also manages a background task, which handles socket output and timer polling.
 
 #![deny(unsafe_code)]
 
