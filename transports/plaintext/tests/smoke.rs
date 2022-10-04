@@ -32,7 +32,7 @@ fn variable_msg_length() {
     let _ = env_logger::try_init();
 
     fn prop(msg: Vec<u8>) {
-        let mut msg_to_send = msg.clone();
+        let msg_to_send = msg.clone();
         let msg_to_receive = msg;
 
         let server_id = identity::Keypair::generate_ed25519();
@@ -91,7 +91,7 @@ fn variable_msg_length() {
 
                 debug!("Client: writing message.");
                 client_channel
-                    .write_all(&mut msg_to_send)
+                    .write_all(&msg_to_send)
                     .await
                     .expect("no error");
                 debug!("Client: flushing channel.");

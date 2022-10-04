@@ -1368,9 +1368,15 @@ where
         self
     }
 
-    /// The maximum number of inbound streams concurrently negotiating on a connection.
+    /// The maximum number of inbound streams concurrently negotiating on a
+    /// connection. New inbound streams exceeding the limit are dropped and thus
+    /// reset.
     ///
-    /// See [`PoolConfig::with_max_negotiating_inbound_streams`].
+    /// Note: This only enforces a limit on the number of concurrently
+    /// negotiating inbound streams. The total number of inbound streams on a
+    /// connection is the sum of negotiating and negotiated streams. A limit on
+    /// the total number of streams can be enforced at the
+    /// [`StreamMuxerBox`](libp2p_core::muxing::StreamMuxerBox) level.
     pub fn max_negotiating_inbound_streams(mut self, v: usize) -> Self {
         self.pool_config = self.pool_config.with_max_negotiating_inbound_streams(v);
         self
@@ -1718,7 +1724,7 @@ mod tests {
         let addr1: Multiaddr = multiaddr::Protocol::Memory(rand::random::<u64>()).into();
         let addr2: Multiaddr = multiaddr::Protocol::Memory(rand::random::<u64>()).into();
 
-        swarm1.listen_on(addr1.clone()).unwrap();
+        swarm1.listen_on(addr1).unwrap();
         swarm2.listen_on(addr2.clone()).unwrap();
 
         let swarm1_id = *swarm1.local_peer_id();
@@ -1976,7 +1982,7 @@ mod tests {
         let addr1: Multiaddr = multiaddr::Protocol::Memory(rand::random::<u64>()).into();
         let addr2: Multiaddr = multiaddr::Protocol::Memory(rand::random::<u64>()).into();
 
-        swarm1.listen_on(addr1.clone()).unwrap();
+        swarm1.listen_on(addr1).unwrap();
         swarm2.listen_on(addr2.clone()).unwrap();
 
         let swarm1_id = *swarm1.local_peer_id();
@@ -2084,7 +2090,7 @@ mod tests {
                 swarm
                     .dial(
                         DialOpts::peer_id(PeerId::random())
-                            .addresses(listen_addresses.into())
+                            .addresses(listen_addresses)
                             .build(),
                     )
                     .unwrap();
@@ -2139,16 +2145,11 @@ mod tests {
                         .addresses(vec![addr.clone()])
                         .build(),
                 )
-                .ok()
                 .expect("Unexpected connection limit.");
         }
 
         match network
-            .dial(
-                DialOpts::peer_id(target)
-                    .addresses(vec![addr.clone()])
-                    .build(),
-            )
+            .dial(DialOpts::peer_id(target).addresses(vec![addr]).build())
             .expect_err("Unexpected dialing success.")
         {
             DialError::ConnectionLimit(limit) => {
@@ -2206,7 +2207,7 @@ mod tests {
             // Spawn and block on the dialer.
             async_std::task::block_on({
                 let mut n = 0;
-                let _ = network2.dial(listen_addr.clone()).unwrap();
+                network2.dial(listen_addr.clone()).unwrap();
 
                 let mut expected_closed = false;
                 let mut network_1_established = false;
