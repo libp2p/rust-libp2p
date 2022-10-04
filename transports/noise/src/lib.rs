@@ -248,7 +248,7 @@ where
 
     fn upgrade_outbound(self, socket: T, _: Self::Info) -> Self::Future {
         async move {
-            let session = self.params.into_responder(
+            let session = self.params.into_initiator(
                 &self.prologue,
                 self.dh_keys.dh_keypair().secret(),
                 None,
@@ -339,7 +339,7 @@ where
 
     fn upgrade_outbound(self, socket: T, _: Self::Info) -> Self::Future {
         async move {
-            let session = self.params.into_responder(
+            let session = self.params.into_initiator(
                 &self.prologue,
                 self.dh_keys.dh_keypair().secret(),
                 None,
