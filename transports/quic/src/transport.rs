@@ -118,13 +118,16 @@ impl<P: Provider> Transport for QuicTransport<P> {
         let listener = Listener::new::<P>(listener_id, socket_addr, self.config.clone())
             .map_err(CoreTransportError::Other)?;
         self.listeners.push(listener);
+
         // Drop reference to dialer endpoint so that the endpoint is dropped once the last
         // connection that uses it is closed.
         // New outbound connections will use a bidirectional (listener) endpoint.
-        match socket_addr {
+        let dialer = match socket_addr {
             SocketAddr::V4(_) => self.ipv4_dialer.take(),
             SocketAddr::V6(_) => self.ipv6_dialer.take(),
         };
+        std::mem::drop(dialer);
+
         Ok(listener_id)
     }
 
@@ -265,6 +268,12 @@ impl Dialer {
             }
         }
         Ok(())
+    }
+}
+
+impl Drop for Dialer {
+    fn drop(&mut self) {
+        self.endpoint_channel.send_on_drop(ToEndpoint::Decoupled);
     }
 }
 
@@ -424,6 +433,12 @@ impl Stream for Listener {
             self.waker = Some(cx.waker().clone());
             return Poll::Pending;
         }
+    }
+}
+
+impl Drop for Listener {
+    fn drop(&mut self) {
+        self.endpoint_channel.send_on_drop(ToEndpoint::Decoupled);
     }
 }
 

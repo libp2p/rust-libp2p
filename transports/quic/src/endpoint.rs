@@ -179,6 +179,14 @@ impl EndpointChannel {
         };
         self.to_endpoint.start_send(to_endpoint).map(Ok)
     }
+
+    /// Send a message to inform the [`ConnectionDriver`] about an
+    /// event caused by the owner of this [`EndpointChannel`] dropping.
+    /// This clones the sender to the endpoint to guarantee delivery.
+    /// It this should *not* be called for regular messages.
+    pub fn send_on_drop(&mut self, to_endpoint: ToEndpoint) {
+        let _ = self.to_endpoint.clone().try_send(to_endpoint);
+    }
 }
 
 /// Message sent to the endpoint background task.
@@ -200,6 +208,9 @@ pub enum ToEndpoint {
     },
     /// Instruct the endpoint to send a packet of data on its UDP socket.
     SendUdpPacket(quinn_proto::Transmit),
+    /// The [`QuicTransport`] [`Dialer`] or [`Listener`] coupled to this endpoint was dropped.
+    /// Once all pending connection closed the [`EndpointDriver`] should shut down.
+    Decoupled,
 }
 
 /// Driver that runs in the background for as long as the endpoint is alive. Responsible for
@@ -301,7 +312,7 @@ pub struct EndpointDriver<P: Provider> {
     // `None` if server capabilities are disabled, i.e. the endpoint is only used for dialing.
     new_connection_tx: Option<mpsc::Sender<Connection>>,
     // Whether the transport dropped its handle for this endpoint.
-    is_orphaned: bool,
+    is_decoupled: bool,
 }
 
 impl<P: Provider> EndpointDriver<P> {
@@ -323,7 +334,7 @@ impl<P: Provider> EndpointDriver<P> {
             next_packet_out: None,
             alive_connections: HashMap::new(),
             new_connection_tx,
-            is_orphaned: false,
+            is_decoupled: false,
         }
     }
 
@@ -369,7 +380,7 @@ impl<P: Provider> EndpointDriver<P> {
                 let is_drained_event = event.is_drained();
                 if is_drained_event {
                     self.alive_connections.remove(&connection_id);
-                    if self.is_orphaned && self.alive_connections.is_empty() {
+                    if self.is_decoupled && self.alive_connections.is_empty() {
                         log::info!(
                             "Listener closed and no active connections remain. Shutting down the background task."
                         );
@@ -396,6 +407,7 @@ impl<P: Provider> EndpointDriver<P> {
 
             // Data needs to be sent on the UDP socket.
             ToEndpoint::SendUdpPacket(transmit) => self.next_packet_out = Some(transmit),
+            ToEndpoint::Decoupled => self.handle_decoupling()?,
         }
         ControlFlow::Continue(())
     }
@@ -456,15 +468,7 @@ impl<P: Provider> EndpointDriver<P> {
                     Ok(()) => {
                         self.alive_connections.insert(connec_id, tx);
                     }
-                    Err(e) if e.is_disconnected() => {
-                        if self.alive_connections.is_empty() {
-                            return ControlFlow::Break(());
-                        }
-                        // Listener was closed.
-                        self.endpoint.reject_new_connections();
-                        self.new_connection_tx = None;
-                        self.is_orphaned = true;
-                    }
+                    Err(e) if e.is_disconnected() => self.handle_decoupling()?,
                     Err(_) => log::warn!(
                         "Dropping new incoming connection {:?} because the channel to the listener is full",
                         connec_id
@@ -472,6 +476,17 @@ impl<P: Provider> EndpointDriver<P> {
                 }
             }
         }
+        ControlFlow::Continue(())
+    }
+
+    fn handle_decoupling(&mut self) -> ControlFlow<()> {
+        if self.alive_connections.is_empty() {
+            return ControlFlow::Break(());
+        }
+        // Listener was closed.
+        self.endpoint.reject_new_connections();
+        self.new_connection_tx = None;
+        self.is_decoupled = true;
         ControlFlow::Continue(())
     }
 }
