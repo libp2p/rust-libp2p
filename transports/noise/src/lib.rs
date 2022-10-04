@@ -90,7 +90,10 @@ pub struct NoiseConfig<P, C: Zeroize, R = ()> {
     prologue: Vec<u8>,
 }
 
-impl<H, C: Zeroize, R> NoiseConfig<H, C, R> {
+impl<H, C, R> NoiseConfig<H, C, R>
+where
+    C: Zeroize,
+{
     /// Turn the `NoiseConfig` into an authenticated upgrade for use
     /// with a `Swarm`.
     pub fn into_authenticated(self) -> NoiseAuthenticated<H, C, R> {
