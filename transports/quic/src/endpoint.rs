@@ -291,6 +291,7 @@ pub enum ToEndpoint {
 /// guarantees that the [`EndpointDriver`], is properly kept alive for as long as any QUIC
 /// connection is open.
 ///
+#[derive(Debug)]
 pub struct EndpointDriver<P: Provider> {
     // The actual QUIC state machine.
     endpoint: quinn_proto::Endpoint,

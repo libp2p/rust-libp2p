@@ -32,7 +32,6 @@ use futures::{channel::mpsc, prelude::*};
 use futures_timer::Delay;
 use libp2p_core::PeerId;
 use std::{
-    fmt,
     net::SocketAddr,
     task::{Context, Poll},
     time::Instant,
@@ -42,6 +41,7 @@ use std::{
 ///
 /// Contains everything needed to process a connection with a remote.
 /// Tied to a specific endpoint.
+#[derive(Debug)]
 pub struct Connection {
     /// Channel to the endpoint this connection belongs to.
     endpoint_channel: EndpointChannel,
@@ -306,12 +306,6 @@ impl Connection {
 
             return Poll::Pending;
         }
-    }
-}
-
-impl fmt::Debug for Connection {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_tuple("Connection").finish()
     }
 }
 

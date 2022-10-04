@@ -222,6 +222,7 @@ impl StreamMuxer for QuicMuxer {
     }
 }
 
+#[derive(Debug)]
 pub struct Substream {
     id: quinn_proto::StreamId,
     muxer: Arc<Mutex<Inner>>,

@@ -29,12 +29,12 @@ use crate::{
 use futures::{prelude::*, ready};
 use libp2p_core::PeerId;
 use std::{
-    fmt,
     pin::Pin,
     task::{Context, Poll},
 };
 
 /// A QUIC connection currently being negotiated.
+#[derive(Debug)]
 pub struct Connecting {
     connection: Option<Connection>,
 }
@@ -76,11 +76,5 @@ impl Future for Connecting {
                 | ConnectionEvent::StreamStopped(_) => {}
             }
         }
-    }
-}
-
-impl fmt::Debug for Connecting {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Debug::fmt(&self.connection, f)
     }
 }
