@@ -71,9 +71,10 @@ fn transport_upgrade() {
             let addr = addr_receiver.await.unwrap();
             dialer.dial(addr).unwrap();
             futures::future::poll_fn(move |cx| loop {
-                match ready!(dialer.poll_next_unpin(cx)).unwrap() {
-                    SwarmEvent::ConnectionEstablished { .. } => return Poll::Ready(()),
-                    _ => {}
+                if let SwarmEvent::ConnectionEstablished { .. } =
+                    ready!(dialer.poll_next_unpin(cx)).unwrap()
+                {
+                    return Poll::Ready(());
                 }
             })
             .await

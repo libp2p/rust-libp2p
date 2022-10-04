@@ -39,7 +39,7 @@ fn clone(c: &mut Criterion) {
 
     c.bench_function("clone", |b| {
         b.iter(|| {
-            black_box(peer_id.clone());
+            black_box(peer_id);
         })
     });
 }

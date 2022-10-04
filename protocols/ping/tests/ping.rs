@@ -44,14 +44,14 @@ fn ping_pong() {
         let cfg = ping::Config::new().with_interval(Duration::from_millis(10));
 
         let (peer1_id, trans) = mk_transport(muxer);
-        let mut swarm1 = Swarm::new(trans, Behaviour::new(cfg.clone()), peer1_id.clone());
+        let mut swarm1 = Swarm::new(trans, Behaviour::new(cfg.clone()), peer1_id);
 
         let (peer2_id, trans) = mk_transport(muxer);
-        let mut swarm2 = Swarm::new(trans, Behaviour::new(cfg), peer2_id.clone());
+        let mut swarm2 = Swarm::new(trans, Behaviour::new(cfg), peer2_id);
 
         let (mut tx, mut rx) = mpsc::channel::<Multiaddr>(1);
 
-        let pid1 = peer1_id.clone();
+        let pid1 = peer1_id;
         let addr = "/ip4/127.0.0.1/tcp/0".parse().unwrap();
         swarm1.listen_on(addr).unwrap();
 
@@ -68,7 +68,7 @@ fn ping_pong() {
                     })) => {
                         count1 -= 1;
                         if count1 == 0 {
-                            return (pid1.clone(), peer, rtt);
+                            return (pid1, peer, rtt);
                         }
                     }
                     SwarmEvent::Behaviour(BehaviourEvent::Ping(ping::Event {
@@ -82,7 +82,7 @@ fn ping_pong() {
             }
         };
 
-        let pid2 = peer2_id.clone();
+        let pid2 = peer2_id;
         let peer2 = async move {
             swarm2.dial(rx.next().await.unwrap()).unwrap();
 
@@ -94,7 +94,7 @@ fn ping_pong() {
                     })) => {
                         count2 -= 1;
                         if count2 == 0 {
-                            return (pid2.clone(), peer, rtt);
+                            return (pid2, peer, rtt);
                         }
                     }
                     SwarmEvent::Behaviour(BehaviourEvent::Ping(ping::Event {
@@ -128,10 +128,10 @@ fn max_failures() {
             .with_max_failures(max_failures.into());
 
         let (peer1_id, trans) = mk_transport(muxer);
-        let mut swarm1 = Swarm::new(trans, Behaviour::new(cfg.clone()), peer1_id.clone());
+        let mut swarm1 = Swarm::new(trans, Behaviour::new(cfg.clone()), peer1_id);
 
         let (peer2_id, trans) = mk_transport(muxer);
-        let mut swarm2 = Swarm::new(trans, Behaviour::new(cfg), peer2_id.clone());
+        let mut swarm2 = Swarm::new(trans, Behaviour::new(cfg), peer2_id);
 
         let (mut tx, mut rx) = mpsc::channel::<Multiaddr>(1);
 
@@ -198,10 +198,10 @@ fn max_failures() {
 #[test]
 fn unsupported_doesnt_fail() {
     let (peer1_id, trans) = mk_transport(MuxerChoice::Mplex);
-    let mut swarm1 = Swarm::new(trans, keep_alive::Behaviour, peer1_id.clone());
+    let mut swarm1 = Swarm::new(trans, keep_alive::Behaviour, peer1_id);
 
     let (peer2_id, trans) = mk_transport(MuxerChoice::Mplex);
-    let mut swarm2 = Swarm::new(trans, Behaviour::default(), peer2_id.clone());
+    let mut swarm2 = Swarm::new(trans, Behaviour::default(), peer2_id);
 
     let (mut tx, mut rx) = mpsc::channel::<Multiaddr>(1);
 
@@ -210,9 +210,8 @@ fn unsupported_doesnt_fail() {
 
     async_std::task::spawn(async move {
         loop {
-            match swarm1.select_next_some().await {
-                SwarmEvent::NewListenAddr { address, .. } => tx.send(address).await.unwrap(),
-                _ => {}
+            if let SwarmEvent::NewListenAddr { address, .. } = swarm1.select_next_some().await {
+                tx.send(address).await.unwrap()
             }
         }
     });

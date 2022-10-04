@@ -75,33 +75,27 @@ async fn run_discovery_test(config: MdnsConfig) -> Result<(), Box<dyn Error>> {
     let mut discovered_b = false;
     loop {
         futures::select! {
-            ev = a.select_next_some() => match ev {
-                SwarmEvent::Behaviour(MdnsEvent::Discovered(peers)) => {
-                    for (peer, _addr) in peers {
-                        if peer == *b.local_peer_id() {
-                            if discovered_a {
-                                return Ok(());
-                            } else {
-                                discovered_b = true;
-                            }
+            ev = a.select_next_some() => if let SwarmEvent::Behaviour(MdnsEvent::Discovered(peers)) = ev {
+                for (peer, _addr) in peers {
+                    if peer == *b.local_peer_id() {
+                        if discovered_a {
+                            return Ok(());
+                        } else {
+                            discovered_b = true;
                         }
                     }
                 }
-                _ => {}
             },
-            ev = b.select_next_some() => match ev {
-                SwarmEvent::Behaviour(MdnsEvent::Discovered(peers)) => {
-                    for (peer, _addr) in peers {
-                        if peer == *a.local_peer_id() {
-                            if discovered_b {
-                                return Ok(());
-                            } else {
-                                discovered_a = true;
-                            }
+            ev = b.select_next_some() => if let SwarmEvent::Behaviour(MdnsEvent::Discovered(peers)) = ev {
+                for (peer, _addr) in peers {
+                    if peer == *a.local_peer_id() {
+                        if discovered_b {
+                            return Ok(());
+                        } else {
+                            discovered_a = true;
                         }
                     }
                 }
-                _ => {}
             }
         }
     }
@@ -113,27 +107,20 @@ async fn run_peer_expiration_test(config: MdnsConfig) -> Result<(), Box<dyn Erro
 
     loop {
         futures::select! {
-            ev = a.select_next_some() => match ev {
-                SwarmEvent::Behaviour(MdnsEvent::Expired(peers)) => {
-                    for (peer, _addr) in peers {
-                        if peer == *b.local_peer_id() {
-                            return Ok(());
-                        }
+            ev = a.select_next_some() => if let SwarmEvent::Behaviour(MdnsEvent::Expired(peers)) = ev {
+                for (peer, _addr) in peers {
+                    if peer == *b.local_peer_id() {
+                        return Ok(());
                     }
                 }
-                _ => {}
             },
-            ev = b.select_next_some() => match ev {
-                SwarmEvent::Behaviour(MdnsEvent::Expired(peers)) => {
-                    for (peer, _addr) in peers {
-                        if peer == *a.local_peer_id() {
-                            return Ok(());
-                        }
+            ev = b.select_next_some() => if let SwarmEvent::Behaviour(MdnsEvent::Expired(peers)) = ev {
+                for (peer, _addr) in peers {
+                    if peer == *a.local_peer_id() {
+                        return Ok(());
                     }
                 }
-                _ => {}
             }
-
         }
     }
 }

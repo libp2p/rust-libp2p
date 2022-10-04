@@ -301,8 +301,8 @@ mod tests {
 
         let mut addr1: Multiaddr = "/ip4/1.2.3.4/tcp/5000".parse().expect("bad multiaddress");
         let mut addr2: Multiaddr = "/ip6/::1/udp/10000".parse().expect("bad multiaddress");
-        addr1.push(Protocol::P2p(peer_id.clone().into()));
-        addr2.push(Protocol::P2p(peer_id.clone().into()));
+        addr1.push(Protocol::P2p(peer_id.into()));
+        addr2.push(Protocol::P2p(peer_id.into()));
 
         let packets = build_query_response(
             0xf8f8,
@@ -324,7 +324,7 @@ mod tests {
                         RData::PTR(record) => record.0.to_string(),
                         _ => return None,
                     };
-                    return Some(record_value);
+                    Some(record_value)
                 })
                 .next()
                 .expect("empty record value");
