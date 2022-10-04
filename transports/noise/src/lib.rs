@@ -109,7 +109,7 @@ impl<H, C: Zeroize, R> NoiseConfig<H, C, R> {
     }
 }
 
-/// Implement `into_responder` and `into_initiator` for all configs where R = ().
+/// Implement `into_responder` and `into_initiator` for all configs where `R = ()`.
 ///
 /// This allows us to ignore the `remote` field.
 impl<H, C> NoiseConfig<H, C, ()>
