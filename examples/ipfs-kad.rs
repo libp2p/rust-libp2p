@@ -74,7 +74,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .nth(1)
         .map(|p| p.parse())
         .transpose()?
-        .unwrap_or_else(|| PeerId::random());
+        .unwrap_or_else(PeerId::random);
 
     println!("Searching for the closest peers to {}", to_search);
     swarm.behaviour_mut().get_closest_peers(to_search);
