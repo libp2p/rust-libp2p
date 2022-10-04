@@ -49,8 +49,7 @@
 - Remove default features. You need to enable required features explicitly now. As a quick workaround, you may want to use the
   new `full` feature which activates all features. See [PR 2918].
 
-- New `libp2p-onion` crate
-  ([PR 2899](https://github.com/libp2p/rust-libp2p/pull/2899)).
+- New `libp2p-onion` crate. See [PR 2899].
 
 - Update individual crates.
     - Update to [`libp2p-autonat` `v0.8.0`](protocols/autonat/CHANGELOG.md#0080).
@@ -79,7 +78,8 @@
     - Update to [`libp2p-websocket` `v0.39.0`](transports/websocket/CHANGELOG.md#0390).
     - Update to [`libp2p-yamux` `v0.41.0`](muxers/mplex/CHANGELOG.md#0410).
 
-- [PR 2918]: https://github.com/libp2p/rust-libp2p/pull/2918
+[PR 2918]: https://github.com/libp2p/rust-libp2p/pull/2918
+[PR 2899]: https://github.com/libp2p/rust-libp2p/pull/2899
 
 # 0.48.0
 
