@@ -1326,7 +1326,7 @@ mod tests {
                 w_buf: BytesMut::new(),
                 eof: false,
             };
-            let mut m = Multiplexed::new(conn, cfg.clone());
+            let mut m = Multiplexed::new(conn, cfg);
 
             // Run the test.
             let mut opened = HashSet::new();

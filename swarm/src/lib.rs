@@ -1724,7 +1724,7 @@ mod tests {
         let addr1: Multiaddr = multiaddr::Protocol::Memory(rand::random::<u64>()).into();
         let addr2: Multiaddr = multiaddr::Protocol::Memory(rand::random::<u64>()).into();
 
-        swarm1.listen_on(addr1.clone()).unwrap();
+        swarm1.listen_on(addr1).unwrap();
         swarm2.listen_on(addr2.clone()).unwrap();
 
         let swarm1_id = *swarm1.local_peer_id();
@@ -1982,7 +1982,7 @@ mod tests {
         let addr1: Multiaddr = multiaddr::Protocol::Memory(rand::random::<u64>()).into();
         let addr2: Multiaddr = multiaddr::Protocol::Memory(rand::random::<u64>()).into();
 
-        swarm1.listen_on(addr1.clone()).unwrap();
+        swarm1.listen_on(addr1).unwrap();
         swarm2.listen_on(addr2.clone()).unwrap();
 
         let swarm1_id = *swarm1.local_peer_id();
@@ -2090,7 +2090,7 @@ mod tests {
                 swarm
                     .dial(
                         DialOpts::peer_id(PeerId::random())
-                            .addresses(listen_addresses.into())
+                            .addresses(listen_addresses)
                             .build(),
                     )
                     .unwrap();
@@ -2145,16 +2145,11 @@ mod tests {
                         .addresses(vec![addr.clone()])
                         .build(),
                 )
-                .ok()
                 .expect("Unexpected connection limit.");
         }
 
         match network
-            .dial(
-                DialOpts::peer_id(target)
-                    .addresses(vec![addr.clone()])
-                    .build(),
-            )
+            .dial(DialOpts::peer_id(target).addresses(vec![addr]).build())
             .expect_err("Unexpected dialing success.")
         {
             DialError::ConnectionLimit(limit) => {
@@ -2212,7 +2207,7 @@ mod tests {
             // Spawn and block on the dialer.
             async_std::task::block_on({
                 let mut n = 0;
-                let _ = network2.dial(listen_addr.clone()).unwrap();
+                network2.dial(listen_addr.clone()).unwrap();
 
                 let mut expected_closed = false;
                 let mut network_1_established = false;

@@ -252,7 +252,7 @@ mod tests {
         );
 
         block_on(poll_fn(|cx| loop {
-            if let Poll::Pending = handler.poll(cx) {
+            if handler.poll(cx).is_pending() {
                 return Poll::Ready(());
             }
         }));
