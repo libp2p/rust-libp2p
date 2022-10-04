@@ -418,10 +418,20 @@ impl<P: Provider> EndpointDriver<P> {
             quinn_proto::DatagramEvent::ConnectionEvent(event) => {
                 // Redirect the datagram to its connection.
                 if let Some(sender) = self.alive_connections.get_mut(&connec_id) {
-                    // Try to send the redirected datagramm event to the connection.
-                    // If the connection is too busy we drop the datagram to back-pressure
-                    // the remote.
-                    let _ = sender.try_send(event);
+                    match sender.try_send(event) {
+                        Ok(()) => {}
+                        Err(err) if err.is_disconnected() => {
+                            // Connection was dropped by the user.
+                            // Inform the endpoint that this connection is drained.
+                            self.endpoint
+                                .handle_event(connec_id, quinn_proto::EndpointEvent::drained());
+                            self.alive_connections.remove(&connec_id);
+                        }
+                        Err(err) if err.is_full() => {
+                            // Connection is too busy. Drop the datagram to back-pressure the remote.
+                        }
+                        Err(_) => unreachable!("Error is either `Full` or `Disconnected`."),
+                    }
                 } else {
                     log::error!("State mismatch: event for closed connection");
                 }
