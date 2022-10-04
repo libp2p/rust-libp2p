@@ -7,6 +7,7 @@
 - Add `NoiseConfig::with_prologue` which allows users to set the noise prologue of the handshake. See [PR 2903].
 - Remove `Deref` implementation on `AuthenticKeypair`. See [PR 2909].
 - Make `handshake` module private. See [PR 2909].
+- Deprecate `AuthenticKeypair::into_identity`. See [PR 2909].
 
 [PR 2887]: https://github.com/libp2p/rust-libp2p/pull/2887
 [PR 2903]: https://github.com/libp2p/rust-libp2p/pull/2903

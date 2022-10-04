@@ -112,6 +112,36 @@ where
     }
 }
 
+/// Implement `into_responder` and `into_initiator` for all configs where R = ().
+///
+/// This allows us to ignore the `remote` field.
+impl<H, C> NoiseConfig<H, C, ()>
+where
+    C: Zeroize + Protocol<C> + AsRef<[u8]>,
+{
+    fn into_responder<S>(self, socket: S) -> Result<State<S>, NoiseError> {
+        let session = self
+            .params
+            .into_builder(&self.prologue, self.dh_keys.keypair.secret(), None)
+            .build_responder()?;
+
+        let state = State::new(socket, session, self.dh_keys.identity, None, self.legacy);
+
+        Ok(state)
+    }
+
+    fn into_initiator<S>(self, socket: S) -> Result<State<S>, NoiseError> {
+        let session = self
+            .params
+            .into_builder(&self.prologue, self.dh_keys.keypair.secret(), None)
+            .build_initiator()?;
+
+        let state = State::new(socket, session, self.dh_keys.identity, None, self.legacy);
+
+        Ok(state)
+    }
+}
+
 impl<C> NoiseConfig<IX, C>
 where
     C: Protocol<C> + Zeroize,
@@ -168,7 +198,7 @@ where
 
 impl<C> NoiseConfig<IK, C, (PublicKey<C>, identity::PublicKey)>
 where
-    C: Protocol<C> + Zeroize,
+    C: Protocol<C> + Zeroize + AsRef<[u8]>,
 {
     /// Create a new `NoiseConfig` for the `IK` handshake pattern (initiator side).
     ///
@@ -187,6 +217,28 @@ where
             _marker: std::marker::PhantomData,
             prologue: Vec::default(),
         }
+    }
+
+    /// Specialised implementation of `into_initiator` for the `IK` handshake where `R != ()`.
+    fn into_initiator<S>(self, socket: S) -> Result<State<S>, NoiseError> {
+        let session = self
+            .params
+            .into_builder(
+                &self.prologue,
+                self.dh_keys.keypair.secret(),
+                Some(&self.remote.0),
+            )
+            .build_initiator()?;
+
+        let state = State::new(
+            socket,
+            session,
+            self.dh_keys.identity,
+            Some(self.remote.1),
+            self.legacy,
+        );
+
+        Ok(state)
     }
 }
 
@@ -210,21 +262,11 @@ where
 
     fn upgrade_inbound(self, socket: T, _: Self::Info) -> Self::Future {
         async move {
-            let session = self.params.into_responder(
-                &self.prologue,
-                self.dh_keys.dh_keypair().secret(),
-                None,
-            )?;
+            let mut state = self.into_responder(socket)?;
 
-            let mut state = State::new(
-                socket,
-                session,
-                self.dh_keys.into_identity(),
-                None,
-                self.legacy,
-            );
             handshake::recv_identity(&mut state).await?;
             handshake::send_identity(&mut state).await?;
+
             state.finish()
         }
         .boxed()
@@ -251,21 +293,11 @@ where
 
     fn upgrade_outbound(self, socket: T, _: Self::Info) -> Self::Future {
         async move {
-            let session = self.params.into_initiator(
-                &self.prologue,
-                self.dh_keys.dh_keypair().secret(),
-                None,
-            )?;
+            let mut state = self.into_initiator(socket)?;
 
-            let mut state = State::new(
-                socket,
-                session,
-                self.dh_keys.into_identity(),
-                None,
-                self.legacy,
-            );
             handshake::send_identity(&mut state).await?;
             handshake::recv_identity(&mut state).await?;
+
             state.finish()
         }
         .boxed()
@@ -296,22 +328,12 @@ where
 
     fn upgrade_inbound(self, socket: T, _: Self::Info) -> Self::Future {
         async move {
-            let session = self.params.into_responder(
-                &self.prologue,
-                self.dh_keys.dh_keypair().secret(),
-                None,
-            )?;
+            let mut state = self.into_responder(socket)?;
 
-            let mut state = State::new(
-                socket,
-                session,
-                self.dh_keys.into_identity(),
-                None,
-                self.legacy,
-            );
             handshake::recv_empty(&mut state).await?;
             handshake::send_identity(&mut state).await?;
             handshake::recv_identity(&mut state).await?;
+
             state.finish()
         }
         .boxed()
@@ -342,22 +364,12 @@ where
 
     fn upgrade_outbound(self, socket: T, _: Self::Info) -> Self::Future {
         async move {
-            let session = self.params.into_initiator(
-                &self.prologue,
-                self.dh_keys.dh_keypair().secret(),
-                None,
-            )?;
+            let mut state = self.into_initiator(socket)?;
 
-            let mut state = State::new(
-                socket,
-                session,
-                self.dh_keys.into_identity(),
-                None,
-                self.legacy,
-            );
             handshake::send_empty(&mut state).await?;
             handshake::recv_identity(&mut state).await?;
             handshake::send_identity(&mut state).await?;
+
             state.finish()
         }
         .boxed()
@@ -387,21 +399,11 @@ where
 
     fn upgrade_inbound(self, socket: T, _: Self::Info) -> Self::Future {
         async move {
-            let session = self.params.into_responder(
-                &self.prologue,
-                self.dh_keys.dh_keypair().secret(),
-                None,
-            )?;
+            let mut state = self.into_responder(socket)?;
 
-            let mut state = State::new(
-                socket,
-                session,
-                self.dh_keys.into_identity(),
-                None,
-                self.legacy,
-            );
             handshake::recv_identity(&mut state).await?;
             handshake::send_signature_only(&mut state).await?;
+
             state.finish()
         }
         .boxed()
@@ -431,21 +433,11 @@ where
 
     fn upgrade_outbound(self, socket: T, _: Self::Info) -> Self::Future {
         async move {
-            let session = self.params.into_initiator(
-                &self.prologue,
-                self.dh_keys.dh_keypair().secret(),
-                Some(&self.remote.0),
-            )?;
+            let mut state = self.into_initiator(socket)?;
 
-            let mut state = State::new(
-                socket,
-                session,
-                self.dh_keys.into_identity(),
-                Some(self.remote.1),
-                self.legacy,
-            );
             handshake::send_identity(&mut state).await?;
             handshake::recv_identity(&mut state).await?;
+
             state.finish()
         }
         .boxed()

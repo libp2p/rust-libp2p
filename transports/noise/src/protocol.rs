@@ -34,39 +34,7 @@ use zeroize::Zeroize;
 pub struct ProtocolParams(snow::params::NoiseParams);
 
 impl ProtocolParams {
-    pub(crate) fn into_responder<C>(
-        self,
-        prologue: &[u8],
-        private_key: &SecretKey<C>,
-        remote_public_key: Option<&PublicKey<C>>,
-    ) -> Result<snow::HandshakeState, snow::Error>
-    where
-        C: Zeroize + AsRef<[u8]> + Protocol<C>,
-    {
-        let state = self
-            .into_builder(prologue, private_key, remote_public_key)
-            .build_responder()?;
-
-        Ok(state)
-    }
-
-    pub(crate) fn into_initiator<C>(
-        self,
-        prologue: &[u8],
-        private_key: &SecretKey<C>,
-        remote_public_key: Option<&PublicKey<C>>,
-    ) -> Result<snow::HandshakeState, snow::Error>
-    where
-        C: Zeroize + AsRef<[u8]> + Protocol<C>,
-    {
-        let state = self
-            .into_builder(prologue, private_key, remote_public_key)
-            .build_initiator()?;
-
-        Ok(state)
-    }
-
-    fn into_builder<'b, C>(
+    pub(crate) fn into_builder<'b, C>(
         self,
         prologue: &'b [u8],
         private_key: &'b SecretKey<C>,
@@ -165,8 +133,8 @@ pub struct Keypair<T: Zeroize> {
 /// A DH keypair that is authentic w.r.t. a [`identity::PublicKey`].
 #[derive(Clone)]
 pub struct AuthenticKeypair<T: Zeroize> {
-    keypair: Keypair<T>,
-    identity: KeypairIdentity,
+    pub(crate) keypair: Keypair<T>,
+    pub(crate) identity: KeypairIdentity,
 }
 
 impl<T: Zeroize> AuthenticKeypair<T> {
@@ -176,6 +144,10 @@ impl<T: Zeroize> AuthenticKeypair<T> {
 
     /// Extract the public [`KeypairIdentity`] from this `AuthenticKeypair`,
     /// dropping the DH `Keypair`.
+    #[deprecated(
+        since = "0.40.0",
+        note = "This function was only used internally and will be removed in the future unless more usecases come up."
+    )]
     pub fn into_identity(self) -> KeypairIdentity {
         self.identity
     }
