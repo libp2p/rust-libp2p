@@ -39,13 +39,13 @@
 //! # async_std::task::block_on(async { test_func().await.unwrap() });
 //! ```
 
-use std::sync::Arc;
-use std::{marker::PhantomData, pin::Pin};
-
 use address::{dangerous_extract_tor_address, safe_extract_tor_address};
 use arti_client::{DataStream, TorClient, TorClientBuilder};
 use futures::{future::BoxFuture, FutureExt};
 use libp2p_core::{transport::TransportError, Multiaddr, Transport};
+use provider::OnionStream;
+use std::sync::Arc;
+use std::{marker::PhantomData, pin::Pin};
 use tor_rtcompat::Runtime;
 
 mod address;
@@ -55,8 +55,6 @@ mod provider;
 #[cfg_attr(docsrs, doc(cfg(feature = "tokio")))]
 #[doc(inline)]
 pub use provider::OnionTokioStream;
-
-use provider::OnionStream;
 
 pub type OnionError = arti_client::Error;
 
