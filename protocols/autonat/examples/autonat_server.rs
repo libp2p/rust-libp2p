@@ -29,7 +29,7 @@
 use clap::Parser;
 use futures::prelude::*;
 use libp2p::autonat;
-use libp2p::identify::{Identify, IdentifyConfig, IdentifyEvent};
+use libp2p::identify;
 use libp2p::multiaddr::Protocol;
 use libp2p::swarm::{Swarm, SwarmEvent};
 use libp2p::{identity, Multiaddr, NetworkBehaviour, PeerId};
@@ -76,14 +76,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
 #[derive(NetworkBehaviour)]
 #[behaviour(out_event = "Event")]
 struct Behaviour {
-    identify: Identify,
+    identify: identify::Behaviour,
     auto_nat: autonat::Behaviour,
 }
 
 impl Behaviour {
     fn new(local_public_key: identity::PublicKey) -> Self {
         Self {
-            identify: Identify::new(IdentifyConfig::new(
+            identify: identify::Behaviour::new(identify::Config::new(
                 "/ipfs/0.1.0".into(),
                 local_public_key.clone(),
             )),
@@ -98,11 +98,11 @@ impl Behaviour {
 #[derive(Debug)]
 enum Event {
     AutoNat(autonat::Event),
-    Identify(IdentifyEvent),
+    Identify(identify::Event),
 }
 
-impl From<IdentifyEvent> for Event {
-    fn from(v: IdentifyEvent) -> Self {
+impl From<identify::Event> for Event {
+    fn from(v: identify::Event) -> Self {
         Self::Identify(v)
     }
 }

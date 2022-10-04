@@ -2,6 +2,14 @@
 
 - Update dependencies.
 
+- Rename types as per [discussion 2174].
+  `Identify` has been renamed to `Behaviour`.
+  The `Identify` prefix has been removed from various types like `IdentifyEvent`.
+  Users should prefer importing the identify protocol as a module (`use libp2p::identify;`),
+  and refer to its types via `identify::`. For example: `identify::Behaviour` or `identify::Event`.
+
+  [discussion 2174]: https://github.com/libp2p/rust-libp2p/discussions/2174
+
 - Update to `libp2p-core` `v0.37.0`.
 
 - Update to `libp2p-swarm` `v0.40.0`.
