@@ -151,7 +151,7 @@ impl<P: Provider> Transport for GenTransport<P> {
 
         // Try to use pick a random listener to use for dialing.
         let rx = match listeners.choose_mut(&mut thread_rng()) {
-            Some(listener) => listener.dial(socket_addr),
+            Some(listener) => listener.dialer_state.new_dial(socket_addr),
             None => {
                 // No listener? Get or create an explicit dialer.
 
@@ -163,7 +163,7 @@ impl<P: Provider> Transport for GenTransport<P> {
                     }
                 };
 
-                dialer.dial(socket_addr)
+                dialer.state.new_dial(socket_addr)
             }
         };
 
@@ -194,7 +194,7 @@ impl<P: Provider> Transport for GenTransport<P> {
     ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
         let mut errored = Vec::new();
         for (key, dialer) in &mut self.dialer {
-            if dialer.drive_dials(cx).is_err() {
+            if let Poll::Ready(_error) = dialer.poll(cx) {
                 errored.push(*key);
             }
         }
@@ -219,8 +219,7 @@ impl From<TransportError> for CoreTransportError<TransportError> {
 #[derive(Debug)]
 struct Dialer {
     endpoint_channel: EndpointChannel,
-    pending_dials: VecDeque<ToEndpoint>,
-    waker: Option<Waker>,
+    state: DialerState,
 }
 
 impl Dialer {
@@ -232,12 +231,29 @@ impl Dialer {
             .map_err(CoreTransportError::Other)?;
         Ok(Dialer {
             endpoint_channel,
-            pending_dials: VecDeque::new(),
-            waker: None,
+            state: DialerState::default(),
         })
     }
 
-    fn dial(
+    fn poll(&mut self, cx: &mut Context<'_>) -> Poll<TransportError> {
+        self.state.poll(&mut self.endpoint_channel, cx)
+    }
+}
+
+impl Drop for Dialer {
+    fn drop(&mut self) {
+        self.endpoint_channel.send_on_drop(ToEndpoint::Decoupled);
+    }
+}
+
+#[derive(Default, Debug)]
+struct DialerState {
+    pending_dials: VecDeque<ToEndpoint>,
+    waker: Option<Waker>,
+}
+
+impl DialerState {
+    fn new_dial(
         &mut self,
         address: SocketAddr,
     ) -> oneshot::Receiver<Result<Connection, quinn_proto::ConnectError>> {
@@ -257,25 +273,26 @@ impl Dialer {
         tx
     }
 
-    fn drive_dials(&mut self, cx: &mut Context<'_>) -> Result<(), mpsc::SendError> {
+    /// Send all pending dials into the given [`EndpointChannel`].
+    ///
+    /// This only ever returns [`Poll::Pending`] or an error in case the channel is closed.
+    fn poll(
+        &mut self,
+        channel: &mut EndpointChannel,
+        cx: &mut Context<'_>,
+    ) -> Poll<TransportError> {
         while let Some(to_endpoint) = self.pending_dials.pop_front() {
-            match self.endpoint_channel.try_send(to_endpoint, cx) {
+            match channel.try_send(to_endpoint, cx) {
                 Ok(Ok(())) => {}
                 Ok(Err(to_endpoint)) => {
                     self.pending_dials.push_front(to_endpoint);
                     break;
                 }
-                Err(err) => return Err(err),
+                Err(_) => return Poll::Ready(TransportError::EndpointDriverCrashed),
             }
         }
         self.waker = Some(cx.waker().clone());
-        Ok(())
-    }
-}
-
-impl Drop for Dialer {
-    fn drop(&mut self) {
-        self.endpoint_channel.send_on_drop(ToEndpoint::Decoupled);
+        Poll::Pending
     }
 }
 
@@ -296,7 +313,7 @@ struct Listener {
     /// Pending event to reported.
     pending_event: Option<<Self as Stream>::Item>,
 
-    pending_dials: VecDeque<ToEndpoint>,
+    dialer_state: DialerState,
 
     waker: Option<Waker>,
 }
@@ -331,27 +348,9 @@ impl Listener {
             if_watcher,
             is_closed: false,
             pending_event,
-            pending_dials: VecDeque::new(),
+            dialer_state: DialerState::default(),
             waker: None,
         })
-    }
-
-    fn dial(
-        &mut self,
-        address: SocketAddr,
-    ) -> oneshot::Receiver<Result<Connection, quinn_proto::ConnectError>> {
-        let (rx, tx) = oneshot::channel();
-
-        self.pending_dials.push_back(ToEndpoint::Dial {
-            addr: address,
-            result: rx,
-        });
-
-        if let Some(waker) = self.waker.take() {
-            waker.wake();
-        }
-
-        tx
     }
 
     /// Report the listener as closed in a [`TransportEvent::ListenerClosed`] and
@@ -406,6 +405,17 @@ impl Listener {
             }
         }
     }
+
+    /// Poll for a next If Event.
+    fn poll_dialer(&mut self, cx: &mut Context<'_>) -> Poll<TransportError> {
+        let Self {
+            dialer_state,
+            endpoint_channel,
+            ..
+        } = &mut *self;
+
+        dialer_state.poll(endpoint_channel, cx)
+    }
 }
 
 impl Stream for Listener {
@@ -422,15 +432,12 @@ impl Stream for Listener {
                 Poll::Ready(event) => return Poll::Ready(Some(event)),
                 Poll::Pending => {}
             }
-            if let Some(to_endpoint) = self.pending_dials.pop_front() {
-                match self.endpoint_channel.try_send(to_endpoint, cx) {
-                    Ok(Ok(())) => {}
-                    Ok(Err(to_endpoint)) => self.pending_dials.push_front(to_endpoint),
-                    Err(_) => {
-                        self.close(Err(TransportError::EndpointDriverCrashed));
-                        continue;
-                    }
+            match self.poll_dialer(cx) {
+                Poll::Ready(error) => {
+                    self.close(Err(error));
+                    continue;
                 }
+                Poll::Pending => {}
             }
             match self.new_connections_rx.poll_next_unpin(cx) {
                 Poll::Ready(Some(connection)) => {
