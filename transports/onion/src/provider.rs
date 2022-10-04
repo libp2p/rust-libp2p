@@ -71,7 +71,7 @@ impl AsyncWrite for OnionTokioStream {
         cx: &mut std::task::Context<'_>,
         buf: &[u8],
     ) -> std::task::Poll<std::io::Result<usize>> {
-        tokio_crate::io::AsyncWrite::poll_write(Pin::new(&mut self.inner), cx, buf)
+        tokio_crate::io::AsyncWrite::poll_write(std::pin::Pin::new(&mut self.inner), cx, buf)
     }
 
     #[inline]
@@ -79,7 +79,7 @@ impl AsyncWrite for OnionTokioStream {
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<std::io::Result<()>> {
-        tokio_crate::io::AsyncWrite::poll_flush(Pin::new(&mut self.inner), cx)
+        tokio_crate::io::AsyncWrite::poll_flush(std::pin::Pin::new(&mut self.inner), cx)
     }
 
     #[inline]
@@ -87,7 +87,7 @@ impl AsyncWrite for OnionTokioStream {
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<std::io::Result<()>> {
-        tokio_crate::io::AsyncWrite::poll_shutdown(Pin::new(&mut self.inner), cx)
+        tokio_crate::io::AsyncWrite::poll_shutdown(std::pin::Pin::new(&mut self.inner), cx)
     }
 
     #[inline]
@@ -96,6 +96,10 @@ impl AsyncWrite for OnionTokioStream {
         cx: &mut std::task::Context<'_>,
         bufs: &[std::io::IoSlice<'_>],
     ) -> std::task::Poll<std::io::Result<usize>> {
-        tokio_crate::io::AsyncWrite::poll_write_vectored(Pin::new(&mut self.inner), cx, bufs)
+        tokio_crate::io::AsyncWrite::poll_write_vectored(
+            std::pin::Pin::new(&mut self.inner),
+            cx,
+            bufs,
+        )
     }
 }
