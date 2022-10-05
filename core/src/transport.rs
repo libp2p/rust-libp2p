@@ -157,8 +157,9 @@ pub trait Transport {
     /// so that e.g. the peer is observed at a different IP than the IP of the local
     /// listening address. See also [`address_translation`][crate::address_translation].
     ///
-    /// Within [`libp2p_swarm::Swarm`][libp2p_swarm::Swarm] this is used when extending the
-    /// listening addresses of the local peer with external addresses observed by remote peers.
+    /// Within [`libp2p::Swarm`](<https://docs.rs/libp2p/latest/libp2p/struct.Swarm.html>) this is
+    /// used when extending the listening addresses of the local peer with external addresses
+    /// observed by remote peers.
     /// On transports where this is not relevant (i.e. no NATs are present) `None` should be
     /// returned for the sake of de-duplication.
     ///
