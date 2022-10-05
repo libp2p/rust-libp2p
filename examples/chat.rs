@@ -49,7 +49,7 @@
 //!
 //! The two nodes then connect.
 
-use async_std::{io, task};
+use async_std::io;
 use futures::{
     prelude::{stream::StreamExt, *},
     select,
@@ -108,7 +108,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Create a Swarm to manage peers and events
     let mut swarm = {
-        let mdns = task::block_on(Mdns::new(MdnsConfig::default()))?;
+        let mdns = Mdns::new(MdnsConfig::default())?;
         let mut behaviour = MyBehaviour {
             floodsub: Floodsub::new(local_peer_id),
             mdns,

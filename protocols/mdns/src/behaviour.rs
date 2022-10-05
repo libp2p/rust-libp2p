@@ -81,7 +81,7 @@ where
     T: Builder,
 {
     /// Builds a new `Mdns` behaviour.
-    pub async fn new(config: MdnsConfig) -> io::Result<Self> {
+    pub fn new(config: MdnsConfig) -> io::Result<Self> {
         let if_watch = if_watch::IfWatcher::new()?;
         Ok(Self {
             config,
