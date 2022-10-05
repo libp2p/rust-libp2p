@@ -300,7 +300,7 @@ mod tests {
             let sodium_sec =
                 ed25519_sk_to_curve25519(&ed25519_compact::SecretKey::new(ed25519.encode()));
             let sodium_pub = ed25519_pk_to_curve25519(&ed25519_compact::PublicKey::new(
-                ed25519.public().encode().clone(),
+                ed25519.public().encode(),
             ));
 
             let our_pub = x25519.public.0;

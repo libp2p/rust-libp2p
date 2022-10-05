@@ -29,7 +29,7 @@ fn within_variance(value: f64, expected: f64, variance: f64) -> bool {
     if expected >= 0.0 {
         return value > expected * (1.0 - variance) && value < expected * (1.0 + variance);
     }
-    return value > expected * (1.0 + variance) && value < expected * (1.0 - variance);
+    value > expected * (1.0 + variance) && value < expected * (1.0 - variance)
 }
 
 // generates a random gossipsub message with sequence number i
@@ -45,7 +45,7 @@ fn make_test_message(seq: u64) -> (MessageId, RawGossipsubMessage) {
     };
 
     let message = GossipsubMessage {
-        source: raw_message.source.clone(),
+        source: raw_message.source,
         data: raw_message.data.clone(),
         sequence_number: raw_message.sequence_number,
         topic: raw_message.topic.clone(),
@@ -62,7 +62,7 @@ fn default_message_id() -> fn(&GossipsubMessage) -> MessageId {
         let mut source_string = if let Some(peer_id) = message.source.as_ref() {
             peer_id.to_base58()
         } else {
-            PeerId::from_bytes(&vec![0, 1, 0])
+            PeerId::from_bytes(&[0, 1, 0])
                 .expect("Valid peer id")
                 .to_base58()
         };
@@ -76,14 +76,18 @@ fn test_score_time_in_mesh() {
     // Create parameters with reasonable default values
     let topic = Topic::new("test");
     let topic_hash = topic.hash();
-    let mut params = PeerScoreParams::default();
-    params.topic_score_cap = 1000.0;
+    let mut params = PeerScoreParams {
+        topic_score_cap: 1000.0,
+        ..Default::default()
+    };
 
-    let mut topic_params = TopicScoreParams::default();
-    topic_params.topic_weight = 0.5;
-    topic_params.time_in_mesh_weight = 1.0;
-    topic_params.time_in_mesh_quantum = Duration::from_millis(1);
-    topic_params.time_in_mesh_cap = 3600.0;
+    let topic_params = TopicScoreParams {
+        topic_weight: 0.5,
+        time_in_mesh_weight: 1.0,
+        time_in_mesh_quantum: Duration::from_millis(1),
+        time_in_mesh_cap: 3600.0,
+        ..Default::default()
+    };
 
     params.topics.insert(topic_hash, topic_params.clone());
 
@@ -91,7 +95,7 @@ fn test_score_time_in_mesh() {
 
     let mut peer_score = PeerScore::new(params);
     // Peer score should start at 0
-    peer_score.add_peer(peer_id.clone());
+    peer_score.add_peer(peer_id);
 
     let score = peer_score.score(&peer_id);
     assert!(
@@ -125,11 +129,13 @@ fn test_score_time_in_mesh_cap() {
     let topic_hash = topic.hash();
     let mut params = PeerScoreParams::default();
 
-    let mut topic_params = TopicScoreParams::default();
-    topic_params.topic_weight = 0.5;
-    topic_params.time_in_mesh_weight = 1.0;
-    topic_params.time_in_mesh_quantum = Duration::from_millis(1);
-    topic_params.time_in_mesh_cap = 10.0;
+    let topic_params = TopicScoreParams {
+        topic_weight: 0.5,
+        time_in_mesh_weight: 1.0,
+        time_in_mesh_quantum: Duration::from_millis(1),
+        time_in_mesh_cap: 10.0,
+        ..Default::default()
+    };
 
     params.topics.insert(topic_hash, topic_params.clone());
 
@@ -137,7 +143,7 @@ fn test_score_time_in_mesh_cap() {
 
     let mut peer_score = PeerScore::new(params);
     // Peer score should start at 0
-    peer_score.add_peer(peer_id.clone());
+    peer_score.add_peer(peer_id);
 
     let score = peer_score.score(&peer_id);
     assert!(
@@ -173,12 +179,14 @@ fn test_score_first_message_deliveries() {
     let topic_hash = topic.hash();
     let mut params = PeerScoreParams::default();
 
-    let mut topic_params = TopicScoreParams::default();
-    topic_params.topic_weight = 1.0;
-    topic_params.first_message_deliveries_weight = 1.0;
-    topic_params.first_message_deliveries_decay = 1.0;
-    topic_params.first_message_deliveries_cap = 2000.0;
-    topic_params.time_in_mesh_weight = 0.0;
+    let topic_params = TopicScoreParams {
+        topic_weight: 1.0,
+        first_message_deliveries_weight: 1.0,
+        first_message_deliveries_decay: 1.0,
+        first_message_deliveries_cap: 2000.0,
+        time_in_mesh_weight: 0.0,
+        ..Default::default()
+    };
 
     params.topics.insert(topic_hash, topic_params.clone());
 
@@ -186,7 +194,7 @@ fn test_score_first_message_deliveries() {
 
     let mut peer_score = PeerScore::new(params);
     // Peer score should start at 0
-    peer_score.add_peer(peer_id.clone());
+    peer_score.add_peer(peer_id);
     peer_score.graft(&peer_id, topic);
 
     // deliver a bunch of messages from the peer
@@ -217,12 +225,14 @@ fn test_score_first_message_deliveries_cap() {
     let topic_hash = topic.hash();
     let mut params = PeerScoreParams::default();
 
-    let mut topic_params = TopicScoreParams::default();
-    topic_params.topic_weight = 1.0;
-    topic_params.first_message_deliveries_weight = 1.0;
-    topic_params.first_message_deliveries_decay = 1.0; // test without decay
-    topic_params.first_message_deliveries_cap = 50.0;
-    topic_params.time_in_mesh_weight = 0.0;
+    let topic_params = TopicScoreParams {
+        topic_weight: 1.0,
+        first_message_deliveries_weight: 1.0,
+        first_message_deliveries_decay: 1.0, // test without decay
+        first_message_deliveries_cap: 50.0,
+        time_in_mesh_weight: 0.0,
+        ..Default::default()
+    };
 
     params.topics.insert(topic_hash, topic_params.clone());
 
@@ -230,7 +240,7 @@ fn test_score_first_message_deliveries_cap() {
 
     let mut peer_score = PeerScore::new(params);
     // Peer score should start at 0
-    peer_score.add_peer(peer_id.clone());
+    peer_score.add_peer(peer_id);
     peer_score.graft(&peer_id, topic);
 
     // deliver a bunch of messages from the peer
@@ -261,17 +271,19 @@ fn test_score_first_message_deliveries_decay() {
     let topic_hash = topic.hash();
     let mut params = PeerScoreParams::default();
 
-    let mut topic_params = TopicScoreParams::default();
-    topic_params.topic_weight = 1.0;
-    topic_params.first_message_deliveries_weight = 1.0;
-    topic_params.first_message_deliveries_decay = 0.9; // decay 10% per decay interval
-    topic_params.first_message_deliveries_cap = 2000.0;
-    topic_params.time_in_mesh_weight = 0.0;
+    let topic_params = TopicScoreParams {
+        topic_weight: 1.0,
+        first_message_deliveries_weight: 1.0,
+        first_message_deliveries_decay: 0.9, // decay 10% per decay interval
+        first_message_deliveries_cap: 2000.0,
+        time_in_mesh_weight: 0.0,
+        ..Default::default()
+    };
 
     params.topics.insert(topic_hash, topic_params.clone());
     let peer_id = PeerId::random();
     let mut peer_score = PeerScore::new(params);
-    peer_score.add_peer(peer_id.clone());
+    peer_score.add_peer(peer_id);
     peer_score.graft(&peer_id, topic);
 
     // deliver a bunch of messages from the peer
@@ -317,17 +329,19 @@ fn test_score_mesh_message_deliveries() {
     let topic_hash = topic.hash();
     let mut params = PeerScoreParams::default();
 
-    let mut topic_params = TopicScoreParams::default();
-    topic_params.topic_weight = 1.0;
-    topic_params.mesh_message_deliveries_weight = -1.0;
-    topic_params.mesh_message_deliveries_activation = Duration::from_secs(1);
-    topic_params.mesh_message_deliveries_window = Duration::from_millis(10);
-    topic_params.mesh_message_deliveries_threshold = 20.0;
-    topic_params.mesh_message_deliveries_cap = 100.0;
-    topic_params.mesh_message_deliveries_decay = 1.0;
-    topic_params.first_message_deliveries_weight = 0.0;
-    topic_params.time_in_mesh_weight = 0.0;
-    topic_params.mesh_failure_penalty_weight = 0.0;
+    let topic_params = TopicScoreParams {
+        topic_weight: 1.0,
+        mesh_message_deliveries_weight: -1.0,
+        mesh_message_deliveries_activation: Duration::from_secs(1),
+        mesh_message_deliveries_window: Duration::from_millis(10),
+        mesh_message_deliveries_threshold: 20.0,
+        mesh_message_deliveries_cap: 100.0,
+        mesh_message_deliveries_decay: 1.0,
+        first_message_deliveries_weight: 0.0,
+        time_in_mesh_weight: 0.0,
+        mesh_failure_penalty_weight: 0.0,
+        ..Default::default()
+    };
 
     params.topics.insert(topic_hash, topic_params.clone());
     let mut peer_score = PeerScore::new(params);
@@ -341,11 +355,11 @@ fn test_score_mesh_message_deliveries() {
     let peer_id_b = PeerId::random();
     let peer_id_c = PeerId::random();
 
-    let peers = vec![peer_id_a.clone(), peer_id_b.clone(), peer_id_c.clone()];
+    let peers = vec![peer_id_a, peer_id_b, peer_id_c];
 
     for peer_id in &peers {
-        peer_score.add_peer(peer_id.clone());
-        peer_score.graft(&peer_id, topic.clone());
+        peer_score.add_peer(*peer_id);
+        peer_score.graft(peer_id, topic.clone());
     }
 
     // assert that nobody has been penalized yet for not delivering messages before activation time
@@ -419,25 +433,27 @@ fn test_score_mesh_message_deliveries_decay() {
     let topic_hash = topic.hash();
     let mut params = PeerScoreParams::default();
 
-    let mut topic_params = TopicScoreParams::default();
-    topic_params.topic_weight = 1.0;
-    topic_params.mesh_message_deliveries_weight = -1.0;
-    topic_params.mesh_message_deliveries_activation = Duration::from_secs(0);
-    topic_params.mesh_message_deliveries_window = Duration::from_millis(10);
-    topic_params.mesh_message_deliveries_threshold = 20.0;
-    topic_params.mesh_message_deliveries_cap = 100.0;
-    topic_params.mesh_message_deliveries_decay = 0.9;
-    topic_params.first_message_deliveries_weight = 0.0;
-    topic_params.time_in_mesh_weight = 0.0;
-    topic_params.time_in_mesh_quantum = Duration::from_secs(1);
-    topic_params.mesh_failure_penalty_weight = 0.0;
+    let topic_params = TopicScoreParams {
+        topic_weight: 1.0,
+        mesh_message_deliveries_weight: -1.0,
+        mesh_message_deliveries_activation: Duration::from_secs(0),
+        mesh_message_deliveries_window: Duration::from_millis(10),
+        mesh_message_deliveries_threshold: 20.0,
+        mesh_message_deliveries_cap: 100.0,
+        mesh_message_deliveries_decay: 0.9,
+        first_message_deliveries_weight: 0.0,
+        time_in_mesh_weight: 0.0,
+        time_in_mesh_quantum: Duration::from_secs(1),
+        mesh_failure_penalty_weight: 0.0,
+        ..Default::default()
+    };
 
     params.topics.insert(topic_hash, topic_params.clone());
     let mut peer_score = PeerScore::new(params);
 
     let peer_id_a = PeerId::random();
-    peer_score.add_peer(peer_id_a.clone());
-    peer_score.graft(&peer_id_a, topic.clone());
+    peer_score.add_peer(peer_id_a);
+    peer_score.graft(&peer_id_a, topic);
 
     // deliver a bunch of messages from peer A
     let messages = 100;
@@ -480,24 +496,26 @@ fn test_score_mesh_failure_penalty() {
     let topic_hash = topic.hash();
     let mut params = PeerScoreParams::default();
 
-    let mut topic_params = TopicScoreParams::default();
-    // the mesh failure penalty is applied when a peer is pruned while their
-    // mesh deliveries are under the threshold.
-    // for this test, we set the mesh delivery threshold, but set
-    // mesh_message_deliveries to zero, so the only affect on the score
-    // is from the mesh failure penalty
-    topic_params.topic_weight = 1.0;
-    topic_params.mesh_message_deliveries_weight = 0.0;
-    topic_params.mesh_message_deliveries_activation = Duration::from_secs(0);
-    topic_params.mesh_message_deliveries_window = Duration::from_millis(10);
-    topic_params.mesh_message_deliveries_threshold = 20.0;
-    topic_params.mesh_message_deliveries_cap = 100.0;
-    topic_params.mesh_message_deliveries_decay = 1.0;
-    topic_params.first_message_deliveries_weight = 0.0;
-    topic_params.time_in_mesh_weight = 0.0;
-    topic_params.time_in_mesh_quantum = Duration::from_secs(1);
-    topic_params.mesh_failure_penalty_weight = -1.0;
-    topic_params.mesh_failure_penalty_decay = 1.0;
+    let topic_params = TopicScoreParams {
+        // the mesh failure penalty is applied when a peer is pruned while their
+        // mesh deliveries are under the threshold.
+        // for this test, we set the mesh delivery threshold, but set
+        // mesh_message_deliveries to zero, so the only affect on the score
+        // is from the mesh failure penalty
+        topic_weight: 1.0,
+        mesh_message_deliveries_weight: 0.0,
+        mesh_message_deliveries_activation: Duration::from_secs(0),
+        mesh_message_deliveries_window: Duration::from_millis(10),
+        mesh_message_deliveries_threshold: 20.0,
+        mesh_message_deliveries_cap: 100.0,
+        mesh_message_deliveries_decay: 1.0,
+        first_message_deliveries_weight: 0.0,
+        time_in_mesh_weight: 0.0,
+        time_in_mesh_quantum: Duration::from_secs(1),
+        mesh_failure_penalty_weight: -1.0,
+        mesh_failure_penalty_decay: 1.0,
+        ..Default::default()
+    };
 
     params.topics.insert(topic_hash, topic_params.clone());
     let mut peer_score = PeerScore::new(params);
@@ -505,11 +523,11 @@ fn test_score_mesh_failure_penalty() {
     let peer_id_a = PeerId::random();
     let peer_id_b = PeerId::random();
 
-    let peers = vec![peer_id_a.clone(), peer_id_b.clone()];
+    let peers = vec![peer_id_a, peer_id_b];
 
     for peer_id in &peers {
-        peer_score.add_peer(peer_id.clone());
-        peer_score.graft(&peer_id, topic.clone());
+        peer_score.add_peer(*peer_id);
+        peer_score.graft(peer_id, topic.clone());
     }
 
     // deliver a bunch of messages from peer A
@@ -562,27 +580,28 @@ fn test_score_invalid_message_deliveries() {
     let topic_hash = topic.hash();
     let mut params = PeerScoreParams::default();
 
-    let mut topic_params = TopicScoreParams::default();
-    topic_params.topic_weight = 1.0;
-    topic_params.mesh_message_deliveries_weight = 0.0;
-    topic_params.mesh_message_deliveries_activation = Duration::from_secs(1);
-    topic_params.mesh_message_deliveries_window = Duration::from_millis(10);
-    topic_params.mesh_message_deliveries_threshold = 20.0;
-    topic_params.mesh_message_deliveries_cap = 100.0;
-    topic_params.mesh_message_deliveries_decay = 1.0;
-    topic_params.first_message_deliveries_weight = 0.0;
-    topic_params.time_in_mesh_weight = 0.0;
-    topic_params.mesh_failure_penalty_weight = 0.0;
-
-    topic_params.invalid_message_deliveries_weight = -1.0;
-    topic_params.invalid_message_deliveries_decay = 1.0;
+    let topic_params = TopicScoreParams {
+        topic_weight: 1.0,
+        mesh_message_deliveries_weight: 0.0,
+        mesh_message_deliveries_activation: Duration::from_secs(1),
+        mesh_message_deliveries_window: Duration::from_millis(10),
+        mesh_message_deliveries_threshold: 20.0,
+        mesh_message_deliveries_cap: 100.0,
+        mesh_message_deliveries_decay: 1.0,
+        first_message_deliveries_weight: 0.0,
+        time_in_mesh_weight: 0.0,
+        mesh_failure_penalty_weight: 0.0,
+        invalid_message_deliveries_weight: -1.0,
+        invalid_message_deliveries_decay: 1.0,
+        ..Default::default()
+    };
 
     params.topics.insert(topic_hash, topic_params.clone());
     let mut peer_score = PeerScore::new(params);
 
     let peer_id_a = PeerId::random();
-    peer_score.add_peer(peer_id_a.clone());
-    peer_score.graft(&peer_id_a, topic.clone());
+    peer_score.add_peer(peer_id_a);
+    peer_score.graft(&peer_id_a, topic);
 
     // reject a bunch of messages from peer A
     let messages = 100;
@@ -608,27 +627,28 @@ fn test_score_invalid_message_deliveris_decay() {
     let topic_hash = topic.hash();
     let mut params = PeerScoreParams::default();
 
-    let mut topic_params = TopicScoreParams::default();
-    topic_params.topic_weight = 1.0;
-    topic_params.mesh_message_deliveries_weight = 0.0;
-    topic_params.mesh_message_deliveries_activation = Duration::from_secs(1);
-    topic_params.mesh_message_deliveries_window = Duration::from_millis(10);
-    topic_params.mesh_message_deliveries_threshold = 20.0;
-    topic_params.mesh_message_deliveries_cap = 100.0;
-    topic_params.mesh_message_deliveries_decay = 1.0;
-    topic_params.first_message_deliveries_weight = 0.0;
-    topic_params.time_in_mesh_weight = 0.0;
-    topic_params.mesh_failure_penalty_weight = 0.0;
-
-    topic_params.invalid_message_deliveries_weight = -1.0;
-    topic_params.invalid_message_deliveries_decay = 0.9;
+    let topic_params = TopicScoreParams {
+        topic_weight: 1.0,
+        mesh_message_deliveries_weight: 0.0,
+        mesh_message_deliveries_activation: Duration::from_secs(1),
+        mesh_message_deliveries_window: Duration::from_millis(10),
+        mesh_message_deliveries_threshold: 20.0,
+        mesh_message_deliveries_cap: 100.0,
+        mesh_message_deliveries_decay: 1.0,
+        first_message_deliveries_weight: 0.0,
+        time_in_mesh_weight: 0.0,
+        mesh_failure_penalty_weight: 0.0,
+        invalid_message_deliveries_weight: -1.0,
+        invalid_message_deliveries_decay: 0.9,
+        ..Default::default()
+    };
 
     params.topics.insert(topic_hash, topic_params.clone());
     let mut peer_score = PeerScore::new(params);
 
     let peer_id_a = PeerId::random();
-    peer_score.add_peer(peer_id_a.clone());
-    peer_score.graft(&peer_id_a, topic.clone());
+    peer_score.add_peer(peer_id_a);
+    peer_score.graft(&peer_id_a, topic);
 
     // reject a bunch of messages from peer A
     let messages = 100;
@@ -667,26 +687,28 @@ fn test_score_reject_message_deliveries() {
     let topic_hash = topic.hash();
     let mut params = PeerScoreParams::default();
 
-    let mut topic_params = TopicScoreParams::default();
-    topic_params.topic_weight = 1.0;
-    topic_params.mesh_message_deliveries_weight = 0.0;
-    topic_params.first_message_deliveries_weight = 0.0;
-    topic_params.mesh_failure_penalty_weight = 0.0;
-    topic_params.time_in_mesh_weight = 0.0;
-    topic_params.time_in_mesh_quantum = Duration::from_secs(1);
-    topic_params.invalid_message_deliveries_weight = -1.0;
-    topic_params.invalid_message_deliveries_decay = 1.0;
+    let topic_params = TopicScoreParams {
+        topic_weight: 1.0,
+        mesh_message_deliveries_weight: 0.0,
+        first_message_deliveries_weight: 0.0,
+        mesh_failure_penalty_weight: 0.0,
+        time_in_mesh_weight: 0.0,
+        time_in_mesh_quantum: Duration::from_secs(1),
+        invalid_message_deliveries_weight: -1.0,
+        invalid_message_deliveries_decay: 1.0,
+        ..Default::default()
+    };
 
-    params.topics.insert(topic_hash, topic_params.clone());
+    params.topics.insert(topic_hash, topic_params);
     let mut peer_score = PeerScore::new(params);
 
     let peer_id_a = PeerId::random();
     let peer_id_b = PeerId::random();
 
-    let peers = vec![peer_id_a.clone(), peer_id_b.clone()];
+    let peers = vec![peer_id_a, peer_id_b];
 
     for peer_id in &peers {
-        peer_score.add_peer(peer_id.clone());
+        peer_score.add_peer(*peer_id);
     }
 
     let (id, msg) = make_test_message(1);
@@ -777,25 +799,29 @@ fn test_application_score() {
     let app_specific_weight = 0.5;
     let topic = Topic::new("test");
     let topic_hash = topic.hash();
-    let mut params = PeerScoreParams::default();
-    params.app_specific_weight = app_specific_weight;
+    let mut params = PeerScoreParams {
+        app_specific_weight,
+        ..Default::default()
+    };
 
-    let mut topic_params = TopicScoreParams::default();
-    topic_params.topic_weight = 1.0;
-    topic_params.mesh_message_deliveries_weight = 0.0;
-    topic_params.first_message_deliveries_weight = 0.0;
-    topic_params.mesh_failure_penalty_weight = 0.0;
-    topic_params.time_in_mesh_weight = 0.0;
-    topic_params.time_in_mesh_quantum = Duration::from_secs(1);
-    topic_params.invalid_message_deliveries_weight = 0.0;
-    topic_params.invalid_message_deliveries_decay = 1.0;
+    let topic_params = TopicScoreParams {
+        topic_weight: 1.0,
+        mesh_message_deliveries_weight: 0.0,
+        first_message_deliveries_weight: 0.0,
+        mesh_failure_penalty_weight: 0.0,
+        time_in_mesh_weight: 0.0,
+        time_in_mesh_quantum: Duration::from_secs(1),
+        invalid_message_deliveries_weight: 0.0,
+        invalid_message_deliveries_decay: 1.0,
+        ..Default::default()
+    };
 
-    params.topics.insert(topic_hash, topic_params.clone());
+    params.topics.insert(topic_hash, topic_params);
     let mut peer_score = PeerScore::new(params);
 
     let peer_id_a = PeerId::random();
-    peer_score.add_peer(peer_id_a.clone());
-    peer_score.graft(&peer_id_a, topic.clone());
+    peer_score.add_peer(peer_id_a);
+    peer_score.graft(&peer_id_a, topic);
 
     let messages = 100;
     for i in -100..messages {
@@ -815,20 +841,24 @@ fn test_score_ip_colocation() {
     let ip_colocation_factor_threshold = 1.0;
     let topic = Topic::new("test");
     let topic_hash = topic.hash();
-    let mut params = PeerScoreParams::default();
-    params.ip_colocation_factor_weight = ip_colocation_factor_weight;
-    params.ip_colocation_factor_threshold = ip_colocation_factor_threshold;
+    let mut params = PeerScoreParams {
+        ip_colocation_factor_weight,
+        ip_colocation_factor_threshold,
+        ..Default::default()
+    };
 
-    let mut topic_params = TopicScoreParams::default();
-    topic_params.topic_weight = 1.0;
-    topic_params.mesh_message_deliveries_weight = 0.0;
-    topic_params.first_message_deliveries_weight = 0.0;
-    topic_params.mesh_failure_penalty_weight = 0.0;
-    topic_params.time_in_mesh_weight = 0.0;
-    topic_params.time_in_mesh_quantum = Duration::from_secs(1);
-    topic_params.invalid_message_deliveries_weight = 0.0;
+    let topic_params = TopicScoreParams {
+        topic_weight: 1.0,
+        mesh_message_deliveries_weight: 0.0,
+        first_message_deliveries_weight: 0.0,
+        mesh_failure_penalty_weight: 0.0,
+        time_in_mesh_weight: 0.0,
+        time_in_mesh_quantum: Duration::from_secs(1),
+        invalid_message_deliveries_weight: 0.0,
+        ..Default::default()
+    };
 
-    params.topics.insert(topic_hash, topic_params.clone());
+    params.topics.insert(topic_hash, topic_params);
     let mut peer_score = PeerScore::new(params);
 
     let peer_id_a = PeerId::random();
@@ -836,15 +866,10 @@ fn test_score_ip_colocation() {
     let peer_id_c = PeerId::random();
     let peer_id_d = PeerId::random();
 
-    let peers = vec![
-        peer_id_a.clone(),
-        peer_id_b.clone(),
-        peer_id_c.clone(),
-        peer_id_d.clone(),
-    ];
+    let peers = vec![peer_id_a, peer_id_b, peer_id_c, peer_id_d];
     for peer_id in &peers {
-        peer_score.add_peer(peer_id.clone());
-        peer_score.graft(&peer_id, topic.clone());
+        peer_score.add_peer(*peer_id);
+        peer_score.graft(peer_id, topic.clone());
     }
 
     // peerA should have no penalty, but B, C, and D should be penalized for sharing an IP
@@ -880,20 +905,24 @@ fn test_score_behaviour_penality() {
 
     let topic = Topic::new("test");
     let topic_hash = topic.hash();
-    let mut params = PeerScoreParams::default();
-    params.behaviour_penalty_decay = behaviour_penalty_decay;
-    params.behaviour_penalty_weight = behaviour_penalty_weight;
+    let mut params = PeerScoreParams {
+        behaviour_penalty_decay,
+        behaviour_penalty_weight,
+        ..Default::default()
+    };
 
-    let mut topic_params = TopicScoreParams::default();
-    topic_params.topic_weight = 1.0;
-    topic_params.mesh_message_deliveries_weight = 0.0;
-    topic_params.first_message_deliveries_weight = 0.0;
-    topic_params.mesh_failure_penalty_weight = 0.0;
-    topic_params.time_in_mesh_weight = 0.0;
-    topic_params.time_in_mesh_quantum = Duration::from_secs(1);
-    topic_params.invalid_message_deliveries_weight = 0.0;
+    let topic_params = TopicScoreParams {
+        topic_weight: 1.0,
+        mesh_message_deliveries_weight: 0.0,
+        first_message_deliveries_weight: 0.0,
+        mesh_failure_penalty_weight: 0.0,
+        time_in_mesh_weight: 0.0,
+        time_in_mesh_quantum: Duration::from_secs(1),
+        invalid_message_deliveries_weight: 0.0,
+        ..Default::default()
+    };
 
-    params.topics.insert(topic_hash, topic_params.clone());
+    params.topics.insert(topic_hash, topic_params);
     let mut peer_score = PeerScore::new(params);
 
     let peer_id_a = PeerId::random();
@@ -905,7 +934,7 @@ fn test_score_behaviour_penality() {
     assert_eq!(score_a, 0.0, "Peer A should be unaffected");
 
     // add the peer and test penalties
-    peer_score.add_peer(peer_id_a.clone());
+    peer_score.add_peer(peer_id_a);
     assert_eq!(score_a, 0.0, "Peer A should be unaffected");
 
     peer_score.add_penalty(&peer_id_a, 1);
@@ -931,23 +960,27 @@ fn test_score_retention() {
     let app_specific_weight = 1.0;
     let app_score_value = -1000.0;
     let retain_score = Duration::from_secs(1);
-    let mut params = PeerScoreParams::default();
-    params.app_specific_weight = app_specific_weight;
-    params.retain_score = retain_score;
+    let mut params = PeerScoreParams {
+        app_specific_weight,
+        retain_score,
+        ..Default::default()
+    };
 
-    let mut topic_params = TopicScoreParams::default();
-    topic_params.topic_weight = 0.0;
-    topic_params.mesh_message_deliveries_weight = 0.0;
-    topic_params.mesh_message_deliveries_activation = Duration::from_secs(0);
-    topic_params.first_message_deliveries_weight = 0.0;
-    topic_params.time_in_mesh_weight = 0.0;
+    let topic_params = TopicScoreParams {
+        topic_weight: 0.0,
+        mesh_message_deliveries_weight: 0.0,
+        mesh_message_deliveries_activation: Duration::from_secs(0),
+        first_message_deliveries_weight: 0.0,
+        time_in_mesh_weight: 0.0,
+        ..Default::default()
+    };
 
-    params.topics.insert(topic_hash, topic_params.clone());
+    params.topics.insert(topic_hash, topic_params);
     let mut peer_score = PeerScore::new(params);
 
     let peer_id_a = PeerId::random();
-    peer_score.add_peer(peer_id_a.clone());
-    peer_score.graft(&peer_id_a, topic.clone());
+    peer_score.add_peer(peer_id_a);
+    peer_score.graft(&peer_id_a, topic);
 
     peer_score.set_application_score(&peer_id_a, app_score_value);
 

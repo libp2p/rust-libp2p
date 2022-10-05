@@ -15,7 +15,6 @@ data-encoding = "2.3.2"
 dns-parser = "0.8.0"
 futures = "0.3.13"
 if-watch = "1.1.1"
-lazy_static = "1.4.0"
 libp2p-core = { version = "0.37.0", path = "../../core" }
 libp2p-swarm = { version = "0.40.0", path = "../../swarm" }
 log = "0.4.14"

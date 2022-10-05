@@ -56,9 +56,8 @@ async fn init_server(config: Option<Config>) -> (Swarm<Behaviour>, PeerId, Multi
         .listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap())
         .unwrap();
     let addr = loop {
-        match server.select_next_some().await {
-            SwarmEvent::NewListenAddr { address, .. } => break address,
-            _ => {}
+        if let SwarmEvent::NewListenAddr { address, .. } = server.select_next_some().await {
+            break address;
         };
     };
     (server, peer_id, addr)
@@ -91,12 +90,9 @@ async fn spawn_client(
                 .listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap())
                 .unwrap();
             loop {
-                match client.select_next_some().await {
-                    SwarmEvent::NewListenAddr { address, .. } => {
-                        addr = Some(address);
-                        break;
-                    }
-                    _ => {}
+                if let SwarmEvent::NewListenAddr { address, .. } = client.select_next_some().await {
+                    addr = Some(address);
+                    break;
                 };
             }
         }
@@ -119,11 +115,8 @@ async fn spawn_client(
 
 async fn next_event(swarm: &mut Swarm<Behaviour>) -> Event {
     loop {
-        match swarm.select_next_some().await {
-            SwarmEvent::Behaviour(event) => {
-                break event;
-            }
-            _ => {}
+        if let SwarmEvent::Behaviour(event) = swarm.select_next_some().await {
+            break event;
         }
     }
 }
@@ -161,9 +154,8 @@ async fn test_dial_back() {
                 } => {
                     assert_eq!(peer_id, client_id);
                     let observed_client_ip = loop {
-                        match send_back_addr.pop().unwrap() {
-                            Protocol::Ip4(ip4_addr) => break ip4_addr,
-                            _ => {}
+                        if let Protocol::Ip4(ip4_addr) = send_back_addr.pop().unwrap() {
+                            break ip4_addr;
                         }
                     };
                     break observed_client_ip;
