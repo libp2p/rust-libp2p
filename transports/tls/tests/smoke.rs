@@ -1,6 +1,6 @@
 use futures::{future, StreamExt};
 use libp2p::multiaddr::Protocol;
-use libp2p::swarm::{DummyBehaviour, KeepAlive, SwarmEvent};
+use libp2p::swarm::{keep_alive, SwarmEvent};
 use libp2p::Swarm;
 use libp2p_core::transport::MemoryTransport;
 use libp2p_core::upgrade::Version;
@@ -56,7 +56,7 @@ async fn can_establish_connection() {
     assert_eq!(&outbound_peer_id, swarm1.local_peer_id());
 }
 
-fn make_swarm() -> Swarm<DummyBehaviour> {
+fn make_swarm() -> Swarm<keep_alive::Behaviour> {
     let identity = libp2p::identity::Keypair::generate_ed25519();
 
     let transport = MemoryTransport::default()
@@ -67,7 +67,7 @@ fn make_swarm() -> Swarm<DummyBehaviour> {
 
     Swarm::new(
         transport,
-        DummyBehaviour::with_keep_alive(KeepAlive::Yes),
+        keep_alive::Behaviour,
         identity.public().to_peer_id(),
     )
 }
