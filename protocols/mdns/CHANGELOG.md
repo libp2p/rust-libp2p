@@ -10,7 +10,7 @@
 
 - Removed the `lazy_static` dependency. See [PR 2977].
 
-- Update to `if-watch` `v2.0.0`. See [PR 2978].
+- Update to `if-watch` `v2.0.0` and thus the `async` method `Mdns::new` and `TokioMdns::new` becomes synchronous. See [PR 2978].
 
 [PR 2918]: https://github.com/libp2p/rust-libp2p/pull/2918
 [PR 2939]: https://github.com/libp2p/rust-libp2p/pull/2939
