@@ -30,7 +30,6 @@
 //! implements the `NetworkBehaviour` trait. This struct will automatically discover other
 //! libp2p nodes on the local network.
 //!
-use lazy_static::lazy_static;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::time::Duration;
 
@@ -48,11 +47,8 @@ const SERVICE_NAME: &[u8] = b"_p2p._udp.local";
 /// The meta query for looking up the `SERVICE_NAME`.
 const META_QUERY_SERVICE: &[u8] = b"_services._dns-sd._udp.local";
 
-lazy_static! {
-    pub static ref IPV4_MDNS_MULTICAST_ADDRESS: Ipv4Addr = Ipv4Addr::new(224, 0, 0, 251);
-    pub static ref IPV6_MDNS_MULTICAST_ADDRESS: Ipv6Addr =
-        Ipv6Addr::new(0xFF02, 0, 0, 0, 0, 0, 0, 0xFB);
-}
+pub const IPV4_MDNS_MULTICAST_ADDRESS: Ipv4Addr = Ipv4Addr::new(224, 0, 0, 251);
+pub const IPV6_MDNS_MULTICAST_ADDRESS: Ipv6Addr = Ipv6Addr::new(0xFF02, 0, 0, 0, 0, 0, 0, 0xFB);
 
 /// Configuration for mDNS.
 #[derive(Debug, Clone)]

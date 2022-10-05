@@ -120,8 +120,8 @@ where
             config.query_interval + Duration::from_millis(jitter)
         };
         let multicast_addr = match addr {
-            IpAddr::V4(_) => IpAddr::V4(*crate::IPV4_MDNS_MULTICAST_ADDRESS),
-            IpAddr::V6(_) => IpAddr::V6(*crate::IPV6_MDNS_MULTICAST_ADDRESS),
+            IpAddr::V4(_) => IpAddr::V4(crate::IPV4_MDNS_MULTICAST_ADDRESS),
+            IpAddr::V6(_) => IpAddr::V6(crate::IPV6_MDNS_MULTICAST_ADDRESS),
         };
         Ok(Self {
             addr,
