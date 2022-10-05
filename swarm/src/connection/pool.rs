@@ -282,33 +282,17 @@ where
         &self.counters
     }
 
-    /// Gets an entry representing a connection in the pool.
-    ///
-    /// Returns `None` if the pool has no connection with the given ID.
-    pub fn get(&mut self, id: ConnectionId) -> Option<PoolConnection<'_, THandler>> {
-        if let hash_map::Entry::Occupied(entry) = self.pending.entry(id) {
-            Some(PoolConnection::Pending(PendingConnection { entry }))
-        } else {
-            self.established
-                .iter_mut()
-                .find_map(|(_, cs)| match cs.entry(id) {
-                    hash_map::Entry::Occupied(entry) => {
-                        Some(PoolConnection::Established(EstablishedConnection { entry }))
-                    }
-                    hash_map::Entry::Vacant(_) => None,
-                })
-        }
-    }
-
     /// Gets an established connection from the pool by ID.
     pub fn get_established(
         &mut self,
         id: ConnectionId,
     ) -> Option<EstablishedConnection<'_, THandlerInEvent<THandler>>> {
-        match self.get(id) {
-            Some(PoolConnection::Established(c)) => Some(c),
-            _ => None,
-        }
+        self.established
+            .iter_mut()
+            .find_map(|(_, cs)| match cs.entry(id) {
+                hash_map::Entry::Occupied(entry) => Some(EstablishedConnection { entry }),
+                hash_map::Entry::Vacant(_) => None,
+            })
     }
 
     /// Returns true if we are connected to the given peer.
@@ -820,12 +804,6 @@ where
 
         Poll::Pending
     }
-}
-
-/// A connection in a [`Pool`].
-pub enum PoolConnection<'a, THandler: IntoConnectionHandler> {
-    Pending(PendingConnection<'a, THandler>),
-    Established(EstablishedConnection<'a, THandlerInEvent<THandler>>),
 }
 
 /// A pending connection in a pool.
