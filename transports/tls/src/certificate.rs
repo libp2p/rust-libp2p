@@ -351,7 +351,7 @@ impl P2pCertificate<'_> {
 
     /// Return the signature scheme corresponding to [`AlgorithmIdentifier`]s
     /// of `subject_pki` and `signature_algorithm`
-    /// according to `<https://tools.ietf.org/id/draft-ietf-tls-tls13-21.html#rfc.section.4.2.3>`.
+    /// according to <https://www.rfc-editor.org/rfc/rfc8446.html#section-4.2.3>.
     fn signature_scheme(&self) -> Result<rustls::SignatureScheme, webpki::Error> {
         // Certificates MUST use the NamedCurve encoding for elliptic curve parameters.
         // Endpoints MUST abort the connection attempt if it is not used.
