@@ -29,8 +29,16 @@ use rustls::{
     client::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
     internal::msgs::handshake::DigitallySignedStruct,
     server::{ClientCertVerified, ClientCertVerifier},
-    Certificate, DistinguishedNames, SignatureScheme,
+    Certificate, DistinguishedNames, SignatureScheme, SupportedProtocolVersion,
 };
+
+/// The protocol versions supported by this verifier.
+///
+/// The spec says:
+///
+/// > The libp2p handshake uses TLS 1.3 (and higher).
+/// > Endpoints MUST NOT negotiate lower TLS versions.
+pub static PROTOCOL_VERSIONS: &'static [&SupportedProtocolVersion] = &[&rustls::version::TLS13];
 
 /// Implementation of the `rustls` certificate verification traits for libp2p.
 ///
@@ -112,11 +120,7 @@ impl ServerCertVerifier for Libp2pCertificateVerifier {
         _cert: &Certificate,
         _dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, rustls::Error> {
-        // The libp2p handshake uses TLS 1.3 (and higher).
-        // Endpoints MUST NOT negotiate lower TLS versions.
-        Err(rustls::Error::PeerIncompatibleError(
-            "Only TLS 1.3 certificates are supported".to_string(),
-        ))
+        unreachable!("`PROTOCOL_VERSIONS` only allows TLS 1.3")
     }
 
     fn verify_tls13_signature(
@@ -166,11 +170,7 @@ impl ClientCertVerifier for Libp2pCertificateVerifier {
         _cert: &Certificate,
         _dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, rustls::Error> {
-        // The libp2p handshake uses TLS 1.3 (and higher).
-        // Endpoints MUST NOT negotiate lower TLS versions.
-        Err(rustls::Error::PeerIncompatibleError(
-            "Only TLS 1.3 certificates are supported".to_string(),
-        ))
+        unreachable!("`PROTOCOL_VERSIONS` only allows TLS 1.3")
     }
 
     fn verify_tls13_signature(

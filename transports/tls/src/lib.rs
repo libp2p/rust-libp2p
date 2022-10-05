@@ -61,7 +61,7 @@ pub fn make_client_config(
     let mut crypto = rustls::ClientConfig::builder()
         .with_cipher_suites(TLS13_CIPHERSUITES)
         .with_safe_default_kx_groups()
-        .with_protocol_versions(&[&rustls::version::TLS13])
+        .with_protocol_versions(verifier::PROTOCOL_VERSIONS)
         .expect("Cipher suites and kx groups are configured; qed")
         .with_custom_certificate_verifier(Arc::new(
             verifier::Libp2pCertificateVerifier::with_remote_peer_id(remote_peer_id),
@@ -82,7 +82,7 @@ pub fn make_server_config(
     let mut crypto = rustls::ServerConfig::builder()
         .with_cipher_suites(TLS13_CIPHERSUITES)
         .with_safe_default_kx_groups()
-        .with_protocol_versions(&[&rustls::version::TLS13])
+        .with_protocol_versions(verifier::PROTOCOL_VERSIONS)
         .expect("Cipher suites and kx groups are configured; qed")
         .with_client_cert_verifier(Arc::new(verifier::Libp2pCertificateVerifier::new()))
         .with_single_cert(vec![certificate], private_key)
