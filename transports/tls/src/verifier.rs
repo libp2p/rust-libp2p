@@ -82,7 +82,7 @@ impl Libp2pCertificateVerifier {
     /// in `verify_tls12_signature` and `verify_tls13_signature` calls.
     ///
     /// This should be in priority order, with the most preferred first.
-    pub fn verification_schemes() -> Vec<SignatureScheme> {
+    fn verification_schemes() -> Vec<SignatureScheme> {
         vec![
             // TODO SignatureScheme::ECDSA_NISTP521_SHA512 is not supported by `ring` yet
             SignatureScheme::ECDSA_NISTP384_SHA384,
