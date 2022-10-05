@@ -170,7 +170,7 @@ fn build_node() -> (Multiaddr, Swarm<Gossipsub>) {
         .validation_mode(ValidationMode::Permissive)
         .build()
         .unwrap();
-    let behaviour = Gossipsub::new(MessageAuthenticity::Author(peer_id.clone()), config).unwrap();
+    let behaviour = Gossipsub::new(MessageAuthenticity::Author(peer_id), config).unwrap();
     let mut swarm = Swarm::new(transport, behaviour, peer_id);
 
     let port = 1 + random::<u64>();
@@ -187,7 +187,7 @@ fn multi_hop_propagation() {
     let _ = env_logger::try_init();
 
     fn prop(num_nodes: u8, seed: u64) -> TestResult {
-        if num_nodes < 2 || num_nodes > 50 {
+        if !(2..=50).contains(&num_nodes) {
             return TestResult::discard();
         }
 

@@ -49,6 +49,8 @@
 - Remove default features. You need to enable required features explicitly now. As a quick workaround, you may want to use the
   new `full` feature which activates all features. See [PR 2918].
 
+- Introduce [`libp2p-tls` `v0.1.0`](transports/tls/CHANGELOG.md#010). See [PR 2945].
+
 - Update individual crates.
     - Update to [`libp2p-autonat` `v0.8.0`](protocols/autonat/CHANGELOG.md#0080).
     - Update to [`libp2p-core` `v0.37.0`](core/CHANGELOG.md#0370).
@@ -76,9 +78,8 @@
     - Update to [`libp2p-websocket` `v0.39.0`](transports/websocket/CHANGELOG.md#0390).
     - Update to [`libp2p-yamux` `v0.41.0`](muxers/mplex/CHANGELOG.md#0410).
 
-- Introduce [`libp2p-tls` `v0.1.0`](transports/tls/CHANGELOG.md#010).
-
-- [PR 2918]: https://github.com/libp2p/rust-libp2p/pull/2918
+[PR 2918]: https://github.com/libp2p/rust-libp2p/pull/2918
+[PR 2945]: https://github.com/libp2p/rust-libp2p/pull/2945
 
 # 0.48.0
 

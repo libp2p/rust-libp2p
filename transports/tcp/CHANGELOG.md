@@ -7,8 +7,12 @@
 
 - Remove default features. If you previously depended on `async-std` you need to enable this explicitly now. See [PR 2918].
 
+- Return `None` in `GenTcpTransport::address_translation` if listen- or observed address are not tcp addresses.
+  See [PR 2970].
+
 [PR 2813]: https://github.com/libp2p/rust-libp2p/pull/2813
 [PR 2918]: https://github.com/libp2p/rust-libp2p/pull/2918
+[PR 2970]: https://github.com/libp2p/rust-libp2p/pull/2970
 
 # 0.36.0
 

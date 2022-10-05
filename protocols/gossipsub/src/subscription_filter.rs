@@ -232,15 +232,15 @@ pub mod regex {
             let subscriptions = vec![
                 GossipsubSubscription {
                     action: Subscribe,
-                    topic_hash: t1.clone(),
+                    topic_hash: t1,
                 },
                 GossipsubSubscription {
                     action: Subscribe,
-                    topic_hash: t2.clone(),
+                    topic_hash: t2,
                 },
                 GossipsubSubscription {
                     action: Subscribe,
-                    topic_hash: t3.clone(),
+                    topic_hash: t3,
                 },
             ];
 
@@ -277,7 +277,7 @@ mod test {
             },
             GossipsubSubscription {
                 action: Subscribe,
-                topic_hash: t2.clone(),
+                topic_hash: t2,
             },
             GossipsubSubscription {
                 action: Subscribe,
@@ -285,7 +285,7 @@ mod test {
             },
             GossipsubSubscription {
                 action: Unsubscribe,
-                topic_hash: t1.clone(),
+                topic_hash: t1,
             },
         ];
 
@@ -306,11 +306,11 @@ mod test {
         let subscriptions = vec![
             GossipsubSubscription {
                 action: Subscribe,
-                topic_hash: t1.clone(),
+                topic_hash: t1,
             },
             GossipsubSubscription {
                 action: Subscribe,
-                topic_hash: t2.clone(),
+                topic_hash: t2,
             },
         ];
 
@@ -343,7 +343,7 @@ mod test {
             },
             GossipsubSubscription {
                 action: Subscribe,
-                topic_hash: t1.clone(),
+                topic_hash: t1,
             },
         ];
 
@@ -434,11 +434,11 @@ mod test {
         let subscriptions = vec![
             GossipsubSubscription {
                 action: Subscribe,
-                topic_hash: t1.clone(),
+                topic_hash: t1,
             },
             GossipsubSubscription {
                 action: Subscribe,
-                topic_hash: t2.clone(),
+                topic_hash: t2,
             },
         ];
 
