@@ -21,7 +21,9 @@
 //! ECDSA keys with secp256r1 curve support.
 
 use super::error::DecodingError;
+use core::cmp;
 use core::fmt;
+use core::hash;
 use p256::{
     ecdsa::{
         signature::{Signer, Verifier},
@@ -117,7 +119,7 @@ impl fmt::Debug for SecretKey {
 }
 
 /// An ECDSA public key.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, Eq, PartialOrd, Ord)]
 pub struct PublicKey(VerifyingKey);
 
 impl PublicKey {
@@ -157,7 +159,7 @@ impl PublicKey {
         let buf = Self::del_asn1_header(k).ok_or_else(|| {
             DecodingError::new("failed to parse asn.1 encoded ecdsa p256 public key")
         })?;
-        Self::from_bytes(&buf)
+        Self::from_bytes(buf)
     }
 
     // ecPublicKey (ANSI X9.62 public key type) OID: 1.2.840.10045.2.1
@@ -198,8 +200,8 @@ impl PublicKey {
         if asn1_head[0] != 0x30
             || asn1_head[2] != 0x30
             || asn1_head[3] as usize != oids_len
-            || &oids_buf[..Self::EC_PUBLIC_KEY_OID.len()] != &Self::EC_PUBLIC_KEY_OID
-            || &oids_buf[Self::EC_PUBLIC_KEY_OID.len()..] != &Self::SECP_256_R1_OID
+            || oids_buf[..Self::EC_PUBLIC_KEY_OID.len()] != Self::EC_PUBLIC_KEY_OID
+            || oids_buf[Self::EC_PUBLIC_KEY_OID.len()..] != Self::SECP_256_R1_OID
             || bitstr_head[0] != 0x03
             || bitstr_head[2] != 0x00
         {
@@ -219,6 +221,18 @@ impl fmt::Debug for PublicKey {
             write!(f, "{:x}", byte)?;
         }
         Ok(())
+    }
+}
+
+impl cmp::PartialEq for PublicKey {
+    fn eq(&self, other: &Self) -> bool {
+        self.to_bytes().eq(&other.to_bytes())
+    }
+}
+
+impl hash::Hash for PublicKey {
+    fn hash<H: hash::Hasher>(&self, state: &mut H) {
+        self.to_bytes().hash(state);
     }
 }
 

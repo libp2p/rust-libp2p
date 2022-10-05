@@ -18,13 +18,13 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! [`ProtocolsHandler`] handling direct connection upgraded through a relayed connection.
+//! [`ConnectionHandler`] handling direct connection upgraded through a relayed connection.
 
 use libp2p_core::connection::ConnectionId;
 use libp2p_core::upgrade::{DeniedUpgrade, InboundUpgrade, OutboundUpgrade};
 use libp2p_swarm::{
-    KeepAlive, NegotiatedSubstream, ProtocolsHandler, ProtocolsHandlerEvent,
-    ProtocolsHandlerUpgrErr, SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
+    NegotiatedSubstream, SubstreamProtocol,
 };
 use std::task::{Context, Poll};
 use void::Void;
@@ -48,10 +48,10 @@ impl Handler {
     }
 }
 
-impl ProtocolsHandler for Handler {
+impl ConnectionHandler for Handler {
     type InEvent = void::Void;
     type OutEvent = Event;
-    type Error = ProtocolsHandlerUpgrErr<std::io::Error>;
+    type Error = ConnectionHandlerUpgrErr<std::io::Error>;
     type InboundProtocol = DeniedUpgrade;
     type OutboundProtocol = DeniedUpgrade;
     type OutboundOpenInfo = Void;
@@ -80,7 +80,7 @@ impl ProtocolsHandler for Handler {
     fn inject_dial_upgrade_error(
         &mut self,
         _: Self::OutboundOpenInfo,
-        _: ProtocolsHandlerUpgrErr<
+        _: ConnectionHandlerUpgrErr<
             <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Error,
         >,
     ) {
@@ -94,7 +94,7 @@ impl ProtocolsHandler for Handler {
         &mut self,
         _: &mut Context<'_>,
     ) -> Poll<
-        ProtocolsHandlerEvent<
+        ConnectionHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
             Self::OutEvent,
@@ -103,7 +103,7 @@ impl ProtocolsHandler for Handler {
     > {
         if !self.reported {
             self.reported = true;
-            return Poll::Ready(ProtocolsHandlerEvent::Custom(
+            return Poll::Ready(ConnectionHandlerEvent::Custom(
                 Event::DirectConnectionUpgradeSucceeded {
                     relayed_connection_id: self.relayed_connection_id,
                 },

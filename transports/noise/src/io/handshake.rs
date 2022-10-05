@@ -20,6 +20,7 @@
 
 //! Noise protocol handshake I/O.
 
+#[allow(clippy::derive_partial_eq_without_eq)]
 mod payload_proto {
     include!(concat!(env!("OUT_DIR"), "/payload.proto.rs"));
 }

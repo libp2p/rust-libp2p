@@ -9,7 +9,7 @@ on:
 jobs:
   test-desktop:
     name: Build and test
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         args: [
@@ -20,13 +20,16 @@ jobs:
     steps:
 
     - name: Cancel Previous Runs
-      uses: styfle/cancel-workflow-action@a40b8845c0683271d9f53dfcb887a7e181d3918b # 0.9.1
+      uses: styfle/cancel-workflow-action@bb6001c4ea612bf59c3abfc4756fbceee4f870c7 # 0.10.0
       with:
         access_token: ${{ github.token }}
 
-    - uses: actions/checkout@v2.4.0
+    - name: Install Protoc
+      uses: arduino/setup-protoc@v1
 
-    - uses: Swatinem/rust-cache@842ef286fff290e445b90b4002cc9807c3669641 # v1.3.0
+    - uses: actions/checkout@v3
+
+    - uses: Swatinem/rust-cache@6720f05bc48b77f96918929a9019fb2203ff71f8 # v2.0.0
       with:
         key: ${{ matrix.args }}
 
@@ -34,7 +37,7 @@ jobs:
 
   test-wasm:
     name: Build on WASM
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         toolchain: [
@@ -52,11 +55,14 @@ jobs:
     steps:
 
     - name: Cancel Previous Runs
-      uses: styfle/cancel-workflow-action@a40b8845c0683271d9f53dfcb887a7e181d3918b # 0.9.1
+      uses: styfle/cancel-workflow-action@bb6001c4ea612bf59c3abfc4756fbceee4f870c7 # 0.10.0
       with:
         access_token: ${{ github.token }}
 
-    - uses: actions/checkout@v2.4.0
+    - name: Install Protoc
+      uses: arduino/setup-protoc@v1
+
+    - uses: actions/checkout@v3
 
     - name: Install Rust ${{ matrix.toolchain }}
       uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
@@ -67,15 +73,12 @@ jobs:
 
     - name: Install a recent version of clang
       run: |
-        wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
-        sudo apt-add-repository "deb http://apt.llvm.org/bionic/ llvm-toolchain-bionic-11 main"
-        sudo apt-get update
-        sudo apt-get install -y clang-11
+        sudo bash -c "$(wget -O - https://apt.llvm.org/llvm.sh)"
 
     - name: Install CMake
       run: sudo apt-get install -y cmake
 
-    - uses: Swatinem/rust-cache@842ef286fff290e445b90b4002cc9807c3669641 # v1.3.0
+    - uses: Swatinem/rust-cache@6720f05bc48b77f96918929a9019fb2203ff71f8 # v2.0.0
       with:
         key: ${{ matrix.toolchain }}
 
@@ -86,33 +89,43 @@ jobs:
 
   check-rustdoc-links:
     name: Check rustdoc intra-doc links
-    runs-on: ubuntu-18.04
-    container:
-      image: rust
+    runs-on: ubuntu-latest
     steps:
 
     - name: Cancel Previous Runs
-      uses: styfle/cancel-workflow-action@a40b8845c0683271d9f53dfcb887a7e181d3918b # 0.9.1
+      uses: styfle/cancel-workflow-action@bb6001c4ea612bf59c3abfc4756fbceee4f870c7 # 0.10.0
       with:
         access_token: ${{ github.token }}
 
-    - uses: actions/checkout@v2.4.0
+    - name: Install Protoc
+      uses: arduino/setup-protoc@v1
 
-    - uses: Swatinem/rust-cache@842ef286fff290e445b90b4002cc9807c3669641 # v1.3.0
+    - uses: actions/checkout@v3
+
+    - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
+      with:
+        profile: minimal
+        toolchain: stable
+        override: true
+
+    - uses: Swatinem/rust-cache@6720f05bc48b77f96918929a9019fb2203ff71f8 # v2.0.0
 
     - name: Check rustdoc links
-      run: RUSTDOCFLAGS="--deny broken_intra_doc_links" cargo doc --verbose --workspace --no-deps --document-private-items --all-features
+      run: RUSTDOCFLAGS="--deny rustdoc::broken_intra_doc_links --deny warnings" cargo doc --verbose --workspace --no-deps --all-features
 
   check-clippy:
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-latest
     steps:
 
     - name: Cancel Previous Runs
-      uses: styfle/cancel-workflow-action@a40b8845c0683271d9f53dfcb887a7e181d3918b # 0.9.1
+      uses: styfle/cancel-workflow-action@bb6001c4ea612bf59c3abfc4756fbceee4f870c7 # 0.10.0
       with:
         access_token: ${{ github.token }}
 
-    - uses: actions/checkout@v2.4.0
+    - name: Install Protoc
+      uses: arduino/setup-protoc@v1
+
+    - uses: actions/checkout@v3
 
     - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
       with:
@@ -121,7 +134,7 @@ jobs:
         override: true
         components: clippy
 
-    - uses: Swatinem/rust-cache@842ef286fff290e445b90b4002cc9807c3669641 # v1.3.0
+    - uses: Swatinem/rust-cache@6720f05bc48b77f96918929a9019fb2203ff71f8 # v2.0.0
 
     - name: Run cargo clippy
       uses: actions-rs/cargo@844f36862e911db73fe0815f00a4a2602c279505 # v1.0.3
@@ -130,33 +143,40 @@ jobs:
 
   integration-test:
     name: Integration tests
-    runs-on: ubuntu-18.04
-    container:
-      image: rust
+    runs-on: ubuntu-latest
     steps:
 
     - name: Cancel Previous Runs
-      uses: styfle/cancel-workflow-action@a40b8845c0683271d9f53dfcb887a7e181d3918b # 0.9.1
+      uses: styfle/cancel-workflow-action@bb6001c4ea612bf59c3abfc4756fbceee4f870c7 # 0.10.0
       with:
         access_token: ${{ github.token }}
 
-    - uses: actions/checkout@v2.4.0
+    - name: Install Protoc
+      uses: arduino/setup-protoc@v1
 
-    - uses: Swatinem/rust-cache@842ef286fff290e445b90b4002cc9807c3669641 # v1.3.0
+    - uses: actions/checkout@v3
+
+    - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
+      with:
+        profile: minimal
+        toolchain: stable
+        override: true
+
+    - uses: Swatinem/rust-cache@6720f05bc48b77f96918929a9019fb2203ff71f8 # v2.0.0
 
     - name: Run ipfs-kad example
-      run: RUST_LOG=libp2p_swarm=debug,libp2p_kad=trace,libp2p_tcp=debug cargo run --example ipfs-kad
+      run: RUST_LOG=libp2p_swarm=debug,libp2p_kad=trace,libp2p_tcp=debug cargo run --example ipfs-kad --features full
 
   rustfmt:
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-latest
     steps:
 
     - name: Cancel Previous Runs
-      uses: styfle/cancel-workflow-action@a40b8845c0683271d9f53dfcb887a7e181d3918b # 0.9.1
+      uses: styfle/cancel-workflow-action@bb6001c4ea612bf59c3abfc4756fbceee4f870c7 # 0.10.0
       with:
         access_token: ${{ github.token }}
 
-    - uses: actions/checkout@v2.4.0
+    - uses: actions/checkout@v3
 
     - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
       with:
@@ -167,3 +187,30 @@ jobs:
 
     - name: Check formatting
       run: cargo fmt -- --check
+
+  manifest_lint:
+    runs-on: ubuntu-latest
+    steps:
+
+    - name: Cancel Previous Runs
+      uses: styfle/cancel-workflow-action@bb6001c4ea612bf59c3abfc4756fbceee4f870c7 # 0.10.0
+      with:
+        access_token: ${{ github.token }}
+
+    - uses: actions/checkout@v3
+
+    - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
+      with:
+        profile: minimal
+        toolchain: stable
+        override: true
+
+    - name: Ensure `full` feature contains all features
+      run: |
+        ALL_FEATURES=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[] | select(.name == "libp2p") | .features | keys | map(select(. != "full")) | sort | join(" ")')
+        FULL_FEATURE=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[] | select(.name == "libp2p") | .features["full"] | sort | join(" ")')
+        
+        echo "$ALL_FEATURES";
+        echo "$FULL_FEATURE";
+        
+        test "$ALL_FEATURES" = "$FULL_FEATURE"

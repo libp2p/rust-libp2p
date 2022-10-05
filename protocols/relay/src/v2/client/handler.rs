@@ -31,18 +31,23 @@ use instant::Instant;
 use libp2p_core::either::EitherError;
 use libp2p_core::multiaddr::Protocol;
 use libp2p_core::{upgrade, ConnectedPoint, Multiaddr, PeerId};
-use libp2p_swarm::protocols_handler::{
-    DummyProtocolsHandler, InboundUpgradeSend, OutboundUpgradeSend, SendWrapper,
+use libp2p_swarm::handler::{
+    DummyConnectionHandler, InboundUpgradeSend, OutboundUpgradeSend, SendWrapper,
 };
 use libp2p_swarm::{
-    IntoProtocolsHandler, KeepAlive, NegotiatedSubstream, ProtocolsHandler, ProtocolsHandlerEvent,
-    ProtocolsHandlerUpgrErr, SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, IntoConnectionHandler,
+    KeepAlive, NegotiatedSubstream, SubstreamProtocol,
 };
 use log::debug;
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::fmt;
 use std::task::{Context, Poll};
 use std::time::Duration;
+
+/// The maximum number of circuits being denied concurrently.
+///
+/// Circuits to be denied exceeding the limit are dropped.
+const MAX_NUMBER_DENYING_CIRCUIT: usize = 8;
 
 pub enum In {
     Reserve {
@@ -79,12 +84,12 @@ pub enum Event {
     ReservationReqFailed {
         /// Indicates whether the request replaces an existing reservation.
         renewal: bool,
-        error: ProtocolsHandlerUpgrErr<outbound_hop::ReservationFailedReason>,
+        error: ConnectionHandlerUpgrErr<outbound_hop::ReservationFailedReason>,
     },
     /// An outbound circuit has been established.
     OutboundCircuitEstablished { limit: Option<protocol::Limit> },
     OutboundCircuitReqFailed {
-        error: ProtocolsHandlerUpgrErr<outbound_hop::CircuitFailedReason>,
+        error: ConnectionHandlerUpgrErr<outbound_hop::CircuitFailedReason>,
     },
     /// An inbound circuit has been established.
     InboundCircuitEstablished {
@@ -93,14 +98,14 @@ pub enum Event {
     },
     /// An inbound circuit request has failed.
     InboundCircuitReqFailed {
-        error: ProtocolsHandlerUpgrErr<void::Void>,
+        error: ConnectionHandlerUpgrErr<void::Void>,
     },
     /// An inbound circuit request has been denied.
     InboundCircuitReqDenied { src_peer_id: PeerId },
     /// Denying an inbound circuit request failed.
     InboundCircuitReqDenyFailed {
         src_peer_id: PeerId,
-        error: std::io::Error,
+        error: inbound_stop::UpgradeError,
     },
 }
 
@@ -119,8 +124,8 @@ impl Prototype {
     }
 }
 
-impl IntoProtocolsHandler for Prototype {
-    type Handler = Either<Handler, DummyProtocolsHandler>;
+impl IntoConnectionHandler for Prototype {
+    type Handler = Either<Handler, DummyConnectionHandler>;
 
     fn into_handler(self, remote_peer_id: &PeerId, endpoint: &ConnectedPoint) -> Self::Handler {
         if endpoint.is_relayed() {
@@ -133,7 +138,7 @@ impl IntoProtocolsHandler for Prototype {
             }
 
             // Deny all substreams on relayed connection.
-            Either::Right(DummyProtocolsHandler::default())
+            Either::Right(DummyConnectionHandler::default())
         } else {
             let mut handler = Handler {
                 remote_peer_id: *remote_peer_id,
@@ -156,7 +161,7 @@ impl IntoProtocolsHandler for Prototype {
         }
     }
 
-    fn inbound_protocol(&self) -> <Self::Handler as ProtocolsHandler>::InboundProtocol {
+    fn inbound_protocol(&self) -> <Self::Handler as ConnectionHandler>::InboundProtocol {
         upgrade::EitherUpgrade::A(SendWrapper(inbound_stop::Upgrade {}))
     }
 }
@@ -167,7 +172,7 @@ pub struct Handler {
     remote_addr: Multiaddr,
     /// A pending fatal error that results in the connection being closed.
     pending_error: Option<
-        ProtocolsHandlerUpgrErr<
+        ConnectionHandlerUpgrErr<
             EitherError<inbound_stop::FatalUpgradeError, outbound_hop::FatalUpgradeError>,
         >,
     >,
@@ -176,11 +181,11 @@ pub struct Handler {
 
     /// Queue of events to return when polled.
     queued_events: VecDeque<
-        ProtocolsHandlerEvent<
-            <Self as ProtocolsHandler>::OutboundProtocol,
-            <Self as ProtocolsHandler>::OutboundOpenInfo,
-            <Self as ProtocolsHandler>::OutEvent,
-            <Self as ProtocolsHandler>::Error,
+        ConnectionHandlerEvent<
+            <Self as ConnectionHandler>::OutboundProtocol,
+            <Self as ConnectionHandler>::OutboundOpenInfo,
+            <Self as ConnectionHandler>::OutEvent,
+            <Self as ConnectionHandler>::Error,
         >,
     >,
 
@@ -196,19 +201,20 @@ pub struct Handler {
     /// eventually.
     alive_lend_out_substreams: FuturesUnordered<oneshot::Receiver<void::Void>>,
 
-    circuit_deny_futs: FuturesUnordered<BoxFuture<'static, (PeerId, Result<(), std::io::Error>)>>,
+    circuit_deny_futs:
+        HashMap<PeerId, BoxFuture<'static, Result<(), protocol::inbound_stop::UpgradeError>>>,
 
     /// Futures that try to send errors to the transport.
     ///
     /// We may drop errors if this handler ends up in a terminal state (by returning
-    /// [`ProtocolsHandlerEvent::Close`]).
+    /// [`ConnectionHandlerEvent::Close`]).
     send_error_futs: FuturesUnordered<BoxFuture<'static, ()>>,
 }
 
-impl ProtocolsHandler for Handler {
+impl ConnectionHandler for Handler {
     type InEvent = In;
     type OutEvent = Event;
-    type Error = ProtocolsHandlerUpgrErr<
+    type Error = ConnectionHandlerUpgrErr<
         EitherError<inbound_stop::FatalUpgradeError, outbound_hop::FatalUpgradeError>,
     >;
     type InboundProtocol = inbound_stop::Upgrade;
@@ -242,7 +248,7 @@ impl ProtocolsHandler for Handler {
                     relay_addr: self.remote_addr.clone(),
                 });
 
-                self.queued_events.push_back(ProtocolsHandlerEvent::Custom(
+                self.queued_events.push_back(ConnectionHandlerEvent::Custom(
                     Event::InboundCircuitEstablished {
                         src_peer_id: self.remote_peer_id,
                         limit,
@@ -251,12 +257,27 @@ impl ProtocolsHandler for Handler {
             }
             Reservation::None => {
                 let src_peer_id = inbound_circuit.src_peer_id();
-                self.circuit_deny_futs.push(
-                    inbound_circuit
-                        .deny(Status::NoReservation)
-                        .map(move |result| (src_peer_id, result))
-                        .boxed(),
-                )
+
+                if self.circuit_deny_futs.len() == MAX_NUMBER_DENYING_CIRCUIT
+                    && !self.circuit_deny_futs.contains_key(&src_peer_id)
+                {
+                    log::warn!(
+                        "Dropping inbound circuit request to be denied from {:?} due to exceeding limit.",
+                        src_peer_id,
+                    );
+                } else if self
+                    .circuit_deny_futs
+                    .insert(
+                        src_peer_id,
+                        inbound_circuit.deny(Status::NoReservation).boxed(),
+                    )
+                    .is_some()
+                {
+                    log::warn!(
+                            "Dropping existing inbound circuit request to be denied from {:?} in favor of new one.",
+                            src_peer_id
+                        )
+                }
             }
         }
     }
@@ -285,7 +306,7 @@ impl ProtocolsHandler for Handler {
                 );
 
                 self.queued_events
-                    .push_back(ProtocolsHandlerEvent::Custom(event));
+                    .push_back(ConnectionHandlerEvent::Custom(event));
             }
 
             // Outbound circuit
@@ -305,7 +326,7 @@ impl ProtocolsHandler for Handler {
                 ))) {
                     Ok(()) => {
                         self.alive_lend_out_substreams.push(rx);
-                        self.queued_events.push_back(ProtocolsHandlerEvent::Custom(
+                        self.queued_events.push_back(ConnectionHandlerEvent::Custom(
                             Event::OutboundCircuitEstablished { limit },
                         ));
                     }
@@ -325,7 +346,7 @@ impl ProtocolsHandler for Handler {
         match event {
             In::Reserve { to_listener } => {
                 self.queued_events
-                    .push_back(ProtocolsHandlerEvent::OutboundSubstreamRequest {
+                    .push_back(ConnectionHandlerEvent::OutboundSubstreamRequest {
                         protocol: SubstreamProtocol::new(
                             outbound_hop::Upgrade::Reserve,
                             OutboundOpenInfo::Reserve { to_listener },
@@ -337,7 +358,7 @@ impl ProtocolsHandler for Handler {
                 dst_peer_id,
             } => {
                 self.queued_events
-                    .push_back(ProtocolsHandlerEvent::OutboundSubstreamRequest {
+                    .push_back(ConnectionHandlerEvent::OutboundSubstreamRequest {
                         protocol: SubstreamProtocol::new(
                             outbound_hop::Upgrade::Connect { dst_peer_id },
                             OutboundOpenInfo::Connect { send_back },
@@ -350,35 +371,35 @@ impl ProtocolsHandler for Handler {
     fn inject_listen_upgrade_error(
         &mut self,
         _: Self::InboundOpenInfo,
-        error: ProtocolsHandlerUpgrErr<<Self::InboundProtocol as InboundUpgradeSend>::Error>,
+        error: ConnectionHandlerUpgrErr<<Self::InboundProtocol as InboundUpgradeSend>::Error>,
     ) {
         let non_fatal_error = match error {
-            ProtocolsHandlerUpgrErr::Timeout => ProtocolsHandlerUpgrErr::Timeout,
-            ProtocolsHandlerUpgrErr::Timer => ProtocolsHandlerUpgrErr::Timer,
-            ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
+            ConnectionHandlerUpgrErr::Timeout => ConnectionHandlerUpgrErr::Timeout,
+            ConnectionHandlerUpgrErr::Timer => ConnectionHandlerUpgrErr::Timer,
+            ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
                 upgrade::NegotiationError::Failed,
-            )) => ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
+            )) => ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
                 upgrade::NegotiationError::Failed,
             )),
-            ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
+            ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
                 upgrade::NegotiationError::ProtocolError(e),
             )) => {
-                self.pending_error = Some(ProtocolsHandlerUpgrErr::Upgrade(
+                self.pending_error = Some(ConnectionHandlerUpgrErr::Upgrade(
                     upgrade::UpgradeError::Select(upgrade::NegotiationError::ProtocolError(e)),
                 ));
                 return;
             }
-            ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(
+            ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(
                 inbound_stop::UpgradeError::Fatal(error),
             )) => {
-                self.pending_error = Some(ProtocolsHandlerUpgrErr::Upgrade(
+                self.pending_error = Some(ConnectionHandlerUpgrErr::Upgrade(
                     upgrade::UpgradeError::Apply(EitherError::A(error)),
                 ));
                 return;
             }
         };
 
-        self.queued_events.push_back(ProtocolsHandlerEvent::Custom(
+        self.queued_events.push_back(ConnectionHandlerEvent::Custom(
             Event::InboundCircuitReqFailed {
                 error: non_fatal_error,
             },
@@ -388,38 +409,38 @@ impl ProtocolsHandler for Handler {
     fn inject_dial_upgrade_error(
         &mut self,
         open_info: Self::OutboundOpenInfo,
-        error: ProtocolsHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>,
+        error: ConnectionHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>,
     ) {
         match open_info {
             OutboundOpenInfo::Reserve { mut to_listener } => {
                 let non_fatal_error = match error {
-                    ProtocolsHandlerUpgrErr::Timeout => ProtocolsHandlerUpgrErr::Timeout,
-                    ProtocolsHandlerUpgrErr::Timer => ProtocolsHandlerUpgrErr::Timer,
-                    ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
+                    ConnectionHandlerUpgrErr::Timeout => ConnectionHandlerUpgrErr::Timeout,
+                    ConnectionHandlerUpgrErr::Timer => ConnectionHandlerUpgrErr::Timer,
+                    ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
                         upgrade::NegotiationError::Failed,
-                    )) => ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
+                    )) => ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
                         upgrade::NegotiationError::Failed,
                     )),
-                    ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
+                    ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
                         upgrade::NegotiationError::ProtocolError(e),
                     )) => {
-                        self.pending_error = Some(ProtocolsHandlerUpgrErr::Upgrade(
+                        self.pending_error = Some(ConnectionHandlerUpgrErr::Upgrade(
                             upgrade::UpgradeError::Select(
                                 upgrade::NegotiationError::ProtocolError(e),
                             ),
                         ));
                         return;
                     }
-                    ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(error)) => {
+                    ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(error)) => {
                         match error {
                             outbound_hop::UpgradeError::Fatal(error) => {
-                                self.pending_error = Some(ProtocolsHandlerUpgrErr::Upgrade(
+                                self.pending_error = Some(ConnectionHandlerUpgrErr::Upgrade(
                                     upgrade::UpgradeError::Apply(EitherError::B(error)),
                                 ));
                                 return;
                             }
                             outbound_hop::UpgradeError::ReservationFailed(error) => {
-                                ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(
+                                ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(
                                     error,
                                 ))
                             }
@@ -447,7 +468,7 @@ impl ProtocolsHandler for Handler {
                 }
 
                 let renewal = self.reservation.failed();
-                self.queued_events.push_back(ProtocolsHandlerEvent::Custom(
+                self.queued_events.push_back(ConnectionHandlerEvent::Custom(
                     Event::ReservationReqFailed {
                         renewal,
                         error: non_fatal_error,
@@ -456,33 +477,33 @@ impl ProtocolsHandler for Handler {
             }
             OutboundOpenInfo::Connect { send_back } => {
                 let non_fatal_error = match error {
-                    ProtocolsHandlerUpgrErr::Timeout => ProtocolsHandlerUpgrErr::Timeout,
-                    ProtocolsHandlerUpgrErr::Timer => ProtocolsHandlerUpgrErr::Timer,
-                    ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
+                    ConnectionHandlerUpgrErr::Timeout => ConnectionHandlerUpgrErr::Timeout,
+                    ConnectionHandlerUpgrErr::Timer => ConnectionHandlerUpgrErr::Timer,
+                    ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
                         upgrade::NegotiationError::Failed,
-                    )) => ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
+                    )) => ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
                         upgrade::NegotiationError::Failed,
                     )),
-                    ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
+                    ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
                         upgrade::NegotiationError::ProtocolError(e),
                     )) => {
-                        self.pending_error = Some(ProtocolsHandlerUpgrErr::Upgrade(
+                        self.pending_error = Some(ConnectionHandlerUpgrErr::Upgrade(
                             upgrade::UpgradeError::Select(
                                 upgrade::NegotiationError::ProtocolError(e),
                             ),
                         ));
                         return;
                     }
-                    ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(error)) => {
+                    ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(error)) => {
                         match error {
                             outbound_hop::UpgradeError::Fatal(error) => {
-                                self.pending_error = Some(ProtocolsHandlerUpgrErr::Upgrade(
+                                self.pending_error = Some(ConnectionHandlerUpgrErr::Upgrade(
                                     upgrade::UpgradeError::Apply(EitherError::B(error)),
                                 ));
                                 return;
                             }
                             outbound_hop::UpgradeError::CircuitFailed(error) => {
-                                ProtocolsHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(
+                                ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(
                                     error,
                                 ))
                             }
@@ -497,7 +518,7 @@ impl ProtocolsHandler for Handler {
 
                 let _ = send_back.send(Err(()));
 
-                self.queued_events.push_back(ProtocolsHandlerEvent::Custom(
+                self.queued_events.push_back(ConnectionHandlerEvent::Custom(
                     Event::OutboundCircuitReqFailed {
                         error: non_fatal_error,
                     },
@@ -514,7 +535,7 @@ impl ProtocolsHandler for Handler {
         &mut self,
         cx: &mut Context<'_>,
     ) -> Poll<
-        ProtocolsHandlerEvent<
+        ConnectionHandlerEvent<
             Self::OutboundProtocol,
             Self::OutboundOpenInfo,
             Self::OutEvent,
@@ -524,7 +545,7 @@ impl ProtocolsHandler for Handler {
         // Check for a pending (fatal) error.
         if let Some(err) = self.pending_error.take() {
             // The handler will not be polled again by the `Swarm`.
-            return Poll::Ready(ProtocolsHandlerEvent::Close(err));
+            return Poll::Ready(ConnectionHandlerEvent::Close(err));
         }
 
         // Return queued events.
@@ -533,24 +554,32 @@ impl ProtocolsHandler for Handler {
         }
 
         if let Poll::Ready(Some(protocol)) = self.reservation.poll(cx) {
-            return Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest { protocol });
+            return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest { protocol });
         }
 
         // Deny incoming circuit requests.
-        if let Poll::Ready(Some((src_peer_id, result))) = self.circuit_deny_futs.poll_next_unpin(cx)
-        {
-            match result {
-                Ok(()) => {
-                    return Poll::Ready(ProtocolsHandlerEvent::Custom(
-                        Event::InboundCircuitReqDenied { src_peer_id },
-                    ))
-                }
-                Err(error) => {
-                    return Poll::Ready(ProtocolsHandlerEvent::Custom(
-                        Event::InboundCircuitReqDenyFailed { src_peer_id, error },
-                    ))
-                }
-            }
+        let maybe_event =
+            self.circuit_deny_futs
+                .iter_mut()
+                .find_map(|(src_peer_id, fut)| match fut.poll_unpin(cx) {
+                    Poll::Ready(Ok(())) => Some((
+                        *src_peer_id,
+                        Event::InboundCircuitReqDenied {
+                            src_peer_id: *src_peer_id,
+                        },
+                    )),
+                    Poll::Ready(Err(error)) => Some((
+                        *src_peer_id,
+                        Event::InboundCircuitReqDenyFailed {
+                            src_peer_id: *src_peer_id,
+                            error,
+                        },
+                    )),
+                    Poll::Pending => None,
+                });
+        if let Some((src_peer_id, event)) = maybe_event {
+            self.circuit_deny_futs.remove(&src_peer_id);
+            return Poll::Ready(ConnectionHandlerEvent::Custom(event));
         }
 
         // Send errors to transport.

@@ -18,8 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::transport::{Transport, TransportError};
+use crate::transport::{ListenerId, Transport, TransportError, TransportEvent};
 use multiaddr::Multiaddr;
+use std::{pin::Pin, task::Context, task::Poll};
 
 /// Transport that is possibly disabled.
 ///
@@ -28,7 +29,8 @@ use multiaddr::Multiaddr;
 /// enabled (read: contains `Some`), then dialing and listening will be handled by the inner
 /// transport.
 #[derive(Debug, Copy, Clone)]
-pub struct OptionalTransport<T>(Option<T>);
+#[pin_project::pin_project]
+pub struct OptionalTransport<T>(#[pin] Option<T>);
 
 impl<T> OptionalTransport<T> {
     /// Builds an `OptionalTransport` with the given transport in an enabled
@@ -55,28 +57,38 @@ where
 {
     type Output = T::Output;
     type Error = T::Error;
-    type Listener = T::Listener;
     type ListenerUpgrade = T::ListenerUpgrade;
     type Dial = T::Dial;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
-        if let Some(inner) = self.0 {
+    fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
+        if let Some(inner) = self.0.as_mut() {
             inner.listen_on(addr)
         } else {
             Err(TransportError::MultiaddrNotSupported(addr))
         }
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        if let Some(inner) = self.0 {
+    fn remove_listener(&mut self, id: ListenerId) -> bool {
+        if let Some(inner) = self.0.as_mut() {
+            inner.remove_listener(id)
+        } else {
+            false
+        }
+    }
+
+    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        if let Some(inner) = self.0.as_mut() {
             inner.dial(addr)
         } else {
             Err(TransportError::MultiaddrNotSupported(addr))
         }
     }
 
-    fn dial_as_listener(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        if let Some(inner) = self.0 {
+    fn dial_as_listener(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+        if let Some(inner) = self.0.as_mut() {
             inner.dial_as_listener(addr)
         } else {
             Err(TransportError::MultiaddrNotSupported(addr))
@@ -88,6 +100,17 @@ where
             inner.address_translation(server, observed)
         } else {
             None
+        }
+    }
+
+    fn poll(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
+        if let Some(inner) = self.project().0.as_pin_mut() {
+            inner.poll(cx)
+        } else {
+            Poll::Pending
         }
     }
 }

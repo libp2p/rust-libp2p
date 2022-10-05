@@ -26,16 +26,16 @@
 //!
 //! # Usage
 //!
-//! The [`Ping`] struct implements the [`NetworkBehaviour`] trait. When used with a [`Swarm`],
+//! The [`Behaviour`] struct implements the [`NetworkBehaviour`] trait. When used with a [`Swarm`],
 //! it will respond to inbound ping requests and as necessary periodically send outbound
 //! ping requests on every established connection. If a configurable number of consecutive
 //! pings fail, the connection will be closed.
 //!
-//! The `Ping` network behaviour produces [`PingEvent`]s, which may be consumed from the `Swarm`
+//! The [`Behaviour`] network behaviour produces [`Event`]s, which may be consumed from the [`Swarm`]
 //! by an application, e.g. to collect statistics.
 //!
 //! > **Note**: The ping protocol does not keep otherwise idle connections alive
-//! > by default, see [`PingConfig::with_keep_alive`] for changing this behaviour.
+//! > by default, see [`Config::with_keep_alive`] for changing this behaviour.
 //!
 //! [`Swarm`]: libp2p_swarm::Swarm
 //! [`Transport`]: libp2p_core::Transport
@@ -52,16 +52,25 @@ use std::{
     task::{Context, Poll},
 };
 
-#[deprecated(
-    since = "0.30.0",
-    note = "Use re-exports that omit `Ping` prefix, i.e. `libp2p::ping::Config` etc"
-)]
-pub use self::{
-    Config as PingConfig, Event as PingEvent, Failure as PingFailure, Result as PingResult,
-    Success as PingSuccess,
-};
-#[deprecated(since = "0.30.0", note = "Use libp2p::ping::Behaviour instead.")]
-pub use Behaviour as Ping;
+#[deprecated(since = "0.39.1", note = "Use libp2p::ping::Config instead.")]
+pub type PingConfig = Config;
+
+#[deprecated(since = "0.39.1", note = "Use libp2p::ping::Event instead.")]
+pub type PingEvent = Event;
+
+#[deprecated(since = "0.39.1", note = "Use libp2p::ping::Success instead.")]
+pub type PingSuccess = Success;
+
+#[deprecated(since = "0.39.1", note = "Use libp2p::ping::Failure instead.")]
+pub type PingFailure = Failure;
+
+#[deprecated(since = "0.39.1", note = "Use libp2p::ping::Result instead.")]
+pub type PingResult = Result;
+
+#[deprecated(since = "0.39.1", note = "Use libp2p::ping::Behaviour instead.")]
+pub type Ping = Behaviour;
+
+pub use self::protocol::PROTOCOL_NAME;
 
 /// The result of an inbound or outbound ping.
 pub type Result = std::result::Result<Success, Failure>;
@@ -103,10 +112,10 @@ impl Default for Behaviour {
 }
 
 impl NetworkBehaviour for Behaviour {
-    type ProtocolsHandler = Handler;
+    type ConnectionHandler = Handler;
     type OutEvent = Event;
 
-    fn new_handler(&mut self) -> Self::ProtocolsHandler {
+    fn new_handler(&mut self) -> Self::ConnectionHandler {
         Handler::new(self.config.clone())
     }
 
@@ -118,8 +127,16 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         _: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
         if let Some(e) = self.events.pop_back() {
+            let Event { result, peer } = &e;
+
+            match result {
+                Ok(Success::Ping { .. }) => log::debug!("Ping sent to {:?}", peer),
+                Ok(Success::Pong) => log::debug!("Ping received from {:?}", peer),
+                _ => {}
+            }
+
             Poll::Ready(NetworkBehaviourAction::GenerateEvent(e))
         } else {
             Poll::Pending

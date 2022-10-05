@@ -1,3 +1,28 @@
+# 0.36.0 [unreleased]
+
+- Remove default features. If you previously depended on `async-std` you need to enable this explicitly now. See [PR 2918].
+
+- Update to `libp2p-core` `v0.37.0`.
+
+[PR 2918]: https://github.com/libp2p/rust-libp2p/pull/2918
+
+# 0.35.0
+
+- Update to `libp2p-core` `v0.36.0`.
+
+# 0.34.0
+
+- Update to `libp2p-core` `v0.35.0`.
+
+# 0.33.0
+
+- Update dependencies.
+- Update to `libp2p-core` `v0.34.0`.
+- Add `Transport::poll` and `Transport::remove_listener` and remove `Transport::Listener` for
+  `UdsConfig` Drive listener streams in `UdsConfig` directly. See [PR 2652].
+
+[PR 2652]: https://github.com/libp2p/rust-libp2p/pull/2652
+
 # 0.32.0 [2022-01-27]
 
 - Update to `libp2p-core` `v0.32.0`.

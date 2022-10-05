@@ -53,7 +53,7 @@
 //!
 //! > **Note**: You can use the `apply_inbound` or `apply_outbound` methods to try upgrade a
 //!             connection or substream. However if you use the recommended `Swarm` or
-//!             `ProtocolsHandler` APIs, the upgrade is automatically handled for you and you don't
+//!             `ConnectionHandler` APIs, the upgrade is automatically handled for you and you don't
 //!             need to use these methods.
 //!
 
@@ -64,6 +64,8 @@ mod error;
 mod from_fn;
 mod map;
 mod optional;
+mod pending;
+mod ready;
 mod select;
 mod transfer;
 
@@ -77,6 +79,8 @@ pub use self::{
     from_fn::{from_fn, FromFnUpgrade},
     map::{MapInboundUpgrade, MapInboundUpgradeErr, MapOutboundUpgrade, MapOutboundUpgradeErr},
     optional::OptionalUpgrade,
+    pending::PendingUpgrade,
+    ready::ReadyUpgrade,
     select::SelectUpgrade,
     transfer::{read_length_prefixed, read_varint, write_length_prefixed, write_varint},
 };

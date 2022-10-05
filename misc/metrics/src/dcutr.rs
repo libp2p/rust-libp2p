@@ -29,7 +29,7 @@ pub struct Metrics {
 
 impl Metrics {
     pub fn new(registry: &mut Registry) -> Self {
-        let sub_registry = registry.sub_registry_with_prefix("relay");
+        let sub_registry = registry.sub_registry_with_prefix("dcutr");
 
         let events = Family::default();
         sub_registry.register(
@@ -77,10 +77,9 @@ impl From<&libp2p_dcutr::behaviour::Event> for EventType {
     }
 }
 
-impl super::Recorder<libp2p_dcutr::behaviour::Event> for super::Metrics {
+impl super::Recorder<libp2p_dcutr::behaviour::Event> for Metrics {
     fn record(&self, event: &libp2p_dcutr::behaviour::Event) {
-        self.dcutr
-            .events
+        self.events
             .get_or_create(&EventLabels {
                 event: event.into(),
             })

@@ -1,4 +1,49 @@
-# 0.34.0 [unreleased]
+# 0.40.0 [unreleased]
+
+- Bump rand to 0.8 and quickcheck to 1. See [PR 2857].
+- Deprecate types with `Ping` prefix. Prefer importing them via the `ping` namespace, i.e. `libp2p::ping::Event` instead
+  of `libp2p::ping::PingEvent`. See [PR 2937].
+
+- Update to `libp2p-core` `v0.37.0`.
+
+- Update to `libp2p-swarm` `v0.40.0`.
+
+[PR 2857]: https://github.com/libp2p/rust-libp2p/pull/2857
+[PR 2937]: https://github.com/libp2p/rust-libp2p/pull/2937
+
+# 0.39.0
+
+- Update to `libp2p-swarm` `v0.39.0`.
+
+- Update to `libp2p-core` `v0.36.0`.
+
+# 0.38.0
+
+- Update to `libp2p-swarm` `v0.38.0`.
+
+- Expose `PROTOCOL_NAME`. See [PR 2734].
+
+- Update to `libp2p-core` `v0.35.0`.
+
+[PR 2734]: https://github.com/libp2p/rust-libp2p/pull/2734/
+
+# 0.37.0
+
+- Update to `libp2p-core` `v0.34.0`.
+
+- Update to `libp2p-swarm` `v0.37.0`.
+
+# 0.36.0
+
+- Update to `libp2p-core` `v0.33.0`.
+
+- Update to `libp2p-swarm` `v0.36.0`.
+
+# 0.35.0
+
+- Update to `libp2p-swarm` `v0.35.0`.
+
+# 0.34.0 [2022-02-22]
 
 - Update to `libp2p-core` `v0.32.0`.
 

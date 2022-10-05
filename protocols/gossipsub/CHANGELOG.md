@@ -1,4 +1,78 @@
-# 0.36.0 [unreleased]
+# 0.42.0 [unreleased]
+
+- Bump rand to 0.8 and quickcheck to 1. See [PR 2857].
+
+- Update to `libp2p-core` `v0.37.0`.
+
+- Update to `libp2p-swarm` `v0.40.0`.
+
+[PR 2857]: https://github.com/libp2p/rust-libp2p/pull/2857
+
+# 0.41.0
+
+- Update to `libp2p-swarm` `v0.39.0`.
+
+- Update to `libp2p-core` `v0.36.0`.
+
+- Allow publishing with any `impl Into<TopicHash>` as a topic. See [PR 2862].
+
+[PR 2862]: https://github.com/libp2p/rust-libp2p/pull/2862
+
+# 0.40.0
+
+- Update prost requirement from 0.10 to 0.11 which no longer installs the protoc Protobuf compiler.
+  Thus you will need protoc installed locally. See [PR 2788].
+
+- Update to `libp2p-swarm` `v0.38.0`.
+
+- Update to `libp2p-core` `v0.35.0`.
+
+- Update to `prometheus-client` `v0.18.0`. See [PR 2822].
+
+[PR 2822]: https://github.com/libp2p/rust-libp2p/pull/2761/
+[PR 2788]: https://github.com/libp2p/rust-libp2p/pull/2788
+
+# 0.39.0
+
+- Update to `libp2p-core` `v0.34.0`.
+
+- Update to `libp2p-swarm` `v0.37.0`.
+
+- Allow for custom protocol ID via `GossipsubConfigBuilder::protocol_id()`. See [PR 2718].
+
+[PR 2718]: https://github.com/libp2p/rust-libp2p/pull/2718/
+
+# 0.38.1
+
+- Fix duplicate connection id. See [PR 2702].
+
+[PR 2702]: https://github.com/libp2p/rust-libp2p/pull/2702
+
+# 0.38.0
+
+- Update to `libp2p-core` `v0.33.0`.
+
+- Update to `libp2p-swarm` `v0.36.0`.
+
+- changed `TimeCache::contains_key` and `DuplicateCache::contains` to immutable methods. See [PR 2620].
+
+- Update to `prometheus-client` `v0.16.0`. See [PR 2631].
+
+[PR 2620]: https://github.com/libp2p/rust-libp2p/pull/2620
+[PR 2631]: https://github.com/libp2p/rust-libp2p/pull/2631
+
+# 0.37.0
+
+- Update to `libp2p-swarm` `v0.35.0`.
+
+- Fix gossipsub metric (see [PR 2558]).
+
+- Allow the user to set the buckets for the score histogram, and to adjust them from the score thresholds. See [PR 2595].
+
+[PR 2558]: https://github.com/libp2p/rust-libp2p/pull/2558
+[PR 2595]: https://github.com/libp2p/rust-libp2p/pull/2595
+
+# 0.36.0 [2022-02-22]
 
 - Update to `libp2p-core` `v0.32.0`.
 

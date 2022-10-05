@@ -40,8 +40,7 @@ use crate::K_VALUE;
 use fnv::{FnvHashMap, FnvHashSet};
 use instant::Instant;
 use libp2p_core::{
-    connection::{ConnectionId, ListenerId},
-    ConnectedPoint, Multiaddr, PeerId,
+    connection::ConnectionId, transport::ListenerId, ConnectedPoint, Multiaddr, PeerId,
 };
 use libp2p_swarm::{
     dial_opts::{self, DialOpts},
@@ -215,13 +214,17 @@ impl Default for KademliaConfig {
 }
 
 impl KademliaConfig {
-    /// Sets a custom protocol name.
+    /// Sets custom protocol names.
     ///
     /// Kademlia nodes only communicate with other nodes using the same protocol
-    /// name. Using a custom name therefore allows to segregate the DHT from
+    /// name. Using custom name(s) therefore allows to segregate the DHT from
     /// others, if that is desired.
-    pub fn set_protocol_name(&mut self, name: impl Into<Cow<'static, [u8]>>) -> &mut Self {
-        self.protocol_config.set_protocol_name(name);
+    ///
+    /// More than one protocol name can be supplied. In this case the node will
+    /// be able to talk to other nodes supporting any of the provided names.
+    /// Multiple names must be used with caution to avoid network partitioning.
+    pub fn set_protocol_names(&mut self, names: Vec<Cow<'static, [u8]>>) -> &mut Self {
+        self.protocol_config.set_protocol_names(names);
         self
     }
 
@@ -404,8 +407,8 @@ where
     }
 
     /// Get the protocol name of this kademlia instance.
-    pub fn protocol_name(&self) -> &[u8] {
-        self.protocol_config.protocol_name()
+    pub fn protocol_names(&self) -> &[Cow<'static, [u8]>] {
+        self.protocol_config.protocol_names()
     }
 
     /// Creates a new `Kademlia` network behaviour with the given configuration.
@@ -566,9 +569,7 @@ where
                     kbucket::InsertResult::Pending { disconnected } => {
                         let handler = self.new_handler();
                         self.queued_events.push_back(NetworkBehaviourAction::Dial {
-                            opts: DialOpts::peer_id(disconnected.into_preimage())
-                                .condition(dial_opts::PeerCondition::Disconnected)
-                                .build(),
+                            opts: DialOpts::peer_id(disconnected.into_preimage()).build(),
                             handler,
                         });
                         RoutingUpdate::Pending
@@ -1163,7 +1164,6 @@ where
                                     let handler = self.new_handler();
                                     self.queued_events.push_back(NetworkBehaviourAction::Dial {
                                         opts: DialOpts::peer_id(disconnected.into_preimage())
-                                            .condition(dial_opts::PeerCondition::Disconnected)
                                             .build(),
                                         handler,
                                     })
@@ -1783,10 +1783,10 @@ where
     for<'a> TStore: RecordStore<'a>,
     TStore: Send + 'static,
 {
-    type ProtocolsHandler = KademliaHandlerProto<QueryId>;
+    type ConnectionHandler = KademliaHandlerProto<QueryId>;
     type OutEvent = KademliaEvent;
 
-    fn new_handler(&mut self) -> Self::ProtocolsHandler {
+    fn new_handler(&mut self) -> Self::ConnectionHandler {
         KademliaHandlerProto::new(KademliaHandlerConfig {
             protocol_config: self.protocol_config.clone(),
             allow_listening: true,
@@ -1825,7 +1825,7 @@ where
         errors: Option<&Vec<Multiaddr>>,
         other_established: usize,
     ) {
-        for addr in errors.map(|a| a.into_iter()).into_iter().flatten() {
+        for addr in errors.map(|a| a.iter()).into_iter().flatten() {
             self.address_failed(*peer_id, addr);
         }
 
@@ -1916,7 +1916,7 @@ where
     fn inject_dial_failure(
         &mut self,
         peer_id: Option<PeerId>,
-        _: Self::ProtocolsHandler,
+        _: Self::ConnectionHandler,
         error: &DialError,
     ) {
         let peer_id = match peer_id {
@@ -1962,7 +1962,7 @@ where
         id: &PeerId,
         _: &ConnectionId,
         _: &ConnectedPoint,
-        _: <Self::ProtocolsHandler as libp2p_swarm::IntoProtocolsHandler>::Handler,
+        _: <Self::ConnectionHandler as libp2p_swarm::IntoConnectionHandler>::Handler,
         remaining_established: usize,
     ) {
         if remaining_established == 0 {
@@ -2243,7 +2243,7 @@ where
         &mut self,
         cx: &mut Context<'_>,
         parameters: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
         let now = Instant::now();
 
         // Calculate the available capacity for queries triggered by background jobs.
@@ -2343,9 +2343,7 @@ where
                             query.inner.pending_rpcs.push((peer_id, event));
                             let handler = self.new_handler();
                             self.queued_events.push_back(NetworkBehaviourAction::Dial {
-                                opts: DialOpts::peer_id(peer_id)
-                                    .condition(dial_opts::PeerCondition::Disconnected)
-                                    .build(),
+                                opts: DialOpts::peer_id(peer_id).build(),
                                 handler,
                             });
                         }
@@ -2555,17 +2553,20 @@ pub struct GetRecordOk {
 }
 
 /// The error result of [`Kademlia::get_record`].
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Error)]
 pub enum GetRecordError {
+    #[error("the record was not found")]
     NotFound {
         key: record::Key,
         closest_peers: Vec<PeerId>,
     },
+    #[error("the quorum failed; needed {quorum} peers")]
     QuorumFailed {
         key: record::Key,
         records: Vec<PeerRecord>,
         quorum: NonZeroUsize,
     },
+    #[error("the request timed out")]
     Timeout {
         key: record::Key,
         records: Vec<PeerRecord>,

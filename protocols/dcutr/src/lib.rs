@@ -25,6 +25,12 @@ pub mod behaviour;
 mod handler;
 mod protocol;
 
+pub use protocol::{
+    inbound::UpgradeError as InboundUpgradeError, outbound::UpgradeError as OutboundUpgradeError,
+    PROTOCOL_NAME,
+};
+
+#[allow(clippy::derive_partial_eq_without_eq)]
 mod message_proto {
     include!(concat!(env!("OUT_DIR"), "/holepunch.pb.rs"));
 }

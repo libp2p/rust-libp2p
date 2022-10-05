@@ -60,13 +60,23 @@ use futures::{future::BoxFuture, prelude::*};
 use libp2p_core::{
     connection::Endpoint,
     multiaddr::{Multiaddr, Protocol},
-    transport::{ListenerEvent, TransportError},
+    transport::{ListenerId, TransportError, TransportEvent},
     Transport,
 };
+use parking_lot::Mutex;
 use smallvec::SmallVec;
 #[cfg(any(feature = "async-std", feature = "tokio"))]
 use std::io;
-use std::{convert::TryFrom, error, fmt, iter, net::IpAddr, str};
+use std::{
+    convert::TryFrom,
+    error, fmt, iter,
+    net::IpAddr,
+    ops::DerefMut,
+    pin::Pin,
+    str,
+    sync::Arc,
+    task::{Context, Poll},
+};
 #[cfg(any(feature = "async-std", feature = "tokio"))]
 use trust_dns_resolver::system_conf;
 use trust_dns_resolver::{proto::xfer::dns_handle::DnsHandle, AsyncResolver, ConnectionProvider};
@@ -105,14 +115,13 @@ pub type DnsConfig<T> = GenDnsConfig<T, AsyncStdConnection, AsyncStdConnectionPr
 pub type TokioDnsConfig<T> = GenDnsConfig<T, TokioConnection, TokioConnectionProvider>;
 
 /// A `Transport` wrapper for performing DNS lookups when dialing `Multiaddr`esses.
-#[derive(Clone)]
 pub struct GenDnsConfig<T, C, P>
 where
     C: DnsHandle<Error = ResolveError>,
     P: ConnectionProvider<Conn = C>,
 {
     /// The underlying transport.
-    inner: T,
+    inner: Arc<Mutex<T>>,
     /// The DNS resolver used when dialing addresses with DNS components.
     resolver: AsyncResolver<C, P>,
 }
@@ -132,7 +141,7 @@ impl<T> DnsConfig<T> {
         opts: ResolverOpts,
     ) -> Result<DnsConfig<T>, io::Error> {
         Ok(DnsConfig {
-            inner,
+            inner: Arc::new(Mutex::new(inner)),
             resolver: async_std_resolver::resolver(cfg, opts).await?,
         })
     }
@@ -154,7 +163,7 @@ impl<T> TokioDnsConfig<T> {
         opts: ResolverOpts,
     ) -> Result<TokioDnsConfig<T>, io::Error> {
         Ok(TokioDnsConfig {
-            inner,
+            inner: Arc::new(Mutex::new(inner)),
             resolver: TokioAsyncResolver::tokio(cfg, opts)?,
         })
     }
@@ -173,7 +182,7 @@ where
 
 impl<T, C, P> Transport for GenDnsConfig<T, C, P>
 where
-    T: Transport + Clone + Send + 'static,
+    T: Transport + Send + Unpin + 'static,
     T::Error: Send,
     T::Dial: Send,
     C: DnsHandle<Error = ResolveError>,
@@ -181,68 +190,70 @@ where
 {
     type Output = T::Output;
     type Error = DnsErr<T::Error>;
-    type Listener = stream::MapErr<
-        stream::MapOk<
-            T::Listener,
-            fn(
-                ListenerEvent<T::ListenerUpgrade, T::Error>,
-            ) -> ListenerEvent<Self::ListenerUpgrade, Self::Error>,
-        >,
-        fn(T::Error) -> Self::Error,
-    >;
     type ListenerUpgrade = future::MapErr<T::ListenerUpgrade, fn(T::Error) -> Self::Error>;
     type Dial = future::Either<
         future::MapErr<T::Dial, fn(T::Error) -> Self::Error>,
         BoxFuture<'static, Result<Self::Output, Self::Error>>,
     >;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
-        let listener = self
-            .inner
+    fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
+        self.inner
+            .lock()
             .listen_on(addr)
-            .map_err(|err| err.map(DnsErr::Transport))?;
-        let listener = listener
-            .map_ok::<_, fn(_) -> _>(|event| {
-                event
-                    .map(|upgr| upgr.map_err::<_, fn(_) -> _>(DnsErr::Transport))
-                    .map_err(DnsErr::Transport)
-            })
-            .map_err::<_, fn(_) -> _>(DnsErr::Transport);
-        Ok(listener)
+            .map_err(|e| e.map(DnsErr::Transport))
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn remove_listener(&mut self, id: ListenerId) -> bool {
+        self.inner.lock().remove_listener(id)
+    }
+
+    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         self.do_dial(addr, Endpoint::Dialer)
     }
 
-    fn dial_as_listener(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial_as_listener(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
         self.do_dial(addr, Endpoint::Listener)
     }
 
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        self.inner.address_translation(server, observed)
+        self.inner.lock().address_translation(server, observed)
+    }
+
+    fn poll(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
+        let mut inner = self.inner.lock();
+        Transport::poll(Pin::new(inner.deref_mut()), cx).map(|event| {
+            event
+                .map_upgrade(|upgr| upgr.map_err::<_, fn(_) -> _>(DnsErr::Transport))
+                .map_err(DnsErr::Transport)
+        })
     }
 }
 
 impl<T, C, P> GenDnsConfig<T, C, P>
 where
-    T: Transport + Clone + Send + 'static,
+    T: Transport + Send + Unpin + 'static,
     T::Error: Send,
     T::Dial: Send,
     C: DnsHandle<Error = ResolveError>,
     P: ConnectionProvider<Conn = C>,
 {
     fn do_dial(
-        self,
+        &mut self,
         addr: Multiaddr,
         role_override: Endpoint,
     ) -> Result<<Self as Transport>::Dial, TransportError<<Self as Transport>::Error>> {
+        let resolver = self.resolver.clone();
+        let inner = self.inner.clone();
+
         // Asynchronlously resolve all DNS names in the address before proceeding
         // with dialing on the underlying transport.
         Ok(async move {
-            let resolver = self.resolver;
-            let inner = self.inner;
-
             let mut last_err = None;
             let mut dns_lookups = 0;
             let mut dial_attempts = 0;
@@ -255,12 +266,14 @@ where
             // dialing attempts as soon as there is another fully resolved
             // address.
             while let Some(addr) = unresolved.pop() {
-                if let Some((i, name)) = addr.iter().enumerate().find(|(_, p)| match p {
-                    Protocol::Dns(_)
-                    | Protocol::Dns4(_)
-                    | Protocol::Dns6(_)
-                    | Protocol::Dnsaddr(_) => true,
-                    _ => false,
+                if let Some((i, name)) = addr.iter().enumerate().find(|(_, p)| {
+                    matches!(
+                        p,
+                        Protocol::Dns(_)
+                            | Protocol::Dns4(_)
+                            | Protocol::Dns6(_)
+                            | Protocol::Dnsaddr(_)
+                    )
                 }) {
                     if dns_lookups == MAX_DNS_LOOKUPS {
                         log::debug!("Too many DNS lookups. Dropping unresolved {}.", addr);
@@ -320,8 +333,8 @@ where
 
                     let transport = inner.clone();
                     let dial = match role_override {
-                        Endpoint::Dialer => transport.dial(addr),
-                        Endpoint::Listener => transport.dial_as_listener(addr),
+                        Endpoint::Dialer => transport.lock().dial(addr),
+                        Endpoint::Listener => transport.lock().dial_as_listener(addr),
                     };
                     let result = match dial {
                         Ok(out) => {
@@ -561,11 +574,10 @@ fn invalid_data(e: impl Into<Box<dyn std::error::Error + Send + Sync>>) -> io::E
 #[cfg(test)]
 mod tests {
     use super::*;
-    use futures::{future::BoxFuture, stream::BoxStream};
+    use futures::future::BoxFuture;
     use libp2p_core::{
         multiaddr::{Multiaddr, Protocol},
-        transport::ListenerEvent,
-        transport::TransportError,
+        transport::{TransportError, TransportEvent},
         PeerId, Transport,
     };
 
@@ -579,34 +591,31 @@ mod tests {
         impl Transport for CustomTransport {
             type Output = ();
             type Error = std::io::Error;
-            type Listener = BoxStream<
-                'static,
-                Result<ListenerEvent<Self::ListenerUpgrade, Self::Error>, Self::Error>,
-            >;
             type ListenerUpgrade = BoxFuture<'static, Result<Self::Output, Self::Error>>;
             type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
             fn listen_on(
-                self,
+                &mut self,
                 _: Multiaddr,
-            ) -> Result<Self::Listener, TransportError<Self::Error>> {
+            ) -> Result<ListenerId, TransportError<Self::Error>> {
                 unreachable!()
             }
 
-            fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+            fn remove_listener(&mut self, _: ListenerId) -> bool {
+                false
+            }
+
+            fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
                 // Check that all DNS components have been resolved, i.e. replaced.
-                assert!(!addr.iter().any(|p| match p {
-                    Protocol::Dns(_)
-                    | Protocol::Dns4(_)
-                    | Protocol::Dns6(_)
-                    | Protocol::Dnsaddr(_) => true,
-                    _ => false,
-                }));
+                assert!(!addr.iter().any(|p| matches!(
+                    p,
+                    Protocol::Dns(_) | Protocol::Dns4(_) | Protocol::Dns6(_) | Protocol::Dnsaddr(_)
+                )));
                 Ok(Box::pin(future::ready(Ok(()))))
             }
 
             fn dial_as_listener(
-                self,
+                &mut self,
                 addr: Multiaddr,
             ) -> Result<Self::Dial, TransportError<Self::Error>> {
                 self.dial(addr)
@@ -615,19 +624,25 @@ mod tests {
             fn address_translation(&self, _: &Multiaddr, _: &Multiaddr) -> Option<Multiaddr> {
                 None
             }
+
+            fn poll(
+                self: Pin<&mut Self>,
+                _: &mut Context<'_>,
+            ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
+                unreachable!()
+            }
         }
 
-        async fn run<T, C, P>(transport: GenDnsConfig<T, C, P>)
+        async fn run<T, C, P>(mut transport: GenDnsConfig<T, C, P>)
         where
             C: DnsHandle<Error = ResolveError>,
             P: ConnectionProvider<Conn = C>,
-            T: Transport + Clone + Send + 'static,
+            T: Transport + Clone + Send + Unpin + 'static,
             T::Error: Send,
             T::Dial: Send,
         {
             // Success due to existing A record for example.com.
             let _ = transport
-                .clone()
                 .dial("/dns4/example.com/tcp/20000".parse().unwrap())
                 .unwrap()
                 .await
@@ -635,7 +650,6 @@ mod tests {
 
             // Success due to existing AAAA record for example.com.
             let _ = transport
-                .clone()
                 .dial("/dns6/example.com/tcp/20000".parse().unwrap())
                 .unwrap()
                 .await
@@ -643,7 +657,6 @@ mod tests {
 
             // Success due to pass-through, i.e. nothing to resolve.
             let _ = transport
-                .clone()
                 .dial("/ip4/1.2.3.4/tcp/20000".parse().unwrap())
                 .unwrap()
                 .await
@@ -651,7 +664,6 @@ mod tests {
 
             // Success due to the DNS TXT records at _dnsaddr.bootstrap.libp2p.io.
             let _ = transport
-                .clone()
                 .dial("/dnsaddr/bootstrap.libp2p.io".parse().unwrap())
                 .unwrap()
                 .await
@@ -661,7 +673,6 @@ mod tests {
             // an entry with suffix `/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN`,
             // i.e. a bootnode with such a peer ID.
             let _ = transport
-                .clone()
                 .dial("/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN".parse().unwrap())
                 .unwrap()
                 .await
@@ -670,7 +681,6 @@ mod tests {
             // Failure due to the DNS TXT records at _dnsaddr.libp2p.io not having
             // an entry with a random `p2p` suffix.
             match transport
-                .clone()
                 .dial(
                     format!("/dnsaddr/bootstrap.libp2p.io/p2p/{}", PeerId::random())
                         .parse()
@@ -686,7 +696,6 @@ mod tests {
 
             // Failure due to no records.
             match transport
-                .clone()
                 .dial("/dns4/example.invalid/tcp/20000".parse().unwrap())
                 .unwrap()
                 .await

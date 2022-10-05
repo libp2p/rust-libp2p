@@ -30,6 +30,9 @@ pub enum ConnectionError<THandlerErr> {
     // TODO: Eventually this should also be a custom error?
     IO(io::Error),
 
+    /// The connection keep-alive timeout expired.
+    KeepAliveTimeout,
+
     /// The connection handler produced an error.
     Handler(THandlerErr),
 }
@@ -41,6 +44,9 @@ where
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ConnectionError::IO(err) => write!(f, "Connection error: I/O error: {}", err),
+            ConnectionError::KeepAliveTimeout => {
+                write!(f, "Connection closed due to expired keep-alive timeout.")
+            }
             ConnectionError::Handler(err) => write!(f, "Connection error: Handler error: {}", err),
         }
     }
@@ -53,8 +59,15 @@ where
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             ConnectionError::IO(err) => Some(err),
+            ConnectionError::KeepAliveTimeout => None,
             ConnectionError::Handler(err) => Some(err),
         }
+    }
+}
+
+impl<THandlerErr> From<io::Error> for ConnectionError<THandlerErr> {
+    fn from(error: io::Error) -> Self {
+        ConnectionError::IO(error)
     }
 }
 

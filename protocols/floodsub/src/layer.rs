@@ -29,8 +29,8 @@ use fnv::FnvHashSet;
 use libp2p_core::{connection::ConnectionId, PeerId};
 use libp2p_core::{ConnectedPoint, Multiaddr};
 use libp2p_swarm::{
-    dial_opts::{self, DialOpts},
-    NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, OneShotHandler, PollParameters,
+    dial_opts::DialOpts, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, OneShotHandler,
+    PollParameters,
 };
 use log::warn;
 use smallvec::SmallVec;
@@ -109,9 +109,7 @@ impl Floodsub {
         if self.target_peers.insert(peer_id) {
             let handler = self.new_handler();
             self.events.push_back(NetworkBehaviourAction::Dial {
-                opts: DialOpts::peer_id(peer_id)
-                    .condition(dial_opts::PeerCondition::Disconnected)
-                    .build(),
+                opts: DialOpts::peer_id(peer_id).build(),
                 handler,
             });
         }
@@ -281,10 +279,10 @@ impl Floodsub {
 }
 
 impl NetworkBehaviour for Floodsub {
-    type ProtocolsHandler = OneShotHandler<FloodsubProtocol, FloodsubRpc, InnerMessage>;
+    type ConnectionHandler = OneShotHandler<FloodsubProtocol, FloodsubRpc, InnerMessage>;
     type OutEvent = FloodsubEvent;
 
-    fn new_handler(&mut self) -> Self::ProtocolsHandler {
+    fn new_handler(&mut self) -> Self::ConnectionHandler {
         Default::default()
     }
 
@@ -327,7 +325,7 @@ impl NetworkBehaviour for Floodsub {
         id: &PeerId,
         _: &ConnectionId,
         _: &ConnectedPoint,
-        _: Self::ProtocolsHandler,
+        _: Self::ConnectionHandler,
         remaining_established: usize,
     ) {
         if remaining_established > 0 {
@@ -343,9 +341,7 @@ impl NetworkBehaviour for Floodsub {
         if self.target_peers.contains(id) {
             let handler = self.new_handler();
             self.events.push_back(NetworkBehaviourAction::Dial {
-                opts: DialOpts::peer_id(*id)
-                    .condition(dial_opts::PeerCondition::Disconnected)
-                    .build(),
+                opts: DialOpts::peer_id(*id).build(),
                 handler,
             });
         }
@@ -474,7 +470,7 @@ impl NetworkBehaviour for Floodsub {
         &mut self,
         _: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
         if let Some(event) = self.events.pop_front() {
             return Poll::Ready(event);
         }

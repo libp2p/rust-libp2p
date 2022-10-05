@@ -22,13 +22,12 @@ use async_trait::async_trait;
 use futures::stream::FusedStream;
 use futures::StreamExt;
 use futures::{future, Stream};
-use libp2p::core::muxing::StreamMuxerBox;
 use libp2p::core::transport::upgrade::Version;
 use libp2p::core::transport::MemoryTransport;
 use libp2p::core::upgrade::SelectUpgrade;
 use libp2p::core::{identity, Multiaddr, PeerId, Transport};
 use libp2p::mplex::MplexConfig;
-use libp2p::noise::{Keypair, NoiseConfig, X25519Spec};
+use libp2p::noise::NoiseAuthenticated;
 use libp2p::swarm::{AddressScore, NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent};
 use libp2p::yamux::YamuxConfig;
 use std::fmt::Debug;
@@ -44,20 +43,14 @@ where
     let identity = identity::Keypair::generate_ed25519();
     let peer_id = PeerId::from(identity.public());
 
-    let dh_keys = Keypair::<X25519Spec>::new()
-        .into_authentic(&identity)
-        .expect("failed to create dh_keys");
-    let noise = NoiseConfig::xx(dh_keys).into_authenticated();
-
     let transport = MemoryTransport::default()
         .upgrade(Version::V1)
-        .authenticate(noise)
+        .authenticate(NoiseAuthenticated::xx(&identity).unwrap())
         .multiplex(SelectUpgrade::new(
             YamuxConfig::default(),
             MplexConfig::new(),
         ))
         .timeout(Duration::from_secs(5))
-        .map(|(peer, muxer), _| (peer, StreamMuxerBox::new(muxer)))
         .boxed();
 
     SwarmBuilder::new(transport, behaviour_fn(peer_id, identity), peer_id)
@@ -69,11 +62,10 @@ where
 
 fn get_rand_memory_address() -> Multiaddr {
     let address_port = rand::random::<u64>();
-    let addr = format!("/memory/{}", address_port)
-        .parse::<Multiaddr>()
-        .unwrap();
 
-    addr
+    format!("/memory/{}", address_port)
+        .parse::<Multiaddr>()
+        .unwrap()
 }
 
 pub async fn await_event_or_timeout<Event, Error>(
@@ -140,7 +132,7 @@ pub trait SwarmExt {
     /// Establishes a connection to the given [`Swarm`], polling both of them until the connection is established.
     async fn block_on_connection<T>(&mut self, other: &mut Swarm<T>)
     where
-        T: NetworkBehaviour,
+        T: NetworkBehaviour + Send,
         <T as NetworkBehaviour>::OutEvent: Debug;
 
     /// Listens on a random memory address, polling the [`Swarm`] until the transport is ready to accept connections.
@@ -153,12 +145,12 @@ pub trait SwarmExt {
 #[async_trait]
 impl<B> SwarmExt for Swarm<B>
 where
-    B: NetworkBehaviour,
+    B: NetworkBehaviour + Send,
     <B as NetworkBehaviour>::OutEvent: Debug,
 {
     async fn block_on_connection<T>(&mut self, other: &mut Swarm<T>)
     where
-        T: NetworkBehaviour,
+        T: NetworkBehaviour + Send,
         <T as NetworkBehaviour>::OutEvent: Debug,
     {
         let addr_to_dial = other.external_addresses().next().unwrap().addr.clone();

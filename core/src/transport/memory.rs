@@ -18,10 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{
-    transport::{ListenerEvent, TransportError},
-    Transport,
-};
+use crate::transport::{ListenerId, Transport, TransportError, TransportEvent};
 use fnv::FnvHashMap;
 use futures::{
     channel::mpsc,
@@ -34,7 +31,12 @@ use lazy_static::lazy_static;
 use multiaddr::{Multiaddr, Protocol};
 use parking_lot::Mutex;
 use rw_stream_sink::RwStreamSink;
-use std::{collections::hash_map::Entry, error, fmt, io, num::NonZeroU64, pin::Pin};
+use std::{
+    collections::{hash_map::Entry, VecDeque},
+    error, fmt, io,
+    num::NonZeroU64,
+    pin::Pin,
+};
 
 lazy_static! {
     static ref HUB: Hub = Hub(Mutex::new(FnvHashMap::default()));
@@ -91,8 +93,16 @@ impl Hub {
 }
 
 /// Transport that supports `/memory/N` multiaddresses.
-#[derive(Debug, Copy, Clone, Default)]
-pub struct MemoryTransport;
+#[derive(Default)]
+pub struct MemoryTransport {
+    listeners: VecDeque<Pin<Box<Listener>>>,
+}
+
+impl MemoryTransport {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
 
 /// Connection to a `MemoryTransport` currently being opened.
 pub struct DialFuture {
@@ -150,9 +160,12 @@ impl Future for DialFuture {
             .take()
             .expect("Future should not be polled again once complete");
         let dial_port = self.dial_port;
-        match self.sender.start_send((channel_to_send, dial_port)) {
-            Err(_) => return Poll::Ready(Err(MemoryTransportError::Unreachable)),
-            Ok(()) => {}
+        if self
+            .sender
+            .start_send((channel_to_send, dial_port))
+            .is_err()
+        {
+            return Poll::Ready(Err(MemoryTransportError::Unreachable));
         }
 
         Poll::Ready(Ok(self
@@ -165,11 +178,10 @@ impl Future for DialFuture {
 impl Transport for MemoryTransport {
     type Output = Channel<Vec<u8>>;
     type Error = MemoryTransportError;
-    type Listener = Listener;
     type ListenerUpgrade = Ready<Result<Self::Output, Self::Error>>;
     type Dial = DialFuture;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
+    fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
         let port = if let Ok(port) = parse_memory_addr(&addr) {
             port
         } else {
@@ -181,17 +193,32 @@ impl Transport for MemoryTransport {
             None => return Err(TransportError::Other(MemoryTransportError::Unreachable)),
         };
 
+        let id = ListenerId::new();
         let listener = Listener {
+            id,
             port,
             addr: Protocol::Memory(port.get()).into(),
             receiver: rx,
             tell_listen_addr: true,
         };
+        self.listeners.push_back(Box::pin(listener));
 
-        Ok(listener)
+        Ok(id)
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<DialFuture, TransportError<Self::Error>> {
+    fn remove_listener(&mut self, id: ListenerId) -> bool {
+        if let Some(index) = self.listeners.iter().position(|listener| listener.id == id) {
+            let listener = self.listeners.get_mut(index).unwrap();
+            let val_in = HUB.unregister_port(&listener.port);
+            debug_assert!(val_in.is_some());
+            listener.receiver.close();
+            true
+        } else {
+            false
+        }
+    }
+
+    fn dial(&mut self, addr: Multiaddr) -> Result<DialFuture, TransportError<Self::Error>> {
         let port = if let Ok(port) = parse_memory_addr(&addr) {
             if let Some(port) = NonZeroU64::new(port) {
                 port
@@ -205,12 +232,65 @@ impl Transport for MemoryTransport {
         DialFuture::new(port).ok_or(TransportError::Other(MemoryTransportError::Unreachable))
     }
 
-    fn dial_as_listener(self, addr: Multiaddr) -> Result<DialFuture, TransportError<Self::Error>> {
+    fn dial_as_listener(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<DialFuture, TransportError<Self::Error>> {
         self.dial(addr)
     }
 
     fn address_translation(&self, _server: &Multiaddr, _observed: &Multiaddr) -> Option<Multiaddr> {
         None
+    }
+
+    fn poll(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>>
+    where
+        Self: Sized,
+    {
+        let mut remaining = self.listeners.len();
+        while let Some(mut listener) = self.listeners.pop_back() {
+            if listener.tell_listen_addr {
+                listener.tell_listen_addr = false;
+                let listen_addr = listener.addr.clone();
+                let listener_id = listener.id;
+                self.listeners.push_front(listener);
+                return Poll::Ready(TransportEvent::NewAddress {
+                    listen_addr,
+                    listener_id,
+                });
+            }
+
+            let event = match Stream::poll_next(Pin::new(&mut listener.receiver), cx) {
+                Poll::Pending => None,
+                Poll::Ready(Some((channel, dial_port))) => Some(TransportEvent::Incoming {
+                    listener_id: listener.id,
+                    upgrade: future::ready(Ok(channel)),
+                    local_addr: listener.addr.clone(),
+                    send_back_addr: Protocol::Memory(dial_port.get()).into(),
+                }),
+                Poll::Ready(None) => {
+                    // Listener was closed.
+                    return Poll::Ready(TransportEvent::ListenerClosed {
+                        listener_id: listener.id,
+                        reason: Ok(()),
+                    });
+                }
+            };
+
+            self.listeners.push_front(listener);
+            if let Some(event) = event {
+                return Poll::Ready(event);
+            } else {
+                remaining -= 1;
+                if remaining == 0 {
+                    break;
+                }
+            }
+        }
+        Poll::Pending
     }
 }
 
@@ -236,49 +316,15 @@ impl error::Error for MemoryTransportError {}
 
 /// Listener for memory connections.
 pub struct Listener {
+    id: ListenerId,
     /// Port we're listening on.
     port: NonZeroU64,
     /// The address we are listening on.
     addr: Multiaddr,
     /// Receives incoming connections.
     receiver: ChannelReceiver,
-    /// Generate `ListenerEvent::NewAddress` to inform about our listen address.
+    /// Generate [`TransportEvent::NewAddress`] to inform about our listen address.
     tell_listen_addr: bool,
-}
-
-impl Stream for Listener {
-    type Item = Result<
-        ListenerEvent<Ready<Result<Channel<Vec<u8>>, MemoryTransportError>>, MemoryTransportError>,
-        MemoryTransportError,
-    >;
-
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        if self.tell_listen_addr {
-            self.tell_listen_addr = false;
-            return Poll::Ready(Some(Ok(ListenerEvent::NewAddress(self.addr.clone()))));
-        }
-
-        let (channel, dial_port) = match Stream::poll_next(Pin::new(&mut self.receiver), cx) {
-            Poll::Pending => return Poll::Pending,
-            Poll::Ready(None) => panic!("Alive listeners always have a sender."),
-            Poll::Ready(Some(v)) => v,
-        };
-
-        let event = ListenerEvent::Upgrade {
-            upgrade: future::ready(Ok(channel)),
-            local_addr: self.addr.clone(),
-            remote_addr: Protocol::Memory(dial_port.get()).into(),
-        };
-
-        Poll::Ready(Some(Ok(event)))
-    }
-}
-
-impl Drop for Listener {
-    fn drop(&mut self) {
-        let val_in = HUB.unregister_port(&self.port);
-        debug_assert!(val_in.is_some());
-    }
 }
 
 /// If the address is `/memory/n`, returns the value of `n`.
@@ -352,9 +398,9 @@ impl<T> Sink<T> for Chan<T> {
     }
 }
 
-impl<T: AsRef<[u8]>> Into<RwStreamSink<Chan<T>>> for Chan<T> {
-    fn into(self) -> RwStreamSink<Chan<T>> {
-        RwStreamSink::new(self)
+impl<T: AsRef<[u8]>> From<Chan<T>> for RwStreamSink<Chan<T>> {
+    fn from(channel: Chan<T>) -> RwStreamSink<Chan<T>> {
+        RwStreamSink::new(channel)
     }
 }
 
@@ -408,34 +454,40 @@ mod tests {
 
     #[test]
     fn listening_twice() {
-        let transport = MemoryTransport::default();
-        assert!(transport
-            .listen_on("/memory/1639174018481".parse().unwrap())
-            .is_ok());
-        assert!(transport
-            .listen_on("/memory/1639174018481".parse().unwrap())
-            .is_ok());
-        let _listener = transport
-            .listen_on("/memory/1639174018481".parse().unwrap())
-            .unwrap();
-        assert!(transport
-            .listen_on("/memory/1639174018481".parse().unwrap())
-            .is_err());
-        assert!(transport
-            .listen_on("/memory/1639174018481".parse().unwrap())
-            .is_err());
-        drop(_listener);
-        assert!(transport
-            .listen_on("/memory/1639174018481".parse().unwrap())
-            .is_ok());
-        assert!(transport
-            .listen_on("/memory/1639174018481".parse().unwrap())
-            .is_ok());
+        let mut transport = MemoryTransport::default();
+
+        let addr_1: Multiaddr = "/memory/1639174018481".parse().unwrap();
+        let addr_2: Multiaddr = "/memory/8459375923478".parse().unwrap();
+
+        let listener_id_1 = transport.listen_on(addr_1.clone()).unwrap();
+        assert!(
+            transport.remove_listener(listener_id_1),
+            "Listener doesn't exist."
+        );
+
+        let listener_id_2 = transport.listen_on(addr_1.clone()).unwrap();
+        let listener_id_3 = transport.listen_on(addr_2.clone()).unwrap();
+
+        assert!(transport.listen_on(addr_1.clone()).is_err());
+        assert!(transport.listen_on(addr_2.clone()).is_err());
+
+        assert!(
+            transport.remove_listener(listener_id_2),
+            "Listener doesn't exist."
+        );
+        assert!(transport.listen_on(addr_1).is_ok());
+        assert!(transport.listen_on(addr_2.clone()).is_err());
+
+        assert!(
+            transport.remove_listener(listener_id_3),
+            "Listener doesn't exist."
+        );
+        assert!(transport.listen_on(addr_2).is_ok());
     }
 
     #[test]
     fn port_not_in_use() {
-        let transport = MemoryTransport::default();
+        let mut transport = MemoryTransport::default();
         assert!(transport
             .dial("/memory/810172461024613".parse().unwrap())
             .is_err());
@@ -448,6 +500,35 @@ mod tests {
     }
 
     #[test]
+    fn stop_listening() {
+        let rand_port = rand::random::<u64>().saturating_add(1);
+        let addr: Multiaddr = format!("/memory/{}", rand_port).parse().unwrap();
+
+        let mut transport = MemoryTransport::default().boxed();
+        futures::executor::block_on(async {
+            let listener_id = transport.listen_on(addr.clone()).unwrap();
+            let reported_addr = transport
+                .select_next_some()
+                .await
+                .into_new_address()
+                .expect("new address");
+            assert_eq!(addr, reported_addr);
+            assert!(transport.remove_listener(listener_id));
+            match transport.select_next_some().await {
+                TransportEvent::ListenerClosed {
+                    listener_id: id,
+                    reason,
+                } => {
+                    assert_eq!(id, listener_id);
+                    assert!(reason.is_ok())
+                }
+                other => panic!("Unexpected transport event: {:?}", other),
+            }
+            assert!(!transport.remove_listener(listener_id));
+        })
+    }
+
+    #[test]
     fn communicating_between_dialer_and_listener() {
         let msg = [1, 2, 3];
 
@@ -457,16 +538,16 @@ mod tests {
         let t1_addr: Multiaddr = format!("/memory/{}", rand_port).parse().unwrap();
         let cloned_t1_addr = t1_addr.clone();
 
-        let t1 = MemoryTransport::default();
+        let mut t1 = MemoryTransport::default().boxed();
 
         let listener = async move {
-            let listener = t1.listen_on(t1_addr.clone()).unwrap();
-
-            let upgrade = listener
-                .filter_map(|ev| futures::future::ready(ListenerEvent::into_upgrade(ev.unwrap())))
-                .next()
-                .await
-                .unwrap();
+            t1.listen_on(t1_addr.clone()).unwrap();
+            let upgrade = loop {
+                let event = t1.select_next_some().await;
+                if let Some(upgrade) = event.into_incoming() {
+                    break upgrade;
+                }
+            };
 
             let mut socket = upgrade.0.await.unwrap();
 
@@ -478,7 +559,7 @@ mod tests {
 
         // Setup dialer.
 
-        let t2 = MemoryTransport::default();
+        let mut t2 = MemoryTransport::default();
         let dialer = async move {
             let mut socket = t2.dial(cloned_t1_addr).unwrap().await.unwrap();
             socket.write_all(&msg).await.unwrap();
@@ -495,14 +576,16 @@ mod tests {
             Protocol::Memory(rand::random::<u64>().saturating_add(1)).into();
         let listener_addr_cloned = listener_addr.clone();
 
-        let listener_transport = MemoryTransport::default();
+        let mut listener_transport = MemoryTransport::default().boxed();
 
         let listener = async move {
-            let mut listener = listener_transport.listen_on(listener_addr.clone()).unwrap();
-            while let Some(ev) = listener.next().await {
-                if let ListenerEvent::Upgrade { remote_addr, .. } = ev.unwrap() {
+            listener_transport.listen_on(listener_addr.clone()).unwrap();
+            loop {
+                if let TransportEvent::Incoming { send_back_addr, .. } =
+                    listener_transport.select_next_some().await
+                {
                     assert!(
-                        remote_addr != listener_addr,
+                        send_back_addr != listener_addr,
                         "Expect dialer address not to equal listener address."
                     );
                     return;
@@ -530,14 +613,16 @@ mod tests {
             Protocol::Memory(rand::random::<u64>().saturating_add(1)).into();
         let listener_addr_cloned = listener_addr.clone();
 
-        let listener_transport = MemoryTransport::default();
+        let mut listener_transport = MemoryTransport::default().boxed();
 
         let listener = async move {
-            let mut listener = listener_transport.listen_on(listener_addr.clone()).unwrap();
-            while let Some(ev) = listener.next().await {
-                if let ListenerEvent::Upgrade { remote_addr, .. } = ev.unwrap() {
+            listener_transport.listen_on(listener_addr.clone()).unwrap();
+            loop {
+                if let TransportEvent::Incoming { send_back_addr, .. } =
+                    listener_transport.select_next_some().await
+                {
                     let dialer_port =
-                        NonZeroU64::new(parse_memory_addr(&remote_addr).unwrap()).unwrap();
+                        NonZeroU64::new(parse_memory_addr(&send_back_addr).unwrap()).unwrap();
 
                     assert!(
                         HUB.get(&dialer_port).is_some(),

@@ -33,18 +33,18 @@
 //! to work, the ipfs node needs to be configured to use gossipsub.
 use async_std::io;
 use futures::{prelude::*, select};
+use libp2p::tcp::GenTcpConfig;
 use libp2p::{
     core::{
         either::EitherTransport, muxing::StreamMuxerBox, transport, transport::upgrade::Version,
     },
     gossipsub::{self, Gossipsub, GossipsubConfigBuilder, GossipsubEvent, MessageAuthenticity},
-    identify::{Identify, IdentifyConfig, IdentifyEvent},
-    identity,
+    identify, identity,
     multiaddr::Protocol,
     noise, ping,
     pnet::{PnetConfig, PreSharedKey},
-    swarm::{NetworkBehaviourEventProcess, SwarmEvent},
-    tcp::TcpConfig,
+    swarm::SwarmEvent,
+    tcp::TcpTransport,
     yamux::YamuxConfig,
     Multiaddr, NetworkBehaviour, PeerId, Swarm, Transport,
 };
@@ -55,13 +55,10 @@ pub fn build_transport(
     key_pair: identity::Keypair,
     psk: Option<PreSharedKey>,
 ) -> transport::Boxed<(PeerId, StreamMuxerBox)> {
-    let noise_keys = noise::Keypair::<noise::X25519Spec>::new()
-        .into_authentic(&key_pair)
-        .unwrap();
-    let noise_config = noise::NoiseConfig::xx(noise_keys).into_authenticated();
+    let noise_config = noise::NoiseAuthenticated::xx(&key_pair).unwrap();
     let yamux_config = YamuxConfig::default();
 
-    let base_transport = TcpConfig::new().nodelay(true);
+    let base_transport = TcpTransport::new(GenTcpConfig::default().nodelay(true));
     let maybe_encrypted = match psk {
         Some(psk) => EitherTransport::Left(
             base_transport.and_then(move |socket, _| PnetConfig::new(psk).handshake(socket)),
@@ -90,7 +87,7 @@ fn get_ipfs_path() -> Box<Path> {
 }
 
 /// Read the pre shared key file from the given ipfs directory
-fn get_psk(path: Box<Path>) -> std::io::Result<Option<String>> {
+fn get_psk(path: &Path) -> std::io::Result<Option<String>> {
     let swarm_key_file = path.join("swarm.key");
     match fs::read_to_string(swarm_key_file) {
         Ok(text) => Ok(Some(text)),
@@ -134,9 +131,9 @@ fn parse_legacy_multiaddr(text: &str) -> Result<Multiaddr, Box<dyn Error>> {
 async fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
-    let ipfs_path: Box<Path> = get_ipfs_path();
+    let ipfs_path = get_ipfs_path();
     println!("using IPFS_PATH {:?}", ipfs_path);
-    let psk: Option<PreSharedKey> = get_psk(ipfs_path)?
+    let psk: Option<PreSharedKey> = get_psk(&ipfs_path)?
         .map(|text| PreSharedKey::from_str(&text))
         .transpose()?;
 
@@ -144,7 +141,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
     println!("using random peer id: {:?}", local_peer_id);
-    for psk in psk {
+    if let Some(psk) = psk {
         println!("using swarm key with fingerprint: {}", psk.fingerprint());
     }
 
@@ -156,78 +153,34 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // We create a custom network behaviour that combines gossipsub, ping and identify.
     #[derive(NetworkBehaviour)]
-    #[behaviour(event_process = true)]
+    #[behaviour(out_event = "MyBehaviourEvent")]
     struct MyBehaviour {
         gossipsub: Gossipsub,
-        identify: Identify,
+        identify: identify::Behaviour,
         ping: ping::Behaviour,
     }
 
-    impl NetworkBehaviourEventProcess<IdentifyEvent> for MyBehaviour {
-        // Called when `identify` produces an event.
-        fn inject_event(&mut self, event: IdentifyEvent) {
-            println!("identify: {:?}", event);
+    enum MyBehaviourEvent {
+        Gossipsub(GossipsubEvent),
+        Identify(identify::Event),
+        Ping(ping::Event),
+    }
+
+    impl From<GossipsubEvent> for MyBehaviourEvent {
+        fn from(event: GossipsubEvent) -> Self {
+            MyBehaviourEvent::Gossipsub(event)
         }
     }
 
-    impl NetworkBehaviourEventProcess<GossipsubEvent> for MyBehaviour {
-        // Called when `gossipsub` produces an event.
-        fn inject_event(&mut self, event: GossipsubEvent) {
-            match event {
-                GossipsubEvent::Message {
-                    propagation_source: peer_id,
-                    message_id: id,
-                    message,
-                } => println!(
-                    "Got message: {} with id: {} from peer: {:?}",
-                    String::from_utf8_lossy(&message.data),
-                    id,
-                    peer_id
-                ),
-                _ => {}
-            }
+    impl From<identify::Event> for MyBehaviourEvent {
+        fn from(event: identify::Event) -> Self {
+            MyBehaviourEvent::Identify(event)
         }
     }
 
-    impl NetworkBehaviourEventProcess<ping::Event> for MyBehaviour {
-        // Called when `ping` produces an event.
-        fn inject_event(&mut self, event: ping::Event) {
-            match event {
-                ping::Event {
-                    peer,
-                    result: Result::Ok(ping::Success::Ping { rtt }),
-                } => {
-                    println!(
-                        "ping: rtt to {} is {} ms",
-                        peer.to_base58(),
-                        rtt.as_millis()
-                    );
-                }
-                ping::Event {
-                    peer,
-                    result: Result::Ok(ping::Success::Pong),
-                } => {
-                    println!("ping: pong from {}", peer.to_base58());
-                }
-                ping::Event {
-                    peer,
-                    result: Result::Err(ping::Failure::Timeout),
-                } => {
-                    println!("ping: timeout to {}", peer.to_base58());
-                }
-                ping::Event {
-                    peer,
-                    result: Result::Err(ping::Failure::Unsupported),
-                } => {
-                    println!("ping: {} does not support ping protocol", peer.to_base58());
-                }
-                ping::Event {
-                    peer,
-                    result: Result::Err(ping::Failure::Other { error }),
-                } => {
-                    println!("ping: ping::Failure with {}: {}", peer.to_base58(), error);
-                }
-            }
+    impl From<ping::Event> for MyBehaviourEvent {
+        fn from(event: ping::Event) -> Self {
+            MyBehaviourEvent::Ping(event)
         }
     }
 
@@ -243,7 +196,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 gossipsub_config,
             )
             .expect("Valid configuration"),
-            identify: Identify::new(IdentifyConfig::new(
+            identify: identify::Behaviour::new(identify::Config::new(
                 "/ipfs/0.1.0".into(),
                 local_key.public(),
             )),
@@ -281,8 +234,64 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 }
             },
             event = swarm.select_next_some() => {
-                if let SwarmEvent::NewListenAddr { address, .. } = event {
-                    println!("Listening on {:?}", address);
+                match event {
+                    SwarmEvent::NewListenAddr { address, .. } => {
+                        println!("Listening on {:?}", address);
+                    }
+                    SwarmEvent::Behaviour(MyBehaviourEvent::Identify(event)) => {
+                        println!("identify: {:?}", event);
+                    }
+                    SwarmEvent::Behaviour(MyBehaviourEvent::Gossipsub(GossipsubEvent::Message {
+                        propagation_source: peer_id,
+                        message_id: id,
+                        message,
+                    })) => {
+                        println!(
+                            "Got message: {} with id: {} from peer: {:?}",
+                            String::from_utf8_lossy(&message.data),
+                            id,
+                            peer_id
+                        )
+                    }
+                    SwarmEvent::Behaviour(MyBehaviourEvent::Ping(event)) => {
+                        match event {
+                            ping::Event {
+                                peer,
+                                result: Result::Ok(ping::Success::Ping { rtt }),
+                            } => {
+                                println!(
+                                    "ping: rtt to {} is {} ms",
+                                    peer.to_base58(),
+                                    rtt.as_millis()
+                                );
+                            }
+                            ping::Event {
+                                peer,
+                                result: Result::Ok(ping::Success::Pong),
+                            } => {
+                                println!("ping: pong from {}", peer.to_base58());
+                            }
+                            ping::Event {
+                                peer,
+                                result: Result::Err(ping::Failure::Timeout),
+                            } => {
+                                println!("ping: timeout to {}", peer.to_base58());
+                            }
+                            ping::Event {
+                                peer,
+                                result: Result::Err(ping::Failure::Unsupported),
+                            } => {
+                                println!("ping: {} does not support ping protocol", peer.to_base58());
+                            }
+                            ping::Event {
+                                peer,
+                                result: Result::Err(ping::Failure::Other { error }),
+                            } => {
+                                println!("ping: ping::Failure with {}: {}", peer.to_base58(), error);
+                            }
+                        }
+                    }
+                    _ => {}
                 }
             }
         }

@@ -33,6 +33,14 @@ use zeroize::Zeroize;
 #[derive(Clone)]
 pub struct Keypair(Arc<RsaKeyPair>);
 
+impl std::fmt::Debug for Keypair {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        f.debug_struct("Keypair")
+            .field("public", self.0.public_key())
+            .finish()
+    }
+}
+
 impl Keypair {
     /// Decode an RSA keypair from a DER-encoded private key in PKCS#8 PrivateKeyInfo
     /// format (i.e. unencrypted) as defined in [RFC5208].
@@ -62,7 +70,7 @@ impl Keypair {
 }
 
 /// An RSA public key.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct PublicKey(Vec<u8>);
 
 impl PublicKey {
@@ -255,7 +263,7 @@ impl DerDecodable<'_> for Asn1SubjectPublicKey {
             )));
         }
 
-        let pk_der: Vec<u8> = object.value().into_iter().skip(1).cloned().collect();
+        let pk_der: Vec<u8> = object.value().iter().skip(1).cloned().collect();
         // We don't parse pk_der further as an ASN.1 RsaPublicKey, since
         // we only need the DER encoding for `verify`.
         Ok(Self(PublicKey(pk_der)))
@@ -298,25 +306,17 @@ impl DerDecodable<'_> for Asn1SubjectPublicKeyInfo {
 mod tests {
     use super::*;
     use quickcheck::*;
-    use rand07::seq::SliceRandom;
-    use std::fmt;
 
-    const KEY1: &'static [u8] = include_bytes!("test/rsa-2048.pk8");
-    const KEY2: &'static [u8] = include_bytes!("test/rsa-3072.pk8");
-    const KEY3: &'static [u8] = include_bytes!("test/rsa-4096.pk8");
+    const KEY1: &[u8] = include_bytes!("test/rsa-2048.pk8");
+    const KEY2: &[u8] = include_bytes!("test/rsa-3072.pk8");
+    const KEY3: &[u8] = include_bytes!("test/rsa-4096.pk8");
 
-    #[derive(Clone)]
+    #[derive(Clone, Debug)]
     struct SomeKeypair(Keypair);
 
-    impl fmt::Debug for SomeKeypair {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            write!(f, "SomeKeypair")
-        }
-    }
-
     impl Arbitrary for SomeKeypair {
-        fn arbitrary<G: Gen>(g: &mut G) -> SomeKeypair {
-            let mut key = [KEY1, KEY2, KEY3].choose(g).unwrap().to_vec();
+        fn arbitrary(g: &mut Gen) -> SomeKeypair {
+            let mut key = g.choose(&[KEY1, KEY2, KEY3]).unwrap().to_vec();
             SomeKeypair(Keypair::from_pkcs8(&mut key).unwrap())
         }
     }

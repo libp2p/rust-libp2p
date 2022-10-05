@@ -13,7 +13,7 @@ const DOMAIN_SEP: &str = "libp2p-routing-state";
 ///
 /// Peer records are designed to be distributable and carry a signature by being wrapped in a signed envelope.
 /// For more information see RFC0003 of the libp2p specifications: <https://github.com/libp2p/specs/blob/master/RFC/0003-routing-records.md>
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct PeerRecord {
     peer_id: PeerId,
     seq: u64,
@@ -32,12 +32,13 @@ impl PeerRecord {
     pub fn from_signed_envelope(envelope: SignedEnvelope) -> Result<Self, FromEnvelopeError> {
         use prost::Message;
 
-        let payload = envelope.payload(String::from(DOMAIN_SEP), PAYLOAD_TYPE.as_bytes())?;
+        let (payload, signing_key) =
+            envelope.payload_and_signing_key(String::from(DOMAIN_SEP), PAYLOAD_TYPE.as_bytes())?;
         let record = peer_record_proto::PeerRecord::decode(payload)?;
 
         let peer_id = PeerId::from_bytes(&record.peer_id)?;
 
-        if peer_id != envelope.key.to_peer_id() {
+        if peer_id != signing_key.to_peer_id() {
             return Err(FromEnvelopeError::MismatchedSignature);
         }
 
@@ -88,7 +89,7 @@ impl PeerRecord {
         };
 
         let envelope = SignedEnvelope::new(
-            &key,
+            key,
             String::from(DOMAIN_SEP),
             PAYLOAD_TYPE.as_bytes().to_vec(),
             payload,

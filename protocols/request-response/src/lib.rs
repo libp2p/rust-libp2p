@@ -66,9 +66,8 @@ use futures::channel::oneshot;
 use handler::{RequestProtocol, RequestResponseHandler, RequestResponseHandlerEvent};
 use libp2p_core::{connection::ConnectionId, ConnectedPoint, Multiaddr, PeerId};
 use libp2p_swarm::{
-    dial_opts::{self, DialOpts},
-    DialError, IntoProtocolsHandler, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
-    PollParameters,
+    dial_opts::DialOpts, DialError, IntoConnectionHandler, NetworkBehaviour,
+    NetworkBehaviourAction, NotifyHandler, PollParameters,
 };
 use smallvec::SmallVec;
 use std::{
@@ -148,7 +147,7 @@ pub enum RequestResponseEvent<TRequest, TResponse, TChannelResponse = TResponse>
 
 /// Possible failures occurring in the context of sending
 /// an outbound request and receiving the response.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OutboundFailure {
     /// The request could not be sent because a dialing attempt failed.
     DialFailure,
@@ -185,7 +184,7 @@ impl std::error::Error for OutboundFailure {}
 
 /// Possible failures occurring in the context of receiving an
 /// inbound request and sending a response.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum InboundFailure {
     /// The inbound request timed out, either while reading the
     /// incoming request or before a response is sent, e.g. if
@@ -385,9 +384,7 @@ where
         if let Some(request) = self.try_send_request(peer, request) {
             let handler = self.new_handler();
             self.pending_events.push_back(NetworkBehaviourAction::Dial {
-                opts: DialOpts::peer_id(*peer)
-                    .condition(dial_opts::PeerCondition::Disconnected)
-                    .build(),
+                opts: DialOpts::peer_id(*peer).build(),
                 handler,
             });
             self.pending_outbound_requests
@@ -567,10 +564,10 @@ impl<TCodec> NetworkBehaviour for RequestResponse<TCodec>
 where
     TCodec: RequestResponseCodec + Send + Clone + 'static,
 {
-    type ProtocolsHandler = RequestResponseHandler<TCodec>;
+    type ConnectionHandler = RequestResponseHandler<TCodec>;
     type OutEvent = RequestResponseEvent<TCodec::Request, TCodec::Response>;
 
-    fn new_handler(&mut self) -> Self::ProtocolsHandler {
+    fn new_handler(&mut self) -> Self::ConnectionHandler {
         RequestResponseHandler::new(
             self.inbound_protocols.clone(),
             self.codec.clone(),
@@ -646,7 +643,7 @@ where
         peer_id: &PeerId,
         conn: &ConnectionId,
         _: &ConnectedPoint,
-        _: <Self::ProtocolsHandler as IntoProtocolsHandler>::Handler,
+        _: <Self::ConnectionHandler as IntoConnectionHandler>::Handler,
         remaining_established: usize,
     ) {
         let connections = self
@@ -691,7 +688,7 @@ where
     fn inject_dial_failure(
         &mut self,
         peer: Option<PeerId>,
-        _: Self::ProtocolsHandler,
+        _: Self::ConnectionHandler,
         _: &DialError,
     ) {
         if let Some(peer) = peer {
@@ -706,7 +703,7 @@ where
                     self.pending_events
                         .push_back(NetworkBehaviourAction::GenerateEvent(
                             RequestResponseEvent::OutboundFailure {
-                                peer: peer,
+                                peer,
                                 request_id: request.request_id,
                                 error: OutboundFailure::DialFailure,
                             },
@@ -872,7 +869,7 @@ where
         &mut self,
         _: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
         if let Some(ev) = self.pending_events.pop_front() {
             return Poll::Ready(ev);
         } else if self.pending_events.capacity() > EMPTY_QUEUE_SHRINK_THRESHOLD {

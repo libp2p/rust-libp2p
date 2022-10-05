@@ -72,28 +72,22 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let local_peer_id = PeerId::from(local_key.public());
     println!("Local peer id: {:?}", local_peer_id);
 
-    // Set up a an encrypted DNS-enabled TCP Transport over the Mplex and Yamux protocols
+    // Set up an encrypted DNS-enabled TCP Transport over the Mplex and Yamux protocols
     let transport = libp2p::development_transport(local_key).await?;
 
     // Create a Floodsub topic
     let floodsub_topic = floodsub::Topic::new("chat");
 
     // We create a custom network behaviour that combines floodsub and mDNS.
-    // In the future, we want to improve libp2p to make this easier to do.
-    // Use the derive to generate delegating NetworkBehaviour impl and require the
-    // NetworkBehaviourEventProcess implementations below.
+    // Use the derive to generate delegating NetworkBehaviour impl.
     #[derive(NetworkBehaviour)]
     #[behaviour(out_event = "OutEvent")]
     struct MyBehaviour {
         floodsub: Floodsub,
         mdns: Mdns,
-
-        // Struct fields which do not implement NetworkBehaviour need to be ignored
-        #[behaviour(ignore)]
-        #[allow(dead_code)]
-        ignored_member: bool,
     }
 
+    #[allow(clippy::large_enum_variant)]
     #[derive(Debug)]
     enum OutEvent {
         Floodsub(FloodsubEvent),
@@ -118,7 +112,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let mut behaviour = MyBehaviour {
             floodsub: Floodsub::new(local_peer_id),
             mdns,
-            ignored_member: false,
         };
 
         behaviour.floodsub.subscribe(floodsub_topic.clone());

@@ -84,7 +84,7 @@ mod generic {
     }
 
     /// Configuration for a [`RateLimiter`].
-    #[derive(Clone, Copy)]
+    #[derive(Debug, Clone, Copy)]
     pub struct RateLimiterConfig {
         /// The maximum number of tokens in the bucket at any point in time.
         pub limit: NonZeroU32,
@@ -279,10 +279,7 @@ mod generic {
                 }
 
                 let mut now = Instant::now();
-                let mut l = RateLimiter::new(RateLimiterConfig {
-                    limit: limit.try_into().unwrap(),
-                    interval,
-                });
+                let mut l = RateLimiter::new(RateLimiterConfig { limit, interval });
 
                 for (id, d) in events {
                     now = if let Some(now) = now.checked_add(d) {

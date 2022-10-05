@@ -7,9 +7,9 @@ A set of examples showcasing how to use rust-libp2p.
 - [Ping](ping.rs)
 
   Small `ping` clone, sending a ping to a peer, expecting a pong as a response. See
-  [tutorial](../src/tutorial.rs) for a step-by-step guide building the example.
+  [tutorial](../src/tutorials/ping.rs) for a step-by-step guide building the example.
 
-## Individual libp2p protocols
+## Individual libp2p features
 
 - [Chat](./chat.rs)
 
@@ -27,6 +27,10 @@ A set of examples showcasing how to use rust-libp2p.
 
   A basic key value store demonstrating libp2p and the mDNS and Kademlia protocol.
 
+- [Identify](../protocols/identify/examples/identify.rs)
+
+  Demonstrates how to use identify protocol to query peer information.
+
 - [IPFS Kademlia](ipfs-kad.rs)
 
   Demonstrates how to perform Kademlia queries on the IPFS network.
@@ -39,6 +43,10 @@ A set of examples showcasing how to use rust-libp2p.
 - [Passive Discovery via MDNS](mdns-passive-discovery.rs)
 
   Discover peers on the same network via the MDNS protocol.
+  
+- [Hole punching tutorial](https://docs.rs/libp2p/latest/libp2p/tutorials/hole_punching/index.html)
+
+  Tutorial on how to overcome firewalls and NATs with libp2p’s hole punching mechanism.
 
 ## Integration into a larger application
 

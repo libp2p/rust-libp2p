@@ -142,21 +142,21 @@ impl From<KadPeer> for proto::message::Peer {
 //       `OutboundUpgrade` to be just a single message
 #[derive(Debug, Clone)]
 pub struct KademliaProtocolConfig {
-    protocol_name: Cow<'static, [u8]>,
+    protocol_names: Vec<Cow<'static, [u8]>>,
     /// Maximum allowed size of a packet.
     max_packet_size: usize,
 }
 
 impl KademliaProtocolConfig {
     /// Returns the configured protocol name.
-    pub fn protocol_name(&self) -> &[u8] {
-        &self.protocol_name
+    pub fn protocol_names(&self) -> &[Cow<'static, [u8]>] {
+        &self.protocol_names
     }
 
-    /// Modifies the protocol name used on the wire. Can be used to create incompatibilities
+    /// Modifies the protocol names used on the wire. Can be used to create incompatibilities
     /// between networks on purpose.
-    pub fn set_protocol_name(&mut self, name: impl Into<Cow<'static, [u8]>>) {
-        self.protocol_name = name.into();
+    pub fn set_protocol_names(&mut self, names: Vec<Cow<'static, [u8]>>) {
+        self.protocol_names = names;
     }
 
     /// Modifies the maximum allowed size of a single Kademlia packet.
@@ -168,7 +168,7 @@ impl KademliaProtocolConfig {
 impl Default for KademliaProtocolConfig {
     fn default() -> Self {
         KademliaProtocolConfig {
-            protocol_name: Cow::Borrowed(DEFAULT_PROTO_NAME),
+            protocol_names: iter::once(Cow::Borrowed(DEFAULT_PROTO_NAME)).collect(),
             max_packet_size: DEFAULT_MAX_PACKET_SIZE,
         }
     }
@@ -176,10 +176,10 @@ impl Default for KademliaProtocolConfig {
 
 impl UpgradeInfo for KademliaProtocolConfig {
     type Info = Cow<'static, [u8]>;
-    type InfoIter = iter::Once<Self::Info>;
+    type InfoIter = std::vec::IntoIter<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
-        iter::once(self.protocol_name.clone())
+        self.protocol_names.clone().into_iter()
     }
 }
 
@@ -603,7 +603,7 @@ where
 mod tests {
 
     /*// TODO: restore
-    use self::libp2p_tcp::TcpConfig;
+    use self::libp2p_tcp::TcpTransport;
     use self::tokio::runtime::current_thread::Runtime;
     use futures::{Future, Sink, Stream};
     use libp2p_core::{PeerId, PublicKey, Transport};
@@ -658,10 +658,10 @@ mod tests {
             let (tx, rx) = mpsc::channel();
 
             let bg_thread = thread::spawn(move || {
-                let transport = TcpConfig::new().with_upgrade(KademliaProtocolConfig);
+                let transport = TcpTransport::default().with_upgrade(KademliaProtocolConfig);
 
                 let (listener, addr) = transport
-                    .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
+                    .listen_on( "/ip4/127.0.0.1/tcp/0".parse().unwrap())
                     .unwrap();
                 tx.send(addr).unwrap();
 
@@ -678,7 +678,7 @@ mod tests {
                 let _ = rt.block_on(future).unwrap();
             });
 
-            let transport = TcpConfig::new().with_upgrade(KademliaProtocolConfig);
+            let transport = TcpTransport::default().with_upgrade(KademliaProtocolConfig);
 
             let future = transport
                 .dial(rx.recv().unwrap())

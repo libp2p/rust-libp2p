@@ -20,7 +20,9 @@
 
 use futures::prelude::*;
 use libp2p::swarm::{NetworkBehaviour, SwarmEvent};
+use libp2p::{identify, ping};
 use libp2p_swarm_derive::*;
+use std::fmt::Debug;
 
 /// Small utility to check that a type implements `NetworkBehaviour`.
 #[allow(dead_code)]
@@ -38,18 +40,16 @@ fn empty() {
 fn one_field() {
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
-    #[behaviour(event_process = true)]
     struct Foo {
-        ping: libp2p::ping::Ping,
+        ping: ping::Behaviour,
     }
 
-    impl libp2p::swarm::NetworkBehaviourEventProcess<libp2p::ping::PingEvent> for Foo {
-        fn inject_event(&mut self, _: libp2p::ping::PingEvent) {}
-    }
-
-    #[allow(dead_code)]
+    #[allow(dead_code, unreachable_code, clippy::diverging_sub_expression)]
     fn foo() {
-        require_net_behaviour::<Foo>();
+        let _out_event: <Foo as NetworkBehaviour>::OutEvent = unimplemented!();
+        match _out_event {
+            FooEvent::Ping(ping::Event { .. }) => {}
+        }
     }
 }
 
@@ -57,23 +57,20 @@ fn one_field() {
 fn two_fields() {
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
-    #[behaviour(event_process = true)]
     struct Foo {
-        ping: libp2p::ping::Ping,
-        identify: libp2p::identify::Identify,
+        ping: ping::Behaviour,
+        identify: identify::Behaviour,
     }
 
-    impl libp2p::swarm::NetworkBehaviourEventProcess<libp2p::identify::IdentifyEvent> for Foo {
-        fn inject_event(&mut self, _: libp2p::identify::IdentifyEvent) {}
-    }
-
-    impl libp2p::swarm::NetworkBehaviourEventProcess<libp2p::ping::PingEvent> for Foo {
-        fn inject_event(&mut self, _: libp2p::ping::PingEvent) {}
-    }
-
-    #[allow(dead_code)]
+    #[allow(dead_code, unreachable_code, clippy::diverging_sub_expression)]
     fn foo() {
-        require_net_behaviour::<Foo>();
+        let _out_event: <Foo as NetworkBehaviour>::OutEvent = unimplemented!();
+        match _out_event {
+            FooEvent::Ping(ping::Event { .. }) => {}
+            FooEvent::Identify(event) => {
+                let _: identify::Event = event;
+            }
+        }
     }
 }
 
@@ -81,89 +78,52 @@ fn two_fields() {
 fn three_fields() {
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
-    #[behaviour(event_process = true)]
     struct Foo {
-        ping: libp2p::ping::Ping,
-        identify: libp2p::identify::Identify,
+        ping: ping::Behaviour,
+        identify: identify::Behaviour,
         kad: libp2p::kad::Kademlia<libp2p::kad::record::store::MemoryStore>,
-        #[behaviour(ignore)]
-        foo: String,
     }
 
-    impl libp2p::swarm::NetworkBehaviourEventProcess<libp2p::ping::PingEvent> for Foo {
-        fn inject_event(&mut self, _: libp2p::ping::PingEvent) {}
-    }
-
-    impl libp2p::swarm::NetworkBehaviourEventProcess<libp2p::identify::IdentifyEvent> for Foo {
-        fn inject_event(&mut self, _: libp2p::identify::IdentifyEvent) {}
-    }
-
-    impl libp2p::swarm::NetworkBehaviourEventProcess<libp2p::kad::KademliaEvent> for Foo {
-        fn inject_event(&mut self, _: libp2p::kad::KademliaEvent) {}
-    }
-
-    #[allow(dead_code)]
+    #[allow(dead_code, unreachable_code, clippy::diverging_sub_expression)]
     fn foo() {
-        require_net_behaviour::<Foo>();
+        let _out_event: <Foo as NetworkBehaviour>::OutEvent = unimplemented!();
+        match _out_event {
+            FooEvent::Ping(ping::Event { .. }) => {}
+            FooEvent::Identify(event) => {
+                let _: identify::Event = event;
+            }
+            FooEvent::Kad(event) => {
+                let _: libp2p::kad::KademliaEvent = event;
+            }
+        }
     }
 }
 
 #[test]
-fn three_fields_non_last_ignored() {
+fn custom_event() {
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
-    #[behaviour(event_process = true)]
+    #[behaviour(out_event = "MyEvent")]
     struct Foo {
-        ping: libp2p::ping::Ping,
-        #[behaviour(ignore)]
-        identify: String,
-        kad: libp2p::kad::Kademlia<libp2p::kad::record::store::MemoryStore>,
+        ping: ping::Behaviour,
+        identify: identify::Behaviour,
     }
 
-    impl libp2p::swarm::NetworkBehaviourEventProcess<libp2p::ping::PingEvent> for Foo {
-        fn inject_event(&mut self, _: libp2p::ping::PingEvent) {}
+    #[allow(clippy::large_enum_variant)]
+    enum MyEvent {
+        Ping(ping::Event),
+        Identify(identify::Event),
     }
 
-    impl libp2p::swarm::NetworkBehaviourEventProcess<libp2p::kad::KademliaEvent> for Foo {
-        fn inject_event(&mut self, _: libp2p::kad::KademliaEvent) {}
+    impl From<ping::Event> for MyEvent {
+        fn from(event: ping::Event) -> Self {
+            MyEvent::Ping(event)
+        }
     }
 
-    #[allow(dead_code)]
-    fn foo() {
-        require_net_behaviour::<Foo>();
-    }
-}
-
-#[test]
-fn custom_polling() {
-    #[allow(dead_code)]
-    #[derive(NetworkBehaviour)]
-    #[behaviour(poll_method = "foo", event_process = true)]
-    struct Foo {
-        ping: libp2p::ping::Ping,
-        identify: libp2p::identify::Identify,
-    }
-
-    impl libp2p::swarm::NetworkBehaviourEventProcess<libp2p::ping::PingEvent> for Foo {
-        fn inject_event(&mut self, _: libp2p::ping::PingEvent) {}
-    }
-
-    impl libp2p::swarm::NetworkBehaviourEventProcess<libp2p::identify::IdentifyEvent> for Foo {
-        fn inject_event(&mut self, _: libp2p::identify::IdentifyEvent) {}
-    }
-
-    impl Foo {
-        fn foo(
-            &mut self,
-            _: &mut std::task::Context,
-            _: &mut impl libp2p::swarm::PollParameters,
-        ) -> std::task::Poll<
-            libp2p::swarm::NetworkBehaviourAction<
-                <Self as NetworkBehaviour>::OutEvent,
-                <Self as NetworkBehaviour>::ProtocolsHandler,
-            >,
-        > {
-            std::task::Poll::Pending
+    impl From<libp2p::identify::Event> for MyEvent {
+        fn from(event: libp2p::identify::Event) -> Self {
+            MyEvent::Identify(event)
         }
     }
 
@@ -174,21 +134,31 @@ fn custom_polling() {
 }
 
 #[test]
-fn custom_event_no_polling() {
+fn custom_event_mismatching_field_names() {
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
-    #[behaviour(out_event = "Vec<String>", event_process = true)]
+    #[behaviour(out_event = "MyEvent")]
     struct Foo {
-        ping: libp2p::ping::Ping,
-        identify: libp2p::identify::Identify,
+        a: ping::Behaviour,
+        b: libp2p::identify::Behaviour,
     }
 
-    impl libp2p::swarm::NetworkBehaviourEventProcess<libp2p::ping::PingEvent> for Foo {
-        fn inject_event(&mut self, _: libp2p::ping::PingEvent) {}
+    #[allow(clippy::large_enum_variant)]
+    enum MyEvent {
+        Ping(ping::Event),
+        Identify(libp2p::identify::Event),
     }
 
-    impl libp2p::swarm::NetworkBehaviourEventProcess<libp2p::identify::IdentifyEvent> for Foo {
-        fn inject_event(&mut self, _: libp2p::identify::IdentifyEvent) {}
+    impl From<ping::Event> for MyEvent {
+        fn from(event: ping::Event) -> Self {
+            MyEvent::Ping(event)
+        }
+    }
+
+    impl From<libp2p::identify::Event> for MyEvent {
+        fn from(event: libp2p::identify::Event) -> Self {
+            MyEvent::Identify(event)
+        }
     }
 
     #[allow(dead_code)]
@@ -198,41 +168,15 @@ fn custom_event_no_polling() {
 }
 
 #[test]
-fn custom_event_and_polling() {
+fn bound() {
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
-    #[behaviour(poll_method = "foo", out_event = "String", event_process = true)]
-    struct Foo {
-        ping: libp2p::ping::Ping,
-        identify: libp2p::identify::Identify,
-    }
-
-    impl libp2p::swarm::NetworkBehaviourEventProcess<libp2p::ping::PingEvent> for Foo {
-        fn inject_event(&mut self, _: libp2p::ping::PingEvent) {}
-    }
-
-    impl libp2p::swarm::NetworkBehaviourEventProcess<libp2p::identify::IdentifyEvent> for Foo {
-        fn inject_event(&mut self, _: libp2p::identify::IdentifyEvent) {}
-    }
-
-    impl Foo {
-        fn foo(
-            &mut self,
-            _: &mut std::task::Context,
-            _: &mut impl libp2p::swarm::PollParameters,
-        ) -> std::task::Poll<
-            libp2p::swarm::NetworkBehaviourAction<
-                <Self as NetworkBehaviour>::OutEvent,
-                <Self as NetworkBehaviour>::ProtocolsHandler,
-            >,
-        > {
-            std::task::Poll::Pending
-        }
-    }
-
-    #[allow(dead_code)]
-    fn foo() {
-        require_net_behaviour::<Foo>();
+    struct Foo<T: Copy + NetworkBehaviour>
+    where
+        <T as NetworkBehaviour>::OutEvent: Debug,
+    {
+        ping: ping::Behaviour,
+        bar: T,
     }
 }
 
@@ -240,73 +184,68 @@ fn custom_event_and_polling() {
 fn where_clause() {
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
-    #[behaviour(event_process = true)]
-    struct Foo<T: Copy> {
-        ping: libp2p::ping::Ping,
+    struct Foo<T>
+    where
+        T: Copy + NetworkBehaviour,
+        <T as NetworkBehaviour>::OutEvent: Debug,
+    {
+        ping: ping::Behaviour,
         bar: T,
     }
 }
 
 #[test]
 fn nested_derives_with_import() {
-    use libp2p::swarm::NetworkBehaviourEventProcess;
-
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
-    #[behaviour(event_process = true)]
     struct Foo {
-        ping: libp2p::ping::Ping,
+        ping: ping::Behaviour,
     }
 
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
-    #[behaviour(event_process = true)]
     struct Bar {
         foo: Foo,
     }
 
-    impl NetworkBehaviourEventProcess<libp2p::ping::PingEvent> for Foo {
-        fn inject_event(&mut self, _: libp2p::ping::PingEvent) {}
-    }
-
-    impl NetworkBehaviourEventProcess<()> for Bar {
-        fn inject_event(&mut self, _: ()) {}
-    }
-
-    #[allow(dead_code)]
-    fn bar() {
-        require_net_behaviour::<Bar>();
+    #[allow(dead_code, unreachable_code, clippy::diverging_sub_expression)]
+    fn foo() {
+        let _out_event: <Bar as NetworkBehaviour>::OutEvent = unimplemented!();
+        match _out_event {
+            BarEvent::Foo(FooEvent::Ping(ping::Event { .. })) => {}
+        }
     }
 }
 
 #[test]
-fn event_process_false() {
+fn custom_event_emit_event_through_poll() {
+    #[allow(clippy::large_enum_variant)]
     enum BehaviourOutEvent {
-        Ping(libp2p::ping::PingEvent),
-        Identify(libp2p::identify::IdentifyEvent),
+        Ping(ping::Event),
+        Identify(identify::Event),
     }
 
-    impl From<libp2p::ping::PingEvent> for BehaviourOutEvent {
-        fn from(event: libp2p::ping::PingEvent) -> Self {
+    impl From<ping::Event> for BehaviourOutEvent {
+        fn from(event: ping::Event) -> Self {
             BehaviourOutEvent::Ping(event)
         }
     }
 
-    impl From<libp2p::identify::IdentifyEvent> for BehaviourOutEvent {
-        fn from(event: libp2p::identify::IdentifyEvent) -> Self {
+    impl From<libp2p::identify::Event> for BehaviourOutEvent {
+        fn from(event: libp2p::identify::Event) -> Self {
             BehaviourOutEvent::Identify(event)
         }
     }
 
-    #[allow(dead_code)]
+    #[allow(dead_code, clippy::large_enum_variant)]
     #[derive(NetworkBehaviour)]
     #[behaviour(out_event = "BehaviourOutEvent")]
     struct Foo {
-        ping: libp2p::ping::Ping,
-        identify: libp2p::identify::Identify,
+        ping: ping::Behaviour,
+        identify: identify::Behaviour,
     }
 
-    #[allow(dead_code, unreachable_code)]
+    #[allow(dead_code, unreachable_code, clippy::diverging_sub_expression)]
     fn bar() {
         require_net_behaviour::<Foo>();
 
@@ -331,18 +270,9 @@ fn with_toggle() {
 
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
-    #[behaviour(event_process = true)]
     struct Foo {
-        identify: libp2p::identify::Identify,
-        ping: Toggle<libp2p::ping::Ping>,
-    }
-
-    impl libp2p::swarm::NetworkBehaviourEventProcess<libp2p::identify::IdentifyEvent> for Foo {
-        fn inject_event(&mut self, _: libp2p::identify::IdentifyEvent) {}
-    }
-
-    impl libp2p::swarm::NetworkBehaviourEventProcess<libp2p::ping::PingEvent> for Foo {
-        fn inject_event(&mut self, _: libp2p::ping::PingEvent) {}
+        identify: identify::Behaviour,
+        ping: Toggle<ping::Behaviour>,
     }
 
     #[allow(dead_code)]
@@ -357,26 +287,9 @@ fn with_either() {
 
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
-    #[behaviour(event_process = true)]
     struct Foo {
         kad: libp2p::kad::Kademlia<libp2p::kad::record::store::MemoryStore>,
-        ping_or_identify: Either<libp2p::ping::Ping, libp2p::identify::Identify>,
-    }
-
-    impl libp2p::swarm::NetworkBehaviourEventProcess<libp2p::kad::KademliaEvent> for Foo {
-        fn inject_event(&mut self, _: libp2p::kad::KademliaEvent) {}
-    }
-
-    impl
-        libp2p::swarm::NetworkBehaviourEventProcess<
-            Either<libp2p::ping::PingEvent, libp2p::identify::IdentifyEvent>,
-        > for Foo
-    {
-        fn inject_event(
-            &mut self,
-            _: Either<libp2p::ping::PingEvent, libp2p::identify::IdentifyEvent>,
-        ) {
-        }
+        ping_or_identify: Either<ping::Behaviour, identify::Behaviour>,
     }
 
     #[allow(dead_code)]
@@ -386,20 +299,12 @@ fn with_either() {
 }
 
 #[test]
-fn no_event_with_either() {
+fn custom_event_with_either() {
     use either::Either;
 
     enum BehaviourOutEvent {
         Kad(libp2p::kad::KademliaEvent),
-        PingOrIdentify(Either<libp2p::ping::PingEvent, libp2p::identify::IdentifyEvent>),
-    }
-
-    #[allow(dead_code)]
-    #[derive(NetworkBehaviour)]
-    #[behaviour(out_event = "BehaviourOutEvent", event_process = false)]
-    struct Foo {
-        kad: libp2p::kad::Kademlia<libp2p::kad::record::store::MemoryStore>,
-        ping_or_identify: Either<libp2p::ping::Ping, libp2p::identify::Identify>,
+        PingOrIdentify(Either<ping::Event, identify::Event>),
     }
 
     impl From<libp2p::kad::KademliaEvent> for BehaviourOutEvent {
@@ -408,14 +313,102 @@ fn no_event_with_either() {
         }
     }
 
-    impl From<Either<libp2p::ping::PingEvent, libp2p::identify::IdentifyEvent>> for BehaviourOutEvent {
-        fn from(event: Either<libp2p::ping::PingEvent, libp2p::identify::IdentifyEvent>) -> Self {
+    impl From<Either<ping::Event, identify::Event>> for BehaviourOutEvent {
+        fn from(event: Either<ping::Event, identify::Event>) -> Self {
             BehaviourOutEvent::PingOrIdentify(event)
         }
+    }
+
+    #[allow(dead_code)]
+    #[derive(NetworkBehaviour)]
+    #[behaviour(out_event = "BehaviourOutEvent")]
+    struct Foo {
+        kad: libp2p::kad::Kademlia<libp2p::kad::record::store::MemoryStore>,
+        ping_or_identify: Either<ping::Behaviour, identify::Behaviour>,
     }
 
     #[allow(dead_code)]
     fn foo() {
         require_net_behaviour::<Foo>();
     }
+}
+
+#[test]
+fn generated_out_event_derive_debug() {
+    #[allow(dead_code)]
+    #[derive(NetworkBehaviour)]
+    struct Foo {
+        ping: ping::Behaviour,
+    }
+
+    fn require_debug<T>()
+    where
+        T: NetworkBehaviour,
+        <T as NetworkBehaviour>::OutEvent: Debug,
+    {
+    }
+
+    require_debug::<Foo>();
+}
+
+#[test]
+fn custom_out_event_no_type_parameters() {
+    use libp2p::core::connection::ConnectionId;
+    use libp2p::swarm::handler::DummyConnectionHandler;
+    use libp2p::swarm::{
+        ConnectionHandler, IntoConnectionHandler, NetworkBehaviourAction, PollParameters,
+    };
+    use libp2p::PeerId;
+    use std::task::Context;
+    use std::task::Poll;
+
+    pub struct TemplatedBehaviour<T: 'static> {
+        _data: T,
+    }
+
+    impl<T> NetworkBehaviour for TemplatedBehaviour<T> {
+        type ConnectionHandler = DummyConnectionHandler;
+        type OutEvent = void::Void;
+
+        fn new_handler(&mut self) -> Self::ConnectionHandler {
+            DummyConnectionHandler::default()
+        }
+
+        fn inject_event(
+            &mut self,
+            _peer: PeerId,
+            _connection: ConnectionId,
+            message: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent,
+        ) {
+            void::unreachable(message);
+        }
+
+        fn poll(
+            &mut self,
+            _ctx: &mut Context,
+            _: &mut impl PollParameters,
+        ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+            Poll::Pending
+        }
+    }
+
+    #[derive(NetworkBehaviour)]
+    #[behaviour(out_event = "OutEvent")]
+    struct Behaviour<T: 'static + Send> {
+        custom: TemplatedBehaviour<T>,
+    }
+
+    #[derive(Debug)]
+    enum OutEvent {
+        None,
+    }
+
+    impl From<void::Void> for OutEvent {
+        fn from(_e: void::Void) -> Self {
+            Self::None
+        }
+    }
+
+    require_net_behaviour::<Behaviour<String>>();
+    require_net_behaviour::<Behaviour<()>>();
 }

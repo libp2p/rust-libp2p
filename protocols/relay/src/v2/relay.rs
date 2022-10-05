@@ -30,10 +30,10 @@ use instant::Instant;
 use libp2p_core::connection::{ConnectedPoint, ConnectionId};
 use libp2p_core::multiaddr::Protocol;
 use libp2p_core::PeerId;
-use libp2p_swarm::protocols_handler::DummyProtocolsHandler;
+use libp2p_swarm::handler::DummyConnectionHandler;
 use libp2p_swarm::{
-    NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
-    ProtocolsHandlerUpgrErr,
+    ConnectionHandlerUpgrErr, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
+    PollParameters,
 };
 use std::collections::{hash_map, HashMap, HashSet, VecDeque};
 use std::num::NonZeroU32;
@@ -59,6 +59,28 @@ pub struct Config {
     pub max_circuit_duration: Duration,
     pub max_circuit_bytes: u64,
     pub circuit_src_rate_limiters: Vec<Box<dyn rate_limiter::RateLimiter>>,
+}
+
+impl std::fmt::Debug for Config {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Config")
+            .field("max_reservations", &self.max_reservations)
+            .field("max_reservations_per_peer", &self.max_reservations_per_peer)
+            .field("reservation_duration", &self.reservation_duration)
+            .field(
+                "reservation_rate_limiters",
+                &format!("[{} rate limiters]", self.reservation_rate_limiters.len()),
+            )
+            .field("max_circuits", &self.max_circuits)
+            .field("max_circuits_per_peer", &self.max_circuits_per_peer)
+            .field("max_circuit_duration", &self.max_circuit_duration)
+            .field("max_circuit_bytes", &self.max_circuit_bytes)
+            .field(
+                "circuit_src_rate_limiters",
+                &format!("[{} rate limiters]", self.circuit_src_rate_limiters.len()),
+            )
+            .finish()
+    }
 }
 
 impl Default for Config {
@@ -116,20 +138,20 @@ pub enum Event {
     /// Accepting an inbound reservation request failed.
     ReservationReqAcceptFailed {
         src_peer_id: PeerId,
-        error: std::io::Error,
+        error: inbound_hop::UpgradeError,
     },
     /// An inbound reservation request has been denied.
     ReservationReqDenied { src_peer_id: PeerId },
     /// Denying an inbound reservation request has failed.
     ReservationReqDenyFailed {
         src_peer_id: PeerId,
-        error: std::io::Error,
+        error: inbound_hop::UpgradeError,
     },
     /// An inbound reservation has timed out.
     ReservationTimedOut { src_peer_id: PeerId },
     CircuitReqReceiveFailed {
         src_peer_id: PeerId,
-        error: ProtocolsHandlerUpgrErr<void::Void>,
+        error: ConnectionHandlerUpgrErr<void::Void>,
     },
     /// An inbound circuit request has been denied.
     CircuitReqDenied {
@@ -140,7 +162,7 @@ pub enum Event {
     CircuitReqDenyFailed {
         src_peer_id: PeerId,
         dst_peer_id: PeerId,
-        error: std::io::Error,
+        error: inbound_hop::UpgradeError,
     },
     /// An inbound cirucit request has been accepted.
     CircuitReqAccepted {
@@ -151,13 +173,13 @@ pub enum Event {
     CircuitReqOutboundConnectFailed {
         src_peer_id: PeerId,
         dst_peer_id: PeerId,
-        error: ProtocolsHandlerUpgrErr<outbound_stop::CircuitFailedReason>,
+        error: ConnectionHandlerUpgrErr<outbound_stop::CircuitFailedReason>,
     },
     /// Accepting an inbound circuit request failed.
     CircuitReqAcceptFailed {
         src_peer_id: PeerId,
         dst_peer_id: PeerId,
-        error: std::io::Error,
+        error: inbound_hop::UpgradeError,
     },
     /// An inbound circuit has closed.
     CircuitClosed {
@@ -194,10 +216,10 @@ impl Relay {
 }
 
 impl NetworkBehaviour for Relay {
-    type ProtocolsHandler = handler::Prototype;
+    type ConnectionHandler = handler::Prototype;
     type OutEvent = Event;
 
-    fn new_handler(&mut self) -> Self::ProtocolsHandler {
+    fn new_handler(&mut self) -> Self::ConnectionHandler {
         handler::Prototype {
             config: handler::Config {
                 reservation_duration: self.config.reservation_duration,
@@ -212,11 +234,11 @@ impl NetworkBehaviour for Relay {
         peer: &PeerId,
         connection: &ConnectionId,
         _: &ConnectedPoint,
-        _handler: Either<handler::Handler, DummyProtocolsHandler>,
+        _handler: Either<handler::Handler, DummyConnectionHandler>,
         _remaining_established: usize,
     ) {
         if let hash_map::Entry::Occupied(mut peer) = self.reservations.entry(*peer) {
-            peer.get_mut().remove(&connection);
+            peer.get_mut().remove(connection);
             if peer.get().is_empty() {
                 peer.remove();
             }
@@ -261,7 +283,7 @@ impl NetworkBehaviour for Relay {
 
                 assert!(
                     !endpoint.is_relayed(),
-                    "`DummyProtocolsHandler` handles relayed connections. It \
+                    "`DummyConnectionHandler` handles relayed connections. It \
                      denies all inbound substreams."
                 );
 
@@ -388,7 +410,7 @@ impl NetworkBehaviour for Relay {
 
                 assert!(
                     !endpoint.is_relayed(),
-                    "`DummyProtocolsHandler` handles relayed connections. It \
+                    "`DummyConnectionHandler` handles relayed connections. It \
                      denies all inbound substreams."
                 );
 
@@ -415,8 +437,7 @@ impl NetworkBehaviour for Relay {
                 } else if let Some(dst_conn) = self
                     .reservations
                     .get(&inbound_circuit_req.dst())
-                    .map(|cs| cs.iter().next())
-                    .flatten()
+                    .and_then(|cs| cs.iter().next())
                 {
                     // Accept circuit request if reservation present.
                     let circuit_id = self.circuits.insert(Circuit {
@@ -600,7 +621,7 @@ impl NetworkBehaviour for Relay {
         &mut self,
         _cx: &mut Context<'_>,
         poll_parameters: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ProtocolsHandler>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
         if let Some(action) = self.queued_actions.pop_front() {
             return Poll::Ready(action.build(poll_parameters));
         }
@@ -735,9 +756,13 @@ impl Action {
                     inbound_reservation_req,
                     addrs: poll_parameters
                         .external_addresses()
-                        .map(|a| {
-                            a.addr
-                                .with(Protocol::P2p((*poll_parameters.local_peer_id()).into()))
+                        .map(|a| a.addr)
+                        // Add local peer ID in case it isn't present yet.
+                        .filter_map(|a| match a.iter().last()? {
+                            Protocol::P2p(_) => Some(a),
+                            _ => Some(
+                                a.with(Protocol::P2p(*poll_parameters.local_peer_id().as_ref())),
+                            ),
                         })
                         .collect(),
                 }),

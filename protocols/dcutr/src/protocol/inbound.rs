@@ -44,17 +44,14 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
     fn upgrade_inbound(self, substream: NegotiatedSubstream, _: Self::Info) -> Self::Future {
-        let mut substream = Framed::new(substream, super::codec::Codec::new());
+        let mut substream = Framed::new(
+            substream,
+            prost_codec::Codec::new(super::MAX_MESSAGE_SIZE_BYTES),
+        );
 
         async move {
             let HolePunch { r#type, obs_addrs } =
-                substream
-                    .next()
-                    .await
-                    .ok_or(super::codec::Error::Io(std::io::Error::new(
-                        std::io::ErrorKind::UnexpectedEof,
-                        "",
-                    )))??;
+                substream.next().await.ok_or(UpgradeError::StreamClosed)??;
 
             let obs_addrs = if obs_addrs.is_empty() {
                 return Err(UpgradeError::NoAddresses);
@@ -88,7 +85,7 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
 }
 
 pub struct PendingConnect {
-    substream: Framed<NegotiatedSubstream, super::codec::Codec>,
+    substream: Framed<NegotiatedSubstream, prost_codec::Codec<HolePunch>>,
     remote_obs_addrs: Vec<Multiaddr>,
 }
 
@@ -103,14 +100,11 @@ impl PendingConnect {
         };
 
         self.substream.send(msg).await?;
-        let HolePunch { r#type, .. } =
-            self.substream
-                .next()
-                .await
-                .ok_or(super::codec::Error::Io(std::io::Error::new(
-                    std::io::ErrorKind::UnexpectedEof,
-                    "",
-                )))??;
+        let HolePunch { r#type, .. } = self
+            .substream
+            .next()
+            .await
+            .ok_or(UpgradeError::StreamClosed)??;
 
         let r#type = hole_punch::Type::from_i32(r#type).ok_or(UpgradeError::ParseTypeField)?;
         match r#type {
@@ -124,12 +118,14 @@ impl PendingConnect {
 
 #[derive(Debug, Error)]
 pub enum UpgradeError {
-    #[error("Failed to encode or decode: {0}")]
+    #[error("Failed to encode or decode")]
     Codec(
         #[from]
         #[source]
-        super::codec::Error,
+        prost_codec::Error,
     ),
+    #[error("Stream closed")]
+    StreamClosed,
     #[error("Expected at least one address in reservation.")]
     NoAddresses,
     #[error("Invalid addresses.")]

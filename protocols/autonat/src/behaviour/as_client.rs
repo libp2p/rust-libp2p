@@ -40,7 +40,7 @@ use std::{
 };
 
 /// Outbound probe failed or was aborted.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OutboundProbeError {
     /// Probe was aborted because no server is known, or all servers
     /// are throttled through [`Config::throttle_server_period`].
@@ -54,7 +54,7 @@ pub enum OutboundProbeError {
     Response(ResponseError),
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OutboundProbeEvent {
     /// A dial-back request was sent to a remote peer.
     Request {
@@ -262,7 +262,12 @@ impl<'a> AsClient<'a> {
         let mut servers: Vec<&PeerId> = self.servers.iter().collect();
 
         if self.config.use_connected {
-            servers.extend(self.connected.iter().map(|(id, _)| id));
+            servers.extend(self.connected.iter().filter_map(|(id, addrs)| {
+                // Filter servers for which no qualified address is known.
+                // This is the case if the connection is relayed or the address is
+                // not global (in case of Config::only_global_ips).
+                addrs.values().any(|a| a.is_some()).then(|| id)
+            }));
         }
 
         servers.retain(|s| !self.throttled_servers.iter().any(|(id, _)| s == &id));

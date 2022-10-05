@@ -108,7 +108,7 @@ impl<T> PeriodicJob<T> {
 
     /// Returns `true` if the job is currently not running but ready
     /// to be run, `false` otherwise.
-    fn is_ready(&mut self, cx: &mut Context<'_>, now: Instant) -> bool {
+    fn check_ready(&mut self, cx: &mut Context<'_>, now: Instant) -> bool {
         if let PeriodicJobState::Waiting(delay, deadline) = &mut self.state {
             if now >= *deadline || !Future::poll(Pin::new(delay), cx).is_pending() {
                 return true;
@@ -195,7 +195,7 @@ impl PutRecordJob {
     where
         for<'a> T: RecordStore<'a>,
     {
-        if self.inner.is_ready(cx, now) {
+        if self.inner.check_ready(cx, now) {
             let publish = self.next_publish.map_or(false, |t_pub| now >= t_pub);
             let records = store
                 .records()
@@ -239,7 +239,7 @@ impl PutRecordJob {
             let deadline = now + self.inner.interval;
             let delay = Delay::new(self.inner.interval);
             self.inner.state = PeriodicJobState::Waiting(delay, deadline);
-            assert!(!self.inner.is_ready(cx, now));
+            assert!(!self.inner.check_ready(cx, now));
         }
 
         Poll::Pending
@@ -296,7 +296,7 @@ impl AddProviderJob {
     where
         for<'a> T: RecordStore<'a>,
     {
-        if self.inner.is_ready(cx, now) {
+        if self.inner.check_ready(cx, now) {
             let records = store
                 .provided()
                 .map(|r| r.into_owned())
@@ -317,7 +317,7 @@ impl AddProviderJob {
             let deadline = now + self.inner.interval;
             let delay = Delay::new(self.inner.interval);
             self.inner.state = PeriodicJobState::Waiting(delay, deadline);
-            assert!(!self.inner.is_ready(cx, now));
+            assert!(!self.inner.check_ready(cx, now));
         }
 
         Poll::Pending
@@ -335,15 +335,15 @@ mod tests {
     fn rand_put_record_job() -> PutRecordJob {
         let mut rng = rand::thread_rng();
         let id = PeerId::random();
-        let replicate_interval = Duration::from_secs(rng.gen_range(1, 60));
-        let publish_interval = Some(replicate_interval * rng.gen_range(1, 10));
-        let record_ttl = Some(Duration::from_secs(rng.gen_range(1, 600)));
-        PutRecordJob::new(id.clone(), replicate_interval, publish_interval, record_ttl)
+        let replicate_interval = Duration::from_secs(rng.gen_range(1..60));
+        let publish_interval = Some(replicate_interval * rng.gen_range(1..10));
+        let record_ttl = Some(Duration::from_secs(rng.gen_range(1..600)));
+        PutRecordJob::new(id, replicate_interval, publish_interval, record_ttl)
     }
 
     fn rand_add_provider_job() -> AddProviderJob {
         let mut rng = rand::thread_rng();
-        let interval = Duration::from_secs(rng.gen_range(1, 60));
+        let interval = Duration::from_secs(rng.gen_range(1..60));
         AddProviderJob::new(interval)
     }
 
@@ -360,7 +360,7 @@ mod tests {
         fn prop(records: Vec<Record>) {
             let mut job = rand_put_record_job();
             // Fill a record store.
-            let mut store = MemoryStore::new(job.local_id.clone());
+            let mut store = MemoryStore::new(job.local_id);
             for r in records {
                 let _ = store.put(r);
             }
@@ -389,9 +389,9 @@ mod tests {
             let mut job = rand_add_provider_job();
             let id = PeerId::random();
             // Fill a record store.
-            let mut store = MemoryStore::new(id.clone());
+            let mut store = MemoryStore::new(id);
             for mut r in records {
-                r.provider = id.clone();
+                r.provider = id;
                 let _ = store.add_provider(r);
             }
 

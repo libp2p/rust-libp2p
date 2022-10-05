@@ -18,14 +18,15 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::protocol;
+use crate::{protocol, PROTOCOL_NAME};
 use futures::future::BoxFuture;
 use futures::prelude::*;
 use futures_timer::Delay;
+use libp2p_core::upgrade::ReadyUpgrade;
 use libp2p_core::{upgrade::NegotiationError, UpgradeError};
 use libp2p_swarm::{
-    KeepAlive, NegotiatedSubstream, ProtocolsHandler, ProtocolsHandlerEvent,
-    ProtocolsHandlerUpgrErr, SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
+    NegotiatedSubstream, SubstreamProtocol,
 };
 use std::collections::VecDeque;
 use std::{
@@ -38,7 +39,7 @@ use std::{
 use void::Void;
 
 /// The configuration for outbound pings.
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub struct Config {
     /// The timeout of an outbound ping.
     timeout: Duration,
@@ -55,7 +56,7 @@ pub struct Config {
 }
 
 impl Config {
-    /// Creates a new `PingConfig` with the following default settings:
+    /// Creates a new [`Config`] with the following default settings:
     ///
     ///   * [`Config::with_interval`] 15s
     ///   * [`Config::with_timeout`] 20s
@@ -108,11 +109,17 @@ impl Config {
     /// is determined by other protocol handlers.
     ///
     /// If the maximum number of allowed ping failures is reached, the
-    /// connection is always terminated as a result of [`ProtocolsHandler::poll`]
+    /// connection is always terminated as a result of [`ConnectionHandler::poll`]
     /// returning an error, regardless of the keep-alive setting.
     pub fn with_keep_alive(mut self, b: bool) -> Self {
         self.keep_alive = b;
         self
+    }
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -178,7 +185,7 @@ pub struct Handler {
     /// Each successful ping resets this counter to 0.
     failures: u32,
     /// The outbound ping state.
-    outbound: Option<PingState>,
+    outbound: Option<OutboundState>,
     /// The inbound pong handler, i.e. if there is an inbound
     /// substream, this is always a future that waits for the
     /// next inbound ping to be answered.
@@ -201,7 +208,7 @@ enum State {
 }
 
 impl Handler {
-    /// Builds a new `PingHandler` with the given configuration.
+    /// Builds a new [`Handler`] with the given configuration.
     pub fn new(config: Config) -> Self {
         Handler {
             config,
@@ -215,17 +222,17 @@ impl Handler {
     }
 }
 
-impl ProtocolsHandler for Handler {
+impl ConnectionHandler for Handler {
     type InEvent = Void;
     type OutEvent = crate::Result;
     type Error = Failure;
-    type InboundProtocol = protocol::Ping;
-    type OutboundProtocol = protocol::Ping;
+    type InboundProtocol = ReadyUpgrade<&'static [u8]>;
+    type OutboundProtocol = ReadyUpgrade<&'static [u8]>;
     type OutboundOpenInfo = ();
     type InboundOpenInfo = ();
 
-    fn listen_protocol(&self) -> SubstreamProtocol<protocol::Ping, ()> {
-        SubstreamProtocol::new(protocol::Ping, ())
+    fn listen_protocol(&self) -> SubstreamProtocol<ReadyUpgrade<&'static [u8]>, ()> {
+        SubstreamProtocol::new(ReadyUpgrade::new(PROTOCOL_NAME), ())
     }
 
     fn inject_fully_negotiated_inbound(&mut self, stream: NegotiatedSubstream, (): ()) {
@@ -234,23 +241,23 @@ impl ProtocolsHandler for Handler {
 
     fn inject_fully_negotiated_outbound(&mut self, stream: NegotiatedSubstream, (): ()) {
         self.timer.reset(self.config.timeout);
-        self.outbound = Some(PingState::Ping(protocol::send_ping(stream).boxed()));
+        self.outbound = Some(OutboundState::Ping(protocol::send_ping(stream).boxed()));
     }
 
     fn inject_event(&mut self, _: Void) {}
 
-    fn inject_dial_upgrade_error(&mut self, _info: (), error: ProtocolsHandlerUpgrErr<Void>) {
+    fn inject_dial_upgrade_error(&mut self, _info: (), error: ConnectionHandlerUpgrErr<Void>) {
         self.outbound = None; // Request a new substream on the next `poll`.
 
         let error = match error {
-            ProtocolsHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)) => {
+            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)) => {
                 debug_assert_eq!(self.state, State::Active);
 
                 self.state = State::Inactive { reported: false };
                 return;
             }
             // Note: This timeout only covers protocol negotiation.
-            ProtocolsHandlerUpgrErr::Timeout => Failure::Timeout,
+            ConnectionHandlerUpgrErr::Timeout => Failure::Timeout,
             e => Failure::Other { error: Box::new(e) },
         };
 
@@ -268,14 +275,15 @@ impl ProtocolsHandler for Handler {
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<ProtocolsHandlerEvent<protocol::Ping, (), crate::Result, Self::Error>> {
+    ) -> Poll<ConnectionHandlerEvent<ReadyUpgrade<&'static [u8]>, (), crate::Result, Self::Error>>
+    {
         match self.state {
             State::Inactive { reported: true } => {
                 return Poll::Pending; // nothing to do on this connection
             }
             State::Inactive { reported: false } => {
                 self.state = State::Inactive { reported: true };
-                return Poll::Ready(ProtocolsHandlerEvent::Custom(Err(Failure::Unsupported)));
+                return Poll::Ready(ConnectionHandlerEvent::Custom(Err(Failure::Unsupported)));
             }
             State::Active => {}
         }
@@ -291,7 +299,7 @@ impl ProtocolsHandler for Handler {
                 Poll::Ready(Ok(stream)) => {
                     // A ping from a remote peer has been answered, wait for the next.
                     self.inbound = Some(protocol::recv_ping(stream).boxed());
-                    return Poll::Ready(ProtocolsHandlerEvent::Custom(Ok(Success::Pong)));
+                    return Poll::Ready(ConnectionHandlerEvent::Custom(Ok(Success::Pong)));
                 }
             }
         }
@@ -313,29 +321,29 @@ impl ProtocolsHandler for Handler {
                 if self.failures > 1 || self.config.max_failures.get() > 1 {
                     if self.failures >= self.config.max_failures.get() {
                         log::debug!("Too many failures ({}). Closing connection.", self.failures);
-                        return Poll::Ready(ProtocolsHandlerEvent::Close(error));
+                        return Poll::Ready(ConnectionHandlerEvent::Close(error));
                     }
 
-                    return Poll::Ready(ProtocolsHandlerEvent::Custom(Err(error)));
+                    return Poll::Ready(ConnectionHandlerEvent::Custom(Err(error)));
                 }
             }
 
             // Continue outbound pings.
             match self.outbound.take() {
-                Some(PingState::Ping(mut ping)) => match ping.poll_unpin(cx) {
+                Some(OutboundState::Ping(mut ping)) => match ping.poll_unpin(cx) {
                     Poll::Pending => {
                         if self.timer.poll_unpin(cx).is_ready() {
                             self.pending_errors.push_front(Failure::Timeout);
                         } else {
-                            self.outbound = Some(PingState::Ping(ping));
+                            self.outbound = Some(OutboundState::Ping(ping));
                             break;
                         }
                     }
                     Poll::Ready(Ok((stream, rtt))) => {
                         self.failures = 0;
                         self.timer.reset(self.config.interval);
-                        self.outbound = Some(PingState::Idle(stream));
-                        return Poll::Ready(ProtocolsHandlerEvent::Custom(Ok(Success::Ping {
+                        self.outbound = Some(OutboundState::Idle(stream));
+                        return Poll::Ready(ConnectionHandlerEvent::Custom(Ok(Success::Ping {
                             rtt,
                         })));
                     }
@@ -344,25 +352,26 @@ impl ProtocolsHandler for Handler {
                             .push_front(Failure::Other { error: Box::new(e) });
                     }
                 },
-                Some(PingState::Idle(stream)) => match self.timer.poll_unpin(cx) {
+                Some(OutboundState::Idle(stream)) => match self.timer.poll_unpin(cx) {
                     Poll::Pending => {
-                        self.outbound = Some(PingState::Idle(stream));
+                        self.outbound = Some(OutboundState::Idle(stream));
                         break;
                     }
                     Poll::Ready(()) => {
                         self.timer.reset(self.config.timeout);
-                        self.outbound = Some(PingState::Ping(protocol::send_ping(stream).boxed()));
+                        self.outbound =
+                            Some(OutboundState::Ping(protocol::send_ping(stream).boxed()));
                     }
                 },
-                Some(PingState::OpenStream) => {
-                    self.outbound = Some(PingState::OpenStream);
+                Some(OutboundState::OpenStream) => {
+                    self.outbound = Some(OutboundState::OpenStream);
                     break;
                 }
                 None => {
-                    self.outbound = Some(PingState::OpenStream);
-                    let protocol = SubstreamProtocol::new(protocol::Ping, ())
+                    self.outbound = Some(OutboundState::OpenStream);
+                    let protocol = SubstreamProtocol::new(ReadyUpgrade::new(PROTOCOL_NAME), ())
                         .with_timeout(self.config.timeout);
-                    return Poll::Ready(ProtocolsHandlerEvent::OutboundSubstreamRequest {
+                    return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
                         protocol,
                     });
                 }
@@ -377,7 +386,7 @@ type PingFuture = BoxFuture<'static, Result<(NegotiatedSubstream, Duration), io:
 type PongFuture = BoxFuture<'static, Result<NegotiatedSubstream, io::Error>>;
 
 /// The current state w.r.t. outbound pings.
-enum PingState {
+enum OutboundState {
     /// A new substream is being negotiated for the ping protocol.
     OpenStream,
     /// The substream is idle, waiting to send the next ping.

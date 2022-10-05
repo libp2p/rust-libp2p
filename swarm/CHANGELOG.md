@@ -1,4 +1,164 @@
-# 0.34.0 [unreleased]
+# 0.40.0 [unreleased]
+
+- Bump rand to 0.8 and quickcheck to 1. See [PR 2857].
+
+- Update to `libp2p-core` `v0.37.0`.
+
+[PR 2857]: https://github.com/libp2p/rust-libp2p/pull/2857
+
+- Pass actual `PeerId` of dial to `NetworkBehaviour::inject_dial_failure` on `DialError::ConnectionLimit`. See [PR 2928].
+
+[PR 2928]: https://github.com/libp2p/rust-libp2p/pull/2928
+
+
+# 0.39.0
+
+- Remove deprecated `NetworkBehaviourEventProcess`. See [libp2p-swarm v0.38.0 changelog entry] for
+  migration path.
+
+- Update to `libp2p-core` `v0.36.0`.
+
+- Enforce backpressure on incoming streams via `StreamMuxer` interface. In case we hit the configured limit of maximum
+  number of inbound streams, we will stop polling the `StreamMuxer` for new inbound streams. Depending on the muxer
+  implementation in use, this may lead to instant dropping of inbound streams. See [PR 2861].
+
+[libp2p-swarm v0.38.0 changelog entry]: https://github.com/libp2p/rust-libp2p/blob/master/swarm/CHANGELOG.md#0380
+[PR 2861]: https://github.com/libp2p/rust-libp2p/pull/2861/
+
+# 0.38.0
+
+- Deprecate `NetworkBehaviourEventProcess`. When deriving `NetworkBehaviour` on a custom `struct` users
+  should either bring their own `OutEvent` via `#[behaviour(out_event = "MyBehaviourEvent")]` or,
+  when not specified, have the derive macro generate one for the user.
+
+  See [`NetworkBehaviour`
+  documentation](https://docs.rs/libp2p/latest/libp2p/swarm/trait.NetworkBehaviour.html) and [PR
+  2784] for details.
+
+  Previously
+
+  ``` rust
+  #[derive(NetworkBehaviour)]
+  #[behaviour(event_process = true)]
+  struct MyBehaviour {
+      gossipsub: Gossipsub,
+      mdns: Mdns,
+  }
+
+  impl NetworkBehaviourEventProcess<Gossipsub> for MyBehaviour {
+      fn inject_event(&mut self, message: GossipsubEvent) {
+        todo!("Handle event")
+      }
+  }
+
+  impl NetworkBehaviourEventProcess<MdnsEvent> for MyBehaviour {
+      fn inject_event(&mut self, message: MdnsEvent) {
+        todo!("Handle event")
+      }
+  }
+  ```
+
+  Now
+
+  ``` rust
+  #[derive(NetworkBehaviour)]
+  #[behaviour(out_event = "MyBehaviourEvent")]
+  struct MyBehaviour {
+      gossipsub: Gossipsub,
+      mdns: Mdns,
+  }
+
+  enum MyBehaviourEvent {
+      Gossipsub(GossipsubEvent),
+      Mdns(MdnsEvent),
+  }
+
+  impl From<GossipsubEvent> for MyBehaviourEvent {
+      fn from(event: GossipsubEvent) -> Self {
+          MyBehaviourEvent::Gossipsub(event)
+      }
+  }
+
+  impl From<MdnsEvent> for MyBehaviourEvent {
+      fn from(event: MdnsEvent) -> Self {
+          MyBehaviourEvent::Mdns(event)
+      }
+  }
+
+  match swarm.next().await.unwrap() {
+    SwarmEvent::Behaviour(MyBehaviourEvent::Gossipsub(event)) => {
+      todo!("Handle event")
+    }
+    SwarmEvent::Behaviour(MyBehaviourEvent::Mdns(event)) => {
+      todo!("Handle event")
+    }
+  }
+  ```
+
+- When deriving `NetworkBehaviour` on a custom `struct` where the user does not specify their own
+  `OutEvent` via `#[behaviour(out_event = "MyBehaviourEvent")]` and where the user does not enable
+  `#[behaviour(event_process = true)]`, then the derive macro generates an `OutEvent` definition for
+  the user.
+
+  See [`NetworkBehaviour`
+  documentation](https://docs.rs/libp2p/latest/libp2p/swarm/trait.NetworkBehaviour.html) and [PR
+  2792] for details.
+
+- Update dial address concurrency factor to `8`, thus dialing up to 8 addresses concurrently for a single connection attempt. See `Swarm::dial_concurrency_factor` and [PR 2741].
+
+- Update to `libp2p-core` `v0.35.0`.
+
+[PR 2741]: https://github.com/libp2p/rust-libp2p/pull/2741/
+[PR 2784]: https://github.com/libp2p/rust-libp2p/pull/2784
+[PR 2792]: https://github.com/libp2p/rust-libp2p/pull/2792
+
+# 0.37.0
+
+- Update to `libp2p-core` `v0.34.0`.
+
+- Extend log message when exceeding inbound negotiating streams with peer ID and limit. See [PR 2716].
+
+- Remove `connection::ListenersStream` and poll the `Transport` directly. See [PR 2652].
+
+[PR 2716]: https://github.com/libp2p/rust-libp2p/pull/2716/
+[PR 2652]: https://github.com/libp2p/rust-libp2p/pull/2652
+
+# 0.36.1
+
+- Limit negotiating inbound substreams per connection. See [PR 2697].
+
+[PR 2697]: https://github.com/libp2p/rust-libp2p/pull/2697
+
+# 0.36.0
+
+- Don't require `Transport` to be `Clone`. See [PR 2529].
+
+- Update to `libp2p-core` `v0.33.0`.
+
+- Make `behaviour::either` module private. See [PR 2610]
+
+- Rename `IncomingInfo::to_connected_point` to `IncomingInfo::create_connected_point`. See [PR 2620].
+
+- Rename `TProtoHandler` to `TConnectionHandler`, `ToggleProtoHandler` to `ToggleConnectionHandler`, `ToggleIntoProtoHandler` to `ToggleIntoConnectionHandler`. See [PR 2640].
+
+[PR 2529]: https://github.com/libp2p/rust-libp2p/pull/2529
+[PR 2610]: https://github.com/libp2p/rust-libp2p/pull/2610
+[PR 2620]: https://github.com/libp2p/rust-libp2p/pull/2620
+[PR 2640]: https://github.com/libp2p/rust-libp2p/pull/2640
+
+# 0.35.0
+
+- Add impl `IntoIterator` for `MultiHandler`. See [PR 2572].
+- Remove `Send` bound from `NetworkBehaviour`. See [PR 2535].
+
+[PR 2572]: https://github.com/libp2p/rust-libp2p/pull/2572/
+[PR 2535]: https://github.com/libp2p/rust-libp2p/pull/2535/
+
+# 0.34.0 [2022-02-22]
+
+- Rename `ProtocolsHandler` to `ConnectionHandler`. Upgrade should be as simple as renaming all
+  occurences of `ProtocolsHandler` to `ConnectionHandler` with your favorite text manipulation tool
+  across your codebase. See [PR 2527].
 
 - Fold `libp2p-core`'s `Network` into `Swarm`. See [PR 2492].
 
@@ -10,6 +170,7 @@
 
 [PR 2492]: https://github.com/libp2p/rust-libp2p/pull/2492
 [PR 2517]: https://github.com/libp2p/rust-libp2p/pull/2517
+[PR 2527]: https://github.com/libp2p/rust-libp2p/pull/2527
 
 # 0.33.0 [2022-01-27]
 

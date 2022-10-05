@@ -27,6 +27,9 @@ use crate::record::{store::MemoryStore, Key};
 use crate::K_VALUE;
 use futures::{executor::block_on, future::poll_fn, prelude::*};
 use futures_timer::Delay;
+use libp2p::noise;
+use libp2p::swarm::{Swarm, SwarmEvent};
+use libp2p::yamux;
 use libp2p_core::{
     connection::{ConnectedPoint, ConnectionId},
     identity,
@@ -35,9 +38,6 @@ use libp2p_core::{
     transport::MemoryTransport,
     upgrade, Endpoint, PeerId, Transport,
 };
-use libp2p_noise as noise;
-use libp2p_swarm::{Swarm, SwarmEvent};
-use libp2p_yamux as yamux;
 use quickcheck::*;
 use rand::{random, rngs::StdRng, thread_rng, Rng, SeedableRng};
 use std::{
@@ -56,18 +56,15 @@ fn build_node() -> (Multiaddr, TestSwarm) {
 fn build_node_with_config(cfg: KademliaConfig) -> (Multiaddr, TestSwarm) {
     let local_key = identity::Keypair::generate_ed25519();
     let local_public_key = local_key.public();
-    let noise_keys = noise::Keypair::<noise::X25519>::new()
-        .into_authentic(&local_key)
-        .unwrap();
     let transport = MemoryTransport::default()
         .upgrade(upgrade::Version::V1)
-        .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
+        .authenticate(noise::NoiseAuthenticated::xx(&local_key).unwrap())
         .multiplex(yamux::YamuxConfig::default())
         .boxed();
 
     let local_id = local_public_key.to_peer_id();
-    let store = MemoryStore::new(local_id.clone());
-    let behaviour = Kademlia::with_config(local_id.clone(), store, cfg.clone());
+    let store = MemoryStore::new(local_id);
+    let behaviour = Kademlia::with_config(local_id, store, cfg);
 
     let mut swarm = Swarm::new(transport, behaviour, local_id);
 
@@ -132,7 +129,7 @@ fn build_fully_connected_nodes_with_config(
 
     for (_addr, swarm) in swarms.iter_mut() {
         for (addr, peer) in &swarm_addr_and_peer_id {
-            swarm.behaviour_mut().add_address(&peer, addr.clone());
+            swarm.behaviour_mut().add_address(peer, addr.clone());
         }
     }
 
@@ -147,8 +144,9 @@ fn random_multihash() -> Multihash {
 struct Seed([u8; 32]);
 
 impl Arbitrary for Seed {
-    fn arbitrary<G: Gen>(g: &mut G) -> Seed {
-        Seed(g.gen())
+    fn arbitrary(g: &mut Gen) -> Seed {
+        let seed = core::array::from_fn(|_| u8::arbitrary(g));
+        Seed(seed)
     }
 }
 
@@ -157,14 +155,14 @@ fn bootstrap() {
     fn prop(seed: Seed) {
         let mut rng = StdRng::from_seed(seed.0);
 
-        let num_total = rng.gen_range(2, 20);
+        let num_total = rng.gen_range(2..20);
         // When looking for the closest node to a key, Kademlia considers
         // K_VALUE nodes to query at initialization. If `num_group` is larger
         // than K_VALUE the remaining locally known nodes will not be
         // considered. Given that no other node is aware of them, they would be
         // lost entirely. To prevent the above restrict `num_group` to be equal
         // or smaller than K_VALUE.
-        let num_group = rng.gen_range(1, (num_total % K_VALUE.get()) + 2);
+        let num_group = rng.gen_range(1..(num_total % K_VALUE.get()) + 2);
 
         let mut cfg = KademliaConfig::default();
         if rng.gen() {
@@ -212,7 +210,7 @@ fn bootstrap() {
                                 let mut known = HashSet::new();
                                 for b in swarm.behaviour_mut().kbuckets.iter() {
                                     for e in b.iter() {
-                                        known.insert(e.node.key.preimage().clone());
+                                        known.insert(*e.node.key.preimage());
                                     }
                                 }
                                 assert_eq!(expected_known, known);
@@ -244,7 +242,7 @@ fn query_iter() {
     }
 
     fn run(rng: &mut impl Rng) {
-        let num_total = rng.gen_range(2, 20);
+        let num_total = rng.gen_range(2..20);
         let mut swarms = build_connected_nodes(num_total, 1)
             .into_iter()
             .map(|(_a, s)| s)
@@ -268,7 +266,7 @@ fn query_iter() {
         }
 
         // Set up expectations.
-        let expected_swarm_id = swarm_ids[0].clone();
+        let expected_swarm_id = swarm_ids[0];
         let expected_peer_ids: Vec<_> = swarm_ids.iter().skip(1).cloned().collect();
         let mut expected_distances = distances(&search_target_key, expected_peer_ids.clone());
         expected_distances.sort();
@@ -492,7 +490,7 @@ fn put_record() {
     fn prop(records: Vec<Record>, seed: Seed, filter_records: bool, drop_records: bool) {
         let mut rng = StdRng::from_seed(seed.0);
         let replication_factor =
-            NonZeroUsize::new(rng.gen_range(1, (K_VALUE.get() / 2) + 1)).unwrap();
+            NonZeroUsize::new(rng.gen_range(1..(K_VALUE.get() / 2) + 1)).unwrap();
         // At least 4 nodes, 1 under test + 3 bootnodes.
         let num_total = usize::max(4, replication_factor.get() * 2);
 
@@ -512,11 +510,11 @@ fn put_record() {
 
             let mut single_swarm = build_node_with_config(config);
             // Connect `single_swarm` to three bootnodes.
-            for i in 0..3 {
-                single_swarm.1.behaviour_mut().add_address(
-                    fully_connected_swarms[i].1.local_peer_id(),
-                    fully_connected_swarms[i].0.clone(),
-                );
+            for swarm in fully_connected_swarms.iter().take(3) {
+                single_swarm
+                    .1
+                    .behaviour_mut()
+                    .add_address(swarm.1.local_peer_id(), swarm.0.clone());
             }
 
             let mut swarms = vec![single_swarm];
@@ -529,6 +527,7 @@ fn put_record() {
                 .collect::<Vec<_>>()
         };
 
+        #[allow(clippy::mutable_key_type)] // False positive, we never modify `Bytes`.
         let records = records
             .into_iter()
             .take(num_total)
@@ -712,7 +711,7 @@ fn put_record() {
                 );
                 assert_eq!(swarms[0].behaviour_mut().queries.size(), 0);
                 for k in records.keys() {
-                    swarms[0].behaviour_mut().store.remove(&k);
+                    swarms[0].behaviour_mut().store.remove(k);
                 }
                 assert_eq!(swarms[0].behaviour_mut().store.records().count(), 0);
                 // All records have been republished, thus the test is complete.
@@ -742,7 +741,7 @@ fn get_record() {
     // Let first peer know of second peer and second peer know of third peer.
     for i in 0..2 {
         let (peer_id, address) = (
-            Swarm::local_peer_id(&swarms[i + 1].1).clone(),
+            *Swarm::local_peer_id(&swarms[i + 1].1),
             swarms[i + 1].0.clone(),
         );
         swarms[i].1.behaviour_mut().add_address(&peer_id, address);
@@ -812,8 +811,8 @@ fn get_record_many() {
 
     let record = Record::new(random_multihash(), vec![4, 5, 6]);
 
-    for i in 0..num_nodes {
-        swarms[i].behaviour_mut().store.put(record.clone()).unwrap();
+    for swarm in swarms.iter_mut().take(num_nodes) {
+        swarm.behaviour_mut().store.put(record.clone()).unwrap();
     }
 
     let quorum = Quorum::N(NonZeroUsize::new(num_results).unwrap());
@@ -856,7 +855,7 @@ fn add_provider() {
     fn prop(keys: Vec<record::Key>, seed: Seed) {
         let mut rng = StdRng::from_seed(seed.0);
         let replication_factor =
-            NonZeroUsize::new(rng.gen_range(1, (K_VALUE.get() / 2) + 1)).unwrap();
+            NonZeroUsize::new(rng.gen_range(1..(K_VALUE.get() / 2) + 1)).unwrap();
         // At least 4 nodes, 1 under test + 3 bootnodes.
         let num_total = usize::max(4, replication_factor.get() * 2);
 
@@ -872,11 +871,11 @@ fn add_provider() {
 
             let mut single_swarm = build_node_with_config(config);
             // Connect `single_swarm` to three bootnodes.
-            for i in 0..3 {
-                single_swarm.1.behaviour_mut().add_address(
-                    fully_connected_swarms[i].1.local_peer_id(),
-                    fully_connected_swarms[i].0.clone(),
-                );
+            for swarm in fully_connected_swarms.iter().take(3) {
+                single_swarm
+                    .1
+                    .behaviour_mut()
+                    .add_address(swarm.1.local_peer_id(), swarm.0.clone());
             }
 
             let mut swarms = vec![single_swarm];
@@ -889,6 +888,7 @@ fn add_provider() {
                 .collect::<Vec<_>>()
         };
 
+        #[allow(clippy::mutable_key_type)] // False positive, we never modify `Bytes`.
         let keys: HashSet<_> = keys.into_iter().take(num_total).collect();
 
         // Each test run publishes all records twice.
@@ -963,7 +963,7 @@ fn add_provider() {
                     .skip(1)
                     .filter_map(|swarm| {
                         if swarm.behaviour().store.providers(&key).len() == 1 {
-                            Some(Swarm::local_peer_id(&swarm).clone())
+                            Some(*Swarm::local_peer_id(swarm))
                         } else {
                             None
                         }
@@ -1009,7 +1009,7 @@ fn add_provider() {
                     keys.len()
                 );
                 for k in &keys {
-                    swarms[0].behaviour_mut().stop_providing(&k);
+                    swarms[0].behaviour_mut().stop_providing(k);
                 }
                 assert_eq!(swarms[0].behaviour_mut().store.provided().count(), 0);
                 // All records have been republished, thus the test is complete.
@@ -1108,11 +1108,11 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
     alice
         .1
         .behaviour_mut()
-        .add_address(&trudy.1.local_peer_id(), trudy.0.clone());
+        .add_address(trudy.1.local_peer_id(), trudy.0.clone());
     alice
         .1
         .behaviour_mut()
-        .add_address(&bob.1.local_peer_id(), bob.0.clone());
+        .add_address(bob.1.local_peer_id(), bob.0.clone());
 
     // Drop the swarm addresses.
     let (mut alice, mut bob, mut trudy) = (alice.1, bob.1, trudy.1);
@@ -1171,12 +1171,12 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
                 assert_eq!(
                     *records,
                     vec![PeerRecord {
-                        peer: Some(Swarm::local_peer_id(&trudy).clone()),
+                        peer: Some(*Swarm::local_peer_id(&trudy)),
                         record: record_trudy.clone(),
                     }],
                 );
             }
-            i @ _ => panic!("Unexpected query info: {:?}", i),
+            i => panic!("Unexpected query info: {:?}", i),
         });
 
     // Poll `alice` and `bob` expecting `alice` to return a successful query
@@ -1213,11 +1213,11 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
 
     assert_eq!(2, records.len());
     assert!(records.contains(&PeerRecord {
-        peer: Some(Swarm::local_peer_id(&bob).clone()),
+        peer: Some(*Swarm::local_peer_id(&bob)),
         record: record_bob,
     }));
     assert!(records.contains(&PeerRecord {
-        peer: Some(Swarm::local_peer_id(&trudy).clone()),
+        peer: Some(*Swarm::local_peer_id(&trudy)),
         record: record_trudy,
     }));
 }
@@ -1285,7 +1285,7 @@ fn network_behaviour_inject_address_change() {
     let old_address: Multiaddr = Protocol::Memory(1).into();
     let new_address: Multiaddr = Protocol::Memory(2).into();
 
-    let mut kademlia = Kademlia::new(local_peer_id.clone(), MemoryStore::new(local_peer_id));
+    let mut kademlia = Kademlia::new(local_peer_id, MemoryStore::new(local_peer_id));
 
     let endpoint = ConnectedPoint::Dialer {
         address: old_address.clone(),
@@ -1303,8 +1303,8 @@ fn network_behaviour_inject_address_change() {
     // Mimick the connection handler confirming the protocol for
     // the test connection, so that the peer is added to the routing table.
     kademlia.inject_event(
-        remote_peer_id.clone(),
-        connection_id.clone(),
+        remote_peer_id,
+        connection_id,
         KademliaHandlerEvent::ProtocolConfirmed { endpoint },
     );
 
@@ -1317,7 +1317,7 @@ fn network_behaviour_inject_address_change() {
         &remote_peer_id,
         &connection_id,
         &ConnectedPoint::Dialer {
-            address: old_address.clone(),
+            address: old_address,
             role_override: Endpoint::Dialer,
         },
         &ConnectedPoint::Dialer {
@@ -1327,7 +1327,7 @@ fn network_behaviour_inject_address_change() {
     );
 
     assert_eq!(
-        vec![new_address.clone()],
+        vec![new_address],
         kademlia.addresses_of_peer(&remote_peer_id),
     );
 }

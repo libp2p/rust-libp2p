@@ -1,4 +1,29 @@
-# 0.32.0 [unreleased]
+# 0.37.0 [unreleased]
+
+- Bump rand to 0.8 and quickcheck to 1. See [PR 2857].
+
+[PR 2857]: https://github.com/libp2p/rust-libp2p/pull/2857
+
+# 0.36.0
+
+- Update to `libp2p-core` `v0.36.0`
+
+# 0.35.0
+
+- Update to `libp2p-core` `v0.35.0`
+
+# 0.34.0
+
+- `Substream` now implements `AsyncRead` and `AsyncWrite`. See [PR 2706].
+- Update to `libp2p-core` `v0.34.0`
+
+[PR 2706]: https://github.com/libp2p/rust-libp2p/pull/2706/
+
+# 0.33.0
+
+- Update to `libp2p-core` `v0.33.0`.
+
+# 0.32.0 [2022-02-22]
 
 - Update to `libp2p-core` `v0.32.0`.
 

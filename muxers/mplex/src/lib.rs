@@ -27,13 +27,10 @@ pub use config::{MaxBufferBehaviour, MplexConfig};
 use bytes::Bytes;
 use codec::LocalStreamId;
 use futures::{future, prelude::*, ready};
-use libp2p_core::{
-    muxing::StreamMuxerEvent,
-    upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo},
-    StreamMuxer,
-};
+use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
+use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use parking_lot::Mutex;
-use std::{cmp, iter, task::Context, task::Poll};
+use std::{cmp, iter, pin::Pin, sync::Arc, task::Context, task::Poll};
 
 impl UpgradeInfo for MplexConfig {
     type Info = &'static [u8];
@@ -54,7 +51,7 @@ where
 
     fn upgrade_inbound(self, socket: C, _: Self::Info) -> Self::Future {
         future::ready(Ok(Multiplex {
-            io: Mutex::new(io::Multiplexed::new(socket, self)),
+            io: Arc::new(Mutex::new(io::Multiplexed::new(socket, self))),
         }))
     }
 }
@@ -69,131 +66,147 @@ where
 
     fn upgrade_outbound(self, socket: C, _: Self::Info) -> Self::Future {
         future::ready(Ok(Multiplex {
-            io: Mutex::new(io::Multiplexed::new(socket, self)),
+            io: Arc::new(Mutex::new(io::Multiplexed::new(socket, self))),
         }))
     }
 }
 
 /// Multiplexer. Implements the `StreamMuxer` trait.
-///
-/// This implementation isn't capable of detecting when the underlying socket changes its address,
-/// and no [`StreamMuxerEvent::AddressChange`] event is ever emitted.
 pub struct Multiplex<C> {
-    io: Mutex<io::Multiplexed<C>>,
+    io: Arc<Mutex<io::Multiplexed<C>>>,
 }
 
 impl<C> StreamMuxer for Multiplex<C>
 where
     C: AsyncRead + AsyncWrite + Unpin,
 {
-    type Substream = Substream;
-    type OutboundSubstream = OutboundSubstream;
+    type Substream = Substream<C>;
     type Error = io::Error;
 
-    fn poll_event(
-        &self,
+    fn poll_inbound(
+        self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> Poll<io::Result<StreamMuxerEvent<Self::Substream>>> {
-        let stream_id = ready!(self.io.lock().poll_next_stream(cx))?;
-        let stream = Substream::new(stream_id);
-        Poll::Ready(Ok(StreamMuxerEvent::InboundSubstream(stream)))
-    }
-
-    fn open_outbound(&self) -> Self::OutboundSubstream {
-        OutboundSubstream {}
+    ) -> Poll<Result<Self::Substream, Self::Error>> {
+        self.io
+            .lock()
+            .poll_next_stream(cx)
+            .map_ok(|stream_id| Substream::new(stream_id, self.io.clone()))
     }
 
     fn poll_outbound(
-        &self,
+        self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-        _: &mut Self::OutboundSubstream,
-    ) -> Poll<Result<Self::Substream, io::Error>> {
-        let stream_id = ready!(self.io.lock().poll_open_stream(cx))?;
-        Poll::Ready(Ok(Substream::new(stream_id)))
+    ) -> Poll<Result<Self::Substream, Self::Error>> {
+        self.io
+            .lock()
+            .poll_open_stream(cx)
+            .map_ok(|stream_id| Substream::new(stream_id, self.io.clone()))
     }
 
-    fn destroy_outbound(&self, _substream: Self::OutboundSubstream) {
-        // Nothing to do, since `open_outbound` creates no new local state.
+    fn poll(
+        self: Pin<&mut Self>,
+        _: &mut Context<'_>,
+    ) -> Poll<Result<StreamMuxerEvent, Self::Error>> {
+        Poll::Pending
     }
 
-    fn read_substream(
-        &self,
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
+        self.io.lock().poll_close(cx)
+    }
+}
+
+impl<C> AsyncRead for Substream<C>
+where
+    C: AsyncRead + AsyncWrite + Unpin,
+{
+    fn poll_read(
+        self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-        substream: &mut Self::Substream,
         buf: &mut [u8],
-    ) -> Poll<Result<usize, io::Error>> {
+    ) -> Poll<io::Result<usize>> {
+        let this = self.get_mut();
+
         loop {
             // Try to read from the current (i.e. last received) frame.
-            if !substream.current_data.is_empty() {
-                let len = cmp::min(substream.current_data.len(), buf.len());
-                buf[..len].copy_from_slice(&substream.current_data.split_to(len));
+            if !this.current_data.is_empty() {
+                let len = cmp::min(this.current_data.len(), buf.len());
+                buf[..len].copy_from_slice(&this.current_data.split_to(len));
                 return Poll::Ready(Ok(len));
             }
 
             // Read the next data frame from the multiplexed stream.
-            match ready!(self.io.lock().poll_read_stream(cx, substream.id))? {
+            match ready!(this.io.lock().poll_read_stream(cx, this.id))? {
                 Some(data) => {
-                    substream.current_data = data;
+                    this.current_data = data;
                 }
                 None => return Poll::Ready(Ok(0)),
             }
         }
     }
+}
 
-    fn write_substream(
-        &self,
+impl<C> AsyncWrite for Substream<C>
+where
+    C: AsyncRead + AsyncWrite + Unpin,
+{
+    fn poll_write(
+        self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-        substream: &mut Self::Substream,
         buf: &[u8],
-    ) -> Poll<Result<usize, io::Error>> {
-        self.io.lock().poll_write_stream(cx, substream.id, buf)
+    ) -> Poll<io::Result<usize>> {
+        let this = self.get_mut();
+
+        this.io.lock().poll_write_stream(cx, this.id, buf)
     }
 
-    fn flush_substream(
-        &self,
-        cx: &mut Context<'_>,
-        substream: &mut Self::Substream,
-    ) -> Poll<Result<(), io::Error>> {
-        self.io.lock().poll_flush_stream(cx, substream.id)
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        let this = self.get_mut();
+
+        this.io.lock().poll_flush_stream(cx, this.id)
     }
 
-    fn shutdown_substream(
-        &self,
-        cx: &mut Context<'_>,
-        substream: &mut Self::Substream,
-    ) -> Poll<Result<(), io::Error>> {
-        self.io.lock().poll_close_stream(cx, substream.id)
-    }
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        let this = self.get_mut();
+        let mut io = this.io.lock();
 
-    fn destroy_substream(&self, sub: Self::Substream) {
-        self.io.lock().drop_stream(sub.id);
-    }
+        ready!(io.poll_close_stream(cx, this.id))?;
+        ready!(io.poll_flush_stream(cx, this.id))?;
 
-    fn close(&self, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
-        self.io.lock().poll_close(cx)
-    }
-
-    fn flush_all(&self, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
-        self.io.lock().poll_flush(cx)
+        Poll::Ready(Ok(()))
     }
 }
 
-/// Active attempt to open an outbound substream.
-pub struct OutboundSubstream {}
-
 /// Active substream to the remote.
-pub struct Substream {
+pub struct Substream<C>
+where
+    C: AsyncRead + AsyncWrite + Unpin,
+{
     /// The unique, local identifier of the substream.
     id: LocalStreamId,
     /// The current data frame the substream is reading from.
     current_data: Bytes,
+    /// Shared reference to the actual muxer.
+    io: Arc<Mutex<io::Multiplexed<C>>>,
 }
 
-impl Substream {
-    fn new(id: LocalStreamId) -> Self {
+impl<C> Substream<C>
+where
+    C: AsyncRead + AsyncWrite + Unpin,
+{
+    fn new(id: LocalStreamId, io: Arc<Mutex<io::Multiplexed<C>>>) -> Self {
         Self {
             id,
             current_data: Bytes::new(),
+            io,
         }
+    }
+}
+
+impl<C> Drop for Substream<C>
+where
+    C: AsyncRead + AsyncWrite + Unpin,
+{
+    fn drop(&mut self) {
+        self.io.lock().drop_stream(self.id);
     }
 }

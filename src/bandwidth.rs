@@ -20,30 +20,35 @@
 
 use crate::{
     core::{
-        transport::{ListenerEvent, TransportError},
+        transport::{TransportError, TransportEvent},
         Transport,
     },
     Multiaddr,
 };
 
-use atomic::Atomic;
 use futures::{
     io::{IoSlice, IoSliceMut},
     prelude::*,
     ready,
 };
+use libp2p_core::transport::ListenerId;
 use std::{
     convert::TryFrom as _,
     io,
     pin::Pin,
-    sync::{atomic::Ordering, Arc},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc,
+    },
     task::{Context, Poll},
 };
 
 /// Wraps around a `Transport` and counts the number of bytes that go through all the opened
 /// connections.
 #[derive(Clone)]
+#[pin_project::pin_project]
 pub struct BandwidthLogging<TInner> {
+    #[pin]
     inner: TInner,
     sinks: Arc<BandwidthSinks>,
 }
@@ -52,8 +57,8 @@ impl<TInner> BandwidthLogging<TInner> {
     /// Creates a new [`BandwidthLogging`] around the transport.
     pub fn new(inner: TInner) -> (Self, Arc<BandwidthSinks>) {
         let sink = Arc::new(BandwidthSinks {
-            inbound: Atomic::new(0),
-            outbound: Atomic::new(0),
+            inbound: AtomicU64::new(0),
+            outbound: AtomicU64::new(0),
         });
 
         let trans = BandwidthLogging {
@@ -71,26 +76,46 @@ where
 {
     type Output = BandwidthConnecLogging<TInner::Output>;
     type Error = TInner::Error;
-    type Listener = BandwidthListener<TInner::Listener>;
     type ListenerUpgrade = BandwidthFuture<TInner::ListenerUpgrade>;
     type Dial = BandwidthFuture<TInner::Dial>;
 
-    fn listen_on(self, addr: Multiaddr) -> Result<Self::Listener, TransportError<Self::Error>> {
-        let sinks = self.sinks;
-        self.inner
-            .listen_on(addr)
-            .map(move |inner| BandwidthListener { inner, sinks })
+    fn poll(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
+        let this = self.project();
+        match this.inner.poll(cx) {
+            Poll::Ready(event) => {
+                let event = event.map_upgrade({
+                    let sinks = this.sinks.clone();
+                    |inner| BandwidthFuture { inner, sinks }
+                });
+                Poll::Ready(event)
+            }
+            Poll::Pending => Poll::Pending,
+        }
     }
 
-    fn dial(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let sinks = self.sinks;
+    fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
+        self.inner.listen_on(addr)
+    }
+
+    fn remove_listener(&mut self, id: ListenerId) -> bool {
+        self.inner.remove_listener(id)
+    }
+
+    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        let sinks = self.sinks.clone();
         self.inner
             .dial(addr)
             .map(move |fut| BandwidthFuture { inner: fut, sinks })
     }
 
-    fn dial_as_listener(self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let sinks = self.sinks;
+    fn dial_as_listener(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+        let sinks = self.sinks.clone();
         self.inner
             .dial_as_listener(addr)
             .map(move |fut| BandwidthFuture { inner: fut, sinks })
@@ -98,39 +123,6 @@ where
 
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
         self.inner.address_translation(server, observed)
-    }
-}
-
-/// Wraps around a `Stream` that produces connections. Wraps each connection around a bandwidth
-/// counter.
-#[pin_project::pin_project]
-pub struct BandwidthListener<TInner> {
-    #[pin]
-    inner: TInner,
-    sinks: Arc<BandwidthSinks>,
-}
-
-impl<TInner, TConn, TErr> Stream for BandwidthListener<TInner>
-where
-    TInner: TryStream<Ok = ListenerEvent<TConn, TErr>, Error = TErr>,
-{
-    type Item = Result<ListenerEvent<BandwidthFuture<TConn>, TErr>, TErr>;
-
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let this = self.project();
-
-        let event = if let Some(event) = ready!(this.inner.try_poll_next(cx)?) {
-            event
-        } else {
-            return Poll::Ready(None);
-        };
-
-        let event = event.map({
-            let sinks = this.sinks.clone();
-            |inner| BandwidthFuture { inner, sinks }
-        });
-
-        Poll::Ready(Some(Ok(event)))
     }
 }
 
@@ -159,8 +151,8 @@ impl<TInner: TryFuture> Future for BandwidthFuture<TInner> {
 
 /// Allows obtaining the average bandwidth of the connections created from a [`BandwidthLogging`].
 pub struct BandwidthSinks {
-    inbound: Atomic<u64>,
-    outbound: Atomic<u64>,
+    inbound: AtomicU64,
+    outbound: AtomicU64,
 }
 
 impl BandwidthSinks {

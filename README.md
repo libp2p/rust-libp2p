@@ -2,6 +2,8 @@
 
 <a href="http://libp2p.io/"><img src="https://img.shields.io/badge/project-libp2p-yellow.svg?style=flat-square" /></a>
 [![dependency status](https://deps.rs/repo/github/libp2p/rust-libp2p/status.svg?style=flat-square)](https://deps.rs/repo/github/libp2p/rust-libp2p)
+[![Crates.io](https://img.shields.io/crates/v/libp2p.svg)](https://crates.io/crates/libp2p)
+[![docs.rs](https://img.shields.io/badge/api-rustdoc-blue.svg)](https://docs.rs/libp2p)
 
 This repository is the central place for Rust development of the [libp2p](https://libp2p.io) spec.
 
@@ -12,7 +14,7 @@ This repository is the central place for Rust development of the [libp2p](https:
 - The **[examples](examples)** folder contains small binaries showcasing the
   many protocols in this repository.
 
-- For **security related issues** please reach out to security@ipfs.io. Please
+- For **security related issues** please reach out to security@libp2p.io. Please
   do not file a public issue on GitHub.
 
 - To **report bugs, suggest improvements or request new features** please open a
@@ -31,8 +33,8 @@ This repository is the central place for Rust development of the [libp2p](https:
 
 The main components of this repository are structured as follows:
 
-  * `core/`: The implementation of `libp2p-core` with its `Network`,
-    `Transport` and `StreamMuxer` API on which almost all other crates depend.
+  * `core/`: The implementation of `libp2p-core` with its `Transport` and
+    `StreamMuxer` API on which almost all other crates depend.
 
   * `transports/`: Implementations of transport protocols (e.g. TCP) and protocol upgrades
     (e.g. for authenticated encryption, compression, ...) based on the `libp2p-core` `Transport`
@@ -43,7 +45,7 @@ The main components of this repository are structured as follows:
     Multiplexing protocols are (mandatory) `Transport` upgrades.
 
   * `swarm/`: The implementation of `libp2p-swarm` building on `libp2p-core`
-    with the central interfaces `NetworkBehaviour` and `ProtocolsHandler` used
+    with the central interfaces `NetworkBehaviour` and `ConnectionHandler` used
     to implement application protocols (see `protocols/`).
 
   * `protocols/`: Implementations of application protocols based on the
@@ -71,6 +73,9 @@ Conduct](https://github.com/ipfs/community/blob/master/code-of-conduct.md).
 
 ## Maintainers
 
+(In alphabetical order.)
+
+- Elena Frank ([@elenaf9](https://github.com/elenaf9/))
 - Max Inden ([@mxinden](https://github.com/mxinden/))
 - Thomas Eizinger ([@thomaseizinger](https://github.com/thomaseizinger))
 
@@ -78,14 +83,15 @@ Conduct](https://github.com/ipfs/community/blob/master/code-of-conduct.md).
 
 (open a pull request if you want your project to be added here)
 
-- https://github.com/paritytech/polkadot
-- https://github.com/paritytech/substrate
-- https://github.com/sigp/lighthouse
-- https://github.com/golemfactory/golem-libp2p
-- https://github.com/comit-network
-- https://github.com/rs-ipfs/rust-ipfs
-- https://github.com/marcopoloprotocol/marcopolo
-- https://github.com/ChainSafe/forest
-- https://github.com/ipfs-rust/ipfs-embed
-- https://www.actyx.com/developers/
-- https://github.com/starcoinorg/starcoin
+- [COMIT](https://github.com/comit-network/xmr-btc-swap) - Bitcoin–Monero Cross-chain Atomic Swap.
+- [Forest](https://github.com/ChainSafe/forest) - An implementation of Filecoin written in Rust.
+- [ipfs-embed](https://github.com/ipfs-rust/ipfs-embed) - A small embeddable ipfs implementation
+used and maintained by [Actyx][https://www.actyx.com].
+- [iroh](https://github.com/n0-computer/iroh) - Next-generation implementation of IPFS for Cloud & Mobile platforms.
+- [Lighthouse](https://github.com/sigp/lighthouse) - Ethereum consensus client in Rust.
+- [Locutus](https://github.com/freenet/locutus) - Global, observable, decentralized key-value store.
+- [rust-ipfs](https://github.com/rs-ipfs/rust-ipfs) - IPFS implementation in Rust.
+- [Starcoin](https://github.com/starcoinorg/starcoin) - A smart contract blockchain network that scales by layering.
+- [Subspace](https://github.com/subspace/subspace) - Subspace Network reference implementation
+- [Substrate](https://github.com/paritytech/substrate) - Framework for blockchain innovation,
+used by [Polkadot](https://www.parity.io/technologies/polkadot/).

@@ -39,9 +39,6 @@
 //       be useful later for record store
 #![allow(dead_code)]
 
-#[cfg(feature = "serde")]
-extern crate _serde as serde;
-
 pub mod handler;
 pub mod kbucket;
 pub mod protocol;
@@ -52,6 +49,7 @@ mod behaviour;
 mod jobs;
 mod query;
 
+#[allow(clippy::derive_partial_eq_without_eq)]
 mod dht_proto {
     include!(concat!(env!("OUT_DIR"), "/dht.pb.rs"));
 }

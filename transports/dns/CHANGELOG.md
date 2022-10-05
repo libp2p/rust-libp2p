@@ -1,4 +1,38 @@
-# 0.32.0 [unreleased]
+# 0.37.0 [unreleased]
+
+- Remove default features. If you previously depended on `async-std` you need to enable this explicitly now. See [PR 2918].
+
+- Update to `libp2p-core` `v0.37.0`.
+
+[PR 2918]: https://github.com/libp2p/rust-libp2p/pull/2918
+
+# 0.36.0
+
+- Update to `libp2p-core` `v0.36.0`.
+
+# 0.35.0
+
+- Update to `libp2p-core` `v0.35.0`.
+
+# 0.34.0
+
+- Update to `libp2p-core` `v0.34.0`.
+
+# 0.33.0
+
+- Update to `libp2p-core` `v0.33.0`.
+
+- Remove implementation of `Clone` on `GenDnsConfig`. See [PR 2682].
+
+[PR 2682]: https://github.com/libp2p/rust-libp2p/pull/2682
+
+# 0.32.1
+
+- Update to `trust-dns` `v0.21`. See [PR 2543].
+
+[PR 2543]: https://github.com/libp2p/rust-libp2p/pull/2543
+
+# 0.32.0 [2022-02-22]
 
 - Update to `libp2p-core` `v0.32.0`.
 

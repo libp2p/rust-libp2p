@@ -28,6 +28,7 @@ pub mod protocol;
 mod layer;
 mod topic;
 
+#[allow(clippy::derive_partial_eq_without_eq)]
 mod rpc_proto {
     include!(concat!(env!("OUT_DIR"), "/floodsub.pb.rs"));
 }
@@ -37,6 +38,7 @@ pub use self::protocol::{FloodsubMessage, FloodsubRpc};
 pub use self::topic::Topic;
 
 /// Configuration options for the Floodsub protocol.
+#[derive(Debug, Clone)]
 pub struct FloodsubConfig {
     /// Peer id of the local node. Used for the source of the messages that we publish.
     pub local_peer_id: PeerId,

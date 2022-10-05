@@ -20,6 +20,8 @@
 
 use futures::{channel::oneshot, Future, FutureExt, StreamExt};
 use futures_timer::Delay;
+use libp2p::core::{ConnectedPoint, Endpoint};
+use libp2p::swarm::DialError;
 use libp2p::{
     development_transport,
     identity::Keypair,
@@ -30,8 +32,6 @@ use libp2p::{
 use libp2p_autonat::{
     Behaviour, Config, Event, InboundProbeError, InboundProbeEvent, ResponseError,
 };
-use libp2p_core::{ConnectedPoint, Endpoint};
-use libp2p_swarm::DialError;
 use std::{num::NonZeroU32, time::Duration};
 
 async fn init_swarm(config: Config) -> Swarm<Behaviour> {
@@ -43,7 +43,10 @@ async fn init_swarm(config: Config) -> Swarm<Behaviour> {
 }
 
 async fn init_server(config: Option<Config>) -> (Swarm<Behaviour>, PeerId, Multiaddr) {
-    let mut config = config.unwrap_or_default();
+    let mut config = config.unwrap_or_else(|| Config {
+        only_global_ips: false,
+        ..Default::default()
+    });
     // Don't do any outbound probes.
     config.boot_delay = Duration::from_secs(60);
 
@@ -53,9 +56,8 @@ async fn init_server(config: Option<Config>) -> (Swarm<Behaviour>, PeerId, Multi
         .listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap())
         .unwrap();
     let addr = loop {
-        match server.select_next_some().await {
-            SwarmEvent::NewListenAddr { address, .. } => break address,
-            _ => {}
+        if let SwarmEvent::NewListenAddr { address, .. } = server.select_next_some().await {
+            break address;
         };
     };
     (server, peer_id, addr)
@@ -74,6 +76,7 @@ async fn spawn_client(
             boot_delay: Duration::from_secs(1),
             retry_interval: Duration::from_secs(1),
             throttle_server_period: Duration::ZERO,
+            only_global_ips: false,
             ..Default::default()
         })
         .await;
@@ -87,12 +90,9 @@ async fn spawn_client(
                 .listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap())
                 .unwrap();
             loop {
-                match client.select_next_some().await {
-                    SwarmEvent::NewListenAddr { address, .. } => {
-                        addr = Some(address);
-                        break;
-                    }
-                    _ => {}
+                if let SwarmEvent::NewListenAddr { address, .. } = client.select_next_some().await {
+                    addr = Some(address);
+                    break;
                 };
             }
         }
@@ -115,11 +115,8 @@ async fn spawn_client(
 
 async fn next_event(swarm: &mut Swarm<Behaviour>) -> Event {
     loop {
-        match swarm.select_next_some().await {
-            SwarmEvent::Behaviour(event) => {
-                break event;
-            }
-            _ => {}
+        if let SwarmEvent::Behaviour(event) = swarm.select_next_some().await {
+            break event;
         }
     }
 }
@@ -157,9 +154,8 @@ async fn test_dial_back() {
                 } => {
                     assert_eq!(peer_id, client_id);
                     let observed_client_ip = loop {
-                        match send_back_addr.pop().unwrap() {
-                            Protocol::Ip4(ip4_addr) => break ip4_addr,
-                            _ => {}
+                        if let Protocol::Ip4(ip4_addr) = send_back_addr.pop().unwrap() {
+                            break ip4_addr;
                         }
                     };
                     break observed_client_ip;
@@ -224,8 +220,6 @@ async fn test_dial_back() {
             }
             other => panic!("Unexpected behaviour event: {:?}.", other),
         }
-
-        drop(_handle);
     };
 
     run_test_with_timeout(test).await;
@@ -270,8 +264,6 @@ async fn test_dial_error() {
             }
             other => panic!("Unexpected behaviour event: {:?}.", other),
         }
-
-        drop(_handle);
     };
 
     run_test_with_timeout(test).await;
@@ -283,6 +275,7 @@ async fn test_throttle_global_max() {
         let (mut server, server_id, server_addr) = init_server(Some(Config {
             throttle_clients_global_max: 1,
             throttle_clients_period: Duration::from_secs(60),
+            only_global_ips: false,
             ..Default::default()
         }))
         .await;
@@ -318,8 +311,6 @@ async fn test_throttle_global_max() {
                 other => panic!("Unexpected behaviour event: {:?}.", other),
             };
         }
-
-        drop(_handles);
     };
 
     run_test_with_timeout(test).await;
@@ -331,6 +322,7 @@ async fn test_throttle_peer_max() {
         let (mut server, server_id, server_addr) = init_server(Some(Config {
             throttle_clients_peer_max: 1,
             throttle_clients_period: Duration::from_secs(60),
+            only_global_ips: false,
             ..Default::default()
         }))
         .await;
@@ -369,8 +361,6 @@ async fn test_throttle_peer_max() {
             }
             other => panic!("Unexpected behaviour event: {:?}.", other),
         };
-
-        drop(_handle);
     };
 
     run_test_with_timeout(test).await;
@@ -382,6 +372,7 @@ async fn test_dial_multiple_addr() {
         let (mut server, server_id, server_addr) = init_server(Some(Config {
             throttle_clients_peer_max: 1,
             throttle_clients_period: Duration::from_secs(60),
+            only_global_ips: false,
             ..Default::default()
         }))
         .await;
@@ -424,6 +415,32 @@ async fn test_dial_multiple_addr() {
                 other => panic!("Unexpected swarm event: {:?}.", other),
             }
         }
+    };
+
+    run_test_with_timeout(test).await;
+}
+
+#[async_std::test]
+async fn test_global_ips_config() {
+    let test = async {
+        let (mut server, server_id, server_addr) = init_server(Some(Config {
+            // Enforce that only clients outside of the local network are qualified for dial-backs.
+            only_global_ips: true,
+            ..Default::default()
+        }))
+        .await;
+
+        let (_handle, rx) = oneshot::channel();
+        spawn_client(true, false, server_id, server_addr.clone(), rx).await;
+
+        // Expect the probe to be refused as both peers run on the same machine and thus in the same local network.
+        match next_event(&mut server).await {
+            Event::InboundProbe(InboundProbeEvent::Error { error, .. }) => assert!(matches!(
+                error,
+                InboundProbeError::Response(ResponseError::DialRefused)
+            )),
+            other => panic!("Unexpected behaviour event: {:?}.", other),
+        };
     };
 
     run_test_with_timeout(test).await;

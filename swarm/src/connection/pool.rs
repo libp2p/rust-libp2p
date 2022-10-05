@@ -19,15 +19,15 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::connection::Connection;
 use crate::{
     behaviour::{THandlerInEvent, THandlerOutEvent},
     connection::{
         Connected, ConnectionError, ConnectionLimit, IncomingInfo, PendingConnectionError,
         PendingInboundConnectionError, PendingOutboundConnectionError,
     },
-    protocols_handler::{NodeHandlerWrapper, NodeHandlerWrapperBuilder, NodeHandlerWrapperError},
     transport::{Transport, TransportError},
-    ConnectedPoint, Executor, IntoProtocolsHandler, Multiaddr, PeerId, ProtocolsHandler,
+    ConnectedPoint, ConnectionHandler, Executor, IntoConnectionHandler, Multiaddr, PeerId,
 };
 use concurrent_dial::ConcurrentDial;
 use fnv::FnvHashMap;
@@ -39,7 +39,7 @@ use futures::{
     stream::FuturesUnordered,
 };
 use libp2p_core::connection::{ConnectionId, Endpoint, PendingPoint};
-use libp2p_core::muxing::{StreamMuxer, StreamMuxerBox};
+use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerExt};
 use std::{
     collections::{hash_map, HashMap},
     convert::TryFrom as _,
@@ -55,7 +55,7 @@ mod concurrent_dial;
 mod task;
 
 /// A connection `Pool` manages a set of connections for each peer.
-pub struct Pool<THandler: IntoProtocolsHandler, TTrans>
+pub struct Pool<THandler: IntoConnectionHandler, TTrans>
 where
     TTrans: Transport,
 {
@@ -69,7 +69,7 @@ where
         PeerId,
         FnvHashMap<
             ConnectionId,
-            EstablishedConnectionInfo<<THandler::Handler as ProtocolsHandler>::InEvent>,
+            EstablishedConnectionInfo<<THandler::Handler as ConnectionHandler>::InEvent>,
         >,
     >,
 
@@ -84,6 +84,14 @@ where
 
     /// Number of addresses concurrently dialed for a single outbound connection attempt.
     dial_concurrency_factor: NonZeroU8,
+
+    /// The configured override for substream protocol upgrades, if any.
+    substream_upgrade_protocol_override: Option<libp2p_core::upgrade::Version>,
+
+    /// The maximum number of inbound streams concurrently negotiating on a connection.
+    ///
+    /// See [`Connection::max_negotiating_inbound_streams`].
+    max_negotiating_inbound_streams: usize,
 
     /// The executor to use for running the background tasks. If `None`,
     /// the tasks are kept in `local_spawns` instead and polled on the
@@ -138,13 +146,13 @@ struct PendingConnectionInfo<THandler> {
     /// [`PeerId`] of the remote peer.
     peer_id: Option<PeerId>,
     /// Handler to handle connection once no longer pending but established.
-    handler: NodeHandlerWrapperBuilder<THandler>,
+    handler: THandler,
     endpoint: PendingPoint,
     /// When dropped, notifies the task which then knows to terminate.
     abort_notifier: Option<oneshot::Sender<Void>>,
 }
 
-impl<THandler: IntoProtocolsHandler, TTrans: Transport> fmt::Debug for Pool<THandler, TTrans> {
+impl<THandler: IntoConnectionHandler, TTrans: Transport> fmt::Debug for Pool<THandler, TTrans> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         f.debug_struct("Pool")
             .field("counters", &self.counters)
@@ -153,13 +161,16 @@ impl<THandler: IntoProtocolsHandler, TTrans: Transport> fmt::Debug for Pool<THan
 }
 
 /// Event that can happen on the `Pool`.
-pub enum PoolEvent<'a, THandler: IntoProtocolsHandler, TTrans>
+#[derive(Debug)]
+pub enum PoolEvent<THandler: IntoConnectionHandler, TTrans>
 where
     TTrans: Transport,
 {
     /// A new connection has been established.
     ConnectionEstablished {
-        connection: EstablishedConnection<'a, <THandler::Handler as ProtocolsHandler>::InEvent>,
+        id: ConnectionId,
+        peer_id: PeerId,
+        endpoint: ConnectedPoint,
         /// List of other connections to the same peer.
         ///
         /// Note: Does not include the connection reported through this event.
@@ -187,16 +198,10 @@ where
         connected: Connected,
         /// The error that occurred, if any. If `None`, the connection
         /// was closed by the local peer.
-        error: Option<
-            ConnectionError<
-                NodeHandlerWrapperError<<THandler::Handler as ProtocolsHandler>::Error>,
-            >,
-        >,
-        /// A reference to the pool that used to manage the connection.
-        pool: &'a mut Pool<THandler, TTrans>,
+        error: Option<ConnectionError<<THandler::Handler as ConnectionHandler>::Error>>,
         /// The remaining established connections to the same peer.
         remaining_established_connection_ids: Vec<ConnectionId>,
-        handler: NodeHandlerWrapper<THandler::Handler>,
+        handler: THandler::Handler,
     },
 
     /// An outbound connection attempt failed.
@@ -206,7 +211,7 @@ where
         /// The error that occurred.
         error: PendingOutboundConnectionError<TTrans::Error>,
         /// The handler that was supposed to handle the connection.
-        handler: NodeHandlerWrapperBuilder<THandler>,
+        handler: THandler,
         /// The (expected) peer of the failed connection.
         peer: Option<PeerId>,
     },
@@ -222,21 +227,21 @@ where
         /// The error that occurred.
         error: PendingInboundConnectionError<TTrans::Error>,
         /// The handler that was supposed to handle the connection.
-        handler: NodeHandlerWrapperBuilder<THandler>,
+        handler: THandler,
     },
 
     /// A node has produced an event.
     ConnectionEvent {
-        /// The connection that has generated the event.
-        connection: EstablishedConnection<'a, THandlerInEvent<THandler>>,
+        id: ConnectionId,
+        peer_id: PeerId,
         /// The produced event.
         event: THandlerOutEvent<THandler>,
     },
 
     /// The connection to a node has changed its address.
     AddressChange {
-        /// The connection that has changed address.
-        connection: EstablishedConnection<'a, THandlerInEvent<THandler>>,
+        id: ConnectionId,
+        peer_id: PeerId,
         /// The new endpoint.
         new_endpoint: ConnectedPoint,
         /// The old endpoint.
@@ -244,76 +249,9 @@ where
     },
 }
 
-impl<'a, THandler: IntoProtocolsHandler, TTrans> fmt::Debug for PoolEvent<'a, THandler, TTrans>
-where
-    TTrans: Transport,
-    TTrans::Error: fmt::Debug,
-{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
-        match self {
-            PoolEvent::ConnectionEstablished {
-                connection,
-                concurrent_dial_errors,
-                ..
-            } => f
-                .debug_tuple("PoolEvent::ConnectionEstablished")
-                .field(connection)
-                .field(concurrent_dial_errors)
-                .finish(),
-            PoolEvent::ConnectionClosed {
-                id,
-                connected,
-                error,
-                ..
-            } => f
-                .debug_struct("PoolEvent::ConnectionClosed")
-                .field("id", id)
-                .field("connected", connected)
-                .field("error", error)
-                .finish(),
-            PoolEvent::PendingOutboundConnectionError {
-                id, error, peer, ..
-            } => f
-                .debug_struct("PoolEvent::PendingOutboundConnectionError")
-                .field("id", id)
-                .field("error", error)
-                .field("peer", peer)
-                .finish(),
-            PoolEvent::PendingInboundConnectionError {
-                id,
-                error,
-                send_back_addr,
-                local_addr,
-                ..
-            } => f
-                .debug_struct("PoolEvent::PendingInboundConnectionError")
-                .field("id", id)
-                .field("error", error)
-                .field("send_back_addr", send_back_addr)
-                .field("local_addr", local_addr)
-                .finish(),
-            PoolEvent::ConnectionEvent { connection, event } => f
-                .debug_struct("PoolEvent::ConnectionEvent")
-                .field("peer", &connection.peer_id())
-                .field("event", event)
-                .finish(),
-            PoolEvent::AddressChange {
-                connection,
-                new_endpoint,
-                old_endpoint,
-            } => f
-                .debug_struct("PoolEvent::AddressChange")
-                .field("peer", &connection.peer_id())
-                .field("new_endpoint", new_endpoint)
-                .field("old_endpoint", old_endpoint)
-                .finish(),
-        }
-    }
-}
-
 impl<THandler, TTrans> Pool<THandler, TTrans>
 where
-    THandler: IntoProtocolsHandler,
+    THandler: IntoConnectionHandler,
     TTrans: Transport,
 {
     /// Creates a new empty `Pool`.
@@ -330,6 +268,8 @@ where
             next_connection_id: ConnectionId::new(0),
             task_command_buffer_size: config.task_command_buffer_size,
             dial_concurrency_factor: config.dial_concurrency_factor,
+            substream_upgrade_protocol_override: config.substream_upgrade_protocol_override,
+            max_negotiating_inbound_streams: config.max_negotiating_inbound_streams,
             executor: config.executor,
             local_spawns: FuturesUnordered::new(),
             pending_connection_events_tx,
@@ -466,7 +406,7 @@ where
 
 impl<THandler, TTrans> Pool<THandler, TTrans>
 where
-    THandler: IntoProtocolsHandler,
+    THandler: IntoConnectionHandler,
     TTrans: Transport + 'static,
     TTrans::Output: Send + 'static,
     TTrans::Error: Send + 'static,
@@ -478,15 +418,25 @@ where
     /// has been reached.
     pub fn add_outgoing(
         &mut self,
-        transport: TTrans,
-        addresses: impl Iterator<Item = Multiaddr> + Send + 'static,
+        dials: Vec<
+            BoxFuture<
+                'static,
+                (
+                    Multiaddr,
+                    Result<
+                        <TTrans as Transport>::Output,
+                        TransportError<<TTrans as Transport>::Error>,
+                    >,
+                ),
+            >,
+        >,
         peer: Option<PeerId>,
-        handler: NodeHandlerWrapperBuilder<THandler>,
+        handler: THandler,
         role_override: Endpoint,
         dial_concurrency_factor_override: Option<NonZeroU8>,
-    ) -> Result<ConnectionId, (ConnectionLimit, NodeHandlerWrapperBuilder<THandler>)>
+    ) -> Result<ConnectionId, (ConnectionLimit, THandler)>
     where
-        TTrans: Clone + Send,
+        TTrans: Send,
         TTrans::Dial: Send + 'static,
     {
         if let Err(limit) = self.counters.check_max_pending_outgoing() {
@@ -494,11 +444,8 @@ where
         };
 
         let dial = ConcurrentDial::new(
-            transport,
-            peer,
-            addresses,
+            dials,
             dial_concurrency_factor_override.unwrap_or(self.dial_concurrency_factor),
-            role_override,
         );
 
         let connection_id = self.next_connection_id();
@@ -538,13 +485,13 @@ where
     pub fn add_incoming<TFut>(
         &mut self,
         future: TFut,
-        handler: NodeHandlerWrapperBuilder<THandler>,
+        handler: THandler,
         info: IncomingInfo<'_>,
-    ) -> Result<ConnectionId, (ConnectionLimit, NodeHandlerWrapperBuilder<THandler>)>
+    ) -> Result<ConnectionId, (ConnectionLimit, THandler)>
     where
         TFut: Future<Output = Result<TTrans::Output, TTrans::Error>> + Send + 'static,
     {
-        let endpoint = info.to_connected_point();
+        let endpoint = info.create_connected_point();
 
         if let Err(limit) = self.counters.check_max_pending_incoming() {
             return Err((limit, handler));
@@ -576,16 +523,14 @@ where
         );
         Ok(connection_id)
     }
+
     /// Polls the connection pool for events.
-    ///
-    /// > **Note**: We use a regular `poll` method instead of implementing `Stream`,
-    /// > because we want the `Pool` to stay borrowed if necessary.
-    pub fn poll<'a>(&'a mut self, cx: &mut Context<'_>) -> Poll<PoolEvent<'a, THandler, TTrans>>
+    pub fn poll(&mut self, cx: &mut Context<'_>) -> Poll<PoolEvent<THandler, TTrans>>
     where
         TTrans: Transport<Output = (PeerId, StreamMuxerBox)>,
-        THandler: IntoProtocolsHandler + 'static,
-        THandler::Handler: ProtocolsHandler + Send,
-        <THandler::Handler as ProtocolsHandler>::OutboundOpenInfo: Send,
+        THandler: IntoConnectionHandler + 'static,
+        THandler::Handler: ConnectionHandler + Send,
+        <THandler::Handler as ConnectionHandler>::OutboundOpenInfo: Send,
     {
         // Poll for events of established connections.
         //
@@ -596,16 +541,7 @@ where
             Poll::Ready(None) => unreachable!("Pool holds both sender and receiver."),
 
             Poll::Ready(Some(task::EstablishedConnectionEvent::Notify { id, peer_id, event })) => {
-                let entry = self
-                    .established
-                    .get_mut(&peer_id)
-                    .expect("Receive `Notify` event for established peer.")
-                    .entry(id)
-                    .expect_occupied("Receive `Notify` event from established connection");
-                return Poll::Ready(PoolEvent::ConnectionEvent {
-                    connection: EstablishedConnection { entry },
-                    event,
-                });
+                return Poll::Ready(PoolEvent::ConnectionEvent { peer_id, id, event });
             }
             Poll::Ready(Some(task::EstablishedConnectionEvent::AddressChange {
                 id,
@@ -623,16 +559,12 @@ where
                 let old_endpoint =
                     std::mem::replace(&mut connection.endpoint, new_endpoint.clone());
 
-                match self.get(id) {
-                    Some(PoolConnection::Established(connection)) => {
-                        return Poll::Ready(PoolEvent::AddressChange {
-                            connection,
-                            new_endpoint,
-                            old_endpoint,
-                        })
-                    }
-                    _ => unreachable!("since `entry` is an `EstablishedEntry`."),
-                }
+                return Poll::Ready(PoolEvent::AddressChange {
+                    peer_id,
+                    id,
+                    new_endpoint,
+                    old_endpoint,
+                });
             }
             Poll::Ready(Some(task::EstablishedConnectionEvent::Closed {
                 id,
@@ -657,7 +589,6 @@ where
                     connected: Connected { endpoint, peer_id },
                     error,
                     remaining_established_connection_ids,
-                    pool: self,
                     handler,
                 });
             }
@@ -674,7 +605,7 @@ where
             match event {
                 task::PendingConnectionEvent::ConnectionEstablished {
                     id,
-                    output: (obtained_peer_id, muxer),
+                    output: (obtained_peer_id, mut muxer),
                     outgoing,
                 } => {
                     let PendingConnectionInfo {
@@ -762,7 +693,7 @@ where
                     if let Err(error) = error {
                         self.spawn(
                             poll_fn(move |cx| {
-                                if let Err(e) = ready!(muxer.close(cx)) {
+                                if let Err(e) = ready!(muxer.poll_close_unpin(cx)) {
                                     log::debug!(
                                         "Failed to close connection {:?} to peer {}: {:?}",
                                         id,
@@ -816,13 +747,12 @@ where
                         },
                     );
 
-                    let connected = Connected {
-                        peer_id: obtained_peer_id,
-                        endpoint,
-                    };
-
-                    let connection =
-                        super::Connection::new(muxer, handler.into_handler(&connected));
+                    let connection = Connection::new(
+                        muxer,
+                        handler.into_handler(&obtained_peer_id, &endpoint),
+                        self.substream_upgrade_protocol_override,
+                        self.max_negotiating_inbound_streams,
+                    );
                     self.spawn(
                         task::new_for_established_connection(
                             id,
@@ -837,7 +767,9 @@ where
                     match self.get(id) {
                         Some(PoolConnection::Established(connection)) => {
                             return Poll::Ready(PoolEvent::ConnectionEstablished {
-                                connection,
+                                peer_id: connection.peer_id(),
+                                endpoint: connection.endpoint().clone(),
+                                id: connection.id(),
                                 other_established_connection_ids,
                                 concurrent_dial_errors,
                             })
@@ -899,17 +831,17 @@ where
 }
 
 /// A connection in a [`Pool`].
-pub enum PoolConnection<'a, THandler: IntoProtocolsHandler> {
+pub enum PoolConnection<'a, THandler: IntoConnectionHandler> {
     Pending(PendingConnection<'a, THandler>),
     Established(EstablishedConnection<'a, THandlerInEvent<THandler>>),
 }
 
 /// A pending connection in a pool.
-pub struct PendingConnection<'a, THandler: IntoProtocolsHandler> {
+pub struct PendingConnection<'a, THandler: IntoConnectionHandler> {
     entry: hash_map::OccupiedEntry<'a, ConnectionId, PendingConnectionInfo<THandler>>,
 }
 
-impl<THandler: IntoProtocolsHandler> PendingConnection<'_, THandler> {
+impl<THandler: IntoConnectionHandler> PendingConnection<'_, THandler> {
     /// Aborts the connection attempt, closing the connection.
     pub fn abort(mut self) {
         if let Some(notifier) = self.entry.get_mut().abort_notifier.take() {
@@ -1226,6 +1158,14 @@ pub struct PoolConfig {
 
     /// Number of addresses concurrently dialed for a single outbound connection attempt.
     pub dial_concurrency_factor: NonZeroU8,
+
+    /// The configured override for substream protocol upgrades, if any.
+    substream_upgrade_protocol_override: Option<libp2p_core::upgrade::Version>,
+
+    /// The maximum number of inbound streams concurrently negotiating on a connection.
+    ///
+    /// See [`Connection::max_negotiating_inbound_streams`].
+    max_negotiating_inbound_streams: usize,
 }
 
 impl Default for PoolConfig {
@@ -1234,8 +1174,10 @@ impl Default for PoolConfig {
             executor: None,
             task_event_buffer_size: 32,
             task_command_buffer_size: 7,
-            // By default, addresses of a single connection attempt are dialed in sequence.
-            dial_concurrency_factor: NonZeroU8::new(1).expect("1 > 0"),
+            // Set to a default of 8 based on frequency of dialer connections
+            dial_concurrency_factor: NonZeroU8::new(8).expect("8 > 0"),
+            substream_upgrade_protocol_override: None,
+            max_negotiating_inbound_streams: 128,
         }
     }
 }
@@ -1283,6 +1225,23 @@ impl PoolConfig {
     /// Number of addresses concurrently dialed for a single outbound connection attempt.
     pub fn with_dial_concurrency_factor(mut self, factor: NonZeroU8) -> Self {
         self.dial_concurrency_factor = factor;
+        self
+    }
+
+    /// Configures an override for the substream upgrade protocol to use.
+    pub fn with_substream_upgrade_protocol_override(
+        mut self,
+        v: libp2p_core::upgrade::Version,
+    ) -> Self {
+        self.substream_upgrade_protocol_override = Some(v);
+        self
+    }
+
+    /// The maximum number of inbound streams concurrently negotiating on a connection.
+    ///
+    /// See [`Connection::max_negotiating_inbound_streams`].
+    pub fn with_max_negotiating_inbound_streams(mut self, v: usize) -> Self {
+        self.max_negotiating_inbound_streams = v;
         self
     }
 }

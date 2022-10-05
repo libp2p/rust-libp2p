@@ -1,10 +1,60 @@
-# 0.32.0 [unreleased]
+# 0.37.0 - [unreleased]
+
+- Update to `if-watch` `v2.0.0`. Simplify `IfWatcher` integration.
+  Use `if_watch::IfWatcher` for all runtimes. See [PR 2813].
+
+- Update to `libp2p-core` `v0.37.0`.
+
+- Remove default features. If you previously depended on `async-std` you need to enable this explicitly now. See [PR 2918].
+
+- Return `None` in `GenTcpTransport::address_translation` if listen- or observed address are not tcp addresses.
+  See [PR 2970].
+
+[PR 2813]: https://github.com/libp2p/rust-libp2p/pull/2813
+[PR 2918]: https://github.com/libp2p/rust-libp2p/pull/2918
+[PR 2970]: https://github.com/libp2p/rust-libp2p/pull/2970
+
+# 0.36.0
+
+- Update to `libp2p-core` `v0.36.0`.
+
+# 0.35.0
+
+- Update to `libp2p-core` `v0.35.0`.
+
+- Update to `if-watch` `v1.1.1`.
+
+# 0.34.0
+
+- Update to `libp2p-core` `v0.34.0`.
+
+- Call `TcpStream::take_error` in tokio `Provider` to report connection
+  establishment errors early. See also [PR 2458] for the related async-io
+  change.
+
+- Split `GenTcpConfig` into `GenTcpConfig` and `GenTcpTransport`. Drive the `TcpListenStream`s
+  within the `GenTcpTransport`. Add `Transport::poll` and `Transport::remove_listener`
+  for `GenTcpTransport`. See [PR 2652].
+
+[PR 2652]: https://github.com/libp2p/rust-libp2p/pull/2652
+
+# 0.33.0
+
+- Update to `libp2p-core` `v0.33.0`.
+
+- Remove implementation of `Clone` on `GenTcpConfig`. See [PR 2682].
+
+[PR 2682]: https://github.com/libp2p/rust-libp2p/pull/2682
+
+# 0.32.0 [2022-02-22]
 
 - Update to `libp2p-core` `v0.32.0`.
 
 # 0.31.1 [2022-02-02]
 
-- Call `TcpSocket::take_error` to report connection establishment errors early.
+- Call `TcpSocket::take_error` to report connection establishment errors early. See [PR 2458].
+
+[PR 2458]: https://github.com/libp2p/rust-libp2p/pull/2458
 
 # 0.31.0 [2022-01-27]
 

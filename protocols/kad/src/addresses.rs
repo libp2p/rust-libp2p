@@ -65,6 +65,7 @@ impl Addresses {
     ///
     /// An address should only be removed if is determined to be invalid or
     /// otherwise unreachable.
+    #[allow(clippy::result_unit_err)]
     pub fn remove(&mut self, addr: &Multiaddr) -> Result<(), ()> {
         if self.addrs.len() == 1 {
             return Err(());

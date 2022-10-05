@@ -19,9 +19,9 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::{channel::oneshot, prelude::*};
-use libp2p_core::{muxing, upgrade, Transport};
-use libp2p_tcp::TcpConfig;
-use std::sync::Arc;
+use libp2p::core::muxing::StreamMuxerExt;
+use libp2p::core::{upgrade, Transport};
+use libp2p::tcp::TcpTransport;
 
 #[test]
 fn async_write() {
@@ -30,39 +30,36 @@ fn async_write() {
     let (tx, rx) = oneshot::channel();
 
     let bg_thread = async_std::task::spawn(async move {
-        let mplex = libp2p_mplex::MplexConfig::new();
+        let mplex = libp2p::mplex::MplexConfig::new();
 
-        let transport = TcpConfig::new()
-            .and_then(move |c, e| upgrade::apply(c, mplex, e, upgrade::Version::V1));
+        let mut transport = TcpTransport::default()
+            .and_then(move |c, e| upgrade::apply(c, mplex, e, upgrade::Version::V1))
+            .boxed();
 
-        let mut listener = transport
+        transport
             .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
             .unwrap();
 
-        let addr = listener
+        let addr = transport
             .next()
             .await
             .expect("some event")
-            .expect("no error")
             .into_new_address()
             .expect("listen address");
 
         tx.send(addr).unwrap();
 
-        let client = listener
+        let mut client = transport
             .next()
             .await
-            .unwrap()
-            .unwrap()
-            .into_upgrade()
+            .expect("some event")
+            .into_incoming()
             .unwrap()
             .0
             .await
             .unwrap();
 
-        let mut outbound = muxing::outbound_from_ref_and_wrap(Arc::new(client))
-            .await
-            .unwrap();
+        let mut outbound = client.next_outbound().await.unwrap();
 
         let mut buf = Vec::new();
         outbound.read_to_end(&mut buf).await.unwrap();
@@ -70,20 +67,13 @@ fn async_write() {
     });
 
     async_std::task::block_on(async {
-        let mplex = libp2p_mplex::MplexConfig::new();
-        let transport = TcpConfig::new()
+        let mplex = libp2p::mplex::MplexConfig::new();
+        let mut transport = TcpTransport::default()
             .and_then(move |c, e| upgrade::apply(c, mplex, e, upgrade::Version::V1));
 
-        let client = Arc::new(transport.dial(rx.await.unwrap()).unwrap().await.unwrap());
-        let mut inbound = loop {
-            if let Some(s) = muxing::event_from_ref_and_wrap(client.clone())
-                .await
-                .unwrap()
-                .into_inbound_substream()
-            {
-                break s;
-            }
-        };
+        let mut client = transport.dial(rx.await.unwrap()).unwrap().await.unwrap();
+
+        let mut inbound = client.next_inbound().await.unwrap();
         inbound.write_all(b"hello world").await.unwrap();
 
         // The test consists in making sure that this flushes the substream.

@@ -1,3 +1,54 @@
+# 0.30.1 [unreleased]
+
+- Fix an issue where the derive would generate bad code if the type parameters between the behaviour and a custom
+  out event differed. See [PR 2907].
+- Fix an issue where the derive would generate incorrect code depending on available imports. See [PR 2921].
+
+[PR 2907]: https://github.com/libp2p/rust-libp2p/pull/2907
+[PR 2921]: https://github.com/libp2p/rust-libp2p/pull/2921
+
+# 0.30.0
+
+- Remove support for removed `NetworkBehaviourEventProcess`. See [PR 2840].
+
+- Remove support for custom `poll` method on `NetworkBehaviour` via `#[behaviour(poll_method =
+  "poll")]`. See [PR 2841].
+
+[PR 2840]: https://github.com/libp2p/rust-libp2p/pull/2840
+[PR 2841]: https://github.com/libp2p/rust-libp2p/pull/2841
+
+- Remove support for non-`NetworkBehaviour` fields on main `struct` via `#[behaviour(ignore)]`. See
+  [PR 2842].
+
+[PR 2842]: https://github.com/libp2p/rust-libp2p/pull/2842
+
+# 0.29.0
+
+- Generate `NetworkBehaviour::OutEvent` if not provided through `#[behaviour(out_event =
+  "MyOutEvent")]` and event processing is disabled (default).
+
+# 0.28.0
+
+- Import `ListenerId` from `libp2p::core::transport`. See [PR 2652].
+
+[PR 2652]: https://github.com/libp2p/rust-libp2p/pull/2652
+
+# 0.27.2
+
+- Replace references of Protocol Handler with Connection Handler. See [PR 2640].
+
+[PR 2640]: https://github.com/libp2p/rust-libp2p/pull/2640
+
+# 0.27.1
+
+- Allow mixing of ignored fields. See [PR 2570].
+
+[PR 2570]: https://github.com/libp2p/rust-libp2p/pull/2570
+
+# 0.27.0 [2022-02-22]
+
+- Adjust to latest changes in `libp2p-swarm`.
+
 # 0.26.1 [2022-01-27]
 
 - Remove unnecessary clone of error in `inject_dial_failure` (see [PR 2349]).

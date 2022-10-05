@@ -1,4 +1,29 @@
-# 0.32.0 [unreleased]
+# 0.37.0 [unreleased]
+
+- Update to `libp2p-core` `v0.37.0`.
+
+# 0.36.0
+
+- Update to `libp2p-core` `v0.36.0`.
+
+# 0.35.0
+
+- Update prost requirement from 0.10 to 0.11 which no longer installs the protoc Protobuf compiler.
+  Thus you will need protoc installed locally. See [PR 2788].
+
+- Update to `libp2p-core` `v0.35.0`.
+
+[PR 2788]: https://github.com/libp2p/rust-libp2p/pull/2788
+
+# 0.34.0
+
+- Update to `libp2p-core` `v0.34.0`.
+
+# 0.33.0
+
+- Update to `libp2p-core` `v0.33.0`.
+
+# 0.32.0 [2022-02-22]
 
 - Update to `libp2p-core` `v0.32.0`.
 

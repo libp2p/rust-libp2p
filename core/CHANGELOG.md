@@ -1,4 +1,81 @@
-# 0.32.0 [unreleased]
+# 0.37.0 [unreleased]
+
+- Implement `Hash` and `Ord` for `PublicKey`. See [PR 2915].
+
+- Remove default features. If you previously depended on `secp256k1` or `ecdsa` you need to enable these explicitly 
+  now. See [PR 2918].
+
+[PR 2915]: https://github.com/libp2p/rust-libp2p/pull/2915
+[PR 2918]: https://github.com/libp2p/rust-libp2p/pull/2918
+
+# 0.36.0
+
+- Make RSA keypair support optional. To enable RSA support, `rsa` feature should be enabled.
+  See [PR 2860].
+
+- Add `ReadyUpgrade`. See [PR 2855].
+
+[PR 2855]: https://github.com/libp2p/rust-libp2p/pull/2855
+[PR 2860]: https://github.com/libp2p/rust-libp2p/pull/2860/
+
+# 0.35.1
+
+- Update to `p256` `v0.11.0`. See [PR 2636].
+
+[PR 2636]: https://github.com/libp2p/rust-libp2p/pull/2636/
+
+# 0.35.0
+
+- Update prost requirement from 0.10 to 0.11 which no longer installs the protoc Protobuf compiler.
+  Thus you will need protoc installed locally. See [PR 2788].
+- Drop `Unpin` requirement from `SubstreamBox`. See [PR 2762] and [PR 2776].
+- Drop `Sync` requirement on `StreamMuxer` for constructing `StreamMuxerBox`. See [PR 2775].
+- Use `Pin<&mut Self>` as the receiver type for all `StreamMuxer` poll functions. See [PR 2765].
+- Change `StreamMuxer` interface to be entirely poll-based. All functions on `StreamMuxer` now
+  require a `Context` and return `Poll`. This gives callers fine-grained control over what they
+  would like to make progress on. See [PR 2724] and [PR 2797].
+
+[PR 2724]: https://github.com/libp2p/rust-libp2p/pull/2724
+[PR 2762]: https://github.com/libp2p/rust-libp2p/pull/2762
+[PR 2775]: https://github.com/libp2p/rust-libp2p/pull/2775
+[PR 2776]: https://github.com/libp2p/rust-libp2p/pull/2776
+[PR 2765]: https://github.com/libp2p/rust-libp2p/pull/2765
+[PR 2797]: https://github.com/libp2p/rust-libp2p/pull/2797
+[PR 2788]: https://github.com/libp2p/rust-libp2p/pull/2788
+
+# 0.34.0
+
+- Remove `{read,write,flush,shutdown,destroy}_substream` functions from `StreamMuxer` trait
+  in favor of forcing `StreamMuxer::Substream` to implement `AsyncRead + AsyncWrite`. See [PR 2707].
+- Replace `Into<std::io::Error>` bound on `StreamMuxer::Error` with `std::error::Error`. See [PR 2710].
+
+- Remove the concept of individual `Transport::Listener` streams from `Transport`.
+  Instead the `Transport` is polled directly via `Transport::poll`. The
+  `Transport` is now responsible for driving its listeners. See [PR 2652].
+
+[PR 2691]: https://github.com/libp2p/rust-libp2p/pull/2691
+[PR 2707]: https://github.com/libp2p/rust-libp2p/pull/2707
+[PR 2710]: https://github.com/libp2p/rust-libp2p/pull/2710
+[PR 2652]: https://github.com/libp2p/rust-libp2p/pull/2652
+
+# 0.33.0
+
+- Have methods on `Transport` take `&mut self` instead of `self`. See [PR 2529].
+- Remove `StreamMuxer::flush_all`. See [PR 2669].
+- Rename `StreamMuxer::close` to `StreamMuxer::poll_close`. See [PR 2666].
+- Remove deprecated function `StreamMuxer::is_remote_acknowledged`. See [PR 2665].
+
+[PR 2529]: https://github.com/libp2p/rust-libp2p/pull/2529
+[PR 2666]: https://github.com/libp2p/rust-libp2p/pull/2666
+[PR 2665]: https://github.com/libp2p/rust-libp2p/pull/2665
+[PR 2669]: https://github.com/libp2p/rust-libp2p/pull/2669
+
+
+# 0.32.1
+
+- Add `PeerId::try_from_multiaddr` to extract a `PeerId` from a `Multiaddr` that ends in `/p2p/<peer-id>`.
+
+# 0.32.0 [2022-02-22]
 
 - Remove `Network`. `libp2p-core` is from now on an auxiliary crate only. Users
   that have previously used `Network` only, will need to use `Swarm` instead. See
@@ -16,11 +93,16 @@
 
 - Don't take ownership of key in `PeerRecord::new` and `SignedEnvelope::new`. See [PR 2516].
 
+- Remove `SignedEnvelope::payload` in favor of
+  `SignedEnvelope::payload_and_signing_key`. The caller is expected to check
+  that the returned signing key makes sense in the payload's context. See [PR 2522].
+
 [PR 2456]: https://github.com/libp2p/rust-libp2p/pull/2456
 [RUSTSEC-2022-0009]: https://rustsec.org/advisories/RUSTSEC-2022-0009.html
 [PR 2492]: https://github.com/libp2p/rust-libp2p/pull/2492
 [PR 2516]: https://github.com/libp2p/rust-libp2p/pull/2516
 [PR 2463]: https://github.com/libp2p/rust-libp2p/pull/2463/
+[PR 2522]: https://github.com/libp2p/rust-libp2p/pull/2522
 
 # 0.31.0 [2022-01-27]
 

@@ -1,4 +1,65 @@
-# 0.34.0 [unreleased]
+# 0.40.0 [unreleased]
+
+- Update dependencies.
+
+- Rename types as per [discussion 2174].
+  `Identify` has been renamed to `Behaviour`.
+  The `Identify` prefix has been removed from various types like `IdentifyEvent`.
+  Users should prefer importing the identify protocol as a module (`use libp2p::identify;`),
+  and refer to its types via `identify::`. For example: `identify::Behaviour` or `identify::Event`.
+
+  [discussion 2174]: https://github.com/libp2p/rust-libp2p/discussions/2174
+
+- Update to `libp2p-core` `v0.37.0`.
+
+- Update to `libp2p-swarm` `v0.40.0`.
+
+# 0.39.0
+
+- Update to `libp2p-swarm` `v0.39.0`.
+
+- Update to `libp2p-core` `v0.36.0`.
+
+# 0.38.0
+
+- Update prost requirement from 0.10 to 0.11 which no longer installs the protoc Protobuf compiler.
+  Thus you will need protoc installed locally. See [PR 2788].
+
+- Update to `libp2p-swarm` `v0.38.0`.
+
+- Expose `PROTOCOL_NAME` and `PUSH_PROTOCOL_NAME`. See [PR 2734].
+
+- Update to `libp2p-core` `v0.35.0`.
+
+[PR 2788]: https://github.com/libp2p/rust-libp2p/pull/2788
+[PR 2734]: https://github.com/libp2p/rust-libp2p/pull/2734/
+
+# 0.37.0
+
+- Update to `libp2p-core` `v0.34.0`.
+
+- Update to `libp2p-swarm` `v0.37.0`.
+
+- Extend log message on second identify push stream with peer ID.
+
+# 0.36.1
+
+- Allow at most one inbound identify push stream.
+
+# 0.36.0
+
+- Update to `libp2p-core` `v0.33.0`.
+
+- Update to `libp2p-swarm` `v0.36.0`.
+
+- Expose explicits errors via `UpgradeError` instead of generic `io::Error`. See [PR 2630].
+
+[PR 2630]: https://github.com/libp2p/rust-libp2p/pull/2630
+# 0.35.0
+
+- Update to `libp2p-swarm` `v0.35.0`.
+
+# 0.34.0 [2022-02-22]
 
 - Update to `libp2p-core` `v0.32.0`.
 
