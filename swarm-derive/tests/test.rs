@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::prelude::*;
-use libp2p::swarm::{NetworkBehaviour, SwarmEvent};
+use libp2p::swarm::{dummy, NetworkBehaviour, SwarmEvent};
 use libp2p::{identify, ping};
 use libp2p_swarm_derive::*;
 use std::fmt::Debug;
@@ -354,7 +354,6 @@ fn generated_out_event_derive_debug() {
 #[test]
 fn custom_out_event_no_type_parameters() {
     use libp2p::core::connection::ConnectionId;
-    use libp2p::swarm::handler::DummyConnectionHandler;
     use libp2p::swarm::{
         ConnectionHandler, IntoConnectionHandler, NetworkBehaviourAction, PollParameters,
     };
@@ -367,11 +366,11 @@ fn custom_out_event_no_type_parameters() {
     }
 
     impl<T> NetworkBehaviour for TemplatedBehaviour<T> {
-        type ConnectionHandler = DummyConnectionHandler;
+        type ConnectionHandler = dummy::ConnectionHandler;
         type OutEvent = void::Void;
 
         fn new_handler(&mut self) -> Self::ConnectionHandler {
-            DummyConnectionHandler::default()
+            dummy::ConnectionHandler
         }
 
         fn inject_event(

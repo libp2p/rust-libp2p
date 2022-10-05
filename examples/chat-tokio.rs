@@ -25,15 +25,7 @@
 //! The example is run per node as follows:
 //!
 //! ```sh
-//! cargo run --example chat-tokio --features="tcp-tokio mdns-tokio"
-//! ```
-//!
-//! Alternatively, to run with the minimal set of features and crates:
-//!
-//! ```sh
-//!cargo run --example chat-tokio \\
-//!    --no-default-features \\
-//!    --features="floodsub mplex noise tcp-tokio mdns-tokio"
+//! cargo run --example chat-tokio --features=full
 //! ```
 
 use futures::StreamExt;
