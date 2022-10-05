@@ -2,7 +2,10 @@
 
 - Bump rand to 0.8 and quickcheck to 1. See [PR 2857].
 
+- Bump salsa to 0.10. See [PR 2986].
+
 [PR 2857]: https://github.com/libp2p/rust-libp2p/pull/2857
+[PR 2986]: https://github.com/libp2p/rust-libp2p/pull/2986
 
 # 0.22.0 [2021-11-01]
 
