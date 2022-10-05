@@ -26,10 +26,14 @@
 use crate::certificate;
 use libp2p_core::PeerId;
 use rustls::{
+    cipher_suite::{
+        TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384, TLS13_CHACHA20_POLY1305_SHA256,
+    },
     client::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
     internal::msgs::handshake::DigitallySignedStruct,
     server::{ClientCertVerified, ClientCertVerifier},
-    Certificate, DistinguishedNames, SignatureScheme, SupportedProtocolVersion,
+    Certificate, DistinguishedNames, SignatureScheme, SupportedCipherSuite,
+    SupportedProtocolVersion,
 };
 
 /// The protocol versions supported by this verifier.
@@ -39,6 +43,16 @@ use rustls::{
 /// > The libp2p handshake uses TLS 1.3 (and higher).
 /// > Endpoints MUST NOT negotiate lower TLS versions.
 pub static PROTOCOL_VERSIONS: &'static [&SupportedProtocolVersion] = &[&rustls::version::TLS13];
+
+/// A list of the TLS 1.3 cipher suites supported by rustls.
+// By default rustls creates client/server configs with both
+// TLS 1.3 __and__ 1.2 cipher suites. But we don't need 1.2.
+pub static CIPHERSUITES: &[SupportedCipherSuite] = &[
+    // TLS1.3 suites
+    TLS13_CHACHA20_POLY1305_SHA256,
+    TLS13_AES_256_GCM_SHA384,
+    TLS13_AES_128_GCM_SHA256,
+];
 
 /// Implementation of the `rustls` certificate verification traits for libp2p.
 ///

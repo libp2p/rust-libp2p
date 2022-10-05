@@ -39,16 +39,6 @@ pub use futures_rustls::TlsStream;
 pub use upgrade::Config;
 pub use upgrade::UpgradeError;
 
-/// A list of the TLS 1.3 cipher suites supported by rustls.
-// By default rustls creates client/server configs with both
-// TLS 1.3 __and__ 1.2 cipher suites. But we don't need 1.2.
-static TLS13_CIPHERSUITES: &[SupportedCipherSuite] = &[
-    // TLS1.3 suites
-    TLS13_CHACHA20_POLY1305_SHA256,
-    TLS13_AES_256_GCM_SHA384,
-    TLS13_AES_128_GCM_SHA256,
-];
-
 const P2P_ALPN: [u8; 6] = *b"libp2p";
 
 /// Create a TLS client configuration for libp2p.
@@ -59,7 +49,7 @@ pub fn make_client_config(
     let (certificate, private_key) = certificate::generate(keypair)?;
 
     let mut crypto = rustls::ClientConfig::builder()
-        .with_cipher_suites(TLS13_CIPHERSUITES)
+        .with_cipher_suites(verifier::CIPHERSUITES)
         .with_safe_default_kx_groups()
         .with_protocol_versions(verifier::PROTOCOL_VERSIONS)
         .expect("Cipher suites and kx groups are configured; qed")
@@ -80,7 +70,7 @@ pub fn make_server_config(
     let (certificate, private_key) = certificate::generate(keypair)?;
 
     let mut crypto = rustls::ServerConfig::builder()
-        .with_cipher_suites(TLS13_CIPHERSUITES)
+        .with_cipher_suites(verifier::CIPHERSUITES)
         .with_safe_default_kx_groups()
         .with_protocol_versions(verifier::PROTOCOL_VERSIONS)
         .expect("Cipher suites and kx groups are configured; qed")
