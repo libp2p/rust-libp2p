@@ -23,7 +23,7 @@ use either::Either;
 use libp2p_core::connection::ConnectionId;
 use libp2p_core::upgrade::{self, DeniedUpgrade};
 use libp2p_core::{ConnectedPoint, PeerId};
-use libp2p_swarm::handler::DummyConnectionHandler;
+use libp2p_swarm::dummy;
 use libp2p_swarm::handler::SendWrapper;
 use libp2p_swarm::{ConnectionHandler, IntoConnectionHandler};
 
@@ -44,7 +44,7 @@ pub enum Role {
 }
 
 impl IntoConnectionHandler for Prototype {
-    type Handler = Either<relayed::Handler, Either<direct::Handler, DummyConnectionHandler>>;
+    type Handler = Either<relayed::Handler, Either<direct::Handler, dummy::ConnectionHandler>>;
 
     fn into_handler(self, _remote_peer_id: &PeerId, endpoint: &ConnectedPoint) -> Self::Handler {
         match self {
@@ -52,7 +52,7 @@ impl IntoConnectionHandler for Prototype {
                 if endpoint.is_relayed() {
                     Either::Left(relayed::Handler::new(endpoint.clone()))
                 } else {
-                    Either::Right(Either::Right(DummyConnectionHandler::default()))
+                    Either::Right(Either::Right(dummy::ConnectionHandler))
                 }
             }
             Self::DirectConnection {
