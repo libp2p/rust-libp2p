@@ -20,3 +20,10 @@ pin-project = "1.0.2"
 
 [dev-dependencies]
 quickcheck = { package = "quickcheck-ext", path = "../../misc/quickcheck-ext" }
+
+# Passing arguments to the docsrs builder in order to properly document cfg's. 
+# More information: https://docs.rs/about/builds#cross-compiling
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+rustc-args = ["--cfg", "docsrs"]

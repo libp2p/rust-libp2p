@@ -38,3 +38,10 @@ futures = "0.3.1"
 libp2p = { path = "../..", features = ["full"] }
 hyper = { version="0.14", features = ["server", "tcp", "http1"] }
 tokio = { version = "1", features = ["rt-multi-thread"] }
+
+# Passing arguments to the docsrs builder in order to properly document cfg's. 
+# More information: https://docs.rs/about/builds#cross-compiling
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+rustc-args = ["--cfg", "docsrs"]

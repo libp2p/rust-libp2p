@@ -21,6 +21,8 @@
 
 //! libp2p circuit relay implementations
 
+#![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
+
 pub mod v2;
 
 // Check that we can safely cast a `usize` to a `u64`.

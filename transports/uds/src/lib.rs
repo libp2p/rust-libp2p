@@ -36,6 +36,7 @@
     not(target_os = "emscripten"),
     any(feature = "tokio", feature = "async-std")
 ))]
+#![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 #![cfg_attr(docsrs, doc(cfg(all(unix, not(target_os = "emscripten")))))]
 
 use futures::stream::BoxStream;

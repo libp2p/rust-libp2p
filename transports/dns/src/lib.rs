@@ -54,6 +54,8 @@
 //!
 //![trust-dns-resolver]: https://docs.rs/trust-dns-resolver/latest/trust_dns_resolver/#dns-over-tls-and-dns-over-https
 
+#![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
+
 #[cfg(feature = "async-std")]
 use async_std_resolver::{AsyncStdConnection, AsyncStdConnectionProvider};
 use futures::{future::BoxFuture, prelude::*};

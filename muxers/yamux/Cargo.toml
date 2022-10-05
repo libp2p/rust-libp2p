@@ -17,3 +17,10 @@ parking_lot = "0.12"
 thiserror = "1.0"
 yamux = "0.10.0"
 log = "0.4"
+
+# Passing arguments to the docsrs builder in order to properly document cfg's. 
+# More information: https://docs.rs/about/builds#cross-compiling
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+rustc-args = ["--cfg", "docsrs"]
