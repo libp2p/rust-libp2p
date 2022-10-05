@@ -35,7 +35,7 @@
 //! terminal window, run:
 //!
 //! ```sh
-//! cargo run --example chat
+//! cargo run --example chat --features=full
 //! ```
 //!
 //! It will print the PeerId and the listening addresses, e.g. `Listening on
@@ -44,7 +44,7 @@
 //! In the second terminal window, start a new instance of the example with:
 //!
 //! ```sh
-//! cargo run --example chat -- /ip4/127.0.0.1/tcp/24915
+//! cargo run --example chat --features=full -- /ip4/127.0.0.1/tcp/24915
 //! ```
 //!
 //! The two nodes then connect.
