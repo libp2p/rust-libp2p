@@ -31,17 +31,55 @@ pub struct DecodingError {
 }
 
 impl DecodingError {
-    pub(crate) fn new<S: ToString>(msg: S) -> Self {
+    #[cfg(not(any(feature = "ecdsa", feature = "rsa", feature = "secp256k1")))]
+    pub(crate) fn missing_feature(feature_name: &'static str) -> Self {
         Self {
-            msg: msg.to_string(),
+            msg: format!("cargo feature `{feature_name}` is not enabled"),
             source: None,
         }
     }
 
-    pub(crate) fn source(self, source: impl Error + Send + Sync + 'static) -> Self {
+    pub(crate) fn failed_to_parse<E>(what: &'static str, source: impl Into<Option<E>>) -> Self
+    where
+        E: Error + Send + Sync + 'static,
+    {
         Self {
+            msg: format!("failed to parse {what}"),
+            source: match source.into() {
+                None => None,
+                Some(e) => Some(Box::new(e)),
+            },
+        }
+    }
+
+    pub(crate) fn bad_protobuf(
+        what: &'static str,
+        source: impl Error + Send + Sync + 'static,
+    ) -> Self {
+        Self {
+            msg: format!("failed to decode {what} from protobuf"),
             source: Some(Box::new(source)),
-            ..self
+        }
+    }
+
+    pub(crate) fn unknown_key_type(key_type: i32) -> Self {
+        Self {
+            msg: format!("unknown key-type {key_type}"),
+            source: None,
+        }
+    }
+
+    pub(crate) fn decoding_unsupported(key_type: &'static str) -> Self {
+        Self {
+            msg: format!("decoding {key_type} key from Protobuf is unsupported"),
+            source: None,
+        }
+    }
+
+    pub(crate) fn encoding_unsupported(key_type: &'static str) -> Self {
+        Self {
+            msg: format!("encoding {key_type} key to Protobuf is unsupported"),
+            source: None,
         }
     }
 }
