@@ -121,8 +121,6 @@ where
 
 #[derive(Debug)]
 struct EstablishedConnectionInfo<TInEvent> {
-    /// [`PeerId`] of the remote peer.
-    peer_id: PeerId,
     endpoint: ConnectedPoint,
     /// Channel endpoint to send commands to the task.
     sender: mpsc::Sender<task::Command<TInEvent>>,
@@ -741,7 +739,6 @@ where
                     conns.insert(
                         id,
                         EstablishedConnectionInfo {
-                            peer_id: obtained_peer_id,
                             endpoint: endpoint.clone(),
                             sender: command_sender,
                         },
@@ -764,18 +761,13 @@ where
                         .boxed(),
                     );
 
-                    match self.get(id) {
-                        Some(PoolConnection::Established(connection)) => {
-                            return Poll::Ready(PoolEvent::ConnectionEstablished {
-                                peer_id: connection.peer_id(),
-                                endpoint: connection.endpoint().clone(),
-                                id: connection.id(),
-                                other_established_connection_ids,
-                                concurrent_dial_errors,
-                            })
-                        }
-                        _ => unreachable!("since `entry` is an `EstablishedEntry`."),
-                    }
+                    return Poll::Ready(PoolEvent::ConnectionEstablished {
+                        peer_id: obtained_peer_id,
+                        endpoint,
+                        id,
+                        other_established_connection_ids,
+                        concurrent_dial_errors,
+                    });
                 }
                 task::PendingConnectionEvent::PendingFailed { id, error } => {
                     if let Some(PendingConnectionInfo {
@@ -867,21 +859,6 @@ where
 }
 
 impl<TInEvent> EstablishedConnection<'_, TInEvent> {
-    /// Returns information about the connected endpoint.
-    pub fn endpoint(&self) -> &ConnectedPoint {
-        &self.entry.get().endpoint
-    }
-
-    /// Returns the identity of the connected peer.
-    pub fn peer_id(&self) -> PeerId {
-        self.entry.get().peer_id
-    }
-
-    /// Returns the local connection ID.
-    pub fn id(&self) -> ConnectionId {
-        *self.entry.key()
-    }
-
     /// (Asynchronously) sends an event to the connection handler.
     ///
     /// If the handler is not ready to receive the event, either because
