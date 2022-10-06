@@ -22,7 +22,7 @@
 
 use crate::{
     connection::{Connection, ConnectionEvent},
-    muxer::QuicMuxer,
+    muxer::Muxer,
     transport,
 };
 
@@ -53,7 +53,7 @@ impl Connecting {
 }
 
 impl Future for Connecting {
-    type Output = Result<(PeerId, QuicMuxer), transport::TransportError>;
+    type Output = Result<(PeerId, Muxer), transport::TransportError>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let connection = self
@@ -64,7 +64,7 @@ impl Future for Connecting {
         loop {
             match connection.poll_event(cx) {
                 Poll::Ready(ConnectionEvent::Connected(peer_id)) => {
-                    let muxer = QuicMuxer::from_connection(self.connection.take().unwrap());
+                    let muxer = Muxer::from_connection(self.connection.take().unwrap());
                     return Poll::Ready(Ok((peer_id, muxer)));
                 }
                 Poll::Ready(ConnectionEvent::ConnectionLost(err)) => {

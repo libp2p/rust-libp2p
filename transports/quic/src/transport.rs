@@ -25,7 +25,7 @@
 use crate::connection::{Connection, ConnectionError};
 use crate::endpoint::{Config, QuinnConfig, ToEndpoint};
 use crate::provider::Provider;
-use crate::{endpoint, muxer::QuicMuxer, upgrade::Connecting};
+use crate::{endpoint, muxer::Muxer, upgrade::Connecting};
 
 use futures::channel::{mpsc, oneshot};
 use futures::future::{BoxFuture, MapErr};
@@ -103,7 +103,7 @@ pub enum TransportError {
 }
 
 impl<P: Provider> Transport for GenTransport<P> {
-    type Output = (PeerId, QuicMuxer);
+    type Output = (PeerId, Muxer);
     type Error = TransportError;
     type ListenerUpgrade = Connecting;
     type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;

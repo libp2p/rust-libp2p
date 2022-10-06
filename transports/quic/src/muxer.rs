@@ -36,7 +36,7 @@ use std::{
 
 /// State for a single opened QUIC connection.
 #[derive(Debug)]
-pub struct QuicMuxer {
+pub struct Muxer {
     inner: Arc<Mutex<Inner>>,
 }
 
@@ -63,10 +63,10 @@ impl Inner {
     }
 }
 
-impl QuicMuxer {
+impl Muxer {
     /// Crate-internal function that builds a [`QuicMuxer`] from a raw connection.
     pub(crate) fn from_connection(connection: Connection) -> Self {
-        QuicMuxer {
+        Muxer {
             inner: Arc::new(Mutex::new(Inner {
                 connection,
                 substreams: Default::default(),
@@ -78,7 +78,7 @@ impl QuicMuxer {
     }
 }
 
-impl StreamMuxer for QuicMuxer {
+impl StreamMuxer for Muxer {
     type Substream = Substream;
     type Error = ConnectionError;
 

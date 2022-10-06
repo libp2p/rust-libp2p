@@ -67,7 +67,7 @@ mod upgrade;
 
 pub use connection::ConnectionError;
 pub use endpoint::Config;
-pub use muxer::QuicMuxer;
+pub use muxer::Muxer;
 #[cfg(feature = "async-std")]
 pub use provider::async_std;
 #[cfg(feature = "tokio")]
