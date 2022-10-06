@@ -25,7 +25,7 @@
 use crate::connection::Connection;
 use crate::endpoint::ToEndpoint;
 use crate::provider::Provider;
-use crate::{endpoint::EndpointChannel, muxer::QuicMuxer, upgrade::Connecting};
+use crate::{endpoint, muxer::QuicMuxer, upgrade::Connecting};
 use crate::{Config, ConnectionError};
 
 use futures::channel::{mpsc, oneshot};
@@ -218,7 +218,7 @@ impl From<TransportError> for CoreTransportError<TransportError> {
 
 #[derive(Debug)]
 struct Dialer {
-    endpoint_channel: EndpointChannel,
+    endpoint_channel: endpoint::Channel,
     state: DialerState,
 }
 
@@ -227,7 +227,7 @@ impl Dialer {
         config: Config,
         socket_family: SocketFamily,
     ) -> Result<Self, CoreTransportError<TransportError>> {
-        let endpoint_channel = EndpointChannel::new_dialer::<P>(config, socket_family)
+        let endpoint_channel = endpoint::Channel::new_dialer::<P>(config, socket_family)
             .map_err(CoreTransportError::Other)?;
         Ok(Dialer {
             endpoint_channel,
@@ -278,7 +278,7 @@ impl DialerState {
     /// This only ever returns [`Poll::Pending`] or an error in case the channel is closed.
     fn poll(
         &mut self,
-        channel: &mut EndpointChannel,
+        channel: &mut endpoint::Channel,
         cx: &mut Context<'_>,
     ) -> Poll<TransportError> {
         while let Some(to_endpoint) = self.pending_dials.pop_front() {
@@ -298,7 +298,7 @@ impl DialerState {
 
 #[derive(Debug)]
 struct Listener {
-    endpoint_channel: EndpointChannel,
+    endpoint_channel: endpoint::Channel,
 
     listener_id: ListenerId,
 
@@ -325,7 +325,7 @@ impl Listener {
         config: Config,
     ) -> Result<Self, TransportError> {
         let (endpoint_channel, new_connections_rx) =
-            EndpointChannel::new_bidirectional::<P>(config, socket_addr)?;
+            endpoint::Channel::new_bidirectional::<P>(config, socket_addr)?;
 
         let if_watcher;
         let pending_event;

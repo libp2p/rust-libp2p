@@ -26,8 +26,7 @@
 //! All interactions with a QUIC connection should be done through this struct.
 // TODO: docs
 
-use crate::endpoint::{EndpointChannel, ToEndpoint};
-
+use crate::endpoint::{self, ToEndpoint};
 use futures::{channel::mpsc, prelude::*};
 use futures_timer::Delay;
 use libp2p_core::PeerId;
@@ -44,7 +43,7 @@ use std::{
 #[derive(Debug)]
 pub struct Connection {
     /// Channel to the endpoint this connection belongs to.
-    endpoint_channel: EndpointChannel,
+    endpoint_channel: endpoint::Channel,
     /// Pending message to be sent to the background task that is driving the endpoint.
     pending_to_endpoint: Option<ToEndpoint>,
     /// Events that the endpoint will send in destination to our local [`quinn_proto::Connection`].
@@ -85,7 +84,7 @@ impl Connection {
     /// This function assumes that the [`quinn_proto::Connection`] is completely fresh and none of
     /// its methods has ever been called. Failure to comply might lead to logic errors and panics.
     pub fn from_quinn_connection(
-        endpoint_channel: EndpointChannel,
+        endpoint_channel: endpoint::Channel,
         connection: quinn_proto::Connection,
         connection_id: quinn_proto::ConnectionHandle,
         from_endpoint: mpsc::Receiver<quinn_proto::ConnectionEvent>,

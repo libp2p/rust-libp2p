@@ -92,7 +92,7 @@ impl Config {
 }
 
 #[derive(Debug, Clone)]
-pub struct EndpointChannel {
+pub struct Channel {
     /// Channel to the background of the endpoint.
     to_endpoint: mpsc::Sender<ToEndpoint>,
     /// Address that the socket is bound to.
@@ -100,7 +100,7 @@ pub struct EndpointChannel {
     socket_addr: SocketAddr,
 }
 
-impl EndpointChannel {
+impl Channel {
     /// Builds a new endpoint that is listening on the [`SocketAddr`].
     pub fn new_bidirectional<P: Provider>(
         config: Config,
@@ -298,7 +298,7 @@ pub struct EndpointDriver<P: Provider> {
     // Config for client connections.
     client_config: quinn_proto::ClientConfig,
     // Copy of the channel to the endpoint driver that is passed to each new connection.
-    channel: EndpointChannel,
+    channel: Channel,
     // Channel to receive messages from the transport or connections.
     rx: mpsc::Receiver<ToEndpoint>,
 
@@ -323,7 +323,7 @@ impl<P: Provider> EndpointDriver<P> {
         client_config: quinn_proto::ClientConfig,
         new_connection_tx: Option<mpsc::Sender<Connection>>,
         server_config: Option<Arc<quinn_proto::ServerConfig>>,
-        channel: EndpointChannel,
+        channel: Channel,
         socket: P,
         rx: mpsc::Receiver<ToEndpoint>,
     ) -> Self {
