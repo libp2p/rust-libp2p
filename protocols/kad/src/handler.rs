@@ -523,6 +523,10 @@ where
         }
     }
 
+    fn max_inbound_streams(&self) -> usize {
+        MAX_NUM_INBOUND_SUBSTREAMS
+    }
+
     fn inject_fully_negotiated_outbound(
         &mut self,
         protocol: <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Output,
@@ -557,30 +561,6 @@ where
             // remote is configured with the same protocol name and we want
             // the behaviour to add this peer to the routing table, if possible.
             self.protocol_status = ProtocolStatus::Confirmed;
-        }
-
-        if self.inbound_substreams.len() == MAX_NUM_INBOUND_SUBSTREAMS {
-            if let Some(position) = self.inbound_substreams.iter().position(|s| {
-                matches!(
-                    s,
-                    // An inbound substream waiting to be reused.
-                    InboundSubstreamState::WaitingMessage { first: false, .. }
-                )
-            }) {
-                self.inbound_substreams.remove(position);
-                log::warn!(
-                    "New inbound substream to {:?} exceeds inbound substream limit. \
-                    Removed older substream waiting to be reused.",
-                    self.remote_peer_id,
-                )
-            } else {
-                log::warn!(
-                    "New inbound substream to {:?} exceeds inbound substream limit. \
-                     No older substream waiting to be reused. Dropping new substream.",
-                    self.remote_peer_id,
-                );
-                return;
-            }
         }
 
         debug_assert!(self.config.allow_listening);
