@@ -68,7 +68,7 @@ pub enum ConnectionError {
     EndpointDriverCrashed,
 
     /// Error in the inner state machine.
-    #[error("{0}")]
+    #[error(transparent)]
     Quinn(#[from] quinn_proto::ConnectionError),
 }
 
