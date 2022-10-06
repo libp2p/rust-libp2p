@@ -105,7 +105,7 @@ impl EndpointChannel {
     pub fn new_bidirectional<P: Provider>(
         config: Config,
         socket_addr: SocketAddr,
-    ) -> Result<(EndpointChannel, mpsc::Receiver<Connection>), transport::TransportError> {
+    ) -> Result<(Self, mpsc::Receiver<Connection>), transport::TransportError> {
         let (new_connections_tx, new_connections_rx) = mpsc::channel(1);
         let endpoint = Self::new::<P>(config, socket_addr, Some(new_connections_tx))?;
         Ok((endpoint, new_connections_rx))
@@ -115,7 +115,7 @@ impl EndpointChannel {
     pub fn new_dialer<P: Provider>(
         config: Config,
         socket_family: SocketFamily,
-    ) -> Result<EndpointChannel, transport::TransportError> {
+    ) -> Result<Self, transport::TransportError> {
         let socket_addr = match socket_family {
             SocketFamily::Ipv4 => SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0),
             SocketFamily::Ipv6 => SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0),
@@ -127,13 +127,13 @@ impl EndpointChannel {
         config: Config,
         socket_addr: SocketAddr,
         new_connections: Option<mpsc::Sender<Connection>>,
-    ) -> Result<EndpointChannel, transport::TransportError> {
+    ) -> Result<Self, transport::TransportError> {
         // NOT blocking, as per man:bind(2), as we pass an IP address.
         let socket = std::net::UdpSocket::bind(&socket_addr)?;
         socket.set_nonblocking(true)?;
         let (to_endpoint_tx, to_endpoint_rx) = mpsc::channel(32);
 
-        let channel = EndpointChannel {
+        let channel = Self {
             to_endpoint: to_endpoint_tx,
             socket_addr: socket.local_addr()?,
         };
