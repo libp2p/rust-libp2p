@@ -197,7 +197,7 @@ impl Channel {
     /// Send a message to inform the [`EndpointDriver`] about an
     /// event caused by the owner of this [`Channel`] dropping.
     /// This clones the sender to the endpoint to guarantee delivery.
-    /// It this should *not* be called for regular messages.
+    /// This should *not* be called for regular messages.
     pub fn send_on_drop(&mut self, to_endpoint: ToEndpoint) {
         let _ = self.to_endpoint.try_send(to_endpoint);
     }
