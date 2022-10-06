@@ -2,7 +2,10 @@
 
 - Bump rand to 0.8 and quickcheck to 1. See [PR 2857].
 
+- Bump async-std-resolver and trust-dns-resolver from 0.21 to 0.22. See [PR 2988].
+
 [PR 2857]: https://github.com/libp2p/rust-libp2p/pull/2857
+[PR 2988]: https://github.com/libp2p/rust-libp2p/pull/2988
 
 # 0.22.0 [2021-11-01]
 

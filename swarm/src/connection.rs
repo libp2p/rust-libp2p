@@ -599,7 +599,7 @@ mod tests {
         let upgrade_timeout = Duration::from_secs(1);
         let mut connection = Connection::new(
             StreamMuxerBox::new(PendingStreamMuxer),
-            MockConnectionHandler::new(upgrade_timeout.clone(), 2),
+            MockConnectionHandler::new(upgrade_timeout, 2),
             None,
             None,
         );
