@@ -152,7 +152,7 @@ impl<P: Provider> Transport for GenTransport<P> {
             .collect::<Vec<_>>();
 
         // Try to use pick a random listener to use for dialing.
-        let rx = match listeners.choose_mut(&mut thread_rng()) {
+        let dialing = match listeners.choose_mut(&mut thread_rng()) {
             Some(listener) => listener.dialer_state.new_dial(socket_addr),
             None => {
                 // No listener? Get or create an explicit dialer.
@@ -170,7 +170,7 @@ impl<P: Provider> Transport for GenTransport<P> {
         };
 
         Ok(async move {
-            let connection = rx.await??;
+            let connection = dialing.await??;
             let final_connec = Connecting::from_connection(connection).await?;
             Ok(final_connec)
         }
