@@ -538,7 +538,7 @@ fn ip_to_listenaddr(endpoint_addr: &SocketAddr, ip: IpAddr) -> Option<Multiaddr>
 
 /// Tries to turn a QUIC multiaddress into a UDP [`SocketAddr`]. Returns None if the format
 /// of the multiaddr is wrong.
-pub fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Option<SocketAddr> {
+fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Option<SocketAddr> {
     let mut iter = addr.iter();
     let proto1 = iter.next()?;
     let proto2 = iter.next()?;
@@ -562,7 +562,7 @@ pub fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Option<SocketAddr> {
     }
 }
 
-pub fn is_quic_addr(addr: &Multiaddr) -> bool {
+fn is_quic_addr(addr: &Multiaddr) -> bool {
     use Protocol::*;
     let mut iter = addr.iter();
     let first = match iter.next() {
@@ -583,7 +583,7 @@ pub fn is_quic_addr(addr: &Multiaddr) -> bool {
 }
 
 /// Turns an IP address and port into the corresponding QUIC multiaddr.
-pub(crate) fn socketaddr_to_multiaddr(socket_addr: &SocketAddr) -> Multiaddr {
+fn socketaddr_to_multiaddr(socket_addr: &SocketAddr) -> Multiaddr {
     Multiaddr::empty()
         .with(socket_addr.ip().into())
         .with(Protocol::Udp(socket_addr.port()))
