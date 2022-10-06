@@ -239,6 +239,10 @@ impl ConnectionHandler for Handler {
         SubstreamProtocol::new(ReadyUpgrade::new(PROTOCOL_NAME), ())
     }
 
+    fn max_inbound_streams(&self) -> usize {
+        1 // There is only ever one active inbound stream.
+    }
+
     fn inject_fully_negotiated_inbound(&mut self, stream: NegotiatedSubstream, (): ()) {
         self.inbound = Some(protocol::recv_ping(stream).boxed());
     }
