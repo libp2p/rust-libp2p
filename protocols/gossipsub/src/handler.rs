@@ -195,6 +195,12 @@ impl ConnectionHandler for GossipsubHandler {
         self.listen_protocol.clone()
     }
 
+    // Gossipsub is supposed to have a single long-lived inbound substream.
+    // Don't allow the remote to create more than one at a time.
+    fn max_inbound_streams(&self) -> usize {
+        1
+    }
+
     fn inject_fully_negotiated_inbound(
         &mut self,
         protocol: <Self::InboundProtocol as InboundUpgrade<NegotiatedSubstream>>::Output,
