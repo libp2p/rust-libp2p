@@ -4,9 +4,9 @@
 
 - Update to `libp2p-swarm` `v0.40.0`.
 
-- Fix WASM compilation. See [PR XXXX].
+- Fix WASM compilation. See [PR 2991].
 
-[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX/
+[PR 2991]: https://github.com/libp2p/rust-libp2p/pull/2991/
 
 # 0.12.0
 
