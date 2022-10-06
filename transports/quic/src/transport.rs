@@ -271,6 +271,7 @@ impl DialerState {
             waker.wake();
         }
 
+        // Our oneshot getting dropped means the message didn't make it to the endpoint driver.
         tx.map_err(|_| TransportError::EndpointDriverCrashed)
     }
 
@@ -289,7 +290,9 @@ impl DialerState {
                     self.pending_dials.push_front(to_endpoint);
                     break;
                 }
-                Err(_) => return Poll::Ready(TransportError::EndpointDriverCrashed),
+                Err(endpoint::Disconnected {}) => {
+                    return Poll::Ready(TransportError::EndpointDriverCrashed)
+                }
             }
         }
         self.waker = Some(cx.waker().clone());

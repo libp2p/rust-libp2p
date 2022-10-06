@@ -232,7 +232,7 @@ impl Connection {
                         self.pending_to_endpoint = Some(to_endpoint);
                         return Poll::Pending;
                     }
-                    Err(_) => {
+                    Err(endpoint::Disconnected {}) => {
                         return Poll::Ready(ConnectionEvent::ConnectionLost(
                             ConnectionError::EndpointDriverCrashed,
                         ));

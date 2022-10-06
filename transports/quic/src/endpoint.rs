@@ -171,13 +171,27 @@ impl Channel {
         &mut self,
         to_endpoint: ToEndpoint,
         cx: &mut Context<'_>,
-    ) -> Result<Result<(), ToEndpoint>, mpsc::SendError> {
+    ) -> Result<Result<(), ToEndpoint>, Disconnected> {
         match self.to_endpoint.poll_ready_unpin(cx) {
             Poll::Ready(Ok(())) => {}
-            Poll::Ready(Err(err)) => return Err(err),
+            Poll::Ready(Err(e)) => {
+                debug_assert!(
+                    e.is_disconnected(),
+                    "mpsc::Sender can only be disconnected when calling `poll_ready_unpin"
+                );
+
+                return Err(Disconnected {});
+            }
             Poll::Pending => return Ok(Err(to_endpoint)),
         };
-        self.to_endpoint.start_send(to_endpoint).map(Ok)
+
+        if let Err(e) = self.to_endpoint.start_send(to_endpoint) {
+            debug_assert!(e.is_disconnected(), "We called `Sink::poll_ready` so we are guaranteed to have a slot. If this fails, it means we are disconnected.");
+
+            return Err(Disconnected {});
+        }
+
+        Ok(Ok(()))
     }
 
     /// Send a message to inform the [`EndpointDriver`] about an
@@ -188,6 +202,10 @@ impl Channel {
         let _ = self.to_endpoint.try_send(to_endpoint);
     }
 }
+
+#[derive(Debug, thiserror::Error)]
+#[error("Background task disconnected")]
+pub struct Disconnected {}
 
 /// Message sent to the endpoint background task.
 #[derive(Debug)]
