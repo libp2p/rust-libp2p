@@ -275,7 +275,7 @@ impl DialerState {
         tx.map_err(|_| TransportError::EndpointDriverCrashed)
     }
 
-    /// Send all pending dials into the given [`EndpointChannel`].
+    /// Send all pending dials into the given [`endpoint::Channel`].
     ///
     /// This only ever returns [`Poll::Pending`] or an error in case the channel is closed.
     fn poll(

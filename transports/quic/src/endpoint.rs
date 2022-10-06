@@ -195,7 +195,7 @@ impl Channel {
     }
 
     /// Send a message to inform the [`EndpointDriver`] about an
-    /// event caused by the owner of this [`EndpointChannel`] dropping.
+    /// event caused by the owner of this [`Channel`] dropping.
     /// This clones the sender to the endpoint to guarantee delivery.
     /// It this should *not* be called for regular messages.
     pub fn send_on_drop(&mut self, to_endpoint: ToEndpoint) {
@@ -254,7 +254,7 @@ pub enum ToEndpoint {
 /// in play:
 ///
 /// - One channel, represented by `EndpointChannel::to_endpoint` and `receiver`, that communicates
-///   messages from [`EndpointChannel`] to the [`EndpointDriver`].
+///   messages from [`Channel`] to the [`EndpointDriver`].
 /// - One channel per each existing connection that communicates messages from the  [`EndpointDriver`]
 ///   to that [`Connection`].
 /// - One channel for the  [`EndpointDriver`] to send newly-opened connections to. The receiving
