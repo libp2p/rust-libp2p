@@ -29,18 +29,20 @@ use crate::{endpoint, muxer::QuicMuxer, upgrade::Connecting};
 use crate::{Config, ConnectionError};
 
 use futures::channel::{mpsc, oneshot};
-use futures::future::BoxFuture;
+use futures::future::{BoxFuture, MapErr};
 use futures::ready;
 use futures::stream::StreamExt;
 use futures::{prelude::*, stream::SelectAll};
 
 use if_watch::{IfEvent, IfWatcher};
 
+use futures::channel::oneshot::{Canceled, Receiver};
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
     transport::{ListenerId, TransportError as CoreTransportError, TransportEvent},
     PeerId, Transport,
 };
+use quinn_proto::ConnectError;
 use rand::prelude::SliceRandom;
 use rand::thread_rng;
 use std::collections::hash_map::Entry;
@@ -168,9 +170,7 @@ impl<P: Provider> Transport for GenTransport<P> {
         };
 
         Ok(async move {
-            let connection = rx
-                .await
-                .map_err(|_| TransportError::EndpointDriverCrashed)??;
+            let connection = rx.await??;
             let final_connec = Connecting::from_connection(connection).await?;
             Ok(final_connec)
         }
@@ -253,10 +253,11 @@ struct DialerState {
 }
 
 impl DialerState {
+    // With TAIP, this return signature would be a bit nicer.
     fn new_dial(
         &mut self,
         address: SocketAddr,
-    ) -> oneshot::Receiver<Result<Connection, quinn_proto::ConnectError>> {
+    ) -> MapErr<Receiver<Result<Connection, ConnectError>>, fn(Canceled) -> TransportError> {
         let (rx, tx) = oneshot::channel();
 
         let message = ToEndpoint::Dial {
@@ -270,7 +271,7 @@ impl DialerState {
             waker.wake();
         }
 
-        tx
+        tx.map_err(|_| TransportError::EndpointDriverCrashed)
     }
 
     /// Send all pending dials into the given [`EndpointChannel`].
