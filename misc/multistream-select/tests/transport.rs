@@ -28,7 +28,7 @@ use libp2p::core::{
 };
 use libp2p::mplex::MplexConfig;
 use libp2p::plaintext::PlainText2Config;
-use libp2p::swarm::{DummyBehaviour, Swarm, SwarmEvent};
+use libp2p::swarm::{dummy, Swarm, SwarmEvent};
 use rand::random;
 use std::task::Poll;
 
@@ -61,8 +61,8 @@ fn transport_upgrade() {
 
         let listen_addr = Multiaddr::from(Protocol::Memory(random::<u64>()));
 
-        let mut dialer = Swarm::new(dialer_transport, DummyBehaviour::default(), dialer_id);
-        let mut listener = Swarm::new(listener_transport, DummyBehaviour::default(), listener_id);
+        let mut dialer = Swarm::new(dialer_transport, dummy::Behaviour, dialer_id);
+        let mut listener = Swarm::new(listener_transport, dummy::Behaviour, listener_id);
 
         listener.listen_on(listen_addr).unwrap();
         let (addr_sender, addr_receiver) = oneshot::channel();
@@ -71,9 +71,10 @@ fn transport_upgrade() {
             let addr = addr_receiver.await.unwrap();
             dialer.dial(addr).unwrap();
             futures::future::poll_fn(move |cx| loop {
-                match ready!(dialer.poll_next_unpin(cx)).unwrap() {
-                    SwarmEvent::ConnectionEstablished { .. } => return Poll::Ready(()),
-                    _ => {}
+                if let SwarmEvent::ConnectionEstablished { .. } =
+                    ready!(dialer.poll_next_unpin(cx)).unwrap()
+                {
+                    return Poll::Ready(());
                 }
             })
             .await

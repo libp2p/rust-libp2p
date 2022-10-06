@@ -33,11 +33,11 @@ use instant::Instant;
 use libp2p_core::connection::ConnectionId;
 use libp2p_core::either::EitherError;
 use libp2p_core::{upgrade, ConnectedPoint, Multiaddr, PeerId};
-use libp2p_swarm::handler::{DummyConnectionHandler, SendWrapper};
+use libp2p_swarm::handler::SendWrapper;
 use libp2p_swarm::handler::{InboundUpgradeSend, OutboundUpgradeSend};
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, IntoConnectionHandler,
-    KeepAlive, NegotiatedSubstream, SubstreamProtocol,
+    dummy, ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr,
+    IntoConnectionHandler, KeepAlive, NegotiatedSubstream, SubstreamProtocol,
 };
 use std::collections::VecDeque;
 use std::fmt;
@@ -342,12 +342,12 @@ pub struct Prototype {
 }
 
 impl IntoConnectionHandler for Prototype {
-    type Handler = Either<Handler, DummyConnectionHandler>;
+    type Handler = Either<Handler, dummy::ConnectionHandler>;
 
     fn into_handler(self, _remote_peer_id: &PeerId, endpoint: &ConnectedPoint) -> Self::Handler {
         if endpoint.is_relayed() {
             // Deny all substreams on relayed connection.
-            Either::Right(DummyConnectionHandler::default())
+            Either::Right(dummy::ConnectionHandler)
         } else {
             Either::Left(Handler {
                 endpoint: endpoint.clone(),

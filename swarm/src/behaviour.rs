@@ -62,9 +62,9 @@ pub(crate) type THandlerOutEvent<THandler> =
 /// [`Toggle`](crate::behaviour::toggle::Toggle) [`NetworkBehaviour`].
 ///
 /// ``` rust
-/// # use libp2p_swarm::DummyBehaviour;
+/// # use libp2p_swarm::dummy;
 /// # use libp2p_swarm::behaviour::toggle::Toggle;
-/// let my_behaviour = DummyBehaviour::default();
+/// let my_behaviour = dummy::Behaviour;
 /// let my_toggled_behaviour = Toggle::from(Some(my_behaviour));
 /// ```
 ///
@@ -90,23 +90,23 @@ pub(crate) type THandlerOutEvent<THandler> =
 /// addition to the event `enum` itself.
 ///
 /// ``` rust
-/// # use libp2p::identify::{Identify, IdentifyEvent};
+/// # use libp2p::identify;
 /// # use libp2p::ping;
 /// # use libp2p::NetworkBehaviour;
 /// #[derive(NetworkBehaviour)]
 /// #[behaviour(out_event = "Event")]
 /// struct MyBehaviour {
-///   identify: Identify,
+///   identify: identify::Behaviour,
 ///   ping: ping::Behaviour,
 /// }
 ///
 /// enum Event {
-///   Identify(IdentifyEvent),
+///   Identify(identify::Event),
 ///   Ping(ping::Event),
 /// }
 ///
-/// impl From<IdentifyEvent> for Event {
-///   fn from(event: IdentifyEvent) -> Self {
+/// impl From<identify::Event> for Event {
+///   fn from(event: identify::Event) -> Self {
 ///     Self::Identify(event)
 ///   }
 /// }

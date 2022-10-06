@@ -21,12 +21,13 @@
 use futures::StreamExt;
 use libp2p::core::identity;
 use libp2p::core::PeerId;
-use libp2p::identify::{Identify, IdentifyConfig, IdentifyEvent};
+use libp2p::identify;
 use libp2p::ping;
-use libp2p::swarm::{Swarm, SwarmEvent};
+use libp2p::swarm::{keep_alive, Swarm, SwarmEvent};
 use libp2p::{development_transport, rendezvous};
 use libp2p::{Multiaddr, NetworkBehaviour};
 use std::time::Duration;
+use void::Void;
 
 #[tokio::main]
 async fn main() {
@@ -42,16 +43,13 @@ async fn main() {
     let mut swarm = Swarm::new(
         development_transport(identity.clone()).await.unwrap(),
         MyBehaviour {
-            identify: Identify::new(IdentifyConfig::new(
+            identify: identify::Behaviour::new(identify::Config::new(
                 "rendezvous-example/1.0.0".to_string(),
                 identity.public(),
             )),
             rendezvous: rendezvous::client::Behaviour::new(identity.clone()),
-            ping: ping::Behaviour::new(
-                ping::Config::new()
-                    .with_interval(Duration::from_secs(1))
-                    .with_keep_alive(true),
-            ),
+            ping: ping::Behaviour::new(ping::Config::new().with_interval(Duration::from_secs(1))),
+            keep_alive: keep_alive::Behaviour,
         },
         PeerId::from(identity.public()),
     );
@@ -75,7 +73,7 @@ async fn main() {
                 log::error!("Lost connection to rendezvous point {}", error);
             }
             // once `/identify` did its job, we know our external address and can register
-            SwarmEvent::Behaviour(MyEvent::Identify(IdentifyEvent::Received { .. })) => {
+            SwarmEvent::Behaviour(MyEvent::Identify(identify::Event::Received { .. })) => {
                 swarm.behaviour_mut().rendezvous.register(
                     rendezvous::Namespace::from_static("rendezvous"),
                     rendezvous_point,
@@ -114,9 +112,10 @@ async fn main() {
 }
 
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 enum MyEvent {
     Rendezvous(rendezvous::client::Event),
-    Identify(IdentifyEvent),
+    Identify(identify::Event),
     Ping(ping::Event),
 }
 
@@ -126,8 +125,8 @@ impl From<rendezvous::client::Event> for MyEvent {
     }
 }
 
-impl From<IdentifyEvent> for MyEvent {
-    fn from(event: IdentifyEvent) -> Self {
+impl From<identify::Event> for MyEvent {
+    fn from(event: identify::Event) -> Self {
         MyEvent::Identify(event)
     }
 }
@@ -138,11 +137,18 @@ impl From<ping::Event> for MyEvent {
     }
 }
 
+impl From<Void> for MyEvent {
+    fn from(event: Void) -> Self {
+        void::unreachable(event)
+    }
+}
+
 #[derive(NetworkBehaviour)]
 #[behaviour(event_process = false)]
 #[behaviour(out_event = "MyEvent")]
 struct MyBehaviour {
-    identify: Identify,
+    identify: identify::Behaviour,
     rendezvous: rendezvous::client::Behaviour,
     ping: ping::Behaviour,
+    keep_alive: keep_alive::Behaviour,
 }

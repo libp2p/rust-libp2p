@@ -21,13 +21,12 @@
 use futures::StreamExt;
 use libp2p::core::identity;
 use libp2p::core::PeerId;
-use libp2p::identify::Identify;
-use libp2p::identify::IdentifyConfig;
-use libp2p::identify::IdentifyEvent;
+use libp2p::identify;
 use libp2p::ping;
-use libp2p::swarm::{Swarm, SwarmEvent};
+use libp2p::swarm::{keep_alive, Swarm, SwarmEvent};
 use libp2p::NetworkBehaviour;
 use libp2p::{development_transport, rendezvous};
+use void::Void;
 
 /// Examples for the rendezvous protocol:
 ///
@@ -48,12 +47,13 @@ async fn main() {
     let mut swarm = Swarm::new(
         development_transport(identity.clone()).await.unwrap(),
         MyBehaviour {
-            identify: Identify::new(IdentifyConfig::new(
+            identify: identify::Behaviour::new(identify::Config::new(
                 "rendezvous-example/1.0.0".to_string(),
                 identity.public(),
             )),
             rendezvous: rendezvous::server::Behaviour::new(rendezvous::server::Config::default()),
-            ping: ping::Behaviour::new(ping::Config::new().with_keep_alive(true)),
+            ping: ping::Behaviour::new(ping::Config::new()),
+            keep_alive: keep_alive::Behaviour,
         },
         PeerId::from(identity.public()),
     );
@@ -104,7 +104,7 @@ async fn main() {
 enum MyEvent {
     Rendezvous(rendezvous::server::Event),
     Ping(ping::Event),
-    Identify(IdentifyEvent),
+    Identify(identify::Event),
 }
 
 impl From<rendezvous::server::Event> for MyEvent {
@@ -119,9 +119,15 @@ impl From<ping::Event> for MyEvent {
     }
 }
 
-impl From<IdentifyEvent> for MyEvent {
-    fn from(event: IdentifyEvent) -> Self {
+impl From<identify::Event> for MyEvent {
+    fn from(event: identify::Event) -> Self {
         MyEvent::Identify(event)
+    }
+}
+
+impl From<Void> for MyEvent {
+    fn from(event: Void) -> Self {
+        void::unreachable(event)
     }
 }
 
@@ -129,7 +135,8 @@ impl From<IdentifyEvent> for MyEvent {
 #[behaviour(event_process = false)]
 #[behaviour(out_event = "MyEvent")]
 struct MyBehaviour {
-    identify: Identify,
+    identify: identify::Behaviour,
     rendezvous: rendezvous::server::Behaviour,
     ping: ping::Behaviour,
+    keep_alive: keep_alive::Behaviour,
 }
