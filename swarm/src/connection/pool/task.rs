@@ -254,7 +254,7 @@ pub async fn new_for_established_connection<THandler>(
                         // Very likely, this log is only useful if we configured a limit > 0.
                         if num_streams > 0 {
                             // This is not necessarily bad but an indication that we have a remote peer that is keeping us very busy.
-                            log::info!("Connection {connection_id} to peer {peer_id} has is operating at the limit of allowed substeams ({num_streams})");
+                            log::info!("Connection {connection_id} to peer {peer_id} is operating at the limit of allowed substeams ({num_streams})");
                         }
                     }
                 }
