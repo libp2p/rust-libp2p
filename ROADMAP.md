@@ -28,7 +28,11 @@
 
 Status: todo
 
-Tracking: https://github.com/libp2p/test-plans/pull/49#issuecomment-1267175415
+Tracking:
+
+Past discussions:
+
+- https://github.com/libp2p/test-plans/pull/49#issuecomment-1267175415
 
 Dependencies:
 
