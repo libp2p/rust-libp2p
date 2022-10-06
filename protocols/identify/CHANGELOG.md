@@ -14,6 +14,8 @@
 
 - Update to `libp2p-swarm` `v0.40.0`.
 
+- Change default `cache_size` of `Config` to 100
+
 # 0.39.0
 
 - Update to `libp2p-swarm` `v0.39.0`.
