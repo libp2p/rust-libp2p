@@ -410,7 +410,7 @@ impl Listener {
         }
     }
 
-    /// Poll for a next If Event.
+    /// Poll [`DialerState`] to initiate requested dials.
     fn poll_dialer(&mut self, cx: &mut Context<'_>) -> Poll<TransportError> {
         let Self {
             dialer_state,
