@@ -18,8 +18,8 @@ futures-lite = "1"
 futures-timer = "3"
 hex = "0.4"
 if-watch = "2.0"
-libp2p-core = { version = "0.36.0", path = "../../core", default-features = false  }
-libp2p-noise = { version = "0.39.0", path = "../../transports/noise" }
+libp2p-core = { version = "0.37.0", path = "../../core", default-features = false  }
+libp2p-noise = { version = "0.40.0", path = "../../transports/noise" }
 log = "0.4"
 multihash = { version = "0.16", default-features = false, features = ["sha2"] }
 multibase = "0.9"
