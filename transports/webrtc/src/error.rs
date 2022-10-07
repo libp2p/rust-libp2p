@@ -27,7 +27,7 @@ pub enum Error {
     #[error("webrtc error: {0}")]
     WebRTC(#[from] webrtc::Error),
     #[error("io error: {0}")]
-    IoError(#[from] std::io::Error),
+    IoError(#[source] std::io::Error),
     #[error("noise error: {0}")]
     Noise(#[from] libp2p_noise::NoiseError),
 

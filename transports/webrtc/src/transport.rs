@@ -347,7 +347,7 @@ impl WebRTCListenStream {
                     log::debug!("Error when polling network interfaces {}", err);
                     return Poll::Ready(TransportEvent::ListenerError {
                         listener_id: self.listener_id,
-                        error: err.into(),
+                        error: Error::IoError(err),
                     });
                 }
             }
