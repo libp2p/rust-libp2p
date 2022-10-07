@@ -39,3 +39,4 @@ libp2p = { path = "../..", features = ["request-response", "webrtc"], default-fe
 rand_core = "0.5"
 quickcheck = "1"
 hex-literal = "0.3"
+multihash = { version = "0.16", default-features = false, features = ["sha3"] }

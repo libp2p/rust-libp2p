@@ -20,6 +20,7 @@
 
 use multibase::Base;
 use multihash::{Code, Hasher, Multihash, MultihashDigest};
+use std::fmt;
 use webrtc::dtls_transport::dtls_fingerprint::RTCDtlsFingerprint;
 
 const SHA256: &str = "sha-256";
@@ -91,6 +92,12 @@ impl Fingerprint {
     /// See https://datatracker.ietf.org/doc/html/rfc8122#section-5
     pub fn algorithm(&self) -> String {
         SHA256.to_owned()
+    }
+}
+
+impl fmt::Debug for Fingerprint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&hex::encode(self.0))
     }
 }
 
