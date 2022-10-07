@@ -34,7 +34,13 @@ pub struct PollDataChannel(RTCPollDataChannel);
 impl PollDataChannel {
     /// Constructs a new `PollDataChannel`.
     pub fn new(data_channel: Arc<DataChannel>) -> Self {
-        Self(RTCPollDataChannel::new(data_channel))
+        let mut data_channel = RTCPollDataChannel::new(data_channel);
+
+        // TODO: default buffer size is too small to fit some messages. Possibly remove once
+        // https://github.com/webrtc-rs/sctp/issues/28 is fixed.
+        data_channel.set_read_buf_capacity(8192 * 10);
+
+        Self(data_channel)
     }
 
     /// Get back the inner data_channel.
@@ -82,11 +88,6 @@ impl PollDataChannel {
     /// data that is considered "low." Defaults to 0.
     pub fn buffered_amount_low_threshold(&self) -> usize {
         self.0.buffered_amount_low_threshold()
-    }
-
-    /// Set the capacity of the temporary read buffer (default: 8192).
-    pub fn set_read_buf_capacity(&mut self, capacity: usize) {
-        self.0.set_read_buf_capacity(capacity)
     }
 }
 
