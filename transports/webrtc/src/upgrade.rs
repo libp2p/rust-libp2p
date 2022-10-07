@@ -163,11 +163,14 @@ async fn new_outbound_connection(
 ) -> Result<RTCPeerConnection, Error> {
     let ufrag = random_ufrag();
     let se = setting_engine(udp_mux, &ufrag, addr.is_ipv4());
-    let api = APIBuilder::new().with_setting_engine(se).build();
 
-    let peer_connection = api.new_peer_connection(config).await?;
+    let connection = APIBuilder::new()
+        .with_setting_engine(se)
+        .build()
+        .new_peer_connection(config)
+        .await?;
 
-    Ok(peer_connection)
+    Ok(connection)
 }
 
 async fn new_inbound_connection(
@@ -187,10 +190,13 @@ async fn new_inbound_connection(
         se.set_answering_dtls_role(DTLSRole::Server)?;
     }
 
-    let api = APIBuilder::new().with_setting_engine(se).build();
-    let peer_connection = api.new_peer_connection(config).await?;
+    let connection = APIBuilder::new()
+        .with_setting_engine(se)
+        .build()
+        .new_peer_connection(config)
+        .await?;
 
-    Ok(peer_connection)
+    Ok(connection)
 }
 
 fn random_ufrag() -> String {
