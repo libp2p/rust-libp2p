@@ -166,20 +166,15 @@ impl libp2p_core::Transport for Transport {
 
         // [`Transport::dial`] should do no work unless the returned [`Future`] is polled. Thus
         // do the `set_remote_description` call within the [`Future`].
-        Ok(async move {
-            let conn = WebRTCConnection::connect(
-                sock_addr,
-                config.into_inner(),
-                udp_mux,
-                our_fingerprint,
-                remote_fingerprint,
-                id_keys,
-                expected_peer_id,
-            )
-            .await?;
-
-            Ok(conn)
-        }
+        Ok(WebRTCConnection::connect(
+            sock_addr,
+            config.into_inner(),
+            udp_mux,
+            our_fingerprint,
+            remote_fingerprint,
+            id_keys,
+            expected_peer_id,
+        )
         .boxed())
     }
 
