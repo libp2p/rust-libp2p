@@ -88,7 +88,7 @@ impl WebRTCConnection {
         let data_channel = create_initial_upgrade_data_channel(&peer_connection).await?;
 
         log::trace!("noise handshake with addr={}", addr);
-        let peer_id = crate::upgrade::noise::outbound(
+        let peer_id = noise::outbound(
             id_keys,
             PollDataChannel::new(data_channel.clone()),
             our_fingerprint,
@@ -162,7 +162,7 @@ impl WebRTCConnection {
 
         log::trace!("noise handshake with addr={} (ufrag={})", addr, ufrag);
         let remote_fingerprint = get_remote_fingerprint(&peer_connection).await;
-        let peer_id = crate::upgrade::noise::inbound(
+        let peer_id = noise::inbound(
             id_keys,
             PollDataChannel::new(data_channel.clone()),
             our_fingerprint,
