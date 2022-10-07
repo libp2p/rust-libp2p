@@ -106,9 +106,8 @@ pub async fn inbound(
 ) -> Result<(PeerId, Connection), Error> {
     log::trace!("new inbound connection from {addr} (ufrag: {remote_ufrag})");
 
-    let ufrag = our_fingerprint.to_ufrag();
-
-    let peer_connection = new_inbound_connection(addr, config, udp_mux, &ufrag).await?;
+    let peer_connection =
+        new_inbound_connection(addr, config, udp_mux, &our_fingerprint.to_ufrag()).await?;
 
     let sdp = sdp::render_client_session_description(addr, &remote_ufrag);
     log::debug!("OFFER: {:?}", sdp);
