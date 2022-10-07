@@ -52,11 +52,7 @@ pub async fn outbound(
     id_keys: identity::Keypair,
     expected_peer_id: PeerId,
 ) -> Result<(PeerId, Connection), Error> {
-    let ufrag = random_ufrag();
-    let se = setting_engine(udp_mux, &ufrag, addr.is_ipv4());
-    let api = APIBuilder::new().with_setting_engine(se).build();
-
-    let peer_connection = api.new_peer_connection(config).await?;
+    let peer_connection = new_outbound_connection(addr, config, udp_mux).await?;
 
     // 1. OFFER
     let offer = peer_connection.create_offer(None).await?;
@@ -117,22 +113,9 @@ pub async fn inbound(
 ) -> Result<(PeerId, Connection), Error> {
     log::trace!("upgrading addr={} (ufrag={})", addr, remote_ufrag);
 
-    // Set both ICE user and password to our fingerprint because that's what the client is
-    // expecting (see [`outbound`] "2. ANSWER").
     let ufrag = our_fingerprint.to_ufrag();
-    let mut se = setting_engine(udp_mux, &ufrag, addr.is_ipv4());
-    {
-        se.set_lite(true);
-        se.disable_certificate_fingerprint_verification(true);
-        // Act as a DTLS server (one which waits for a connection).
-        //
-        // NOTE: removing this seems to break DTLS setup (both sides send `ClientHello` messages,
-        // but none end up responding).
-        se.set_answering_dtls_role(DTLSRole::Server)?;
-    }
 
-    let api = APIBuilder::new().with_setting_engine(se).build();
-    let peer_connection = api.new_peer_connection(config).await?;
+    let peer_connection = new_inbound_connection(addr, config, udp_mux, &ufrag).await?;
 
     let client_session_description =
         crate::sdp::render_client_session_description(addr, &remote_ufrag);
@@ -173,6 +156,43 @@ pub async fn inbound(
     Ok((peer_id, c))
 }
 
+async fn new_outbound_connection(
+    addr: SocketAddr,
+    config: RTCConfiguration,
+    udp_mux: Arc<dyn UDPMux + Send + Sync>,
+) -> Result<RTCPeerConnection, Error> {
+    let ufrag = random_ufrag();
+    let se = setting_engine(udp_mux, &ufrag, addr.is_ipv4());
+    let api = APIBuilder::new().with_setting_engine(se).build();
+
+    let peer_connection = api.new_peer_connection(config).await?;
+
+    Ok(peer_connection)
+}
+
+async fn new_inbound_connection(
+    addr: SocketAddr,
+    config: RTCConfiguration,
+    udp_mux: Arc<dyn UDPMux + Send + Sync>,
+    ufrag: &str,
+) -> Result<RTCPeerConnection, Error> {
+    let mut se = setting_engine(udp_mux, &ufrag, addr.is_ipv4());
+    {
+        se.set_lite(true);
+        se.disable_certificate_fingerprint_verification(true);
+        // Act as a DTLS server (one which waits for a connection).
+        //
+        // NOTE: removing this seems to break DTLS setup (both sides send `ClientHello` messages,
+        // but none end up responding).
+        se.set_answering_dtls_role(DTLSRole::Server)?;
+    }
+
+    let api = APIBuilder::new().with_setting_engine(se).build();
+    let peer_connection = api.new_peer_connection(config).await?;
+
+    Ok(peer_connection)
+}
+
 fn random_ufrag() -> String {
     // TODO: at least 128 bit of entropy
 
@@ -190,6 +210,8 @@ fn setting_engine(
 ) -> SettingEngine {
     let mut se = SettingEngine::default();
 
+    // Set both ICE user and password to our fingerprint because that's what the client is
+    // expecting..
     se.set_ice_credentials(ufrag.to_owned(), ufrag.to_owned());
 
     se.set_udp_network(UDPNetwork::Muxed(udp_mux.clone()));
