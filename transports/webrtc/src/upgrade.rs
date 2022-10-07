@@ -24,7 +24,8 @@ use crate::connection::PollDataChannel;
 use crate::error::Error;
 use crate::fingerprint::Fingerprint;
 use crate::{sdp, Connection};
-use futures::{channel::oneshot, prelude::*, select};
+use futures::channel::oneshot;
+use futures::future::Either;
 use futures_timer::Delay;
 use libp2p_core::{identity, PeerId};
 use rand::distributions::Alphanumeric;
@@ -240,17 +241,22 @@ async fn create_initial_upgrade_data_channel(
         )
         .await?;
 
-    let (tx, mut rx) = oneshot::channel::<Arc<DataChannel>>();
+    let (tx, rx) = oneshot::channel::<Arc<DataChannel>>();
 
     // Wait until the data channel is opened and detach it.
     crate::connection::register_data_channel_open_handler(data_channel, tx).await;
-    select! {
-        res = rx => match res {
-            Ok(detached) => Ok(detached),
-            Err(e) => Err(Error::Internal(e.to_string())),
-        },
-        _ = Delay::new(Duration::from_secs(10)).fuse() => Err(Error::Internal(
-            "data channel opening took longer than 10 seconds (see logs)".into(),
-        ))
-    }
+
+    let channel = match futures::future::select(rx, Delay::new(Duration::from_secs(10))).await {
+        Either::Left((Ok(channel), _)) => channel,
+        Either::Left((Err(_), _)) => {
+            return Err(Error::Internal("failed to open data channel".to_owned()))
+        }
+        Either::Right(((), _)) => {
+            return Err(Error::Internal(
+                "data channel opening took longer than 10 seconds (see logs)".into(),
+            ))
+        }
+    };
+
+    Ok(channel)
 }
