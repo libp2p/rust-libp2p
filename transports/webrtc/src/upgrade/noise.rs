@@ -7,7 +7,7 @@ use multihash::Multihash;
 
 pub async fn outbound<T>(
     id_keys: identity::Keypair,
-    poll_data_channel: T,
+    stream: T,
     our_fingerprint: Fingerprint,
     remote_fingerprint: Fingerprint,
 ) -> Result<PeerId, Error>
@@ -22,7 +22,7 @@ where
     let info = noise.protocol_info().next().unwrap();
     let (peer_id, _noise_io) = noise
         .into_authenticated()
-        .upgrade_outbound(poll_data_channel, info)
+        .upgrade_outbound(stream, info)
         .await?;
 
     Ok(peer_id)
@@ -30,7 +30,7 @@ where
 
 pub async fn inbound<T>(
     id_keys: identity::Keypair,
-    poll_data_channel: T,
+    stream: T,
     our_fingerprint: Fingerprint,
     remote_fingerprint: Fingerprint,
 ) -> Result<PeerId, Error>
@@ -45,7 +45,7 @@ where
     let info = noise.protocol_info().next().unwrap();
     let (peer_id, _noise_io) = noise
         .into_authenticated()
-        .upgrade_inbound(poll_data_channel, info)
+        .upgrade_inbound(stream, info)
         .await?;
 
     Ok(peer_id)

@@ -71,7 +71,6 @@ pub async fn outbound(
     // Open a data channel to do Noise on top and verify the remote.
     let data_channel = create_initial_upgrade_data_channel(&peer_connection).await?;
 
-    log::trace!("noise handshake with addr={}", addr);
     let peer_id = noise::outbound(
         id_keys,
         PollDataChannel::new(data_channel.clone()),
