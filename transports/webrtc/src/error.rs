@@ -24,8 +24,6 @@ use thiserror::Error;
 /// Error in WebRTC.
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("multi-address {0} is not supported")]
-    InvalidMultiaddr(libp2p_core::Multiaddr),
     #[error("webrtc error: {0}")]
     WebRTC(#[from] webrtc::Error),
     #[error("io error: {0}")]

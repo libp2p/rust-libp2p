@@ -158,6 +158,8 @@ impl libp2p_core::Transport for Transport {
         if sock_addr.port() == 0 || sock_addr.ip().is_unspecified() {
             return Err(TransportError::MultiaddrNotSupported(addr));
         }
+        let remote_fingerprint = fingerprint_from_addr(&addr)
+            .ok_or_else(|| TransportError::MultiaddrNotSupported(addr.clone()))?;
 
         let remote = addr.clone(); // used for logging
         trace!("dialing addr={}", remote);
@@ -176,9 +178,6 @@ impl libp2p_core::Transport for Transport {
         // [`Transport::dial`] should do no work unless the returned [`Future`] is polled. Thus
         // do the `set_remote_description` call within the [`Future`].
         Ok(async move {
-            let remote_fingerprint = fingerprint_from_addr(&addr)
-                .ok_or_else(|| Error::InvalidMultiaddr(addr.clone()))?;
-
             let conn = WebRTCConnection::connect(
                 sock_addr,
                 config.into_inner(),
