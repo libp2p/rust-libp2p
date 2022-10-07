@@ -28,8 +28,8 @@ pub enum Error {
     WebRTC(#[from] webrtc::Error),
     #[error("io error: {0}")]
     Io(#[source] std::io::Error),
-    #[error("noise error: {0}")]
-    Noise(#[from] libp2p_noise::NoiseError),
+    #[error("failed to authenticate peer")]
+    Authentication(#[from] libp2p_noise::NoiseError),
 
     // Authentication errors.
     #[error("invalid peer ID (expected {expected:?}, got {got:?})")]

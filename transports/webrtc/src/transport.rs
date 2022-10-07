@@ -600,6 +600,7 @@ where
         .into_authenticated()
         .upgrade_inbound(poll_data_channel, info)
         .await?;
+
     Ok(peer_id)
 }
 
