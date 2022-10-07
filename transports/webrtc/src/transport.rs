@@ -85,9 +85,7 @@ impl libp2p_core::Transport for Transport {
             self.config.clone(),
             udp_mux,
             self.id_keys.clone(),
-            IfWatcher::new()
-                .map_err(Error::Io)
-                .map_err(TransportError::Other)?,
+            IfWatcher::new().map_err(|io| TransportError::Other(Error::Io(io)))?,
         ));
 
         Ok(id)
