@@ -52,12 +52,7 @@ pub async fn outbound(
     id_keys: identity::Keypair,
     expected_peer_id: PeerId,
 ) -> Result<(PeerId, Connection), Error> {
-    // TODO: at least 128 bit of entropy
-    let ufrag: String = thread_rng()
-        .sample_iter(&Alphanumeric)
-        .take(64)
-        .map(char::from)
-        .collect();
+    let ufrag = random_ufrag();
     let se = setting_engine(udp_mux, &ufrag, addr.is_ipv4());
     let api = APIBuilder::new().with_setting_engine(se).build();
 
@@ -123,7 +118,7 @@ pub async fn inbound(
     log::trace!("upgrading addr={} (ufrag={})", addr, remote_ufrag);
 
     // Set both ICE user and password to our fingerprint because that's what the client is
-    // expecting (see [`Self::connect`] "2. ANSWER").
+    // expecting (see [`outbound`] "2. ANSWER").
     let ufrag = our_fingerprint.to_ufrag();
     let mut se = setting_engine(udp_mux, &ufrag, addr.is_ipv4());
     {
@@ -176,6 +171,16 @@ pub async fn inbound(
     c.set_data_channels_read_buf_capacity(8192 * 10);
 
     Ok((peer_id, c))
+}
+
+fn random_ufrag() -> String {
+    // TODO: at least 128 bit of entropy
+
+    thread_rng()
+        .sample_iter(&Alphanumeric)
+        .take(64)
+        .map(char::from)
+        .collect()
 }
 
 fn setting_engine(
