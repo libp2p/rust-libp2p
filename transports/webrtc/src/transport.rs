@@ -162,8 +162,6 @@ impl libp2p_core::Transport for Transport {
             .ok_or(TransportError::Other(Error::NoListeners))?;
         let udp_mux = first_listener.udp_mux.udp_mux_handle();
 
-        // [`Transport::dial`] should do no work unless the returned [`Future`] is polled. Thus
-        // do the `set_remote_description` call within the [`Future`].
         Ok(upgrade::outbound(
             sock_addr,
             config.into_inner(),
