@@ -67,8 +67,7 @@ pub async fn outbound(
     );
     peer_connection.set_remote_description(answer).await?; // This will start the gathering of ICE candidates.
 
-    // Open a data channel to do Noise on top and verify the remote.
-    let data_channel = create_initial_upgrade_data_channel(&peer_connection).await?;
+    let data_channel = create_data_channel_for_noise_handshake(&peer_connection).await?;
 
     let peer_id =
         noise::outbound(id_keys, data_channel, our_fingerprint, remote_fingerprint).await?;
@@ -106,8 +105,7 @@ pub async fn inbound(
     log::debug!("created SDP answer for inbound connection: {:?}", answer);
     peer_connection.set_local_description(answer).await?; // This will start the gathering of ICE candidates.
 
-    // Open a data channel to do Noise on top and verify the remote.
-    let data_channel = create_initial_upgrade_data_channel(&peer_connection).await?;
+    let data_channel = create_data_channel_for_noise_handshake(&peer_connection).await?;
     let remote_fingerprint = get_remote_fingerprint(&peer_connection).await;
 
     let peer_id =
@@ -205,7 +203,7 @@ async fn get_remote_fingerprint(conn: &RTCPeerConnection) -> Fingerprint {
     Fingerprint::from_certificate(&cert_bytes)
 }
 
-async fn create_initial_upgrade_data_channel(
+async fn create_data_channel_for_noise_handshake(
     conn: &RTCPeerConnection,
 ) -> Result<PollDataChannel, Error> {
     // Open a data channel to do Noise on top and verify the remote.
