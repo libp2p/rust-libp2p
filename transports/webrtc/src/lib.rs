@@ -91,5 +91,4 @@ mod webrtc_connection;
 
 pub use connection::Connection;
 pub use error::Error;
-pub use fingerprint::Fingerprint;
 pub use transport::Transport;

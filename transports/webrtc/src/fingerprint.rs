@@ -31,6 +31,7 @@ pub struct Fingerprint([u8; 32]);
 impl Fingerprint {
     pub(crate) const FF: Fingerprint = Fingerprint([0xFF; 32]);
 
+    #[cfg(test)]
     pub fn raw(bytes: [u8; 32]) -> Self {
         Self(bytes)
     }
@@ -82,18 +83,6 @@ impl Fingerprint {
     /// Formats this fingerprint as uppercase hex, separated by colons (`:`).
     ///
     /// This is the format described in <https://www.rfc-editor.org/rfc/rfc4572#section-5>.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// # use hex_literal::hex;
-    /// # use libp2p_webrtc::Fingerprint;
-    /// let fp = Fingerprint::raw(hex!("7DE3D83F81A680592A471E6B6ABB0747ABD35385A8093FDFE112C1EEBB6CC6AC"));
-    ///
-    /// let sdp_format = fp.to_sdp_format();
-    ///
-    /// assert_eq!(sdp_format, "7D:E3:D8:3F:81:A6:80:59:2A:47:1E:6B:6A:BB:07:47:AB:D3:53:85:A8:09:3F:DF:E1:12:C1:EE:BB:6C:C6:AC")
-    /// ```
     pub fn to_sdp_format(&self) -> String {
         self.0.map(|byte| format!("{:02X}", byte)).join(":")
     }
@@ -102,5 +91,21 @@ impl Fingerprint {
     /// See https://datatracker.ietf.org/doc/html/rfc8122#section-5
     pub fn algorithm(&self) -> String {
         SHA256.to_owned()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sdp_format() {
+        let fp = Fingerprint::raw(hex_literal::hex!(
+            "7DE3D83F81A680592A471E6B6ABB0747ABD35385A8093FDFE112C1EEBB6CC6AC"
+        ));
+
+        let sdp_format = fp.to_sdp_format();
+
+        assert_eq!(sdp_format, "7D:E3:D8:3F:81:A6:80:59:2A:47:1E:6B:6A:BB:07:47:AB:D3:53:85:A8:09:3F:DF:E1:12:C1:EE:BB:6C:C6:AC")
     }
 }
