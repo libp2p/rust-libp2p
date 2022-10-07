@@ -60,7 +60,7 @@ use crate::{
 /// A WebRTC transport with direct p2p communication (without a STUN server).
 pub struct WebRTCTransport {
     /// The config which holds this peer's certificate(s).
-    config: WebRTCConfiguration,
+    config: Config,
     /// `Keypair` identifying this peer
     id_keys: identity::Keypair,
     /// All the active listeners.
@@ -71,7 +71,7 @@ impl WebRTCTransport {
     /// Creates a new WebRTC transport.
     pub fn new(certificate: RTCCertificate, id_keys: identity::Keypair) -> Self {
         Self {
-            config: WebRTCConfiguration::new(certificate),
+            config: Config::new(certificate),
             id_keys,
             listeners: SelectAll::new(),
         }
@@ -249,7 +249,7 @@ struct WebRTCListenStream {
     listen_addr: SocketAddr,
 
     /// The config which holds this peer's certificate(s).
-    config: WebRTCConfiguration,
+    config: Config,
 
     /// The UDP muxer that manages all ICE connections.
     udp_mux: UDPMuxNewAddr,
@@ -276,7 +276,7 @@ impl WebRTCListenStream {
     fn new(
         listener_id: ListenerId,
         listen_addr: SocketAddr,
-        config: WebRTCConfiguration,
+        config: Config,
         udp_mux: UDPMuxNewAddr,
         id_keys: identity::Keypair,
         if_watcher: IfWatcher,
@@ -405,13 +405,12 @@ impl Stream for WebRTCListenStream {
     }
 }
 
-/// A wrapper around [`RTCConfiguration`].
 #[derive(Clone)]
-struct WebRTCConfiguration {
+struct Config {
     inner: RTCConfiguration,
 }
 
-impl WebRTCConfiguration {
+impl Config {
     /// Creates a new config.
     fn new(certificate: RTCCertificate) -> Self {
         Self {
@@ -530,7 +529,7 @@ where
 
 async fn upgrade(
     udp_mux: Arc<dyn UDPMux + Send + Sync>,
-    config: WebRTCConfiguration,
+    config: Config,
     socket_addr: SocketAddr,
     ufrag: String,
     id_keys: identity::Keypair,
