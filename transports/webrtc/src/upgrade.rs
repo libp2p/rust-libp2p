@@ -128,7 +128,7 @@ async fn new_inbound_connection(
     udp_mux: Arc<dyn UDPMux + Send + Sync>,
     ufrag: &str,
 ) -> Result<RTCPeerConnection, Error> {
-    let mut se = setting_engine(udp_mux, &ufrag, addr);
+    let mut se = setting_engine(udp_mux, ufrag, addr);
     {
         se.set_lite(true);
         se.disable_certificate_fingerprint_verification(true);

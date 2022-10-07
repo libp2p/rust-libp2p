@@ -69,12 +69,12 @@ impl Fingerprint {
         Some(Self(bytes))
     }
 
-    pub fn to_multi_hash(&self) -> Multihash {
+    pub fn to_multi_hash(self) -> Multihash {
         Code::Sha2_256.wrap(&self.0).unwrap()
     }
 
     /// Transforms this fingerprint into a ufrag.
-    pub fn to_ufrag(&self) -> String {
+    pub fn to_ufrag(self) -> String {
         multibase::encode(
             Base::Base64Url,
             Code::Sha2_256.wrap(&self.0).unwrap().to_bytes(),
@@ -84,7 +84,7 @@ impl Fingerprint {
     /// Formats this fingerprint as uppercase hex, separated by colons (`:`).
     ///
     /// This is the format described in <https://www.rfc-editor.org/rfc/rfc4572#section-5>.
-    pub fn to_sdp_format(&self) -> String {
+    pub fn to_sdp_format(self) -> String {
         self.0.map(|byte| format!("{:02X}", byte)).join(":")
     }
 
