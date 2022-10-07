@@ -278,7 +278,7 @@ impl ListenStream {
                         let socket_addr = SocketAddr::new(ip, self.listen_addr.port());
                         let ma =
                             socketaddr_to_multiaddr(&socket_addr, Some(self.config.fingerprint));
-                        log::debug!("New listen address: {}", ma);
+
                         return Poll::Ready(TransportEvent::NewAddress {
                             listener_id: self.listener_id,
                             listen_addr: ma,
@@ -293,7 +293,7 @@ impl ListenStream {
                         let socket_addr = SocketAddr::new(ip, self.listen_addr.port());
                         let ma =
                             socketaddr_to_multiaddr(&socket_addr, Some(self.config.fingerprint));
-                        log::debug!("Expired listen address: {}", ma);
+
                         return Poll::Ready(TransportEvent::AddressExpired {
                             listener_id: self.listener_id,
                             listen_addr: ma,
@@ -301,7 +301,6 @@ impl ListenStream {
                     }
                 }
                 Err(err) => {
-                    log::debug!("Error when polling network interfaces {}", err);
                     return Poll::Ready(TransportEvent::ListenerError {
                         listener_id: self.listener_id,
                         error: Error::Io(err),
