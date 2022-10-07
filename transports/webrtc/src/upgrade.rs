@@ -55,20 +55,16 @@ pub async fn outbound(
 
     let peer_connection = new_outbound_connection(addr, config, udp_mux).await?;
 
-    // 1. OFFER
     let offer = peer_connection.create_offer(None).await?;
     log::debug!("created SDP offer for outbound connection: {:?}", offer.sdp);
     peer_connection.set_local_description(offer).await?;
 
-    // 2. ANSWER
-    // Set the remote description to the predefined SDP.
-    // NOTE: this will start the gathering of ICE candidates
     let answer = sdp::answer(addr, &remote_fingerprint);
     log::debug!(
         "calculated SDP answer for outbound connection: {:?}",
         answer
     );
-    peer_connection.set_remote_description(answer).await?;
+    peer_connection.set_remote_description(answer).await?; // This will start the gathering of ICE candidates.
 
     // Open a data channel to do Noise on top and verify the remote.
     let data_channel = create_initial_upgrade_data_channel(&peer_connection).await?;
@@ -116,11 +112,9 @@ pub async fn inbound(
     log::debug!("calculated SDP offer for inbound connection: {:?}", offer);
     peer_connection.set_remote_description(offer).await?;
 
-    // Set the local description and start UDP listeners
-    // Note: this will start the gathering of ICE candidates
     let answer = peer_connection.create_answer(None).await?;
     log::debug!("created SDP answer for inbound connection: {:?}", answer);
-    peer_connection.set_local_description(answer).await?;
+    peer_connection.set_local_description(answer).await?; // This will start the gathering of ICE candidates.
 
     // Open a data channel to do Noise on top and verify the remote.
     let data_channel = create_initial_upgrade_data_channel(&peer_connection).await?;
