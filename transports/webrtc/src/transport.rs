@@ -89,19 +89,19 @@ impl Transport {
 
         // XXX: `UdpSocket::bind` is async, so use a std socket and convert
         let std_sock = std::net::UdpSocket::bind(sock_addr)
-            .map_err(Error::IoError)
+            .map_err(Error::Io)
             .map_err(TransportError::Other)?;
         std_sock
             .set_nonblocking(true)
-            .map_err(Error::IoError)
+            .map_err(Error::Io)
             .map_err(TransportError::Other)?;
         let socket = UdpSocket::from_std(std_sock)
-            .map_err(Error::IoError)
+            .map_err(Error::Io)
             .map_err(TransportError::Other)?;
 
         let listen_addr = socket
             .local_addr()
-            .map_err(Error::IoError)
+            .map_err(Error::Io)
             .map_err(TransportError::Other)?;
         debug!("listening on {}", listen_addr);
 
@@ -114,7 +114,7 @@ impl Transport {
             udp_mux,
             self.id_keys.clone(),
             IfWatcher::new()
-                .map_err(Error::IoError)
+                .map_err(Error::Io)
                 .map_err(TransportError::Other)?,
         ))
     }
@@ -347,7 +347,7 @@ impl WebRTCListenStream {
                     log::debug!("Error when polling network interfaces {}", err);
                     return Poll::Ready(TransportEvent::ListenerError {
                         listener_id: self.listener_id,
-                        error: Error::IoError(err),
+                        error: Error::Io(err),
                     });
                 }
             }
@@ -393,7 +393,7 @@ impl Stream for WebRTCListenStream {
                     return Poll::Ready(Some(event));
                 }
                 UDPMuxEvent::Error(e) => {
-                    self.close(Err(Error::UDPMuxError(e)));
+                    self.close(Err(Error::UDPMux(e)));
                 }
             }
         }

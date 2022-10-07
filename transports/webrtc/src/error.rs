@@ -27,7 +27,7 @@ pub enum Error {
     #[error("webrtc error: {0}")]
     WebRTC(#[from] webrtc::Error),
     #[error("io error: {0}")]
-    IoError(#[source] std::io::Error),
+    Io(#[source] std::io::Error),
     #[error("noise error: {0}")]
     Noise(#[from] libp2p_noise::NoiseError),
 
@@ -42,8 +42,8 @@ pub enum Error {
     NoListeners,
 
     #[error("UDP mux error: {0}")]
-    UDPMuxError(std::io::Error),
+    UDPMux(std::io::Error),
 
     #[error("internal error: {0} (see debug logs)")]
-    InternalError(String),
+    Internal(String),
 }

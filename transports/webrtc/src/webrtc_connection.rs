@@ -142,9 +142,9 @@ impl WebRTCConnection {
         select! {
             res = rx => match res {
                 Ok(detached) => Ok(detached),
-                Err(e) => Err(Error::InternalError(e.to_string())),
+                Err(e) => Err(Error::Internal(e.to_string())),
             },
-            _ = Delay::new(Duration::from_secs(10)).fuse() => Err(Error::InternalError(
+            _ = Delay::new(Duration::from_secs(10)).fuse() => Err(Error::Internal(
                 "data channel opening took longer than 10 seconds (see logs)".into(),
             ))
         }

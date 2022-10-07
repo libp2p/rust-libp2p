@@ -166,7 +166,7 @@ impl StreamMuxer for Connection {
 
                 Poll::Ready(Ok(ch))
             }
-            None => Poll::Ready(Err(Error::InternalError(
+            None => Poll::Ready(Err(Error::Internal(
                 "incoming_data_channels_rx is closed (no messages left)".to_string(),
             ))),
         }
@@ -206,7 +206,7 @@ impl StreamMuxer for Connection {
             // Wait until data channel is opened and ready to use
             match rx.await {
                 Ok(detached) => Ok(detached),
-                Err(e) => Err(Error::InternalError(e.to_string())),
+                Err(e) => Err(Error::Internal(e.to_string())),
             }
         }));
 
