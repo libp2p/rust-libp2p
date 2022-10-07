@@ -39,12 +39,12 @@ use std::{
     task::{Context, Poll},
 };
 
-use crate::upgrade::WebRTCConnection;
 use crate::{
     connection::Connection,
     error::Error,
     fingerprint::Fingerprint,
     udp_mux::{UDPMuxEvent, UDPMuxNewAddr},
+    upgrade,
 };
 
 /// A WebRTC transport with direct p2p communication (without a STUN server).
@@ -164,7 +164,7 @@ impl libp2p_core::Transport for Transport {
 
         // [`Transport::dial`] should do no work unless the returned [`Future`] is polled. Thus
         // do the `set_remote_description` call within the [`Future`].
-        Ok(WebRTCConnection::connect(
+        Ok(upgrade::outbound(
             sock_addr,
             config.into_inner(),
             udp_mux,
@@ -334,7 +334,7 @@ impl Stream for WebRTCListenStream {
                     let local_addr = socketaddr_to_multiaddr(&self.listen_addr);
                     let send_back_addr = socketaddr_to_multiaddr(&new_addr.addr);
                     let event = TransportEvent::Incoming {
-                        upgrade: WebRTCConnection::accept(
+                        upgrade: upgrade::inbound(
                             new_addr.addr,
                             self.config.clone().into_inner(),
                             self.udp_mux.udp_mux_handle(),

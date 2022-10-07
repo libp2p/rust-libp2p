@@ -42,147 +42,140 @@ use webrtc::peer_connection::configuration::RTCConfiguration;
 use webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
 use webrtc::peer_connection::RTCPeerConnection;
 
-pub(crate) struct WebRTCConnection;
+/// Creates a new outbound WebRTC connection.
+pub async fn outbound(
+    addr: SocketAddr,
+    config: RTCConfiguration,
+    udp_mux: Arc<dyn UDPMux + Send + Sync>,
+    our_fingerprint: Fingerprint,
+    remote_fingerprint: Fingerprint,
+    id_keys: identity::Keypair,
+    expected_peer_id: PeerId,
+) -> Result<(PeerId, Connection), Error> {
+    // TODO: at least 128 bit of entropy
+    let ufrag: String = thread_rng()
+        .sample_iter(&Alphanumeric)
+        .take(64)
+        .map(char::from)
+        .collect();
+    let se = setting_engine(udp_mux, &ufrag, addr.is_ipv4());
+    let api = APIBuilder::new().with_setting_engine(se).build();
 
-impl WebRTCConnection {
-    /// Creates a new WebRTC peer connection to the remote.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the given address is not valid WebRTC dialing address.
-    pub async fn connect(
-        addr: SocketAddr,
-        config: RTCConfiguration,
-        udp_mux: Arc<dyn UDPMux + Send + Sync>,
-        our_fingerprint: Fingerprint,
-        remote_fingerprint: Fingerprint,
-        id_keys: identity::Keypair,
-        expected_peer_id: PeerId,
-    ) -> Result<(PeerId, Connection), Error> {
-        // TODO: at least 128 bit of entropy
-        let ufrag: String = thread_rng()
-            .sample_iter(&Alphanumeric)
-            .take(64)
-            .map(char::from)
-            .collect();
-        let se = setting_engine(udp_mux, &ufrag, addr.is_ipv4());
-        let api = APIBuilder::new().with_setting_engine(se).build();
+    let peer_connection = api.new_peer_connection(config).await?;
 
-        let peer_connection = api.new_peer_connection(config).await?;
+    // 1. OFFER
+    let offer = peer_connection.create_offer(None).await?;
+    log::debug!("OFFER: {:?}", offer.sdp);
+    peer_connection.set_local_description(offer).await?;
 
-        // 1. OFFER
-        let offer = peer_connection.create_offer(None).await?;
-        log::debug!("OFFER: {:?}", offer.sdp);
-        peer_connection.set_local_description(offer).await?;
+    // 2. ANSWER
+    // Set the remote description to the predefined SDP.
+    let server_session_description =
+        crate::sdp::render_server_session_description(addr, &remote_fingerprint);
+    log::debug!("ANSWER: {:?}", server_session_description);
+    let sdp = RTCSessionDescription::answer(server_session_description).unwrap();
+    // NOTE: this will start the gathering of ICE candidates
+    peer_connection.set_remote_description(sdp).await?;
 
-        // 2. ANSWER
-        // Set the remote description to the predefined SDP.
-        let server_session_description =
-            crate::sdp::render_server_session_description(addr, &remote_fingerprint);
-        log::debug!("ANSWER: {:?}", server_session_description);
-        let sdp = RTCSessionDescription::answer(server_session_description).unwrap();
-        // NOTE: this will start the gathering of ICE candidates
-        peer_connection.set_remote_description(sdp).await?;
+    // Open a data channel to do Noise on top and verify the remote.
+    let data_channel = create_initial_upgrade_data_channel(&peer_connection).await?;
 
-        // Open a data channel to do Noise on top and verify the remote.
-        let data_channel = create_initial_upgrade_data_channel(&peer_connection).await?;
+    log::trace!("noise handshake with addr={}", addr);
+    let peer_id = noise::outbound(
+        id_keys,
+        PollDataChannel::new(data_channel.clone()),
+        our_fingerprint,
+        remote_fingerprint,
+    )
+    .await?;
 
-        log::trace!("noise handshake with addr={}", addr);
-        let peer_id = noise::outbound(
-            id_keys,
-            PollDataChannel::new(data_channel.clone()),
-            our_fingerprint,
-            remote_fingerprint,
-        )
-        .await?;
-
-        log::trace!("verifying peer's identity addr={}", addr);
-        if expected_peer_id != peer_id {
-            return Err(Error::InvalidPeerID {
-                expected: expected_peer_id,
-                got: peer_id,
-            });
-        }
-
-        // Close the initial data channel after noise handshake is done.
-        data_channel
-            .close()
-            .await
-            .map_err(|e| Error::WebRTC(webrtc::Error::Data(e)))?;
-
-        let mut c = Connection::new(peer_connection).await;
-        // TODO: default buffer size is too small to fit some messages. Possibly remove once
-        // https://github.com/webrtc-rs/sctp/issues/28 is fixed.
-        c.set_data_channels_read_buf_capacity(8192 * 10);
-
-        Ok((peer_id, c))
+    log::trace!("verifying peer's identity addr={}", addr);
+    if expected_peer_id != peer_id {
+        return Err(Error::InvalidPeerID {
+            expected: expected_peer_id,
+            got: peer_id,
+        });
     }
 
-    pub async fn accept(
-        addr: SocketAddr,
-        config: RTCConfiguration,
-        udp_mux: Arc<dyn UDPMux + Send + Sync>,
-        our_fingerprint: Fingerprint,
-        remote_ufrag: String,
-        id_keys: identity::Keypair,
-    ) -> Result<(PeerId, Connection), Error> {
-        log::trace!("upgrading addr={} (ufrag={})", addr, remote_ufrag);
+    // Close the initial data channel after noise handshake is done.
+    data_channel
+        .close()
+        .await
+        .map_err(|e| Error::WebRTC(webrtc::Error::Data(e)))?;
 
-        // Set both ICE user and password to our fingerprint because that's what the client is
-        // expecting (see [`Self::connect`] "2. ANSWER").
-        let ufrag = our_fingerprint.to_ufrag();
-        let mut se = setting_engine(udp_mux, &ufrag, addr.is_ipv4());
-        {
-            se.set_lite(true);
-            se.disable_certificate_fingerprint_verification(true);
-            // Act as a DTLS server (one which waits for a connection).
-            //
-            // NOTE: removing this seems to break DTLS setup (both sides send `ClientHello` messages,
-            // but none end up responding).
-            se.set_answering_dtls_role(DTLSRole::Server)?;
-        }
+    let mut c = Connection::new(peer_connection).await;
+    // TODO: default buffer size is too small to fit some messages. Possibly remove once
+    // https://github.com/webrtc-rs/sctp/issues/28 is fixed.
+    c.set_data_channels_read_buf_capacity(8192 * 10);
 
-        let api = APIBuilder::new().with_setting_engine(se).build();
-        let peer_connection = api.new_peer_connection(config).await?;
+    Ok((peer_id, c))
+}
 
-        let client_session_description =
-            crate::sdp::render_client_session_description(addr, &remote_ufrag);
-        log::debug!("OFFER: {:?}", client_session_description);
-        let sdp = RTCSessionDescription::offer(client_session_description).unwrap();
-        peer_connection.set_remote_description(sdp).await?;
+/// Creates a new inbound WebRTC connection.
+pub async fn inbound(
+    addr: SocketAddr,
+    config: RTCConfiguration,
+    udp_mux: Arc<dyn UDPMux + Send + Sync>,
+    our_fingerprint: Fingerprint,
+    remote_ufrag: String,
+    id_keys: identity::Keypair,
+) -> Result<(PeerId, Connection), Error> {
+    log::trace!("upgrading addr={} (ufrag={})", addr, remote_ufrag);
 
-        let answer = peer_connection.create_answer(None).await?;
-        // Set the local description and start UDP listeners
-        // Note: this will start the gathering of ICE candidates
-        log::debug!("ANSWER: {:?}", answer.sdp);
-        peer_connection.set_local_description(answer).await?;
-
-        // Open a data channel to do Noise on top and verify the remote.
-        let data_channel = create_initial_upgrade_data_channel(&peer_connection).await?;
-
-        log::trace!("noise handshake with addr={} (ufrag={})", addr, ufrag);
-        let remote_fingerprint = get_remote_fingerprint(&peer_connection).await;
-        let peer_id = noise::inbound(
-            id_keys,
-            PollDataChannel::new(data_channel.clone()),
-            our_fingerprint,
-            remote_fingerprint,
-        )
-        .await?;
-
-        // Close the initial data channel after noise handshake is done.
-        data_channel
-            .close()
-            .await
-            .map_err(|e| Error::WebRTC(webrtc::Error::Data(e)))?;
-
-        let mut c = Connection::new(peer_connection).await;
-        // TODO: default buffer size is too small to fit some messages. Possibly remove once
-        // https://github.com/webrtc-rs/sctp/issues/28 is fixed.
-        c.set_data_channels_read_buf_capacity(8192 * 10);
-
-        Ok((peer_id, c))
+    // Set both ICE user and password to our fingerprint because that's what the client is
+    // expecting (see [`Self::connect`] "2. ANSWER").
+    let ufrag = our_fingerprint.to_ufrag();
+    let mut se = setting_engine(udp_mux, &ufrag, addr.is_ipv4());
+    {
+        se.set_lite(true);
+        se.disable_certificate_fingerprint_verification(true);
+        // Act as a DTLS server (one which waits for a connection).
+        //
+        // NOTE: removing this seems to break DTLS setup (both sides send `ClientHello` messages,
+        // but none end up responding).
+        se.set_answering_dtls_role(DTLSRole::Server)?;
     }
+
+    let api = APIBuilder::new().with_setting_engine(se).build();
+    let peer_connection = api.new_peer_connection(config).await?;
+
+    let client_session_description =
+        crate::sdp::render_client_session_description(addr, &remote_ufrag);
+    log::debug!("OFFER: {:?}", client_session_description);
+    let sdp = RTCSessionDescription::offer(client_session_description).unwrap();
+    peer_connection.set_remote_description(sdp).await?;
+
+    let answer = peer_connection.create_answer(None).await?;
+    // Set the local description and start UDP listeners
+    // Note: this will start the gathering of ICE candidates
+    log::debug!("ANSWER: {:?}", answer.sdp);
+    peer_connection.set_local_description(answer).await?;
+
+    // Open a data channel to do Noise on top and verify the remote.
+    let data_channel = create_initial_upgrade_data_channel(&peer_connection).await?;
+
+    log::trace!("noise handshake with addr={} (ufrag={})", addr, ufrag);
+    let remote_fingerprint = get_remote_fingerprint(&peer_connection).await;
+    let peer_id = noise::inbound(
+        id_keys,
+        PollDataChannel::new(data_channel.clone()),
+        our_fingerprint,
+        remote_fingerprint,
+    )
+    .await?;
+
+    // Close the initial data channel after noise handshake is done.
+    data_channel
+        .close()
+        .await
+        .map_err(|e| Error::WebRTC(webrtc::Error::Data(e)))?;
+
+    let mut c = Connection::new(peer_connection).await;
+    // TODO: default buffer size is too small to fit some messages. Possibly remove once
+    // https://github.com/webrtc-rs/sctp/issues/28 is fixed.
+    c.set_data_channels_read_buf_capacity(8192 * 10);
+
+    Ok((peer_id, c))
 }
 
 fn setting_engine(
