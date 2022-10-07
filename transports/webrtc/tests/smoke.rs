@@ -5,12 +5,13 @@ use futures::{
     io::{AsyncRead, AsyncWrite, AsyncWriteExt},
     stream::StreamExt,
 };
+use libp2p::core::{identity, muxing::StreamMuxerBox, upgrade, Transport as _};
 use libp2p::request_response::{
     ProtocolName, ProtocolSupport, RequestResponse, RequestResponseCodec, RequestResponseConfig,
     RequestResponseEvent, RequestResponseMessage,
 };
 use libp2p::swarm::{Swarm, SwarmBuilder, SwarmEvent};
-use libp2p_core::{identity, muxing::StreamMuxerBox, upgrade, Transport as _};
+use libp2p::webrtc;
 use rand::RngCore;
 use tokio_crate as tokio;
 
@@ -450,7 +451,7 @@ async fn concurrent_connections_and_streams() {
 fn create_swarm() -> Result<Swarm<RequestResponse<PingCodec>>> {
     let keypair = generate_tls_keypair();
     let peer_id = keypair.public().to_peer_id();
-    let transport = libp2p_webrtc::Transport::new(keypair);
+    let transport = webrtc::Transport::new(keypair);
     let protocols = iter::once((PingProtocol(), ProtocolSupport::Full));
     let cfg = RequestResponseConfig::default();
     let behaviour = RequestResponse::new(PingCodec(), protocols, cfg);
