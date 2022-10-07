@@ -57,15 +57,18 @@ pub async fn outbound(
 
     // 1. OFFER
     let offer = peer_connection.create_offer(None).await?;
-    log::debug!("OFFER: {:?}", offer.sdp);
+    log::debug!("created SDP offer for outbound connection: {:?}", offer.sdp);
     peer_connection.set_local_description(offer).await?;
 
     // 2. ANSWER
     // Set the remote description to the predefined SDP.
     // NOTE: this will start the gathering of ICE candidates
-    let sdp = sdp::render_server_session_description(addr, &remote_fingerprint);
-    log::debug!("ANSWER: {:?}", sdp);
-    peer_connection.set_remote_description(sdp).await?;
+    let answer = sdp::answer(addr, &remote_fingerprint);
+    log::debug!(
+        "calculated SDP answer for outbound connection: {:?}",
+        answer
+    );
+    peer_connection.set_remote_description(answer).await?;
 
     // Open a data channel to do Noise on top and verify the remote.
     let data_channel = create_initial_upgrade_data_channel(&peer_connection).await?;
@@ -109,14 +112,14 @@ pub async fn inbound(
     let peer_connection =
         new_inbound_connection(addr, config, udp_mux, &our_fingerprint.to_ufrag()).await?;
 
-    let sdp = sdp::render_client_session_description(addr, &remote_ufrag);
-    log::debug!("OFFER: {:?}", sdp);
-    peer_connection.set_remote_description(sdp).await?;
+    let offer = sdp::offer(addr, &remote_ufrag);
+    log::debug!("calculated SDP offer for inbound connection: {:?}", offer);
+    peer_connection.set_remote_description(offer).await?;
 
     // Set the local description and start UDP listeners
     // Note: this will start the gathering of ICE candidates
     let answer = peer_connection.create_answer(None).await?;
-    log::debug!("ANSWER: {:?}", answer.sdp);
+    log::debug!("created SDP answer for inbound connection: {:?}", answer);
     peer_connection.set_local_description(answer).await?;
 
     // Open a data channel to do Noise on top and verify the remote.
