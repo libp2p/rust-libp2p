@@ -10,8 +10,7 @@ use libp2p::request_response::{
     RequestResponseEvent, RequestResponseMessage,
 };
 use libp2p::swarm::{Swarm, SwarmBuilder, SwarmEvent};
-use libp2p_core::{identity, multiaddr::Protocol, muxing::StreamMuxerBox, upgrade, Transport};
-use libp2p_webrtc::Fingerprint;
+use libp2p_core::{identity, muxing::StreamMuxerBox, upgrade, Transport};
 use libp2p_webrtc::WebRTCTransport;
 use rand::RngCore;
 use rcgen::KeyPair;
@@ -29,11 +28,10 @@ fn generate_tls_keypair() -> identity::Keypair {
     identity::Keypair::generate_ed25519()
 }
 
-fn create_swarm() -> Result<(Swarm<RequestResponse<PingCodec>>, Fingerprint)> {
+fn create_swarm() -> Result<Swarm<RequestResponse<PingCodec>>> {
     let cert = generate_certificate();
     let keypair = generate_tls_keypair();
     let peer_id = keypair.public().to_peer_id();
-    let fingerprint = cert.get_fingerprints().unwrap().first().unwrap().clone();
     let transport = WebRTCTransport::new(cert, keypair);
     let protocols = iter::once((PingProtocol(), ProtocolSupport::Full));
     let cfg = RequestResponseConfig::default();
@@ -42,14 +40,11 @@ fn create_swarm() -> Result<(Swarm<RequestResponse<PingCodec>>, Fingerprint)> {
         .map(|(peer_id, conn), _| (peer_id, StreamMuxerBox::new(conn)))
         .boxed();
 
-    Ok((
-        SwarmBuilder::new(transport, behaviour, peer_id)
-            .executor(Box::new(|fut| {
-                tokio::spawn(fut);
-            }))
-            .build(),
-        Fingerprint::try_from_rtc_dtls(fingerprint).unwrap(),
-    ))
+    Ok(SwarmBuilder::new(transport, behaviour, peer_id)
+        .executor(Box::new(|fut| {
+            tokio::spawn(fut);
+        }))
+        .build())
 }
 
 #[tokio::test]
@@ -58,8 +53,8 @@ async fn smoke() -> Result<()> {
 
     let mut rng = rand::thread_rng();
 
-    let (mut a, a_fingerprint) = create_swarm()?;
-    let (mut b, _b_fingerprint) = create_swarm()?;
+    let mut a = create_swarm()?;
+    let mut b = create_swarm()?;
 
     Swarm::listen_on(&mut a, "/ip4/127.0.0.1/udp/0/webrtc".parse()?)?;
     Swarm::listen_on(&mut b, "/ip4/127.0.0.1/udp/0/webrtc".parse()?)?;
@@ -71,8 +66,6 @@ async fn smoke() -> Result<()> {
 
     // skip other interface addresses
     while a.next().now_or_never().is_some() {}
-
-    let addr = addr.with(Protocol::Certhash(a_fingerprint.to_multi_hash()));
 
     let _ = match b.next().await {
         Some(SwarmEvent::NewListenAddr { address, .. }) => address,
@@ -301,8 +294,8 @@ impl RequestResponseCodec for PingCodec {
 async fn dial_failure() -> Result<()> {
     let _ = env_logger::builder().is_test(true).try_init();
 
-    let (mut a, a_fingerprint) = create_swarm()?;
-    let (mut b, _b_fingerprint) = create_swarm()?;
+    let mut a = create_swarm()?;
+    let mut b = create_swarm()?;
 
     Swarm::listen_on(&mut a, "/ip4/127.0.0.1/udp/0/webrtc".parse()?)?;
     Swarm::listen_on(&mut b, "/ip4/127.0.0.1/udp/0/webrtc".parse()?)?;
@@ -314,8 +307,6 @@ async fn dial_failure() -> Result<()> {
 
     // skip other interface addresses
     while a.next().now_or_never().is_some() {}
-
-    let addr = addr.with(Protocol::Certhash(a_fingerprint.to_multi_hash()));
 
     let _ = match b.next().await {
         Some(SwarmEvent::NewListenAddr { address, .. }) => address,
@@ -363,7 +354,7 @@ async fn concurrent_connections_and_streams() {
 
     // Spawn the listener nodes.
     for _ in 0..num_listeners {
-        let (mut listener, fingerprint) = create_swarm().unwrap();
+        let mut listener = create_swarm().unwrap();
         Swarm::listen_on(
             &mut listener,
             "/ip4/127.0.0.1/udp/0/webrtc".parse().unwrap(),
@@ -375,8 +366,6 @@ async fn concurrent_connections_and_streams() {
             Some(SwarmEvent::NewListenAddr { address, .. }) => address,
             e => panic!("{:?}", e),
         };
-
-        let addr = addr.with(Protocol::Certhash(fingerprint.to_multi_hash()));
 
         listeners.push((*listener.local_peer_id(), addr));
 
@@ -422,7 +411,7 @@ async fn concurrent_connections_and_streams() {
         });
     }
 
-    let (mut dialer, _fingerprint) = create_swarm().unwrap();
+    let mut dialer = create_swarm().unwrap();
     Swarm::listen_on(&mut dialer, "/ip4/127.0.0.1/udp/0/webrtc".parse().unwrap()).unwrap();
 
     // Wait to listen on address.

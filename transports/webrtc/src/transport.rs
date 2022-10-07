@@ -318,7 +318,11 @@ impl WebRTCListenStream {
                         || self.listen_addr.is_ipv6() == ip.is_ipv6()
                     {
                         let socket_addr = SocketAddr::new(ip, self.listen_addr.port());
-                        let ma = socketaddr_to_multiaddr(&socket_addr);
+                        let ma = socketaddr_to_multiaddr(&socket_addr).with(Protocol::Certhash(
+                            self.config
+                                .fingerprint_of_first_certificate()
+                                .to_multi_hash(),
+                        ));
                         log::debug!("New listen address: {}", ma);
                         return Poll::Ready(TransportEvent::NewAddress {
                             listener_id: self.listener_id,
@@ -332,7 +336,11 @@ impl WebRTCListenStream {
                         || self.listen_addr.is_ipv6() == ip.is_ipv6()
                     {
                         let socket_addr = SocketAddr::new(ip, self.listen_addr.port());
-                        let ma = socketaddr_to_multiaddr(&socket_addr);
+                        let ma = socketaddr_to_multiaddr(&socket_addr).with(Protocol::Certhash(
+                            self.config
+                                .fingerprint_of_first_certificate()
+                                .to_multi_hash(),
+                        ));
                         log::debug!("Expired listen address: {}", ma);
                         return Poll::Ready(TransportEvent::AddressExpired {
                             listener_id: self.listener_id,
