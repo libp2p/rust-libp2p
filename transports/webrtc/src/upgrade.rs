@@ -1,5 +1,3 @@
-pub mod noise;
-
 // Copyright 2022 Parity Technologies (UK) Ltd.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -20,7 +18,11 @@ pub mod noise;
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+pub mod noise;
+
 use crate::connection::PollDataChannel;
+use crate::error::Error;
+use crate::fingerprint::Fingerprint;
 use crate::Connection;
 use futures::{channel::oneshot, prelude::*, select};
 use futures_timer::Delay;
@@ -39,9 +41,6 @@ use webrtc::ice::udp_network::UDPNetwork;
 use webrtc::peer_connection::configuration::RTCConfiguration;
 use webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
 use webrtc::peer_connection::RTCPeerConnection;
-
-use crate::error::Error;
-use crate::fingerprint::Fingerprint;
 
 pub(crate) struct WebRTCConnection;
 
