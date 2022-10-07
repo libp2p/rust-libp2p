@@ -146,9 +146,6 @@ impl libp2p_core::Transport for Transport {
             return Err(TransportError::MultiaddrNotSupported(addr));
         }
 
-        let remote = addr.clone(); // used for logging
-        log::trace!("dialing addr={}", remote);
-
         let config = self.config.clone();
         let our_fingerprint = self.config.fingerprint();
         let id_keys = self.id_keys.clone();
