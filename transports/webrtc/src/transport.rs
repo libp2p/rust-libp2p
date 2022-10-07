@@ -276,9 +276,8 @@ impl ListenStream {
                         || self.listen_addr.is_ipv6() == ip.is_ipv6()
                     {
                         let socket_addr = SocketAddr::new(ip, self.listen_addr.port());
-                        let ma = socketaddr_to_multiaddr(&socket_addr).with(Protocol::Certhash(
-                            self.config.fingerprint().to_multi_hash(),
-                        ));
+                        let ma =
+                            socketaddr_to_multiaddr(&socket_addr, Some(self.config.fingerprint));
                         log::debug!("New listen address: {}", ma);
                         return Poll::Ready(TransportEvent::NewAddress {
                             listener_id: self.listener_id,
@@ -292,9 +291,8 @@ impl ListenStream {
                         || self.listen_addr.is_ipv6() == ip.is_ipv6()
                     {
                         let socket_addr = SocketAddr::new(ip, self.listen_addr.port());
-                        let ma = socketaddr_to_multiaddr(&socket_addr).with(Protocol::Certhash(
-                            self.config.fingerprint().to_multi_hash(),
-                        ));
+                        let ma =
+                            socketaddr_to_multiaddr(&socket_addr, Some(self.config.fingerprint));
                         log::debug!("Expired listen address: {}", ma);
                         return Poll::Ready(TransportEvent::AddressExpired {
                             listener_id: self.listener_id,
@@ -335,8 +333,9 @@ impl Stream for ListenStream {
             // Poll UDP muxer for new addresses or incoming data for streams.
             match ready!(self.udp_mux.poll(cx)) {
                 UDPMuxEvent::NewAddr(new_addr) => {
-                    let local_addr = socketaddr_to_multiaddr(&self.listen_addr);
-                    let send_back_addr = socketaddr_to_multiaddr(&new_addr.addr);
+                    let local_addr =
+                        socketaddr_to_multiaddr(&self.listen_addr, Some(self.config.fingerprint));
+                    let send_back_addr = socketaddr_to_multiaddr(&new_addr.addr, None);
                     let event = TransportEvent::Incoming {
                         upgrade: upgrade::inbound(
                             new_addr.addr,
@@ -401,11 +400,17 @@ impl Config {
 }
 
 /// Turns an IP address and port into the corresponding WebRTC multiaddr.
-fn socketaddr_to_multiaddr(socket_addr: &SocketAddr) -> Multiaddr {
-    Multiaddr::empty()
+fn socketaddr_to_multiaddr(socket_addr: &SocketAddr, certhash: Option<Fingerprint>) -> Multiaddr {
+    let addr = Multiaddr::empty()
         .with(socket_addr.ip().into())
         .with(Protocol::Udp(socket_addr.port()))
-        .with(Protocol::WebRTC)
+        .with(Protocol::WebRTC);
+
+    if let Some(fp) = certhash {
+        return addr.with(Protocol::Certhash(fp.to_multi_hash()));
+    }
+
+    addr
 }
 
 /// Parse the given [`Multiaddr`] into a [`SocketAddr`] for listening.
