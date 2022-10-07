@@ -124,9 +124,11 @@ impl WebRTCConnection {
         config: RTCConfiguration,
         udp_mux: Arc<dyn UDPMux + Send + Sync>,
         our_fingerprint: Fingerprint,
-        remote_ufrag: &str,
+        remote_ufrag: String,
         id_keys: identity::Keypair,
     ) -> Result<(PeerId, Connection), Error> {
+        log::trace!("upgrading addr={} (ufrag={})", addr, remote_ufrag);
+
         // Set both ICE user and password to our fingerprint because that's what the client is
         // expecting (see [`Self::connect`] "2. ANSWER").
         let ufrag = our_fingerprint.to_ufrag();
@@ -145,7 +147,7 @@ impl WebRTCConnection {
         let peer_connection = api.new_peer_connection(config).await?;
 
         let client_session_description =
-            crate::sdp::render_client_session_description(addr, remote_ufrag);
+            crate::sdp::render_client_session_description(addr, &remote_ufrag);
         log::debug!("OFFER: {:?}", client_session_description);
         let sdp = RTCSessionDescription::offer(client_session_description).unwrap();
         peer_connection.set_remote_description(sdp).await?;

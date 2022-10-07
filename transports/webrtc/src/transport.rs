@@ -28,7 +28,6 @@ use libp2p_core::{
 };
 use log::{debug, trace};
 use tokio_crate::net::UdpSocket;
-use webrtc::ice::udp_mux::UDPMux;
 use webrtc::peer_connection::certificate::RTCCertificate;
 use webrtc::peer_connection::configuration::RTCConfiguration;
 
@@ -37,7 +36,6 @@ use std::net::IpAddr;
 use std::{
     net::SocketAddr,
     pin::Pin,
-    sync::Arc,
     task::{Context, Poll},
 };
 
@@ -336,13 +334,15 @@ impl Stream for WebRTCListenStream {
                     let local_addr = socketaddr_to_multiaddr(&self.listen_addr);
                     let send_back_addr = socketaddr_to_multiaddr(&new_addr.addr);
                     let event = TransportEvent::Incoming {
-                        upgrade: Box::pin(upgrade(
-                            self.udp_mux.udp_mux_handle(),
-                            self.config.clone(),
+                        upgrade: WebRTCConnection::accept(
                             new_addr.addr,
+                            self.config.clone().into_inner(),
+                            self.udp_mux.udp_mux_handle(),
+                            self.config.fingerprint(),
                             new_addr.ufrag,
                             self.id_keys.clone(),
-                        )) as BoxFuture<'static, _>,
+                        )
+                        .boxed(),
                         local_addr,
                         send_back_addr,
                         listener_id: self.listener_id,
@@ -464,30 +464,6 @@ fn parse_webrtc_dial_addr(addr: &Multiaddr) -> Option<(SocketAddr, Fingerprint, 
     }
 
     Some((SocketAddr::new(ip, port), fingerprint, peer_id))
-}
-
-async fn upgrade(
-    udp_mux: Arc<dyn UDPMux + Send + Sync>,
-    config: Config,
-    socket_addr: SocketAddr,
-    ufrag: String,
-    id_keys: identity::Keypair,
-) -> Result<(PeerId, Connection), Error> {
-    trace!("upgrading addr={} (ufrag={})", socket_addr, ufrag);
-
-    let our_fingerprint = config.fingerprint();
-
-    let conn = WebRTCConnection::accept(
-        socket_addr,
-        config.into_inner(),
-        udp_mux,
-        our_fingerprint,
-        &ufrag,
-        id_keys,
-    )
-    .await?;
-
-    Ok(conn)
 }
 
 // Tests //////////////////////////////////////////////////////////////////////////////////////////
