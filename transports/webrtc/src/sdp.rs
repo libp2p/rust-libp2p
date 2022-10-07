@@ -23,26 +23,37 @@ use std::net::SocketAddr;
 use tinytemplate::TinyTemplate;
 
 use std::net::IpAddr;
+use webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
 
 use crate::fingerprint::Fingerprint;
 
 pub(crate) fn render_server_session_description(
     addr: SocketAddr,
     fingerprint: &Fingerprint,
-) -> String {
-    render_description(
+) -> RTCSessionDescription {
+    RTCSessionDescription::answer(render_description(
         SERVER_SESSION_DESCRIPTION,
         addr,
         fingerprint,
         &fingerprint.to_ufrag(),
-    )
+    ))
+    .unwrap()
 }
 
 /// Renders the SDP client session description.
 ///
 /// Certificate verification is disabled which is why we hardcode a dummy fingerprint here.
-pub(crate) fn render_client_session_description(addr: SocketAddr, ufrag: &str) -> String {
-    render_description(CLIENT_SESSION_DESCRIPTION, addr, &Fingerprint::FF, ufrag)
+pub(crate) fn render_client_session_description(
+    addr: SocketAddr,
+    ufrag: &str,
+) -> RTCSessionDescription {
+    RTCSessionDescription::offer(render_description(
+        CLIENT_SESSION_DESCRIPTION,
+        addr,
+        &Fingerprint::FF,
+        ufrag,
+    ))
+    .unwrap()
 }
 
 // An SDP message that constitutes the offer.

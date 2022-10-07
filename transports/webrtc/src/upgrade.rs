@@ -23,7 +23,7 @@ pub mod noise;
 use crate::connection::PollDataChannel;
 use crate::error::Error;
 use crate::fingerprint::Fingerprint;
-use crate::Connection;
+use crate::{sdp, Connection};
 use futures::{channel::oneshot, prelude::*, select};
 use futures_timer::Delay;
 use libp2p_core::{identity, PeerId};
@@ -39,7 +39,6 @@ use webrtc::ice::network_type::NetworkType;
 use webrtc::ice::udp_mux::UDPMux;
 use webrtc::ice::udp_network::UDPNetwork;
 use webrtc::peer_connection::configuration::RTCConfiguration;
-use webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
 use webrtc::peer_connection::RTCPeerConnection;
 
 /// Creates a new outbound WebRTC connection.
@@ -61,10 +60,8 @@ pub async fn outbound(
 
     // 2. ANSWER
     // Set the remote description to the predefined SDP.
-    let server_session_description =
-        crate::sdp::render_server_session_description(addr, &remote_fingerprint);
-    log::debug!("ANSWER: {:?}", server_session_description);
-    let sdp = RTCSessionDescription::answer(server_session_description).unwrap();
+    let sdp = sdp::render_server_session_description(addr, &remote_fingerprint);
+    log::debug!("ANSWER: {:?}", sdp);
     // NOTE: this will start the gathering of ICE candidates
     peer_connection.set_remote_description(sdp).await?;
 
@@ -111,10 +108,8 @@ pub async fn inbound(
 
     let peer_connection = new_inbound_connection(addr, config, udp_mux, &ufrag).await?;
 
-    let client_session_description =
-        crate::sdp::render_client_session_description(addr, &remote_ufrag);
-    log::debug!("OFFER: {:?}", client_session_description);
-    let sdp = RTCSessionDescription::offer(client_session_description).unwrap();
+    let sdp = sdp::render_client_session_description(addr, &remote_ufrag);
+    log::debug!("OFFER: {:?}", sdp);
     peer_connection.set_remote_description(sdp).await?;
 
     let answer = peer_connection.create_answer(None).await?;
