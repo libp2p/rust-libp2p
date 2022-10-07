@@ -26,7 +26,6 @@ use libp2p_core::{
     transport::{ListenerId, TransportError, TransportEvent},
     PeerId,
 };
-use log::{debug, trace};
 use tokio_crate::net::UdpSocket;
 use webrtc::peer_connection::certificate::RTCCertificate;
 use webrtc::peer_connection::configuration::RTCConfiguration;
@@ -148,7 +147,7 @@ impl libp2p_core::Transport for Transport {
         }
 
         let remote = addr.clone(); // used for logging
-        trace!("dialing addr={}", remote);
+        log::trace!("dialing addr={}", remote);
 
         let config = self.config.clone();
         let our_fingerprint = self.config.fingerprint();
@@ -258,7 +257,7 @@ impl ListenStream {
     /// terminate the stream.
     fn close(&mut self, reason: Result<(), Error>) {
         match self.report_closed {
-            Some(_) => debug!("Listener was already closed."),
+            Some(_) => log::debug!("Listener was already closed."),
             None => {
                 // Report the listener event as closed.
                 let _ = self
