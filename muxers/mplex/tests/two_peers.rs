@@ -188,11 +188,10 @@ fn protocol_not_match() {
         let mut transport = TcpTransport::default()
             .and_then(move |c, e| upgrade::apply(c, mplex, e, upgrade::Version::V1))
             .boxed();
-        match transport.dial(rx.await.unwrap()).unwrap().await {
-            Ok(_) => {
-                assert!(false, "Dialing should fail here as protocols do not match")
-            }
-            _ => {}
-        }
+
+        assert!(
+            transport.dial(rx.await.unwrap()).unwrap().await.is_err(),
+            "Dialing should fail here as protocols do not match"
+        );
     });
 }

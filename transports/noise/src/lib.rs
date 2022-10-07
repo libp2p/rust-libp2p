@@ -390,12 +390,12 @@ pub struct NoiseAuthenticated<P, C: Zeroize, R> {
     config: NoiseConfig<P, C, R>,
 }
 
-impl NoiseAuthenticated<XX, X25519, ()> {
+impl NoiseAuthenticated<XX, X25519Spec, ()> {
     /// Create a new [`NoiseAuthenticated`] for the `XX` handshake pattern using X25519 DH keys.
     ///
     /// For now, this is the only combination that is guaranteed to be compatible with other libp2p implementations.
     pub fn xx(id_keys: &identity::Keypair) -> Result<Self, NoiseError> {
-        let dh_keys = Keypair::<X25519>::new();
+        let dh_keys = Keypair::<X25519Spec>::new();
         let noise_keys = dh_keys.into_authentic(id_keys)?;
         let config = NoiseConfig::xx(noise_keys);
 
