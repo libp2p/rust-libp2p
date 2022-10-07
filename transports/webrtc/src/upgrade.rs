@@ -123,7 +123,6 @@ pub async fn inbound(
     // Open a data channel to do Noise on top and verify the remote.
     let data_channel = create_initial_upgrade_data_channel(&peer_connection).await?;
 
-    log::trace!("noise handshake with addr={} (ufrag={})", addr, ufrag);
     let remote_fingerprint = get_remote_fingerprint(&peer_connection).await;
     let peer_id = noise::inbound(
         id_keys,
