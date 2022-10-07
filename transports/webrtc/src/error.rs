@@ -32,11 +32,8 @@ pub enum Error {
     Authentication(#[from] libp2p_noise::NoiseError),
 
     // Authentication errors.
-    #[error("invalid peer ID (expected {expected:?}, got {got:?})")]
-    InvalidPeerID {
-        expected: Option<PeerId>,
-        got: PeerId,
-    },
+    #[error("invalid peer ID (expected {expected}, got {got})")]
+    InvalidPeerID { expected: PeerId, got: PeerId },
 
     #[error("no active listeners")]
     NoListeners,
