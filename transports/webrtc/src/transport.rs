@@ -64,28 +64,6 @@ impl Transport {
             listeners: SelectAll::new(),
         }
     }
-
-    fn do_listen(
-        &self,
-        listener_id: ListenerId,
-        addr: Multiaddr,
-    ) -> Result<ListenStream, TransportError<Error>> {
-        let socket_addr =
-            parse_webrtc_listen_addr(&addr).ok_or(TransportError::MultiaddrNotSupported(addr))?;
-
-        let udp_mux = UDPMuxNewAddr::listen_on(socket_addr)
-            .map_err(|io| TransportError::Other(Error::Io(io)))?;
-
-        Ok(ListenStream::new(
-            listener_id,
-            self.config.clone(),
-            udp_mux,
-            self.id_keys.clone(),
-            IfWatcher::new()
-                .map_err(Error::Io)
-                .map_err(TransportError::Other)?,
-        ))
-    }
 }
 
 impl libp2p_core::Transport for Transport {
@@ -96,8 +74,22 @@ impl libp2p_core::Transport for Transport {
 
     fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
         let id = ListenerId::new();
-        let listener = self.do_listen(id, addr)?;
-        self.listeners.push(listener);
+
+        let socket_addr =
+            parse_webrtc_listen_addr(&addr).ok_or(TransportError::MultiaddrNotSupported(addr))?;
+        let udp_mux = UDPMuxNewAddr::listen_on(socket_addr)
+            .map_err(|io| TransportError::Other(Error::Io(io)))?;
+
+        self.listeners.push(ListenStream::new(
+            id,
+            self.config.clone(),
+            udp_mux,
+            self.id_keys.clone(),
+            IfWatcher::new()
+                .map_err(Error::Io)
+                .map_err(TransportError::Other)?,
+        ));
+
         Ok(id)
     }
 
