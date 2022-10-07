@@ -54,7 +54,7 @@ pub struct Transport {
     /// `Keypair` identifying this peer
     id_keys: identity::Keypair,
     /// All the active listeners.
-    listeners: SelectAll<WebRTCListenStream>,
+    listeners: SelectAll<ListenStream>,
 }
 
 impl Transport {
@@ -71,7 +71,7 @@ impl Transport {
         &self,
         listener_id: ListenerId,
         addr: Multiaddr,
-    ) -> Result<WebRTCListenStream, TransportError<Error>> {
+    ) -> Result<ListenStream, TransportError<Error>> {
         let sock_addr =
             parse_webrtc_listen_addr(&addr).ok_or(TransportError::MultiaddrNotSupported(addr))?;
 
@@ -95,7 +95,7 @@ impl Transport {
 
         let udp_mux = UDPMuxNewAddr::new(socket);
 
-        Ok(WebRTCListenStream::new(
+        Ok(ListenStream::new(
             listener_id,
             listen_addr,
             self.config.clone(),
@@ -202,7 +202,7 @@ impl libp2p_core::Transport for Transport {
 }
 
 /// A stream of incoming connections on one or more interfaces.
-struct WebRTCListenStream {
+struct ListenStream {
     /// The ID of this listener.
     listener_id: ListenerId,
 
@@ -234,7 +234,7 @@ struct WebRTCListenStream {
     if_watcher: IfWatcher,
 }
 
-impl WebRTCListenStream {
+impl ListenStream {
     /// Constructs a `WebRTCListenStream` for incoming connections.
     fn new(
         listener_id: ListenerId,
@@ -244,7 +244,7 @@ impl WebRTCListenStream {
         id_keys: identity::Keypair,
         if_watcher: IfWatcher,
     ) -> Self {
-        WebRTCListenStream {
+        ListenStream {
             listener_id,
             listen_addr,
             config,
@@ -321,7 +321,7 @@ impl WebRTCListenStream {
     }
 }
 
-impl Stream for WebRTCListenStream {
+impl Stream for ListenStream {
     type Item = TransportEvent<<Transport as libp2p_core::Transport>::ListenerUpgrade, Error>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
