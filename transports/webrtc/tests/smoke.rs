@@ -10,8 +10,7 @@ use libp2p::request_response::{
     RequestResponseEvent, RequestResponseMessage,
 };
 use libp2p::swarm::{Swarm, SwarmBuilder, SwarmEvent};
-use libp2p_core::{identity, muxing::StreamMuxerBox, upgrade, Transport};
-use libp2p_webrtc::WebRTCTransport;
+use libp2p_core::{identity, muxing::StreamMuxerBox, upgrade, Transport as _};
 use rand::RngCore;
 use tokio_crate as tokio;
 
@@ -24,7 +23,7 @@ fn generate_tls_keypair() -> identity::Keypair {
 fn create_swarm() -> Result<Swarm<RequestResponse<PingCodec>>> {
     let keypair = generate_tls_keypair();
     let peer_id = keypair.public().to_peer_id();
-    let transport = WebRTCTransport::new(keypair);
+    let transport = libp2p_webrtc::Transport::new(keypair);
     let protocols = iter::once((PingProtocol(), ProtocolSupport::Full));
     let cfg = RequestResponseConfig::default();
     let behaviour = RequestResponse::new(PingCodec(), protocols, cfg);

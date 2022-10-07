@@ -31,7 +31,7 @@ use libp2p_core::{
     identity,
     multiaddr::{Multiaddr, Protocol},
     transport::{ListenerId, TransportError, TransportEvent},
-    InboundUpgrade, OutboundUpgrade, PeerId, Transport, UpgradeInfo,
+    InboundUpgrade, OutboundUpgrade, PeerId, UpgradeInfo,
 };
 use libp2p_noise::{Keypair, NoiseConfig, X25519Spec};
 use log::{debug, trace};
@@ -59,7 +59,7 @@ use crate::{
 };
 
 /// A WebRTC transport with direct p2p communication (without a STUN server).
-pub struct WebRTCTransport {
+pub struct Transport {
     /// The config which holds this peer's certificate(s).
     config: Config,
     /// `Keypair` identifying this peer
@@ -68,7 +68,7 @@ pub struct WebRTCTransport {
     listeners: SelectAll<WebRTCListenStream>,
 }
 
-impl WebRTCTransport {
+impl Transport {
     /// Creates a new WebRTC transport.
     pub fn new(id_keys: identity::Keypair) -> Self {
         Self {
@@ -119,7 +119,7 @@ impl WebRTCTransport {
     }
 }
 
-impl Transport for WebRTCTransport {
+impl libp2p_core::Transport for Transport {
     type Output = (PeerId, Connection);
     type Error = Error;
     type ListenerUpgrade = BoxFuture<'static, Result<Self::Output, Self::Error>>;
@@ -360,7 +360,7 @@ impl WebRTCListenStream {
 }
 
 impl Stream for WebRTCListenStream {
-    type Item = TransportEvent<<WebRTCTransport as Transport>::ListenerUpgrade, Error>;
+    type Item = TransportEvent<<Transport as libp2p_core::Transport>::ListenerUpgrade, Error>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         loop {
@@ -615,7 +615,7 @@ mod tests {
     use super::*;
     use futures::future::poll_fn;
     use hex_literal::hex;
-    use libp2p_core::{multiaddr::Protocol, Multiaddr};
+    use libp2p_core::{multiaddr::Protocol, Multiaddr, Transport as _};
     use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
     use tokio_crate as tokio;
 
@@ -712,7 +712,7 @@ mod tests {
     #[tokio::test]
     async fn close_listener() {
         let id_keys = identity::Keypair::generate_ed25519();
-        let mut transport = WebRTCTransport::new(id_keys);
+        let mut transport = Transport::new(id_keys);
 
         assert!(poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx))
             .now_or_never()
