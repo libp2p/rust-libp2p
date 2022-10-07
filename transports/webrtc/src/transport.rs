@@ -147,7 +147,7 @@ impl libp2p_core::Transport for Transport {
         }
 
         let config = self.config.clone();
-        let our_fingerprint = self.config.fingerprint();
+        let our_fingerprint = self.config.fingerprint;
         let id_keys = self.id_keys.clone();
         let udp_mux = self
             .listeners
@@ -160,7 +160,7 @@ impl libp2p_core::Transport for Transport {
         Ok(async move {
             let (actual_peer_id, connection) = upgrade::outbound(
                 sock_addr,
-                config.into_inner(),
+                config.inner,
                 udp_mux,
                 our_fingerprint,
                 remote_fingerprint,
@@ -337,9 +337,9 @@ impl Stream for ListenStream {
 
                     let upgrade = upgrade::inbound(
                         new_addr.addr,
-                        self.config.clone().into_inner(),
+                        self.config.inner.clone(),
                         self.udp_mux.udp_mux_handle(),
-                        self.config.fingerprint(),
+                        self.config.fingerprint,
                         new_addr.ufrag,
                         self.id_keys.clone(),
                     )
@@ -386,16 +386,6 @@ impl Config {
             )
             .expect("we specified SHA-256"),
         }
-    }
-
-    /// Returns the fingerprint of our certificate.
-    fn fingerprint(&self) -> Fingerprint {
-        self.fingerprint
-    }
-
-    /// Consumes the `WebRTCConfiguration`, returning its inner configuration.
-    fn into_inner(self) -> RTCConfiguration {
-        self.inner
     }
 }
 
