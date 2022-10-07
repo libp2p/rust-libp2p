@@ -24,6 +24,7 @@ log = "0.4"
 multihash = { version = "0.16", default-features = false, features = ["sha2"] }
 multibase = "0.9"
 rand = "0.8"
+rcgen = "0.9.3"
 serde = { version = "1.0", features = ["derive"] }
 stun = "0.4"
 thiserror = "1"
@@ -36,6 +37,5 @@ anyhow = "1.0"
 env_logger = "0.9"
 libp2p = { path = "../..", features = ["request-response"], default-features = false }
 rand_core = "0.5"
-rcgen = "0.9"
 quickcheck = "1"
 hex-literal = "0.3"

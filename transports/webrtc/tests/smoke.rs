@@ -13,26 +13,18 @@ use libp2p::swarm::{Swarm, SwarmBuilder, SwarmEvent};
 use libp2p_core::{identity, muxing::StreamMuxerBox, upgrade, Transport};
 use libp2p_webrtc::WebRTCTransport;
 use rand::RngCore;
-use rcgen::KeyPair;
 use tokio_crate as tokio;
-use webrtc::peer_connection::certificate::RTCCertificate;
 
 use std::{io, iter};
-
-fn generate_certificate() -> RTCCertificate {
-    let kp = KeyPair::generate(&rcgen::PKCS_ECDSA_P256_SHA256).expect("key pair");
-    RTCCertificate::from_key_pair(kp).expect("certificate")
-}
 
 fn generate_tls_keypair() -> identity::Keypair {
     identity::Keypair::generate_ed25519()
 }
 
 fn create_swarm() -> Result<Swarm<RequestResponse<PingCodec>>> {
-    let cert = generate_certificate();
     let keypair = generate_tls_keypair();
     let peer_id = keypair.public().to_peer_id();
-    let transport = WebRTCTransport::new(cert, keypair);
+    let transport = WebRTCTransport::new(keypair);
     let protocols = iter::once((PingProtocol(), ProtocolSupport::Full));
     let cfg = RequestResponseConfig::default();
     let behaviour = RequestResponse::new(PingCodec(), protocols, cfg);

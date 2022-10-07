@@ -41,6 +41,7 @@ use webrtc::ice::udp_mux::UDPMux;
 use webrtc::peer_connection::certificate::RTCCertificate;
 use webrtc::peer_connection::configuration::RTCConfiguration;
 
+use rand::distributions::DistString;
 use std::{
     net::SocketAddr,
     pin::Pin,
@@ -69,9 +70,9 @@ pub struct WebRTCTransport {
 
 impl WebRTCTransport {
     /// Creates a new WebRTC transport.
-    pub fn new(certificate: RTCCertificate, id_keys: identity::Keypair) -> Self {
+    pub fn new(id_keys: identity::Keypair) -> Self {
         Self {
-            config: Config::new(certificate),
+            config: Config::new(),
             id_keys,
             listeners: SelectAll::new(),
         }
@@ -411,8 +412,13 @@ struct Config {
 }
 
 impl Config {
-    /// Creates a new config.
-    fn new(certificate: RTCCertificate) -> Self {
+    fn new() -> Self {
+        let mut params = rcgen::CertificateParams::new(vec![
+            rand::distributions::Alphanumeric.sample_string(&mut rand::thread_rng(), 16)
+        ]);
+        params.alg = &rcgen::PKCS_ECDSA_P256_SHA256;
+        let certificate = RTCCertificate::from_params(params).expect("default params to work");
+
         Self {
             inner: RTCConfiguration {
                 certificates: vec![certificate],
@@ -623,7 +629,6 @@ mod tests {
     use futures::future::poll_fn;
     use hex_literal::hex;
     use libp2p_core::{multiaddr::Protocol, Multiaddr};
-    use rcgen::KeyPair;
     use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
     use tokio_crate as tokio;
 
@@ -720,11 +725,7 @@ mod tests {
     #[tokio::test]
     async fn close_listener() {
         let id_keys = identity::Keypair::generate_ed25519();
-        let mut transport = {
-            let kp = KeyPair::generate(&rcgen::PKCS_ECDSA_P256_SHA256).expect("key pair");
-            let cert = RTCCertificate::from_key_pair(kp).expect("certificate");
-            WebRTCTransport::new(cert, id_keys)
-        };
+        let mut transport = WebRTCTransport::new(id_keys);
 
         assert!(poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx))
             .now_or_never()
