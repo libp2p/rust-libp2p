@@ -336,21 +336,23 @@ impl Stream for ListenStream {
                     let local_addr =
                         socketaddr_to_multiaddr(&self.listen_addr, Some(self.config.fingerprint));
                     let send_back_addr = socketaddr_to_multiaddr(&new_addr.addr, None);
-                    let event = TransportEvent::Incoming {
-                        upgrade: upgrade::inbound(
-                            new_addr.addr,
-                            self.config.clone().into_inner(),
-                            self.udp_mux.udp_mux_handle(),
-                            self.config.fingerprint(),
-                            new_addr.ufrag,
-                            self.id_keys.clone(),
-                        )
-                        .boxed(),
+
+                    let upgrade = upgrade::inbound(
+                        new_addr.addr,
+                        self.config.clone().into_inner(),
+                        self.udp_mux.udp_mux_handle(),
+                        self.config.fingerprint(),
+                        new_addr.ufrag,
+                        self.id_keys.clone(),
+                    )
+                    .boxed();
+
+                    return Poll::Ready(Some(TransportEvent::Incoming {
+                        upgrade,
                         local_addr,
                         send_back_addr,
                         listener_id: self.listener_id,
-                    };
-                    return Poll::Ready(Some(event));
+                    }));
                 }
                 UDPMuxEvent::Error(e) => {
                     self.close(Err(Error::UDPMux(e)));
