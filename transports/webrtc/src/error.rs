@@ -24,9 +24,9 @@ use thiserror::Error;
 /// Error in WebRTC.
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("webrtc error: {0}")]
+    #[error(transparent)]
     WebRTC(#[from] webrtc::Error),
-    #[error("io error: {0}")]
+    #[error("IO error")]
     Io(#[source] std::io::Error),
     #[error("failed to authenticate peer")]
     Authentication(#[from] libp2p_noise::NoiseError),
