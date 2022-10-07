@@ -53,13 +53,13 @@ use futures::stream::StreamExt;
 use libp2p::core::Multiaddr;
 use libp2p::metrics::{Metrics, Recorder};
 use libp2p::swarm::SwarmEvent;
-use libp2p::{identify, identity, NetworkBehaviour, PeerId, ping, Swarm};
+use libp2p::{identity, ping, NetworkBehaviour, PeerId, Swarm};
+use libp2p_swarm::keep_alive;
+use log::info;
 use prometheus_client::registry::Registry;
 use std::error::Error;
 use std::thread;
 
-use env_logger::Env;
-use log::info;
 mod http_service;
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -71,7 +71,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut swarm = Swarm::new(
         block_on(libp2p::development_transport(local_key.clone()))?,
-        // ping::Behaviour::new(ping::Config::new().with_keep_alive(true)),
         MyBehaviour::new(local_key),
         local_peer_id,
     );
@@ -109,10 +108,15 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-#[derive(NetworkBehaviour)]
+/// Our network behaviour.
+///
+/// For illustrative purposes, this includes the [`keep_alive::Behaviour`]) behaviour so the ping actually happen
+/// and can be observed via the metrics.
+#[derive(NetworkBehaviour, Default)]
 #[behaviour(out_event = "Event")]
-struct MyBehaviour {
+struct Behaviour {
     identify: identify::Identify,
+    keep_alive: keep_alive::Behaviour,
     ping: ping::Behaviour,
 }
 
@@ -131,7 +135,12 @@ impl From<ping::Event> for Event {
         Self::Ping(event)
     }
 }
-impl MyBehaviour{
+impl From<keep_alive::Event> for Event {
+    fn from(event: keep_alive::Event) -> Self {
+        Self::KeepAlive(event)
+    }
+}
+impl Behaviour{
     fn new(local_key: libp2p::identity::Keypair) -> Self {
         Self{
             ping: ping::Behaviour::new(ping::Config::new().with_keep_alive(true)),
