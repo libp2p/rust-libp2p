@@ -41,12 +41,12 @@ use std::{
     task::{Context, Poll},
 };
 
+use crate::upgrade::WebRTCConnection;
 use crate::{
     connection::Connection,
     error::Error,
     fingerprint::Fingerprint,
     udp_mux::{UDPMuxEvent, UDPMuxNewAddr},
-    webrtc_connection::WebRTCConnection,
 };
 
 /// A WebRTC transport with direct p2p communication (without a STUN server).

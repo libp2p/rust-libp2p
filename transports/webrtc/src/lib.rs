@@ -88,7 +88,6 @@ mod sdp;
 mod transport;
 mod udp_mux;
 mod upgrade;
-mod webrtc_connection;
 
 pub use connection::Connection;
 pub use error::Error;
