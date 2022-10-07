@@ -369,7 +369,6 @@ async fn concurrent_connections_and_streams() {
     }
 }
 
-
 #[derive(Debug, Clone)]
 struct PingProtocol();
 
@@ -395,8 +394,8 @@ impl RequestResponseCodec for PingCodec {
     type Response = Pong;
 
     async fn read_request<T>(&mut self, _: &PingProtocol, io: &mut T) -> io::Result<Self::Request>
-        where
-            T: AsyncRead + Unpin + Send,
+    where
+        T: AsyncRead + Unpin + Send,
     {
         upgrade::read_length_prefixed(io, 4096)
             .map(|res| match res {
@@ -408,8 +407,8 @@ impl RequestResponseCodec for PingCodec {
     }
 
     async fn read_response<T>(&mut self, _: &PingProtocol, io: &mut T) -> io::Result<Self::Response>
-        where
-            T: AsyncRead + Unpin + Send,
+    where
+        T: AsyncRead + Unpin + Send,
     {
         upgrade::read_length_prefixed(io, 4096)
             .map(|res| match res {
@@ -426,8 +425,8 @@ impl RequestResponseCodec for PingCodec {
         io: &mut T,
         Ping(data): Ping,
     ) -> io::Result<()>
-        where
-            T: AsyncWrite + Unpin + Send,
+    where
+        T: AsyncWrite + Unpin + Send,
     {
         upgrade::write_length_prefixed(io, data).await?;
         io.close().await?;
@@ -440,8 +439,8 @@ impl RequestResponseCodec for PingCodec {
         io: &mut T,
         Pong(data): Pong,
     ) -> io::Result<()>
-        where
-            T: AsyncWrite + Unpin + Send,
+    where
+        T: AsyncWrite + Unpin + Send,
     {
         upgrade::write_length_prefixed(io, data).await?;
         io.close().await?;
