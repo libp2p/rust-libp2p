@@ -35,7 +35,7 @@ use futures::stream::StreamExt;
 use libp2p_core::connection::{ConnectedPoint, ConnectionId};
 use libp2p_core::{Multiaddr, PeerId};
 use libp2p_swarm::dial_opts::DialOpts;
-use libp2p_swarm::handler::DummyConnectionHandler;
+use libp2p_swarm::dummy;
 use libp2p_swarm::{
     ConnectionHandlerUpgrErr, NegotiatedSubstream, NetworkBehaviour, NetworkBehaviourAction,
     NotifyHandler, PollParameters,
@@ -144,7 +144,7 @@ impl NetworkBehaviour for Client {
         peer_id: &PeerId,
         connection_id: &ConnectionId,
         endpoint: &ConnectedPoint,
-        _handler: Either<handler::Handler, DummyConnectionHandler>,
+        _handler: Either<handler::Handler, dummy::ConnectionHandler>,
         _remaining_established: usize,
     ) {
         if !endpoint.is_relayed() {

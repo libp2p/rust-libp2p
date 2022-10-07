@@ -48,19 +48,19 @@
 //! You should see a long list of metrics printed to the terminal. Check the
 //! `libp2p_ping` metrics, they should be `>0`.
 
+use env_logger::Env;
 use futures::executor::block_on;
 use futures::stream::StreamExt;
 use libp2p::core::Multiaddr;
 use libp2p::metrics::{Metrics, Recorder};
-use libp2p::ping;
 use libp2p::swarm::SwarmEvent;
-use libp2p::{identity, PeerId, Swarm};
+use libp2p::{identity, ping, NetworkBehaviour, PeerId, Swarm};
+use libp2p_swarm::keep_alive;
+use log::info;
 use prometheus_client::registry::Registry;
 use std::error::Error;
 use std::thread;
 
-use env_logger::Env;
-use log::info;
 mod http_service;
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -72,7 +72,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut swarm = Swarm::new(
         block_on(libp2p::development_transport(local_key))?,
-        ping::Behaviour::new(ping::Config::new().with_keep_alive(true)),
+        Behaviour::default(),
         local_peer_id,
     );
 
@@ -91,7 +91,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     block_on(async {
         loop {
             match swarm.select_next_some().await {
-                SwarmEvent::Behaviour(ping_event) => {
+                SwarmEvent::Behaviour(BehaviourEvent::Ping(ping_event)) => {
                     info!("{:?}", ping_event);
                     metrics.record(&ping_event);
                 }
@@ -103,4 +103,14 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     });
     Ok(())
+}
+
+/// Our network behaviour.
+///
+/// For illustrative purposes, this includes the [`keep_alive::Behaviour`]) behaviour so the ping actually happen
+/// and can be observed via the metrics.
+#[derive(NetworkBehaviour, Default)]
+struct Behaviour {
+    keep_alive: keep_alive::Behaviour,
+    ping: ping::Behaviour,
 }
