@@ -60,9 +60,9 @@ pub async fn outbound(
 
     // 2. ANSWER
     // Set the remote description to the predefined SDP.
+    // NOTE: this will start the gathering of ICE candidates
     let sdp = sdp::render_server_session_description(addr, &remote_fingerprint);
     log::debug!("ANSWER: {:?}", sdp);
-    // NOTE: this will start the gathering of ICE candidates
     peer_connection.set_remote_description(sdp).await?;
 
     // Open a data channel to do Noise on top and verify the remote.
@@ -112,9 +112,9 @@ pub async fn inbound(
     log::debug!("OFFER: {:?}", sdp);
     peer_connection.set_remote_description(sdp).await?;
 
-    let answer = peer_connection.create_answer(None).await?;
     // Set the local description and start UDP listeners
     // Note: this will start the gathering of ICE candidates
+    let answer = peer_connection.create_answer(None).await?;
     log::debug!("ANSWER: {:?}", answer.sdp);
     peer_connection.set_local_description(answer).await?;
 
