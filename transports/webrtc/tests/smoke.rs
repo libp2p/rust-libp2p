@@ -16,28 +16,6 @@ use tokio_crate as tokio;
 
 use std::{io, iter};
 
-fn generate_tls_keypair() -> identity::Keypair {
-    identity::Keypair::generate_ed25519()
-}
-
-fn create_swarm() -> Result<Swarm<RequestResponse<PingCodec>>> {
-    let keypair = generate_tls_keypair();
-    let peer_id = keypair.public().to_peer_id();
-    let transport = libp2p_webrtc::Transport::new(keypair);
-    let protocols = iter::once((PingProtocol(), ProtocolSupport::Full));
-    let cfg = RequestResponseConfig::default();
-    let behaviour = RequestResponse::new(PingCodec(), protocols, cfg);
-    let transport = transport
-        .map(|(peer_id, conn), _| (peer_id, StreamMuxerBox::new(conn)))
-        .boxed();
-
-    Ok(SwarmBuilder::new(transport, behaviour, peer_id)
-        .executor(Box::new(|fut| {
-            tokio::spawn(fut);
-        }))
-        .build())
-}
-
 #[tokio::test]
 async fn smoke() -> Result<()> {
     let _ = env_logger::builder().is_test(true).try_init();
@@ -467,4 +445,26 @@ async fn concurrent_connections_and_streams() {
             }
         }
     }
+}
+
+fn create_swarm() -> Result<Swarm<RequestResponse<PingCodec>>> {
+    let keypair = generate_tls_keypair();
+    let peer_id = keypair.public().to_peer_id();
+    let transport = libp2p_webrtc::Transport::new(keypair);
+    let protocols = iter::once((PingProtocol(), ProtocolSupport::Full));
+    let cfg = RequestResponseConfig::default();
+    let behaviour = RequestResponse::new(PingCodec(), protocols, cfg);
+    let transport = transport
+        .map(|(peer_id, conn), _| (peer_id, StreamMuxerBox::new(conn)))
+        .boxed();
+
+    Ok(SwarmBuilder::new(transport, behaviour, peer_id)
+        .executor(Box::new(|fut| {
+            tokio::spawn(fut);
+        }))
+        .build())
+}
+
+fn generate_tls_keypair() -> identity::Keypair {
+    identity::Keypair::generate_ed25519()
 }
