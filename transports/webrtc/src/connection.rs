@@ -71,7 +71,7 @@ impl Unpin for Connection {}
 
 impl Connection {
     /// Creates a new connection.
-    pub async fn new(rtc_conn: RTCPeerConnection) -> Self {
+    pub(crate) async fn new(rtc_conn: RTCPeerConnection) -> Self {
         let (data_channel_tx, data_channel_rx) = mpsc::channel(MAX_DATA_CHANNELS_IN_FLIGHT);
 
         Connection::register_incoming_data_channels_handler(&rtc_conn, data_channel_tx).await;
@@ -86,7 +86,7 @@ impl Connection {
     }
 
     /// Set the capacity of a data channel's temporary read buffer (equal for all data channels; default: 8192).
-    pub fn set_data_channels_read_buf_capacity(&mut self, cap: usize) {
+    pub(crate) fn set_data_channels_read_buf_capacity(&mut self, cap: usize) {
         self.read_buf_cap = Some(cap);
     }
 

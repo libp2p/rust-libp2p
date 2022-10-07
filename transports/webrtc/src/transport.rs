@@ -239,7 +239,7 @@ impl Transport for WebRTCTransport {
 }
 
 /// A stream of incoming connections on one or more interfaces.
-pub struct WebRTCListenStream {
+struct WebRTCListenStream {
     /// The ID of this listener.
     listener_id: ListenerId,
 
@@ -407,13 +407,13 @@ impl Stream for WebRTCListenStream {
 
 /// A wrapper around [`RTCConfiguration`].
 #[derive(Clone)]
-pub(crate) struct WebRTCConfiguration {
+struct WebRTCConfiguration {
     inner: RTCConfiguration,
 }
 
 impl WebRTCConfiguration {
     /// Creates a new config.
-    pub fn new(certificate: RTCCertificate) -> Self {
+    fn new(certificate: RTCCertificate) -> Self {
         Self {
             inner: RTCConfiguration {
                 certificates: vec![certificate],
@@ -427,7 +427,7 @@ impl WebRTCConfiguration {
     /// # Panics
     ///
     /// Panics if the config does not contain any certificates.
-    pub fn fingerprint_of_first_certificate(&self) -> Fingerprint {
+    fn fingerprint_of_first_certificate(&self) -> Fingerprint {
         // safe to unwrap here because we require a certificate during construction.
         let fingerprint = self
             .inner
@@ -444,13 +444,13 @@ impl WebRTCConfiguration {
     }
 
     /// Consumes the `WebRTCConfiguration`, returning its inner configuration.
-    pub fn into_inner(self) -> RTCConfiguration {
+    fn into_inner(self) -> RTCConfiguration {
         self.inner
     }
 }
 
 /// Turns an IP address and port into the corresponding WebRTC multiaddr.
-pub(crate) fn socketaddr_to_multiaddr(socket_addr: &SocketAddr) -> Multiaddr {
+fn socketaddr_to_multiaddr(socket_addr: &SocketAddr) -> Multiaddr {
     Multiaddr::empty()
         .with(socket_addr.ip().into())
         .with(Protocol::Udp(socket_addr.port()))
