@@ -162,15 +162,26 @@ impl libp2p_core::Transport for Transport {
             .ok_or(TransportError::Other(Error::NoListeners))?;
         let udp_mux = first_listener.udp_mux.udp_mux_handle();
 
-        Ok(upgrade::outbound(
-            sock_addr,
-            config.into_inner(),
-            udp_mux,
-            our_fingerprint,
-            remote_fingerprint,
-            id_keys,
-            expected_peer_id,
-        )
+        Ok(async move {
+            let (actual_peer_id, connection) = upgrade::outbound(
+                sock_addr,
+                config.into_inner(),
+                udp_mux,
+                our_fingerprint,
+                remote_fingerprint,
+                id_keys,
+            )
+            .await?;
+
+            if actual_peer_id != expected_peer_id {
+                return Err(Error::InvalidPeerID {
+                    expected: expected_peer_id,
+                    got: actual_peer_id,
+                });
+            }
+
+            Ok((actual_peer_id, connection))
+        }
         .boxed())
     }
 

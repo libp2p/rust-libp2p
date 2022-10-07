@@ -50,7 +50,6 @@ pub async fn outbound(
     our_fingerprint: Fingerprint,
     remote_fingerprint: Fingerprint,
     id_keys: identity::Keypair,
-    expected_peer_id: PeerId,
 ) -> Result<(PeerId, Connection), Error> {
     log::trace!("new outbound connection to {addr})");
 
@@ -71,14 +70,6 @@ pub async fn outbound(
 
     let peer_id =
         noise::outbound(id_keys, data_channel, our_fingerprint, remote_fingerprint).await?;
-
-    log::trace!("verifying peer's identity addr={}", addr);
-    if expected_peer_id != peer_id {
-        return Err(Error::InvalidPeerID {
-            expected: expected_peer_id,
-            got: peer_id,
-        });
-    }
 
     Ok((peer_id, Connection::new(peer_connection).await))
 }
