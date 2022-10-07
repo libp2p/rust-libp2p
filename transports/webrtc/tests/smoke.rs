@@ -181,85 +181,6 @@ async fn smoke() -> Result<()> {
     Ok(())
 }
 
-#[derive(Debug, Clone)]
-struct PingProtocol();
-
-#[derive(Clone)]
-struct PingCodec();
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct Ping(Vec<u8>);
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct Pong(Vec<u8>);
-
-impl ProtocolName for PingProtocol {
-    fn protocol_name(&self) -> &[u8] {
-        "/ping/1".as_bytes()
-    }
-}
-
-#[async_trait]
-impl RequestResponseCodec for PingCodec {
-    type Protocol = PingProtocol;
-    type Request = Ping;
-    type Response = Pong;
-
-    async fn read_request<T>(&mut self, _: &PingProtocol, io: &mut T) -> io::Result<Self::Request>
-    where
-        T: AsyncRead + Unpin + Send,
-    {
-        upgrade::read_length_prefixed(io, 4096)
-            .map(|res| match res {
-                Err(e) => Err(io::Error::new(io::ErrorKind::InvalidData, e)),
-                Ok(vec) if vec.is_empty() => Err(io::ErrorKind::UnexpectedEof.into()),
-                Ok(vec) => Ok(Ping(vec)),
-            })
-            .await
-    }
-
-    async fn read_response<T>(&mut self, _: &PingProtocol, io: &mut T) -> io::Result<Self::Response>
-    where
-        T: AsyncRead + Unpin + Send,
-    {
-        upgrade::read_length_prefixed(io, 4096)
-            .map(|res| match res {
-                Err(e) => Err(io::Error::new(io::ErrorKind::InvalidData, e)),
-                Ok(vec) if vec.is_empty() => Err(io::ErrorKind::UnexpectedEof.into()),
-                Ok(vec) => Ok(Pong(vec)),
-            })
-            .await
-    }
-
-    async fn write_request<T>(
-        &mut self,
-        _: &PingProtocol,
-        io: &mut T,
-        Ping(data): Ping,
-    ) -> io::Result<()>
-    where
-        T: AsyncWrite + Unpin + Send,
-    {
-        upgrade::write_length_prefixed(io, data).await?;
-        io.close().await?;
-        Ok(())
-    }
-
-    async fn write_response<T>(
-        &mut self,
-        _: &PingProtocol,
-        io: &mut T,
-        Pong(data): Pong,
-    ) -> io::Result<()>
-    where
-        T: AsyncWrite + Unpin + Send,
-    {
-        upgrade::write_length_prefixed(io, data).await?;
-        io.close().await?;
-        Ok(())
-    }
-}
-
 #[tokio::test]
 async fn dial_failure() -> Result<()> {
     let _ = env_logger::builder().is_test(true).try_init();
@@ -445,6 +366,86 @@ async fn concurrent_connections_and_streams() {
                 panic!("unexpected event {:?}", e);
             }
         }
+    }
+}
+
+
+#[derive(Debug, Clone)]
+struct PingProtocol();
+
+#[derive(Clone)]
+struct PingCodec();
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Ping(Vec<u8>);
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Pong(Vec<u8>);
+
+impl ProtocolName for PingProtocol {
+    fn protocol_name(&self) -> &[u8] {
+        "/ping/1".as_bytes()
+    }
+}
+
+#[async_trait]
+impl RequestResponseCodec for PingCodec {
+    type Protocol = PingProtocol;
+    type Request = Ping;
+    type Response = Pong;
+
+    async fn read_request<T>(&mut self, _: &PingProtocol, io: &mut T) -> io::Result<Self::Request>
+        where
+            T: AsyncRead + Unpin + Send,
+    {
+        upgrade::read_length_prefixed(io, 4096)
+            .map(|res| match res {
+                Err(e) => Err(io::Error::new(io::ErrorKind::InvalidData, e)),
+                Ok(vec) if vec.is_empty() => Err(io::ErrorKind::UnexpectedEof.into()),
+                Ok(vec) => Ok(Ping(vec)),
+            })
+            .await
+    }
+
+    async fn read_response<T>(&mut self, _: &PingProtocol, io: &mut T) -> io::Result<Self::Response>
+        where
+            T: AsyncRead + Unpin + Send,
+    {
+        upgrade::read_length_prefixed(io, 4096)
+            .map(|res| match res {
+                Err(e) => Err(io::Error::new(io::ErrorKind::InvalidData, e)),
+                Ok(vec) if vec.is_empty() => Err(io::ErrorKind::UnexpectedEof.into()),
+                Ok(vec) => Ok(Pong(vec)),
+            })
+            .await
+    }
+
+    async fn write_request<T>(
+        &mut self,
+        _: &PingProtocol,
+        io: &mut T,
+        Ping(data): Ping,
+    ) -> io::Result<()>
+        where
+            T: AsyncWrite + Unpin + Send,
+    {
+        upgrade::write_length_prefixed(io, data).await?;
+        io.close().await?;
+        Ok(())
+    }
+
+    async fn write_response<T>(
+        &mut self,
+        _: &PingProtocol,
+        io: &mut T,
+        Pong(data): Pong,
+    ) -> io::Result<()>
+        where
+            T: AsyncWrite + Unpin + Send,
+    {
+        upgrade::write_length_prefixed(io, data).await?;
+        io.close().await?;
+        Ok(())
     }
 }
 
