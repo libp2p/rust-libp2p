@@ -64,7 +64,7 @@ impl WebRTCConnection {
             .take(64)
             .map(char::from)
             .collect();
-        let se = Self::setting_engine(udp_mux, &ufrag, addr.is_ipv4());
+        let se = setting_engine(udp_mux, &ufrag, addr.is_ipv4());
         let api = APIBuilder::new().with_setting_engine(se).build();
 
         let peer_connection = api.new_peer_connection(config).await?;
@@ -128,7 +128,7 @@ impl WebRTCConnection {
         // Set both ICE user and password to our fingerprint because that's what the client is
         // expecting (see [`Self::connect`] "2. ANSWER").
         let ufrag = our_fingerprint.to_ufrag();
-        let mut se = Self::setting_engine(udp_mux, &ufrag, addr.is_ipv4());
+        let mut se = setting_engine(udp_mux, &ufrag, addr.is_ipv4());
         {
             se.set_lite(true);
             se.disable_certificate_fingerprint_verification(true);
@@ -180,34 +180,34 @@ impl WebRTCConnection {
 
         Ok((peer_id, c))
     }
+}
 
-    fn setting_engine(
-        udp_mux: Arc<dyn UDPMux + Send + Sync>,
-        ufrag: &str,
-        is_ipv4: bool,
-    ) -> SettingEngine {
-        let mut se = SettingEngine::default();
+fn setting_engine(
+    udp_mux: Arc<dyn UDPMux + Send + Sync>,
+    ufrag: &str,
+    is_ipv4: bool,
+) -> SettingEngine {
+    let mut se = SettingEngine::default();
 
-        se.set_ice_credentials(ufrag.to_owned(), ufrag.to_owned());
+    se.set_ice_credentials(ufrag.to_owned(), ufrag.to_owned());
 
-        se.set_udp_network(UDPNetwork::Muxed(udp_mux.clone()));
+    se.set_udp_network(UDPNetwork::Muxed(udp_mux.clone()));
 
-        // Allow detaching data channels.
-        se.detach_data_channels();
+    // Allow detaching data channels.
+    se.detach_data_channels();
 
-        // Set the desired network type.
-        //
-        // NOTE: if not set, a [`webrtc_ice::agent::Agent`] might pick a wrong local candidate
-        // (e.g. IPv6 `[::1]` while dialing an IPv4 `10.11.12.13`).
-        let network_type = if is_ipv4 {
-            NetworkType::Udp4
-        } else {
-            NetworkType::Udp6
-        };
-        se.set_network_types(vec![network_type]);
+    // Set the desired network type.
+    //
+    // NOTE: if not set, a [`webrtc_ice::agent::Agent`] might pick a wrong local candidate
+    // (e.g. IPv6 `[::1]` while dialing an IPv4 `10.11.12.13`).
+    let network_type = if is_ipv4 {
+        NetworkType::Udp4
+    } else {
+        NetworkType::Udp6
+    };
+    se.set_network_types(vec![network_type]);
 
-        se
-    }
+    se
 }
 
 /// Returns the SHA-256 fingerprint of the remote.
