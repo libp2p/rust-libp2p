@@ -27,7 +27,7 @@ use webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
 
 use crate::fingerprint::Fingerprint;
 
-pub(crate) fn render_server_session_description(
+pub fn render_server_session_description(
     addr: SocketAddr,
     fingerprint: &Fingerprint,
 ) -> RTCSessionDescription {
@@ -43,7 +43,7 @@ pub(crate) fn render_server_session_description(
 /// Renders the SDP client session description.
 ///
 /// Certificate verification is disabled which is why we hardcode a dummy fingerprint here.
-pub(crate) fn render_client_session_description(
+pub fn render_client_session_description(
     addr: SocketAddr,
     ufrag: &str,
 ) -> RTCSessionDescription {
