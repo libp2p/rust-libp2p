@@ -91,7 +91,6 @@ impl Transport {
             .local_addr()
             .map_err(Error::Io)
             .map_err(TransportError::Other)?;
-        debug!("listening on {}", listen_addr);
 
         let udp_mux = UDPMuxNewAddr::new(socket);
 
