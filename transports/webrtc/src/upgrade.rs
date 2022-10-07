@@ -162,7 +162,7 @@ async fn new_outbound_connection(
     udp_mux: Arc<dyn UDPMux + Send + Sync>,
 ) -> Result<RTCPeerConnection, Error> {
     let ufrag = random_ufrag();
-    let se = setting_engine(udp_mux, &ufrag, addr.is_ipv4());
+    let se = setting_engine(udp_mux, &ufrag, addr);
 
     let connection = APIBuilder::new()
         .with_setting_engine(se)
@@ -179,7 +179,7 @@ async fn new_inbound_connection(
     udp_mux: Arc<dyn UDPMux + Send + Sync>,
     ufrag: &str,
 ) -> Result<RTCPeerConnection, Error> {
-    let mut se = setting_engine(udp_mux, &ufrag, addr.is_ipv4());
+    let mut se = setting_engine(udp_mux, &ufrag, addr);
     {
         se.set_lite(true);
         se.disable_certificate_fingerprint_verification(true);
@@ -212,7 +212,7 @@ fn random_ufrag() -> String {
 fn setting_engine(
     udp_mux: Arc<dyn UDPMux + Send + Sync>,
     ufrag: &str,
-    is_ipv4: bool,
+    addr: SocketAddr,
 ) -> SettingEngine {
     let mut se = SettingEngine::default();
 
@@ -229,10 +229,9 @@ fn setting_engine(
     //
     // NOTE: if not set, a [`webrtc_ice::agent::Agent`] might pick a wrong local candidate
     // (e.g. IPv6 `[::1]` while dialing an IPv4 `10.11.12.13`).
-    let network_type = if is_ipv4 {
-        NetworkType::Udp4
-    } else {
-        NetworkType::Udp6
+    let network_type = match addr {
+        SocketAddr::V4(_) => NetworkType::Udp4,
+        SocketAddr::V6(_) => NetworkType::Udp6,
     };
     se.set_network_types(vec![network_type]);
 
