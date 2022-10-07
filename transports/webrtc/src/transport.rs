@@ -275,13 +275,9 @@ impl ListenStream {
                     if self.listen_addr.is_ipv4() == ip.is_ipv4()
                         || self.listen_addr.is_ipv6() == ip.is_ipv6()
                     {
-                        let socket_addr = SocketAddr::new(ip, self.listen_addr.port());
-                        let ma =
-                            socketaddr_to_multiaddr(&socket_addr, Some(self.config.fingerprint));
-
                         return Poll::Ready(TransportEvent::NewAddress {
                             listener_id: self.listener_id,
-                            listen_addr: ma,
+                            listen_addr: self.listen_multi_address(ip),
                         });
                     }
                 }
@@ -290,13 +286,9 @@ impl ListenStream {
                     if self.listen_addr.is_ipv4() == ip.is_ipv4()
                         || self.listen_addr.is_ipv6() == ip.is_ipv6()
                     {
-                        let socket_addr = SocketAddr::new(ip, self.listen_addr.port());
-                        let ma =
-                            socketaddr_to_multiaddr(&socket_addr, Some(self.config.fingerprint));
-
                         return Poll::Ready(TransportEvent::AddressExpired {
                             listener_id: self.listener_id,
-                            listen_addr: ma,
+                            listen_addr: self.listen_multi_address(ip),
                         });
                     }
                 }
@@ -310,6 +302,13 @@ impl ListenStream {
         }
 
         Poll::Pending
+    }
+
+    /// Constructs a [`Multiaddr`] for the given IP address that represents our listen address.
+    fn listen_multi_address(&self, ip: IpAddr) -> Multiaddr {
+        let socket_addr = SocketAddr::new(ip, self.listen_addr.port());
+
+        socketaddr_to_multiaddr(&socket_addr, Some(self.config.fingerprint))
     }
 }
 
