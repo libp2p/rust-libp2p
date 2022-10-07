@@ -51,7 +51,7 @@ pub async fn outbound(
     remote_fingerprint: Fingerprint,
     id_keys: identity::Keypair,
 ) -> Result<(PeerId, Connection), Error> {
-    log::trace!("new outbound connection to {addr})");
+    log::debug!("new outbound connection to {addr})");
 
     let peer_connection = new_outbound_connection(addr, config, udp_mux).await?;
 
@@ -83,7 +83,7 @@ pub async fn inbound(
     remote_ufrag: String,
     id_keys: identity::Keypair,
 ) -> Result<(PeerId, Connection), Error> {
-    log::trace!("new inbound connection from {addr} (ufrag: {remote_ufrag})");
+    log::debug!("new inbound connection from {addr} (ufrag: {remote_ufrag})");
 
     let peer_connection =
         new_inbound_connection(addr, config, udp_mux, &our_fingerprint.to_ufrag()).await?;
