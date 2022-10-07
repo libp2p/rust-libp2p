@@ -18,24 +18,15 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::{
-    future::BoxFuture,
-    io::{AsyncRead, AsyncWrite},
-    prelude::*,
-    ready,
-    stream::SelectAll,
-    stream::Stream,
-};
+use futures::{future::BoxFuture, prelude::*, ready, stream::SelectAll, stream::Stream};
 use if_watch::{IfEvent, IfWatcher};
 use libp2p_core::{
     identity,
     multiaddr::{Multiaddr, Protocol},
     transport::{ListenerId, TransportError, TransportEvent},
-    InboundUpgrade, OutboundUpgrade, PeerId, UpgradeInfo,
+    PeerId,
 };
-use libp2p_noise::{Keypair, NoiseConfig, X25519Spec};
 use log::{debug, trace};
-use multihash::Multihash;
 use tokio_crate::net::UdpSocket;
 use webrtc::ice::udp_mux::UDPMux;
 use webrtc::peer_connection::certificate::RTCCertificate;
@@ -189,7 +180,7 @@ impl libp2p_core::Transport for Transport {
             let data_channel = conn.create_initial_upgrade_data_channel().await?;
 
             trace!("noise handshake with addr={}", remote);
-            let peer_id = perform_noise_handshake_outbound(
+            let peer_id = crate::upgrade::noise::outbound(
                 id_keys,
                 PollDataChannel::new(data_channel.clone()),
                 our_fingerprint,
@@ -508,29 +499,6 @@ fn parse_webrtc_dial_addr(addr: &Multiaddr) -> Option<(SocketAddr, Fingerprint, 
     Some((SocketAddr::new(ip, port), fingerprint, peer_id))
 }
 
-async fn perform_noise_handshake_outbound<T>(
-    id_keys: identity::Keypair,
-    poll_data_channel: T,
-    our_fingerprint: Fingerprint,
-    remote_fingerprint: Fingerprint,
-) -> Result<PeerId, Error>
-where
-    T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
-{
-    let dh_keys = Keypair::<X25519Spec>::new()
-        .into_authentic(&id_keys)
-        .unwrap();
-    let noise =
-        NoiseConfig::xx(dh_keys).with_prologue(noise_prologue(our_fingerprint, remote_fingerprint));
-    let info = noise.protocol_info().next().unwrap();
-    let (peer_id, _noise_io) = noise
-        .into_authenticated()
-        .upgrade_outbound(poll_data_channel, info)
-        .await?;
-
-    Ok(peer_id)
-}
-
 async fn upgrade(
     udp_mux: Arc<dyn UDPMux + Send + Sync>,
     config: Config,
@@ -560,7 +528,7 @@ async fn upgrade(
         ufrag
     );
     let remote_fingerprint = conn.get_remote_fingerprint().await;
-    let peer_id = perform_noise_handshake_inbound(
+    let peer_id = crate::upgrade::noise::inbound(
         id_keys,
         PollDataChannel::new(data_channel.clone()),
         our_fingerprint,
@@ -582,73 +550,15 @@ async fn upgrade(
     Ok((peer_id, c))
 }
 
-async fn perform_noise_handshake_inbound<T>(
-    id_keys: identity::Keypair,
-    poll_data_channel: T,
-    our_fingerprint: Fingerprint,
-    remote_fingerprint: Fingerprint,
-) -> Result<PeerId, Error>
-where
-    T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
-{
-    let dh_keys = Keypair::<X25519Spec>::new()
-        .into_authentic(&id_keys)
-        .unwrap();
-    let noise =
-        NoiseConfig::xx(dh_keys).with_prologue(noise_prologue(our_fingerprint, remote_fingerprint));
-    let info = noise.protocol_info().next().unwrap();
-    let (peer_id, _noise_io) = noise
-        .into_authenticated()
-        .upgrade_inbound(poll_data_channel, info)
-        .await?;
-
-    Ok(peer_id)
-}
-
-fn noise_prologue(our_fingerprint: Fingerprint, remote_fingerprint: Fingerprint) -> Vec<u8> {
-    let (a, b): (Multihash, Multihash) = (
-        our_fingerprint.to_multi_hash(),
-        remote_fingerprint.to_multi_hash(),
-    );
-    let (a, b) = (a.to_bytes(), b.to_bytes());
-    let (first, second) = if a < b { (a, b) } else { (b, a) };
-    const PREFIX: &[u8] = b"libp2p-webrtc-noise:";
-    let mut out = Vec::with_capacity(PREFIX.len() + first.len() + second.len());
-    out.extend_from_slice(PREFIX);
-    out.extend_from_slice(&first);
-    out.extend_from_slice(&second);
-    out
-}
-
 // Tests //////////////////////////////////////////////////////////////////////////////////////////
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use futures::future::poll_fn;
-    use hex_literal::hex;
     use libp2p_core::{multiaddr::Protocol, Transport as _};
     use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
     use tokio_crate as tokio;
-
-    #[test]
-    fn noise_prologue_tests() {
-        let a = Fingerprint::raw(hex!(
-            "3e79af40d6059617a0d83b83a52ce73b0c1f37a72c6043ad2969e2351bdca870"
-        ));
-        let b = Fingerprint::raw(hex!(
-            "30fc9f469c207419dfdd0aab5f27a86c973c94e40548db9375cca2e915973b99"
-        ));
-
-        let prologue1 = noise_prologue(a, b);
-        let prologue2 = noise_prologue(b, a);
-
-        assert_eq!(hex::encode(&prologue1), "6c69627032702d7765627274632d6e6f6973653a122030fc9f469c207419dfdd0aab5f27a86c973c94e40548db9375cca2e915973b9912203e79af40d6059617a0d83b83a52ce73b0c1f37a72c6043ad2969e2351bdca870");
-        assert_eq!(
-            prologue1, prologue2,
-            "order of fingerprints does not matter"
-        );
-    }
 
     #[test]
     fn missing_webrtc_protocol() {

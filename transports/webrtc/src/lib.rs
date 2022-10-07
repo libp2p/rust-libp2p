@@ -87,6 +87,7 @@ mod req_res_chan;
 mod sdp;
 mod transport;
 mod udp_mux;
+mod upgrade;
 mod webrtc_connection;
 
 pub use connection::Connection;
