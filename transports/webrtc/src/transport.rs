@@ -43,7 +43,6 @@ use std::{
 
 use crate::{
     connection::Connection,
-    connection::PollDataChannel,
     error::Error,
     fingerprint::Fingerprint,
     udp_mux::{UDPMuxEvent, UDPMuxNewAddr},
@@ -172,41 +171,14 @@ impl libp2p_core::Transport for Transport {
                 sock_addr,
                 config.into_inner(),
                 udp_mux,
-                &remote_fingerprint,
-            )
-            .await?;
-
-            // Open a data channel to do Noise on top and verify the remote.
-            let data_channel = conn.create_initial_upgrade_data_channel().await?;
-
-            trace!("noise handshake with addr={}", remote);
-            let peer_id = crate::upgrade::noise::outbound(
-                id_keys,
-                PollDataChannel::new(data_channel.clone()),
                 our_fingerprint,
                 remote_fingerprint,
+                id_keys,
+                expected_peer_id,
             )
             .await?;
 
-            trace!("verifying peer's identity addr={}", remote);
-            if expected_peer_id != peer_id {
-                return Err(Error::InvalidPeerID {
-                    expected: expected_peer_id,
-                    got: peer_id,
-                });
-            }
-
-            // Close the initial data channel after noise handshake is done.
-            data_channel
-                .close()
-                .await
-                .map_err(|e| Error::WebRTC(webrtc::Error::Data(e)))?;
-
-            let mut c = Connection::new(conn.into_inner()).await;
-            // TODO: default buffer size is too small to fit some messages. Possibly remove once
-            // https://github.com/webrtc-rs/sctp/issues/28 is fixed.
-            c.set_data_channels_read_buf_capacity(8192 * 10);
-            Ok((peer_id, c))
+            Ok(conn)
         }
         .boxed())
     }
@@ -514,40 +486,13 @@ async fn upgrade(
         socket_addr,
         config.into_inner(),
         udp_mux,
-        &our_fingerprint,
-        &ufrag,
-    )
-    .await?;
-
-    // Open a data channel to do Noise on top and verify the remote.
-    let data_channel = conn.create_initial_upgrade_data_channel().await?;
-
-    trace!(
-        "noise handshake with addr={} (ufrag={})",
-        socket_addr,
-        ufrag
-    );
-    let remote_fingerprint = conn.get_remote_fingerprint().await;
-    let peer_id = crate::upgrade::noise::inbound(
-        id_keys,
-        PollDataChannel::new(data_channel.clone()),
         our_fingerprint,
-        remote_fingerprint,
+        &ufrag,
+        id_keys,
     )
     .await?;
 
-    // Close the initial data channel after noise handshake is done.
-    data_channel
-        .close()
-        .await
-        .map_err(|e| Error::WebRTC(webrtc::Error::Data(e)))?;
-
-    let mut c = Connection::new(conn.into_inner()).await;
-    // TODO: default buffer size is too small to fit some messages. Possibly remove once
-    // https://github.com/webrtc-rs/sctp/issues/28 is fixed.
-    c.set_data_channels_read_buf_capacity(8192 * 10);
-
-    Ok((peer_id, c))
+    Ok(conn)
 }
 
 // Tests //////////////////////////////////////////////////////////////////////////////////////////

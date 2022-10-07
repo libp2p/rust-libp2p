@@ -18,10 +18,14 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::connection::PollDataChannel;
+use crate::Connection;
 use futures::{channel::oneshot, prelude::*, select};
 use futures_timer::Delay;
+use libp2p_core::{identity, PeerId};
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 use webrtc::api::setting_engine::SettingEngine;
 use webrtc::api::APIBuilder;
 use webrtc::data::data_channel::DataChannel;
@@ -34,14 +38,10 @@ use webrtc::peer_connection::configuration::RTCConfiguration;
 use webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
 use webrtc::peer_connection::RTCPeerConnection;
 
-use std::{net::SocketAddr, sync::Arc, time::Duration};
-
 use crate::error::Error;
 use crate::fingerprint::Fingerprint;
 
-pub(crate) struct WebRTCConnection {
-    peer_connection: RTCPeerConnection,
-}
+pub(crate) struct WebRTCConnection;
 
 impl WebRTCConnection {
     /// Creates a new WebRTC peer connection to the remote.
@@ -53,8 +53,11 @@ impl WebRTCConnection {
         addr: SocketAddr,
         config: RTCConfiguration,
         udp_mux: Arc<dyn UDPMux + Send + Sync>,
-        remote_fingerprint: &Fingerprint,
-    ) -> Result<Self, Error> {
+        our_fingerprint: Fingerprint,
+        remote_fingerprint: Fingerprint,
+        id_keys: identity::Keypair,
+        expected_peer_id: PeerId,
+    ) -> Result<(PeerId, Connection), Error> {
         // TODO: at least 128 bit of entropy
         let ufrag: String = thread_rng()
             .sample_iter(&Alphanumeric)
@@ -74,22 +77,54 @@ impl WebRTCConnection {
         // 2. ANSWER
         // Set the remote description to the predefined SDP.
         let server_session_description =
-            crate::sdp::render_server_session_description(addr, remote_fingerprint);
+            crate::sdp::render_server_session_description(addr, &remote_fingerprint);
         log::debug!("ANSWER: {:?}", server_session_description);
         let sdp = RTCSessionDescription::answer(server_session_description).unwrap();
         // NOTE: this will start the gathering of ICE candidates
         peer_connection.set_remote_description(sdp).await?;
 
-        Ok(Self { peer_connection })
+        // Open a data channel to do Noise on top and verify the remote.
+        let data_channel = create_initial_upgrade_data_channel(&peer_connection).await?;
+
+        log::trace!("noise handshake with addr={}", addr);
+        let peer_id = crate::upgrade::noise::outbound(
+            id_keys,
+            PollDataChannel::new(data_channel.clone()),
+            our_fingerprint,
+            remote_fingerprint,
+        )
+        .await?;
+
+        log::trace!("verifying peer's identity addr={}", addr);
+        if expected_peer_id != peer_id {
+            return Err(Error::InvalidPeerID {
+                expected: expected_peer_id,
+                got: peer_id,
+            });
+        }
+
+        // Close the initial data channel after noise handshake is done.
+        data_channel
+            .close()
+            .await
+            .map_err(|e| Error::WebRTC(webrtc::Error::Data(e)))?;
+
+        let mut c = Connection::new(peer_connection).await;
+        // TODO: default buffer size is too small to fit some messages. Possibly remove once
+        // https://github.com/webrtc-rs/sctp/issues/28 is fixed.
+        c.set_data_channels_read_buf_capacity(8192 * 10);
+
+        Ok((peer_id, c))
     }
 
     pub async fn accept(
         addr: SocketAddr,
         config: RTCConfiguration,
         udp_mux: Arc<dyn UDPMux + Send + Sync>,
-        our_fingerprint: &Fingerprint,
+        our_fingerprint: Fingerprint,
         remote_ufrag: &str,
-    ) -> Result<Self, Error> {
+        id_keys: identity::Keypair,
+    ) -> Result<(PeerId, Connection), Error> {
         // Set both ICE user and password to our fingerprint because that's what the client is
         // expecting (see [`Self::connect`] "2. ANSWER").
         let ufrag = our_fingerprint.to_ufrag();
@@ -119,51 +154,31 @@ impl WebRTCConnection {
         log::debug!("ANSWER: {:?}", answer.sdp);
         peer_connection.set_local_description(answer).await?;
 
-        Ok(Self { peer_connection })
-    }
-
-    pub async fn create_initial_upgrade_data_channel(&self) -> Result<Arc<DataChannel>, Error> {
         // Open a data channel to do Noise on top and verify the remote.
-        let data_channel = self
-            .peer_connection
-            .create_data_channel(
-                "data",
-                Some(RTCDataChannelInit {
-                    negotiated: Some(0),
-                    ..RTCDataChannelInit::default()
-                }),
-            )
-            .await?;
+        let data_channel = create_initial_upgrade_data_channel(&peer_connection).await?;
 
-        let (tx, mut rx) = oneshot::channel::<Arc<DataChannel>>();
+        log::trace!("noise handshake with addr={} (ufrag={})", addr, ufrag);
+        let remote_fingerprint = get_remote_fingerprint(&peer_connection).await;
+        let peer_id = crate::upgrade::noise::inbound(
+            id_keys,
+            PollDataChannel::new(data_channel.clone()),
+            our_fingerprint,
+            remote_fingerprint,
+        )
+        .await?;
 
-        // Wait until the data channel is opened and detach it.
-        crate::connection::register_data_channel_open_handler(data_channel, tx).await;
-        select! {
-            res = rx => match res {
-                Ok(detached) => Ok(detached),
-                Err(e) => Err(Error::Internal(e.to_string())),
-            },
-            _ = Delay::new(Duration::from_secs(10)).fuse() => Err(Error::Internal(
-                "data channel opening took longer than 10 seconds (see logs)".into(),
-            ))
-        }
-    }
+        // Close the initial data channel after noise handshake is done.
+        data_channel
+            .close()
+            .await
+            .map_err(|e| Error::WebRTC(webrtc::Error::Data(e)))?;
 
-    pub fn into_inner(self) -> RTCPeerConnection {
-        self.peer_connection
-    }
+        let mut c = Connection::new(peer_connection).await;
+        // TODO: default buffer size is too small to fit some messages. Possibly remove once
+        // https://github.com/webrtc-rs/sctp/issues/28 is fixed.
+        c.set_data_channels_read_buf_capacity(8192 * 10);
 
-    /// Returns the SHA-256 fingerprint of the remote.
-    pub async fn get_remote_fingerprint(&self) -> Fingerprint {
-        let cert_bytes = self
-            .peer_connection
-            .sctp()
-            .transport()
-            .get_remote_certificate()
-            .await;
-
-        Fingerprint::from_certificate(&cert_bytes)
+        Ok((peer_id, c))
     }
 
     fn setting_engine(
@@ -192,5 +207,41 @@ impl WebRTCConnection {
         se.set_network_types(vec![network_type]);
 
         se
+    }
+}
+
+/// Returns the SHA-256 fingerprint of the remote.
+async fn get_remote_fingerprint(conn: &RTCPeerConnection) -> Fingerprint {
+    let cert_bytes = conn.sctp().transport().get_remote_certificate().await;
+
+    Fingerprint::from_certificate(&cert_bytes)
+}
+
+async fn create_initial_upgrade_data_channel(
+    conn: &RTCPeerConnection,
+) -> Result<Arc<DataChannel>, Error> {
+    // Open a data channel to do Noise on top and verify the remote.
+    let data_channel = conn
+        .create_data_channel(
+            "data",
+            Some(RTCDataChannelInit {
+                negotiated: Some(0),
+                ..RTCDataChannelInit::default()
+            }),
+        )
+        .await?;
+
+    let (tx, mut rx) = oneshot::channel::<Arc<DataChannel>>();
+
+    // Wait until the data channel is opened and detach it.
+    crate::connection::register_data_channel_open_handler(data_channel, tx).await;
+    select! {
+        res = rx => match res {
+            Ok(detached) => Ok(detached),
+            Err(e) => Err(Error::Internal(e.to_string())),
+        },
+        _ = Delay::new(Duration::from_secs(10)).fuse() => Err(Error::Internal(
+            "data channel opening took longer than 10 seconds (see logs)".into(),
+        ))
     }
 }
