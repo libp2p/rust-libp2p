@@ -38,10 +38,10 @@ fn create_swarm() -> Result<(Swarm<RequestResponse<PingCodec>>, Fingerprint)> {
     let protocols = iter::once((PingProtocol(), ProtocolSupport::Full));
     let cfg = RequestResponseConfig::default();
     let behaviour = RequestResponse::new(PingCodec(), protocols, cfg);
-    let transport = Transport::map(transport, |(peer_id, conn), _| {
-        (peer_id, StreamMuxerBox::new(conn))
-    })
-    .boxed();
+    let transport = transport
+        .map(|(peer_id, conn), _| (peer_id, StreamMuxerBox::new(conn)))
+        .boxed();
+
     Ok((
         SwarmBuilder::new(transport, behaviour, peer_id)
             .executor(Box::new(|fut| {
