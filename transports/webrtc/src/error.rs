@@ -32,8 +32,6 @@ pub enum Error {
     Noise(#[from] libp2p_noise::NoiseError),
 
     // Authentication errors.
-    #[error("invalid fingerprint (expected {expected:?}, got {got:?})")]
-    InvalidFingerprint { expected: String, got: String },
     #[error("invalid peer ID (expected {expected:?}, got {got:?})")]
     InvalidPeerID {
         expected: Option<PeerId>,
