@@ -80,6 +80,12 @@ pub async fn outbound(
     )
     .await?;
 
+    // Close the initial data channel after noise handshake is done.
+    data_channel
+        .close()
+        .await
+        .map_err(|e| Error::WebRTC(webrtc::Error::Data(e)))?;
+
     log::trace!("verifying peer's identity addr={}", addr);
     if expected_peer_id != peer_id {
         return Err(Error::InvalidPeerID {
@@ -87,12 +93,6 @@ pub async fn outbound(
             got: peer_id,
         });
     }
-
-    // Close the initial data channel after noise handshake is done.
-    data_channel
-        .close()
-        .await
-        .map_err(|e| Error::WebRTC(webrtc::Error::Data(e)))?;
 
     Ok((peer_id, Connection::new(peer_connection).await))
 }
