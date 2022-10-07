@@ -27,7 +27,7 @@ pub enum Error {
     #[error(transparent)]
     WebRTC(#[from] webrtc::Error),
     #[error("IO error")]
-    Io(#[source] std::io::Error),
+    Io(#[from] std::io::Error),
     #[error("failed to authenticate peer")]
     Authentication(#[from] libp2p_noise::NoiseError),
 

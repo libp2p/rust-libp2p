@@ -1,6 +1,6 @@
 use crate::fingerprint::Fingerprint;
 use crate::Error;
-use futures::{AsyncRead, AsyncWrite};
+use futures::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use libp2p_core::{identity, InboundUpgrade, OutboundUpgrade, PeerId, UpgradeInfo};
 use libp2p_noise::{Keypair, NoiseConfig, X25519Spec};
 use multihash::Multihash;
@@ -20,10 +20,12 @@ where
     let noise =
         NoiseConfig::xx(dh_keys).with_prologue(noise_prologue(our_fingerprint, remote_fingerprint));
     let info = noise.protocol_info().next().unwrap();
-    let (peer_id, _noise_io) = noise
+    let (peer_id, mut channel) = noise
         .into_authenticated()
         .upgrade_outbound(stream, info)
         .await?;
+
+    channel.close().await?;
 
     Ok(peer_id)
 }
@@ -43,10 +45,12 @@ where
     let noise =
         NoiseConfig::xx(dh_keys).with_prologue(noise_prologue(our_fingerprint, remote_fingerprint));
     let info = noise.protocol_info().next().unwrap();
-    let (peer_id, _noise_io) = noise
+    let (peer_id, mut channel) = noise
         .into_authenticated()
         .upgrade_inbound(stream, info)
         .await?;
+
+    channel.close().await?;
 
     Ok(peer_id)
 }

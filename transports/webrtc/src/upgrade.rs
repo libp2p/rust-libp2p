@@ -70,19 +70,8 @@ pub async fn outbound(
     // Open a data channel to do Noise on top and verify the remote.
     let data_channel = create_initial_upgrade_data_channel(&peer_connection).await?;
 
-    let peer_id = noise::outbound(
-        id_keys,
-        PollDataChannel::new(data_channel.clone()),
-        our_fingerprint,
-        remote_fingerprint,
-    )
-    .await?;
-
-    // Close the initial data channel after noise handshake is done.
-    data_channel
-        .close()
-        .await
-        .map_err(|e| Error::WebRTC(webrtc::Error::Data(e)))?;
+    let peer_id =
+        noise::outbound(id_keys, data_channel, our_fingerprint, remote_fingerprint).await?;
 
     log::trace!("verifying peer's identity addr={}", addr);
     if expected_peer_id != peer_id {
@@ -121,19 +110,8 @@ pub async fn inbound(
     let data_channel = create_initial_upgrade_data_channel(&peer_connection).await?;
 
     let remote_fingerprint = get_remote_fingerprint(&peer_connection).await;
-    let peer_id = noise::inbound(
-        id_keys,
-        PollDataChannel::new(data_channel.clone()),
-        our_fingerprint,
-        remote_fingerprint,
-    )
-    .await?;
-
-    // Close the initial data channel after noise handshake is done.
-    data_channel
-        .close()
-        .await
-        .map_err(|e| Error::WebRTC(webrtc::Error::Data(e)))?;
+    let peer_id =
+        noise::inbound(id_keys, data_channel, our_fingerprint, remote_fingerprint).await?;
 
     Ok((peer_id, Connection::new(peer_connection).await))
 }
@@ -229,7 +207,7 @@ async fn get_remote_fingerprint(conn: &RTCPeerConnection) -> Fingerprint {
 
 async fn create_initial_upgrade_data_channel(
     conn: &RTCPeerConnection,
-) -> Result<Arc<DataChannel>, Error> {
+) -> Result<PollDataChannel, Error> {
     // Open a data channel to do Noise on top and verify the remote.
     let data_channel = conn
         .create_data_channel(
@@ -258,5 +236,5 @@ async fn create_initial_upgrade_data_channel(
         }
     };
 
-    Ok(channel)
+    Ok(PollDataChannel::new(channel))
 }
