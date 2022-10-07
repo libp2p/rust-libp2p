@@ -26,7 +26,6 @@ use libp2p_core::{
     transport::{ListenerId, TransportError, TransportEvent},
     PeerId,
 };
-use tokio_crate::net::UdpSocket;
 use webrtc::peer_connection::certificate::RTCCertificate;
 use webrtc::peer_connection::configuration::RTCConfiguration;
 
@@ -71,31 +70,14 @@ impl Transport {
         listener_id: ListenerId,
         addr: Multiaddr,
     ) -> Result<ListenStream, TransportError<Error>> {
-        let sock_addr =
+        let socket_addr =
             parse_webrtc_listen_addr(&addr).ok_or(TransportError::MultiaddrNotSupported(addr))?;
 
-        // XXX: `UdpSocket::bind` is async, so use a std socket and convert
-        let std_sock = std::net::UdpSocket::bind(sock_addr)
-            .map_err(Error::Io)
-            .map_err(TransportError::Other)?;
-        std_sock
-            .set_nonblocking(true)
-            .map_err(Error::Io)
-            .map_err(TransportError::Other)?;
-        let socket = UdpSocket::from_std(std_sock)
-            .map_err(Error::Io)
-            .map_err(TransportError::Other)?;
-
-        let listen_addr = socket
-            .local_addr()
-            .map_err(Error::Io)
-            .map_err(TransportError::Other)?;
-
-        let udp_mux = UDPMuxNewAddr::new(socket);
+        let udp_mux = UDPMuxNewAddr::listen_on(socket_addr)
+            .map_err(|io| TransportError::Other(Error::Io(io)))?;
 
         Ok(ListenStream::new(
             listener_id,
-            listen_addr,
             self.config.clone(),
             udp_mux,
             self.id_keys.clone(),
@@ -233,7 +215,6 @@ impl ListenStream {
     /// Constructs a `WebRTCListenStream` for incoming connections.
     fn new(
         listener_id: ListenerId,
-        listen_addr: SocketAddr,
         config: Config,
         udp_mux: UDPMuxNewAddr,
         id_keys: identity::Keypair,
@@ -241,7 +222,7 @@ impl ListenStream {
     ) -> Self {
         ListenStream {
             listener_id,
-            listen_addr,
+            listen_addr: udp_mux.listen_addr(),
             config,
             udp_mux,
             id_keys,

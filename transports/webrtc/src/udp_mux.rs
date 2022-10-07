@@ -36,6 +36,7 @@ use futures::future::{BoxFuture, FutureExt, OptionFuture};
 use futures::stream::FuturesUnordered;
 use std::{
     collections::{HashMap, HashSet},
+    io,
     io::ErrorKind,
     net::SocketAddr,
     sync::Arc,
@@ -67,6 +68,8 @@ pub enum UDPMuxEvent {
 pub struct UDPMuxNewAddr {
     udp_sock: UdpSocket,
 
+    listen_addr: SocketAddr,
+
     /// Maps from ufrag to the underlying connection.
     conns: HashMap<String, UDPMuxConn>,
 
@@ -95,14 +98,21 @@ pub struct UDPMuxNewAddr {
 }
 
 impl UDPMuxNewAddr {
-    /// Creates a new UDP muxer.
-    pub fn new(udp_sock: UdpSocket) -> Self {
+    pub fn listen_on(addr: SocketAddr) -> Result<Self, io::Error> {
+        // XXX: `UdpSocket::bind` is async, so use a std socket and convert
+        let std_sock = std::net::UdpSocket::bind(addr)?;
+        std_sock.set_nonblocking(true)?;
+
+        let tokio_socket = UdpSocket::from_std(std_sock)?;
+        let listen_addr = tokio_socket.local_addr()?;
+
         let (udp_mux_handle, close_command, get_conn_command, remove_conn_command) =
             UdpMuxHandle::new();
         let (udp_mux_writer_handle, registration_command, send_command) = UdpMuxWriterHandle::new();
 
-        Self {
-            udp_sock,
+        Ok(Self {
+            udp_sock: tokio_socket,
+            listen_addr,
             conns: HashMap::default(),
             address_map: HashMap::default(),
             new_addrs: HashSet::default(),
@@ -117,7 +127,11 @@ impl UDPMuxNewAddr {
             send_command,
             udp_mux_handle: Arc::new(udp_mux_handle),
             udp_mux_writer_handle: Arc::new(udp_mux_writer_handle),
-        }
+        })
+    }
+
+    pub fn listen_addr(&self) -> SocketAddr {
+        self.listen_addr
     }
 
     pub fn udp_mux_handle(&self) -> Arc<UdpMuxHandle> {
