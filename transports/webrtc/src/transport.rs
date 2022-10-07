@@ -152,13 +152,13 @@ impl libp2p_core::Transport for Transport {
         let config = self.config.clone();
         let our_fingerprint = self.config.fingerprint();
         let id_keys = self.id_keys.clone();
-
-        let first_listener = self
+        let udp_mux = self
             .listeners
             .iter()
             .next()
-            .ok_or(TransportError::Other(Error::NoListeners))?;
-        let udp_mux = first_listener.udp_mux.udp_mux_handle();
+            .ok_or(TransportError::Other(Error::NoListeners))?
+            .udp_mux
+            .udp_mux_handle();
 
         Ok(async move {
             let (actual_peer_id, connection) = upgrade::outbound(
