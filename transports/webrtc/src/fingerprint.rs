@@ -45,7 +45,7 @@ impl Fingerprint {
         Fingerprint(bytes)
     }
 
-    pub fn try_from_rtc_dtls(fp: RTCDtlsFingerprint) -> Option<Self> {
+    pub fn try_from_rtc_dtls(fp: &RTCDtlsFingerprint) -> Option<Self> {
         if fp.algorithm != SHA256 {
             return None;
         }

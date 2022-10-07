@@ -163,7 +163,7 @@ impl Transport for WebRTCTransport {
         trace!("dialing addr={}", remote);
 
         let config = self.config.clone();
-        let our_fingerprint = self.config.fingerprint_of_first_certificate();
+        let our_fingerprint = self.config.fingerprint();
         let id_keys = self.id_keys.clone();
 
         let first_listener = self
@@ -320,9 +320,7 @@ impl WebRTCListenStream {
                     {
                         let socket_addr = SocketAddr::new(ip, self.listen_addr.port());
                         let ma = socketaddr_to_multiaddr(&socket_addr).with(Protocol::Certhash(
-                            self.config
-                                .fingerprint_of_first_certificate()
-                                .to_multi_hash(),
+                            self.config.fingerprint().to_multi_hash(),
                         ));
                         log::debug!("New listen address: {}", ma);
                         return Poll::Ready(TransportEvent::NewAddress {
@@ -338,9 +336,7 @@ impl WebRTCListenStream {
                     {
                         let socket_addr = SocketAddr::new(ip, self.listen_addr.port());
                         let ma = socketaddr_to_multiaddr(&socket_addr).with(Protocol::Certhash(
-                            self.config
-                                .fingerprint_of_first_certificate()
-                                .to_multi_hash(),
+                            self.config.fingerprint().to_multi_hash(),
                         ));
                         log::debug!("Expired listen address: {}", ma);
                         return Poll::Ready(TransportEvent::AddressExpired {
@@ -409,6 +405,7 @@ impl Stream for WebRTCListenStream {
 #[derive(Clone)]
 struct Config {
     inner: RTCConfiguration,
+    fingerprint: Fingerprint,
 }
 
 impl Config {
@@ -419,33 +416,23 @@ impl Config {
         params.alg = &rcgen::PKCS_ECDSA_P256_SHA256;
         let certificate = RTCCertificate::from_params(params).expect("default params to work");
 
+        let fingerprints = certificate.get_fingerprints().expect("to never fail"); // TODO: Remove `Result` upstream?
+
         Self {
             inner: RTCConfiguration {
                 certificates: vec![certificate],
                 ..RTCConfiguration::default()
             },
+            fingerprint: Fingerprint::try_from_rtc_dtls(
+                fingerprints.first().expect("at least one certificate"),
+            )
+            .expect("we specified SHA-256"),
         }
     }
 
-    /// Returns a SHA-256 fingerprint of the first certificate.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the config does not contain any certificates.
-    fn fingerprint_of_first_certificate(&self) -> Fingerprint {
-        // safe to unwrap here because we require a certificate during construction.
-        let fingerprint = self
-            .inner
-            .certificates
-            .first()
-            .expect("at least one certificate")
-            .get_fingerprints()
-            .expect("get_fingerprints to succeed")
-            .first()
-            .expect("at least one certificate")
-            .clone();
-
-        Fingerprint::try_from_rtc_dtls(fingerprint).expect("a sha256 fingerprint")
+    /// Returns the fingerprint of our certificate.
+    fn fingerprint(&self) -> Fingerprint {
+        self.fingerprint
     }
 
     /// Consumes the `WebRTCConfiguration`, returning its inner configuration.
@@ -542,7 +529,7 @@ async fn upgrade(
 ) -> Result<(PeerId, Connection), Error> {
     trace!("upgrading addr={} (ufrag={})", socket_addr, ufrag);
 
-    let our_fingerprint = config.fingerprint_of_first_certificate();
+    let our_fingerprint = config.fingerprint();
 
     let conn = WebRTCConnection::accept(
         socket_addr,
