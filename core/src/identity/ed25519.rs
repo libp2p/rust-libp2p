@@ -21,7 +21,9 @@
 //! Ed25519 keys.
 
 use super::error::DecodingError;
+use core::cmp;
 use core::fmt;
+use core::hash;
 use ed25519_dalek::{self as ed25519, Signer as _, Verifier as _};
 use rand::RngCore;
 use std::convert::TryFrom;
@@ -113,7 +115,7 @@ impl From<SecretKey> for Keypair {
 }
 
 /// An Ed25519 public key.
-#[derive(PartialEq, Eq, Clone)]
+#[derive(Eq, Clone)]
 pub struct PublicKey(ed25519::PublicKey);
 
 impl fmt::Debug for PublicKey {
@@ -123,6 +125,30 @@ impl fmt::Debug for PublicKey {
             write!(f, "{:x}", byte)?;
         }
         Ok(())
+    }
+}
+
+impl cmp::PartialEq for PublicKey {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.as_bytes().eq(other.0.as_bytes())
+    }
+}
+
+impl hash::Hash for PublicKey {
+    fn hash<H: hash::Hasher>(&self, state: &mut H) {
+        self.0.as_bytes().hash(state);
+    }
+}
+
+impl cmp::PartialOrd for PublicKey {
+    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
+        self.0.as_bytes().partial_cmp(other.0.as_bytes())
+    }
+}
+
+impl cmp::Ord for PublicKey {
+    fn cmp(&self, other: &Self) -> cmp::Ordering {
+        self.0.as_bytes().cmp(other.0.as_bytes())
     }
 }
 

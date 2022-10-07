@@ -335,15 +335,15 @@ mod tests {
     fn rand_put_record_job() -> PutRecordJob {
         let mut rng = rand::thread_rng();
         let id = PeerId::random();
-        let replicate_interval = Duration::from_secs(rng.gen_range(1, 60));
-        let publish_interval = Some(replicate_interval * rng.gen_range(1, 10));
-        let record_ttl = Some(Duration::from_secs(rng.gen_range(1, 600)));
-        PutRecordJob::new(id.clone(), replicate_interval, publish_interval, record_ttl)
+        let replicate_interval = Duration::from_secs(rng.gen_range(1..60));
+        let publish_interval = Some(replicate_interval * rng.gen_range(1..10));
+        let record_ttl = Some(Duration::from_secs(rng.gen_range(1..600)));
+        PutRecordJob::new(id, replicate_interval, publish_interval, record_ttl)
     }
 
     fn rand_add_provider_job() -> AddProviderJob {
         let mut rng = rand::thread_rng();
-        let interval = Duration::from_secs(rng.gen_range(1, 60));
+        let interval = Duration::from_secs(rng.gen_range(1..60));
         AddProviderJob::new(interval)
     }
 
@@ -360,7 +360,7 @@ mod tests {
         fn prop(records: Vec<Record>) {
             let mut job = rand_put_record_job();
             // Fill a record store.
-            let mut store = MemoryStore::new(job.local_id.clone());
+            let mut store = MemoryStore::new(job.local_id);
             for r in records {
                 let _ = store.put(r);
             }
@@ -389,9 +389,9 @@ mod tests {
             let mut job = rand_add_provider_job();
             let id = PeerId::random();
             // Fill a record store.
-            let mut store = MemoryStore::new(id.clone());
+            let mut store = MemoryStore::new(id);
             for mut r in records {
-                r.provider = id.clone();
+                r.provider = id;
                 let _ = store.add_provider(r);
             }
 
