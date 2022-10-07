@@ -48,12 +48,13 @@
 //! You should see a long list of metrics printed to the terminal. Check the
 //! `libp2p_ping` metrics, they should be `>0`.
 
+use env_logger::Env;
 use futures::executor::block_on;
 use futures::stream::StreamExt;
 use libp2p::core::Multiaddr;
 use libp2p::metrics::{Metrics, Recorder};
 use libp2p::swarm::SwarmEvent;
-use libp2p::{identity, ping, NetworkBehaviour, PeerId, Swarm};
+use libp2p::{identify, identity, ping, NetworkBehaviour, PeerId, Swarm};
 use libp2p_swarm::keep_alive;
 use log::info;
 use prometheus_client::registry::Registry;
@@ -71,7 +72,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let mut swarm = Swarm::new(
         block_on(libp2p::development_transport(local_key.clone()))?,
-        MyBehaviour::new(local_key),
+        Behaviour::new(local_key),
         local_peer_id,
     );
 
@@ -90,11 +91,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     block_on(async {
         loop {
             match swarm.select_next_some().await {
-                SwarmEvent::Behaviour(Event::Ping(ping_event)) => {
+                SwarmEvent::Behaviour(BehaviourEvent::Ping(ping_event)) => {
                     info!("{:?}", ping_event);
                     metrics.record(&ping_event);
                 }
-                SwarmEvent::Behaviour(Event::Identify(identify_event)) => {
+                SwarmEvent::Behaviour(BehaviourEvent::Identify(identify_event)) => {
                     info!("{:?}", identify_event);
                     metrics.record(&identify_event);
                 }
@@ -112,42 +113,23 @@ fn main() -> Result<(), Box<dyn Error>> {
 ///
 /// For illustrative purposes, this includes the [`keep_alive::Behaviour`]) behaviour so the ping actually happen
 /// and can be observed via the metrics.
-#[derive(NetworkBehaviour, Default)]
-#[behaviour(out_event = "Event")]
+#[derive(NetworkBehaviour)]
+// #[behaviour(out_event = "Event")]
 struct Behaviour {
-    identify: identify::Identify,
+    identify: identify::Behaviour,
     keep_alive: keep_alive::Behaviour,
     ping: ping::Behaviour,
 }
 
-#[derive(Debug)]
-enum Event {
-    Identify(identify::IdentifyEvent),
-    Ping(ping::Event),
-}
-impl From<identify::IdentifyEvent> for Event {
-    fn from(event: identify::IdentifyEvent) -> Self {
-        Self::Identify(event)
-    }
-}
-impl From<ping::Event> for Event {
-    fn from(event: ping::Event) -> Self {
-        Self::Ping(event)
-    }
-}
-impl From<keep_alive::Event> for Event {
-    fn from(event: keep_alive::Event) -> Self {
-        Self::KeepAlive(event)
-    }
-}
 impl Behaviour{
     fn new(local_key: libp2p::identity::Keypair) -> Self {
         Self{
-            ping: ping::Behaviour::new(ping::Config::new().with_keep_alive(true)),
-            identify: identify::Identify::new( identify::IdentifyConfig::new(
+            ping: ping::Behaviour::default(),
+            identify: identify::Behaviour::new( identify::Config::new(
                 "/ipfs/0.1.0".into(),
                 local_key.public(),
             )),
+            keep_alive: keep_alive::Behaviour::default(),
         }
     }
 }
