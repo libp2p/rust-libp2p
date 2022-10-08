@@ -43,6 +43,13 @@
 
 # `libp2p` facade crate
 
+# 0.50.0 - [unreleased]
+
+- Remove deprecated features: `tcp-tokio`, `mdns-tokio`, `dns-tokio`, `tcp-async-io`, `mdns-async-io`, `dns-async-std`.
+  See [PR XXXX].
+
+[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+
 # 0.49.0 - [unreleased]
 
 - Remove default features. You need to enable required features explicitly now. As a quick workaround, you may want to use the
