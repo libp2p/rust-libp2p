@@ -6,6 +6,9 @@ on:
     branches:
       - master
 
+concurrency:
+  cancel-in-progress: true
+
 jobs:
   test-desktop:
     name: Build and test
@@ -18,12 +21,6 @@ jobs:
           "--benches --all-features",
         ]
     steps:
-
-    - name: Cancel Previous Runs
-      uses: styfle/cancel-workflow-action@bb6001c4ea612bf59c3abfc4756fbceee4f870c7 # 0.10.0
-      with:
-        access_token: ${{ github.token }}
-
     - name: Install Protoc
       uses: arduino/setup-protoc@v1
 
@@ -53,12 +50,6 @@ jobs:
       run:
         shell: bash
     steps:
-
-    - name: Cancel Previous Runs
-      uses: styfle/cancel-workflow-action@bb6001c4ea612bf59c3abfc4756fbceee4f870c7 # 0.10.0
-      with:
-        access_token: ${{ github.token }}
-
     - name: Install Protoc
       uses: arduino/setup-protoc@v1
 
@@ -91,12 +82,6 @@ jobs:
     name: Check rustdoc intra-doc links
     runs-on: ubuntu-latest
     steps:
-
-    - name: Cancel Previous Runs
-      uses: styfle/cancel-workflow-action@bb6001c4ea612bf59c3abfc4756fbceee4f870c7 # 0.10.0
-      with:
-        access_token: ${{ github.token }}
-
     - name: Install Protoc
       uses: arduino/setup-protoc@v1
 
@@ -116,12 +101,6 @@ jobs:
   check-clippy:
     runs-on: ubuntu-latest
     steps:
-
-    - name: Cancel Previous Runs
-      uses: styfle/cancel-workflow-action@bb6001c4ea612bf59c3abfc4756fbceee4f870c7 # 0.10.0
-      with:
-        access_token: ${{ github.token }}
-
     - name: Install Protoc
       uses: arduino/setup-protoc@v1
 
@@ -145,12 +124,6 @@ jobs:
     name: Integration tests
     runs-on: ubuntu-latest
     steps:
-
-    - name: Cancel Previous Runs
-      uses: styfle/cancel-workflow-action@bb6001c4ea612bf59c3abfc4756fbceee4f870c7 # 0.10.0
-      with:
-        access_token: ${{ github.token }}
-
     - name: Install Protoc
       uses: arduino/setup-protoc@v1
 
@@ -170,12 +143,6 @@ jobs:
   rustfmt:
     runs-on: ubuntu-latest
     steps:
-
-    - name: Cancel Previous Runs
-      uses: styfle/cancel-workflow-action@bb6001c4ea612bf59c3abfc4756fbceee4f870c7 # 0.10.0
-      with:
-        access_token: ${{ github.token }}
-
     - uses: actions/checkout@v3
 
     - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
@@ -191,12 +158,6 @@ jobs:
   manifest_lint:
     runs-on: ubuntu-latest
     steps:
-
-    - name: Cancel Previous Runs
-      uses: styfle/cancel-workflow-action@bb6001c4ea612bf59c3abfc4756fbceee4f870c7 # 0.10.0
-      with:
-        access_token: ${{ github.token }}
-
     - uses: actions/checkout@v3
 
     - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
