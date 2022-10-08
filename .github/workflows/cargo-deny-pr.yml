@@ -1,4 +1,5 @@
 name: cargo deny
+
 on:
   push:
     paths:
@@ -6,6 +7,7 @@ on:
   pull_request:
     paths:
       - '**/Cargo.toml'
+
 jobs:
   cargo-deny:
     runs-on: ubuntu-latest
