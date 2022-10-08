@@ -40,29 +40,29 @@ pub const PUSH_PROTOCOL_NAME: &[u8; 19] = b"/ipfs/id/push/1.0.0";
 
 /// Substream upgrade protocol for `/ipfs/id/1.0.0`.
 #[derive(Debug, Clone)]
-pub struct IdentifyProtocol;
+pub struct Protocol;
 
 /// Substream upgrade protocol for `/ipfs/id/push/1.0.0`.
 #[derive(Debug, Clone)]
-pub struct IdentifyPushProtocol<T>(T);
+pub struct PushProtocol<T>(T);
 pub struct InboundPush();
-pub struct OutboundPush(IdentifyInfo);
+pub struct OutboundPush(Info);
 
-impl IdentifyPushProtocol<InboundPush> {
+impl PushProtocol<InboundPush> {
     pub fn inbound() -> Self {
-        IdentifyPushProtocol(InboundPush())
+        PushProtocol(InboundPush())
     }
 }
 
-impl IdentifyPushProtocol<OutboundPush> {
-    pub fn outbound(info: IdentifyInfo) -> Self {
-        IdentifyPushProtocol(OutboundPush(info))
+impl PushProtocol<OutboundPush> {
+    pub fn outbound(info: Info) -> Self {
+        PushProtocol(OutboundPush(info))
     }
 }
 
 /// Information of a peer sent in protocol messages.
 #[derive(Debug, Clone)]
-pub struct IdentifyInfo {
+pub struct Info {
     /// The public key of the local peer.
     pub public_key: PublicKey,
     /// Application-specific version of the protocol family used by the peer,
@@ -98,12 +98,12 @@ where
     ///
     /// Consumes the substream, returning a future that resolves
     /// when the reply has been sent on the underlying connection.
-    pub async fn send(self, info: IdentifyInfo) -> Result<(), UpgradeError> {
+    pub async fn send(self, info: Info) -> Result<(), UpgradeError> {
         send(self.inner, info).await.map_err(Into::into)
     }
 }
 
-impl UpgradeInfo for IdentifyProtocol {
+impl UpgradeInfo for Protocol {
     type Info = &'static [u8];
     type InfoIter = iter::Once<Self::Info>;
 
@@ -112,7 +112,7 @@ impl UpgradeInfo for IdentifyProtocol {
     }
 }
 
-impl<C> InboundUpgrade<C> for IdentifyProtocol {
+impl<C> InboundUpgrade<C> for Protocol {
     type Output = ReplySubstream<C>;
     type Error = UpgradeError;
     type Future = future::Ready<Result<Self::Output, UpgradeError>>;
@@ -122,11 +122,11 @@ impl<C> InboundUpgrade<C> for IdentifyProtocol {
     }
 }
 
-impl<C> OutboundUpgrade<C> for IdentifyProtocol
+impl<C> OutboundUpgrade<C> for Protocol
 where
     C: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
-    type Output = IdentifyInfo;
+    type Output = Info;
     type Error = UpgradeError;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
@@ -135,7 +135,7 @@ where
     }
 }
 
-impl<T> UpgradeInfo for IdentifyPushProtocol<T> {
+impl<T> UpgradeInfo for PushProtocol<T> {
     type Info = &'static [u8];
     type InfoIter = iter::Once<Self::Info>;
 
@@ -144,11 +144,11 @@ impl<T> UpgradeInfo for IdentifyPushProtocol<T> {
     }
 }
 
-impl<C> InboundUpgrade<C> for IdentifyPushProtocol<InboundPush>
+impl<C> InboundUpgrade<C> for PushProtocol<InboundPush>
 where
     C: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
-    type Output = BoxFuture<'static, Result<IdentifyInfo, UpgradeError>>;
+    type Output = BoxFuture<'static, Result<Info, UpgradeError>>;
     type Error = Void;
     type Future = future::Ready<Result<Self::Output, Self::Error>>;
 
@@ -158,7 +158,7 @@ where
     }
 }
 
-impl<C> OutboundUpgrade<C> for IdentifyPushProtocol<OutboundPush>
+impl<C> OutboundUpgrade<C> for PushProtocol<OutboundPush>
 where
     C: AsyncWrite + Unpin + Send + 'static,
 {
@@ -171,7 +171,7 @@ where
     }
 }
 
-async fn send<T>(io: T, info: IdentifyInfo) -> Result<(), UpgradeError>
+async fn send<T>(io: T, info: Info) -> Result<(), UpgradeError>
 where
     T: AsyncWrite + Unpin,
 {
@@ -205,7 +205,7 @@ where
     Ok(())
 }
 
-async fn recv<T>(mut socket: T) -> Result<IdentifyInfo, UpgradeError>
+async fn recv<T>(mut socket: T) -> Result<Info, UpgradeError>
 where
     T: AsyncRead + AsyncWrite + Unpin,
 {
@@ -225,7 +225,7 @@ where
     Ok(info)
 }
 
-impl TryFrom<structs_proto::Identify> for IdentifyInfo {
+impl TryFrom<structs_proto::Identify> for Info {
     type Error = UpgradeError;
 
     fn try_from(msg: structs_proto::Identify) -> Result<Self, Self::Error> {
@@ -244,7 +244,7 @@ impl TryFrom<structs_proto::Identify> for IdentifyInfo {
         let public_key = PublicKey::from_protobuf_encoding(&msg.public_key.unwrap_or_default())?;
 
         let observed_addr = parse_multiaddr(msg.observed_addr.unwrap_or_default())?;
-        let info = IdentifyInfo {
+        let info = Info {
             public_key,
             protocol_version: msg.protocol_version.unwrap_or_default(),
             agent_version: msg.agent_version.unwrap_or_default(),
@@ -332,10 +332,10 @@ mod tests {
                 .await
                 .unwrap();
 
-            let sender = apply_inbound(socket, IdentifyProtocol).await.unwrap();
+            let sender = apply_inbound(socket, Protocol).await.unwrap();
 
             sender
-                .send(IdentifyInfo {
+                .send(Info {
                     public_key: send_pubkey,
                     protocol_version: "proto_version".to_owned(),
                     agent_version: "agent_version".to_owned(),
@@ -354,7 +354,7 @@ mod tests {
             let mut transport = TcpTransport::default();
 
             let socket = transport.dial(rx.await.unwrap()).unwrap().await.unwrap();
-            let info = apply_outbound(socket, IdentifyProtocol, upgrade::Version::V1)
+            let info = apply_outbound(socket, Protocol, upgrade::Version::V1)
                 .await
                 .unwrap();
             assert_eq!(

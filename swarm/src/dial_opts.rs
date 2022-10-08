@@ -122,7 +122,7 @@ impl WithPeerId {
     }
 
     /// Override
-    /// [`PoolConfig::with_dial_concurrency_factor`](crate::connection::pool::PoolConfig::with_dial_concurrency_factor).
+    /// Number of addresses concurrently dialed for a single outbound connection attempt.
     pub fn override_dial_concurrency_factor(mut self, factor: NonZeroU8) -> Self {
         self.dial_concurrency_factor_override = Some(factor);
         self
@@ -196,7 +196,7 @@ impl WithPeerIdWithAddresses {
     }
 
     /// Override
-    /// [`PoolConfig::with_dial_concurrency_factor`](crate::connection::pool::PoolConfig::with_dial_concurrency_factor).
+    /// Number of addresses concurrently dialed for a single outbound connection attempt.
     pub fn override_dial_concurrency_factor(mut self, factor: NonZeroU8) -> Self {
         self.dial_concurrency_factor_override = Some(factor);
         self
