@@ -12,7 +12,8 @@ use libp2p_core::{
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
-use std::{fmt, mem};
+use std::time::Duration;
+use std::{fmt, io, mem};
 
 pub async fn connected_muxers_on_memory_transport<MC, M, E>() -> (M, M)
 where
@@ -193,12 +194,18 @@ async fn run<A, B, S, E, F1, F2>(
                 log::info!("Dialer completed protocol");
                 dialer_complete = true
             }
+            Either::Left((Some(Event::Timeout), _)) => {
+                panic!("Dialer protocol timed out");
+            }
             Either::Right((Some(Event::SetupComplete), _)) => {
                 log::info!("Listener received inbound stream");
             }
             Either::Right((Some(Event::ProtocolComplete), _)) => {
                 log::info!("Listener completed protocol");
                 listener_complete = true
+            }
+            Either::Right((Some(Event::Timeout), _)) => {
+                panic!("Listener protocol timed out");
             }
             _ => unreachable!(),
         }
@@ -223,6 +230,7 @@ where
     },
     Running {
         muxer: &'m mut M,
+        timeout: futures_timer::Delay,
         proto: BoxFuture<'static, ()>,
     },
     Complete {
@@ -233,6 +241,7 @@ where
 
 enum Event {
     SetupComplete,
+    Timeout,
     ProtocolComplete,
 }
 
@@ -251,6 +260,7 @@ where
                     if let Poll::Ready(stream) = muxer.poll_inbound_unpin(cx) {
                         *this = Harness::Running {
                             muxer,
+                            timeout: futures_timer::Delay::new(Duration::from_secs(10)),
                             proto: proto_fn(stream.unwrap()),
                         };
                         return Poll::Ready(Some(Event::SetupComplete));
@@ -270,6 +280,7 @@ where
                     if let Poll::Ready(stream) = muxer.poll_outbound_unpin(cx) {
                         *this = Harness::Running {
                             muxer,
+                            timeout: futures_timer::Delay::new(Duration::from_secs(10)),
                             proto: proto_fn(stream.unwrap()),
                         };
                         return Poll::Ready(Some(Event::SetupComplete));
@@ -285,11 +296,19 @@ where
                     *this = Harness::OutboundSetup { muxer, proto_fn };
                     return Poll::Pending;
                 }
-                Harness::Running { muxer, mut proto } => {
+                Harness::Running {
+                    muxer,
+                    mut proto,
+                    mut timeout,
+                } => {
                     if let Poll::Ready(event) = muxer.poll_unpin(cx) {
                         event.unwrap();
 
-                        *this = Harness::Running { muxer, proto };
+                        *this = Harness::Running {
+                            muxer,
+                            proto,
+                            timeout,
+                        };
                         continue;
                     }
 
@@ -298,7 +317,15 @@ where
                         return Poll::Ready(Some(Event::ProtocolComplete));
                     }
 
-                    *this = Harness::Running { muxer, proto };
+                    if let Poll::Ready(()) = timeout.poll_unpin(cx) {
+                        return Poll::Ready(Some(Event::Timeout));
+                    }
+
+                    *this = Harness::Running {
+                        muxer,
+                        proto,
+                        timeout,
+                    };
                     return Poll::Pending;
                 }
                 Harness::Complete { muxer } => {

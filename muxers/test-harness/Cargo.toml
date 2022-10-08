@@ -11,3 +11,4 @@ license = "MIT"
 libp2p-core = { path = "../../core" }
 futures = "0.3.24"
 log = "0.4"
+futures-timer = "3.0.2"
