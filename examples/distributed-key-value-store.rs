@@ -40,7 +40,7 @@
 //!
 //! 4. Close with Ctrl-c.
 
-use async_std::{io, task};
+use async_std::io;
 use futures::{prelude::*, select};
 use libp2p::kad::record::store::MemoryStore;
 use libp2p::kad::{
@@ -96,7 +96,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         // Create a Kademlia behaviour.
         let store = MemoryStore::new(local_peer_id);
         let kademlia = Kademlia::new(local_peer_id, store);
-        let mdns = task::block_on(Mdns::new(MdnsConfig::default()))?;
+        let mdns = Mdns::new(MdnsConfig::default())?;
         let behaviour = MyBehaviour { kademlia, mdns };
         Swarm::new(transport, behaviour, local_peer_id)
     };

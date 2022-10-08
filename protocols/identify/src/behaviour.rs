@@ -605,9 +605,8 @@ mod tests {
             loop {
                 let swarm1_fut = swarm1.select_next_some();
                 pin_mut!(swarm1_fut);
-                match swarm1_fut.await {
-                    SwarmEvent::NewListenAddr { address, .. } => return address,
-                    _ => {}
+                if let SwarmEvent::NewListenAddr { address, .. } = swarm1_fut.await {
+                    return address;
                 }
             }
         });
@@ -681,9 +680,8 @@ mod tests {
             loop {
                 let swarm1_fut = swarm1.select_next_some();
                 pin_mut!(swarm1_fut);
-                match swarm1_fut.await {
-                    SwarmEvent::NewListenAddr { address, .. } => return address,
-                    _ => {}
+                if let SwarmEvent::NewListenAddr { address, .. } = swarm1_fut.await {
+                    return address;
                 }
             }
         });
@@ -835,7 +833,7 @@ mod tests {
         let addr_without_peer_id: Multiaddr = addr.clone();
         let mut addr_with_other_peer_id = addr.clone();
 
-        addr.push(Protocol::P2p(peer_id.clone().into()));
+        addr.push(Protocol::P2p(peer_id.into()));
         addr_with_other_peer_id.push(Protocol::P2p(other_peer_id.into()));
 
         assert!(multiaddr_matches_peer_id(&addr, &peer_id));

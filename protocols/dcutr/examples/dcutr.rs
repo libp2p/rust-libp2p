@@ -113,6 +113,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
 
     #[derive(Debug)]
+    #[allow(clippy::large_enum_variant)]
     enum Event {
         Ping(ping::Event),
         Identify(identify::Event),

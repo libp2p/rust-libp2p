@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::prelude::*;
-use libp2p::swarm::{NetworkBehaviour, SwarmEvent};
+use libp2p::swarm::{dummy, NetworkBehaviour, SwarmEvent};
 use libp2p::{identify, ping};
 use libp2p_swarm_derive::*;
 use std::fmt::Debug;
@@ -44,8 +44,7 @@ fn one_field() {
         ping: ping::Behaviour,
     }
 
-    #[allow(dead_code)]
-    #[allow(unreachable_code)]
+    #[allow(dead_code, unreachable_code, clippy::diverging_sub_expression)]
     fn foo() {
         let _out_event: <Foo as NetworkBehaviour>::OutEvent = unimplemented!();
         match _out_event {
@@ -63,8 +62,7 @@ fn two_fields() {
         identify: identify::Behaviour,
     }
 
-    #[allow(dead_code)]
-    #[allow(unreachable_code)]
+    #[allow(dead_code, unreachable_code, clippy::diverging_sub_expression)]
     fn foo() {
         let _out_event: <Foo as NetworkBehaviour>::OutEvent = unimplemented!();
         match _out_event {
@@ -86,8 +84,7 @@ fn three_fields() {
         kad: libp2p::kad::Kademlia<libp2p::kad::record::store::MemoryStore>,
     }
 
-    #[allow(dead_code)]
-    #[allow(unreachable_code)]
+    #[allow(dead_code, unreachable_code, clippy::diverging_sub_expression)]
     fn foo() {
         let _out_event: <Foo as NetworkBehaviour>::OutEvent = unimplemented!();
         match _out_event {
@@ -112,6 +109,7 @@ fn custom_event() {
         identify: identify::Behaviour,
     }
 
+    #[allow(clippy::large_enum_variant)]
     enum MyEvent {
         Ping(ping::Event),
         Identify(identify::Event),
@@ -145,6 +143,7 @@ fn custom_event_mismatching_field_names() {
         b: libp2p::identify::Behaviour,
     }
 
+    #[allow(clippy::large_enum_variant)]
     enum MyEvent {
         Ping(ping::Event),
         Identify(libp2p::identify::Event),
@@ -209,8 +208,7 @@ fn nested_derives_with_import() {
         foo: Foo,
     }
 
-    #[allow(dead_code)]
-    #[allow(unreachable_code)]
+    #[allow(dead_code, unreachable_code, clippy::diverging_sub_expression)]
     fn foo() {
         let _out_event: <Bar as NetworkBehaviour>::OutEvent = unimplemented!();
         match _out_event {
@@ -221,6 +219,7 @@ fn nested_derives_with_import() {
 
 #[test]
 fn custom_event_emit_event_through_poll() {
+    #[allow(clippy::large_enum_variant)]
     enum BehaviourOutEvent {
         Ping(ping::Event),
         Identify(identify::Event),
@@ -238,7 +237,7 @@ fn custom_event_emit_event_through_poll() {
         }
     }
 
-    #[allow(dead_code)]
+    #[allow(dead_code, clippy::large_enum_variant)]
     #[derive(NetworkBehaviour)]
     #[behaviour(out_event = "BehaviourOutEvent")]
     struct Foo {
@@ -246,7 +245,7 @@ fn custom_event_emit_event_through_poll() {
         identify: identify::Behaviour,
     }
 
-    #[allow(dead_code, unreachable_code)]
+    #[allow(dead_code, unreachable_code, clippy::diverging_sub_expression)]
     fn bar() {
         require_net_behaviour::<Foo>();
 
@@ -355,7 +354,6 @@ fn generated_out_event_derive_debug() {
 #[test]
 fn custom_out_event_no_type_parameters() {
     use libp2p::core::connection::ConnectionId;
-    use libp2p::swarm::handler::DummyConnectionHandler;
     use libp2p::swarm::{
         ConnectionHandler, IntoConnectionHandler, NetworkBehaviourAction, PollParameters,
     };
@@ -368,11 +366,11 @@ fn custom_out_event_no_type_parameters() {
     }
 
     impl<T> NetworkBehaviour for TemplatedBehaviour<T> {
-        type ConnectionHandler = DummyConnectionHandler;
+        type ConnectionHandler = dummy::ConnectionHandler;
         type OutEvent = void::Void;
 
         fn new_handler(&mut self) -> Self::ConnectionHandler {
-            DummyConnectionHandler::default()
+            dummy::ConnectionHandler
         }
 
         fn inject_event(
