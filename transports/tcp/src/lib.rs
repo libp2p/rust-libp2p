@@ -320,6 +320,14 @@ impl<T> Transport<T>
 where
     T: Provider + Send,
 {
+    /// Create a new instance of [`Transport`].
+    ///
+    /// If you don't want to specify a [`Config`], use [`Transport::default`].
+    ///
+    /// It is best to call this function through one of the type-aliases of this type:
+    ///
+    /// - [`tokio::Transport::new`]
+    /// - [`async_io::Transport::new`]
     pub fn new(config: Config) -> Self {
         let port_reuse = if config.enable_port_reuse {
             PortReuse::Enabled {
