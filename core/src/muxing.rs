@@ -161,7 +161,7 @@ pub trait StreamMuxerExt: StreamMuxer + Sized {
 
     /// Returns a future that resolves to the next inbound `Substream` opened by the remote.
     #[deprecated(
-        since = "0.36.1",
+        since = "0.37.0",
         note = "This future violates the `StreamMuxer` contract because it doesn't call `StreamMuxer::poll`."
     )]
     fn next_inbound(&mut self) -> NextInbound<'_, Self> {
@@ -170,7 +170,7 @@ pub trait StreamMuxerExt: StreamMuxer + Sized {
 
     /// Returns a future that opens a new outbound `Substream` with the remote.
     #[deprecated(
-        since = "0.36.1",
+        since = "0.37.0",
         note = "This future violates the `StreamMuxer` contract because it doesn't call `StreamMuxer::poll`."
     )]
     fn next_outbound(&mut self) -> NextOutbound<'_, Self> {
