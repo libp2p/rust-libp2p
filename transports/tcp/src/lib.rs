@@ -925,7 +925,7 @@ mod tests {
         env_logger::try_init().ok();
 
         async fn listener<T: Provider>(addr: Multiaddr, mut ready_tx: mpsc::Sender<Multiaddr>) {
-            let mut tcp = Transport::<T>::new(Config::new()).boxed();
+            let mut tcp = Transport::<T>::default().boxed();
             tcp.listen_on(addr).unwrap();
             loop {
                 match tcp.select_next_some().await {
@@ -947,7 +947,7 @@ mod tests {
 
         async fn dialer<T: Provider>(mut ready_rx: mpsc::Receiver<Multiaddr>) {
             let addr = ready_rx.next().await.unwrap();
-            let mut tcp = Transport::<T>::new(Config::new());
+            let mut tcp = Transport::<T>::default();
 
             // Obtain a future socket through dialing
             let mut socket = tcp.dial(addr.clone()).unwrap().await.unwrap();
@@ -994,7 +994,7 @@ mod tests {
         env_logger::try_init().ok();
 
         async fn listener<T: Provider>(addr: Multiaddr, mut ready_tx: mpsc::Sender<Multiaddr>) {
-            let mut tcp = Transport::<T>::new(Config::new()).boxed();
+            let mut tcp = Transport::<T>::default().boxed();
             tcp.listen_on(addr).unwrap();
 
             loop {
@@ -1023,7 +1023,7 @@ mod tests {
 
         async fn dialer<T: Provider>(mut ready_rx: mpsc::Receiver<Multiaddr>) {
             let dest_addr = ready_rx.next().await.unwrap();
-            let mut tcp = Transport::<T>::new(Config::new());
+            let mut tcp = Transport::<T>::default();
             tcp.dial(dest_addr).unwrap().await.unwrap();
         }
 
@@ -1224,7 +1224,7 @@ mod tests {
         env_logger::try_init().ok();
 
         async fn listen<T: Provider>(addr: Multiaddr) -> Multiaddr {
-            let mut tcp = Transport::<T>::new(Config::new()).boxed();
+            let mut tcp = Transport::<T>::default().boxed();
             tcp.listen_on(addr).unwrap();
             tcp.select_next_some()
                 .await
@@ -1261,13 +1261,13 @@ mod tests {
         fn test(addr: Multiaddr) {
             #[cfg(feature = "async-io")]
             {
-                let mut tcp = async_io::Transport::new(Config::new());
+                let mut tcp = async_io::Transport::default();
                 assert!(tcp.listen_on(addr.clone()).is_err());
             }
 
             #[cfg(feature = "tokio")]
             {
-                let mut tcp = tokio::Transport::new(Config::new());
+                let mut tcp = tokio::Transport::default();
                 assert!(tcp.listen_on(addr).is_err());
             }
         }
@@ -1278,19 +1278,21 @@ mod tests {
     #[cfg(feature = "async-io")]
     #[test]
     fn test_address_translation_async_io() {
-        test_address_translation(async_io::Transport::new(Config::new()))
+        test_address_translation::<async_io::Transport>()
     }
 
     #[cfg(feature = "tokio")]
     #[test]
     fn test_address_translation_tokio() {
-        test_address_translation(tokio::Transport::new(Config::new()))
+        test_address_translation::<tokio::Transport>()
     }
 
-    fn test_address_translation<T>(transport: Transport<T>)
+    fn test_address_translation<T>()
     where
-        T: Provider,
+        T: Default + libp2p_core::Transport,
     {
+        let transport = T::default();
+
         let port = 42;
         let tcp_listen_addr = Multiaddr::empty()
             .with(Protocol::Ip4(Ipv4Addr::new(127, 0, 0, 1)))
