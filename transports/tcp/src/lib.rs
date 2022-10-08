@@ -402,6 +402,9 @@ impl<T> Default for Transport<T>
 where
     T: Provider + Send,
 {
+    /// Creates a [`Transport`] with reasonable defaults.
+    ///
+    /// This transport will have port-reuse disabled.
     fn default() -> Self {
         let config = Config::default();
         let port_reuse = if config.enable_port_reuse {
