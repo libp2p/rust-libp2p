@@ -27,5 +27,5 @@ async-io = ["async-io-crate"]
 
 [dev-dependencies]
 async-std = { version = "1.6.5", features = ["attributes"] }
-tokio-crate = { package = "tokio", version = "1.0.1", default-features = false, features = ["net", "rt", "macros"] }
+tokio-crate = { package = "tokio", version = "1.0.1", default-features = false, features = ["full"] }
 env_logger = "0.9.0"
