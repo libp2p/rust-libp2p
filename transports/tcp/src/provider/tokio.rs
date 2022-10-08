@@ -31,6 +31,24 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 /// A TCP [`Transport`](libp2p_core::Transport) that works with the `tokio` ecosystem.
+///
+/// # Example
+///
+/// ```rust
+/// # use libp2p_tcp as tcp;
+/// # use libp2p_core::Transport;
+/// # use futures::future;
+/// #
+/// # #[tokio_crate::main]
+/// # async fn main() {
+/// let mut transport = tcp::tokio::Transport::new(tcp::Config::default());
+/// let id = transport.listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
+///
+/// let addr = future::poll_fn(|cx| transport.poll(cx)).await.into_new_address().unwrap();
+///
+/// println!("Listening on {addr}");
+/// # }
+/// ```
 pub type Transport = crate::Transport<Tcp>;
 
 #[derive(Copy, Clone)]
