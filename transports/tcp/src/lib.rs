@@ -28,7 +28,6 @@
 
 mod provider;
 
-use if_watch::{IfEvent, IfWatcher};
 #[cfg(feature = "async-io")]
 pub use provider::async_io;
 
@@ -50,11 +49,13 @@ use futures::{
     prelude::*,
 };
 use futures_timer::Delay;
+use if_watch::{IfEvent, IfWatcher};
 use libp2p_core::{
     address_translation,
     multiaddr::{Multiaddr, Protocol},
     transport::{ListenerId, TransportError, TransportEvent},
 };
+use provider::{Incoming, Provider};
 use socket2::{Domain, Socket, Type};
 use std::{
     collections::{HashSet, VecDeque},
@@ -65,8 +66,6 @@ use std::{
     task::{Context, Poll},
     time::Duration,
 };
-
-use provider::{Incoming, Provider};
 
 /// The configuration for a TCP/IP transport capability for libp2p.
 #[deprecated(since = "0.37.0", note = "Use `Config` instead.")]
