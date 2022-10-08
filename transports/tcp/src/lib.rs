@@ -1275,14 +1275,22 @@ mod tests {
         test("/ip4/127.0.0.1/tcp/12345/tcp/12345".parse().unwrap());
     }
 
-    #[cfg(any(feature = "async-io", feature = "tcp"))]
+    #[cfg(feature = "async-io")]
     #[test]
-    fn test_address_translation() {
-        #[cfg(feature = "async-io")]
-        let transport = TcpTransport::new(GenTcpConfig::new());
-        #[cfg(all(feature = "tokio", not(feature = "async-io")))]
-        let transport = TokioTcpTransport::new(GenTcpConfig::new());
+    fn test_address_translation_async_io() {
+        test_address_translation(async_io::Transport::new(Config::new()))
+    }
 
+    #[cfg(feature = "tokio")]
+    #[test]
+    fn test_address_translation_tokio() {
+        test_address_translation(tokio::Transport::new(Config::new()))
+    }
+
+    fn test_address_translation<T>(transport: Transport<T>)
+    where
+        T: Provider,
+    {
         let port = 42;
         let tcp_listen_addr = Multiaddr::empty()
             .with(Protocol::Ip4(Ipv4Addr::new(127, 0, 0, 1)))
