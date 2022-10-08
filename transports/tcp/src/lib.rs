@@ -293,7 +293,7 @@ impl Default for Config {
     }
 }
 
-/// A [`libp2p_core::Transport`] implementation that is abstract over the given [`Provider`].
+/// A [`libp2p_core::Transport`] implementation that is abstract over the given [`Provider`](crate::provider::Provider).
 ///
 /// You shouldn't need to use this type directly. Use one of the following instead:
 ///
@@ -309,10 +309,10 @@ where
     /// The configuration of port reuse when dialing.
     port_reuse: PortReuse,
     /// All the active listeners.
-    /// The `TcpListenStream` struct contains a stream that we want to be pinned. Since the `VecDeque`
+    /// The [`TcpListenStream`] struct contains a stream that we want to be pinned. Since the `VecDeque`
     /// can be resized, the only way is to use a `Pin<Box<>>`.
     listeners: VecDeque<Pin<Box<TcpListenStream<T>>>>,
-    /// Pending transport events to return from [`GenTcpTransport::poll`].
+    /// Pending transport events to return from [`Transport::poll`].
     pending_events:
         VecDeque<TransportEvent<<Self as libp2p_core::Transport>::ListenerUpgrade, io::Error>>,
 }
