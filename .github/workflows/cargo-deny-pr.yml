@@ -8,6 +8,10 @@ on:
     paths:
       - '**/Cargo.toml'
 
+concurrency:
+  group: cargo-deny-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   cargo-deny:
     runs-on: ubuntu-latest
