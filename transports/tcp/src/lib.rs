@@ -293,13 +293,12 @@ impl Default for Config {
     }
 }
 
-/// A [`libp2p_core::Transport`] implementation that is abstract over the given [`Provider`](crate::provider::Provider).
+/// An abstract [`libp2p_core::Transport`] implementation.
 ///
 /// You shouldn't need to use this type directly. Use one of the following instead:
 ///
 /// - [`tokio::Transport`]
 /// - [`async_io::Transport`]
-#[doc(hidden)]
 pub struct Transport<T>
 where
     T: Provider + Send,
@@ -312,7 +311,7 @@ where
     /// The [`TcpListenStream`] struct contains a stream that we want to be pinned. Since the `VecDeque`
     /// can be resized, the only way is to use a `Pin<Box<>>`.
     listeners: VecDeque<Pin<Box<TcpListenStream<T>>>>,
-    /// Pending transport events to return from [`Transport::poll`].
+    /// Pending transport events to return from [`libp2p_core::Transport::poll`].
     pending_events:
         VecDeque<TransportEvent<<Self as libp2p_core::Transport>::ListenerUpgrade, io::Error>>,
 }
