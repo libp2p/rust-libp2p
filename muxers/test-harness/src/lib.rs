@@ -137,46 +137,6 @@ where
     .await;
 }
 
-/// Verifies that we can write to a substream that has been half-closed by the remote.
-pub async fn write_to_remote_closed<A, B, S, E>(alice: A, bob: B)
-where
-    A: StreamMuxer<Substream = S, Error = E> + Unpin,
-    B: StreamMuxer<Substream = S, Error = E> + Unpin,
-    S: AsyncRead + AsyncWrite + Send + Unpin + 'static,
-    E: fmt::Debug,
-{
-    run_commutative(
-        alice,
-        bob,
-        |mut stream| async move {
-            stream.write_all(b"PING").await.unwrap();
-
-            let mut buf = Vec::new();
-            stream.read_to_end(&mut buf).await.unwrap();
-
-            assert_eq!(buf, b"PONG");
-
-            stream.write_all(b"PING").await.unwrap();
-            stream.close().await.unwrap();
-        },
-        |mut stream| async move {
-            let mut buf = [0u8; 4];
-            stream.read_exact(&mut buf).await.unwrap();
-
-            assert_eq!(&buf, b"PING");
-
-            stream.write_all(b"PONG").await.unwrap();
-            stream.close().await.unwrap();
-
-            let mut buf = [0u8; 4];
-            stream.read_exact(&mut buf).await.unwrap();
-
-            assert_eq!(&buf, b"PING");
-        },
-    )
-    .await;
-}
-
 /// Runs the given protocol between the two parties, ensuring commutativity, i.e. either party can be the dialer and listener.
 async fn run_commutative<A, B, S, E, F1, F2>(
     mut alice: A,
