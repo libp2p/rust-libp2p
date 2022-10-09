@@ -28,6 +28,8 @@
 
 Status: todo
 
+Target completion: Q4/2022
+
 Tracking:
 
 Past discussions:
@@ -53,6 +55,8 @@ go-libp2p.
 
 Status: In progress
 
+Target completion: Q4/2022
+
 Tracking: https://github.com/libp2p/rust-libp2p/pull/2945
 
 Dependencies:
@@ -66,6 +70,8 @@ support. Running TLS on top of TCP is a nice to have, since we already have nois
 ## QUIC support
 
 Status: In progress
+
+Target completion: Q4/2022
 
 Tracking: https://github.com/libp2p/rust-libp2p/issues/2883
 
@@ -83,6 +89,8 @@ issue https://github.com/libp2p/rust-libp2p/issues/2883.
 ## WebRTC support (browser-to-server)
 
 Status: In progress
+
+Target completion: Q4/2022
 
 Tracking: https://github.com/libp2p/specs/pull/412
 
@@ -104,6 +112,8 @@ stack. Though that should only happen after improved WASM support, see below.
 
 Status: todo
 
+Target completion: Q4/2022
+
 Tracking: https://github.com/libp2p/rust-libp2p/issues/2902
 
 Dependencies:
@@ -117,6 +127,8 @@ release frequency (better for users).
 ## Refactor event handling in `Swarm`
 
 Status: In progress
+
+Target completion: Q4/2022
 
 Tracking: https://github.com/libp2p/rust-libp2p/issues/2832
 
@@ -138,6 +150,8 @@ otherwise introduce too much complexity.
 
 Status: todo
 
+Target completion: Q1/2023
+
 Tracking: https://github.com/libp2p/rust-libp2p/issues/2680
 
 Dependencies:
@@ -152,6 +166,8 @@ Dependents:
 
 Status: todo
 
+Target completion: Q1/2023
+
 Tracking: https://github.com/libp2p/rust-libp2p/issues/2863
 
 Dependencies:
@@ -163,6 +179,8 @@ started with rust-libp2p.
 
 ## Generic connection management
 
+Target completion: Q1/2023
+
 See https://github.com/libp2p/rust-libp2p/issues/2824 for motivation. Given that this will enable
 downstream users to easier integrate with rust-libp2p, I think this counts as a "improving existing
 components" over "introducing a new component".
@@ -172,6 +190,8 @@ First draft is in https://github.com/libp2p/rust-libp2p/pull/2828
 ## Kademlia efficient querying
 
 Status: in progress
+
+Target completion: Q1/2023
 
 Tracking: https://github.com/libp2p/rust-libp2p/pull/2712
 
@@ -185,6 +205,8 @@ Users of rust-libp2p like [iroh](https://github.com/n0-computer/iroh) need this 
 
 Status: todo
 
+Target completion: Q1/2023
+
 Tracking: https://github.com/libp2p/rust-libp2p/issues/2032
 
 Dependencies:
@@ -196,6 +218,8 @@ Dependents:
 ## Hole punching
 
 Status: todo
+
+Target completion: Q1/2023
 
 Dependencies:
 
@@ -214,6 +238,8 @@ hole punching stack.
 
 Status: todo
 
+Target completion: Q1/2023
+
 Tracking: https://github.com/libp2p/rust-libp2p/issues/2657
 
 rust-libp2p is very opinionated on how to write peer-to-peer protocols. There are many good reasons
@@ -224,6 +250,8 @@ newcomers to get started.
 ## Improved WASM support
 
 Status: todo
+
+Target completion: Q2/2023
 
 Tracking: https://github.com/libp2p/rust-libp2p/issues/2617
 
@@ -239,6 +267,8 @@ This opens rust-libp2p to hole new set of use-cases.
 
 Status: todo
 
+Target completion: Q2/2023
+
 Tracking: https://github.com/libp2p/rust-libp2p/issues/2994
 
 I suggest we do not prioritize this. On the performance end, investing into QUIC support seems like
@@ -248,6 +278,8 @@ though not thus far demanded.
 ## Bitswap implementation
 
 Status: todo
+
+Target completion: unknown
 
 Tracking: https://github.com/libp2p/rust-libp2p/issues/2632
 
@@ -262,6 +294,8 @@ implement their own implementations and are thus not blocked on the rust-libp2p 
 ## WebTransport
 
 Status: todo
+
+Target completion: unknown
 
 Tracking: https://github.com/libp2p/rust-libp2p/issues/2993
 
