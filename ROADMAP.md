@@ -25,19 +25,19 @@
 
 ## Testground abstraction
 
-Status: todo
+**Status:** todo
 
-Target completion: Q4/2022
+**Target completion:** Q4/2022
 
-Tracking:
+**Tracking:**
 
-Past discussions:
+**Past discussions:**
 
 - https://github.com/libp2p/test-plans/pull/49#issuecomment-1267175415
 
-Dependencies:
+**Dependencies:**
 
-Dependents:
+**Dependents:**
 
 - [QUIC](#quic-support)
 - [WebRTC](#webrtc-support-browser-to-server)
@@ -52,15 +52,15 @@ go-libp2p.
 
 ## TLS support
 
-Status: In progress
+**Status:** In progress
 
-Target completion: Q4/2022
+**Target completion:** Q4/2022
 
-Tracking: https://github.com/libp2p/rust-libp2p/pull/2945
+**Tracking:** https://github.com/libp2p/rust-libp2p/pull/2945
 
-Dependencies:
+**Dependencies:**
 
-Dependents:
+**Dependents:**
 - [QUIC](#quic-support)
 
 This allows us to secure both TCP and QUIC connections using TLS. This is a requirement for QUIC
@@ -68,17 +68,17 @@ support. Running TLS on top of TCP is a nice to have, since we already have nois
 
 ## QUIC support
 
-Status: In progress
+**Status:** In progress
 
-Target completion: Q4/2022
+**Target completion:** Q4/2022
 
-Tracking: https://github.com/libp2p/rust-libp2p/issues/2883
+**Tracking:** https://github.com/libp2p/rust-libp2p/issues/2883
 
-Dependencies:
+**Dependencies:**
 - [TLS](#tls-support)
 - [Testground](#testground)
 
-Dependents:
+**Dependents:**
 
 QUIC has been on the roadmap for a long time. It enables various performance improvements as well as
 higher hole punching success rates. We are close to finishing a first version with
@@ -87,17 +87,17 @@ issue https://github.com/libp2p/rust-libp2p/issues/2883.
 
 ## WebRTC support (browser-to-server)
 
-Status: In progress
+**Status:** In progress
 
-Target completion: Q4/2022
+**Target completion:** Q4/2022
 
-Tracking: https://github.com/libp2p/specs/pull/412
+**Tracking:** https://github.com/libp2p/specs/pull/412
 
-Dependencies:
+**Dependencies:**
 - [TLS](#tls-support)
 - [Testground](#testground)
 
-Dependents:
+**Dependents:**
 
 We are currently implementing WebRTC for **browser-to-server** connectivity in
 https://github.com/libp2p/rust-libp2p/pull/2622. More specifically the server side. This will enable
@@ -109,15 +109,15 @@ stack. Though that should only happen after improved WASM support, see below.
 
 ## Refactor event handling in `Swarm`
 
-Status: In progress
+**Status:** In progress
 
-Target completion: Q4/2022
+**Target completion:** Q4/2022
 
-Tracking: https://github.com/libp2p/rust-libp2p/issues/2832
+**Tracking:** https://github.com/libp2p/rust-libp2p/issues/2832
 
-Dependencies:
+**Dependencies:**
 
-Dependents:
+**Dependents:**
 
 - [Cross behaviour communication](#cross-behaviour-communication)
 
@@ -131,38 +131,38 @@ otherwise introduce too much complexity.
 
 ## Cross Behaviour communication
 
-Status: todo
+**Status:** todo
 
-Target completion: Q1/2023
+**Target completion:** Q1/2023
 
-Tracking: https://github.com/libp2p/rust-libp2p/issues/2680
+**Tracking:** https://github.com/libp2p/rust-libp2p/issues/2680
 
-Dependencies:
+**Dependencies:**
 
 - [Refactor event handling](#refactor-event-handling-in-swarm)
 
-Dependents:
+**Dependents:**
 
 - [Kademlia client mode](#kademlia-client-mode)
 
 ## Decouple ConnectionHandler from {In,Out}boundUpgrade
 
-Status: todo
+**Status:** todo
 
-Target completion: Q1/2023
+**Target completion:** Q1/2023
 
-Tracking: https://github.com/libp2p/rust-libp2p/issues/2863
+**Tracking:** https://github.com/libp2p/rust-libp2p/issues/2863
 
-Dependencies:
+**Dependencies:**
 
-Dependents:
+**Dependents:**
 
 I think this will simplify existing implementations and lower the learning curve required to get
 started with rust-libp2p.
 
 ## Generic connection management
 
-Target completion: Q1/2023
+**Target completion:** Q1/2023
 
 See https://github.com/libp2p/rust-libp2p/issues/2824 for motivation. Given that this will enable
 downstream users to easier integrate with rust-libp2p, I think this counts as a "improving existing
@@ -172,15 +172,15 @@ First draft is in https://github.com/libp2p/rust-libp2p/pull/2828
 
 ## Kademlia efficient querying
 
-Status: in progress
+**Status:** in progress
 
-Target completion: Q1/2023
+**Target completion:** Q1/2023
 
-Tracking: https://github.com/libp2p/rust-libp2p/pull/2712
+**Tracking:** https://github.com/libp2p/rust-libp2p/pull/2712
 
-Dependencies:
+**Dependencies:**
 
-Dependents:
+**Dependents:**
 
 Users of rust-libp2p like [iroh](https://github.com/n0-computer/iroh) need this for low latency
 usage of `libp2p-kad`. The rust-libp2p maintainers can pick this up unless iroh folks finish the
@@ -188,27 +188,27 @@ work before that.
 
 ## Kademlia client mode
 
-Status: todo
+**Status:** todo
 
-Target completion: Q1/2023
+**Target completion:** Q1/2023
 
-Tracking: https://github.com/libp2p/rust-libp2p/issues/2032
+**Tracking:** https://github.com/libp2p/rust-libp2p/issues/2032
 
-Dependencies:
+**Dependencies:**
 
 - [Cross behaviour communication](#cross-behaviour-communication)
 
-Dependents:
+**Dependents:**
 
 ## Optimize Hole punching
 
-Status: todo
+**Status:** todo
 
-Target completion: Q1/2023
+**Target completion:** Q1/2023
 
-Dependencies:
+**Dependencies:**
 
-Dependents:
+**Dependents:**
 
 We released hole punching support with [rust-libp2p
 `v0.43.0`](https://github.com/libp2p/rust-libp2p/releases/tag/v0.43.0), see also
@@ -221,11 +221,11 @@ hole punching stack.
 
 ## Streaming response protocol aka. the ultimate escape hatch
 
-Status: todo
+**Status:** todo
 
-Target completion: Q1/2023
+**Target completion:** Q1/2023
 
-Tracking: https://github.com/libp2p/rust-libp2p/issues/2657
+**Tracking:** https://github.com/libp2p/rust-libp2p/issues/2657
 
 rust-libp2p is very opinionated on how to write peer-to-peer protocols. There are many good reasons
 for this, and I think we should not change directions here. That said, the ultimate escape hatch -
@@ -234,15 +234,15 @@ newcomers to get started.
 
 ## Improved WASM support
 
-Status: todo
+**Status:** todo
 
-Target completion: Q2/2023
+**Target completion:** Q2/2023
 
-Tracking: https://github.com/libp2p/rust-libp2p/issues/2617
+**Tracking:** https://github.com/libp2p/rust-libp2p/issues/2617
 
-Dependencies:
+**Dependencies:**
 
-Dependents:
+**Dependents:**
 
 - WebRTC browser-to-browser and browser side
 
@@ -253,11 +253,11 @@ follows this roadmap item and not the other way round.)
 
 ## Handshake optimizations
 
-Status: todo
+**Status:** todo
 
-Target completion: Q2/2023
+**Target completion:** Q2/2023
 
-Tracking:
+**Tracking:**
 
 - Security protocol in multiaddr https://github.com/libp2p/specs/pull/353
 - Early muxer negotiation https://github.com/libp2p/rust-libp2p/issues/2994
@@ -271,33 +271,33 @@ also allows us to catch up and thus be consistent with go-libp2p.
 
 ## Bitswap implementation
 
-Status: todo
+**Status:** todo
 
-Target completion: unknown
+**Target completion:** unknown
 
-Tracking: https://github.com/libp2p/rust-libp2p/issues/2632
+**Tracking:** https://github.com/libp2p/rust-libp2p/issues/2632
 
 I think this is a common component that many users need to build peer-to-peer applications. In
 addition, it is very performance critical and thus likely challenges many of our existing designs in
 rust-libp2p.
 
-I would prioritize it below [Muxer handshake optimization](#muxer-handshake-optimization) following
-the convention of improving existing components over introducing new ones. Users have and can
-implement their own implementations and are thus not blocked on the rust-libp2p project.
+I would prioritize it below [handshake optimization](#handshake-optimizations) following the
+convention of improving existing components over introducing new ones. Users have and can implement
+their own implementations and are thus not blocked on the rust-libp2p project.
 
 ## WebTransport
 
-Status: todo
+**Status:** todo
 
-Target completion: unknown
+**Target completion:** unknown
 
-Tracking: https://github.com/libp2p/rust-libp2p/issues/2993
+**Tracking:** https://github.com/libp2p/rust-libp2p/issues/2993
 
-Dependencies:
+**Dependencies:**
 
 - [QUIC](#quic-support)
 
-Dependents:
+**Dependents:**
 
 A WebTransport implementation in rust-libp2p will enable browsers to connect to rust-libp2p nodes
 where the latter only have a self-signed TLS certificate. Compared to WebRTC, this would likely be
