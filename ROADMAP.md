@@ -17,7 +17,7 @@
     - [Hole punching](#hole-punching)
     - [Streaming response protocol aka. the ultimate escape hatch](#streaming-response-protocol-aka-the-ultimate-escape-hatch)
     - [Improved WASM support](#improved-wasm-support)
-    - [Muxer handshake optimization](#muxer-handshake-optimization)
+    - [Handshake optimizations](#handshake-optimizations)
     - [Bitswap implementation](#bitswap-implementation)
     - [WebTransport](#webtransport)
 
@@ -248,17 +248,23 @@ Dependents:
 
 This opens rust-libp2p to hole new set of use-cases.
 
-## Muxer handshake optimization
+## Handshake optimizations
 
 Status: todo
 
 Target completion: Q2/2023
 
-Tracking: https://github.com/libp2p/rust-libp2p/issues/2994
+Tracking:
 
-I suggest we do not prioritize this. On the performance end, investing into QUIC support seems like
-the better bet. Long term this is a wonderful improvement, likely very much appreciated by users
-though not thus far demanded.
+- Security protocol in multiaddr https://github.com/libp2p/specs/pull/353
+- Early muxer negotiation https://github.com/libp2p/rust-libp2p/issues/2994
+
+Short term, investing into rust-libp2p's QUIC support will likely give us a larger performance win,
+thus neither of the two optimizations is planned for 2022. While great to have, it has not been
+requested from any rust-libp2p users.
+
+Long term, given that this will give us a great performance gain, we should definitely tackle it. It
+also allows us to catch up and thus be consistent with go-libp2p.
 
 ## Bitswap implementation
 
