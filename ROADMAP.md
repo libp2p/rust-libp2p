@@ -8,7 +8,6 @@
     - [TLS support](#tls-support)
     - [QUIC support](#quic-support)
     - [WebRTC support (browser-to-server)](#webrtc-support-browser-to-server)
-    - [Release process](#release-process)
     - [Refactor event handling in `Swarm`](#refactor-event-handling-in-swarm)
     - [Cross Behaviour communication](#cross-behaviour-communication)
     - [swarm/handler: Decouple ConnectionHandler from {In,Out}boundUpgrade #2863](#swarmhandler-decouple-connectionhandler-from-inoutboundupgrade-2863)
@@ -107,22 +106,6 @@ certificates. See https://github.com/libp2p/specs/pull/412 for in-depth motivati
 
 Long term we should enable rust-libp2p running in the browser via WASM to use the browser's WebRTC
 stack. Though that should only happen after improved WASM support, see below.
-
-## Release process
-
-Status: todo
-
-Target completion: Q4/2022
-
-Tracking: https://github.com/libp2p/rust-libp2p/issues/2902
-
-Dependencies:
-
-Dependents:
-
-I think we are doing a decent job at releasing often. That said, automating this will free up
-contributor time (less work on PRs), maintainer time (less work on releases) and overall increase
-release frequency (better for users).
 
 ## Refactor event handling in `Swarm`
 
