@@ -199,7 +199,9 @@ Dependencies:
 
 Dependents:
 
-Users of rust-libp2p like [iroh](https://github.com/n0-computer/iroh) need this for low latency usage of `libp2p-kad`.
+Users of rust-libp2p like [iroh](https://github.com/n0-computer/iroh) need this for low latency
+usage of `libp2p-kad`. The rust-libp2p maintainers can pick this up unless iroh folks finish the
+work before that.
 
 ## Kademlia client mode
 
