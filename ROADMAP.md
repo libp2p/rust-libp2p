@@ -246,7 +246,10 @@ Dependents:
 
 - WebRTC browser-to-browser and browser side
 
-This opens rust-libp2p to hole new set of use-cases.
+This opens rust-libp2p to hole new set of use-cases. I would love for this to happen earlier. Though
+(a) I think we should prioritize improving existing functionality over new functionality and (b) we
+don't have high demand for this feature from the community. (One could argue that that demand
+follows this roadmap item and not the other way round.)
 
 ## Handshake optimizations
 
