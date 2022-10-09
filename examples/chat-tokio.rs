@@ -25,15 +25,7 @@
 //! The example is run per node as follows:
 //!
 //! ```sh
-//! cargo run --example chat-tokio --features="tcp-tokio mdns-tokio"
-//! ```
-//!
-//! Alternatively, to run with the minimal set of features and crates:
-//!
-//! ```sh
-//!cargo run --example chat-tokio \\
-//!    --no-default-features \\
-//!    --features="floodsub mplex noise tcp-tokio mdns-tokio"
+//! cargo run --example chat-tokio --features=full
 //! ```
 
 use futures::StreamExt;
@@ -113,7 +105,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Create a Swarm to manage peers and events.
     let mut swarm = {
-        let mdns = TokioMdns::new(Default::default()).await?;
+        let mdns = TokioMdns::new(Default::default())?;
         let mut behaviour = MyBehaviour {
             floodsub: Floodsub::new(peer_id),
             mdns,
