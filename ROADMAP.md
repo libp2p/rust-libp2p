@@ -10,7 +10,7 @@
     - [WebRTC support (browser-to-server)](#webrtc-support-browser-to-server)
     - [Refactor event handling in `Swarm`](#refactor-event-handling-in-swarm)
     - [Cross Behaviour communication](#cross-behaviour-communication)
-    - [swarm/handler: Decouple ConnectionHandler from {In,Out}boundUpgrade #2863](#swarmhandler-decouple-connectionhandler-from-inoutboundupgrade-2863)
+    - [Decouple ConnectionHandler from {In,Out}boundUpgrade](#decouple-connectionhandler-from-inoutboundupgrade)
     - [Generic connection management](#generic-connection-management)
     - [Kademlia efficient querying](#kademlia-efficient-querying)
     - [Kademlia client mode](#kademlia-client-mode)
@@ -145,7 +145,7 @@ Dependents:
 
 - [Kademlia client mode](#kademlia-client-mode)
 
-## swarm/handler: Decouple ConnectionHandler from {In,Out}boundUpgrade #2863
+## Decouple ConnectionHandler from {In,Out}boundUpgrade
 
 Status: todo
 
