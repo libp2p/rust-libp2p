@@ -4,7 +4,12 @@
 
 - Update to `libp2p-core` `v0.37.0`.
 
+- Introduce `libp2p_swarm::keep_alive::ConnectionHandler` in favor of removing `keep_alive` from 
+  `libp2p_swarm::dummy::ConnectionHandler`. `dummy::ConnectionHandler` now literally does not do anything. In the same
+  spirit, introduce `libp2p_swarm::keep_alive::Behaviour` and `libp2p_swarm::dummy::Behaviour`. See [PR 2859].
+
 [PR 2857]: https://github.com/libp2p/rust-libp2p/pull/2857
+[PR 2859]: https://github.com/libp2p/rust-libp2p/pull/2859/
 
 - Pass actual `PeerId` of dial to `NetworkBehaviour::inject_dial_failure` on `DialError::ConnectionLimit`. See [PR 2928].
 

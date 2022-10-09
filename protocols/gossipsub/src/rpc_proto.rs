@@ -75,7 +75,7 @@ mod test {
         assert_eq!(new_message.topic, topic1.clone().into_string());
 
         let new_message = super::Message::decode(&old_message2b[..]).unwrap();
-        assert_eq!(new_message.topic, topic2.clone().into_string());
+        assert_eq!(new_message.topic, topic2.into_string());
 
         let old_message = compat_proto::Message::decode(&new_message1b[..]).unwrap();
         assert_eq!(old_message.topic_ids, vec![topic1.into_string()]);
