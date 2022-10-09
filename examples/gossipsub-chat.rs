@@ -34,12 +34,16 @@
 //! mDNS discovered a new peer: {peerId}
 //! ```
 //!
-//! Type a message hit return: the message is sent and printed in the other terminal.
+//! Type a message and hit return: the message is sent and printed in the other terminal.
 //! Close with Ctrl-c.
 //!
-//! You can open more terminal windows and add more participants using the same line above.
-//! Once additional participants are mDNS discovered they can participate in the conversation
-//! and all peers will receive messages sent from any of them.
+//! You can open more terminal windows and add more peers using the same line above.
+//!
+//! Once an additional peer is mDNS discovered it can participate in the conversation
+//! and all peers will receive messages sent from it.
+//!
+//! If a participant exits (Control-C or otherwise) the other peers will receive an mDNS expired
+//! event and remove the expired peer from the list of known peers.
 
 use async_std::io;
 use futures::{prelude::*, select};
@@ -61,8 +65,6 @@ use std::time::Duration;
 
 #[async_std::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    env_logger::init();
-
     // Create a random PeerId
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
@@ -151,6 +153,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     for (peer_id, _multiaddr) in list {
                         println!("mDNS discovered a new peer: {}", peer_id);
                         swarm.behaviour_mut().gossipsub.add_explicit_peer(&peer_id);
+                    }
+                },
+                SwarmEvent::Behaviour(MyBehaviourEvent::Mdns(MdnsEvent::Expired(list))) => {
+                    for (peer_id, _multiaddr) in list {
+                        println!("mDNS discover peer has expired: {}", peer_id);
+                        swarm.behaviour_mut().gossipsub.remove_explicit_peer(&peer_id);
                     }
                 },
                 SwarmEvent::Behaviour(MyBehaviourEvent::Gossipsub(GossipsubEvent::Message {
