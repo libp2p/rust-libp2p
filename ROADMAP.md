@@ -14,7 +14,7 @@
     - [Generic connection management](#generic-connection-management)
     - [Kademlia efficient querying](#kademlia-efficient-querying)
     - [Kademlia client mode](#kademlia-client-mode)
-    - [Hole punching](#hole-punching)
+    - [Optimize Hole punching](#optimize-hole-punching)
     - [Streaming response protocol aka. the ultimate escape hatch](#streaming-response-protocol-aka-the-ultimate-escape-hatch)
     - [Improved WASM support](#improved-wasm-support)
     - [Handshake optimizations](#handshake-optimizations)
@@ -200,7 +200,7 @@ Dependencies:
 
 Dependents:
 
-## Hole punching
+## Optimize Hole punching
 
 Status: todo
 
