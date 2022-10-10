@@ -149,8 +149,6 @@ async fn new_inbound_connection(
 }
 
 fn random_ufrag() -> String {
-    // TODO: at least 128 bit of entropy
-
     thread_rng()
         .sample_iter(&Alphanumeric)
         .take(64)
