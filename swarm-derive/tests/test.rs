@@ -134,6 +134,23 @@ fn custom_event() {
 }
 
 #[test]
+fn custom_crate() {
+    use libp2p as mylibp2p;
+    #[allow(dead_code)]
+    #[derive(NetworkBehaviour)]
+    #[behaviour(crate = "mylibp2p")]
+    struct Foo {
+        ping: ping::Behaviour,
+        identify: identify::Behaviour,
+    }
+
+    #[allow(dead_code)]
+    fn foo() {
+        require_net_behaviour::<Foo>();
+    }
+}
+
+#[test]
 fn custom_event_mismatching_field_names() {
     #[allow(dead_code)]
     #[derive(NetworkBehaviour)]
