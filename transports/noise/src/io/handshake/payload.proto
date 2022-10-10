@@ -1,11 +1,11 @@
-syntax = "proto3";
+syntax = "proto2";
 
 package payload.proto;
 
 // Payloads for Noise handshake messages.
 
 message NoiseHandshakePayload {
-    bytes identity_key = 1;
-    bytes identity_sig = 2;
-    bytes data         = 3;
+    optional bytes identity_key = 1;
+    optional bytes identity_sig = 2;
+    optional bytes data         = 3;
 }
