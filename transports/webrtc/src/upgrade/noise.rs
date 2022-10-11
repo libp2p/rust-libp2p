@@ -55,8 +55,8 @@ where
 }
 
 pub fn noise_prologue(client_fingerprint: Fingerprint, server_fingerprint: Fingerprint) -> Vec<u8> {
-    let client = client_fingerprint.to_multi_hash().to_bytes();
-    let server = server_fingerprint.to_multi_hash().to_bytes();
+    let client = client_fingerprint.to_raw();
+    let server = server_fingerprint.to_raw();
     const PREFIX: &[u8] = b"libp2p-webrtc-noise:";
     let mut out = Vec::with_capacity(PREFIX.len() + client.len() + server.len());
     out.extend_from_slice(PREFIX);
@@ -82,7 +82,7 @@ mod tests {
         let prologue1 = noise_prologue(a, b);
         let prologue2 = noise_prologue(b, a);
 
-        assert_eq!(hex::encode(&prologue1), "6c69627032702d7765627274632d6e6f6973653a12203e79af40d6059617a0d83b83a52ce73b0c1f37a72c6043ad2969e2351bdca870122030fc9f469c207419dfdd0aab5f27a86c973c94e40548db9375cca2e915973b99");
-        assert_eq!(hex::encode(&prologue2), "6c69627032702d7765627274632d6e6f6973653a122030fc9f469c207419dfdd0aab5f27a86c973c94e40548db9375cca2e915973b9912203e79af40d6059617a0d83b83a52ce73b0c1f37a72c6043ad2969e2351bdca870");
+        assert_eq!(hex::encode(&prologue1), "6c69627032702d7765627274632d6e6f6973653a3e79af40d6059617a0d83b83a52ce73b0c1f37a72c6043ad2969e2351bdca87030fc9f469c207419dfdd0aab5f27a86c973c94e40548db9375cca2e915973b99");
+        assert_eq!(hex::encode(&prologue2), "6c69627032702d7765627274632d6e6f6973653a30fc9f469c207419dfdd0aab5f27a86c973c94e40548db9375cca2e915973b993e79af40d6059617a0d83b83a52ce73b0c1f37a72c6043ad2969e2351bdca870");
     }
 }

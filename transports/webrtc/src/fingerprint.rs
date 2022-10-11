@@ -73,6 +73,10 @@ impl Fingerprint {
         Code::Sha2_256.wrap(&self.0).unwrap()
     }
 
+    pub fn to_raw(self) -> [u8; 32] {
+        self.0
+    }
+
     /// Transforms this fingerprint into a ufrag.
     pub fn to_ufrag(self) -> String {
         multibase::encode(
