@@ -16,8 +16,8 @@ where
     let dh_keys = Keypair::<X25519Spec>::new()
         .into_authentic(&id_keys)
         .unwrap();
-    let noise =
-        NoiseConfig::xx(dh_keys).with_prologue(noise_prologue(client_fingerprint, server_fingerprint));
+    let noise = NoiseConfig::xx(dh_keys)
+        .with_prologue(noise_prologue(client_fingerprint, server_fingerprint));
     let info = noise.protocol_info().next().unwrap();
     let (peer_id, mut channel) = noise
         .into_authenticated()
@@ -41,8 +41,8 @@ where
     let dh_keys = Keypair::<X25519Spec>::new()
         .into_authentic(&id_keys)
         .unwrap();
-    let noise =
-        NoiseConfig::xx(dh_keys).with_prologue(noise_prologue(client_fingerprint, server_fingerprint));
+    let noise = NoiseConfig::xx(dh_keys)
+        .with_prologue(noise_prologue(client_fingerprint, server_fingerprint));
     let info = noise.protocol_info().next().unwrap();
     let (peer_id, mut channel) = noise
         .into_authenticated()
