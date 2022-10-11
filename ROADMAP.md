@@ -94,21 +94,6 @@ stack. Though that should only happen after improved WASM support, see below.
 
 - [Kademlia client mode](#kademlia-client-mode)
 
-## Decouple ConnectionHandler from {In,Out}boundUpgrade
-
-**Status:** todo
-
-**Target completion:** Q1/2023
-
-**Tracking:** https://github.com/libp2p/rust-libp2p/issues/2863
-
-**Dependencies:**
-
-**Dependents:**
-
-I think this will simplify existing implementations and lower the learning curve required to get
-started with rust-libp2p.
-
 ## Generic connection management
 
 **Target completion:** Q1/2023
