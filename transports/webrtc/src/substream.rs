@@ -54,7 +54,6 @@ pub struct Substream {
     io: Framed<Compat<PollDataChannel>, prost_codec::Codec<Message>>,
     state: State,
     read_buffer: Bytes,
-    substream_id: u16,
 }
 
 impl Substream {
@@ -66,14 +65,10 @@ impl Substream {
         // https://github.com/webrtc-rs/webrtc/issues/273 is fixed.
         inner.set_read_buf_capacity(8192 * 10);
 
-        let io = Framed::new(inner.compat(), prost_codec::Codec::new(MAX_MSG_LEN));
-        let substream_id = io.get_ref().stream_identifier();
-
         Self {
-            io,
+            io: Framed::new(inner.compat(), prost_codec::Codec::new(MAX_MSG_LEN)),
             state: State::Open,
             read_buffer: Bytes::default(),
-            substream_id,
         }
     }
 
@@ -123,7 +118,6 @@ impl AsyncRead for Substream {
             }
 
             let Self {
-                substream_id,
                 read_buffer,
                 io,
                 state,
@@ -132,7 +126,7 @@ impl AsyncRead for Substream {
             match ready!(io_poll_next(io, cx))? {
                 Some((flag, message)) => {
                     if let Some(flag) = flag {
-                        state.handle_inbound_flag(flag, read_buffer, *substream_id);
+                        state.handle_inbound_flag(flag, read_buffer);
                     }
 
                     debug_assert!(read_buffer.is_empty());
@@ -141,7 +135,7 @@ impl AsyncRead for Substream {
                     }
                 }
                 None => {
-                    state.handle_inbound_flag(Flag::Fin, read_buffer, *substream_id);
+                    state.handle_inbound_flag(Flag::Fin, read_buffer);
                     return Poll::Ready(Ok(0));
                 }
             }
@@ -160,7 +154,6 @@ impl AsyncWrite for Substream {
             // underlying I/O resource once more. Is that allowed? How about introducing a state IoReadClosed?
 
             let Self {
-                substream_id,
                 read_buffer,
                 io,
                 state,
@@ -171,7 +164,7 @@ impl AsyncWrite for Substream {
                     // Read side is closed. Discard any incoming messages.
                     drop(message);
                     // But still handle flags, e.g. a `Flag::StopSending`.
-                    state.handle_inbound_flag(flag, read_buffer, *substream_id)
+                    state.handle_inbound_flag(flag, read_buffer)
                 }
                 Poll::Ready(Some((None, message))) => drop(message),
                 Poll::Ready(None) | Poll::Pending => break,
@@ -277,7 +270,7 @@ enum Closing {
 
 impl State {
     /// Performs a state transition for a flag contained in an inbound message.
-    fn handle_inbound_flag(&mut self, flag: Flag, buffer: &mut Bytes, substream_id: u16) {
+    fn handle_inbound_flag(&mut self, flag: Flag, buffer: &mut Bytes) {
         let current = *self;
 
         match (current, flag) {
@@ -299,8 +292,6 @@ impl State {
             }
             _ => {}
         }
-
-        log::trace!("Transitioned from {current:?} to {self:?} on substream {substream_id}")
     }
 
     fn write_closed(&mut self) {
@@ -558,7 +549,7 @@ mod tests {
     fn cannot_read_after_receiving_fin() {
         let mut open = State::Open;
 
-        open.handle_inbound_flag(Flag::Fin, &mut Bytes::default(), 0);
+        open.handle_inbound_flag(Flag::Fin, &mut Bytes::default());
         let error = open.read_barrier().unwrap_err();
 
         assert_eq!(error.kind(), ErrorKind::BrokenPipe)
@@ -580,7 +571,7 @@ mod tests {
     fn cannot_write_after_receiving_stop_sending() {
         let mut open = State::Open;
 
-        open.handle_inbound_flag(Flag::StopSending, &mut Bytes::default(), 0);
+        open.handle_inbound_flag(Flag::StopSending, &mut Bytes::default());
         let error = open.write_barrier().unwrap_err();
 
         assert_eq!(error.kind(), ErrorKind::BrokenPipe)
@@ -602,7 +593,7 @@ mod tests {
     fn everything_broken_after_receiving_reset() {
         let mut open = State::Open;
 
-        open.handle_inbound_flag(Flag::Reset, &mut Bytes::default(), 0);
+        open.handle_inbound_flag(Flag::Reset, &mut Bytes::default());
         let error1 = open.read_barrier().unwrap_err();
         let error2 = open.write_barrier().unwrap_err();
         let error3 = open.close_write_barrier().unwrap_err();
@@ -618,7 +609,7 @@ mod tests {
     fn should_read_flags_in_async_write_after_read_closed() {
         let mut open = State::Open;
 
-        open.handle_inbound_flag(Flag::Fin, &mut Bytes::default(), 0);
+        open.handle_inbound_flag(Flag::Fin, &mut Bytes::default());
 
         assert!(open.read_flags_in_async_write())
     }
@@ -627,8 +618,8 @@ mod tests {
     fn cannot_read_or_write_after_receiving_fin_and_stop_sending() {
         let mut open = State::Open;
 
-        open.handle_inbound_flag(Flag::Fin, &mut Bytes::default(), 0);
-        open.handle_inbound_flag(Flag::StopSending, &mut Bytes::default(), 0);
+        open.handle_inbound_flag(Flag::Fin, &mut Bytes::default());
+        open.handle_inbound_flag(Flag::StopSending, &mut Bytes::default());
 
         let error1 = open.read_barrier().unwrap_err();
         let error2 = open.write_barrier().unwrap_err();
@@ -728,7 +719,7 @@ mod tests {
         let mut open = State::Open;
         let mut buffer = Bytes::copy_from_slice(b"foobar");
 
-        open.handle_inbound_flag(Flag::Reset, &mut buffer, 0);
+        open.handle_inbound_flag(Flag::Reset, &mut buffer);
 
         assert!(buffer.is_empty());
     }
