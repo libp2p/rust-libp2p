@@ -29,16 +29,14 @@ pub use as_server::{InboundProbeError, InboundProbeEvent};
 use futures_timer::Delay;
 use instant::Instant;
 use libp2p_core::{
-    connection::ConnectionId, multiaddr::Protocol, transport::ListenerId, ConnectedPoint, Endpoint,
-    Multiaddr, PeerId,
+    connection::ConnectionId, multiaddr::Protocol, ConnectedPoint, Endpoint, Multiaddr, PeerId,
 };
 use libp2p_request_response::{
-    handler::RequestResponseHandlerEvent, ProtocolSupport, RequestId, RequestResponse,
-    RequestResponseConfig, RequestResponseEvent, RequestResponseMessage, ResponseChannel,
+    ProtocolSupport, RequestId, RequestResponse, RequestResponseConfig, RequestResponseEvent,
+    RequestResponseMessage, ResponseChannel,
 };
 use libp2p_swarm::{
-    behaviour::FromSwarm, DialError, IntoConnectionHandler, NetworkBehaviour,
-    NetworkBehaviourAction, PollParameters,
+    behaviour::FromSwarm, DialError, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
 };
 use std::{
     collections::{HashMap, VecDeque},

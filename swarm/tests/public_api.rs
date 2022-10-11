@@ -1,12 +1,12 @@
 use libp2p::core::transport::ListenerId;
 use libp2p::swarm::behaviour::FromSwarm;
-use libp2p::swarm::handler::DummyConnectionHandler;
+use libp2p::swarm::dummy;
 
 #[test]
 // test to break compilation everytime a variant changes,
 // forcing us to revisit each implementation
 fn swarm_event_variants() {
-    let event: FromSwarm<'_, DummyConnectionHandler> = FromSwarm::ListenerClosed {
+    let event: FromSwarm<'_, dummy::ConnectionHandler> = FromSwarm::ListenerClosed {
         listener_id: ListenerId::new(),
         reason: Ok(()),
     };

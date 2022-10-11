@@ -65,7 +65,6 @@ pub mod dummy;
 pub mod handler;
 pub mod keep_alive;
 
-use behaviour::FromSwarm;
 pub use behaviour::{
     CloseConnection, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
 };
@@ -1534,60 +1533,6 @@ impl error::Error for DialError {
             DialError::ConnectionIo(_) => None,
             DialError::Transport(_) => None,
         }
-    }
-}
-
-/// Dummy implementation of [`NetworkBehaviour`] that doesn't do anything.
-#[derive(Clone)]
-pub struct DummyBehaviour {
-    keep_alive: KeepAlive,
-}
-
-impl DummyBehaviour {
-    pub fn with_keep_alive(keep_alive: KeepAlive) -> Self {
-        Self { keep_alive }
-    }
-
-    pub fn keep_alive_mut(&mut self) -> &mut KeepAlive {
-        &mut self.keep_alive
-    }
-}
-
-impl Default for DummyBehaviour {
-    fn default() -> Self {
-        Self {
-            keep_alive: KeepAlive::No,
-        }
-    }
-}
-
-impl NetworkBehaviour for DummyBehaviour {
-    type ConnectionHandler = handler::DummyConnectionHandler;
-    type OutEvent = void::Void;
-
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
-        handler::DummyConnectionHandler {
-            keep_alive: self.keep_alive,
-        }
-    }
-
-    fn on_swarm_event(&mut self, _event: FromSwarm<Self::ConnectionHandler>) {}
-
-    fn on_connection_handler_event(
-        &mut self,
-        _peer_id: PeerId,
-        _connection_id: ConnectionId,
-        event: crate::THandlerOutEvent<Self>,
-    ) {
-        void::unreachable(event)
-    }
-
-    fn poll(
-        &mut self,
-        _: &mut Context<'_>,
-        _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
-        Poll::Pending
     }
 }
 
