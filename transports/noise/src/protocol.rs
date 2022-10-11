@@ -333,7 +333,7 @@ mod tests {
     }
 
     fn xx_builder(prologue: &'static [u8]) -> snow::Builder<'static> {
-        X25519::params_xx().into_builder(prologue, &TEST_KEY.secret(), None)
+        X25519::params_xx().into_builder(prologue, TEST_KEY.secret(), None)
     }
 
     // Hack to work around borrow-checker.
