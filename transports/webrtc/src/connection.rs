@@ -167,7 +167,7 @@ impl StreamMuxer for Connection {
                     "Sender-end of channel should be owned by `RTCPeerConnection`"
                 );
 
-                return Poll::Pending; // Return `Pending` without registering a waker: If the channel is closed, we don't need to be called anymore.
+                Poll::Pending // Return `Pending` without registering a waker: If the channel is closed, we don't need to be called anymore.
             }
         }
     }
