@@ -49,6 +49,16 @@
 - Remove default features. You need to enable required features explicitly now. As a quick workaround, you may want to use the
   new `full` feature which activates all features. See [PR 2918].
 
+- Introduce `tokio` and `async-std` features and deprecate the following ones:
+  - `tcp-tokio` in favor of `tcp` + `tokio`
+  - `mdns-tokio` in favor of `mdns` + `tokio`
+  - `dns-tokio` in favor of `dns` + `tokio`
+  - `tcp-async-io` in favor of `tcp` + `async-std`
+  - `mdns-async-io` in favor of `mdns` + `async-std`
+  - `dns-async-std` in favor of `dns` + `async-std`
+  
+  See [PR 2962].
+
 - Introduce [`libp2p-tls` `v0.1.0`](transports/tls/CHANGELOG.md#010). See [PR 2945].
 
 - Update individual crates.
@@ -79,6 +89,7 @@
     - Update to [`libp2p-yamux` `v0.41.0`](muxers/mplex/CHANGELOG.md#0410).
 
 [PR 2918]: https://github.com/libp2p/rust-libp2p/pull/2918
+[PR 2962]: https://github.com/libp2p/rust-libp2p/pull/2962
 [PR 2945]: https://github.com/libp2p/rust-libp2p/pull/2945
 
 # 0.48.0
