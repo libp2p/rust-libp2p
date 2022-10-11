@@ -197,7 +197,7 @@ fn ik_xx() {
         let client_id_public = client_id.public();
 
         let server_dh = Keypair::<X25519>::new().into_authentic(&server_id).unwrap();
-        let server_dh_public = server_dh.public().clone();
+        let server_dh_public = server_dh.public_dh_key().clone();
         let server_transport = TcpTransport::default()
             .and_then(move |output, endpoint| {
                 if endpoint.is_listener() {
