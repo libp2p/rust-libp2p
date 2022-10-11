@@ -29,6 +29,8 @@ use libp2p_core::upgrade::{EitherUpgrade, UpgradeError};
 use libp2p_core::{ConnectedPoint, Multiaddr, PeerId};
 use std::task::{Context, Poll};
 
+/// Auxiliary type to allow implementing [`IntoConnectionHandler`]. As [`IntoConnectionHandler`] is
+/// already implemented for T, we cannot implement it for Either<A, B>.
 pub enum IntoEitherHandler<L, R> {
     Left(L),
     Right(R),

@@ -63,7 +63,7 @@ pub mod behaviour;
 pub mod dial_opts;
 pub mod handler;
 
-use behaviour::InEvent;
+use behaviour::FromSwarm;
 pub use behaviour::{
     CloseConnection, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
 };
@@ -1563,59 +1563,7 @@ impl NetworkBehaviour for DummyBehaviour {
         }
     }
 
-    fn on_swarm_event(&mut self, event: InEvent<Self::ConnectionHandler>) {
-        match event {
-            InEvent::ConnectionEstablished {
-                peer_id: _,
-                connection_id: _,
-                endpoint: _,
-                failed_addresses: _,
-                other_established: _,
-            } => {}
-            InEvent::ConnectionClosed {
-                peer_id: _,
-                connection_id: _,
-                endpoint: _,
-                handler: _,
-                remaining_established: _,
-            } => {}
-            InEvent::AddressChange {
-                peer_id: _,
-                connection_id: _,
-                old: _,
-                new: _,
-            } => {}
-            InEvent::DialFailure {
-                peer_id: _,
-                handler: _,
-                error: _,
-            } => {}
-            InEvent::ListenFailure {
-                local_addr: _,
-                send_back_addr: _,
-                handler: _,
-            } => {}
-            InEvent::NewListener { listener_id: _ } => {}
-            InEvent::NewListenAddr {
-                listener_id: _,
-                addr: _,
-            } => {}
-            InEvent::ExpiredListenAddr {
-                listener_id: _,
-                addr: _,
-            } => {}
-            InEvent::ListenerError {
-                listener_id: _,
-                err: _,
-            } => {}
-            InEvent::ListenerClosed {
-                listener_id: _,
-                reason: _,
-            } => {}
-            InEvent::NewExternalAddr { addr: _ } => {}
-            InEvent::ExpiredExternalAddr { addr: _ } => {}
-        }
-    }
+    fn on_swarm_event(&mut self, _event: FromSwarm<Self::ConnectionHandler>) {}
 
     fn on_connection_handler_event(
         &mut self,

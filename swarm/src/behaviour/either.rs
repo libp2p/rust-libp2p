@@ -47,7 +47,7 @@ where
         }
     }
 
-    fn on_swarm_event(&mut self, event: behaviour::InEvent<Self::ConnectionHandler>) {
+    fn on_swarm_event(&mut self, event: behaviour::FromSwarm<Self::ConnectionHandler>) {
         match self {
             Either::Left(b) => b.on_swarm_event(event.map_handler(
                 |h| h.unwrap_left(),
