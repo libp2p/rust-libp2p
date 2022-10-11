@@ -55,13 +55,11 @@ where
 }
 
 pub fn noise_prologue(client_fingerprint: Fingerprint, server_fingerprint: Fingerprint) -> Vec<u8> {
-    let client = client_fingerprint.to_multi_hash().to_bytes();
-    let server = server_fingerprint.to_multi_hash().to_bytes();
     const PREFIX: &[u8] = b"libp2p-webrtc-noise:";
-    let mut out = Vec::with_capacity(PREFIX.len() + client.len() + server.len());
+    let mut out = Vec::with_capacity(PREFIX.len() + 64);
     out.extend_from_slice(PREFIX);
-    out.extend_from_slice(&client);
-    out.extend_from_slice(&server);
+    out.extend_from_slice(&client_fingerprint.to_raw());
+    out.extend_from_slice(&server_fingerprint.to_raw());
     out
 }
 
