@@ -157,7 +157,7 @@ impl State {
         }
     }
 
-    /// Whether we should read from the stream in the [`AsyncWrite`] implementation.
+    /// Whether we should read from the stream in the [`futures::AsyncWrite`] implementation.
     ///
     /// This is necessary for read-closed streams because we would otherwise not read any more flags from
     /// the socket.
@@ -165,7 +165,7 @@ impl State {
         matches!(self, Self::ReadClosed)
     }
 
-    /// Acts as a "barrier" for [`AsyncRead::poll_read`].
+    /// Acts as a "barrier" for [`futures::AsyncRead::poll_read`].
     pub(crate) fn read_barrier(&self) -> io::Result<()> {
         use crate::substream::State::{Open, ReadClosed, WriteClosed};
         use State::*;
@@ -188,7 +188,7 @@ impl State {
         Err(kind.into())
     }
 
-    /// Acts as a "barrier" for [`AsyncWrite::poll_write`].
+    /// Acts as a "barrier" for [`futures::AsyncWrite::poll_write`].
     pub(crate) fn write_barrier(&self) -> io::Result<()> {
         use crate::substream::State::{Open, ReadClosed, WriteClosed};
         use State::*;
@@ -212,7 +212,7 @@ impl State {
         Err(kind.into())
     }
 
-    /// Acts as a "barrier" for [`AsyncWrite::poll_close`].
+    /// Acts as a "barrier" for [`futures::AsyncWrite::poll_close`].
     pub(crate) fn close_write_barrier(&mut self) -> io::Result<Option<Closing>> {
         loop {
             match &self {
@@ -257,7 +257,7 @@ impl State {
         }
     }
 
-    /// Acts as a "barrier" for [`Substream::poll_close_read`].
+    /// Acts as a "barrier" for [`Substream::poll_close_read`](super::Substream::poll_close_read).
     pub fn close_read_barrier(&mut self) -> io::Result<Option<Closing>> {
         loop {
             match self {
