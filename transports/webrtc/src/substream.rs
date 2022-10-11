@@ -54,6 +54,7 @@ pub struct Substream {
     io: Framed<Compat<PollDataChannel>, prost_codec::Codec<Message>>,
     state: State,
     read_buffer: Bytes,
+    substream_id: u16,
 }
 
 impl Substream {
@@ -65,15 +66,15 @@ impl Substream {
         // https://github.com/webrtc-rs/webrtc/issues/273 is fixed.
         inner.set_read_buf_capacity(8192 * 10);
 
+        let io = Framed::new(inner.compat(), prost_codec::Codec::new(MAX_MSG_LEN));
+        let substream_id = io.get_ref().stream_identifier();
+
         Self {
-            io: Framed::new(inner.compat(), prost_codec::Codec::new(MAX_MSG_LEN)),
+            io,
             state: State::Open,
             read_buffer: Bytes::default(),
+            substream_id,
         }
-    }
-
-    fn stream_identifier(&self) -> u16 {
-        self.io.get_ref().stream_identifier()
     }
 
     /// Gracefully closes the "read-half" of the substream.
