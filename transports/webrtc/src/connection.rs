@@ -149,9 +149,14 @@ impl StreamMuxer for Connection {
 
                 Poll::Ready(Ok(Substream::new(detached)))
             }
-            None => Poll::Ready(Err(Error::Internal(
-                "incoming_data_channels_rx is closed (no messages left)".to_string(),
-            ))),
+            None => {
+                debug_assert!(
+                    false,
+                    "Sender-end of channel should be owned by `RTCPeerConnection`"
+                );
+
+                return Poll::Pending; // Return `Pending` without registering a waker: If the channel is closed, we don't need to be called anymore.
+            }
         }
     }
 
