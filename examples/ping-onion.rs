@@ -45,10 +45,10 @@
 
 use futures::prelude::*;
 use libp2p::onion::AddressConversion;
-use libp2p::swarm::{Swarm, SwarmEvent, keep_alive};
+use libp2p::swarm::{keep_alive, Swarm, SwarmEvent};
 use libp2p::{
-    core::upgrade, identity, mplex, noise, onion, ping, yamux, Multiaddr, PeerId, Transport,
-    NetworkBehaviour
+    core::upgrade, identity, mplex, noise, onion, ping, yamux, Multiaddr, NetworkBehaviour, PeerId,
+    Transport,
 };
 use std::error::Error;
 
