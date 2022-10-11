@@ -42,6 +42,7 @@ full = [
     "wasm-bindgen",
     "wasm-ext",
     "wasm-ext-websocket",
+    "webrtc",
     "websocket",
     "yamux",
 ]

@@ -65,7 +65,7 @@ impl Unpin for Connection {}
 
 impl Connection {
     /// Creates a new connection.
-    pub async fn new(rtc_conn: RTCPeerConnection) -> Self {
+    pub(crate) async fn new(rtc_conn: RTCPeerConnection) -> Self {
         let (data_channel_tx, data_channel_rx) = mpsc::channel(MAX_DATA_CHANNELS_IN_FLIGHT);
 
         Connection::register_incoming_data_channels_handler(&rtc_conn, data_channel_tx).await;
@@ -149,7 +149,7 @@ impl StreamMuxer for Connection {
 
                 Poll::Ready(Ok(Substream::new(detached)))
             }
-            None => Poll::Ready(Err(Error::InternalError(
+            None => Poll::Ready(Err(Error::Internal(
                 "incoming_data_channels_rx is closed (no messages left)".to_string(),
             ))),
         }
@@ -189,7 +189,7 @@ impl StreamMuxer for Connection {
             // Wait until data channel is opened and ready to use
             match rx.await {
                 Ok(detached) => Ok(detached),
-                Err(e) => Err(Error::InternalError(e.to_string())),
+                Err(e) => Err(Error::Internal(e.to_string())),
             }
         }));
 

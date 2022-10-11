@@ -88,7 +88,7 @@ mod sdp;
 mod substream;
 mod transport;
 mod udp_mux;
-mod webrtc_connection;
+mod upgrade;
 mod message_proto {
     #![allow(clippy::derive_partial_eq_without_eq)]
 
@@ -97,5 +97,4 @@ mod message_proto {
 
 pub use connection::Connection;
 pub use error::Error;
-pub use fingerprint::Fingerprint;
-pub use transport::{WebRTCListenStream, WebRTCTransport};
+pub use transport::Transport;

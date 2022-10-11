@@ -24,30 +24,23 @@ use thiserror::Error;
 /// Error in WebRTC.
 #[derive(Error, Debug)]
 pub enum Error {
-    #[error("multi-address {0} is not supported")]
-    InvalidMultiaddr(libp2p_core::Multiaddr),
-    #[error("webrtc error: {0}")]
+    #[error(transparent)]
     WebRTC(#[from] webrtc::Error),
-    #[error("io error: {0}")]
-    IoError(#[from] std::io::Error),
-    #[error("noise error: {0}")]
-    Noise(#[from] libp2p_noise::NoiseError),
+    #[error("IO error")]
+    Io(#[from] std::io::Error),
+    #[error("failed to authenticate peer")]
+    Authentication(#[from] libp2p_noise::NoiseError),
 
     // Authentication errors.
-    #[error("invalid fingerprint (expected {expected:?}, got {got:?})")]
-    InvalidFingerprint { expected: String, got: String },
-    #[error("invalid peer ID (expected {expected:?}, got {got:?})")]
-    InvalidPeerID {
-        expected: Option<PeerId>,
-        got: PeerId,
-    },
+    #[error("invalid peer ID (expected {expected}, got {got})")]
+    InvalidPeerID { expected: PeerId, got: PeerId },
 
     #[error("no active listeners")]
     NoListeners,
 
     #[error("UDP mux error: {0}")]
-    UDPMuxError(std::io::Error),
+    UDPMux(std::io::Error),
 
     #[error("internal error: {0} (see debug logs)")]
-    InternalError(String),
+    Internal(String),
 }
