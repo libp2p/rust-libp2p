@@ -39,6 +39,7 @@ mod ping;
 #[cfg(feature = "relay")]
 mod relay;
 mod swarm;
+mod protocol_stack;
 
 use prometheus_client::registry::Registry;
 

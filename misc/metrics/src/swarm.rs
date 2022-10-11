@@ -22,9 +22,10 @@ use prometheus_client::encoding::text::Encode;
 use prometheus_client::metrics::counter::Counter;
 use prometheus_client::metrics::family::Family;
 use prometheus_client::registry::Registry;
+use crate::protocol_stack::protocol_stack;
 
 pub struct Metrics {
-    connections_incoming: Family<Vec<&'static str>, Counter>,
+    connections_incoming: Family<Vec<String>, Counter>,
     connections_incoming_error: Family<IncomingConnectionErrorLabels, Counter>,
 
     connections_established: Family<ConnectionEstablishedLabels, Counter>,
@@ -157,7 +158,7 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
                     .inc();
             }
             libp2p_swarm::SwarmEvent::IncomingConnection { send_back_addr, .. } => {
-                let labels : Vec<&'static str> = send_back_addr.protocol_stack().collect();
+                let labels = protocol_stack(send_back_addr);
                 self.connections_incoming.get_or_create(&labels).inc();
             }
             libp2p_swarm::SwarmEvent::IncomingConnectionError { error, .. } => {

@@ -28,6 +28,7 @@ use std::collections::HashMap;
 use std::iter;
 use std::sync::{Arc, Mutex};
 use prometheus_client::metrics::family::Family;
+use super::protocol_stack::protocol_stack;
 
 pub struct Metrics {
     protocols: Protocols,
@@ -37,7 +38,7 @@ pub struct Metrics {
     received_info_listen_addrs: Histogram,
     received_info_protocols: Histogram,
     sent: Counter,
-    listen_addresses: Family<Vec<&'static str>, Counter>,
+    listen_addresses: Family<Vec<String>, Counter>,
 }
 
 impl Metrics {
@@ -178,7 +179,7 @@ impl super::Recorder<libp2p_identify::Event> for Metrics {
                 self.received_info_listen_addrs
                     .observe(info.listen_addrs.len() as f64);
                 for listen_addr in &info.listen_addrs {
-                    let key : Vec<&'static str> = listen_addr.protocol_stack().collect();
+                    let key = protocol_stack(listen_addr);
                     self.listen_addresses.get_or_create(&key).inc();
                 }
             }
