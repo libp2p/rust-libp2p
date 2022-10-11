@@ -28,7 +28,7 @@ use webrtc::data::data_channel::DataChannel;
 use webrtc::data::data_channel::PollDataChannel;
 
 use std::{
-    fmt, io,
+    io,
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
@@ -53,6 +53,7 @@ const MAX_DATA_LEN: usize = MAX_MSG_LEN - VARINT_LEN - PROTO_OVERHEAD;
 pub struct Substream {
     io: Framed<Compat<PollDataChannel>, prost_codec::Codec<Message>>,
     state: State,
+    read_buffer: Bytes,
 }
 
 impl Substream {
@@ -66,14 +67,38 @@ impl Substream {
 
         Self {
             io: Framed::new(inner.compat(), prost_codec::Codec::new(MAX_MSG_LEN)),
-            state: State::Open {
-                read_buffer: Default::default(),
-            },
+            state: State::Open,
+            read_buffer: Bytes::default(),
         }
     }
 
     fn stream_identifier(&self) -> u16 {
         self.io.get_ref().stream_identifier()
+    }
+
+    /// Gracefully closes the "read-half" of the substream.
+    pub fn poll_close_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        loop {
+            match self.state.close_read_barrier()? {
+                Closing::Requested => {
+                    ready!(self.io.poll_ready_unpin(cx))?;
+
+                    self.io.start_send_unpin(Message {
+                        flag: Some(Flag::StopSending.into()),
+                        message: None,
+                    })?;
+
+                    continue;
+                }
+                Closing::MessageSent => {
+                    ready!(self.io.poll_flush_unpin(cx))?;
+
+                    self.state.handle_outbound_flag(Flag::StopSending);
+
+                    return Poll::Ready(Ok(()));
+                }
+            }
+        }
     }
 }
 
@@ -84,43 +109,29 @@ impl AsyncRead for Substream {
         buf: &mut [u8],
     ) -> Poll<io::Result<usize>> {
         loop {
-            if let Some(read_buffer) = self.state.non_empty_read_buffer_mut() {
-                let n = std::cmp::min(read_buffer.len(), buf.len());
-                let data = read_buffer.split_to(n);
+            self.state.read_barrier()?;
+
+            if !self.read_buffer.is_empty() {
+                let n = std::cmp::min(self.read_buffer.len(), buf.len());
+                let data = self.read_buffer.split_to(n);
                 buf[0..n].copy_from_slice(&data[..]);
 
                 return Poll::Ready(Ok(n));
             }
 
-            let substream_id = self.stream_identifier();
-            let Self { state, io } = &mut *self;
-
-            let read_buffer = match state {
-                State::Open { read_buffer } | State::WriteClosed { read_buffer } => read_buffer,
-                State::ReadClosed { read_buffer, .. }
-                | State::ReadWriteClosed { read_buffer, .. } => {
-                    assert!(read_buffer.is_empty());
-                    return Poll::Ready(Ok(0));
-                }
-                State::ReadReset | State::ReadResetWriteClosed => {
-                    return Poll::Ready(Err(io::Error::from(io::ErrorKind::ConnectionReset)));
-                }
-                State::Poisoned => unreachable!(),
-            };
-
-            match ready!(io_poll_next(io, cx))? {
+            match ready!(io_poll_next(&mut self.io, cx))? {
                 Some((flag, message)) => {
-                    assert!(read_buffer.is_empty());
-                    if let Some(message) = message {
-                        *read_buffer = message.into();
+                    if let Some(flag) = flag {
+                        self.state.handle_inbound_flag(flag);
                     }
 
-                    if let Some(flag) = flag {
-                        self.state.handle_flag(flag, substream_id)
-                    };
+                    debug_assert!(self.read_buffer.is_empty());
+                    if let Some(message) = message {
+                        self.read_buffer = message.into();
+                    }
                 }
                 None => {
-                    self.state.handle_flag(Flag::Fin, substream_id);
+                    self.state.handle_inbound_flag(Flag::Fin);
                     return Poll::Ready(Ok(0));
                 }
             }
@@ -134,9 +145,7 @@ impl AsyncWrite for Substream {
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
-        let substream_id = self.stream_identifier();
-        // Handle flags iff read side closed.
-        while let State::ReadClosed { .. } | State::ReadReset = self.state {
+        while self.state.read_flags_in_async_write() {
             // TODO: In case AsyncRead::poll_read encountered an error or returned None earlier, we will poll the
             // underlying I/O resource once more. Is that allowed? How about introducing a state IoReadClosed?
             match io_poll_next(&mut self.io, cx)? {
@@ -144,20 +153,14 @@ impl AsyncWrite for Substream {
                     // Read side is closed. Discard any incoming messages.
                     drop(message);
                     // But still handle flags, e.g. a `Flag::StopSending`.
-                    self.state.handle_flag(flag, substream_id)
+                    self.state.handle_inbound_flag(flag)
                 }
                 Poll::Ready(Some((None, message))) => drop(message),
                 Poll::Ready(None) | Poll::Pending => break,
             }
         }
 
-        match self.state {
-            State::WriteClosed { .. }
-            | State::ReadWriteClosed { .. }
-            | State::ReadResetWriteClosed => return Poll::Ready(Ok(0)),
-            State::Open { .. } | State::ReadClosed { .. } | State::ReadReset => {}
-            State::Poisoned => todo!(),
-        }
+        self.state.write_barrier()?;
 
         ready!(self.io.poll_ready_unpin(cx))?;
 
@@ -177,38 +180,27 @@ impl AsyncWrite for Substream {
     }
 
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        match &self.state {
-            State::WriteClosed { .. }
-            | State::ReadWriteClosed { .. }
-            | State::ReadResetWriteClosed { .. } => {}
+        loop {
+            match self.state.close_write_barrier()? {
+                Closing::Requested => {
+                    ready!(self.io.poll_ready_unpin(cx))?;
 
-            State::Open { .. } | State::ReadClosed { .. } | State::ReadReset => {
-                ready!(self.io.poll_ready_unpin(cx))?;
-                Pin::new(&mut self.io).start_send(Message {
-                    flag: Some(Flag::Fin.into()),
-                    message: None,
-                })?;
+                    self.io.start_send_unpin(Message {
+                        flag: Some(Flag::Fin.into()),
+                        message: None,
+                    })?;
 
-                match std::mem::replace(&mut self.state, State::Poisoned) {
-                    State::Open { read_buffer } => self.state = State::WriteClosed { read_buffer },
-                    State::ReadClosed { read_buffer } => {
-                        self.state = State::ReadWriteClosed { read_buffer }
-                    }
-                    State::ReadReset => self.state = State::ReadResetWriteClosed,
-                    State::WriteClosed { .. }
-                    | State::ReadWriteClosed { .. }
-                    | State::ReadResetWriteClosed
-                    | State::Poisoned => {
-                        unreachable!()
-                    }
+                    continue;
+                }
+                Closing::MessageSent => {
+                    ready!(self.io.poll_flush_unpin(cx))?;
+
+                    self.state.handle_outbound_flag(Flag::Fin);
+
+                    return Poll::Ready(Ok(()));
                 }
             }
-
-            State::Poisoned => todo!(),
         }
-
-        // TODO: Is flush the correct thing here? We don't want the underlying layer to close both write and read.
-        self.io.poll_flush_unpin(cx).map_err(Into::into)
     }
 }
 
@@ -234,106 +226,56 @@ fn io_poll_next(
 }
 
 enum State {
-    Open { read_buffer: Bytes },
-    WriteClosed { read_buffer: Bytes },
-    ReadClosed { read_buffer: Bytes },
-    ReadWriteClosed { read_buffer: Bytes },
-    ReadReset,
-    ReadResetWriteClosed,
-    Poisoned,
+    Open,
+    ReadClosed,
+    WriteClosed,
+    ClosingRead(Closing),
+    ClosingWrite(Closing),
+    BothClosed { reset: bool },
+}
+
+/// Represents the state of closing one half (either read or write) of the connection.
+///
+/// Gracefully closing the read or write requires sending the `STOP_SENDING` or `FIN` flag respectively
+/// and flushing the underlying connection.
+enum Closing {
+    Requested,
+    MessageSent,
 }
 
 impl State {
-    fn handle_flag(&mut self, flag: Flag, substream_id: u16) {
-        let old_state = format!("{}", self);
-        match (std::mem::replace(self, State::Poisoned), flag) {
-            // StopSending
-            (
-                State::Open { read_buffer } | State::WriteClosed { read_buffer },
-                Flag::StopSending,
-            ) => {
-                *self = State::WriteClosed { read_buffer };
-            }
+    /// Performs a state transition for a flag contained in an inbound message.
+    fn handle_inbound_flag(&mut self, flag: Flag) {}
 
-            (
-                State::ReadClosed { read_buffer } | State::ReadWriteClosed { read_buffer },
-                Flag::StopSending,
-            ) => {
-                *self = State::ReadWriteClosed { read_buffer };
-            }
+    /// Performs a state transition for a flag contained in an outbound message.
+    fn handle_outbound_flag(&mut self, flag: Flag) {}
 
-            (State::ReadReset | State::ReadResetWriteClosed, Flag::StopSending) => {
-                *self = State::ReadResetWriteClosed;
-            }
-
-            // Fin
-            (State::Open { read_buffer } | State::ReadClosed { read_buffer }, Flag::Fin) => {
-                *self = State::ReadClosed { read_buffer };
-            }
-
-            (
-                State::WriteClosed { read_buffer } | State::ReadWriteClosed { read_buffer },
-                Flag::Fin,
-            ) => {
-                *self = State::ReadWriteClosed { read_buffer };
-            }
-
-            (State::ReadReset, Flag::Fin) => *self = State::ReadReset,
-
-            (State::ReadResetWriteClosed, Flag::Fin) => *self = State::ReadResetWriteClosed,
-
-            // Reset
-            (State::ReadClosed { .. } | State::ReadReset | State::Open { .. }, Flag::Reset) => {
-                *self = State::ReadReset
-            }
-
-            (
-                State::ReadWriteClosed { .. }
-                | State::WriteClosed { .. }
-                | State::ReadResetWriteClosed,
-                Flag::Reset,
-            ) => *self = State::ReadResetWriteClosed,
-
-            (State::Poisoned, _) => unreachable!(),
-        }
-
-        log::debug!(
-            "substream={}: got flag {:?}, moved from {} to {}",
-            substream_id,
-            flag,
-            old_state,
-            *self
-        );
+    /// Whether we should read from the stream in the [`AsyncWrite`] implementation.
+    ///
+    /// This is necessary for read-closed streams because we would otherwise not read any more flags from
+    /// the socket.
+    fn read_flags_in_async_write(&self) -> bool {
+        false
     }
 
-    /// Returns a reference to the underlying buffer if possible and the buffer is not empty.
-    fn non_empty_read_buffer_mut(&mut self) -> Option<&mut Bytes> {
-        match self {
-            State::Open { read_buffer }
-            | State::WriteClosed { read_buffer }
-            | State::ReadClosed { read_buffer }
-            | State::ReadWriteClosed { read_buffer }
-                if !read_buffer.is_empty() =>
-            {
-                Some(read_buffer)
-            }
-            State::Poisoned => unreachable!(),
-            _ => None,
-        }
+    /// Acts as a "barrier" for [`AsyncRead::poll_read`].
+    fn read_barrier(&self) -> io::Result<()> {
+        Ok(())
     }
-}
 
-impl fmt::Display for State {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match *self {
-            State::Open { .. } => write!(f, "Open"),
-            State::WriteClosed { .. } => write!(f, "WriteClosed"),
-            State::ReadClosed { .. } => write!(f, "ReadClosed"),
-            State::ReadWriteClosed { .. } => write!(f, "ReadWriteClosed"),
-            State::ReadReset => write!(f, "ReadReset"),
-            State::ReadResetWriteClosed => write!(f, "ReadResetWriteClosed"),
-            State::Poisoned => write!(f, "Poisoned"),
-        }
+    /// Acts as a "barrier" for [`AsyncWrite::poll_write`].
+    fn write_barrier(&self) -> io::Result<()> {
+        Ok(())
+    }
+
+    /// Acts as a "barrier" for [`AsyncWrite::poll_close`].
+    fn close_write_barrier(&self) -> io::Result<Closing> {
+        todo!()
+    }
+
+    /// Acts as a "barrier" for [`Substream::poll_close_read`].
+    fn close_read_barrier(&self) -> io::Result<Closing> {
+        todo!()
     }
 }
 
@@ -343,7 +285,87 @@ mod tests {
     use asynchronous_codec::Encoder;
     use bytes::BytesMut;
     use prost::Message;
+    use std::io::ErrorKind;
     use unsigned_varint::codec::UviBytes;
+
+    #[test]
+    fn cannot_read_after_receiving_fin() {
+        let mut open = State::Open;
+
+        open.handle_inbound_flag(Flag::Fin);
+        let error = open.read_barrier().unwrap_err();
+
+        assert_eq!(error.kind(), ErrorKind::BrokenPipe)
+    }
+
+    #[test]
+    fn cannot_read_after_sending_stop_sending() {
+        let mut open = State::Open;
+
+        open.handle_outbound_flag(Flag::StopSending);
+        let error = open.read_barrier().unwrap_err();
+
+        assert_eq!(error.kind(), ErrorKind::BrokenPipe)
+    }
+
+    #[test]
+    fn cannot_write_after_receiving_stop_sending() {
+        let mut open = State::Open;
+
+        open.handle_inbound_flag(Flag::StopSending);
+        let error = open.write_barrier().unwrap_err();
+
+        assert_eq!(error.kind(), ErrorKind::BrokenPipe)
+    }
+
+    #[test]
+    fn cannot_write_after_sending_fin() {
+        let mut open = State::Open;
+
+        open.handle_outbound_flag(Flag::Fin);
+        let error = open.write_barrier().unwrap_err();
+
+        assert_eq!(error.kind(), ErrorKind::BrokenPipe)
+    }
+
+    #[test]
+    fn everything_broken_after_receiving_reset() {
+        let mut open = State::Open;
+
+        open.handle_inbound_flag(Flag::Reset);
+        let error1 = open.read_barrier().unwrap_err();
+        let error2 = open.write_barrier().unwrap_err();
+        let error3 = open.close_write_barrier().unwrap_err();
+        let error4 = open.close_read_barrier().unwrap_err();
+
+        assert_eq!(error1.kind(), ErrorKind::ConnectionReset);
+        assert_eq!(error2.kind(), ErrorKind::ConnectionReset);
+        assert_eq!(error3.kind(), ErrorKind::ConnectionReset);
+        assert_eq!(error4.kind(), ErrorKind::ConnectionReset);
+    }
+
+    #[test]
+    fn should_read_flags_in_async_write_after_read_closed() {
+        let mut open = State::Open;
+
+        open.handle_inbound_flag(Flag::Fin);
+
+        assert!(open.read_flags_in_async_write())
+    }
+
+    #[test]
+    fn cannot_read_or_write_after_receiving_fin_and_stop_sending() {
+        let mut open = State::Open;
+
+        open.handle_inbound_flag(Flag::Fin);
+        open.handle_inbound_flag(Flag::StopSending);
+
+        let error1 = open.read_barrier().unwrap_err();
+        let error2 = open.write_barrier().unwrap_err();
+
+        assert_eq!(error1.kind(), ErrorKind::BrokenPipe);
+        assert_eq!(error2.kind(), ErrorKind::BrokenPipe);
+    }
 
     #[test]
     fn max_data_len() {
