@@ -14,7 +14,7 @@
 
 - Update to `libp2p-swarm` `v0.40.0`.
 
-- Change default `cache_size` of `Config` to 100
+- Change default `cache_size` of `Config` to 100. See [PR 2995].
 
 [PR 2995]: https://github.com/libp2p/rust-libp2p/pull/2995
 [PR 2995]: https://github.com/libp2p/rust-libp2p/pull/2995
