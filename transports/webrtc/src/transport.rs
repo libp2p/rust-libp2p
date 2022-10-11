@@ -112,14 +112,14 @@ impl libp2p_core::Transport for Transport {
     }
 
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let (sock_addr, remote_fingerprint, expected_peer_id) = parse_webrtc_dial_addr(&addr)
+        let (sock_addr, server_fingerprint, expected_peer_id) = parse_webrtc_dial_addr(&addr)
             .ok_or_else(|| TransportError::MultiaddrNotSupported(addr.clone()))?;
         if sock_addr.port() == 0 || sock_addr.ip().is_unspecified() {
             return Err(TransportError::MultiaddrNotSupported(addr));
         }
 
         let config = self.config.clone();
-        let our_fingerprint = self.config.fingerprint;
+        let client_fingerprint = self.config.fingerprint;
         let id_keys = self.id_keys.clone();
         let udp_mux = self
             .listeners
@@ -134,8 +134,8 @@ impl libp2p_core::Transport for Transport {
                 sock_addr,
                 config.inner,
                 udp_mux,
-                our_fingerprint,
-                remote_fingerprint,
+                client_fingerprint,
+                server_fingerprint,
                 id_keys,
             )
             .await?;

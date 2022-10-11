@@ -47,8 +47,8 @@ pub async fn outbound(
     addr: SocketAddr,
     config: RTCConfiguration,
     udp_mux: Arc<dyn UDPMux + Send + Sync>,
-    our_fingerprint: Fingerprint,
-    remote_fingerprint: Fingerprint,
+    client_fingerprint: Fingerprint,
+    server_fingerprint: Fingerprint,
     id_keys: identity::Keypair,
 ) -> Result<(PeerId, Connection), Error> {
     log::debug!("new outbound connection to {addr})");
@@ -59,7 +59,7 @@ pub async fn outbound(
     log::debug!("created SDP offer for outbound connection: {:?}", offer.sdp);
     peer_connection.set_local_description(offer).await?;
 
-    let answer = sdp::answer(addr, &remote_fingerprint);
+    let answer = sdp::answer(addr, &server_fingerprint);
     log::debug!(
         "calculated SDP answer for outbound connection: {:?}",
         answer
@@ -69,7 +69,7 @@ pub async fn outbound(
     let data_channel = create_substream_for_noise_handshake(&peer_connection).await?;
 
     let peer_id =
-        noise::outbound(id_keys, data_channel, our_fingerprint, remote_fingerprint).await?;
+        noise::outbound(id_keys, data_channel, client_fingerprint, server_fingerprint).await?;
 
     Ok((peer_id, Connection::new(peer_connection).await))
 }
@@ -79,14 +79,14 @@ pub async fn inbound(
     addr: SocketAddr,
     config: RTCConfiguration,
     udp_mux: Arc<dyn UDPMux + Send + Sync>,
-    our_fingerprint: Fingerprint,
+    server_fingerprint: Fingerprint,
     remote_ufrag: String,
     id_keys: identity::Keypair,
 ) -> Result<(PeerId, Connection), Error> {
     log::debug!("new inbound connection from {addr} (ufrag: {remote_ufrag})");
 
     let peer_connection =
-        new_inbound_connection(addr, config, udp_mux, &our_fingerprint.to_ufrag()).await?;
+        new_inbound_connection(addr, config, udp_mux, &server_fingerprint.to_ufrag()).await?;
 
     let offer = sdp::offer(addr, &remote_ufrag);
     log::debug!("calculated SDP offer for inbound connection: {:?}", offer);
@@ -97,10 +97,10 @@ pub async fn inbound(
     peer_connection.set_local_description(answer).await?; // This will start the gathering of ICE candidates.
 
     let data_channel = create_substream_for_noise_handshake(&peer_connection).await?;
-    let remote_fingerprint = get_remote_fingerprint(&peer_connection).await;
+    let client_fingerprint = get_remote_fingerprint(&peer_connection).await;
 
     let peer_id =
-        noise::inbound(id_keys, data_channel, our_fingerprint, remote_fingerprint).await?;
+        noise::inbound(id_keys, data_channel, server_fingerprint, client_fingerprint).await?;
 
     Ok((peer_id, Connection::new(peer_connection).await))
 }
