@@ -24,7 +24,7 @@ use futures::{
         oneshot::{self, Sender},
     },
     lock::Mutex as FutMutex,
-    {future::BoxFuture, prelude::*, ready},
+    {future::BoxFuture, ready},
 };
 use futures_lite::StreamExt;
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
@@ -171,10 +171,7 @@ impl StreamMuxer for Connection {
             let peer_conn = peer_conn.lock().await;
 
             // Create a datachannel with label 'data'
-            let data_channel = peer_conn
-                .create_data_channel("data", None)
-                .map_err(Error::WebRTC)
-                .await?;
+            let data_channel = peer_conn.create_data_channel("data", None).await?;
 
             trace!("Opening outbound substream {}", data_channel.id());
 
@@ -211,7 +208,9 @@ impl StreamMuxer for Connection {
         let peer_conn = self.peer_conn.clone();
         let fut = self.close_fut.get_or_insert(Box::pin(async move {
             let peer_conn = peer_conn.lock().await;
-            peer_conn.close().await.map_err(Error::WebRTC)
+            peer_conn.close().await?;
+
+            Ok(())
         }));
 
         match ready!(fut.as_mut().poll(cx)) {
