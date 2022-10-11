@@ -66,10 +66,16 @@ pub async fn outbound(
     );
     peer_connection.set_remote_description(answer).await?; // This will start the gathering of ICE candidates.
 
+    // Note the roles are reversed because it allows the server (webrtc connection responder) to
+    // send application data 0.5 RTT earlier.
     let data_channel = create_substream_for_noise_handshake(&peer_connection).await?;
-
-    let peer_id =
-        noise::outbound(id_keys, data_channel, client_fingerprint, server_fingerprint).await?;
+    let peer_id = noise::inbound(
+        id_keys,
+        data_channel,
+        server_fingerprint,
+        client_fingerprint,
+    )
+    .await?;
 
     Ok((peer_id, Connection::new(peer_connection).await))
 }
@@ -96,11 +102,17 @@ pub async fn inbound(
     log::debug!("created SDP answer for inbound connection: {:?}", answer);
     peer_connection.set_local_description(answer).await?; // This will start the gathering of ICE candidates.
 
+    // Note the roles are reversed because it allows the server (webrtc connection responder) to
+    // send application data 0.5 RTT earlier.
     let data_channel = create_substream_for_noise_handshake(&peer_connection).await?;
     let client_fingerprint = get_remote_fingerprint(&peer_connection).await;
-
-    let peer_id =
-        noise::inbound(id_keys, data_channel, server_fingerprint, client_fingerprint).await?;
+    let peer_id = noise::outbound(
+        id_keys,
+        data_channel,
+        client_fingerprint,
+        server_fingerprint,
+    )
+    .await?;
 
     Ok((peer_id, Connection::new(peer_connection).await))
 }
