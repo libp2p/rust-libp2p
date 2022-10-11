@@ -81,23 +81,25 @@ impl Substream {
     pub fn poll_close_read(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         loop {
             match self.state.close_read_barrier()? {
-                Closing::Requested => {
+                Some(Closing::Requested) => {
                     ready!(self.io.poll_ready_unpin(cx))?;
 
                     self.io.start_send_unpin(Message {
                         flag: Some(Flag::StopSending.into()),
                         message: None,
                     })?;
+                    self.state.close_read_message_sent();
 
                     continue;
                 }
-                Closing::MessageSent => {
+                Some(Closing::MessageSent) => {
                     ready!(self.io.poll_flush_unpin(cx))?;
 
-                    self.state.handle_outbound_flag(Flag::StopSending);
+                    self.state.read_closed();
 
                     return Poll::Ready(Ok(()));
                 }
+                None => return Poll::Ready(Ok(())),
             }
         }
     }
@@ -120,10 +122,11 @@ impl AsyncRead for Substream {
                 return Poll::Ready(Ok(n));
             }
 
+            let substream_id = self.substream_id;
             match ready!(io_poll_next(&mut self.io, cx))? {
                 Some((flag, message)) => {
                     if let Some(flag) = flag {
-                        self.state.handle_inbound_flag(flag);
+                        self.state.handle_inbound_flag(flag, substream_id);
                     }
 
                     debug_assert!(self.read_buffer.is_empty());
@@ -132,7 +135,7 @@ impl AsyncRead for Substream {
                     }
                 }
                 None => {
-                    self.state.handle_inbound_flag(Flag::Fin);
+                    self.state.handle_inbound_flag(Flag::Fin, substream_id);
                     return Poll::Ready(Ok(0));
                 }
             }
@@ -149,12 +152,14 @@ impl AsyncWrite for Substream {
         while self.state.read_flags_in_async_write() {
             // TODO: In case AsyncRead::poll_read encountered an error or returned None earlier, we will poll the
             // underlying I/O resource once more. Is that allowed? How about introducing a state IoReadClosed?
+            let substream_id = self.substream_id;
+
             match io_poll_next(&mut self.io, cx)? {
                 Poll::Ready(Some((Some(flag), message))) => {
                     // Read side is closed. Discard any incoming messages.
                     drop(message);
                     // But still handle flags, e.g. a `Flag::StopSending`.
-                    self.state.handle_inbound_flag(flag)
+                    self.state.handle_inbound_flag(flag, substream_id)
                 }
                 Poll::Ready(Some((None, message))) => drop(message),
                 Poll::Ready(None) | Poll::Pending => break,
@@ -183,23 +188,25 @@ impl AsyncWrite for Substream {
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         loop {
             match self.state.close_write_barrier()? {
-                Closing::Requested => {
+                Some(Closing::Requested) => {
                     ready!(self.io.poll_ready_unpin(cx))?;
 
                     self.io.start_send_unpin(Message {
                         flag: Some(Flag::Fin.into()),
                         message: None,
                     })?;
+                    self.state.close_write_message_sent();
 
                     continue;
                 }
-                Closing::MessageSent => {
+                Some(Closing::MessageSent) => {
                     ready!(self.io.poll_flush_unpin(cx))?;
 
-                    self.state.handle_outbound_flag(Flag::Fin);
+                    self.state.write_closed();
 
                     return Poll::Ready(Ok(()));
                 }
+                None => return Poll::Ready(Ok(())),
             }
         }
     }
@@ -226,19 +233,31 @@ fn io_poll_next(
     }
 }
 
+#[derive(Debug, Copy, Clone)]
 enum State {
     Open,
     ReadClosed,
     WriteClosed,
-    ClosingRead(Closing),
-    ClosingWrite(Closing),
-    BothClosed { reset: bool },
+    ClosingRead {
+        /// Whether the write side of our channel was already closed.
+        write_closed: bool,
+        inner: Closing,
+    },
+    ClosingWrite {
+        /// Whether the write side of our channel was already closed.
+        read_closed: bool,
+        inner: Closing,
+    },
+    BothClosed {
+        reset: bool,
+    },
 }
 
 /// Represents the state of closing one half (either read or write) of the connection.
 ///
 /// Gracefully closing the read or write requires sending the `STOP_SENDING` or `FIN` flag respectively
 /// and flushing the underlying connection.
+#[derive(Debug, Copy, Clone)]
 enum Closing {
     Requested,
     MessageSent,
@@ -246,37 +265,268 @@ enum Closing {
 
 impl State {
     /// Performs a state transition for a flag contained in an inbound message.
-    fn handle_inbound_flag(&mut self, flag: Flag) {}
+    fn handle_inbound_flag(&mut self, flag: Flag, substream_id: u16) {
+        let current = *self;
 
-    /// Performs a state transition for a flag contained in an outbound message.
-    fn handle_outbound_flag(&mut self, flag: Flag) {}
+        match (current, flag) {
+            (Self::Open, Flag::Fin) => {
+                *self = Self::ReadClosed;
+            }
+            (Self::WriteClosed, Flag::Fin) => {
+                *self = Self::BothClosed { reset: false };
+            }
+            (Self::Open, Flag::StopSending) => {
+                *self = Self::WriteClosed;
+            }
+            (Self::ReadClosed, Flag::StopSending) => {
+                *self = Self::BothClosed { reset: false };
+            }
+            (_, Flag::Reset) => *self = Self::BothClosed { reset: true },
+            _ => {}
+        }
+
+        log::trace!("Transitioned from {current:?} to {self:?} on substream {substream_id}")
+    }
+
+    fn write_closed(&mut self) {
+        match self {
+            State::ClosingWrite {
+                read_closed: true,
+                inner,
+            } => {
+                debug_assert!(matches!(inner, Closing::MessageSent));
+
+                *self = State::BothClosed { reset: false };
+            }
+            State::ClosingWrite {
+                read_closed: false,
+                inner,
+            } => {
+                debug_assert!(matches!(inner, Closing::MessageSent));
+
+                *self = State::WriteClosed;
+            }
+            State::Open
+            | State::ReadClosed
+            | State::WriteClosed
+            | State::ClosingRead { .. }
+            | State::BothClosed { .. } => {
+                unreachable!("bad state machine impl")
+            }
+        }
+    }
+
+    fn close_write_message_sent(&mut self) {
+        match self {
+            State::ClosingWrite { inner, read_closed } => {
+                debug_assert!(matches!(inner, Closing::Requested));
+
+                *self = State::ClosingWrite {
+                    read_closed: *read_closed,
+                    inner: Closing::MessageSent,
+                };
+            }
+            State::Open
+            | State::ReadClosed
+            | State::WriteClosed
+            | State::ClosingRead { .. }
+            | State::BothClosed { .. } => {
+                unreachable!("bad state machine impl")
+            }
+        }
+    }
+
+    fn read_closed(&mut self) {
+        match self {
+            State::ClosingRead {
+                write_closed: true,
+                inner,
+            } => {
+                debug_assert!(matches!(inner, Closing::MessageSent));
+
+                *self = State::BothClosed { reset: false };
+            }
+            State::ClosingRead {
+                write_closed: false,
+                inner,
+            } => {
+                debug_assert!(matches!(inner, Closing::MessageSent));
+
+                *self = State::ReadClosed;
+            }
+            State::Open
+            | State::ReadClosed
+            | State::WriteClosed
+            | State::ClosingWrite { .. }
+            | State::BothClosed { .. } => {
+                unreachable!("bad state machine impl")
+            }
+        }
+    }
+
+    fn close_read_message_sent(&mut self) {
+        match self {
+            State::ClosingRead {
+                inner,
+                write_closed,
+            } => {
+                debug_assert!(matches!(inner, Closing::Requested));
+
+                *self = State::ClosingRead {
+                    write_closed: *write_closed,
+                    inner: Closing::MessageSent,
+                };
+            }
+            State::Open
+            | State::ReadClosed
+            | State::WriteClosed
+            | State::ClosingWrite { .. }
+            | State::BothClosed { .. } => {
+                unreachable!("bad state machine impl")
+            }
+        }
+    }
 
     /// Whether we should read from the stream in the [`AsyncWrite`] implementation.
     ///
     /// This is necessary for read-closed streams because we would otherwise not read any more flags from
     /// the socket.
     fn read_flags_in_async_write(&self) -> bool {
-        false
+        matches!(self, Self::ReadClosed)
     }
 
     /// Acts as a "barrier" for [`AsyncRead::poll_read`].
     fn read_barrier(&self) -> io::Result<()> {
-        Ok(())
+        use State::*;
+
+        let kind = match self {
+            Open
+            | WriteClosed
+            | ClosingWrite {
+                read_closed: false, ..
+            } => return Ok(()),
+            ClosingWrite {
+                read_closed: true, ..
+            }
+            | ReadClosed
+            | ClosingRead { .. }
+            | BothClosed { reset: false } => io::ErrorKind::BrokenPipe,
+            BothClosed { reset: true } => io::ErrorKind::ConnectionReset,
+        };
+
+        Err(kind.into())
     }
 
     /// Acts as a "barrier" for [`AsyncWrite::poll_write`].
     fn write_barrier(&self) -> io::Result<()> {
-        Ok(())
+        use State::*;
+
+        let kind = match self {
+            Open
+            | ReadClosed
+            | ClosingRead {
+                write_closed: false,
+                ..
+            } => return Ok(()),
+            ClosingRead {
+                write_closed: true, ..
+            }
+            | WriteClosed
+            | ClosingWrite { .. }
+            | BothClosed { reset: false } => io::ErrorKind::BrokenPipe,
+            BothClosed { reset: true } => io::ErrorKind::ConnectionReset,
+        };
+
+        Err(kind.into())
     }
 
     /// Acts as a "barrier" for [`AsyncWrite::poll_close`].
-    fn close_write_barrier(&self) -> io::Result<Closing> {
-        todo!()
+    fn close_write_barrier(&mut self) -> io::Result<Option<Closing>> {
+        loop {
+            match &self {
+                State::WriteClosed => return Ok(None),
+
+                State::ClosingWrite { inner, .. } => return Ok(Some(*inner)),
+
+                State::Open => {
+                    *self = Self::ClosingWrite {
+                        read_closed: false,
+                        inner: Closing::Requested,
+                    };
+                }
+                State::ReadClosed => {
+                    *self = Self::ClosingWrite {
+                        read_closed: true,
+                        inner: Closing::Requested,
+                    };
+                }
+
+                State::ClosingRead {
+                    write_closed: true, ..
+                }
+                | State::BothClosed { reset: false } => {
+                    return Err(io::ErrorKind::BrokenPipe.into())
+                }
+
+                State::ClosingRead {
+                    write_closed: false,
+                    ..
+                } => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::Other,
+                        "cannot close read half while closing write half",
+                    ))
+                }
+
+                State::BothClosed { reset: true } => {
+                    return Err(io::ErrorKind::ConnectionReset.into())
+                }
+            }
+        }
     }
 
     /// Acts as a "barrier" for [`Substream::poll_close_read`].
-    fn close_read_barrier(&self) -> io::Result<Closing> {
-        todo!()
+    fn close_read_barrier(&mut self) -> io::Result<Option<Closing>> {
+        loop {
+            match self {
+                State::ReadClosed => return Ok(None),
+
+                State::ClosingRead { inner, .. } => return Ok(Some(*inner)),
+
+                State::Open => {
+                    *self = Self::ClosingRead {
+                        write_closed: false,
+                        inner: Closing::Requested,
+                    };
+                }
+                State::WriteClosed => {
+                    *self = Self::ClosingRead {
+                        write_closed: true,
+                        inner: Closing::Requested,
+                    };
+                }
+
+                State::ClosingWrite {
+                    read_closed: true, ..
+                }
+                | State::BothClosed { reset: false } => {
+                    return Err(io::ErrorKind::BrokenPipe.into())
+                }
+
+                State::ClosingWrite {
+                    read_closed: false, ..
+                } => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::Other,
+                        "cannot close write half while closing read half",
+                    ))
+                }
+
+                State::BothClosed { reset: true } => {
+                    return Err(io::ErrorKind::ConnectionReset.into())
+                }
+            }
+        }
     }
 }
 
@@ -293,17 +543,19 @@ mod tests {
     fn cannot_read_after_receiving_fin() {
         let mut open = State::Open;
 
-        open.handle_inbound_flag(Flag::Fin);
+        open.handle_inbound_flag(Flag::Fin, 0);
         let error = open.read_barrier().unwrap_err();
 
         assert_eq!(error.kind(), ErrorKind::BrokenPipe)
     }
 
     #[test]
-    fn cannot_read_after_sending_stop_sending() {
+    fn cannot_read_after_closing_read() {
         let mut open = State::Open;
 
-        open.handle_outbound_flag(Flag::StopSending);
+        open.close_read_barrier().unwrap();
+        open.close_read_message_sent();
+        open.read_closed();
         let error = open.read_barrier().unwrap_err();
 
         assert_eq!(error.kind(), ErrorKind::BrokenPipe)
@@ -313,17 +565,19 @@ mod tests {
     fn cannot_write_after_receiving_stop_sending() {
         let mut open = State::Open;
 
-        open.handle_inbound_flag(Flag::StopSending);
+        open.handle_inbound_flag(Flag::StopSending, 0);
         let error = open.write_barrier().unwrap_err();
 
         assert_eq!(error.kind(), ErrorKind::BrokenPipe)
     }
 
     #[test]
-    fn cannot_write_after_sending_fin() {
+    fn cannot_write_after_closing_write() {
         let mut open = State::Open;
 
-        open.handle_outbound_flag(Flag::Fin);
+        open.close_write_barrier().unwrap();
+        open.close_write_message_sent();
+        open.write_closed();
         let error = open.write_barrier().unwrap_err();
 
         assert_eq!(error.kind(), ErrorKind::BrokenPipe)
@@ -333,7 +587,7 @@ mod tests {
     fn everything_broken_after_receiving_reset() {
         let mut open = State::Open;
 
-        open.handle_inbound_flag(Flag::Reset);
+        open.handle_inbound_flag(Flag::Reset, 0);
         let error1 = open.read_barrier().unwrap_err();
         let error2 = open.write_barrier().unwrap_err();
         let error3 = open.close_write_barrier().unwrap_err();
@@ -349,7 +603,7 @@ mod tests {
     fn should_read_flags_in_async_write_after_read_closed() {
         let mut open = State::Open;
 
-        open.handle_inbound_flag(Flag::Fin);
+        open.handle_inbound_flag(Flag::Fin, 0);
 
         assert!(open.read_flags_in_async_write())
     }
@@ -358,14 +612,100 @@ mod tests {
     fn cannot_read_or_write_after_receiving_fin_and_stop_sending() {
         let mut open = State::Open;
 
-        open.handle_inbound_flag(Flag::Fin);
-        open.handle_inbound_flag(Flag::StopSending);
+        open.handle_inbound_flag(Flag::Fin, 0);
+        open.handle_inbound_flag(Flag::StopSending, 0);
 
         let error1 = open.read_barrier().unwrap_err();
         let error2 = open.write_barrier().unwrap_err();
 
         assert_eq!(error1.kind(), ErrorKind::BrokenPipe);
         assert_eq!(error2.kind(), ErrorKind::BrokenPipe);
+    }
+
+    #[test]
+    fn can_read_after_closing_write() {
+        let mut open = State::Open;
+
+        open.close_write_barrier().unwrap();
+        open.close_write_message_sent();
+        open.write_closed();
+
+        open.read_barrier().unwrap();
+    }
+
+    #[test]
+    fn can_write_after_closing_read() {
+        let mut open = State::Open;
+
+        open.close_read_barrier().unwrap();
+        open.close_read_message_sent();
+        open.read_closed();
+
+        open.write_barrier().unwrap();
+    }
+
+    #[test]
+    fn cannot_write_after_starting_close() {
+        let mut open = State::Open;
+
+        open.close_write_barrier().expect("to close in open");
+        let error = open.write_barrier().unwrap_err();
+
+        assert_eq!(error.kind(), ErrorKind::BrokenPipe);
+    }
+
+    #[test]
+    fn cannot_read_after_starting_close() {
+        let mut open = State::Open;
+
+        open.close_read_barrier().expect("to close in open");
+        let error = open.read_barrier().unwrap_err();
+
+        assert_eq!(error.kind(), ErrorKind::BrokenPipe);
+    }
+
+    #[test]
+    fn can_read_in_open() {
+        let open = State::Open;
+
+        let result = open.read_barrier();
+
+        result.unwrap();
+    }
+
+    #[test]
+    fn can_write_in_open() {
+        let open = State::Open;
+
+        let result = open.write_barrier();
+
+        result.unwrap();
+    }
+
+    #[test]
+    fn write_close_barrier_returns_ok_when_closed() {
+        let mut open = State::Open;
+
+        open.close_write_barrier().unwrap();
+        open.close_write_message_sent();
+        open.write_closed();
+
+        let maybe = open.close_write_barrier().unwrap();
+
+        assert!(maybe.is_none())
+    }
+
+    #[test]
+    fn read_close_barrier_returns_ok_when_closed() {
+        let mut open = State::Open;
+
+        open.close_read_barrier().unwrap();
+        open.close_read_message_sent();
+        open.read_closed();
+
+        let maybe = open.close_read_barrier().unwrap();
+
+        assert!(maybe.is_none())
     }
 
     #[test]
