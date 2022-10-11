@@ -42,10 +42,9 @@ prost-build = "0.11"
 [dev-dependencies]
 anyhow = "1.0"
 env_logger = "0.9"
-libp2p = { path = "../..", features = ["request-response", "webrtc"], default-features = false }
-rand_core = "0.5"
-quickcheck = "1"
 hex-literal = "0.3"
+libp2p = { path = "../..", features = ["request-response", "webrtc"], default-features = false }
 multihash = { version = "0.16", default-features = false, features = ["sha3"] }
+quickcheck = "1"
+rand_core = "0.5"
 unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
-asynchronous-codec = { version = "0.6" }
