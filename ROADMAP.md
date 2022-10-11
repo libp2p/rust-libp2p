@@ -4,7 +4,6 @@
 **Table of Contents**
 
 - [rust-libp2p Roadmap](#rust-libp2p-roadmap)
-    - [Testground abstraction](#testground-abstraction)
     - [TLS support](#tls-support)
     - [QUIC support](#quic-support)
     - [WebRTC support (browser-to-server)](#webrtc-support-browser-to-server)
@@ -22,33 +21,6 @@
     - [WebTransport](#webtransport)
 
 <!-- markdown-toc end -->
-
-## Testground abstraction
-
-**Status:** todo
-
-**Target completion:** Q4/2022
-
-**Tracking:**
-
-**Past discussions:**
-
-- https://github.com/libp2p/test-plans/pull/49#issuecomment-1267175415
-
-**Dependencies:**
-
-**Dependents:**
-
-- [QUIC](#quic-support)
-- [WebRTC](#webrtc-support-browser-to-server)
-
-We now have the infrastructure to run cross-implementation and cross-version compatilibilty tests
-via https://github.com/libp2p/test-plans and Testground. This setup is rather bare-bone, i.e. today
-it only runs a single TCP test. Long term we need to come up with the abstractions to test many
-dimensions, e.g. implementations (Go, JS, Rust, Nim), version, transport, ... .
-
-This will enable us to test QUIC and WebRTC against rust-libp2p itself as well as js-libp2p and
-go-libp2p.
 
 ## TLS support
 
@@ -76,7 +48,7 @@ support. Running TLS on top of TCP is a nice to have, since we already have nois
 
 **Dependencies:**
 - [TLS](#tls-support)
-- [Testground](#testground)
+- https://github.com/libp2p/test-plans/issues/53
 
 **Dependents:**
 
@@ -95,7 +67,7 @@ issue https://github.com/libp2p/rust-libp2p/issues/2883.
 
 **Dependencies:**
 - [TLS](#tls-support)
-- [Testground](#testground)
+- https://github.com/libp2p/test-plans/issues/53
 
 **Dependents:**
 
