@@ -1,6 +1,7 @@
 # rust-libp2p Roadmap
 
-Below is a high level roadmap for the rust-libp2p project.
+Below is a high level roadmap for the rust-libp2p project. Items are ordered by priority (high to
+low).
 
 For a more detailed view see https://github.com/orgs/libp2p/projects/4/views/1.
 
