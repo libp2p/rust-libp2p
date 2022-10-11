@@ -1,5 +1,9 @@
 # rust-libp2p Roadmap
 
+Below is a high level roadmap for the rust-libp2p project.
+
+For a more detailed view see https://github.com/orgs/libp2p/projects/4/views/1.
+
 <!-- markdown-toc start - Don't edit this section. Run M-x markdown-toc-refresh-toc -->
 **Table of Contents**
 
@@ -145,7 +149,7 @@ follows this roadmap item and not the other way round.)
 
 | Status | Target Completion | Tracking                                                                                                                                                | Dependencies | Dependents |
 |--------|-------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------|--------------|------------|
-| todo   | Q2/2023           | - Security protocol in multiaddr https://github.com/libp2p/specs/pull/353 and early muxer negotiation https://github.com/libp2p/rust-libp2p/issues/2994 |              |            |
+| todo   | Q2/2023           | Security protocol in multiaddr https://github.com/libp2p/specs/pull/353 and early muxer negotiation https://github.com/libp2p/rust-libp2p/issues/2994 |              |            |
 
 Short term, investing into rust-libp2p's QUIC support will likely give us a larger performance win,
 thus neither of the two optimizations is planned for 2022. While great to have, it has not been
