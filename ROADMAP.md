@@ -7,7 +7,6 @@
     - [TLS support](#tls-support)
     - [QUIC support](#quic-support)
     - [WebRTC support (browser-to-server)](#webrtc-support-browser-to-server)
-    - [Refactor event handling in `Swarm`](#refactor-event-handling-in-swarm)
     - [Cross Behaviour communication](#cross-behaviour-communication)
     - [Decouple ConnectionHandler from {In,Out}boundUpgrade](#decouple-connectionhandler-from-inoutboundupgrade)
     - [Generic connection management](#generic-connection-management)
@@ -79,28 +78,6 @@ certificates. See https://github.com/libp2p/specs/pull/412 for in-depth motivati
 Long term we should enable rust-libp2p running in the browser via WASM to use the browser's WebRTC
 stack. Though that should only happen after improved WASM support, see below.
 
-## Refactor event handling in `Swarm`
-
-**Status:** In progress
-
-**Target completion:** Q4/2022
-
-**Tracking:** https://github.com/libp2p/rust-libp2p/issues/2832
-
-**Dependencies:**
-
-**Dependents:**
-
-- [Cross behaviour communication](#cross-behaviour-communication)
-
-More specifically replace the `inject_*` methods on `NetworkBehaviour` and `ConnectionHandler` with
-consolidated `on_*_event` handlers. See https://github.com/libp2p/rust-libp2p/issues/2832 and
-https://github.com/libp2p/rust-libp2p/pull/2867 for details.
-
-While a rather small change, this will make using rust-libp2p easier. In my eyes this is a
-requirement for generic connection management and cross behaviour communication as either would
-otherwise introduce too much complexity.
-
 ## Cross Behaviour communication
 
 **Status:** todo
@@ -111,7 +88,7 @@ otherwise introduce too much complexity.
 
 **Dependencies:**
 
-- [Refactor event handling](#refactor-event-handling-in-swarm)
+- https://github.com/libp2p/rust-libp2p/issues/2832
 
 **Dependents:**
 
