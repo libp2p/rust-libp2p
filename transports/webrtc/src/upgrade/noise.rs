@@ -3,13 +3,12 @@ use crate::Error;
 use futures::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use libp2p_core::{identity, InboundUpgrade, OutboundUpgrade, PeerId, UpgradeInfo};
 use libp2p_noise::{Keypair, NoiseConfig, X25519Spec};
-use multihash::Multihash;
 
 pub async fn outbound<T>(
     id_keys: identity::Keypair,
     stream: T,
-    our_fingerprint: Fingerprint,
-    remote_fingerprint: Fingerprint,
+    client_fingerprint: Fingerprint,
+    server_fingerprint: Fingerprint,
 ) -> Result<PeerId, Error>
 where
     T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
@@ -18,7 +17,7 @@ where
         .into_authentic(&id_keys)
         .unwrap();
     let noise =
-        NoiseConfig::xx(dh_keys).with_prologue(noise_prologue(our_fingerprint, remote_fingerprint));
+        NoiseConfig::xx(dh_keys).with_prologue(noise_prologue(client_fingerprint, server_fingerprint));
     let info = noise.protocol_info().next().unwrap();
     let (peer_id, mut channel) = noise
         .into_authenticated()
@@ -33,8 +32,8 @@ where
 pub async fn inbound<T>(
     id_keys: identity::Keypair,
     stream: T,
-    our_fingerprint: Fingerprint,
-    remote_fingerprint: Fingerprint,
+    server_fingerprint: Fingerprint,
+    client_fingerprint: Fingerprint,
 ) -> Result<PeerId, Error>
 where
     T: AsyncRead + AsyncWrite + Unpin + Send + 'static,
@@ -43,7 +42,7 @@ where
         .into_authentic(&id_keys)
         .unwrap();
     let noise =
-        NoiseConfig::xx(dh_keys).with_prologue(noise_prologue(our_fingerprint, remote_fingerprint));
+        NoiseConfig::xx(dh_keys).with_prologue(noise_prologue(client_fingerprint, server_fingerprint));
     let info = noise.protocol_info().next().unwrap();
     let (peer_id, mut channel) = noise
         .into_authenticated()
@@ -55,18 +54,14 @@ where
     Ok(peer_id)
 }
 
-pub fn noise_prologue(our_fingerprint: Fingerprint, remote_fingerprint: Fingerprint) -> Vec<u8> {
-    let (a, b): (Multihash, Multihash) = (
-        our_fingerprint.to_multi_hash(),
-        remote_fingerprint.to_multi_hash(),
-    );
-    let (a, b) = (a.to_bytes(), b.to_bytes());
-    let (first, second) = if a < b { (a, b) } else { (b, a) };
+pub fn noise_prologue(client_fingerprint: Fingerprint, server_fingerprint: Fingerprint) -> Vec<u8> {
+    let client = client_fingerprint.to_multi_hash().to_bytes();
+    let server = server_fingerprint.to_multi_hash().to_bytes();
     const PREFIX: &[u8] = b"libp2p-webrtc-noise:";
-    let mut out = Vec::with_capacity(PREFIX.len() + first.len() + second.len());
+    let mut out = Vec::with_capacity(PREFIX.len() + client.len() + server.len());
     out.extend_from_slice(PREFIX);
-    out.extend_from_slice(&first);
-    out.extend_from_slice(&second);
+    out.extend_from_slice(&client);
+    out.extend_from_slice(&server);
     out
 }
 
@@ -87,10 +82,7 @@ mod tests {
         let prologue1 = noise_prologue(a, b);
         let prologue2 = noise_prologue(b, a);
 
-        assert_eq!(hex::encode(&prologue1), "6c69627032702d7765627274632d6e6f6973653a122030fc9f469c207419dfdd0aab5f27a86c973c94e40548db9375cca2e915973b9912203e79af40d6059617a0d83b83a52ce73b0c1f37a72c6043ad2969e2351bdca870");
-        assert_eq!(
-            prologue1, prologue2,
-            "order of fingerprints does not matter"
-        );
+        assert_eq!(hex::encode(&prologue1), "6c69627032702d7765627274632d6e6f6973653a12203e79af40d6059617a0d83b83a52ce73b0c1f37a72c6043ad2969e2351bdca870122030fc9f469c207419dfdd0aab5f27a86c973c94e40548db9375cca2e915973b99");
+        assert_eq!(hex::encode(&prologue2), "6c69627032702d7765627274632d6e6f6973653a122030fc9f469c207419dfdd0aab5f27a86c973c94e40548db9375cca2e915973b9912203e79af40d6059617a0d83b83a52ce73b0c1f37a72c6043ad2969e2351bdca870");
     }
 }
