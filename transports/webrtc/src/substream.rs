@@ -34,8 +34,7 @@ use std::{
     task::{Context, Poll},
 };
 
-use crate::message_proto::message::Flag;
-use crate::message_proto::Message;
+use crate::message_proto::{message::Flag, Message};
 
 /// Maximum length of a message, in bytes.
 const MAX_MSG_LEN: usize = 16384; // 16kiB
