@@ -223,5 +223,8 @@ async fn create_substream_for_noise_handshake(
         }
     };
 
-    Ok(Substream::new(channel))
+    let (substream, drop_listener) = Substream::new(channel);
+    drop(drop_listener); // Don't care about cancelled substreams during initial handshake.
+
+    Ok(substream)
 }

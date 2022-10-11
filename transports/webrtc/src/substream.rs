@@ -20,14 +20,13 @@
 
 use asynchronous_codec::Framed;
 use bytes::Bytes;
+use futures::channel::oneshot;
 use futures::prelude::*;
 use futures::ready;
 use tokio_util::compat::Compat;
-use tokio_util::compat::TokioAsyncReadCompatExt;
 use webrtc::data::data_channel::DataChannel;
 use webrtc::data::data_channel::PollDataChannel;
 
-use state::{Closing, State};
 use std::{
     io,
     pin::Pin,
@@ -36,7 +35,12 @@ use std::{
 };
 
 use crate::message_proto::{message::Flag, Message};
+use crate::substream::drop_listener::GracefullyClosed;
+use crate::substream::framed_dc::FramedDC;
+use crate::substream::state::{Closing, State};
 
+mod drop_listener;
+mod framed_dc;
 mod state;
 
 /// As long as message interleaving is not supported, the sender SHOULD limit the maximum message size to 16 KB to avoid monopolization.
@@ -49,30 +53,34 @@ const PROTO_OVERHEAD: usize = 5;
 /// Maximum length of data, in bytes.
 const MAX_DATA_LEN: usize = MAX_MSG_LEN - VARINT_LEN - PROTO_OVERHEAD;
 
+pub use drop_listener::DropListener;
+
 /// A substream on top of a WebRTC data channel.
 ///
 /// To be a proper libp2p substream, we need to implement [`AsyncRead`] and [`AsyncWrite`] as well
 /// as support a half-closed state which we do by framing messages in a protobuf envelope.
 pub struct Substream {
-    io: Framed<Compat<PollDataChannel>, prost_codec::Codec<Message>>,
+    io: FramedDC,
     state: State,
     read_buffer: Bytes,
+    /// Dropping this will close the oneshot and notify the receiver by emitting `Canceled`.
+    drop_notifier: Option<oneshot::Sender<GracefullyClosed>>,
 }
 
 impl Substream {
     /// Constructs a new `Substream`.
-    pub(crate) fn new(data_channel: Arc<DataChannel>) -> Self {
-        let mut inner = PollDataChannel::new(data_channel);
+    pub(crate) fn new(data_channel: Arc<DataChannel>) -> (Self, DropListener) {
+        let (sender, receiver) = oneshot::channel();
 
-        // TODO: default buffer size is too small to fit some messages. Possibly remove once
-        // https://github.com/webrtc-rs/webrtc/issues/273 is fixed.
-        inner.set_read_buf_capacity(8192 * 10);
-
-        Self {
-            io: Framed::new(inner.compat(), prost_codec::Codec::new(MAX_MSG_LEN)),
+        let substream = Self {
+            io: framed_dc::new(data_channel.clone()),
             state: State::Open,
             read_buffer: Bytes::default(),
-        }
+            drop_notifier: Some(sender),
+        };
+        let listener = DropListener::new(framed_dc::new(data_channel), receiver);
+
+        (substream, listener)
     }
 
     /// Gracefully closes the "read-half" of the substream.
@@ -124,6 +132,7 @@ impl AsyncRead for Substream {
                 read_buffer,
                 io,
                 state,
+                ..
             } = &mut *self;
 
             match ready!(io_poll_next(io, cx))? {
@@ -160,6 +169,7 @@ impl AsyncWrite for Substream {
                 read_buffer,
                 io,
                 state,
+                ..
             } = &mut *self;
 
             match io_poll_next(io, cx)? {
@@ -211,6 +221,11 @@ impl AsyncWrite for Substream {
                     ready!(self.io.poll_flush_unpin(cx))?;
 
                     self.state.write_closed();
+                    let _ = self
+                        .drop_notifier
+                        .take()
+                        .expect("to not close twice")
+                        .send(GracefullyClosed {});
 
                     return Poll::Ready(Ok(()));
                 }
