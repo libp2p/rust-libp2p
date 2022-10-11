@@ -36,7 +36,8 @@ use std::{
 
 use crate::message_proto::{message::Flag, Message};
 
-/// Maximum length of a message, in bytes.
+/// As long as message interleaving is not supported, the sender SHOULD limit the maximum message size to 16 KB to avoid monopolization.
+// Source: <https://www.rfc-editor.org/rfc/rfc8831#name-transferring-user-data-on-a>
 const MAX_MSG_LEN: usize = 16384; // 16kiB
 /// Length of varint, in bytes.
 const VARINT_LEN: usize = 2;
