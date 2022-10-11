@@ -487,7 +487,7 @@ mod tests {
         fn prop(msg: Message) {
             let mut buf = BytesMut::new();
             msg.encode(&mut buf)
-                .expect(&format!("Encoding message failed: {:?}", msg));
+                .unwrap_or_else(|_| panic!("Encoding message failed: {:?}", msg));
             match Message::decode(buf.freeze()) {
                 Ok(m) => assert_eq!(m, msg),
                 Err(e) => panic!("Decoding failed: {:?}", e),
