@@ -19,9 +19,9 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::{channel::oneshot, prelude::*};
-use libp2p_core::muxing::StreamMuxerExt;
-use libp2p_core::{upgrade, Transport};
-use libp2p_tcp::TcpTransport;
+use libp2p::core::muxing::StreamMuxerExt;
+use libp2p::core::{upgrade, Transport};
+use libp2p::tcp::TcpTransport;
 
 #[test]
 fn client_to_server_outbound() {
@@ -188,11 +188,10 @@ fn protocol_not_match() {
         let mut transport = TcpTransport::default()
             .and_then(move |c, e| upgrade::apply(c, mplex, e, upgrade::Version::V1))
             .boxed();
-        match transport.dial(rx.await.unwrap()).unwrap().await {
-            Ok(_) => {
-                assert!(false, "Dialing should fail here as protocols do not match")
-            }
-            _ => {}
-        }
+
+        assert!(
+            transport.dial(rx.await.unwrap()).unwrap().await.is_err(),
+            "Dialing should fail here as protocols do not match"
+        );
     });
 }

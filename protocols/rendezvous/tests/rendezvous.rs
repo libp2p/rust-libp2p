@@ -24,9 +24,9 @@ pub mod harness;
 use crate::harness::{await_event_or_timeout, await_events_or_timeout, new_swarm, SwarmExt};
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
-use libp2p_core::identity;
-use libp2p_rendezvous as rendezvous;
-use libp2p_swarm::{DialError, Swarm, SwarmEvent};
+use libp2p::core::identity;
+use libp2p::rendezvous;
+use libp2p::swarm::{DialError, Swarm, SwarmEvent};
 use std::convert::TryInto;
 use std::time::Duration;
 
@@ -37,7 +37,7 @@ async fn given_successful_registration_then_successful_discovery() {
     let ([mut alice, mut bob], mut robert) =
         new_server_with_connected_clients(rendezvous::server::Config::default()).await;
 
-    let _ = alice
+    alice
         .behaviour_mut()
         .register(namespace.clone(), *robert.local_peer_id(), None);
 
@@ -86,7 +86,7 @@ async fn given_successful_registration_then_refresh_ttl() {
     let roberts_peer_id = *robert.local_peer_id();
     let refresh_ttl = 10_000;
 
-    let _ = alice
+    alice
         .behaviour_mut()
         .register(namespace.clone(), roberts_peer_id, None);
 
@@ -374,6 +374,7 @@ struct CombinedBehaviour {
 }
 
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 enum CombinedEvent {
     Client(rendezvous::client::Event),
     Server(rendezvous::server::Event),

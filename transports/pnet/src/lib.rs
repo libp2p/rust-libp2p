@@ -30,7 +30,7 @@ use log::trace;
 use pin_project::pin_project;
 use rand::RngCore;
 use salsa20::{
-    cipher::{NewCipher, StreamCipher},
+    cipher::{KeyIvInit, StreamCipher},
     Salsa20, XSalsa20,
 };
 use sha3::{digest::ExtendableOutput, Shake128};
@@ -319,9 +319,8 @@ mod tests {
     use quickcheck::*;
 
     impl Arbitrary for PreSharedKey {
-        fn arbitrary<G: Gen>(g: &mut G) -> PreSharedKey {
-            let mut key = [0; KEY_SIZE];
-            g.fill_bytes(&mut key);
+        fn arbitrary(g: &mut Gen) -> PreSharedKey {
+            let key = core::array::from_fn(|_| u8::arbitrary(g));
             PreSharedKey(key)
         }
     }
