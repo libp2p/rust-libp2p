@@ -426,78 +426,6 @@ impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = <RequestResponse<AutoNatCodec> as NetworkBehaviour>::ConnectionHandler;
     type OutEvent = Event;
 
-    fn inject_connection_established(
-        &mut self,
-        peer: &PeerId,
-        conn: &ConnectionId,
-        endpoint: &ConnectedPoint,
-        failed_addresses: Option<&Vec<Multiaddr>>,
-        other_established: usize,
-    ) {
-        let failed_addresses = failed_addresses
-            .map(|v| v.as_slice())
-            .unwrap_or_else(|| &[]);
-        self.on_connection_established(*peer, *conn, endpoint, failed_addresses, other_established)
-    }
-
-    fn inject_connection_closed(
-        &mut self,
-        peer: &PeerId,
-        conn: &ConnectionId,
-        endpoint: &ConnectedPoint,
-        handler: <Self::ConnectionHandler as IntoConnectionHandler>::Handler,
-        remaining_established: usize,
-    ) {
-        self.on_connection_closed(*peer, *conn, endpoint, handler, remaining_established)
-    }
-
-    fn inject_dial_failure(
-        &mut self,
-        peer: Option<PeerId>,
-        handler: Self::ConnectionHandler,
-        error: &DialError,
-    ) {
-        self.on_dial_failure(peer, handler, error)
-    }
-
-    fn inject_address_change(
-        &mut self,
-        peer: &PeerId,
-        conn: &ConnectionId,
-        old: &ConnectedPoint,
-        new: &ConnectedPoint,
-    ) {
-        self.on_address_change(*peer, *conn, old, new)
-    }
-
-    fn inject_new_listen_addr(&mut self, id: ListenerId, addr: &Multiaddr) {
-        self.inner.on_swarm_event(FromSwarm::NewListenAddr {
-            listener_id: id,
-            addr,
-        });
-        self.as_client().on_new_address();
-    }
-
-    fn inject_expired_listen_addr(&mut self, id: ListenerId, addr: &Multiaddr) {
-        self.inner.on_swarm_event(FromSwarm::ExpiredListenAddr {
-            listener_id: id,
-            addr,
-        });
-        self.as_client().on_expired_address(addr);
-    }
-
-    fn inject_new_external_addr(&mut self, addr: &Multiaddr) {
-        self.inner
-            .on_swarm_event(FromSwarm::NewExternalAddr { addr });
-        self.as_client().on_new_address();
-    }
-
-    fn inject_expired_external_addr(&mut self, addr: &Multiaddr) {
-        self.inner
-            .on_swarm_event(FromSwarm::ExpiredExternalAddr { addr });
-        self.as_client().on_expired_address(addr);
-    }
-
     fn poll(&mut self, cx: &mut Context<'_>, params: &mut impl PollParameters) -> Poll<Action> {
         loop {
             if let Some(event) = self.pending_out_events.pop_front() {
@@ -549,47 +477,6 @@ impl NetworkBehaviour for Behaviour {
 
     fn addresses_of_peer(&mut self, peer: &PeerId) -> Vec<Multiaddr> {
         self.inner.addresses_of_peer(peer)
-    }
-
-    fn inject_event(
-        &mut self,
-        peer_id: PeerId,
-        conn: ConnectionId,
-        event: RequestResponseHandlerEvent<AutoNatCodec>,
-    ) {
-        self.inner.on_connection_handler_event(peer_id, conn, event)
-    }
-
-    fn inject_listen_failure(
-        &mut self,
-        local_addr: &Multiaddr,
-        send_back_addr: &Multiaddr,
-        handler: Self::ConnectionHandler,
-    ) {
-        self.inner.on_swarm_event(FromSwarm::ListenFailure {
-            local_addr,
-            send_back_addr,
-            handler,
-        });
-    }
-
-    fn inject_new_listener(&mut self, id: ListenerId) {
-        self.inner
-            .on_swarm_event(FromSwarm::NewListener { listener_id: id })
-    }
-
-    fn inject_listener_error(&mut self, id: ListenerId, err: &(dyn std::error::Error + 'static)) {
-        self.inner.on_swarm_event(FromSwarm::ListenerError {
-            listener_id: id,
-            err,
-        });
-    }
-
-    fn inject_listener_closed(&mut self, id: ListenerId, reason: Result<(), &std::io::Error>) {
-        self.inner.on_swarm_event(FromSwarm::ListenerClosed {
-            listener_id: id,
-            reason,
-        });
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
