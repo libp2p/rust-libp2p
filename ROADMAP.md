@@ -5,10 +5,9 @@
 
 - [rust-libp2p Roadmap](#rust-libp2p-roadmap)
     - [TLS support](#tls-support)
-    - [QUIC support](#quic-support)
+    - [Experimental QUIC support](#experimental-quic-support)
     - [WebRTC support (browser-to-server)](#webrtc-support-browser-to-server)
     - [Cross Behaviour communication](#cross-behaviour-communication)
-    - [Decouple ConnectionHandler from {In,Out}boundUpgrade](#decouple-connectionhandler-from-inoutboundupgrade)
     - [Generic connection management](#generic-connection-management)
     - [Kademlia efficient querying](#kademlia-efficient-querying)
     - [Kademlia client mode](#kademlia-client-mode)
@@ -32,12 +31,12 @@
 **Dependencies:**
 
 **Dependents:**
-- [QUIC](#quic-support)
+- [QUIC](#experimental-quic-support)
 
 This allows us to secure both TCP and QUIC connections using TLS. This is a requirement for QUIC
 support. Running TLS on top of TCP is a nice to have, since we already have noise.
 
-## QUIC support
+## Experimental QUIC support
 
 **Status:** In progress
 
@@ -53,8 +52,11 @@ support. Running TLS on top of TCP is a nice to have, since we already have nois
 
 QUIC has been on the roadmap for a long time. It enables various performance improvements as well as
 higher hole punching success rates. We are close to finishing a first version with
-https://github.com/libp2p/rust-libp2p/pull/2289. Long term there is lots more to do, see tracking
-issue https://github.com/libp2p/rust-libp2p/issues/2883.
+https://github.com/libp2p/rust-libp2p/pull/2289.
+
+Long term there is lots more to do, see tracking issue
+https://github.com/libp2p/rust-libp2p/issues/2883. Though this will be tackled as a new roadmap
+item.
 
 ## WebRTC support (browser-to-server)
 
