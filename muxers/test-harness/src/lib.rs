@@ -13,7 +13,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::Duration;
-use std::{fmt, io, mem};
+use std::{fmt, mem};
 
 pub async fn connected_muxers_on_memory_transport<MC, M, E>() -> (M, M)
 where
