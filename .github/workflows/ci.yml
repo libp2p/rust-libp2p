@@ -111,7 +111,7 @@ jobs:
     - uses: Swatinem/rust-cache@6720f05bc48b77f96918929a9019fb2203ff71f8 # v2.0.0
 
     - name: Check rustdoc links
-      run: RUSTDOCFLAGS="--deny broken_intra_doc_links" cargo doc --verbose --workspace --no-deps --document-private-items --all-features
+      run: RUSTDOCFLAGS="--deny rustdoc::broken_intra_doc_links --deny warnings" cargo doc --verbose --workspace --no-deps --all-features --document-private-items
 
   check-clippy:
     runs-on: ubuntu-latest
@@ -210,4 +210,7 @@ jobs:
         ALL_FEATURES=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[] | select(.name == "libp2p") | .features | keys | map(select(. != "full")) | sort | join(" ")')
         FULL_FEATURE=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[] | select(.name == "libp2p") | .features["full"] | sort | join(" ")')
         
-        test "$ALL_FEATURES = $FULL_FEATURE"
+        echo "$ALL_FEATURES";
+        echo "$FULL_FEATURE";
+        
+        test "$ALL_FEATURES" = "$FULL_FEATURE"

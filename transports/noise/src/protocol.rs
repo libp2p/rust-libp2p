@@ -34,9 +34,24 @@ use zeroize::Zeroize;
 pub struct ProtocolParams(snow::params::NoiseParams);
 
 impl ProtocolParams {
-    /// Turn the protocol parameters into a session builder.
-    pub(crate) fn into_builder(self) -> snow::Builder<'static> {
-        snow::Builder::with_resolver(self.0, Box::new(Resolver))
+    pub(crate) fn into_builder<'b, C>(
+        self,
+        prologue: &'b [u8],
+        private_key: &'b SecretKey<C>,
+        remote_public_key: Option<&'b PublicKey<C>>,
+    ) -> snow::Builder<'b>
+    where
+        C: Zeroize + AsRef<[u8]> + Protocol<C>,
+    {
+        let mut builder = snow::Builder::with_resolver(self.0, Box::new(Resolver))
+            .prologue(prologue.as_ref())
+            .local_private_key(private_key.as_ref());
+
+        if let Some(remote_public_key) = remote_public_key {
+            builder = builder.remote_public_key(remote_public_key.as_ref());
+        }
+
+        builder
     }
 }
 
@@ -118,23 +133,24 @@ pub struct Keypair<T: Zeroize> {
 /// A DH keypair that is authentic w.r.t. a [`identity::PublicKey`].
 #[derive(Clone)]
 pub struct AuthenticKeypair<T: Zeroize> {
-    keypair: Keypair<T>,
-    identity: KeypairIdentity,
+    pub(crate) keypair: Keypair<T>,
+    pub(crate) identity: KeypairIdentity,
 }
 
 impl<T: Zeroize> AuthenticKeypair<T> {
+    /// Returns the public DH key of this keypair.
+    pub fn public_dh_key(&self) -> &PublicKey<T> {
+        &self.keypair.public
+    }
+
     /// Extract the public [`KeypairIdentity`] from this `AuthenticKeypair`,
     /// dropping the DH `Keypair`.
+    #[deprecated(
+        since = "0.40.0",
+        note = "This function was only used internally and will be removed in the future unless more usecases come up."
+    )]
     pub fn into_identity(self) -> KeypairIdentity {
         self.identity
-    }
-}
-
-impl<T: Zeroize> std::ops::Deref for AuthenticKeypair<T> {
-    type Target = Keypair<T>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.keypair
     }
 }
 
@@ -288,3 +304,40 @@ impl rand::RngCore for Rng {
 impl rand::CryptoRng for Rng {}
 
 impl snow::types::Random for Rng {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::X25519;
+
+    #[test]
+    fn handshake_hashes_disagree_if_prologue_differs() {
+        let alice = xx_builder(b"alice prologue").build_initiator().unwrap();
+        let bob = xx_builder(b"bob prologue").build_responder().unwrap();
+
+        let alice_handshake_hash = alice.get_handshake_hash();
+        let bob_handshake_hash = bob.get_handshake_hash();
+
+        assert_ne!(alice_handshake_hash, bob_handshake_hash)
+    }
+
+    #[test]
+    fn handshake_hashes_agree_if_prologue_is_the_same() {
+        let alice = xx_builder(b"shared knowledge").build_initiator().unwrap();
+        let bob = xx_builder(b"shared knowledge").build_responder().unwrap();
+
+        let alice_handshake_hash = alice.get_handshake_hash();
+        let bob_handshake_hash = bob.get_handshake_hash();
+
+        assert_eq!(alice_handshake_hash, bob_handshake_hash)
+    }
+
+    fn xx_builder(prologue: &'static [u8]) -> snow::Builder<'static> {
+        X25519::params_xx().into_builder(prologue, TEST_KEY.secret(), None)
+    }
+
+    // Hack to work around borrow-checker.
+    lazy_static::lazy_static! {
+        static ref TEST_KEY: Keypair<X25519> = Keypair::<X25519>::new();
+    }
+}
