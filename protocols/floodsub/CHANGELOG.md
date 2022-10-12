@@ -1,4 +1,4 @@
-# 0.39.1
+# 0.39.1 [unreleased]
 
 - Bump rand to 0.8 and quickcheck to 1. See [PR 2857].
 

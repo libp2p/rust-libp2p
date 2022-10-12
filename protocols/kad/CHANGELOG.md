@@ -1,4 +1,4 @@
-# 0.41.0
+# 0.41.0 [unreleased]
 
 - Remove deprecated `set_protocol_name()` from `KademliaConfig` & `KademliaProtocolConfig`.
   Use `set_protocol_names()` instead. See [PR 2866].
