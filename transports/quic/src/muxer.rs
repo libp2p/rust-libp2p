@@ -94,7 +94,7 @@ impl StreamMuxer for QuicMuxer {
         // the wakers of related poll-based methods.
         while let Poll::Ready(event) = inner.connection.poll_event(cx) {
             match event {
-                ConnectionEvent::Connected | ConnectionEvent::HandshakeDataReady => {
+                ConnectionEvent::Connected(_) | ConnectionEvent::HandshakeDataReady => {
                     debug_assert!(
                         false,
                         "Unexpected event {:?} on established QUIC connection",

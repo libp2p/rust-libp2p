@@ -110,23 +110,6 @@ impl Connection {
         self.connection.remote_address()
     }
 
-    /// Returns the ID of the node we're connected to.
-    pub fn remote_peer_id(&self) -> PeerId {
-        let session = self.connection.crypto_session();
-        let identity = session
-            .peer_identity()
-            .expect("connection got identity because it passed TLS handshake; qed");
-        let certificates: Box<Vec<rustls::Certificate>> =
-            identity.downcast().expect("we rely on rustls feature; qed");
-        let end_entity = certificates
-            .get(0)
-            .expect("there should be exactly one certificate; qed");
-        let end_entity_der = end_entity.as_ref();
-        let p2p_cert = crate::tls::certificate::parse_certificate(end_entity_der)
-            .expect("the certificate was validated during TLS handshake; qed");
-        PeerId::from_public_key(&p2p_cert.extension.public_key)
-    }
-
     /// Start closing the connection. A [`ConnectionEvent::ConnectionLost`] event will be
     /// produced in the future.
     pub fn close(&mut self) {
@@ -291,19 +274,70 @@ impl Connection {
 
             // The final step consists in handling the events related to the various substreams.
             if let Some(ev) = self.connection.poll() {
-                match ConnectionEvent::try_from(ev) {
-                    Ok(ConnectionEvent::ConnectionLost(reason)) => {
+                match self.parse_connection_event(ev) {
+                    ConnectionEvent::ConnectionLost(reason) => {
                         // Continue in the loop once more so that we can send a
                         // `EndpointEvent::drained` to the endpoint before returning.
                         closed = Some(reason);
                         continue;
                     }
-                    Ok(event) => return Poll::Ready(event),
-                    Err(_) => unreachable!("We don't use datagrams or unidirectional streams."),
+                    event => return Poll::Ready(event),
                 }
             }
 
             return Poll::Pending;
+        }
+    }
+
+    fn parse_connection_event(&self, event: quinn_proto::Event) -> ConnectionEvent {
+        match event {
+            quinn_proto::Event::Connected => {
+                let session = self.connection.crypto_session();
+                let identity = session
+                    .peer_identity()
+                    .expect("connection got identity because it passed TLS handshake; qed");
+                let certificates: Box<Vec<rustls::Certificate>> =
+                    identity.downcast().expect("we rely on rustls feature; qed");
+                let end_entity = certificates
+                    .get(0)
+                    .expect("there should be exactly one certificate; qed");
+                let end_entity_der = end_entity.as_ref();
+                let p2p_cert = crate::tls::certificate::parse_certificate(end_entity_der)
+                    .expect("the certificate was validated during TLS handshake; qed");
+                let peer_id = PeerId::from_public_key(&p2p_cert.extension.public_key);
+                ConnectionEvent::Connected(peer_id)
+            }
+            quinn_proto::Event::Stream(quinn_proto::StreamEvent::Readable { id }) => {
+                ConnectionEvent::StreamReadable(id)
+            }
+            quinn_proto::Event::Stream(quinn_proto::StreamEvent::Writable { id }) => {
+                ConnectionEvent::StreamWritable(id)
+            }
+            quinn_proto::Event::Stream(quinn_proto::StreamEvent::Stopped { id, .. }) => {
+                ConnectionEvent::StreamStopped(id)
+            }
+            quinn_proto::Event::Stream(quinn_proto::StreamEvent::Available {
+                dir: quinn_proto::Dir::Bi,
+            }) => ConnectionEvent::StreamAvailable,
+            quinn_proto::Event::Stream(quinn_proto::StreamEvent::Opened {
+                dir: quinn_proto::Dir::Bi,
+            }) => ConnectionEvent::StreamOpened,
+            quinn_proto::Event::ConnectionLost { reason } => {
+                ConnectionEvent::ConnectionLost(ConnectionError::Quinn(reason))
+            }
+            quinn_proto::Event::Stream(quinn_proto::StreamEvent::Finished { id }) => {
+                ConnectionEvent::StreamFinished(id)
+            }
+            quinn_proto::Event::HandshakeDataReady => ConnectionEvent::HandshakeDataReady,
+            quinn_proto::Event::Stream(quinn_proto::StreamEvent::Opened {
+                dir: quinn_proto::Dir::Uni,
+            })
+            | quinn_proto::Event::Stream(quinn_proto::StreamEvent::Available {
+                dir: quinn_proto::Dir::Uni,
+            })
+            | quinn_proto::Event::DatagramReceived => {
+                unreachable!("We don't use datagrams or unidirectional streams.")
+            }
         }
     }
 }
@@ -322,7 +356,7 @@ impl Drop for Connection {
 #[derive(Debug)]
 pub enum ConnectionEvent {
     /// Now connected to the remote and certificates are available.
-    Connected,
+    Connected(PeerId),
 
     /// Connection has been closed and can no longer be used.
     ConnectionLost(ConnectionError),
@@ -346,43 +380,4 @@ pub enum ConnectionEvent {
     StreamStopped(quinn_proto::StreamId),
 
     HandshakeDataReady,
-}
-
-impl TryFrom<quinn_proto::Event> for ConnectionEvent {
-    type Error = quinn_proto::Event;
-
-    fn try_from(event: quinn_proto::Event) -> Result<Self, Self::Error> {
-        match event {
-            quinn_proto::Event::Stream(quinn_proto::StreamEvent::Readable { id }) => {
-                Ok(ConnectionEvent::StreamReadable(id))
-            }
-            quinn_proto::Event::Stream(quinn_proto::StreamEvent::Writable { id }) => {
-                Ok(ConnectionEvent::StreamWritable(id))
-            }
-            quinn_proto::Event::Stream(quinn_proto::StreamEvent::Stopped { id, .. }) => {
-                Ok(ConnectionEvent::StreamStopped(id))
-            }
-            quinn_proto::Event::Stream(quinn_proto::StreamEvent::Available {
-                dir: quinn_proto::Dir::Bi,
-            }) => Ok(ConnectionEvent::StreamAvailable),
-            quinn_proto::Event::Stream(quinn_proto::StreamEvent::Opened {
-                dir: quinn_proto::Dir::Bi,
-            }) => Ok(ConnectionEvent::StreamOpened),
-            quinn_proto::Event::ConnectionLost { reason } => Ok(ConnectionEvent::ConnectionLost(
-                ConnectionError::Quinn(reason),
-            )),
-            quinn_proto::Event::Stream(quinn_proto::StreamEvent::Finished { id }) => {
-                Ok(ConnectionEvent::StreamFinished(id))
-            }
-            quinn_proto::Event::Connected => Ok(ConnectionEvent::Connected),
-            quinn_proto::Event::HandshakeDataReady => Ok(ConnectionEvent::HandshakeDataReady),
-            ev @ quinn_proto::Event::Stream(quinn_proto::StreamEvent::Opened {
-                dir: quinn_proto::Dir::Uni,
-            })
-            | ev @ quinn_proto::Event::Stream(quinn_proto::StreamEvent::Available {
-                dir: quinn_proto::Dir::Uni,
-            })
-            | ev @ quinn_proto::Event::DatagramReceived => Err(ev),
-        }
-    }
 }

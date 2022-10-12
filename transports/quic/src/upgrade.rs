@@ -63,8 +63,7 @@ impl Future for Connecting {
 
         loop {
             match connection.poll_event(cx) {
-                Poll::Ready(ConnectionEvent::Connected) => {
-                    let peer_id = connection.remote_peer_id();
+                Poll::Ready(ConnectionEvent::Connected(peer_id)) => {
                     let muxer = QuicMuxer::from_connection(self.connection.take().unwrap());
                     return Poll::Ready(Ok((peer_id, muxer)));
                 }
