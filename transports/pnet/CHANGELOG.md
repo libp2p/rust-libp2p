@@ -4,8 +4,11 @@
 
 - Bump async-std-resolver and trust-dns-resolver from 0.21 to 0.22. See [PR 2988].
 
+- Bump salsa20 to 0.10. See [PR 2989].
+
 [PR 2857]: https://github.com/libp2p/rust-libp2p/pull/2857
 [PR 2988]: https://github.com/libp2p/rust-libp2p/pull/2988
+[PR 2989]: https://github.com/libp2p/rust-libp2p/pull/2989
 
 # 0.22.0 [2021-11-01]
 
