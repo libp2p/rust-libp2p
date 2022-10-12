@@ -187,7 +187,7 @@ impl Channel {
         let server_config = new_connections
             .is_some()
             .then_some(quinn_config.server_config);
-        let socket = P::from_socket(socket)?;
+        let provider_socket = P::from_socket(socket)?;
 
         let driver = EndpointDriver::<P>::new(
             quinn_config.endpoint_config,
@@ -195,7 +195,7 @@ impl Channel {
             new_connections,
             server_config,
             channel.clone(),
-            socket,
+            provider_socket,
             to_endpoint_rx,
         );
 
@@ -276,7 +276,7 @@ pub enum ToEndpoint {
     SendUdpPacket(quinn_proto::Transmit),
     /// The [`GenTransport`][transport::GenTransport] dialer or listener coupled to this endpoint
     /// was dropped.
-    /// Once all pending connection closed the [`EndpointDriver`] should shut down.
+    /// Once all pending connections are closed, the [`EndpointDriver`] should shut down.
     Decoupled,
 }
 
@@ -369,7 +369,7 @@ pub struct EndpointDriver<P: Provider> {
     rx: mpsc::Receiver<ToEndpoint>,
 
     // Socket for sending and receiving datagrams.
-    socket: P,
+    provider_socket: P,
     // Future for writing the next packet to the socket.
     next_packet_out: Option<quinn_proto::Transmit>,
 
@@ -398,7 +398,7 @@ impl<P: Provider> EndpointDriver<P> {
             client_config,
             channel,
             rx,
-            socket,
+            provider_socket: socket,
             next_packet_out: None,
             alive_connections: HashMap::new(),
             new_connection_tx,
@@ -563,7 +563,7 @@ impl<P: Provider> Future for EndpointDriver<P> {
     type Output = ();
     fn poll(mut self: std::pin::Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         loop {
-            match ready!(self.socket.poll_send_flush(cx)) {
+            match ready!(self.provider_socket.poll_send_flush(cx)) {
                 Ok(_) => {}
                 // Errors on the socket are expected to never happen, and we handle them by simply
                 // printing a log message. The packet gets discarded in case of error, but we are
@@ -575,7 +575,7 @@ impl<P: Provider> Future for EndpointDriver<P> {
             }
 
             if let Some(transmit) = self.next_packet_out.take() {
-                self.socket
+                self.provider_socket
                     .start_send(transmit.contents, transmit.destination);
                 continue;
             }
@@ -598,7 +598,7 @@ impl<P: Provider> Future for EndpointDriver<P> {
                 Poll::Pending => {}
             }
 
-            match self.socket.poll_recv_from(cx) {
+            match self.provider_socket.poll_recv_from(cx) {
                 Poll::Ready(Ok((bytes, packet_src))) => {
                     let bytes_mut = bytes.as_bytes().into();
                     match self.handle_datagram(bytes_mut, packet_src) {

@@ -158,6 +158,9 @@ impl<P: Provider> Transport for GenTransport<P> {
             .listeners
             .iter_mut()
             .filter(|l| {
+                if l.is_closed {
+                    return false;
+                }
                 let listen_addr = l.endpoint_channel.socket_addr();
                 SocketFamily::is_same(&listen_addr.ip(), &socket_addr.ip())
                     && listen_addr.ip().is_loopback() == socket_addr.ip().is_loopback()
@@ -198,7 +201,7 @@ impl<P: Provider> Transport for GenTransport<P> {
         // `addr`. See DCUtR specification below.
         //
         // https://github.com/libp2p/specs/blob/master/relay/DCUtR.md#the-protocol
-        self.dial(addr)
+        Err(CoreTransportError::MultiaddrNotSupported(addr))
     }
 
     fn poll(
@@ -432,7 +435,7 @@ impl Listener {
             dialer_state,
             endpoint_channel,
             ..
-        } = &mut *self;
+        } = self;
 
         dialer_state.poll(endpoint_channel, cx)
     }
