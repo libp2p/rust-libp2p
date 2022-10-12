@@ -164,7 +164,8 @@ pub trait NetworkBehaviour: 'static {
         &mut self,
         _peer_id: PeerId,
         _connection_id: ConnectionId,
-        _event: crate::THandlerOutEvent<Self>,
+        _event: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as
+        ConnectionHandler>::OutEvent,
     ) {
     }
 
