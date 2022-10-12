@@ -26,24 +26,28 @@ use crate::{
     transport,
 };
 
-use futures::{prelude::*, ready};
+use futures::prelude::*;
+use futures_timer::Delay;
 use libp2p_core::PeerId;
 use std::{
     pin::Pin,
     task::{Context, Poll},
+    time::Duration,
 };
 
 /// A QUIC connection currently being negotiated.
 #[derive(Debug)]
 pub struct Connecting {
     connection: Option<Connection>,
+    timeout: Delay,
 }
 
 impl Connecting {
     /// Builds an [`Connecting`] that wraps around a [`Connection`].
-    pub(crate) fn from_connection(connection: Connection) -> Self {
+    pub(crate) fn from_connection(connection: Connection, timeout: Duration) -> Self {
         Connecting {
             connection: Some(connection),
+            timeout: Delay::new(timeout),
         }
     }
 }
@@ -58,21 +62,31 @@ impl Future for Connecting {
             .expect("Future polled after it has completed");
 
         loop {
-            match ready!(connection.poll_event(cx)) {
-                ConnectionEvent::Connected => {
+            match connection.poll_event(cx) {
+                Poll::Ready(ConnectionEvent::Connected) => {
                     let peer_id = connection.remote_peer_id();
                     let muxer = QuicMuxer::from_connection(self.connection.take().unwrap());
                     return Poll::Ready(Ok((peer_id, muxer)));
                 }
-                ConnectionEvent::ConnectionLost(err) => return Poll::Ready(Err(err.into())),
-                ConnectionEvent::HandshakeDataReady
-                | ConnectionEvent::StreamAvailable
-                | ConnectionEvent::StreamOpened
-                | ConnectionEvent::StreamReadable(_)
-                | ConnectionEvent::StreamWritable(_)
-                | ConnectionEvent::StreamFinished(_)
-                | ConnectionEvent::StreamStopped(_) => {}
+                Poll::Ready(ConnectionEvent::ConnectionLost(err)) => {
+                    return Poll::Ready(Err(err.into()))
+                }
+                Poll::Ready(ConnectionEvent::HandshakeDataReady)
+                | Poll::Ready(ConnectionEvent::StreamAvailable)
+                | Poll::Ready(ConnectionEvent::StreamOpened)
+                | Poll::Ready(ConnectionEvent::StreamReadable(_))
+                | Poll::Ready(ConnectionEvent::StreamWritable(_))
+                | Poll::Ready(ConnectionEvent::StreamFinished(_))
+                | Poll::Ready(ConnectionEvent::StreamStopped(_)) => continue,
+                Poll::Pending => {}
             }
+            match self.timeout.poll_unpin(cx) {
+                Poll::Ready(()) => {
+                    return Poll::Ready(Err(transport::TransportError::HandshakeTimedOut))
+                }
+                Poll::Pending => {}
+            }
+            return Poll::Pending;
         }
     }
 }

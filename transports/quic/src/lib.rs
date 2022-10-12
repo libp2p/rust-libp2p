@@ -35,7 +35,7 @@
 //! use libp2p_core::{Multiaddr, Transport};
 //!
 //! let keypair = libp2p_core::identity::Keypair::generate_ed25519();
-//! let quic_config = quic::Config::new(&keypair).expect("could not make config");
+//! let quic_config = quic::Config::new(&keypair);
 //!
 //! let mut quic_transport = quic::async_std::Transport::new(quic_config);
 //!

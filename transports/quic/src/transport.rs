@@ -22,11 +22,10 @@
 //!
 //! Combines all the objects in the other modules to implement the trait.
 
-use crate::connection::Connection;
-use crate::endpoint::ToEndpoint;
+use crate::connection::{Connection, ConnectionError};
+use crate::endpoint::{Config, QuinnConfig, ToEndpoint};
 use crate::provider::Provider;
 use crate::{endpoint, muxer::QuicMuxer, upgrade::Connecting};
-use crate::{Config, ConnectionError};
 
 use futures::channel::{mpsc, oneshot};
 use futures::future::{BoxFuture, MapErr};
@@ -50,6 +49,7 @@ use std::collections::{HashMap, VecDeque};
 use std::marker::PhantomData;
 use std::net::IpAddr;
 use std::task::Waker;
+use std::time::Duration;
 use std::{
     net::SocketAddr,
     pin::Pin,
@@ -58,7 +58,9 @@ use std::{
 
 #[derive(Debug)]
 pub struct GenTransport<P> {
-    config: Config,
+    quinn_config: QuinnConfig,
+    handshake_timeout: Duration,
+
     listeners: SelectAll<Listener>,
     /// Dialer for each socket family if no matching listener exists.
     dialer: HashMap<SocketFamily, Dialer>,
@@ -68,9 +70,12 @@ pub struct GenTransport<P> {
 
 impl<P> GenTransport<P> {
     pub fn new(config: Config) -> Self {
+        let handshake_timeout = config.handshake_timeout;
+        let quinn_config = config.into();
         Self {
             listeners: SelectAll::new(),
-            config,
+            quinn_config,
+            handshake_timeout,
             dialer: HashMap::new(),
             _marker: Default::default(),
         }
@@ -93,6 +98,9 @@ pub enum TransportError {
     /// The task driving the endpoint has crashed.
     #[error("Endpoint driver crashed")]
     EndpointDriverCrashed,
+
+    #[error("Handshake with the remote timed out.")]
+    HandshakeTimedOut,
 }
 
 impl<P: Provider> Transport for GenTransport<P> {
@@ -108,7 +116,12 @@ impl<P: Provider> Transport for GenTransport<P> {
         let socket_addr = multiaddr_to_socketaddr(&addr)
             .ok_or(CoreTransportError::MultiaddrNotSupported(addr))?;
         let listener_id = ListenerId::new();
-        let listener = Listener::new::<P>(listener_id, socket_addr, self.config.clone())?;
+        let listener = Listener::new::<P>(
+            listener_id,
+            socket_addr,
+            self.quinn_config.clone(),
+            self.handshake_timeout,
+        )?;
         self.listeners.push(listener);
 
         // Remove dialer endpoint so that the endpoint is dropped once the last
@@ -161,17 +174,17 @@ impl<P: Provider> Transport for GenTransport<P> {
                 let dialer = match self.dialer.entry(socket_family) {
                     Entry::Occupied(occupied) => occupied.into_mut(),
                     Entry::Vacant(vacant) => {
-                        vacant.insert(Dialer::new::<P>(self.config.clone(), socket_family)?)
+                        vacant.insert(Dialer::new::<P>(self.quinn_config.clone(), socket_family)?)
                     }
                 };
 
                 dialer.state.new_dial(socket_addr)
             }
         };
-
+        let handshake_timeout = self.handshake_timeout;
         Ok(async move {
             let connection = dialing.await??;
-            let final_connec = Connecting::from_connection(connection).await?;
+            let final_connec = Connecting::from_connection(connection, handshake_timeout).await?;
             Ok(final_connec)
         }
         .boxed())
@@ -224,7 +237,7 @@ struct Dialer {
 
 impl Dialer {
     fn new<P: Provider>(
-        config: Config,
+        config: QuinnConfig,
         socket_family: SocketFamily,
     ) -> Result<Self, CoreTransportError<TransportError>> {
         let endpoint_channel = endpoint::Channel::new_dialer::<P>(config, socket_family)
@@ -308,6 +321,7 @@ struct Listener {
 
     /// Channel where new connections are being sent.
     new_connections_rx: mpsc::Receiver<Connection>,
+    handshake_timeout: Duration,
 
     if_watcher: Option<IfWatcher>,
 
@@ -326,7 +340,8 @@ impl Listener {
     fn new<P: Provider>(
         listener_id: ListenerId,
         socket_addr: SocketAddr,
-        config: Config,
+        config: QuinnConfig,
+        handshake_timeout: Duration,
     ) -> Result<Self, TransportError> {
         let (endpoint_channel, new_connections_rx) =
             endpoint::Channel::new_bidirectional::<P>(config, socket_addr)?;
@@ -349,6 +364,7 @@ impl Listener {
             endpoint_channel,
             listener_id,
             new_connections_rx,
+            handshake_timeout,
             if_watcher,
             is_closed: false,
             pending_event,
@@ -448,7 +464,7 @@ impl Stream for Listener {
                     let local_addr = socketaddr_to_multiaddr(connection.local_addr());
                     let send_back_addr = socketaddr_to_multiaddr(&connection.remote_addr());
                     let event = TransportEvent::Incoming {
-                        upgrade: Connecting::from_connection(connection),
+                        upgrade: Connecting::from_connection(connection, self.handshake_timeout),
                         local_addr,
                         send_back_addr,
                         listener_id: self.listener_id,
@@ -642,7 +658,7 @@ mod test {
     #[tokio::test]
     async fn tokio_close_listener() {
         let keypair = libp2p_core::identity::Keypair::generate_ed25519();
-        let config = Config::new(&keypair).unwrap();
+        let config = Config::new(&keypair);
         let transport = crate::tokio::Transport::new(config.clone());
         test_close_listener(transport).await
     }
@@ -651,7 +667,7 @@ mod test {
     #[async_std::test]
     async fn async_std_close_listener() {
         let keypair = libp2p_core::identity::Keypair::generate_ed25519();
-        let config = Config::new(&keypair).unwrap();
+        let config = Config::new(&keypair);
         let transport = crate::async_std::Transport::new(config.clone());
         test_close_listener(transport).await
     }

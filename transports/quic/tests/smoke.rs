@@ -21,6 +21,7 @@ use libp2p_quic as quic;
 use quic::Provider;
 use rand::RngCore;
 use std::num::NonZeroU8;
+use std::time::Duration;
 use std::{io, iter};
 
 #[cfg(feature = "async-std")]
@@ -35,7 +36,8 @@ fn generate_tls_keypair() -> libp2p::identity::Keypair {
 async fn create_swarm<P: Provider>() -> Swarm<RequestResponse<PingCodec>> {
     let keypair = generate_tls_keypair();
     let peer_id = keypair.public().to_peer_id();
-    let config = quic::Config::new(&keypair).unwrap();
+    let mut config = quic::Config::new(&keypair);
+    config.handshake_timeout = Duration::from_secs(1);
     let transport = quic::GenTransport::<P>::new(config);
 
     let transport = Transport::map(transport, |(peer, muxer), _| {

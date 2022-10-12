@@ -51,43 +51,89 @@ use std::{
 };
 use x509_parser::nom::AsBytes;
 
-/// Represents the configuration for the QUIC endpoint.
-#[derive(Debug, Clone)]
+/// Config for the transport.
+#[derive(Clone)]
 pub struct Config {
-    /// The client configuration to pass to `quinn_proto`.
-    client_config: quinn_proto::ClientConfig,
-    /// The server configuration to pass to `quinn_proto`.
-    server_config: Arc<quinn_proto::ServerConfig>,
-    /// The endpoint configuration to pass to `quinn_proto`.
-    endpoint_config: Arc<quinn_proto::EndpointConfig>,
+    /// Timeout for the initial handshake when establishing a connection.
+    /// The actual timeout is the minimum of this an the [`Config::max_idle_timeout`].
+    pub handshake_timeout: Duration,
+    /// Maximum duration of inactivity to accept before timing out the connection.
+    pub max_idle_timeout: Duration,
+    /// Period of inactivity before sending a keep-alive packet.
+    /// Must be set lower than the idle_timeout of both
+    /// peers to be effective.
+    ///
+    /// See [`quinn_proto::TransportConfig::keep_alive_interval`] for more
+    /// info.
+    pub keep_alive_interval: Duration,
+    /// Maximum number of incoming bidirectional streams that may be open
+    /// concurrently by the remote peer.
+    pub max_concurrent_stream_limit: u32,
+
+    client_tls_config: Arc<rustls::ClientConfig>,
+    server_tls_config: Arc<rustls::ServerConfig>,
 }
 
 impl Config {
     /// Creates a new configuration object with default values.
-    pub fn new(keypair: &libp2p_core::identity::Keypair) -> Result<Self, tls::ConfigError> {
+    pub fn new(keypair: &libp2p_core::identity::Keypair) -> Self {
+        let client_tls_config = Arc::new(tls::make_client_config(keypair).unwrap());
+        let server_tls_config = Arc::new(tls::make_server_config(keypair).unwrap());
+        Self {
+            client_tls_config,
+            server_tls_config,
+            handshake_timeout: Duration::from_secs(5),
+            max_idle_timeout: Duration::from_secs(30),
+            max_concurrent_stream_limit: 256,
+            keep_alive_interval: Duration::from_secs(15),
+        }
+    }
+}
+
+/// Represents the inner configuration for [`quinn_proto`].
+#[derive(Debug, Clone)]
+pub struct QuinnConfig {
+    client_config: quinn_proto::ClientConfig,
+    server_config: Arc<quinn_proto::ServerConfig>,
+    endpoint_config: Arc<quinn_proto::EndpointConfig>,
+}
+
+impl From<Config> for QuinnConfig {
+    fn from(config: Config) -> QuinnConfig {
+        let Config {
+            client_tls_config,
+            server_tls_config,
+            max_idle_timeout,
+            max_concurrent_stream_limit,
+            keep_alive_interval,
+            handshake_timeout: _,
+        } = config;
         let mut transport = quinn_proto::TransportConfig::default();
-        transport.max_concurrent_uni_streams(0u32.into()); // Can only panic if value is out of range.
+        transport.max_concurrent_uni_streams(0u32.into());
+        transport.max_concurrent_bidi_streams(max_concurrent_stream_limit.into());
         transport.datagram_receive_buffer_size(None);
-        transport.keep_alive_interval(Some(Duration::from_millis(10)));
+        transport.keep_alive_interval(Some(keep_alive_interval));
+        transport.max_idle_timeout(Some(max_idle_timeout.try_into().expect("is < 2^62")));
+        transport.allow_spin(false);
         let transport = Arc::new(transport);
 
-        let client_tls_config = tls::make_client_config(keypair).unwrap();
-        let server_tls_config = tls::make_server_config(keypair).unwrap();
-
-        let mut server_config = quinn_proto::ServerConfig::with_crypto(Arc::new(server_tls_config));
+        let mut server_config = quinn_proto::ServerConfig::with_crypto(server_tls_config);
         server_config.transport = Arc::clone(&transport);
         // Disables connection migration.
         // Long-term this should be enabled, however we then need to handle address change
         // on connections in the `QuicMuxer`.
         server_config.migration(false);
 
-        let mut client_config = quinn_proto::ClientConfig::new(Arc::new(client_tls_config));
+        let mut client_config = quinn_proto::ClientConfig::new(client_tls_config);
         client_config.transport = transport;
-        Ok(Self {
+
+        let endpoint_config = quinn_proto::EndpointConfig::default();
+
+        QuinnConfig {
             client_config,
             server_config: Arc::new(server_config),
-            endpoint_config: Default::default(),
-        })
+            endpoint_config: Arc::new(endpoint_config),
+        }
     }
 }
 
@@ -103,28 +149,28 @@ pub struct Channel {
 impl Channel {
     /// Builds a new endpoint that is listening on the [`SocketAddr`].
     pub fn new_bidirectional<P: Provider>(
-        config: Config,
+        quinn_config: QuinnConfig,
         socket_addr: SocketAddr,
     ) -> Result<(Self, mpsc::Receiver<Connection>), transport::TransportError> {
         let (new_connections_tx, new_connections_rx) = mpsc::channel(1);
-        let endpoint = Self::new::<P>(config, socket_addr, Some(new_connections_tx))?;
+        let endpoint = Self::new::<P>(quinn_config, socket_addr, Some(new_connections_tx))?;
         Ok((endpoint, new_connections_rx))
     }
 
     /// Builds a new endpoint that only supports outbound connections.
     pub fn new_dialer<P: Provider>(
-        config: Config,
+        quinn_config: QuinnConfig,
         socket_family: SocketFamily,
     ) -> Result<Self, transport::TransportError> {
         let socket_addr = match socket_family {
             SocketFamily::Ipv4 => SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0),
             SocketFamily::Ipv6 => SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0),
         };
-        Self::new::<P>(config, socket_addr, None)
+        Self::new::<P>(quinn_config, socket_addr, None)
     }
 
     fn new<P: Provider>(
-        config: Config,
+        quinn_config: QuinnConfig,
         socket_addr: SocketAddr,
         new_connections: Option<mpsc::Sender<Connection>>,
     ) -> Result<Self, transport::TransportError> {
@@ -138,12 +184,14 @@ impl Channel {
             socket_addr: socket.local_addr()?,
         };
 
-        let server_config = new_connections.is_some().then_some(config.server_config);
+        let server_config = new_connections
+            .is_some()
+            .then_some(quinn_config.server_config);
         let socket = P::from_socket(socket)?;
 
         let driver = EndpointDriver::<P>::new(
-            config.endpoint_config,
-            config.client_config,
+            quinn_config.endpoint_config,
+            quinn_config.client_config,
             new_connections,
             server_config,
             channel.clone(),
@@ -313,7 +361,7 @@ pub enum ToEndpoint {
 pub struct EndpointDriver<P: Provider> {
     // The actual QUIC state machine.
     endpoint: quinn_proto::Endpoint,
-    // Config for client connections.
+    // QuinnConfig for client connections.
     client_config: quinn_proto::ClientConfig,
     // Copy of the channel to the endpoint driver that is passed to each new connection.
     channel: Channel,
