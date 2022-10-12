@@ -464,7 +464,7 @@ impl<P: Provider> EndpointDriver<P> {
                         // We clone the sender to guarantee that there will be at least one
                         // free slot to send the event.
                         // The channel can not grow out of bound because an `event_back` is
-                        // only sent if we prior received an event from the same connection.
+                        // only sent if we previously received an event from the same connection.
                         // If the connection is busy, it won't sent us any more events to handle.
                         let _ = sender.clone().start_send(event_back);
                     } else {
@@ -567,7 +567,7 @@ impl<P: Provider> Future for EndpointDriver<P> {
                 Ok(_) => {}
                 // Errors on the socket are expected to never happen, and we handle them by simply
                 // printing a log message. The packet gets discarded in case of error, but we are
-                // robust to packet losses and it is consequently not a logic error to process with
+                // robust to packet losses and it is consequently not a logic error to proceed with
                 // normal operations.
                 Err(err) => {
                     log::error!("Error while sending on QUIC UDP socket: {:?}", err)
