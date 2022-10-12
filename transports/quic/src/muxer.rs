@@ -309,7 +309,12 @@ impl AsyncWrite for Substream {
         let mut muxer = self.muxer.lock();
 
         match muxer.connection.send_stream(self.id).write(buf) {
-            Ok(bytes) => Poll::Ready(Ok(bytes)),
+            Ok(bytes) => {
+                if let Some(waker) = muxer.poll_connection_waker.take() {
+                    waker.wake();
+                }
+                Poll::Ready(Ok(bytes))
+            }
             Err(quinn_proto::WriteError::Blocked) => {
                 let substream = muxer
                     .substreams
