@@ -35,6 +35,7 @@ async-std = ["dep:async-std-crate"]
 [dev-dependencies]
 async-std-crate = { package = "async-std", version = "1.12.0", features = ["attributes"] }
 libp2p = { path = "../..", features = ["request-response"] }
+env_logger = "0.9.0"
 rand = "0.8.4"
 tokio-crate = { package = "tokio", version = "1.21.1", features = ["macros", "rt-multi-thread"] }
 quickcheck = "1"
