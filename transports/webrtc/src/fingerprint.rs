@@ -89,7 +89,7 @@ impl Fingerprint {
     }
 
     /// Returns the algorithm used (e.g. "sha-256").
-    /// See https://datatracker.ietf.org/doc/html/rfc8122#section-5
+    /// See <https://datatracker.ietf.org/doc/html/rfc8122#section-5>
     pub fn algorithm(&self) -> String {
         SHA256.to_owned()
     }

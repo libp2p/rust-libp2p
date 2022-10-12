@@ -20,9 +20,9 @@
 
 mod noise;
 
-use crate::connection::PollDataChannel;
 use crate::error::Error;
 use crate::fingerprint::Fingerprint;
+use crate::substream::Substream;
 use crate::{sdp, Connection};
 use futures::channel::oneshot;
 use futures::future::Either;
@@ -66,7 +66,7 @@ pub async fn outbound(
     );
     peer_connection.set_remote_description(answer).await?; // This will start the gathering of ICE candidates.
 
-    let data_channel = create_data_channel_for_noise_handshake(&peer_connection).await?;
+    let data_channel = create_substream_for_noise_handshake(&peer_connection).await?;
 
     let peer_id =
         noise::outbound(id_keys, data_channel, our_fingerprint, remote_fingerprint).await?;
@@ -96,7 +96,7 @@ pub async fn inbound(
     log::debug!("created SDP answer for inbound connection: {:?}", answer);
     peer_connection.set_local_description(answer).await?; // This will start the gathering of ICE candidates.
 
-    let data_channel = create_data_channel_for_noise_handshake(&peer_connection).await?;
+    let data_channel = create_substream_for_noise_handshake(&peer_connection).await?;
     let remote_fingerprint = get_remote_fingerprint(&peer_connection).await;
 
     let peer_id =
@@ -192,9 +192,9 @@ async fn get_remote_fingerprint(conn: &RTCPeerConnection) -> Fingerprint {
     Fingerprint::from_certificate(&cert_bytes)
 }
 
-async fn create_data_channel_for_noise_handshake(
+async fn create_substream_for_noise_handshake(
     conn: &RTCPeerConnection,
-) -> Result<PollDataChannel, Error> {
+) -> Result<Substream, Error> {
     // Open a data channel to do Noise on top and verify the remote.
     let data_channel = conn
         .create_data_channel(
@@ -223,5 +223,8 @@ async fn create_data_channel_for_noise_handshake(
         }
     };
 
-    Ok(PollDataChannel::new(channel))
+    let (substream, drop_listener) = Substream::new(channel);
+    drop(drop_listener); // Don't care about cancelled substreams during initial handshake.
+
+    Ok(substream)
 }

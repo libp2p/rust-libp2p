@@ -18,31 +18,30 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-mod poll_data_channel;
-
+use futures::stream::FuturesUnordered;
 use futures::{
     channel::{
         mpsc,
         oneshot::{self, Sender},
     },
     lock::Mutex as FutMutex,
-    {future::BoxFuture, prelude::*, ready},
+    StreamExt,
+    {future::BoxFuture, ready},
 };
-use futures_lite::StreamExt;
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
 use log::{debug, error, trace};
 use webrtc::data::data_channel::DataChannel as DetachedDataChannel;
 use webrtc::data_channel::RTCDataChannel;
 use webrtc::peer_connection::RTCPeerConnection;
 
+use std::task::Waker;
 use std::{
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
 };
 
-use crate::error::Error;
-pub(crate) use poll_data_channel::PollDataChannel;
+use crate::{error::Error, substream, substream::Substream};
 
 const MAX_DATA_CHANNELS_IN_FLIGHT: usize = 10;
 
@@ -61,6 +60,9 @@ pub struct Connection {
 
     /// Future, which, once polled, will result in closing the entire connection.
     close_fut: Option<BoxFuture<'static, Result<(), Error>>>,
+
+    drop_listeners: FuturesUnordered<substream::DropListener>,
+    no_drop_listeners_waker: Option<Waker>,
 }
 
 impl Unpin for Connection {}
@@ -77,6 +79,8 @@ impl Connection {
             incoming_data_channels_rx: data_channel_rx,
             outbound_fut: None,
             close_fut: None,
+            drop_listeners: FuturesUnordered::default(),
+            no_drop_listeners_waker: None,
         }
     }
 
@@ -138,30 +142,52 @@ impl Connection {
 }
 
 impl StreamMuxer for Connection {
-    type Substream = PollDataChannel;
+    type Substream = Substream;
     type Error = Error;
 
     fn poll_inbound(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Result<Self::Substream, Self::Error>> {
-        match ready!(self.incoming_data_channels_rx.poll_next(cx)) {
+        match ready!(self.incoming_data_channels_rx.poll_next_unpin(cx)) {
             Some(detached) => {
                 trace!("Incoming substream {}", detached.stream_identifier());
 
-                Poll::Ready(Ok(PollDataChannel::new(detached)))
+                let (substream, drop_listener) = Substream::new(detached);
+                self.drop_listeners.push(drop_listener);
+                if let Some(waker) = self.no_drop_listeners_waker.take() {
+                    waker.wake()
+                }
+
+                Poll::Ready(Ok(substream))
             }
-            None => Poll::Ready(Err(Error::Internal(
-                "incoming_data_channels_rx is closed (no messages left)".to_string(),
-            ))),
+            None => {
+                debug_assert!(
+                    false,
+                    "Sender-end of channel should be owned by `RTCPeerConnection`"
+                );
+
+                Poll::Pending // Return `Pending` without registering a waker: If the channel is closed, we don't need to be called anymore.
+            }
         }
     }
 
     fn poll(
-        self: Pin<&mut Self>,
-        _cx: &mut Context<'_>,
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
     ) -> Poll<Result<StreamMuxerEvent, Self::Error>> {
-        Poll::Pending
+        loop {
+            match ready!(self.drop_listeners.poll_next_unpin(cx)) {
+                Some(Ok(())) => {}
+                Some(Err(e)) => {
+                    log::debug!("a DropListener failed: {e}")
+                }
+                None => {
+                    self.no_drop_listeners_waker = Some(cx.waker().clone());
+                    return Poll::Pending;
+                }
+            }
+        }
     }
 
     fn poll_outbound(
@@ -173,10 +199,7 @@ impl StreamMuxer for Connection {
             let peer_conn = peer_conn.lock().await;
 
             // Create a datachannel with label 'data'
-            let data_channel = peer_conn
-                .create_data_channel("data", None)
-                .map_err(Error::WebRTC)
-                .await?;
+            let data_channel = peer_conn.create_data_channel("data", None).await?;
 
             trace!("Opening outbound substream {}", data_channel.id());
 
@@ -198,7 +221,13 @@ impl StreamMuxer for Connection {
         match ready!(fut.as_mut().poll(cx)) {
             Ok(detached) => {
                 self.outbound_fut = None;
-                Poll::Ready(Ok(PollDataChannel::new(detached)))
+                let (substream, drop_listener) = Substream::new(detached);
+                self.drop_listeners.push(drop_listener);
+                if let Some(waker) = self.no_drop_listeners_waker.take() {
+                    waker.wake()
+                }
+
+                Poll::Ready(Ok(substream))
             }
             Err(e) => {
                 self.outbound_fut = None;
@@ -213,7 +242,9 @@ impl StreamMuxer for Connection {
         let peer_conn = self.peer_conn.clone();
         let fut = self.close_fut.get_or_insert(Box::pin(async move {
             let peer_conn = peer_conn.lock().await;
-            peer_conn.close().await.map_err(Error::WebRTC)
+            peer_conn.close().await?;
+
+            Ok(())
         }));
 
         match ready!(fut.as_mut().poll(cx)) {
