@@ -55,6 +55,14 @@ struct Inner {
     poll_connection_waker: Option<Waker>,
 }
 
+impl Inner {
+    fn unchecked_substream_state(&mut self, id: quinn_proto::StreamId) -> &mut SubstreamState {
+        self.substreams
+            .get_mut(&id)
+            .expect("Substream should be known.")
+    }
+}
+
 impl QuicMuxer {
     /// Crate-internal function that builds a [`QuicMuxer`] from a raw connection.
     pub(crate) fn from_connection(connection: Connection) -> Self {
@@ -114,8 +122,13 @@ impl StreamMuxer for QuicMuxer {
                         }
                     }
                 }
-                ConnectionEvent::StreamFinished(substream)
-                | ConnectionEvent::StreamStopped(substream) => {
+                ConnectionEvent::StreamFinished(substream) => {
+                    if let Some(substream) = inner.substreams.get_mut(&substream) {
+                        substream.wake_all();
+                        substream.is_write_closed = true;
+                    }
+                }
+                ConnectionEvent::StreamStopped(substream) => {
                     if let Some(substream) = inner.substreams.get_mut(&substream) {
                         substream.wake_all();
                     }
@@ -186,13 +199,10 @@ impl StreamMuxer for QuicMuxer {
             return Poll::Ready(Ok(()));
         }
 
-        if connection.send_stream_count() != 0 {
-            for substream in substreams.keys() {
-                if let Err(e) = connection.finish_substream(*substream) {
-                    log::warn!("substream finish error on muxer close: {}", e);
-                }
-            }
+        for substream in substreams.keys() {
+            let _ = connection.finish_substream(*substream);
         }
+
         loop {
             if connection.send_stream_count() == 0 && !connection.is_closed() {
                 connection.close()
@@ -213,6 +223,8 @@ struct SubstreamState {
     write_waker: Option<Waker>,
     /// Waker to wake if the substream becomes closed or stopped.
     finished_waker: Option<Waker>,
+
+    is_write_closed: bool,
 }
 
 impl SubstreamState {
@@ -264,12 +276,9 @@ impl AsyncRead for Substream {
         let mut bytes = 0;
         let mut pending = false;
         loop {
-            if buf.is_empty() {
-                break;
-            }
             let chunk = match chunks.next(buf.len()) {
-                Ok(Some(chunk)) => chunk,
-                Ok(None) => break,
+                Ok(Some(chunk)) if !chunk.bytes.is_empty() => chunk,
+                Ok(_) => break,
                 Err(err @ quinn_proto::ReadError::Reset(_)) => {
                     return Poll::Ready(Err(io::Error::new(io::ErrorKind::ConnectionReset, err)))
                 }
@@ -288,10 +297,7 @@ impl AsyncRead for Substream {
             }
         }
         if pending && bytes == 0 {
-            let substream_state = muxer
-                .substreams
-                .get_mut(&self.id)
-                .expect("known substream; qed");
+            let substream_state = muxer.unchecked_substream_state(self.id);
             substream_state.read_waker = Some(cx.waker().clone());
             Poll::Pending
         } else {
@@ -316,11 +322,8 @@ impl AsyncWrite for Substream {
                 Poll::Ready(Ok(bytes))
             }
             Err(quinn_proto::WriteError::Blocked) => {
-                let substream = muxer
-                    .substreams
-                    .get_mut(&self.id)
-                    .expect("known substream; qed");
-                substream.write_waker = Some(cx.waker().clone());
+                let substream_state = muxer.unchecked_substream_state(self.id);
+                substream_state.write_waker = Some(cx.waker().clone());
                 Poll::Pending
             }
             Err(err @ quinn_proto::WriteError::Stopped(_)) => {
@@ -339,19 +342,23 @@ impl AsyncWrite for Substream {
 
     fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
         let mut muxer = self.muxer.lock();
+
+        if muxer.unchecked_substream_state(self.id).is_write_closed {
+            return Poll::Ready(Ok(()));
+        }
+
         match muxer.connection.finish_substream(self.id) {
             Ok(()) => {
-                let substream_state = muxer
-                    .substreams
-                    .get_mut(&self.id)
-                    .expect("Substream is not finished.");
+                let substream_state = muxer.unchecked_substream_state(self.id);
                 substream_state.finished_waker = Some(cx.waker().clone());
                 Poll::Pending
             }
             Err(err @ quinn_proto::FinishError::Stopped(_)) => {
                 Poll::Ready(Err(io::Error::new(io::ErrorKind::ConnectionReset, err)))
             }
-            Err(quinn_proto::FinishError::UnknownStream) => Poll::Ready(Ok(())),
+            Err(quinn_proto::FinishError::UnknownStream) => {
+                Poll::Ready(Err(io::ErrorKind::BrokenPipe.into()))
+            }
         }
     }
 }
