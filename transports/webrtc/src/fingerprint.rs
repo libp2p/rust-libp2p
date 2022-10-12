@@ -48,7 +48,7 @@ impl Fingerprint {
         Fingerprint(bytes)
     }
 
-    /// Converts to [`Fingerprint`] from [`RTCDtlsFingerprint`].
+    /// Converts [`RTCDtlsFingerprint`] to [`Fingerprint`].
     pub fn try_from_rtc_dtls(fp: &RTCDtlsFingerprint) -> Option<Self> {
         if fp.algorithm != SHA256 {
             return None;
@@ -60,7 +60,7 @@ impl Fingerprint {
         Some(Self(buf))
     }
 
-    /// Converts to [`Fingerprint`] from [`Multihash`].
+    /// Converts [`type@Multihash`] to [`Fingerprint`].
     pub fn try_from_multihash(hash: Multihash) -> Option<Self> {
         if hash.code() != u64::from(Code::Sha2_256) {
             // Only support SHA256 for now.
@@ -72,7 +72,7 @@ impl Fingerprint {
         Some(Self(bytes))
     }
 
-    /// Converts the fingerprint to [`Multihash`].
+    /// Converts this fingerprint to [`type@Multihash`].
     pub fn to_multi_hash(self) -> Multihash {
         Code::Sha2_256.wrap(&self.0).unwrap()
     }
