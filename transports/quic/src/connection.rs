@@ -183,7 +183,6 @@ impl Connection {
 
     /// Polls the connection for an event that happened on it.
     pub fn poll_event(&mut self, cx: &mut Context<'_>) -> Poll<ConnectionEvent> {
-        let mut closed = None;
         loop {
             match self.from_endpoint.poll_next_unpin(cx) {
                 Poll::Ready(Some(event)) => {
@@ -191,11 +190,9 @@ impl Connection {
                     continue;
                 }
                 Poll::Ready(None) => {
-                    if closed.is_none() {
-                        return Poll::Ready(ConnectionEvent::ConnectionLost(
-                            ConnectionError::EndpointDriverCrashed,
-                        ));
-                    }
+                    return Poll::Ready(ConnectionEvent::ConnectionLost(
+                        ConnectionError::EndpointDriverCrashed,
+                    ));
                 }
                 Poll::Pending => {}
             }
@@ -210,7 +207,7 @@ impl Connection {
             // being full to the user.
             if let Some(to_endpoint) = self.pending_to_endpoint.take() {
                 match self.endpoint_channel.try_send(to_endpoint, cx) {
-                    Ok(Ok(())) => {}
+                    Ok(Ok(())) => continue, // The endpoint may send back an event.
                     Ok(Err(to_endpoint)) => {
                         self.pending_to_endpoint = Some(to_endpoint);
                         return Poll::Pending;
@@ -268,21 +265,10 @@ impl Connection {
                 continue;
             }
 
-            if let Some(closed) = closed {
-                return Poll::Ready(ConnectionEvent::ConnectionLost(closed));
-            }
-
             // The final step consists in handling the events related to the various substreams.
             if let Some(ev) = self.connection.poll() {
-                match self.parse_connection_event(ev) {
-                    ConnectionEvent::ConnectionLost(reason) => {
-                        // Continue in the loop once more so that we can send a
-                        // `EndpointEvent::drained` to the endpoint before returning.
-                        closed = Some(reason);
-                        continue;
-                    }
-                    event => return Poll::Ready(event),
-                }
+                let event = self.parse_connection_event(ev);
+                return Poll::Ready(event);
             }
 
             return Poll::Pending;

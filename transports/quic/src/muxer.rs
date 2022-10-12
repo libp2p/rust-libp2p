@@ -55,17 +55,6 @@ struct Inner {
     poll_connection_waker: Option<Waker>,
 }
 
-/// State of a single substream.
-#[derive(Debug, Default, Clone)]
-struct SubstreamState {
-    /// Waker to wake if the substream becomes readable or stopped.
-    read_waker: Option<Waker>,
-    /// Waker to wake if the substream becomes writable or stopped.
-    write_waker: Option<Waker>,
-    /// Waker to wake if the substream becomes closed or stopped.
-    finished_waker: Option<Waker>,
-}
-
 impl QuicMuxer {
     /// Crate-internal function that builds a [`QuicMuxer`] from a raw connection.
     pub(crate) fn from_connection(connection: Connection) -> Self {
@@ -101,7 +90,11 @@ impl StreamMuxer for QuicMuxer {
                         event
                     );
                 }
-                ConnectionEvent::ConnectionLost(err) => return Poll::Ready(Err(err)),
+                ConnectionEvent::ConnectionLost(err) => {
+                    inner.connection.close();
+                    inner.substreams.values_mut().for_each(|s| s.wake_all());
+                    return Poll::Ready(Err(err));
+                }
                 ConnectionEvent::StreamOpened => {
                     if let Some(waker) = inner.poll_outbound_waker.take() {
                         waker.wake();
@@ -124,15 +117,7 @@ impl StreamMuxer for QuicMuxer {
                 ConnectionEvent::StreamFinished(substream)
                 | ConnectionEvent::StreamStopped(substream) => {
                     if let Some(substream) = inner.substreams.get_mut(&substream) {
-                        if let Some(waker) = substream.read_waker.take() {
-                            waker.wake();
-                        }
-                        if let Some(waker) = substream.write_waker.take() {
-                            waker.wake();
-                        }
-                        if let Some(waker) = substream.finished_waker.take() {
-                            waker.wake();
-                        }
+                        substream.wake_all();
                     }
                 }
                 ConnectionEvent::StreamAvailable => {
@@ -215,6 +200,31 @@ impl StreamMuxer for QuicMuxer {
             if let ConnectionEvent::ConnectionLost(_) = ready!(connection.poll_event(cx)) {
                 return Poll::Ready(Ok(()));
             }
+        }
+    }
+}
+
+/// State of a single substream.
+#[derive(Debug, Default, Clone)]
+struct SubstreamState {
+    /// Waker to wake if the substream becomes readable or stopped.
+    read_waker: Option<Waker>,
+    /// Waker to wake if the substream becomes writable or stopped.
+    write_waker: Option<Waker>,
+    /// Waker to wake if the substream becomes closed or stopped.
+    finished_waker: Option<Waker>,
+}
+
+impl SubstreamState {
+    fn wake_all(&mut self) {
+        if let Some(waker) = self.read_waker.take() {
+            waker.wake();
+        }
+        if let Some(waker) = self.write_waker.take() {
+            waker.wake();
+        }
+        if let Some(waker) = self.finished_waker.take() {
+            waker.wake();
         }
     }
 }
