@@ -211,3 +211,6 @@ required-features = ["full"]
 [[example]]
 name = "distributed-key-value-store"
 required-features = ["full"]
+
+[patch.crates-io]
+yamux = { git = "https://github.com/thomaseizinger/rust-yamux", branch = "poll-style" }

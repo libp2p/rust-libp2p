@@ -71,7 +71,7 @@ where
     /// Create a new Yamux connection.
     fn new(io: C, cfg: yamux::Config, mode: yamux::Mode) -> Self {
         let conn = yamux::Connection::new(io, cfg, mode);
-        let ctrl = conn.control();
+        let ctrl = conn.control().unwrap();
 
         Yamux {
             incoming: Incoming {
@@ -84,25 +84,25 @@ where
     }
 }
 
-impl<C> Yamux<LocalIncoming<C>>
-where
-    C: AsyncRead + AsyncWrite + Unpin + 'static,
-{
-    /// Create a new Yamux connection (which is ![`Send`]).
-    fn local(io: C, cfg: yamux::Config, mode: yamux::Mode) -> Self {
-        let conn = yamux::Connection::new(io, cfg, mode);
-        let ctrl = conn.control();
-
-        Yamux {
-            incoming: LocalIncoming {
-                stream: yamux::into_stream(conn).err_into().boxed_local(),
-                _marker: std::marker::PhantomData,
-            },
-            control: ctrl,
-            inbound_stream_buffer: VecDeque::default(),
-        }
-    }
-}
+// impl<C> Yamux<LocalIncoming<C>>
+// where
+//     C: AsyncRead + AsyncWrite + Unpin + 'static,
+// {
+//     /// Create a new Yamux connection (which is ![`Send`]).
+//     fn local(io: C, cfg: yamux::Config, mode: yamux::Mode) -> Self {
+//         let conn = yamux::Connection::new(io, cfg, mode);
+//         let ctrl = conn.control();
+//
+//         Yamux {
+//             incoming: LocalIncoming {
+//                 stream: yamux::into_stream(conn).err_into().boxed_local(),
+//                 _marker: std::marker::PhantomData,
+//             },
+//             control: ctrl,
+//             inbound_stream_buffer: VecDeque::default(),
+//         }
+//     }
+// }
 
 pub type YamuxResult<T> = Result<T, YamuxError>;
 
@@ -330,20 +330,20 @@ where
     }
 }
 
-impl<C> InboundUpgrade<C> for YamuxLocalConfig
-where
-    C: AsyncRead + AsyncWrite + Unpin + 'static,
-{
-    type Output = Yamux<LocalIncoming<C>>;
-    type Error = io::Error;
-    type Future = future::Ready<Result<Self::Output, Self::Error>>;
-
-    fn upgrade_inbound(self, io: C, _: Self::Info) -> Self::Future {
-        let cfg = self.0;
-        let mode = cfg.mode.unwrap_or(yamux::Mode::Server);
-        future::ready(Ok(Yamux::local(io, cfg.inner, mode)))
-    }
-}
+// impl<C> InboundUpgrade<C> for YamuxLocalConfig
+// where
+//     C: AsyncRead + AsyncWrite + Unpin + 'static,
+// {
+//     type Output = Yamux<LocalIncoming<C>>;
+//     type Error = io::Error;
+//     type Future = future::Ready<Result<Self::Output, Self::Error>>;
+//
+//     fn upgrade_inbound(self, io: C, _: Self::Info) -> Self::Future {
+//         let cfg = self.0;
+//         let mode = cfg.mode.unwrap_or(yamux::Mode::Server);
+//         future::ready(Ok(Yamux::local(io, cfg.inner, mode)))
+//     }
+// }
 
 impl<C> OutboundUpgrade<C> for YamuxConfig
 where
@@ -359,20 +359,20 @@ where
     }
 }
 
-impl<C> OutboundUpgrade<C> for YamuxLocalConfig
-where
-    C: AsyncRead + AsyncWrite + Unpin + 'static,
-{
-    type Output = Yamux<LocalIncoming<C>>;
-    type Error = io::Error;
-    type Future = future::Ready<Result<Self::Output, Self::Error>>;
-
-    fn upgrade_outbound(self, io: C, _: Self::Info) -> Self::Future {
-        let cfg = self.0;
-        let mode = cfg.mode.unwrap_or(yamux::Mode::Client);
-        future::ready(Ok(Yamux::local(io, cfg.inner, mode)))
-    }
-}
+// impl<C> OutboundUpgrade<C> for YamuxLocalConfig
+// where
+//     C: AsyncRead + AsyncWrite + Unpin + 'static,
+// {
+//     type Output = Yamux<LocalIncoming<C>>;
+//     type Error = io::Error;
+//     type Future = future::Ready<Result<Self::Output, Self::Error>>;
+//
+//     fn upgrade_outbound(self, io: C, _: Self::Info) -> Self::Future {
+//         let cfg = self.0;
+//         let mode = cfg.mode.unwrap_or(yamux::Mode::Client);
+//         future::ready(Ok(Yamux::local(io, cfg.inner, mode)))
+//     }
+// }
 
 /// The Yamux [`StreamMuxer`] error type.
 #[derive(Debug, Error)]
