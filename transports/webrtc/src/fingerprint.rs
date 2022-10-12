@@ -37,6 +37,7 @@ impl Fingerprint {
         Self(bytes)
     }
 
+    /// Creates a fingerprint from a raw certificate.
     pub fn from_certificate(bytes: &[u8]) -> Self {
         let mut h = multihash::Sha2_256::default();
         h.update(bytes);
@@ -47,6 +48,7 @@ impl Fingerprint {
         Fingerprint(bytes)
     }
 
+    /// Converts to [`Fingerprint`] from [`RTCDtlsFingerprint`].
     pub fn try_from_rtc_dtls(fp: &RTCDtlsFingerprint) -> Option<Self> {
         if fp.algorithm != SHA256 {
             return None;
@@ -58,6 +60,7 @@ impl Fingerprint {
         Some(Self(buf))
     }
 
+    /// Converts to [`Fingerprint`] from [`Multihash`].
     pub fn try_from_multihash(hash: Multihash) -> Option<Self> {
         if hash.code() != u64::from(Code::Sha2_256) {
             // Only support SHA256 for now.
@@ -69,10 +72,12 @@ impl Fingerprint {
         Some(Self(bytes))
     }
 
+    /// Converts the fingerprint to [`Multihash`].
     pub fn to_multi_hash(self) -> Multihash {
         Code::Sha2_256.wrap(&self.0).unwrap()
     }
 
+    /// Returns raw fingerprint bytes.
     pub fn to_raw(self) -> [u8; 32] {
         self.0
     }
