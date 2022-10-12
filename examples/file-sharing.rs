@@ -57,7 +57,7 @@
 //! 1. Run command below in one terminal.
 //!
 //!    ```
-//!    cargo run --example file-sharing -- \
+//!    cargo run --example file-sharing --features=full -- \
 //!              --listen-address /ip4/127.0.0.1/tcp/40837 \
 //!              --secret-key-seed 1 \
 //!              provide \
@@ -68,7 +68,7 @@
 //! 2. Run command below in another terminal.
 //!
 //!    ```
-//!    cargo run --example file-sharing -- \
+//!    cargo run --example file-sharing --features=full -- \
 //!              --peer /ip4/127.0.0.1/tcp/40837/p2p/12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X \
 //!              get \
 //!              --name <name-for-others-to-find-your-file>

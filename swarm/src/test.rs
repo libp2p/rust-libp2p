@@ -232,7 +232,7 @@ where
     }
 
     fn addresses_of_peer(&mut self, p: &PeerId) -> Vec<Multiaddr> {
-        self.addresses_of_peer.push(p.clone());
+        self.addresses_of_peer.push(*p);
         self.inner.addresses_of_peer(p)
     }
 
@@ -271,12 +271,8 @@ where
         } else {
             assert_eq!(other_established, 0)
         }
-        self.inject_connection_established.push((
-            p.clone(),
-            c.clone(),
-            e.clone(),
-            other_established,
-        ));
+        self.inject_connection_established
+            .push((*p, *c, e.clone(), other_established));
         self.inner
             .inject_connection_established(p, c, e, errors, other_established);
     }
@@ -349,7 +345,7 @@ where
             "`inject_event` is never called for closed connections."
         );
 
-        self.inject_event.push((p.clone(), c.clone(), e.clone()));
+        self.inject_event.push((p, c, e.clone()));
         self.inner.inject_event(p, c, e);
     }
 
@@ -389,7 +385,7 @@ where
     }
 
     fn inject_listener_error(&mut self, l: ListenerId, e: &(dyn std::error::Error + 'static)) {
-        self.inject_listener_error.push(l.clone());
+        self.inject_listener_error.push(l);
         self.inner.inject_listener_error(l, e);
     }
 

@@ -552,7 +552,7 @@ enum Shutdown {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::handler::DummyConnectionHandler;
+    use crate::keep_alive;
     use futures::AsyncRead;
     use futures::AsyncWrite;
     use libp2p_core::upgrade::DeniedUpgrade;
@@ -572,9 +572,7 @@ mod tests {
                 StreamMuxerBox::new(DummyStreamMuxer {
                     counter: alive_substream_counter.clone(),
                 }),
-                DummyConnectionHandler {
-                    keep_alive: KeepAlive::Yes,
-                },
+                keep_alive::ConnectionHandler,
                 None,
                 max_negotiating_inbound_streams,
             );
@@ -598,7 +596,7 @@ mod tests {
         let upgrade_timeout = Duration::from_secs(1);
         let mut connection = Connection::new(
             StreamMuxerBox::new(PendingStreamMuxer),
-            MockConnectionHandler::new(upgrade_timeout.clone()),
+            MockConnectionHandler::new(upgrade_timeout),
             None,
             2,
         );
