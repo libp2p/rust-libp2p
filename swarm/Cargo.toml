@@ -27,5 +27,5 @@ void = "1"
 [dev-dependencies]
 async-std = { version = "1.6.2", features = ["attributes"] }
 env_logger = "0.9"
-libp2p = { path = "..", features = ["full"] }
+libp2p = { path = "../meta/", features = ["full"] }
 quickcheck = { package = "quickcheck-ext", path = "../misc/quickcheck-ext" }
