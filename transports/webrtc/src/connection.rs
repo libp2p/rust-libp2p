@@ -43,6 +43,8 @@ use std::{
 
 use crate::{error::Error, substream, substream::Substream};
 
+/// Maximum number of unprocessed data channels.
+/// See [`Connection::poll_inbound`].
 const MAX_DATA_CHANNELS_IN_FLIGHT: usize = 10;
 
 /// A WebRTC connection, wrapping [`RTCPeerConnection`] and implementing [`StreamMuxer`] trait.
@@ -72,7 +74,11 @@ impl Connection {
     pub(crate) async fn new(rtc_conn: RTCPeerConnection) -> Self {
         let (data_channel_tx, data_channel_rx) = mpsc::channel(MAX_DATA_CHANNELS_IN_FLIGHT);
 
-        Connection::register_incoming_data_channels_handler(&rtc_conn, data_channel_tx).await;
+        Connection::register_incoming_data_channels_handler(
+            &rtc_conn,
+            Arc::new(FutMutex::new(data_channel_tx)),
+        )
+        .await;
 
         Self {
             peer_conn: Arc::new(FutMutex::new(rtc_conn)),
@@ -85,9 +91,14 @@ impl Connection {
     }
 
     /// Registers a handler for incoming data channels.
+    ///
+    /// NOTE: `mpsc::Sender` is wrapped in `Arc` because cloning a raw sender would make the channel
+    /// unbounded. "The channel’s capacity is equal to buffer + num-senders. In other words, each
+    /// sender gets a guaranteed slot in the channel capacity..."
+    /// See <https://docs.rs/futures/latest/futures/channel/mpsc/fn.channel.html>
     async fn register_incoming_data_channels_handler(
         rtc_conn: &RTCPeerConnection,
-        tx: mpsc::Sender<Arc<DetachedDataChannel>>,
+        tx: Arc<FutMutex<mpsc::Sender<Arc<DetachedDataChannel>>>>,
     ) {
         rtc_conn
             .on_data_channel(Box::new(move |data_channel: Arc<RTCDataChannel>| {
@@ -97,7 +108,7 @@ impl Connection {
                     data_channel.id()
                 );
 
-                let mut tx = tx.clone();
+                let tx = tx.clone();
 
                 Box::pin(async move {
                     data_channel
@@ -114,6 +125,7 @@ impl Connection {
                                     let data_channel = data_channel.clone();
                                     match data_channel.detach().await {
                                         Ok(detached) => {
+                                            let mut tx = tx.lock().await;
                                             if let Err(e) = tx.try_send(detached.clone()) {
                                                 error!("Can't send data channel: {}", e);
                                                 // We're not accepting data channels fast enough =>
