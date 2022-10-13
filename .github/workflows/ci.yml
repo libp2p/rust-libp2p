@@ -210,7 +210,52 @@ jobs:
         ALL_FEATURES=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[] | select(.name == "libp2p") | .features | keys | map(select(. != "full")) | sort | join(" ")')
         FULL_FEATURE=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[] | select(.name == "libp2p") | .features["full"] | sort | join(" ")')
         
+        test "$ALL_FEATURES = $FULL_FEATURE"
+
         echo "$ALL_FEATURES";
         echo "$FULL_FEATURE";
         
         test "$ALL_FEATURES" = "$FULL_FEATURE"
+
+  gather_crates_for_semver_checks:
+    runs-on: ubuntu-latest
+    outputs:
+      members: ${{ steps.cargo-metadata.outputs.members }}
+    steps:
+      - uses: actions/checkout@v3
+
+      - id: cargo-metadata
+        run: |
+          WORKSPACE_MEMBERS=$(cargo metadata --format-version=1 --no-deps | jq -c '.packages | .[] | select(.publish == null) | .name' | jq -s '.' | jq -c '.')
+          echo "::set-output name=members::${WORKSPACE_MEMBERS}"
+
+  semver-check:
+    runs-on: ubuntu-latest
+    needs: gather_crates_for_semver_checks
+    strategy:
+      fail-fast: false
+      matrix:
+        crate: ${{ fromJSON(needs.gather_crates_for_semver_checks.outputs.members) }}
+    steps:
+    - name: Cancel Previous Runs
+      uses: styfle/cancel-workflow-action@bb6001c4ea612bf59c3abfc4756fbceee4f870c7 # 0.10.0
+      with:
+        access_token: ${{ github.token }}
+
+    - uses: actions/checkout@v3
+
+    - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
+      with:
+        profile: minimal
+        toolchain: stable
+        override: true
+
+    - name: Install Protoc
+      uses: arduino/setup-protoc@v1
+
+    - uses: Swatinem/rust-cache@6720f05bc48b77f96918929a9019fb2203ff71f8 # v2.0.0
+
+    - run: cargo install cargo-semver-checks
+    
+    - name: Semver Check
+      run: cargo semver-checks check-release -p ${{ matrix.crate }}

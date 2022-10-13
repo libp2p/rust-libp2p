@@ -18,6 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use futures::future::poll_fn;
 use futures::{channel::oneshot, prelude::*};
 use libp2p::core::muxing::StreamMuxerExt;
 use libp2p::core::{upgrade, Transport};
@@ -59,7 +60,10 @@ fn async_write() {
             .await
             .unwrap();
 
-        let mut outbound = client.next_outbound().await.unwrap();
+        // Just calling `poll_outbound` without `poll` is fine here because mplex makes progress through all `poll_` functions. It is hacky though.
+        let mut outbound = poll_fn(|cx| client.poll_outbound_unpin(cx))
+            .await
+            .expect("unexpected error");
 
         let mut buf = Vec::new();
         outbound.read_to_end(&mut buf).await.unwrap();
@@ -73,7 +77,10 @@ fn async_write() {
 
         let mut client = transport.dial(rx.await.unwrap()).unwrap().await.unwrap();
 
-        let mut inbound = client.next_inbound().await.unwrap();
+        // Just calling `poll_inbound` without `poll` is fine here because mplex makes progress through all `poll_` functions. It is hacky though.
+        let mut inbound = poll_fn(|cx| client.poll_inbound_unpin(cx))
+            .await
+            .expect("unexpected error");
         inbound.write_all(b"hello world").await.unwrap();
 
         // The test consists in making sure that this flushes the substream.
