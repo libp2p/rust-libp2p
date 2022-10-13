@@ -42,10 +42,9 @@ use libp2p_core::{
     PeerId, Transport,
 };
 use quinn_proto::ConnectError;
-use rand::prelude::SliceRandom;
-use rand::thread_rng;
-use std::collections::hash_map::Entry;
+use std::collections::hash_map::{DefaultHasher, Entry};
 use std::collections::{HashMap, VecDeque};
+use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
 use std::net::IpAddr;
 use std::task::Waker;
@@ -167,23 +166,25 @@ impl<P: Provider> Transport for GenTransport<P> {
             })
             .collect::<Vec<_>>();
 
-        // Try to use pick a random listener to use for dialing.
-        let dialing = match listeners.choose_mut(&mut thread_rng()) {
-            Some(listener) => listener.dialer_state.new_dial(socket_addr),
-            None => {
-                // No listener? Get or create an explicit dialer.
-
-                let socket_family = socket_addr.ip().into();
-                let dialer = match self.dialer.entry(socket_family) {
-                    Entry::Occupied(occupied) => occupied.into_mut(),
-                    Entry::Vacant(vacant) => {
-                        vacant.insert(Dialer::new::<P>(self.quinn_config.clone(), socket_family)?)
-                    }
-                };
-
-                dialer.state.new_dial(socket_addr)
-            }
+        let dialing = if !listeners.is_empty() {
+            // Pick any listener to use for dialing.
+            // We hash the socket address to achieve determinism.
+            let mut hasher = DefaultHasher::new();
+            socket_addr.hash(&mut hasher);
+            let index = hasher.finish() as usize % listeners.len();
+            listeners[index].dialer_state.new_dial(socket_addr)
+        } else {
+            // No listener? Get or create an explicit dialer.
+            let socket_family = socket_addr.ip().into();
+            let dialer = match self.dialer.entry(socket_family) {
+                Entry::Occupied(occupied) => occupied.into_mut(),
+                Entry::Vacant(vacant) => {
+                    vacant.insert(Dialer::new::<P>(self.quinn_config.clone(), socket_family)?)
+                }
+            };
+            dialer.state.new_dial(socket_addr)
         };
+
         let handshake_timeout = self.handshake_timeout;
         Ok(async move {
             let connection = dialing.await??;
