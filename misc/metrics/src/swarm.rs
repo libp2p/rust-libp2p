@@ -25,7 +25,7 @@ use prometheus_client::registry::Registry;
 use crate::protocol_stack::protocol_stack;
 
 pub struct Metrics {
-    connections_incoming: Family<Vec<String>, Counter>,
+    connections_incoming: Family<String, Counter>,
     connections_incoming_error: Family<IncomingConnectionErrorLabels, Counter>,
 
     connections_established: Family<ConnectionEstablishedLabels, Counter>,
@@ -248,7 +248,6 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
 #[derive(Encode, Hash, Clone, Eq, PartialEq)]
 struct ConnectionEstablishedLabels {
     role: Role,
-
 }
 
 #[derive(Encode, Hash, Clone, Eq, PartialEq)]

@@ -28,7 +28,7 @@ use std::collections::HashMap;
 use std::iter;
 use std::sync::{Arc, Mutex};
 use prometheus_client::metrics::family::Family;
-use super::protocol_stack::protocol_stack;
+use crate::protocol_stack::protocol_stack;
 
 pub struct Metrics {
     protocols: Protocols,
@@ -38,7 +38,7 @@ pub struct Metrics {
     received_info_listen_addrs: Histogram,
     received_info_protocols: Histogram,
     sent: Counter,
-    listen_addresses: Family<Vec<String>, Counter>,
+    listen_addresses: Family<String, Counter>,
 }
 
 impl Metrics {

@@ -114,7 +114,6 @@ fn main() -> Result<(), Box<dyn Error>> {
 /// For illustrative purposes, this includes the [`keep_alive::Behaviour`]) behaviour so the ping actually happen
 /// and can be observed via the metrics.
 #[derive(NetworkBehaviour)]
-// #[behaviour(out_event = "Event")]
 struct Behaviour {
     identify: identify::Behaviour,
     keep_alive: keep_alive::Behaviour,
