@@ -20,7 +20,7 @@
 
 use crate::{
     connection::{Connection, ConnectionEvent},
-    ConnectionError,
+    Error,
 };
 
 use futures::{ready, AsyncRead, AsyncWrite};
@@ -80,7 +80,7 @@ impl Muxer {
 
 impl StreamMuxer for Muxer {
     type Substream = Substream;
-    type Error = ConnectionError;
+    type Error = Error;
 
     fn poll(
         self: Pin<&mut Self>,

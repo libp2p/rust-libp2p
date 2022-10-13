@@ -22,8 +22,7 @@
 
 use crate::{
     connection::{Connection, ConnectionEvent},
-    muxer::Muxer,
-    transport,
+    Error, Muxer,
 };
 
 use futures::prelude::*;
@@ -53,7 +52,7 @@ impl Connecting {
 }
 
 impl Future for Connecting {
-    type Output = Result<(PeerId, Muxer), transport::TransportError>;
+    type Output = Result<(PeerId, Muxer), Error>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let connection = self
@@ -67,9 +66,7 @@ impl Future for Connecting {
                     let muxer = Muxer::from_connection(self.connection.take().unwrap());
                     return Poll::Ready(Ok((peer_id, muxer)));
                 }
-                Poll::Ready(ConnectionEvent::ConnectionLost(err)) => {
-                    return Poll::Ready(Err(err.into()))
-                }
+                Poll::Ready(ConnectionEvent::ConnectionLost(err)) => return Poll::Ready(Err(err)),
                 Poll::Ready(ConnectionEvent::HandshakeDataReady)
                 | Poll::Ready(ConnectionEvent::StreamAvailable)
                 | Poll::Ready(ConnectionEvent::StreamOpened)
@@ -80,9 +77,7 @@ impl Future for Connecting {
                 Poll::Pending => {}
             }
             match self.timeout.poll_unpin(cx) {
-                Poll::Ready(()) => {
-                    return Poll::Ready(Err(transport::TransportError::HandshakeTimedOut))
-                }
+                Poll::Ready(()) => return Poll::Ready(Err(Error::HandshakeTimedOut)),
                 Poll::Pending => {}
             }
             return Poll::Pending;

@@ -22,10 +22,10 @@
 //!
 //! Combines all the objects in the other modules to implement the trait.
 
-use crate::connection::{Connection, ConnectionError};
+use crate::connection::Connection;
 use crate::endpoint::{Config, QuinnConfig, ToEndpoint};
 use crate::provider::Provider;
-use crate::{endpoint, muxer::Muxer, upgrade::Connecting};
+use crate::{endpoint, muxer::Muxer, upgrade::Connecting, Error};
 
 use futures::channel::{mpsc, oneshot};
 use futures::future::BoxFuture;
@@ -37,7 +37,7 @@ use if_watch::{IfEvent, IfWatcher};
 
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
-    transport::{ListenerId, TransportError as CoreTransportError, TransportEvent},
+    transport::{ListenerId, TransportError, TransportEvent},
     PeerId, Transport,
 };
 use std::collections::hash_map::{DefaultHasher, Entry};
@@ -79,39 +79,15 @@ impl<P> GenTransport<P> {
     }
 }
 
-/// Error that can happen on the transport.
-#[derive(Debug, thiserror::Error)]
-pub enum TransportError {
-    /// Error while trying to reach a remote.
-    #[error(transparent)]
-    Reach(#[from] quinn_proto::ConnectError),
-    /// Error after the remote has been reached.
-    #[error(transparent)]
-    Established(#[from] ConnectionError),
-
-    #[error(transparent)]
-    Io(#[from] std::io::Error),
-
-    /// The task driving the endpoint has crashed.
-    #[error("Endpoint driver crashed")]
-    EndpointDriverCrashed,
-
-    #[error("Handshake with the remote timed out.")]
-    HandshakeTimedOut,
-}
-
 impl<P: Provider> Transport for GenTransport<P> {
     type Output = (PeerId, Muxer);
-    type Error = TransportError;
+    type Error = Error;
     type ListenerUpgrade = Connecting;
     type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
-    fn listen_on(
-        &mut self,
-        addr: Multiaddr,
-    ) -> Result<ListenerId, CoreTransportError<Self::Error>> {
-        let socket_addr = multiaddr_to_socketaddr(&addr)
-            .ok_or(CoreTransportError::MultiaddrNotSupported(addr))?;
+    fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
+        let socket_addr =
+            multiaddr_to_socketaddr(&addr).ok_or(TransportError::MultiaddrNotSupported(addr))?;
         let listener_id = ListenerId::new();
         let listener = Listener::new::<P>(
             listener_id,
@@ -147,11 +123,11 @@ impl<P: Provider> Transport for GenTransport<P> {
         Some(observed.clone())
     }
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, CoreTransportError<Self::Error>> {
+    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         let socket_addr = multiaddr_to_socketaddr(&addr)
-            .ok_or_else(|| CoreTransportError::MultiaddrNotSupported(addr.clone()))?;
+            .ok_or_else(|| TransportError::MultiaddrNotSupported(addr.clone()))?;
         if socket_addr.port() == 0 || socket_addr.ip().is_unspecified() {
-            return Err(CoreTransportError::MultiaddrNotSupported(addr));
+            return Err(TransportError::MultiaddrNotSupported(addr));
         }
         let mut listeners = self
             .listeners
@@ -193,12 +169,12 @@ impl<P: Provider> Transport for GenTransport<P> {
     fn dial_as_listener(
         &mut self,
         addr: Multiaddr,
-    ) -> Result<Self::Dial, CoreTransportError<Self::Error>> {
+    ) -> Result<Self::Dial, TransportError<Self::Error>> {
         // TODO: As the listener of a QUIC hole punch, we need to send a random UDP packet to the
         // `addr`. See DCUtR specification below.
         //
         // https://github.com/libp2p/specs/blob/master/relay/DCUtR.md#the-protocol
-        Err(CoreTransportError::MultiaddrNotSupported(addr))
+        Err(TransportError::MultiaddrNotSupported(addr))
     }
 
     fn poll(
@@ -223,9 +199,9 @@ impl<P: Provider> Transport for GenTransport<P> {
     }
 }
 
-impl From<TransportError> for CoreTransportError<TransportError> {
-    fn from(err: TransportError) -> Self {
-        CoreTransportError::Other(err)
+impl From<Error> for TransportError<Error> {
+    fn from(err: Error) -> Self {
+        TransportError::Other(err)
     }
 }
 
@@ -239,16 +215,16 @@ impl Dialer {
     fn new<P: Provider>(
         config: QuinnConfig,
         socket_family: SocketFamily,
-    ) -> Result<Self, CoreTransportError<TransportError>> {
+    ) -> Result<Self, TransportError<Error>> {
         let endpoint_channel = endpoint::Channel::new_dialer::<P>(config, socket_family)
-            .map_err(CoreTransportError::Other)?;
+            .map_err(TransportError::Other)?;
         Ok(Dialer {
             endpoint_channel,
             state: DialerState::default(),
         })
     }
 
-    fn poll(&mut self, cx: &mut Context<'_>) -> Poll<TransportError> {
+    fn poll(&mut self, cx: &mut Context<'_>) -> Poll<Error> {
         self.state.poll(&mut self.endpoint_channel, cx)
     }
 }
@@ -271,7 +247,7 @@ impl DialerState {
         &mut self,
         address: SocketAddr,
         timeout: Duration,
-    ) -> BoxFuture<'static, Result<(PeerId, Muxer), TransportError>> {
+    ) -> BoxFuture<'static, Result<(PeerId, Muxer), Error>> {
         let (rx, tx) = oneshot::channel();
 
         let message = ToEndpoint::Dial {
@@ -287,9 +263,7 @@ impl DialerState {
 
         async move {
             // Our oneshot getting dropped means the message didn't make it to the endpoint driver.
-            let connection = tx
-                .await
-                .map_err(|_| TransportError::EndpointDriverCrashed)??;
+            let connection = tx.await.map_err(|_| Error::EndpointDriverCrashed)??;
             let (peer, muxer) = Connecting::from_connection(connection, timeout).await?;
 
             Ok((peer, muxer))
@@ -300,11 +274,7 @@ impl DialerState {
     /// Send all pending dials into the given [`endpoint::Channel`].
     ///
     /// This only ever returns [`Poll::Pending`] or an error in case the channel is closed.
-    fn poll(
-        &mut self,
-        channel: &mut endpoint::Channel,
-        cx: &mut Context<'_>,
-    ) -> Poll<TransportError> {
+    fn poll(&mut self, channel: &mut endpoint::Channel, cx: &mut Context<'_>) -> Poll<Error> {
         while let Some(to_endpoint) = self.pending_dials.pop_front() {
             match channel.try_send(to_endpoint, cx) {
                 Ok(Ok(())) => {}
@@ -312,9 +282,7 @@ impl DialerState {
                     self.pending_dials.push_front(to_endpoint);
                     break;
                 }
-                Err(endpoint::Disconnected {}) => {
-                    return Poll::Ready(TransportError::EndpointDriverCrashed)
-                }
+                Err(endpoint::Disconnected {}) => return Poll::Ready(Error::EndpointDriverCrashed),
             }
         }
         self.waker = Some(cx.waker().clone());
@@ -351,7 +319,7 @@ impl Listener {
         socket_addr: SocketAddr,
         config: QuinnConfig,
         handshake_timeout: Duration,
-    ) -> Result<Self, TransportError> {
+    ) -> Result<Self, Error> {
         let (endpoint_channel, new_connections_rx) =
             endpoint::Channel::new_bidirectional::<P>(config, socket_addr)?;
 
@@ -384,7 +352,7 @@ impl Listener {
 
     /// Report the listener as closed in a [`TransportEvent::ListenerClosed`] and
     /// terminate the stream.
-    fn close(&mut self, reason: Result<(), TransportError>) {
+    fn close(&mut self, reason: Result<(), Error>) {
         if self.is_closed {
             return;
         }
@@ -436,7 +404,7 @@ impl Listener {
     }
 
     /// Poll [`DialerState`] to initiate requested dials.
-    fn poll_dialer(&mut self, cx: &mut Context<'_>) -> Poll<TransportError> {
+    fn poll_dialer(&mut self, cx: &mut Context<'_>) -> Poll<Error> {
         let Self {
             dialer_state,
             endpoint_channel,
@@ -448,7 +416,7 @@ impl Listener {
 }
 
 impl Stream for Listener {
-    type Item = TransportEvent<Connecting, TransportError>;
+    type Item = TransportEvent<Connecting, Error>;
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         loop {
             if let Some(event) = self.pending_event.take() {
@@ -481,7 +449,7 @@ impl Stream for Listener {
                     return Poll::Ready(Some(event));
                 }
                 Poll::Ready(None) => {
-                    self.close(Err(TransportError::EndpointDriverCrashed));
+                    self.close(Err(Error::EndpointDriverCrashed));
                     continue;
                 }
                 Poll::Pending => {}

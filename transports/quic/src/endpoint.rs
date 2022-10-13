@@ -29,10 +29,7 @@
 //! [`EndpointDriver`] for a thorough description.
 
 use crate::{
-    connection::Connection,
-    provider::Provider,
-    tls,
-    transport::{self, SocketFamily},
+    connection::Connection, provider::Provider, tls, transport::SocketFamily, ConnectError, Error,
 };
 
 use bytes::BytesMut;
@@ -151,7 +148,7 @@ impl Channel {
     pub fn new_bidirectional<P: Provider>(
         quinn_config: QuinnConfig,
         socket_addr: SocketAddr,
-    ) -> Result<(Self, mpsc::Receiver<Connection>), transport::TransportError> {
+    ) -> Result<(Self, mpsc::Receiver<Connection>), Error> {
         let (new_connections_tx, new_connections_rx) = mpsc::channel(1);
         let endpoint = Self::new::<P>(quinn_config, socket_addr, Some(new_connections_tx))?;
         Ok((endpoint, new_connections_rx))
@@ -161,7 +158,7 @@ impl Channel {
     pub fn new_dialer<P: Provider>(
         quinn_config: QuinnConfig,
         socket_family: SocketFamily,
-    ) -> Result<Self, transport::TransportError> {
+    ) -> Result<Self, Error> {
         let socket_addr = match socket_family {
             SocketFamily::Ipv4 => SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0),
             SocketFamily::Ipv6 => SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0),
@@ -173,7 +170,7 @@ impl Channel {
         quinn_config: QuinnConfig,
         socket_addr: SocketAddr,
         new_connections: Option<mpsc::Sender<Connection>>,
-    ) -> Result<Self, transport::TransportError> {
+    ) -> Result<Self, Error> {
         // NOT blocking, as per man:bind(2), as we pass an IP address.
         let socket = std::net::UdpSocket::bind(&socket_addr)?;
         socket.set_nonblocking(true)?;
@@ -263,7 +260,7 @@ pub enum ToEndpoint {
         /// UDP address to connect to.
         addr: SocketAddr,
         /// Channel to return the result of the dialing to.
-        result: oneshot::Sender<Result<Connection, quinn_proto::ConnectError>>,
+        result: oneshot::Sender<Result<Connection, Error>>,
     },
     /// Sent by a `quinn_proto` connection when the endpoint needs to process an event generated
     /// by a connection. The event itself is opaque to us. Only `quinn_proto` knows what is in
@@ -417,7 +414,7 @@ impl<P: Provider> EndpointDriver<P> {
                     match self.endpoint.connect(self.client_config.clone(), addr, "l") {
                         Ok(c) => c,
                         Err(err) => {
-                            let _ = result.send(Err(err));
+                            let _ = result.send(Err(ConnectError::from(err).into()));
                             return ControlFlow::Continue(());
                         }
                     };

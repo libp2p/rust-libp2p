@@ -26,7 +26,10 @@
 //! All interactions with a QUIC connection should be done through this struct.
 // TODO: docs
 
-use crate::endpoint::{self, ToEndpoint};
+use crate::{
+    endpoint::{self, ToEndpoint},
+    ConnectionError, Error,
+};
 use futures::{channel::mpsc, prelude::*};
 use futures_timer::Delay;
 use libp2p_core::PeerId;
@@ -57,18 +60,6 @@ pub struct Connection {
     connection_id: quinn_proto::ConnectionHandle,
     /// `Future` that triggers at the [`Instant`] that `self.connection.poll_timeout()` indicates.
     next_timeout: Option<(Delay, Instant)>,
-}
-
-/// Error on the connection as a whole.
-#[derive(Debug, Clone, thiserror::Error)]
-pub enum ConnectionError {
-    /// The task driving the endpoint has crashed.
-    #[error("Endpoint driver crashed")]
-    EndpointDriverCrashed,
-
-    /// Error in the inner state machine.
-    #[error(transparent)]
-    Quinn(#[from] quinn_proto::ConnectionError),
 }
 
 impl Connection {
@@ -191,7 +182,7 @@ impl Connection {
                 }
                 Poll::Ready(None) => {
                     return Poll::Ready(ConnectionEvent::ConnectionLost(
-                        ConnectionError::EndpointDriverCrashed,
+                        Error::EndpointDriverCrashed,
                     ));
                 }
                 Poll::Pending => {}
@@ -214,7 +205,7 @@ impl Connection {
                     }
                     Err(endpoint::Disconnected {}) => {
                         return Poll::Ready(ConnectionEvent::ConnectionLost(
-                            ConnectionError::EndpointDriverCrashed,
+                            Error::EndpointDriverCrashed,
                         ));
                     }
                 }
@@ -309,7 +300,7 @@ impl Connection {
                 dir: quinn_proto::Dir::Bi,
             }) => ConnectionEvent::StreamOpened,
             quinn_proto::Event::ConnectionLost { reason } => {
-                ConnectionEvent::ConnectionLost(ConnectionError::Quinn(reason))
+                ConnectionEvent::ConnectionLost(ConnectionError::from(reason).into())
             }
             quinn_proto::Event::Stream(quinn_proto::StreamEvent::Finished { id }) => {
                 ConnectionEvent::StreamFinished(id)
@@ -345,7 +336,7 @@ pub enum ConnectionEvent {
     Connected(PeerId),
 
     /// Connection has been closed and can no longer be used.
-    ConnectionLost(ConnectionError),
+    ConnectionLost(Error),
 
     /// Generated after [`Connection::accept_substream`] has been called and has returned
     /// `None`. After this event has been generated, this method is guaranteed to return `Some`.
