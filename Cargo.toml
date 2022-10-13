@@ -12,9 +12,11 @@ categories = ["network-programming", "asynchronous"]
 
 [features]
 full = [
+    "async-std",
     "autonat",
     "dcutr",
     "deflate",
+    "dns",
     "dns-async-std",
     "dns-tokio",
     "ecdsa",
@@ -22,6 +24,7 @@ full = [
     "gossipsub",
     "identify",
     "kad",
+    "mdns",
     "mdns-async-io",
     "mdns-tokio",
     "metrics",
@@ -36,8 +39,10 @@ full = [
     "rsa",
     "secp256k1",
     "serde",
+    "tcp",
     "tcp-async-io",
     "tcp-tokio",
+    "tokio",
     "uds",
     "wasm-bindgen",
     "wasm-ext",
@@ -48,6 +53,7 @@ full = [
 autonat = ["dep:libp2p-autonat"]
 dcutr = ["dep:libp2p-dcutr", "libp2p-metrics?/dcutr"]
 deflate = ["dep:libp2p-deflate"]
+dns = ["dep:libp2p-dns"]
 dns-async-std = ["dep:libp2p-dns", "libp2p-dns?/async-std"]
 dns-tokio = ["dep:libp2p-dns", "libp2p-dns?/tokio"]
 floodsub = ["dep:libp2p-floodsub"]
@@ -55,6 +61,7 @@ identify = ["dep:libp2p-identify", "libp2p-metrics?/identify"]
 kad = ["dep:libp2p-kad", "libp2p-metrics?/kad"]
 gossipsub = ["dep:libp2p-gossipsub", "libp2p-metrics?/gossipsub"]
 metrics = ["dep:libp2p-metrics"]
+mdns = ["dep:libp2p-mdns"]
 mdns-async-io = ["dep:libp2p-mdns", "libp2p-mdns?/async-io"]
 mdns-tokio = ["dep:libp2p-mdns", "libp2p-mdns?/tokio"]
 mplex = ["dep:libp2p-mplex"]
@@ -65,6 +72,7 @@ pnet = ["dep:libp2p-pnet"]
 relay = ["dep:libp2p-relay", "libp2p-metrics?/relay"]
 request-response = ["dep:libp2p-request-response"]
 rendezvous = ["dep:libp2p-rendezvous"]
+tcp = ["dep:libp2p-tcp"]
 tcp-async-io = ["dep:libp2p-tcp", "libp2p-tcp?/async-io"]
 tcp-tokio = ["dep:libp2p-tcp", "libp2p-tcp?/tokio"]
 uds = ["dep:libp2p-uds"]
@@ -77,6 +85,8 @@ secp256k1 = ["libp2p-core/secp256k1"]
 rsa = ["libp2p-core/rsa"]
 ecdsa = ["libp2p-core/ecdsa"]
 serde = ["libp2p-core/serde", "libp2p-kad?/serde", "libp2p-gossipsub?/serde"]
+tokio = ["libp2p-mdns?/tokio", "libp2p-tcp?/tokio", "libp2p-dns?/tokio"]
+async-std = ["libp2p-mdns?/async-io", "libp2p-tcp?/async-io", "libp2p-dns?/async-std"]
 
 [package.metadata.docs.rs]
 all-features = true
@@ -91,7 +101,7 @@ lazy_static = "1.2"
 
 libp2p-autonat = { version = "0.8.0", path = "protocols/autonat", optional = true }
 libp2p-core = { version = "0.37.0", path = "core" }
-libp2p-dcutr = { version = "0.7.0", path = "protocols/dcutr",  optional = true }
+libp2p-dcutr = { version = "0.7.0", path = "protocols/dcutr", optional = true }
 libp2p-floodsub = { version = "0.40.1", path = "protocols/floodsub", optional = true }
 libp2p-identify = { version = "0.40.0", path = "protocols/identify", optional = true }
 libp2p-kad = { version = "0.41.0", path = "protocols/kad", optional = true }
@@ -128,7 +138,7 @@ libp2p-gossipsub = { version = "0.42.1", path = "protocols/gossipsub", optional 
 async-std = { version = "1.6.2", features = ["attributes"] }
 async-trait = "0.1"
 env_logger = "0.9.0"
-clap = {version = "3.1.6", features = ["derive"]}
+clap = { version = "3.1.6", features = ["derive"] }
 tokio = { version = "1.15", features = ["io-util", "io-std", "macros", "rt", "rt-multi-thread"] }
 
 [workspace]
