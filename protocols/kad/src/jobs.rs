@@ -62,6 +62,7 @@
 //! > out of the job to the consumer, where they can be dropped after being sent.
 
 use crate::record::{self, store::RecordStore, ProviderRecord, Record};
+use crate::store::{ProviderRecordsIter, RecordsIter};
 use futures::prelude::*;
 use futures_timer::Delay;
 use instant::Instant;
@@ -70,7 +71,6 @@ use std::collections::HashSet;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::Duration;
-use std::vec;
 
 /// The maximum number of queries towards which background jobs
 /// are allowed to start new queries on an invocation of
@@ -135,7 +135,7 @@ pub struct PutRecordJob {
     publish_interval: Option<Duration>,
     record_ttl: Option<Duration>,
     skipped: HashSet<record::Key>,
-    inner: PeriodicJob<vec::IntoIter<Record>>,
+    inner: PeriodicJob<RecordsIter>,
 }
 
 impl PutRecordJob {
@@ -197,31 +197,28 @@ impl PutRecordJob {
     {
         if self.inner.check_ready(cx, now) {
             let publish = self.next_publish.map_or(false, |t_pub| now >= t_pub);
-            let records = store
-                .records()
-                .filter_map(|r| {
-                    let is_publisher = r.publisher.as_ref() == Some(&self.local_id);
-                    if self.skipped.contains(&r.key) || (!publish && is_publisher) {
-                        None
-                    } else {
-                        let mut record = r;
-                        if publish && is_publisher {
-                            record.expires = record
-                                .expires
-                                .or_else(|| self.record_ttl.map(|ttl| now + ttl));
-                        }
-                        Some(record)
+            #[allow(clippy::mutable_key_type)]
+            let mut skipped = Default::default();
+            std::mem::swap(&mut skipped, &mut self.skipped);
+            let record_ttl = self.record_ttl;
+            let local_id = self.local_id;
+            let records = Box::new(store.records().filter_map(move |r| {
+                let is_publisher = r.publisher.as_ref() == Some(&local_id);
+                if skipped.contains(&r.key) || (!publish && is_publisher) {
+                    None
+                } else {
+                    let mut record = r;
+                    if publish && is_publisher {
+                        record.expires = record.expires.or_else(|| record_ttl.map(|ttl| now + ttl));
                     }
-                })
-                .collect::<Vec<_>>()
-                .into_iter();
+                    Some(record)
+                }
+            }));
 
             // Schedule the next publishing run.
             if publish {
                 self.next_publish = self.publish_interval.map(|i| now + i);
             }
-
-            self.skipped.clear();
 
             self.inner.state = PeriodicJobState::Running(records);
         }
@@ -251,7 +248,7 @@ impl PutRecordJob {
 
 /// Periodic job for replicating provider records.
 pub struct AddProviderJob {
-    inner: PeriodicJob<vec::IntoIter<ProviderRecord>>,
+    inner: PeriodicJob<ProviderRecordsIter>,
 }
 
 impl AddProviderJob {
@@ -297,7 +294,7 @@ impl AddProviderJob {
         T: RecordStore,
     {
         if self.inner.check_ready(cx, now) {
-            let records = store.provided().collect::<Vec<_>>().into_iter();
+            let records = store.provided();
             self.inner.state = PeriodicJobState::Running(records);
         }
 

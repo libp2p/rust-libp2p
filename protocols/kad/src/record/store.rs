@@ -45,6 +45,9 @@ pub enum Error {
     ValueTooLarge,
 }
 
+pub type RecordsIter = Box<dyn Iterator<Item = Record> + Send + Sync + 'static>;
+pub type ProviderRecordsIter = Box<dyn Iterator<Item = ProviderRecord> + Send + Sync + 'static>;
+
 /// Trait for types implementing a record store.
 ///
 /// There are two types of records managed by a `RecordStore`:
@@ -64,9 +67,6 @@ pub enum Error {
 ///      to the closest nodes to the key.
 ///
 pub trait RecordStore {
-    type RecordsIter: Iterator<Item = Record>;
-    type ProvidedIter: Iterator<Item = ProviderRecord>;
-
     /// Gets a record from the store, given its key.
     fn get(&self, k: &Key) -> Option<Record>;
 
@@ -77,7 +77,7 @@ pub trait RecordStore {
     fn remove(&mut self, k: &Key);
 
     /// Gets an iterator over all (value-) records currently stored.
-    fn records(&self) -> Self::RecordsIter;
+    fn records(&self) -> RecordsIter;
 
     /// Adds a provider record to the store.
     ///
@@ -91,7 +91,7 @@ pub trait RecordStore {
 
     /// Gets an iterator over all stored provider records for which the
     /// node owning the store is itself the provider.
-    fn provided(&self) -> Self::ProvidedIter;
+    fn provided(&self) -> ProviderRecordsIter;
 
     /// Removes a provider record from the store.
     fn remove_provider(&mut self, k: &Key, p: &PeerId);

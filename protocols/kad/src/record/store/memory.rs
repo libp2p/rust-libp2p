@@ -23,8 +23,7 @@ use super::*;
 use crate::kbucket;
 use libp2p_core::PeerId;
 use smallvec::SmallVec;
-use std::collections::{hash_map, hash_set, HashMap, HashSet};
-use std::iter;
+use std::collections::{hash_map, HashMap, HashSet};
 
 /// In-memory implementation of a `RecordStore`.
 pub struct MemoryStore {
@@ -96,10 +95,6 @@ impl MemoryStore {
 }
 
 impl RecordStore for MemoryStore {
-    type RecordsIter = Box<dyn Iterator<Item = Record>>;
-
-    type ProvidedIter = Box<dyn Iterator<Item = ProviderRecord>>;
-
     fn get(&self, k: &Key) -> Option<Record> {
         self.records.get(k).cloned()
     }
@@ -130,7 +125,7 @@ impl RecordStore for MemoryStore {
         self.records.remove(k);
     }
 
-    fn records(&self) -> Self::RecordsIter {
+    fn records(&self) -> RecordsIter {
         Box::new(
             self.records
                 .values()
@@ -196,8 +191,14 @@ impl RecordStore for MemoryStore {
             .map_or_else(Vec::new, |ps| ps.clone().into_vec())
     }
 
-    fn provided(&self) -> Self::ProvidedIter {
-        Box::new(self.provided.iter().cloned())
+    fn provided(&self) -> ProviderRecordsIter {
+        Box::new(
+            self.provided
+                .iter()
+                .cloned()
+                .collect::<Vec<_>>()
+                .into_iter(),
+        )
     }
 
     fn remove_provider(&mut self, key: &Key, provider: &PeerId) {
