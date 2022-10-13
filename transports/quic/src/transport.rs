@@ -133,6 +133,8 @@ impl<P: Provider> Transport for GenTransport<P> {
 
     fn remove_listener(&mut self, id: ListenerId) -> bool {
         if let Some(listener) = self.listeners.iter_mut().find(|l| l.listener_id == id) {
+            // Close the listener, which will eventually finish its stream.
+            // `SelectAll` removes streams once they are finished.
             listener.close(Ok(()));
             true
         } else {
@@ -517,9 +519,13 @@ impl From<IpAddr> for SocketFamily {
     }
 }
 
-/// Turn an [`IpAddr`] into a listen-address for the endpoint.
+/// Turn an [`IpAddr`] reported byt the [`IfWatcher`] into a
+/// listen-address for the endpoint.
 ///
-/// Returns `None` if the address is not the same socket family as the
+/// For this, the `ip` is combined with the port that the endpoint
+/// is actually bound.
+///
+/// Returns `None` if the `ip` is not the same socket family as the
 /// address that the endpoint is bound to.
 fn ip_to_listenaddr(endpoint_addr: &SocketAddr, ip: IpAddr) -> Option<Multiaddr> {
     // True if either both addresses are Ipv4 or both Ipv6.
@@ -681,7 +687,7 @@ mod test {
             .now_or_never()
             .is_none());
 
-        // Run test twice to check that there is no unexpected behaviour if `GenTransport.listener`
+        // Run test twice to check that there is no unexpected behaviour if `Transport.listener`
         // is temporarily empty.
         for _ in 0..2 {
             let listener = transport
