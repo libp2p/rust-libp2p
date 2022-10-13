@@ -4,7 +4,7 @@ use futures::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use libp2p_core::{identity, InboundUpgrade, OutboundUpgrade, PeerId, UpgradeInfo};
 use libp2p_noise::{Keypair, NoiseConfig, X25519Spec};
 
-pub async fn outbound<T>(
+pub async fn inbound<T>(
     id_keys: identity::Keypair,
     stream: T,
     client_fingerprint: Fingerprint,
@@ -19,6 +19,8 @@ where
     let noise = NoiseConfig::xx(dh_keys)
         .with_prologue(noise_prologue(client_fingerprint, server_fingerprint));
     let info = noise.protocol_info().next().unwrap();
+    // Note the roles are reversed because it allows the server (webrtc connection responder) to
+    // send application data 0.5 RTT earlier.
     let (peer_id, mut channel) = noise
         .into_authenticated()
         .upgrade_outbound(stream, info)
@@ -29,7 +31,7 @@ where
     Ok(peer_id)
 }
 
-pub async fn inbound<T>(
+pub async fn outbound<T>(
     id_keys: identity::Keypair,
     stream: T,
     server_fingerprint: Fingerprint,
@@ -44,6 +46,8 @@ where
     let noise = NoiseConfig::xx(dh_keys)
         .with_prologue(noise_prologue(client_fingerprint, server_fingerprint));
     let info = noise.protocol_info().next().unwrap();
+    // Note the roles are reversed because it allows the server (webrtc connection responder) to
+    // send application data 0.5 RTT earlier.
     let (peer_id, mut channel) = noise
         .into_authenticated()
         .upgrade_inbound(stream, info)
