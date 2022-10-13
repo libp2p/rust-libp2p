@@ -25,7 +25,6 @@ use thiserror::Error;
 
 use super::*;
 use crate::K_VALUE;
-use std::borrow::Cow;
 
 /// The result of an operation on a `RecordStore`.
 pub type Result<T> = std::result::Result<T, Error>;
@@ -64,36 +63,36 @@ pub enum Error {
 ///      content. Just like a regular record, a provider record is distributed
 ///      to the closest nodes to the key.
 ///
-pub trait RecordStore<'a> {
-    type RecordsIter: Iterator<Item = Cow<'a, Record>>;
-    type ProvidedIter: Iterator<Item = Cow<'a, ProviderRecord>>;
+pub trait RecordStore {
+    type RecordsIter: Iterator<Item = Record>;
+    type ProvidedIter: Iterator<Item = ProviderRecord>;
 
     /// Gets a record from the store, given its key.
-    fn get(&'a self, k: &Key) -> Option<Cow<'_, Record>>;
+    fn get(&self, k: &Key) -> Option<Record>;
 
     /// Puts a record into the store.
-    fn put(&'a mut self, r: Record) -> Result<()>;
+    fn put(&mut self, r: Record) -> Result<()>;
 
     /// Removes the record with the given key from the store.
-    fn remove(&'a mut self, k: &Key);
+    fn remove(&mut self, k: &Key);
 
     /// Gets an iterator over all (value-) records currently stored.
-    fn records(&'a self) -> Self::RecordsIter;
+    fn records(&self) -> Self::RecordsIter;
 
     /// Adds a provider record to the store.
     ///
     /// A record store only needs to store a number of provider records
     /// for a key corresponding to the replication factor and should
     /// store those records whose providers are closest to the key.
-    fn add_provider(&'a mut self, record: ProviderRecord) -> Result<()>;
+    fn add_provider(&mut self, record: ProviderRecord) -> Result<()>;
 
     /// Gets a copy of the stored provider records for the given key.
-    fn providers(&'a self, key: &Key) -> Vec<ProviderRecord>;
+    fn providers(&self, key: &Key) -> Vec<ProviderRecord>;
 
     /// Gets an iterator over all stored provider records for which the
     /// node owning the store is itself the provider.
-    fn provided(&'a self) -> Self::ProvidedIter;
+    fn provided(&self) -> Self::ProvidedIter;
 
     /// Removes a provider record from the store.
-    fn remove_provider(&'a mut self, k: &Key, p: &PeerId);
+    fn remove_provider(&mut self, k: &Key, p: &PeerId);
 }

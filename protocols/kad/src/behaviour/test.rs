@@ -596,7 +596,7 @@ fn put_record() {
                                 Ok(ok) => {
                                     assert!(records.contains_key(&ok.key));
                                     let record = swarm.behaviour_mut().store.get(&ok.key).unwrap();
-                                    results.push(record.into_owned());
+                                    results.push(record);
                                 }
                             }
                         }

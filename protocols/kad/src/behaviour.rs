@@ -398,8 +398,7 @@ impl KademliaConfig {
 
 impl<TStore> Kademlia<TStore>
 where
-    for<'a> TStore: RecordStore<'a>,
-    TStore: Send + 'static,
+    TStore: RecordStore + Send + 'static,
 {
     /// Creates a new `Kademlia` network behaviour with a default configuration.
     pub fn new(id: PeerId, store: TStore) -> Self {
@@ -688,10 +687,7 @@ where
             if record.is_expired(Instant::now()) {
                 self.store.remove(&key)
             } else {
-                records.push(PeerRecord {
-                    peer: None,
-                    record: record.into_owned(),
-                });
+                records.push(PeerRecord { peer: None, record });
             }
         }
 
@@ -1780,8 +1776,7 @@ fn exp_decrease(ttl: Duration, exp: u32) -> Duration {
 
 impl<TStore> NetworkBehaviour for Kademlia<TStore>
 where
-    for<'a> TStore: RecordStore<'a>,
-    TStore: Send + 'static,
+    TStore: RecordStore + Send + 'static,
 {
     type ConnectionHandler = KademliaHandlerProto<QueryId>;
     type OutEvent = KademliaEvent;
@@ -2097,7 +2092,7 @@ where
                             self.store.remove(&key);
                             None
                         } else {
-                            Some(record.into_owned())
+                            Some(record)
                         }
                     }
                     None => None,

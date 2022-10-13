@@ -193,7 +193,7 @@ impl PutRecordJob {
     /// to be run.
     pub fn poll<T>(&mut self, cx: &mut Context<'_>, store: &mut T, now: Instant) -> Poll<Record>
     where
-        for<'a> T: RecordStore<'a>,
+        T: RecordStore,
     {
         if self.inner.check_ready(cx, now) {
             let publish = self.next_publish.map_or(false, |t_pub| now >= t_pub);
@@ -204,7 +204,7 @@ impl PutRecordJob {
                     if self.skipped.contains(&r.key) || (!publish && is_publisher) {
                         None
                     } else {
-                        let mut record = r.into_owned();
+                        let mut record = r;
                         if publish && is_publisher {
                             record.expires = record
                                 .expires
@@ -294,14 +294,10 @@ impl AddProviderJob {
         now: Instant,
     ) -> Poll<ProviderRecord>
     where
-        for<'a> T: RecordStore<'a>,
+        T: RecordStore,
     {
         if self.inner.check_ready(cx, now) {
-            let records = store
-                .provided()
-                .map(|r| r.into_owned())
-                .collect::<Vec<_>>()
-                .into_iter();
+            let records = store.provided().collect::<Vec<_>>().into_iter();
             self.inner.state = PeriodicJobState::Running(records);
         }
 
@@ -368,7 +364,7 @@ mod tests {
             block_on(poll_fn(|ctx| {
                 let now = Instant::now() + job.inner.interval;
                 // All (non-expired) records in the store must be yielded by the job.
-                for r in store.records().map(|r| r.into_owned()).collect::<Vec<_>>() {
+                for r in store.records().collect::<Vec<_>>() {
                     if !r.is_expired(now) {
                         assert_eq!(job.poll(ctx, &mut store, now), Poll::Ready(r));
                         assert!(job.is_running());
@@ -398,7 +394,7 @@ mod tests {
             block_on(poll_fn(|ctx| {
                 let now = Instant::now() + job.inner.interval;
                 // All (non-expired) records in the store must be yielded by the job.
-                for r in store.provided().map(|r| r.into_owned()).collect::<Vec<_>>() {
+                for r in store.provided().collect::<Vec<_>>() {
                     if !r.is_expired(now) {
                         assert_eq!(job.poll(ctx, &mut store, now), Poll::Ready(r));
                         assert!(job.is_running());
