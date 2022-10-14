@@ -60,7 +60,7 @@ struct Opts {
     remote_peer_id: Option<PeerId>,
 }
 
-#[derive(Debug, Parser, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Parser)]
 enum Mode {
     Dial,
     Listen,
