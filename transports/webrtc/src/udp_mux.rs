@@ -186,6 +186,8 @@ impl UDPMuxNewAddr {
     /// Reads from the underlying UDP socket and either reports a new address or proxies data to the
     /// muxed connection.
     pub fn poll(&mut self, cx: &mut Context) -> Poll<UDPMuxEvent> {
+        let mut recv_buf = [0u8; RECEIVE_MTU];
+
         loop {
             // => Send data to target
             match self.send_buffer.take() {
@@ -324,8 +326,7 @@ impl UDPMuxNewAddr {
                     continue;
                 }
                 Poll::Ready(None) => {
-                    // TODO: avoid allocating the buffer each time.
-                    let mut recv_buf = [0u8; RECEIVE_MTU];
+                    // => Read from the socket
                     let mut read = ReadBuf::new(&mut recv_buf);
 
                     match self.udp_sock.poll_recv_from(cx, &mut read) {
