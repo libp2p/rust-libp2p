@@ -1,4 +1,4 @@
-# 0.12.0 [unreleased]
+# 0.12.0
 
 - Remove parallel dialing optimization, to avoid requiring the use of the `ls` command. See [PR 2934].
 
