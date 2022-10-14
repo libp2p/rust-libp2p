@@ -120,11 +120,11 @@ struct Behaviour {
     ping: ping::Behaviour,
 }
 
-impl Behaviour{
+impl Behaviour {
     fn new(local_key: libp2p::identity::Keypair) -> Self {
-        Self{
+        Self {
             ping: ping::Behaviour::default(),
-            identify: identify::Behaviour::new( identify::Config::new(
+            identify: identify::Behaviour::new(identify::Config::new(
                 "/ipfs/0.1.0".into(),
                 local_key.public(),
             )),

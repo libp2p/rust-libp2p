@@ -18,17 +18,17 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::protocol_stack;
 use libp2p_core::PeerId;
 use prometheus_client::encoding::text::{EncodeMetric, Encoder};
 use prometheus_client::metrics::counter::Counter;
+use prometheus_client::metrics::family::Family;
 use prometheus_client::metrics::histogram::{exponential_buckets, Histogram};
 use prometheus_client::metrics::MetricType;
 use prometheus_client::registry::Registry;
 use std::collections::HashMap;
 use std::iter;
 use std::sync::{Arc, Mutex};
-use prometheus_client::metrics::family::Family;
-use crate::protocol_stack;
 
 pub struct Metrics {
     protocols: Protocols,
@@ -107,7 +107,7 @@ impl Metrics {
         sub_registry.register(
             "listen_addresses",
             "Number of listen addresses for remote peer per protocol stack",
-            Box::new(listen_addresses.clone())
+            Box::new(listen_addresses.clone()),
         );
 
         Self {
@@ -118,7 +118,7 @@ impl Metrics {
             received_info_listen_addrs,
             received_info_protocols,
             sent,
-            listen_addresses
+            listen_addresses,
         }
     }
 }
@@ -179,7 +179,9 @@ impl super::Recorder<libp2p_identify::Event> for Metrics {
                 self.received_info_listen_addrs
                     .observe(info.listen_addrs.len() as f64);
                 for listen_addr in &info.listen_addrs {
-                    self.listen_addresses.get_or_create(&protocol_stack::Label::for_multi_address(&listen_addr)).inc();
+                    self.listen_addresses
+                        .get_or_create(&protocol_stack::Label::for_multi_address(&listen_addr))
+                        .inc();
                 }
             }
             libp2p_identify::Event::Sent { .. } => {

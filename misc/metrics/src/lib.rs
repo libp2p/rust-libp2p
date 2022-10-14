@@ -36,10 +36,10 @@ mod identify;
 mod kad;
 #[cfg(feature = "ping")]
 mod ping;
+mod protocol_stack;
 #[cfg(feature = "relay")]
 mod relay;
 mod swarm;
-mod protocol_stack;
 
 use prometheus_client::registry::Registry;
 

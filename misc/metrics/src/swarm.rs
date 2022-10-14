@@ -18,11 +18,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::protocol_stack;
 use prometheus_client::encoding::text::Encode;
 use prometheus_client::metrics::counter::Counter;
 use prometheus_client::metrics::family::Family;
 use prometheus_client::registry::Registry;
-use crate::protocol_stack;
 
 pub struct Metrics {
     connections_incoming: Family<protocol_stack::Label, Counter>,
@@ -158,7 +158,9 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
                     .inc();
             }
             libp2p_swarm::SwarmEvent::IncomingConnection { send_back_addr, .. } => {
-                self.connections_incoming.get_or_create(&protocol_stack::Label::for_multi_address(&send_back_addr)).inc();
+                self.connections_incoming
+                    .get_or_create(&protocol_stack::Label::for_multi_address(&send_back_addr))
+                    .inc();
             }
             libp2p_swarm::SwarmEvent::IncomingConnectionError { error, .. } => {
                 self.connections_incoming_error
