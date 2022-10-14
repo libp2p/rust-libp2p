@@ -270,13 +270,14 @@ impl AsyncWrite for SubstreamBox {
 mod tests {
     use super::*;
     use crate::muxing::StreamMuxerExt;
+    use futures::future::poll_fn;
 
     #[async_std::test]
     async fn stream_muxer_box_tracks_alive_inbound_streams() {
         let mut muxer = StreamMuxerBox::new(DummyStreamMuxer);
 
-        let _stream1 = muxer.next_inbound().await.unwrap();
-        let _stream2 = muxer.next_inbound().await.unwrap();
+        let _stream1 = poll_fn(|cx| muxer.poll_inbound_unpin(cx)).await.unwrap();
+        let _stream2 = poll_fn(|cx| muxer.poll_inbound_unpin(cx)).await.unwrap();
 
         assert_eq!(muxer.active_inbound_streams(), 2);
 
@@ -289,8 +290,8 @@ mod tests {
     async fn stream_muxer_box_tracks_alive_outbound_streams() {
         let mut muxer = StreamMuxerBox::new(DummyStreamMuxer);
 
-        let _stream1 = muxer.next_outbound().await.unwrap();
-        let _stream2 = muxer.next_outbound().await.unwrap();
+        let _stream1 = poll_fn(|cx| muxer.poll_outbound_unpin(cx)).await.unwrap();
+        let _stream2 = poll_fn(|cx| muxer.poll_outbound_unpin(cx)).await.unwrap();
 
         assert_eq!(muxer.active_outbound_streams(), 2);
 
