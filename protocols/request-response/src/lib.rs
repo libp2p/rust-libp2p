@@ -66,8 +66,10 @@ use futures::channel::oneshot;
 use handler::{RequestProtocol, RequestResponseHandler, RequestResponseHandlerEvent};
 use libp2p_core::{connection::ConnectionId, ConnectedPoint, Multiaddr, PeerId};
 use libp2p_swarm::{
-    dial_opts::DialOpts, DialError, IntoConnectionHandler, NetworkBehaviour,
-    NetworkBehaviourAction, NotifyHandler, PollParameters,
+    behaviour::{AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm},
+    dial_opts::DialOpts,
+    IntoConnectionHandler, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
+    PollParameters,
 };
 use smallvec::SmallVec;
 use std::{
@@ -558,6 +560,145 @@ where
             .get_mut(peer)
             .and_then(|connections| connections.iter_mut().find(|c| c.id == connection))
     }
+
+    /// Called on the [`FromSwarm::ConnectionEstablished`]
+    /// [event](`NetworkBehaviour::on_swarm_event`).
+    fn on_connection_established(
+        &mut self,
+        ConnectionEstablished {
+            peer_id,
+            connection_id,
+            endpoint,
+            other_established,
+            ..
+        }: ConnectionEstablished,
+    ) {
+        let address = match endpoint {
+            ConnectedPoint::Dialer { address, .. } => Some(address.clone()),
+            ConnectedPoint::Listener { .. } => None,
+        };
+        self.connected
+            .entry(peer_id)
+            .or_default()
+            .push(Connection::new(connection_id, address));
+
+        if other_established == 0 {
+            if let Some(pending) = self.pending_outbound_requests.remove(&peer_id) {
+                for request in pending {
+                    let request = self.try_send_request(&peer_id, request);
+                    assert!(request.is_none());
+                }
+            }
+        }
+    }
+
+    /// Called on the [`FromSwarm::ConnectionClosed`]
+    /// [event](`NetworkBehaviour::on_swarm_event`).
+    fn on_connection_closed(
+        &mut self,
+        ConnectionClosed {
+            peer_id,
+            connection_id,
+            remaining_established,
+            ..
+        }: ConnectionClosed<<Self as NetworkBehaviour>::ConnectionHandler>,
+    ) {
+        let connections = self
+            .connected
+            .get_mut(&peer_id)
+            .expect("Expected some established connection to peer before closing.");
+
+        let connection = connections
+            .iter()
+            .position(|c| c.id == connection_id)
+            .map(|p: usize| connections.remove(p))
+            .expect("Expected connection to be established before closing.");
+
+        debug_assert_eq!(connections.is_empty(), remaining_established == 0);
+        if connections.is_empty() {
+            self.connected.remove(&peer_id);
+        }
+
+        for request_id in connection.pending_outbound_responses {
+            self.pending_events
+                .push_back(NetworkBehaviourAction::GenerateEvent(
+                    RequestResponseEvent::InboundFailure {
+                        peer: peer_id,
+                        request_id,
+                        error: InboundFailure::ConnectionClosed,
+                    },
+                ));
+        }
+
+        for request_id in connection.pending_inbound_responses {
+            self.pending_events
+                .push_back(NetworkBehaviourAction::GenerateEvent(
+                    RequestResponseEvent::OutboundFailure {
+                        peer: peer_id,
+                        request_id,
+                        error: OutboundFailure::ConnectionClosed,
+                    },
+                ));
+        }
+    }
+
+    /// Called on the [`FromSwarm::AddressChange`]
+    /// [event](`NetworkBehaviour::on_swarm_event`).
+    fn on_address_change(
+        &mut self,
+        AddressChange {
+            peer_id,
+            connection_id,
+            new,
+            ..
+        }: AddressChange,
+    ) {
+        let new_address = match new {
+            ConnectedPoint::Dialer { address, .. } => Some(address.clone()),
+            ConnectedPoint::Listener { .. } => None,
+        };
+        let connections = self
+            .connected
+            .get_mut(&peer_id)
+            .expect("Address change can only happen on an established connection.");
+
+        let connection = connections
+            .iter_mut()
+            .find(|c| &c.id == &connection_id)
+            .expect("Address change can only happen on an established connection.");
+        connection.address = new_address;
+    }
+
+    /// Called on the [`FromSwarm::DialFailure`]
+    /// [event](`NetworkBehaviour::on_swarm_event`).
+    fn on_dial_failure(
+        &mut self,
+        DialFailure {
+            peer_id,
+            ..
+        }: DialFailure<<Self as NetworkBehaviour>::ConnectionHandler>,
+    ) {
+        if let Some(peer) = peer_id {
+            // If there are pending outgoing requests when a dial failure occurs,
+            // it is implied that we are not connected to the peer, since pending
+            // outgoing requests are drained when a connection is established and
+            // only created when a peer is not connected when a request is made.
+            // Thus these requests must be considered failed, even if there is
+            // another, concurrent dialing attempt ongoing.
+            if let Some(pending) = self.pending_outbound_requests.remove(&peer) {
+                for request in pending {
+                    self.pending_events
+                        .push_back(NetworkBehaviourAction::GenerateEvent(
+                            RequestResponseEvent::OutboundFailure {
+                                peer,
+                                request_id: request.request_id,
+                                error: OutboundFailure::DialFailure,
+                            },
+                        ));
+                }
+            }
+        }
+    }
 }
 
 impl<TCodec> NetworkBehaviour for RequestResponse<TCodec>
@@ -588,143 +729,37 @@ where
         addresses
     }
 
-    fn inject_address_change(
+    fn on_swarm_event(
         &mut self,
-        peer: &PeerId,
-        conn: &ConnectionId,
-        _old: &ConnectedPoint,
-        new: &ConnectedPoint,
+        event: libp2p_swarm::behaviour::FromSwarm<Self::ConnectionHandler>,
     ) {
-        let new_address = match new {
-            ConnectedPoint::Dialer { address, .. } => Some(address.clone()),
-            ConnectedPoint::Listener { .. } => None,
-        };
-        let connections = self
-            .connected
-            .get_mut(peer)
-            .expect("Address change can only happen on an established connection.");
-
-        let connection = connections
-            .iter_mut()
-            .find(|c| &c.id == conn)
-            .expect("Address change can only happen on an established connection.");
-        connection.address = new_address;
-    }
-
-    fn inject_connection_established(
-        &mut self,
-        peer: &PeerId,
-        conn: &ConnectionId,
-        endpoint: &ConnectedPoint,
-        _errors: Option<&Vec<Multiaddr>>,
-        other_established: usize,
-    ) {
-        let address = match endpoint {
-            ConnectedPoint::Dialer { address, .. } => Some(address.clone()),
-            ConnectedPoint::Listener { .. } => None,
-        };
-        self.connected
-            .entry(*peer)
-            .or_default()
-            .push(Connection::new(*conn, address));
-
-        if other_established == 0 {
-            if let Some(pending) = self.pending_outbound_requests.remove(peer) {
-                for request in pending {
-                    let request = self.try_send_request(peer, request);
-                    assert!(request.is_none());
-                }
+        match event {
+            FromSwarm::ConnectionEstablished(connection_established) => {
+                self.on_connection_established(connection_established)
             }
-        }
-    }
-
-    fn inject_connection_closed(
-        &mut self,
-        peer_id: &PeerId,
-        conn: &ConnectionId,
-        _: &ConnectedPoint,
-        _: <Self::ConnectionHandler as IntoConnectionHandler>::Handler,
-        remaining_established: usize,
-    ) {
-        let connections = self
-            .connected
-            .get_mut(peer_id)
-            .expect("Expected some established connection to peer before closing.");
-
-        let connection = connections
-            .iter()
-            .position(|c| &c.id == conn)
-            .map(|p: usize| connections.remove(p))
-            .expect("Expected connection to be established before closing.");
-
-        debug_assert_eq!(connections.is_empty(), remaining_established == 0);
-        if connections.is_empty() {
-            self.connected.remove(peer_id);
-        }
-
-        for request_id in connection.pending_outbound_responses {
-            self.pending_events
-                .push_back(NetworkBehaviourAction::GenerateEvent(
-                    RequestResponseEvent::InboundFailure {
-                        peer: *peer_id,
-                        request_id,
-                        error: InboundFailure::ConnectionClosed,
-                    },
-                ));
-        }
-
-        for request_id in connection.pending_inbound_responses {
-            self.pending_events
-                .push_back(NetworkBehaviourAction::GenerateEvent(
-                    RequestResponseEvent::OutboundFailure {
-                        peer: *peer_id,
-                        request_id,
-                        error: OutboundFailure::ConnectionClosed,
-                    },
-                ));
-        }
-    }
-
-    fn inject_dial_failure(
-        &mut self,
-        peer: Option<PeerId>,
-        _: Self::ConnectionHandler,
-        _: &DialError,
-    ) {
-        if let Some(peer) = peer {
-            // If there are pending outgoing requests when a dial failure occurs,
-            // it is implied that we are not connected to the peer, since pending
-            // outgoing requests are drained when a connection is established and
-            // only created when a peer is not connected when a request is made.
-            // Thus these requests must be considered failed, even if there is
-            // another, concurrent dialing attempt ongoing.
-            if let Some(pending) = self.pending_outbound_requests.remove(&peer) {
-                for request in pending {
-                    self.pending_events
-                        .push_back(NetworkBehaviourAction::GenerateEvent(
-                            RequestResponseEvent::OutboundFailure {
-                                peer,
-                                request_id: request.request_id,
-                                error: OutboundFailure::DialFailure,
-                            },
-                        ));
-                }
+            FromSwarm::ConnectionClosed(connection_closed) => {
+                self.on_connection_closed(connection_closed)
             }
+            FromSwarm::AddressChange(address_change) => self.on_address_change(address_change),
+            FromSwarm::DialFailure(dial_failure) => self.on_dial_failure(dial_failure),
+            _ => {},
         }
     }
 
-    fn inject_event(
+    fn on_connection_handler_event(
         &mut self,
-        peer: PeerId,
-        connection: ConnectionId,
-        event: RequestResponseHandlerEvent<TCodec>,
+        peer_id: PeerId,
+        connection_id: ConnectionId,
+        event: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as
+            libp2p_swarm::ConnectionHandler>::OutEvent,
     ) {
         match event {
             RequestResponseHandlerEvent::Response {
                 request_id,
                 response,
             } => {
-                let removed = self.remove_pending_inbound_response(&peer, connection, &request_id);
+                let removed =
+                    self.remove_pending_inbound_response(&peer_id, connection_id, &request_id);
                 debug_assert!(
                     removed,
                     "Expect request_id to be pending before receiving response.",
@@ -736,7 +771,10 @@ where
                 };
                 self.pending_events
                     .push_back(NetworkBehaviourAction::GenerateEvent(
-                        RequestResponseEvent::Message { peer, message },
+                        RequestResponseEvent::Message {
+                            peer: peer_id,
+                            message,
+                        },
                     ));
             }
             RequestResponseHandlerEvent::Request {
@@ -752,10 +790,13 @@ where
                 };
                 self.pending_events
                     .push_back(NetworkBehaviourAction::GenerateEvent(
-                        RequestResponseEvent::Message { peer, message },
+                        RequestResponseEvent::Message {
+                            peer: peer_id,
+                            message,
+                        },
                     ));
 
-                match self.get_connection_mut(&peer, connection) {
+                match self.get_connection_mut(&peer_id, connection_id) {
                     Some(connection) => {
                         let inserted = connection.pending_outbound_responses.insert(request_id);
                         debug_assert!(inserted, "Expect id of new request to be unknown.");
@@ -765,7 +806,7 @@ where
                         self.pending_events
                             .push_back(NetworkBehaviourAction::GenerateEvent(
                                 RequestResponseEvent::InboundFailure {
-                                    peer,
+                                    peer: peer_id,
                                     request_id,
                                     error: InboundFailure::ConnectionClosed,
                                 },
@@ -774,7 +815,8 @@ where
                 }
             }
             RequestResponseHandlerEvent::ResponseSent(request_id) => {
-                let removed = self.remove_pending_outbound_response(&peer, connection, request_id);
+                let removed =
+                    self.remove_pending_outbound_response(&peer_id, connection_id, request_id);
                 debug_assert!(
                     removed,
                     "Expect request_id to be pending before response is sent."
@@ -782,11 +824,15 @@ where
 
                 self.pending_events
                     .push_back(NetworkBehaviourAction::GenerateEvent(
-                        RequestResponseEvent::ResponseSent { peer, request_id },
+                        RequestResponseEvent::ResponseSent {
+                            peer: peer_id,
+                            request_id,
+                        },
                     ));
             }
             RequestResponseHandlerEvent::ResponseOmission(request_id) => {
-                let removed = self.remove_pending_outbound_response(&peer, connection, request_id);
+                let removed =
+                    self.remove_pending_outbound_response(&peer_id, connection_id, request_id);
                 debug_assert!(
                     removed,
                     "Expect request_id to be pending before response is omitted.",
@@ -795,14 +841,15 @@ where
                 self.pending_events
                     .push_back(NetworkBehaviourAction::GenerateEvent(
                         RequestResponseEvent::InboundFailure {
-                            peer,
+                            peer: peer_id,
                             request_id,
                             error: InboundFailure::ResponseOmission,
                         },
                     ));
             }
             RequestResponseHandlerEvent::OutboundTimeout(request_id) => {
-                let removed = self.remove_pending_inbound_response(&peer, connection, &request_id);
+                let removed =
+                    self.remove_pending_inbound_response(&peer_id, connection_id, &request_id);
                 debug_assert!(
                     removed,
                     "Expect request_id to be pending before request times out."
@@ -811,7 +858,7 @@ where
                 self.pending_events
                     .push_back(NetworkBehaviourAction::GenerateEvent(
                         RequestResponseEvent::OutboundFailure {
-                            peer,
+                            peer: peer_id,
                             request_id,
                             error: OutboundFailure::Timeout,
                         },
@@ -822,19 +869,20 @@ where
                 // out to receive the request and for timing out sending the response. In the former
                 // case the request is never added to `pending_outbound_responses` and thus one can
                 // not assert the request_id to be present before removing it.
-                self.remove_pending_outbound_response(&peer, connection, request_id);
+                self.remove_pending_outbound_response(&peer_id, connection_id, request_id);
 
                 self.pending_events
                     .push_back(NetworkBehaviourAction::GenerateEvent(
                         RequestResponseEvent::InboundFailure {
-                            peer,
+                            peer: peer_id,
                             request_id,
                             error: InboundFailure::Timeout,
                         },
                     ));
             }
             RequestResponseHandlerEvent::OutboundUnsupportedProtocols(request_id) => {
-                let removed = self.remove_pending_inbound_response(&peer, connection, &request_id);
+                let removed =
+                    self.remove_pending_inbound_response(&peer_id, connection_id, &request_id);
                 debug_assert!(
                     removed,
                     "Expect request_id to be pending before failing to connect.",
@@ -843,7 +891,7 @@ where
                 self.pending_events
                     .push_back(NetworkBehaviourAction::GenerateEvent(
                         RequestResponseEvent::OutboundFailure {
-                            peer,
+                            peer: peer_id,
                             request_id,
                             error: OutboundFailure::UnsupportedProtocols,
                         },
@@ -856,7 +904,7 @@ where
                 self.pending_events
                     .push_back(NetworkBehaviourAction::GenerateEvent(
                         RequestResponseEvent::InboundFailure {
-                            peer,
+                            peer: peer_id,
                             request_id,
                             error: InboundFailure::UnsupportedProtocols,
                         },
