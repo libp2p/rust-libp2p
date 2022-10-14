@@ -20,24 +20,19 @@
 
 use futures::{channel::oneshot, Future, FutureExt, StreamExt};
 use futures_timer::Delay;
-use libp2p::core::{ConnectedPoint, Endpoint};
-use libp2p::swarm::DialError;
-use libp2p::{
-    development_transport,
-    identity::Keypair,
-    multiaddr::Protocol,
-    swarm::{AddressScore, Swarm, SwarmEvent},
-    Multiaddr, PeerId,
-};
 use libp2p_autonat::{
     Behaviour, Config, Event, InboundProbeError, InboundProbeEvent, ResponseError,
 };
+use libp2p_core::{identity::Keypair, multiaddr::Protocol, Multiaddr, PeerId};
+use libp2p_core::{ConnectedPoint, Endpoint};
+use libp2p_swarm::DialError;
+use libp2p_swarm::{AddressScore, Swarm, SwarmEvent};
 use std::{num::NonZeroU32, time::Duration};
 
 async fn init_swarm(config: Config) -> Swarm<Behaviour> {
     let keypair = Keypair::generate_ed25519();
     let local_id = PeerId::from_public_key(&keypair.public());
-    let transport = development_transport(keypair).await.unwrap();
+    let transport = libp2p::development_transport(keypair).await.unwrap();
     let behaviour = Behaviour::new(local_id, config);
     Swarm::new(transport, behaviour, local_id)
 }

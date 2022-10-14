@@ -23,17 +23,17 @@ use futures::future::FutureExt;
 use futures::io::{AsyncRead, AsyncWrite};
 use futures::stream::StreamExt;
 use futures::task::Spawn;
-use libp2p::core::multiaddr::{Multiaddr, Protocol};
-use libp2p::core::muxing::StreamMuxerBox;
-use libp2p::core::transport::choice::OrTransport;
-use libp2p::core::transport::{Boxed, MemoryTransport, Transport};
-use libp2p::core::PublicKey;
-use libp2p::core::{identity, upgrade, PeerId};
-use libp2p::ping;
-use libp2p::plaintext::PlainText2Config;
-use libp2p::relay::v2::client;
-use libp2p::relay::v2::relay;
-use libp2p::swarm::{AddressScore, NetworkBehaviour, Swarm, SwarmEvent};
+use libp2p_core::multiaddr::{Multiaddr, Protocol};
+use libp2p_core::muxing::StreamMuxerBox;
+use libp2p_core::transport::choice::OrTransport;
+use libp2p_core::transport::{Boxed, MemoryTransport, Transport};
+use libp2p_core::PublicKey;
+use libp2p_core::{identity, upgrade, PeerId};
+use libp2p_ping as ping;
+use libp2p_plaintext::PlainText2Config;
+use libp2p_relay::v2::client;
+use libp2p_relay::v2::relay;
+use libp2p_swarm::{AddressScore, NetworkBehaviour, Swarm, SwarmEvent};
 use std::time::Duration;
 
 #[test]
@@ -338,12 +338,16 @@ where
     transport
         .upgrade(upgrade::Version::V1)
         .authenticate(PlainText2Config { local_public_key })
-        .multiplex(libp2p::yamux::YamuxConfig::default())
+        .multiplex(libp2p_yamux::YamuxConfig::default())
         .boxed()
 }
 
 #[derive(NetworkBehaviour)]
-#[behaviour(out_event = "RelayEvent", event_process = false)]
+#[behaviour(
+    out_event = "RelayEvent",
+    event_process = false,
+    prelude = "libp2p_swarm::derive_prelude"
+)]
 struct Relay {
     relay: relay::Relay,
     ping: ping::Behaviour,
@@ -368,7 +372,11 @@ impl From<ping::Event> for RelayEvent {
 }
 
 #[derive(NetworkBehaviour)]
-#[behaviour(out_event = "ClientEvent", event_process = false)]
+#[behaviour(
+    out_event = "ClientEvent",
+    event_process = false,
+    prelude = "libp2p_swarm::derive_prelude"
+)]
 struct Client {
     relay: client::Client,
     ping: ping::Behaviour,

@@ -29,7 +29,13 @@ void = "1"
 prost-build = "0.11"
 
 [dev-dependencies]
-env_logger = "0.9.0"
-libp2p = { path = "../..", features = ["full"] }
-rand = "0.8"
 clap = { version = "4.0.13", features = ["derive"] }
+env_logger = "0.9.0"
+libp2p-dns = { path = "../../transports/dns" }
+libp2p-noise = { path = "../../transports/noise" }
+libp2p-identify = { path = "../../protocols/identify" }
+libp2p-plaintext = { path = "../../transports/plaintext" }
+libp2p-relay = { path = "../relay" }
+libp2p-tcp = { path = "../../transports/tcp" }
+libp2p-yamux = { path = "../../muxers/yamux" }
+rand = "0.8"

@@ -28,11 +28,11 @@
 
 use clap::Parser;
 use futures::prelude::*;
-use libp2p::autonat;
-use libp2p::identify;
-use libp2p::multiaddr::Protocol;
-use libp2p::swarm::{NetworkBehaviour, Swarm, SwarmEvent};
-use libp2p::{identity, Multiaddr, PeerId};
+use libp2p_autonat as autonat;
+use libp2p_core::multiaddr::Protocol;
+use libp2p_core::{identity, Multiaddr, PeerId};
+use libp2p_identify as identify;
+use libp2p_swarm::{NetworkBehaviour, Swarm, SwarmEvent};
 use std::error::Error;
 use std::net::Ipv4Addr;
 
@@ -74,7 +74,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 }
 
 #[derive(NetworkBehaviour)]
-#[behaviour(out_event = "Event")]
+#[behaviour(out_event = "Event", prelude = "libp2p_swarm::derive_prelude")]
 struct Behaviour {
     identify: identify::Behaviour,
     auto_nat: autonat::Behaviour,

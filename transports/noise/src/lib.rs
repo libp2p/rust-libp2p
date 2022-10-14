@@ -40,8 +40,8 @@
 //!
 //! ```
 //! use libp2p_core::{identity, Transport, upgrade};
-//! use libp2p::tcp::TcpTransport;
-//! use libp2p::noise::{Keypair, X25519Spec, NoiseAuthenticated};
+//! use libp2p_tcp::TcpTransport;
+//! use libp2p_noise::{Keypair, X25519Spec, NoiseAuthenticated};
 //!
 //! # fn main() {
 //! let id_keys = identity::Keypair::generate_ed25519();

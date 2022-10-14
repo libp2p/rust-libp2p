@@ -126,8 +126,8 @@ libp2p-gossipsub = { version = "0.42.1", path = "protocols/gossipsub", optional 
 [dev-dependencies]
 async-std = { version = "1.6.2", features = ["attributes"] }
 async-trait = "0.1"
-env_logger = "0.9.0"
 clap = { version = "4.0.13", features = ["derive"] }
+env_logger = "0.9.0"
 tokio = { version = "1.15", features = ["io-util", "io-std", "macros", "rt", "rt-multi-thread"] }
 
 [workspace]
@@ -168,36 +168,36 @@ members = [
 
 [[example]]
 name = "chat"
-required-features = ["full"]
+required-features = []
 
 [[example]]
 name = "chat-tokio"
-required-features = ["full"]
+required-features = []
 
 [[example]]
 name = "file-sharing"
-required-features = ["full"]
+required-features = []
 
 [[example]]
 name = "gossipsub-chat"
-required-features = ["full"]
+required-features = []
 
 [[example]]
 name = "ipfs-private"
-required-features = ["full"]
+required-features = []
 
 [[example]]
 name = "ipfs-kad"
-required-features = ["full"]
+required-features = []
 
 [[example]]
 name = "ping"
-required-features = ["full"]
+required-features = []
 
 [[example]]
 name = "mdns-passive-discovery"
-required-features = ["full"]
+required-features = []
 
 [[example]]
 name = "distributed-key-value-store"
-required-features = ["full"]
+required-features = []

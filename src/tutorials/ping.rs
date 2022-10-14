@@ -175,7 +175,7 @@
 //!
 //! ```rust
 //! use libp2p::{identity, PeerId, ping};
-//! use libp2p::swarm::Swarm;
+//! use libp2p_swarm::Swarm;
 //! use std::error::Error;
 //!
 //! #[async_std::main]
@@ -227,7 +227,7 @@
 //!
 //! ```rust
 //! use libp2p::{identity, Multiaddr, PeerId, ping};
-//! use libp2p::swarm::{Swarm, dial_opts::DialOpts};
+//! use libp2p_swarm::{Swarm, dial_opts::DialOpts};
 //! use std::error::Error;
 //!
 //! #[async_std::main]
@@ -271,7 +271,7 @@
 //!
 //! ```no_run
 //! use futures::prelude::*;
-//! use libp2p::swarm::{Swarm, SwarmEvent, dial_opts::DialOpts};
+//! use libp2p_swarm::{Swarm, SwarmEvent, dial_opts::DialOpts};
 //! use libp2p::{identity, Multiaddr, PeerId, ping};
 //! use std::error::Error;
 //!
