@@ -8,12 +8,12 @@ documentation will refer to `X.Y.Z` as _major_, _minor_ and _patch_ version.
 - Every substantial pull request should add an entry to the `[unreleased]`
   section of the corresponding crate `CHANGELOG.md` file. See
   [#1698](https://github.com/libp2p/rust-libp2p/pull/1698/files) as an example.
-  
-  In case there is no `[unreleased]` section yet, create one with an increased
-  major, minor or patch version depending on your change. In addition update the
-  version in the crate's `Cargo.toml` as well as the corresponding entry of the
-  crate in the root level `Cargo.toml`.
 
+  In case there is no `[unreleased]` section yet, create one with an increased
+  major, minor or patch version depending on your change. Update the version in
+  the crate's `Cargo.toml`. In addition update the corresponding entry of the
+  crate in the root level `Cargo.toml` and add an entry in the root level
+  `CHANGELOG.md`.
 
 ## Releasing one or more crates
 
