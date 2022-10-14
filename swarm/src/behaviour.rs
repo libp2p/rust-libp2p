@@ -892,6 +892,7 @@ pub enum FromSwarm<'a, Handler: IntoConnectionHandler> {
 }
 
 /// [`FromSwarm`] variant that informs the behaviour about a newly established connection to a peer.
+#[derive(Clone, Copy)]
 pub struct ConnectionEstablished<'a> {
     pub peer_id: PeerId,
     pub connection_id: ConnectionId,
