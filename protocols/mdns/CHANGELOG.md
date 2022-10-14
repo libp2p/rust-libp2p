@@ -1,4 +1,4 @@
-# 0.41.0 [unreleased]
+# 0.41.0
 
 - Remove default features. If you previously depended on `async-io` you need to enable this explicitly now. See [PR 2918].
 
