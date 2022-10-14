@@ -636,25 +636,12 @@ mod test {
         );
     }
 
-    #[cfg(feature = "tokio")]
-    #[tokio::test]
-    async fn tokio_close_listener() {
-        let keypair = libp2p_core::identity::Keypair::generate_ed25519();
-        let config = Config::new(&keypair);
-        let transport = crate::tokio::Transport::new(config.clone());
-        test_close_listener(transport).await
-    }
-
     #[cfg(feature = "async-std")]
     #[async_std::test]
-    async fn async_std_close_listener() {
+    async fn test_close_listener() {
         let keypair = libp2p_core::identity::Keypair::generate_ed25519();
         let config = Config::new(&keypair);
-        let transport = crate::async_std::Transport::new(config.clone());
-        test_close_listener(transport).await
-    }
-
-    async fn test_close_listener<P: Provider>(mut transport: GenTransport<P>) {
+        let mut transport = crate::async_std::Transport::new(config);
         assert!(poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx))
             .now_or_never()
             .is_none());
@@ -716,5 +703,56 @@ mod test {
             })
             .await;
         }
+    }
+
+    #[cfg(feature = "tokio")]
+    #[tokio::test]
+    async fn test_dialer_drop() {
+        let keypair = libp2p_core::identity::Keypair::generate_ed25519();
+        let config = Config::new(&keypair);
+        let mut transport = crate::async_std::Transport::new(config);
+
+        let _dial = transport
+            .dial("/ip4/123.45.67.8/udp/1234/quic".parse().unwrap())
+            .unwrap();
+
+        // Expect a dialer and its background task to exist.
+        let mut channel = transport
+            .dialer
+            .get(&SocketFamily::Ipv4)
+            .unwrap()
+            .endpoint_channel
+            .clone();
+        assert!(!transport.dialer.contains_key(&SocketFamily::Ipv6));
+
+        // Send dummy dial to check that the endpoint driver is running.
+        poll_fn(|cx| {
+            let (tx, _) = oneshot::channel();
+            let _ = channel
+                .try_send(
+                    ToEndpoint::Dial {
+                        addr: SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0),
+                        result: tx,
+                    },
+                    cx,
+                )
+                .unwrap();
+            Poll::Ready(())
+        })
+        .await;
+
+        // Start listening so that the dialer and driver are dropped.
+        let _ = transport
+            .listen_on("/ip4/0.0.0.0/udp/0/quic".parse().unwrap())
+            .unwrap();
+        assert!(!transport.dialer.contains_key(&SocketFamily::Ipv4));
+
+        // Check that the [`EndpointDriver`] has shut down.
+        Delay::new(Duration::from_millis(10)).await;
+        poll_fn(|cx| {
+            assert!(channel.try_send(ToEndpoint::Decoupled, cx).is_err());
+            Poll::Ready(())
+        })
+        .await;
     }
 }
