@@ -505,6 +505,10 @@ impl<P: Provider> EndpointDriver<P> {
                         }
                         Err(err) if err.is_full() => {
                             // Connection is too busy. Drop the datagram to back-pressure the remote.
+                            log::debug!(
+                                "Dropping {:?} because the connection's channel is full.",
+                                err.into_inner()
+                            );
                         }
                         Err(_) => unreachable!("Error is either `Full` or `Disconnected`."),
                     }
@@ -519,9 +523,7 @@ impl<P: Provider> EndpointDriver<P> {
                 let connection_tx = match self.new_connection_tx.as_mut() {
                     Some(tx) => tx,
                     None => {
-                        log::warn!(
-                            "Endpoint reported a new connection even though server capabilities are disabled."
-                        );
+                        debug_assert!(false, "Endpoint reported a new connection even though server capabilities are disabled.");
                         return ControlFlow::Continue(());
                     }
                 };
