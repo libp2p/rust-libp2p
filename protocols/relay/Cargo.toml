@@ -36,4 +36,4 @@ prost-build = "0.11"
 env_logger = "0.9.0"
 libp2p = { path = "../..", features = ["full"] }
 quickcheck = { package = "quickcheck-ext", path = "../../misc/quickcheck-ext" }
-clap = {version = "3.1.6", features = ["derive"]}
+clap = { version = "4.0.13", features = ["derive"] }
