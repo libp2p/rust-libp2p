@@ -1,13 +1,27 @@
+use prometheus_client::encoding::text::Encode;
 use libp2p_core::multiaddr::{Multiaddr,Protocol};
-use itertools::Itertools;//TODO: replace with std intersperse when that's stable
+
+#[derive(Encode, Hash, Clone, Eq, PartialEq)]
+pub struct Label {
+    address_stack: String
+}
+
+pub fn create_label(ma: &Multiaddr) -> Label {
+    // Has potential to allocate multiple times, but this line expresses the intent here.
+    //  std::iter::once("/").chain(ma.iter().map(tag).intersperse("/")).collect()
+    let len = ma.iter().fold(0, |acc,proto|acc+tag(proto).len()+1);
+    let mut result = String::with_capacity(len);
+    for proto_tag in ma.iter().map(tag) {
+        result.push('/');
+        result.push_str(proto_tag);
+    }
+    Label{ address_stack: result }
+}
 
 //TODO: remove most/all of this file and replace with calls to Multiaddr::protocol_stack
 //  once that lands : https://github.com/multiformats/rust-multiaddr/pull/60
-
-pub(crate) fn protocol_stack(ma: &Multiaddr) -> String {
-    ma.iter().map(tag).intersperse("/").collect()
-}
-
+// In the meantime there is no _ case in the match so one can easily detect mismatch in supported
+//  protocols when dependency version changes.
 pub fn tag(proto: Protocol) -> &'static str {
     use Protocol::*;
     match proto {
@@ -40,5 +54,21 @@ pub fn tag(proto: Protocol) -> &'static str {
         Ws(_) => "x-parity-ws",
         Wss(ref s) if s == "/" => "wss",
         Wss(_) => "x-parity-wss",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ip6_tcp_wss_p2p() {
+        let ma = Multiaddr::try_from("/ip6/2001:8a0:7ac5:4201:3ac9:86ff:fe31:7095/tcp/8000/wss/p2p/QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC").expect("testbad");
+        let actual = create_label(&ma);
+        assert_eq!(actual.address_stack,"/ip6/tcp/wss/p2p");
+        let mut buf = Vec::new();
+        actual.encode(&mut buf).expect("encode failed");
+        let actual = String::from_utf8(buf).expect("invalid utf-8?");
+        assert_eq!(actual, "address_stack=\"/ip6/tcp/wss/p2p\"");
     }
 }
