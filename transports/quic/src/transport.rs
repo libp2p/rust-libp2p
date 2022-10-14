@@ -142,28 +142,30 @@ impl<P: Provider> Transport for GenTransport<P> {
             })
             .collect::<Vec<_>>();
 
-        let dialing = if !listeners.is_empty() {
-            // Pick any listener to use for dialing.
-            // We hash the socket address to achieve determinism.
-            let mut hasher = DefaultHasher::new();
-            socket_addr.hash(&mut hasher);
-            let index = hasher.finish() as usize % listeners.len();
-            listeners[index]
-                .dialer_state
-                .new_dial(socket_addr, self.handshake_timeout)
-        } else {
-            // No listener? Get or create an explicit dialer.
-            let socket_family = socket_addr.ip().into();
-            let dialer = match self.dialer.entry(socket_family) {
-                Entry::Occupied(occupied) => occupied.into_mut(),
-                Entry::Vacant(vacant) => {
-                    vacant.insert(Dialer::new::<P>(self.quinn_config.clone(), socket_family)?)
-                }
-            };
-            dialer.state.new_dial(socket_addr, self.handshake_timeout)
+        let dialer_state = match listeners.len() {
+            0 => {
+                // No listener. Get or create an explicit dialer.
+                let socket_family = socket_addr.ip().into();
+                let dialer = match self.dialer.entry(socket_family) {
+                    Entry::Occupied(occupied) => occupied.into_mut(),
+                    Entry::Vacant(vacant) => {
+                        vacant.insert(Dialer::new::<P>(self.quinn_config.clone(), socket_family)?)
+                    }
+                };
+                &mut dialer.state
+            }
+            1 => &mut listeners[0].dialer_state,
+            _ => {
+                // Pick any listener to use for dialing.
+                // We hash the socket address to achieve determinism.
+                let mut hasher = DefaultHasher::new();
+                socket_addr.hash(&mut hasher);
+                let index = hasher.finish() as usize % listeners.len();
+                &mut listeners[index].dialer_state
+            }
         };
 
-        Ok(dialing)
+        Ok(dialer_state.new_dial(socket_addr, self.handshake_timeout))
     }
 
     fn dial_as_listener(
