@@ -145,7 +145,7 @@ multiaddr = { version = "0.15.0", git = "https://github.com/multiformats/rust-mu
 async-std = { version = "1.6.2", features = ["attributes"] }
 async-trait = "0.1"
 env_logger = "0.9.0"
-clap = { version = "3.1.6", features = ["derive"] }
+clap = { version = "4.0.13", features = ["derive"] }
 tokio = { version = "1.15", features = ["io-util", "io-std", "macros", "rt", "rt-multi-thread"] }
 
 [workspace]
