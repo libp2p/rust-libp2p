@@ -567,6 +567,7 @@ mod test {
     #[cfg(feature = "async-std")]
     use async_std_crate as async_std;
     use futures::future::poll_fn;
+    use futures_timer::Delay;
     use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
     #[cfg(feature = "tokio")]
     use tokio_crate as tokio;
@@ -661,15 +662,25 @@ mod test {
         // Run test twice to check that there is no unexpected behaviour if `Transport.listener`
         // is temporarily empty.
         for _ in 0..2 {
-            let listener = transport
+            let id = transport
                 .listen_on("/ip4/0.0.0.0/udp/0/quic".parse().unwrap())
                 .unwrap();
+
+            // Copy channel to use it later.
+            let mut channel = transport
+                .listeners
+                .iter()
+                .next()
+                .unwrap()
+                .endpoint_channel
+                .clone();
+
             match poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx)).await {
                 TransportEvent::NewAddress {
                     listener_id,
                     listen_addr,
                 } => {
-                    assert_eq!(listener_id, listener);
+                    assert_eq!(listener_id, id);
                     assert!(
                         matches!(listen_addr.iter().next(), Some(Protocol::Ip4(a)) if !a.is_unspecified())
                     );
@@ -680,16 +691,13 @@ mod test {
                 }
                 e => panic!("Unexpected event: {:?}", e),
             }
-            assert!(
-                transport.remove_listener(listener),
-                "Expect listener to exist."
-            );
+            assert!(transport.remove_listener(id), "Expect listener to exist.");
             match poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx)).await {
                 TransportEvent::ListenerClosed {
                     listener_id,
                     reason: Ok(()),
                 } => {
-                    assert_eq!(listener_id, listener);
+                    assert_eq!(listener_id, id);
                 }
                 e => panic!("Unexpected event: {:?}", e),
             }
@@ -699,6 +707,14 @@ mod test {
                 .now_or_never()
                 .is_none());
             assert!(transport.listeners.is_empty());
+
+            // Check that the [`EndpointDriver`] has shut down.
+            Delay::new(Duration::from_millis(10)).await;
+            poll_fn(|cx| {
+                assert!(channel.try_send(ToEndpoint::Decoupled, cx).is_err());
+                Poll::Ready(())
+            })
+            .await;
         }
     }
 }

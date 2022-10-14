@@ -248,7 +248,7 @@ impl Channel {
     }
 }
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, thiserror::Error, Clone, PartialEq, Eq)]
 #[error("Background task disconnected")]
 pub struct Disconnected {}
 
