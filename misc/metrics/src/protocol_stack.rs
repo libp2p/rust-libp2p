@@ -1,6 +1,16 @@
 use prometheus_client::encoding::text::Encode;
 use libp2p_core::multiaddr::{Multiaddr,Protocol};
 
+#[derive(Encode, Hash, Clone, Eq, PartialEq)]
+pub struct Label {
+    address_stack: String
+}
+impl Label {
+    pub fn for_multi_address(ma: &Multiaddr) -> Self {
+        Self { address_stack: ma.protocol_stack() }
+    }
+}
+
 //TODO: remove this trait and tag() and replace with calls to the upstream method
 //  once that lands : https://github.com/multiformats/rust-multiaddr/pull/60
 // In the meantime there is no _ case in the match so one can easily detect mismatch in supported
@@ -19,21 +29,6 @@ impl MultiaddrExt for Multiaddr {
             result.push_str(proto_tag);
         }
         result
-    }
-}
-
-#[derive(Encode, Hash, Clone, Eq, PartialEq)]
-pub struct Label {
-    address_stack: String
-}
-impl From<Multiaddr> for Label {
-    fn from(ma: Multiaddr) -> Self {
-       Self:: from(&ma)
-    }
-}
-impl From<&Multiaddr> for Label {
-     fn from(ma: &Multiaddr) -> Self {
-        Self { address_stack: ma.protocol_stack() }
     }
 }
 
@@ -79,7 +74,7 @@ mod tests {
     #[test]
     fn ip6_tcp_wss_p2p() {
         let ma = Multiaddr::try_from("/ip6/2001:8a0:7ac5:4201:3ac9:86ff:fe31:7095/tcp/8000/wss/p2p/QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC").expect("testbad");
-        let actual : Label = ma.into();
+        let actual = Label::for_multi_address(&ma);
         assert_eq!(actual.address_stack,"/ip6/tcp/wss/p2p");
         let mut buf = Vec::new();
         actual.encode(&mut buf).expect("encode failed");
