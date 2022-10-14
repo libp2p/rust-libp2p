@@ -58,7 +58,7 @@ pub use libp2p_deflate as deflate;
 #[cfg_attr(docsrs, doc(cfg(feature = "dns")))]
 #[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
 #[doc(inline)]
-pub use libp2p_dns::*;
+pub use libp2p_dns as dns;
 #[cfg(feature = "floodsub")]
 #[cfg_attr(docsrs, doc(cfg(feature = "floodsub")))]
 #[doc(inline)]
@@ -80,7 +80,7 @@ pub use libp2p_kad as kad;
 #[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
 #[cfg_attr(docsrs, doc(cfg(feature = "mdns")))]
 #[doc(inline)]
-pub use libp2p_mdns::*;
+pub use libp2p_mdns as mdns;
 #[cfg(feature = "metrics")]
 #[cfg_attr(docsrs, doc(cfg(feature = "metrics")))]
 #[doc(inline)]
@@ -123,7 +123,7 @@ pub use libp2p_swarm as swarm;
 #[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
 #[cfg_attr(docsrs, doc(cfg(feature = "tcp")))]
 #[doc(inline)]
-pub use libp2p_tcp::*;
+pub use libp2p_tcp as tcp;
 #[cfg(feature = "uds")]
 #[cfg_attr(docsrs, doc(cfg(feature = "uds")))]
 #[doc(inline)]
