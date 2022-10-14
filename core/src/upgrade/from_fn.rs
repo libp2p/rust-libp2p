@@ -70,8 +70,7 @@ pub struct FromFnUpgrade<F> {
     fun: F,
 }
 
-impl<F> UpgradeInfo for FromFnUpgrade<F>
-{
+impl<F> UpgradeInfo for FromFnUpgrade<F> {
     type InfoIter = iter::Once<ProtocolName>;
 
     fn protocol_info(&self) -> Self::InfoIter {

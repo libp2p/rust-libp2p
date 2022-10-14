@@ -22,7 +22,7 @@ use crate::muxing::StreamMuxerEvent;
 use crate::{
     muxing::StreamMuxer,
     transport::{ListenerId, Transport, TransportError, TransportEvent},
-    Multiaddr, ProtocolName,
+    Multiaddr,
 };
 use futures::{
     io::{IoSlice, IoSliceMut},
@@ -310,20 +310,6 @@ where
     }
 }
 
-#[derive(Debug, Clone)]
-pub enum EitherName {
-    A(ProtocolName),
-    B(ProtocolName),
-}
-
-impl EitherName {
-    fn protocol_name(&self) -> &str {
-        match self {
-            EitherName::A(a) => a.protocol_name(),
-            EitherName::B(b) => b.protocol_name(),
-        }
-    }
-}
 #[pin_project(project = EitherTransportProj)]
 #[derive(Debug)]
 #[must_use = "transports do nothing unless polled"]

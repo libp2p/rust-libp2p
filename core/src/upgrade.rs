@@ -135,21 +135,26 @@ pub use multistream_select::{NegotiatedComplete, NegotiationError, ProtocolError
 //     }
 // }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProtocolName(Cow<'static, str>);
 
 impl ProtocolName {
     fn protocol_name(&self) -> &str {
-	self.0.as_ref()
+        self.0.as_ref()
     }
 }
 
 impl AsRef<str> for ProtocolName {
     fn as_ref(&self) -> &str {
-	self.0.as_ref()
+        self.0.as_ref()
     }
 }
 
-
+impl AsRef<[u8]> for ProtocolName {
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_ref().as_bytes()
+    }
+}
 
 /// Common trait for upgrades that can be applied on inbound substreams, outbound substreams,
 /// or both.

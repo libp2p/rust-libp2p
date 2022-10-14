@@ -19,8 +19,9 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
-    either::{EitherError, EitherFuture2, EitherName, EitherOutput},
+    either::{EitherError, EitherFuture2, EitherOutput},
     upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo},
+    ProtocolName,
 };
 
 /// Upgrade that combines two upgrades into one. Supports all the protocols supported by either
@@ -44,16 +45,16 @@ where
     A: UpgradeInfo,
     B: UpgradeInfo,
 {
-    type InfoIter = InfoIterChain<
+    type InfoIter = std::iter::Chain<
         <A::InfoIter as IntoIterator>::IntoIter,
         <B::InfoIter as IntoIterator>::IntoIter,
     >;
 
     fn protocol_info(&self) -> Self::InfoIter {
-        InfoIterChain(
-            self.0.protocol_info().into_iter(),
-            self.1.protocol_info().into_iter(),
-        )
+        self.0
+            .protocol_info()
+            .into_iter()
+            .chain(self.1.protocol_info().into_iter())
     }
 }
 
@@ -66,11 +67,26 @@ where
     type Error = EitherError<EA, EB>;
     type Future = EitherFuture2<A::Future, B::Future>;
 
-    fn upgrade_inbound(self, sock: C, info: EitherName) -> Self::Future {
-        match info {
-            EitherName::A(info) => EitherFuture2::A(self.0.upgrade_inbound(sock, info)),
-            EitherName::B(info) => EitherFuture2::B(self.1.upgrade_inbound(sock, info)),
+    fn upgrade_inbound(self, sock: C, info: ProtocolName) -> Self::Future {
+        if self
+            .0
+            .protocol_info()
+            .into_iter()
+            .any(|candidate| candidate == info)
+        {
+            return EitherFuture2::A(self.0.upgrade_inbound(sock, info));
         }
+
+        if self
+            .1
+            .protocol_info()
+            .into_iter()
+            .any(|candidate| candidate == info)
+        {
+            return EitherFuture2::B(self.1.upgrade_inbound(sock, info));
+        }
+
+        unreachable!("selected protocol must be suppored by one of the upgrades")
     }
 }
 
@@ -83,39 +99,25 @@ where
     type Error = EitherError<EA, EB>;
     type Future = EitherFuture2<A::Future, B::Future>;
 
-    fn upgrade_outbound(self, sock: C, info: EitherName) -> Self::Future {
-        match info {
-            EitherName::A(info) => EitherFuture2::A(self.0.upgrade_outbound(sock, info)),
-            EitherName::B(info) => EitherFuture2::B(self.1.upgrade_outbound(sock, info)),
+    fn upgrade_outbound(self, sock: C, info: ProtocolName) -> Self::Future {
+        if self
+            .0
+            .protocol_info()
+            .into_iter()
+            .any(|candidate| candidate == info)
+        {
+            return EitherFuture2::A(self.0.upgrade_outbound(sock, info));
         }
-    }
-}
 
-/// Iterator that combines the protocol names of twp upgrades.
-#[derive(Debug, Clone)]
-pub struct InfoIterChain<A, B>(A, B);
-
-impl<A, B> Iterator for InfoIterChain<A, B>
-where
-    A: Iterator,
-    B: Iterator,
-{
-    type Item = EitherName;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if let Some(info) = self.0.next() {
-            return Some(EitherName::A(info));
+        if self
+            .1
+            .protocol_info()
+            .into_iter()
+            .any(|candidate| candidate == info)
+        {
+            return EitherFuture2::B(self.1.upgrade_outbound(sock, info));
         }
-        if let Some(info) = self.1.next() {
-            return Some(EitherName::B(info));
-        }
-        None
-    }
 
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        let (min1, max1) = self.0.size_hint();
-        let (min2, max2) = self.1.size_hint();
-        let max = max1.and_then(move |m1| max2.and_then(move |m2| m1.checked_add(m2)));
-        (min1.saturating_add(min2), max)
+        unreachable!("selected protocol must be suppored by one of the upgrades")
     }
 }

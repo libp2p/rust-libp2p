@@ -36,8 +36,7 @@ impl ReadyUpgrade {
     }
 }
 
-impl UpgradeInfo for ReadyUpgrade
-{
+impl UpgradeInfo for ReadyUpgrade {
     type InfoIter = iter::Once<ProtocolName>;
 
     fn protocol_info(&self) -> Self::InfoIter {
@@ -45,8 +44,7 @@ impl UpgradeInfo for ReadyUpgrade
     }
 }
 
-impl<C> InboundUpgrade<C> for ReadyUpgrade
-{
+impl<C> InboundUpgrade<C> for ReadyUpgrade {
     type Output = C;
     type Error = Void;
     type Future = future::Ready<Result<Self::Output, Self::Error>>;
@@ -56,8 +54,7 @@ impl<C> InboundUpgrade<C> for ReadyUpgrade
     }
 }
 
-impl<C> OutboundUpgrade<C> for ReadyUpgrade
-{
+impl<C> OutboundUpgrade<C> for ReadyUpgrade {
     type Output = C;
     type Error = Void;
     type Future = future::Ready<Result<Self::Output, Self::Error>>;

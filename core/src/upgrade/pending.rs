@@ -37,8 +37,7 @@ impl PendingUpgrade {
     }
 }
 
-impl UpgradeInfo for PendingUpgrade
-{
+impl UpgradeInfo for PendingUpgrade {
     type InfoIter = iter::Once<ProtocolName>;
 
     fn protocol_info(&self) -> Self::InfoIter {
@@ -46,8 +45,7 @@ impl UpgradeInfo for PendingUpgrade
     }
 }
 
-impl<C> InboundUpgrade<C> for PendingUpgrade
-{
+impl<C> InboundUpgrade<C> for PendingUpgrade {
     type Output = Void;
     type Error = Void;
     type Future = future::Pending<Result<Self::Output, Self::Error>>;
@@ -57,8 +55,7 @@ impl<C> InboundUpgrade<C> for PendingUpgrade
     }
 }
 
-impl<C> OutboundUpgrade<C> for PendingUpgrade
-{
+impl<C> OutboundUpgrade<C> for PendingUpgrade {
     type Output = Void;
     type Error = Void;
     type Future = future::Pending<Result<Self::Output, Self::Error>>;

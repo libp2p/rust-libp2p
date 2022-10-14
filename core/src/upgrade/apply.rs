@@ -23,7 +23,7 @@ use crate::{connection::ConnectedPoint, Negotiated};
 use futures::{future::Either, prelude::*};
 use log::debug;
 use multistream_select::{self, DialerSelectFuture, ListenerSelectFuture};
-use std::{iter, mem, pin::Pin, task::Context, task::Poll};
+use std::{mem, pin::Pin, task::Context, task::Poll};
 
 pub use multistream_select::Version;
 
@@ -53,10 +53,7 @@ where
     C: AsyncRead + AsyncWrite + Unpin,
     U: InboundUpgrade<Negotiated<C>>,
 {
-    let iter = up
-        .protocol_info()
-        .into_iter()
-        .map(NameWrap as fn(_) -> NameWrap<_>);
+    let iter = up.protocol_info().into_iter();
     let future = multistream_select::listener_select_proto(conn, iter);
     InboundUpgradeApply {
         inner: InboundUpgradeApplyState::Init {
@@ -72,10 +69,7 @@ where
     C: AsyncRead + AsyncWrite + Unpin,
     U: OutboundUpgrade<Negotiated<C>>,
 {
-    let iter = up
-        .protocol_info()
-        .into_iter()
-        .map(NameWrap as fn(_) -> NameWrap<_>);
+    let iter = up.protocol_info().into_iter();
     let future = multistream_select::dialer_select_proto(conn, iter, v);
     OutboundUpgradeApply {
         inner: OutboundUpgradeApplyState::Init {
@@ -100,7 +94,7 @@ where
     U: InboundUpgrade<Negotiated<C>>,
 {
     Init {
-        future: ListenerSelectFuture<C, NameWrap<ProtocolName>>,
+        future: ListenerSelectFuture<C, ProtocolName>,
         upgrade: U,
     },
     Upgrade {
@@ -138,7 +132,7 @@ where
                         }
                     };
                     self.inner = InboundUpgradeApplyState::Upgrade {
-                        future: Box::pin(upgrade.upgrade_inbound(io, info.0)),
+                        future: Box::pin(upgrade.upgrade_inbound(io, info)),
                     };
                 }
                 InboundUpgradeApplyState::Upgrade { mut future } => {
@@ -180,7 +174,7 @@ where
     U: OutboundUpgrade<Negotiated<C>>,
 {
     Init {
-        future: DialerSelectFuture<C, NameWrapIter<<U::InfoIter as IntoIterator>::IntoIter>>,
+        future: DialerSelectFuture<C, <U::InfoIter as IntoIterator>::IntoIter>,
         upgrade: U,
     },
     Upgrade {
@@ -218,7 +212,7 @@ where
                         }
                     };
                     self.inner = OutboundUpgradeApplyState::Upgrade {
-                        future: Box::pin(upgrade.upgrade_outbound(connection, info.0)),
+                        future: Box::pin(upgrade.upgrade_outbound(connection, info)),
                     };
                 }
                 OutboundUpgradeApplyState::Upgrade { mut future } => {
@@ -242,17 +236,5 @@ where
                 }
             }
         }
-    }
-}
-
-type NameWrapIter<I> = iter::Map<I, fn(<I as Iterator>::Item) -> NameWrap<<I as Iterator>::Item>>;
-
-/// Wrapper type to expose an `AsRef<[u8]>` impl for all types implementing `ProtocolName`.
-#[derive(Clone)]
-struct NameWrap<N>(N);
-
-impl<N> AsRef<[u8]> for NameWrap<N> {
-    fn as_ref(&self) -> &[u8] {
-        self.0.protocol_name().as_bytes()
     }
 }
