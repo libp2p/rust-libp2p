@@ -568,3 +568,35 @@ async fn ipv4_dial_ipv6() {
         }
     }
 }
+
+#[cfg(feature = "async-std")]
+#[async_std::test]
+async fn wrong_peerod() {
+    use libp2p::PeerId;
+
+    let _ = env_logger::try_init();
+    let mut swarm_a = create_swarm::<quic::async_std::Provider>().await;
+    let mut swarm_b = create_swarm::<quic::async_std::Provider>().await;
+
+    let a_addr = start_listening(&mut swarm_a, "/ip6/::1/udp/0/quic").await;
+    let a_id = *swarm_a.local_peer_id();
+
+    let wrong_id = PeerId::random();
+    let dial_ops = DialOpts::peer_id(wrong_id).addresses(vec![a_addr]).build();
+    swarm_b.dial(dial_ops).unwrap();
+
+    loop {
+        select! {
+            _ = swarm_a.select_next_some() => {},
+            ev = swarm_b.select_next_some() => match ev {
+                SwarmEvent::Dialing(peer_id) => assert_eq!(peer_id, wrong_id),
+                SwarmEvent::OutgoingConnectionError {peer_id: Some(peer_id), error: DialError::WrongPeerId { obtained, .. }} => {
+                    assert_eq!(peer_id, wrong_id);
+                    assert_eq!(obtained, a_id);
+                    break;
+                },
+                e => panic!("{:?}", e),
+            }
+        }
+    }
+}
