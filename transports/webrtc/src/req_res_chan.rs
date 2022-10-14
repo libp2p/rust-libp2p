@@ -1,9 +1,12 @@
-use futures::channel::mpsc;
-use futures::channel::oneshot;
-use futures::SinkExt;
+use futures::{
+    channel::{mpsc, oneshot},
+    SinkExt,
+};
 use futures_lite::StreamExt;
-use std::io;
-use std::task::{Context, Poll};
+use std::{
+    io,
+    task::{Context, Poll},
+};
 
 pub fn new<Req, Res>(capacity: usize) -> (Sender<Req, Res>, Receiver<Req, Res>) {
     let (sender, receiver) = mpsc::channel(capacity);

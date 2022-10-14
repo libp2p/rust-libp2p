@@ -20,17 +20,12 @@
 
 mod noise;
 
-use crate::error::Error;
-use crate::fingerprint::Fingerprint;
-use crate::substream::Substream;
-use crate::{sdp, Connection};
 use futures::channel::oneshot;
 use futures::future::Either;
 use futures_timer::Delay;
 use libp2p_core::{identity, PeerId};
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
-use std::{net::SocketAddr, sync::Arc, time::Duration};
 use webrtc::api::setting_engine::SettingEngine;
 use webrtc::api::APIBuilder;
 use webrtc::data::data_channel::DataChannel;
@@ -41,6 +36,13 @@ use webrtc::ice::udp_mux::UDPMux;
 use webrtc::ice::udp_network::UDPNetwork;
 use webrtc::peer_connection::configuration::RTCConfiguration;
 use webrtc::peer_connection::RTCPeerConnection;
+
+use std::{net::SocketAddr, sync::Arc, time::Duration};
+
+use crate::error::Error;
+use crate::fingerprint::Fingerprint;
+use crate::substream::Substream;
+use crate::{sdp, Connection};
 
 /// Creates a new outbound WebRTC connection.
 pub async fn outbound(

@@ -19,7 +19,12 @@
 // DEALINGS IN THE SOFTWARE.
 
 use async_trait::async_trait;
-use futures::StreamExt;
+use futures::{
+    channel::oneshot,
+    future::{BoxFuture, FutureExt, OptionFuture},
+    stream::FuturesUnordered,
+    StreamExt,
+};
 use stun::{
     attributes::ATTR_USERNAME,
     message::{is_message as is_stun_message, Message as STUNMessage},
@@ -30,10 +35,6 @@ use tokio_crate as tokio;
 use webrtc::ice::udp_mux::{UDPMux, UDPMuxConn, UDPMuxConnParams, UDPMuxWriter};
 use webrtc::util::{Conn, Error};
 
-use crate::req_res_chan;
-use futures::channel::oneshot;
-use futures::future::{BoxFuture, FutureExt, OptionFuture};
-use futures::stream::FuturesUnordered;
 use std::{
     collections::{HashMap, HashSet},
     io,
@@ -42,6 +43,8 @@ use std::{
     sync::Arc,
     task::{Context, Poll},
 };
+
+use crate::req_res_chan;
 
 const RECEIVE_MTU: usize = 8192;
 
@@ -184,6 +187,7 @@ impl UDPMuxNewAddr {
     /// muxed connection.
     pub fn poll(&mut self, cx: &mut Context) -> Poll<UDPMuxEvent> {
         loop {
+            // => Send data to target
             match self.send_buffer.take() {
                 None => {
                     if let Poll::Ready(Some(((buf, target), response))) =
@@ -206,6 +210,7 @@ impl UDPMuxNewAddr {
                 }
             }
 
+            // => Register a new connection
             if let Poll::Ready(Some(((conn, addr), response))) =
                 self.registration_command.poll_next(cx)
             {
@@ -229,6 +234,7 @@ impl UDPMuxNewAddr {
                 continue;
             }
 
+            // => Get connection with the given ufrag
             if let Poll::Ready(Some((ufrag, response))) = self.get_conn_command.poll_next(cx) {
                 if self.is_closed {
                     let _ = response.send(Err(Error::ErrUseClosedNetworkConn));
@@ -266,6 +272,7 @@ impl UDPMuxNewAddr {
                 continue;
             }
 
+            // => Close UDPMux
             if let Poll::Ready(Some(((), response))) = self.close_command.poll_next(cx) {
                 if self.is_closed {
                     let _ = response.send(Err(Error::ErrAlreadyClosed));
@@ -291,6 +298,7 @@ impl UDPMuxNewAddr {
                 continue;
             }
 
+            // => Remove connection with the given ufrag
             if let Poll::Ready(Some((ufrag, response))) = self.remove_conn_command.poll_next(cx) {
                 // Pion's ice implementation has both `RemoveConnByFrag` and `RemoveConn`, but since `conns`
                 // is keyed on `ufrag` their implementation is equivalent.
@@ -306,8 +314,10 @@ impl UDPMuxNewAddr {
                 continue;
             }
 
+            // => Remove closed connections
             let _ = self.close_futures.poll_next_unpin(cx);
 
+            // => Write previously received data to local connections
             match self.write_future.poll_unpin(cx) {
                 Poll::Ready(Some(())) => {
                     self.write_future = OptionFuture::default();
@@ -402,6 +412,8 @@ impl UDPMuxNewAddr {
     }
 }
 
+/// Handle which utilizes [`req_res_chan`] to transmit commands (e.g. remove connection) from the
+/// WebRTC ICE agent to [`UDPMuxNewAddr::poll`].
 pub struct UdpMuxHandle {
     close_sender: req_res_chan::Sender<(), Result<(), Error>>,
     get_conn_sender: req_res_chan::Sender<String, Result<Arc<dyn Conn + Send + Sync>, Error>>,
@@ -409,6 +421,7 @@ pub struct UdpMuxHandle {
 }
 
 impl UdpMuxHandle {
+    /// Returns a new `UdpMuxHandle` and `close`, `get_conn` and `remove` receivers.
     pub fn new() -> (
         Self,
         req_res_chan::Receiver<(), Result<(), Error>>,
@@ -457,12 +470,15 @@ impl UDPMux for UdpMuxHandle {
     }
 }
 
+/// Handle which utilizes [`req_res_chan`] to transmit commands from [`UDPMuxConn`] connections to
+/// [`UDPMuxNewAddr::poll`].
 pub struct UdpMuxWriterHandle {
     registration_channel: req_res_chan::Sender<(UDPMuxConn, SocketAddr), ()>,
     send_channel: req_res_chan::Sender<(Vec<u8>, SocketAddr), Result<usize, Error>>,
 }
 
 impl UdpMuxWriterHandle {
+    /// Returns a new `UdpMuxWriterHandle` and `registration`, `send` receivers.
     fn new() -> (
         Self,
         req_res_chan::Receiver<(UDPMuxConn, SocketAddr), ()>,

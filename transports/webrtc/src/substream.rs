@@ -20,12 +20,9 @@
 
 use asynchronous_codec::Framed;
 use bytes::Bytes;
-use futures::channel::oneshot;
-use futures::prelude::*;
-use futures::ready;
+use futures::{channel::oneshot, prelude::*, ready};
 use tokio_util::compat::Compat;
-use webrtc::data::data_channel::DataChannel;
-use webrtc::data::data_channel::PollDataChannel;
+use webrtc::data::data_channel::{DataChannel, PollDataChannel};
 
 use std::{
     io,
@@ -43,8 +40,11 @@ mod drop_listener;
 mod framed_dc;
 mod state;
 
-/// As long as message interleaving is not supported, the sender SHOULD limit the maximum message size to 16 KB to avoid monopolization.
-// Source: <https://www.rfc-editor.org/rfc/rfc8831#name-transferring-user-data-on-a>
+/// Maximum length of a message.
+///
+/// "As long as message interleaving is not supported, the sender SHOULD limit the maximum message
+/// size to 16 KB to avoid monopolization."
+/// Source: <https://www.rfc-editor.org/rfc/rfc8831#name-transferring-user-data-on-a>
 const MAX_MSG_LEN: usize = 16384; // 16kiB
 /// Length of varint, in bytes.
 const VARINT_LEN: usize = 2;
@@ -68,7 +68,8 @@ pub struct Substream {
 }
 
 impl Substream {
-    /// Constructs a new `Substream`.
+    /// Returns a new `Substream` and a listener, which will notify the receiver when/if the substream
+    /// is dropped.
     pub(crate) fn new(data_channel: Arc<DataChannel>) -> (Self, DropListener) {
         let (sender, receiver) = oneshot::channel();
 

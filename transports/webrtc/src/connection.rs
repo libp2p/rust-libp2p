@@ -29,7 +29,6 @@ use futures::{
     {future::BoxFuture, ready},
 };
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
-use log::{debug, error, trace};
 use webrtc::data::data_channel::DataChannel as DetachedDataChannel;
 use webrtc::data_channel::RTCDataChannel;
 use webrtc::peer_connection::RTCPeerConnection;
@@ -63,6 +62,7 @@ pub struct Connection {
     /// Future, which, once polled, will result in closing the entire connection.
     close_fut: Option<BoxFuture<'static, Result<(), Error>>>,
 
+    /// A list of futures, which, once completed, signal that a [`Substream`] has been dropped.
     drop_listeners: FuturesUnordered<substream::DropListener>,
     no_drop_listeners_waker: Option<Waker>,
 }
@@ -102,7 +102,7 @@ impl Connection {
     ) {
         rtc_conn
             .on_data_channel(Box::new(move |data_channel: Arc<RTCDataChannel>| {
-                debug!(
+                log::debug!(
                     "Incoming data channel '{}'-'{}'",
                     data_channel.label(),
                     data_channel.id()
@@ -115,7 +115,7 @@ impl Connection {
                         .on_open({
                             let data_channel = data_channel.clone();
                             Box::new(move || {
-                                debug!(
+                                log::debug!(
                                     "Data channel '{}'-'{}' open",
                                     data_channel.label(),
                                     data_channel.id()
@@ -127,7 +127,7 @@ impl Connection {
                                         Ok(detached) => {
                                             let mut tx = tx.lock().await;
                                             if let Err(e) = tx.try_send(detached.clone()) {
-                                                error!("Can't send data channel: {}", e);
+                                                log::error!("Can't send data channel: {}", e);
                                                 // We're not accepting data channels fast enough =>
                                                 // close this channel.
                                                 //
@@ -135,12 +135,15 @@ impl Connection {
                                                 // during the negotiation process, but it's not
                                                 // possible with the current API.
                                                 if let Err(e) = detached.close().await {
-                                                    error!("Failed to close data channel: {}", e);
+                                                    log::error!(
+                                                        "Failed to close data channel: {}",
+                                                        e
+                                                    );
                                                 }
                                             }
                                         }
                                         Err(e) => {
-                                            error!("Can't detach data channel: {}", e);
+                                            log::error!("Can't detach data channel: {}", e);
                                         }
                                     };
                                 })
@@ -163,7 +166,7 @@ impl StreamMuxer for Connection {
     ) -> Poll<Result<Self::Substream, Self::Error>> {
         match ready!(self.incoming_data_channels_rx.poll_next_unpin(cx)) {
             Some(detached) => {
-                trace!("Incoming substream {}", detached.stream_identifier());
+                log::trace!("Incoming substream {}", detached.stream_identifier());
 
                 let (substream, drop_listener) = Substream::new(detached);
                 self.drop_listeners.push(drop_listener);
@@ -213,7 +216,7 @@ impl StreamMuxer for Connection {
             // Create a datachannel with label 'data'
             let data_channel = peer_conn.create_data_channel("data", None).await?;
 
-            trace!("Opening outbound substream {}", data_channel.id());
+            log::trace!("Opening outbound substream {}", data_channel.id());
 
             // No need to hold the lock during the DTLS handshake.
             drop(peer_conn);
@@ -249,7 +252,7 @@ impl StreamMuxer for Connection {
     }
 
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        debug!("Closing connection");
+        log::debug!("Closing connection");
 
         let peer_conn = self.peer_conn.clone();
         let fut = self.close_fut.get_or_insert(Box::pin(async move {
@@ -281,7 +284,7 @@ pub(crate) async fn register_data_channel_open_handler(
         .on_open({
             let data_channel = data_channel.clone();
             Box::new(move || {
-                debug!(
+                log::debug!(
                     "Data channel '{}'-'{}' open",
                     data_channel.label(),
                     data_channel.id()
@@ -292,14 +295,14 @@ pub(crate) async fn register_data_channel_open_handler(
                     match data_channel.detach().await {
                         Ok(detached) => {
                             if let Err(e) = data_channel_tx.send(detached.clone()) {
-                                error!("Can't send data channel: {:?}", e);
+                                log::error!("Can't send data channel: {:?}", e);
                                 if let Err(e) = detached.close().await {
-                                    error!("Failed to close data channel: {}", e);
+                                    log::error!("Failed to close data channel: {}", e);
                                 }
                             }
                         }
                         Err(e) => {
-                            error!("Can't detach data channel: {}", e);
+                            log::error!("Can't detach data channel: {}", e);
                         }
                     };
                 })
