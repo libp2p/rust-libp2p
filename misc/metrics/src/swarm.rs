@@ -159,7 +159,7 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
             }
             libp2p_swarm::SwarmEvent::IncomingConnection { send_back_addr, .. } => {
                 self.connections_incoming
-                    .get_or_create(&protocol_stack::Label::for_multi_address(&send_back_addr))
+                    .get_or_create(&protocol_stack::Label::for_multi_address(send_back_addr))
                     .inc();
             }
             libp2p_swarm::SwarmEvent::IncomingConnectionError { error, .. } => {
