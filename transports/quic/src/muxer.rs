@@ -40,7 +40,7 @@ pub struct Muxer {
     inner: Arc<Mutex<Inner>>,
 }
 
-/// Mutex-protected fields of [`QuicMuxer`].
+/// Mutex-protected fields of [`Muxer`].
 #[derive(Debug)]
 struct Inner {
     /// Inner connection object that yields events.
@@ -64,7 +64,7 @@ impl Inner {
 }
 
 impl Muxer {
-    /// Crate-internal function that builds a [`QuicMuxer`] from a raw connection.
+    /// Crate-internal function that builds a [`Muxer`] from a raw connection.
     pub(crate) fn from_connection(connection: Connection) -> Self {
         Muxer {
             inner: Arc::new(Mutex::new(Inner {

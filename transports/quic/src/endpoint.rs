@@ -118,7 +118,7 @@ impl From<Config> for QuinnConfig {
         server_config.transport = Arc::clone(&transport);
         // Disables connection migration.
         // Long-term this should be enabled, however we then need to handle address change
-        // on connections in the `QuicMuxer`.
+        // on connections in the `Muxer`.
         server_config.migration(false);
 
         let mut client_config = quinn_proto::ClientConfig::new(client_tls_config);
@@ -271,7 +271,7 @@ pub enum ToEndpoint {
     },
     /// Instruct the endpoint to send a packet of data on its UDP socket.
     SendUdpPacket(quinn_proto::Transmit),
-    /// The [`GenTransport`][transport::GenTransport] dialer or listener coupled to this endpoint
+    /// The [`GenTransport`][crate::GenTransport] dialer or listener coupled to this endpoint
     /// was dropped.
     /// Once all pending connections are closed, the [`EndpointDriver`] should shut down.
     Decoupled,
