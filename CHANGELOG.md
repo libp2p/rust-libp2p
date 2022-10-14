@@ -43,7 +43,7 @@
 
 # `libp2p` facade crate
 
-# 0.49.0 - [unreleased]
+# 0.49.0
 
 - Remove default features. You need to enable required features explicitly now. As a quick workaround, you may want to use the
   new `full` feature which activates all features. See [PR 2918].
