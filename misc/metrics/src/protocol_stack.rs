@@ -1,27 +1,42 @@
 use prometheus_client::encoding::text::Encode;
 use libp2p_core::multiaddr::{Multiaddr,Protocol};
 
+//TODO: remove this trait and tag() and replace with calls to the upstream method
+//  once that lands : https://github.com/multiformats/rust-multiaddr/pull/60
+// In the meantime there is no _ case in the match so one can easily detect mismatch in supported
+//  protocols when dependency version changes.
+trait MultiaddrExt {
+    fn protocol_stack(&self) -> String;
+}
+impl MultiaddrExt for Multiaddr {
+    fn protocol_stack(&self) -> String {
+        // Has potential to allocate multiple times, but this line expresses the intent here.
+        //  std::iter::once("/").chain(ma.iter().map(tag).intersperse("/")).collect()
+        let len = self.iter().fold(0, |acc, proto| acc + tag(proto).len() + 1);
+        let mut result = String::with_capacity(len);
+        for proto_tag in self.iter().map(tag) {
+            result.push('/');
+            result.push_str(proto_tag);
+        }
+        result
+    }
+}
+
 #[derive(Encode, Hash, Clone, Eq, PartialEq)]
 pub struct Label {
     address_stack: String
 }
-
-pub fn create_label(ma: &Multiaddr) -> Label {
-    // Has potential to allocate multiple times, but this line expresses the intent here.
-    //  std::iter::once("/").chain(ma.iter().map(tag).intersperse("/")).collect()
-    let len = ma.iter().fold(0, |acc,proto|acc+tag(proto).len()+1);
-    let mut result = String::with_capacity(len);
-    for proto_tag in ma.iter().map(tag) {
-        result.push('/');
-        result.push_str(proto_tag);
+impl From<Multiaddr> for Label {
+    fn from(ma: Multiaddr) -> Self {
+       Self:: from(&ma)
     }
-    Label{ address_stack: result }
+}
+impl From<&Multiaddr> for Label {
+     fn from(ma: &Multiaddr) -> Self {
+        Self { address_stack: ma.protocol_stack() }
+    }
 }
 
-//TODO: remove most/all of this file and replace with calls to Multiaddr::protocol_stack
-//  once that lands : https://github.com/multiformats/rust-multiaddr/pull/60
-// In the meantime there is no _ case in the match so one can easily detect mismatch in supported
-//  protocols when dependency version changes.
 pub fn tag(proto: Protocol) -> &'static str {
     use Protocol::*;
     match proto {
@@ -64,7 +79,7 @@ mod tests {
     #[test]
     fn ip6_tcp_wss_p2p() {
         let ma = Multiaddr::try_from("/ip6/2001:8a0:7ac5:4201:3ac9:86ff:fe31:7095/tcp/8000/wss/p2p/QmcgpsyWgH8Y8ajJz1Cu72KnS5uo2Aa2LpzU7kinSupNKC").expect("testbad");
-        let actual = create_label(&ma);
+        let actual : Label = ma.into();
         assert_eq!(actual.address_stack,"/ip6/tcp/wss/p2p");
         let mut buf = Vec::new();
         actual.encode(&mut buf).expect("encode failed");
