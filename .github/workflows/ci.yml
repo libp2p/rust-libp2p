@@ -85,7 +85,7 @@ jobs:
     - name: Build on ${{ matrix.toolchain }}
       # TODO: also run `cargo test`
       # TODO: ideally we would build `--workspace`, but not all crates compile for WASM
-      run: cargo build --target=${{ matrix.toolchain }} ${{ matrix.args }}
+      run: cargo build --package libp2p --target=${{ matrix.toolchain }} ${{ matrix.args }}
 
   check-rustdoc-links:
     name: Check rustdoc intra-doc links
