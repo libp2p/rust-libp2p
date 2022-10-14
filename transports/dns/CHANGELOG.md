@@ -1,4 +1,4 @@
-# 0.37.0 [unreleased]
+# 0.37.0
 
 - Remove default features. If you previously depended on `async-std` you need to enable this explicitly now. See [PR 2918].
 
