@@ -1,10 +1,10 @@
-# 0.40.0 [unreleased]
+# 0.40.0
 
 - Bump rand to 0.8 and quickcheck to 1. See [PR 2857].
 
 - Update to `libp2p-core` `v0.37.0`.
 
-- Introduce `libp2p_swarm::keep_alive::ConnectionHandler` in favor of removing `keep_alive` from 
+- Introduce `libp2p_swarm::keep_alive::ConnectionHandler` in favor of removing `keep_alive` from
   `libp2p_swarm::dummy::ConnectionHandler`. `dummy::ConnectionHandler` now literally does not do anything. In the same
   spirit, introduce `libp2p_swarm::keep_alive::Behaviour` and `libp2p_swarm::dummy::Behaviour`. See [PR 2859].
 
