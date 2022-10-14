@@ -1,5 +1,7 @@
 # 0.10.0 [unreleased]
 
+- Added `protocol_stack` metrics.
+
 - Update to `libp2p-swarm` `v0.40.0`.
 
 - Update to `libp2p-dcutr` `v0.7.0`.
