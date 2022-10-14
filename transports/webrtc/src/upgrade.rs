@@ -208,7 +208,7 @@ async fn create_substream_for_noise_handshake(
     // Open a data channel to do Noise on top and verify the remote.
     let data_channel = conn
         .create_data_channel(
-            "data",
+            "noise",
             Some(RTCDataChannelInit {
                 negotiated: Some(0),
                 ..RTCDataChannelInit::default()
