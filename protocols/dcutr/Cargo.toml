@@ -32,4 +32,4 @@ prost-build = "0.11"
 env_logger = "0.9.0"
 libp2p = { path = "../..", features = ["full"] }
 rand = "0.8"
-clap = {version = "3.1.6", features = ["derive"]}
+clap = { version = "4.0.13", features = ["derive"] }

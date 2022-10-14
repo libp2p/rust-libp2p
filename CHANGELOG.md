@@ -49,7 +49,17 @@
 - Remove default features. You need to enable required features explicitly now. As a quick workaround, you may want to use the
   new `full` feature which activates all features. See [PR 2918].
 
+
 - New `libp2p-onion` crate. See [PR 2899].
+- Introduce `tokio` and `async-std` features and deprecate the following ones:
+  - `tcp-tokio` in favor of `tcp` + `tokio`
+  - `mdns-tokio` in favor of `mdns` + `tokio`
+  - `dns-tokio` in favor of `dns` + `tokio`
+  - `tcp-async-io` in favor of `tcp` + `async-std`
+  - `mdns-async-io` in favor of `mdns` + `async-std`
+  - `dns-async-std` in favor of `dns` + `async-std`
+  
+  See [PR 2962].
 
 - Update individual crates.
     - Update to [`libp2p-autonat` `v0.8.0`](protocols/autonat/CHANGELOG.md#0080).
@@ -80,6 +90,7 @@
 
 [PR 2918]: https://github.com/libp2p/rust-libp2p/pull/2918
 [PR 2899]: https://github.com/libp2p/rust-libp2p/pull/2899
+[PR 2962]: https://github.com/libp2p/rust-libp2p/pull/2962
 
 # 0.48.0
 
