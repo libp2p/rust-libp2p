@@ -1,0 +1,22 @@
+pull_request_rules:
+  - name: Close stale pull request
+    conditions:
+      - base=master
+      - -closed
+      - updated-at<14 days ago
+    actions:
+      close:
+        message: |
+          This pull request looks stale. Feel free to reopen it if you think it's a mistake.
+
+  - name: Ask to resolve conflict
+    conditions:
+      - conflict
+      - -draft # Draft PRs are allowed to have conflicts.
+    actions:
+      comment:
+        message: This pull request has merge conflicts. Could you please resolve them @{{author}}? 🙏
+
+queue_rules:
+  - name: default
+    conditions: []
