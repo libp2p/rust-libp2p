@@ -444,7 +444,6 @@ mod tests {
     use futures::future::poll_fn;
     use libp2p_core::{multiaddr::Protocol, Transport as _};
     use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
-    use tokio_crate as tokio;
 
     #[test]
     fn missing_webrtc_protocol() {

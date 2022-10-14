@@ -13,7 +13,6 @@ use libp2p::request_response::{
 use libp2p::swarm::{Swarm, SwarmBuilder, SwarmEvent};
 use libp2p::webrtc;
 use rand::RngCore;
-use tokio_crate as tokio;
 
 use std::{io, iter};
 
