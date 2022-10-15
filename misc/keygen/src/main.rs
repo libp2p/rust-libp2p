@@ -27,7 +27,7 @@ enum Command {
     /// Read from config file
     From {
         /// Provide a IPFS config file
-        #[clap(parse(from_os_str))]
+        #[clap(value_parser)]
         config: PathBuf,
     },
     /// Generate random
