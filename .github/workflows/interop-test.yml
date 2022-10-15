@@ -1,9 +1,14 @@
+name: Interoperability Testing
+
 on:
   pull_request:
   push:
     branches:
       - master
-name: Interoperability Testing
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   # NOTE: during a pull request run, github creates a merge commit referenced in `github.sha`
