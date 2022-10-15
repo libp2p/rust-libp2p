@@ -542,7 +542,7 @@ where
             Err((connection_limit, handler)) => {
                 let error = DialError::ConnectionLimit(connection_limit);
                 #[allow(deprecated)]
-                self.behaviour.inject_dial_failure(None, handler, &error);
+                self.behaviour.inject_dial_failure(peer_id, handler, &error);
                 Err(error)
             }
         }
