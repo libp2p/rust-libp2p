@@ -9,7 +9,7 @@ on:
       - '**/Cargo.toml'
 
 concurrency:
-  group: cargo-deny-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
