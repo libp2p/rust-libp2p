@@ -200,7 +200,7 @@ jobs:
         crate: ${{ fromJSON(needs.gather_crates_for_semver_checks.outputs.members) }}
     steps:
     - name: Cancel Previous Runs
-      uses: styfle/cancel-workflow-action@bb6001c4ea612bf59c3abfc4756fbceee4f870c7 # 0.10.0
+      uses: styfle/cancel-workflow-action@b173b6ec0100793626c2d9e6b90435061f4fc3e5 # 0.10.0
       with:
         access_token: ${{ github.token }}
 
