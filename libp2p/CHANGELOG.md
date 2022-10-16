@@ -14,31 +14,31 @@
   See [PR 2962].
 
 - Update individual crates.
-    - Update to [`libp2p-autonat` `v0.8.0`](protocols/autonat/CHANGELOG.md#0080).
-    - Update to [`libp2p-core` `v0.37.0`](core/CHANGELOG.md#0370).
-    - Update to [`libp2p-dcutr` `v0.7.0`](protocols/dcutr/CHANGELOG.md#0070).
-    - Update to [`libp2p-deflate` `v0.37.0`](transports/deflate/CHANGELOG.md#0370).
-    - Update to [`libp2p-dns` `v0.37.0`](transports/dns/CHANGELOG.md#0370).
-    - Update to [`libp2p-floodsub` `v0.40.0`](protocols/floodsub/CHANGELOG.md#0400).
-    - Update to [`libp2p-gossipsub` `v0.42.0`](protocols/gossipsub/CHANGELOG.md#0420).
-    - Update to [`libp2p-identify` `v0.40.0`](protocols/identify/CHANGELOG.md#0400).
-    - Update to [`libp2p-kad` `v0.41.0`](protocols/kad/CHANGELOG.md#0410).
-    - Update to [`libp2p-mdns` `v0.41.0`](protocols/mdns/CHANGELOG.md#0410).
-    - Update to [`libp2p-metrics` `v0.10.0`](misc/metrics/CHANGELOG.md#0100).
-    - Update to [`libp2p-mplex` `v0.37.0`](muxers/mplex/CHANGELOG.md#0370).
-    - Update to [`libp2p-noise` `v0.40.0`](transports/noise/CHANGELOG.md#0400).
-    - Update to [`libp2p-ping` `v0.40.0`](protocols/ping/CHANGELOG.md#0400).
-    - Update to [`libp2p-plaintext` `v0.37.0`](transports/plaintext/CHANGELOG.md#0370).
-    - Update to [`libp2p-relay` `v0.13.0`](protocols/relay/CHANGELOG.md#0130).
-    - Update to [`libp2p-rendezvous` `v0.10.0`](protocols/rendezovus/CHANGELOG.md#0100).
-    - Update to [`libp2p-request-response` `v0.22.0`](protocols/request-response/CHANGELOG.md#0220).
-    - Update to [`libp2p-swarm-derive` `v0.30.1`](swarm-derive/CHANGELOG.md#0301).
-    - Update to [`libp2p-swarm` `v0.40.0`](swarm/CHANGELOG.md#0400).
-    - Update to [`libp2p-tcp` `v0.37.0`](transports/tcp/CHANGELOG.md#0370).
-    - Update to [`libp2p-uds` `v0.36.0`](transports/uds/CHANGELOG.md#0360).
-    - Update to [`libp2p-wasm-ext` `v0.37.0`](transports/wasm-ext/CHANGELOG.md#0370).
-    - Update to [`libp2p-websocket` `v0.39.0`](transports/websocket/CHANGELOG.md#0390).
-    - Update to [`libp2p-yamux` `v0.41.0`](muxers/mplex/CHANGELOG.md#0410).
+    - Update to [`libp2p-autonat` `v0.8.0`](../protocols/autonat/CHANGELOG.md#0080).
+    - Update to [`libp2p-core` `v0.37.0`](../core/CHANGELOG.md#0370).
+    - Update to [`libp2p-dcutr` `v0.7.0`](../protocols/dcutr/CHANGELOG.md#0070).
+    - Update to [`libp2p-deflate` `v0.37.0`](../transports/deflate/CHANGELOG.md#0370).
+    - Update to [`libp2p-dns` `v0.37.0`](../transports/dns/CHANGELOG.md#0370).
+    - Update to [`libp2p-floodsub` `v0.40.0`](../protocols/floodsub/CHANGELOG.md#0400).
+    - Update to [`libp2p-gossipsub` `v0.42.0`](../protocols/gossipsub/CHANGELOG.md#0420).
+    - Update to [`libp2p-identify` `v0.40.0`](../protocols/identify/CHANGELOG.md#0400).
+    - Update to [`libp2p-kad` `v0.41.0`](../protocols/kad/CHANGELOG.md#0410).
+    - Update to [`libp2p-mdns` `v0.41.0`](../protocols/mdns/CHANGELOG.md#0410).
+    - Update to [`libp2p-metrics` `v0.10.0`](../misc/metrics/CHANGELOG.md#0100).
+    - Update to [`libp2p-mplex` `v0.37.0`](../muxers/mplex/CHANGELOG.md#0370).
+    - Update to [`libp2p-noise` `v0.40.0`](../transports/noise/CHANGELOG.md#0400).
+    - Update to [`libp2p-ping` `v0.40.0`](../protocols/ping/CHANGELOG.md#0400).
+    - Update to [`libp2p-plaintext` `v0.37.0`](../transports/plaintext/CHANGELOG.md#0370).
+    - Update to [`libp2p-relay` `v0.13.0`](../protocols/relay/CHANGELOG.md#0130).
+    - Update to [`libp2p-rendezvous` `v0.10.0`](../protocols/rendezovus/CHANGELOG.md#0100).
+    - Update to [`libp2p-request-response` `v0.22.0`](../protocols/request-response/CHANGELOG.md#0220).
+    - Update to [`libp2p-swarm-derive` `v0.30.1`](../swarm-derive/CHANGELOG.md#0301).
+    - Update to [`libp2p-swarm` `v0.40.0`](../swarm/CHANGELOG.md#0400).
+    - Update to [`libp2p-tcp` `v0.37.0`](../transports/tcp/CHANGELOG.md#0370).
+    - Update to [`libp2p-uds` `v0.36.0`](../transports/uds/CHANGELOG.md#0360).
+    - Update to [`libp2p-wasm-ext` `v0.37.0`](../transports/wasm-ext/CHANGELOG.md#0370).
+    - Update to [`libp2p-websocket` `v0.39.0`](../transports/websocket/CHANGELOG.md#0390).
+    - Update to [`libp2p-yamux` `v0.41.0`](../muxers/mplex/CHANGELOG.md#0410).
 
 [PR 2918]: https://github.com/libp2p/rust-libp2p/pull/2918
 [PR 2962]: https://github.com/libp2p/rust-libp2p/pull/2962
@@ -46,137 +46,137 @@
 # 0.48.0
 
 - Update individual crates.
-  - Update to [`libp2p-core` `v0.36.0`](core/CHANGELOG.md#0360).
-  - Update to [`libp2p-swarm-derive` `v0.30.0`](swarm-derive/CHANGELOG.md#0300).
-  - Update to [`libp2p-dcutr` `v0.6.0`](protocols/dcutr/CHANGELOG.md#060).
-  - Update to [`libp2p-rendezvous` `v0.9.0`](protocols/rendezvous/CHANGELOG.md#090).
-  - Update to [`libp2p-ping` `v0.39.0`](protocols/ping/CHANGELOG.md#0390).
-  - Update to [`libp2p-identify` `v0.39.0`](protocols/identify/CHANGELOG.md#0390).
-  - Update to [`libp2p-floodsub` `v0.39.0`](protocols/floodsub/CHANGELOG.md#0390).
-  - Update to [`libp2p-relay` `v0.12.0`](protocols/relay/CHANGELOG.md#0120).
-  - Update to [`libp2p-metrics` `v0.9.0`](misc/metrics/CHANGELOG.md#090).
-  - Update to [`libp2p-kad` `v0.40.0`](protocols/kad/CHANGELOG.md#0400).
-  - Update to [`libp2p-autonat` `v0.7.0`](protocols/autonat/CHANGELOG.md#070).
-  - Update to [`libp2p-request-response` `v0.21.0`](protocols/request-response/CHANGELOG.md#0210).
+  - Update to [`libp2p-core` `v0.36.0`](../core/CHANGELOG.md#0360).
+  - Update to [`libp2p-swarm-derive` `v0.30.0`](../swarm-derive/CHANGELOG.md#0300).
+  - Update to [`libp2p-dcutr` `v0.6.0`](../protocols/dcutr/CHANGELOG.md#060).
+  - Update to [`libp2p-rendezvous` `v0.9.0`](../protocols/rendezvous/CHANGELOG.md#090).
+  - Update to [`libp2p-ping` `v0.39.0`](../protocols/ping/CHANGELOG.md#0390).
+  - Update to [`libp2p-identify` `v0.39.0`](../protocols/identify/CHANGELOG.md#0390).
+  - Update to [`libp2p-floodsub` `v0.39.0`](../protocols/floodsub/CHANGELOG.md#0390).
+  - Update to [`libp2p-relay` `v0.12.0`](../protocols/relay/CHANGELOG.md#0120).
+  - Update to [`libp2p-metrics` `v0.9.0`](../misc/metrics/CHANGELOG.md#090).
+  - Update to [`libp2p-kad` `v0.40.0`](../protocols/kad/CHANGELOG.md#0400).
+  - Update to [`libp2p-autonat` `v0.7.0`](../protocols/autonat/CHANGELOG.md#070).
+  - Update to [`libp2p-request-response` `v0.21.0`](../protocols/request-response/CHANGELOG.md#0210).
 
 # 0.47.0
 
 - Update individual crates.
-  - Update to [`libp2p-dcutr` `v0.5.0`](protocols/dcutr/CHANGELOG.md#050)
-  - Update to [`libp2p-derive` `v0.29.0`](swarm-derive/CHANGELOG.md#0290)
-  - Update to [`libp2p-rendezvous` `v0.8.0`](protocols/rendezvous/CHANGELOG.md#080)
-  - Update to [`libp2p-ping` `v0.38.0`](protocols/ping/CHANGELOG.md#0380)
-  - Update to [`libp2p-identify` `v0.38.0`](protocols/identify/CHANGELOG.md#0380)
-  - Update to [`libp2p-floodsub` `v0.38.0`](protocols/floodsub/CHANGELOG.md#0380)
-  - Update to [`libp2p-relay` `v0.11.0`](protocols/relay/CHANGELOG.md#0110)
-  - Update to [`libp2p-metrics` `v0.8.0`](misc/metrics/CHANGELOG.md#080)
-  - Update to [`libp2p-kad` `v0.39.0`](protocols/kad/CHANGELOG.md#0390)
-  - Update to [`libp2p-autonat` `v0.6.0`](protocols/autonat/CHANGELOG.md#060)
-  - Update to [`libp2p-request-response` `v0.20.0`](protocols/request-response/CHANGELOG.md#0200)
-  - Update to [`libp2p-swarm` `v0.38.0`](swarm/CHANGELOG.md#0380)
+  - Update to [`libp2p-dcutr` `v0.5.0`](../protocols/dcutr/CHANGELOG.md#050)
+  - Update to [`libp2p-derive` `v0.29.0`](../swarm-derive/CHANGELOG.md#0290)
+  - Update to [`libp2p-rendezvous` `v0.8.0`](../protocols/rendezvous/CHANGELOG.md#080)
+  - Update to [`libp2p-ping` `v0.38.0`](../protocols/ping/CHANGELOG.md#0380)
+  - Update to [`libp2p-identify` `v0.38.0`](../protocols/identify/CHANGELOG.md#0380)
+  - Update to [`libp2p-floodsub` `v0.38.0`](../protocols/floodsub/CHANGELOG.md#0380)
+  - Update to [`libp2p-relay` `v0.11.0`](../protocols/relay/CHANGELOG.md#0110)
+  - Update to [`libp2p-metrics` `v0.8.0`](../misc/metrics/CHANGELOG.md#080)
+  - Update to [`libp2p-kad` `v0.39.0`](../protocols/kad/CHANGELOG.md#0390)
+  - Update to [`libp2p-autonat` `v0.6.0`](../protocols/autonat/CHANGELOG.md#060)
+  - Update to [`libp2p-request-response` `v0.20.0`](../protocols/request-response/CHANGELOG.md#0200)
+  - Update to [`libp2p-swarm` `v0.38.0`](../swarm/CHANGELOG.md#0380)
 
 # 0.46.1
 
-- Update to `libp2p-derive` [`v0.28.0`](swarm-derive/CHANGELOG.md#0280).
+- Update to `libp2p-derive` [`v0.28.0`](../swarm-derive/CHANGELOG.md#0280).
 
 # 0.46.0
 
 - Semver bump Rust from `1.56.1` to `1.60.0` . See [PR 2646].
 - Added weak dependencies for features. See [PR 2646].
 - Update individual crates.
-    - Update to [`libp2p-autonat` `v0.5.0`](protocols/autonat/CHANGELOG.md#050).
-    - Update to [`libp2p-core` `v0.34.0`](core/CHANGELOG.md#0340).
-    - Update to [`libp2p-dcutr` `v0.4.0`](protocols/dcutr/CHANGELOG.md#040).
-    - Update to [`libp2p-floodsub` `v0.37.0`](protocols/floodsub/CHANGELOG.md#0370).
-    - Update to [`libp2p-identify` `v0.37.0`](protocols/identify/CHANGELOG.md#0370).
-    - Update to [`libp2p-kad` `v0.38.0`](protocols/kad/CHANGELOG.md#0380).
-    - Update to [`libp2p-metrics` `v0.7.0`](misc/metrics/CHANGELOG.md#070).
-    - Update to [`libp2p-mplex` `v0.34.0`](muxers/mplex/CHANGELOG.md).
-    - Update to [`libp2p-noise` `v0.37.0`](transports/noise/CHANGELOG.md#0370).
-    - Update to [`libp2p-ping` `v0.37.0`](protocols/ping/CHANGELOG.md#0370).
-    - Update to [`libp2p-plaintext` `v0.34.0`](transports/plaintext/CHANGELOG.md#0340).
-    - Update to [`libp2p-relay` `v0.10.0`](protocols/relay/CHANGELOG.md#0100).
-    - Update to [`libp2p-rendezvous` `v0.7.0`](protocols/rendezvous/CHANGELOG.md#070).
-    - Update to [`libp2p-request-response` `v0.19.0`](protocols/request-response/CHANGELOG.md#0190).
-    - Update to [`libp2p-swarm` `v0.37.0`](swarm/CHANGELOG.md#0370).
-    - Update to [`libp2p-wasm-ext` `v0.34.0`](transports/wasm-ext/CHANGELOG.md#0340).
-    - Update to [`libp2p-yamux` `v0.38.0`](muxers/yamux/CHANGELOG.md#0380).
-    - Update to `libp2p-uds` [`v0.33.0`](transports/uds/CHANGELOG.md).
+    - Update to [`libp2p-autonat` `v0.5.0`](../protocols/autonat/CHANGELOG.md#050).
+    - Update to [`libp2p-core` `v0.34.0`](../core/CHANGELOG.md#0340).
+    - Update to [`libp2p-dcutr` `v0.4.0`](../protocols/dcutr/CHANGELOG.md#040).
+    - Update to [`libp2p-floodsub` `v0.37.0`](../protocols/floodsub/CHANGELOG.md#0370).
+    - Update to [`libp2p-identify` `v0.37.0`](../protocols/identify/CHANGELOG.md#0370).
+    - Update to [`libp2p-kad` `v0.38.0`](../protocols/kad/CHANGELOG.md#0380).
+    - Update to [`libp2p-metrics` `v0.7.0`](../misc/metrics/CHANGELOG.md#070).
+    - Update to [`libp2p-mplex` `v0.34.0`](../muxers/mplex/CHANGELOG.md).
+    - Update to [`libp2p-noise` `v0.37.0`](../transports/noise/CHANGELOG.md#0370).
+    - Update to [`libp2p-ping` `v0.37.0`](../protocols/ping/CHANGELOG.md#0370).
+    - Update to [`libp2p-plaintext` `v0.34.0`](../transports/plaintext/CHANGELOG.md#0340).
+    - Update to [`libp2p-relay` `v0.10.0`](../protocols/relay/CHANGELOG.md#0100).
+    - Update to [`libp2p-rendezvous` `v0.7.0`](../protocols/rendezvous/CHANGELOG.md#070).
+    - Update to [`libp2p-request-response` `v0.19.0`](../protocols/request-response/CHANGELOG.md#0190).
+    - Update to [`libp2p-swarm` `v0.37.0`](../swarm/CHANGELOG.md#0370).
+    - Update to [`libp2p-wasm-ext` `v0.34.0`](../transports/wasm-ext/CHANGELOG.md#0340).
+    - Update to [`libp2p-yamux` `v0.38.0`](../muxers/yamux/CHANGELOG.md#0380).
+    - Update to `libp2p-uds` [`v0.33.0`](../transports/uds/CHANGELOG.md).
 
 [PR 2646]: https://github.com/libp2p/rust-libp2p/pull/2646
 
 # 0.45.1
 
 - Update individual crates.
-    - Update to [`libp2p-dcutr` `v0.3.1`](protocols/dcutr/CHANGELOG.md).
-    - Update to [`libp2p-identify` `v0.36.1`](protocols/identify/CHANGELOG.md).
-    - Update to [`libp2p-kad` `v0.37.1`](protocols/kad/CHANGELOG.md).
-    - Update to [`libp2p-relay` `v0.9.1`](protocols/relay/CHANGELOG.md).
-    - Update to [`libp2p-swarm` `v0.36.1`](swarm/CHANGELOG.md).
+    - Update to [`libp2p-dcutr` `v0.3.1`](../protocols/dcutr/CHANGELOG.md).
+    - Update to [`libp2p-identify` `v0.36.1`](../protocols/identify/CHANGELOG.md).
+    - Update to [`libp2p-kad` `v0.37.1`](../protocols/kad/CHANGELOG.md).
+    - Update to [`libp2p-relay` `v0.9.1`](../protocols/relay/CHANGELOG.md).
+    - Update to [`libp2p-swarm` `v0.36.1`](../swarm/CHANGELOG.md).
 
 # 0.45.0
 - Update individual crates.
-    - Update to [`libp2p-plaintext` `v0.33.0`](transports/plaintext/CHANGELOG.md).
-    - Update to [`libp2p-noise` `v0.36.0`](transports/noise/CHANGELOG.md).
-    - Update to [`libp2p-wasm-ext` `v0.33.0`](transports/wasm-ext/CHANGELOG.md).
-    - Update to [`libp2p-yamux` `v0.37.0`](muxers/yamux/CHANGELOG.md).
-    - Update to [`libp2p-mplex` `v0.33.0`](muxers/mplex/CHANGELOG.md).
-    - Update to [`libp2p-dcutr` `v0.3.0`](protocols/dcutr/CHANGELOG.md).
-    - Update to [`libp2p-rendezvous` `v0.6.0`](protocols/rendezvous/CHANGELOG.md).
-    - Update to [`libp2p-ping` `v0.36.0`](protocols/ping/CHANGELOG.md).
-    - Update to [`libp2p-identify` `v0.36.0`](protocols/identify/CHANGELOG.md).
-    - Update to [`libp2p-floodsub` `v0.36.0`](protocols/floodsub/CHANGELOG.md).
-    - Update to [`libp2p-relay` `v0.9.0`](protocols/relay/CHANGELOG.md).
-    - Update to [`libp2p-metrics` `v0.6.0`](misc/metrics/CHANGELOG.md).
-    - Update to [`libp2p-kad` `v0.37.0`](protocols/kad/CHANGELOG.md).
-    - Update to [`libp2p-autonat` `v0.4.0`](protocols/autonat/CHANGELOG.md).
-    - Update to [`libp2p-request-response` `v0.18.0`](protocols/request-response/CHANGELOG.md).
-    - Update to [`libp2p-swarm` `v0.36.0`](swarm/CHANGELOG.md).
-    - Update to [`libp2p-core` `v0.33.0`](core/CHANGELOG.md).
+    - Update to [`libp2p-plaintext` `v0.33.0`](../transports/plaintext/CHANGELOG.md).
+    - Update to [`libp2p-noise` `v0.36.0`](../transports/noise/CHANGELOG.md).
+    - Update to [`libp2p-wasm-ext` `v0.33.0`](../transports/wasm-ext/CHANGELOG.md).
+    - Update to [`libp2p-yamux` `v0.37.0`](../muxers/yamux/CHANGELOG.md).
+    - Update to [`libp2p-mplex` `v0.33.0`](../muxers/mplex/CHANGELOG.md).
+    - Update to [`libp2p-dcutr` `v0.3.0`](../protocols/dcutr/CHANGELOG.md).
+    - Update to [`libp2p-rendezvous` `v0.6.0`](../protocols/rendezvous/CHANGELOG.md).
+    - Update to [`libp2p-ping` `v0.36.0`](../protocols/ping/CHANGELOG.md).
+    - Update to [`libp2p-identify` `v0.36.0`](../protocols/identify/CHANGELOG.md).
+    - Update to [`libp2p-floodsub` `v0.36.0`](../protocols/floodsub/CHANGELOG.md).
+    - Update to [`libp2p-relay` `v0.9.0`](../protocols/relay/CHANGELOG.md).
+    - Update to [`libp2p-metrics` `v0.6.0`](../misc/metrics/CHANGELOG.md).
+    - Update to [`libp2p-kad` `v0.37.0`](../protocols/kad/CHANGELOG.md).
+    - Update to [`libp2p-autonat` `v0.4.0`](../protocols/autonat/CHANGELOG.md).
+    - Update to [`libp2p-request-response` `v0.18.0`](../protocols/request-response/CHANGELOG.md).
+    - Update to [`libp2p-swarm` `v0.36.0`](../swarm/CHANGELOG.md).
+    - Update to [`libp2p-core` `v0.33.0`](../core/CHANGELOG.md).
 
 ## 0.44.0
 
 - Update individual crates.
-    - Update to [`libp2p-dcutr` `v0.2.0`](protocols/dcutr/CHANGELOG.md).
-    - Update to [`libp2p-dns` `v0.32.1`](transports/dns/CHANGELOG.md).
-    - Update to [`libp2p-rendezvous` `v0.5.0`](protocols/rendezvous/CHANGELOG.md).
-    - Update to [`libp2p-ping` `v0.35.0`](protocols/ping/CHANGELOG.md).
-    - Update to [`libp2p-identify` `v0.35.0`](protocols/identify/CHANGELOG.md).
-    - Update to [`libp2p-floodsub` `v0.35.0`](protocols/floodsub/CHANGELOG.md).
-    - Update to [`libp2p-relay` `v0.8.0`](protocols/relay/CHANGELOG.md).
-    - Update to [`libp2p-metrics` `v0.5.0`](misc/metrics/CHANGELOG.md).
-    - Update to [`libp2p-kad` `v0.36.0`](protocols/kad/CHANGELOG.md).
-    - Update to [`libp2p-autonat` `v0.3.0`](protocols/autonat/CHANGELOG.md).
-    - Update to [`libp2p-request-response` `v0.17.0`](protocols/request-response/CHANGELOG.md).
-    - Update to [`libp2p-swarm` `v0.35.0`](swarm/CHANGELOG.md).
+    - Update to [`libp2p-dcutr` `v0.2.0`](../protocols/dcutr/CHANGELOG.md).
+    - Update to [`libp2p-dns` `v0.32.1`](../transports/dns/CHANGELOG.md).
+    - Update to [`libp2p-rendezvous` `v0.5.0`](../protocols/rendezvous/CHANGELOG.md).
+    - Update to [`libp2p-ping` `v0.35.0`](../protocols/ping/CHANGELOG.md).
+    - Update to [`libp2p-identify` `v0.35.0`](../protocols/identify/CHANGELOG.md).
+    - Update to [`libp2p-floodsub` `v0.35.0`](../protocols/floodsub/CHANGELOG.md).
+    - Update to [`libp2p-relay` `v0.8.0`](../protocols/relay/CHANGELOG.md).
+    - Update to [`libp2p-metrics` `v0.5.0`](../misc/metrics/CHANGELOG.md).
+    - Update to [`libp2p-kad` `v0.36.0`](../protocols/kad/CHANGELOG.md).
+    - Update to [`libp2p-autonat` `v0.3.0`](../protocols/autonat/CHANGELOG.md).
+    - Update to [`libp2p-request-response` `v0.17.0`](../protocols/request-response/CHANGELOG.md).
+    - Update to [`libp2p-swarm` `v0.35.0`](../swarm/CHANGELOG.md).
 
 ## Version 0.43.0 [2022-02-22]
 
 - Update individual crates.
-    - Update to `libp2p-autonat` [`v0.2.0`](protocols/autonat/CHANGELOG.md#020-2022-02-22).
-    - Update to `libp2p-core` [`v0.32.0`](core/CHANGELOG.md#0320-2022-02-22).
-    - Update to `libp2p-deflate` [`v0.32.0`](transports/deflate/CHANGELOG.md#0320-2022-02-22).
-    - Update to `libp2p-dns` [`v0.32.0`](transports/dns/CHANGELOG.md#0320-2022-02-22).
-    - Update to `libp2p-floodsub` [`v0.34.0`](protocols/floodsub/CHANGELOG.md#0340-2022-02-22).
-    - Update to `libp2p-gossipsub` [`v0.36.0`](protocols/gossipsub/CHANGELOG.md#0360-2022-02-22).
-    - Update to `libp2p-identify` [`v0.34.0`](protocols/identify/CHANGELOG.md#0340-2022-02-22).
-    - Update to `libp2p-kad` [`v0.35.0`](protocols/kad/CHANGELOG.md#0350-2022-02-22).
-    - Update to `libp2p-mdns` [`v0.35.0`](protocols/mdns/CHANGELOG.md#0350-2022-02-22).
-    - Update to `libp2p-metrics` [`v0.4.0`](misc/metrics/CHANGELOG.md#040-2022-02-22).
-    - Update to `libp2p-mplex` [`v0.32.0`](muxers/mplex/CHANGELOG.md#0320-2022-02-22).
-    - Update to `libp2p-noise` [`v0.35.0`](transports/noise/CHANGELOG.md#0350-2022-02-22).
-    - Update to `libp2p-ping` [`v0.34.0`](protocols/ping/CHANGELOG.md#0340-2022-02-22).
-    - Update to `libp2p-plaintext` [`v0.32.0`](transports/plaintext/CHANGELOG.md#0320-2022-02-22).
-    - Update to `libp2p-relay` [`v0.7.0`](protocols/relay/CHANGELOG.md#070-2022-02-22).
-    - Update to `libp2p-rendezvous` [`v0.4.0`](protocols/rendezvous/CHANGELOG.md#040-2022-02-22).
-    - Update to `libp2p-request-response` [`v0.16.0`](protocols/request-response/CHANGELOG.md#0160-2022-02-22).
-    - Update to `libp2p-swarm` [`v0.34.0`](swarm/CHANGELOG.md#0340-2022-02-22).
-    - Update to `libp2p-derive` [`v0.27.0`](swarm-derive/CHANGELOG.md#0270-2022-02-22).
-    - Update to `libp2p-tcp` [`v0.32.0`](transports/tcp/CHANGELOG.md#0320-2022-02-22).
-    - Update to `libp2p-uds` [`v0.32.0`](transports/uds/CHANGELOG.md#0320-2022-02-22).
-    - Update to `libp2p-wasm-ext` [`v0.32.0`](transports/wasm-ext/CHANGELOG.md#0320-2022-02-22).
-    - Update to `libp2p-websocket` [`v0.34.0`](transports/websocket/CHANGELOG.md#0340-2022-02-22).
-    - Update to `libp2p-yamux` [`v0.36.0`](muxers/yamux/CHANGELOG.md#0360-2022-02-22).
+    - Update to `libp2p-autonat` [`v0.2.0`](../protocols/autonat/CHANGELOG.md#020-2022-02-22).
+    - Update to `libp2p-core` [`v0.32.0`](../core/CHANGELOG.md#0320-2022-02-22).
+    - Update to `libp2p-deflate` [`v0.32.0`](../transports/deflate/CHANGELOG.md#0320-2022-02-22).
+    - Update to `libp2p-dns` [`v0.32.0`](../transports/dns/CHANGELOG.md#0320-2022-02-22).
+    - Update to `libp2p-floodsub` [`v0.34.0`](../protocols/floodsub/CHANGELOG.md#0340-2022-02-22).
+    - Update to `libp2p-gossipsub` [`v0.36.0`](../protocols/gossipsub/CHANGELOG.md#0360-2022-02-22).
+    - Update to `libp2p-identify` [`v0.34.0`](../protocols/identify/CHANGELOG.md#0340-2022-02-22).
+    - Update to `libp2p-kad` [`v0.35.0`](../protocols/kad/CHANGELOG.md#0350-2022-02-22).
+    - Update to `libp2p-mdns` [`v0.35.0`](../protocols/mdns/CHANGELOG.md#0350-2022-02-22).
+    - Update to `libp2p-metrics` [`v0.4.0`](../misc/metrics/CHANGELOG.md#040-2022-02-22).
+    - Update to `libp2p-mplex` [`v0.32.0`](../muxers/mplex/CHANGELOG.md#0320-2022-02-22).
+    - Update to `libp2p-noise` [`v0.35.0`](../transports/noise/CHANGELOG.md#0350-2022-02-22).
+    - Update to `libp2p-ping` [`v0.34.0`](../protocols/ping/CHANGELOG.md#0340-2022-02-22).
+    - Update to `libp2p-plaintext` [`v0.32.0`](../transports/plaintext/CHANGELOG.md#0320-2022-02-22).
+    - Update to `libp2p-relay` [`v0.7.0`](../protocols/relay/CHANGELOG.md#070-2022-02-22).
+    - Update to `libp2p-rendezvous` [`v0.4.0`](../protocols/rendezvous/CHANGELOG.md#040-2022-02-22).
+    - Update to `libp2p-request-response` [`v0.16.0`](../protocols/request-response/CHANGELOG.md#0160-2022-02-22).
+    - Update to `libp2p-swarm` [`v0.34.0`](../swarm/CHANGELOG.md#0340-2022-02-22).
+    - Update to `libp2p-derive` [`v0.27.0`](../swarm-derive/CHANGELOG.md#0270-2022-02-22).
+    - Update to `libp2p-tcp` [`v0.32.0`](../transports/tcp/CHANGELOG.md#0320-2022-02-22).
+    - Update to `libp2p-uds` [`v0.32.0`](../transports/uds/CHANGELOG.md#0320-2022-02-22).
+    - Update to `libp2p-wasm-ext` [`v0.32.0`](../transports/wasm-ext/CHANGELOG.md#0320-2022-02-22).
+    - Update to `libp2p-websocket` [`v0.34.0`](../transports/websocket/CHANGELOG.md#0340-2022-02-22).
+    - Update to `libp2p-yamux` [`v0.36.0`](../muxers/yamux/CHANGELOG.md#0360-2022-02-22).
 
 - Update to `parking_lot` `v0.12.0`. See [PR 2463].
 
