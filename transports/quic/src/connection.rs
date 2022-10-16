@@ -41,7 +41,7 @@ use std::{
 /// State for a single opened QUIC connection.
 #[derive(Debug)]
 pub struct Connection {
-    inner: Arc<Mutex<Inner>>,
+    state: Arc<Mutex<State>>,
     /// Channel to the endpoint this connection belongs to.
     endpoint_channel: endpoint::Channel,
     /// Pending message to be sent to the background task that is driving the endpoint.
@@ -75,7 +75,7 @@ impl Connection {
         from_endpoint: mpsc::Receiver<quinn_proto::ConnectionEvent>,
     ) -> Self {
         debug_assert!(!connection.is_closed());
-        let inner = Inner {
+        let state = State {
             connection,
             substreams: HashMap::new(),
             poll_connection_waker: None,
@@ -88,7 +88,7 @@ impl Connection {
             next_timeout: None,
             from_endpoint,
             connection_id,
-            inner: Arc::new(Mutex::new(inner)),
+            state: Arc::new(Mutex::new(state)),
         }
     }
 
@@ -99,11 +99,11 @@ impl Connection {
 
     /// Returns the address of the node we're connected to.
     pub fn remote_addr(&self) -> SocketAddr {
-        self.inner.lock().connection.remote_address()
+        self.state.lock().connection.remote_address()
     }
 
     pub fn peer_identity(&self) -> Option<Box<dyn Any>> {
-        self.inner
+        self.state
             .lock()
             .connection
             .crypto_session()
@@ -112,7 +112,7 @@ impl Connection {
 
     /// Polls the connection for an event that happened on it.
     pub fn poll_event(&mut self, cx: &mut Context<'_>) -> Poll<Option<quinn_proto::Event>> {
-        let mut inner = self.inner.lock();
+        let mut inner = self.state.lock();
         loop {
             match self.from_endpoint.poll_next_unpin(cx) {
                 Poll::Ready(Some(event)) => {
@@ -213,7 +213,7 @@ impl StreamMuxer for Connection {
         cx: &mut Context<'_>,
     ) -> Poll<Result<StreamMuxerEvent, Self::Error>> {
         while let Poll::Ready(event) = self.poll_event(cx) {
-            let mut inner = self.inner.lock();
+            let mut inner = self.state.lock();
             let event = match event {
                 Some(event) => event,
                 None => return Poll::Ready(Err(Error::EndpointDriverCrashed)),
@@ -289,7 +289,7 @@ impl StreamMuxer for Connection {
         // TODO: If connection migration is enabled (currently disabled) address
         // change on the connection needs to be handled.
 
-        self.inner.lock().poll_connection_waker = Some(cx.waker().clone());
+        self.state.lock().poll_connection_waker = Some(cx.waker().clone());
         Poll::Pending
     }
 
@@ -297,7 +297,7 @@ impl StreamMuxer for Connection {
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Result<Self::Substream, Self::Error>> {
-        let mut inner = self.inner.lock();
+        let mut inner = self.state.lock();
 
         let substream_id = match inner.connection.streams().accept(quinn_proto::Dir::Bi) {
             Some(id) => {
@@ -310,7 +310,7 @@ impl StreamMuxer for Connection {
             }
         };
         inner.substreams.insert(substream_id, Default::default());
-        let substream = Substream::new(substream_id, self.inner.clone());
+        let substream = Substream::new(substream_id, self.state.clone());
 
         Poll::Ready(Ok(substream))
     }
@@ -319,7 +319,7 @@ impl StreamMuxer for Connection {
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Result<Self::Substream, Self::Error>> {
-        let mut inner = self.inner.lock();
+        let mut inner = self.state.lock();
         let substream_id = match inner.connection.streams().open(quinn_proto::Dir::Bi) {
             Some(id) => {
                 inner.poll_outbound_waker = None;
@@ -331,12 +331,12 @@ impl StreamMuxer for Connection {
             }
         };
         inner.substreams.insert(substream_id, Default::default());
-        let substream = Substream::new(substream_id, self.inner.clone());
+        let substream = Substream::new(substream_id, self.state.clone());
         Poll::Ready(Ok(substream))
     }
 
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        let mut inner = self.inner.lock();
+        let mut inner = self.state.lock();
         if inner.connection.is_drained() {
             return Poll::Ready(Ok(()));
         }
@@ -372,9 +372,9 @@ impl Drop for Connection {
     }
 }
 
-/// Mutex-protected fields of [`Connection`].
+/// Mutex-protected state of [`Connection`].
 #[derive(Debug)]
-pub struct Inner {
+pub struct State {
     /// The QUIC inner machine for this specific connection.
     connection: quinn_proto::Connection,
 
@@ -388,7 +388,7 @@ pub struct Inner {
     pub poll_connection_waker: Option<Waker>,
 }
 
-impl Inner {
+impl State {
     fn unchecked_substream_state(&mut self, id: quinn_proto::StreamId) -> &mut SubstreamState {
         self.substreams
             .get_mut(&id)
@@ -426,12 +426,12 @@ impl SubstreamState {
 #[derive(Debug)]
 pub struct Substream {
     id: quinn_proto::StreamId,
-    connection: Arc<Mutex<Inner>>,
+    state: Arc<Mutex<State>>,
 }
 
 impl Substream {
-    fn new(id: quinn_proto::StreamId, connection: Arc<Mutex<Inner>>) -> Self {
-        Self { id, connection }
+    fn new(id: quinn_proto::StreamId, state: Arc<Mutex<State>>) -> Self {
+        Self { id, state }
     }
 }
 
@@ -441,9 +441,9 @@ impl AsyncRead for Substream {
         cx: &mut Context<'_>,
         mut buf: &mut [u8],
     ) -> Poll<io::Result<usize>> {
-        let mut connection = self.connection.lock();
+        let mut state = self.state.lock();
 
-        let mut stream = connection.connection.recv_stream(self.id);
+        let mut stream = state.connection.recv_stream(self.id);
         let mut chunks = match stream.read(true) {
             Ok(chunks) => chunks,
             Err(quinn_proto::ReadableError::UnknownStream) => {
@@ -474,12 +474,12 @@ impl AsyncRead for Substream {
             bytes += chunk.bytes.len();
         }
         if chunks.finalize().should_transmit() {
-            if let Some(waker) = connection.poll_connection_waker.take() {
+            if let Some(waker) = state.poll_connection_waker.take() {
                 waker.wake();
             }
         }
         if pending && bytes == 0 {
-            let substream_state = connection.unchecked_substream_state(self.id);
+            let substream_state = state.unchecked_substream_state(self.id);
             substream_state.read_waker = Some(cx.waker().clone());
             Poll::Pending
         } else {
@@ -494,17 +494,17 @@ impl AsyncWrite for Substream {
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<std::io::Result<usize>> {
-        let mut connection = self.connection.lock();
+        let mut state = self.state.lock();
 
-        match connection.connection.send_stream(self.id).write(buf) {
+        match state.connection.send_stream(self.id).write(buf) {
             Ok(bytes) => {
-                if let Some(waker) = connection.poll_connection_waker.take() {
+                if let Some(waker) = state.poll_connection_waker.take() {
                     waker.wake();
                 }
                 Poll::Ready(Ok(bytes))
             }
             Err(quinn_proto::WriteError::Blocked) => {
-                let substream_state = connection.unchecked_substream_state(self.id);
+                let substream_state = state.unchecked_substream_state(self.id);
                 substream_state.write_waker = Some(cx.waker().clone());
                 Poll::Pending
             }
@@ -523,7 +523,7 @@ impl AsyncWrite for Substream {
     }
 
     fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
-        let mut inner = self.connection.lock();
+        let mut inner = self.state.lock();
 
         if inner.unchecked_substream_state(self.id).is_write_closed {
             return Poll::Ready(Ok(()));
@@ -547,10 +547,10 @@ impl AsyncWrite for Substream {
 
 impl Drop for Substream {
     fn drop(&mut self) {
-        let mut connection = self.connection.lock();
-        connection.substreams.remove(&self.id);
-        let _ = connection.connection.recv_stream(self.id).stop(0u32.into());
-        let mut send_stream = connection.connection.send_stream(self.id);
+        let mut state = self.state.lock();
+        state.substreams.remove(&self.id);
+        let _ = state.connection.recv_stream(self.id).stop(0u32.into());
+        let mut send_stream = state.connection.send_stream(self.id);
         match send_stream.finish() {
             Ok(()) => {}
             // Already finished or reset, which is fine.
