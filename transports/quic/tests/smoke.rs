@@ -40,8 +40,8 @@ async fn create_swarm<P: Provider>() -> Swarm<RequestResponse<PingCodec>> {
     config.handshake_timeout = Duration::from_secs(1);
     let transport = quic::GenTransport::<P>::new(config);
 
-    let transport = Transport::map(transport, |(peer, muxer), _| {
-        (peer, StreamMuxerBox::new(muxer))
+    let transport = Transport::map(transport, |(peer, connection), _| {
+        (peer, StreamMuxerBox::new(connection))
     })
     .boxed();
 

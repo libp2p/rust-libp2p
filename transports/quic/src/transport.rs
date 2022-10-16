@@ -22,10 +22,10 @@
 //!
 //! Combines all the objects in the other modules to implement the trait.
 
+use crate::connection::Inner;
 use crate::endpoint::{Config, QuinnConfig, ToEndpoint};
-use crate::muxer::Inner;
 use crate::provider::Provider;
-use crate::{endpoint, muxer::Muxer, upgrade::Connecting, Error};
+use crate::{connection::Connection, endpoint, upgrade::Connecting, Error};
 
 use futures::channel::{mpsc, oneshot};
 use futures::future::BoxFuture;
@@ -80,7 +80,7 @@ impl<P> GenTransport<P> {
 }
 
 impl<P: Provider> Transport for GenTransport<P> {
-    type Output = (PeerId, Muxer);
+    type Output = (PeerId, Connection);
     type Error = Error;
     type ListenerUpgrade = Connecting;
     type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
@@ -249,7 +249,7 @@ impl DialerState {
         &mut self,
         address: SocketAddr,
         timeout: Duration,
-    ) -> BoxFuture<'static, Result<(PeerId, Muxer), Error>> {
+    ) -> BoxFuture<'static, Result<(PeerId, Connection), Error>> {
         let (rx, tx) = oneshot::channel();
 
         let message = ToEndpoint::Dial {
@@ -266,9 +266,9 @@ impl DialerState {
         async move {
             // Our oneshot getting dropped means the message didn't make it to the endpoint driver.
             let connection = tx.await.map_err(|_| Error::EndpointDriverCrashed)??;
-            let (peer, muxer) = Connecting::new(connection, timeout).await?;
+            let (peer, connection) = Connecting::new(connection, timeout).await?;
 
-            Ok((peer, muxer))
+            Ok((peer, connection))
         }
         .boxed()
     }

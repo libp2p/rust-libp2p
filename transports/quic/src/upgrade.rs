@@ -20,7 +20,7 @@
 
 //! Future that drives a QUIC connection until is has performed its TLS handshake.
 
-use crate::{muxer::Inner, Error, Muxer};
+use crate::{connection::Inner, Connection, Error};
 
 use futures::prelude::*;
 use futures_timer::Delay;
@@ -49,7 +49,7 @@ impl Connecting {
 }
 
 impl Future for Connecting {
-    type Output = Result<(PeerId, Muxer), Error>;
+    type Output = Result<(PeerId, Connection), Error>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let connection = self
@@ -84,8 +84,8 @@ impl Future for Connecting {
                         .expect("the certificate was validated during TLS handshake; qed");
                     let peer_id = PeerId::from_public_key(&p2p_cert.extension.public_key);
 
-                    let muxer = Muxer::new(self.connection.take().unwrap());
-                    return Poll::Ready(Ok((peer_id, muxer)));
+                    let connection = Connection::new(self.connection.take().unwrap());
+                    return Poll::Ready(Ok((peer_id, connection)));
                 }
                 quinn_proto::Event::ConnectionLost { reason } => {
                     return Poll::Ready(Err(Error::Connection(reason.into())))

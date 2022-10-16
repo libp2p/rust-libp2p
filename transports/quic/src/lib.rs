@@ -57,17 +57,17 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
+mod connection;
 mod endpoint;
 mod error;
-mod muxer;
 mod provider;
 mod tls;
 mod transport;
 mod upgrade;
 
+pub use connection::Connection;
 pub use endpoint::Config;
 pub use error::{ConnectError, ConnectionError, Error};
-pub use muxer::Muxer;
 #[cfg(feature = "async-std")]
 pub use provider::async_std;
 #[cfg(feature = "tokio")]

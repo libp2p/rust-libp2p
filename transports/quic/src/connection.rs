@@ -39,20 +39,20 @@ use std::{
 
 /// State for a single opened QUIC connection.
 #[derive(Debug)]
-pub struct Muxer {
+pub struct Connection {
     inner: Arc<Mutex<Inner>>,
 }
 
-impl Muxer {
-    /// Crate-internal function that builds a [`Muxer`] from a raw connection.
+impl Connection {
+    /// Crate-internal function that builds a [`Connection`] from a raw connection.
     pub(crate) fn new(inner: Inner) -> Self {
-        Muxer {
+        Connection {
             inner: Arc::new(Mutex::new(inner)),
         }
     }
 }
 
-impl StreamMuxer for Muxer {
+impl StreamMuxer for Connection {
     type Substream = Substream;
     type Error = Error;
 
@@ -206,7 +206,7 @@ impl StreamMuxer for Muxer {
     }
 }
 
-/// Mutex-protected fields of [`Muxer`].
+/// Mutex-protected fields of [`Connection`].
 #[derive(Debug)]
 pub struct Inner {
     /// Channel to the endpoint this connection belongs to.
@@ -479,12 +479,12 @@ impl SubstreamState {
 #[derive(Debug)]
 pub struct Substream {
     id: quinn_proto::StreamId,
-    muxer: Arc<Mutex<Inner>>,
+    connection: Arc<Mutex<Inner>>,
 }
 
 impl Substream {
-    fn new(id: quinn_proto::StreamId, muxer: Arc<Mutex<Inner>>) -> Self {
-        Self { id, muxer }
+    fn new(id: quinn_proto::StreamId, connection: Arc<Mutex<Inner>>) -> Self {
+        Self { id, connection }
     }
 }
 
@@ -494,9 +494,9 @@ impl AsyncRead for Substream {
         cx: &mut Context<'_>,
         mut buf: &mut [u8],
     ) -> Poll<io::Result<usize>> {
-        let mut muxer = self.muxer.lock();
+        let mut connection = self.connection.lock();
 
-        let mut stream = muxer.connection.recv_stream(self.id);
+        let mut stream = connection.connection.recv_stream(self.id);
         let mut chunks = match stream.read(true) {
             Ok(chunks) => chunks,
             Err(quinn_proto::ReadableError::UnknownStream) => {
@@ -527,12 +527,12 @@ impl AsyncRead for Substream {
             bytes += chunk.bytes.len();
         }
         if chunks.finalize().should_transmit() {
-            if let Some(waker) = muxer.poll_connection_waker.take() {
+            if let Some(waker) = connection.poll_connection_waker.take() {
                 waker.wake();
             }
         }
         if pending && bytes == 0 {
-            let substream_state = muxer.unchecked_substream_state(self.id);
+            let substream_state = connection.unchecked_substream_state(self.id);
             substream_state.read_waker = Some(cx.waker().clone());
             Poll::Pending
         } else {
@@ -547,17 +547,17 @@ impl AsyncWrite for Substream {
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<std::io::Result<usize>> {
-        let mut muxer = self.muxer.lock();
+        let mut connection = self.connection.lock();
 
-        match muxer.connection.send_stream(self.id).write(buf) {
+        match connection.connection.send_stream(self.id).write(buf) {
             Ok(bytes) => {
-                if let Some(waker) = muxer.poll_connection_waker.take() {
+                if let Some(waker) = connection.poll_connection_waker.take() {
                     waker.wake();
                 }
                 Poll::Ready(Ok(bytes))
             }
             Err(quinn_proto::WriteError::Blocked) => {
-                let substream_state = muxer.unchecked_substream_state(self.id);
+                let substream_state = connection.unchecked_substream_state(self.id);
                 substream_state.write_waker = Some(cx.waker().clone());
                 Poll::Pending
             }
@@ -576,15 +576,18 @@ impl AsyncWrite for Substream {
     }
 
     fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
-        let mut muxer = self.muxer.lock();
+        let mut connection = self.connection.lock();
 
-        if muxer.unchecked_substream_state(self.id).is_write_closed {
+        if connection
+            .unchecked_substream_state(self.id)
+            .is_write_closed
+        {
             return Poll::Ready(Ok(()));
         }
 
-        match muxer.finish_substream(self.id) {
+        match connection.finish_substream(self.id) {
             Ok(()) => {
-                let substream_state = muxer.unchecked_substream_state(self.id);
+                let substream_state = connection.unchecked_substream_state(self.id);
                 substream_state.finished_waker = Some(cx.waker().clone());
                 Poll::Pending
             }
@@ -600,10 +603,10 @@ impl AsyncWrite for Substream {
 
 impl Drop for Substream {
     fn drop(&mut self) {
-        let mut muxer = self.muxer.lock();
-        muxer.substreams.remove(&self.id);
-        let _ = muxer.connection.recv_stream(self.id).stop(0u32.into());
-        let mut send_stream = muxer.connection.send_stream(self.id);
+        let mut connection = self.connection.lock();
+        connection.substreams.remove(&self.id);
+        let _ = connection.connection.recv_stream(self.id).stop(0u32.into());
+        let mut send_stream = connection.connection.send_stream(self.id);
         match send_stream.finish() {
             Ok(()) => {}
             // Already finished or reset, which is fine.
