@@ -55,8 +55,6 @@
 //! Instead, you must pass all needed configuration into the constructor.
 //!
 
-#![deny(unsafe_code)]
-
 mod connection;
 mod endpoint;
 mod error;
