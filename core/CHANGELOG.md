@@ -1,8 +1,8 @@
 # 0.38.0 [unreleased]
 
-- Remove deprecated functions `StreamMuxerExt::next_{inbound,outbound}`. See [PR XXXX].
+- Remove deprecated functions `StreamMuxerExt::next_{inbound,outbound}`. See [PR 3031].
 
-[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+[PR 3031]: https://github.com/libp2p/rust-libp2p/pull/3031
 
 # 0.37.0
 
