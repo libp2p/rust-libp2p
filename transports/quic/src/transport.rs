@@ -24,7 +24,7 @@
 
 use crate::endpoint::{Config, QuinnConfig, ToEndpoint};
 use crate::provider::Provider;
-use crate::{connection::Connection, endpoint, upgrade::Connecting, Error};
+use crate::{endpoint, Connecting, Connection, Error};
 
 use futures::channel::{mpsc, oneshot};
 use futures::future::BoxFuture;

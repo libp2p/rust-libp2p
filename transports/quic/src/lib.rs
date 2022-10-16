@@ -63,9 +63,8 @@ mod error;
 mod provider;
 mod tls;
 mod transport;
-mod upgrade;
 
-pub use connection::Connection;
+pub use connection::{Connecting, Connection, Substream};
 pub use endpoint::Config;
 pub use error::{ConnectError, ConnectionError, Error};
 #[cfg(feature = "async-std")]
@@ -74,4 +73,3 @@ pub use provider::async_std;
 pub use provider::tokio;
 pub use provider::Provider;
 pub use transport::GenTransport;
-pub use upgrade::Connecting;
