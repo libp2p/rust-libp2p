@@ -1,8 +1,8 @@
-# 0.37.0 [unreleased]
+# 0.37.0
 
 - Implement `Hash` and `Ord` for `PublicKey`. See [PR 2915].
 
-- Remove default features. If you previously depended on `secp256k1` or `ecdsa` you need to enable these explicitly 
+- Remove default features. If you previously depended on `secp256k1` or `ecdsa` you need to enable these explicitly
   now. See [PR 2918].
 
 - Deprecate `StreamMuxerExt::next_{inbound,outbound}`. See [PR 3002].
