@@ -46,9 +46,9 @@
 # 0.50.0 - [unreleased]
 
 - Remove deprecated features: `tcp-tokio`, `mdns-tokio`, `dns-tokio`, `tcp-async-io`, `mdns-async-io`, `dns-async-std`.
-  See [PR XXXX].
+  See [PR 3001].
 
-[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+[PR 3001]: https://github.com/libp2p/rust-libp2p/pull/3001
 
 # 0.49.0
 
