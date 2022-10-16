@@ -11,7 +11,7 @@ This repository is the central place for Rust development of the [libp2p](https:
 
 - **Main documentation** can be found on https://docs.rs/libp2p.
 
-- The **[examples](examples)** folder contains small binaries showcasing the
+- The **[examples](libp2p/examples)** folder contains small binaries showcasing the
   many protocols in this repository.
 
 - For **security related issues** please reach out to security@libp2p.io. Please
@@ -33,6 +33,11 @@ This repository is the central place for Rust development of the [libp2p](https:
 
 The main components of this repository are structured as follows:
 
+  * `libp2p/`: The `libp2p` meta crate which re-exports everything else.
+
+  * `libp2p/examples/`: Worked examples of built-in application protocols (see `protocols/`)
+    with common `Transport` configurations.
+
   * `core/`: The implementation of `libp2p-core` with its `Transport` and
     `StreamMuxer` API on which almost all other crates depend.
 
@@ -52,9 +57,6 @@ The main components of this repository are structured as follows:
     `libp2p-swarm` APIs.
 
   * `misc/`: Utility libraries.
-
-  * `examples/`: Worked examples of built-in application protocols (see `protocols/`)
-    with common `Transport` configurations.
 
 ## Community Guidelines
 
