@@ -22,7 +22,6 @@
 //!
 //! Combines all the objects in the other modules to implement the trait.
 
-use crate::connection::Inner;
 use crate::endpoint::{Config, QuinnConfig, ToEndpoint};
 use crate::provider::Provider;
 use crate::{connection::Connection, endpoint, upgrade::Connecting, Error};
@@ -299,7 +298,7 @@ struct Listener {
     listener_id: ListenerId,
 
     /// Channel where new connections are being sent.
-    new_connections_rx: mpsc::Receiver<Inner>,
+    new_connections_rx: mpsc::Receiver<Connection>,
     handshake_timeout: Duration,
 
     if_watcher: Option<IfWatcher>,

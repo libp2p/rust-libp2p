@@ -20,7 +20,7 @@
 
 //! Future that drives a QUIC connection until is has performed its TLS handshake.
 
-use crate::{connection::Inner, Connection, Error};
+use crate::{Connection, Error};
 
 use futures::prelude::*;
 use futures_timer::Delay;
@@ -34,15 +34,15 @@ use std::{
 /// A QUIC connection currently being negotiated.
 #[derive(Debug)]
 pub struct Connecting {
-    connection: Option<Inner>,
+    connection: Option<Connection>,
     timeout: Delay,
 }
 
 impl Connecting {
-    /// Builds an [`Connecting`] that wraps around an [`Inner`] connection.
-    pub(crate) fn new(inner: Inner, timeout: Duration) -> Self {
+    /// Builds an [`Connecting`] that wraps around an [`Connection`].
+    pub(crate) fn new(connection: Connection, timeout: Duration) -> Self {
         Connecting {
-            connection: Some(inner),
+            connection: Some(connection),
             timeout: Delay::new(timeout),
         }
     }
@@ -70,8 +70,7 @@ impl Future for Connecting {
             };
             match event {
                 quinn_proto::Event::Connected => {
-                    let session = connection.crypto_session();
-                    let identity = session
+                    let identity = connection
                         .peer_identity()
                         .expect("connection got identity because it passed TLS handshake; qed");
                     let certificates: Box<Vec<rustls::Certificate>> =
@@ -84,8 +83,7 @@ impl Future for Connecting {
                         .expect("the certificate was validated during TLS handshake; qed");
                     let peer_id = PeerId::from_public_key(&p2p_cert.extension.public_key);
 
-                    let connection = Connection::new(self.connection.take().unwrap());
-                    return Poll::Ready(Ok((peer_id, connection)));
+                    return Poll::Ready(Ok((peer_id, self.connection.take().unwrap())));
                 }
                 quinn_proto::Event::ConnectionLost { reason } => {
                     return Poll::Ready(Err(Error::Connection(reason.into())))

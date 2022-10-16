@@ -28,9 +28,7 @@
 //! the rest of the code only happens through channels. See the documentation of the
 //! [`EndpointDriver`] for a thorough description.
 
-use crate::{
-    connection::Inner, provider::Provider, tls, transport::SocketFamily, ConnectError, Error,
-};
+use crate::{provider::Provider, tls, transport::SocketFamily, ConnectError, Connection, Error};
 
 use bytes::BytesMut;
 use futures::{
@@ -148,7 +146,7 @@ impl Channel {
     pub fn new_bidirectional<P: Provider>(
         quinn_config: QuinnConfig,
         socket_addr: SocketAddr,
-    ) -> Result<(Self, mpsc::Receiver<Inner>), Error> {
+    ) -> Result<(Self, mpsc::Receiver<Connection>), Error> {
         let (new_connections_tx, new_connections_rx) = mpsc::channel(1);
         let endpoint = Self::new::<P>(quinn_config, socket_addr, Some(new_connections_tx))?;
         Ok((endpoint, new_connections_rx))
@@ -169,7 +167,7 @@ impl Channel {
     fn new<P: Provider>(
         quinn_config: QuinnConfig,
         socket_addr: SocketAddr,
-        new_connections: Option<mpsc::Sender<Inner>>,
+        new_connections: Option<mpsc::Sender<Connection>>,
     ) -> Result<Self, Error> {
         // NOT blocking, as per man:bind(2), as we pass an IP address.
         let socket = std::net::UdpSocket::bind(&socket_addr)?;
@@ -260,7 +258,7 @@ pub enum ToEndpoint {
         /// UDP address to connect to.
         addr: SocketAddr,
         /// Channel to return the result of the dialing to.
-        result: oneshot::Sender<Result<Inner, Error>>,
+        result: oneshot::Sender<Result<Connection, Error>>,
     },
     /// Sent by a `quinn_proto` connection when the endpoint needs to process an event generated
     /// by a connection. The event itself is opaque to us. Only `quinn_proto` knows what is in
@@ -375,7 +373,7 @@ pub struct EndpointDriver<P: Provider> {
         HashMap<quinn_proto::ConnectionHandle, mpsc::Sender<quinn_proto::ConnectionEvent>>,
     // Channel to forward new inbound connections to the transport.
     // `None` if server capabilities are disabled, i.e. the endpoint is only used for dialing.
-    new_connection_tx: Option<mpsc::Sender<Inner>>,
+    new_connection_tx: Option<mpsc::Sender<Connection>>,
     // Whether the transport dropped its handle for this endpoint.
     is_decoupled: bool,
 }
@@ -384,7 +382,7 @@ impl<P: Provider> EndpointDriver<P> {
     fn new(
         endpoint_config: Arc<quinn_proto::EndpointConfig>,
         client_config: quinn_proto::ClientConfig,
-        new_connection_tx: Option<mpsc::Sender<Inner>>,
+        new_connection_tx: Option<mpsc::Sender<Connection>>,
         server_config: Option<Arc<quinn_proto::ServerConfig>>,
         channel: Channel,
         socket: P,
@@ -421,7 +419,7 @@ impl<P: Provider> EndpointDriver<P> {
 
                 debug_assert_eq!(connection.side(), quinn_proto::Side::Client);
                 let (tx, rx) = mpsc::channel(16);
-                let connection = Inner::from_quinn_connection(
+                let connection = Connection::from_quinn_connection(
                     self.channel.clone(),
                     connection,
                     connection_id,
@@ -530,7 +528,7 @@ impl<P: Provider> EndpointDriver<P> {
 
                 let (tx, rx) = mpsc::channel(16);
                 let connection =
-                    Inner::from_quinn_connection(self.channel.clone(), connec, connec_id, rx);
+                    Connection::from_quinn_connection(self.channel.clone(), connec, connec_id, rx);
                 match connection_tx.try_send(connection) {
                     Ok(()) => {
                         self.alive_connections.insert(connec_id, tx);
