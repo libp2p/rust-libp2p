@@ -42,15 +42,9 @@ pub struct Muxer {
 
 impl Muxer {
     /// Crate-internal function that builds a [`Muxer`] from a raw connection.
-    pub(crate) fn from_connection(connection: Connection) -> Self {
+    pub(crate) fn new(inner: Inner) -> Self {
         Muxer {
-            inner: Arc::new(Mutex::new(Inner {
-                connection,
-                substreams: Default::default(),
-                poll_outbound_waker: None,
-                poll_inbound_waker: None,
-                poll_connection_waker: None,
-            })),
+            inner: Arc::new(Mutex::new(inner)),
         }
     }
 }
@@ -193,17 +187,17 @@ impl StreamMuxer for Muxer {
 
 /// Mutex-protected fields of [`Muxer`].
 #[derive(Debug)]
-struct Inner {
+pub struct Inner {
     /// Inner connection object that yields events.
-    connection: Connection,
+    pub connection: Connection,
     /// State of all the substreams that the muxer reports as open.
-    substreams: HashMap<quinn_proto::StreamId, SubstreamState>,
+    pub substreams: HashMap<quinn_proto::StreamId, SubstreamState>,
     /// Waker to wake if a new outbound substream is opened.
-    poll_outbound_waker: Option<Waker>,
+    pub poll_outbound_waker: Option<Waker>,
     /// Waker to wake if a new inbound substream was happened.
-    poll_inbound_waker: Option<Waker>,
+    pub poll_inbound_waker: Option<Waker>,
     /// Waker to wake if the connection should be polled again.
-    poll_connection_waker: Option<Waker>,
+    pub poll_connection_waker: Option<Waker>,
 }
 
 impl Inner {
@@ -216,7 +210,7 @@ impl Inner {
 
 /// State of a single substream.
 #[derive(Debug, Default, Clone)]
-struct SubstreamState {
+pub struct SubstreamState {
     /// Waker to wake if the substream becomes readable or stopped.
     read_waker: Option<Waker>,
     /// Waker to wake if the substream becomes writable or stopped.

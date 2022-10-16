@@ -24,6 +24,7 @@
 
 use crate::connection::Connection;
 use crate::endpoint::{Config, QuinnConfig, ToEndpoint};
+use crate::muxer::Inner;
 use crate::provider::Provider;
 use crate::{endpoint, muxer::Muxer, upgrade::Connecting, Error};
 
@@ -266,7 +267,14 @@ impl DialerState {
         async move {
             // Our oneshot getting dropped means the message didn't make it to the endpoint driver.
             let connection = tx.await.map_err(|_| Error::EndpointDriverCrashed)??;
-            let (peer, muxer) = Connecting::from_connection(connection, timeout).await?;
+            let inner = Inner {
+                connection,
+                substreams: Default::default(),
+                poll_outbound_waker: None,
+                poll_inbound_waker: None,
+                poll_connection_waker: None,
+            };
+            let (peer, muxer) = Connecting::new(inner, timeout).await?;
 
             Ok((peer, muxer))
         }
@@ -442,8 +450,15 @@ impl Stream for Listener {
                 Poll::Ready(Some(connection)) => {
                     let local_addr = socketaddr_to_multiaddr(connection.local_addr());
                     let send_back_addr = socketaddr_to_multiaddr(&connection.remote_addr());
+                    let inner = Inner {
+                        connection,
+                        substreams: Default::default(),
+                        poll_outbound_waker: None,
+                        poll_inbound_waker: None,
+                        poll_connection_waker: None,
+                    };
                     let event = TransportEvent::Incoming {
-                        upgrade: Connecting::from_connection(connection, self.handshake_timeout),
+                        upgrade: Connecting::new(inner, self.handshake_timeout),
                         local_addr,
                         send_back_addr,
                         listener_id: self.listener_id,

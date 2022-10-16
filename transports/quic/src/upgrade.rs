@@ -20,10 +20,7 @@
 
 //! Future that drives a QUIC connection until is has performed its TLS handshake.
 
-use crate::{
-    connection::{Connection, ConnectionEvent},
-    Error, Muxer,
-};
+use crate::{connection::ConnectionEvent, muxer::Inner, Error, Muxer};
 
 use futures::prelude::*;
 use futures_timer::Delay;
@@ -37,15 +34,15 @@ use std::{
 /// A QUIC connection currently being negotiated.
 #[derive(Debug)]
 pub struct Connecting {
-    connection: Option<Connection>,
+    inner: Option<Inner>,
     timeout: Delay,
 }
 
 impl Connecting {
     /// Builds an [`Connecting`] that wraps around a [`Connection`].
-    pub(crate) fn from_connection(connection: Connection, timeout: Duration) -> Self {
+    pub(crate) fn new(inner: Inner, timeout: Duration) -> Self {
         Connecting {
-            connection: Some(connection),
+            inner: Some(inner),
             timeout: Delay::new(timeout),
         }
     }
@@ -55,15 +52,15 @@ impl Future for Connecting {
     type Output = Result<(PeerId, Muxer), Error>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let connection = self
-            .connection
+        let inner = self
+            .inner
             .as_mut()
             .expect("Future polled after it has completed");
 
         loop {
-            match connection.poll_event(cx) {
+            match inner.connection.poll_event(cx) {
                 Poll::Ready(ConnectionEvent::Connected(peer_id)) => {
-                    let muxer = Muxer::from_connection(self.connection.take().unwrap());
+                    let muxer = Muxer::new(self.inner.take().unwrap());
                     return Poll::Ready(Ok((peer_id, muxer)));
                 }
                 Poll::Ready(ConnectionEvent::ConnectionLost(err)) => return Poll::Ready(Err(err)),
