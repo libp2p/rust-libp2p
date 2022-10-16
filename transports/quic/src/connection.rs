@@ -26,13 +26,9 @@
 //! All interactions with a QUIC connection should be done through this struct.
 // TODO: docs
 
-use crate::{
-    endpoint::{self, ToEndpoint},
-    ConnectionError, Error,
-};
+use crate::endpoint::{self, ToEndpoint};
 use futures::{channel::mpsc, prelude::*};
 use futures_timer::Delay;
-use libp2p_core::PeerId;
 use std::{
     net::SocketAddr,
     task::{Context, Poll},
@@ -172,8 +168,12 @@ impl Connection {
         self.connection.send_stream(id).finish()
     }
 
+    pub fn crypto_session(&self) -> &dyn quinn_proto::crypto::Session {
+        self.connection.crypto_session()
+    }
+
     /// Polls the connection for an event that happened on it.
-    pub fn poll_event(&mut self, cx: &mut Context<'_>) -> Poll<ConnectionEvent> {
+    pub fn poll_event(&mut self, cx: &mut Context<'_>) -> Poll<Option<quinn_proto::Event>> {
         loop {
             match self.from_endpoint.poll_next_unpin(cx) {
                 Poll::Ready(Some(event)) => {
@@ -181,9 +181,7 @@ impl Connection {
                     continue;
                 }
                 Poll::Ready(None) => {
-                    return Poll::Ready(ConnectionEvent::ConnectionLost(
-                        Error::EndpointDriverCrashed,
-                    ));
+                    return Poll::Ready(None);
                 }
                 Poll::Pending => {}
             }
@@ -204,9 +202,7 @@ impl Connection {
                         return Poll::Pending;
                     }
                     Err(endpoint::Disconnected {}) => {
-                        return Poll::Ready(ConnectionEvent::ConnectionLost(
-                            Error::EndpointDriverCrashed,
-                        ));
+                        return Poll::Ready(None);
                     }
                 }
             }
@@ -258,63 +254,10 @@ impl Connection {
 
             // The final step consists in handling the events related to the various substreams.
             if let Some(ev) = self.connection.poll() {
-                let event = self.parse_connection_event(ev);
-                return Poll::Ready(event);
+                return Poll::Ready(Some(ev));
             }
 
             return Poll::Pending;
-        }
-    }
-
-    fn parse_connection_event(&self, event: quinn_proto::Event) -> ConnectionEvent {
-        match event {
-            quinn_proto::Event::Connected => {
-                let session = self.connection.crypto_session();
-                let identity = session
-                    .peer_identity()
-                    .expect("connection got identity because it passed TLS handshake; qed");
-                let certificates: Box<Vec<rustls::Certificate>> =
-                    identity.downcast().expect("we rely on rustls feature; qed");
-                let end_entity = certificates
-                    .get(0)
-                    .expect("there should be exactly one certificate; qed");
-                let end_entity_der = end_entity.as_ref();
-                let p2p_cert = crate::tls::certificate::parse_certificate(end_entity_der)
-                    .expect("the certificate was validated during TLS handshake; qed");
-                let peer_id = PeerId::from_public_key(&p2p_cert.extension.public_key);
-                ConnectionEvent::Connected(peer_id)
-            }
-            quinn_proto::Event::Stream(quinn_proto::StreamEvent::Readable { id }) => {
-                ConnectionEvent::StreamReadable(id)
-            }
-            quinn_proto::Event::Stream(quinn_proto::StreamEvent::Writable { id }) => {
-                ConnectionEvent::StreamWritable(id)
-            }
-            quinn_proto::Event::Stream(quinn_proto::StreamEvent::Stopped { id, .. }) => {
-                ConnectionEvent::StreamStopped(id)
-            }
-            quinn_proto::Event::Stream(quinn_proto::StreamEvent::Available {
-                dir: quinn_proto::Dir::Bi,
-            }) => ConnectionEvent::StreamAvailable,
-            quinn_proto::Event::Stream(quinn_proto::StreamEvent::Opened {
-                dir: quinn_proto::Dir::Bi,
-            }) => ConnectionEvent::StreamOpened,
-            quinn_proto::Event::ConnectionLost { reason } => {
-                ConnectionEvent::ConnectionLost(ConnectionError::from(reason).into())
-            }
-            quinn_proto::Event::Stream(quinn_proto::StreamEvent::Finished { id }) => {
-                ConnectionEvent::StreamFinished(id)
-            }
-            quinn_proto::Event::HandshakeDataReady => ConnectionEvent::HandshakeDataReady,
-            quinn_proto::Event::Stream(quinn_proto::StreamEvent::Opened {
-                dir: quinn_proto::Dir::Uni,
-            })
-            | quinn_proto::Event::Stream(quinn_proto::StreamEvent::Available {
-                dir: quinn_proto::Dir::Uni,
-            })
-            | quinn_proto::Event::DatagramReceived => {
-                unreachable!("We don't use datagrams or unidirectional streams.")
-            }
         }
     }
 }
@@ -327,34 +270,4 @@ impl Drop for Connection {
         };
         self.endpoint_channel.send_on_drop(to_endpoint);
     }
-}
-
-/// Event generated by the [`Connection`].
-#[derive(Debug)]
-pub enum ConnectionEvent {
-    /// Now connected to the remote and certificates are available.
-    Connected(PeerId),
-
-    /// Connection has been closed and can no longer be used.
-    ConnectionLost(Error),
-
-    /// Generated after [`Connection::accept_substream`] has been called and has returned
-    /// `None`. After this event has been generated, this method is guaranteed to return `Some`.
-    StreamAvailable,
-    /// Generated after [`Connection::open_substream`] has been called and has returned
-    /// `None`. After this event has been generated, this method is guaranteed to return `Some`.
-    StreamOpened,
-
-    /// Generated after `read_substream` has returned a `Blocked` error.
-    StreamReadable(quinn_proto::StreamId),
-    /// Generated after `write_substream` has returned a `Blocked` error.
-    StreamWritable(quinn_proto::StreamId),
-
-    /// Generated after [`Connection::finish_substream`] has been called.
-    StreamFinished(quinn_proto::StreamId),
-    /// A substream has been stopped. This concept is similar to the concept of a substream being
-    /// "reset", as in a TCP socket being reset for example.
-    StreamStopped(quinn_proto::StreamId),
-
-    HandshakeDataReady,
 }

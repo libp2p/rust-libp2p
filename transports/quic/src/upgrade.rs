@@ -20,7 +20,7 @@
 
 //! Future that drives a QUIC connection until is has performed its TLS handshake.
 
-use crate::{connection::ConnectionEvent, muxer::Inner, Error, Muxer};
+use crate::{muxer::Inner, Error, Muxer};
 
 use futures::prelude::*;
 use futures_timer::Delay;
@@ -58,26 +58,43 @@ impl Future for Connecting {
             .expect("Future polled after it has completed");
 
         loop {
-            match inner.connection.poll_event(cx) {
-                Poll::Ready(ConnectionEvent::Connected(peer_id)) => {
+            let event = match inner.connection.poll_event(cx) {
+                Poll::Ready(Some(event)) => event,
+                Poll::Ready(None) => return Poll::Ready(Err(Error::EndpointDriverCrashed)),
+                Poll::Pending => {
+                    return self
+                        .timeout
+                        .poll_unpin(cx)
+                        .map(|()| Err(Error::HandshakeTimedOut));
+                }
+            };
+            match event {
+                quinn_proto::Event::Connected => {
+                    let session = inner.connection.crypto_session();
+                    let identity = session
+                        .peer_identity()
+                        .expect("connection got identity because it passed TLS handshake; qed");
+                    let certificates: Box<Vec<rustls::Certificate>> =
+                        identity.downcast().expect("we rely on rustls feature; qed");
+                    let end_entity = certificates
+                        .get(0)
+                        .expect("there should be exactly one certificate; qed");
+                    let end_entity_der = end_entity.as_ref();
+                    let p2p_cert = crate::tls::certificate::parse_certificate(end_entity_der)
+                        .expect("the certificate was validated during TLS handshake; qed");
+                    let peer_id = PeerId::from_public_key(&p2p_cert.extension.public_key);
+
                     let muxer = Muxer::new(self.inner.take().unwrap());
                     return Poll::Ready(Ok((peer_id, muxer)));
                 }
-                Poll::Ready(ConnectionEvent::ConnectionLost(err)) => return Poll::Ready(Err(err)),
-                Poll::Ready(ConnectionEvent::HandshakeDataReady)
-                | Poll::Ready(ConnectionEvent::StreamAvailable)
-                | Poll::Ready(ConnectionEvent::StreamOpened)
-                | Poll::Ready(ConnectionEvent::StreamReadable(_))
-                | Poll::Ready(ConnectionEvent::StreamWritable(_))
-                | Poll::Ready(ConnectionEvent::StreamFinished(_))
-                | Poll::Ready(ConnectionEvent::StreamStopped(_)) => continue,
-                Poll::Pending => {}
+                quinn_proto::Event::ConnectionLost { reason } => {
+                    return Poll::Ready(Err(Error::Connection(reason.into())))
+                }
+                quinn_proto::Event::HandshakeDataReady | quinn_proto::Event::Stream(_) => {}
+                quinn_proto::Event::DatagramReceived => {
+                    debug_assert!(false, "Datagrams are not supported")
+                }
             }
-            match self.timeout.poll_unpin(cx) {
-                Poll::Ready(()) => return Poll::Ready(Err(Error::HandshakeTimedOut)),
-                Poll::Pending => {}
-            }
-            return Poll::Pending;
         }
     }
 }

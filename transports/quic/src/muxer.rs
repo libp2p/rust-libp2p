@@ -18,10 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{
-    connection::{Connection, ConnectionEvent},
-    Error,
-};
+use crate::{connection::Connection, Error};
 
 use futures::{ready, AsyncRead, AsyncWrite};
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
@@ -61,53 +58,73 @@ impl StreamMuxer for Muxer {
         // Poll the inner [`quinn_proto::Connection`] for events and wake
         // the wakers of related poll-based methods.
         while let Poll::Ready(event) = inner.connection.poll_event(cx) {
+            let event = match event {
+                Some(event) => event,
+                None => return Poll::Ready(Err(Error::EndpointDriverCrashed)),
+            };
             match event {
-                ConnectionEvent::Connected(_) | ConnectionEvent::HandshakeDataReady => {
+                quinn_proto::Event::Connected | quinn_proto::Event::HandshakeDataReady => {
                     debug_assert!(
                         false,
                         "Unexpected event {:?} on established QUIC connection",
                         event
                     );
                 }
-                ConnectionEvent::ConnectionLost(err) => {
+                quinn_proto::Event::ConnectionLost { reason } => {
                     inner.connection.close();
                     inner.substreams.values_mut().for_each(|s| s.wake_all());
-                    return Poll::Ready(Err(err));
+                    return Poll::Ready(Err(Error::Connection(reason.into())));
                 }
-                ConnectionEvent::StreamOpened => {
+                quinn_proto::Event::Stream(quinn_proto::StreamEvent::Opened {
+                    dir: quinn_proto::Dir::Bi,
+                }) => {
                     if let Some(waker) = inner.poll_outbound_waker.take() {
                         waker.wake();
                     }
                 }
-                ConnectionEvent::StreamReadable(substream) => {
-                    if let Some(substream) = inner.substreams.get_mut(&substream) {
+                quinn_proto::Event::Stream(quinn_proto::StreamEvent::Available {
+                    dir: quinn_proto::Dir::Bi,
+                }) => {
+                    if let Some(waker) = inner.poll_inbound_waker.take() {
+                        waker.wake();
+                    }
+                }
+                quinn_proto::Event::Stream(quinn_proto::StreamEvent::Readable { id }) => {
+                    if let Some(substream) = inner.substreams.get_mut(&id) {
                         if let Some(waker) = substream.read_waker.take() {
                             waker.wake();
                         }
                     }
                 }
-                ConnectionEvent::StreamWritable(substream) => {
-                    if let Some(substream) = inner.substreams.get_mut(&substream) {
+                quinn_proto::Event::Stream(quinn_proto::StreamEvent::Writable { id }) => {
+                    if let Some(substream) = inner.substreams.get_mut(&id) {
                         if let Some(waker) = substream.write_waker.take() {
                             waker.wake();
                         }
                     }
                 }
-                ConnectionEvent::StreamFinished(substream) => {
-                    if let Some(substream) = inner.substreams.get_mut(&substream) {
+                quinn_proto::Event::Stream(quinn_proto::StreamEvent::Finished { id }) => {
+                    if let Some(substream) = inner.substreams.get_mut(&id) {
                         substream.wake_all();
                         substream.is_write_closed = true;
                     }
                 }
-                ConnectionEvent::StreamStopped(substream) => {
-                    if let Some(substream) = inner.substreams.get_mut(&substream) {
+                quinn_proto::Event::Stream(quinn_proto::StreamEvent::Stopped {
+                    id,
+                    error_code: _,
+                }) => {
+                    if let Some(substream) = inner.substreams.get_mut(&id) {
                         substream.wake_all();
                     }
                 }
-                ConnectionEvent::StreamAvailable => {
-                    if let Some(waker) = inner.poll_inbound_waker.take() {
-                        waker.wake();
-                    }
+                quinn_proto::Event::DatagramReceived
+                | quinn_proto::Event::Stream(quinn_proto::StreamEvent::Available {
+                    dir: quinn_proto::Dir::Uni,
+                })
+                | quinn_proto::Event::Stream(quinn_proto::StreamEvent::Opened {
+                    dir: quinn_proto::Dir::Uni,
+                }) => {
+                    unreachable!("We don't use datagrams or unidirectional streams.")
                 }
             }
         }
@@ -178,8 +195,10 @@ impl StreamMuxer for Muxer {
             if connection.send_stream_count() == 0 && !connection.is_closed() {
                 connection.close()
             }
-            if let ConnectionEvent::ConnectionLost(_) = ready!(connection.poll_event(cx)) {
-                return Poll::Ready(Ok(()));
+            match ready!(connection.poll_event(cx)) {
+                Some(quinn_proto::Event::ConnectionLost { .. }) => return Poll::Ready(Ok(())),
+                None => return Poll::Ready(Err(Error::EndpointDriverCrashed)),
+                _ => {}
             }
         }
     }
