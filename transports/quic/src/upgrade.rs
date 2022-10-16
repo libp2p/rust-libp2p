@@ -34,15 +34,15 @@ use std::{
 /// A QUIC connection currently being negotiated.
 #[derive(Debug)]
 pub struct Connecting {
-    inner: Option<Inner>,
+    connection: Option<Inner>,
     timeout: Delay,
 }
 
 impl Connecting {
-    /// Builds an [`Connecting`] that wraps around a [`Connection`].
+    /// Builds an [`Connecting`] that wraps around an [`Inner`] connection.
     pub(crate) fn new(inner: Inner, timeout: Duration) -> Self {
         Connecting {
-            inner: Some(inner),
+            connection: Some(inner),
             timeout: Delay::new(timeout),
         }
     }
@@ -52,13 +52,13 @@ impl Future for Connecting {
     type Output = Result<(PeerId, Muxer), Error>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let inner = self
-            .inner
+        let connection = self
+            .connection
             .as_mut()
             .expect("Future polled after it has completed");
 
         loop {
-            let event = match inner.connection.poll_event(cx) {
+            let event = match connection.poll_event(cx) {
                 Poll::Ready(Some(event)) => event,
                 Poll::Ready(None) => return Poll::Ready(Err(Error::EndpointDriverCrashed)),
                 Poll::Pending => {
@@ -70,7 +70,7 @@ impl Future for Connecting {
             };
             match event {
                 quinn_proto::Event::Connected => {
-                    let session = inner.connection.crypto_session();
+                    let session = connection.crypto_session();
                     let identity = session
                         .peer_identity()
                         .expect("connection got identity because it passed TLS handshake; qed");
@@ -84,7 +84,7 @@ impl Future for Connecting {
                         .expect("the certificate was validated during TLS handshake; qed");
                     let peer_id = PeerId::from_public_key(&p2p_cert.extension.public_key);
 
-                    let muxer = Muxer::new(self.inner.take().unwrap());
+                    let muxer = Muxer::new(self.connection.take().unwrap());
                     return Poll::Ready(Ok((peer_id, muxer)));
                 }
                 quinn_proto::Event::ConnectionLost { reason } => {
