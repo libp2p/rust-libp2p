@@ -55,6 +55,8 @@
 //! Instead, you must pass all needed configuration into the constructor.
 //!
 
+#![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
+
 mod connection;
 mod endpoint;
 mod error;
