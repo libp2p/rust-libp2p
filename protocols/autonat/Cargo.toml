@@ -29,4 +29,4 @@ prost = "0.11"
 async-std = { version = "1.10", features = ["attributes"] }
 env_logger = "0.9"
 clap = { version = "4.0.13", features = ["derive"] }
-libp2p = { path = "../../meta/", features = ["full"] }
+libp2p = { path = "../../libp2p/", features = ["full"] }

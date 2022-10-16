@@ -1,6 +1,6 @@
 [workspace]
 members = [
-    "meta",
+    "libp2p",
     "core",
     "misc/metrics",
     "misc/multistream-select",
