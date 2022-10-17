@@ -1749,7 +1749,7 @@ mod tests {
                         // The banned connection was established. Check that it was not reported to
                         // the behaviour of the banning swarm.
                         assert_eq!(
-                            swarm2.behaviour.inject_connection_established.len(), s2_expected_conns,
+                            swarm2.behaviour.on_connection_established.len(), s2_expected_conns,
                             "No additional closed connections should be reported for the banned peer"
                         );
 
@@ -1763,7 +1763,7 @@ mod tests {
                     if swarm2.network_info().num_peers() == 0 {
                         // The banned connection has closed. Check that it was not reported.
                         assert_eq!(
-                            swarm2.behaviour.inject_connection_closed.len(), s2_expected_conns,
+                            swarm2.behaviour.on_connection_closed.len(), s2_expected_conns,
                             "No additional closed connections should be reported for the banned peer"
                         );
                         assert!(swarm2.banned_peer_connections.is_empty());
@@ -1778,7 +1778,7 @@ mod tests {
                     }
                 }
                 Stage::Reconnecting => {
-                    if swarm1.behaviour.inject_connection_established.len() == s1_expected_conns
+                    if swarm1.behaviour.on_connection_established.len() == s1_expected_conns
                         && swarm2.behaviour.assert_connected(s2_expected_conns, 2)
                     {
                         return Poll::Ready(());
@@ -1963,7 +1963,7 @@ mod tests {
                 State::Connecting => {
                     if swarms_connected(&swarm1, &swarm2, num_connections) {
                         disconnected_conn_id = {
-                            let conn_id = swarm2.behaviour.inject_connection_established
+                            let conn_id = swarm2.behaviour.on_connection_established
                                 [num_connections / 2]
                                 .1;
                             swarm2.behaviour.inner().next_action.replace(
@@ -1981,20 +1981,20 @@ mod tests {
                     for s in &[&swarm1, &swarm2] {
                         assert!(s
                             .behaviour
-                            .inject_connection_closed
+                            .on_connection_closed
                             .iter()
                             .all(|(.., remaining_conns)| *remaining_conns > 0));
                         assert_eq!(
-                            s.behaviour.inject_connection_established.len(),
+                            s.behaviour.on_connection_established.len(),
                             num_connections
                         );
                         s.behaviour.assert_connected(num_connections, 1);
                     }
                     if [&swarm1, &swarm2]
                         .iter()
-                        .all(|s| s.behaviour.inject_connection_closed.len() == 1)
+                        .all(|s| s.behaviour.on_connection_closed.len() == 1)
                     {
-                        let conn_id = swarm2.behaviour.inject_connection_closed[0].1;
+                        let conn_id = swarm2.behaviour.on_connection_closed[0].1;
                         assert_eq!(Some(conn_id), disconnected_conn_id);
                         return Poll::Ready(());
                     }
