@@ -1,4 +1,5 @@
 name: cargo deny
+
 on:
   push:
     paths:
@@ -6,6 +7,11 @@ on:
   pull_request:
     paths:
       - '**/Cargo.toml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   cargo-deny:
     runs-on: ubuntu-latest
