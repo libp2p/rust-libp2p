@@ -18,7 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::behaviour::{FromSwarm, ConnectionEstablished, ConnectionClosed, DialFailure, ListenerClosed, ListenerError, ExpiredExternalAddr, NewExternalAddr, ExpiredListenAddr, NewListener, NewListenAddr};
+use crate::behaviour::{
+    ConnectionClosed, ConnectionEstablished, DialFailure, ExpiredExternalAddr, ExpiredListenAddr,
+    FromSwarm, ListenerClosed, ListenerError, NewExternalAddr, NewListenAddr, NewListener,
+};
 use crate::{
     ConnectionHandler, IntoConnectionHandler, NetworkBehaviour, NetworkBehaviourAction,
     PollParameters,
@@ -257,12 +260,21 @@ where
         } else {
             assert_eq!(other_established, 0)
         }
-        self.on_connection_established
-            .push((peer_id, connection_id, endpoint.clone(), other_established));
+        self.on_connection_established.push((
+            peer_id,
+            connection_id,
+            endpoint.clone(),
+            other_established,
+        ));
         let errors = Some(failed_addresses.to_vec());
         #[allow(deprecated)]
-        self.inner
-            .inject_connection_established(&peer_id, &connection_id, endpoint, errors.as_ref(), other_established);
+        self.inner.inject_connection_established(
+            &peer_id,
+            &connection_id,
+            endpoint,
+            errors.as_ref(),
+            other_established,
+        );
     }
 
     /// Called on the [`FromSwarm::ConnectionClosed`]
@@ -277,7 +289,6 @@ where
             remaining_established,
         }: ConnectionClosed<<Self as NetworkBehaviour>::ConnectionHandler>,
     ) {
-
         let mut other_closed_connections = self
             .on_connection_established
             .iter()
@@ -308,16 +319,25 @@ where
         assert!(
             self.on_connection_established
                 .iter()
-                .any(|(peer, conn_id, endpoint, _)| (peer, conn_id, endpoint) == (&peer_id,
-                        &connection_id, endpoint)),
+                .any(|(peer, conn_id, endpoint, _)| (peer, conn_id, endpoint)
+                    == (&peer_id, &connection_id, endpoint)),
             "`inject_connection_closed` is called only for connections for \
             which `inject_connection_established` was called first."
         );
-        self.on_connection_closed
-            .push((peer_id, connection_id, endpoint.clone(), remaining_established));
+        self.on_connection_closed.push((
+            peer_id,
+            connection_id,
+            endpoint.clone(),
+            remaining_established,
+        ));
         #[allow(deprecated)]
-        self.inner
-            .inject_connection_closed(&peer_id, &connection_id, endpoint, handler, remaining_established);
+        self.inner.inject_connection_closed(
+            &peer_id,
+            &connection_id,
+            endpoint,
+            handler,
+            remaining_established,
+        );
     }
 }
 
@@ -341,10 +361,17 @@ where
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
         match event {
-            FromSwarm::ConnectionEstablished(connection_established) =>
-                self.on_connection_established(connection_established),
-            FromSwarm::ConnectionClosed(connection_closed) => self.on_connection_closed(connection_closed),
-            FromSwarm::DialFailure(DialFailure { peer_id, handler, error }) => {
+            FromSwarm::ConnectionEstablished(connection_established) => {
+                self.on_connection_established(connection_established)
+            }
+            FromSwarm::ConnectionClosed(connection_closed) => {
+                self.on_connection_closed(connection_closed)
+            }
+            FromSwarm::DialFailure(DialFailure {
+                peer_id,
+                handler,
+                error,
+            }) => {
                 self.on_dial_failure.push(peer_id);
                 #[allow(deprecated)]
                 self.inner.inject_dial_failure(peer_id, handler, error);
@@ -360,7 +387,8 @@ where
                 self.inner.inject_new_listen_addr(listener_id, addr);
             }
             FromSwarm::ExpiredListenAddr(ExpiredListenAddr { listener_id, addr }) => {
-                self.on_expired_listen_addr.push((listener_id, addr.clone()));
+                self.on_expired_listen_addr
+                    .push((listener_id, addr.clone()));
                 #[allow(deprecated)]
                 self.inner.inject_expired_listen_addr(listener_id, addr);
             }
@@ -379,12 +407,15 @@ where
                 #[allow(deprecated)]
                 self.inner.inject_listener_error(listener_id, err);
             }
-            FromSwarm::ListenerClosed(ListenerClosed { listener_id, reason }) => {
+            FromSwarm::ListenerClosed(ListenerClosed {
+                listener_id,
+                reason,
+            }) => {
                 self.on_listener_closed.push((listener_id, reason.is_ok()));
                 #[allow(deprecated)]
                 self.inner.inject_listener_closed(listener_id, reason);
             }
-            _ => {},
+            _ => {}
         }
     }
 

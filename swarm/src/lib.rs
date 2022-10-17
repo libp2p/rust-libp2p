@@ -1963,9 +1963,8 @@ mod tests {
                 State::Connecting => {
                     if swarms_connected(&swarm1, &swarm2, num_connections) {
                         disconnected_conn_id = {
-                            let conn_id = swarm2.behaviour.on_connection_established
-                                [num_connections / 2]
-                                .1;
+                            let conn_id =
+                                swarm2.behaviour.on_connection_established[num_connections / 2].1;
                             swarm2.behaviour.inner().next_action.replace(
                                 NetworkBehaviourAction::CloseConnection {
                                     peer_id: swarm1_id,
@@ -1984,10 +1983,7 @@ mod tests {
                             .on_connection_closed
                             .iter()
                             .all(|(.., remaining_conns)| *remaining_conns > 0));
-                        assert_eq!(
-                            s.behaviour.on_connection_established.len(),
-                            num_connections
-                        );
+                        assert_eq!(s.behaviour.on_connection_established.len(), num_connections);
                         s.behaviour.assert_connected(num_connections, 1);
                     }
                     if [&swarm1, &swarm2]
