@@ -1,3 +1,8 @@
+# 0.41.1 - [unreleased]
+
+- replace `GenMdns`'s NetworkBehaviour implemention `inject_*` methods with the new `on_*` methods.
+  See [PR 3011].
+
 # 0.41.0
 
 - Remove default features. If you previously depended on `async-io` you need to enable this explicitly now. See [PR 2918].

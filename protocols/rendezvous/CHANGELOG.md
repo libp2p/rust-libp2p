@@ -1,3 +1,8 @@
+# 0.10.1 - [unreleased]
+
+- replace `Client` and `Server`'s NetworkBehaviour implemention `inject_*` methods with the new `on_*` methods.
+  See [PR 3011].
+
 # 0.10.0
 
 - Update to `libp2p-core` `v0.37.0`.

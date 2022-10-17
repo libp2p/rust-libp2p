@@ -1,3 +1,8 @@
+# 0.40.1 - [unreleased]
+
+- replace `Behaviour`'s NetworkBehaviour implemention `inject_*` methods with the new `on_*` methods.
+  See [PR 3011].
+
 # 0.40.0
 
 - Update dependencies.

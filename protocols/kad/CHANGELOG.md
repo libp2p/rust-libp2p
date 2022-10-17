@@ -1,3 +1,8 @@
+# 0.41.1 - [unreleased]
+
+- replace `Kademlia`'s NetworkBehaviour implemention `inject_*` methods with the new `on_*` methods.
+  See [PR 3011].
+
 # 0.41.0
 
 - Remove deprecated `set_protocol_name()` from `KademliaConfig` & `KademliaProtocolConfig`.

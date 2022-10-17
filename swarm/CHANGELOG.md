@@ -1,3 +1,13 @@
+# 0.40.1 - [unreleased]
+
+- Add new `on_swarm_event` method to `NetworkBehaviour` that accepts a `FromSwarm` enum and update
+  `inject_*` methods to call `on_swarm_event` with the respective `FromSwarm` variant and deprecate
+  them. See [PR 3011].
+
+- Add new `on_connection_handler_event` method with the same signature as `inject_event`, make the
+  default implementation of `inject_event` call `on_connection_handler_event` and deprecate it.
+  See [PR 3011].
+
 # 0.40.0
 
 - Bump rand to 0.8 and quickcheck to 1. See [PR 2857].
