@@ -207,8 +207,8 @@ where
     }
     let pb = pb_result?;
 
-    if !pb.identity_key.is_empty() {
-        let pk = identity::PublicKey::from_protobuf_encoding(&pb.identity_key)
+    if !pb.identity_key.as_ref().expect("optional").is_empty() {
+        let pk = identity::PublicKey::from_protobuf_encoding(&pb.identity_key.unwrap())
             .map_err(|_| NoiseError::InvalidKey)?;
         if let Some(ref k) = state.id_remote_pubkey {
             if k != &pk {
@@ -218,8 +218,8 @@ where
         state.id_remote_pubkey = Some(pk);
     }
 
-    if !pb.identity_sig.is_empty() {
-        state.dh_remote_pubkey_sig = Some(pb.identity_sig);
+    if !pb.identity_sig.as_ref().expect("optional").is_empty() {
+        state.dh_remote_pubkey_sig = pb.identity_sig;
     }
 
     Ok(())
@@ -231,12 +231,12 @@ where
     T: AsyncWrite + Unpin,
 {
     let mut pb = payload_proto::NoiseHandshakePayload {
-        identity_key: state.identity.public.to_protobuf_encoding(),
+        identity_key: Some(state.identity.public.to_protobuf_encoding()),
         ..Default::default()
     };
 
     if let Some(ref sig) = state.identity.signature {
-        pb.identity_sig = sig.clone()
+        pb.identity_sig = Some(sig.clone())
     }
 
     let mut msg = if state.legacy.send_legacy_handshake {
@@ -262,7 +262,7 @@ where
     let mut pb = payload_proto::NoiseHandshakePayload::default();
 
     if let Some(ref sig) = state.identity.signature {
-        pb.identity_sig = sig.clone()
+        pb.identity_sig = Some(sig.clone())
     }
 
     let mut msg = if state.legacy.send_legacy_handshake {
