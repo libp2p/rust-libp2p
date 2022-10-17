@@ -29,8 +29,8 @@ use libp2p_core::{Multiaddr, PeerId};
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm};
 use libp2p_swarm::dial_opts::{self, DialOpts};
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerUpgrErr, IntoConnectionHandler,
-    NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
+    ConnectionHandler, ConnectionHandlerUpgrErr, IntoConnectionHandler, NetworkBehaviour,
+    NetworkBehaviourAction, NotifyHandler, PollParameters,
 };
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::task::{Context, Poll};
@@ -162,9 +162,7 @@ impl Behaviour {
     fn on_dial_failure(
         &mut self,
         DialFailure {
-            peer_id,
-            handler,
-            ..
+            peer_id, handler, ..
         }: DialFailure<<Self as NetworkBehaviour>::ConnectionHandler>,
     ) {
         if let handler::Prototype::DirectConnection {

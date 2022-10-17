@@ -34,7 +34,7 @@ use futures::ready;
 use futures::stream::StreamExt;
 use libp2p_core::connection::ConnectionId;
 use libp2p_core::PeerId;
-use libp2p_swarm::behaviour::{ConnectionEstablished, FromSwarm, ConnectionClosed};
+use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm};
 use libp2p_swarm::dial_opts::DialOpts;
 use libp2p_swarm::{
     ConnectionHandlerUpgrErr, NegotiatedSubstream, NetworkBehaviour, NetworkBehaviourAction,

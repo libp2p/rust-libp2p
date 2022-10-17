@@ -68,8 +68,7 @@ use libp2p_core::{connection::ConnectionId, ConnectedPoint, Multiaddr, PeerId};
 use libp2p_swarm::{
     behaviour::{AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm},
     dial_opts::DialOpts,
-    IntoConnectionHandler, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
-    PollParameters,
+    IntoConnectionHandler, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
 };
 use smallvec::SmallVec;
 use std::{
@@ -664,7 +663,7 @@ where
 
         let connection = connections
             .iter_mut()
-            .find(|c| &c.id == &connection_id)
+            .find(|c| c.id == connection_id)
             .expect("Address change can only happen on an established connection.");
         connection.address = new_address;
     }
@@ -673,10 +672,7 @@ where
     /// [event](`NetworkBehaviour::on_swarm_event`).
     fn on_dial_failure(
         &mut self,
-        DialFailure {
-            peer_id,
-            ..
-        }: DialFailure<<Self as NetworkBehaviour>::ConnectionHandler>,
+        DialFailure { peer_id, .. }: DialFailure<<Self as NetworkBehaviour>::ConnectionHandler>,
     ) {
         if let Some(peer) = peer_id {
             // If there are pending outgoing requests when a dial failure occurs,
@@ -742,7 +738,7 @@ where
             }
             FromSwarm::AddressChange(address_change) => self.on_address_change(address_change),
             FromSwarm::DialFailure(dial_failure) => self.on_dial_failure(dial_failure),
-            _ => {},
+            _ => {}
         }
     }
 

@@ -22,12 +22,9 @@ use crate::handler::{self, Proto, Push};
 use crate::protocol::{Info, ReplySubstream, UpgradeError};
 use futures::prelude::*;
 use libp2p_core::{
-    connection::ConnectionId, multiaddr::Protocol, ConnectedPoint,
-    Multiaddr, PeerId, PublicKey,
+    connection::ConnectionId, multiaddr::Protocol, ConnectedPoint, Multiaddr, PeerId, PublicKey,
 };
-use libp2p_swarm::behaviour::{
-    ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm,
-};
+use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm};
 use libp2p_swarm::{
     dial_opts::DialOpts, AddressScore, ConnectionHandler, ConnectionHandlerUpgrErr, DialError,
     IntoConnectionHandler, NegotiatedSubstream, NetworkBehaviour, NetworkBehaviourAction,
