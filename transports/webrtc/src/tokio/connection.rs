@@ -214,7 +214,7 @@ impl StreamMuxer for Connection {
             let peer_conn = peer_conn.lock().await;
 
             // Create a datachannel with label 'data'
-            let data_channel = peer_conn.create_data_channel("data", None).await?;
+            let data_channel = peer_conn.create_data_channel("", None).await?;
 
             log::trace!("Opening outbound substream {}", data_channel.id());
 
