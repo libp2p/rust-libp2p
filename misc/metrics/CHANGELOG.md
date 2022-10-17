@@ -1,6 +1,8 @@
-# 0.10.0
+# 0.10.1
 
-- Added `protocol_stack` metrics.
+- Added `protocol_stack` metrics. See [PR 2982].
+
+# 0.10.0
 
 - Update to `libp2p-swarm` `v0.40.0`.
 
