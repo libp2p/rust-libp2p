@@ -47,8 +47,8 @@ impl ConnectionHandler for PendingConnectionHandler {
     type InEvent = Void;
     type OutEvent = Void;
     type Error = Void;
-    type InboundProtocol = PendingUpgrade<String>;
-    type OutboundProtocol = PendingUpgrade<String>;
+    type InboundProtocol = PendingUpgrade;
+    type OutboundProtocol = PendingUpgrade;
     type OutboundOpenInfo = Void;
     type InboundOpenInfo = ();
 

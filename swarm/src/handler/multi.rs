@@ -397,9 +397,9 @@ where
 
 /// Index and protocol name pair used as `UpgradeInfo::Info`.
 #[derive(Debug, Clone)]
-pub struct IndexedProtoName<H>(usize, H);
+pub struct IndexedProtoName(usize, ProtocolName);
 
-impl<H: ProtocolName> ProtocolName for IndexedProtoName<H> {
+impl IndexedProtoName {
     fn protocol_name(&self) -> &[u8] {
         self.1.protocol_name()
     }
@@ -455,8 +455,7 @@ where
     H: UpgradeInfoSend,
     K: Send + 'static,
 {
-    type Info = IndexedProtoName<H::Info>;
-    type InfoIter = std::vec::IntoIter<Self::Info>;
+    type InfoIter = std::vec::IntoIter<IndexedProtoName>;
 
     fn protocol_info(&self) -> Self::InfoIter {
         self.upgrades
@@ -478,7 +477,7 @@ where
     type Error = (K, <H as InboundUpgradeSend>::Error);
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
-    fn upgrade_inbound(mut self, resource: NegotiatedSubstream, info: Self::Info) -> Self::Future {
+    fn upgrade_inbound(mut self, resource: NegotiatedSubstream, info: ProtocolName) -> Self::Future {
         let IndexedProtoName(index, info) = info;
         let (key, upgrade) = self.upgrades.remove(index);
         upgrade
@@ -500,7 +499,7 @@ where
     type Error = (K, <H as OutboundUpgradeSend>::Error);
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
-    fn upgrade_outbound(mut self, resource: NegotiatedSubstream, info: Self::Info) -> Self::Future {
+    fn upgrade_outbound(mut self, resource: NegotiatedSubstream, info: ProtocolName) -> Self::Future {
         let IndexedProtoName(index, info) = info;
         let (key, upgrade) = self.upgrades.remove(index);
         upgrade
