@@ -119,7 +119,7 @@ impl NetworkBehaviour for Behaviour {
         Handler::new(self.config.clone())
     }
 
-    fn inject_event(&mut self, peer: PeerId, _: ConnectionId, result: Result) {
+    fn on_connection_handler_event(&mut self, peer: PeerId, _: ConnectionId, result: Result) {
         self.events.push_front(Event { peer, result })
     }
 
