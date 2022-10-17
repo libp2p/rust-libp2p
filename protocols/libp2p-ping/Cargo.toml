@@ -1,0 +1,26 @@
+[package]
+name = "libp2p-ping"
+edition = "2021"
+rust-version = "1.56.1"
+description = "Ping protocol for libp2p"
+version = "0.40.1"
+authors = ["Parity Technologies <admin@parity.io>"]
+license = "MIT"
+repository = "https://github.com/libp2p/rust-libp2p"
+keywords = ["peer-to-peer", "libp2p", "networking"]
+categories = ["network-programming", "asynchronous"]
+
+[dependencies]
+futures = "0.3.1"
+futures-timer = "3.0.2"
+instant = "0.1.11"
+libp2p-core = { version = "0.37.0", path = "../../libp2p-core" }
+libp2p-swarm = { version = "0.40.0", path = "../../libp2p-swarm" }
+log = "0.4.1"
+rand = "0.8"
+void = "1.0"
+
+[dev-dependencies]
+async-std = "1.6.2"
+libp2p = { path = "../../libp2p/", features = ["full"] }
+quickcheck = { package = "quickcheck-ext", path = "../../misc/quickcheck-ext" }

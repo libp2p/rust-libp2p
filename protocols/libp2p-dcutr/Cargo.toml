@@ -1,0 +1,35 @@
+[package]
+name = "libp2p-dcutr"
+edition = "2021"
+rust-version = "1.56.1"
+description = "Direct connection upgrade through relay"
+version = "0.7.0"
+authors = ["Max Inden <mail@max-inden.de>"]
+license = "MIT"
+repository = "https://github.com/libp2p/rust-libp2p"
+keywords = ["peer-to-peer", "libp2p", "networking"]
+categories = ["network-programming", "asynchronous"]
+
+[dependencies]
+asynchronous-codec = "0.6"
+bytes = "1"
+either = "1.6.0"
+futures = "0.3.1"
+futures-timer = "3.0"
+instant = "0.1.11"
+libp2p-core = { version = "0.37.0", path = "../../libp2p-core" }
+libp2p-swarm = { version = "0.40.0", path = "../../libp2p-swarm" }
+log = "0.4"
+prost-codec = { version = "0.2", path = "../../misc/prost-codec" }
+prost = "0.11"
+thiserror = "1.0"
+void = "1"
+
+[build-dependencies]
+prost-build = "0.11"
+
+[dev-dependencies]
+env_logger = "0.9.0"
+libp2p = { path = "../../libp2p/", features = ["full"] }
+rand = "0.8"
+clap = { version = "4.0.13", features = ["derive"] }

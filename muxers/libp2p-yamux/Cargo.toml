@@ -1,18 +1,19 @@
 [package]
-name = "keygen"
-version = "0.1.0"
+name = "libp2p-yamux"
 edition = "2021"
-authors = ["demfabris <demfabris@gmail.com>"]
+rust-version = "1.56.1"
+description = "Yamux multiplexing protocol for libp2p"
+version = "0.41.0"
+authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
 keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
-publish = false
 
 [dependencies]
-clap = { version = "4.0.13", features = ["derive"] }
-zeroize = "1"
-serde = { version = "1.0.136", features = ["derive"] }
-serde_json = "1.0.79"
+futures = "0.3.1"
 libp2p-core = { version = "0.37.0", path = "../../libp2p-core" }
-base64 = "0.13.0"
+parking_lot = "0.12"
+thiserror = "1.0"
+yamux = "0.10.0"
+log = "0.4"
