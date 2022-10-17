@@ -1,3 +1,8 @@
+# 0.22.1 - [unreleased]
+
+- replace `RequestResponse`'s NetworkBehaviour implemention `inject_*` methods with the new `on_*` methods.
+  See [PR 3011].
+
 # 0.22.0
 
 - Bump rand to 0.8 and quickcheck to 1. See [PR 2857].
