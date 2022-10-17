@@ -265,11 +265,8 @@ impl NetworkBehaviour for Relay {
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
-        match event {
-            FromSwarm::ConnectionClosed(connection_closed) => {
-                self.on_connection_closed(connection_closed)
-            }
-            _ => {}
+        if let FromSwarm::ConnectionClosed(connection_closed) = event {
+            self.on_connection_closed(connection_closed)
         }
     }
 
