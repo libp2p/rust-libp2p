@@ -1,7 +1,11 @@
 use libp2p::core::transport::ListenerId;
 use libp2p::swarm::behaviour::FromSwarm;
 use libp2p::swarm::dummy;
-use libp2p_swarm::behaviour::{ConnectionEstablished, ConnectionClosed, AddressChange, DialFailure, ListenFailure, NewListener, NewListenAddr, ExpiredListenAddr, ListenerError, ListenerClosed, NewExternalAddr, ExpiredExternalAddr};
+use libp2p_swarm::behaviour::{
+    AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, ExpiredExternalAddr,
+    ExpiredListenAddr, ListenFailure, ListenerClosed, ListenerError, NewExternalAddr,
+    NewListenAddr, NewListener,
+};
 
 #[test]
 // test to break compilation everytime a variant changes,
@@ -13,7 +17,7 @@ fn swarm_event_variants() {
             reason: Ok(()),
         });
     match event {
-        FromSwarm::ConnectionEstablished( ConnectionEstablished {
+        FromSwarm::ConnectionEstablished(ConnectionEstablished {
             peer_id: _,
             connection_id: _,
             endpoint: _,

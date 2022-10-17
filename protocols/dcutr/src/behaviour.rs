@@ -107,7 +107,7 @@ impl Behaviour {
                 // https://github.com/libp2p/specs/blob/master/relay/DCUtR.md#the-protocol
                 self.queued_actions.extend([
                     ActionBuilder::Connect {
-                        peer_id: peer_id,
+                        peer_id,
                         attempt: 1,
                         handler: NotifyHandler::One(connection_id),
                     },
