@@ -1,3 +1,7 @@
+# 0.40.1
+
+ - Changing `payload.proto` syntax to be proto2. See [PR 3007]
+
 # 0.40.0
 
 - Update to `libp2p-core` `v0.37.0`.
