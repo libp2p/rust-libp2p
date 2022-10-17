@@ -1,6 +1,8 @@
-use crate::message_proto::message::Flag;
 use bytes::Bytes;
+
 use std::io;
+
+use crate::message_proto::message::Flag;
 
 #[derive(Debug, Copy, Clone)]
 pub enum State {
@@ -167,7 +169,7 @@ impl State {
 
     /// Acts as a "barrier" for [`futures::AsyncRead::poll_read`].
     pub(crate) fn read_barrier(&self) -> io::Result<()> {
-        use crate::substream::State::{Open, ReadClosed, WriteClosed};
+        use crate::tokio::substream::State::{Open, ReadClosed, WriteClosed};
         use State::*;
 
         let kind = match self {
@@ -190,7 +192,7 @@ impl State {
 
     /// Acts as a "barrier" for [`futures::AsyncWrite::poll_write`].
     pub(crate) fn write_barrier(&self) -> io::Result<()> {
-        use crate::substream::State::{Open, ReadClosed, WriteClosed};
+        use crate::tokio::substream::State::{Open, ReadClosed, WriteClosed};
         use State::*;
 
         let kind = match self {

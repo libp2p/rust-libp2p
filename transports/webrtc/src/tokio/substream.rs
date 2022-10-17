@@ -32,9 +32,11 @@ use std::{
 };
 
 use crate::message_proto::{message::Flag, Message};
-use crate::substream::drop_listener::GracefullyClosed;
-use crate::substream::framed_dc::FramedDC;
-use crate::substream::state::{Closing, State};
+use crate::tokio::{
+    substream::drop_listener::GracefullyClosed,
+    substream::framed_dc::FramedDC,
+    substream::state::{Closing, State},
+};
 
 mod drop_listener;
 mod framed_dc;

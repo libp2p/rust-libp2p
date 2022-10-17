@@ -40,7 +40,7 @@ use std::{
     task::{Context, Poll},
 };
 
-use crate::{error::Error, substream, substream::Substream};
+use crate::tokio::{error::Error, substream, substream::Substream};
 
 /// Maximum number of unprocessed data channels.
 /// See [`Connection::poll_inbound`].

@@ -32,9 +32,13 @@ serde = { version = "1.0", features = ["derive"] }
 stun = "0.4"
 thiserror = "1"
 tinytemplate = "1.2"
-tokio = { version = "1.18", features = ["net"]}
-tokio-util = { version = "0.7", features = ["compat"] }
-webrtc = "0.5.0"
+
+tokio = { version = "1.18", features = ["net"], optional = true}
+tokio-util = { version = "0.7", features = ["compat"], optional = true }
+webrtc = { version = "0.5.0", optional = true }
+
+[features]
+tokio = ["dep:tokio", "dep:tokio-util", "dep:webrtc"]
 
 [build-dependencies]
 prost-build = "0.11"

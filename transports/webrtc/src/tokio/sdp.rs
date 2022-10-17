@@ -19,13 +19,12 @@
 // DEALINGS IN THE SOFTWARE.
 
 use serde::Serialize;
-use std::net::SocketAddr;
 use tinytemplate::TinyTemplate;
-
-use std::net::IpAddr;
 use webrtc::peer_connection::sdp::session_description::RTCSessionDescription;
 
-use crate::fingerprint::Fingerprint;
+use std::net::{IpAddr, SocketAddr};
+
+use crate::tokio::fingerprint::Fingerprint;
 
 /// Creates the SDP answer used by the client.
 pub fn answer(addr: SocketAddr, server_fingerprint: &Fingerprint) -> RTCSessionDescription {

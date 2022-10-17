@@ -11,7 +11,7 @@ use libp2p::request_response::{
     RequestResponseEvent, RequestResponseMessage,
 };
 use libp2p::swarm::{Swarm, SwarmBuilder, SwarmEvent};
-use libp2p::webrtc;
+use libp2p::webrtc::tokio as webrtc;
 use rand::RngCore;
 
 use std::{io, iter};

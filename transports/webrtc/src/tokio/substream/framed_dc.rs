@@ -1,10 +1,12 @@
-use crate::message_proto::Message;
-use crate::substream::MAX_MSG_LEN;
 use asynchronous_codec::Framed;
-use std::sync::Arc;
 use tokio_util::compat::Compat;
 use tokio_util::compat::TokioAsyncReadCompatExt;
 use webrtc::data::data_channel::{DataChannel, PollDataChannel};
+
+use std::sync::Arc;
+
+use crate::message_proto::Message;
+use crate::tokio::substream::MAX_MSG_LEN;
 
 pub type FramedDC = Framed<Compat<PollDataChannel>, prost_codec::Codec<Message>>;
 

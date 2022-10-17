@@ -1,8 +1,9 @@
-use crate::fingerprint::Fingerprint;
-use crate::Error;
 use futures::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use libp2p_core::{identity, InboundUpgrade, OutboundUpgrade, PeerId, UpgradeInfo};
 use libp2p_noise::{Keypair, NoiseConfig, X25519Spec};
+
+use crate::tokio::fingerprint::Fingerprint;
+use crate::tokio::Error;
 
 pub async fn inbound<T>(
     id_keys: identity::Keypair,

@@ -1,12 +1,14 @@
-use crate::message_proto::{message::Flag, Message};
-use crate::substream::framed_dc::FramedDC;
 use futures::channel::oneshot;
 use futures::channel::oneshot::Canceled;
 use futures::{FutureExt, SinkExt};
+
 use std::future::Future;
 use std::io;
 use std::pin::Pin;
 use std::task::{Context, Poll};
+
+use crate::message_proto::{message::Flag, Message};
+use crate::tokio::substream::framed_dc::FramedDC;
 
 #[must_use]
 pub struct DropListener {

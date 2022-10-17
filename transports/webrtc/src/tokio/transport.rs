@@ -26,10 +26,10 @@ use libp2p_core::{
     transport::{ListenerId, TransportError, TransportEvent},
     PeerId,
 };
+use rand::distributions::DistString;
 use webrtc::peer_connection::certificate::RTCCertificate;
 use webrtc::peer_connection::configuration::RTCConfiguration;
 
-use rand::distributions::DistString;
 use std::net::IpAddr;
 use std::{
     net::SocketAddr,
@@ -37,7 +37,7 @@ use std::{
     task::{Context, Poll},
 };
 
-use crate::{
+use crate::tokio::{
     connection::Connection,
     error::Error,
     fingerprint::Fingerprint,

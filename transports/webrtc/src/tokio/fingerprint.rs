@@ -20,8 +20,9 @@
 
 use multibase::Base;
 use multihash::{Code, Hasher, Multihash, MultihashDigest};
-use std::fmt;
 use webrtc::dtls_transport::dtls_fingerprint::RTCDtlsFingerprint;
+
+use std::fmt;
 
 const SHA256: &str = "sha-256";
 

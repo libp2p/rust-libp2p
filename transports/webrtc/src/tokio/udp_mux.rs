@@ -43,7 +43,7 @@ use std::{
     task::{Context, Poll},
 };
 
-use crate::req_res_chan;
+use crate::tokio::req_res_chan;
 
 const RECEIVE_MTU: usize = 8192;
 

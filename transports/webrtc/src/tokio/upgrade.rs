@@ -39,10 +39,7 @@ use webrtc::peer_connection::RTCPeerConnection;
 
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 
-use crate::error::Error;
-use crate::fingerprint::Fingerprint;
-use crate::substream::Substream;
-use crate::{sdp, Connection};
+use crate::tokio::{error::Error, fingerprint::Fingerprint, sdp, substream::Substream, Connection};
 
 /// Creates a new outbound WebRTC connection.
 pub async fn outbound(
@@ -219,7 +216,7 @@ async fn create_substream_for_noise_handshake(
     let (tx, rx) = oneshot::channel::<Arc<DataChannel>>();
 
     // Wait until the data channel is opened and detach it.
-    crate::connection::register_data_channel_open_handler(data_channel, tx).await;
+    crate::tokio::connection::register_data_channel_open_handler(data_channel, tx).await;
 
     let channel = match futures::future::select(rx, Delay::new(Duration::from_secs(10))).await {
         Either::Left((Ok(channel), _)) => channel,
