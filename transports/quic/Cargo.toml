@@ -8,7 +8,7 @@ repository = "https://github.com/libp2p/rust-libp2p"
 license = "MIT"
 
 [dependencies]
-async-std-crate = { package = "async-std", version = "1.12.0", default-features = false, optional = true }
+async-std = { version = "1.12.0", default-features = false, optional = true }
 async-trait = "0.1.50"
 bytes = "1.2.1"
 futures = "0.3.15"
@@ -23,14 +23,14 @@ rcgen = "0.9.2"
 ring = "0.16.20"
 rustls = { version = "0.20.2", default-features = false, features = ["dangerous_configuration"] }
 thiserror = "1.0.26"
-tokio-crate = { package = "tokio", version = "1.21.1", default-features = false, features = ["net", "rt"], optional = true }
+tokio = { version = "1.21.1", default-features = false, features = ["net", "rt"], optional = true }
 webpki = "0.22.0"
 x509-parser = "0.13.0"
 yasna = "0.5.0"
 
 [features]
-tokio = ["dep:tokio-crate"]
-async-std = ["dep:async-std-crate"]
+tokio = ["dep:tokio"]
+async-std = ["dep:async-std"]
 
 # Passing arguments to the docsrs builder in order to properly document cfg's. 
 # More information: https://docs.rs/about/builds#cross-compiling
@@ -40,9 +40,9 @@ rustdoc-args = ["--cfg", "docsrs"]
 rustc-args = ["--cfg", "docsrs"]
 
 [dev-dependencies]
-async-std-crate = { package = "async-std", version = "1.12.0", features = ["attributes"] }
+async-std = { version = "1.12.0", features = ["attributes"] }
 libp2p = { path = "../..", features = ["request-response"] }
 env_logger = "0.9.0"
 rand = "0.8.4"
-tokio-crate = { package = "tokio", version = "1.21.1", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1.21.1", features = ["macros", "rt-multi-thread"] }
 quickcheck = "1"

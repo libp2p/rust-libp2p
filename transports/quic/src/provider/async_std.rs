@@ -26,7 +26,7 @@ use std::{
     task::{Context, Poll},
 };
 
-use async_std_crate::{net::UdpSocket, task::spawn};
+use async_std::{net::UdpSocket, task::spawn};
 use futures::{future::BoxFuture, ready, Future, FutureExt, Stream, StreamExt};
 
 use crate::GenTransport;

@@ -24,11 +24,6 @@ use std::num::NonZeroU8;
 use std::time::Duration;
 use std::{io, iter};
 
-#[cfg(feature = "async-std")]
-use async_std_crate as async_std;
-#[cfg(feature = "tokio")]
-use tokio_crate as tokio;
-
 fn generate_tls_keypair() -> libp2p::identity::Keypair {
     libp2p::identity::Keypair::generate_ed25519()
 }

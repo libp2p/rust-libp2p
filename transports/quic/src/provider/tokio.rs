@@ -25,7 +25,7 @@ use std::{
 };
 
 use futures::{ready, Future};
-use tokio_crate::{io::ReadBuf, net::UdpSocket};
+use tokio::{io::ReadBuf, net::UdpSocket};
 use x509_parser::nom::AsBytes;
 
 use crate::GenTransport;
@@ -80,6 +80,6 @@ impl ProviderTrait for Provider {
     }
 
     fn spawn(future: impl Future<Output = ()> + Send + 'static) {
-        tokio_crate::spawn(future);
+        tokio::spawn(future);
     }
 }

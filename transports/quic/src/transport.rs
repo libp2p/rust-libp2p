@@ -565,13 +565,9 @@ fn socketaddr_to_multiaddr(socket_addr: &SocketAddr) -> Multiaddr {
 #[cfg(test)]
 #[cfg(any(feature = "async-std", feature = "tokio"))]
 mod test {
-    #[cfg(feature = "async-std")]
-    use async_std_crate as async_std;
     use futures::future::poll_fn;
     use futures_timer::Delay;
     use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
-    #[cfg(feature = "tokio")]
-    use tokio_crate as tokio;
 
     use super::*;
 
