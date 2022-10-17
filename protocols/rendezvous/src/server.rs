@@ -118,7 +118,7 @@ impl NetworkBehaviour for Behaviour {
         SubstreamConnectionHandler::new_inbound_only(initial_keep_alive)
     }
 
-    fn inject_event(
+    fn on_connection_handler_event(
         &mut self,
         peer_id: PeerId,
         connection: ConnectionId,

@@ -183,7 +183,7 @@ impl NetworkBehaviour for Behaviour {
             .collect()
     }
 
-    fn inject_event(
+    fn on_connection_handler_event(
         &mut self,
         peer_id: PeerId,
         connection_id: ConnectionId,
