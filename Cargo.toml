@@ -12,6 +12,7 @@ members = [
     "misc/rw-stream-sink",
     "muxers/libp2p-mplex",
     "muxers/libp2p-yamux",
+    "muxers/test-harness",
     "protocols/libp2p-autonat",
     "protocols/libp2p-dcutr",
     "protocols/libp2p-floodsub",
