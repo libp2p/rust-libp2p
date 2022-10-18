@@ -34,7 +34,7 @@ use std::{
 use crate::message_proto::{message::Flag, Message};
 use crate::tokio::{
     substream::drop_listener::GracefullyClosed,
-    substream::framed_dc::FramedDC,
+    substream::framed_dc::FramedDc,
     substream::state::{Closing, State},
 };
 
@@ -62,7 +62,7 @@ pub use drop_listener::DropListener;
 /// To be a proper libp2p substream, we need to implement [`AsyncRead`] and [`AsyncWrite`] as well
 /// as support a half-closed state which we do by framing messages in a protobuf envelope.
 pub struct Substream {
-    io: FramedDC,
+    io: FramedDc,
     state: State,
     read_buffer: Bytes,
     /// Dropping this will close the oneshot and notify the receiver by emitting `Canceled`.

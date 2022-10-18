@@ -248,7 +248,7 @@ impl ListenStream {
                     {
                         return Poll::Ready(TransportEvent::NewAddress {
                             listener_id: self.listener_id,
-                            listen_addr: self.listen_multi_address(ip),
+                            listen_addr: self.listen_multiaddress(ip),
                         });
                     }
                 }
@@ -259,7 +259,7 @@ impl ListenStream {
                     {
                         return Poll::Ready(TransportEvent::AddressExpired {
                             listener_id: self.listener_id,
-                            listen_addr: self.listen_multi_address(ip),
+                            listen_addr: self.listen_multiaddress(ip),
                         });
                     }
                 }
@@ -276,7 +276,7 @@ impl ListenStream {
     }
 
     /// Constructs a [`Multiaddr`] for the given IP address that represents our listen address.
-    fn listen_multi_address(&self, ip: IpAddr) -> Multiaddr {
+    fn listen_multiaddress(&self, ip: IpAddr) -> Multiaddr {
         let socket_addr = SocketAddr::new(ip, self.listen_addr.port());
 
         socketaddr_to_multiaddr(&socket_addr, Some(self.config.fingerprint))

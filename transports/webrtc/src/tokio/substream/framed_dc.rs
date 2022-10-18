@@ -28,9 +28,9 @@ use std::sync::Arc;
 use crate::message_proto::Message;
 use crate::tokio::substream::MAX_MSG_LEN;
 
-pub type FramedDC = Framed<Compat<PollDataChannel>, prost_codec::Codec<Message>>;
+pub type FramedDc = Framed<Compat<PollDataChannel>, prost_codec::Codec<Message>>;
 
-pub fn new(data_channel: Arc<DataChannel>) -> FramedDC {
+pub fn new(data_channel: Arc<DataChannel>) -> FramedDc {
     let mut inner = PollDataChannel::new(data_channel);
 
     // TODO: default buffer size is too small to fit some messages. Possibly remove once

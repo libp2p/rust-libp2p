@@ -28,7 +28,7 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use crate::message_proto::{message::Flag, Message};
-use crate::tokio::substream::framed_dc::FramedDC;
+use crate::tokio::substream::framed_dc::FramedDc;
 
 #[must_use]
 pub struct DropListener {
@@ -36,7 +36,7 @@ pub struct DropListener {
 }
 
 impl DropListener {
-    pub fn new(stream: FramedDC, receiver: oneshot::Receiver<GracefullyClosed>) -> Self {
+    pub fn new(stream: FramedDc, receiver: oneshot::Receiver<GracefullyClosed>) -> Self {
         let substream_id = stream.get_ref().stream_identifier();
 
         Self {
@@ -52,16 +52,16 @@ impl DropListener {
 enum State {
     /// The [`DropListener`] is idle and waiting to be activated.
     Idle {
-        stream: FramedDC,
+        stream: FramedDc,
         receiver: oneshot::Receiver<GracefullyClosed>,
         substream_id: u16,
     },
     /// The stream got dropped and we are sending a reset flag.
     SendingReset {
-        stream: FramedDC,
+        stream: FramedDc,
     },
     Flushing {
-        stream: FramedDC,
+        stream: FramedDc,
     },
     /// Bad state transition.
     Poisoned,
