@@ -101,7 +101,6 @@ pub struct UDPMuxNewAddr {
 
 impl UDPMuxNewAddr {
     pub fn listen_on(addr: SocketAddr) -> Result<Self, io::Error> {
-        // XXX: `UdpSocket::bind` is async, so use a std socket and convert
         let std_sock = std::net::UdpSocket::bind(addr)?;
         std_sock.set_nonblocking(true)?;
 
