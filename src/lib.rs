@@ -62,10 +62,6 @@ pub use libp2p_deflate as deflate;
     not(feature = "dns")
 ))]
 #[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
-#[cfg_attr(
-    docsrs,
-    doc(cfg(any(feature = "dns-tokio", feature = "dns-async-std")))
-)]
 pub mod dns {
     #[doc(inline)]
     pub use libp2p_dns::*;
@@ -73,7 +69,6 @@ pub mod dns {
 
 #[cfg(feature = "dns")]
 #[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
-#[cfg_attr(docsrs, doc(cfg(feature = "dns")))]
 pub mod dns {
     #[doc(inline)]
     pub use libp2p_dns::*;
@@ -100,10 +95,6 @@ pub use libp2p_kad as kad;
     not(feature = "mdns")
 ))]
 #[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
-#[cfg_attr(
-    docsrs,
-    doc(cfg(any(feature = "mdns-tokio", feature = "mdns-async-io")))
-)]
 pub mod mdns {
     #[doc(inline)]
     pub use libp2p_mdns::*;
@@ -111,7 +102,6 @@ pub mod mdns {
 
 #[cfg(feature = "mdns")]
 #[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
-#[cfg_attr(docsrs, doc(cfg(feature = "mdns")))]
 pub mod mdns {
     #[doc(inline)]
     pub use libp2p_mdns::*;
@@ -155,7 +145,6 @@ pub use libp2p_swarm as swarm;
     not(feature = "tcp")
 ))]
 #[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
-#[cfg_attr(docsrs, doc(cfg(any(feature = "tcp-tokio", feature = "tcp-async-io"))))]
 pub mod tcp {
     #[doc(inline)]
     pub use libp2p_tcp::*;
@@ -163,7 +152,6 @@ pub mod tcp {
 
 #[cfg(feature = "tcp")]
 #[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
-#[cfg_attr(docsrs, doc(cfg(feature = "tcp")))]
 pub mod tcp {
     #[doc(inline)]
     pub use libp2p_tcp::*;
@@ -225,20 +213,6 @@ pub use libp2p_swarm_derive::NetworkBehaviour;
     feature = "yamux"
 ))]
 #[cfg_attr(
-    docsrs,
-    doc(cfg(all(
-        not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")),
-        any(
-            all(feature = "tcp-async-io", feature = "dns-async-std"),
-            all(feature = "tcp", feature = "dns", feature = "async-std")
-        ),
-        feature = "websocket",
-        feature = "noise",
-        feature = "mplex",
-        feature = "yamux"
-    )))
-)]
-#[cfg_attr(
     all(
         any(feature = "tcp-async-io", feature = "dns-async-std"),
         not(feature = "async-std")
@@ -298,20 +272,6 @@ pub async fn development_transport(
     feature = "mplex",
     feature = "yamux"
 ))]
-#[cfg_attr(
-    docsrs,
-    doc(cfg(all(
-        not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")),
-        any(
-            all(feature = "tcp-tokio", feature = "dns-tokio"),
-            all(feature = "tcp", feature = "dns", feature = "tokio")
-        ),
-        feature = "websocket",
-        feature = "noise",
-        feature = "mplex",
-        feature = "yamux"
-    )))
-)]
 #[cfg_attr(
     all(
         any(feature = "tcp-tokio", feature = "dns-tokio"),
