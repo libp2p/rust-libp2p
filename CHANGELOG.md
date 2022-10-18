@@ -44,13 +44,18 @@
 
 # `libp2p` facade crate
 
+# 0.50.0 [unreleased]
+
+- New `libp2p-onion` crate. See [PR 2899].
+
+[PR 2899]: https://github.com/libp2p/rust-libp2p/pull/2899
+
 # 0.49.0
 
 - Remove default features. You need to enable required features explicitly now. As a quick workaround, you may want to use the
   new `full` feature which activates all features. See [PR 2918].
 
 
-- New `libp2p-onion` crate. See [PR 2899].
 - Introduce `tokio` and `async-std` features and deprecate the following ones:
   - `tcp-tokio` in favor of `tcp` + `tokio`
   - `mdns-tokio` in favor of `mdns` + `tokio`
@@ -89,7 +94,6 @@
     - Update to [`libp2p-yamux` `v0.41.0`](muxers/mplex/CHANGELOG.md#0410).
 
 [PR 2918]: https://github.com/libp2p/rust-libp2p/pull/2918
-[PR 2899]: https://github.com/libp2p/rust-libp2p/pull/2899
 [PR 2962]: https://github.com/libp2p/rust-libp2p/pull/2962
 
 # 0.48.0
