@@ -48,7 +48,7 @@ const MAX_DATA_CHANNELS_IN_FLIGHT: usize = 10;
 
 /// A WebRTC connection, wrapping [`RTCPeerConnection`] and implementing [`StreamMuxer`] trait.
 pub struct Connection {
-    /// `RTCPeerConnection` to the remote peer.
+    /// [`RTCPeerConnection`] to the remote peer.
     ///
     /// Uses futures mutex because used in async code (see poll_outbound and poll_close).
     peer_conn: Arc<FutMutex<RTCPeerConnection>>,

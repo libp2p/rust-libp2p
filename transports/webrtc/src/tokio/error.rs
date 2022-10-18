@@ -35,7 +35,7 @@ pub enum Error {
     #[error("invalid peer ID (expected {expected}, got {got})")]
     InvalidPeerID { expected: PeerId, got: PeerId },
 
-    #[error("no active listeners")]
+    #[error("no active listeners, can not dial without a previous listen")]
     NoListeners,
 
     #[error("UDP mux error: {0}")]

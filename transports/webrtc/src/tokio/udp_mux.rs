@@ -47,7 +47,7 @@ use crate::tokio::req_res_chan;
 
 const RECEIVE_MTU: usize = 8192;
 
-/// A previously unseen address of a remote who've sent us an ICE binding request.
+/// A previously unseen address of a remote which has sent us an ICE binding request.
 #[derive(Debug)]
 pub struct NewAddr {
     pub addr: SocketAddr,
