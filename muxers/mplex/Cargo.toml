@@ -23,11 +23,12 @@ smallvec = "1.6.1"
 unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
 
 [dev-dependencies]
-async-std = "1.7.0"
+async-std = { version = "1.7.0", features = ["attributes"] }
 criterion = "0.4"
 env_logger = "0.9"
 futures = "0.3"
 libp2p = { path = "../..", features = ["full"] }
+libp2p-muxer-test-harness = { path = "../test-harness" }
 quickcheck = { package = "quickcheck-ext", path = "../../misc/quickcheck-ext" }
 
 [[bench]]
