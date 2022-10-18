@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-tls"
-version = "0.1.0"
+version = "0.1.0-alpha"
 edition = "2021"
 license = "MIT"
 exclude = ["src/test_assets"]
