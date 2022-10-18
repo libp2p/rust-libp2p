@@ -207,19 +207,25 @@ where
     }
     let pb = pb_result?;
 
-    if !pb.identity_key.as_ref().expect("optional").is_empty() {
-        let pk = identity::PublicKey::from_protobuf_encoding(&pb.identity_key.unwrap())
-            .map_err(|_| NoiseError::InvalidKey)?;
-        if let Some(ref k) = state.id_remote_pubkey {
-            if k != &pk {
-                return Err(NoiseError::InvalidKey);
+    match pb.identity_key {
+        Some(ref identity_key) => {
+            let pk = identity::PublicKey::from_protobuf_encoding(&identity_key)
+                .map_err(|_| NoiseError::InvalidKey)?;
+            if let Some(ref k) = state.id_remote_pubkey {
+                if k != &pk {
+                    return Err(NoiseError::InvalidKey);
+                }
             }
+            state.id_remote_pubkey = Some(pk);
         }
-        state.id_remote_pubkey = Some(pk);
+        None => {}
     }
 
-    if !pb.identity_sig.as_ref().expect("optional").is_empty() {
-        state.dh_remote_pubkey_sig = pb.identity_sig;
+    match pb.identity_sig {
+        Some(identity_sig) => {
+            state.dh_remote_pubkey_sig = Some(identity_sig);
+        }
+        None => {}
     }
 
     Ok(())
