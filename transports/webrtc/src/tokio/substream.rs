@@ -70,7 +70,7 @@ pub struct Substream {
 }
 
 impl Substream {
-    /// Returns a new [`Substream`] and a listener, which will notify the receiver when/if the substream
+    /// Returns a new `Substream` and a listener, which will notify the receiver when/if the substream
     /// is dropped.
     pub(crate) fn new(data_channel: Arc<DataChannel>) -> (Self, DropListener) {
         let (sender, receiver) = oneshot::channel();

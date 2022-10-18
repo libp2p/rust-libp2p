@@ -21,7 +21,6 @@
 mod connection;
 mod error;
 mod fingerprint;
-mod noise_substream;
 mod req_res_chan;
 mod sdp;
 mod substream;
