@@ -112,7 +112,7 @@ impl libp2p_core::Transport for Transport {
     }
 
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let (sock_addr, server_fingerprint, expected_peer_id) = parse_webrtc_dial_addr(&addr)
+        let (sock_addr, server_fingerprint) = parse_webrtc_dial_addr(&addr)
             .ok_or_else(|| TransportError::MultiaddrNotSupported(addr.clone()))?;
         if sock_addr.port() == 0 || sock_addr.ip().is_unspecified() {
             return Err(TransportError::MultiaddrNotSupported(addr));
@@ -130,7 +130,7 @@ impl libp2p_core::Transport for Transport {
             .udp_mux_handle();
 
         Ok(async move {
-            let (actual_peer_id, connection) = upgrade::outbound(
+            let (peer_id, connection) = upgrade::outbound(
                 sock_addr,
                 config.inner,
                 udp_mux,
@@ -140,14 +140,7 @@ impl libp2p_core::Transport for Transport {
             )
             .await?;
 
-            if actual_peer_id != expected_peer_id {
-                return Err(Error::InvalidPeerID {
-                    expected: expected_peer_id,
-                    got: actual_peer_id,
-                });
-            }
-
-            Ok((actual_peer_id, connection))
+            Ok((peer_id, connection))
         }
         .boxed())
     }
@@ -400,7 +393,7 @@ fn parse_webrtc_listen_addr(addr: &Multiaddr) -> Option<SocketAddr> {
 }
 
 /// Parse the given [`Multiaddr`] into a [`SocketAddr`] and a [`Fingerprint`] for dialing.
-fn parse_webrtc_dial_addr(addr: &Multiaddr) -> Option<(SocketAddr, Fingerprint, PeerId)> {
+fn parse_webrtc_dial_addr(addr: &Multiaddr) -> Option<(SocketAddr, Fingerprint)> {
     let mut iter = addr.iter();
 
     let ip = match iter.next()? {
@@ -414,17 +407,16 @@ fn parse_webrtc_dial_addr(addr: &Multiaddr) -> Option<(SocketAddr, Fingerprint, 
     let certhash = iter.next()?;
     let p2p = iter.next()?;
 
-    let (port, fingerprint, peer_id) = match (port, webrtc, certhash, p2p) {
+    let (port, fingerprint) = match (port, webrtc, certhash, p2p) {
         (
             Protocol::Udp(port),
             Protocol::WebRTC,
             Protocol::Certhash(cert_hash),
-            Protocol::P2p(peer_hash),
+            Protocol::P2p(_),
         ) => {
             let fingerprint = Fingerprint::try_from_multihash(cert_hash)?;
-            let peer_id = PeerId::from_multihash(peer_hash).ok()?;
 
-            (port, fingerprint, peer_id)
+            (port, fingerprint)
         }
         _ => return None,
     };
@@ -433,7 +425,7 @@ fn parse_webrtc_dial_addr(addr: &Multiaddr) -> Option<(SocketAddr, Fingerprint, 
         return None;
     }
 
-    Some((SocketAddr::new(ip, port), fingerprint, peer_id))
+    Some((SocketAddr::new(ip, port), fingerprint))
 }
 
 // Tests //////////////////////////////////////////////////////////////////////////////////////////
@@ -468,10 +460,7 @@ mod tests {
                 SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 39901),
                 Fingerprint::raw(hex_literal::hex!(
                     "e2929e4a5548242ed6b512350df8829b1e4f9d50183c5732a07f99d7c4b2b8eb"
-                )),
-                "12D3KooWNpDk9w6WrEEcdsEH1y47W71S36yFjw4sd3j7omzgCSMS"
-                    .parse::<PeerId>()
-                    .unwrap()
+                ))
             ))
         );
     }
@@ -513,10 +502,7 @@ mod tests {
                 SocketAddr::new(IpAddr::V6(Ipv6Addr::LOCALHOST), 12345),
                 Fingerprint::raw(hex_literal::hex!(
                     "e2929e4a5548242ed6b512350df8829b1e4f9d50183c5732a07f99d7c4b2b8eb"
-                )),
-                "12D3KooWNpDk9w6WrEEcdsEH1y47W71S36yFjw4sd3j7omzgCSMS"
-                    .parse::<PeerId>()
-                    .unwrap()
+                ))
             ))
         );
     }
