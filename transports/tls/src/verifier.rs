@@ -143,7 +143,7 @@ impl ServerCertVerifier for Libp2pCertificateVerifier {
         cert: &Certificate,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, rustls::Error> {
-        verify_tls13_signature(cert, dss.scheme, message, dss.sig.0.as_ref())
+        verify_tls13_signature(cert, dss.scheme, message, dss.signature())
     }
 
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
@@ -193,7 +193,7 @@ impl ClientCertVerifier for Libp2pCertificateVerifier {
         cert: &Certificate,
         dss: &DigitallySignedStruct,
     ) -> Result<HandshakeSignatureValid, rustls::Error> {
-        verify_tls13_signature(cert, dss.scheme, message, dss.sig.0.as_ref())
+        verify_tls13_signature(cert, dss.scheme, message, dss.signature())
     }
 
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
