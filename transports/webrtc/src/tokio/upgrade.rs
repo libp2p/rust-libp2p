@@ -39,7 +39,9 @@ use webrtc::peer_connection::RTCPeerConnection;
 
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 
-use crate::tokio::{error::Error, fingerprint::Fingerprint, sdp, substream::Substream, Connection};
+use crate::tokio::{
+    error::Error, fingerprint::Fingerprint, noise_substream::NoiseSubstream, sdp, Connection,
+};
 
 /// Creates a new outbound WebRTC connection.
 pub async fn outbound(
@@ -201,7 +203,7 @@ async fn get_remote_fingerprint(conn: &RTCPeerConnection) -> Fingerprint {
 
 async fn create_substream_for_noise_handshake(
     conn: &RTCPeerConnection,
-) -> Result<Substream, Error> {
+) -> Result<NoiseSubstream, Error> {
     // Open a data channel to do Noise on top and verify the remote.
     let data_channel = conn
         .create_data_channel(
@@ -230,8 +232,5 @@ async fn create_substream_for_noise_handshake(
         }
     };
 
-    let (substream, drop_listener) = Substream::new(channel);
-    drop(drop_listener); // Don't care about cancelled substreams during initial handshake.
-
-    Ok(substream)
+    Ok(NoiseSubstream::new(channel))
 }
