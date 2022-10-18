@@ -75,14 +75,19 @@ impl Fingerprint {
 
     /// Converts this fingerprint to [`type@Multihash`].
     pub fn to_multi_hash(self) -> Multihash {
-        Code::Sha2_256.wrap(&self.0).unwrap()
+        Code::Sha2_256
+            .wrap(&self.0)
+            .expect("fingerprint's len to be 32 bytes")
     }
 
     /// Transforms this fingerprint into a ufrag.
     pub fn to_ufrag(self) -> String {
         multibase::encode(
             Base::Base64Url,
-            Code::Sha2_256.wrap(&self.0).unwrap().to_bytes(),
+            Code::Sha2_256
+                .wrap(&self.0)
+                .expect("fingerprint's len to be 32 bytes")
+                .to_bytes(),
         )
     }
 
