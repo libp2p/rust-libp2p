@@ -55,7 +55,6 @@
 - Remove default features. You need to enable required features explicitly now. As a quick workaround, you may want to use the
   new `full` feature which activates all features. See [PR 2918].
 
-
 - Introduce `tokio` and `async-std` features and deprecate the following ones:
   - `tcp-tokio` in favor of `tcp` + `tokio`
   - `mdns-tokio` in favor of `mdns` + `tokio`
