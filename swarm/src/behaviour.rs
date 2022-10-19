@@ -916,6 +916,7 @@ pub struct ConnectionClosed<'a, Handler: IntoConnectionHandler> {
 
 /// [`FromSwarm`] variant that informs the behaviour that the [`ConnectedPoint`] of an existing
 /// connection has changed.
+#[derive(Clone, Copy)]
 pub struct AddressChange<'a> {
     pub peer_id: PeerId,
     pub connection_id: ConnectionId,
@@ -925,6 +926,7 @@ pub struct AddressChange<'a> {
 
 /// [`FromSwarm`] variant that informs the behaviour that the dial to a known
 /// or unknown node failed.
+#[derive(Clone, Copy)]
 pub struct DialFailure<'a, Handler> {
     pub peer_id: Option<PeerId>,
     pub handler: Handler,
@@ -936,6 +938,7 @@ pub struct DialFailure<'a, Handler> {
 ///
 /// This can include, for example, an error during the handshake of the encryption layer, or the
 /// connection unexpectedly closed.
+#[derive(Clone, Copy)]
 pub struct ListenFailure<'a, Handler> {
     pub local_addr: &'a Multiaddr,
     pub send_back_addr: &'a Multiaddr,
@@ -943,12 +946,14 @@ pub struct ListenFailure<'a, Handler> {
 }
 
 /// [`FromSwarm`] variant that informs the behaviour that a new listener was created.
+#[derive(Clone, Copy)]
 pub struct NewListener {
     pub listener_id: ListenerId,
 }
 
 /// [`FromSwarm`] variant that informs the behaviour
 /// that we have started listening on a new multiaddr.
+#[derive(Clone, Copy)]
 pub struct NewListenAddr<'a> {
     pub listener_id: ListenerId,
     pub addr: &'a Multiaddr,
@@ -957,18 +962,21 @@ pub struct NewListenAddr<'a> {
 /// [`FromSwarm`] variant that informs the behaviour that a multiaddr
 /// we were listening on has expired,
 /// which means that we are no longer listening on it.
+#[derive(Clone, Copy)]
 pub struct ExpiredListenAddr<'a> {
     pub listener_id: ListenerId,
     pub addr: &'a Multiaddr,
 }
 
 /// [`FromSwarm`] variant that informs the behaviour that a listener experienced an error.
+#[derive(Clone, Copy)]
 pub struct ListenerError<'a> {
     pub listener_id: ListenerId,
     pub err: &'a (dyn std::error::Error + 'static),
 }
 
 /// [`FromSwarm`] variant that informs the behaviour that a listener closed.
+#[derive(Clone, Copy)]
 pub struct ListenerClosed<'a> {
     pub listener_id: ListenerId,
     pub reason: Result<(), &'a std::io::Error>,
@@ -976,11 +984,13 @@ pub struct ListenerClosed<'a> {
 
 /// [`FromSwarm`] variant that informs the behaviour
 /// that we have discovered a new external address for us.
+#[derive(Clone, Copy)]
 pub struct NewExternalAddr<'a> {
     pub addr: &'a Multiaddr,
 }
 
 /// [`FromSwarm`] variant that informs the behaviour that an external address was removed.
+#[derive(Clone, Copy)]
 pub struct ExpiredExternalAddr<'a> {
     pub addr: &'a Multiaddr,
 }

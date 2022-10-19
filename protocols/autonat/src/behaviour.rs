@@ -306,23 +306,13 @@ impl Behaviour {
     fn on_connection_established(
         &mut self,
         ConnectionEstablished {
-            peer_id,
-            connection_id,
+            peer_id: peer,
+            connection_id: conn,
             endpoint,
-            failed_addresses,
-            other_established,
+            ..
         }: ConnectionEstablished,
     ) {
-        self.inner
-            .on_swarm_event(FromSwarm::ConnectionEstablished(ConnectionEstablished {
-                peer_id,
-                connection_id,
-                endpoint,
-                failed_addresses,
-                other_established,
-            }));
-
-        let connections = self.connected.entry(peer_id).or_default();
+        let connections = self.connected.entry(peer).or_default();
         let addr = endpoint.get_remote_address();
         let observed_addr =
             if !endpoint.is_relayed() && (!self.config.only_global_ips || addr.is_global_ip()) {
@@ -330,14 +320,14 @@ impl Behaviour {
             } else {
                 None
             };
-        connections.insert(connection_id, observed_addr);
+        connections.insert(conn, observed_addr);
 
         match endpoint {
             ConnectedPoint::Dialer {
                 address,
                 role_override: Endpoint::Dialer,
             } => {
-                if let Some(event) = self.as_server().on_outbound_connection(&peer_id, address) {
+                if let Some(event) = self.as_server().on_outbound_connection(&peer, address) {
                     self.pending_out_events
                         .push_back(Event::InboundProbe(event));
                 }
@@ -407,26 +397,18 @@ impl Behaviour {
     fn on_address_change(
         &mut self,
         AddressChange {
-            peer_id,
-            connection_id,
+            peer_id: peer,
+            connection_id: conn,
             old,
             new,
         }: AddressChange,
     ) {
-        self.inner
-            .on_swarm_event(FromSwarm::AddressChange(AddressChange {
-                peer_id,
-                connection_id,
-                old,
-                new,
-            }));
-
         if old.is_relayed() && new.is_relayed() {
             return;
         }
         let connections = self
             .connected
-            .get_mut(&peer_id)
+            .get_mut(&peer)
             .expect("Peer is connected.");
         let addr = new.get_remote_address();
         let observed_addr =
@@ -435,7 +417,7 @@ impl Behaviour {
             } else {
                 None
             };
-        connections.insert(connection_id, observed_addr);
+        connections.insert(conn, observed_addr);
     }
 }
 
@@ -499,13 +481,17 @@ impl NetworkBehaviour for Behaviour {
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
         match event {
             FromSwarm::ConnectionEstablished(connection_established) => {
+                self.inner.on_swarm_event(FromSwarm::ConnectionEstablished(connection_established));
                 self.on_connection_established(connection_established)
             }
             FromSwarm::ConnectionClosed(connection_closed) => {
                 self.on_connection_closed(connection_closed)
             }
             FromSwarm::DialFailure(dial_failure) => self.on_dial_failure(dial_failure),
-            FromSwarm::AddressChange(address_change) => self.on_address_change(address_change),
+            FromSwarm::AddressChange(address_change) => {
+                self.inner.on_swarm_event(FromSwarm::AddressChange(address_change));
+                self.on_address_change(address_change)
+            },
             listen_addr @ FromSwarm::NewListenAddr(_) => {
                 self.inner.on_swarm_event(listen_addr);
                 self.as_client().on_new_address();

@@ -1979,7 +1979,7 @@ where
     fn on_connection_handler_event(
         &mut self,
         source: PeerId,
-        connection_id: ConnectionId,
+        connection: ConnectionId,
         event: KademliaHandlerEvent<QueryId>,
     ) {
         match event {
@@ -2011,7 +2011,7 @@ where
                 self.queued_events
                     .push_back(NetworkBehaviourAction::NotifyHandler {
                         peer_id: source,
-                        handler: NotifyHandler::One(connection_id),
+                        handler: NotifyHandler::One(connection),
                         event: KademliaHandlerIn::FindNodeRes {
                             closer_peers,
                             request_id,
@@ -2043,7 +2043,7 @@ where
                 self.queued_events
                     .push_back(NetworkBehaviourAction::NotifyHandler {
                         peer_id: source,
-                        handler: NotifyHandler::One(connection_id),
+                        handler: NotifyHandler::One(connection),
                         event: KademliaHandlerIn::GetProvidersRes {
                             closer_peers,
                             provider_peers,
@@ -2120,7 +2120,7 @@ where
                 self.queued_events
                     .push_back(NetworkBehaviourAction::NotifyHandler {
                         peer_id: source,
-                        handler: NotifyHandler::One(connection_id),
+                        handler: NotifyHandler::One(connection),
                         event: KademliaHandlerIn::GetRecordRes {
                             record,
                             closer_peers,
@@ -2192,7 +2192,7 @@ where
             }
 
             KademliaHandlerEvent::PutRecord { record, request_id } => {
-                self.record_received(source, connection_id, request_id, record);
+                self.record_received(source, connection, request_id, record);
             }
 
             KademliaHandlerEvent::PutRecordRes { user_data, .. } => {
