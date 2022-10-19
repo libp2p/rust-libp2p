@@ -81,11 +81,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         mdns: Mdns,
     }
 
-    enum MyBehaviourEvent {
-        Gossipsub(GossipsubEvent),
-        Mdns(MdnsEvent),
-    }
-
     impl From<GossipsubEvent> for MyBehaviourEvent {
         fn from(event: GossipsubEvent) -> Self {
             MyBehaviourEvent::Gossipsub(event)
