@@ -30,6 +30,9 @@ full = [
     "metrics",
     "mplex",
     "noise",
+    "onion",
+    "onion-native-tls",
+    "onion-rustls",
     "ping",
     "plaintext",
     "pnet",
@@ -49,9 +52,6 @@ full = [
     "wasm-ext-websocket",
     "websocket",
     "yamux",
-    "onion",
-    "onion-native-tls",
-    "onion-rustls",
 ]
 autonat = ["dep:libp2p-autonat"]
 dcutr = ["dep:libp2p-dcutr", "libp2p-metrics?/dcutr"]
