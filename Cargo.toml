@@ -49,10 +49,9 @@ full = [
     "wasm-ext-websocket",
     "websocket",
     "yamux",
-    "onion-async-std",
+    "onion",
     "onion-native-tls",
     "onion-rustls",
-    "onion-tokio",
 ]
 autonat = ["dep:libp2p-autonat"]
 dcutr = ["dep:libp2p-dcutr", "libp2p-metrics?/dcutr"]
