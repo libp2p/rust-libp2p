@@ -43,6 +43,11 @@
 
 # `libp2p` facade crate
 
+# 0.50.0 [unreleased]
+
+- Update individual crates.
+  - Update to [`libp2p-tcp` `v0.38.0`](transports/tcp/CHANGELOG.md#0380).
+
 # 0.49.0
 
 - Remove default features. You need to enable required features explicitly now. As a quick workaround, you may want to use the

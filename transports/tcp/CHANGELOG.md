@@ -1,3 +1,11 @@
+# 0.38.0 [unreleased]
+
+- Deprecate types with `Tcp` prefix (`GenTcpConfig`, `TcpTransport` and `TokioTcpTransport`) in favor of referencing them by module / crate. See [PR 2961].
+
+- Remove `TcpListenStream` and `TcpListenerEvent` from public API. See [PR 2961].
+
+[PR 2961]: https://github.com/libp2p/rust-libp2p/pull/2961
+
 # 0.37.0
 
 - Update to `if-watch` `v2.0.0`. Simplify `IfWatcher` integration.
@@ -10,14 +18,9 @@
 - Return `None` in `GenTcpTransport::address_translation` if listen- or observed address are not tcp addresses.
   See [PR 2970].
 
-- Deprecate types with `Tcp` prefix (`GenTcpConfig`, `TcpTransport` and `TokioTcpTransport`) in favor of referencing them by module / crate. See [PR 2961].
-
-- Remove `TcpListenStream` and `TcpListenerEvent` from public API. See [PR 2961].
-
 [PR 2813]: https://github.com/libp2p/rust-libp2p/pull/2813
 [PR 2918]: https://github.com/libp2p/rust-libp2p/pull/2918
 [PR 2970]: https://github.com/libp2p/rust-libp2p/pull/2970
-[PR 2961]: https://github.com/libp2p/rust-libp2p/pull/2961
 
 # 0.36.0
 
