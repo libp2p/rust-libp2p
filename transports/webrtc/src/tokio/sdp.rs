@@ -174,6 +174,10 @@ a=max-message-size:16384
 // a=candidate:<foundation> <component-id> <transport> <priority> <connection-address> <port> <cand-type>
 //
 //     A transport address for a candidate that can be used for connectivity checks (RFC8839).
+//
+// a=end-of-candidates
+//
+//     Indicate that no more candidates will ever be sent (RFC8838).
 const SERVER_SESSION_DESCRIPTION: &str = "v=0
 o=- 0 0 IN {ip_version} {target_ip}
 s=-
@@ -191,6 +195,7 @@ a=setup:passive
 a=sctp-port:5000
 a=max-message-size:16384
 a=candidate:1 1 UDP 1 {target_ip} {target_port} typ host
+a=end-of-candidates
 ";
 
 /// Indicates the IP version used in WebRTC: `IP4` or `IP6`.
