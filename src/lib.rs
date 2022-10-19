@@ -133,7 +133,7 @@ pub use libp2p_mplex as mplex;
 #[cfg_attr(docsrs, doc(cfg(feature = "noise")))]
 #[doc(inline)]
 pub use libp2p_noise as noise;
-#[cfg(any(feature = "onion-async-std", feature = "onion-tokio"))]
+#[cfg(feature = "onion")]
 #[cfg_attr(docsrs, doc(cfg(feature = "onion")))]
 #[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
 #[doc(inline)]

@@ -92,7 +92,7 @@ onion = ["dep:libp2p-onion"]
 onion-native-tls = ["dep:libp2p-onion", "libp2p-onion?/native-tls"]
 onion-rustls = ["dep:libp2p-onion", "libp2p-onion?/rustls"]
 tokio = ["libp2p-mdns?/tokio", "libp2p-tcp?/tokio", "libp2p-dns?/tokio", "libp2p-onion?/tokio"]
-async-std = ["libp2p-mdns?/async-io", "libp2p-tcp?/async-io", "libp2p-dns?/async-std"]
+async-std = ["libp2p-mdns?/async-io", "libp2p-tcp?/async-io", "libp2p-dns?/async-std", "libp2p-onion?/async-std"]
 
 [package.metadata.docs.rs]
 all-features = true
