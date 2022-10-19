@@ -43,6 +43,11 @@
 
 # `libp2p` facade crate
 
+# 0.49.1
+
+- Update individual crates.
+    - Update to [`libp2p-identify` `v0.40.1`](protocols/identify/CHANGELOG.md).
+
 # 0.49.0
 
 - Remove default features. You need to enable required features explicitly now. As a quick workaround, you may want to use the

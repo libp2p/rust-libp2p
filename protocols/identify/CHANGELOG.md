@@ -1,3 +1,9 @@
+# 0.40.1
+
+- Change cache to a default size of 100 (was 0) See [PR 2933]
+
+  [PR 2933]: https://github.com/libp2p/rust-libp2p/issues/2933
+
 # 0.40.0
 
 - Update dependencies.
