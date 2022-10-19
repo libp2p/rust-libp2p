@@ -65,6 +65,7 @@ use libp2p_core::{
 };
 use parking_lot::Mutex;
 use smallvec::SmallVec;
+#[cfg(any(feature = "async-std", feature = "tokio"))]
 use std::io;
 use std::{
     convert::TryFrom,
