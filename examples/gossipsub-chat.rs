@@ -70,7 +70,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let local_peer_id = PeerId::from(local_key.public());
     println!("Local peer id: {}", local_peer_id);
 
-    // Set up a an encrypted DNS-enabled TCP Transport over the Mplex protocol.
+    // Set up an encrypted DNS-enabled TCP Transport over the Mplex protocol.
     let transport = libp2p::development_transport(local_key.clone()).await?;
 
     // We create a custom network behaviour that combines Gossipsub and Mdns.
