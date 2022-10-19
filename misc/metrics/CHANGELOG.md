@@ -1,6 +1,8 @@
-# 0.10.1
+# 0.10.1 [unreleased]
 
 - Added `protocol_stack` metrics. See [PR 2982].
+
+[PR 2982]: https://github.com/libp2p/rust-libp2p/pull/2982/
 
 # 0.10.0
 
