@@ -1,6 +1,8 @@
 # 0.40.1 [unreleased]
 
- - Changing `payload.proto` syntax to be proto2. See [PR 3007]
+ - Changing `payload.proto` syntax to be proto2. See [PR 3007].
+ 
+[PR 3007]: https://github.com/libp2p/rust-libp2p/pull/3007
 
 # 0.40.0
 

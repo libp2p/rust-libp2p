@@ -46,7 +46,7 @@
 # 0.49.1
 
 - Update individual crates.
-    - Update to [`libp2p-noise` `v0.40.1`](transports/noise/CHANGELOG.md#0400).
+    - Update to [`libp2p-noise` `v0.40.1`](transports/noise/CHANGELOG.md#0401).
 
 # 0.49.0
 
