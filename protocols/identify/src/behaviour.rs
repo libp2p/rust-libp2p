@@ -207,8 +207,6 @@ impl Behaviour {
         }
     }
 
-    /// Called on the [`FromSwarm::ConnectionEstablished`]
-    /// [event](`NetworkBehaviour::on_swarm_event`).
     fn on_connection_established(
         &mut self,
         ConnectionEstablished {

@@ -1774,8 +1774,6 @@ where
         }
     }
 
-    /// Called on the [`FromSwarm::ConnectionEstablished`]
-    /// [event](`NetworkBehaviour::on_swarm_event`).
     fn on_connection_established(
         &mut self,
         ConnectionEstablished {
@@ -1817,8 +1815,6 @@ where
         }
     }
 
-    /// Called on the [`FromSwarm::ConnectionClosed`]
-    /// [event](`NetworkBehaviour::on_swarm_event`).
     fn on_connection_closed(
         &mut self,
         ConnectionClosed {
@@ -1836,8 +1832,6 @@ where
         }
     }
 
-    /// Called on the [`FromSwarm::DialFailure`]
-    /// [event](`NetworkBehaviour::on_swarm_event`).
     fn on_dial_failure(
         &mut self,
         DialFailure { peer_id, error, .. }: DialFailure<
@@ -1882,8 +1876,6 @@ where
         }
     }
 
-    /// Called on the [`FromSwarm::AddressChange`]
-    /// [event](`NetworkBehaviour::on_swarm_event`).
     fn on_address_change(
         &mut self,
         AddressChange {

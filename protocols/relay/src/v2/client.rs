@@ -114,8 +114,6 @@ impl Client {
         (transport, behaviour)
     }
 
-    /// Called on the [`FromSwarm::ConnectionClosed`]
-    /// [event](`NetworkBehaviour::on_swarm_event`).
     fn on_connection_closed(
         &mut self,
         ConnectionClosed {

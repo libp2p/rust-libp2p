@@ -278,8 +278,6 @@ impl Floodsub {
         }
     }
 
-    /// Called on the [`FromSwarm::ConnectionEstablished`]
-    /// [event](`NetworkBehaviour::on_swarm_event`).
     fn on_connection_established(
         &mut self,
         ConnectionEstablished {
@@ -314,8 +312,6 @@ impl Floodsub {
         self.connected_peers.insert(peer_id, SmallVec::new());
     }
 
-    /// Called on the [`FromSwarm::ConnectionClosed`]
-    /// [event](`NetworkBehaviour::on_swarm_event`).
     fn on_connection_closed(
         &mut self,
         ConnectionClosed {

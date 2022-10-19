@@ -83,8 +83,6 @@ impl Behaviour {
         }
     }
 
-    /// Called on the [`FromSwarm::ConnectionEstablished`]
-    /// [event](`NetworkBehaviour::on_swarm_event`).
     fn on_connection_established(
         &mut self,
         ConnectionEstablished {
@@ -131,8 +129,6 @@ impl Behaviour {
         }
     }
 
-    /// Called on the [`FromSwarm::ConnectionClosed`]
-    /// [event](`NetworkBehaviour::on_swarm_event`).
     fn on_connection_closed(
         &mut self,
         ConnectionClosed {
@@ -157,8 +153,6 @@ impl Behaviour {
         }
     }
 
-    /// Called on the [`FromSwarm::DialFailure`]
-    /// [event](`NetworkBehaviour::on_swarm_event`).
     fn on_dial_failure(
         &mut self,
         DialFailure {
