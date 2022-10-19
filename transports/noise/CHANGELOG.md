@@ -1,3 +1,9 @@
+# 0.40.1 [unreleased]
+
+- Introduce more variants to `NoiseError` to better differentiate between failure cases during authentication. See [PR 2972].
+
+[PR 2972]: https://github.com/libp2p/rust-libp2p/pull/2972
+
 # 0.40.0
 
 - Update to `libp2p-core` `v0.37.0`.
@@ -8,12 +14,10 @@
 - Remove `Deref` implementation on `AuthenticKeypair`. See [PR 2909].
 - Make `handshake` module private. See [PR 2909].
 - Deprecate `AuthenticKeypair::into_identity`. See [PR 2909].
-- Introduce more variants to `NoiseError` to better differentiate between failure cases during authentication. See [PR XXXX].
 
 [PR 2887]: https://github.com/libp2p/rust-libp2p/pull/2887
 [PR 2903]: https://github.com/libp2p/rust-libp2p/pull/2903
 [PR 2909]: https://github.com/libp2p/rust-libp2p/pull/2909
-[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
 
 # 0.39.0
 
