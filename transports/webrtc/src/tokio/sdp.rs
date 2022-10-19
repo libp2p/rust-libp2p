@@ -136,7 +136,7 @@ a=ice-pwd:{pwd}
 a=fingerprint:{fingerprint_algorithm} {fingerprint_value}
 a=setup:actpass
 a=sctp-port:5000
-a=max-message-size:100000
+a=max-message-size:16384
 ";
 
 // See [`CLIENT_SESSION_DESCRIPTION`].
@@ -189,7 +189,7 @@ a=fingerprint:{fingerprint_algorithm} {fingerprint_value}
 
 a=setup:passive
 a=sctp-port:5000
-a=max-message-size:100000
+a=max-message-size:16384
 a=candidate:1 1 UDP 1 {target_ip} {target_port} typ host
 ";
 
