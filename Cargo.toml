@@ -152,6 +152,7 @@ members = [
     "misc/quickcheck-ext",
     "muxers/mplex",
     "muxers/yamux",
+    "muxers/test-harness",
     "protocols/dcutr",
     "protocols/autonat",
     "protocols/floodsub",
