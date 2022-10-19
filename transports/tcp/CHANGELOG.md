@@ -1,4 +1,4 @@
-# 0.37.0 - [unreleased]
+# 0.37.0
 
 - Update to `if-watch` `v2.0.0`. Simplify `IfWatcher` integration.
   Use `if_watch::IfWatcher` for all runtimes. See [PR 2813].
