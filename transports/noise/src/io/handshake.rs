@@ -207,25 +207,19 @@ where
     }
     let pb = pb_result?;
 
-    match pb.identity_key {
-        Some(ref identity_key) => {
-            let pk = identity::PublicKey::from_protobuf_encoding(&identity_key)
-                .map_err(|_| NoiseError::InvalidKey)?;
-            if let Some(ref k) = state.id_remote_pubkey {
-                if k != &pk {
-                    return Err(NoiseError::InvalidKey);
-                }
+    if let Some(ref identity_key) = pb.identity_key {
+        let pk = identity::PublicKey::from_protobuf_encoding(identity_key)
+            .map_err(|_| NoiseError::InvalidKey)?;
+        if let Some(ref k) = state.id_remote_pubkey {
+            if k != &pk {
+                return Err(NoiseError::InvalidKey);
             }
-            state.id_remote_pubkey = Some(pk);
         }
-        None => {}
+        state.id_remote_pubkey = Some(pk);
     }
 
-    match pb.identity_sig {
-        Some(identity_sig) => {
-            state.dh_remote_pubkey_sig = Some(identity_sig);
-        }
-        None => {}
+    if let Some(identity_sig) = pb.identity_sig {
+        state.dh_remote_pubkey_sig = Some(identity_sig);
     }
 
     Ok(())
