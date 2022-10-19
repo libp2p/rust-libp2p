@@ -2,11 +2,11 @@
 
 - Add new `on_swarm_event` method to `NetworkBehaviour` that accepts a `FromSwarm` enum and update
   `inject_*` methods to call `on_swarm_event` with the respective `FromSwarm` variant and deprecate
-  them. See [PR 3011].
+  them. See [PR 3011](https://github.com/libp2p/rust-libp2p/pull/3011).
 
 - Add new `on_connection_handler_event` method with the same signature as `inject_event`, make the
   default implementation of `inject_event` call `on_connection_handler_event` and deprecate it.
-  See [PR 3011].
+  See [PR 3011](https://github.com/libp2p/rust-libp2p/pull/3011).
 
 # 0.40.0
 

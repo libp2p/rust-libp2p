@@ -1,7 +1,7 @@
 # 0.22.1 - [unreleased]
 
-- replace `RequestResponse`'s NetworkBehaviour implemention `inject_*` methods with the new `on_*` methods.
-  See [PR 3011].
+- Replace `RequestResponse`'s NetworkBehaviour implemention `inject_*` methods with the new `on_*` methods.
+  See [PR 3011](https://github.com/libp2p/rust-libp2p/pull/3011).
 
 # 0.22.0
 
