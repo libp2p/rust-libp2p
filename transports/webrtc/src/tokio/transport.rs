@@ -26,7 +26,6 @@ use libp2p_core::{
     transport::{ListenerId, TransportError, TransportEvent},
     PeerId,
 };
-use rand::distributions::DistString;
 use webrtc::peer_connection::certificate::RTCCertificate;
 use webrtc::peer_connection::configuration::RTCConfiguration;
 
@@ -47,20 +46,37 @@ use crate::tokio::{
 
 /// A WebRTC transport with direct p2p communication (without a STUN server).
 pub struct Transport {
-    /// The config which holds this peer's certificate(s).
+    /// The config which holds this peer's keys and certificate.
     config: Config,
-    /// `Keypair` identifying this peer
-    id_keys: identity::Keypair,
     /// All the active listeners.
     listeners: SelectAll<ListenStream>,
 }
 
 impl Transport {
     /// Creates a new WebRTC transport.
-    pub fn new(id_keys: identity::Keypair) -> Self {
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use libp2p_core::identity;
+    /// use webrtc::peer_connection::certificate::RTCCertificate;
+    /// use rand::distributions::DistString;
+    /// use libp2p_webrtc::tokio::Transport;
+    ///
+    /// let id_keys = identity::Keypair::generate_ed25519();
+    /// let certificate = {
+    ///     let mut params = rcgen::CertificateParams::new(vec![
+    ///         rand::distributions::Alphanumeric.sample_string(&mut rand::thread_rng(), 16)
+    ///     ]);
+    ///     params.alg = &rcgen::PKCS_ECDSA_P256_SHA256;
+    ///     RTCCertificate::from_params(params).expect("default params to work")
+    /// };
+    ///
+    /// let transport = Transport::new(id_keys, certificate);
+    /// ```
+    pub fn new(id_keys: identity::Keypair, certificate: RTCCertificate) -> Self {
         Self {
-            config: Config::new(),
-            id_keys,
+            config: Config::new(id_keys, certificate),
             listeners: SelectAll::new(),
         }
     }
@@ -84,7 +100,6 @@ impl libp2p_core::Transport for Transport {
             id,
             self.config.clone(),
             udp_mux,
-            self.id_keys.clone(),
             IfWatcher::new().map_err(|io| TransportError::Other(Error::Io(io)))?,
         ));
 
@@ -120,7 +135,6 @@ impl libp2p_core::Transport for Transport {
 
         let config = self.config.clone();
         let client_fingerprint = self.config.fingerprint;
-        let id_keys = self.id_keys.clone();
         let udp_mux = self
             .listeners
             .iter()
@@ -136,7 +150,7 @@ impl libp2p_core::Transport for Transport {
                 udp_mux,
                 client_fingerprint,
                 server_fingerprint,
-                id_keys,
+                config.id_keys,
             )
             .await?;
 
@@ -177,9 +191,6 @@ struct ListenStream {
     /// The UDP muxer that manages all ICE connections.
     udp_mux: UDPMuxNewAddr,
 
-    /// `Keypair` identifying this peer
-    id_keys: identity::Keypair,
-
     /// Set to `Some` if this listener should close.
     ///
     /// Optionally contains a [`TransportEvent::ListenerClosed`] that should be
@@ -200,7 +211,6 @@ impl ListenStream {
         listener_id: ListenerId,
         config: Config,
         udp_mux: UDPMuxNewAddr,
-        id_keys: identity::Keypair,
         if_watcher: IfWatcher,
     ) -> Self {
         ListenStream {
@@ -208,7 +218,6 @@ impl ListenStream {
             listen_addr: udp_mux.listen_addr(),
             config,
             udp_mux,
-            id_keys,
             report_closed: None,
             if_watcher,
         }
@@ -305,7 +314,7 @@ impl Stream for ListenStream {
                         self.udp_mux.udp_mux_handle(),
                         self.config.fingerprint,
                         new_addr.ufrag,
-                        self.id_keys.clone(),
+                        self.config.id_keys.clone(),
                     )
                     .boxed();
 
@@ -324,31 +333,36 @@ impl Stream for ListenStream {
     }
 }
 
+/// A config which holds peer's keys and a x509Cert used to authenticate WebRTC communications.
 #[derive(Clone)]
 struct Config {
     inner: RTCConfiguration,
     fingerprint: Fingerprint,
+    id_keys: identity::Keypair,
 }
 
 impl Config {
-    fn new() -> Self {
-        let mut params = rcgen::CertificateParams::new(vec![
-            rand::distributions::Alphanumeric.sample_string(&mut rand::thread_rng(), 16)
-        ]);
-        params.alg = &rcgen::PKCS_ECDSA_P256_SHA256;
-        let certificate = RTCCertificate::from_params(params).expect("default params to work");
-
-        let fingerprints = certificate.get_fingerprints().expect("to never fail"); // TODO: Remove `Result` upstream?
+    /// Returns a new [`Config`] with the given keys and certificate.
+    ///
+    /// # Panics
+    ///
+    /// This function will panic if there's no fingerprint with the SHA-256 algorithm (see
+    /// [`RTCCertificate::get_fingerprints`]).
+    fn new(id_keys: identity::Keypair, certificate: RTCCertificate) -> Self {
+        let fingerprints = certificate.get_fingerprints().expect("to never fail");
+        let sha256_fingerprint = fingerprints
+            .iter()
+            .find(|f| f.algorithm == "sha-256")
+            .expect("a SHA-256 fingerprint");
 
         Self {
+            id_keys,
             inner: RTCConfiguration {
                 certificates: vec![certificate],
                 ..RTCConfiguration::default()
             },
-            fingerprint: Fingerprint::try_from_rtc_dtls(
-                fingerprints.first().expect("at least one certificate"),
-            )
-            .expect("we specified SHA-256"),
+            fingerprint: Fingerprint::try_from_rtc_dtls(sha256_fingerprint)
+                .expect("we specified SHA-256"),
         }
     }
 }
@@ -435,6 +449,7 @@ mod tests {
     use super::*;
     use futures::future::poll_fn;
     use libp2p_core::{multiaddr::Protocol, Transport as _};
+    use rand::distributions::DistString;
     use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
     #[test]
@@ -535,7 +550,8 @@ mod tests {
     #[tokio::test]
     async fn close_listener() {
         let id_keys = identity::Keypair::generate_ed25519();
-        let mut transport = Transport::new(id_keys);
+        let certificate = generate_certificate();
+        let mut transport = Transport::new(id_keys, certificate);
 
         assert!(poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx))
             .now_or_never()
@@ -583,5 +599,13 @@ mod tests {
                 .is_none());
             assert!(transport.listeners.is_empty());
         }
+    }
+
+    fn generate_certificate() -> RTCCertificate {
+        let mut params = rcgen::CertificateParams::new(vec![
+            rand::distributions::Alphanumeric.sample_string(&mut rand::thread_rng(), 16)
+        ]);
+        params.alg = &rcgen::PKCS_ECDSA_P256_SHA256;
+        RTCCertificate::from_params(params).expect("default params to work")
     }
 }

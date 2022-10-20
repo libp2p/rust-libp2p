@@ -18,6 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use ::webrtc::peer_connection::certificate::RTCCertificate;
 use anyhow::Result;
 use async_trait::async_trait;
 use futures::{
@@ -32,6 +33,7 @@ use libp2p::request_response::{
 };
 use libp2p::swarm::{Swarm, SwarmBuilder, SwarmEvent};
 use libp2p::webrtc::tokio as webrtc;
+use rand::distributions::DistString;
 use rand::RngCore;
 
 use std::{io, iter};
@@ -468,9 +470,11 @@ impl RequestResponseCodec for PingCodec {
 }
 
 fn create_swarm() -> Result<Swarm<RequestResponse<PingCodec>>> {
-    let keypair = generate_tls_keypair();
-    let peer_id = keypair.public().to_peer_id();
-    let transport = webrtc::Transport::new(keypair);
+    let id_keys = identity::Keypair::generate_ed25519();
+    let peer_id = id_keys.public().to_peer_id();
+    let certificate = generate_certificate();
+    let transport = webrtc::Transport::new(id_keys, certificate);
+
     let protocols = iter::once((PingProtocol(), ProtocolSupport::Full));
     let cfg = RequestResponseConfig::default();
     let behaviour = RequestResponse::new(PingCodec(), protocols, cfg);
@@ -485,6 +489,10 @@ fn create_swarm() -> Result<Swarm<RequestResponse<PingCodec>>> {
         .build())
 }
 
-fn generate_tls_keypair() -> identity::Keypair {
-    identity::Keypair::generate_ed25519()
+fn generate_certificate() -> RTCCertificate {
+    let mut params = rcgen::CertificateParams::new(vec![
+        rand::distributions::Alphanumeric.sample_string(&mut rand::thread_rng(), 16)
+    ]);
+    params.alg = &rcgen::PKCS_ECDSA_P256_SHA256;
+    RTCCertificate::from_params(params).expect("default params to work")
 }
