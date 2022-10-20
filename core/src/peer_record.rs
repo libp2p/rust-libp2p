@@ -30,11 +30,11 @@ impl PeerRecord {
     ///
     /// If this function succeeds, the [`SignedEnvelope`] contained a peer record with a valid signature and can hence be considered authenticated.
     pub fn from_signed_envelope(envelope: SignedEnvelope) -> Result<Self, FromEnvelopeError> {
-        use prost::Message;
+        use protobuf::Message;
 
         let (payload, signing_key) =
             envelope.payload_and_signing_key(String::from(DOMAIN_SEP), PAYLOAD_TYPE.as_bytes())?;
-        let record = peer_record_proto::PeerRecord::decode(payload)?;
+        let record = peer_record_proto::PeerRecord::parse_from_bytes(payload).map_err(|e| FromEnvelopeError::from(e))?;
 
         let peer_id = PeerId::from_bytes(&record.peer_id)?;
 
@@ -61,7 +61,7 @@ impl PeerRecord {
     ///
     /// This is the same key that is used for authenticating every libp2p connection of your application, i.e. what you use when setting up your [`crate::transport::Transport`].
     pub fn new(key: &Keypair, addresses: Vec<Multiaddr>) -> Result<Self, SigningError> {
-        use prost::Message;
+        use protobuf::Message;
 
         let seq = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
@@ -70,22 +70,19 @@ impl PeerRecord {
         let peer_id = key.public().to_peer_id();
 
         let payload = {
-            let record = peer_record_proto::PeerRecord {
-                peer_id: peer_id.to_bytes(),
-                seq,
-                addresses: addresses
-                    .iter()
-                    .map(|m| peer_record_proto::peer_record::AddressInfo {
-                        multiaddr: m.to_vec(),
-                    })
-                    .collect(),
-            };
+            let mut record = peer_record_proto::PeerRecord::new();
+            record.peer_id = peer_id.to_bytes();
+            record.seq = seq;
+            record.addresses = addresses
+                .iter()
+                .map(|m| {
+                    let mut addr_info = peer_record_proto::peer_record::AddressInfo::new();
+                    addr_info.multiaddr = m.to_vec();
+                    addr_info
+                })
+                .collect();
 
-            let mut buf = Vec::with_capacity(record.encoded_len());
-            record
-                .encode(&mut buf)
-                .expect("Vec<u8> provides capacity as needed");
-            buf
+            record.write_to_bytes().expect("Encoding to succeed.")
         };
 
         let envelope = SignedEnvelope::new(
@@ -129,7 +126,7 @@ pub enum FromEnvelopeError {
     /// Failed to extract the payload from the envelope.
     BadPayload(signed_envelope::ReadPayloadError),
     /// Failed to decode the provided bytes as a [`PeerRecord`].
-    InvalidPeerRecord(prost::DecodeError),
+    InvalidPeerRecord(protobuf::Error),
     /// Failed to decode the peer ID.
     InvalidPeerId(multihash::Error),
     /// The signer of the envelope is different than the peer id in the record.
@@ -144,8 +141,8 @@ impl From<signed_envelope::ReadPayloadError> for FromEnvelopeError {
     }
 }
 
-impl From<prost::DecodeError> for FromEnvelopeError {
-    fn from(e: prost::DecodeError) -> Self {
+impl From<protobuf::Error> for FromEnvelopeError {
+    fn from(e: protobuf::Error) -> Self {
         Self::InvalidPeerRecord(e)
     }
 }

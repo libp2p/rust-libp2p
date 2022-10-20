@@ -37,19 +37,14 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
+mod protos {
+    include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
+}
 #[allow(clippy::derive_partial_eq_without_eq)]
-mod keys_proto {
-    include!(concat!(env!("OUT_DIR"), "/keys_proto.rs"));
-}
-
-mod envelope_proto {
-    include!(concat!(env!("OUT_DIR"), "/envelope_proto.rs"));
-}
-
+use protos::keys as keys_proto;
+use protos::envelope as envelope_proto;
 #[allow(clippy::derive_partial_eq_without_eq)]
-mod peer_record_proto {
-    include!(concat!(env!("OUT_DIR"), "/peer_record_proto.rs"));
-}
+use protos::peer_record as peer_record_proto;
 
 /// Multi-address re-export.
 pub use multiaddr;

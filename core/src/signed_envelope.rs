@@ -73,32 +73,27 @@ impl SignedEnvelope {
 
     /// Encode this [`SignedEnvelope`] using the protobuf encoding specified in the RFC.
     pub fn into_protobuf_encoding(self) -> Vec<u8> {
-        use prost::Message;
+        use protobuf::Message;
 
-        let envelope = crate::envelope_proto::Envelope {
-            public_key: Some((&self.key).into()),
-            payload_type: self.payload_type,
-            payload: self.payload,
-            signature: self.signature,
-        };
+        let mut envelope = crate::envelope_proto::Envelope::new();
+        envelope.public_key = protobuf::MessageField::some((&self.key).into());
+        envelope.payload_type = self.payload_type;
+        envelope.payload = self.payload;
+        envelope.signature = self.signature;
 
-        let mut buf = Vec::with_capacity(envelope.encoded_len());
-        envelope
-            .encode(&mut buf)
-            .expect("Vec<u8> provides capacity as needed");
-
-        buf
+        envelope.write_to_bytes().expect("Encoding to succeed.")
     }
 
     /// Decode a [`SignedEnvelope`] using the protobuf encoding specified in the RFC.
     pub fn from_protobuf_encoding(bytes: &[u8]) -> Result<Self, DecodingError> {
-        use prost::Message;
+        use protobuf::Message;
 
-        let envelope = crate::envelope_proto::Envelope::decode(bytes)?;
+        let envelope = crate::envelope_proto::Envelope::parse_from_bytes(bytes)?;
 
         Ok(Self {
             key: envelope
                 .public_key
+                .into_option()
                 .ok_or(DecodingError::MissingPublicKey)?
                 .try_into()?,
             payload_type: envelope.payload_type,
@@ -143,15 +138,15 @@ fn signature_payload(domain_separation: String, payload_type: &[u8], payload: &[
 #[derive(Debug)]
 pub enum DecodingError {
     /// Decoding the provided bytes as a signed envelope failed.
-    InvalidEnvelope(prost::DecodeError),
+    InvalidEnvelope(protobuf::Error),
     /// The public key in the envelope could not be converted to our internal public key type.
     InvalidPublicKey(identity::error::DecodingError),
     /// The public key in the envelope could not be converted to our internal public key type.
     MissingPublicKey,
 }
 
-impl From<prost::DecodeError> for DecodingError {
-    fn from(e: prost::DecodeError) -> Self {
+impl From<protobuf::Error> for DecodingError {
+    fn from(e: protobuf::Error) -> Self {
         Self::InvalidEnvelope(e)
     }
 }

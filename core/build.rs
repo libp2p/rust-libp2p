@@ -19,13 +19,17 @@
 // DEALINGS IN THE SOFTWARE.
 
 fn main() {
-    prost_build::compile_protos(
-        &[
+    protobuf_codegen::Codegen::new()
+        .pure()
+        .includes(&["src"])
+        .inputs(
+            &[
             "src/keys.proto",
             "src/envelope.proto",
             "src/peer_record.proto",
-        ],
-        &["src"],
-    )
-    .unwrap();
+            ]
+        )
+        .cargo_out_dir("protos")
+        .run()
+        .unwrap()
 }
