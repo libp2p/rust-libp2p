@@ -1,3 +1,9 @@
+# 0.37.1 [unreleased]
+
+- Remove `prost` and add `protobuf`. See [PR 3050].
+
+[PR 3050]: https://github.com/libp2p/rust-libp2p/pull/3050
+
 # 0.37.0
 
 - Update to `libp2p-core` `v0.37.0`.

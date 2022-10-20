@@ -19,5 +19,11 @@
 // DEALINGS IN THE SOFTWARE.
 
 fn main() {
-    prost_build::compile_protos(&["src/structs.proto"], &["src"]).unwrap();
+    protobuf_codegen::Codegen::new()
+        .pure()
+        .includes(&["src"])
+        .input("src/structs.proto")
+        .cargo_out_dir("protos")
+        .run()
+        .unwrap()
 }

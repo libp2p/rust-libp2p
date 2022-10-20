@@ -28,7 +28,7 @@ pub enum PlainTextError {
     IoError(IoError),
 
     /// Failed to parse the handshake protobuf message.
-    InvalidPayload(Option<prost::DecodeError>),
+    InvalidPayload(Option<protobuf::Error>),
 
     /// The peer id of the exchange isn't consistent with the remote public key.
     InvalidPeerId,
@@ -65,8 +65,8 @@ impl From<IoError> for PlainTextError {
     }
 }
 
-impl From<prost::DecodeError> for PlainTextError {
-    fn from(err: prost::DecodeError) -> PlainTextError {
+impl From<protobuf::Error> for PlainTextError {
+    fn from(err: protobuf::Error) -> PlainTextError {
         PlainTextError::InvalidPayload(Some(err))
     }
 }

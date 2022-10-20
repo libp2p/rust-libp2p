@@ -27,7 +27,7 @@ use bytes::{Bytes, BytesMut};
 use futures::prelude::*;
 use libp2p_core::{PeerId, PublicKey};
 use log::{debug, trace};
-use prost::Message;
+use protobuf::Message;
 use std::io::{Error as IoError, ErrorKind as IoErrorKind};
 use unsigned_varint::codec::UviBytes;
 
@@ -52,19 +52,14 @@ pub struct Remote {
 
 impl HandshakeContext<Local> {
     fn new(config: PlainText2Config) -> Self {
-        let exchange = Exchange {
-            id: Some(config.local_public_key.to_peer_id().to_bytes()),
-            pubkey: Some(config.local_public_key.to_protobuf_encoding()),
-        };
-        let mut buf = Vec::with_capacity(exchange.encoded_len());
-        exchange
-            .encode(&mut buf)
-            .expect("Vec<u8> provides capacity as needed");
+        let mut exchange = Exchange::new();
+        exchange.set_id(config.local_public_key.to_peer_id().to_bytes());
+        exchange.set_pubkey(config.local_public_key.to_protobuf_encoding());
 
         Self {
             config,
             state: Local {
-                exchange_bytes: buf,
+                exchange_bytes: exchange.write_to_bytes().expect("Encode to succeed."),
             },
         }
     }
@@ -73,7 +68,7 @@ impl HandshakeContext<Local> {
         self,
         exchange_bytes: BytesMut,
     ) -> Result<HandshakeContext<Remote>, PlainTextError> {
-        let prop = match Exchange::decode(exchange_bytes) {
+        let prop = match Exchange::parse_from_bytes(exchange_bytes.as_ref()) {
             Ok(prop) => prop,
             Err(e) => {
                 debug!("failed to parse remote's exchange protobuf message");
