@@ -94,8 +94,8 @@ impl AsyncRead for Substream {
         loop {
             if buf.is_empty() {
                 // Chunks::next will continue returning `Ok(Some(_))` with an
-                // empty chunk if there are no bytes left to read, so we break
-                // early here.
+                // empty chunk if there is no space left in the buffer, so we
+                // break early here.
                 break;
             }
             let chunk = match chunks.next(buf.len()) {
