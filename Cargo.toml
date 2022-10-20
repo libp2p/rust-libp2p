@@ -3,7 +3,7 @@ name = "libp2p"
 edition = "2021"
 rust-version = "1.60.0"
 description = "Peer-to-peer networking library"
-version = "0.49.0"
+version = "0.50.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -12,18 +12,17 @@ categories = ["network-programming", "asynchronous"]
 
 [features]
 full = [
+    "async-std",
     "autonat",
     "dcutr",
     "deflate",
-    "dns-async-std",
-    "dns-tokio",
+    "dns",
     "ecdsa",
     "floodsub",
     "gossipsub",
     "identify",
     "kad",
-    "mdns-async-io",
-    "mdns-tokio",
+    "mdns",
     "metrics",
     "mplex",
     "noise",
@@ -36,8 +35,8 @@ full = [
     "rsa",
     "secp256k1",
     "serde",
-    "tcp-async-io",
-    "tcp-tokio",
+    "tcp",
+    "tokio",
     "uds",
     "wasm-bindgen",
     "wasm-ext",
@@ -48,15 +47,13 @@ full = [
 autonat = ["dep:libp2p-autonat"]
 dcutr = ["dep:libp2p-dcutr", "libp2p-metrics?/dcutr"]
 deflate = ["dep:libp2p-deflate"]
-dns-async-std = ["dep:libp2p-dns", "libp2p-dns?/async-std"]
-dns-tokio = ["dep:libp2p-dns", "libp2p-dns?/tokio"]
+dns = ["dep:libp2p-dns"]
 floodsub = ["dep:libp2p-floodsub"]
 identify = ["dep:libp2p-identify", "libp2p-metrics?/identify"]
 kad = ["dep:libp2p-kad", "libp2p-metrics?/kad"]
 gossipsub = ["dep:libp2p-gossipsub", "libp2p-metrics?/gossipsub"]
 metrics = ["dep:libp2p-metrics"]
-mdns-async-io = ["dep:libp2p-mdns", "libp2p-mdns?/async-io"]
-mdns-tokio = ["dep:libp2p-mdns", "libp2p-mdns?/tokio"]
+mdns = ["dep:libp2p-mdns"]
 mplex = ["dep:libp2p-mplex"]
 noise = ["dep:libp2p-noise"]
 ping = ["dep:libp2p-ping", "libp2p-metrics?/ping"]
@@ -65,8 +62,7 @@ pnet = ["dep:libp2p-pnet"]
 relay = ["dep:libp2p-relay", "libp2p-metrics?/relay"]
 request-response = ["dep:libp2p-request-response"]
 rendezvous = ["dep:libp2p-rendezvous"]
-tcp-async-io = ["dep:libp2p-tcp", "libp2p-tcp?/async-io"]
-tcp-tokio = ["dep:libp2p-tcp", "libp2p-tcp?/tokio"]
+tcp = ["dep:libp2p-tcp"]
 uds = ["dep:libp2p-uds"]
 wasm-bindgen = ["futures-timer/wasm-bindgen", "instant/wasm-bindgen", "getrandom/js"]
 wasm-ext = ["dep:libp2p-wasm-ext"]
@@ -77,6 +73,8 @@ secp256k1 = ["libp2p-core/secp256k1"]
 rsa = ["libp2p-core/rsa"]
 ecdsa = ["libp2p-core/ecdsa"]
 serde = ["libp2p-core/serde", "libp2p-kad?/serde", "libp2p-gossipsub?/serde"]
+tokio = ["libp2p-mdns?/tokio", "libp2p-tcp?/tokio", "libp2p-dns?/tokio"]
+async-std = ["libp2p-mdns?/async-io", "libp2p-tcp?/async-io", "libp2p-dns?/async-std"]
 
 [package.metadata.docs.rs]
 all-features = true
@@ -91,7 +89,7 @@ lazy_static = "1.2"
 
 libp2p-autonat = { version = "0.8.0", path = "protocols/autonat", optional = true }
 libp2p-core = { version = "0.37.0", path = "core" }
-libp2p-dcutr = { version = "0.7.0", path = "protocols/dcutr",  optional = true }
+libp2p-dcutr = { version = "0.7.0", path = "protocols/dcutr", optional = true }
 libp2p-floodsub = { version = "0.40.1", path = "protocols/floodsub", optional = true }
 libp2p-identify = { version = "0.40.0", path = "protocols/identify", optional = true }
 libp2p-kad = { version = "0.41.0", path = "protocols/kad", optional = true }
@@ -128,7 +126,7 @@ libp2p-gossipsub = { version = "0.42.1", path = "protocols/gossipsub", optional 
 async-std = { version = "1.6.2", features = ["attributes"] }
 async-trait = "0.1"
 env_logger = "0.9.0"
-clap = {version = "3.1.6", features = ["derive"]}
+clap = { version = "4.0.13", features = ["derive"] }
 tokio = { version = "1.15", features = ["io-util", "io-std", "macros", "rt", "rt-multi-thread"] }
 
 [workspace]
@@ -142,6 +140,7 @@ members = [
     "misc/quickcheck-ext",
     "muxers/mplex",
     "muxers/yamux",
+    "muxers/test-harness",
     "protocols/dcutr",
     "protocols/autonat",
     "protocols/floodsub",

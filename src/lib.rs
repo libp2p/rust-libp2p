@@ -54,11 +54,8 @@ pub use libp2p_dcutr as dcutr;
 #[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
 #[doc(inline)]
 pub use libp2p_deflate as deflate;
-#[cfg(any(feature = "dns-async-std", feature = "dns-tokio"))]
-#[cfg_attr(
-    docsrs,
-    doc(cfg(any(feature = "dns-async-std", feature = "dns-tokio")))
-)]
+#[cfg(feature = "dns")]
+#[cfg_attr(docsrs, doc(cfg(feature = "dns")))]
 #[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
 #[doc(inline)]
 pub use libp2p_dns as dns;
@@ -79,12 +76,9 @@ pub use libp2p_identify as identify;
 #[cfg_attr(docsrs, doc(cfg(feature = "kad")))]
 #[doc(inline)]
 pub use libp2p_kad as kad;
-#[cfg(any(feature = "mdns-async-io", feature = "mdns-tokio"))]
-#[cfg_attr(
-    docsrs,
-    doc(cfg(any(feature = "mdns-tokio", feature = "mdns-async-io")))
-)]
+#[cfg(feature = "mdns")]
 #[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
+#[cfg_attr(docsrs, doc(cfg(feature = "mdns")))]
 #[doc(inline)]
 pub use libp2p_mdns as mdns;
 #[cfg(feature = "metrics")]
@@ -125,9 +119,9 @@ pub use libp2p_rendezvous as rendezvous;
 pub use libp2p_request_response as request_response;
 #[doc(inline)]
 pub use libp2p_swarm as swarm;
-#[cfg(any(feature = "tcp-async-io", feature = "tcp-tokio"))]
-#[cfg_attr(docsrs, doc(cfg(any(feature = "tcp-async-io", feature = "tcp-tokio"))))]
+#[cfg(feature = "tcp")]
 #[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
+#[cfg_attr(docsrs, doc(cfg(feature = "tcp")))]
 #[doc(inline)]
 pub use libp2p_tcp as tcp;
 #[cfg(feature = "uds")]
@@ -181,8 +175,10 @@ pub use libp2p_swarm_derive::NetworkBehaviour;
 /// >           reserves the right to support additional protocols or remove deprecated protocols.
 #[cfg(all(
     not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")),
-    feature = "tcp-async-io",
-    feature = "dns-async-std",
+    any(
+        all(feature = "tcp-async-io", feature = "dns-async-std"),
+        all(feature = "tcp", feature = "dns", feature = "async-std")
+    ),
     feature = "websocket",
     feature = "noise",
     feature = "mplex",
@@ -192,13 +188,25 @@ pub use libp2p_swarm_derive::NetworkBehaviour;
     docsrs,
     doc(cfg(all(
         not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")),
-        feature = "tcp-async-io",
-        feature = "dns-async-std",
+        any(
+            all(feature = "tcp-async-io", feature = "dns-async-std"),
+            all(feature = "tcp", feature = "dns", feature = "async-std")
+        ),
         feature = "websocket",
         feature = "noise",
         feature = "mplex",
         feature = "yamux"
     )))
+)]
+#[cfg_attr(
+    all(
+        any(feature = "tcp-async-io", feature = "dns-async-std"),
+        not(feature = "async-std")
+    ),
+    deprecated(
+        since = "0.49.0",
+        note = "The `tcp-async-io` and `dns-async-std` features are deprecated. Use the new `tcp` and `dns` features together with the `async-std` feature."
+    )
 )]
 pub async fn development_transport(
     keypair: identity::Keypair,
@@ -241,8 +249,10 @@ pub async fn development_transport(
 /// >           reserves the right to support additional protocols or remove deprecated protocols.
 #[cfg(all(
     not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")),
-    feature = "tcp-tokio",
-    feature = "dns-tokio",
+    any(
+        all(feature = "tcp-tokio", feature = "dns-tokio"),
+        all(feature = "tcp", feature = "dns", feature = "tokio")
+    ),
     feature = "websocket",
     feature = "noise",
     feature = "mplex",
@@ -252,13 +262,25 @@ pub async fn development_transport(
     docsrs,
     doc(cfg(all(
         not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")),
-        feature = "tcp-tokio",
-        feature = "dns-tokio",
+        any(
+            all(feature = "tcp-tokio", feature = "dns-tokio"),
+            all(feature = "tcp", feature = "dns", feature = "tokio")
+        ),
         feature = "websocket",
         feature = "noise",
         feature = "mplex",
         feature = "yamux"
     )))
+)]
+#[cfg_attr(
+    all(
+        any(feature = "tcp-tokio", feature = "dns-tokio"),
+        not(feature = "tokio")
+    ),
+    deprecated(
+        since = "0.49.0",
+        note = "The `tcp-tokio` and `dns-tokio` features are deprecated. Use the new `tcp` and `dns` feature together with the `tokio` feature."
+    )
 )]
 pub fn tokio_development_transport(
     keypair: identity::Keypair,

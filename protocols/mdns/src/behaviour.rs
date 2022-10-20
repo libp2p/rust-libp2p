@@ -25,7 +25,6 @@ mod timer;
 use self::iface::InterfaceState;
 use crate::behaviour::{socket::AsyncSocket, timer::Builder};
 use crate::MdnsConfig;
-use futures::prelude::*;
 use futures::Stream;
 use if_watch::{IfEvent, IfWatcher};
 use libp2p_core::transport::ListenerId;
@@ -81,8 +80,8 @@ where
     T: Builder,
 {
     /// Builds a new `Mdns` behaviour.
-    pub async fn new(config: MdnsConfig) -> io::Result<Self> {
-        let if_watch = if_watch::IfWatcher::new().await?;
+    pub fn new(config: MdnsConfig) -> io::Result<Self> {
+        let if_watch = if_watch::IfWatcher::new()?;
         Ok(Self {
             config,
             if_watch,
@@ -169,7 +168,7 @@ where
         params: &mut impl PollParameters,
     ) -> Poll<NetworkBehaviourAction<Self::OutEvent, dummy::ConnectionHandler>> {
         // Poll ifwatch.
-        while let Poll::Ready(event) = Pin::new(&mut self.if_watch).poll(cx) {
+        while let Poll::Ready(Some(event)) = Pin::new(&mut self.if_watch).poll_next(cx) {
             match event {
                 Ok(IfEvent::Up(inet)) => {
                     let addr = inet.addr();
