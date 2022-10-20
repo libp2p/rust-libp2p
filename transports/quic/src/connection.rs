@@ -73,7 +73,7 @@ impl Connection {
     ///
     /// This function assumes that the [`quinn_proto::Connection`] is completely fresh and none of
     /// its methods has ever been called. Failure to comply might lead to logic errors and panics.
-    pub fn from_quinn_connection(
+    pub(crate) fn from_quinn_connection(
         endpoint_channel: endpoint::Channel,
         connection: quinn_proto::Connection,
         connection_id: quinn_proto::ConnectionHandle,
@@ -98,16 +98,16 @@ impl Connection {
     }
 
     /// The address that the local socket is bound to.
-    pub fn local_addr(&self) -> &SocketAddr {
+    pub(crate) fn local_addr(&self) -> &SocketAddr {
         self.endpoint_channel.socket_addr()
     }
 
     /// Returns the address of the node we're connected to.
-    pub fn remote_addr(&self) -> SocketAddr {
+    pub(crate) fn remote_addr(&self) -> SocketAddr {
         self.state.lock().connection.remote_address()
     }
 
-    pub fn peer_identity(&self) -> Option<Box<dyn Any>> {
+    fn peer_identity(&self) -> Option<Box<dyn Any>> {
         self.state
             .lock()
             .connection
@@ -116,7 +116,7 @@ impl Connection {
     }
 
     /// Polls the connection for an event that happened on it.
-    pub fn poll_event(&mut self, cx: &mut Context<'_>) -> Poll<Option<quinn_proto::Event>> {
+    fn poll_event(&mut self, cx: &mut Context<'_>) -> Poll<Option<quinn_proto::Event>> {
         let mut inner = self.state.lock();
         loop {
             match self.from_endpoint.poll_next_unpin(cx) {
