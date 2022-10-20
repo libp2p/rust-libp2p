@@ -92,9 +92,15 @@ impl AsyncRead for Substream {
         let mut bytes = 0;
         let mut pending = false;
         loop {
+            if buf.is_empty() {
+                // Chunks::next will continue returning `Ok(Some(_))` with an
+                // empty chunk if there are no bytes left to read, so we break
+                // early here.
+                break;
+            }
             let chunk = match chunks.next(buf.len()) {
-                Ok(Some(chunk)) if !chunk.bytes.is_empty() => chunk,
-                Ok(_) => break,
+                Ok(Some(chunk)) => chunk,
+                Ok(None) => break,
                 Err(err @ quinn_proto::ReadError::Reset(_)) => {
                     return Poll::Ready(Err(io::Error::new(io::ErrorKind::ConnectionReset, err)))
                 }
