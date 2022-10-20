@@ -11,7 +11,7 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-libp2p-swarm = { version = "0.40.0", path = "../../swarm" }
+libp2p-swarm = { version = "0.40.1", path = "../../swarm" }
 libp2p-core = { version = "0.37.0", path = "../../core" }
 bytes = "1.0"
 byteorder = "1.3.4"
