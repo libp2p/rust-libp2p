@@ -36,6 +36,7 @@ use futures::{
     prelude::*,
     ready,
 };
+use quinn_proto::VarInt;
 use std::{
     collections::HashMap,
     net::{Ipv4Addr, Ipv6Addr, SocketAddr},
@@ -52,8 +53,8 @@ pub struct Config {
     /// Timeout for the initial handshake when establishing a connection.
     /// The actual timeout is the minimum of this an the [`Config::max_idle_timeout`].
     pub handshake_timeout: Duration,
-    /// Maximum duration of inactivity to accept before timing out the connection.
-    pub max_idle_timeout: Duration,
+    /// Maximum duration of inactivity in ms to accept before timing out the connection.
+    pub max_idle_timeout: u32,
     /// Period of inactivity before sending a keep-alive packet.
     /// Must be set lower than the idle_timeout of both
     /// peers to be effective.
@@ -64,6 +65,13 @@ pub struct Config {
     /// Maximum number of incoming bidirectional streams that may be open
     /// concurrently by the remote peer.
     pub max_concurrent_stream_limit: u32,
+
+    /// Max unacknowledged data in bytes that may be send on a single stream.
+    pub max_stream_data: u32,
+
+    /// Max unacknowledged data in bytes that may be send in total on all streams
+    /// of a connection.
+    pub max_connection_data: u32,
 
     client_tls_config: Arc<rustls::ClientConfig>,
     server_tls_config: Arc<rustls::ServerConfig>,
@@ -78,9 +86,13 @@ impl Config {
             client_tls_config,
             server_tls_config,
             handshake_timeout: Duration::from_secs(5),
-            max_idle_timeout: Duration::from_secs(30),
+            max_idle_timeout: 30 * 1000,
             max_concurrent_stream_limit: 256,
             keep_alive_interval: Duration::from_secs(15),
+            max_connection_data: 15_000_000,
+
+            // Ensure that one stream is not consuming the whole connection.
+            max_stream_data: 10_000_000,
         }
     }
 }
@@ -101,6 +113,8 @@ impl From<Config> for QuinnConfig {
             max_idle_timeout,
             max_concurrent_stream_limit,
             keep_alive_interval,
+            max_connection_data,
+            max_stream_data,
             handshake_timeout: _,
         } = config;
         let mut transport = quinn_proto::TransportConfig::default();
@@ -108,8 +122,10 @@ impl From<Config> for QuinnConfig {
         transport.max_concurrent_bidi_streams(max_concurrent_stream_limit.into());
         transport.datagram_receive_buffer_size(None);
         transport.keep_alive_interval(Some(keep_alive_interval));
-        transport.max_idle_timeout(Some(max_idle_timeout.try_into().expect("is < 2^62")));
+        transport.max_idle_timeout(Some(VarInt::from_u32(max_idle_timeout).into()));
         transport.allow_spin(false);
+        transport.stream_receive_window(max_stream_data.into());
+        transport.receive_window(max_connection_data.into());
         let transport = Arc::new(transport);
 
         let mut server_config = quinn_proto::ServerConfig::with_crypto(server_tls_config);
