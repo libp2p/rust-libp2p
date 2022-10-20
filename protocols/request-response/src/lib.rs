@@ -717,10 +717,7 @@ where
         addresses
     }
 
-    fn on_swarm_event(
-        &mut self,
-        event: libp2p_swarm::behaviour::FromSwarm<Self::ConnectionHandler>,
-    ) {
+    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
         match event {
             FromSwarm::ConnectionEstablished(connection_established) => {
                 self.on_connection_established(connection_established)
@@ -736,8 +733,8 @@ where
 
     fn on_connection_handler_event(
         &mut self,
-        peer_id: PeerId,
-        connection_id: ConnectionId,
+        peer: PeerId,
+        connection: ConnectionId,
         event: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as
             libp2p_swarm::ConnectionHandler>::OutEvent,
     ) {
@@ -746,8 +743,7 @@ where
                 request_id,
                 response,
             } => {
-                let removed =
-                    self.remove_pending_inbound_response(&peer_id, connection_id, &request_id);
+                let removed = self.remove_pending_inbound_response(&peer, connection, &request_id);
                 debug_assert!(
                     removed,
                     "Expect request_id to be pending before receiving response.",
@@ -759,10 +755,7 @@ where
                 };
                 self.pending_events
                     .push_back(NetworkBehaviourAction::GenerateEvent(
-                        RequestResponseEvent::Message {
-                            peer: peer_id,
-                            message,
-                        },
+                        RequestResponseEvent::Message { peer, message },
                     ));
             }
             RequestResponseHandlerEvent::Request {
@@ -778,13 +771,10 @@ where
                 };
                 self.pending_events
                     .push_back(NetworkBehaviourAction::GenerateEvent(
-                        RequestResponseEvent::Message {
-                            peer: peer_id,
-                            message,
-                        },
+                        RequestResponseEvent::Message { peer, message },
                     ));
 
-                match self.get_connection_mut(&peer_id, connection_id) {
+                match self.get_connection_mut(&peer, connection) {
                     Some(connection) => {
                         let inserted = connection.pending_outbound_responses.insert(request_id);
                         debug_assert!(inserted, "Expect id of new request to be unknown.");
@@ -794,7 +784,7 @@ where
                         self.pending_events
                             .push_back(NetworkBehaviourAction::GenerateEvent(
                                 RequestResponseEvent::InboundFailure {
-                                    peer: peer_id,
+                                    peer,
                                     request_id,
                                     error: InboundFailure::ConnectionClosed,
                                 },
@@ -803,8 +793,7 @@ where
                 }
             }
             RequestResponseHandlerEvent::ResponseSent(request_id) => {
-                let removed =
-                    self.remove_pending_outbound_response(&peer_id, connection_id, request_id);
+                let removed = self.remove_pending_outbound_response(&peer, connection, request_id);
                 debug_assert!(
                     removed,
                     "Expect request_id to be pending before response is sent."
@@ -812,15 +801,11 @@ where
 
                 self.pending_events
                     .push_back(NetworkBehaviourAction::GenerateEvent(
-                        RequestResponseEvent::ResponseSent {
-                            peer: peer_id,
-                            request_id,
-                        },
+                        RequestResponseEvent::ResponseSent { peer, request_id },
                     ));
             }
             RequestResponseHandlerEvent::ResponseOmission(request_id) => {
-                let removed =
-                    self.remove_pending_outbound_response(&peer_id, connection_id, request_id);
+                let removed = self.remove_pending_outbound_response(&peer, connection, request_id);
                 debug_assert!(
                     removed,
                     "Expect request_id to be pending before response is omitted.",
@@ -829,15 +814,14 @@ where
                 self.pending_events
                     .push_back(NetworkBehaviourAction::GenerateEvent(
                         RequestResponseEvent::InboundFailure {
-                            peer: peer_id,
+                            peer,
                             request_id,
                             error: InboundFailure::ResponseOmission,
                         },
                     ));
             }
             RequestResponseHandlerEvent::OutboundTimeout(request_id) => {
-                let removed =
-                    self.remove_pending_inbound_response(&peer_id, connection_id, &request_id);
+                let removed = self.remove_pending_inbound_response(&peer, connection, &request_id);
                 debug_assert!(
                     removed,
                     "Expect request_id to be pending before request times out."
@@ -846,7 +830,7 @@ where
                 self.pending_events
                     .push_back(NetworkBehaviourAction::GenerateEvent(
                         RequestResponseEvent::OutboundFailure {
-                            peer: peer_id,
+                            peer,
                             request_id,
                             error: OutboundFailure::Timeout,
                         },
@@ -857,20 +841,19 @@ where
                 // out to receive the request and for timing out sending the response. In the former
                 // case the request is never added to `pending_outbound_responses` and thus one can
                 // not assert the request_id to be present before removing it.
-                self.remove_pending_outbound_response(&peer_id, connection_id, request_id);
+                self.remove_pending_outbound_response(&peer, connection, request_id);
 
                 self.pending_events
                     .push_back(NetworkBehaviourAction::GenerateEvent(
                         RequestResponseEvent::InboundFailure {
-                            peer: peer_id,
+                            peer,
                             request_id,
                             error: InboundFailure::Timeout,
                         },
                     ));
             }
             RequestResponseHandlerEvent::OutboundUnsupportedProtocols(request_id) => {
-                let removed =
-                    self.remove_pending_inbound_response(&peer_id, connection_id, &request_id);
+                let removed = self.remove_pending_inbound_response(&peer, connection, &request_id);
                 debug_assert!(
                     removed,
                     "Expect request_id to be pending before failing to connect.",
@@ -879,7 +862,7 @@ where
                 self.pending_events
                     .push_back(NetworkBehaviourAction::GenerateEvent(
                         RequestResponseEvent::OutboundFailure {
-                            peer: peer_id,
+                            peer,
                             request_id,
                             error: OutboundFailure::UnsupportedProtocols,
                         },
@@ -892,7 +875,7 @@ where
                 self.pending_events
                     .push_back(NetworkBehaviourAction::GenerateEvent(
                         RequestResponseEvent::InboundFailure {
-                            peer: peer_id,
+                            peer,
                             request_id,
                             error: InboundFailure::UnsupportedProtocols,
                         },
