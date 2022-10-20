@@ -560,6 +560,31 @@ where
             .and_then(|connections| connections.iter_mut().find(|c| c.id == connection))
     }
 
+    fn on_address_change(
+        &mut self,
+        AddressChange {
+            peer_id,
+            connection_id,
+            new,
+            ..
+        }: AddressChange,
+    ) {
+        let new_address = match new {
+            ConnectedPoint::Dialer { address, .. } => Some(address.clone()),
+            ConnectedPoint::Listener { .. } => None,
+        };
+        let connections = self
+            .connected
+            .get_mut(&peer_id)
+            .expect("Address change can only happen on an established connection.");
+
+        let connection = connections
+            .iter_mut()
+            .find(|c| c.id == connection_id)
+            .expect("Address change can only happen on an established connection.");
+        connection.address = new_address;
+    }
+
     fn on_connection_established(
         &mut self,
         ConnectionEstablished {
@@ -635,31 +660,6 @@ where
                     },
                 ));
         }
-    }
-
-    fn on_address_change(
-        &mut self,
-        AddressChange {
-            peer_id,
-            connection_id,
-            new,
-            ..
-        }: AddressChange,
-    ) {
-        let new_address = match new {
-            ConnectedPoint::Dialer { address, .. } => Some(address.clone()),
-            ConnectedPoint::Listener { .. } => None,
-        };
-        let connections = self
-            .connected
-            .get_mut(&peer_id)
-            .expect("Address change can only happen on an established connection.");
-
-        let connection = connections
-            .iter_mut()
-            .find(|c| c.id == connection_id)
-            .expect("Address change can only happen on an established connection.");
-        connection.address = new_address;
     }
 
     fn on_dial_failure(

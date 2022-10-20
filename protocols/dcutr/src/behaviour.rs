@@ -129,30 +129,6 @@ impl Behaviour {
         }
     }
 
-    fn on_connection_closed(
-        &mut self,
-        ConnectionClosed {
-            peer_id,
-            connection_id,
-            endpoint,
-            ..
-        }: ConnectionClosed<<Self as NetworkBehaviour>::ConnectionHandler>,
-    ) {
-        if !endpoint.is_relayed() {
-            let connections = self
-                .direct_connections
-                .get_mut(&peer_id)
-                .expect("Peer of direct connection to be tracked.");
-            connections
-                .remove(&connection_id)
-                .then(|| ())
-                .expect("Direct connection to be tracked.");
-            if connections.is_empty() {
-                self.direct_connections.remove(&peer_id);
-            }
-        }
-    }
-
     fn on_dial_failure(
         &mut self,
         DialFailure {
@@ -190,6 +166,30 @@ impl Behaviour {
             }
         }
     }
+
+    fn on_connection_closed(
+        &mut self,
+        ConnectionClosed {
+            peer_id,
+            connection_id,
+            endpoint,
+            ..
+        }: ConnectionClosed<<Self as NetworkBehaviour>::ConnectionHandler>,
+    ) {
+        if !endpoint.is_relayed() {
+            let connections = self
+                .direct_connections
+                .get_mut(&peer_id)
+                .expect("Peer of direct connection to be tracked.");
+            connections
+                .remove(&connection_id)
+                .then(|| ())
+                .expect("Direct connection to be tracked.");
+            if connections.is_empty() {
+                self.direct_connections.remove(&peer_id);
+            }
+        }
+    }
 }
 
 impl NetworkBehaviour for Behaviour {
@@ -198,10 +198,6 @@ impl NetworkBehaviour for Behaviour {
 
     fn new_handler(&mut self) -> Self::ConnectionHandler {
         handler::Prototype::UnknownConnection
-    }
-
-    fn addresses_of_peer(&mut self, _peer_id: &PeerId) -> Vec<Multiaddr> {
-        vec![]
     }
 
     fn on_connection_handler_event(

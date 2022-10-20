@@ -211,7 +211,7 @@ impl Behaviour {
         &mut self,
         ConnectionEstablished {
             peer_id,
-            connection_id,
+            connection_id: conn,
             endpoint,
             failed_addresses,
             ..
@@ -225,7 +225,7 @@ impl Behaviour {
         self.connected
             .entry(peer_id)
             .or_default()
-            .insert(connection_id, addr);
+            .insert(conn, addr);
 
         if let Some(entry) = self.discovered_peers.get_mut(&peer_id) {
             for addr in failed_addresses {
