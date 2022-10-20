@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Implementation of the [Identify] protocol.
+//! Implementation of the [Identify](https://github.com/libp2p/specs/blob/master/identify/README.md) protocol.
 //!
 //! This implementation of the protocol periodically exchanges
 //! [`Info`] messages between the peers on an established connection.
