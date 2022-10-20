@@ -2,7 +2,11 @@
 
 - Add new `on_swarm_event` method to `NetworkBehaviour` that accepts a `FromSwarm` enum and update
   `inject_*` methods to call `on_swarm_event` with the respective `FromSwarm` variant and deprecate
-  them. See [PR 3011].
+  them.
+  To migrate, users should replace the `NetworkBehaviour::inject_*` calls with a single
+  implementation of `NetworkBehaviour::on_swarm_event` treating each `FromSwarm` variant in
+  the same way its corresponding `inject_*` call was treated.
+  See [PR 3011].
 
 - Add new `on_connection_handler_event` method with the same signature as `inject_event`, make the
   default implementation of `inject_event` call `on_connection_handler_event` and deprecate it.

@@ -7,9 +7,9 @@ use libp2p_swarm::behaviour::{
     NewListenAddr, NewListener,
 };
 
+// Test to break compilation everytime a variant changes,
+// forcing us to revisit each implementation.
 #[test]
-// test to break compilation everytime a variant changes,
-// forcing us to revisit each implementation
 fn swarm_event_variants() {
     let event: FromSwarm<'_, dummy::ConnectionHandler> =
         FromSwarm::ListenerClosed(libp2p_swarm::behaviour::ListenerClosed {
