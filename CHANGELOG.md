@@ -48,7 +48,11 @@
 
 - New `libp2p-onion` crate. See [PR 2899].
 
+- Remove deprecated features: `tcp-tokio`, `mdns-tokio`, `dns-tokio`, `tcp-async-io`, `mdns-async-io`, `dns-async-std`.
+  See [PR 3001].
+  
 [PR 2899]: https://github.com/libp2p/rust-libp2p/pull/2899
+[PR 3001]: https://github.com/libp2p/rust-libp2p/pull/3001
 
 # 0.49.0
 
