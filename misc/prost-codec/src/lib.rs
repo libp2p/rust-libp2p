@@ -1,9 +1,8 @@
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
 use asynchronous_codec::{Decoder, Encoder};
-use bytes::BytesMut;
-use prost::Message;
-use std::io::Cursor;
+use bytes::Bytes;
+use protobuf::Message;
 use std::marker::PhantomData;
 use thiserror::Error;
 use unsigned_varint::codec::UviBytes;
@@ -41,11 +40,10 @@ impl<In: Message, Out> Encoder for Codec<In, Out> {
         item: Self::Item,
         dst: &mut asynchronous_codec::BytesMut,
     ) -> Result<(), Self::Error> {
-        let mut encoded_msg = BytesMut::new();
-        item.encode(&mut encoded_msg)
-            .expect("BytesMut to have sufficient capacity.");
+        let bytes = item.write_to_bytes()
+            .expect("Failed to write to bytes.");
         self.uvi
-            .encode(encoded_msg.freeze(), dst)
+            .encode(Bytes::from(bytes), dst)
             .map_err(|e| e.into())
     }
 }
@@ -61,7 +59,7 @@ impl<In, Out: Message + Default> Decoder for Codec<In, Out> {
         Ok(self
             .uvi
             .decode(src)?
-            .map(|msg| Message::decode(Cursor::new(msg)))
+            .map(|msg| Message::parse_from_bytes(msg.as_ref()))
             .transpose()?)
     }
 }
@@ -72,7 +70,7 @@ pub enum Error {
     Decode(
         #[from]
         #[source]
-        prost::DecodeError,
+        protobuf::Error,
     ),
     #[error("Io error {0}")]
     Io(
