@@ -159,7 +159,16 @@ where
                     iface.fire_timer();
                 }
             }
-            _ => {}
+            FromSwarm::ConnectionEstablished(_) => {}
+            FromSwarm::DialFailure(_) => {}
+            FromSwarm::AddressChange(_) => {}
+            FromSwarm::ListenFailure(_) => {}
+            FromSwarm::NewListenAddr(_) => {}
+            FromSwarm::ExpiredListenAddr(_) => {}
+            FromSwarm::ListenerError(_) => {}
+            FromSwarm::ListenerClosed(_) => {}
+            FromSwarm::NewExternalAddr(_) => {}
+            FromSwarm::ExpiredExternalAddr(_) => {}
         }
     }
 
