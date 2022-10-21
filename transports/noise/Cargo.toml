@@ -34,7 +34,7 @@ env_logger = "0.9.0"
 libp2p = { path = "../..", features = ["full"] }
 quickcheck = { package = "quickcheck-ext", path = "../../misc/quickcheck-ext" }
 libsodium-sys-stable = { version = "1.19.22", features = ["fetch-latest"] }
-ed25519-compact = "1.0.11"
+ed25519-compact = "2.0.2"
 
 [build-dependencies]
 prost-build = "0.11"
