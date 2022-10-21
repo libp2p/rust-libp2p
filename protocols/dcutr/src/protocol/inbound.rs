@@ -50,30 +50,27 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
         );
 
         async move {
-            let HolePunch { r#type, obs_addrs } =
-                substream.next().await.ok_or(UpgradeError::StreamClosed)??;
+            let hole_punch: HolePunch = substream.next().await.ok_or(UpgradeError::StreamClosed)??;
 
-            let obs_addrs = if obs_addrs.is_empty() {
-                return Err(UpgradeError::NoAddresses);
-            } else {
-                obs_addrs
-                    .into_iter()
-                    .map(Multiaddr::try_from)
-                    // Filter out relayed addresses.
-                    .filter(|a| match a {
-                        Ok(a) => !a.iter().any(|p| p == Protocol::P2pCircuit),
-                        Err(_) => true,
-                    })
-                    .collect::<Result<Vec<Multiaddr>, _>>()
-                    .map_err(|_| UpgradeError::InvalidAddrs)?
-            };
-
-            let r#type = hole_punch::Type::from_i32(r#type).ok_or(UpgradeError::ParseTypeField)?;
-
-            match r#type {
-                hole_punch::Type::Connect => {}
-                hole_punch::Type::Sync => return Err(UpgradeError::UnexpectedTypeSync),
+            match hole_punch.type_() {
+                hole_punch::Type::CONNECT => {}
+                hole_punch::Type::SYNC => return Err(UpgradeError::UnexpectedTypeSync),
             }
+
+            if hole_punch.ObsAddrs.is_empty() {
+                return Err(UpgradeError::NoAddresses);
+            }
+
+            let obs_addrs = hole_punch.ObsAddrs
+                .into_iter()
+                .map(Multiaddr::try_from)
+                // Filter out relayed addresses.
+                .filter(|a| match a {
+                    Ok(a) => !a.iter().any(|p| p == Protocol::P2pCircuit),
+                    Err(_) => true,
+                })
+                .collect::<Result<Vec<Multiaddr>, _>>()
+                .map_err(|_| UpgradeError::InvalidAddrs)?;
 
             Ok(PendingConnect {
                 substream,
@@ -94,22 +91,20 @@ impl PendingConnect {
         mut self,
         local_obs_addrs: Vec<Multiaddr>,
     ) -> Result<Vec<Multiaddr>, UpgradeError> {
-        let msg = HolePunch {
-            r#type: hole_punch::Type::Connect.into(),
-            obs_addrs: local_obs_addrs.into_iter().map(|a| a.to_vec()).collect(),
-        };
+        let mut msg = HolePunch::new();
+        msg.ObsAddrs = local_obs_addrs.into_iter().map(|a| a.to_vec()).collect();
+        msg.set_type(hole_punch::Type::CONNECT);
 
         self.substream.send(msg).await?;
-        let HolePunch { r#type, .. } = self
+        let r#type = self
             .substream
             .next()
             .await
-            .ok_or(UpgradeError::StreamClosed)??;
+            .ok_or(UpgradeError::StreamClosed)??.type_();
 
-        let r#type = hole_punch::Type::from_i32(r#type).ok_or(UpgradeError::ParseTypeField)?;
         match r#type {
-            hole_punch::Type::Connect => return Err(UpgradeError::UnexpectedTypeConnect),
-            hole_punch::Type::Sync => {}
+            hole_punch::Type::CONNECT => return Err(UpgradeError::UnexpectedTypeConnect),
+            hole_punch::Type::SYNC => {}
         }
 
         Ok(self.remote_obs_addrs)
