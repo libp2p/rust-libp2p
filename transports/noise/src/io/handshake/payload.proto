@@ -2,10 +2,12 @@ syntax = "proto3";
 
 package payload.proto;
 
-// Payloads for Noise handshake messages.
+message NoiseExtensions {
+    repeated bytes webtransport_certhashes = 1;
+}
 
 message NoiseHandshakePayload {
-    bytes identity_key = 1;
-    bytes identity_sig = 2;
-    bytes data         = 3;
+  bytes identity_key = 1;
+  bytes identity_sig = 2;
+  optional NoiseExtensions extensions = 4;
 }
