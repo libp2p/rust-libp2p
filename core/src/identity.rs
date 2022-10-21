@@ -316,12 +316,7 @@ impl TryFrom<keys_proto::PublicKey> for PublicKey {
     type Error = DecodingError;
 
     fn try_from(pubkey: keys_proto::PublicKey) -> Result<Self, Self::Error> {
-        use protobuf::Enum;
-
-        let key_type = keys_proto::KeyType::from_i32(pubkey.Type().value())
-            .ok_or_else(|| DecodingError::new(format!("unknown key type: {}", pubkey.Type().value())))?;
-
-        match key_type {
+        match pubkey.Type() {
             keys_proto::KeyType::Ed25519 => {
                 ed25519::PublicKey::decode(&pubkey.Data()).map(PublicKey::Ed25519)
             }
