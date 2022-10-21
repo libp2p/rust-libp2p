@@ -54,31 +54,11 @@ pub use libp2p_dcutr as dcutr;
 #[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
 #[doc(inline)]
 pub use libp2p_deflate as deflate;
-#[deprecated(
-    since = "0.49.0",
-    note = "The `dns-tokio` and `dns-async-std` features are deprecated. Use the new `dns` feature together with the `tokio` or `async-std` features."
-)]
-#[cfg(all(
-    any(feature = "dns-tokio", feature = "dns-async-std"),
-    not(feature = "dns")
-))]
-#[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
-#[cfg_attr(
-    docsrs,
-    doc(cfg(any(feature = "dns-tokio", feature = "dns-async-std")))
-)]
-pub mod dns {
-    #[doc(inline)]
-    pub use libp2p_dns::*;
-}
-
 #[cfg(feature = "dns")]
-#[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
 #[cfg_attr(docsrs, doc(cfg(feature = "dns")))]
-pub mod dns {
-    #[doc(inline)]
-    pub use libp2p_dns::*;
-}
+#[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
+#[doc(inline)]
+pub use libp2p_dns as dns;
 #[cfg(feature = "floodsub")]
 #[cfg_attr(docsrs, doc(cfg(feature = "floodsub")))]
 #[doc(inline)]
@@ -96,31 +76,11 @@ pub use libp2p_identify as identify;
 #[cfg_attr(docsrs, doc(cfg(feature = "kad")))]
 #[doc(inline)]
 pub use libp2p_kad as kad;
-#[deprecated(
-    since = "0.49.0",
-    note = "The `mdns-tokio` and `mdns-async-io` features are deprecated. Use the new `mdns` feature together with the `tokio` or `async-std` features."
-)]
-#[cfg(all(
-    any(feature = "mdns-async-io", feature = "mdns-tokio"),
-    not(feature = "mdns")
-))]
-#[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
-#[cfg_attr(
-    docsrs,
-    doc(cfg(any(feature = "mdns-tokio", feature = "mdns-async-io")))
-)]
-pub mod mdns {
-    #[doc(inline)]
-    pub use libp2p_mdns::*;
-}
-
 #[cfg(feature = "mdns")]
 #[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
 #[cfg_attr(docsrs, doc(cfg(feature = "mdns")))]
-pub mod mdns {
-    #[doc(inline)]
-    pub use libp2p_mdns::*;
-}
+#[doc(inline)]
+pub use libp2p_mdns as mdns;
 #[cfg(feature = "metrics")]
 #[cfg_attr(docsrs, doc(cfg(feature = "metrics")))]
 #[doc(inline)]
@@ -159,28 +119,11 @@ pub use libp2p_rendezvous as rendezvous;
 pub use libp2p_request_response as request_response;
 #[doc(inline)]
 pub use libp2p_swarm as swarm;
-#[deprecated(
-    since = "0.49.0",
-    note = "The `tcp-tokio` and `tcp-async-io` features are deprecated. Use the new `tcp` feature together with the `tokio` or `async-std` features."
-)]
-#[cfg(all(
-    any(feature = "tcp-tokio", feature = "tcp-async-io"),
-    not(feature = "tcp")
-))]
-#[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
-#[cfg_attr(docsrs, doc(cfg(any(feature = "tcp-tokio", feature = "tcp-async-io"))))]
-pub mod tcp {
-    #[doc(inline)]
-    pub use libp2p_tcp::*;
-}
-
 #[cfg(feature = "tcp")]
 #[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
 #[cfg_attr(docsrs, doc(cfg(feature = "tcp")))]
-pub mod tcp {
-    #[doc(inline)]
-    pub use libp2p_tcp::*;
-}
+#[doc(inline)]
+pub use libp2p_tcp as tcp;
 #[cfg(feature = "uds")]
 #[cfg_attr(docsrs, doc(cfg(feature = "uds")))]
 #[doc(inline)]
