@@ -23,6 +23,7 @@ fn main() {
         .pure()
         .includes(&["src"])
         .input("src/structs.proto")
+        .customize(protobuf_codegen::Customize::default().lite_runtime(true))
         .cargo_out_dir("protos")
         .run()
         .unwrap()

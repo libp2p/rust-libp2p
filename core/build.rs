@@ -29,6 +29,7 @@ fn main() {
             "src/peer_record.proto",
             ]
         )
+        .customize(protobuf_codegen::Customize::default().lite_runtime(true))
         .cargo_out_dir("protos")
         .run()
         .unwrap()
