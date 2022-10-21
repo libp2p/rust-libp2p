@@ -25,15 +25,17 @@
 
 use libp2p_core::PeerId;
 
+#[allow(clippy::derive_partial_eq_without_eq)]
+mod protos {
+    include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
+}
+
+use protos::rpc as rpc_proto;
+
 pub mod protocol;
 
 mod layer;
 mod topic;
-
-#[allow(clippy::derive_partial_eq_without_eq)]
-mod rpc_proto {
-    include!(concat!(env!("OUT_DIR"), "/floodsub.pb.rs"));
-}
 
 pub use self::layer::{Floodsub, FloodsubEvent};
 pub use self::protocol::{FloodsubMessage, FloodsubRpc};
