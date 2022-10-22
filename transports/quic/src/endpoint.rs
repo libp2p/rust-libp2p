@@ -34,7 +34,6 @@ use bytes::BytesMut;
 use futures::{
     channel::{mpsc, oneshot},
     prelude::*,
-    ready,
 };
 use quinn_proto::VarInt;
 use std::{
@@ -418,7 +417,10 @@ impl<P: Provider> EndpointDriver<P> {
     }
 
     /// Handle a message sent from either the [`GenTransport`](super::GenTransport) or a [`crate::Connection`].
-    fn handle_message(&mut self, to_endpoint: ToEndpoint) -> ControlFlow<()> {
+    fn handle_message(
+        &mut self,
+        to_endpoint: ToEndpoint,
+    ) -> ControlFlow<(), Option<quinn_proto::Transmit>> {
         match to_endpoint {
             ToEndpoint::Dial { addr, result } => {
                 // This `"l"` seems necessary because an empty string is an invalid domain
@@ -429,7 +431,7 @@ impl<P: Provider> EndpointDriver<P> {
                         Ok(c) => c,
                         Err(err) => {
                             let _ = result.send(Err(ConnectError::from(err).into()));
-                            return ControlFlow::Continue(());
+                            return ControlFlow::Continue(None);
                         }
                     };
 
@@ -452,7 +454,7 @@ impl<P: Provider> EndpointDriver<P> {
             } => {
                 let has_key = self.alive_connections.contains_key(&connection_id);
                 if !has_key {
-                    return ControlFlow::Continue(());
+                    return ControlFlow::Continue(None);
                 }
                 // We "drained" event indicates that the connection no longer exists and
                 // its ID can be reclaimed.
@@ -485,10 +487,10 @@ impl<P: Provider> EndpointDriver<P> {
             }
 
             // Data needs to be sent on the UDP socket.
-            ToEndpoint::SendUdpPacket(transmit) => self.next_packet_out = Some(transmit),
+            ToEndpoint::SendUdpPacket(transmit) => return ControlFlow::Continue(Some(transmit)),
             ToEndpoint::Decoupled => self.handle_decoupling()?,
         }
-        ControlFlow::Continue(())
+        ControlFlow::Continue(None)
     }
 
     /// Handle datagram received on the socket.
@@ -550,15 +552,16 @@ impl<P: Provider> EndpointDriver<P> {
                 let (tx, rx) = mpsc::channel(16);
                 let connection =
                     Connection::from_quinn_connection(self.channel.clone(), connec, connec_id, rx);
-                match connection_tx.try_send(connection) {
+                match connection_tx.start_send(connection) {
                     Ok(()) => {
                         self.alive_connections.insert(connec_id, tx);
                     }
                     Err(e) if e.is_disconnected() => self.handle_decoupling()?,
-                    Err(_) => log::warn!(
+                    Err(e) if e.is_full() => log::warn!(
                         "Dropping new incoming connection {:?} because the channel to the listener is full",
                         connec_id
-                    )
+                    ),
+                    Err(_) => unreachable!("Error is either `Full` or `Disconnected`."),
                 }
             }
         }
@@ -581,37 +584,43 @@ impl<P: Provider> Future for EndpointDriver<P> {
     type Output = ();
     fn poll(mut self: std::pin::Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         loop {
-            match ready!(self.provider_socket.poll_send_flush(cx)) {
-                Ok(_) => {}
+            match self.provider_socket.poll_send_flush(cx) {
+                Poll::Ready(Ok(_)) => {
+                    if let Some(transmit) = self.next_packet_out.take() {
+                        self.provider_socket
+                            .start_send(transmit.contents, transmit.destination);
+                        continue;
+                    }
+
+                    // The endpoint might request packets to be sent out. This is handled in priority to avoid
+                    // buffering up packets.
+                    if let Some(transmit) = self.endpoint.poll_transmit() {
+                        self.next_packet_out = Some(transmit);
+                        continue;
+                    }
+
+                    match self.rx.poll_next_unpin(cx) {
+                        Poll::Ready(Some(to_endpoint)) => match self.handle_message(to_endpoint) {
+                            ControlFlow::Continue(Some(transmit)) => {
+                                self.next_packet_out = Some(transmit);
+                                continue;
+                            }
+                            ControlFlow::Continue(None) => continue,
+                            ControlFlow::Break(()) => break,
+                        },
+                        Poll::Ready(None) => {
+                            unreachable!("Sender side is never dropped or closed.")
+                        }
+                        Poll::Pending => {}
+                    }
+                }
                 // Errors on the socket are expected to never happen, and we handle them by simply
                 // printing a log message. The packet gets discarded in case of error, but we are
                 // robust to packet losses and it is consequently not a logic error to proceed with
                 // normal operations.
-                Err(err) => {
-                    log::error!("Error while sending on QUIC UDP socket: {:?}", err)
-                }
-            }
-
-            if let Some(transmit) = self.next_packet_out.take() {
-                self.provider_socket
-                    .start_send(transmit.contents, transmit.destination);
-                continue;
-            }
-
-            // The endpoint might request packets to be sent out. This is handled in priority to avoid
-            // buffering up packets.
-            if let Some(transmit) = self.endpoint.poll_transmit() {
-                self.next_packet_out = Some(transmit);
-                continue;
-            }
-
-            match self.rx.poll_next_unpin(cx) {
-                Poll::Ready(Some(to_endpoint)) => match self.handle_message(to_endpoint) {
-                    ControlFlow::Continue(()) => continue,
-                    ControlFlow::Break(()) => break,
-                },
-                Poll::Ready(None) => {
-                    unreachable!("Sender side is never dropped or closed.")
+                Poll::Ready(Err(err)) => {
+                    log::error!("Error while sending on QUIC UDP socket: {:?}", err);
+                    continue;
                 }
                 Poll::Pending => {}
             }
@@ -632,6 +641,7 @@ impl<P: Provider> Future for EndpointDriver<P> {
                 }
                 Poll::Pending => {}
             }
+
             return Poll::Pending;
         }
 
