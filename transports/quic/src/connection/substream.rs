@@ -30,20 +30,22 @@ use parking_lot::Mutex;
 
 use super::State;
 
-/// State of a single substream.
+/// Wakers for the [`AsyncRead`] and [`AsyncWrite`] on a substream.
 #[derive(Debug, Default, Clone)]
 pub struct SubstreamState {
-    /// Waker to wake if the substream becomes readable or stopped.
+    /// Waker to wake if the substream becomes readable.
     pub read_waker: Option<Waker>,
-    /// Waker to wake if the substream becomes writable or stopped.
+    /// Waker to wake if the substream becomes writable, closed or stopped.
     pub write_waker: Option<Waker>,
     /// Waker to wake if the substream becomes closed or stopped.
     pub finished_waker: Option<Waker>,
 
+    /// `true` if the stream finished, i.e. the writing side closed.
     pub is_write_closed: bool,
 }
 
 impl SubstreamState {
+    /// Wake all wakers for reading, writing and closed the stream.
     pub fn wake_all(&mut self) {
         if let Some(waker) = self.read_waker.take() {
             waker.wake();
@@ -57,9 +59,12 @@ impl SubstreamState {
     }
 }
 
+/// A single stream on a connection
 #[derive(Debug)]
 pub struct Substream {
+    /// The id of the stream.
     id: quinn_proto::StreamId,
+    /// The state of the [`super::Connection`] this stream belongs to.
     state: Arc<Mutex<State>>,
 }
 
@@ -89,6 +94,7 @@ impl AsyncRead for Substream {
                 );
             }
         };
+
         let mut bytes = 0;
         let mut pending = false;
         loop {

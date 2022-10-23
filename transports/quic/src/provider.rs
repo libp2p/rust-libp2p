@@ -30,25 +30,35 @@ pub mod async_std;
 #[cfg(feature = "tokio")]
 pub mod tokio;
 
-// Wrapped socket for non-blocking I/O operations.
+/// Size of the buffer for reading data 0x10000.
+const RECEIVE_BUFFER_SIZE: usize = 65536;
+
+/// Provider for non-blocking receiving and sending on a [`std::net::UdpSocket`]
+/// and spawning tasks.
 pub trait Provider: Unpin + Send + Sized + 'static {
-    // Wrap a socket.
-    // Note: The socket must be set to non-blocking.
+    /// Create a new providing that is wrapping the socket.
+    ///
+    /// Note: The socket must be set to non-blocking.
     fn from_socket(socket: std::net::UdpSocket) -> io::Result<Self>;
 
-    // Receive a single datagram message.
-    // Returns the message and the address the message came from.
+    /// Receive a single packet.
+    ///
+    /// Returns the message and the address the message came from.
     fn poll_recv_from(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<(Vec<u8>, SocketAddr)>>;
 
-    // Set sending the packet on the socket.
-    // Since only one packet may be sent at a time, this may only be called if a preceding call
-    // to [`Provider::poll_send_flush`] returned [`Poll::Ready`].
+    /// Set sending a packet on the socket.
+    ///
+    /// Since only one packet can be sent at a time, this may only be called if a preceding
+    /// call to [`Provider::poll_send_flush`] returned [`Poll::Ready`].
     fn start_send(&mut self, data: Vec<u8>, addr: SocketAddr);
 
-    // Flush a packet send in [`Provider::start_send`].
-    // If [`Poll::Ready`] is returned the socket is ready for sending a new packet.
+    /// Flush a packet send in [`Provider::start_send`].
+    ///
+    /// If [`Poll::Ready`] is returned the socket is ready for sending a new packet.
     fn poll_send_flush(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>>;
 
-    // Run the given future in the background until it ends.
+    /// Run the given future in the background until it ends.
+    ///
+    /// This is used to spawn the task that is driving the endpoint.
     fn spawn(future: impl Future<Output = ()> + Send + 'static);
 }

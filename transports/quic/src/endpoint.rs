@@ -18,16 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Background task dedicated to manage the QUIC state machine.
-//!
-//! Considering that all QUIC communications happen over a single UDP socket, one needs to
-//! maintain a unique synchronization point that holds the state of all the active connections.
-//!
-//! The endpoint represents this synchronization point. It is maintained in a background task
-//! whose role is to interface with the UDP socket. Communication between the background task and
-//! the rest of the code only happens through channels. See the documentation of the
-//! [`EndpointDriver`] for a thorough description.
-
 use crate::{provider::Provider, tls, transport::SocketFamily, ConnectError, Connection, Error};
 
 use bytes::BytesMut;
@@ -40,13 +30,14 @@ use std::{
     collections::HashMap,
     net::{Ipv4Addr, Ipv6Addr, SocketAddr},
     ops::ControlFlow,
+    pin::Pin,
     sync::Arc,
     task::{Context, Poll},
     time::{Duration, Instant},
 };
 use x509_parser::nom::AsBytes;
 
-// The `EndpointDriver` drops packets if the channel to the connection
+// The `Driver` drops packets if the channel to the connection
 // or transport is full.
 // Set capacity 10 to avoid unnecessary packet drops if the receiver
 // is only very briefly busy, but not buffer a large amount of packets
@@ -79,7 +70,9 @@ pub struct Config {
     /// of a connection.
     pub max_connection_data: u32,
 
+    /// TLS client config for the inner [`quinn_proto::ClientConfig`].
     client_tls_config: Arc<rustls::ClientConfig>,
+    /// TLS server config for the inner [`quinn_proto::ServerConfig`].
     server_tls_config: Arc<rustls::ServerConfig>,
 }
 
@@ -124,8 +117,10 @@ impl From<Config> for QuinnConfig {
             handshake_timeout: _,
         } = config;
         let mut transport = quinn_proto::TransportConfig::default();
+        // Disable uni-directional streams.
         transport.max_concurrent_uni_streams(0u32.into());
         transport.max_concurrent_bidi_streams(max_concurrent_stream_limit.into());
+        // Disable datagrams.
         transport.datagram_receive_buffer_size(None);
         transport.keep_alive_interval(Some(keep_alive_interval));
         transport.max_idle_timeout(Some(VarInt::from_u32(max_idle_timeout).into()));
@@ -154,6 +149,7 @@ impl From<Config> for QuinnConfig {
     }
 }
 
+/// Channel used to send commands to the [`Driver`].
 #[derive(Debug, Clone)]
 pub struct Channel {
     /// Channel to the background of the endpoint.
@@ -169,6 +165,7 @@ impl Channel {
         quinn_config: QuinnConfig,
         socket_addr: SocketAddr,
     ) -> Result<(Self, mpsc::Receiver<Connection>), Error> {
+        // Channel for forwarding new inbound connections to the listener.
         let (new_connections_tx, new_connections_rx) = mpsc::channel(CHANNEL_CAPACITY);
         let endpoint = Self::new::<P>(quinn_config, socket_addr, Some(new_connections_tx))?;
         Ok((endpoint, new_connections_rx))
@@ -186,13 +183,14 @@ impl Channel {
         Self::new::<P>(quinn_config, socket_addr, None)
     }
 
+    /// Spawn a new [`Driver`] that runs in the background.
     fn new<P: Provider>(
         quinn_config: QuinnConfig,
         socket_addr: SocketAddr,
         new_connections: Option<mpsc::Sender<Connection>>,
     ) -> Result<Self, Error> {
-        // NOT blocking, as per man:bind(2), as we pass an IP address.
         let socket = std::net::UdpSocket::bind(&socket_addr)?;
+        // NOT blocking, as per man:bind(2), as we pass an IP address.
         socket.set_nonblocking(true)?;
         // Capacity 0 to back-pressure the rest of the application if
         // the udp socket is busy.
@@ -206,9 +204,10 @@ impl Channel {
         let server_config = new_connections
             .is_some()
             .then_some(quinn_config.server_config);
+
         let provider_socket = P::from_socket(socket)?;
 
-        let driver = EndpointDriver::<P>::new(
+        let driver = Driver::<P>::new(
             quinn_config.endpoint_config,
             quinn_config.client_config,
             new_connections,
@@ -218,6 +217,7 @@ impl Channel {
             to_endpoint_rx,
         );
 
+        // Drive the endpoint future in the background.
         P::spawn(driver);
 
         Ok(channel)
@@ -261,7 +261,7 @@ impl Channel {
         Ok(Ok(()))
     }
 
-    /// Send a message to inform the [`EndpointDriver`] about an
+    /// Send a message to inform the [`Driver`] about an
     /// event caused by the owner of this [`Channel`] dropping.
     /// This clones the sender to the endpoint to guarantee delivery.
     /// This should *not* be called for regular messages.
@@ -277,14 +277,14 @@ pub struct Disconnected {}
 /// Message sent to the endpoint background task.
 #[derive(Debug)]
 pub enum ToEndpoint {
-    /// Instruct the endpoint to start connecting to the given address.
+    /// Instruct the [`quinn_proto::Endpoint`] to start connecting to the given address.
     Dial {
         /// UDP address to connect to.
         addr: SocketAddr,
         /// Channel to return the result of the dialing to.
         result: oneshot::Sender<Result<Connection, Error>>,
     },
-    /// Sent by a `quinn_proto` connection when the endpoint needs to process an event generated
+    /// Send by a [`quinn_proto::Connection`] when the endpoint needs to process an event generated
     /// by a connection. The event itself is opaque to us. Only `quinn_proto` knows what is in
     /// there.
     ProcessConnectionEvent {
@@ -295,14 +295,12 @@ pub enum ToEndpoint {
     SendUdpPacket(quinn_proto::Transmit),
     /// The [`GenTransport`][crate::GenTransport] dialer or listener coupled to this endpoint
     /// was dropped.
-    /// Once all pending connections are closed, the [`EndpointDriver`] should shut down.
+    /// Once all pending connections are closed, the [`Driver`] should shut down.
     Decoupled,
 }
 
 /// Driver that runs in the background for as long as the endpoint is alive. Responsible for
 /// processing messages and the UDP socket.
-///
-/// The `receiver` parameter must be the receiving side of the `EndpointChannel::to_endpoint` sender.
 ///
 /// # Behaviour
 ///
@@ -313,71 +311,45 @@ pub enum ToEndpoint {
 ///   machine.
 /// - Transmitting events generated by the [`quinn_proto::Endpoint`] to the corresponding
 ///   [`crate::Connection`].
-/// - Receiving messages from the `receiver` and processing the requested actions. This includes
+/// - Receiving messages from the `rx` and processing the requested actions. This includes
 ///   UDP packets to send and events emitted by the [`crate::Connection`] objects.
-/// - Sending new connections on `new_connections`.
+/// - Sending new connections on `new_connection_tx`.
 ///
 /// When it comes to channels, there exists three main multi-producer-single-consumer channels
 /// in play:
 ///
-/// - One channel, represented by `EndpointChannel::to_endpoint` and `receiver`, that communicates
-///   messages from [`Channel`] to the [`EndpointDriver`].
-/// - One channel per each existing connection that communicates messages from the  [`EndpointDriver`]
-///   to that [`crate::Connection`].
-/// - One channel for the  [`EndpointDriver`] to send newly-opened connections to. The receiving
+/// - One channel, represented by `EndpointChannel::to_endpoint` and `Driver::rx`,
+///   that communicates messages from [`Channel`] to the [`Driver`].
+/// - One channel for each existing connection that communicates messages from the
+///   [`Driver` to that [`crate::Connection`].
+/// - One channel for the [`Driver`] to send newly-opened connections to. The receiving
 ///   side is processed by the [`GenTransport`][crate::GenTransport].
 ///
+///
+/// ## Back-pressure
+///
+/// ### If writing to the UDP socket is blocked
+///
 /// In order to avoid an unbounded buffering of events, we prioritize sending data on the UDP
-/// socket over everything else. If the network interface is too busy to process our packets,
-/// everything comes to a freeze (including receiving UDP packets) until it is ready to accept
-/// more.
+/// socket over everything else. Messages from the rest of the application sent through the
+/// [`Channel`] are only processed if the UDP socket is ready so that we propagate back-pressure
+/// in case of a busy socket. For connections, thus this eventually also back-pressures the
+/// `AsyncWrite`on substreams.
 ///
-/// Apart from freezing when the network interface is too busy, the background task should sleep
-/// as little as possible. It is in particular important for the `receiver` to be drained as
-/// quickly as possible in order to avoid unnecessary back-pressure on the [`crate::Connection`] objects.
 ///
-/// ## Back-pressure on `new_connections`
+/// ### Back-pressuring the remote if the application is busy
 ///
-/// The [`quinn_proto::Endpoint`] object contains an accept buffer, in other words a buffer of the
-/// incoming connections waiting to be accepted. When a new connection is signalled, we send this
-/// new connection on the `new_connection_tx` channel in an asynchronous way, and we only free a slot
-/// in the accept buffer once the element has actually been enqueued on `new_connection_tx`. There
-/// are therefore in total three buffers in play: the `new_connection_tx` channel itself, the queue
-/// of elements being sent on `new_connection_tx`, and the accept buffer of the
-/// [`quinn_proto::Endpoint`].
+/// If the channel to a connection is full because the connection is busy, inbound datagrams
+/// for that connection are dropped so that the remote is backpressured.
+/// The same applies for new connections if the transport is too busy to received it.
 ///
-/// ## Back-pressure on connections
 ///
-/// Because connections are processed by the user at a rate of their choice, we cannot properly
-/// handle the situation where the channel from the background task to individual connections is
-/// full. Sleeping the task while waiting for the connection to be processed by the user could
-/// even lead to a deadlock if this processing is also sleeping waiting for some other action that
-/// itself depends on the background task (e.g. if processing the connection is waiting for a
-/// message arriving on a different connection).
-///
-/// In an ideal world, we would handle a background-task-to-connection channel being full by
-/// dropping UDP packets destined to this connection, as a way to back-pressure the remote.
-/// Unfortunately, the `quinn-proto` library doesn't provide any way for us to know which
-/// connection a UDP packet is destined for before it has been turned into a `ConnectionEvent`,
-/// and because these `ConnectionEvent`s are sometimes used to synchronize the states of the
-/// endpoint and connection, it would be a logic error to silently drop them.
-///
-/// We handle this tricky situation by simply killing connections as soon as their associated
-/// channel is full.
-///
-// TODO: actually implement the killing of connections if channel is full, at the moment we just
-// wait
 /// # Shutdown
 ///
-/// The background task shuts down if `endpoint_weak`, `receiver` or `new_connections` become
-/// disconnected/invalid. This corresponds to the lifetime of the associated [`quinn_proto::Endpoint`].
-///
-/// Keep in mind that we pass an `EndpointChannel` whenever we create a new connection, which
-/// guarantees that the [`EndpointDriver`], is properly kept alive for as long as any QUIC
-/// connection is open.
-///
+/// The background task shuts down if an [`ToEndpoint::Decoupled`] event was received and the
+/// last active connection has drained.
 #[derive(Debug)]
-pub struct EndpointDriver<P: Provider> {
+pub struct Driver<P: Provider> {
     // The actual QUIC state machine.
     endpoint: quinn_proto::Endpoint,
     // QuinnConfig for client connections.
@@ -402,7 +374,7 @@ pub struct EndpointDriver<P: Provider> {
     is_decoupled: bool,
 }
 
-impl<P: Provider> EndpointDriver<P> {
+impl<P: Provider> Driver<P> {
     fn new(
         endpoint_config: Arc<quinn_proto::EndpointConfig>,
         client_config: quinn_proto::ClientConfig,
@@ -412,7 +384,7 @@ impl<P: Provider> EndpointDriver<P> {
         socket: P,
         rx: mpsc::Receiver<ToEndpoint>,
     ) -> Self {
-        EndpointDriver {
+        Driver {
             endpoint: quinn_proto::Endpoint::new(endpoint_config, server_config),
             client_config,
             channel,
@@ -425,7 +397,8 @@ impl<P: Provider> EndpointDriver<P> {
         }
     }
 
-    /// Handle a message sent from either the [`GenTransport`](super::GenTransport) or a [`crate::Connection`].
+    /// Handle a message sent from either the [`GenTransport`](super::GenTransport)
+    /// or a [`crate::Connection`].
     fn handle_message(
         &mut self,
         to_endpoint: ToEndpoint,
@@ -502,7 +475,7 @@ impl<P: Provider> EndpointDriver<P> {
         ControlFlow::Continue(None)
     }
 
-    /// Handle datagram received on the socket.
+    /// Handle an UDP datagram received on the socket.
     /// The datagram content was written into the `socket_recv_buffer`.
     fn handle_datagram(&mut self, packet: BytesMut, packet_src: SocketAddr) -> ControlFlow<()> {
         let local_ip = self.channel.socket_addr.ip();
@@ -518,7 +491,7 @@ impl<P: Provider> EndpointDriver<P> {
         match event {
             quinn_proto::DatagramEvent::ConnectionEvent(event) => {
                 // `event` has type `quinn_proto::ConnectionEvent`, which has multiple
-                // variants. However, `quinn_proto::Endpoint::handle` only ever returns
+                // variants. `quinn_proto::Endpoint::handle` however only ever returns
                 // `ConnectionEvent::Datagram`.
                 debug_assert!(format!("{:?}", event).contains("Datagram"));
 
@@ -577,6 +550,7 @@ impl<P: Provider> EndpointDriver<P> {
         ControlFlow::Continue(())
     }
 
+    /// The transport dropped the channel to this [`Driver`].
     fn handle_decoupling(&mut self) -> ControlFlow<()> {
         if self.alive_connections.is_empty() {
             return ControlFlow::Break(());
@@ -589,25 +563,32 @@ impl<P: Provider> EndpointDriver<P> {
     }
 }
 
-impl<P: Provider> Future for EndpointDriver<P> {
+/// Future that runs until the [`Driver`] is decoupled and not active connections
+/// remain
+impl<P: Provider> Future for Driver<P> {
     type Output = ();
-    fn poll(mut self: std::pin::Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         loop {
+            // Flush any pending pocket so that the socket is reading to write an next
+            // packet.
             match self.provider_socket.poll_send_flush(cx) {
+                // The pending packet was send or no packet was pending.
                 Poll::Ready(Ok(_)) => {
+                    // Start sending a packet on the socket.
                     if let Some(transmit) = self.next_packet_out.take() {
                         self.provider_socket
                             .start_send(transmit.contents, transmit.destination);
                         continue;
                     }
 
-                    // The endpoint might request packets to be sent out. This is handled in priority to avoid
-                    // buffering up packets.
+                    // The endpoint might request packets to be sent out. This is handled in
+                    // priority to avoid buffering up packets.
                     if let Some(transmit) = self.endpoint.poll_transmit() {
                         self.next_packet_out = Some(transmit);
                         continue;
                     }
 
+                    // Handle messages from transport and connections.
                     match self.rx.poll_next_unpin(cx) {
                         Poll::Ready(Some(to_endpoint)) => match self.handle_message(to_endpoint) {
                             ControlFlow::Continue(Some(transmit)) => {
@@ -634,6 +615,7 @@ impl<P: Provider> Future for EndpointDriver<P> {
                 Poll::Pending => {}
             }
 
+            // Poll for new packets from the remote.
             match self.provider_socket.poll_recv_from(cx) {
                 Poll::Ready(Ok((bytes, packet_src))) => {
                     let bytes_mut = bytes.as_bytes().into();

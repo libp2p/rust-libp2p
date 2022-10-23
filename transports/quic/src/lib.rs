@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Implementation of the libp2p `Transport` and `StreamMuxer` traits for QUIC.
+//! Implementation of the QUIC transport protocol for libp2p.
 //!
 //! # Usage
 //!
@@ -59,17 +59,50 @@
 
 mod connection;
 mod endpoint;
-mod error;
 mod provider;
 mod tls;
 mod transport;
 
 pub use connection::{Connecting, Connection, Substream};
 pub use endpoint::Config;
-pub use error::{ConnectError, ConnectionError, Error};
 #[cfg(feature = "async-std")]
 pub use provider::async_std;
 #[cfg(feature = "tokio")]
 pub use provider::tokio;
 pub use provider::Provider;
 pub use transport::GenTransport;
+
+/// Errors that may happen on the [`GenTransport`] or a single [`Connection`].
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    /// Error while trying to reach a remote.
+    #[error(transparent)]
+    Reach(#[from] ConnectError),
+
+    /// Error after the remote has been reached.
+    #[error(transparent)]
+    Connection(#[from] ConnectionError),
+
+    /// I/O Error on a socket.
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+
+    /// The task spawned in [`Provider::spawn`] to drive
+    /// the quic endpoint has crashed.
+    #[error("Endpoint driver crashed")]
+    EndpointDriverCrashed,
+
+    /// The [`Connecting`] future timed out.
+    #[error("Handshake with the remote timed out.")]
+    HandshakeTimedOut,
+}
+
+/// Dialing a remote peer failed.
+#[derive(Debug, thiserror::Error)]
+#[error(transparent)]
+pub struct ConnectError(#[from] quinn_proto::ConnectError);
+
+/// Error on an established [`Connection`].
+#[derive(Debug, thiserror::Error)]
+#[error(transparent)]
+pub struct ConnectionError(#[from] quinn_proto::ConnectionError);

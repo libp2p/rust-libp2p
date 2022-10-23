@@ -106,7 +106,6 @@ pub use libp2p_plaintext as plaintext;
 #[doc(inline)]
 pub use libp2p_pnet as pnet;
 #[cfg(feature = "quic")]
-#[cfg_attr(docsrs, doc(cfg(feature = "quic")))]
 #[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
 pub mod quic {
     #[doc(inline)]

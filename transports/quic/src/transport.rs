@@ -18,10 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Implementation of the [`Transport`] trait for QUIC.
-//!
-//! Combines all the objects in the other modules to implement the trait.
-
 use crate::endpoint::{Config, QuinnConfig, ToEndpoint};
 use crate::provider::Provider;
 use crate::{endpoint, Connecting, Connection, Error};
@@ -52,19 +48,22 @@ use std::{
     task::{Context, Poll},
 };
 
+/// Implementation of the [`Transport`] trait for QUIC.
 #[derive(Debug)]
 pub struct GenTransport<P> {
+    /// Config for the inner [`quinn_proto`] structs.
     quinn_config: QuinnConfig,
+    /// Timeout for the [`Connecting`] future.
     handshake_timeout: Duration,
-
+    /// Streams of active [`Listener`]s.
     listeners: SelectAll<Listener>,
     /// Dialer for each socket family if no matching listener exists.
     dialer: HashMap<SocketFamily, Dialer>,
-
     _marker: PhantomData<P>,
 }
 
 impl<P> GenTransport<P> {
+    /// Create a new [`GenTransport`] with the given [`Config`].
     pub fn new(config: Config) -> Self {
         let handshake_timeout = config.handshake_timeout;
         let quinn_config = config.into();
@@ -98,7 +97,7 @@ impl<P: Provider> Transport for GenTransport<P> {
 
         // Remove dialer endpoint so that the endpoint is dropped once the last
         // connection that uses it is closed.
-        // New outbound connections will use a bidirectional (listener) endpoint.
+        // New outbound connections will use the bidirectional (listener) endpoint.
         self.dialer.remove(&socket_addr.ip().into());
 
         Ok(listener_id)
@@ -128,6 +127,7 @@ impl<P: Provider> Transport for GenTransport<P> {
         if socket_addr.port() == 0 || socket_addr.ip().is_unspecified() {
             return Err(TransportError::MultiaddrNotSupported(addr));
         }
+
         let mut listeners = self
             .listeners
             .iter_mut()
@@ -206,9 +206,13 @@ impl From<Error> for TransportError<Error> {
     }
 }
 
+/// Dialer for addresses if no matching listener exists.
 #[derive(Debug)]
 struct Dialer {
+    /// Channel to the [`crate::endpoint::Driver`] that
+    /// is driving the endpoint.
     endpoint_channel: endpoint::Channel,
+    /// Queued dials for the endpoint.
     state: DialerState,
 }
 
@@ -236,6 +240,8 @@ impl Drop for Dialer {
     }
 }
 
+/// Pending dials to be sent to the endpoint was the [`endpoint::Channel`]
+/// has capacity
 #[derive(Default, Debug)]
 struct DialerState {
     pending_dials: VecDeque<ToEndpoint>,
@@ -243,7 +249,6 @@ struct DialerState {
 }
 
 impl DialerState {
-    // With TAIP, this return signature would be a bit nicer.
     fn new_dial(
         &mut self,
         address: SocketAddr,
@@ -274,7 +279,7 @@ impl DialerState {
 
     /// Send all pending dials into the given [`endpoint::Channel`].
     ///
-    /// This only ever returns [`Poll::Pending`] or an error in case the channel is closed.
+    /// This only ever returns [`Poll::Pending`], or an error in case the channel is closed.
     fn poll(&mut self, channel: &mut endpoint::Channel, cx: &mut Context<'_>) -> Poll<Error> {
         while let Some(to_endpoint) = self.pending_dials.pop_front() {
             match channel.try_send(to_endpoint, cx) {
@@ -291,16 +296,25 @@ impl DialerState {
     }
 }
 
+/// Listener for incoming connections.
 #[derive(Debug)]
 struct Listener {
-    endpoint_channel: endpoint::Channel,
-
+    /// Id of the listener.
     listener_id: ListenerId,
+
+    /// Channel to the endpoint to initiate dials.
+    endpoint_channel: endpoint::Channel,
+    /// Queued dials.
+    dialer_state: DialerState,
 
     /// Channel where new connections are being sent.
     new_connections_rx: mpsc::Receiver<Connection>,
+    /// Timeout for connection establishment on inbound connections.
     handshake_timeout: Duration,
 
+    /// Watcher for network interface changes.
+    ///
+    /// None if we are only listening on a single interface.
     if_watcher: Option<IfWatcher>,
 
     /// Whether the listener was closed and the stream should terminate.
@@ -308,10 +322,6 @@ struct Listener {
 
     /// Pending event to reported.
     pending_event: Option<<Self as Stream>::Item>,
-
-    dialer_state: DialerState,
-
-    waker: Option<Waker>,
 }
 
 impl Listener {
@@ -347,7 +357,6 @@ impl Listener {
             is_closed: false,
             pending_event,
             dialer_state: DialerState::default(),
-            waker: None,
         })
     }
 
@@ -455,7 +464,6 @@ impl Stream for Listener {
                 }
                 Poll::Pending => {}
             };
-            self.waker = Some(cx.waker().clone());
             return Poll::Pending;
         }
     }
@@ -534,6 +542,7 @@ fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Option<SocketAddr> {
     }
 }
 
+/// Whether an [`Multiaddr`] is a valid for the QUIC transport.
 fn is_quic_addr(addr: &Multiaddr) -> bool {
     use Protocol::*;
     let mut iter = addr.iter();
@@ -692,7 +701,7 @@ mod test {
                 .is_none());
             assert!(transport.listeners.is_empty());
 
-            // Check that the [`EndpointDriver`] has shut down.
+            // Check that the [`Driver`] has shut down.
             Delay::new(Duration::from_millis(10)).await;
             poll_fn(|cx| {
                 assert!(channel.try_send(ToEndpoint::Decoupled, cx).is_err());
@@ -744,7 +753,7 @@ mod test {
             .unwrap();
         assert!(!transport.dialer.contains_key(&SocketFamily::Ipv4));
 
-        // Check that the [`EndpointDriver`] has shut down.
+        // Check that the [`Driver`] has shut down.
         Delay::new(Duration::from_millis(10)).await;
         poll_fn(|cx| {
             assert!(channel.try_send(ToEndpoint::Decoupled, cx).is_err());

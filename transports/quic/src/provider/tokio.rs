@@ -18,33 +18,34 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use futures::{ready, Future};
 use std::{
     io,
     net::SocketAddr,
     task::{Context, Poll},
 };
-
-use futures::{ready, Future};
 use tokio::{io::ReadBuf, net::UdpSocket};
 use x509_parser::nom::AsBytes;
 
 use crate::GenTransport;
 
-use super::Provider as ProviderTrait;
-
+/// Transport with [`tokio`] runtime.
 pub type Transport = GenTransport<Provider>;
+
+/// Provider for reading / writing to a sockets and spawning
+/// tasks using [`tokio`].
 pub struct Provider {
     socket: UdpSocket,
     socket_recv_buffer: Vec<u8>,
     next_packet_out: Option<(Vec<u8>, SocketAddr)>,
 }
 
-impl ProviderTrait for Provider {
+impl super::Provider for Provider {
     fn from_socket(socket: std::net::UdpSocket) -> std::io::Result<Self> {
         let socket = UdpSocket::from_std(socket)?;
         Ok(Provider {
             socket,
-            socket_recv_buffer: vec![0; 65536],
+            socket_recv_buffer: vec![0; super::RECEIVE_BUFFER_SIZE],
             next_packet_out: None,
         })
     }

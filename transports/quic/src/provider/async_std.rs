@@ -18,6 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use async_std::{net::UdpSocket, task::spawn};
+use futures::{future::BoxFuture, ready, Future, FutureExt, Stream, StreamExt};
 use std::{
     io,
     net::SocketAddr,
@@ -26,22 +28,23 @@ use std::{
     task::{Context, Poll},
 };
 
-use async_std::{net::UdpSocket, task::spawn};
-use futures::{future::BoxFuture, ready, Future, FutureExt, Stream, StreamExt};
-
 use crate::GenTransport;
 
-use super::Provider as ProviderTrait;
-
+/// Transport with [`async-std`] runtime.
 pub type Transport = GenTransport<Provider>;
 
+/// Provider for reading / writing to a sockets and spawning
+/// tasks using [`async-std`].
 pub struct Provider {
     socket: Arc<UdpSocket>,
+    // Future for sending a packet.
+    // This is needed since [`async_Std::net::UdpSocket`] does not
+    // provide a poll-style interface for sending a packet.
     send_packet: Option<BoxFuture<'static, Result<(), io::Error>>>,
     recv_stream: ReceiveStream,
 }
 
-impl ProviderTrait for Provider {
+impl super::Provider for Provider {
     fn from_socket(socket: std::net::UdpSocket) -> io::Result<Self> {
         let socket = Arc::new(socket.into());
         let recv_stream = ReceiveStream::new(Arc::clone(&socket));
@@ -62,10 +65,9 @@ impl ProviderTrait for Provider {
     }
 
     fn start_send(&mut self, data: Vec<u8>, addr: SocketAddr) {
-        let _len = data.len();
         let socket = self.socket.clone();
         let send = async move {
-            let _send_len = socket.send_to(&data, addr).await?;
+            socket.send_to(&data, addr).await?;
             Ok(())
         }
         .boxed();
@@ -91,26 +93,29 @@ impl ProviderTrait for Provider {
     }
 }
 
+type ReceiveStreamItem = (
+    Result<(usize, SocketAddr), io::Error>,
+    Arc<UdpSocket>,
+    Vec<u8>,
+);
+
 /// Wrapper around the socket to implement `Stream` on it.
 struct ReceiveStream {
-    fut: BoxFuture<
-        'static,
-        (
-            Result<(usize, SocketAddr), io::Error>,
-            Arc<UdpSocket>,
-            Vec<u8>,
-        ),
-    >,
+    /// Future for receiving a packet on the socket.
+    // This is needed since [`async_Std::net::UdpSocket`] does not
+    // provide a poll-style interface for receiving packets.
+    fut: BoxFuture<'static, ReceiveStreamItem>,
 }
 
 impl ReceiveStream {
     fn new(socket: Arc<UdpSocket>) -> Self {
-        let mut socket_recv_buffer = vec![0; 65536];
-        let fut = async move {
-            let recv = socket.recv_from(&mut socket_recv_buffer).await;
-            (recv, socket, socket_recv_buffer)
-        };
+        let fut = ReceiveStream::next(socket, vec![0; super::RECEIVE_BUFFER_SIZE]).boxed();
         Self { fut: fut.boxed() }
+    }
+
+    async fn next(socket: Arc<UdpSocket>, mut socket_recv_buffer: Vec<u8>) -> ReceiveStreamItem {
+        let recv = socket.recv_from(&mut socket_recv_buffer).await;
+        (recv, socket, socket_recv_buffer)
     }
 }
 
@@ -118,17 +123,16 @@ impl Stream for ReceiveStream {
     type Item = Result<(Vec<u8>, SocketAddr), io::Error>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let (result, socket, mut buffer) = ready!(self.fut.poll_unpin(cx));
+        let (result, socket, buffer) = ready!(self.fut.poll_unpin(cx));
+
         let result = result.map(|(packet_len, packet_src)| {
             debug_assert!(packet_len <= buffer.len());
             // Copies the bytes from the `socket_recv_buffer` they were written into.
             (buffer[..packet_len].into(), packet_src)
         });
-        self.fut = async move {
-            let recv = socket.recv_from(&mut buffer).await;
-            (recv, socket, buffer)
-        }
-        .boxed();
+        // Set the future for receiving the next packet on the stream.
+        self.fut = ReceiveStream::next(socket, buffer).boxed();
+
         Poll::Ready(Some(result))
     }
 }

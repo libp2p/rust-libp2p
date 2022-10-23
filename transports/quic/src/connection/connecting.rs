@@ -39,7 +39,6 @@ pub struct Connecting {
 }
 
 impl Connecting {
-    /// Builds an [`Connecting`] that wraps around an [`Connection`].
     pub(crate) fn new(connection: Connection, timeout: Duration) -> Self {
         Connecting {
             connection: Some(connection),
@@ -70,6 +69,7 @@ impl Future for Connecting {
             };
             match event {
                 quinn_proto::Event::Connected => {
+                    // Parse the remote's Id identity from the certificate.
                     let identity = connection
                         .peer_identity()
                         .expect("connection got identity because it passed TLS handshake; qed");
@@ -78,8 +78,7 @@ impl Future for Connecting {
                     let end_entity = certificates
                         .get(0)
                         .expect("there should be exactly one certificate; qed");
-                    let end_entity_der = end_entity.as_ref();
-                    let p2p_cert = crate::tls::certificate::parse_certificate(end_entity_der)
+                    let p2p_cert = crate::tls::certificate::parse_certificate(end_entity.as_ref())
                         .expect("the certificate was validated during TLS handshake; qed");
                     let peer_id = PeerId::from_public_key(&p2p_cert.extension.public_key);
 

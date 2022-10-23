@@ -46,25 +46,28 @@ use std::{
 /// State for a single opened QUIC connection.
 #[derive(Debug)]
 pub struct Connection {
+    /// State shared with the substreams.
     state: Arc<Mutex<State>>,
-    /// Channel to the endpoint this connection belongs to.
+    /// Channel to the [`endpoint::Driver`] that drives the [`quinn_proto::Endpoint`] that
+    /// this connection belongs to.
     endpoint_channel: endpoint::Channel,
-    /// Pending message to be sent to the background task that is driving the endpoint.
+    /// Pending message to be sent to the [`quinn_proto::Endpoint`] in the [`endpoint::Driver`].
     pending_to_endpoint: Option<ToEndpoint>,
-    /// Events that the endpoint will send in destination to our local [`quinn_proto::Connection`].
-    /// Passed at initialization.
+    /// Events that the [`quinn_proto::Endpoint`] will send in destination to our local
+    /// [`quinn_proto::Connection`].
     from_endpoint: mpsc::Receiver<quinn_proto::ConnectionEvent>,
-    /// Identifier for this connection according to the endpoint. Used when sending messages to
-    /// the endpoint.
+    /// Identifier for this connection according to the [`quinn_proto::Endpoint`].
+    /// Used when sending messages to the endpoint.
     connection_id: quinn_proto::ConnectionHandle,
-    /// `Future` that triggers at the [`Instant`] that `self.connection.poll_timeout()` indicates.
+    /// `Future` that triggers at the [`Instant`] that [`quinn_proto::Connection::poll_timeout`]
+    /// indicates.
     next_timeout: Option<(Delay, Instant)>,
 }
 
 impl Connection {
-    /// Crate-internal function that builds a [`Connection`] from raw components.
+    /// Build a [`Connection`] from raw components.
     ///
-    /// This function assumes that there exists a [`EndpointDriver`](super::endpoint::EndpointDriver)
+    /// This function assumes that there exists a [`Driver`](super::endpoint::Driver)
     /// that will process the messages sent to `EndpointChannel::to_endpoint` and send us messages
     /// on `from_endpoint`.
     ///
@@ -107,6 +110,10 @@ impl Connection {
         self.state.lock().connection.remote_address()
     }
 
+    /// Identity of the remote peer inferred from the handshake.
+    ///
+    /// `None` if the handshake is not complete yet, i.e. [`Self::poll_event`]
+    ///  has not yet reported a [`quinn_proto::Event::Connected`]
     fn peer_identity(&self) -> Option<Box<dyn Any>> {
         self.state
             .lock()
@@ -116,6 +123,12 @@ impl Connection {
     }
 
     /// Polls the connection for an event that happened on it.
+    ///
+    /// `quinn::proto::Connection` is polled in the order instructed in their docs:
+    /// 1. [`quinn_proto::Connection::poll_transmit`]
+    /// 2. [`quinn_proto::Connection::poll_timeout`]
+    /// 3. [`quinn_proto::Connection::poll_endpoint_events`]
+    /// 4. [`quinn_proto::Connection::poll`]
     fn poll_event(&mut self, cx: &mut Context<'_>) -> Poll<Option<quinn_proto::Event>> {
         let mut inner = self.state.lock();
         loop {
@@ -132,9 +145,6 @@ impl Connection {
 
             // Sending the pending event to the endpoint. If the endpoint is too busy, we just
             // stop the processing here.
-            // We need to be careful to avoid a potential deadlock if both `from_endpoint` and
-            // `to_endpoint` are full. As such, we continue to transfer data from `from_endpoint`
-            // to the `quinn_proto::Connection` (see above).
             // However we don't deliver substream-related events to the user as long as
             // `to_endpoint` is full. This should propagate the back-pressure of `to_endpoint`
             // being full to the user.
@@ -268,8 +278,13 @@ impl StreamMuxer for Connection {
                 }
                 quinn_proto::Event::Stream(quinn_proto::StreamEvent::Finished { id }) => {
                     if let Some(substream) = inner.substreams.get_mut(&id) {
-                        substream.wake_all();
                         substream.is_write_closed = true;
+                        if let Some(waker) = substream.write_waker.take() {
+                            waker.wake();
+                        }
+                        if let Some(waker) = substream.finished_waker.take() {
+                            waker.wake();
+                        }
                     }
                 }
                 quinn_proto::Event::Stream(quinn_proto::StreamEvent::Stopped {
@@ -277,7 +292,12 @@ impl StreamMuxer for Connection {
                     error_code: _,
                 }) => {
                     if let Some(substream) = inner.substreams.get_mut(&id) {
-                        substream.wake_all();
+                        if let Some(waker) = substream.write_waker.take() {
+                            waker.wake();
+                        }
+                        if let Some(waker) = substream.finished_waker.take() {
+                            waker.wake();
+                        }
                     }
                 }
                 quinn_proto::Event::DatagramReceived
@@ -380,7 +400,7 @@ impl Drop for Connection {
 /// Mutex-protected state of [`Connection`].
 #[derive(Debug)]
 pub struct State {
-    /// The QUIC inner machine for this specific connection.
+    /// The QUIC inner state machine for this specific connection.
     connection: quinn_proto::Connection,
 
     /// State of all the substreams that the muxer reports as open.
