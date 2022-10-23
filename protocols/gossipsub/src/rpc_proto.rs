@@ -18,8 +18,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 #![allow(clippy::derive_partial_eq_without_eq)]
+mod protos {
+    include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
+}
 
-include!(concat!(env!("OUT_DIR"), "/gossipsub.pb.rs"));
+pub use protos::rpc::*;
 
 #[cfg(test)]
 mod test {

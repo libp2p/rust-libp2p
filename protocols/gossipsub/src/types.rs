@@ -23,7 +23,7 @@ use crate::rpc_proto;
 use crate::TopicHash;
 use libp2p_core::{connection::ConnectionId, PeerId};
 use prometheus_client::encoding::text::Encode;
-use prost::Message;
+use protobuf::Message;
 use std::fmt;
 use std::fmt::Debug;
 
@@ -135,15 +135,15 @@ pub struct RawGossipsubMessage {
 impl RawGossipsubMessage {
     /// Calculates the encoded length of this message (used for calculating metrics).
     pub fn raw_protobuf_len(&self) -> usize {
-        let message = rpc_proto::Message {
-            from: self.source.map(|m| m.to_bytes()),
-            data: Some(self.data.clone()),
-            seqno: self.sequence_number.map(|s| s.to_be_bytes().to_vec()),
-            topic: TopicHash::into_string(self.topic.clone()),
-            signature: self.signature.clone(),
-            key: self.key.clone(),
-        };
-        message.encoded_len()
+        let mut message = rpc_proto::Message::new();
+        message.from = self.source.map(|m| m.to_bytes());
+        message.seqno = self.sequence_number.map(|s| s.to_be_bytes().to_vec());
+        message.signature = self.signature.clone();
+        message.key = self.key.clone();
+        message.set_data(self.data.clone());
+        message.set_topic(TopicHash::into_string(self.topic.clone()));
+
+        usize::try_from(message.compute_size()).expect("Size of message fits in usize.")
     }
 }
 
@@ -249,47 +249,43 @@ pub struct GossipsubRpc {
 impl GossipsubRpc {
     /// Converts the GossipsubRPC into its protobuf format.
     // A convenience function to avoid explicitly specifying types.
-    pub fn into_protobuf(self) -> rpc_proto::Rpc {
+    pub fn into_protobuf(self) -> rpc_proto::RPC {
         self.into()
     }
 }
 
-impl From<GossipsubRpc> for rpc_proto::Rpc {
+impl From<GossipsubRpc> for rpc_proto::RPC {
     /// Converts the RPC into protobuf format.
     fn from(rpc: GossipsubRpc) -> Self {
         // Messages
         let mut publish = Vec::new();
 
         for message in rpc.messages.into_iter() {
-            let message = rpc_proto::Message {
-                from: message.source.map(|m| m.to_bytes()),
-                data: Some(message.data),
-                seqno: message.sequence_number.map(|s| s.to_be_bytes().to_vec()),
-                topic: TopicHash::into_string(message.topic),
-                signature: message.signature,
-                key: message.key,
-            };
+            let mut msg = rpc_proto::Message::new();
+            msg.from = message.source.map(|m| m.to_bytes());
+            msg.seqno = message.sequence_number.map(|s| s.to_be_bytes().to_vec());
+            msg.signature = message.signature;
+            msg.key = message.key;
+            msg.set_data(message.data);
+            msg.set_topic(TopicHash::into_string(message.topic));
 
-            publish.push(message);
+            publish.push(msg);
         }
 
         // subscriptions
         let subscriptions = rpc
             .subscriptions
             .into_iter()
-            .map(|sub| rpc_proto::rpc::SubOpts {
-                subscribe: Some(sub.action == GossipsubSubscriptionAction::Subscribe),
-                topic_id: Some(sub.topic_hash.into_string()),
+            .map(|sub| {
+                let mut sub_opts = rpc_proto::rpc::SubOpts::new();
+                sub_opts.set_subscribe(sub.action == GossipsubSubscriptionAction::Subscribe);
+                sub_opts.set_topic_id(sub.topic_hash.into_string());
+                sub_opts
             })
             .collect::<Vec<_>>();
 
         // control messages
-        let mut control = rpc_proto::ControlMessage {
-            ihave: Vec::new(),
-            iwant: Vec::new(),
-            graft: Vec::new(),
-            prune: Vec::new(),
-        };
+        let mut control = rpc_proto::ControlMessage::new();
 
         let empty_control_msg = rpc.control_msgs.is_empty();
 
@@ -300,22 +296,22 @@ impl From<GossipsubRpc> for rpc_proto::Rpc {
                     topic_hash,
                     message_ids,
                 } => {
-                    let rpc_ihave = rpc_proto::ControlIHave {
-                        topic_id: Some(topic_hash.into_string()),
-                        message_ids: message_ids.into_iter().map(|msg_id| msg_id.0).collect(),
-                    };
+                    let mut rpc_ihave = rpc_proto::ControlIHave::new();
+                    rpc_ihave.set_topic_id(topic_hash.into_string());
+                    rpc_ihave.message_ids = message_ids.into_iter().map(|msg_id| msg_id.0).collect();
+
                     control.ihave.push(rpc_ihave);
                 }
                 GossipsubControlAction::IWant { message_ids } => {
-                    let rpc_iwant = rpc_proto::ControlIWant {
-                        message_ids: message_ids.into_iter().map(|msg_id| msg_id.0).collect(),
-                    };
+                    let mut rpc_iwant = rpc_proto::ControlIWant::new();
+                    rpc_iwant.message_ids =  message_ids.into_iter().map(|msg_id| msg_id.0).collect();
+
                     control.iwant.push(rpc_iwant);
                 }
                 GossipsubControlAction::Graft { topic_hash } => {
-                    let rpc_graft = rpc_proto::ControlGraft {
-                        topic_id: Some(topic_hash.into_string()),
-                    };
+                    let mut rpc_graft = rpc_proto::ControlGraft::new();
+                    rpc_graft.set_topic_id(topic_hash.into_string());
+
                     control.graft.push(rpc_graft);
                 }
                 GossipsubControlAction::Prune {
@@ -323,32 +319,35 @@ impl From<GossipsubRpc> for rpc_proto::Rpc {
                     peers,
                     backoff,
                 } => {
-                    let rpc_prune = rpc_proto::ControlPrune {
-                        topic_id: Some(topic_hash.into_string()),
-                        peers: peers
-                            .into_iter()
-                            .map(|info| rpc_proto::PeerInfo {
-                                peer_id: info.peer_id.map(|id| id.to_bytes()),
-                                /// TODO, see https://github.com/libp2p/specs/pull/217
-                                signed_peer_record: None,
-                            })
-                            .collect(),
-                        backoff,
-                    };
+                    let mut rpc_prune = rpc_proto::ControlPrune::new();
+
+                    rpc_prune.set_topic_id(topic_hash.into_string());
+                    rpc_prune.backoff = backoff;
+                    rpc_prune.peers = peers
+                        .into_iter()
+                        .map(|info| {
+                            let mut peer = rpc_proto::PeerInfo::new();
+                            peer.peer_id = info.peer_id.map(|id| id.to_bytes());
+                            // TODO, see https://github.com/libp2p/specs/pull/217
+                            peer.signed_peer_record = None;
+                            peer
+                        })
+                        .collect();
+
                     control.prune.push(rpc_prune);
                 }
             }
         }
 
-        rpc_proto::Rpc {
-            subscriptions,
-            publish,
-            control: if empty_control_msg {
-                None
-            } else {
-                Some(control)
-            },
-        }
+        let mut rpc = rpc_proto::RPC::new();
+        rpc.subscriptions = subscriptions;
+        rpc.publish = publish;
+        rpc.control = if empty_control_msg {
+            protobuf::MessageField::none()
+        } else {
+            protobuf::MessageField::some(control)
+        };
+        rpc
     }
 }
 

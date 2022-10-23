@@ -21,7 +21,7 @@
 use crate::rpc_proto;
 use base64::encode;
 use prometheus_client::encoding::text::Encode;
-use prost::Message;
+use protobuf::Message;
 use sha2::{Digest, Sha256};
 use std::fmt;
 
@@ -47,15 +47,12 @@ impl Hasher for Sha256Hash {
     /// Creates a [`TopicHash`] by SHA256 hashing the topic then base64 encoding the
     /// hash.
     fn hash(topic_string: String) -> TopicHash {
-        let topic_descripter = rpc_proto::TopicDescriptor {
-            name: Some(topic_string),
-            auth: None,
-            enc: None,
-        };
-        let mut bytes = Vec::with_capacity(topic_descripter.encoded_len());
-        topic_descripter
-            .encode(&mut bytes)
-            .expect("buffer is large enough");
+        let mut topic_descripter = rpc_proto::TopicDescriptor::new();
+        topic_descripter.set_name(topic_string);
+
+        let bytes = topic_descripter
+            .write_to_bytes()
+            .expect("All required fields to be initialized.");
         let hash = encode(Sha256::digest(&bytes).as_slice());
         TopicHash { hash }
     }

@@ -24,7 +24,7 @@ log = "0.4.11"
 sha2 = "0.10.0"
 base64 = "0.13.0"
 smallvec = "1.6.1"
-prost = "0.11"
+protobuf = "3.2"
 hex_fmt = "0.3.0"
 regex = "1.5.5"
 serde = { version = "1", optional = true, features = ["derive"] }
@@ -42,7 +42,7 @@ hex = "0.4.2"
 derive_builder = "0.11.1"
 
 [build-dependencies]
-prost-build = "0.11"
+protobuf-codegen = "3.2"
 
 # Passing arguments to the docsrs builder in order to properly document cfg's. 
 # More information: https://docs.rs/about/builds#cross-compiling

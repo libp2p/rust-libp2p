@@ -33,7 +33,7 @@ use std::{
 use futures::StreamExt;
 use log::{debug, error, trace, warn};
 use prometheus_client::registry::Registry;
-use prost::Message;
+use protobuf::Message;
 use rand::{seq::SliceRandom, thread_rng};
 
 use libp2p_core::{
@@ -618,8 +618,10 @@ where
         .into_protobuf();
 
         // check that the size doesn't exceed the max transmission size
-        if event.encoded_len() > self.config.max_transmit_size() {
-            return Err(PublishError::MessageTooLarge);
+        match usize::try_from(event.compute_size()) {
+            Ok(v) if v > self.config.max_transmit_size() => return Err(PublishError::MessageTooLarge),
+            Err(_) => return Err(PublishError::MessageTooLarge),
+            _ => {}
         }
 
         // Check the if the message has been published before
@@ -729,13 +731,13 @@ where
         }
 
         // Send to peers we know are subscribed to the topic.
-        let msg_bytes = event.encoded_len();
+        let msg_bytes = event.compute_size();
         for peer_id in recipient_peers.iter() {
             trace!("Sending message to peer: {:?}", peer_id);
             self.send_message(*peer_id, event.clone())?;
 
             if let Some(m) = self.metrics.as_mut() {
-                m.msg_sent(&topic_hash, msg_bytes);
+                m.msg_sent(&topic_hash, usize::try_from(msg_bytes).expect("Size of sent messages fit in usize."));
             }
         }
 
@@ -1348,14 +1350,17 @@ where
             }
             .into_protobuf();
 
-            let msg_bytes = message.encoded_len();
+            let msg_bytes = message.compute_size();
 
             if self.send_message(*peer_id, message).is_err() {
                 error!("Failed to send cached messages. Messages too large");
             } else if let Some(m) = self.metrics.as_mut() {
                 // Sending of messages succeeded, register them on the internal metrics.
                 for topic in topics.iter() {
-                    m.msg_sent(topic, msg_bytes);
+                    m.msg_sent(
+                        topic,
+                        usize::try_from(msg_bytes).expect("Size of sent messages fit in usize.")
+                    );
                 }
             }
         }
@@ -2744,12 +2749,15 @@ where
             }
             .into_protobuf();
 
-            let msg_bytes = event.encoded_len();
+            let msg_bytes = event.compute_size();
             for peer in recipient_peers.iter() {
                 debug!("Sending message: {:?} to peer {:?}", msg_id, peer);
                 self.send_message(*peer, event.clone())?;
                 if let Some(m) = self.metrics.as_mut() {
-                    m.msg_sent(&message.topic, msg_bytes);
+                    m.msg_sent(
+                        &message.topic,
+                        usize::try_from(msg_bytes).expect("Size of sent messages fit in usize.")
+                    )
                 }
             }
             debug!("Completed forwarding message");
@@ -2775,23 +2783,17 @@ where
                 let sequence_number: u64 = rand::random();
 
                 let signature = {
-                    let message = rpc_proto::Message {
-                        from: Some(author.clone().to_bytes()),
-                        data: Some(data.clone()),
-                        seqno: Some(sequence_number.to_be_bytes().to_vec()),
-                        topic: topic.clone().into_string(),
-                        signature: None,
-                        key: None,
-                    };
-
-                    let mut buf = Vec::with_capacity(message.encoded_len());
-                    message
-                        .encode(&mut buf)
-                        .expect("Buffer has sufficient capacity");
+                    let mut message = rpc_proto::Message::new();
+                    message.set_from(author.clone().to_bytes());
+                    message.set_data(data.clone());
+                    message.set_seqno(sequence_number.to_be_bytes().to_vec());
+                    message.set_topic(topic.clone().into_string());
 
                     // the signature is over the bytes "libp2p-pubsub:<protobuf-message>"
                     let mut signature_bytes = SIGNING_PREFIX.to_vec();
-                    signature_bytes.extend_from_slice(&buf);
+                    signature_bytes.extend_from_slice(
+                        &message.write_to_bytes().expect("All required fields to be initialized.")
+                    );
                     Some(keypair.sign(&signature_bytes)?)
                 };
 
@@ -2889,7 +2891,7 @@ where
     fn send_message(
         &mut self,
         peer_id: PeerId,
-        message: rpc_proto::Rpc,
+        message: rpc_proto::RPC,
     ) -> Result<(), PublishError> {
         // If the message is oversized, try and fragment it. If it cannot be fragmented, log an
         // error and drop the message (all individual messages should be small enough to fit in the
@@ -2910,16 +2912,17 @@ where
 
     // If a message is too large to be sent as-is, this attempts to fragment it into smaller RPC
     // messages to be sent.
-    fn fragment_message(&self, rpc: rpc_proto::Rpc) -> Result<Vec<rpc_proto::Rpc>, PublishError> {
-        if rpc.encoded_len() < self.config.max_transmit_size() {
-            return Ok(vec![rpc]);
+    fn fragment_message(&self, rpc: rpc_proto::RPC) -> Result<Vec<rpc_proto::RPC>, PublishError> {
+        match usize::try_from(rpc.compute_size()) {
+            Ok(size) => {
+                if size < self.config.max_transmit_size() {
+                    return Ok(vec![rpc]);
+                }
+            }
+            Err(_) =>  return Err(PublishError::MessageTooLarge),
         }
 
-        let new_rpc = rpc_proto::Rpc {
-            subscriptions: Vec::new(),
-            publish: Vec::new(),
-            control: None,
-        };
+        let new_rpc = rpc_proto::RPC::new();
 
         let mut rpc_list = vec![new_rpc.clone()];
 
@@ -2931,7 +2934,8 @@ where
 
                 // create a new RPC if the new object plus 5% of its size (for length prefix
                 // buffers) exceeds the max transmit size.
-                if rpc_list[list_index].encoded_len() + (($object_size as f64) * 1.05) as usize
+                let msg_size = usize::try_from(rpc_list[list_index].compute_size()).expect("Message size has already been validated.");
+                if msg_size + (($object_size as f64) * 1.05) as usize
                     > self.config.max_transmit_size()
                     && rpc_list[list_index] != new_rpc
                 {
@@ -2943,7 +2947,7 @@ where
 
         macro_rules! add_item {
             ($object: ident, $type: ident ) => {
-                let object_size = $object.encoded_len();
+                let object_size = usize::try_from($object.compute_size()).expect("Message size has already been validated.");
 
                 if object_size + 2 > self.config.max_transmit_size() {
                     // This should not be possible. All received and published messages have already
@@ -2973,56 +2977,59 @@ where
         // fragmenting, otherwise, fragment the control messages
         let empty_control = rpc_proto::ControlMessage::default();
         if let Some(control) = rpc.control.as_ref() {
-            if control.encoded_len() + 2 > self.config.max_transmit_size() {
+            let control_size = usize::try_from(control.compute_size())
+                .expect("Message size has already been validated.");
+            if control_size + 2 > self.config.max_transmit_size() {
                 // fragment the RPC
                 for ihave in &control.ihave {
-                    let len = ihave.encoded_len();
+                    let len = usize::try_from(ihave.compute_size())
+                        .expect("Message size has already been validated.");
                     create_or_add_rpc!(len);
-                    rpc_list
-                        .last_mut()
-                        .expect("Always an element")
-                        .control
-                        .get_or_insert_with(|| empty_control.clone())
-                        .ihave
-                        .push(ihave.clone());
+                    let mut last_rpc = rpc_list.last_mut().expect("Always an element");
+                    if last_rpc.control.as_ref().is_none() {
+                        last_rpc.control = protobuf::MessageField::some(empty_control.clone());
+                    }
+
+                    last_rpc.control.as_mut().map(|c| c.ihave.push(ihave.clone()));
                 }
                 for iwant in &control.iwant {
-                    let len = iwant.encoded_len();
+                    let len = usize::try_from(iwant.compute_size())
+                        .expect("Message size has already been validated.");
                     create_or_add_rpc!(len);
-                    rpc_list
-                        .last_mut()
-                        .expect("Always an element")
-                        .control
-                        .get_or_insert_with(|| empty_control.clone())
-                        .iwant
-                        .push(iwant.clone());
+                    let mut last_rpc = rpc_list.last_mut().expect("Always an element");
+                    if last_rpc.control.as_ref().is_none() {
+                        last_rpc.control = protobuf::MessageField::some(empty_control.clone());
+                    }
+
+                    last_rpc.control.as_mut().map(|c| c.iwant.push(iwant.clone()));
                 }
                 for graft in &control.graft {
-                    let len = graft.encoded_len();
+                    let len = usize::try_from(graft.compute_size())
+                        .expect("Message size has already been validated.");
                     create_or_add_rpc!(len);
-                    rpc_list
-                        .last_mut()
-                        .expect("Always an element")
-                        .control
-                        .get_or_insert_with(|| empty_control.clone())
-                        .graft
-                        .push(graft.clone());
+                    let mut last_rpc = rpc_list.last_mut().expect("Always an element");
+                    if last_rpc.control.as_ref().is_none() {
+                        last_rpc.control = protobuf::MessageField::some(empty_control.clone());
+                    }
+
+                    last_rpc.control.as_mut().map(|c| c.graft.push(graft.clone()));
                 }
                 for prune in &control.prune {
-                    let len = prune.encoded_len();
+                    let len = usize::try_from(prune.compute_size())
+                        .expect("Message size has already been validated.");
                     create_or_add_rpc!(len);
-                    rpc_list
-                        .last_mut()
-                        .expect("Always an element")
-                        .control
-                        .get_or_insert_with(|| empty_control.clone())
-                        .prune
-                        .push(prune.clone());
+                    let mut last_rpc = rpc_list.last_mut().expect("Always an element");
+                    if last_rpc.control.as_ref().is_none() {
+                        last_rpc.control = protobuf::MessageField::some(empty_control.clone());
+                    }
+
+                    last_rpc.control.as_mut().map(|c| c.prune.push(prune.clone()));
                 }
             } else {
-                let len = control.encoded_len();
+                let len = usize::try_from(control.compute_size())
+                    .expect("Message size has already been validated.");
                 create_or_add_rpc!(len);
-                rpc_list.last_mut().expect("Always an element").control = Some(control.clone());
+                rpc_list.last_mut().expect("Always an element").control = protobuf::MessageField::some(control.clone());
             }
         }
 

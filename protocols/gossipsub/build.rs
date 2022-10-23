@@ -19,5 +19,12 @@
 // DEALINGS IN THE SOFTWARE.
 
 fn main() {
-    prost_build::compile_protos(&["src/rpc.proto", "src/compat.proto"], &["src"]).unwrap();
+    protobuf_codegen::Codegen::new()
+        .pure()
+        .includes(&["src"])
+        .inputs(&["src/rpc.proto", "src/compat.proto"])
+        .customize(protobuf_codegen::Customize::default().lite_runtime(true))
+        .cargo_out_dir("protos")
+        .run()
+        .unwrap()
 }

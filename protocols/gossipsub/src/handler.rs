@@ -66,7 +66,7 @@ pub enum HandlerEvent {
 #[derive(Debug, Clone)]
 pub enum GossipsubHandlerIn {
     /// A gossipsub message to send.
-    Message(crate::rpc_proto::Rpc),
+    Message(crate::rpc_proto::RPC),
     /// The peer has joined the mesh.
     JoinedMesh,
     /// The peer has left the mesh.
@@ -92,7 +92,7 @@ pub struct GossipsubHandler {
     inbound_substream: Option<InboundSubstreamState>,
 
     /// Queue of values that we want to send to the remote.
-    send_queue: SmallVec<[crate::rpc_proto::Rpc; 16]>,
+    send_queue: SmallVec<[crate::rpc_proto::RPC; 16]>,
 
     /// Flag indicating that an outbound substream is being established to prevent duplicate
     /// requests.
@@ -150,7 +150,7 @@ enum OutboundSubstreamState {
     /// Waiting to send a message to the remote.
     PendingSend(
         Framed<NegotiatedSubstream, GossipsubCodec>,
-        crate::rpc_proto::Rpc,
+        crate::rpc_proto::RPC,
     ),
     /// Waiting to flush the substream so that the data arrives to the remote.
     PendingFlush(Framed<NegotiatedSubstream, GossipsubCodec>),
@@ -188,7 +188,7 @@ impl ConnectionHandler for GossipsubHandler {
     type Error = GossipsubHandlerError;
     type InboundOpenInfo = ();
     type InboundProtocol = ProtocolConfig;
-    type OutboundOpenInfo = crate::rpc_proto::Rpc;
+    type OutboundOpenInfo = crate::rpc_proto::RPC;
     type OutboundProtocol = ProtocolConfig;
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {

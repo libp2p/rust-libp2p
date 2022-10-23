@@ -247,7 +247,7 @@ where
 }
 
 // Converts a protobuf message into a gossipsub message for reading the Gossipsub event queue.
-fn proto_to_message(rpc: &crate::rpc_proto::Rpc) -> GossipsubRpc {
+fn proto_to_message(rpc: &crate::rpc_proto::RPC) -> GossipsubRpc {
     // Store valid messages.
     let mut messages = Vec::with_capacity(rpc.publish.len());
     let rpc = rpc.clone();
