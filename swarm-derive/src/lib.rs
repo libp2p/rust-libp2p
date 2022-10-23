@@ -46,21 +46,22 @@ fn build(ast: &DeriveInput) -> TokenStream {
 fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     let name = &ast.ident;
     let (_, ty_generics, where_clause) = ast.generics.split_for_impl();
-    let multiaddr = quote! {::libp2p::core::Multiaddr};
-    let trait_to_impl = quote! {::libp2p::swarm::NetworkBehaviour};
-    let either_ident = quote! {::libp2p::core::either::EitherOutput};
-    let network_behaviour_action = quote! {::libp2p::swarm::NetworkBehaviourAction};
-    let into_connection_handler = quote! {::libp2p::swarm::IntoConnectionHandler};
-    let connection_handler = quote! {::libp2p::swarm::ConnectionHandler};
-    let into_proto_select_ident = quote! {::libp2p::swarm::IntoConnectionHandlerSelect};
-    let peer_id = quote! {::libp2p::core::PeerId};
-    let connection_id = quote! {::libp2p::core::connection::ConnectionId};
-    let dial_errors = quote! {Option<&Vec<::libp2p::core::Multiaddr>>};
-    let connected_point = quote! {::libp2p::core::ConnectedPoint};
-    let listener_id = quote! {::libp2p::core::transport::ListenerId};
-    let dial_error = quote! {::libp2p::swarm::DialError};
 
-    let poll_parameters = quote! {::libp2p::swarm::PollParameters};
+    let multiaddr = quote! {::libp2p::swarm::derive_prelude::Multiaddr};
+    let trait_to_impl = quote! {::libp2p::swarm::derive_prelude::NetworkBehaviour};
+    let either_ident = quote! {::libp2p::swarm::derive_prelude::EitherOutput};
+    let network_behaviour_action = quote! {::libp2p::swarm::derive_prelude::NetworkBehaviourAction};
+    let into_connection_handler = quote! {::libp2p::swarm::derive_prelude::IntoConnectionHandler};
+    let connection_handler = quote! {::libp2p::swarm::derive_prelude::ConnectionHandler};
+    let into_proto_select_ident =
+        quote! {::libp2p::swarm::derive_prelude::IntoConnectionHandlerSelect};
+    let peer_id = quote! {::libp2p::swarm::derive_prelude::PeerId};
+    let connection_id = quote! {::libp2p::swarm::derive_prelude::ConnectionId};
+    let dial_errors = quote! {Option<&Vec<::libp2p::swarm::derive_prelude::Multiaddr>>};
+    let connected_point = quote! {::libp2p::swarm::derive_prelude::ConnectedPoint};
+    let listener_id = quote! {::libp2p::swarm::derive_prelude::ListenerId};
+    let dial_error = quote! {::libp2p::swarm::derive_prelude::DialError};
+    let poll_parameters = quote! {::libp2p::swarm::derive_prelude::PollParameters};
 
     // Build the generics.
     let impl_generics = {

@@ -65,6 +65,24 @@ pub mod dummy;
 pub mod handler;
 pub mod keep_alive;
 
+/// Bundles all symbols required for the `libp2p_swarm_derive::NetworkBehavior` macro.
+#[doc(hidden)]
+pub mod derive_prelude {
+    pub use crate::ConnectionHandler;
+    pub use crate::DialError;
+    pub use crate::IntoConnectionHandler;
+    pub use crate::IntoConnectionHandlerSelect;
+    pub use crate::NetworkBehaviour;
+    pub use crate::NetworkBehaviourAction;
+    pub use crate::PollParameters;
+    pub use libp2p_core::connection::ConnectionId;
+    pub use libp2p_core::either::EitherOutput;
+    pub use libp2p_core::transport::ListenerId;
+    pub use libp2p_core::ConnectedPoint;
+    pub use libp2p_core::Multiaddr;
+    pub use libp2p_core::PeerId;
+}
+
 pub use behaviour::{
     CloseConnection, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
 };
