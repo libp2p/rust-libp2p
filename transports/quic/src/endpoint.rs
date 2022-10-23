@@ -46,6 +46,13 @@ use std::{
 };
 use x509_parser::nom::AsBytes;
 
+// The `EndpointDriver` drops packets if the channel to the connection
+// or transport is full.
+// Set capacity 10 to avoid unnecessary packet drops if the receiver
+// is only very briefly busy, but not buffer a large amount of packets
+// if it is blocked longer.
+const CHANNEL_CAPACITY: usize = 10;
+
 /// Config for the transport.
 #[derive(Clone)]
 pub struct Config {
@@ -162,7 +169,7 @@ impl Channel {
         quinn_config: QuinnConfig,
         socket_addr: SocketAddr,
     ) -> Result<(Self, mpsc::Receiver<Connection>), Error> {
-        let (new_connections_tx, new_connections_rx) = mpsc::channel(1);
+        let (new_connections_tx, new_connections_rx) = mpsc::channel(CHANNEL_CAPACITY);
         let endpoint = Self::new::<P>(quinn_config, socket_addr, Some(new_connections_tx))?;
         Ok((endpoint, new_connections_rx))
     }
@@ -187,7 +194,9 @@ impl Channel {
         // NOT blocking, as per man:bind(2), as we pass an IP address.
         let socket = std::net::UdpSocket::bind(&socket_addr)?;
         socket.set_nonblocking(true)?;
-        let (to_endpoint_tx, to_endpoint_rx) = mpsc::channel(32);
+        // Capacity 0 to back-pressure the rest of the application if
+        // the udp socket is busy.
+        let (to_endpoint_tx, to_endpoint_rx) = mpsc::channel(0);
 
         let channel = Self {
             to_endpoint: to_endpoint_tx,
@@ -436,7 +445,7 @@ impl<P: Provider> EndpointDriver<P> {
                     };
 
                 debug_assert_eq!(connection.side(), quinn_proto::Side::Client);
-                let (tx, rx) = mpsc::channel(16);
+                let (tx, rx) = mpsc::channel(CHANNEL_CAPACITY);
                 let connection = Connection::from_quinn_connection(
                     self.channel.clone(),
                     connection,
@@ -549,7 +558,7 @@ impl<P: Provider> EndpointDriver<P> {
                     }
                 };
 
-                let (tx, rx) = mpsc::channel(16);
+                let (tx, rx) = mpsc::channel(CHANNEL_CAPACITY);
                 let connection =
                     Connection::from_quinn_connection(self.channel.clone(), connec, connec_id, rx);
                 match connection_tx.start_send(connection) {
