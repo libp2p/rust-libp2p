@@ -23,6 +23,8 @@
 //!
 //! See <https://github.com/libp2p/specs/blob/master/tls/tls.md>.
 
+#![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
+
 pub mod certificate;
 mod upgrade;
 mod verifier;
