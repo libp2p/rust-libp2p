@@ -168,7 +168,7 @@ impl DialRequest {
         msg.dial = MessageField::some(dial);
         msg.dialResponse = MessageField::none();
 
-        msg.write_to_bytes().expect("Encoding to succeed.")
+        msg.write_to_bytes().expect("All fields to be initialized.")
     }
 }
 
@@ -289,7 +289,7 @@ impl DialResponse {
         msg.dial = MessageField::none();
         msg.dialResponse = MessageField::some(dial_response);
 
-        msg.write_to_bytes().expect("Encoding to succeed.")
+        msg.write_to_bytes().expect("All fields to be initialized.")
     }
 }
 

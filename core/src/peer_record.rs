@@ -82,7 +82,7 @@ impl PeerRecord {
                 })
                 .collect();
 
-            record.write_to_bytes().expect("Encoding to succeed.")
+            record.write_to_bytes().expect("All fields to be initialized.")
         };
 
         let envelope = SignedEnvelope::new(

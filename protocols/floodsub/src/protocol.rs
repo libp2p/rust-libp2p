@@ -205,7 +205,7 @@ impl FloodsubRpc {
             })
             .collect();
 
-        rpc.write_to_bytes().expect("Encoding to succeed.")
+        rpc.write_to_bytes().expect("All fields to be initialized.")
     }
 }
 

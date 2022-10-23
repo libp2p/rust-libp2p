@@ -258,7 +258,7 @@ impl PublicKey {
 
         let public_key = keys_proto::PublicKey::from(self);
 
-        public_key.write_to_bytes().expect("Encoding failed.")
+        public_key.write_to_bytes().expect("All fields to be initialized.")
     }
 
     /// Decode a public key from a protobuf structure, e.g. read from storage
