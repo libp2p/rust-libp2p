@@ -23,6 +23,7 @@
 use heck::ToUpperCamelCase;
 use proc_macro::TokenStream;
 use quote::quote;
+use syn::parse::Parse;
 use syn::{parse_macro_input, Data, DataStruct, DeriveInput};
 
 /// Generates a delegating `NetworkBehaviour` implementation for the struct this is used for. See
@@ -75,22 +76,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         // If we find a `#[behaviour(out_event = "Foo")]` attribute on the
         // struct, we set `Foo` as the out event. If not, the `OutEvent` is
         // generated.
-        let user_provided_out_event_name: Option<syn::Type> = ast
-            .attrs
-            .iter()
-            .filter_map(get_meta_items)
-            .flatten()
-            .filter_map(|meta_item| {
-                if let syn::NestedMeta::Meta(syn::Meta::NameValue(ref m)) = meta_item {
-                    if m.path.is_ident("out_event") {
-                        if let syn::Lit::Str(ref s) = m.lit {
-                            return Some(syn::parse_str(&s.value()).unwrap());
-                        }
-                    }
-                }
-                None
-            })
-            .next();
+        let user_provided_out_event_name = parse_attribute_value_by_key::<syn::Type>(ast, "out_event");
 
         match user_provided_out_event_name {
             // User provided `OutEvent`.
@@ -633,6 +619,30 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     };
 
     final_quote.into()
+}
+
+/// Parses the `value` of a key=value pair in the `#[behaviour]` attribute into the requested type.
+///
+/// Only `String` values are supported, e.g. `#[behaviour(foo="bar")]`.
+fn parse_attribute_value_by_key<T>(ast: &DeriveInput, key: &str) -> Option<T>
+where
+    T: Parse,
+{
+    ast.attrs
+        .iter()
+        .filter_map(get_meta_items)
+        .flatten()
+        .filter_map(|meta_item| {
+            if let syn::NestedMeta::Meta(syn::Meta::NameValue(ref m)) = meta_item {
+                if m.path.is_ident(key) {
+                    if let syn::Lit::Str(ref s) = m.lit {
+                        return Some(syn::parse_str(&s.value()).unwrap());
+                    }
+                }
+            }
+            None
+        })
+        .next()
 }
 
 fn get_meta_items(attr: &syn::Attribute) -> Option<Vec<syn::NestedMeta>> {
