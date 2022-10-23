@@ -20,8 +20,7 @@
 
 use futures::prelude::*;
 use libp2p::swarm::{dummy, NetworkBehaviour, SwarmEvent};
-use libp2p::{identify, ping};
-use libp2p_swarm_derive::*;
+use libp2p::{identify, ping, NetworkBehaviour};
 use std::fmt::Debug;
 
 /// Small utility to check that a type implements `NetworkBehaviour`.
