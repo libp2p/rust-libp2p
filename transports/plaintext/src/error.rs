@@ -34,7 +34,7 @@ pub enum PlainTextError {
     InvalidPublicKey(libp2p_core::identity::error::DecodingError),
 
     /// The peer id of the exchange isn't consistent with the remote public key.
-    InvalidPeerId,
+    PeerIdMismatch,
 }
 
 impl error::Error for PlainTextError {
@@ -56,7 +56,7 @@ impl fmt::Display for PlainTextError {
                 Some(e) => write!(f, "Protobuf error: {}", e),
                 None => f.write_str("Failed to parse one of the handshake protobuf messages"),
             },
-            PlainTextError::InvalidPeerId => f.write_str(
+            PlainTextError::PeerIdMismatch => f.write_str(
                 "The peer id of the exchange isn't consistent with the remote public key",
             ),
             PlainTextError::InvalidPublicKey(_) => f.write_str("Failed to decode public key"),

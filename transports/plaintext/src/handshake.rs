@@ -91,7 +91,7 @@ impl HandshakeContext<Local> {
 
         // Check the validity of the remote's `Exchange`.
         if peer_id != public_key.to_peer_id() {
-            return Err(PlainTextError::InvalidPeerId);
+            return Err(PlainTextError::PeerIdMismatch);
         }
 
         Ok(HandshakeContext {
