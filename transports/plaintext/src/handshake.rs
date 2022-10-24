@@ -76,7 +76,6 @@ impl HandshakeContext<Local> {
         let prop = match Exchange::decode(exchange_bytes) {
             Ok(prop) => prop,
             Err(e) => {
-                debug!("failed to parse remote's exchange protobuf message");
                 return Err(PlainTextError::InvalidPayload(Some(e)));
             }
         };
@@ -85,21 +84,18 @@ impl HandshakeContext<Local> {
         let public_key = match PublicKey::from_protobuf_encoding(pb_pubkey.as_slice()) {
             Ok(p) => p,
             Err(_) => {
-                debug!("failed to parse remote's exchange's pubkey protobuf");
                 return Err(PlainTextError::InvalidPayload(None));
             }
         };
         let peer_id = match PeerId::from_bytes(&prop.id.unwrap_or_default()) {
             Ok(p) => p,
             Err(_) => {
-                debug!("failed to parse remote's exchange's id protobuf");
                 return Err(PlainTextError::InvalidPayload(None));
             }
         };
 
         // Check the validity of the remote's `Exchange`.
         if peer_id != public_key.to_peer_id() {
-            debug!("the remote's `PeerId` isn't consistent with the remote's public key");
             return Err(PlainTextError::InvalidPeerId);
         }
 
