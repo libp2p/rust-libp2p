@@ -36,11 +36,7 @@ impl<In: Message, Out> Encoder for Codec<In, Out> {
     type Item = In;
     type Error = Error;
 
-    fn encode(
-        &mut self,
-        item: Self::Item,
-        dst: &mut asynchronous_codec::BytesMut,
-    ) -> Result<(), Self::Error> {
+    fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
         let mut encoded_msg = BytesMut::new();
         item.encode(&mut encoded_msg)
             .expect("BytesMut to have sufficient capacity.");
@@ -54,10 +50,7 @@ impl<In, Out: Message + Default> Decoder for Codec<In, Out> {
     type Item = Out;
     type Error = Error;
 
-    fn decode(
-        &mut self,
-        src: &mut asynchronous_codec::BytesMut,
-    ) -> Result<Option<Self::Item>, Self::Error> {
+    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         Ok(self
             .uvi
             .decode(src)?
