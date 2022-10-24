@@ -185,14 +185,13 @@ where
 
     let pubkey_bytes = info.public_key.to_protobuf_encoding();
 
-    let message = structs_proto::Identify {
-        agent_version: Some(info.agent_version),
-        protocol_version: Some(info.protocol_version),
-        public_key: Some(pubkey_bytes),
-        listen_addrs,
-        observed_addr: Some(info.observed_addr.to_vec()),
-        protocols: info.protocols,
-    };
+    let mut message = structs_proto::Identify::new();
+    message.set_protocolVersion(info.protocol_version);
+    message.set_agentVersion(info.agent_version);
+    message.set_publicKey(pubkey_bytes);
+    message.set_observedAddr(info.observed_addr.to_vec());
+    message.protocols = info.protocols;
+    message.listenAddrs = listen_addrs;
 
     let mut framed_io = FramedWrite::new(
         io,
@@ -235,19 +234,19 @@ impl TryFrom<structs_proto::Identify> for Info {
 
         let listen_addrs = {
             let mut addrs = Vec::new();
-            for addr in msg.listen_addrs.into_iter() {
+            for addr in msg.listenAddrs.into_iter() {
                 addrs.push(parse_multiaddr(addr)?);
             }
             addrs
         };
 
-        let public_key = PublicKey::from_protobuf_encoding(&msg.public_key.unwrap_or_default())?;
+        let public_key = PublicKey::from_protobuf_encoding(&msg.publicKey.unwrap_or_default())?;
 
-        let observed_addr = parse_multiaddr(msg.observed_addr.unwrap_or_default())?;
+        let observed_addr = parse_multiaddr(msg.observedAddr.unwrap_or_default())?;
         let info = Info {
             public_key,
-            protocol_version: msg.protocol_version.unwrap_or_default(),
-            agent_version: msg.agent_version.unwrap_or_default(),
+            protocol_version: msg.protocolVersion.unwrap_or_default(),
+            agent_version: msg.agentVersion.unwrap_or_default(),
             listen_addrs,
             protocols: msg.protocols,
             observed_addr,
