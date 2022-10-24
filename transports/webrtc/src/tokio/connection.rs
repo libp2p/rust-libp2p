@@ -213,13 +213,12 @@ impl StreamMuxer for Connection {
         let fut = self.outbound_fut.get_or_insert(Box::pin(async move {
             let peer_conn = peer_conn.lock().await;
 
-            // Create a datachannel with label 'data'
             let data_channel = peer_conn.create_data_channel("", None).await?;
-
-            log::trace!("Opening outbound substream {}", data_channel.id());
 
             // No need to hold the lock during the DTLS handshake.
             drop(peer_conn);
+
+            log::trace!("Opening outbound substream {}", data_channel.id());
 
             let (tx, rx) = oneshot::channel::<Arc<DetachedDataChannel>>();
 
