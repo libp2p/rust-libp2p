@@ -29,7 +29,6 @@
 //! ```
 
 use futures::StreamExt;
-use libp2p::tcp::GenTcpConfig;
 use libp2p::{
     core::upgrade,
     floodsub::{self, Floodsub, FloodsubEvent},
@@ -39,11 +38,10 @@ use libp2p::{
         // `TokioMdns` is available through the `mdns-tokio` feature.
         TokioMdns,
     },
-    mplex,
-    noise,
+    mplex, noise,
     swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent},
-    // `TokioTcpTransport` is available through the `tcp-tokio` feature.
-    tcp::TokioTcpTransport,
+
+    tcp,
     Multiaddr,
     PeerId,
     Transport,
@@ -63,7 +61,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Create a tokio-based TCP transport use noise for authenticated
     // encryption and Mplex for multiplexing of substreams on a TCP stream.
-    let transport = TokioTcpTransport::new(GenTcpConfig::default().nodelay(true))
+    let transport = tcp::tokio::Transport::new(tcp::Config::default().nodelay(true))
         .upgrade(upgrade::Version::V1)
         .authenticate(
             noise::NoiseAuthenticated::xx(&id_keys)

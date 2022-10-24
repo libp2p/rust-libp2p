@@ -32,6 +32,8 @@
 //! module.
 //!
 
+#![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
+
 use futures::{future::Ready, prelude::*, ready, stream::SelectAll};
 use libp2p_core::{
     connection::Endpoint,

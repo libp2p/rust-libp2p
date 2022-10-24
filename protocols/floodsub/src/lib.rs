@@ -21,6 +21,8 @@
 //! Implements the floodsub protocol, see also the:
 //! [spec](https://github.com/libp2p/specs/tree/master/pubsub).
 
+#![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
+
 use libp2p_core::PeerId;
 
 pub mod protocol;

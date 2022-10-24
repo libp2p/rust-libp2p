@@ -30,9 +30,8 @@ use libp2p::core::muxing::StreamMuxerExt;
 use libp2p::core::{
     identity, multiaddr::multiaddr, muxing, transport, upgrade, Multiaddr, PeerId, Transport,
 };
-use libp2p::mplex;
 use libp2p::plaintext::PlainText2Config;
-use libp2p::tcp::GenTcpConfig;
+use libp2p::{mplex, tcp};
 use std::pin::Pin;
 use std::time::Duration;
 
@@ -170,7 +169,7 @@ fn tcp_transport(split_send_size: usize) -> BenchTransport {
     let mut mplex = mplex::MplexConfig::default();
     mplex.set_split_send_size(split_send_size);
 
-    libp2p::tcp::TcpTransport::new(GenTcpConfig::default().nodelay(true))
+    tcp::async_io::Transport::new(tcp::Config::default().nodelay(true))
         .upgrade(upgrade::Version::V1)
         .authenticate(PlainText2Config { local_public_key })
         .multiplex(mplex)
