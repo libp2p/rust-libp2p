@@ -18,43 +18,36 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Implementation of the libp2p `Transport` trait for TCP/IP.
+//! Implementation of the libp2p [`libp2p_core::Transport`] trait for TCP/IP.
 //!
 //! # Usage
 //!
-//! This crate provides a `TcpTransport` and `TokioTcpTransport`, depending on
-//! the enabled features, which implement the `Transport` trait for use as a
+//! This crate provides a [`async_io::Transport`] and [`tokio::Transport`], depending on
+//! the enabled features, which implement the [`libp2p_core::Transport`] trait for use as a
 //! transport with `libp2p-core` or `libp2p-swarm`.
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
 mod provider;
 
-use if_watch::{IfEvent, IfWatcher};
 #[cfg(feature = "async-io")]
 pub use provider::async_io;
 
-/// The type of a [`GenTcpTransport`] using the `async-io` implementation.
-#[cfg(feature = "async-io")]
-pub type TcpTransport = GenTcpTransport<async_io::Tcp>;
-
 #[cfg(feature = "tokio")]
 pub use provider::tokio;
-
-/// The type of a [`GenTcpTransport`] using the `tokio` implementation.
-#[cfg(feature = "tokio")]
-pub type TokioTcpTransport = GenTcpTransport<tokio::Tcp>;
 
 use futures::{
     future::{self, Ready},
     prelude::*,
 };
 use futures_timer::Delay;
+use if_watch::{IfEvent, IfWatcher};
 use libp2p_core::{
     address_translation,
     multiaddr::{Multiaddr, Protocol},
-    transport::{ListenerId, Transport, TransportError, TransportEvent},
+    transport::{ListenerId, TransportError, TransportEvent},
 };
+use provider::{Incoming, Provider};
 use socket2::{Domain, Socket, Type};
 use std::{
     collections::{HashSet, VecDeque},
@@ -66,11 +59,9 @@ use std::{
     time::Duration,
 };
 
-use provider::{Incoming, Provider};
-
 /// The configuration for a TCP/IP transport capability for libp2p.
 #[derive(Clone, Debug)]
-pub struct GenTcpConfig {
+pub struct Config {
     /// TTL to set for opened sockets, or `None` to keep default.
     ttl: Option<u32>,
     /// `TCP_NODELAY` to set for opened sockets, or `None` to keep default.
@@ -159,17 +150,17 @@ impl PortReuse {
     }
 }
 
-impl GenTcpConfig {
+impl Config {
     /// Creates a new configuration for a TCP/IP transport:
     ///
     ///   * Nagle's algorithm, i.e. `TCP_NODELAY`, is _enabled_.
-    ///     See [`GenTcpConfig::nodelay`].
+    ///     See [`Config::nodelay`].
     ///   * Reuse of listening ports is _disabled_.
-    ///     See [`GenTcpConfig::port_reuse`].
+    ///     See [`Config::port_reuse`].
     ///   * No custom `IP_TTL` is set. The default of the OS TCP stack applies.
-    ///     See [`GenTcpConfig::ttl`].
+    ///     See [`Config::ttl`].
     ///   * The size of the listen backlog for new listening sockets is `1024`.
-    ///     See [`GenTcpConfig::listen_backlog`].
+    ///     See [`Config::listen_backlog`].
     pub fn new() -> Self {
         Self {
             ttl: None,
@@ -234,10 +225,10 @@ impl GenTcpConfig {
     /// > a single outgoing connection to a particular address and port
     /// > of a peer per local listening socket address.
     ///
-    /// [`GenTcpTransport`] keeps track of the listen socket addresses as they
+    /// [`Transport`] keeps track of the listen socket addresses as they
     /// are reported by polling it. It is possible to listen on multiple
     /// addresses, enabling port reuse for each, knowing exactly which listen
-    /// address is reused when dialing with a specific [`GenTcpTransport`], as in the
+    /// address is reused when dialing with a specific [`Transport`], as in the
     /// following example:
     ///
     /// ```no_run
@@ -251,12 +242,11 @@ impl GenTcpConfig {
     /// #[cfg(feature = "async-io")]
     /// #[async_std::main]
     /// async fn main() -> std::io::Result<()> {
-    /// use libp2p_tcp::{GenTcpConfig, TcpTransport};
     ///
     /// let listen_addr1: Multiaddr = "/ip4/127.0.0.1/tcp/9001".parse().unwrap();
     /// let listen_addr2: Multiaddr = "/ip4/127.0.0.1/tcp/9002".parse().unwrap();
     ///
-    /// let mut tcp1 = TcpTransport::new(GenTcpConfig::new().port_reuse(true)).boxed();
+    /// let mut tcp1 = libp2p_tcp::async_io::Transport::new(libp2p_tcp::Config::new().port_reuse(true)).boxed();
     /// tcp1.listen_on( listen_addr1.clone()).expect("listener");
     /// match tcp1.select_next_some().await {
     ///     TransportEvent::NewAddress { listen_addr, .. } => {
@@ -267,7 +257,7 @@ impl GenTcpConfig {
     ///     _ => {}
     /// }
     ///
-    /// let mut tcp2 = TcpTransport::new(GenTcpConfig::new().port_reuse(true)).boxed();
+    /// let mut tcp2 = libp2p_tcp::async_io::Transport::new(libp2p_tcp::Config::new().port_reuse(true)).boxed();
     /// tcp2.listen_on( listen_addr2).expect("listener");
     /// match tcp2.select_next_some().await {
     ///     TransportEvent::NewAddress { listen_addr, .. } => {
@@ -286,7 +276,7 @@ impl GenTcpConfig {
     /// case, one is chosen whose IP protocol version and loopback status is the
     /// same as that of the remote address. Consequently, for maximum control of
     /// the local listening addresses and ports that are used for outgoing
-    /// connections, a new [`GenTcpTransport`] should be created for each listening
+    /// connections, a new [`Transport`] should be created for each listening
     /// socket, avoiding the use of wildcard addresses which bind a socket to
     /// all network interfaces.
     ///
@@ -299,33 +289,48 @@ impl GenTcpConfig {
     }
 }
 
-impl Default for GenTcpConfig {
+impl Default for Config {
     fn default() -> Self {
         Self::new()
     }
 }
 
-pub struct GenTcpTransport<T>
+/// An abstract [`libp2p_core::Transport`] implementation.
+///
+/// You shouldn't need to use this type directly. Use one of the following instead:
+///
+/// - [`tokio::Transport`]
+/// - [`async_io::Transport`]
+pub struct Transport<T>
 where
     T: Provider + Send,
 {
-    config: GenTcpConfig,
+    config: Config,
 
     /// The configuration of port reuse when dialing.
     port_reuse: PortReuse,
     /// All the active listeners.
-    /// The `TcpListenStream` struct contains a stream that we want to be pinned. Since the `VecDeque`
+    /// The [`TcpListenStream`] struct contains a stream that we want to be pinned. Since the `VecDeque`
     /// can be resized, the only way is to use a `Pin<Box<>>`.
     listeners: VecDeque<Pin<Box<TcpListenStream<T>>>>,
-    /// Pending transport events to return from [`GenTcpTransport::poll`].
-    pending_events: VecDeque<TransportEvent<<Self as Transport>::ListenerUpgrade, io::Error>>,
+    /// Pending transport events to return from [`libp2p_core::Transport::poll`].
+    pending_events:
+        VecDeque<TransportEvent<<Self as libp2p_core::Transport>::ListenerUpgrade, io::Error>>,
 }
 
-impl<T> GenTcpTransport<T>
+impl<T> Transport<T>
 where
     T: Provider + Send,
 {
-    pub fn new(config: GenTcpConfig) -> Self {
+    /// Create a new instance of [`Transport`].
+    ///
+    /// If you don't want to specify a [`Config`], use [`Transport::default`].
+    ///
+    /// It is best to call this function through one of the type-aliases of this type:
+    ///
+    /// - [`tokio::Transport::new`]
+    /// - [`async_io::Transport::new`]
+    pub fn new(config: Config) -> Self {
         let port_reuse = if config.enable_port_reuse {
             PortReuse::Enabled {
                 listen_addrs: Arc::new(RwLock::new(HashSet::new())),
@@ -333,7 +338,7 @@ where
         } else {
             PortReuse::Disabled
         };
-        GenTcpTransport {
+        Transport {
             config,
             port_reuse,
             ..Default::default()
@@ -395,12 +400,15 @@ where
     }
 }
 
-impl<T> Default for GenTcpTransport<T>
+impl<T> Default for Transport<T>
 where
     T: Provider + Send,
 {
+    /// Creates a [`Transport`] with reasonable defaults.
+    ///
+    /// This transport will have port-reuse disabled.
     fn default() -> Self {
-        let config = GenTcpConfig::default();
+        let config = Config::default();
         let port_reuse = if config.enable_port_reuse {
             PortReuse::Enabled {
                 listen_addrs: Arc::new(RwLock::new(HashSet::new())),
@@ -408,7 +416,7 @@ where
         } else {
             PortReuse::Disabled
         };
-        GenTcpTransport {
+        Transport {
             port_reuse,
             config,
             listeners: VecDeque::new(),
@@ -417,7 +425,7 @@ where
     }
 }
 
-impl<T> Transport for GenTcpTransport<T>
+impl<T> libp2p_core::Transport for Transport<T>
 where
     T: Provider + Send + 'static,
     T::Listener: Unpin,
@@ -609,7 +617,7 @@ where
 
 /// Event produced by a [`TcpListenStream`].
 #[derive(Debug)]
-pub enum TcpListenerEvent<S> {
+enum TcpListenerEvent<S> {
     /// The listener is listening on a new additional [`Multiaddr`].
     NewAddress(Multiaddr),
     /// An upgrade, consisting of the upgrade future, the listener address and the remote address.
@@ -631,7 +639,7 @@ pub enum TcpListenerEvent<S> {
 }
 
 /// A stream of incoming connections on one or more interfaces.
-pub struct TcpListenStream<T>
+struct TcpListenStream<T>
 where
     T: Provider,
 {
@@ -851,6 +859,20 @@ fn is_tcp_addr(addr: &Multiaddr) -> bool {
     matches!(first, Ip4(_) | Ip6(_) | Dns(_) | Dns4(_) | Dns6(_)) && matches!(second, Tcp(_))
 }
 
+/// The configuration for a TCP/IP transport capability for libp2p.
+#[deprecated(since = "0.37.0", note = "Use `Config` instead.")]
+pub type GenTcpConfig = Config;
+
+/// The type of a [`Transport`](libp2p_core::Transport) using the `async-io` implementation.
+#[cfg(feature = "async-io")]
+#[deprecated(since = "0.37.0", note = "Use `async_io::Transport` instead.")]
+pub type TcpTransport = Transport<async_io::Tcp>;
+
+/// The type of a [`Transport`](libp2p_core::Transport) using the `tokio` implementation.
+#[cfg(feature = "tokio")]
+#[deprecated(since = "0.37.0", note = "Use `tokio::Transport` instead.")]
+pub type TokioTcpTransport = Transport<tokio::Tcp>;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -859,6 +881,7 @@ mod tests {
         future::poll_fn,
     };
     use libp2p_core::PeerId;
+    use libp2p_core::Transport as _;
 
     #[test]
     fn multiaddr_to_tcp_conversion() {
@@ -914,7 +937,7 @@ mod tests {
         env_logger::try_init().ok();
 
         async fn listener<T: Provider>(addr: Multiaddr, mut ready_tx: mpsc::Sender<Multiaddr>) {
-            let mut tcp = GenTcpTransport::<T>::new(GenTcpConfig::new()).boxed();
+            let mut tcp = Transport::<T>::default().boxed();
             tcp.listen_on(addr).unwrap();
             loop {
                 match tcp.select_next_some().await {
@@ -936,7 +959,7 @@ mod tests {
 
         async fn dialer<T: Provider>(mut ready_rx: mpsc::Receiver<Multiaddr>) {
             let addr = ready_rx.next().await.unwrap();
-            let mut tcp = GenTcpTransport::<T>::new(GenTcpConfig::new());
+            let mut tcp = Transport::<T>::default();
 
             // Obtain a future socket through dialing
             let mut socket = tcp.dial(addr.clone()).unwrap().await.unwrap();
@@ -983,7 +1006,7 @@ mod tests {
         env_logger::try_init().ok();
 
         async fn listener<T: Provider>(addr: Multiaddr, mut ready_tx: mpsc::Sender<Multiaddr>) {
-            let mut tcp = GenTcpTransport::<T>::new(GenTcpConfig::new()).boxed();
+            let mut tcp = Transport::<T>::default().boxed();
             tcp.listen_on(addr).unwrap();
 
             loop {
@@ -1012,7 +1035,7 @@ mod tests {
 
         async fn dialer<T: Provider>(mut ready_rx: mpsc::Receiver<Multiaddr>) {
             let dest_addr = ready_rx.next().await.unwrap();
-            let mut tcp = GenTcpTransport::<T>::new(GenTcpConfig::new());
+            let mut tcp = Transport::<T>::default();
             tcp.dial(dest_addr).unwrap().await.unwrap();
         }
 
@@ -1056,7 +1079,7 @@ mod tests {
             mut ready_tx: mpsc::Sender<Multiaddr>,
             port_reuse_rx: oneshot::Receiver<Protocol<'_>>,
         ) {
-            let mut tcp = GenTcpTransport::<T>::new(GenTcpConfig::new()).boxed();
+            let mut tcp = Transport::<T>::new(Config::new()).boxed();
             tcp.listen_on(addr).unwrap();
             loop {
                 match tcp.select_next_some().await {
@@ -1091,7 +1114,7 @@ mod tests {
             port_reuse_tx: oneshot::Sender<Protocol<'_>>,
         ) {
             let dest_addr = ready_rx.next().await.unwrap();
-            let mut tcp = GenTcpTransport::<T>::new(GenTcpConfig::new().port_reuse(true));
+            let mut tcp = Transport::<T>::new(Config::new().port_reuse(true));
             tcp.listen_on(addr).unwrap();
             match poll_fn(|cx| Pin::new(&mut tcp).poll(cx)).await {
                 TransportEvent::NewAddress { .. } => {
@@ -1159,7 +1182,7 @@ mod tests {
         env_logger::try_init().ok();
 
         async fn listen_twice<T: Provider>(addr: Multiaddr) {
-            let mut tcp = GenTcpTransport::<T>::new(GenTcpConfig::new().port_reuse(true));
+            let mut tcp = Transport::<T>::new(Config::new().port_reuse(true));
             tcp.listen_on(addr).unwrap();
             match poll_fn(|cx| Pin::new(&mut tcp).poll(cx)).await {
                 TransportEvent::NewAddress {
@@ -1213,7 +1236,7 @@ mod tests {
         env_logger::try_init().ok();
 
         async fn listen<T: Provider>(addr: Multiaddr) -> Multiaddr {
-            let mut tcp = GenTcpTransport::<T>::new(GenTcpConfig::new()).boxed();
+            let mut tcp = Transport::<T>::default().boxed();
             tcp.listen_on(addr).unwrap();
             tcp.select_next_some()
                 .await
@@ -1250,13 +1273,13 @@ mod tests {
         fn test(addr: Multiaddr) {
             #[cfg(feature = "async-io")]
             {
-                let mut tcp = TcpTransport::new(GenTcpConfig::new());
+                let mut tcp = async_io::Transport::default();
                 assert!(tcp.listen_on(addr.clone()).is_err());
             }
 
             #[cfg(feature = "tokio")]
             {
-                let mut tcp = TokioTcpTransport::new(GenTcpConfig::new());
+                let mut tcp = tokio::Transport::default();
                 assert!(tcp.listen_on(addr).is_err());
             }
         }
@@ -1264,13 +1287,23 @@ mod tests {
         test("/ip4/127.0.0.1/tcp/12345/tcp/12345".parse().unwrap());
     }
 
-    #[cfg(any(feature = "async-io", feature = "tcp"))]
+    #[cfg(feature = "async-io")]
     #[test]
-    fn test_address_translation() {
-        #[cfg(feature = "async-io")]
-        let transport = TcpTransport::new(GenTcpConfig::new());
-        #[cfg(all(feature = "tokio", not(feature = "async-io")))]
-        let transport = TokioTcpTransport::new(GenTcpConfig::new());
+    fn test_address_translation_async_io() {
+        test_address_translation::<async_io::Transport>()
+    }
+
+    #[cfg(feature = "tokio")]
+    #[test]
+    fn test_address_translation_tokio() {
+        test_address_translation::<tokio::Transport>()
+    }
+
+    fn test_address_translation<T>()
+    where
+        T: Default + libp2p_core::Transport,
+    {
+        let transport = T::default();
 
         let port = 42;
         let tcp_listen_addr = Multiaddr::empty()
