@@ -419,15 +419,9 @@ fn parse_webrtc_dial_addr(addr: &Multiaddr) -> Option<(SocketAddr, Fingerprint)>
     let port = iter.next()?;
     let webrtc = iter.next()?;
     let certhash = iter.next()?;
-    let p2p = iter.next()?;
 
-    let (port, fingerprint) = match (port, webrtc, certhash, p2p) {
-        (
-            Protocol::Udp(port),
-            Protocol::WebRTC,
-            Protocol::Certhash(cert_hash),
-            Protocol::P2p(_),
-        ) => {
+    let (port, fingerprint) = match (port, webrtc, certhash) {
+        (Protocol::Udp(port), Protocol::WebRTC, Protocol::Certhash(cert_hash)) => {
             let fingerprint = Fingerprint::try_from_multihash(cert_hash)?;
 
             (port, fingerprint)
@@ -435,8 +429,12 @@ fn parse_webrtc_dial_addr(addr: &Multiaddr) -> Option<(SocketAddr, Fingerprint)>
         _ => return None,
     };
 
-    if iter.next().is_some() {
-        return None;
+    match iter.next() {
+        Some(Protocol::P2p(_)) => {}
+        // peer ID is optional
+        None => {}
+        // unexpected protocol
+        Some(_) => return None,
     }
 
     Some((SocketAddr::new(ip, port), fingerprint))
@@ -464,6 +462,25 @@ mod tests {
     #[test]
     fn parse_valid_address_with_certhash_and_p2p() {
         let addr = "/ip4/127.0.0.1/udp/39901/webrtc/certhash/uEiDikp5KVUgkLta1EjUN-IKbHk-dUBg8VzKgf5nXxLK46w/p2p/12D3KooWNpDk9w6WrEEcdsEH1y47W71S36yFjw4sd3j7omzgCSMS"
+            .parse()
+            .unwrap();
+
+        let maybe_parsed = parse_webrtc_dial_addr(&addr);
+
+        assert_eq!(
+            maybe_parsed,
+            Some((
+                SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 39901),
+                Fingerprint::raw(hex_literal::hex!(
+                    "e2929e4a5548242ed6b512350df8829b1e4f9d50183c5732a07f99d7c4b2b8eb"
+                ))
+            ))
+        );
+    }
+
+    #[test]
+    fn peer_id_is_not_required() {
+        let addr = "/ip4/127.0.0.1/udp/39901/webrtc/certhash/uEiDikp5KVUgkLta1EjUN-IKbHk-dUBg8VzKgf5nXxLK46w"
             .parse()
             .unwrap();
 
