@@ -1,4 +1,4 @@
-# 0.40.1 [unreleased]
+# 0.40.2 [unreleased]
 
 - Export `NetworkBehaviour` derive as `libp2p_swarm::NetworkBehaviour`.
   This follows the convention of other popular libraries. `serde` for example exports the `Serialize` trait and macro as
