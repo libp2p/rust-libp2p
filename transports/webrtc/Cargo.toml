@@ -10,10 +10,9 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-asynchronous-codec = "0.6"
 async-trait = "0.1"
+asynchronous-codec = "0.6"
 bytes = "1"
-fnv = "1.0"
 futures = "0.3"
 futures-lite = "1"
 futures-timer = "3"
@@ -22,17 +21,15 @@ if-watch = "2.0"
 libp2p-core = { version = "0.37.0", path = "../../core"  }
 libp2p-noise = { version = "0.40.0", path = "../../transports/noise" }
 log = "0.4"
-multihash = { version = "0.16", default-features = false, features = ["sha2"] }
 multibase = "0.9"
+multihash = { version = "0.16", default-features = false, features = ["sha2"] }
 prost = "0.11"
 prost-codec = { version = "0.2.1", path = "../../misc/prost-codec" }
 rand = "0.8"
-rcgen = "0.9.3"
 serde = { version = "1.0", features = ["derive"] }
 stun = "0.4"
 thiserror = "1"
 tinytemplate = "1.2"
-
 tokio = { version = "1.18", features = ["net"], optional = true}
 tokio-util = { version = "0.7", features = ["compat"], optional = true }
 webrtc = { version = "0.5.0", optional = true }
@@ -48,7 +45,5 @@ anyhow = "1.0"
 env_logger = "0.9"
 hex-literal = "0.3"
 libp2p = { path = "../..", features = ["request-response", "webrtc"], default-features = false }
-multihash = { version = "0.16", default-features = false, features = ["sha3"] }
-quickcheck = "1"
-rand_core = "0.5"
+rcgen = "0.9.3"
 unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
