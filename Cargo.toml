@@ -78,9 +78,6 @@ serde = ["libp2p-core/serde", "libp2p-kad?/serde", "libp2p-gossipsub?/serde"]
 tokio = ["libp2p-mdns?/tokio", "libp2p-tcp?/tokio", "libp2p-dns?/tokio"]
 async-std = ["libp2p-mdns?/async-io", "libp2p-tcp?/async-io", "libp2p-dns?/async-std"]
 
-[package.metadata.docs.rs]
-all-features = true
-
 [dependencies]
 bytes = "1"
 futures = "0.3.1"
@@ -118,7 +115,7 @@ smallvec = "1.6.1"
 libp2p-deflate = { version = "0.37.0", path = "transports/deflate", optional = true }
 libp2p-dns = { version = "0.37.0", path = "transports/dns", optional = true }
 libp2p-mdns = { version = "0.41.0", path = "protocols/mdns", optional = true }
-libp2p-tcp = { version = "0.37.0", path = "transports/tcp", optional = true }
+libp2p-tcp = { version = "0.38.0", path = "transports/tcp", optional = true }
 libp2p-websocket = { version = "0.39.0", path = "transports/websocket", optional = true }
 libp2p-tls = { version = "0.1.0-alpha", path = "transports/tls", optional = true }
 
@@ -204,3 +201,10 @@ required-features = ["full"]
 [[example]]
 name = "distributed-key-value-store"
 required-features = ["full"]
+
+# Passing arguments to the docsrs builder in order to properly document cfg's. 
+# More information: https://docs.rs/about/builds#cross-compiling
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+rustc-args = ["--cfg", "docsrs"]

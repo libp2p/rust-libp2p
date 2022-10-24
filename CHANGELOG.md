@@ -48,9 +48,13 @@
 
 - Remove deprecated features: `tcp-tokio`, `mdns-tokio`, `dns-tokio`, `tcp-async-io`, `mdns-async-io`, `dns-async-std`.
   See [PR 3001].
+- Introduce [`libp2p-tls` `v0.1.0`](transports/tls/CHANGELOG.md#010). See [PR 2945].
+- Update individual crates.
+  - Update to [`libp2p-tcp` `v0.38.0`](transports/tcp/CHANGELOG.md#0380).
 - Deprecate `development_transport` and `tokio_development_transport`. See [PR XXXX].
 
 [PR 3001]: https://github.com/libp2p/rust-libp2p/pull/3001
+[PR 2945]: https://github.com/libp2p/rust-libp2p/pull/2945
 [PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
 
 # 0.49.0
@@ -67,8 +71,6 @@
   - `dns-async-std` in favor of `dns` + `async-std`
   
   See [PR 2962].
-
-- Introduce [`libp2p-tls` `v0.1.0`](transports/tls/CHANGELOG.md#010). See [PR 2945].
 
 - Update individual crates.
     - Update to [`libp2p-autonat` `v0.8.0`](protocols/autonat/CHANGELOG.md#0080).
@@ -99,7 +101,6 @@
 
 [PR 2918]: https://github.com/libp2p/rust-libp2p/pull/2918
 [PR 2962]: https://github.com/libp2p/rust-libp2p/pull/2962
-[PR 2945]: https://github.com/libp2p/rust-libp2p/pull/2945
 
 # 0.48.0
 

@@ -31,7 +31,7 @@ use libp2p::mplex;
 use libp2p::noise;
 use libp2p::ping;
 use libp2p::swarm::{Swarm, SwarmEvent};
-use libp2p::tcp::{GenTcpConfig, TcpTransport};
+use libp2p::tcp;
 use libp2p::yamux;
 use libp2p::NetworkBehaviour;
 use libp2p_swarm::keep_alive;
@@ -246,7 +246,7 @@ fn mk_transport(muxer: MuxerChoice) -> (PeerId, transport::Boxed<(PeerId, Stream
     let peer_id = id_keys.public().to_peer_id();
     (
         peer_id,
-        TcpTransport::new(GenTcpConfig::default().nodelay(true))
+        tcp::async_io::Transport::new(tcp::Config::default().nodelay(true))
             .upgrade(upgrade::Version::V1)
             .authenticate(noise::NoiseAuthenticated::xx(&id_keys).unwrap())
             .multiplex(match muxer {
