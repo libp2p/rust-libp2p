@@ -1,3 +1,9 @@
+# 0.11.0 [unreleased]
+
+- De- and encode protobuf messages using `prost-codec`. See [PR XXXX]. 
+
+[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+
 # 0.10.0
 
 - Update to `libp2p-core` `v0.37.0`.

@@ -99,7 +99,7 @@ libp2p-ping = { version = "0.40.1", path = "protocols/ping", optional = true }
 libp2p-plaintext = { version = "0.37.0", path = "transports/plaintext", optional = true }
 libp2p-pnet = { version = "0.22.1", path = "transports/pnet", optional = true }
 libp2p-relay = { version = "0.14.0", path = "protocols/relay", optional = true }
-libp2p-rendezvous = { version = "0.10.0", path = "protocols/rendezvous", optional = true }
+libp2p-rendezvous = { version = "0.11.0", path = "protocols/rendezvous", optional = true }
 libp2p-request-response = { version = "0.22.1", path = "protocols/request-response", optional = true }
 libp2p-swarm = { version = "0.40.1", path = "swarm" }
 libp2p-swarm-derive = { version = "0.30.1", path = "swarm-derive" }

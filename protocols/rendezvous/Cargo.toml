@@ -3,7 +3,7 @@ name = "libp2p-rendezvous"
 edition = "2021"
 rust-version = "1.56.1"
 description = "Rendezvous protocol for libp2p"
-version = "0.10.0"
+version = "0.11.0"
 authors = ["The COMIT guys <hello@comit.network>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -20,6 +20,7 @@ libp2p-core = { version = "0.37.0", path = "../../core" }
 libp2p-swarm = { version = "0.40.0", path = "../../swarm" }
 log = "0.4"
 prost = "0.11"
+prost-codec = { version = "0.3.0", path = "../../misc/prost-codec" }
 rand = "0.8"
 sha2 = "0.10"
 thiserror = "1"

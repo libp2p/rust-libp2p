@@ -48,6 +48,8 @@
 
 - Remove deprecated features: `tcp-tokio`, `mdns-tokio`, `dns-tokio`, `tcp-async-io`, `mdns-async-io`, `dns-async-std`.
   See [PR 3001].
+- Update individual crates.
+  - Update to [`libp2p-rendezvous` `v0.11.0`](protocols/rendezovus/CHANGELOG.md#0110).
 
 [PR 3001]: https://github.com/libp2p/rust-libp2p/pull/3001
 
