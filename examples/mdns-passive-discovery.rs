@@ -20,10 +20,12 @@
 
 use futures::StreamExt;
 use libp2p::{
+    core::{upgrade::Version, Transport},
     identity,
     mdns::{Mdns, MdnsConfig, MdnsEvent},
+    noise,
     swarm::{Swarm, SwarmEvent},
-    PeerId,
+    tcp, yamux, PeerId,
 };
 use std::error::Error;
 
@@ -37,7 +39,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!("Local peer id: {:?}", peer_id);
 
     // Create a transport.
-    let transport = libp2p::development_transport(id_keys).await?;
+    let transport = tcp::TcpTransport::default()
+        .upgrade(Version::V1)
+        .authenticate(noise::NoiseAuthenticated::xx(&id_keys)?)
+        .multiplex(yamux::YamuxConfig::default())
+        .boxed();
 
     // Create an MDNS network behaviour.
     let behaviour = Mdns::new(MdnsConfig::default())?;

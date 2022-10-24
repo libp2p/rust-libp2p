@@ -19,10 +19,12 @@
 // DEALINGS IN THE SOFTWARE.use futures::StreamExt;
 use futures::StreamExt;
 use libp2p::{
+    core::{upgrade::Version, Transport},
     identity,
     mdns::{MdnsConfig, MdnsEvent, TokioMdns},
+    noise,
     swarm::{Swarm, SwarmEvent},
-    PeerId,
+    tcp, yamux, PeerId,
 };
 use std::error::Error;
 use std::time::Duration;
@@ -56,7 +58,11 @@ async fn test_expired_tokio() -> Result<(), Box<dyn Error>> {
 async fn create_swarm(config: MdnsConfig) -> Result<Swarm<TokioMdns>, Box<dyn Error>> {
     let id_keys = identity::Keypair::generate_ed25519();
     let peer_id = PeerId::from(id_keys.public());
-    let transport = libp2p::tokio_development_transport(id_keys)?;
+    let transport = tcp::TcpTransport::default()
+        .upgrade(Version::V1)
+        .authenticate(noise::NoiseAuthenticated::xx(&id_keys)?)
+        .multiplex(yamux::YamuxConfig::default())
+        .boxed();
     let behaviour = TokioMdns::new(config)?;
     let mut swarm = Swarm::new(transport, behaviour, peer_id);
     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;

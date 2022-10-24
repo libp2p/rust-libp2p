@@ -21,10 +21,12 @@
 use futures::{channel::oneshot, Future, FutureExt, StreamExt};
 use futures_timer::Delay;
 use libp2p::{
-    development_transport,
+    core::upgrade::Version,
+    core::Transport,
     identity::Keypair,
+    noise,
     swarm::{AddressScore, Swarm, SwarmEvent},
-    Multiaddr, PeerId,
+    tcp, yamux, Multiaddr, PeerId,
 };
 use libp2p_autonat::{
     Behaviour, Config, Event, NatStatus, OutboundProbeError, OutboundProbeEvent, ResponseError,
@@ -38,7 +40,11 @@ const TEST_REFRESH_INTERVAL: Duration = Duration::from_secs(2);
 async fn init_swarm(config: Config) -> Swarm<Behaviour> {
     let keypair = Keypair::generate_ed25519();
     let local_id = PeerId::from_public_key(&keypair.public());
-    let transport = development_transport(keypair).await.unwrap();
+    let transport = tcp::TcpTransport::default()
+        .upgrade(Version::V1)
+        .authenticate(noise::NoiseAuthenticated::xx(&keypair).unwrap())
+        .multiplex(yamux::YamuxConfig::default())
+        .boxed();
     let behaviour = Behaviour::new(local_id, config);
     Swarm::new(transport, behaviour, local_id)
 }

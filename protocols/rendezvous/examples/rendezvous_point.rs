@@ -25,7 +25,7 @@ use libp2p::identify;
 use libp2p::ping;
 use libp2p::swarm::{keep_alive, Swarm, SwarmEvent};
 use libp2p::NetworkBehaviour;
-use libp2p::{development_transport, rendezvous};
+use libp2p::{core::upgrade::Version, core::Transport, noise, rendezvous, tcp, yamux};
 use void::Void;
 
 /// Examples for the rendezvous protocol:
@@ -45,7 +45,11 @@ async fn main() {
     let identity = identity::Keypair::Ed25519(key.into());
 
     let mut swarm = Swarm::new(
-        development_transport(identity.clone()).await.unwrap(),
+        tcp::TcpTransport::default()
+            .upgrade(Version::V1)
+            .authenticate(noise::NoiseAuthenticated::xx(&identity).unwrap())
+            .multiplex(yamux::YamuxConfig::default())
+            .boxed(),
         MyBehaviour {
             identify: identify::Behaviour::new(identify::Config::new(
                 "rendezvous-example/1.0.0".to_string(),

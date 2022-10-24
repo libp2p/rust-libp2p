@@ -42,7 +42,10 @@
 
 use futures::prelude::*;
 use libp2p::swarm::{Swarm, SwarmEvent};
-use libp2p::{identity, ping, Multiaddr, NetworkBehaviour, PeerId};
+use libp2p::{
+    core::{upgrade::Version, Transport},
+    identity, noise, ping, tcp, yamux, Multiaddr, NetworkBehaviour, PeerId,
+};
 use libp2p_swarm::keep_alive;
 use std::error::Error;
 
@@ -52,7 +55,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let local_peer_id = PeerId::from(local_key.public());
     println!("Local peer id: {:?}", local_peer_id);
 
-    let transport = libp2p::development_transport(local_key).await?;
+    let transport = tcp::TcpTransport::default()
+        .upgrade(Version::V1)
+        .authenticate(noise::NoiseAuthenticated::xx(&local_key)?)
+        .multiplex(yamux::YamuxConfig::default())
+        .boxed();
 
     let mut swarm = Swarm::new(transport, Behaviour::default(), local_peer_id);
 

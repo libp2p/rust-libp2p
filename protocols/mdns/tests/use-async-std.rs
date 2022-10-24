@@ -20,10 +20,12 @@
 
 use futures::StreamExt;
 use libp2p::{
+    core::{upgrade::Version, Transport},
     identity,
     mdns::{Mdns, MdnsConfig, MdnsEvent},
+    noise,
     swarm::{Swarm, SwarmEvent},
-    PeerId,
+    tcp, yamux, PeerId,
 };
 use std::error::Error;
 use std::time::Duration;
@@ -60,7 +62,11 @@ async fn test_expired_async_std() -> Result<(), Box<dyn Error>> {
 async fn create_swarm(config: MdnsConfig) -> Result<Swarm<Mdns>, Box<dyn Error>> {
     let id_keys = identity::Keypair::generate_ed25519();
     let peer_id = PeerId::from(id_keys.public());
-    let transport = libp2p::development_transport(id_keys).await?;
+    let transport = tcp::TcpTransport::default()
+        .upgrade(Version::V1)
+        .authenticate(noise::NoiseAuthenticated::xx(&id_keys)?)
+        .multiplex(yamux::YamuxConfig::default())
+        .boxed();
     let behaviour = Mdns::new(config)?;
     let mut swarm = Swarm::new(transport, behaviour, peer_id);
     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;

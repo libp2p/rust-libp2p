@@ -23,11 +23,13 @@ use futures_timer::Delay;
 use libp2p::core::{ConnectedPoint, Endpoint};
 use libp2p::swarm::DialError;
 use libp2p::{
-    development_transport,
+    core::upgrade::Version,
+    core::Transport,
     identity::Keypair,
     multiaddr::Protocol,
+    noise,
     swarm::{AddressScore, Swarm, SwarmEvent},
-    Multiaddr, PeerId,
+    tcp, yamux, Multiaddr, PeerId,
 };
 use libp2p_autonat::{
     Behaviour, Config, Event, InboundProbeError, InboundProbeEvent, ResponseError,
@@ -37,7 +39,11 @@ use std::{num::NonZeroU32, time::Duration};
 async fn init_swarm(config: Config) -> Swarm<Behaviour> {
     let keypair = Keypair::generate_ed25519();
     let local_id = PeerId::from_public_key(&keypair.public());
-    let transport = development_transport(keypair).await.unwrap();
+    let transport = tcp::TcpTransport::default()
+        .upgrade(Version::V1)
+        .authenticate(noise::NoiseAuthenticated::xx(&keypair).unwrap())
+        .multiplex(yamux::YamuxConfig::default())
+        .boxed();
     let behaviour = Behaviour::new(local_id, config);
     Swarm::new(transport, behaviour, local_id)
 }

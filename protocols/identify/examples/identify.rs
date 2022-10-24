@@ -37,7 +37,10 @@
 //! and will send each other identify info which is then printed to the console.
 
 use futures::prelude::*;
-use libp2p::{identify, identity, Multiaddr, PeerId};
+use libp2p::{
+    core::{upgrade::Version, Transport},
+    identify, identity, noise, tcp, yamux, Multiaddr, PeerId,
+};
 use libp2p_swarm::{Swarm, SwarmEvent};
 use std::error::Error;
 
@@ -47,7 +50,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let local_peer_id = PeerId::from(local_key.public());
     println!("Local peer id: {:?}", local_peer_id);
 
-    let transport = libp2p::development_transport(local_key.clone()).await?;
+    let transport = tcp::TcpTransport::default()
+        .upgrade(Version::V1)
+        .authenticate(noise::NoiseAuthenticated::xx(&local_key)?)
+        .multiplex(yamux::YamuxConfig::default())
+        .boxed();
 
     // Create a identify network behaviour.
     let behaviour = identify::Behaviour::new(identify::Config::new(

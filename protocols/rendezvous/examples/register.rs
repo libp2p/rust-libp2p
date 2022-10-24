@@ -23,7 +23,10 @@ use libp2p::core::identity;
 use libp2p::core::PeerId;
 use libp2p::ping;
 use libp2p::swarm::{Swarm, SwarmEvent};
-use libp2p::{development_transport, rendezvous};
+use libp2p::{
+    core::{upgrade::Version, Transport},
+    noise, rendezvous, tcp, yamux,
+};
 use libp2p::{Multiaddr, NetworkBehaviour};
 use libp2p_swarm::AddressScore;
 use std::time::Duration;
@@ -40,7 +43,11 @@ async fn main() {
     let identity = identity::Keypair::generate_ed25519();
 
     let mut swarm = Swarm::new(
-        development_transport(identity.clone()).await.unwrap(),
+        tcp::TcpTransport::default()
+            .upgrade(Version::V1)
+            .authenticate(noise::NoiseAuthenticated::xx(&identity).unwrap())
+            .multiplex(yamux::YamuxConfig::default())
+            .boxed(),
         MyBehaviour {
             rendezvous: rendezvous::client::Behaviour::new(identity.clone()),
             ping: ping::Behaviour::new(ping::Config::new().with_interval(Duration::from_secs(1))),

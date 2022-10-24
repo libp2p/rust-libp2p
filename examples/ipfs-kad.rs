@@ -28,9 +28,11 @@ use futures::StreamExt;
 use libp2p::kad::record::store::MemoryStore;
 use libp2p::kad::{GetClosestPeersError, Kademlia, KademliaConfig, KademliaEvent, QueryResult};
 use libp2p::{
-    development_transport, identity,
+    core::upgrade::Version,
+    core::Transport,
+    identity, noise,
     swarm::{Swarm, SwarmEvent},
-    Multiaddr, PeerId,
+    tcp, yamux, Multiaddr, PeerId,
 };
 use std::{env, error::Error, str::FromStr, time::Duration};
 
@@ -49,8 +51,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
 
-    // Set up a an encrypted DNS-enabled TCP Transport over the Mplex protocol
-    let transport = development_transport(local_key).await?;
+    let transport = tcp::TcpTransport::default()
+        .upgrade(Version::V1)
+        .authenticate(noise::NoiseAuthenticated::xx(&local_key)?)
+        .multiplex(yamux::YamuxConfig::default())
+        .boxed();
 
     // Create a swarm to manage peers and events.
     let mut swarm = {
