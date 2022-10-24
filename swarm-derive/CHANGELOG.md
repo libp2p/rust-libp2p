@@ -1,9 +1,9 @@
 # 0.30.2 [unreleased]
 
 - Add `prelude` configuration option.
-  The derive-macro generates code that needs to refer to various symbols. See [PR XXXX].
+  The derive-macro generates code that needs to refer to various symbols. See [PR 3055].
 
-[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+[PR 3055]: https://github.com/libp2p/rust-libp2p/pull/3055
 
 # 0.30.1
 

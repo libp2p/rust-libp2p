@@ -50,14 +50,14 @@
   See [PR 3001].
 - Introduce [`libp2p-tls` `v0.1.0`](transports/tls/CHANGELOG.md#010). See [PR 2945].
 - Remove `NetworkBehaviour` macro export from root crate in favor of re-exported macro from `libp2p::swarm`.
-  Change your import from `libp2p::NetworkBehaviour` to `libp2p::swarm::NetworkBehaviour`. See [PR XXXX].
-- Feature-gate `NetworkBehaviour` macro behind `macros` feature flag. See [PR XXXX].
+  Change your import from `libp2p::NetworkBehaviour` to `libp2p::swarm::NetworkBehaviour`. See [PR 3055].
+- Feature-gate `NetworkBehaviour` macro behind `macros` feature flag. See [PR 3055].
 - Update individual crates.
   - Update to [`libp2p-tcp` `v0.38.0`](transports/tcp/CHANGELOG.md#0380).
 
 [PR 3001]: https://github.com/libp2p/rust-libp2p/pull/3001
 [PR 2945]: https://github.com/libp2p/rust-libp2p/pull/2945
-[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+[PR 3055]: https://github.com/libp2p/rust-libp2p/pull/3055
 
 # 0.49.0
 
