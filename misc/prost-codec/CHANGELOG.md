@@ -1,8 +1,8 @@
 # 0.3.0 [unreleased]
 
-- Don't leak `prost` dependency in `Error` type. See [PR XXXX].
+- Don't leak `prost` dependency in `Error` type. See [PR 3058].
 
-[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX/
+[PR 3058]: https://github.com/libp2p/rust-libp2p/pull/3058/
 
 # 0.2.0
 
