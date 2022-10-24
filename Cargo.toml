@@ -172,36 +172,36 @@ members = [
 
 [[example]]
 name = "chat"
-required-features = []
+required-features = ["full"]
 
 [[example]]
 name = "chat-tokio"
-required-features = []
+required-features = ["full"]
 
 [[example]]
 name = "file-sharing"
-required-features = []
+required-features = ["full"]
 
 [[example]]
 name = "gossipsub-chat"
-required-features = []
+required-features = ["full"]
 
 [[example]]
 name = "ipfs-private"
-required-features = []
+required-features = ["full"]
 
 [[example]]
 name = "ipfs-kad"
-required-features = []
+required-features = ["full"]
 
 [[example]]
 name = "ping"
-required-features = []
+required-features = ["full"]
 
 [[example]]
 name = "mdns-passive-discovery"
-required-features = []
+required-features = ["full"]
 
 [[example]]
 name = "distributed-key-value-store"
-required-features = []
+required-features = ["full"]
