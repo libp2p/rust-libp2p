@@ -40,11 +40,7 @@ use libp2p::{
     },
     mplex, noise,
     swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent},
-
-    tcp,
-    Multiaddr,
-    PeerId,
-    Transport,
+    tcp, Multiaddr, PeerId, Transport,
 };
 use std::error::Error;
 use tokio::io::{self, AsyncBufReadExt};
