@@ -34,7 +34,7 @@ use libp2p_noise as noise;
 use libp2p_ping as ping;
 use libp2p_relay::v2::client::{self, Client};
 use libp2p_swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent};
-use libp2p_tcp::{GenTcpConfig, TcpTransport};
+use libp2p_tcp as tcp;
 use log::info;
 use std::convert::TryInto;
 use std::error::Error;
@@ -91,8 +91,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let transport = OrTransport::new(
         relay_transport,
-        block_on(DnsConfig::system(TcpTransport::new(
-            GenTcpConfig::default().port_reuse(true),
+        block_on(DnsConfig::system(tcp::async_io::Transport::new(
+            tcp::Config::default().port_reuse(true),
         )))
         .unwrap(),
     )

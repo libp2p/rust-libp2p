@@ -76,7 +76,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     info!("Local peer id: {:?}", local_peer_id);
 
     let mut swarm = Swarm::new(
-        tcp::TcpTransport::default()
+        tcp::async_io::Transport::default()
             .upgrade(Version::V1)
             .authenticate(noise::NoiseAuthenticated::xx(&local_key)?)
             .multiplex(yamux::YamuxConfig::default())

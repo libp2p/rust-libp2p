@@ -36,7 +36,7 @@
     not(target_os = "emscripten"),
     any(feature = "tokio", feature = "async-std")
 ))]
-#![cfg_attr(docsrs, doc(cfg(all(unix, not(target_os = "emscripten")))))]
+#![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
 use futures::stream::BoxStream;
 use futures::{
@@ -66,7 +66,6 @@ pub type Listener<T> = BoxStream<
 macro_rules! codegen {
     ($feature_name:expr, $uds_config:ident, $build_listener:expr, $unix_stream:ty, $($mut_or_not:tt)*) => {
         /// Represents the configuration for a Unix domain sockets transport capability for libp2p.
-        #[cfg_attr(docsrs, doc(cfg(feature = $feature_name)))]
         pub struct $uds_config {
             listeners: VecDeque<(ListenerId, Listener<Self>)>,
         }

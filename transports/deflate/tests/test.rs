@@ -21,7 +21,7 @@
 use futures::{future, prelude::*};
 use libp2p_core::{transport::Transport, upgrade};
 use libp2p_deflate::DeflateConfig;
-use libp2p_tcp::TcpTransport;
+use libp2p_tcp as tcp;
 use quickcheck::{QuickCheck, TestResult};
 use rand::RngCore;
 
@@ -46,7 +46,7 @@ fn lot_of_data() {
 
 async fn run(message1: Vec<u8>) {
     let new_transport = || {
-        TcpTransport::default()
+        tcp::async_io::Transport::default()
             .and_then(|conn, endpoint| {
                 upgrade::apply(
                     conn,

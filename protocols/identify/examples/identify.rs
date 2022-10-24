@@ -49,7 +49,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let local_peer_id = PeerId::from(local_key.public());
     println!("Local peer id: {:?}", local_peer_id);
 
-    let transport = libp2p_tcp::TcpTransport::default()
+    let transport = libp2p_tcp::async_io::Transport::default()
         .upgrade(Version::V1)
         .authenticate(libp2p_noise::NoiseAuthenticated::xx(&local_key).unwrap())
         .multiplex(libp2p_yamux::YamuxConfig::default())

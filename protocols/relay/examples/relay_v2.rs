@@ -30,7 +30,7 @@ use libp2p_noise as noise;
 use libp2p_ping as ping;
 use libp2p_relay::v2::relay::{self, Relay};
 use libp2p_swarm::{NetworkBehaviour, Swarm, SwarmEvent};
-use libp2p_tcp::TcpTransport;
+use libp2p_tcp as tcp;
 use std::error::Error;
 use std::net::{Ipv4Addr, Ipv6Addr};
 
@@ -45,7 +45,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let local_peer_id = PeerId::from(local_key.public());
     println!("Local peer id: {:?}", local_peer_id);
 
-    let tcp_transport = TcpTransport::default();
+    let tcp_transport = tcp::async_io::Transport::default();
 
     let transport = tcp_transport
         .upgrade(upgrade::Version::V1)

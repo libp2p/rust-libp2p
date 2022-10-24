@@ -1,11 +1,11 @@
-# 0.40.1 [unreleased]
+# 0.40.2 [unreleased]
 
 - Export `NetworkBehaviour` derive as `libp2p_swarm::NetworkBehaviour`.
   This follows the convention of other popular libraries. `serde` for example exports the `Serialize` trait and macro as
-  `serde::Serialize`. See [PR XXXX].
-- Feature-gate `NetworkBehaviour` macro behind `macros` feature flag. See [PR XXXX].
+  `serde::Serialize`. See [PR 3055].
+- Feature-gate `NetworkBehaviour` macro behind `macros` feature flag. See [PR 3055].
 
-[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+[PR 3055]: https://github.com/libp2p/rust-libp2p/pull/3055
 
 # 0.40.0
 

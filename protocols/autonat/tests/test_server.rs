@@ -37,7 +37,7 @@ use std::{num::NonZeroU32, time::Duration};
 async fn init_swarm(config: Config) -> Swarm<Behaviour> {
     let keypair = Keypair::generate_ed25519();
     let local_id = PeerId::from_public_key(&keypair.public());
-    let transport = tcp::TcpTransport::default()
+    let transport = tcp::async_io::Transport::default()
         .upgrade(Version::V1)
         .authenticate(noise::NoiseAuthenticated::xx(&keypair).unwrap())
         .multiplex(yamux::YamuxConfig::default())

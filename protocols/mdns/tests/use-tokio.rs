@@ -54,7 +54,7 @@ async fn test_expired_tokio() -> Result<(), Box<dyn Error>> {
 async fn create_swarm(config: MdnsConfig) -> Result<Swarm<TokioMdns>, Box<dyn Error>> {
     let id_keys = identity::Keypair::generate_ed25519();
     let peer_id = PeerId::from(id_keys.public());
-    let transport = libp2p_tcp::TokioTcpTransport::default()
+    let transport = libp2p_tcp::tokio::Transport::default()
         .upgrade(Version::V1)
         .authenticate(libp2p_noise::NoiseAuthenticated::xx(&id_keys).unwrap())
         .multiplex(libp2p_yamux::YamuxConfig::default())

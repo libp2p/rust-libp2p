@@ -32,7 +32,6 @@ use libp2p_core::{
 };
 use libp2p_mplex as mplex;
 use libp2p_plaintext::PlainText2Config;
-use libp2p_tcp::GenTcpConfig;
 use std::pin::Pin;
 use std::time::Duration;
 
@@ -170,7 +169,7 @@ fn tcp_transport(split_send_size: usize) -> BenchTransport {
     let mut mplex = mplex::MplexConfig::default();
     mplex.set_split_send_size(split_send_size);
 
-    libp2p_tcp::TcpTransport::new(GenTcpConfig::default().nodelay(true))
+    libp2p_tcp::async_io::Transport::new(libp2p_tcp::Config::default().nodelay(true))
         .upgrade(upgrade::Version::V1)
         .authenticate(PlainText2Config { local_public_key })
         .multiplex(mplex)

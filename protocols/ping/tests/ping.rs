@@ -32,7 +32,7 @@ use libp2p_noise as noise;
 use libp2p_ping as ping;
 use libp2p_swarm::keep_alive;
 use libp2p_swarm::{NetworkBehaviour, Swarm, SwarmEvent};
-use libp2p_tcp::{GenTcpConfig, TcpTransport};
+use libp2p_tcp as tcp;
 use libp2p_yamux as yamux;
 use quickcheck::*;
 use std::{num::NonZeroU8, time::Duration};
@@ -245,7 +245,7 @@ fn mk_transport(muxer: MuxerChoice) -> (PeerId, transport::Boxed<(PeerId, Stream
     let peer_id = id_keys.public().to_peer_id();
     (
         peer_id,
-        TcpTransport::new(GenTcpConfig::default().nodelay(true))
+        tcp::async_io::Transport::new(tcp::Config::default().nodelay(true))
             .upgrade(upgrade::Version::V1)
             .authenticate(noise::NoiseAuthenticated::xx(&id_keys).unwrap())
             .multiplex(match muxer {

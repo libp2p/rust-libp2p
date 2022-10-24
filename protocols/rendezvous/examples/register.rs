@@ -38,7 +38,7 @@ async fn main() {
     let identity = identity::Keypair::generate_ed25519();
 
     let mut swarm = Swarm::new(
-        libp2p_tcp::TokioTcpTransport::default()
+        libp2p_tcp::tokio::Transport::default()
             .upgrade(Version::V1)
             .authenticate(libp2p_noise::NoiseAuthenticated::xx(&identity).unwrap())
             .multiplex(libp2p_yamux::YamuxConfig::default())

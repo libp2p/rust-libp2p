@@ -65,7 +65,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
 
-    let transport = tcp::TcpTransport::default()
+    let transport = tcp::async_io::Transport::default()
         .upgrade(Version::V1)
         .authenticate(noise::NoiseAuthenticated::xx(&local_key)?)
         .multiplex(yamux::YamuxConfig::default())

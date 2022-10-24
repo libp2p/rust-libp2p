@@ -1,3 +1,5 @@
+#![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
+
 pub use quickcheck::*;
 
 use core::ops::Range;
