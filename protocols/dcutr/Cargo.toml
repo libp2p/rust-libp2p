@@ -34,6 +34,7 @@ env_logger = "0.9.0"
 libp2p-dns = { path = "../../transports/dns" }
 libp2p-noise = { path = "../../transports/noise" }
 libp2p-identify = { path = "../../protocols/identify" }
+libp2p-ping = { path = "../../protocols/ping" }
 libp2p-plaintext = { path = "../../transports/plaintext" }
 libp2p-relay = { path = "../relay" }
 libp2p-tcp = { path = "../../transports/tcp" }

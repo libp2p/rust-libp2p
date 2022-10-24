@@ -49,10 +49,15 @@
 use async_std::io;
 use env_logger::{Builder, Env};
 use futures::{prelude::*, select};
+use libp2p::core::upgrade::Version;
+use libp2p::core::Transport;
 use libp2p::gossipsub::MessageId;
 use libp2p::gossipsub::{
     GossipsubEvent, GossipsubMessage, IdentTopic as Topic, MessageAuthenticity, ValidationMode,
 };
+use libp2p::noise;
+use libp2p::tcp;
+use libp2p::yamux;
 use libp2p::{gossipsub, identity, swarm::SwarmEvent, Multiaddr, PeerId};
 use std::collections::hash_map::DefaultHasher;
 use std::error::Error;
@@ -68,8 +73,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let local_peer_id = PeerId::from(local_key.public());
     println!("Local peer id: {:?}", local_peer_id);
 
-    // Set up an encrypted TCP Transport over the Mplex and Yamux protocols
-    let transport = libp2p::development_transport(local_key.clone()).await?;
+    let transport = tcp::TcpTransport::default()
+        .upgrade(Version::V1)
+        .authenticate(noise::NoiseAuthenticated::xx(&local_key).unwrap())
+        .multiplex(yamux::YamuxConfig::default())
+        .boxed();
 
     // Create a Gossipsub topic
     let topic = Topic::new("test-net");

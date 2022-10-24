@@ -51,14 +51,16 @@
 use env_logger::Env;
 use futures::executor::block_on;
 use futures::stream::StreamExt;
-use libp2p_core::Multiaddr;
-use libp2p_core::{identity, PeerId};
+use libp2p_core::{identity, upgrade::Version, Multiaddr, PeerId, Transport};
 use libp2p_metrics::{Metrics, Recorder};
+use libp2p_noise as noise;
 use libp2p_ping as ping;
 use libp2p_swarm::keep_alive;
 use libp2p_swarm::NetworkBehaviour;
 use libp2p_swarm::Swarm;
 use libp2p_swarm::SwarmEvent;
+use libp2p_tcp as tcp;
+use libp2p_yamux as yamux;
 use log::info;
 use prometheus_client::registry::Registry;
 use std::error::Error;
@@ -74,7 +76,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     info!("Local peer id: {:?}", local_peer_id);
 
     let mut swarm = Swarm::new(
-        block_on(libp2p::development_transport(local_key))?,
+        tcp::TcpTransport::default()
+            .upgrade(Version::V1)
+            .authenticate(noise::NoiseAuthenticated::xx(&local_key)?)
+            .multiplex(yamux::YamuxConfig::default())
+            .boxed(),
         Behaviour::default(),
         local_peer_id,
     );

@@ -48,10 +48,12 @@ use libp2p::kad::{
     Quorum, Record,
 };
 use libp2p::{
-    development_transport, identity,
+    core::{upgrade::Version, Transport},
+    identity,
     mdns::{Mdns, MdnsConfig, MdnsEvent},
+    noise,
     swarm::{NetworkBehaviour, SwarmEvent},
-    PeerId, Swarm,
+    tcp, yamux, PeerId, Swarm,
 };
 use std::error::Error;
 
@@ -63,8 +65,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
 
-    // Set up a an encrypted DNS-enabled TCP Transport over the Mplex protocol.
-    let transport = development_transport(local_key).await?;
+    let transport = tcp::TcpTransport::default()
+        .upgrade(Version::V1)
+        .authenticate(noise::NoiseAuthenticated::xx(&local_key)?)
+        .multiplex(yamux::YamuxConfig::default())
+        .boxed();
 
     // We create a custom network behaviour that combines Kademlia and mDNS.
     #[derive(NetworkBehaviour)]

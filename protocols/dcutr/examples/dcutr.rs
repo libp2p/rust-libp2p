@@ -27,7 +27,7 @@ use libp2p_core::transport::OrTransport;
 use libp2p_core::upgrade;
 use libp2p_core::Transport;
 use libp2p_core::{identity, PeerId};
-use libp2p_dcutr as dctur;
+use libp2p_dcutr as dcutr;
 use libp2p_dns::DnsConfig;
 use libp2p_identify as identify;
 use libp2p_noise as noise;
@@ -105,7 +105,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     .boxed();
 
     #[derive(NetworkBehaviour)]
-    #[behaviour(out_event = "Event", event_process = false)]
+    #[behaviour(
+        out_event = "Event",
+        event_process = false,
+        prelude = "libp2p_swarm::derive_prelude"
+    )]
     struct Behaviour {
         relay_client: Client,
         ping: ping::Behaviour,

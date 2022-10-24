@@ -29,6 +29,7 @@
 - [`libp2p-uds` CHANGELOG](transports/uds/CHANGELOG.md)
 - [`libp2p-wasm-ext` CHANGELOG](transports/wasm-ext/CHANGELOG.md)
 - [`libp2p-websocket` CHANGELOG](transports/websocket/CHANGELOG.md)
+- [`libp2p-tls` CHANGELOG](transports/tls/CHANGELOG.md)
 
 ## Multiplexers
 
@@ -50,6 +51,7 @@
 - Remove `NetworkBehaviour` macro export from root crate in favor of re-exported macro from `libp2p::swarm`.
   Change your import from `libp2p::NetworkBehaviour` to `libp2p::swarm::NetworkBehaviour`. See [PR XXXX].
 - Feature-gate `NetworkBehaviour` macro behind `macros` feature flag. See [PR XXXX].
+- Deprecate `development_transport` and `tokio_development_transport`. See [PR XXXX].
 
 [PR 3001]: https://github.com/libp2p/rust-libp2p/pull/3001
 [PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
@@ -68,6 +70,8 @@
   - `dns-async-std` in favor of `dns` + `async-std`
   
   See [PR 2962].
+
+- Introduce [`libp2p-tls` `v0.1.0`](transports/tls/CHANGELOG.md#010). See [PR 2945].
 
 - Update individual crates.
     - Update to [`libp2p-autonat` `v0.8.0`](protocols/autonat/CHANGELOG.md#0080).
@@ -98,6 +102,7 @@
 
 [PR 2918]: https://github.com/libp2p/rust-libp2p/pull/2918
 [PR 2962]: https://github.com/libp2p/rust-libp2p/pull/2962
+[PR 2945]: https://github.com/libp2p/rust-libp2p/pull/2945
 
 # 0.48.0
 

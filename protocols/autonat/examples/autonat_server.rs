@@ -29,10 +29,12 @@
 use clap::Parser;
 use futures::prelude::*;
 use libp2p_autonat as autonat;
-use libp2p_core::multiaddr::Protocol;
-use libp2p_core::{identity, Multiaddr, PeerId};
+use libp2p_core::{identity, multiaddr::Protocol, upgrade::Version, Multiaddr, PeerId, Transport};
 use libp2p_identify as identify;
+use libp2p_noise as noise;
 use libp2p_swarm::{NetworkBehaviour, Swarm, SwarmEvent};
+use libp2p_tcp as tcp;
+use libp2p_yamux as yamux;
 use std::error::Error;
 use std::net::Ipv4Addr;
 
@@ -53,7 +55,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let local_peer_id = PeerId::from(local_key.public());
     println!("Local peer id: {:?}", local_peer_id);
 
-    let transport = libp2p::development_transport(local_key.clone()).await?;
+    let transport = tcp::TcpTransport::default()
+        .upgrade(Version::V1)
+        .authenticate(noise::NoiseAuthenticated::xx(&local_key)?)
+        .multiplex(yamux::YamuxConfig::default())
+        .boxed();
 
     let behaviour = Behaviour::new(local_key.public());
 

@@ -23,8 +23,11 @@ use futures_timer::Delay;
 use libp2p_autonat::{
     Behaviour, Config, Event, NatStatus, OutboundProbeError, OutboundProbeEvent, ResponseError,
 };
-use libp2p_core::{identity::Keypair, Multiaddr, PeerId};
+use libp2p_core::{identity::Keypair, upgrade::Version, Multiaddr, PeerId, Transport};
+use libp2p_noise as noise;
 use libp2p_swarm::{AddressScore, Swarm, SwarmEvent};
+use libp2p_tcp as tcp;
+use libp2p_yamux as yamux;
 use std::time::Duration;
 
 const MAX_CONFIDENCE: usize = 3;
@@ -34,7 +37,11 @@ const TEST_REFRESH_INTERVAL: Duration = Duration::from_secs(2);
 async fn init_swarm(config: Config) -> Swarm<Behaviour> {
     let keypair = Keypair::generate_ed25519();
     let local_id = PeerId::from_public_key(&keypair.public());
-    let transport = libp2p::development_transport(keypair).await.unwrap();
+    let transport = tcp::TcpTransport::default()
+        .upgrade(Version::V1)
+        .authenticate(noise::NoiseAuthenticated::xx(&keypair).unwrap())
+        .multiplex(yamux::YamuxConfig::default())
+        .boxed();
     let behaviour = Behaviour::new(local_id, config);
     Swarm::new(transport, behaviour, local_id)
 }
