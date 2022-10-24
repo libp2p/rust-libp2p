@@ -29,6 +29,7 @@ full = [
     "ping",
     "plaintext",
     "pnet",
+    "macros",
     "relay",
     "rendezvous",
     "request-response",
@@ -54,6 +55,7 @@ floodsub = ["dep:libp2p-floodsub"]
 gossipsub = ["dep:libp2p-gossipsub", "libp2p-metrics?/gossipsub"]
 identify = ["dep:libp2p-identify", "libp2p-metrics?/identify"]
 kad = ["dep:libp2p-kad", "libp2p-metrics?/kad"]
+macros = ["libp2p-swarm/macros"]
 mdns = ["dep:libp2p-mdns"]
 metrics = ["dep:libp2p-metrics"]
 mplex = ["dep:libp2p-mplex"]
