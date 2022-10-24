@@ -1,4 +1,4 @@
-# 0.3.0
+# 0.2.1
 
 - Implement `From` trait for `std::io::Error`. See [PR 2622].
 
