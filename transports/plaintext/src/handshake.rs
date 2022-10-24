@@ -73,12 +73,7 @@ impl HandshakeContext<Local> {
         self,
         exchange_bytes: BytesMut,
     ) -> Result<HandshakeContext<Remote>, PlainTextError> {
-        let prop = match Exchange::decode(exchange_bytes) {
-            Ok(prop) => prop,
-            Err(e) => {
-                return Err(PlainTextError::InvalidPayload(Some(e)));
-            }
-        };
+        let prop = Exchange::decode(exchange_bytes)?;
 
         let public_key = PublicKey::from_protobuf_encoding(&prop.pubkey.unwrap_or_default())?;
         let peer_id = PeerId::from_bytes(&prop.id.unwrap_or_default())?;
