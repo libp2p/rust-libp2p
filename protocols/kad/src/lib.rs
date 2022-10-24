@@ -51,9 +51,11 @@ mod jobs;
 mod query;
 
 #[allow(clippy::derive_partial_eq_without_eq)]
-mod dht_proto {
-    include!(concat!(env!("OUT_DIR"), "/dht.pb.rs"));
+mod protos {
+    include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 }
+
+use protos::dht as dht_proto;
 
 pub use addresses::Addresses;
 pub use behaviour::{

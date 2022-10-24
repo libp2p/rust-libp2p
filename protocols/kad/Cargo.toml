@@ -20,7 +20,7 @@ futures = "0.3.1"
 log = "0.4"
 libp2p-core = { version = "0.37.0", path = "../../core" }
 libp2p-swarm = { version = "0.40.0", path = "../../swarm" }
-prost = "0.11"
+protobuf = "3.2"
 rand = "0.8"
 sha2 = "0.10.0"
 smallvec = "1.6.1"
@@ -39,7 +39,7 @@ libp2p = { path = "../..", features = ["full"] }
 quickcheck = { package = "quickcheck-ext", path = "../../misc/quickcheck-ext" }
 
 [build-dependencies]
-prost-build = "0.11"
+protobuf-codegen = "3.2"
 
 [features]
 serde = ["dep:serde", "bytes/serde"]
