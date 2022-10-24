@@ -39,6 +39,7 @@ full = [
     "secp256k1",
     "serde",
     "tcp",
+    "tls",
     "tokio",
     "uds",
     "wasm-bindgen",
@@ -55,6 +56,7 @@ floodsub = ["dep:libp2p-floodsub"]
 identify = ["dep:libp2p-identify", "libp2p-metrics?/identify"]
 kad = ["dep:libp2p-kad", "libp2p-metrics?/kad"]
 gossipsub = ["dep:libp2p-gossipsub", "libp2p-metrics?/gossipsub"]
+tls = ["dep:libp2p-tls"]
 metrics = ["dep:libp2p-metrics"]
 mdns = ["dep:libp2p-mdns"]
 mplex = ["dep:libp2p-mplex"]
@@ -81,9 +83,6 @@ onion-native-tls = ["dep:libp2p-onion", "libp2p-onion?/native-tls"]
 onion-rustls = ["dep:libp2p-onion", "libp2p-onion?/rustls"]
 tokio = ["libp2p-mdns?/tokio", "libp2p-tcp?/tokio", "libp2p-dns?/tokio", "libp2p-onion?/tokio"]
 async-std = ["libp2p-mdns?/async-io", "libp2p-tcp?/async-io", "libp2p-dns?/async-std", "libp2p-onion?/async-std"]
-
-[package.metadata.docs.rs]
-all-features = true
 
 [dependencies]
 bytes = "1"
@@ -125,6 +124,7 @@ libp2p-mdns = { version = "0.41.0", path = "protocols/mdns", optional = true }
 libp2p-onion = { version = "0.1.0-alpha", path = "transports/onion", default-features = false, optional = true }
 libp2p-tcp = { version = "0.37.0", path = "transports/tcp", optional = true }
 libp2p-websocket = { version = "0.39.0", path = "transports/websocket", optional = true }
+libp2p-tls = { version = "0.1.0-alpha", path = "transports/tls", optional = true }
 
 [target.'cfg(not(target_os = "unknown"))'.dependencies]
 libp2p-gossipsub = { version = "0.42.1", path = "protocols/gossipsub", optional = true }
@@ -139,38 +139,39 @@ tokio = { version = "1.15", features = ["io-util", "io-std", "macros", "rt", "rt
 [workspace]
 members = [
     "core",
+    "misc/keygen",
     "misc/metrics",
     "misc/multistream-select",
-    "misc/rw-stream-sink",
-    "misc/keygen",
     "misc/prost-codec",
     "misc/quickcheck-ext",
+    "misc/rw-stream-sink",
     "muxers/mplex",
-    "muxers/yamux",
     "muxers/test-harness",
-    "protocols/dcutr",
+    "muxers/yamux",
     "protocols/autonat",
+    "protocols/dcutr",
     "protocols/floodsub",
     "protocols/gossipsub",
-    "protocols/rendezvous",
     "protocols/identify",
     "protocols/kad",
     "protocols/mdns",
     "protocols/ping",
     "protocols/relay",
+    "protocols/rendezvous",
     "protocols/request-response",
     "swarm",
     "swarm-derive",
     "transports/deflate",
     "transports/dns",
     "transports/noise",
+    "transports/onion"
     "transports/plaintext",
     "transports/pnet",
     "transports/tcp",
+    "transports/tls",
     "transports/uds",
-    "transports/websocket",
     "transports/wasm-ext",
-    "transports/onion"
+    "transports/websocket",
 ]
 
 [[example]]
@@ -213,3 +214,9 @@ required-features = ["full"]
 name = "distributed-key-value-store"
 required-features = ["full"]
 
+# Passing arguments to the docsrs builder in order to properly document cfg's.
+# More information: https://docs.rs/about/builds#cross-compiling
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+rustc-args = ["--cfg", "docsrs"]
