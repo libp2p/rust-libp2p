@@ -81,13 +81,7 @@ impl HandshakeContext<Local> {
         };
 
         let public_key = PublicKey::from_protobuf_encoding(&prop.pubkey.unwrap_or_default())?;
-
-        let peer_id = match PeerId::from_bytes(&prop.id.unwrap_or_default()) {
-            Ok(p) => p,
-            Err(_) => {
-                return Err(PlainTextError::InvalidPayload(None));
-            }
-        };
+        let peer_id = PeerId::from_bytes(&prop.id.unwrap_or_default())?;
 
         // Check the validity of the remote's `Exchange`.
         if peer_id != public_key.to_peer_id() {
