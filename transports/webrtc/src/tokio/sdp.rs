@@ -27,12 +27,16 @@ use std::net::{IpAddr, SocketAddr};
 use crate::tokio::fingerprint::Fingerprint;
 
 /// Creates the SDP answer used by the client.
-pub fn answer(addr: SocketAddr, server_fingerprint: &Fingerprint) -> RTCSessionDescription {
+pub fn answer(
+    addr: SocketAddr,
+    server_fingerprint: &Fingerprint,
+    client_ufrag: &str,
+) -> RTCSessionDescription {
     RTCSessionDescription::answer(render_description(
         SERVER_SESSION_DESCRIPTION,
         addr,
         server_fingerprint,
-        &server_fingerprint.to_ufrag(),
+        client_ufrag,
     ))
     .unwrap()
 }

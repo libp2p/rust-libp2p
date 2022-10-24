@@ -52,13 +52,13 @@ pub async fn outbound(
 ) -> Result<(PeerId, Connection), Error> {
     log::debug!("new outbound connection to {addr})");
 
-    let peer_connection = new_outbound_connection(addr, config, udp_mux).await?;
+    let (peer_connection, ufrag) = new_outbound_connection(addr, config, udp_mux).await?;
 
     let offer = peer_connection.create_offer(None).await?;
     log::debug!("created SDP offer for outbound connection: {:?}", offer.sdp);
     peer_connection.set_local_description(offer).await?;
 
-    let answer = sdp::answer(addr, &server_fingerprint);
+    let answer = sdp::answer(addr, &server_fingerprint, &ufrag);
     log::debug!(
         "calculated SDP answer for outbound connection: {:?}",
         answer
@@ -88,8 +88,7 @@ pub async fn inbound(
 ) -> Result<(PeerId, Connection), Error> {
     log::debug!("new inbound connection from {addr} (ufrag: {remote_ufrag})");
 
-    let peer_connection =
-        new_inbound_connection(addr, config, udp_mux, &server_fingerprint.to_ufrag()).await?;
+    let peer_connection = new_inbound_connection(addr, config, udp_mux, &remote_ufrag).await?;
 
     let offer = sdp::offer(addr, &remote_ufrag);
     log::debug!("calculated SDP offer for inbound connection: {:?}", offer);
@@ -116,7 +115,7 @@ async fn new_outbound_connection(
     addr: SocketAddr,
     config: RTCConfiguration,
     udp_mux: Arc<dyn UDPMux + Send + Sync>,
-) -> Result<RTCPeerConnection, Error> {
+) -> Result<(RTCPeerConnection, String), Error> {
     let ufrag = random_ufrag();
     let se = setting_engine(udp_mux, &ufrag, addr);
 
@@ -126,7 +125,7 @@ async fn new_outbound_connection(
         .new_peer_connection(config)
         .await?;
 
-    Ok(connection)
+    Ok((connection, ufrag))
 }
 
 async fn new_inbound_connection(

@@ -18,7 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use multibase::Base;
 use multihash::{Code, Hasher, Multihash, MultihashDigest};
 use webrtc::dtls_transport::dtls_fingerprint::RTCDtlsFingerprint;
 
@@ -78,17 +77,6 @@ impl Fingerprint {
         Code::Sha2_256
             .wrap(&self.0)
             .expect("fingerprint's len to be 32 bytes")
-    }
-
-    /// Transforms this fingerprint into a ufrag.
-    pub fn to_ufrag(self) -> String {
-        multibase::encode(
-            Base::Base64Url,
-            Code::Sha2_256
-                .wrap(&self.0)
-                .expect("fingerprint's len to be 32 bytes")
-                .to_bytes(),
-        )
     }
 
     /// Formats this fingerprint as uppercase hex, separated by colons (`:`).
