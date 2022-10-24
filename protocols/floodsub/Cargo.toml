@@ -20,6 +20,7 @@ log = "0.4"
 prost = "0.11"
 rand = "0.8"
 smallvec = "1.6.1"
+thiserror = "1.0.37"
 
 [build-dependencies]
 prost-build = "0.11"

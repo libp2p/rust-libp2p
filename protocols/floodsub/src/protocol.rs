@@ -26,7 +26,7 @@ use futures::{
 };
 use libp2p_core::{upgrade, InboundUpgrade, OutboundUpgrade, PeerId, UpgradeInfo};
 use prost::Message;
-use std::{error, fmt, io, iter, pin::Pin};
+use std::{io, iter, pin::Pin};
 
 /// Implementation of `ConnectionUpgrade` for the floodsub protocol.
 #[derive(Debug, Clone, Default)]
@@ -92,52 +92,17 @@ where
 }
 
 /// Reach attempt interrupt errors.
-#[derive(Debug)]
+#[derive(thiserror::Error, Debug)]
 pub enum FloodsubDecodeError {
     /// Error when reading the packet from the socket.
-    ReadError(io::Error),
+    #[error("Failed to read from socket")]
+    ReadError(#[from] io::Error),
     /// Error when decoding the raw buffer into a protobuf.
-    ProtobufError(prost::DecodeError),
+    #[error("Failed to decode protobuf")]
+    ProtobufError(#[from] prost::DecodeError),
     /// Error when parsing the `PeerId` in the message.
+    #[error("Failed to decode PeerId from message")]
     InvalidPeerId,
-}
-
-impl From<io::Error> for FloodsubDecodeError {
-    fn from(err: io::Error) -> Self {
-        FloodsubDecodeError::ReadError(err)
-    }
-}
-
-impl From<prost::DecodeError> for FloodsubDecodeError {
-    fn from(err: prost::DecodeError) -> Self {
-        FloodsubDecodeError::ProtobufError(err)
-    }
-}
-
-impl fmt::Display for FloodsubDecodeError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match *self {
-            FloodsubDecodeError::ReadError(ref err) => {
-                write!(f, "Error while reading from socket: {}", err)
-            }
-            FloodsubDecodeError::ProtobufError(ref err) => {
-                write!(f, "Error while decoding protobuf: {}", err)
-            }
-            FloodsubDecodeError::InvalidPeerId => {
-                write!(f, "Error while decoding PeerId from message")
-            }
-        }
-    }
-}
-
-impl error::Error for FloodsubDecodeError {
-    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-        match *self {
-            FloodsubDecodeError::ReadError(ref err) => Some(err),
-            FloodsubDecodeError::ProtobufError(ref err) => Some(err),
-            FloodsubDecodeError::InvalidPeerId => None,
-        }
-    }
 }
 
 /// An RPC received by the floodsub system.
