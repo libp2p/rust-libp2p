@@ -50,6 +50,7 @@
   See [PR 3001].
 - Update individual crates.
   - Update to [`libp2p-rendezvous` `v0.11.0`](protocols/rendezovus/CHANGELOG.md#0110).
+  - Update to [`libp2p-plaintext` `v0.38.0`](transports/plaintext/CHANGELOG.md#0380).
 
 [PR 3001]: https://github.com/libp2p/rust-libp2p/pull/3001
 
