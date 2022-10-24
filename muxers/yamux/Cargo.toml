@@ -21,3 +21,10 @@ log = "0.4"
 [dev-dependencies]
 async-std = { version = "1.7.0", features = ["attributes"] }
 libp2p-muxer-test-harness = { path = "../test-harness" }
+
+# Passing arguments to the docsrs builder in order to properly document cfg's. 
+# More information: https://docs.rs/about/builds#cross-compiling
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+rustc-args = ["--cfg", "docsrs"]

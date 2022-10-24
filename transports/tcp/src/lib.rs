@@ -26,6 +26,8 @@
 //! the enabled features, which implement the `Transport` trait for use as a
 //! transport with `libp2p-core` or `libp2p-swarm`.
 
+#![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
+
 mod provider;
 
 use if_watch::{IfEvent, IfWatcher};

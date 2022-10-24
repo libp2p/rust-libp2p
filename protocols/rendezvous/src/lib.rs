@@ -18,6 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+#![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
+
 pub use self::codec::{Cookie, ErrorCode, Namespace, NamespaceTooLong, Registration, Ttl};
 
 mod codec;

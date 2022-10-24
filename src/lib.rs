@@ -31,6 +31,7 @@
 
 #![doc(html_logo_url = "https://libp2p.io/img/logo_small.png")]
 #![doc(html_favicon_url = "https://libp2p.io/img/favicon.png")]
+#![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
 pub use bytes;
 pub use futures;
@@ -40,17 +41,14 @@ pub use libp2p_core::multihash;
 pub use multiaddr;
 
 #[cfg(feature = "autonat")]
-#[cfg_attr(docsrs, doc(cfg(feature = "autonat")))]
 #[doc(inline)]
 pub use libp2p_autonat as autonat;
 #[doc(inline)]
 pub use libp2p_core as core;
 #[cfg(feature = "dcutr")]
-#[cfg_attr(docsrs, doc(cfg(feature = "dcutr")))]
 #[doc(inline)]
 pub use libp2p_dcutr as dcutr;
 #[cfg(feature = "deflate")]
-#[cfg_attr(docsrs, doc(cfg(feature = "deflate")))]
 #[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
 #[doc(inline)]
 pub use libp2p_deflate as deflate;
@@ -60,20 +58,16 @@ pub use libp2p_deflate as deflate;
 #[doc(inline)]
 pub use libp2p_dns as dns;
 #[cfg(feature = "floodsub")]
-#[cfg_attr(docsrs, doc(cfg(feature = "floodsub")))]
 #[doc(inline)]
 pub use libp2p_floodsub as floodsub;
 #[cfg(feature = "gossipsub")]
-#[cfg_attr(docsrs, doc(cfg(feature = "gossipsub")))]
 #[cfg(not(target_os = "unknown"))]
 #[doc(inline)]
 pub use libp2p_gossipsub as gossipsub;
 #[cfg(feature = "identify")]
-#[cfg_attr(docsrs, doc(cfg(feature = "identify")))]
 #[doc(inline)]
 pub use libp2p_identify as identify;
 #[cfg(feature = "kad")]
-#[cfg_attr(docsrs, doc(cfg(feature = "kad")))]
 #[doc(inline)]
 pub use libp2p_kad as kad;
 #[cfg(feature = "mdns")]
@@ -82,39 +76,30 @@ pub use libp2p_kad as kad;
 #[doc(inline)]
 pub use libp2p_mdns as mdns;
 #[cfg(feature = "metrics")]
-#[cfg_attr(docsrs, doc(cfg(feature = "metrics")))]
 #[doc(inline)]
 pub use libp2p_metrics as metrics;
 #[cfg(feature = "mplex")]
-#[cfg_attr(docsrs, doc(cfg(feature = "mplex")))]
 #[doc(inline)]
 pub use libp2p_mplex as mplex;
 #[cfg(feature = "noise")]
-#[cfg_attr(docsrs, doc(cfg(feature = "noise")))]
 #[doc(inline)]
 pub use libp2p_noise as noise;
 #[cfg(feature = "ping")]
-#[cfg_attr(docsrs, doc(cfg(feature = "ping")))]
 #[doc(inline)]
 pub use libp2p_ping as ping;
 #[cfg(feature = "plaintext")]
-#[cfg_attr(docsrs, doc(cfg(feature = "plaintext")))]
 #[doc(inline)]
 pub use libp2p_plaintext as plaintext;
 #[cfg(feature = "pnet")]
-#[cfg_attr(docsrs, doc(cfg(feature = "pnet")))]
 #[doc(inline)]
 pub use libp2p_pnet as pnet;
 #[cfg(feature = "relay")]
-#[cfg_attr(docsrs, doc(cfg(feature = "relay")))]
 #[doc(inline)]
 pub use libp2p_relay as relay;
 #[cfg(feature = "rendezvous")]
-#[cfg_attr(docsrs, doc(cfg(feature = "rendezvous")))]
 #[doc(inline)]
 pub use libp2p_rendezvous as rendezvous;
 #[cfg(feature = "request-response")]
-#[cfg_attr(docsrs, doc(cfg(feature = "request-response")))]
 #[doc(inline)]
 pub use libp2p_request_response as request_response;
 #[doc(inline)]
@@ -129,20 +114,16 @@ pub use libp2p_tcp as tcp;
 #[doc(inline)]
 pub use libp2p_tls as tls;
 #[cfg(feature = "uds")]
-#[cfg_attr(docsrs, doc(cfg(feature = "uds")))]
 #[doc(inline)]
 pub use libp2p_uds as uds;
 #[cfg(feature = "wasm-ext")]
-#[cfg_attr(docsrs, doc(cfg(feature = "wasm-ext")))]
 #[doc(inline)]
 pub use libp2p_wasm_ext as wasm_ext;
 #[cfg(feature = "websocket")]
-#[cfg_attr(docsrs, doc(cfg(feature = "websocket")))]
 #[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
 #[doc(inline)]
 pub use libp2p_websocket as websocket;
 #[cfg(feature = "yamux")]
-#[cfg_attr(docsrs, doc(cfg(feature = "yamux")))]
 #[doc(inline)]
 pub use libp2p_yamux as yamux;
 
@@ -188,20 +169,6 @@ pub use libp2p_swarm_derive::NetworkBehaviour;
     feature = "mplex",
     feature = "yamux"
 ))]
-#[cfg_attr(
-    docsrs,
-    doc(cfg(all(
-        not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")),
-        any(
-            all(feature = "tcp-async-io", feature = "dns-async-std"),
-            all(feature = "tcp", feature = "dns", feature = "async-std")
-        ),
-        feature = "websocket",
-        feature = "noise",
-        feature = "mplex",
-        feature = "yamux"
-    )))
-)]
 #[cfg_attr(
     all(
         any(feature = "tcp-async-io", feature = "dns-async-std"),
@@ -262,20 +229,6 @@ pub async fn development_transport(
     feature = "mplex",
     feature = "yamux"
 ))]
-#[cfg_attr(
-    docsrs,
-    doc(cfg(all(
-        not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")),
-        any(
-            all(feature = "tcp-tokio", feature = "dns-tokio"),
-            all(feature = "tcp", feature = "dns", feature = "tokio")
-        ),
-        feature = "websocket",
-        feature = "noise",
-        feature = "mplex",
-        feature = "yamux"
-    )))
-)]
 #[cfg_attr(
     all(
         any(feature = "tcp-tokio", feature = "dns-tokio"),
