@@ -137,10 +137,6 @@ libp2p-websocket = { version = "0.39.0", path = "transports/websocket", optional
 [target.'cfg(not(target_os = "unknown"))'.dependencies]
 libp2p-gossipsub = { version = "0.42.1", path = "protocols/gossipsub", optional = true }
 
-[patch.crates-io]
-# TODO: remove once a new version of rust-multiaddr is released
-multiaddr = { version = "0.15.0", git = "https://github.com/multiformats/rust-multiaddr.git", branch = "master" }
-
 [dev-dependencies]
 async-std = { version = "1.6.2", features = ["attributes"] }
 async-trait = "0.1"
