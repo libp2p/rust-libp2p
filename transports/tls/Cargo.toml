@@ -1,0 +1,36 @@
+[package]
+name = "libp2p-tls"
+version = "0.1.0-alpha"
+edition = "2021"
+license = "MIT"
+exclude = ["src/test_assets"]
+
+[dependencies]
+futures = { version = "0.3.24", default-features = false }
+futures-rustls = "0.22.2"
+libp2p-core = { version = "0.37.0", path = "../../core" }
+rcgen = "0.9.2"
+ring = "0.16.20"
+thiserror = "1.0.36"
+webpki = "0.22.0"
+x509-parser = "0.14.0"
+yasna = "0.5.0"
+
+# Exposed dependencies. Breaking changes to these are breaking changes to us.
+[dependencies.rustls]
+version = "0.20.7"
+default-features = false
+features = ["dangerous_configuration"] # Must enable this to allow for custom verification code.
+
+[dev-dependencies]
+hex = "0.4.3"
+hex-literal = "0.3.4"
+libp2p = { path = "../..", features = ["yamux"], default-features = false }
+tokio = { version = "1.21.1", features = ["full"] }
+
+# Passing arguments to the docsrs builder in order to properly document cfg's.
+# More information: https://docs.rs/about/builds#cross-compiling
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+rustc-args = ["--cfg", "docsrs"]
