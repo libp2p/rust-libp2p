@@ -1,3 +1,9 @@
+# 0.37.1 [unreleased]
+
+- Improve error messages in case keys cannot be decoded because of missing feature flags. See [PR 2972].
+
+[PR 2972]: https://github.com/libp2p/rust-libp2p/pull/2972
+
 # 0.37.0
 
 - Implement `Hash` and `Ord` for `PublicKey`. See [PR 2915].
