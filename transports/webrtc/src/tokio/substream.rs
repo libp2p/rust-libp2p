@@ -202,7 +202,6 @@ impl AsyncWrite for Substream {
     }
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        // TODO: Double check that we don't have to depend on self.state here.
         self.io.poll_flush_unpin(cx).map_err(Into::into)
     }
 
