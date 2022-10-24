@@ -97,6 +97,7 @@ impl AsyncRead for Substream {
 
         let mut bytes = 0;
         let mut pending = false;
+        let mut error = None;
         loop {
             if buf.is_empty() {
                 // Chunks::next will continue returning `Ok(Some(_))` with an
@@ -108,7 +109,8 @@ impl AsyncRead for Substream {
                 Ok(Some(chunk)) => chunk,
                 Ok(None) => break,
                 Err(err @ quinn_proto::ReadError::Reset(_)) => {
-                    return Poll::Ready(Err(io::Error::new(io::ErrorKind::ConnectionReset, err)))
+                    error = Some(Err(io::Error::new(io::ErrorKind::ConnectionReset, err)));
+                    break;
                 }
                 Err(quinn_proto::ReadError::Blocked) => {
                     pending = true;
@@ -124,13 +126,17 @@ impl AsyncRead for Substream {
                 waker.wake();
             }
         }
+        if let Some(err) = error {
+            return Poll::Ready(err);
+        }
+
         if pending && bytes == 0 {
             let substream_state = state.unchecked_substream_state(self.id);
             substream_state.read_waker = Some(cx.waker().clone());
-            Poll::Pending
-        } else {
-            Poll::Ready(Ok(bytes))
+            return Poll::Pending;
         }
+
+        Poll::Ready(Ok(bytes))
     }
 }
 
