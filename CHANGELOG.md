@@ -47,8 +47,11 @@
 
 - Remove deprecated features: `tcp-tokio`, `mdns-tokio`, `dns-tokio`, `tcp-async-io`, `mdns-async-io`, `dns-async-std`.
   See [PR 3001].
+- Remove `NetworkBehaviour` macro export from root crate in favor of re-exported macro from `libp2p::swarm`.
+  Change your import from `libp2p::NetworkBehaviour` to `libp2p::swarm::NetworkBehaviour`. See [PR XXXX].
 
 [PR 3001]: https://github.com/libp2p/rust-libp2p/pull/3001
+[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
 
 # 0.49.0
 

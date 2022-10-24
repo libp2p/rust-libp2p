@@ -96,6 +96,7 @@ pub use handler::{
     IntoConnectionHandler, IntoConnectionHandlerSelect, KeepAlive, OneShotHandler,
     OneShotHandlerConfig, SubstreamProtocol,
 };
+pub use libp2p_swarm_derive::NetworkBehaviour;
 pub use registry::{AddAddressResult, AddressRecord, AddressScore};
 
 use connection::pool::{Pool, PoolConfig, PoolEvent};
@@ -1591,12 +1592,12 @@ mod tests {
     use futures::future::poll_fn;
     use futures::future::Either;
     use futures::{executor, future, ready};
-    use libp2p::core::{identity, multiaddr, transport, upgrade};
-    use libp2p::plaintext;
-    use libp2p::yamux;
     use libp2p_core::multiaddr::multiaddr;
     use libp2p_core::transport::TransportEvent;
     use libp2p_core::Endpoint;
+    use libp2p_core::{identity, multiaddr, transport, upgrade};
+    use libp2p_plaintext as plaintext;
+    use libp2p_yamux as yamux;
     use quickcheck::*;
 
     // Test execution state.

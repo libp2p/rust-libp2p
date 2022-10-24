@@ -41,11 +41,10 @@ use libp2p::{
     },
     mplex,
     noise,
-    swarm::{SwarmBuilder, SwarmEvent},
+    swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent},
     // `TokioTcpTransport` is available through the `tcp-tokio` feature.
     tcp::TokioTcpTransport,
     Multiaddr,
-    NetworkBehaviour,
     PeerId,
     Transport,
 };

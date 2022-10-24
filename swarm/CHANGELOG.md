@@ -1,3 +1,11 @@
+# 0.40.1 [unreleased]
+
+- Export `NetworkBehaviour` derive as `libp2p_swarm::NetworkBehaviour`.
+  This follows the convention of other popular libraries. `serde` for example exports the `Serialize` trait and macro as
+  `serde::Serialize`. See [PR XXXX].
+
+[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+
 # 0.40.0
 
 - Bump rand to 0.8 and quickcheck to 1. See [PR 2857].
