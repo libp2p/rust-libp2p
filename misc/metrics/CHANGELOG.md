@@ -6,6 +6,16 @@
 
 - Update to `libp2p-relay` `v0.14.0`.
 
+- Update to `libp2p-core` `v0.38.0`.
+
+- Update to `libp2p-swarm` `v0.41.0`.
+
+- Update to `libp2p-ping` `v0.41.0`.
+
+- Update to `libp2p-kad` `v0.42.0`.
+
+- Update to `libp2p-gossipsub` `v0.43.0`.
+
 # 0.10.0
 
 - Update to `libp2p-swarm` `v0.40.0`.
@@ -137,6 +147,7 @@
 - Drop support for gossipsub in wasm32-unknown-unknown target (see [PR 2506]).
 
 [PR 2442]: https://github.com/libp2p/rust-libp2p/pull/2442
+
 [PR 2506]: https://github.com/libp2p/rust-libp2p/pull/2506
 
 # 0.3.0 [2022-01-27]

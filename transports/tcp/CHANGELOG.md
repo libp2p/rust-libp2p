@@ -1,3 +1,7 @@
+# 0.38.0 [unreleased]
+
+- Update to `libp2p-core` `v0.38.0`.
+
 # 0.37.0
 
 - Update to `if-watch` `v2.0.0`. Simplify `IfWatcher` integration.

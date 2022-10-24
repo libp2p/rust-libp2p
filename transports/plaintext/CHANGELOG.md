@@ -2,6 +2,8 @@
 
 - Add more specific error reporting and remove `prost::Error` from public API. See [PR XXXX].
 
+- Update to `libp2p-core` `v0.38.0`.
+
 [PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
 
 # 0.37.0

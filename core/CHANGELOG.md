@@ -1,6 +1,6 @@
 # 0.38.0 [unreleased]
 
-- Hide `prost::Error` from public API in `FromEnvelopeError::InvalidPeerRecord`. See [PR XXXX].
+- Hide `prost::Error` from public API in `FromEnvelopeError::InvalidPeerRecord` and `signed_envelope::DecodingError`. See [PR XXXX].
 
 [PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
 

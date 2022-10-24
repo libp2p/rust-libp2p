@@ -1,3 +1,9 @@
+# 0.42.0 [unreleased]
+
+- Update to `libp2p-core` `v0.38.0`.
+
+- Update to `libp2p-swarm` `v0.41.0`.
+
 # 0.41.0
 
 - Remove default features. If you previously depended on `async-io` you need to enable this explicitly now. See [PR 2918].
