@@ -51,11 +51,11 @@
 - Introduce [`libp2p-tls` `v0.1.0`](transports/tls/CHANGELOG.md#010). See [PR 2945].
 - Update individual crates.
   - Update to [`libp2p-tcp` `v0.38.0`](transports/tcp/CHANGELOG.md#0380).
-- Deprecate `development_transport` and `tokio_development_transport`. See [PR XXXX].
+- Deprecate `development_transport` and `tokio_development_transport`. See [PR 3056].
 
 [PR 3001]: https://github.com/libp2p/rust-libp2p/pull/3001
 [PR 2945]: https://github.com/libp2p/rust-libp2p/pull/2945
-[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+[PR 3056]: https://github.com/libp2p/rust-libp2p/pull/3056
 
 # 0.49.0
 
