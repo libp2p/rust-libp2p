@@ -1,3 +1,7 @@
+# 0.41.0 [unreleased]
+
+- Update to `prost-codec` `v0.3.0`.
+
 # 0.40.0
 
 - Update dependencies.

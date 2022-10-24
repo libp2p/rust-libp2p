@@ -1,3 +1,9 @@
+# 0.3.0 [unreleased]
+
+- Don't leak `prost` dependency in `Error` type. See [PR XXXX].
+
+[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX/
+
 # 0.2.0
 
 - Update to prost(-build) `v0.11`. See [PR 2788].

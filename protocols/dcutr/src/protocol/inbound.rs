@@ -118,7 +118,7 @@ impl PendingConnect {
 
 #[derive(Debug, Error)]
 pub enum UpgradeError {
-    #[error("Failed to encode or decode")]
+    #[error(transparent)]
     Codec(#[from] prost_codec::Error),
     #[error("Stream closed")]
     StreamClosed,

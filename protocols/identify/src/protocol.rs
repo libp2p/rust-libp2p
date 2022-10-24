@@ -259,7 +259,7 @@ impl TryFrom<structs_proto::Identify> for Info {
 
 #[derive(Debug, Error)]
 pub enum UpgradeError {
-    #[error("Failed to encode or decode")]
+    #[error(transparent)]
     Codec(#[from] prost_codec::Error),
     #[error("I/O interaction failed")]
     Io(#[from] io::Error),
