@@ -509,8 +509,8 @@ impl<P: Provider> Driver<P> {
                         Err(err) if err.is_full() => {
                             // Connection is too busy. Drop the datagram to back-pressure the remote.
                             log::debug!(
-                                "Dropping {:?} because the connection's channel is full.",
-                                err.into_inner()
+                                "Dropping packet for connection {:?} because the connection's channel is full.",
+                                connec_id
                             );
                         }
                         Err(_) => unreachable!("Error is either `Full` or `Disconnected`."),
@@ -609,7 +609,7 @@ impl<P: Provider> Future for Driver<P> {
                 // robust to packet losses and it is consequently not a logic error to proceed with
                 // normal operations.
                 Poll::Ready(Err(err)) => {
-                    log::error!("Error while sending on QUIC UDP socket: {:?}", err);
+                    log::warn!("Error while sending on QUIC UDP socket: {:?}", err);
                     continue;
                 }
                 Poll::Pending => {}
@@ -627,7 +627,7 @@ impl<P: Provider> Future for Driver<P> {
                 // Errors on the socket are expected to never happen, and we handle them by
                 // simply printing a log message.
                 Poll::Ready(Err(err)) => {
-                    log::error!("Error while receive on QUIC UDP socket: {:?}", err);
+                    log::warn!("Error while receive on QUIC UDP socket: {:?}", err);
                     continue;
                 }
                 Poll::Pending => {}
