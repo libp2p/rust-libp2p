@@ -78,9 +78,9 @@ impl Future for Connecting {
                     let end_entity = certificates
                         .get(0)
                         .expect("there should be exactly one certificate; qed");
-                    let p2p_cert = crate::tls::certificate::parse_certificate(end_entity.as_ref())
+                    let p2p_cert = libp2p_tls::certificate::parse(end_entity)
                         .expect("the certificate was validated during TLS handshake; qed");
-                    let peer_id = PeerId::from_public_key(&p2p_cert.extension.public_key);
+                    let peer_id = p2p_cert.peer_id();
 
                     return Poll::Ready(Ok((peer_id, self.connection.take().unwrap())));
                 }

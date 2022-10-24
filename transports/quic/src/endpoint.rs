@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{provider::Provider, tls, transport::SocketFamily, ConnectError, Connection, Error};
+use crate::{provider::Provider, transport::SocketFamily, ConnectError, Connection, Error};
 
 use bytes::BytesMut;
 use futures::{
@@ -79,8 +79,8 @@ pub struct Config {
 impl Config {
     /// Creates a new configuration object with default values.
     pub fn new(keypair: &libp2p_core::identity::Keypair) -> Self {
-        let client_tls_config = Arc::new(tls::make_client_config(keypair).unwrap());
-        let server_tls_config = Arc::new(tls::make_server_config(keypair).unwrap());
+        let client_tls_config = Arc::new(libp2p_tls::make_client_config(keypair, None).unwrap());
+        let server_tls_config = Arc::new(libp2p_tls::make_server_config(keypair).unwrap());
         Self {
             client_tls_config,
             server_tls_config,

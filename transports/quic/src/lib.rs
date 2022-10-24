@@ -60,7 +60,6 @@
 mod connection;
 mod endpoint;
 mod provider;
-mod tls;
 mod transport;
 
 pub use connection::{Connecting, Connection, Substream};
