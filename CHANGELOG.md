@@ -29,6 +29,7 @@
 - [`libp2p-uds` CHANGELOG](transports/uds/CHANGELOG.md)
 - [`libp2p-wasm-ext` CHANGELOG](transports/wasm-ext/CHANGELOG.md)
 - [`libp2p-websocket` CHANGELOG](transports/websocket/CHANGELOG.md)
+- [`libp2p-tls` CHANGELOG](transports/tls/CHANGELOG.md)
 
 ## Multiplexers
 
@@ -43,10 +44,16 @@
 
 # `libp2p` facade crate
 
-# 0.50.0 [unreleased]
+# 0.50.0 - [unreleased]
 
+- Remove deprecated features: `tcp-tokio`, `mdns-tokio`, `dns-tokio`, `tcp-async-io`, `mdns-async-io`, `dns-async-std`.
+  See [PR 3001].
+- Introduce [`libp2p-tls` `v0.1.0`](transports/tls/CHANGELOG.md#010). See [PR 2945].
 - Update individual crates.
   - Update to [`libp2p-tcp` `v0.38.0`](transports/tcp/CHANGELOG.md#0380).
+
+[PR 3001]: https://github.com/libp2p/rust-libp2p/pull/3001
+[PR 2945]: https://github.com/libp2p/rust-libp2p/pull/2945
 
 # 0.49.0
 

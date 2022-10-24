@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Implementation of the [Identify] protocol.
+//! Implementation of the [Identify](https://github.com/libp2p/specs/blob/master/identify/README.md) protocol.
 //!
 //! This implementation of the protocol periodically exchanges
 //! [`Info`] messages between the peers on an established connection.
@@ -38,6 +38,8 @@
 //! The [`Behaviour`] struct implements a [`NetworkBehaviour`](libp2p_swarm::NetworkBehaviour)
 //! that negotiates and executes the protocol on every established connection, emitting
 //! [`Event`]s.
+
+#![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
 pub use self::behaviour::{Behaviour, Config, Event};
 pub use self::protocol::{Info, UpgradeError, PROTOCOL_NAME, PUSH_PROTOCOL_NAME};
