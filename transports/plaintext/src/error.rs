@@ -28,7 +28,7 @@ pub enum PlainTextError {
     IoError(IoError),
 
     /// Failed to parse the handshake protobuf message.
-    InvalidPayload(prost::DecodeError),
+    InvalidPayload(DecodeError),
 
     /// Failed to parse public key from bytes in protobuf message.
     InvalidPublicKey(libp2p_core::identity::error::DecodingError),
@@ -38,6 +38,21 @@ pub enum PlainTextError {
 
     /// The peer id of the exchange isn't consistent with the remote public key.
     PeerIdMismatch,
+}
+
+#[derive(Debug)]
+pub struct DecodeError(prost::DecodeError);
+
+impl fmt::Display for DecodeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl error::Error for DecodeError {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        self.0.source()
+    }
 }
 
 impl error::Error for PlainTextError {
@@ -74,7 +89,7 @@ impl From<IoError> for PlainTextError {
 
 impl From<prost::DecodeError> for PlainTextError {
     fn from(err: prost::DecodeError) -> PlainTextError {
-        PlainTextError::InvalidPayload(err)
+        PlainTextError::InvalidPayload(DecodeError(err))
     }
 }
 
