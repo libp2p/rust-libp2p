@@ -80,13 +80,8 @@ impl HandshakeContext<Local> {
             }
         };
 
-        let pb_pubkey = prop.pubkey.unwrap_or_default();
-        let public_key = match PublicKey::from_protobuf_encoding(pb_pubkey.as_slice()) {
-            Ok(p) => p,
-            Err(_) => {
-                return Err(PlainTextError::InvalidPayload(None));
-            }
-        };
+        let public_key = PublicKey::from_protobuf_encoding(&prop.pubkey.unwrap_or_default())?;
+
         let peer_id = match PeerId::from_bytes(&prop.id.unwrap_or_default()) {
             Ok(p) => p,
             Err(_) => {

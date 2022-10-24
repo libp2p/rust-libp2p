@@ -30,6 +30,9 @@ pub enum PlainTextError {
     /// Failed to parse the handshake protobuf message.
     InvalidPayload(Option<prost::DecodeError>),
 
+    /// Failed to parse public key from bytes in protobuf message.
+    InvalidPublicKey(libp2p_core::identity::error::DecodingError),
+
     /// The peer id of the exchange isn't consistent with the remote public key.
     InvalidPeerId,
 }
@@ -39,6 +42,7 @@ impl error::Error for PlainTextError {
         match *self {
             PlainTextError::IoError(ref err) => Some(err),
             PlainTextError::InvalidPayload(Some(ref err)) => Some(err),
+            PlainTextError::InvalidPublicKey(ref err) => Some(err),
             _ => None,
         }
     }
@@ -55,6 +59,7 @@ impl fmt::Display for PlainTextError {
             PlainTextError::InvalidPeerId => f.write_str(
                 "The peer id of the exchange isn't consistent with the remote public key",
             ),
+            PlainTextError::InvalidPublicKey(_) => f.write_str("Failed to decode public key"),
         }
     }
 }
@@ -68,5 +73,11 @@ impl From<IoError> for PlainTextError {
 impl From<prost::DecodeError> for PlainTextError {
     fn from(err: prost::DecodeError) -> PlainTextError {
         PlainTextError::InvalidPayload(Some(err))
+    }
+}
+
+impl From<libp2p_core::identity::error::DecodingError> for PlainTextError {
+    fn from(err: libp2p_core::identity::error::DecodingError) -> PlainTextError {
+        PlainTextError::InvalidPublicKey(err)
     }
 }
