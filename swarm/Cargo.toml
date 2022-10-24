@@ -34,9 +34,10 @@ either = "1.6.0"
 env_logger = "0.9"
 futures = "0.3.1"
 libp2p-identify = { path = "../protocols/identify" }
-libp2p-ping = { path = "../protocols/ping" }
 libp2p-kad = { path = "../protocols/kad" }
+libp2p-ping = { path = "../protocols/ping" }
 libp2p-plaintext = { path = "../transports/plaintext" }
+libp2p-swarm-derive = { version = "0.30.2", path = "../swarm-derive" }
 libp2p-yamux = { path = "../muxers/yamux" }
 quickcheck = { package = "quickcheck-ext", path = "../misc/quickcheck-ext" }
 void = "1"
