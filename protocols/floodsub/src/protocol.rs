@@ -59,7 +59,7 @@ where
     fn upgrade_inbound(self, mut socket: TSocket, _: Self::Info) -> Self::Future {
         Box::pin(async move {
             let packet = upgrade::read_length_prefixed(&mut socket, 2048).await?;
-            let rpc = rpc_proto::Rpc::decode(&packet[..])?;
+            let rpc = rpc_proto::Rpc::decode(&packet[..]).map_err(DecodeError)?;
 
             let mut messages = Vec::with_capacity(rpc.publish.len());
             for publish in rpc.publish.into_iter() {
@@ -99,11 +99,15 @@ pub enum FloodsubDecodeError {
     ReadError(#[from] io::Error),
     /// Error when decoding the raw buffer into a protobuf.
     #[error("Failed to decode protobuf")]
-    ProtobufError(#[from] prost::DecodeError),
+    ProtobufError(#[from] DecodeError),
     /// Error when parsing the `PeerId` in the message.
     #[error("Failed to decode PeerId from message")]
     InvalidPeerId,
 }
+
+#[derive(thiserror::Error, Debug)]
+#[error(transparent)]
+pub struct DecodeError(prost::DecodeError);
 
 /// An RPC received by the floodsub system.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
