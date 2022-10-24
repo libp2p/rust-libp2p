@@ -1,7 +1,7 @@
 use crate::identity::error::SigningError;
 use crate::identity::Keypair;
 use crate::signed_envelope::SignedEnvelope;
-use crate::{peer_record_proto, signed_envelope, Multiaddr, PeerId};
+use crate::{peer_record_proto, signed_envelope, DecodeError, Multiaddr, PeerId};
 use instant::SystemTime;
 use std::convert::TryInto;
 
@@ -33,7 +33,7 @@ impl PeerRecord {
 
         let (payload, signing_key) =
             envelope.payload_and_signing_key(String::from(DOMAIN_SEP), PAYLOAD_TYPE.as_bytes())?;
-        let record = peer_record_proto::PeerRecord::decode(payload)?;
+        let record = peer_record_proto::PeerRecord::decode(payload).map_err(DecodeError)?;
 
         let peer_id = PeerId::from_bytes(&record.peer_id)?;
 
@@ -130,7 +130,7 @@ pub enum FromEnvelopeError {
     BadPayload(#[from] signed_envelope::ReadPayloadError),
     /// Failed to decode the provided bytes as a [`PeerRecord`].
     #[error("Failed to decode bytes as PeerRecord")]
-    InvalidPeerRecord(#[from] prost::DecodeError),
+    InvalidPeerRecord(#[from] DecodeError),
     /// Failed to decode the peer ID.
     #[error("Failed to decode bytes as PeerId")]
     InvalidPeerId(#[from] multihash::Error),

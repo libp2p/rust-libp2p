@@ -1,6 +1,6 @@
 use crate::identity::error::SigningError;
 use crate::identity::Keypair;
-use crate::{identity, PublicKey};
+use crate::{identity, DecodeError, PublicKey};
 use std::convert::TryInto;
 use std::fmt;
 use unsigned_varint::encode::usize_buffer;
@@ -94,7 +94,7 @@ impl SignedEnvelope {
     pub fn from_protobuf_encoding(bytes: &[u8]) -> Result<Self, DecodingError> {
         use prost::Message;
 
-        let envelope = crate::envelope_proto::Envelope::decode(bytes)?;
+        let envelope = crate::envelope_proto::Envelope::decode(bytes).map_err(DecodeError)?;
 
         Ok(Self {
             key: envelope
@@ -144,7 +144,7 @@ fn signature_payload(domain_separation: String, payload_type: &[u8], payload: &[
 pub enum DecodingError {
     /// Decoding the provided bytes as a signed envelope failed.
     #[error("Failed to decode envelope")]
-    InvalidEnvelope(#[from] prost::DecodeError),
+    InvalidEnvelope(#[from] DecodeError),
     /// The public key in the envelope could not be converted to our internal public key type.
     #[error("Failed to convert public key")]
     InvalidPublicKey(#[from] identity::error::DecodingError),
