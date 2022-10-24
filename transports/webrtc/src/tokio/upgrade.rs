@@ -202,12 +202,12 @@ async fn get_remote_fingerprint(conn: &RTCPeerConnection) -> Fingerprint {
 async fn create_substream_for_noise_handshake(
     conn: &RTCPeerConnection,
 ) -> Result<Substream, Error> {
-    // Open a data channel to do Noise on top and verify the remote.
+    // NOTE: the data channel w/ `negotiated` flag set to `true` MUST be created on both ends.
     let data_channel = conn
         .create_data_channel(
             "",
             Some(RTCDataChannelInit {
-                negotiated: Some(0),
+                negotiated: Some(0), // 0 is reserved for the Noise substream
                 ..RTCDataChannelInit::default()
             }),
         )
