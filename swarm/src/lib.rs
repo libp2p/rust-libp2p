@@ -75,6 +75,7 @@ pub mod derive_prelude {
     pub use crate::NetworkBehaviour;
     pub use crate::NetworkBehaviourAction;
     pub use crate::PollParameters;
+    pub use futures::prelude as futures;
     pub use libp2p_core::connection::ConnectionId;
     pub use libp2p_core::either::EitherOutput;
     pub use libp2p_core::transport::ListenerId;

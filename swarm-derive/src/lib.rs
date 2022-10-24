@@ -48,21 +48,23 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     let name = &ast.ident;
     let (_, ty_generics, where_clause) = ast.generics.split_for_impl();
 
-    let multiaddr = quote! {::libp2p::swarm::derive_prelude::Multiaddr};
-    let trait_to_impl = quote! {::libp2p::swarm::derive_prelude::NetworkBehaviour};
-    let either_ident = quote! {::libp2p::swarm::derive_prelude::EitherOutput};
-    let network_behaviour_action = quote! {::libp2p::swarm::derive_prelude::NetworkBehaviourAction};
-    let into_connection_handler = quote! {::libp2p::swarm::derive_prelude::IntoConnectionHandler};
-    let connection_handler = quote! {::libp2p::swarm::derive_prelude::ConnectionHandler};
-    let into_proto_select_ident =
-        quote! {::libp2p::swarm::derive_prelude::IntoConnectionHandlerSelect};
-    let peer_id = quote! {::libp2p::swarm::derive_prelude::PeerId};
-    let connection_id = quote! {::libp2p::swarm::derive_prelude::ConnectionId};
-    let dial_errors = quote! {Option<&Vec<::libp2p::swarm::derive_prelude::Multiaddr>>};
-    let connected_point = quote! {::libp2p::swarm::derive_prelude::ConnectedPoint};
-    let listener_id = quote! {::libp2p::swarm::derive_prelude::ListenerId};
-    let dial_error = quote! {::libp2p::swarm::derive_prelude::DialError};
-    let poll_parameters = quote! {::libp2p::swarm::derive_prelude::PollParameters};
+    let prelude_path = parse_attribute_value_by_key::<syn::Path>(ast, "prelude")
+        .unwrap_or_else(|| syn::parse_quote! { ::libp2p::swarm::derive_prelude });
+
+    let multiaddr = quote! { #prelude_path::Multiaddr };
+    let trait_to_impl = quote! { #prelude_path::NetworkBehaviour };
+    let either_ident = quote! { #prelude_path::EitherOutput };
+    let network_behaviour_action = quote! { #prelude_path::NetworkBehaviourAction };
+    let into_connection_handler = quote! { #prelude_path::IntoConnectionHandler };
+    let connection_handler = quote! { #prelude_path::ConnectionHandler };
+    let into_proto_select_ident = quote! { #prelude_path::IntoConnectionHandlerSelect };
+    let peer_id = quote! { #prelude_path::PeerId };
+    let connection_id = quote! { #prelude_path::ConnectionId };
+    let dial_errors = quote! {Option<&Vec<#prelude_path::Multiaddr>> };
+    let connected_point = quote! { #prelude_path::ConnectedPoint };
+    let listener_id = quote! { #prelude_path::ListenerId };
+    let dial_error = quote! { #prelude_path::DialError };
+    let poll_parameters = quote! { #prelude_path::PollParameters };
 
     // Build the generics.
     let impl_generics = {
@@ -76,7 +78,8 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         // If we find a `#[behaviour(out_event = "Foo")]` attribute on the
         // struct, we set `Foo` as the out event. If not, the `OutEvent` is
         // generated.
-        let user_provided_out_event_name = parse_attribute_value_by_key::<syn::Type>(ast, "out_event");
+        let user_provided_out_event_name =
+            parse_attribute_value_by_key::<syn::Type>(ast, "out_event");
 
         match user_provided_out_event_name {
             // User provided `OutEvent`.
@@ -611,7 +614,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             }
 
             fn poll(&mut self, cx: &mut std::task::Context, poll_params: &mut impl #poll_parameters) -> std::task::Poll<#network_behaviour_action<Self::OutEvent, Self::ConnectionHandler>> {
-                use libp2p::futures::prelude::*;
+                use #prelude_path::futures::*;
                 #(#poll_stmts)*
                 std::task::Poll::Pending
             }
