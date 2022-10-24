@@ -32,10 +32,7 @@ pub type FramedDc = Framed<Compat<PollDataChannel>, prost_codec::Codec<Message>>
 
 pub fn new(data_channel: Arc<DataChannel>) -> FramedDc {
     let mut inner = PollDataChannel::new(data_channel);
-
-    // TODO: default buffer size is too small to fit some messages. Possibly remove once
-    // https://github.com/webrtc-rs/webrtc/issues/273 is fixed.
-    inner.set_read_buf_capacity(8192 * 10);
+    inner.set_read_buf_capacity(16384);
 
     Framed::new(inner.compat(), prost_codec::Codec::new(MAX_MSG_LEN))
 }
