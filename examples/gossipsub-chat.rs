@@ -75,7 +75,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // We create a custom network behaviour that combines Gossipsub and Mdns.
     #[derive(NetworkBehaviour)]
-    #[behaviour(out_event = "MyBehaviourEvent")]
     struct MyBehaviour {
         gossipsub: Gossipsub,
         mdns: Mdns,
