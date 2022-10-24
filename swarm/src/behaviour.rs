@@ -90,11 +90,12 @@ pub(crate) type THandlerOutEvent<THandler> =
 /// addition to the event `enum` itself.
 ///
 /// ``` rust
-/// # use libp2p::identify;
-/// # use libp2p::ping;
-/// # use libp2p::NetworkBehaviour;
+/// # use libp2p_identify as identify;
+/// # use libp2p_ping as ping;
+/// # use libp2p_swarm_derive::NetworkBehaviour;
 /// #[derive(NetworkBehaviour)]
 /// #[behaviour(out_event = "Event")]
+/// # #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
 /// struct MyBehaviour {
 ///   identify: identify::Behaviour,
 ///   ping: ping::Behaviour,
@@ -327,7 +328,7 @@ pub enum NetworkBehaviourAction<
     /// #     ConnectionHandlerEvent, ConnectionHandlerUpgrErr, SubstreamProtocol, Swarm, SwarmEvent,
     /// # };
     /// # use libp2p_swarm::dial_opts::{DialOpts, PeerCondition};
-    /// # use libp2p::yamux;
+    /// # use libp2p_yamux as yamux;
     /// # use std::collections::VecDeque;
     /// # use std::task::{Context, Poll};
     /// # use void::Void;

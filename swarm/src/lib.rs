@@ -69,7 +69,6 @@ pub mod keep_alive;
 
 /// Bundles all symbols required for the `libp2p_swarm_derive::NetworkBehavior` macro.
 #[doc(hidden)]
-#[cfg(feature = "macros")]
 pub mod derive_prelude {
     pub use crate::ConnectionHandler;
     pub use crate::DialError;
