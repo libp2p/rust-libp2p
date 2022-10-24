@@ -109,6 +109,10 @@ pub use libp2p_swarm as swarm;
 #[cfg_attr(docsrs, doc(cfg(feature = "tcp")))]
 #[doc(inline)]
 pub use libp2p_tcp as tcp;
+#[cfg(feature = "tls")]
+#[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
+#[doc(inline)]
+pub use libp2p_tls as tls;
 #[cfg(feature = "uds")]
 #[doc(inline)]
 pub use libp2p_uds as uds;
