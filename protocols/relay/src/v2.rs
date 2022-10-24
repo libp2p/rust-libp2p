@@ -22,9 +22,11 @@
 //! specification](https://github.com/libp2p/specs/issues/314).
 
 #[allow(clippy::derive_partial_eq_without_eq)]
-mod message_proto {
-    include!(concat!(env!("OUT_DIR"), "/message_v2.pb.rs"));
+mod protos {
+    include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 }
+
+use protos::message as message_proto;
 
 pub mod client;
 mod copy_future;

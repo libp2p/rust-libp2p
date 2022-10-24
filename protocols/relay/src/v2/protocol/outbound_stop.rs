@@ -51,55 +51,62 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
     fn upgrade_outbound(self, substream: NegotiatedSubstream, _: Self::Info) -> Self::Future {
-        let msg = StopMessage {
-            r#type: stop_message::Type::Connect.into(),
-            peer: Some(Peer {
-                id: self.relay_peer_id.to_bytes(),
-                addrs: vec![],
-            }),
-            limit: Some(Limit {
-                duration: Some(
-                    self.max_circuit_duration
-                        .as_secs()
-                        .try_into()
-                        .expect("`max_circuit_duration` not to exceed `u32::MAX`."),
-                ),
-                data: Some(self.max_circuit_bytes),
-            }),
-            status: None,
-        };
+        let mut msg = StopMessage::new();
+        msg.set_type(stop_message::Type::CONNECT);
+        msg.peer = protobuf::MessageField::some(Peer {
+            id: Some(self.relay_peer_id.to_bytes()),
+            addrs: vec![],
+            ..Peer::default()
+        });
+        msg.limit = protobuf::MessageField::some(Limit {
+            duration: Some(
+                self.max_circuit_duration
+                    .as_secs()
+                    .try_into()
+                    .expect("`max_circuit_duration` not to exceed `u32::MAX`."),
+            ),
+            data: Some(self.max_circuit_bytes),
+            ..Limit::default()
+        });
 
         let mut substream = Framed::new(substream, prost_codec::Codec::new(MAX_MESSAGE_SIZE));
 
         async move {
             substream.send(msg).await?;
             let StopMessage {
-                r#type,
+                type_,
                 peer: _,
                 limit: _,
                 status,
+                ..
             } = substream
                 .next()
                 .await
                 .ok_or(FatalUpgradeError::StreamClosed)??;
 
-            let r#type =
-                stop_message::Type::from_i32(r#type).ok_or(FatalUpgradeError::ParseTypeField)?;
-            match r#type {
-                stop_message::Type::Connect => {
+            let ty = type_
+                .ok_or(FatalUpgradeError::ParseTypeField)?
+                .enum_value()
+                .or(Err(FatalUpgradeError::ParseTypeField))?;
+
+            match ty {
+                stop_message::Type::CONNECT => {
                     return Err(FatalUpgradeError::UnexpectedTypeConnect.into())
                 }
-                stop_message::Type::Status => {}
+                stop_message::Type::STATUS => {}
             }
 
-            let status = Status::from_i32(status.ok_or(FatalUpgradeError::MissingStatusField)?)
-                .ok_or(FatalUpgradeError::ParseStatusField)?;
+            let status = status
+                .ok_or(FatalUpgradeError::MissingStatusField)?
+                .enum_value()
+                .or(Err(FatalUpgradeError::ParseStatusField))?;
+
             match status {
-                Status::Ok => {}
-                Status::ResourceLimitExceeded => {
+                Status::OK => {}
+                Status::RESOURCE_LIMIT_EXCEEDED => {
                     return Err(CircuitFailedReason::ResourceLimitExceeded.into())
                 }
-                Status::PermissionDenied => {
+                Status::PERMISSION_DENIED => {
                     return Err(CircuitFailedReason::PermissionDenied.into())
                 }
                 s => return Err(FatalUpgradeError::UnexpectedStatus(s).into()),

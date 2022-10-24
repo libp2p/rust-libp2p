@@ -52,22 +52,19 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
 
     fn upgrade_outbound(self, substream: NegotiatedSubstream, _: Self::Info) -> Self::Future {
         let msg = match self {
-            Upgrade::Reserve => HopMessage {
-                r#type: hop_message::Type::Reserve.into(),
-                peer: None,
-                reservation: None,
-                limit: None,
-                status: None,
+            Upgrade::Reserve => {
+                let mut msg = HopMessage::new();
+                msg.set_type(hop_message::Type::RESERVE);
+                msg
             },
-            Upgrade::Connect { dst_peer_id } => HopMessage {
-                r#type: hop_message::Type::Connect.into(),
-                peer: Some(Peer {
-                    id: dst_peer_id.to_bytes(),
-                    addrs: vec![],
-                }),
-                reservation: None,
-                limit: None,
-                status: None,
+            Upgrade::Connect { dst_peer_id } => {
+                let mut msg = HopMessage::new();
+                msg.set_type(hop_message::Type::CONNECT);
+                msg.peer = protobuf::MessageField::some(Peer {
+                    id: Some(dst_peer_id.to_bytes()),
+                    ..Peer::default()
+                });
+                msg
             },
         };
 
@@ -76,62 +73,62 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
         async move {
             substream.send(msg).await?;
             let HopMessage {
-                r#type,
+                type_,
                 peer: _,
                 reservation,
                 limit,
                 status,
+                ..
             } = substream
                 .next()
                 .await
                 .ok_or(FatalUpgradeError::StreamClosed)??;
 
-            let r#type =
-                hop_message::Type::from_i32(r#type).ok_or(FatalUpgradeError::ParseTypeField)?;
-            match r#type {
-                hop_message::Type::Connect => {
+            let ty = type_
+                .ok_or(FatalUpgradeError::ParseTypeField)?
+                .enum_value()
+                .or(Err(FatalUpgradeError::ParseTypeField))?;
+
+            match ty {
+                hop_message::Type::CONNECT => {
                     return Err(FatalUpgradeError::UnexpectedTypeConnect.into())
                 }
-                hop_message::Type::Reserve => {
+                hop_message::Type::RESERVE => {
                     return Err(FatalUpgradeError::UnexpectedTypeReserve.into())
                 }
-                hop_message::Type::Status => {}
+                hop_message::Type::STATUS => {}
             }
 
-            let status = Status::from_i32(status.ok_or(FatalUpgradeError::MissingStatusField)?)
-                .ok_or(FatalUpgradeError::ParseStatusField)?;
+            let status = status
+                .ok_or(FatalUpgradeError::MissingStatusField)?
+                .enum_value()
+                .or(Err(FatalUpgradeError::ParseStatusField))?;
 
-            let limit = limit.map(Into::into);
+            let limit = limit.into_option().map(Into::into);
 
             let output = match self {
                 Upgrade::Reserve => {
                     match status {
-                        Status::Ok => {}
-                        Status::ReservationRefused => {
+                        Status::OK => {}
+                        Status::RESERVATION_REFUSED => {
                             return Err(ReservationFailedReason::Refused.into())
                         }
-                        Status::ResourceLimitExceeded => {
+                        Status::RESOURCE_LIMIT_EXCEEDED => {
                             return Err(ReservationFailedReason::ResourceLimitExceeded.into())
                         }
                         s => return Err(FatalUpgradeError::UnexpectedStatus(s).into()),
                     }
 
-                    let reservation =
-                        reservation.ok_or(FatalUpgradeError::MissingReservationField)?;
+                    let reservation = reservation
+                        .into_option()
+                        .ok_or(FatalUpgradeError::MissingReservationField)?;
 
                     if reservation.addrs.is_empty() {
                         return Err(FatalUpgradeError::NoAddressesInReservation.into());
                     }
 
-                    let addrs = reservation
-                        .addrs
-                        .into_iter()
-                        .map(TryFrom::try_from)
-                        .collect::<Result<Vec<Multiaddr>, _>>()
-                        .map_err(|_| FatalUpgradeError::InvalidReservationAddrs)?;
-
                     let renewal_timeout = reservation
-                        .expire
+                        .expire()
                         .checked_sub(
                             SystemTime::now()
                                 .duration_since(SystemTime::UNIX_EPOCH)
@@ -144,6 +141,13 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
                         .map(Delay::new)
                         .ok_or(FatalUpgradeError::InvalidReservationExpiration)?;
 
+                    let addrs = reservation
+                        .addrs
+                        .into_iter()
+                        .map(TryFrom::try_from)
+                        .collect::<Result<Vec<Multiaddr>, _>>()
+                        .map_err(|_| FatalUpgradeError::InvalidReservationAddrs)?;
+
                     substream.close().await?;
 
                     Output::Reservation {
@@ -154,17 +158,17 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
                 }
                 Upgrade::Connect { .. } => {
                     match status {
-                        Status::Ok => {}
-                        Status::ResourceLimitExceeded => {
+                        Status::OK => {}
+                        Status::RESOURCE_LIMIT_EXCEEDED => {
                             return Err(CircuitFailedReason::ResourceLimitExceeded.into())
                         }
-                        Status::ConnectionFailed => {
+                        Status::CONNECTION_FAILED => {
                             return Err(CircuitFailedReason::ConnectionFailed.into())
                         }
-                        Status::NoReservation => {
+                        Status::NO_RESERVATION => {
                             return Err(CircuitFailedReason::NoReservation.into())
                         }
-                        Status::PermissionDenied => {
+                        Status::PERMISSION_DENIED => {
                             return Err(CircuitFailedReason::PermissionDenied.into())
                         }
                         s => return Err(FatalUpgradeError::UnexpectedStatus(s).into()),

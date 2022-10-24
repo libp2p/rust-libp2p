@@ -267,7 +267,7 @@ impl ConnectionHandler for Handler {
                     .circuit_deny_futs
                     .insert(
                         src_peer_id,
-                        inbound_circuit.deny(Status::NoReservation).boxed(),
+                        inbound_circuit.deny(Status::NO_RESERVATION).boxed(),
                     )
                     .is_some()
                 {

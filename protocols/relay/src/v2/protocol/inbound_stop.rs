@@ -49,29 +49,37 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
 
         async move {
             let StopMessage {
-                r#type,
+                type_,
                 peer,
                 limit,
                 status: _,
+                ..
             } = substream
                 .next()
                 .await
                 .ok_or(FatalUpgradeError::StreamClosed)??;
 
-            let r#type =
-                stop_message::Type::from_i32(r#type).ok_or(FatalUpgradeError::ParseTypeField)?;
-            match r#type {
-                stop_message::Type::Connect => {
+            let ty = type_
+                .ok_or(FatalUpgradeError::ParseTypeField)?
+                .enum_value()
+                .or(Err(FatalUpgradeError::ParseTypeField))?;
+            match ty {
+                stop_message::Type::CONNECT => {
                     let src_peer_id =
-                        PeerId::from_bytes(&peer.ok_or(FatalUpgradeError::MissingPeer)?.id)
-                            .map_err(|_| FatalUpgradeError::ParsePeerId)?;
+                        PeerId::from_bytes(
+                            &peer
+                                .into_option()
+                                .ok_or(FatalUpgradeError::MissingPeer)?
+                                .id
+                                .ok_or(FatalUpgradeError::ParsePeerId)?
+                        ).map_err(|_| FatalUpgradeError::ParsePeerId)?;
                     Ok(Circuit {
                         substream,
                         src_peer_id,
-                        limit: limit.map(Into::into),
+                        limit: limit.into_option().map(Into::into),
                     })
                 }
-                stop_message::Type::Status => Err(FatalUpgradeError::UnexpectedTypeStatus.into()),
+                stop_message::Type::STATUS => Err(FatalUpgradeError::UnexpectedTypeStatus.into()),
             }
         }
         .boxed()
@@ -126,12 +134,9 @@ impl Circuit {
     }
 
     pub async fn accept(mut self) -> Result<(NegotiatedSubstream, Bytes), UpgradeError> {
-        let msg = StopMessage {
-            r#type: stop_message::Type::Status.into(),
-            peer: None,
-            limit: None,
-            status: Some(Status::Ok.into()),
-        };
+        let mut msg = StopMessage::new();
+        msg.set_type(stop_message::Type::STATUS);
+        msg.set_status(Status::OK);
 
         self.send(msg).await?;
 
@@ -150,12 +155,9 @@ impl Circuit {
     }
 
     pub async fn deny(mut self, status: Status) -> Result<(), UpgradeError> {
-        let msg = StopMessage {
-            r#type: stop_message::Type::Status.into(),
-            peer: None,
-            limit: None,
-            status: Some(status.into()),
-        };
+        let mut msg = StopMessage::new();
+        msg.set_type(stop_message::Type::STATUS);
+        msg.set_status(status);
 
         self.send(msg).await.map_err(Into::into)
     }

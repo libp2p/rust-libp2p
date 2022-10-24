@@ -315,7 +315,7 @@ impl NetworkBehaviour for Relay {
                         peer_id: event_source,
                         event: Either::Left(handler::In::DenyReservationReq {
                             inbound_reservation_req,
-                            status: message_proto::Status::ResourceLimitExceeded,
+                            status: message_proto::Status::RESOURCE_LIMIT_EXCEEDED,
                         }),
                     }
                     .into()
@@ -430,7 +430,7 @@ impl NetworkBehaviour for Relay {
                         event: Either::Left(handler::In::DenyCircuitReq {
                             circuit_id: None,
                             inbound_circuit_req,
-                            status: message_proto::Status::ResourceLimitExceeded,
+                            status: message_proto::Status::RESOURCE_LIMIT_EXCEEDED,
                         }),
                     }
                 } else if let Some(dst_conn) = self
@@ -466,7 +466,7 @@ impl NetworkBehaviour for Relay {
                         event: Either::Left(handler::In::DenyCircuitReq {
                             circuit_id: None,
                             inbound_circuit_req,
-                            status: message_proto::Status::NoReservation,
+                            status: message_proto::Status::NO_RESERVATION,
                         }),
                     }
                 };

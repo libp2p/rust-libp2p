@@ -55,31 +55,40 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
 
         async move {
             let HopMessage {
-                r#type,
+                type_,
                 peer,
                 reservation: _,
                 limit: _,
                 status: _,
+                ..
             } = substream
                 .next()
                 .await
                 .ok_or(FatalUpgradeError::StreamClosed)??;
 
-            let r#type =
-                hop_message::Type::from_i32(r#type).ok_or(FatalUpgradeError::ParseTypeField)?;
-            let req = match r#type {
-                hop_message::Type::Reserve => Req::Reserve(ReservationReq {
+            let ty = type_
+                .ok_or(FatalUpgradeError::ParseTypeField)?
+                .enum_value()
+                .or(Err(FatalUpgradeError::ParseTypeField))?;
+
+            let req = match ty {
+                hop_message::Type::RESERVE => Req::Reserve(ReservationReq {
                     substream,
                     reservation_duration: self.reservation_duration,
                     max_circuit_duration: self.max_circuit_duration,
                     max_circuit_bytes: self.max_circuit_bytes,
                 }),
-                hop_message::Type::Connect => {
-                    let dst = PeerId::from_bytes(&peer.ok_or(FatalUpgradeError::MissingPeer)?.id)
-                        .map_err(|_| FatalUpgradeError::ParsePeerId)?;
+                hop_message::Type::CONNECT => {
+                    let dst = PeerId::from_bytes(
+                        &peer
+                            .into_option()
+                            .ok_or(FatalUpgradeError::MissingPeer)?
+                            .id
+                            .ok_or(FatalUpgradeError::ParsePeerId)?
+                    ).map_err(|_| FatalUpgradeError::ParsePeerId)?;
                     Req::Connect(CircuitReq { dst, substream })
                 }
-                hop_message::Type::Status => {
+                hop_message::Type::STATUS => {
                     return Err(FatalUpgradeError::UnexpectedTypeStatus.into())
                 }
             };
@@ -136,40 +145,35 @@ pub struct ReservationReq {
 
 impl ReservationReq {
     pub async fn accept(self, addrs: Vec<Multiaddr>) -> Result<(), UpgradeError> {
-        let msg = HopMessage {
-            r#type: hop_message::Type::Status.into(),
-            peer: None,
-            reservation: Some(Reservation {
-                addrs: addrs.into_iter().map(|a| a.to_vec()).collect(),
-                expire: (SystemTime::now() + self.reservation_duration)
-                    .duration_since(SystemTime::UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs(),
-                voucher: None,
-            }),
-            limit: Some(Limit {
-                duration: Some(
-                    self.max_circuit_duration
-                        .as_secs()
-                        .try_into()
-                        .expect("`max_circuit_duration` not to exceed `u32::MAX`."),
-                ),
-                data: Some(self.max_circuit_bytes),
-            }),
-            status: Some(Status::Ok.into()),
-        };
+        let mut msg = HopMessage::new();
+        msg.set_type(hop_message::Type::STATUS);
+        msg.reservation = protobuf::MessageField::some(Reservation {
+            addrs: addrs.into_iter().map(|a| a.to_vec()).collect(),
+            expire: Some((SystemTime::now() + self.reservation_duration)
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .unwrap()
+                .as_secs()),
+            ..Reservation::default()
+        });
+        msg.limit = protobuf::MessageField::some(Limit {
+            duration: Some(
+                self.max_circuit_duration
+                    .as_secs()
+                    .try_into()
+                    .expect("`max_circuit_duration` not to exceed `u32::MAX`."),
+            ),
+            data: Some(self.max_circuit_bytes),
+            ..Limit::default()
+        });
+        msg.set_status(Status::OK);
 
         self.send(msg).await
     }
 
     pub async fn deny(self, status: Status) -> Result<(), UpgradeError> {
-        let msg = HopMessage {
-            r#type: hop_message::Type::Status.into(),
-            peer: None,
-            reservation: None,
-            limit: None,
-            status: Some(status.into()),
-        };
+        let mut msg = HopMessage::new();
+        msg.set_type(hop_message::Type::STATUS);
+        msg.set_status(status);
 
         self.send(msg).await
     }
@@ -194,13 +198,9 @@ impl CircuitReq {
     }
 
     pub async fn accept(mut self) -> Result<(NegotiatedSubstream, Bytes), UpgradeError> {
-        let msg = HopMessage {
-            r#type: hop_message::Type::Status.into(),
-            peer: None,
-            reservation: None,
-            limit: None,
-            status: Some(Status::Ok.into()),
-        };
+        let mut msg = HopMessage::new();
+        msg.set_type(hop_message::Type::STATUS);
+        msg.set_status(Status::OK);
 
         self.send(msg).await?;
 
@@ -219,13 +219,10 @@ impl CircuitReq {
     }
 
     pub async fn deny(mut self, status: Status) -> Result<(), UpgradeError> {
-        let msg = HopMessage {
-            r#type: hop_message::Type::Status.into(),
-            peer: None,
-            reservation: None,
-            limit: None,
-            status: Some(status.into()),
-        };
+        let mut msg = HopMessage::new();
+        msg.set_type(hop_message::Type::STATUS);
+        msg.set_status(status);
+
         self.send(msg).await?;
         self.substream.close().await.map_err(Into::into)
     }

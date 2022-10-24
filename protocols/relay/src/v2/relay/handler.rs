@@ -652,10 +652,10 @@ impl ConnectionHandler for Handler {
     ) {
         let (non_fatal_error, status) = match error {
             ConnectionHandlerUpgrErr::Timeout => {
-                (ConnectionHandlerUpgrErr::Timeout, Status::ConnectionFailed)
+                (ConnectionHandlerUpgrErr::Timeout, Status::CONNECTION_FAILED)
             }
             ConnectionHandlerUpgrErr::Timer => {
-                (ConnectionHandlerUpgrErr::Timer, Status::ConnectionFailed)
+                (ConnectionHandlerUpgrErr::Timer, Status::CONNECTION_FAILED)
             }
             ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
                 upgrade::NegotiationError::Failed,
@@ -685,10 +685,10 @@ impl ConnectionHandler for Handler {
                 outbound_stop::UpgradeError::CircuitFailed(error) => {
                     let status = match error {
                         outbound_stop::CircuitFailedReason::ResourceLimitExceeded => {
-                            Status::ResourceLimitExceeded
+                            Status::RESOURCE_LIMIT_EXCEEDED
                         }
                         outbound_stop::CircuitFailedReason::PermissionDenied => {
-                            Status::PermissionDenied
+                            Status::PERMISSION_DENIED
                         }
                     };
                     (
