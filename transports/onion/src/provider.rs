@@ -25,28 +25,27 @@ pub trait OnionStream: AsyncRead + AsyncWrite + From<DataStream> {}
 
 impl OnionStream for DataStream {}
 
+#[cfg(feature = "async-std")]
+pub type AsyncStdOnionStream = DataStream;
+
 #[cfg(feature = "tokio")]
-#[cfg_attr(docsrs, doc(cfg(feature = "tokio")))]
 #[derive(Debug)]
-pub struct OnionTokioStream {
+pub struct TokioOnionStream {
     inner: DataStream,
 }
 
 #[cfg(feature = "tokio")]
-#[cfg_attr(docsrs, doc(cfg(feature = "tokio")))]
-impl From<DataStream> for OnionTokioStream {
+impl From<DataStream> for TokioOnionStream {
     fn from(inner: DataStream) -> Self {
         Self { inner }
     }
 }
 
 #[cfg(feature = "tokio")]
-#[cfg_attr(docsrs, doc(cfg(feature = "tokio")))]
-impl OnionStream for OnionTokioStream {}
+impl OnionStream for TokioOnionStream {}
 
 #[cfg(feature = "tokio")]
-#[cfg_attr(docsrs, doc(cfg(feature = "tokio")))]
-impl AsyncRead for OnionTokioStream {
+impl AsyncRead for TokioOnionStream {
     fn poll_read(
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
@@ -63,8 +62,7 @@ impl AsyncRead for OnionTokioStream {
 }
 
 #[cfg(feature = "tokio")]
-#[cfg_attr(docsrs, doc(cfg(feature = "tokio")))]
-impl AsyncWrite for OnionTokioStream {
+impl AsyncWrite for TokioOnionStream {
     #[inline]
     fn poll_write(
         mut self: std::pin::Pin<&mut Self>,

@@ -20,7 +20,7 @@
 
 #![doc(html_logo_url = "https://libp2p.io/img/logo_small.png")]
 #![doc(html_favicon_url = "https://libp2p.io/img/favicon.png")]
-#![cfg_attr(docsrs, feature(doc_cfg))]
+#![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 //! Tor based transport for libp2p. Connect through the Tor network to TCP listeners.
 //!
 //! Main entrypoint of the crate: [`OnionTransport`]
@@ -40,7 +40,7 @@
 //! ```
 
 use address::{dangerous_extract_tor_address, safe_extract_tor_address};
-use arti_client::{DataStream, TorClient, TorClientBuilder};
+use arti_client::{TorClient, TorClientBuilder};
 use futures::{future::BoxFuture, FutureExt};
 use libp2p_core::{transport::TransportError, Multiaddr, Transport};
 use provider::OnionStream;
@@ -52,9 +52,12 @@ mod address;
 mod provider;
 
 #[cfg(feature = "tokio")]
-#[cfg_attr(docsrs, doc(cfg(feature = "tokio")))]
 #[doc(inline)]
-pub use provider::OnionTokioStream;
+pub use provider::TokioOnionStream;
+
+#[cfg(feature = "async-std")]
+#[doc(inline)]
+pub use provider::AsyncStdOnionStream;
 
 pub type OnionError = arti_client::Error;
 
@@ -118,7 +121,6 @@ macro_rules! default_constructor {
 }
 
 #[cfg(all(feature = "native-tls", feature = "async-std"))]
-#[cfg_attr(docsrs, doc(cfg(all(feature = "native-tls", feature = "async-std"))))]
 impl<S> OnionTransport<tor_rtcompat::async_std::AsyncStdNativeTlsRuntime, S> {
     pub fn builder() -> OnionBuilder<tor_rtcompat::async_std::AsyncStdNativeTlsRuntime> {
         let runtime = tor_rtcompat::async_std::AsyncStdNativeTlsRuntime::current()
@@ -129,7 +131,6 @@ impl<S> OnionTransport<tor_rtcompat::async_std::AsyncStdNativeTlsRuntime, S> {
 }
 
 #[cfg(all(feature = "rustls", feature = "async-std"))]
-#[cfg_attr(docsrs, doc(cfg(all(feature = "rustls", feature = "async-std"))))]
 impl<S> OnionTransport<tor_rtcompat::async_std::AsyncStdRustlsRuntime, S> {
     pub fn builder() -> OnionBuilder<tor_rtcompat::async_std::AsyncStdRustlsRuntime> {
         let runtime = tor_rtcompat::async_std::AsyncStdRustlsRuntime::current()
@@ -140,7 +141,6 @@ impl<S> OnionTransport<tor_rtcompat::async_std::AsyncStdRustlsRuntime, S> {
 }
 
 #[cfg(all(feature = "native-tls", feature = "tokio"))]
-#[cfg_attr(docsrs, doc(cfg(all(feature = "native-tls", feature = "tokio"))))]
 impl<S> OnionTransport<tor_rtcompat::tokio::TokioNativeTlsRuntime, S> {
     pub fn builder() -> OnionBuilder<tor_rtcompat::tokio::TokioNativeTlsRuntime> {
         let runtime = tor_rtcompat::tokio::TokioNativeTlsRuntime::current()
@@ -151,7 +151,6 @@ impl<S> OnionTransport<tor_rtcompat::tokio::TokioNativeTlsRuntime, S> {
 }
 
 #[cfg(all(feature = "rustls", feature = "tokio"))]
-#[cfg_attr(docsrs, doc(cfg(all(feature = "rustls", feature = "tokio"))))]
 impl<S> OnionTransport<tor_rtcompat::tokio::TokioRustlsRuntime, S> {
     pub fn builder() -> OnionBuilder<tor_rtcompat::tokio::TokioRustlsRuntime> {
         let runtime = tor_rtcompat::tokio::TokioRustlsRuntime::current()
@@ -162,21 +161,17 @@ impl<S> OnionTransport<tor_rtcompat::tokio::TokioRustlsRuntime, S> {
 }
 
 #[cfg(all(feature = "native-tls", feature = "async-std"))]
-#[cfg_attr(docsrs, doc(cfg(all(feature = "native-tls", feature = "async-std"))))]
 pub type AsyncStdNativeTlsOnionTransport =
-    OnionTransport<tor_rtcompat::async_std::AsyncStdNativeTlsRuntime, DataStream>;
+    OnionTransport<tor_rtcompat::async_std::AsyncStdNativeTlsRuntime, AsyncStdOnionStream>;
 #[cfg(all(feature = "rustls", feature = "async-std"))]
-#[cfg_attr(docsrs, doc(cfg(all(feature = "rustls", feature = "async-std"))))]
 pub type AsyncStdRustlsOnionTransport =
-    OnionTransport<tor_rtcompat::async_std::AsyncStdRustlsRuntime, DataStream>;
+    OnionTransport<tor_rtcompat::async_std::AsyncStdRustlsRuntime, AsyncStdOnionStream>;
 #[cfg(all(feature = "native-tls", feature = "tokio"))]
-#[cfg_attr(docsrs, doc(cfg(all(feature = "native-tls", feature = "tokio"))))]
 pub type TokioNativeTlsOnionTransport =
-    OnionTransport<tor_rtcompat::tokio::TokioNativeTlsRuntime, OnionTokioStream>;
+    OnionTransport<tor_rtcompat::tokio::TokioNativeTlsRuntime, TokioOnionStream>;
 #[cfg(all(feature = "rustls", feature = "tokio"))]
-#[cfg_attr(docsrs, doc(cfg(all(feature = "rustls", feature = "tokio"))))]
 pub type TokioRustlsOnionTransport =
-    OnionTransport<tor_rtcompat::tokio::TokioRustlsRuntime, OnionTokioStream>;
+    OnionTransport<tor_rtcompat::tokio::TokioRustlsRuntime, TokioOnionStream>;
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct AlwaysErrorListenerUpgrade<S>(PhantomData<S>);
