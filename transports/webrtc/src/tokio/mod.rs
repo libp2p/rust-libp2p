@@ -18,6 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+pub mod certificate;
 mod connection;
 mod error;
 mod fingerprint;
@@ -28,6 +29,7 @@ mod transport;
 mod udp_mux;
 mod upgrade;
 
+pub use certificate::Certificate;
 pub use connection::Connection;
 pub use error::Error;
 pub use transport::Transport;

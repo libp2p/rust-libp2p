@@ -26,7 +26,6 @@ use libp2p_core::{
     transport::{ListenerId, TransportError, TransportEvent},
     PeerId,
 };
-use webrtc::peer_connection::certificate::RTCCertificate;
 use webrtc::peer_connection::configuration::RTCConfiguration;
 
 use std::net::IpAddr;
@@ -37,6 +36,7 @@ use std::{
 };
 
 use crate::tokio::{
+    certificate::Certificate,
     connection::Connection,
     error::Error,
     fingerprint::Fingerprint,
@@ -61,20 +61,15 @@ impl Transport {
     /// use libp2p_core::identity;
     /// use webrtc::peer_connection::certificate::RTCCertificate;
     /// use rand::distributions::DistString;
-    /// use libp2p_webrtc::tokio::Transport;
+    /// use rand::thread_rng;
+    /// use libp2p_webrtc::tokio::{Certificate, Transport};
     ///
     /// let id_keys = identity::Keypair::generate_ed25519();
-    /// let certificate = {
-    ///     let mut params = rcgen::CertificateParams::new(vec![
-    ///         rand::distributions::Alphanumeric.sample_string(&mut rand::thread_rng(), 16)
-    ///     ]);
-    ///     params.alg = &rcgen::PKCS_ECDSA_P256_SHA256;
-    ///     RTCCertificate::from_params(params).expect("default params to work")
-    /// };
+    /// let certificate = Certificate::generate(&mut thread_rng()).unwrap();
     ///
     /// let transport = Transport::new(id_keys, certificate);
     /// ```
-    pub fn new(id_keys: identity::Keypair, certificate: RTCCertificate) -> Self {
+    pub fn new(id_keys: identity::Keypair, certificate: Certificate) -> Self {
         Self {
             config: Config::new(id_keys, certificate),
             listeners: SelectAll::new(),
@@ -348,21 +343,16 @@ impl Config {
     ///
     /// This function will panic if there's no fingerprint with the SHA-256 algorithm (see
     /// [`RTCCertificate::get_fingerprints`]).
-    fn new(id_keys: identity::Keypair, certificate: RTCCertificate) -> Self {
-        let fingerprints = certificate.get_fingerprints().expect("to never fail");
-        let sha256_fingerprint = fingerprints
-            .iter()
-            .find(|f| f.algorithm == "sha-256")
-            .expect("a SHA-256 fingerprint");
+    fn new(id_keys: identity::Keypair, certificate: Certificate) -> Self {
+        let fingerprint = certificate.fingerprint();
 
         Self {
             id_keys,
             inner: RTCConfiguration {
-                certificates: vec![certificate],
+                certificates: vec![certificate.to_rtc_certificate()],
                 ..RTCConfiguration::default()
             },
-            fingerprint: Fingerprint::try_from_rtc_dtls(sha256_fingerprint)
-                .expect("we specified SHA-256"),
+            fingerprint,
         }
     }
 }
@@ -447,7 +437,7 @@ mod tests {
     use super::*;
     use futures::future::poll_fn;
     use libp2p_core::{multiaddr::Protocol, Transport as _};
-    use rand::distributions::DistString;
+    use rand::thread_rng;
     use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
     #[test]
@@ -567,8 +557,8 @@ mod tests {
     #[tokio::test]
     async fn close_listener() {
         let id_keys = identity::Keypair::generate_ed25519();
-        let certificate = generate_certificate();
-        let mut transport = Transport::new(id_keys, certificate);
+        let mut transport =
+            Transport::new(id_keys, Certificate::generate(&mut thread_rng()).unwrap());
 
         assert!(poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx))
             .now_or_never()
@@ -616,13 +606,5 @@ mod tests {
                 .is_none());
             assert!(transport.listeners.is_empty());
         }
-    }
-
-    fn generate_certificate() -> RTCCertificate {
-        let mut params = rcgen::CertificateParams::new(vec![
-            rand::distributions::Alphanumeric.sample_string(&mut rand::thread_rng(), 16)
-        ]);
-        params.alg = &rcgen::PKCS_ECDSA_P256_SHA256;
-        RTCCertificate::from_params(params).expect("default params to work")
     }
 }
