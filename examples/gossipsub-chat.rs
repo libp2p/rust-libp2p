@@ -80,18 +80,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         mdns: Mdns,
     }
 
-    impl From<GossipsubEvent> for MyBehaviourEvent {
-        fn from(event: GossipsubEvent) -> Self {
-            MyBehaviourEvent::Gossipsub(event)
-        }
-    }
-
-    impl From<MdnsEvent> for MyBehaviourEvent {
-        fn from(event: MdnsEvent) -> Self {
-            MyBehaviourEvent::Mdns(event)
-        }
-    }
-
     // To content-address message, we can take the hash of message and use it as an ID.
     let message_id_fn = |message: &GossipsubMessage| {
         let mut s = DefaultHasher::new();
