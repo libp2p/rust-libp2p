@@ -191,7 +191,7 @@ impl UDPMuxNewAddr {
             match self.send_buffer.take() {
                 None => {
                     if let Poll::Ready(Some(((buf, target), response))) =
-                        self.send_command.poll_next(cx)
+                        self.send_command.poll_next_unpin(cx)
                     {
                         self.send_buffer = Some((buf, target, response));
                         continue;
@@ -212,7 +212,7 @@ impl UDPMuxNewAddr {
 
             // => Register a new connection
             if let Poll::Ready(Some(((conn, addr), response))) =
-                self.registration_command.poll_next(cx)
+                self.registration_command.poll_next_unpin(cx)
             {
                 let key = conn.key();
 
@@ -235,7 +235,8 @@ impl UDPMuxNewAddr {
             }
 
             // => Get connection with the given ufrag
-            if let Poll::Ready(Some((ufrag, response))) = self.get_conn_command.poll_next(cx) {
+            if let Poll::Ready(Some((ufrag, response))) = self.get_conn_command.poll_next_unpin(cx)
+            {
                 if self.is_closed {
                     let _ = response.send(Err(Error::ErrUseClosedNetworkConn));
                     continue;
@@ -273,7 +274,7 @@ impl UDPMuxNewAddr {
             }
 
             // => Close UDPMux
-            if let Poll::Ready(Some(((), response))) = self.close_command.poll_next(cx) {
+            if let Poll::Ready(Some(((), response))) = self.close_command.poll_next_unpin(cx) {
                 if self.is_closed {
                     let _ = response.send(Err(Error::ErrAlreadyClosed));
                     continue;
@@ -299,7 +300,9 @@ impl UDPMuxNewAddr {
             }
 
             // => Remove connection with the given ufrag
-            if let Poll::Ready(Some((ufrag, response))) = self.remove_conn_command.poll_next(cx) {
+            if let Poll::Ready(Some((ufrag, response))) =
+                self.remove_conn_command.poll_next_unpin(cx)
+            {
                 // Pion's ice implementation has both `RemoveConnByFrag` and `RemoveConn`, but since `conns`
                 // is keyed on `ufrag` their implementation is equivalent.
 

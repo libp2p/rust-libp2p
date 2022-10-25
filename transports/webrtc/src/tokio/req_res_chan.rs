@@ -20,9 +20,8 @@
 
 use futures::{
     channel::{mpsc, oneshot},
-    SinkExt,
+    SinkExt, StreamExt,
 };
-use futures_lite::StreamExt;
 
 use std::{
     io,
@@ -67,7 +66,10 @@ pub struct Receiver<Req, Res> {
 }
 
 impl<Req, Res> Receiver<Req, Res> {
-    pub fn poll_next(&mut self, cx: &mut Context<'_>) -> Poll<Option<(Req, oneshot::Sender<Res>)>> {
-        self.inner.poll_next(cx)
+    pub fn poll_next_unpin(
+        &mut self,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<(Req, oneshot::Sender<Res>)>> {
+        self.inner.poll_next_unpin(cx)
     }
 }
