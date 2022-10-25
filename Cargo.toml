@@ -164,7 +164,7 @@ members = [
     "transports/deflate",
     "transports/dns",
     "transports/noise",
-    "transports/onion"
+    "transports/onion",
     "transports/plaintext",
     "transports/pnet",
     "transports/tcp",
