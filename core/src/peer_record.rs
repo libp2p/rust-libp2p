@@ -210,7 +210,7 @@ mod tests {
 
     #[test]
     fn mismatched_signature() {
-        use prost::Message;
+        use protobuf::Message;
 
         let addr: Multiaddr = HOME.parse().unwrap();
 
@@ -224,14 +224,12 @@ mod tests {
                     seq: 0,
                     addresses: vec![peer_record_proto::peer_record::AddressInfo {
                         multiaddr: addr.to_vec(),
+                        ..peer_record_proto::peer_record::AddressInfo::default()
                     }],
+                    ..peer_record_proto::PeerRecord::default()
                 };
 
-                let mut buf = Vec::with_capacity(record.encoded_len());
-                record
-                    .encode(&mut buf)
-                    .expect("Vec<u8> provides capacity as needed");
-                buf
+                record.write_to_bytes().unwrap()
             };
 
             SignedEnvelope::new(
