@@ -34,7 +34,7 @@ impl PeerRecord {
 
         let (payload, signing_key) =
             envelope.payload_and_signing_key(String::from(DOMAIN_SEP), PAYLOAD_TYPE.as_bytes())?;
-        let record = peer_record_proto::PeerRecord::parse_from_bytes(payload).map_err(|e| FromEnvelopeError::from(e))?;
+        let record = peer_record_proto::PeerRecord::parse_from_bytes(payload).map_err(FromEnvelopeError::from)?;
 
         let peer_id = PeerId::from_bytes(&record.peer_id)?;
 

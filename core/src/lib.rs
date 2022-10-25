@@ -37,13 +37,13 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
+#[allow(clippy::derive_partial_eq_without_eq)]
 mod protos {
     include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 }
-#[allow(clippy::derive_partial_eq_without_eq)]
+
 use protos::keys as keys_proto;
 use protos::envelope as envelope_proto;
-#[allow(clippy::derive_partial_eq_without_eq)]
 use protos::peer_record as peer_record_proto;
 
 /// Multi-address re-export.

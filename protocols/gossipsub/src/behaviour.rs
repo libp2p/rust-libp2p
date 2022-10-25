@@ -2990,7 +2990,9 @@ where
                         last_rpc.control = protobuf::MessageField::some(empty_control.clone());
                     }
 
-                    last_rpc.control.as_mut().map(|c| c.ihave.push(ihave.clone()));
+                    if let Some(c) = last_rpc.control.as_mut() {
+                        c.ihave.push(ihave.clone())
+                    }
                 }
                 for iwant in &control.iwant {
                     let len = usize::try_from(iwant.compute_size())
@@ -3001,7 +3003,9 @@ where
                         last_rpc.control = protobuf::MessageField::some(empty_control.clone());
                     }
 
-                    last_rpc.control.as_mut().map(|c| c.iwant.push(iwant.clone()));
+                    if let Some(c) = last_rpc.control.as_mut() {
+                        c.iwant.push(iwant.clone())
+                    }
                 }
                 for graft in &control.graft {
                     let len = usize::try_from(graft.compute_size())
@@ -3012,7 +3016,9 @@ where
                         last_rpc.control = protobuf::MessageField::some(empty_control.clone());
                     }
 
-                    last_rpc.control.as_mut().map(|c| c.graft.push(graft.clone()));
+                    if let Some(c) = last_rpc.control.as_mut() {
+                        c.graft.push(graft.clone())
+                    }
                 }
                 for prune in &control.prune {
                     let len = usize::try_from(prune.compute_size())
@@ -3023,7 +3029,9 @@ where
                         last_rpc.control = protobuf::MessageField::some(empty_control.clone());
                     }
 
-                    last_rpc.control.as_mut().map(|c| c.prune.push(prune.clone()));
+                    if let Some(c) = last_rpc.control.as_mut() {
+                        c.prune.push(prune.clone())
+                    }
                 }
             } else {
                 let len = usize::try_from(control.compute_size())

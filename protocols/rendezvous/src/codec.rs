@@ -301,7 +301,7 @@ impl From<Message> for wire::Message {
                 msg.set_type(MessageType::REGISTER_RESPONSE);
                 msg.registerResponse = protobuf::MessageField::some({
                     let mut res = RegisterResponse::new();
-                    res.set_status(ResponseStatus::from(error).into());
+                    res.set_status(ResponseStatus::from(error));
                     res
                 });
                 msg

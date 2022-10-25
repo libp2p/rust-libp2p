@@ -176,7 +176,7 @@ impl Keypair {
             }
         };
 
-        Ok(pk.write_to_bytes().map_err(|e| DecodingError::new("Failed to decode.").source(e))?)
+        pk.write_to_bytes().map_err(|e| DecodingError::new("Failed to decode.").source(e))
     }
 
     /// Decode a private key from a protobuf structure and parse it as a [`Keypair`].
@@ -194,7 +194,7 @@ impl Keypair {
 
         match key_type {
             keys_proto::KeyType::Ed25519 => {
-                ed25519::Keypair::decode(&mut private_key.mut_Data()).map(Keypair::Ed25519)
+                ed25519::Keypair::decode(private_key.mut_Data()).map(Keypair::Ed25519)
             }
             keys_proto::KeyType::RSA => Err(DecodingError::new(
                 "Decoding RSA key from Protobuf is unsupported.",
@@ -318,11 +318,11 @@ impl TryFrom<keys_proto::PublicKey> for PublicKey {
     fn try_from(pubkey: keys_proto::PublicKey) -> Result<Self, Self::Error> {
         match pubkey.Type() {
             keys_proto::KeyType::Ed25519 => {
-                ed25519::PublicKey::decode(&pubkey.Data()).map(PublicKey::Ed25519)
+                ed25519::PublicKey::decode(pubkey.Data()).map(PublicKey::Ed25519)
             }
             #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
             keys_proto::KeyType::RSA => {
-                rsa::PublicKey::decode_x509(&pubkey.Data()).map(PublicKey::Rsa)
+                rsa::PublicKey::decode_x509(pubkey.Data()).map(PublicKey::Rsa)
             }
             #[cfg(any(not(feature = "rsa"), target_arch = "wasm32"))]
             keys_proto::KeyType::RSA => {
@@ -331,7 +331,7 @@ impl TryFrom<keys_proto::PublicKey> for PublicKey {
             }
             #[cfg(feature = "secp256k1")]
             keys_proto::KeyType::Secp256k1 => {
-                secp256k1::PublicKey::decode(&pubkey.Data()).map(PublicKey::Secp256k1)
+                secp256k1::PublicKey::decode(pubkey.Data()).map(PublicKey::Secp256k1)
             }
             #[cfg(not(feature = "secp256k1"))]
             keys_proto::KeyType::Secp256k1 => {
@@ -340,7 +340,7 @@ impl TryFrom<keys_proto::PublicKey> for PublicKey {
             }
             #[cfg(feature = "ecdsa")]
             keys_proto::KeyType::ECDSA => {
-                ecdsa::PublicKey::decode_der(&pubkey.Data()).map(PublicKey::Ecdsa)
+                ecdsa::PublicKey::decode_der(pubkey.Data()).map(PublicKey::Ecdsa)
             }
             #[cfg(not(feature = "ecdsa"))]
             keys_proto::KeyType::ECDSA => {
