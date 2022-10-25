@@ -3,8 +3,6 @@
 Below is a high level roadmap for the rust-libp2p project. Items are ordered by priority (high to
 low).
 
-For a more detailed view see https://github.com/orgs/libp2p/projects/4/views/1.
-
 <!-- markdown-toc start - Don't edit this section. Run M-x markdown-toc-refresh-toc -->
 **Table of Contents**
 
