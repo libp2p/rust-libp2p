@@ -5,11 +5,12 @@ low).
 
 This is a living document. Input is always welcome e.g. via GitHub issues or pull requests.
 
+This is the roadmap of the Rust implementation of libp2p. See also the [general libp2p project
+roadmap](https://github.com/libp2p/specs/blob/master/ROADMAP.md).
+
 <!-- markdown-toc start - Don't edit this section. Run M-x markdown-toc-refresh-toc -->
 **Table of Contents**
 
-- [rust-libp2p Roadmap](#rust-libp2p-roadmap)
-    - [TLS support](#tls-support)
     - [Experimental QUIC support](#experimental-quic-support)
     - [WebRTC support (browser-to-server)](#webrtc-support-browser-to-server)
     - [Cross Behaviour communication](#cross-behaviour-communication)
@@ -61,7 +62,7 @@ stack. Though that should only happen after improved WASM support, see below.
 | Developer ergonomics | todo   | Q1/2023           | https://github.com/libp2p/rust-libp2p/issues/2680 | https://github.com/libp2p/rust-libp2p/issues/2832 | [Kademlia client mode](#kademlia-client-mode) |
 
 Today `NetworkBehaviour` implementations like Kademlia, GossipSub or Circuit Relay v2 can not
-communicate with each other, i.e. can not make use of information known by another
+communicate with each other, i.e. cannot make use of information known by another
 `NetworkBehaviour` implementation. Users need to write the wiring code by hand to e.g. enable
 Kademlia to learn protocols supported by a remote peer from Identify.
 
