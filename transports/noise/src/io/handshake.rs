@@ -21,9 +21,11 @@
 //! Noise protocol handshake I/O.
 
 #[allow(clippy::derive_partial_eq_without_eq)]
-mod payload_proto {
-    include!(concat!(env!("OUT_DIR"), "/payload.proto.rs"));
+mod protos {
+    include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 }
+
+use protos::payload as payload_proto;
 
 use crate::error::NoiseError;
 use crate::io::{framed::NoiseFramed, NoiseOutput};
@@ -32,7 +34,7 @@ use crate::LegacyConfig;
 use bytes::Bytes;
 use futures::prelude::*;
 use libp2p_core::identity;
-use prost::Message;
+use protobuf::Message;
 use std::io;
 
 /// The identity of the remote established during a handshake.
@@ -175,7 +177,7 @@ where
 {
     let msg = recv(state).await?;
 
-    let mut pb_result = payload_proto::NoiseHandshakePayload::decode(&msg[..]);
+    let mut pb_result = payload_proto::NoiseHandshakePayload::parse_from_bytes(&msg[..]);
 
     if pb_result.is_err() && state.legacy.recv_legacy_handshake {
         // NOTE: This is support for legacy handshake payloads. As long as
@@ -196,7 +198,7 @@ where
                 // frame length, because each length is encoded as a `u16`.
                 if usize::from(u16::from_be_bytes(buf)) + 2 == msg.len() {
                     log::debug!("Attempting fallback legacy protobuf decoding.");
-                    payload_proto::NoiseHandshakePayload::decode(&msg[2..])
+                    payload_proto::NoiseHandshakePayload::parse_from_bytes(&msg[2..])
                 } else {
                     Err(e)
                 }
@@ -239,16 +241,18 @@ where
         pb.identity_sig = sig.clone()
     }
 
+    let size = usize::try_from(pb.compute_size())
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
+
     let mut msg = if state.legacy.send_legacy_handshake {
-        let mut msg = Vec::with_capacity(2 + pb.encoded_len());
-        msg.extend_from_slice(&(pb.encoded_len() as u16).to_be_bytes());
+        let mut msg = Vec::with_capacity(2 + size);
+        msg.extend_from_slice(&(size as u16).to_be_bytes());
         msg
     } else {
-        Vec::with_capacity(pb.encoded_len())
+        Vec::with_capacity(size)
     };
 
-    pb.encode(&mut msg)
-        .expect("Vec<u8> provides capacity as needed");
+    msg.extend(pb.write_to_bytes().expect("All required fields to be initialized."));
     state.io.send(&msg).await?;
 
     Ok(())
@@ -265,16 +269,18 @@ where
         pb.identity_sig = sig.clone()
     }
 
+    let size = usize::try_from(pb.compute_size())
+        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
+
     let mut msg = if state.legacy.send_legacy_handshake {
-        let mut msg = Vec::with_capacity(2 + pb.encoded_len());
-        msg.extend_from_slice(&(pb.encoded_len() as u16).to_be_bytes());
+        let mut msg = Vec::with_capacity(2 + size);
+        msg.extend_from_slice(&(size as u16).to_be_bytes());
         msg
     } else {
-        Vec::with_capacity(pb.encoded_len())
+        Vec::with_capacity(size)
     };
 
-    pb.encode(&mut msg)
-        .expect("Vec<u8> provides capacity as needed");
+    msg.extend(pb.write_to_bytes().expect("All required fields to be initialized."));
     state.io.send(&msg).await?;
 
     Ok(())
