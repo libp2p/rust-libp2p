@@ -25,12 +25,13 @@ use futures::stream::StreamExt;
 use libp2p::core::upgrade;
 use libp2p::identify;
 use libp2p::multiaddr::Protocol;
+use libp2p::ping;
 use libp2p::relay::v2::relay::{self, Relay};
 use libp2p::swarm::{Swarm, SwarmEvent};
-use libp2p::tcp::TcpTransport;
+use libp2p::tcp;
+use libp2p::Transport;
 use libp2p::{identity, NetworkBehaviour, PeerId};
 use libp2p::{noise, Multiaddr};
-use libp2p::{ping, Transport};
 use std::error::Error;
 use std::net::{Ipv4Addr, Ipv6Addr};
 
@@ -45,7 +46,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let local_peer_id = PeerId::from(local_key.public());
     println!("Local peer id: {:?}", local_peer_id);
 
-    let tcp_transport = TcpTransport::default();
+    let tcp_transport = tcp::async_io::Transport::default();
 
     let transport = tcp_transport
         .upgrade(upgrade::Version::V1)
