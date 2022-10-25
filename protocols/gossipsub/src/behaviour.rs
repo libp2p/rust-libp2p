@@ -3672,6 +3672,12 @@ mod local_test {
     use asynchronous_codec::Encoder;
     use quickcheck::*;
 
+    macro_rules! to_usize {
+        ($object_size: expr ) => {{
+            usize::try_from($object_size).unwrap()
+        }}
+    }
+
     fn empty_rpc() -> GossipsubRpc {
         GossipsubRpc {
             subscriptions: Vec::new(),
@@ -3748,7 +3754,7 @@ mod local_test {
 
         // Messages over the limit should be split
 
-        while rpc_proto.encoded_len() < max_transmit_size {
+        while to_usize!(rpc_proto.compute_size()) < max_transmit_size {
             rpc.messages.push(test_message());
             rpc_proto = rpc.clone().into_protobuf();
         }
@@ -3765,7 +3771,7 @@ mod local_test {
         // all fragmented messages should be under the limit
         for message in fragmented_messages {
             assert!(
-                message.encoded_len() < max_transmit_size,
+                to_usize!(message.compute_size()) < max_transmit_size,
                 "all messages should be less than the transmission size"
             );
         }
@@ -3792,7 +3798,7 @@ mod local_test {
                 .fragment_message(rpc_proto.clone())
                 .expect("Messages must be valid");
 
-            if rpc_proto.encoded_len() < max_transmit_size {
+            if to_usize!(rpc_proto.compute_size()) < max_transmit_size {
                 assert_eq!(
                     fragmented_messages.len(),
                     1,
@@ -3808,12 +3814,12 @@ mod local_test {
             // all fragmented messages should be under the limit
             for message in fragmented_messages {
                 assert!(
-                    message.encoded_len() < max_transmit_size,
-                    "all messages should be less than the transmission size: list size {} max size{}", message.encoded_len(), max_transmit_size
+                    to_usize!(message.compute_size()) < max_transmit_size,
+                    "all messages should be less than the transmission size: list size {} max size{}", to_usize!(message.compute_size()), max_transmit_size
                 );
 
                 // ensure they can all be encoded
-                let mut buf = bytes::BytesMut::with_capacity(message.encoded_len());
+                let mut buf = bytes::BytesMut::with_capacity(to_usize!(message.compute_size()));
                 codec.encode(message, &mut buf).unwrap()
             }
         }

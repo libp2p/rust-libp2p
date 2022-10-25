@@ -256,14 +256,14 @@ fn proto_to_message(rpc: &crate::rpc_proto::RPC) -> GossipsubRpc {
             source: message.from.map(|x| PeerId::from_bytes(&x).unwrap()),
             data: message.data.unwrap_or_default(),
             sequence_number: message.seqno.map(|x| BigEndian::read_u64(&x)), // don't inform the application
-            topic: TopicHash::from_raw(message.topic),
+            topic: TopicHash::from_raw(message.topic.unwrap()),
             signature: message.signature, // don't inform the application
             key: None,
             validated: false,
         });
     }
     let mut control_msgs = Vec::new();
-    if let Some(rpc_control) = rpc.control {
+    if let Some(rpc_control) = rpc.control.into_option() {
         // Collect the gossipsub control messages
         let ihave_msgs: Vec<GossipsubControlAction> = rpc_control
             .ihave

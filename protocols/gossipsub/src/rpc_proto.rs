@@ -28,12 +28,13 @@ pub use protos::rpc::*;
 mod test {
     use crate::IdentTopic as Topic;
     use libp2p_core::PeerId;
-    use prost::Message;
+    use protobuf::Message;
     use rand::Rng;
 
-    mod compat_proto {
-        include!(concat!(env!("OUT_DIR"), "/compat.pb.rs"));
+    mod protos {
+        include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
     }
+    use protos::compat as compat_proto;
 
     #[test]
     fn test_multi_topic_message_compatibility() {
@@ -44,9 +45,10 @@ mod test {
             from: Some(PeerId::random().to_bytes()),
             data: Some(rand::thread_rng().gen::<[u8; 32]>().to_vec()),
             seqno: Some(rand::thread_rng().gen::<[u8; 8]>().to_vec()),
-            topic: topic1.clone().into_string(),
+            topic: Some(topic1.clone().into_string()),
             signature: Some(rand::thread_rng().gen::<[u8; 32]>().to_vec()),
             key: Some(rand::thread_rng().gen::<[u8; 32]>().to_vec()),
+            ..super::Message::default()
         };
         let old_message1 = compat_proto::Message {
             from: Some(PeerId::random().to_bytes()),
@@ -55,6 +57,7 @@ mod test {
             topic_ids: vec![topic1.clone().into_string()],
             signature: Some(rand::thread_rng().gen::<[u8; 32]>().to_vec()),
             key: Some(rand::thread_rng().gen::<[u8; 32]>().to_vec()),
+            ..compat_proto::Message::default()
         };
         let old_message2 = compat_proto::Message {
             from: Some(PeerId::random().to_bytes()),
@@ -63,24 +66,22 @@ mod test {
             topic_ids: vec![topic1.clone().into_string(), topic2.clone().into_string()],
             signature: Some(rand::thread_rng().gen::<[u8; 32]>().to_vec()),
             key: Some(rand::thread_rng().gen::<[u8; 32]>().to_vec()),
+            ..compat_proto::Message::default()
         };
 
-        let mut new_message1b = Vec::with_capacity(new_message1.encoded_len());
-        new_message1.encode(&mut new_message1b).unwrap();
+        let new_message1b = new_message1.write_to_bytes().unwrap();
 
-        let mut old_message1b = Vec::with_capacity(old_message1.encoded_len());
-        old_message1.encode(&mut old_message1b).unwrap();
+        let old_message1b = old_message1.write_to_bytes().unwrap();
 
-        let mut old_message2b = Vec::with_capacity(old_message2.encoded_len());
-        old_message2.encode(&mut old_message2b).unwrap();
+        let old_message2b = old_message2.write_to_bytes().unwrap();
 
-        let new_message = super::Message::decode(&old_message1b[..]).unwrap();
-        assert_eq!(new_message.topic, topic1.clone().into_string());
+        let new_message = super::Message::parse_from_bytes(&old_message1b[..]).unwrap();
+        assert_eq!(new_message.topic.unwrap(), topic1.clone().into_string());
 
-        let new_message = super::Message::decode(&old_message2b[..]).unwrap();
-        assert_eq!(new_message.topic, topic2.into_string());
+        let new_message = super::Message::parse_from_bytes(&old_message2b[..]).unwrap();
+        assert_eq!(new_message.topic.unwrap(), topic2.into_string());
 
-        let old_message = compat_proto::Message::decode(&new_message1b[..]).unwrap();
+        let old_message = compat_proto::Message::parse_from_bytes(&new_message1b[..]).unwrap();
         assert_eq!(old_message.topic_ids, vec![topic1.into_string()]);
     }
 }
