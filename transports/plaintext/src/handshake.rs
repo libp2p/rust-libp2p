@@ -59,7 +59,9 @@ impl HandshakeContext<Local> {
         Self {
             config,
             state: Local {
-                exchange_bytes: exchange.write_to_bytes().expect("All fields to be initialized."),
+                exchange_bytes: exchange
+                    .write_to_bytes()
+                    .expect("All fields to be initialized."),
             },
         }
     }

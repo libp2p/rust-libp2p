@@ -255,7 +255,11 @@ impl GossipsubCodec {
         message_sig.key = None;
 
         let mut signature_bytes = SIGNING_PREFIX.to_vec();
-        signature_bytes.extend_from_slice(&message_sig.write_to_bytes().expect("All fields to be initialized."));
+        signature_bytes.extend_from_slice(
+            &message_sig
+                .write_to_bytes()
+                .expect("All fields to be initialized."),
+        );
         public_key.verify(&signature_bytes, signature)
     }
 }
@@ -268,8 +272,11 @@ impl Encoder for GossipsubCodec {
         // length prefix the protobuf message, ensuring the max limit is not hit
         self.length_codec
             .encode(
-                Bytes::from(item.write_to_bytes().expect("All fields to be initialized.")),
-                dst
+                Bytes::from(
+                    item.write_to_bytes()
+                        .expect("All fields to be initialized."),
+                ),
+                dst,
             )
             .map_err(|_| GossipsubHandlerError::MaxTransmissionSize)
     }

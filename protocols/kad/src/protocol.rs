@@ -110,7 +110,9 @@ impl TryFrom<proto::message::Peer> for KadPeer {
         }
         debug_assert_eq!(addrs.len(), addrs.capacity());
 
-        let connection_ty = peer.connection.enum_value()
+        let connection_ty = peer
+            .connection
+            .enum_value()
             .map_err(|_| invalid_data("unknown connection type"))?
             .into();
 
@@ -430,7 +432,8 @@ fn resp_msg_to_proto(kad_msg: KadResponseMsg) -> proto::Message {
 ///
 /// Fails if the protobuf message is not a valid and supported Kademlia request message.
 fn proto_to_req_msg(message: proto::Message) -> Result<KadRequestMsg, io::Error> {
-    let msg_type = message.type_
+    let msg_type = message
+        .type_
         .enum_value()
         .map_err(|ty| invalid_data(format!("unknown message type: {}", ty)))?;
 
@@ -470,7 +473,8 @@ fn proto_to_req_msg(message: proto::Message) -> Result<KadRequestMsg, io::Error>
 ///
 /// Fails if the protobuf message is not a valid and supported Kademlia response message.
 fn proto_to_resp_msg(message: proto::Message) -> Result<KadResponseMsg, io::Error> {
-    let msg_type = message.type_
+    let msg_type = message
+        .type_
         .enum_value()
         .map_err(|ty| invalid_data(format!("unknown message type: {}", ty)))?;
 

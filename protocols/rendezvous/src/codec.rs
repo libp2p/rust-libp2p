@@ -223,7 +223,9 @@ impl Encoder for RendezvousCodec {
 
         let message = wire::Message::from(item);
 
-        let bytes = message.write_to_bytes().expect("All required fields to be initialized.");
+        let bytes = message
+            .write_to_bytes()
+            .expect("All required fields to be initialized.");
 
         // Length prefix the protobuf message, ensuring the max limit is not hit
         self.length_codec.encode(Bytes::from(bytes), dst)?;
@@ -244,8 +246,7 @@ impl Decoder for RendezvousCodec {
             None => return Ok(None),
         };
 
-        let message = wire::Message::parse_from_bytes(message.as_ref())
-            .map_err(Error::Decode)?;
+        let message = wire::Message::parse_from_bytes(message.as_ref()).map_err(Error::Decode)?;
 
         Ok(Some(message.try_into()?))
     }
@@ -278,13 +279,11 @@ impl From<Message> for wire::Message {
                 msg.register = protobuf::MessageField::some(Register {
                     ns: Some(namespace.into()),
                     ttl,
-                    signedPeerRecord: Some(
-                        record.into_signed_envelope().into_protobuf_encoding(),
-                    ),
+                    signedPeerRecord: Some(record.into_signed_envelope().into_protobuf_encoding()),
                     ..Register::default()
                 });
                 msg
-            },
+            }
             Message::RegisterResponse(Ok(ttl)) => {
                 let mut msg = wire::Message::new();
                 msg.set_type(MessageType::REGISTER_RESPONSE);
@@ -295,7 +294,7 @@ impl From<Message> for wire::Message {
                     res
                 });
                 msg
-            },
+            }
             Message::RegisterResponse(Err(error)) => {
                 let mut msg = wire::Message::new();
                 msg.set_type(MessageType::REGISTER_RESPONSE);
@@ -305,7 +304,7 @@ impl From<Message> for wire::Message {
                     res
                 });
                 msg
-            },
+            }
             Message::Unregister(namespace) => {
                 let mut msg = wire::Message::new();
                 msg.set_type(MessageType::UNREGISTER);
@@ -315,7 +314,7 @@ impl From<Message> for wire::Message {
                     ..Unregister::default()
                 });
                 msg
-            },
+            }
             Message::Discover {
                 namespace,
                 cookie,
@@ -330,7 +329,7 @@ impl From<Message> for wire::Message {
                     ..Discover::default()
                 });
                 msg
-            },
+            }
             Message::DiscoverResponse(Ok((registrations, cookie))) => {
                 let mut msg = wire::Message::new();
                 msg.set_type(MessageType::DISCOVER_RESPONSE);
@@ -351,7 +350,7 @@ impl From<Message> for wire::Message {
                     ..DiscoverResponse::default()
                 });
                 msg
-            },
+            }
             Message::DiscoverResponse(Err(error)) => {
                 let mut msg = wire::Message::new();
                 msg.set_type(MessageType::DISCOVER_RESPONSE);
@@ -360,7 +359,7 @@ impl From<Message> for wire::Message {
                     ..DiscoverResponse::default()
                 });
                 msg
-            },
+            }
         }
     }
 }
@@ -371,74 +370,95 @@ impl TryFrom<wire::Message> for Message {
     fn try_from(message: wire::Message) -> Result<Self, Self::Error> {
         use wire::message::*;
 
-        let msg_ty = message.type_
+        let msg_ty = message
+            .type_
             .ok_or(ConversionError::InconsistentWireMessage)?
             .enum_value()
             .or(Err(ConversionError::InconsistentWireMessage))?;
 
         let message = match msg_ty {
             MessageType::REGISTER => {
-                let register = message.register.into_option().ok_or(ConversionError::InconsistentWireMessage)?;
-                let signed_peer_record = register.signedPeerRecord.ok_or(ConversionError::InconsistentWireMessage)?;
+                let register = message
+                    .register
+                    .into_option()
+                    .ok_or(ConversionError::InconsistentWireMessage)?;
+                let signed_peer_record = register
+                    .signedPeerRecord
+                    .ok_or(ConversionError::InconsistentWireMessage)?;
                 Message::Register(NewRegistration {
-                    namespace: register.ns
+                    namespace: register
+                        .ns
                         .map(Namespace::new)
                         .transpose()?
                         .ok_or(ConversionError::MissingNamespace)?,
                     ttl: register.ttl,
-                    record: PeerRecord::from_signed_envelope(SignedEnvelope::from_protobuf_encoding(
-                        &signed_peer_record,
-                    )?)?,
+                    record: PeerRecord::from_signed_envelope(
+                        SignedEnvelope::from_protobuf_encoding(&signed_peer_record)?,
+                    )?,
                 })
             }
             MessageType::REGISTER_RESPONSE => {
-                let register_response = message.registerResponse.into_option().ok_or(ConversionError::InconsistentWireMessage)?;
-                let status = register_response.status
+                let register_response = message
+                    .registerResponse
+                    .into_option()
+                    .ok_or(ConversionError::InconsistentWireMessage)?;
+                let status = register_response
+                    .status
                     .ok_or(ConversionError::InconsistentWireMessage)?
                     .enum_value()
                     .or(Err(ConversionError::BadStatusCode))?;
 
                 match status {
-                    ResponseStatus::OK => Message::RegisterResponse(
-                        Ok(register_response.ttl.ok_or(ConversionError::MissingTtl)?)
-                    ),
+                    ResponseStatus::OK => Message::RegisterResponse(Ok(register_response
+                        .ttl
+                        .ok_or(ConversionError::MissingTtl)?)),
                     error_code => Message::RegisterResponse(Err(error_code.try_into()?)),
                 }
             }
             MessageType::UNREGISTER => {
-                let unregister = message.unregister
+                let unregister = message
+                    .unregister
                     .into_option()
                     .ok_or(ConversionError::InconsistentWireMessage)?;
 
                 Message::Unregister(
-                    unregister.ns.map(Namespace::new)
+                    unregister
+                        .ns
+                        .map(Namespace::new)
                         .transpose()?
                         .ok_or(ConversionError::MissingNamespace)?,
                 )
             }
             MessageType::DISCOVER => {
-                let discover = message.discover
+                let discover = message
+                    .discover
                     .into_option()
                     .ok_or(ConversionError::InconsistentWireMessage)?;
 
                 Message::Discover {
                     namespace: discover.ns.map(Namespace::new).transpose()?,
-                    cookie: discover.cookie.map(Cookie::from_wire_encoding).transpose()?,
+                    cookie: discover
+                        .cookie
+                        .map(Cookie::from_wire_encoding)
+                        .transpose()?,
                     limit: discover.limit,
                 }
             }
             MessageType::DISCOVER_RESPONSE => {
-                let discover_response = message.discoverResponse
+                let discover_response = message
+                    .discoverResponse
                     .into_option()
                     .ok_or(ConversionError::InconsistentWireMessage)?;
-                let status = discover_response.status
+                let status = discover_response
+                    .status
                     .ok_or(ConversionError::InconsistentWireMessage)?
                     .enum_value()
                     .or(Err(ConversionError::BadStatusCode))?;
 
                 match status {
                     ResponseStatus::OK => {
-                        let registrations = discover_response.registrations
+                        let registrations = discover_response
+                            .registrations
                             .into_iter()
                             .map(|reggo| {
                                 Ok(Registration {
@@ -459,7 +479,9 @@ impl TryFrom<wire::Message> for Message {
                             })
                             .collect::<Result<Vec<_>, ConversionError>>()?;
                         let cookie = Cookie::from_wire_encoding(
-                            discover_response.cookie.ok_or(ConversionError::InconsistentWireMessage)?
+                            discover_response
+                                .cookie
+                                .ok_or(ConversionError::InconsistentWireMessage)?,
                         )?;
 
                         Message::DiscoverResponse(Ok((registrations, cookie)))

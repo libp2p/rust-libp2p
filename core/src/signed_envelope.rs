@@ -81,7 +81,9 @@ impl SignedEnvelope {
         envelope.payload = self.payload;
         envelope.signature = self.signature;
 
-        envelope.write_to_bytes().expect("All fields to be initialized.")
+        envelope
+            .write_to_bytes()
+            .expect("All fields to be initialized.")
     }
 
     /// Decode a [`SignedEnvelope`] using the protobuf encoding specified in the RFC.

@@ -68,7 +68,8 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
 
             let sent_time = Instant::now();
 
-            let hole_punch: HolePunch = substream.next().await.ok_or(UpgradeError::StreamClosed)??;
+            let hole_punch: HolePunch =
+                substream.next().await.ok_or(UpgradeError::StreamClosed)??;
 
             let rtt = sent_time.elapsed();
 
@@ -81,7 +82,8 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
                 return Err(UpgradeError::NoAddresses);
             }
 
-            let obs_addrs = hole_punch.ObsAddrs
+            let obs_addrs = hole_punch
+                .ObsAddrs
                 .into_iter()
                 .map(Multiaddr::try_from)
                 // Filter out relayed addresses.

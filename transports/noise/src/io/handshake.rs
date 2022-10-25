@@ -252,7 +252,10 @@ where
         Vec::with_capacity(size)
     };
 
-    msg.extend(pb.write_to_bytes().expect("All required fields to be initialized."));
+    msg.extend(
+        pb.write_to_bytes()
+            .expect("All required fields to be initialized."),
+    );
     state.io.send(&msg).await?;
 
     Ok(())
@@ -280,7 +283,10 @@ where
         Vec::with_capacity(size)
     };
 
-    msg.extend(pb.write_to_bytes().expect("All required fields to be initialized."));
+    msg.extend(
+        pb.write_to_bytes()
+            .expect("All required fields to be initialized."),
+    );
     state.io.send(&msg).await?;
 
     Ok(())

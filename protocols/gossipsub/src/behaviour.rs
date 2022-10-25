@@ -619,7 +619,9 @@ where
 
         // check that the size doesn't exceed the max transmission size
         match usize::try_from(event.compute_size()) {
-            Ok(v) if v > self.config.max_transmit_size() => return Err(PublishError::MessageTooLarge),
+            Ok(v) if v > self.config.max_transmit_size() => {
+                return Err(PublishError::MessageTooLarge)
+            }
             Err(_) => return Err(PublishError::MessageTooLarge),
             _ => {}
         }
@@ -737,7 +739,10 @@ where
             self.send_message(*peer_id, event.clone())?;
 
             if let Some(m) = self.metrics.as_mut() {
-                m.msg_sent(&topic_hash, usize::try_from(msg_bytes).expect("Size of sent messages fit in usize."));
+                m.msg_sent(
+                    &topic_hash,
+                    usize::try_from(msg_bytes).expect("Size of sent messages fit in usize."),
+                );
             }
         }
 
@@ -1359,7 +1364,7 @@ where
                 for topic in topics.iter() {
                     m.msg_sent(
                         topic,
-                        usize::try_from(msg_bytes).expect("Size of sent messages fit in usize.")
+                        usize::try_from(msg_bytes).expect("Size of sent messages fit in usize."),
                     );
                 }
             }
@@ -2756,7 +2761,7 @@ where
                 if let Some(m) = self.metrics.as_mut() {
                     m.msg_sent(
                         &message.topic,
-                        usize::try_from(msg_bytes).expect("Size of sent messages fit in usize.")
+                        usize::try_from(msg_bytes).expect("Size of sent messages fit in usize."),
                     )
                 }
             }
@@ -2792,7 +2797,9 @@ where
                     // the signature is over the bytes "libp2p-pubsub:<protobuf-message>"
                     let mut signature_bytes = SIGNING_PREFIX.to_vec();
                     signature_bytes.extend_from_slice(
-                        &message.write_to_bytes().expect("All required fields to be initialized.")
+                        &message
+                            .write_to_bytes()
+                            .expect("All required fields to be initialized."),
                     );
                     Some(keypair.sign(&signature_bytes)?)
                 };
@@ -2919,7 +2926,7 @@ where
                     return Ok(vec![rpc]);
                 }
             }
-            Err(_) =>  return Err(PublishError::MessageTooLarge),
+            Err(_) => return Err(PublishError::MessageTooLarge),
         }
 
         let new_rpc = rpc_proto::RPC::new();
@@ -2934,7 +2941,8 @@ where
 
                 // create a new RPC if the new object plus 5% of its size (for length prefix
                 // buffers) exceeds the max transmit size.
-                let msg_size = usize::try_from(rpc_list[list_index].compute_size()).expect("Message size has already been validated.");
+                let msg_size = usize::try_from(rpc_list[list_index].compute_size())
+                    .expect("Message size has already been validated.");
                 if msg_size + (($object_size as f64) * 1.05) as usize
                     > self.config.max_transmit_size()
                     && rpc_list[list_index] != new_rpc
@@ -2947,7 +2955,8 @@ where
 
         macro_rules! add_item {
             ($object: ident, $type: ident ) => {
-                let object_size = usize::try_from($object.compute_size()).expect("Message size has already been validated.");
+                let object_size = usize::try_from($object.compute_size())
+                    .expect("Message size has already been validated.");
 
                 if object_size + 2 > self.config.max_transmit_size() {
                     // This should not be possible. All received and published messages have already
@@ -3037,7 +3046,8 @@ where
                 let len = usize::try_from(control.compute_size())
                     .expect("Message size has already been validated.");
                 create_or_add_rpc!(len);
-                rpc_list.last_mut().expect("Always an element").control = protobuf::MessageField::some(control.clone());
+                rpc_list.last_mut().expect("Always an element").control =
+                    protobuf::MessageField::some(control.clone());
             }
         }
 
@@ -3683,7 +3693,7 @@ mod local_test {
     macro_rules! to_usize {
         ($object_size: expr ) => {{
             usize::try_from($object_size).unwrap()
-        }}
+        }};
     }
 
     fn empty_rpc() -> GossipsubRpc {

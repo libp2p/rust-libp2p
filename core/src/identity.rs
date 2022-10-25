@@ -155,7 +155,7 @@ impl Keypair {
                 key.set_Type(keys_proto::KeyType::Ed25519);
                 key.set_Data(data.encode().into());
                 key
-            },
+            }
             #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
             Self::Rsa(_) => {
                 return Err(DecodingError::new(
@@ -176,21 +176,23 @@ impl Keypair {
             }
         };
 
-        pk.write_to_bytes().map_err(|e| DecodingError::new("Failed to decode.").source(e))
+        pk.write_to_bytes()
+            .map_err(|e| DecodingError::new("Failed to decode.").source(e))
     }
 
     /// Decode a private key from a protobuf structure and parse it as a [`Keypair`].
     pub fn from_protobuf_encoding(bytes: &[u8]) -> Result<Keypair, DecodingError> {
-        use protobuf::Message;
         use protobuf::Enum;
+        use protobuf::Message;
 
         let mut private_key = keys_proto::PrivateKey::parse_from_bytes(bytes)
             .map_err(|e| DecodingError::new("Protobuf").source(e))
             .map(zeroize::Zeroizing::new)?;
 
-        let key_type = keys_proto::KeyType::from_i32(private_key.Type().value()).ok_or_else(|| {
-            DecodingError::new(format!("unknown key type: {:?}", private_key.Type()))
-        })?;
+        let key_type =
+            keys_proto::KeyType::from_i32(private_key.Type().value()).ok_or_else(|| {
+                DecodingError::new(format!("unknown key type: {:?}", private_key.Type()))
+            })?;
 
         match key_type {
             keys_proto::KeyType::Ed25519 => {
@@ -258,7 +260,9 @@ impl PublicKey {
 
         let public_key = keys_proto::PublicKey::from(self);
 
-        public_key.write_to_bytes().expect("All fields to be initialized.")
+        public_key
+            .write_to_bytes()
+            .expect("All fields to be initialized.")
     }
 
     /// Decode a public key from a protobuf structure, e.g. read from storage
@@ -286,28 +290,28 @@ impl From<&PublicKey> for keys_proto::PublicKey {
                 pubkey.set_Type(keys_proto::KeyType::Ed25519);
                 pubkey.set_Data(key.encode().to_vec());
                 pubkey
-            },
+            }
             #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
             PublicKey::Rsa(key) => {
                 let mut pubkey = keys_proto::PublicKey::new();
                 pubkey.set_Type(keys_proto::KeyType::RSA);
                 pubkey.set_Data(key.encode_x509());
                 pubkey
-            },
+            }
             #[cfg(feature = "secp256k1")]
             PublicKey::Secp256k1(key) => {
                 let mut pubkey = keys_proto::PublicKey::new();
                 pubkey.set_Type(keys_proto::KeyType::Secp256k1);
                 pubkey.set_Data(key.encode().to_vec());
                 pubkey
-            },
+            }
             #[cfg(feature = "ecdsa")]
             PublicKey::Ecdsa(key) => {
                 let mut pubkey = keys_proto::PublicKey::new();
                 pubkey.set_Type(keys_proto::KeyType::ECDSA);
                 pubkey.set_Data(key.encode_der());
                 pubkey
-            },
+            }
         }
     }
 }

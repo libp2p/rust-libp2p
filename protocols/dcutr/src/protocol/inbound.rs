@@ -50,7 +50,8 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
         );
 
         async move {
-            let hole_punch: HolePunch = substream.next().await.ok_or(UpgradeError::StreamClosed)??;
+            let hole_punch: HolePunch =
+                substream.next().await.ok_or(UpgradeError::StreamClosed)??;
 
             match hole_punch.type_() {
                 hole_punch::Type::CONNECT => {}
@@ -61,7 +62,8 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
                 return Err(UpgradeError::NoAddresses);
             }
 
-            let obs_addrs = hole_punch.ObsAddrs
+            let obs_addrs = hole_punch
+                .ObsAddrs
                 .into_iter()
                 .map(Multiaddr::try_from)
                 // Filter out relayed addresses.
@@ -100,7 +102,8 @@ impl PendingConnect {
             .substream
             .next()
             .await
-            .ok_or(UpgradeError::StreamClosed)??.type_();
+            .ok_or(UpgradeError::StreamClosed)??
+            .type_();
 
         match r#type {
             hole_punch::Type::CONNECT => return Err(UpgradeError::UnexpectedTypeConnect),

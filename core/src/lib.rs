@@ -42,8 +42,8 @@ mod protos {
     include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 }
 
-use protos::keys as keys_proto;
 use protos::envelope as envelope_proto;
+use protos::keys as keys_proto;
 use protos::peer_record as peer_record_proto;
 
 /// Multi-address re-export.

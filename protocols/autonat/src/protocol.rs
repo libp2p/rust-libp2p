@@ -113,12 +113,14 @@ impl DialRequest {
         if msg.type_() != structs_proto::message::MessageType::DIAL as _ {
             return Err(io::Error::new(io::ErrorKind::InvalidData, "invalid type"));
         }
-        let (peer_id, addrs) = if let Some(
-            structs_proto::message::PeerInfo {
-                id: Some(peer_id),
-                addrs,
-                ..
-        }) = msg.dial.into_option().and_then(|dial| dial.peer.into_option())
+        let (peer_id, addrs) = if let Some(structs_proto::message::PeerInfo {
+            id: Some(peer_id),
+            addrs,
+            ..
+        }) = msg
+            .dial
+            .into_option()
+            .and_then(|dial| dial.peer.into_option())
         {
             (peer_id, addrs)
         } else {
@@ -197,7 +199,9 @@ impl TryFrom<structs_proto::message::ResponseStatus> for ResponseError {
     fn try_from(value: structs_proto::message::ResponseStatus) -> Result<Self, Self::Error> {
         match value {
             structs_proto::message::ResponseStatus::E_DIAL_ERROR => Ok(ResponseError::DialError),
-            structs_proto::message::ResponseStatus::E_DIAL_REFUSED => Ok(ResponseError::DialRefused),
+            structs_proto::message::ResponseStatus::E_DIAL_REFUSED => {
+                Ok(ResponseError::DialRefused)
+            }
             structs_proto::message::ResponseStatus::E_BAD_REQUEST => Ok(ResponseError::BadRequest),
             structs_proto::message::ResponseStatus::E_INTERNAL_ERROR => {
                 Ok(ResponseError::InternalError)
@@ -228,11 +232,12 @@ impl DialResponse {
         }
         Ok(match msg.dialResponse.into_option() {
             Some(structs_proto::message::DialResponse {
-                 status: Some(status),
-                 statusText,
-                 addr: Some(addr),
-                 ..
-            }) if structs_proto::message::ResponseStatus::from_i32(status.value()) ==  Some(structs_proto::message::ResponseStatus::OK) =>
+                status: Some(status),
+                statusText,
+                addr: Some(addr),
+                ..
+            }) if structs_proto::message::ResponseStatus::from_i32(status.value())
+                == Some(structs_proto::message::ResponseStatus::OK) =>
             {
                 let addr = Multiaddr::try_from(addr)
                     .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?;
@@ -242,16 +247,21 @@ impl DialResponse {
                 }
             }
             Some(structs_proto::message::DialResponse {
-                 status: Some(status),
-                 statusText,
-                 addr: None,
-                 ..
+                status: Some(status),
+                statusText,
+                addr: None,
+                ..
             }) => Self {
                 status_text: statusText,
                 result: Err(ResponseError::try_from(
-                    structs_proto::message::ResponseStatus::from_i32(status.value()).ok_or_else(|| {
-                        io::Error::new(io::ErrorKind::InvalidData, "invalid response status code")
-                    })?,
+                    structs_proto::message::ResponseStatus::from_i32(status.value()).ok_or_else(
+                        || {
+                            io::Error::new(
+                                io::ErrorKind::InvalidData,
+                                "invalid response status code",
+                            )
+                        },
+                    )?,
                 )?),
             },
             _ => {
@@ -273,15 +283,18 @@ impl DialResponse {
                 res.statusText = self.status_text;
 
                 res
-            },
+            }
             Err(error) => {
                 let mut res = structs_proto::message::DialResponse::new();
                 res.clear_addr();
-                res.set_status(structs_proto::message::ResponseStatus::from_i32(error.into()).expect("Valid ResponseError."));
+                res.set_status(
+                    structs_proto::message::ResponseStatus::from_i32(error.into())
+                        .expect("Valid ResponseError."),
+                );
                 res.statusText = self.status_text;
 
                 res
-            },
+            }
         };
 
         let mut msg = structs_proto::Message::new();

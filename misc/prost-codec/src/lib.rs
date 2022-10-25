@@ -40,8 +40,7 @@ impl<In: Message, Out> Encoder for Codec<In, Out> {
         item: Self::Item,
         dst: &mut asynchronous_codec::BytesMut,
     ) -> Result<(), Self::Error> {
-        let bytes = item.write_to_bytes()
-            .expect("Failed to write to bytes.");
+        let bytes = item.write_to_bytes().expect("Failed to write to bytes.");
         self.uvi
             .encode(Bytes::from(bytes), dst)
             .map_err(|e| e.into())

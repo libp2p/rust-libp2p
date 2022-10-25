@@ -84,8 +84,9 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
                             .into_option()
                             .ok_or(FatalUpgradeError::MissingPeer)?
                             .id
-                            .ok_or(FatalUpgradeError::ParsePeerId)?
-                    ).map_err(|_| FatalUpgradeError::ParsePeerId)?;
+                            .ok_or(FatalUpgradeError::ParsePeerId)?,
+                    )
+                    .map_err(|_| FatalUpgradeError::ParsePeerId)?;
                     Req::Connect(CircuitReq { dst, substream })
                 }
                 hop_message::Type::STATUS => {
@@ -149,10 +150,12 @@ impl ReservationReq {
         msg.set_type(hop_message::Type::STATUS);
         msg.reservation = protobuf::MessageField::some(Reservation {
             addrs: addrs.into_iter().map(|a| a.to_vec()).collect(),
-            expire: Some((SystemTime::now() + self.reservation_duration)
-                .duration_since(SystemTime::UNIX_EPOCH)
-                .unwrap()
-                .as_secs()),
+            expire: Some(
+                (SystemTime::now() + self.reservation_duration)
+                    .duration_since(SystemTime::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs(),
+            ),
             ..Reservation::default()
         });
         msg.limit = protobuf::MessageField::some(Limit {

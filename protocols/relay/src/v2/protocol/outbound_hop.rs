@@ -56,7 +56,7 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
                 let mut msg = HopMessage::new();
                 msg.set_type(hop_message::Type::RESERVE);
                 msg
-            },
+            }
             Upgrade::Connect { dst_peer_id } => {
                 let mut msg = HopMessage::new();
                 msg.set_type(hop_message::Type::CONNECT);
@@ -65,7 +65,7 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
                     ..Peer::default()
                 });
                 msg
-            },
+            }
         };
 
         let mut substream = Framed::new(substream, prost_codec::Codec::new(MAX_MESSAGE_SIZE));

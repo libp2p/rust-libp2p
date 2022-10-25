@@ -298,13 +298,15 @@ impl From<GossipsubRpc> for rpc_proto::RPC {
                 } => {
                     let mut rpc_ihave = rpc_proto::ControlIHave::new();
                     rpc_ihave.set_topic_id(topic_hash.into_string());
-                    rpc_ihave.message_ids = message_ids.into_iter().map(|msg_id| msg_id.0).collect();
+                    rpc_ihave.message_ids =
+                        message_ids.into_iter().map(|msg_id| msg_id.0).collect();
 
                     control.ihave.push(rpc_ihave);
                 }
                 GossipsubControlAction::IWant { message_ids } => {
                     let mut rpc_iwant = rpc_proto::ControlIWant::new();
-                    rpc_iwant.message_ids =  message_ids.into_iter().map(|msg_id| msg_id.0).collect();
+                    rpc_iwant.message_ids =
+                        message_ids.into_iter().map(|msg_id| msg_id.0).collect();
 
                     control.iwant.push(rpc_iwant);
                 }

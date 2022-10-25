@@ -22,13 +22,11 @@ fn main() {
     protobuf_codegen::Codegen::new()
         .pure()
         .includes(&["src"])
-        .inputs(
-            &[
+        .inputs(&[
             "src/keys.proto",
             "src/envelope.proto",
             "src/peer_record.proto",
-            ]
-        )
+        ])
         .customize(protobuf_codegen::Customize::default().lite_runtime(true))
         .cargo_out_dir("protos")
         .run()

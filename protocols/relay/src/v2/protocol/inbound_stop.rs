@@ -65,14 +65,14 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
                 .or(Err(FatalUpgradeError::ParseTypeField))?;
             match ty {
                 stop_message::Type::CONNECT => {
-                    let src_peer_id =
-                        PeerId::from_bytes(
-                            &peer
-                                .into_option()
-                                .ok_or(FatalUpgradeError::MissingPeer)?
-                                .id
-                                .ok_or(FatalUpgradeError::ParsePeerId)?
-                        ).map_err(|_| FatalUpgradeError::ParsePeerId)?;
+                    let src_peer_id = PeerId::from_bytes(
+                        &peer
+                            .into_option()
+                            .ok_or(FatalUpgradeError::MissingPeer)?
+                            .id
+                            .ok_or(FatalUpgradeError::ParsePeerId)?,
+                    )
+                    .map_err(|_| FatalUpgradeError::ParsePeerId)?;
                     Ok(Circuit {
                         substream,
                         src_peer_id,
