@@ -236,8 +236,8 @@ mod tests {
         futures::executor::block_on(connect(a))
     }
 
-    fn new_ws_config() -> WsConfig<tcp::TcpTransport> {
-        WsConfig::new(tcp::TcpTransport::new(tcp::GenTcpConfig::default()))
+    fn new_ws_config() -> WsConfig<tcp::async_io::Transport> {
+        WsConfig::new(tcp::async_io::Transport::new(tcp::Config::default()))
     }
 
     async fn connect(listen_addr: Multiaddr) {
