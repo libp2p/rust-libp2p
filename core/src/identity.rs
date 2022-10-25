@@ -290,7 +290,7 @@ impl From<&PublicKey> for keys_proto::PublicKey {
             #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
             PublicKey::Rsa(key) => {
                 let mut pubkey = keys_proto::PublicKey::new();
-                pubkey.set_Type(keys_proto::KeyType::Rsa);
+                pubkey.set_Type(keys_proto::KeyType::RSA);
                 pubkey.set_Data(key.encode_x509());
                 pubkey
             },
@@ -321,7 +321,7 @@ impl TryFrom<keys_proto::PublicKey> for PublicKey {
                 ed25519::PublicKey::decode(&pubkey.Data()).map(PublicKey::Ed25519)
             }
             #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
-            keys_proto::KeyType::Rsa => {
+            keys_proto::KeyType::RSA => {
                 rsa::PublicKey::decode_x509(&pubkey.Data()).map(PublicKey::Rsa)
             }
             #[cfg(any(not(feature = "rsa"), target_arch = "wasm32"))]
