@@ -25,16 +25,6 @@ This is a living document. Input is always welcome e.g. via GitHub issues or pul
 
 <!-- markdown-toc end -->
 
-## TLS support
-
-| Category     | Status      | Target Completion | Tracking                                        | Dependencies                       | Dependents |
-|--------------|-------------|-------------------|-------------------------------------------------|------------------------------------|------------|
-| Connectivity | In progress | Q4/2022           | https://github.com/libp2p/rust-libp2p/pull/2945 | [QUIC](#experimental-quic-support) |            |
-
-
-This allows us to secure both TCP and QUIC connections using TLS. This is a requirement for QUIC
-support. Running TLS on top of TCP is a nice to have, since we already have noise.
-
 ## Experimental QUIC support
 
 | Category     | Status      | Target Completion | Tracking                                          | Dependencies                                                        | Dependents |
