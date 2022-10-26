@@ -3,6 +3,7 @@ use crate::identity::Keypair;
 use crate::signed_envelope::SignedEnvelope;
 use crate::{peer_record_proto, signed_envelope, DecodeError, Multiaddr, PeerId};
 use instant::SystemTime;
+use std::borrow::Cow;
 use std::convert::TryInto;
 
 const PAYLOAD_TYPE: &str = "/libp2p/routing-state-record";
@@ -29,11 +30,11 @@ impl PeerRecord {
     ///
     /// If this function succeeds, the [`SignedEnvelope`] contained a peer record with a valid signature and can hence be considered authenticated.
     pub fn from_signed_envelope(envelope: SignedEnvelope) -> Result<Self, FromEnvelopeError> {
-        use prost::Message;
-
         let (payload, signing_key) =
             envelope.payload_and_signing_key(String::from(DOMAIN_SEP), PAYLOAD_TYPE.as_bytes())?;
-        let record = peer_record_proto::PeerRecord::decode(payload).map_err(DecodeError)?;
+
+        let record: peer_record_proto::PeerRecord =
+            quick_protobuf::deserialize_from_slice(payload).map_err(DecodeError)?;
 
         let peer_id = PeerId::from_bytes(&record.peer_id)?;
 
@@ -45,7 +46,7 @@ impl PeerRecord {
         let addresses = record
             .addresses
             .into_iter()
-            .map(|a| a.multiaddr.try_into())
+            .map(|a| a.multiaddr.to_vec().try_into())
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(Self {
@@ -60,8 +61,6 @@ impl PeerRecord {
     ///
     /// This is the same key that is used for authenticating every libp2p connection of your application, i.e. what you use when setting up your [`crate::transport::Transport`].
     pub fn new(key: &Keypair, addresses: Vec<Multiaddr>) -> Result<Self, SigningError> {
-        use prost::Message;
-
         let seq = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .expect("now() is never before UNIX_EPOCH")
@@ -70,21 +69,17 @@ impl PeerRecord {
 
         let payload = {
             let record = peer_record_proto::PeerRecord {
-                peer_id: peer_id.to_bytes(),
+                peer_id: Cow::from(peer_id.to_bytes()),
                 seq,
                 addresses: addresses
                     .iter()
-                    .map(|m| peer_record_proto::peer_record::AddressInfo {
-                        multiaddr: m.to_vec(),
+                    .map(|m| peer_record_proto::mod_PeerRecord::AddressInfo {
+                        multiaddr: Cow::from(m.to_vec()),
                     })
                     .collect(),
             };
 
-            let mut buf = Vec::with_capacity(record.encoded_len());
-            record
-                .encode(&mut buf)
-                .expect("Vec<u8> provides capacity as needed");
-            buf
+            quick_protobuf::serialize_into_vec(&record).expect("Encoding to succeed.")
         };
 
         let envelope = SignedEnvelope::new(

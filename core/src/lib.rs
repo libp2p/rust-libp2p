@@ -38,18 +38,11 @@
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
 #[allow(clippy::derive_partial_eq_without_eq)]
-mod keys_proto {
-    include!(concat!(env!("OUT_DIR"), "/keys_proto.rs"));
+mod protos {
+    include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 }
 
-mod envelope_proto {
-    include!(concat!(env!("OUT_DIR"), "/envelope_proto.rs"));
-}
-
-#[allow(clippy::derive_partial_eq_without_eq)]
-mod peer_record_proto {
-    include!(concat!(env!("OUT_DIR"), "/peer_record_proto.rs"));
-}
+use protos::*;
 
 /// Multi-address re-export.
 pub use multiaddr;
@@ -82,4 +75,4 @@ pub use upgrade::{InboundUpgrade, OutboundUpgrade, ProtocolName, UpgradeError, U
 
 #[derive(thiserror::Error, Debug)]
 #[error(transparent)]
-pub struct DecodeError(prost::DecodeError);
+pub struct DecodeError(quick_protobuf::Error);

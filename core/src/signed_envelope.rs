@@ -1,6 +1,8 @@
+use crate::envelope_proto;
 use crate::identity::error::SigningError;
 use crate::identity::Keypair;
 use crate::{identity, DecodeError, PublicKey};
+use std::borrow::Cow;
 use std::convert::TryInto;
 use std::fmt;
 use unsigned_varint::encode::usize_buffer;
@@ -73,37 +75,29 @@ impl SignedEnvelope {
 
     /// Encode this [`SignedEnvelope`] using the protobuf encoding specified in the RFC.
     pub fn into_protobuf_encoding(self) -> Vec<u8> {
-        use prost::Message;
-
         let envelope = crate::envelope_proto::Envelope {
             public_key: Some((&self.key).into()),
-            payload_type: self.payload_type,
-            payload: self.payload,
-            signature: self.signature,
+            payload_type: Cow::from(self.payload_type),
+            payload: Cow::from(self.payload),
+            signature: Cow::from(self.signature),
         };
 
-        let mut buf = Vec::with_capacity(envelope.encoded_len());
-        envelope
-            .encode(&mut buf)
-            .expect("Vec<u8> provides capacity as needed");
-
-        buf
+        quick_protobuf::serialize_into_vec(&envelope).expect("Encoding to succeed.")
     }
 
     /// Decode a [`SignedEnvelope`] using the protobuf encoding specified in the RFC.
     pub fn from_protobuf_encoding(bytes: &[u8]) -> Result<Self, DecodingError> {
-        use prost::Message;
-
-        let envelope = crate::envelope_proto::Envelope::decode(bytes).map_err(DecodeError)?;
+        let envelope: envelope_proto::Envelope =
+            quick_protobuf::deserialize_from_slice(bytes).map_err(DecodeError)?;
 
         Ok(Self {
             key: envelope
                 .public_key
                 .ok_or(DecodingError::MissingPublicKey)?
                 .try_into()?,
-            payload_type: envelope.payload_type,
-            payload: envelope.payload,
-            signature: envelope.signature,
+            payload_type: envelope.payload_type.to_vec(),
+            payload: envelope.payload.to_vec(),
+            signature: envelope.signature.to_vec(),
         })
     }
 }
