@@ -73,7 +73,7 @@ impl Certificate {
         let der_encoded = x509.x509_enc().ok_or(Kind::FailedToEncode)?;
 
         let certificate = webrtc::dtls::crypto::Certificate {
-            certificate: vec![rustls::Certificate(der_encoded)],
+            certificate: vec![rustls::Certificate(der_encoded.clone())],
             private_key: CryptoPrivateKey {
                 kind: CryptoPrivateKeyKind::Ecdsa256(key_pair),
                 serialized_der: document.as_ref().to_owned(),
@@ -84,7 +84,7 @@ impl Certificate {
             certificate,
             &pem::encode(&Pem {
                 tag: "CERTIFICATE".to_string(),
-                contents: document.as_ref().to_owned(),
+                contents: der_encoded,
             }),
             SystemTime::UNIX_EPOCH
                 .checked_add(Duration::from_secs(UNIX_3000 as u64))
@@ -147,7 +147,7 @@ mod tests {
 
         assert_eq!(
             pem,
-            "-----BEGIN CERTIFICATE-----\r\nMIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgdqBAU72gqIvaUXe4\r\nahXDsp9VmHPLSBIyKZzVdDFRrEuhRANCAARUpdAcrvL5Quijbk3jdtO3RxTerTIS\r\nRAp3fqP9w6+OyXDhnRuSFDV73UA6oW0PSnDvQnbYFMuQRe8ZUfZYTnWU\r\n-----END CERTIFICATE-----\r\n"
+            "-----BEGIN CERTIFICATE-----\r\nMIIBEDCBvgIBADAKBggqhkjOPQQDAjAWMRQwEgYDVQQKDAtydXN0LWxpYnAycDAi\r\nGA8xOTk5MTIzMTEzMDAwMFoYDzI5OTkxMjMxMTMwMDAwWjAWMRQwEgYDVQQKDAty\r\ndXN0LWxpYnAycDBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABFSl0Byu8vlC6KNu\r\nTeN207dHFN6tMhJECnd+o/3Dr47JcOGdG5IUNXvdQDqhbQ9KcO9CdtgUy5BF7xlR\r\n9lhOdZQwCgYIKoZIzj0EAwIDQQBdpiGC3yxU6g+91aWxEfBPZF9WjQXRjysDUmzf\r\n5C4H1Ql1XNPpojRHPOrFnjYZwvolt2PxgFKEHYhZAIJBUyfy\r\n-----END CERTIFICATE-----\r\n"
         )
     }
 
