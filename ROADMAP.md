@@ -26,7 +26,7 @@ roadmap](https://github.com/libp2p/specs/blob/master/ROADMAP.md).
 
 <!-- markdown-toc end -->
 
-## Experimental QUIC support
+## QUIC support
 
 | Category     | Status      | Target Completion | Tracking                                          | Dependencies                                                        | Dependents |
 |--------------|-------------|-------------------|---------------------------------------------------|---------------------------------------------------------------------|------------|
@@ -34,7 +34,7 @@ roadmap](https://github.com/libp2p/specs/blob/master/ROADMAP.md).
 
 QUIC has been on the roadmap for a long time. It enables various performance improvements as well as
 higher hole punching success rates. We are close to finishing a first version with
-https://github.com/libp2p/rust-libp2p/pull/2289 and will improve from there. See tracking issue
+https://github.com/libp2p/rust-libp2p/pull/2289. We will improve from there. See tracking issue
 https://github.com/libp2p/rust-libp2p/issues/2883.
 
 ## WebRTC support (browser-to-server)
