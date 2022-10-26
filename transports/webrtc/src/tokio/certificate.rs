@@ -1,16 +1,35 @@
 use crate::tokio::fingerprint::Fingerprint;
-use rand::distributions::DistString;
+use pem::Pem;
 use rand::{CryptoRng, Rng};
-use rcgen::{CertificateParams, RcgenError, PKCS_ED25519};
-use ring::signature::Ed25519KeyPair;
+use ring::signature::{EcdsaKeyPair, KeyPair, ECDSA_P256_SHA256_FIXED_SIGNING};
 use ring::test::rand::FixedSliceSequenceRandom;
 use std::cell::UnsafeCell;
+use std::time::{Duration, SystemTime};
+use webrtc::dtls::crypto::{CryptoPrivateKey, CryptoPrivateKeyKind};
 use webrtc::peer_connection::certificate::RTCCertificate;
 
 #[derive(Clone, PartialEq)]
 pub struct Certificate {
     inner: RTCCertificate,
 }
+
+/// The year 2000.
+const UNIX_2000: i64 = 946645200;
+
+/// The year 3000.
+const UNIX_3000: i64 = 32503640400;
+
+/// OID for the organisation name. See <http://oid-info.com/get/2.5.4.10>.
+const ORGANISATION_NAME_OID: [u64; 4] = [2, 5, 4, 10];
+
+/// OID for Elliptic Curve Public Key Cryptography. See <http://oid-info.com/get/1.2.840.10045.2.1>.
+const EC_OID: [u64; 6] = [1, 2, 840, 10045, 2, 1];
+
+/// OID for 256-bit Elliptic Curve Cryptography (ECC) with the P256 curve. See <http://oid-info.com/get/1.2.840.10045.3.1.7>.
+const P256_OID: [u64; 7] = [1, 2, 840, 10045, 3, 1, 7];
+
+/// OID for the ECDSA signature algorithm with using SHA256 as the hash function. See <http://oid-info.com/get/1.2.840.10045.4.3.2>.
+const ECDSA_SHA256_OID: [u64; 7] = [1, 2, 840, 10045, 4, 3, 2];
 
 impl Certificate {
     /// Generate new certificate.
@@ -20,14 +39,57 @@ impl Certificate {
     where
         R: CryptoRng + Rng,
     {
-        let keypair = new_keypair(rng)?;
-        let alt_name = rand::distributions::Alphanumeric.sample_string(rng, 16);
+        // Usage of `FixedSliceSequenceRandom` guarantees us that we only use each byte-slice of pre-generated randomness once.
+        let ring_rng = FixedSliceSequenceRandom {
+            bytes: &[&rng.gen::<[u8; 32]>(), &rng.gen::<[u8; 32]>()],
+            current: UnsafeCell::new(0),
+        };
 
-        let mut params = CertificateParams::new(vec![alt_name.clone()]);
-        params.alg = &PKCS_ED25519;
-        params.key_pair = Some(keypair);
+        let document = EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_FIXED_SIGNING, &ring_rng)
+            .map_err(Kind::Unspecified)?;
+        let key_pair =
+            EcdsaKeyPair::from_pkcs8(&ECDSA_P256_SHA256_FIXED_SIGNING, document.as_ref())
+                .map_err(Kind::KeyRejected)?;
 
-        let certificate = RTCCertificate::from_params(params).map_err(Kind::WebRTC)?;
+        // Create a minimal certificate.
+        let x509 = simple_x509::X509::builder()
+            .issuer_utf8(Vec::from(ORGANISATION_NAME_OID), "rust-libp2p")
+            .subject_utf8(Vec::from(ORGANISATION_NAME_OID), "rust-libp2p")
+            .not_before_gen(UNIX_2000)
+            .not_after_gen(UNIX_3000)
+            .pub_key_ec(
+                Vec::from(EC_OID),
+                key_pair.public_key().as_ref().to_owned(),
+                Vec::from(P256_OID),
+            )
+            .sign_oid(Vec::from(ECDSA_SHA256_OID))
+            .build()
+            .sign(
+                |data, _| Some(key_pair.sign(&ring_rng, &data).ok()?.as_ref().to_owned()),
+                &vec![], // We close over the keypair so no need to pass it.
+            )
+            .ok_or(Kind::FailedToSign)?;
+
+        let der_encoded = x509.x509_enc().ok_or(Kind::FailedToEncode)?;
+
+        let certificate = webrtc::dtls::crypto::Certificate {
+            certificate: vec![rustls::Certificate(der_encoded)],
+            private_key: CryptoPrivateKey {
+                kind: CryptoPrivateKeyKind::Ecdsa256(key_pair),
+                serialized_der: document.as_ref().to_owned(),
+            },
+        };
+
+        let certificate = RTCCertificate::from_existing(
+            certificate,
+            &pem::encode(&Pem {
+                tag: "CERTIFICATE".to_string(),
+                contents: document.as_ref().to_owned(),
+            }),
+            SystemTime::UNIX_EPOCH
+                .checked_add(Duration::from_secs(UNIX_3000 as u64))
+                .expect("expiry to be always valid"),
+        );
 
         Ok(Self { inner: certificate })
     }
@@ -61,39 +123,13 @@ pub struct Error(#[from] Kind);
 #[derive(thiserror::Error, Debug)]
 enum Kind {
     #[error(transparent)]
-    Rcgen(RcgenError),
+    KeyRejected(ring::error::KeyRejected),
     #[error(transparent)]
-    Ring(ring::error::Unspecified),
-    #[error(transparent)]
-    WebRTC(webrtc::Error),
-}
-
-/// Generates a new [`rcgen::KeyPair`] from the given randomness source.
-///
-/// This implementation uses `ring`'s [`FixedSliceSequenceRandom`] to create a deterministic randomness
-/// source which allows us to fully control the resulting keypair.
-///
-/// [`FixedSliceSequenceRandom`] only hands out the provided byte-slices for each call to
-/// [`SecureRandom::fill`] and therefore does not offer ANY guarantees about the randomess, it is
-/// all under our control.
-///
-/// Using [`FixedSliceSequenceRandom`] over [`FixedSliceRandom`] ensures that we only ever use the
-/// provided byte-slice once and don't reuse our "randomness" for different variables which could be
-/// a security problem.
-fn new_keypair<R>(rng: &mut R) -> Result<rcgen::KeyPair, Error>
-where
-    R: CryptoRng + Rng,
-{
-    let ring_rng = FixedSliceSequenceRandom {
-        bytes: &[&rng.gen::<[u8; 32]>()],
-        current: UnsafeCell::new(0),
-    };
-
-    let document = Ed25519KeyPair::generate_pkcs8(&ring_rng).map_err(Kind::Ring)?;
-    let der = document.as_ref();
-    let keypair = rcgen::KeyPair::from_der(der).map_err(Kind::Rcgen)?;
-
-    Ok(keypair)
+    Unspecified(ring::error::Unspecified),
+    #[error("Failed to sign certificate")]
+    FailedToSign,
+    #[error("Failed to DER-encode certificate")]
+    FailedToEncode,
 }
 
 #[cfg(test)]
@@ -111,7 +147,7 @@ mod tests {
 
         assert_eq!(
             pem,
-            "-----BEGIN CERTIFICATE-----\r\nMIIBGTCBzKADAgECAgkA349L+6JmEFgwBQYDK2VwMCExHzAdBgNVBAMMFnJjZ2Vu\r\nIHNlbGYgc2lnbmVkIGNlcnQwIBcNNzUwMTAxMDAwMDAwWhgPNDA5NjAxMDEwMDAw\r\nMDBaMCExHzAdBgNVBAMMFnJjZ2VuIHNlbGYgc2lnbmVkIGNlcnQwKjAFBgMrZXAD\r\nIQDqCj9zLT7ijKUXLEZw7/JZeuDEvleLkSgyFN3Q8lhWXqMfMB0wGwYDVR0RBBQw\r\nEoIQNTRDZG14TlhhREhFd1k4VzAFBgMrZXADQQBQdGOd+rpYKM63TTDT7V4TysD3\r\nhSD7qs2fNQ+tM7mGe9r2mScaOXvnoCnlLt/wDsEB3hFwpkmRbgZMLjCooZ8E\r\n-----END CERTIFICATE-----\r\n"
+            "-----BEGIN CERTIFICATE-----\r\nMIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgdqBAU72gqIvaUXe4\r\nahXDsp9VmHPLSBIyKZzVdDFRrEuhRANCAARUpdAcrvL5Quijbk3jdtO3RxTerTIS\r\nRAp3fqP9w6+OyXDhnRuSFDV73UA6oW0PSnDvQnbYFMuQRe8ZUfZYTnWU\r\n-----END CERTIFICATE-----\r\n"
         )
     }
 

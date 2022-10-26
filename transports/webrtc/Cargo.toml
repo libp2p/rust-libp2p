@@ -21,12 +21,14 @@ libp2p-core = { version = "0.37.0", path = "../../core"  }
 libp2p-noise = { version = "0.40.0", path = "../../transports/noise" }
 log = "0.4"
 multihash = { version = "0.16", default-features = false, features = ["sha2"] }
+pem = "1.1.0"
 prost = "0.11"
 prost-codec = { version = "0.2.1", path = "../../misc/prost-codec" }
 rand = "0.8"
-rcgen = "0.9.3"
 ring = "0.16.20"
+rustls = "0.19.1" # Must match version in webrtc library.
 serde = { version = "1.0", features = ["derive"] }
+simple_x509 = "0.2.2"
 stun = "0.4"
 thiserror = "1"
 tinytemplate = "1.2"
