@@ -39,7 +39,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!("Local peer id: {:?}", peer_id);
 
     // Create a transport.
-    let transport = tcp::TcpTransport::default()
+    let transport = tcp::async_io::Transport::default()
         .upgrade(Version::V1)
         .authenticate(noise::NoiseAuthenticated::xx(&id_keys)?)
         .multiplex(yamux::YamuxConfig::default())

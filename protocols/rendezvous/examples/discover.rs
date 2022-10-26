@@ -23,8 +23,7 @@ use libp2p::core::identity;
 use libp2p::core::PeerId;
 use libp2p::multiaddr::Protocol;
 use libp2p::ping;
-use libp2p::swarm::{keep_alive, SwarmEvent};
-use libp2p::Swarm;
+use libp2p::swarm::{keep_alive, SwarmBuilder, SwarmEvent};
 use libp2p::{
     core::{upgrade::Version, Transport},
     noise, rendezvous, tcp, yamux, Multiaddr,
@@ -44,8 +43,8 @@ async fn main() {
         .parse()
         .unwrap();
 
-    let mut swarm = Swarm::new(
-        tcp::TcpTransport::default()
+    let mut swarm = SwarmBuilder::new(
+        tcp::tokio::Transport::default()
             .upgrade(Version::V1)
             .authenticate(noise::NoiseAuthenticated::xx(&identity).unwrap())
             .multiplex(yamux::YamuxConfig::default())
@@ -56,7 +55,11 @@ async fn main() {
             keep_alive: keep_alive::Behaviour,
         },
         PeerId::from(identity.public()),
-    );
+    )
+    .executor(Box::new(|f| {
+        tokio::spawn(f);
+    }))
+    .build();
 
     log::info!("Local peer id: {}", swarm.local_peer_id());
 

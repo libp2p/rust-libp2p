@@ -255,7 +255,7 @@ mod network {
         // Build the Swarm, connecting the lower layer transport logic with the
         // higher layer network behaviour logic.
         let swarm = SwarmBuilder::new(
-            tcp::TcpTransport::default()
+            tcp::async_io::Transport::default()
                 .upgrade(Version::V1)
                 .authenticate(noise::NoiseAuthenticated::xx(&id_keys)?)
                 .multiplex(yamux::YamuxConfig::default())

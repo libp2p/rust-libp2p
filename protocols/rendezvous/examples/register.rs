@@ -22,7 +22,7 @@ use futures::StreamExt;
 use libp2p::core::identity;
 use libp2p::core::PeerId;
 use libp2p::ping;
-use libp2p::swarm::{Swarm, SwarmEvent};
+use libp2p::swarm::{SwarmBuilder, SwarmEvent};
 use libp2p::{
     core::{upgrade::Version, Transport},
     noise, rendezvous, tcp, yamux,
@@ -42,8 +42,8 @@ async fn main() {
 
     let identity = identity::Keypair::generate_ed25519();
 
-    let mut swarm = Swarm::new(
-        tcp::TcpTransport::default()
+    let mut swarm = SwarmBuilder::new(
+        tcp::tokio::Transport::default()
             .upgrade(Version::V1)
             .authenticate(noise::NoiseAuthenticated::xx(&identity).unwrap())
             .multiplex(yamux::YamuxConfig::default())
@@ -53,7 +53,11 @@ async fn main() {
             ping: ping::Behaviour::new(ping::Config::new().with_interval(Duration::from_secs(1))),
         },
         PeerId::from(identity.public()),
-    );
+    )
+    .executor(Box::new(|f| {
+        tokio::spawn(f);
+    }))
+    .build();
 
     // In production the external address should be the publicly facing IP address of the rendezvous point.
     // This address is recorded in the registration entry by the rendezvous point.

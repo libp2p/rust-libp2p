@@ -62,7 +62,7 @@ async fn test_expired_async_std() -> Result<(), Box<dyn Error>> {
 async fn create_swarm(config: MdnsConfig) -> Result<Swarm<Mdns>, Box<dyn Error>> {
     let id_keys = identity::Keypair::generate_ed25519();
     let peer_id = PeerId::from(id_keys.public());
-    let transport = tcp::TcpTransport::default()
+    let transport = tcp::async_io::Transport::default()
         .upgrade(Version::V1)
         .authenticate(noise::NoiseAuthenticated::xx(&id_keys)?)
         .multiplex(yamux::YamuxConfig::default())
