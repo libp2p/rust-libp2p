@@ -39,56 +39,22 @@ impl Certificate {
     where
         R: CryptoRng + Rng,
     {
-        // Usage of `FixedSliceSequenceRandom` guarantees us that we only use each byte-slice of pre-generated randomness once.
-        let ring_rng = FixedSliceSequenceRandom {
-            bytes: &[&rng.gen::<[u8; 32]>(), &rng.gen::<[u8; 32]>()],
-            current: UnsafeCell::new(0),
-        };
-
-        let document = EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_FIXED_SIGNING, &ring_rng)
-            .map_err(Kind::Unspecified)?;
-        let key_pair =
-            EcdsaKeyPair::from_pkcs8(&ECDSA_P256_SHA256_FIXED_SIGNING, document.as_ref())
-                .map_err(Kind::KeyRejected)?;
-
-        // Create a minimal certificate.
-        let x509 = simple_x509::X509::builder()
-            .issuer_utf8(Vec::from(ORGANISATION_NAME_OID), "rust-libp2p")
-            .subject_utf8(Vec::from(ORGANISATION_NAME_OID), "rust-libp2p")
-            .not_before_gen(UNIX_2000)
-            .not_after_gen(UNIX_3000)
-            .pub_key_ec(
-                Vec::from(EC_OID),
-                key_pair.public_key().as_ref().to_owned(),
-                Vec::from(P256_OID),
-            )
-            .sign_oid(Vec::from(ECDSA_SHA256_OID))
-            .build()
-            .sign(
-                |data, _| Some(key_pair.sign(&ring_rng, &data).ok()?.as_ref().to_owned()),
-                &vec![], // We close over the keypair so no need to pass it.
-            )
-            .ok_or(Kind::FailedToSign)?;
-
-        let der_encoded = x509.x509_enc().ok_or(Kind::FailedToEncode)?;
-
-        let certificate = webrtc::dtls::crypto::Certificate {
-            certificate: vec![rustls::Certificate(der_encoded.clone())],
-            private_key: CryptoPrivateKey {
-                kind: CryptoPrivateKeyKind::Ecdsa256(key_pair),
-                serialized_der: document.as_ref().to_owned(),
-            },
-        };
+        let (key_pair, key_pair_der_bytes) = make_keypair(rng)?;
+        let (certificate, expiry) = make_minimal_certificate(rng, &key_pair)?;
 
         let certificate = RTCCertificate::from_existing(
-            certificate,
+            webrtc::dtls::crypto::Certificate {
+                certificate: vec![rustls::Certificate(certificate.clone())],
+                private_key: CryptoPrivateKey {
+                    kind: CryptoPrivateKeyKind::Ecdsa256(key_pair),
+                    serialized_der: key_pair_der_bytes,
+                },
+            },
             &pem::encode(&Pem {
                 tag: "CERTIFICATE".to_string(),
-                contents: der_encoded,
+                contents: certificate,
             }),
-            SystemTime::UNIX_EPOCH
-                .checked_add(Duration::from_secs(UNIX_3000 as u64))
-                .expect("expiry to be always valid"),
+            expiry,
         );
 
         Ok(Self { inner: certificate })
@@ -116,6 +82,68 @@ impl Certificate {
     }
 }
 
+fn make_keypair<R>(rng: &mut R) -> Result<(EcdsaKeyPair, Vec<u8>), Kind>
+where
+    R: CryptoRng + Rng,
+{
+    let rng = FixedSliceSequenceRandom {
+        bytes: &[&rng.gen::<[u8; 32]>()],
+        current: UnsafeCell::new(0),
+    };
+
+    let document = EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_FIXED_SIGNING, &rng)?;
+    let der_bytes = document.as_ref().to_owned();
+
+    let key_pair = EcdsaKeyPair::from_pkcs8(&ECDSA_P256_SHA256_FIXED_SIGNING, &der_bytes)?;
+
+    Ok((key_pair, der_bytes))
+}
+
+/// Constructs a minimal x509 certificate.
+///
+/// The returned bytes are DER-encoded.
+fn make_minimal_certificate<R>(
+    rng: &mut R,
+    key_pair: &EcdsaKeyPair,
+) -> Result<(Vec<u8>, SystemTime), Kind>
+where
+    R: CryptoRng + Rng,
+{
+    let mut rand = [0u8; 32];
+    rng.fill(&mut rand);
+
+    let rng = FixedSliceSequenceRandom {
+        bytes: &[&rand],
+        current: UnsafeCell::new(0),
+    };
+
+    let certificate = simple_x509::X509::builder()
+        .issuer_utf8(Vec::from(ORGANISATION_NAME_OID), "rust-libp2p")
+        .subject_utf8(Vec::from(ORGANISATION_NAME_OID), "rust-libp2p")
+        .not_before_gen(UNIX_2000)
+        .not_after_gen(UNIX_3000)
+        .pub_key_ec(
+            Vec::from(EC_OID),
+            key_pair.public_key().as_ref().to_owned(),
+            Vec::from(P256_OID),
+        )
+        .sign_oid(Vec::from(ECDSA_SHA256_OID))
+        .build()
+        .sign(
+            |cert, _| Some(key_pair.sign(&rng, &cert).ok()?.as_ref().to_owned()),
+            &vec![], // We close over the keypair so no need to pass it.
+        )
+        .ok_or(Kind::FailedToSign)?;
+
+    let der_bytes = certificate.x509_enc().ok_or(Kind::FailedToEncode)?;
+
+    let expiry = SystemTime::UNIX_EPOCH
+        .checked_add(Duration::from_secs(UNIX_3000 as u64))
+        .expect("expiry to be always valid");
+
+    Ok((der_bytes, expiry))
+}
+
 #[derive(thiserror::Error, Debug)]
 #[error("Failed to generate certificate")]
 pub struct Error(#[from] Kind);
@@ -123,9 +151,9 @@ pub struct Error(#[from] Kind);
 #[derive(thiserror::Error, Debug)]
 enum Kind {
     #[error(transparent)]
-    KeyRejected(ring::error::KeyRejected),
+    KeyRejected(#[from] ring::error::KeyRejected),
     #[error(transparent)]
-    Unspecified(ring::error::Unspecified),
+    Unspecified(#[from] ring::error::Unspecified),
     #[error("Failed to sign certificate")]
     FailedToSign,
     #[error("Failed to DER-encode certificate")]
@@ -141,14 +169,24 @@ mod tests {
 
     #[test]
     fn certificate_generation_is_deterministic() {
-        let certificate = Certificate::generate(&mut ChaCha20Rng::from_seed([0u8; 32])).unwrap();
+        let (keypair1, _) = make_keypair(&mut ChaCha20Rng::from_seed([0u8; 32])).unwrap();
+        let (keypair2, _) = make_keypair(&mut ChaCha20Rng::from_seed([0u8; 32])).unwrap();
 
-        let pem = certificate.to_pem();
+        let (bytes1, _) =
+            make_minimal_certificate(&mut ChaCha20Rng::from_seed([1u8; 32]), &keypair1).unwrap();
+        let (bytes2, _) =
+            make_minimal_certificate(&mut ChaCha20Rng::from_seed([1u8; 32]), &keypair2).unwrap();
 
-        assert_eq!(
-            pem,
-            "-----BEGIN CERTIFICATE-----\r\nMIIBEDCBvgIBADAKBggqhkjOPQQDAjAWMRQwEgYDVQQKDAtydXN0LWxpYnAycDAi\r\nGA8xOTk5MTIzMTEzMDAwMFoYDzI5OTkxMjMxMTMwMDAwWjAWMRQwEgYDVQQKDAty\r\ndXN0LWxpYnAycDBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABFSl0Byu8vlC6KNu\r\nTeN207dHFN6tMhJECnd+o/3Dr47JcOGdG5IUNXvdQDqhbQ9KcO9CdtgUy5BF7xlR\r\n9lhOdZQwCgYIKoZIzj0EAwIDQQBdpiGC3yxU6g+91aWxEfBPZF9WjQXRjysDUmzf\r\n5C4H1Ql1XNPpojRHPOrFnjYZwvolt2PxgFKEHYhZAIJBUyfy\r\n-----END CERTIFICATE-----\r\n"
-        )
+        assert_eq!(bytes1, bytes2)
+    }
+
+    #[test]
+    fn keypair_generation_is_deterministic() {
+        let (key1, bytes1) = make_keypair(&mut ChaCha20Rng::from_seed([0u8; 32])).unwrap();
+        let (key2, bytes2) = make_keypair(&mut ChaCha20Rng::from_seed([0u8; 32])).unwrap();
+
+        assert_eq!(bytes1, bytes2);
+        assert_eq!(key1.public_key().as_ref(), key2.public_key().as_ref());
     }
 
     #[test]
