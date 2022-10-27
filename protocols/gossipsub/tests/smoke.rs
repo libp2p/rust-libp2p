@@ -41,19 +41,17 @@ use libp2p::swarm::{Swarm, SwarmEvent};
 use libp2p::yamux;
 
 struct Graph {
-    pub nodes: Vec<(Multiaddr, Swarm<Gossipsub>)>,
+    pub nodes: Vec<Swarm<Gossipsub>>,
 }
 
 impl Future for Graph {
-    type Output = (Multiaddr, GossipsubEvent);
+    type Output = GossipsubEvent;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        for (addr, node) in &mut self.nodes {
+        for node in &mut self.nodes {
             loop {
                 match node.poll_next_unpin(cx) {
-                    Poll::Ready(Some(SwarmEvent::Behaviour(event))) => {
-                        return Poll::Ready((addr.clone(), event))
-                    }
+                    Poll::Ready(Some(SwarmEvent::Behaviour(event))) => return Poll::Ready(event),
                     Poll::Ready(Some(_)) => {}
                     Poll::Ready(None) => panic!("unexpected None when polling nodes"),
                     Poll::Pending => break,
@@ -98,7 +96,10 @@ impl Graph {
         }
 
         Graph {
-            nodes: connected_nodes,
+            nodes: connected_nodes
+                .into_iter()
+                .map(|(_, swarm)| swarm)
+                .collect(),
         }
     }
 
@@ -108,7 +109,7 @@ impl Graph {
     /// Returns [`true`] on success and [`false`] on timeout.
     fn wait_for<F: FnMut(&GossipsubEvent) -> bool>(&mut self, mut f: F) -> bool {
         let fut = futures::future::poll_fn(move |cx| match self.poll_unpin(cx) {
-            Poll::Ready((_addr, ev)) if f(&ev) => Poll::Ready(()),
+            Poll::Ready(ev) if f(&ev) => Poll::Ready(()),
             _ => Poll::Pending,
         });
 
@@ -192,7 +193,7 @@ fn multi_hop_propagation() {
 
         // Subscribe each node to the same topic.
         let topic = Topic::new("test-net");
-        for (_addr, node) in &mut graph.nodes {
+        for node in &mut graph.nodes {
             node.behaviour_mut().subscribe(&topic).unwrap();
         }
 
@@ -221,7 +222,6 @@ fn multi_hop_propagation() {
 
         // Publish a single message.
         graph.nodes[0]
-            .1
             .behaviour_mut()
             .publish(topic, vec![1, 2, 3])
             .unwrap();
