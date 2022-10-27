@@ -30,9 +30,8 @@ use libp2p::core::muxing::StreamMuxerExt;
 use libp2p::core::{
     identity, multiaddr::multiaddr, muxing, transport, upgrade, Multiaddr, PeerId, Transport,
 };
-use libp2p::mplex;
 use libp2p::plaintext::PlainText2Config;
-use libp2p::tcp::GenTcpConfig;
+use libp2p::{mplex, tcp};
 use std::pin::Pin;
 use std::time::Duration;
 
@@ -53,7 +52,7 @@ const BENCH_SIZES: [usize; 8] = [
 fn prepare(c: &mut Criterion) {
     let _ = env_logger::try_init();
 
-    let payload: Vec<u8> = vec![1; 1024 * 1024 * 1];
+    let payload: Vec<u8> = vec![1; 1024 * 1024];
 
     let mut tcp = c.benchmark_group("tcp");
     let tcp_addr = multiaddr![Ip4(std::net::Ipv4Addr::new(127, 0, 0, 1)), Tcp(0u16)];
@@ -114,7 +113,10 @@ fn run(
                 }
                 transport::TransportEvent::Incoming { upgrade, .. } => {
                     let (_peer, mut conn) = upgrade.await.unwrap();
-                    let mut s = conn.next_inbound().await.expect("unexpected error");
+                    // Just calling `poll_inbound` without `poll` is fine here because mplex makes progress through all `poll_` functions. It is hacky though.
+                    let mut s = poll_fn(|cx| conn.poll_inbound_unpin(cx))
+                        .await
+                        .expect("unexpected error");
 
                     let mut buf = vec![0u8; payload_len];
                     let mut off = 0;
@@ -139,7 +141,8 @@ fn run(
     let sender = async move {
         let addr = addr_receiver.await.unwrap();
         let (_peer, mut conn) = sender_trans.dial(addr).unwrap().await.unwrap();
-        let mut stream = conn.next_outbound().await.unwrap();
+        // Just calling `poll_outbound` without `poll` is fine here because mplex makes progress through all `poll_` functions. It is hacky though.
+        let mut stream = poll_fn(|cx| conn.poll_outbound_unpin(cx)).await.unwrap();
         let mut off = 0;
         loop {
             let n = poll_fn(|cx| Pin::new(&mut stream).poll_write(cx, &payload[off..]))
@@ -166,7 +169,7 @@ fn tcp_transport(split_send_size: usize) -> BenchTransport {
     let mut mplex = mplex::MplexConfig::default();
     mplex.set_split_send_size(split_send_size);
 
-    libp2p::tcp::TcpTransport::new(GenTcpConfig::default().nodelay(true))
+    tcp::async_io::Transport::new(tcp::Config::default().nodelay(true))
         .upgrade(upgrade::Version::V1)
         .authenticate(PlainText2Config { local_public_key })
         .multiplex(mplex)

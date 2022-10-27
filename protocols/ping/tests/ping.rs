@@ -22,7 +22,9 @@
 
 use futures::prelude::*;
 use libp2p::ping;
-use libp2p::swarm::{DummyBehaviour, KeepAlive, Swarm, SwarmEvent};
+use libp2p::swarm::{Swarm, SwarmEvent};
+use libp2p::NetworkBehaviour;
+use libp2p_swarm::keep_alive;
 use libp2p_swarm_test::SwarmExt;
 use quickcheck::*;
 use std::{num::NonZeroU8, time::Duration};
@@ -30,12 +32,10 @@ use std::{num::NonZeroU8, time::Duration};
 #[test]
 fn ping_pong() {
     fn prop(count: NonZeroU8) {
-        let cfg = ping::Config::new()
-            .with_keep_alive(true)
-            .with_interval(Duration::from_millis(10));
+        let cfg = ping::Config::new().with_interval(Duration::from_millis(10));
 
-        let mut swarm1 = Swarm::new_ephemeral(|_| ping::Behaviour::new(cfg.clone()));
-        let mut swarm2 = Swarm::new_ephemeral(|_| ping::Behaviour::new(cfg.clone()));
+        let mut swarm1 = Swarm::new_ephemeral(|_| Behaviour::new(cfg.clone()));
+        let mut swarm2 = Swarm::new_ephemeral(|_| Behaviour::new(cfg.clone()));
 
         async_std::task::block_on(async {
             swarm1.listen_on_random_memory_address().await;
@@ -45,8 +45,14 @@ fn ping_pong() {
                 let (e1, e2) =
                     future::join(swarm1.next_or_timeout(), swarm2.next_or_timeout()).await;
 
-                let e1 = e1.try_into_behaviour_event().unwrap();
-                let e2 = e2.try_into_behaviour_event().unwrap();
+                let e1 = match e1 {
+                    SwarmEvent::Behaviour(BehaviourEvent::Ping(ping)) => ping,
+                    other => panic!("Unexpected event: {other:?}"),
+                };
+                let e2 = match e2 {
+                    SwarmEvent::Behaviour(BehaviourEvent::Ping(ping)) => ping,
+                    other => panic!("Unexpected event: {other:?}"),
+                };
 
                 assert_eq!(&e1.peer, swarm2.local_peer_id());
                 assert_eq!(&e2.peer, swarm1.local_peer_id());
@@ -74,13 +80,12 @@ fn assert_ping_rtt_less_than_50ms(e: ping::Event) {
 fn max_failures() {
     fn prop(max_failures: NonZeroU8) {
         let cfg = ping::Config::new()
-            .with_keep_alive(true)
             .with_interval(Duration::from_millis(10))
             .with_timeout(Duration::from_millis(0))
             .with_max_failures(max_failures.into());
 
-        let mut swarm1 = Swarm::new_ephemeral(|_| ping::Behaviour::new(cfg.clone()));
-        let mut swarm2 = Swarm::new_ephemeral(|_| ping::Behaviour::new(cfg.clone()));
+        let mut swarm1 = Swarm::new_ephemeral(|_| Behaviour::new(cfg.clone()));
+        let mut swarm2 = Swarm::new_ephemeral(|_| Behaviour::new(cfg.clone()));
 
         let (count1, count2) = async_std::task::block_on(async {
             swarm1.listen_on_random_memory_address().await;
@@ -99,18 +104,18 @@ fn max_failures() {
     QuickCheck::new().tests(10).quickcheck(prop as fn(_))
 }
 
-async fn count_ping_failures_until_connection_closed(mut swarm: Swarm<ping::Behaviour>) -> u8 {
+async fn count_ping_failures_until_connection_closed(mut swarm: Swarm<Behaviour>) -> u8 {
     let mut failure_count = 0;
 
     loop {
         match swarm.next_or_timeout().await {
-            SwarmEvent::Behaviour(ping::Event {
+            SwarmEvent::Behaviour(BehaviourEvent::Ping(ping::Event {
                 result: Ok(ping::Success::Ping { .. }),
                 ..
-            }) => {
+            })) => {
                 failure_count = 0; // there may be an occasional success
             }
-            SwarmEvent::Behaviour(ping::Event { result: Err(_), .. }) => {
+            SwarmEvent::Behaviour(BehaviourEvent::Ping(ping::Event { result: Err(_), .. })) => {
                 failure_count += 1;
             }
             SwarmEvent::ConnectionClosed { .. } => {
@@ -123,9 +128,8 @@ async fn count_ping_failures_until_connection_closed(mut swarm: Swarm<ping::Beha
 
 #[test]
 fn unsupported_doesnt_fail() {
-    let mut swarm1 = Swarm::new_ephemeral(|_| DummyBehaviour::with_keep_alive(KeepAlive::Yes));
-    let mut swarm2 =
-        Swarm::new_ephemeral(|_| ping::Behaviour::new(ping::Config::new().with_keep_alive(true)));
+    let mut swarm1 = Swarm::new_ephemeral(|_| keep_alive::Behaviour);
+    let mut swarm2 = Swarm::new_ephemeral(|_| Behaviour::new(ping::Config::new()));
 
     let result = async_std::task::block_on(async {
         swarm1.listen_on_random_memory_address().await;
@@ -133,10 +137,10 @@ fn unsupported_doesnt_fail() {
 
         loop {
             match swarm2.next_or_timeout().await {
-                SwarmEvent::Behaviour(ping::Event {
+                SwarmEvent::Behaviour(BehaviourEvent::Ping(ping::Event {
                     result: Err(ping::Failure::Unsupported),
                     ..
-                }) => {
+                })) => {
                     swarm2.disconnect_peer_id(*swarm1.local_peer_id()).unwrap();
                 }
                 SwarmEvent::ConnectionClosed { cause: Some(e), .. } => {
@@ -151,4 +155,19 @@ fn unsupported_doesnt_fail() {
     });
 
     result.expect("node with ping should not fail connection due to unsupported protocol");
+}
+
+#[derive(NetworkBehaviour, Default)]
+struct Behaviour {
+    keep_alive: keep_alive::Behaviour,
+    ping: ping::Behaviour,
+}
+
+impl Behaviour {
+    fn new(config: ping::Config) -> Self {
+        Self {
+            keep_alive: keep_alive::Behaviour,
+            ping: ping::Behaviour::new(config),
+        }
+    }
 }

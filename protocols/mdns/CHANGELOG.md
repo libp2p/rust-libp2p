@@ -1,12 +1,21 @@
-# 0.41.0 [unreleased]
+# 0.41.0
 
 - Remove default features. If you previously depended on `async-io` you need to enable this explicitly now. See [PR 2918].
 
 - Update to `libp2p-core` `v0.37.0`.
 
 - Update to `libp2p-swarm` `v0.40.0`.
- 
+
+- Fix a bug that could cause a delay of ~10s until peers would get discovered when using the tokio runtime. See [PR 2939].
+
+- Removed the `lazy_static` dependency. See [PR 2977].
+
+- Update to `if-watch` `v2.0.0` and thus the `async` method `Mdns::new` and `TokioMdns::new` becomes synchronous. See [PR 2978].
+
 [PR 2918]: https://github.com/libp2p/rust-libp2p/pull/2918
+[PR 2939]: https://github.com/libp2p/rust-libp2p/pull/2939
+[PR 2977]: https://github.com/libp2p/rust-libp2p/pull/2977
+[PR 2978]: https://github.com/libp2p/rust-libp2p/pull/2978
 
 # 0.40.0
 

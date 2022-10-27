@@ -3,7 +3,7 @@ name = "libp2p-core"
 edition = "2021"
 rust-version = "1.56.1"
 description = "Core traits and structs of libp2p"
-version = "0.37.1"
+version = "0.37.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -64,3 +64,10 @@ serde = ["multihash/serde-codec", "dep:serde"]
 [[bench]]
 name = "peer_id"
 harness = false
+
+# Passing arguments to the docsrs builder in order to properly document cfg's. 
+# More information: https://docs.rs/about/builds#cross-compiling
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+rustc-args = ["--cfg", "docsrs"]

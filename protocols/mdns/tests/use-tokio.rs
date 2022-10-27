@@ -57,7 +57,7 @@ async fn create_swarm(config: MdnsConfig) -> Result<Swarm<TokioMdns>, Box<dyn Er
     let id_keys = identity::Keypair::generate_ed25519();
     let peer_id = PeerId::from(id_keys.public());
     let transport = libp2p::tokio_development_transport(id_keys)?;
-    let behaviour = TokioMdns::new(config).await?;
+    let behaviour = TokioMdns::new(config)?;
     let mut swarm = Swarm::new(transport, behaviour, peer_id);
     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
     Ok(swarm)
@@ -71,33 +71,27 @@ async fn run_discovery_test(config: MdnsConfig) -> Result<(), Box<dyn Error>> {
     let mut discovered_b = false;
     loop {
         futures::select! {
-            ev = a.select_next_some() => match ev {
-                SwarmEvent::Behaviour(MdnsEvent::Discovered(peers)) => {
-                    for (peer, _addr) in peers {
-                        if peer == *b.local_peer_id() {
-                            if discovered_a {
-                                return Ok(());
-                            } else {
-                                discovered_b = true;
-                            }
+            ev = a.select_next_some() => if let SwarmEvent::Behaviour(MdnsEvent::Discovered(peers)) = ev {
+                for (peer, _addr) in peers {
+                    if peer == *b.local_peer_id() {
+                        if discovered_a {
+                            return Ok(());
+                        } else {
+                            discovered_b = true;
                         }
                     }
                 }
-                _ => {}
             },
-            ev = b.select_next_some() => match ev {
-                SwarmEvent::Behaviour(MdnsEvent::Discovered(peers)) => {
-                    for (peer, _addr) in peers {
-                        if peer == *a.local_peer_id() {
-                            if discovered_b {
-                                return Ok(());
-                            } else {
-                                discovered_a = true;
-                            }
+            ev = b.select_next_some() => if let SwarmEvent::Behaviour(MdnsEvent::Discovered(peers)) = ev {
+                for (peer, _addr) in peers {
+                    if peer == *a.local_peer_id() {
+                        if discovered_b {
+                            return Ok(());
+                        } else {
+                            discovered_a = true;
                         }
                     }
                 }
-                _ => {}
             }
         }
     }
