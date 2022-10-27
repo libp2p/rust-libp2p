@@ -33,6 +33,7 @@ env_logger = "0.9.0"
 libp2p = { path = "../..", features = ["full"] }
 rand = "0.8"
 clap = { version = "4.0.13", features = ["derive"] }
+libp2p-swarm-test = { path = "../../swarm-test"}
 async-std = { version = "1.12.0", features = ["attributes"] }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's. 

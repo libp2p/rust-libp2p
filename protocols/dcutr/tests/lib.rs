@@ -18,46 +18,43 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::io::{AsyncRead, AsyncWrite};
 use futures::stream::StreamExt;
 use libp2p::core::multiaddr::{Multiaddr, Protocol};
-use libp2p::core::muxing::StreamMuxerBox;
 use libp2p::core::transport::upgrade::Version;
-use libp2p::core::transport::{Boxed, MemoryTransport, OrTransport, Transport};
-use libp2p::core::PublicKey;
+use libp2p::core::transport::{MemoryTransport, OrTransport, Transport};
 use libp2p::core::{identity, PeerId};
 use libp2p::dcutr;
 use libp2p::plaintext::PlainText2Config;
 use libp2p::relay::v2::client;
 use libp2p::relay::v2::relay;
-use libp2p::swarm::{AddressScore, NetworkBehaviour, Swarm, SwarmEvent};
+use libp2p::swarm::{NetworkBehaviour, Swarm, SwarmEvent};
 use libp2p::NetworkBehaviour;
+use libp2p_swarm_test::SwarmExt;
 use std::time::Duration;
 
 #[async_std::test]
 async fn connect() {
     let _ = env_logger::try_init();
 
-    let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
     let mut relay = build_relay();
-    let relay_peer_id = *relay.local_peer_id();
-
-    relay.listen_on(relay_addr.clone()).unwrap();
-    relay.add_external_address(relay_addr.clone(), AddressScore::Infinite);
-
-    async_std::task::spawn(loop_forever(relay));
-
     let mut dst = build_client();
+    let mut src = build_client();
+
+    // Have all swarms listen on a local memory address.
+    let relay_addr = relay.listen().await;
+    let dst_addr = dst.listen().await;
+    src.listen().await;
+
+    let relay_peer_id = *relay.local_peer_id();
     let dst_peer_id = *dst.local_peer_id();
+
+    async_std::task::spawn(relay.loop_on_next());
+
     let dst_relayed_addr = relay_addr
         .with(Protocol::P2p(relay_peer_id.into()))
         .with(Protocol::P2pCircuit)
         .with(Protocol::P2p(dst_peer_id.into()));
-    let dst_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
-
     dst.listen_on(dst_relayed_addr.clone()).unwrap();
-    dst.listen_on(dst_addr.clone()).unwrap();
-    dst.add_external_address(dst_addr.clone(), AddressScore::Infinite);
 
     wait_for_reservation(
         &mut dst,
@@ -66,51 +63,54 @@ async fn connect() {
         false, // No renewal.
     )
     .await;
+    async_std::task::spawn(dst.loop_on_next());
 
-    async_std::task::spawn(loop_forever(dst));
+    src.dial_and_wait(dst_relayed_addr.clone()).await;
 
-    let mut src = build_client();
-    let src_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
-    src.listen_on(src_addr.clone()).unwrap();
-
-    wait_for_new_listen_addr(&mut src, &src_addr).await;
-
-    src.add_external_address(src_addr.clone(), AddressScore::Infinite);
-
-    src.dial(dst_relayed_addr.clone()).unwrap();
-
-    wait_for_connection_established(&mut src, &dst_relayed_addr).await;
-
-    match wait_for_dcutr_event(&mut src).await {
-        dcutr::behaviour::Event::RemoteInitiatedDirectConnectionUpgrade {
-            remote_peer_id,
-            remote_relayed_addr,
-        } if remote_peer_id == dst_peer_id && remote_relayed_addr == dst_relayed_addr => {}
-        e => panic!("Unexpected event: {:?}.", e),
+    loop {
+        match src
+            .next_or_timeout()
+            .await
+            .try_into_behaviour_event()
+            .unwrap()
+        {
+            ClientEvent::Dcutr(
+                dcutr::behaviour::Event::RemoteInitiatedDirectConnectionUpgrade {
+                    remote_peer_id,
+                    remote_relayed_addr,
+                },
+            ) => {
+                if remote_peer_id == dst_peer_id && remote_relayed_addr == dst_relayed_addr {
+                    break;
+                }
+            }
+            other => panic!("Unexpected event: {:?}.", other),
+        }
     }
 
-    wait_for_connection_established(&mut src, &dst_addr.with(Protocol::P2p(dst_peer_id.into())))
-        .await;
+    let dst_addr = dst_addr.with(Protocol::P2p(dst_peer_id.into()));
+
+    src.wait(move |e| match e {
+        SwarmEvent::ConnectionEstablished { endpoint, .. } => {
+            (*endpoint.get_remote_address() == dst_addr).then(|| ())
+        }
+        _ => None,
+    })
+    .await;
 }
 
 fn build_relay() -> Swarm<relay::Relay> {
-    let local_key = identity::Keypair::generate_ed25519();
-    let local_public_key = local_key.public();
-    let local_peer_id = local_public_key.to_peer_id();
+    Swarm::new_ephemeral(|identity| {
+        let local_peer_id = identity.public().to_peer_id();
 
-    let transport = build_transport(MemoryTransport::default().boxed(), local_public_key);
-
-    Swarm::new(
-        transport,
         relay::Relay::new(
             local_peer_id,
             relay::Config {
                 reservation_duration: Duration::from_secs(2),
                 ..Default::default()
             },
-        ),
-        local_peer_id,
-    )
+        )
+    })
 }
 
 fn build_client() -> Swarm<Client> {
@@ -119,10 +119,13 @@ fn build_client() -> Swarm<Client> {
     let local_peer_id = local_public_key.to_peer_id();
 
     let (relay_transport, behaviour) = client::Client::new_transport_and_behaviour(local_peer_id);
-    let transport = build_transport(
-        OrTransport::new(relay_transport, MemoryTransport::default()).boxed(),
-        local_public_key,
-    );
+
+    let transport = OrTransport::new(relay_transport, MemoryTransport::default())
+        .boxed()
+        .upgrade(Version::V1)
+        .authenticate(PlainText2Config { local_public_key })
+        .multiplex(libp2p::yamux::YamuxConfig::default())
+        .boxed();
 
     Swarm::new(
         transport,
@@ -134,30 +137,10 @@ fn build_client() -> Swarm<Client> {
     )
 }
 
-fn build_transport<StreamSink>(
-    transport: Boxed<StreamSink>,
-    local_public_key: PublicKey,
-) -> Boxed<(PeerId, StreamMuxerBox)>
-where
-    StreamSink: AsyncRead + AsyncWrite + Send + Unpin + 'static,
-{
-    transport
-        .upgrade(Version::V1)
-        .authenticate(PlainText2Config { local_public_key })
-        .multiplex(libp2p::yamux::YamuxConfig::default())
-        .boxed()
-}
-
 #[derive(NetworkBehaviour)]
 struct Client {
     relay: client::Client,
     dcutr: dcutr::behaviour::Behaviour,
-}
-
-async fn loop_forever<B: NetworkBehaviour + Send>(mut swarm: Swarm<B>) {
-    loop {
-        swarm.next().await;
-    }
 }
 
 async fn wait_for_reservation(
@@ -189,41 +172,6 @@ async fn wait_for_reservation(
             }
             SwarmEvent::Dialing(peer_id) if peer_id == relay_peer_id => {}
             SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == relay_peer_id => {}
-            e => panic!("{:?}", e),
-        }
-    }
-}
-
-async fn wait_for_connection_established(client: &mut Swarm<Client>, addr: &Multiaddr) {
-    loop {
-        match client.select_next_some().await {
-            SwarmEvent::IncomingConnection { .. } => {}
-            SwarmEvent::ConnectionEstablished { endpoint, .. }
-                if endpoint.get_remote_address() == addr =>
-            {
-                break
-            }
-            SwarmEvent::Dialing(_) => {}
-            SwarmEvent::Behaviour(ClientEvent::Relay(
-                client::Event::OutboundCircuitEstablished { .. },
-            )) => {}
-            SwarmEvent::ConnectionEstablished { .. } => {}
-            e => panic!("{:?}", e),
-        }
-    }
-}
-
-async fn wait_for_new_listen_addr(client: &mut Swarm<Client>, new_addr: &Multiaddr) {
-    match client.select_next_some().await {
-        SwarmEvent::NewListenAddr { address, .. } if address == *new_addr => {}
-        e => panic!("{:?}", e),
-    }
-}
-
-async fn wait_for_dcutr_event(client: &mut Swarm<Client>) -> dcutr::behaviour::Event {
-    loop {
-        match client.select_next_some().await {
-            SwarmEvent::Behaviour(ClientEvent::Dcutr(e)) => return e,
             e => panic!("{:?}", e),
         }
     }
