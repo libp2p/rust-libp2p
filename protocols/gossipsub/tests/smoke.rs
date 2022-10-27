@@ -18,13 +18,14 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use async_std::prelude::FutureExt;
 use futures::stream::SelectAll;
 use log::debug;
 use quickcheck::{QuickCheck, TestResult};
 use rand::{random, seq::SliceRandom, SeedableRng};
 use std::{task::Poll, time::Duration};
 
-use futures::{ready, StreamExt};
+use futures::StreamExt;
 use libp2p::core::{
     identity, multiaddr::Protocol, transport::MemoryTransport, upgrade, Multiaddr, Transport,
 };
@@ -33,7 +34,7 @@ use libp2p::gossipsub::{
     ValidationMode,
 };
 use libp2p::plaintext::PlainText2Config;
-use libp2p::swarm::{Swarm, SwarmEvent};
+use libp2p::swarm::Swarm;
 use libp2p::yamux;
 
 struct Graph {
@@ -84,18 +85,26 @@ impl Graph {
     /// `true`.
     ///
     /// Returns [`true`] on success and [`false`] on timeout.
-    fn wait_for<F: FnMut(&GossipsubEvent) -> bool>(&mut self, mut f: F) -> bool {
-        let fut = futures::future::poll_fn(move |cx| loop {
-            match ready!(self.nodes.poll_next_unpin(cx)) {
-                Some(SwarmEvent::Behaviour(ev)) if f(&ev) => return Poll::Ready(()),
-                Some(_) => continue,
-                None => unreachable!(),
+    async fn wait_for<F: FnMut(&GossipsubEvent) -> bool>(&mut self, mut f: F) -> bool {
+        let condition = async {
+            loop {
+                if let Ok(ev) = self
+                    .nodes
+                    .select_next_some()
+                    .await
+                    .try_into_behaviour_event()
+                {
+                    if f(&ev) {
+                        break;
+                    }
+                }
             }
-        });
+        };
 
-        let fut = async_std::future::timeout(Duration::from_secs(10), fut);
-
-        futures::executor::block_on(fut).is_ok()
+        match condition.timeout(Duration::from_secs(10)).await {
+            Ok(()) => true,
+            Err(_) => false,
+        }
     }
 
     /// Polls the graph until Poll::Pending is obtained, completing the underlying polls.
@@ -179,7 +188,7 @@ fn multi_hop_propagation() {
 
         // Wait for all nodes to be subscribed.
         let mut subscribed = 0;
-        let all_subscribed = graph.wait_for(move |ev| {
+        let all_subscribed = async_std::task::block_on(graph.wait_for(move |ev| {
             if let GossipsubEvent::Subscribed { .. } = ev {
                 subscribed += 1;
                 if subscribed == (number_nodes - 1) * 2 {
@@ -188,7 +197,7 @@ fn multi_hop_propagation() {
             }
 
             false
-        });
+        }));
         if !all_subscribed {
             return TestResult::error(format!(
                 "Timed out waiting for all nodes to subscribe but only have {:?}/{:?}.",
@@ -212,7 +221,7 @@ fn multi_hop_propagation() {
 
         // Wait for all nodes to receive the published message.
         let mut received_msgs = 0;
-        let all_received = graph.wait_for(move |ev| {
+        let all_received = async_std::task::block_on(graph.wait_for(move |ev| {
             if let GossipsubEvent::Message { .. } = ev {
                 received_msgs += 1;
                 if received_msgs == number_nodes - 1 {
@@ -221,7 +230,7 @@ fn multi_hop_propagation() {
             }
 
             false
-        });
+        }));
         if !all_received {
             return TestResult::error(format!(
                 "Timed out waiting for all nodes to receive the msg but only have {:?}/{:?}.",
