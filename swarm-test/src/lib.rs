@@ -3,6 +3,7 @@ use futures::future::Either;
 use futures::StreamExt;
 use libp2p::core::transport::MemoryTransport;
 use libp2p::core::upgrade::Version;
+use libp2p::core::ConnectedPoint;
 use libp2p::identity::Keypair;
 use libp2p::multiaddr::Protocol;
 use libp2p::plaintext::PlainText2Config;
@@ -38,6 +39,14 @@ pub trait SwarmExt {
     where
         T: NetworkBehaviour + Send,
         <T as NetworkBehaviour>::OutEvent: Debug;
+
+    /// Dial the provided address and wait until a connection has been established.
+    ///
+    /// In a normal test scenario, you should prefer [`SwarmExt::connect`] but that is not always possible.
+    /// This function only abstracts away the "dial and wait for `ConnectionEstablished` event" part.
+    ///
+    /// Because we don't have access to the other [`Swarm`], we can't guarantee that it makes progress.
+    async fn dial_and_wait(&mut self, addr: Multiaddr);
 
     /// Listens for incoming connections, polling the [`Swarm`] until the transport is ready to accept connections.
     ///
@@ -124,6 +133,27 @@ where
 
             if dialer_done && listener_done {
                 return;
+            }
+        }
+    }
+
+    async fn dial_and_wait(&mut self, to_dial: Multiaddr) {
+        self.dial(to_dial.clone()).unwrap();
+
+        loop {
+            match self.next_or_timeout().await {
+                SwarmEvent::ConnectionEstablished { endpoint, .. } => {
+                    if endpoint.get_remote_address() == to_dial {
+                        break;
+                    }
+
+                    log::debug!(
+                        "Established a connection but not to the address we are looking for"
+                    )
+                }
+                other => {
+                    log::debug!("Ignoring event from dialer {:?}", other);
+                }
             }
         }
     }
