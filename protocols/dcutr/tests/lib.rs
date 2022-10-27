@@ -148,28 +148,9 @@ where
 }
 
 #[derive(NetworkBehaviour)]
-#[behaviour(out_event = "ClientEvent", event_process = false)]
 struct Client {
     relay: client::Client,
     dcutr: dcutr::behaviour::Behaviour,
-}
-
-#[derive(Debug)]
-enum ClientEvent {
-    Relay(client::Event),
-    Dcutr(dcutr::behaviour::Event),
-}
-
-impl From<client::Event> for ClientEvent {
-    fn from(event: client::Event) -> Self {
-        ClientEvent::Relay(event)
-    }
-}
-
-impl From<dcutr::behaviour::Event> for ClientEvent {
-    fn from(event: dcutr::behaviour::Event) -> Self {
-        ClientEvent::Dcutr(event)
-    }
 }
 
 fn spawn_swarm_on_pool<B: NetworkBehaviour + Send>(pool: &LocalPool, swarm: Swarm<B>) {
