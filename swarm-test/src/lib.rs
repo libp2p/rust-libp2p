@@ -107,29 +107,18 @@ where
         let mut listener_done = false;
 
         loop {
-            futures::select! {
-                dialer_event = self.select_next_some() => {
-                    match dialer_event {
-                        SwarmEvent::ConnectionEstablished { .. } => {
-                            dialer_done = true;
-                        }
-                        other => {
-                            log::debug!("Ignoring {:?}", other);
-                        }
-                    }
-                },
-                listener_event = other.select_next_some() => {
-                    match listener_event {
-                        SwarmEvent::ConnectionEstablished { .. } => {
-                            listener_done = true;
-                        }
-                        SwarmEvent::IncomingConnectionError { error, .. } => {
-                            panic!("Failure in incoming connection {}", error);
-                        }
-                        other => {
-                            log::debug!("Ignoring {:?}", other);
-                        }
-                    }
+            match futures::future::select(self.select_next_some(), other.select_next_some()).await {
+                Either::Left((SwarmEvent::ConnectionEstablished { .. }, _)) => {
+                    dialer_done = true;
+                }
+                Either::Right((SwarmEvent::ConnectionEstablished { .. }, _)) => {
+                    listener_done = true;
+                }
+                Either::Left((other, _)) => {
+                    log::debug!("Ignoring event from dialer {:?}", other);
+                }
+                Either::Right((other, _)) => {
+                    log::debug!("Ignoring event from listener {:?}", other);
                 }
             }
 
