@@ -3,7 +3,6 @@ use futures::future::Either;
 use futures::StreamExt;
 use libp2p::core::transport::MemoryTransport;
 use libp2p::core::upgrade::Version;
-use libp2p::core::ConnectedPoint;
 use libp2p::identity::Keypair;
 use libp2p::multiaddr::Protocol;
 use libp2p::plaintext::PlainText2Config;
@@ -47,6 +46,14 @@ pub trait SwarmExt {
     ///
     /// Because we don't have access to the other [`Swarm`], we can't guarantee that it makes progress.
     async fn dial_and_wait(&mut self, addr: Multiaddr);
+
+    /// Wait for specified condition to return `Some`.
+    async fn wait<E, P>(&mut self, predicate: P) -> E
+    where
+        P: Fn(
+            SwarmEvent<<Self::NB as NetworkBehaviour>::OutEvent, THandlerErr<Self::NB>>,
+        ) -> Option<E>,
+        P: Send;
 
     /// Listens for incoming connections, polling the [`Swarm`] until the transport is ready to accept connections.
     ///
@@ -140,20 +147,27 @@ where
     async fn dial_and_wait(&mut self, to_dial: Multiaddr) {
         self.dial(to_dial.clone()).unwrap();
 
-        loop {
-            match self.next_or_timeout().await {
-                SwarmEvent::ConnectionEstablished { endpoint, .. } => {
-                    if endpoint.get_remote_address() == to_dial {
-                        break;
-                    }
+        self.wait(|e| match e {
+            SwarmEvent::ConnectionEstablished { endpoint, .. } => {
+                (endpoint.get_remote_address() == &to_dial).then(|| ())
+            }
+            other => {
+                log::debug!("Ignoring event from dialer {:?}", other);
+                None
+            }
+        })
+        .await;
+    }
 
-                    log::debug!(
-                        "Established a connection but not to the address we are looking for"
-                    )
-                }
-                other => {
-                    log::debug!("Ignoring event from dialer {:?}", other);
-                }
+    async fn wait<E, P>(&mut self, predicate: P) -> E
+    where
+        P: Fn(SwarmEvent<<B as NetworkBehaviour>::OutEvent, THandlerErr<B>>) -> Option<E>,
+        P: Send,
+    {
+        loop {
+            let event = self.next_or_timeout().await;
+            if let Some(e) = predicate(event) {
+                break e;
             }
         }
     }
@@ -162,22 +176,21 @@ where
         let memory_addr_listener_id = self.listen_on(Protocol::Memory(0).into()).unwrap();
 
         // block until we are actually listening
-        let multiaddr = loop {
-            match self.select_next_some().await {
+        let multiaddr = self
+            .wait(|e| match e {
                 SwarmEvent::NewListenAddr {
                     address,
                     listener_id,
-                } if listener_id == memory_addr_listener_id => {
-                    break address;
-                }
+                } => (listener_id == memory_addr_listener_id).then(|| address),
                 other => {
                     log::debug!(
                         "Ignoring {:?} while waiting for listening to succeed",
                         other
                     );
+                    None
                 }
-            }
-        };
+            })
+            .await;
 
         // Memory addresses are externally reachable because they all share the same memory-space.
         self.add_external_address(multiaddr.clone(), AddressScore::Infinite);
