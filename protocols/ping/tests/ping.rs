@@ -38,7 +38,7 @@ fn ping_pong() {
         let mut swarm2 = Swarm::new_ephemeral(|_| Behaviour::new(cfg.clone()));
 
         async_std::task::block_on(async {
-            swarm1.listen_on_random_memory_address().await;
+            swarm1.listen().await;
             swarm2.connect(&mut swarm1).await;
 
             for _ in 0..count.get() {
@@ -88,7 +88,7 @@ fn max_failures() {
         let mut swarm2 = Swarm::new_ephemeral(|_| Behaviour::new(cfg.clone()));
 
         let (count1, count2) = async_std::task::block_on(async {
-            swarm1.listen_on_random_memory_address().await;
+            swarm1.listen().await;
             swarm2.connect(&mut swarm1).await;
 
             future::join(
@@ -132,7 +132,7 @@ fn unsupported_doesnt_fail() {
     let mut swarm2 = Swarm::new_ephemeral(|_| Behaviour::new(ping::Config::new()));
 
     let result = async_std::task::block_on(async {
-        swarm1.listen_on_random_memory_address().await;
+        swarm1.listen().await;
         swarm2.connect(&mut swarm1).await;
 
         loop {

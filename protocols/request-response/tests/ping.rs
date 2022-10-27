@@ -89,7 +89,7 @@ async fn ping_protocol() {
     let mut swarm2 = Swarm::new_ephemeral(|_| RequestResponse::new(PingCodec(), protocols, cfg));
     let peer2_id = *swarm2.local_peer_id();
 
-    swarm1.listen_on_random_memory_address().await;
+    swarm1.listen().await;
     swarm2.connect(&mut swarm1).await;
 
     let expected_ping = ping.clone();
@@ -180,7 +180,7 @@ async fn emits_inbound_connection_closed_failure() {
     let mut swarm2 = Swarm::new_ephemeral(|_| RequestResponse::new(PingCodec(), protocols, cfg));
     let peer2_id = *swarm2.local_peer_id();
 
-    swarm1.listen_on_random_memory_address().await;
+    swarm1.listen().await;
     swarm2.connect(&mut swarm1).await;
 
     swarm2.behaviour_mut().send_request(&peer1_id, ping.clone());
@@ -241,7 +241,7 @@ async fn emits_inbound_connection_closed_if_channel_is_dropped() {
     let mut swarm2 = Swarm::new_ephemeral(|_| RequestResponse::new(PingCodec(), protocols, cfg));
     let peer2_id = *swarm2.local_peer_id();
 
-    swarm1.listen_on_random_memory_address().await;
+    swarm1.listen().await;
     swarm2.connect(&mut swarm1).await;
 
     swarm2.behaviour_mut().send_request(&peer1_id, ping.clone());

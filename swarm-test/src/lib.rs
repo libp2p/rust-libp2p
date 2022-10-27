@@ -39,8 +39,10 @@ pub trait SwarmExt {
         T: NetworkBehaviour + Send,
         <T as NetworkBehaviour>::OutEvent: Debug;
 
-    /// Listens on a random memory address, polling the [`Swarm`] until the transport is ready to accept connections.
-    async fn listen_on_random_memory_address(&mut self) -> Multiaddr;
+    /// Listens for incoming connections, polling the [`Swarm`] until the transport is ready to accept connections.
+    ///
+    /// The concrete transport is an implementation detail and should not be relied upon.
+    async fn listen(&mut self) -> Multiaddr;
 
     /// Returns the next [`SwarmEvent`] or times out after 10 seconds.
     ///
@@ -137,7 +139,7 @@ where
         }
     }
 
-    async fn listen_on_random_memory_address(&mut self) -> Multiaddr {
+    async fn listen(&mut self) -> Multiaddr {
         let memory_addr_listener_id = self.listen_on(Protocol::Memory(0).into()).unwrap();
 
         // block until we are actually listening
