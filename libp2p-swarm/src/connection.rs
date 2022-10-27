@@ -347,7 +347,11 @@ pub struct ConnectionLimit {
 
 impl fmt::Display for ConnectionLimit {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}/{}", self.current, self.limit)
+        write!(
+            f,
+            "connection limit exceeded ({}/{})",
+            self.current, self.limit
+        )
     }
 }
 

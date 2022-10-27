@@ -28,6 +28,7 @@
 - [`libp2p-uds` CHANGELOG](transports/libp2p-uds/CHANGELOG.md)
 - [`libp2p-wasm-ext` CHANGELOG](transports/libp2p-wasm-ext/CHANGELOG.md)
 - [`libp2p-websocket` CHANGELOG](transports/libp2p-websocket/CHANGELOG.md)
+- [`libp2p-tls` CHANGELOG](transports/tls/CHANGELOG.md)
 
 ## Multiplexers
 

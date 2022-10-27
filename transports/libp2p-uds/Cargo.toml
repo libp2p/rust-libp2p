@@ -19,3 +19,10 @@ tokio = { version = "1.15", default-features = false, features = ["net"], option
 
 [target.'cfg(all(unix, not(target_os = "emscripten")))'.dev-dependencies]
 tempfile = "3.0"
+
+# Passing arguments to the docsrs builder in order to properly document cfg's. 
+# More information: https://docs.rs/about/builds#cross-compiling
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+rustc-args = ["--cfg", "docsrs"]
