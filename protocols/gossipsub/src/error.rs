@@ -99,6 +99,8 @@ pub enum GossipsubHandlerError {
     NegotiationTimeout,
     /// Protocol negotiation failed.
     NegotiationProtocolError(ProtocolError),
+
+    // TODO: replace with codec::Error?
     /// IO error.
     Io(std::io::Error),
 }

@@ -38,6 +38,7 @@ use libp2p_core::{
 };
 use log::{debug, warn};
 use prost::Message as ProtobufMessage;
+use prost_codec::Codec as ProstCodec; //, Error};
 use std::{borrow::Cow, pin::Pin};
 use unsigned_varint::codec;
 
@@ -143,7 +144,10 @@ impl<TSocket> InboundUpgrade<TSocket> for ProtocolConfig
 where
     TSocket: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
-    type Output = (Framed<TSocket, GossipsubCodec>, PeerKind);
+    type Output = (
+        Framed<TSocket, GossipsubCodec<dyn ProtobufMessage>>,
+        PeerKind,
+    );
     type Error = GossipsubHandlerError;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
@@ -153,7 +157,11 @@ where
         Box::pin(future::ok((
             Framed::new(
                 socket,
-                GossipsubCodec::new(length_codec, self.validation_mode),
+                GossipsubCodec::new(
+                    length_codec,
+                    self.validation_mode,
+                    ProstCodec::new(length_codec),
+                ),
             ),
             protocol_id.kind,
         )))
@@ -164,7 +172,10 @@ impl<TSocket> OutboundUpgrade<TSocket> for ProtocolConfig
 where
     TSocket: AsyncWrite + AsyncRead + Unpin + Send + 'static,
 {
-    type Output = (Framed<TSocket, GossipsubCodec>, PeerKind);
+    type Output = (
+        Framed<TSocket, GossipsubCodec<dyn ProtobufMessage>>,
+        PeerKind,
+    );
     type Error = GossipsubHandlerError;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
@@ -174,7 +185,11 @@ where
         Box::pin(future::ok((
             Framed::new(
                 socket,
-                GossipsubCodec::new(length_codec, self.validation_mode),
+                GossipsubCodec::new(
+                    length_codec,
+                    self.validation_mode,
+                    ProstCodec::new(length_codec),
+                ),
             ),
             protocol_id.kind,
         )))
@@ -183,18 +198,25 @@ where
 
 /* Gossip codec for the framing */
 
-pub struct GossipsubCodec {
+pub struct GossipsubCodec<In> {
     /// Codec to encode/decode the Unsigned varint length prefix of the frames.
     length_codec: codec::UviBytes,
     /// Determines the level of validation performed on incoming messages.
     validation_mode: ValidationMode,
+    /// Codec to handle encode/decode
+    codec: ProstCodec<In>,
 }
 
-impl GossipsubCodec {
-    pub fn new(length_codec: codec::UviBytes, validation_mode: ValidationMode) -> Self {
+impl GossipsubCodec<dyn ProtobufMessage> {
+    pub fn new(
+        length_codec: codec::UviBytes,
+        validation_mode: ValidationMode,
+        codec: ProstCodec<dyn ProtobufMessage>,
+    ) -> Self {
         GossipsubCodec {
             length_codec,
             validation_mode,
+            codec,
         }
     }
 
@@ -263,11 +285,12 @@ impl GossipsubCodec {
     }
 }
 
-impl Encoder for GossipsubCodec {
+impl<In> Encoder for GossipsubCodec<In> {
     type Item = rpc_proto::Rpc;
     type Error = GossipsubHandlerError;
 
     fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
+        // TODO: Replace this with a call to the codec::encode
         let mut buf = Vec::with_capacity(item.encoded_len());
 
         item.encode(&mut buf)
@@ -280,11 +303,12 @@ impl Encoder for GossipsubCodec {
     }
 }
 
-impl Decoder for GossipsubCodec {
+impl<In> Decoder for GossipsubCodec<In> {
     type Item = HandlerEvent;
     type Error = GossipsubHandlerError;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+        // TODO: Replace with codec::decode call
         let packet = match self.length_codec.decode(src).map_err(|e| {
             if let std::io::ErrorKind::PermissionDenied = e.kind() {
                 GossipsubHandlerError::MaxTransmissionSize
@@ -295,6 +319,8 @@ impl Decoder for GossipsubCodec {
             Some(p) => p,
             None => return Ok(None),
         };
+
+        // end of TODO
 
         let rpc = rpc_proto::Rpc::decode(&packet[..]).map_err(std::io::Error::from)?;
 
