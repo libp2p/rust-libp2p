@@ -107,10 +107,8 @@ where
         let mut listener_done = false;
 
         loop {
-            let mut dialer_event_fut = self.select_next_some();
-
             futures::select! {
-                dialer_event = dialer_event_fut => {
+                dialer_event = self.select_next_some() => {
                     match dialer_event {
                         SwarmEvent::ConnectionEstablished { .. } => {
                             dialer_done = true;
