@@ -149,7 +149,7 @@ where
 
         self.wait(|e| match e {
             SwarmEvent::ConnectionEstablished { endpoint, .. } => {
-                (endpoint.get_remote_address() == &to_dial).then(|| ())
+                (endpoint.get_remote_address() == &to_dial).then_some(())
             }
             other => {
                 log::debug!("Ignoring event from dialer {:?}", other);
@@ -181,7 +181,7 @@ where
                 SwarmEvent::NewListenAddr {
                     address,
                     listener_id,
-                } => (listener_id == memory_addr_listener_id).then(|| address),
+                } => (listener_id == memory_addr_listener_id).then_some(address),
                 other => {
                     log::debug!(
                         "Ignoring {:?} while waiting for listening to succeed",
