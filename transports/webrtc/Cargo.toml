@@ -24,6 +24,7 @@ multihash = { version = "0.16", default-features = false, features = ["sha2"] }
 prost = "0.11"
 prost-codec = { version = "0.2.1", path = "../../misc/prost-codec" }
 rand = "0.8"
+rcgen = "0.9.3"
 serde = { version = "1.0", features = ["derive"] }
 stun = "0.4"
 thiserror = "1"
@@ -43,5 +44,8 @@ anyhow = "1.0"
 env_logger = "0.9"
 hex-literal = "0.3"
 libp2p = { path = "../..", features = ["request-response", "webrtc"], default-features = false }
-rcgen = "0.9.3"
 unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
+
+[[test]]
+name = "smoke"
+required-features = ["tokio"]
