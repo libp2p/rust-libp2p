@@ -108,22 +108,14 @@ impl Graph {
     }
 
     /// Polls the graph until Poll::Pending is obtained, completing the underlying polls.
-    fn drain_poll(self) -> Self {
-        // The future below should return self. Given that it is a FnMut and not a FnOnce, one needs
-        // to wrap `self` in an Option, leaving a `None` behind after the final `Poll::Ready`.
-        let mut this = Some(self);
-
-        let fut = futures::future::poll_fn(move |cx| match &mut this {
-            Some(graph) => loop {
-                match graph.nodes.poll_next_unpin(cx) {
-                    Poll::Ready(_) => {}
-                    Poll::Pending => return Poll::Ready(this.take().unwrap()),
-                }
-            },
-            None => panic!("future called after final return"),
+    async fn drain_events(&mut self) {
+        let fut = futures::future::poll_fn(|cx| loop {
+            match self.nodes.poll_next_unpin(cx) {
+                Poll::Ready(_) => {}
+                Poll::Pending => return Poll::Ready(()),
+            }
         });
-        let fut = async_std::future::timeout(Duration::from_secs(10), fut);
-        futures::executor::block_on(fut).unwrap()
+        fut.timeout(Duration::from_secs(10)).await.unwrap();
     }
 }
 
@@ -207,7 +199,7 @@ fn multi_hop_propagation() {
 
         // It can happen that the publish occurs before all grafts have completed causing this test
         // to fail. We drain all the poll messages before publishing.
-        graph = graph.drain_poll();
+        async_std::task::block_on(graph.drain_events());
 
         // Publish a single message.
         graph
