@@ -18,11 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::executor::LocalPool;
-use futures::future::FutureExt;
 use futures::io::{AsyncRead, AsyncWrite};
 use futures::stream::StreamExt;
-use futures::task::Spawn;
 use libp2p::core::multiaddr::{Multiaddr, Protocol};
 use libp2p::core::muxing::StreamMuxerBox;
 use libp2p::core::transport::upgrade::Version;
@@ -37,10 +34,9 @@ use libp2p::swarm::{AddressScore, NetworkBehaviour, Swarm, SwarmEvent};
 use libp2p::NetworkBehaviour;
 use std::time::Duration;
 
-#[test]
-fn connect() {
+#[async_std::test]
+async fn connect() {
     let _ = env_logger::try_init();
-    let mut pool = LocalPool::new();
 
     let relay_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
     let mut relay = build_relay();
@@ -48,7 +44,8 @@ fn connect() {
 
     relay.listen_on(relay_addr.clone()).unwrap();
     relay.add_external_address(relay_addr.clone(), AddressScore::Infinite);
-    spawn_swarm_on_pool(&pool, relay);
+
+    async_std::task::spawn(loop_forever(relay));
 
     let mut dst = build_client();
     let dst_peer_id = *dst.local_peer_id();
@@ -62,34 +59,38 @@ fn connect() {
     dst.listen_on(dst_addr.clone()).unwrap();
     dst.add_external_address(dst_addr.clone(), AddressScore::Infinite);
 
-    pool.run_until(wait_for_reservation(
+    wait_for_reservation(
         &mut dst,
         dst_relayed_addr.clone(),
         relay_peer_id,
         false, // No renewal.
-    ));
-    spawn_swarm_on_pool(&pool, dst);
+    )
+    .await;
+
+    async_std::task::spawn(loop_forever(dst));
 
     let mut src = build_client();
     let src_addr = Multiaddr::empty().with(Protocol::Memory(rand::random::<u64>()));
     src.listen_on(src_addr.clone()).unwrap();
-    pool.run_until(wait_for_new_listen_addr(&mut src, &src_addr));
+
+    wait_for_new_listen_addr(&mut src, &src_addr).await;
+
     src.add_external_address(src_addr.clone(), AddressScore::Infinite);
 
     src.dial(dst_relayed_addr.clone()).unwrap();
 
-    pool.run_until(wait_for_connection_established(&mut src, &dst_relayed_addr));
-    match pool.run_until(wait_for_dcutr_event(&mut src)) {
+    wait_for_connection_established(&mut src, &dst_relayed_addr).await;
+
+    match wait_for_dcutr_event(&mut src).await {
         dcutr::behaviour::Event::RemoteInitiatedDirectConnectionUpgrade {
             remote_peer_id,
             remote_relayed_addr,
         } if remote_peer_id == dst_peer_id && remote_relayed_addr == dst_relayed_addr => {}
         e => panic!("Unexpected event: {:?}.", e),
     }
-    pool.run_until(wait_for_connection_established(
-        &mut src,
-        &dst_addr.with(Protocol::P2p(dst_peer_id.into())),
-    ));
+
+    wait_for_connection_established(&mut src, &dst_addr.with(Protocol::P2p(dst_peer_id.into())))
+        .await;
 }
 
 fn build_relay() -> Swarm<relay::Relay> {
@@ -153,10 +154,10 @@ struct Client {
     dcutr: dcutr::behaviour::Behaviour,
 }
 
-fn spawn_swarm_on_pool<B: NetworkBehaviour + Send>(pool: &LocalPool, swarm: Swarm<B>) {
-    pool.spawner()
-        .spawn_obj(swarm.collect::<Vec<_>>().map(|_| ()).boxed().into())
-        .unwrap();
+async fn loop_forever<B: NetworkBehaviour + Send>(mut swarm: Swarm<B>) {
+    loop {
+        swarm.next().await;
+    }
 }
 
 async fn wait_for_reservation(
