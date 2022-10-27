@@ -171,7 +171,7 @@ pub trait NetworkBehaviour: 'static {
 
     /// Informs the behaviour about a newly established connection to a peer.
     #[deprecated(
-        since = "0.39.0",
+        since = "0.40.2",
         note = "Handle `FromSwarm::ConnectionEstablished` in `NetworkBehaviour::on_swarm_event` instead. The default implementation of this `inject_*` method delegates to it."
     )]
     fn inject_connection_established(
@@ -198,7 +198,7 @@ pub trait NetworkBehaviour: 'static {
     /// A call to this method is always paired with an earlier call to
     /// [`NetworkBehaviour::inject_connection_established`] with the same peer ID, connection ID and endpoint.
     #[deprecated(
-        since = "0.39.0",
+        since = "0.40.2",
         note = "Handle `FromSwarm::ConnectionClosed` in `NetworkBehaviour::on_swarm_event` instead. The default implementation of this `inject_*` method delegates to it."
     )]
     fn inject_connection_closed(
@@ -220,7 +220,7 @@ pub trait NetworkBehaviour: 'static {
 
     /// Informs the behaviour that the [`ConnectedPoint`] of an existing connection has changed.
     #[deprecated(
-        since = "0.39.0",
+        since = "0.40.2",
         note = "Handle `FromSwarm::AddressChange` in `NetworkBehaviour::on_swarm_event` instead. The default implementation of this `inject_*` method delegates to it."
     )]
     fn inject_address_change(
@@ -244,7 +244,7 @@ pub trait NetworkBehaviour: 'static {
     /// The `peer_id` is guaranteed to be in a connected state. In other words,
     /// [`NetworkBehaviour::inject_connection_established`] has previously been called with this `PeerId`.
     #[deprecated(
-        since = "0.39.0",
+        since = "0.40.2",
         note = "Implement `NetworkBehaviour::on_connection_handler_event` instead. The default implementation of this `inject_*` method delegates to it."
     )]
     fn inject_event(
@@ -258,7 +258,7 @@ pub trait NetworkBehaviour: 'static {
 
     /// Indicates to the behaviour that the dial to a known or unknown node failed.
     #[deprecated(
-        since = "0.39.0",
+        since = "0.40.2",
         note = "Handle `InEvent::DialFailure` in `NetworkBehaviour::on_swarm_event` instead. The default implementation of this `inject_*` method delegates to it."
     )]
     fn inject_dial_failure(
@@ -280,7 +280,7 @@ pub trait NetworkBehaviour: 'static {
     /// This can include, for example, an error during the handshake of the encryption layer, or the
     /// connection unexpectedly closed.
     #[deprecated(
-        since = "0.39.0",
+        since = "0.40.2",
         note = "Handle `FromSwarm::ListenFailure` in `NetworkBehaviour::on_swarm_event` instead. The default implementation of this `inject_*` method delegates to it."
     )]
     fn inject_listen_failure(
@@ -298,7 +298,7 @@ pub trait NetworkBehaviour: 'static {
 
     /// Indicates to the behaviour that a new listener was created.
     #[deprecated(
-        since = "0.39.0",
+        since = "0.40.2",
         note = "Handle `FromSwarm::NewListener` in `NetworkBehaviour::on_swarm_event` instead. The default implementation of this `inject_*` method delegates to it."
     )]
     fn inject_new_listener(&mut self, id: ListenerId) {
@@ -307,7 +307,7 @@ pub trait NetworkBehaviour: 'static {
 
     /// Indicates to the behaviour that we have started listening on a new multiaddr.
     #[deprecated(
-        since = "0.39.0",
+        since = "0.40.2",
         note = "Handle `FromSwarm::NewListenAddr` in `NetworkBehaviour::on_swarm_event` instead. The default implementation of this `inject_*` method delegates to it."
     )]
     fn inject_new_listen_addr(&mut self, id: ListenerId, addr: &Multiaddr) {
@@ -320,7 +320,7 @@ pub trait NetworkBehaviour: 'static {
     /// Indicates to the behaviour that a multiaddr we were listening on has expired,
     /// which means that we are no longer listening on it.
     #[deprecated(
-        since = "0.39.0",
+        since = "0.40.2",
         note = "Handle `FromSwarm::ExpiredListenAddr` in `NetworkBehaviour::on_swarm_event` instead. The default implementation of this `inject_*` method delegates to it."
     )]
     fn inject_expired_listen_addr(&mut self, id: ListenerId, addr: &Multiaddr) {
@@ -332,7 +332,7 @@ pub trait NetworkBehaviour: 'static {
 
     /// A listener experienced an error.
     #[deprecated(
-        since = "0.39.0",
+        since = "0.40.2",
         note = "Handle `FromSwarm::ListenerError` in `NetworkBehaviour::on_swarm_event` instead. The default implementation of this `inject_*` method delegates to it."
     )]
     fn inject_listener_error(&mut self, id: ListenerId, err: &(dyn std::error::Error + 'static)) {
@@ -344,7 +344,7 @@ pub trait NetworkBehaviour: 'static {
 
     /// A listener closed.
     #[deprecated(
-        since = "0.39.0",
+        since = "0.40.2",
         note = "Handle `FromSwarm::ListenerClosed` in `NetworkBehaviour::on_swarm_event` instead. The default implementation of this `inject_*` method delegates to it."
     )]
     fn inject_listener_closed(&mut self, id: ListenerId, reason: Result<(), &std::io::Error>) {
@@ -356,7 +356,7 @@ pub trait NetworkBehaviour: 'static {
 
     /// Indicates to the behaviour that we have discovered a new external address for us.
     #[deprecated(
-        since = "0.39.0",
+        since = "0.40.2",
         note = "Handle `FromSwarm::NewExternalAddr` in `NetworkBehaviour::on_swarm_event` instead. The default implementation of this `inject_*` method delegates to it."
     )]
     fn inject_new_external_addr(&mut self, addr: &Multiaddr) {
@@ -365,7 +365,7 @@ pub trait NetworkBehaviour: 'static {
 
     /// Indicates to the behaviour that an external address was removed.
     #[deprecated(
-        since = "0.39.0",
+        since = "0.40.2",
         note = "Handle `FromSwarm::ExpiredExternalAddr` in `NetworkBehaviour::on_swarm_event` instead. The default implementation of this `inject_*` method delegates to it."
     )]
     fn inject_expired_external_addr(&mut self, addr: &Multiaddr) {
