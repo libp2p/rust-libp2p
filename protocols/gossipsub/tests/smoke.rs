@@ -86,17 +86,13 @@ impl Graph {
             let mut next = not_connected_nodes.pop().unwrap();
             let connected_addr = &connected_nodes[0].0;
 
-            // Memory transport can not handle addresses with `/p2p` suffix.
-            let mut connected_addr_no_p2p = connected_addr.clone();
-            let p2p_suffix_connected = connected_addr_no_p2p.pop();
-
             debug!(
                 "Connect: {} -> {}",
                 next.0.clone().pop().unwrap(),
-                p2p_suffix_connected.unwrap()
+                next.1.local_peer_id()
             );
 
-            next.1.dial(connected_addr_no_p2p).unwrap();
+            next.1.dial(connected_addr.clone()).unwrap();
 
             connected_nodes.push(next);
         }
