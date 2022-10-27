@@ -18,17 +18,13 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::prelude::*;
+use futures::stream::SelectAll;
 use log::debug;
 use quickcheck::{QuickCheck, TestResult};
 use rand::{random, seq::SliceRandom, SeedableRng};
-use std::{
-    pin::Pin,
-    task::{Context, Poll},
-    time::Duration,
-};
+use std::{task::Poll, time::Duration};
 
-use futures::StreamExt;
+use futures::{ready, StreamExt};
 use libp2p::core::{
     identity, multiaddr::Protocol, transport::MemoryTransport, upgrade, Multiaddr, Transport,
 };
@@ -41,26 +37,7 @@ use libp2p::swarm::{Swarm, SwarmEvent};
 use libp2p::yamux;
 
 struct Graph {
-    pub nodes: Vec<Swarm<Gossipsub>>,
-}
-
-impl Future for Graph {
-    type Output = GossipsubEvent;
-
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        for node in &mut self.nodes {
-            loop {
-                match node.poll_next_unpin(cx) {
-                    Poll::Ready(Some(SwarmEvent::Behaviour(event))) => return Poll::Ready(event),
-                    Poll::Ready(Some(_)) => {}
-                    Poll::Ready(None) => panic!("unexpected None when polling nodes"),
-                    Poll::Pending => break,
-                }
-            }
-        }
-
-        Poll::Pending
-    }
+    pub nodes: SelectAll<Swarm<Gossipsub>>,
 }
 
 impl Graph {
@@ -108,9 +85,12 @@ impl Graph {
     ///
     /// Returns [`true`] on success and [`false`] on timeout.
     fn wait_for<F: FnMut(&GossipsubEvent) -> bool>(&mut self, mut f: F) -> bool {
-        let fut = futures::future::poll_fn(move |cx| match self.poll_unpin(cx) {
-            Poll::Ready(ev) if f(&ev) => Poll::Ready(()),
-            _ => Poll::Pending,
+        let fut = futures::future::poll_fn(move |cx| loop {
+            match ready!(self.nodes.poll_next_unpin(cx)) {
+                Some(SwarmEvent::Behaviour(ev)) if f(&ev) => return Poll::Ready(()),
+                Some(_) => continue,
+                None => unreachable!(),
+            }
         });
 
         let fut = async_std::future::timeout(Duration::from_secs(10), fut);
@@ -126,7 +106,7 @@ impl Graph {
 
         let fut = futures::future::poll_fn(move |cx| match &mut this {
             Some(graph) => loop {
-                match graph.poll_unpin(cx) {
+                match graph.nodes.poll_next_unpin(cx) {
                     Poll::Ready(_) => {}
                     Poll::Pending => return Poll::Ready(this.take().unwrap()),
                 }
@@ -221,7 +201,11 @@ fn multi_hop_propagation() {
         graph = graph.drain_poll();
 
         // Publish a single message.
-        graph.nodes[0]
+        graph
+            .nodes
+            .iter_mut()
+            .next()
+            .unwrap()
             .behaviour_mut()
             .publish(topic, vec![1, 2, 3])
             .unwrap();
