@@ -5,7 +5,7 @@ use libp2p::core::transport::MemoryTransport;
 use libp2p::core::upgrade::Version;
 use libp2p::identity::Keypair;
 use libp2p::multiaddr::Protocol;
-use libp2p::noise::NoiseAuthenticated;
+use libp2p::plaintext::PlainText2Config;
 use libp2p::swarm::dial_opts::DialOpts;
 use libp2p::swarm::{
     AddressScore, ConnectionHandler, IntoConnectionHandler, NetworkBehaviour, SwarmEvent,
@@ -76,7 +76,9 @@ where
 
         let transport = MemoryTransport::default()
             .upgrade(Version::V1)
-            .authenticate(NoiseAuthenticated::xx(&identity).unwrap())
+            .authenticate(PlainText2Config {
+                local_public_key: identity.public(),
+            })
             .multiplex(YamuxConfig::default())
             .timeout(Duration::from_secs(20))
             .boxed();
