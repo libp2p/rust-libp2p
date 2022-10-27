@@ -107,7 +107,7 @@ where
         let mut listener_done = false;
 
         loop {
-            match futures::future::select(self.select_next_some(), other.select_next_some()).await {
+            match futures::future::select(self.next_or_timeout(), other.next_or_timeout()).await {
                 Either::Left((SwarmEvent::ConnectionEstablished { .. }, _)) => {
                     dialer_done = true;
                 }
