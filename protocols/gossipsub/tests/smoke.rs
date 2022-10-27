@@ -73,9 +73,7 @@ impl Graph {
 
         let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
 
-        let mut not_connected_nodes = std::iter::once(())
-            .cycle()
-            .take(num_nodes)
+        let mut not_connected_nodes = (0..num_nodes)
             .map(|_| build_node())
             .collect::<Vec<(Multiaddr, Swarm<Gossipsub>)>>();
 
