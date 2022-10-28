@@ -26,7 +26,30 @@ use std::io;
 use std::net;
 use std::task::{Context, Poll};
 
+/// A TCP [`Transport`](libp2p_core::Transport) that works with the `async-std` ecosystem.
+///
+/// # Example
+///
+/// ```rust
+/// # use libp2p_tcp as tcp;
+/// # use libp2p_core::Transport;
+/// # use futures::future;
+/// # use std::pin::Pin;
+/// #
+/// # #[async_std::main]
+/// # async fn main() {
+/// let mut transport = tcp::async_io::Transport::new(tcp::Config::default());
+/// let id = transport.listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap()).unwrap();
+///
+/// let addr = future::poll_fn(|cx| Pin::new(&mut transport).poll(cx)).await.into_new_address().unwrap();
+///
+/// println!("Listening on {addr}");
+/// # }
+/// ```
+pub type Transport = crate::Transport<Tcp>;
+
 #[derive(Copy, Clone)]
+#[doc(hidden)]
 pub enum Tcp {}
 
 impl Provider for Tcp {

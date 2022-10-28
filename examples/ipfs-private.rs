@@ -33,7 +33,6 @@
 //! to work, the ipfs node needs to be configured to use gossipsub.
 use async_std::io;
 use futures::{prelude::*, select};
-use libp2p::tcp::GenTcpConfig;
 use libp2p::{
     core::{
         either::EitherTransport, muxing::StreamMuxerBox, transport, transport::upgrade::Version,
@@ -44,7 +43,7 @@ use libp2p::{
     noise, ping,
     pnet::{PnetConfig, PreSharedKey},
     swarm::SwarmEvent,
-    tcp::TcpTransport,
+    tcp,
     yamux::YamuxConfig,
     Multiaddr, NetworkBehaviour, PeerId, Swarm, Transport,
 };
@@ -58,7 +57,7 @@ pub fn build_transport(
     let noise_config = noise::NoiseAuthenticated::xx(&key_pair).unwrap();
     let yamux_config = YamuxConfig::default();
 
-    let base_transport = TcpTransport::new(GenTcpConfig::default().nodelay(true));
+    let base_transport = tcp::async_io::Transport::new(tcp::Config::default().nodelay(true));
     let maybe_encrypted = match psk {
         Some(psk) => EitherTransport::Left(
             base_transport.and_then(move |socket, _| PnetConfig::new(psk).handshake(socket)),

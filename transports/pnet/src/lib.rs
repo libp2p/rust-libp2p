@@ -23,6 +23,9 @@
 //!
 //! Libp2p nodes configured with a pre-shared key can only communicate with other nodes with
 //! the same key.
+
+#![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
+
 mod crypt_writer;
 use crypt_writer::CryptWriter;
 use futures::prelude::*;
