@@ -558,9 +558,14 @@ fn is_quic_addr(addr: &Multiaddr) -> bool {
         Some(p) => p,
         None => return false,
     };
+    let fourth = iter.next();
+    let fifth = iter.next();
+
     matches!(first, Ip4(_) | Ip6(_) | Dns(_) | Dns4(_) | Dns6(_))
         && matches!(second, Udp(_))
         && matches!(third, Quic)
+        && matches!(fourth, Some(P2p(_)) | None)
+        && matches!(fifth, None)
 }
 
 /// Turns an IP address and port into the corresponding QUIC multiaddr.
