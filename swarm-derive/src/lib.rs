@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 #![recursion_limit = "256"]
+#![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
 use heck::ToUpperCamelCase;
 use proc_macro::TokenStream;
@@ -125,7 +126,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                             )
                             .unwrap();
                             let ty = &field.ty;
-                            quote! {#variant(<#ty as NetworkBehaviour>::OutEvent)}
+                            quote! {#variant(<#ty as #trait_to_impl>::OutEvent)}
                         })
                         .collect::<Vec<_>>();
                     let visibility = &ast.vis;

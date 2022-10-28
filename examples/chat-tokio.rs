@@ -25,19 +25,10 @@
 //! The example is run per node as follows:
 //!
 //! ```sh
-//! cargo run --example chat-tokio --features="tcp-tokio mdns-tokio"
-//! ```
-//!
-//! Alternatively, to run with the minimal set of features and crates:
-//!
-//! ```sh
-//!cargo run --example chat-tokio \\
-//!    --no-default-features \\
-//!    --features="floodsub mplex noise tcp-tokio mdns-tokio"
+//! cargo run --example chat-tokio --features=full
 //! ```
 
 use futures::StreamExt;
-use libp2p::tcp::GenTcpConfig;
 use libp2p::{
     core::upgrade,
     floodsub::{self, Floodsub, FloodsubEvent},
@@ -47,15 +38,9 @@ use libp2p::{
         // `TokioMdns` is available through the `mdns-tokio` feature.
         TokioMdns,
     },
-    mplex,
-    noise,
+    mplex, noise,
     swarm::{SwarmBuilder, SwarmEvent},
-    // `TokioTcpTransport` is available through the `tcp-tokio` feature.
-    tcp::TokioTcpTransport,
-    Multiaddr,
-    NetworkBehaviour,
-    PeerId,
-    Transport,
+    tcp, Multiaddr, NetworkBehaviour, PeerId, Transport,
 };
 use std::error::Error;
 use tokio::io::{self, AsyncBufReadExt};
@@ -72,7 +57,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Create a tokio-based TCP transport use noise for authenticated
     // encryption and Mplex for multiplexing of substreams on a TCP stream.
-    let transport = TokioTcpTransport::new(GenTcpConfig::default().nodelay(true))
+    let transport = tcp::tokio::Transport::new(tcp::Config::default().nodelay(true))
         .upgrade(upgrade::Version::V1)
         .authenticate(
             noise::NoiseAuthenticated::xx(&id_keys)
@@ -113,7 +98,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Create a Swarm to manage peers and events.
     let mut swarm = {
-        let mdns = TokioMdns::new(Default::default()).await?;
+        let mdns = TokioMdns::new(Default::default())?;
         let mut behaviour = MyBehaviour {
             floodsub: Floodsub::new(peer_id),
             mdns,

@@ -197,7 +197,7 @@ mod tests {
             let n = std::cmp::min(self.read.len(), buf.len());
             buf[0..n].copy_from_slice(&self.read[0..n]);
             self.read = self.read.split_off(n);
-            return Poll::Ready(Ok(n));
+            Poll::Ready(Ok(n))
         }
     }
 

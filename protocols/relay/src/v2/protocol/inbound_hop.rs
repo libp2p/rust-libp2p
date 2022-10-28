@@ -23,11 +23,11 @@ use crate::v2::protocol::{HOP_PROTOCOL_NAME, MAX_MESSAGE_SIZE};
 use asynchronous_codec::{Framed, FramedParts};
 use bytes::Bytes;
 use futures::{future::BoxFuture, prelude::*};
+use instant::{Duration, SystemTime};
 use libp2p_core::{upgrade, Multiaddr, PeerId};
 use libp2p_swarm::NegotiatedSubstream;
 use std::convert::TryInto;
 use std::iter;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use thiserror::Error;
 
 pub struct Upgrade {
@@ -142,7 +142,7 @@ impl ReservationReq {
             reservation: Some(Reservation {
                 addrs: addrs.into_iter().map(|a| a.to_vec()).collect(),
                 expire: (SystemTime::now() + self.reservation_duration)
-                    .duration_since(UNIX_EPOCH)
+                    .duration_since(SystemTime::UNIX_EPOCH)
                     .unwrap()
                     .as_secs(),
                 voucher: None,

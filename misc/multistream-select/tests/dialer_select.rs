@@ -20,14 +20,9 @@
 
 //! Integration tests for protocol negotiation.
 
-#![cfg(test)]
-
-use crate::dialer_select::{dialer_select_proto_parallel, dialer_select_proto_serial};
-use crate::{dialer_select_proto, listener_select_proto};
-use crate::{NegotiationError, Version};
-
 use async_std::net::{TcpListener, TcpStream};
 use futures::prelude::*;
+use multistream_select::{dialer_select_proto, listener_select_proto, NegotiationError, Version};
 
 #[test]
 fn select_proto_basic() {
@@ -180,68 +175,4 @@ fn negotiation_failed() {
             }
         }
     }
-}
-
-#[test]
-fn select_proto_parallel() {
-    async fn run(version: Version) {
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let listener_addr = listener.local_addr().unwrap();
-
-        let server = async_std::task::spawn(async move {
-            let connec = listener.accept().await.unwrap().0;
-            let protos = vec![b"/proto1", b"/proto2"];
-            let (proto, io) = listener_select_proto(connec, protos).await.unwrap();
-            assert_eq!(proto, b"/proto2");
-            io.complete().await.unwrap();
-        });
-
-        let client = async_std::task::spawn(async move {
-            let connec = TcpStream::connect(&listener_addr).await.unwrap();
-            let protos = vec![b"/proto3", b"/proto2"];
-            let (proto, io) = dialer_select_proto_parallel(connec, protos.into_iter(), version)
-                .await
-                .unwrap();
-            assert_eq!(proto, b"/proto2");
-            io.complete().await.unwrap();
-        });
-
-        server.await;
-        client.await;
-    }
-
-    async_std::task::block_on(run(Version::V1));
-    async_std::task::block_on(run(Version::V1Lazy));
-}
-
-#[test]
-fn select_proto_serial() {
-    async fn run(version: Version) {
-        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let listener_addr = listener.local_addr().unwrap();
-
-        let server = async_std::task::spawn(async move {
-            let connec = listener.accept().await.unwrap().0;
-            let protos = vec![b"/proto1", b"/proto2"];
-            let (proto, io) = listener_select_proto(connec, protos).await.unwrap();
-            assert_eq!(proto, b"/proto2");
-            io.complete().await.unwrap();
-        });
-
-        let client = async_std::task::spawn(async move {
-            let connec = TcpStream::connect(&listener_addr).await.unwrap();
-            let protos = vec![b"/proto3", b"/proto2"];
-            let (proto, io) = dialer_select_proto_serial(connec, protos.into_iter(), version)
-                .await
-                .unwrap();
-            assert_eq!(proto, b"/proto2");
-            io.complete().await.unwrap();
-        });
-
-        server.await;
-        client.await;
-    }
-
-    async_std::task::block_on(run(Version::V1));
-    async_std::task::block_on(run(Version::V1Lazy));
 }

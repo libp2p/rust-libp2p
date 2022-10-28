@@ -25,14 +25,12 @@ mod timer;
 use self::iface::InterfaceState;
 use crate::behaviour::{socket::AsyncSocket, timer::Builder};
 use crate::MdnsConfig;
-use futures::prelude::*;
 use futures::Stream;
 use if_watch::{IfEvent, IfWatcher};
 use libp2p_core::transport::ListenerId;
 use libp2p_core::{Multiaddr, PeerId};
 use libp2p_swarm::{
-    handler::DummyConnectionHandler, ConnectionHandler, NetworkBehaviour, NetworkBehaviourAction,
-    PollParameters,
+    dummy, ConnectionHandler, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
 };
 use smallvec::SmallVec;
 use std::collections::hash_map::{Entry, HashMap};
@@ -82,8 +80,8 @@ where
     T: Builder,
 {
     /// Builds a new `Mdns` behaviour.
-    pub async fn new(config: MdnsConfig) -> io::Result<Self> {
-        let if_watch = if_watch::IfWatcher::new().await?;
+    pub fn new(config: MdnsConfig) -> io::Result<Self> {
+        let if_watch = if_watch::IfWatcher::new()?;
         Ok(Self {
             config,
             if_watch,
@@ -120,11 +118,11 @@ where
     T: Builder + Stream,
     S: AsyncSocket,
 {
-    type ConnectionHandler = DummyConnectionHandler;
+    type ConnectionHandler = dummy::ConnectionHandler;
     type OutEvent = MdnsEvent;
 
     fn new_handler(&mut self) -> Self::ConnectionHandler {
-        DummyConnectionHandler::default()
+        dummy::ConnectionHandler
     }
 
     fn addresses_of_peer(&mut self, peer_id: &PeerId) -> Vec<Multiaddr> {
@@ -168,9 +166,9 @@ where
         &mut self,
         cx: &mut Context<'_>,
         params: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, DummyConnectionHandler>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, dummy::ConnectionHandler>> {
         // Poll ifwatch.
-        while let Poll::Ready(event) = Pin::new(&mut self.if_watch).poll(cx) {
+        while let Poll::Ready(Some(event)) = Pin::new(&mut self.if_watch).poll_next(cx) {
             match event {
                 Ok(IfEvent::Up(inet)) => {
                     let addr = inet.addr();
@@ -203,7 +201,7 @@ where
         // Emit discovered event.
         let mut discovered = SmallVec::<[(PeerId, Multiaddr); 4]>::new();
         for iface_state in self.iface_states.values_mut() {
-            while let Some((peer, addr, expiration)) = iface_state.poll(cx, params) {
+            while let Poll::Ready((peer, addr, expiration)) = iface_state.poll(cx, params) {
                 if let Some((_, _, cur_expires)) = self
                     .discovered_nodes
                     .iter_mut()

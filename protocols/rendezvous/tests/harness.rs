@@ -62,11 +62,10 @@ where
 
 fn get_rand_memory_address() -> Multiaddr {
     let address_port = rand::random::<u64>();
-    let addr = format!("/memory/{}", address_port)
-        .parse::<Multiaddr>()
-        .unwrap();
 
-    addr
+    format!("/memory/{}", address_port)
+        .parse::<Multiaddr>()
+        .unwrap()
 }
 
 pub async fn await_event_or_timeout<Event, Error>(
