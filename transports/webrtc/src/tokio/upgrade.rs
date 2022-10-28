@@ -154,12 +154,16 @@ async fn new_inbound_connection(
     Ok(connection)
 }
 
+/// Generates a random ufrag and adds a prefix according to the spec.
 fn random_ufrag() -> String {
-    thread_rng()
-        .sample_iter(&Alphanumeric)
-        .take(64)
-        .map(char::from)
-        .collect()
+    format!(
+        "libp2p+webrtc+v1/{}",
+        thread_rng()
+            .sample_iter(&Alphanumeric)
+            .take(64)
+            .map(char::from)
+            .collect::<String>()
+    )
 }
 
 fn setting_engine(
