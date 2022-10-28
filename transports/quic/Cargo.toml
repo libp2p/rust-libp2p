@@ -40,7 +40,7 @@ rustc-args = ["--cfg", "docsrs"]
 
 [dev-dependencies]
 async-std = { version = "1.12.0", features = ["attributes"] }
-libp2p = { path = "../..", features = ["request-response"] }
+libp2p = { path = "../..", features = ["request-response", "tcp", "yamux", "noise", "async-std"] }
 env_logger = "0.9.0"
 rand = "0.8.4"
 tokio = { version = "1.21.1", features = ["macros", "rt-multi-thread"] }

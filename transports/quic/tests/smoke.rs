@@ -16,7 +16,9 @@ use libp2p::request_response::{
 };
 use libp2p::swarm::dial_opts::{DialOpts, PeerCondition};
 use libp2p::swarm::{ConnectionError, DialError, Swarm, SwarmEvent};
-use libp2p::Multiaddr;
+use libp2p::{noise, tcp, yamux, Multiaddr};
+use libp2p_core::either::EitherOutput;
+use libp2p_core::transport::OrTransport;
 use libp2p_quic as quic;
 use quic::Provider;
 use rand::RngCore;
@@ -566,7 +568,7 @@ async fn ipv4_dial_ipv6() {
 
 #[cfg(feature = "async-std")]
 #[async_std::test]
-async fn wrong_peerod() {
+async fn wrong_peerid() {
     use libp2p::PeerId;
 
     let _ = env_logger::try_init();
@@ -591,6 +593,88 @@ async fn wrong_peerod() {
                     break;
                 },
                 e => panic!("{:?}", e),
+            }
+        }
+    }
+}
+
+#[cfg(feature = "async-std")]
+fn new_tcp_quic_swarm() -> Swarm<RequestResponse<PingCodec>> {
+    let keypair = generate_tls_keypair();
+    let peer_id = keypair.public().to_peer_id();
+    let mut config = quic::Config::new(&keypair);
+    config.handshake_timeout = Duration::from_secs(1);
+    let quic_transport = quic::async_std::Transport::new(config);
+    let tcp_transport = tcp::async_io::Transport::new(tcp::Config::default())
+        .upgrade(upgrade::Version::V1Lazy)
+        .authenticate(
+            noise::NoiseConfig::xx(
+                noise::Keypair::<noise::X25519Spec>::new()
+                    .into_authentic(&keypair)
+                    .unwrap(),
+            )
+            .into_authenticated(),
+        )
+        .multiplex(yamux::YamuxConfig::default());
+
+    let transport = OrTransport::new(quic_transport, tcp_transport)
+        .map(|either_output, _| match either_output {
+            EitherOutput::First((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
+            EitherOutput::Second((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
+        })
+        .boxed();
+
+    let protocols = iter::once((PingProtocol(), ProtocolSupport::Full));
+    let cfg = RequestResponseConfig::default();
+    let behaviour = RequestResponse::new(PingCodec(), protocols, cfg);
+
+    Swarm::new(transport, behaviour, peer_id)
+}
+
+#[cfg(feature = "async-std")]
+#[async_std::test]
+async fn tcp_and_quic() {
+    let mut swarm_a = new_tcp_quic_swarm();
+    let swarm_a_id = *swarm_a.local_peer_id();
+    println!("{}", swarm_a_id);
+
+    let mut swarm_b = new_tcp_quic_swarm();
+
+    let quic_addr = start_listening(&mut swarm_a, "/ip4/127.0.0.1/udp/0/quic").await;
+    let tcp_addr = start_listening(&mut swarm_a, "/ip4/127.0.0.1/tcp/0").await;
+
+    swarm_b.dial(quic_addr.clone()).unwrap();
+
+    loop {
+        select! {
+                ev = swarm_a.select_next_some() => match ev {
+                    SwarmEvent::ConnectionEstablished { .. } => break,
+                    SwarmEvent::IncomingConnection { .. } => { }
+                    e => panic!("{:?}", e),
+                },
+                ev = swarm_b.select_next_some() => match ev {
+                    SwarmEvent::ConnectionEstablished { .. } => {},
+                    e => panic!("{:?}", e),
+            }
+        }
+    }
+
+    swarm_b.dial(tcp_addr).unwrap();
+
+    loop {
+        select! {
+                ev = swarm_a.select_next_some() => match ev {
+                    SwarmEvent::ConnectionEstablished { .. } => break,
+                    SwarmEvent::IncomingConnection { .. }
+                    | SwarmEvent::ConnectionClosed { .. } => { }
+                    e => panic!("{:?}", e),
+                },
+                ev = swarm_b.select_next_some() => match ev {
+                    SwarmEvent::ConnectionEstablished { .. } => {},
+                    SwarmEvent::ConnectionClosed { endpoint, .. } => {
+                        assert_eq!(endpoint.get_remote_address(), &quic_addr );
+                    }
+                    e => panic!("{:?}", e),
             }
         }
     }
