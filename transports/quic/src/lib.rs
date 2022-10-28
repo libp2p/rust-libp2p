@@ -18,6 +18,7 @@ use std::{
     time::Duration,
 };
 
+use futures::{future::BoxFuture, FutureExt};
 use futures::{stream::SelectAll, AsyncRead, AsyncWrite, Stream, StreamExt};
 
 mod in_addr;
@@ -75,8 +76,10 @@ impl AsyncWrite for QuicSubstream {
 
 pub struct QuicMuxer {
     connection: quinn::Connection,
-    incoming: quinn::IncomingBiStreams,
-    outgoing: Option<quinn::OpenBi>,
+    incoming:
+        BoxFuture<'static, Result<(quinn::SendStream, quinn::RecvStream), quinn::ConnectionError>>,
+    outgoing:
+        BoxFuture<'static, Result<(quinn::SendStream, quinn::RecvStream), quinn::ConnectionError>>,
 }
 
 impl StreamMuxer for QuicMuxer {
@@ -87,13 +90,13 @@ impl StreamMuxer for QuicMuxer {
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Result<Self::Substream, Self::Error>> {
-        let res = futures::Stream::poll_next(Pin::new(&mut self.get_mut().incoming), cx);
-        let res = res?;
-        match res {
-            Poll::Ready(Some((send, recv))) => Poll::Ready(Ok(QuicSubstream::new(send, recv))),
-            Poll::Pending => Poll::Pending,
-            Poll::Ready(None) => panic!("exhasted"),
-        }
+        let this = self.get_mut();
+
+        let substream = futures::ready!(this.incoming.poll_unpin(cx));
+        let connection = this.connection.clone();
+        this.incoming = Box::pin(async move { connection.accept_bi().await });
+        let substream = substream.map(|(send, recv)| QuicSubstream::new(send, recv));
+        Poll::Ready(substream)
     }
 
     fn poll_outbound(
@@ -102,25 +105,11 @@ impl StreamMuxer for QuicMuxer {
     ) -> Poll<Result<Self::Substream, Self::Error>> {
         let this = self.get_mut();
 
-        let open_future = this.outgoing.take();
-
-        if let Some(mut open_future) = open_future {
-            match Pin::new(&mut open_future).poll(cx) {
-                Poll::Pending => {
-                    this.outgoing.replace(open_future);
-                    Poll::Pending
-                }
-                Poll::Ready(result) => {
-                    let result = result.map(|(send, recv)| QuicSubstream::new(send, recv));
-                    Poll::Ready(result)
-                }
-            }
-        } else {
-            let open_future = this.connection.open_bi();
-            this.outgoing.replace(open_future);
-
-            Pin::new(this).poll_outbound(cx)
-        }
+        let substream = futures::ready!(this.outgoing.poll_unpin(cx));
+        let connection = this.connection.clone();
+        this.outgoing = Box::pin(async move { connection.open_bi().await });
+        let substream = substream.map(|(send, recv)| QuicSubstream::new(send, recv));
+        Poll::Ready(substream)
     }
 
     fn poll(
@@ -176,16 +165,16 @@ impl Future for QuicUpgrade {
             .poll(cx)
             .map_err(io::Error::from)
             .map_ok(|new_connection| {
-                let quinn::NewConnection {
-                    connection,
-                    bi_streams,
-                    ..
-                } = new_connection;
+                let connection = new_connection;
                 let peer_id = QuicUpgrade::remote_peer_id(&connection);
+                let connection_c = connection.clone();
+                let incoming = Box::pin(async move { connection_c.accept_bi().await });
+                let connection_c = connection.clone();
+                let outgoing = Box::pin(async move { connection_c.open_bi().await });
                 let muxer = QuicMuxer {
                     connection,
-                    incoming: bi_streams,
-                    outgoing: None,
+                    incoming,
+                    outgoing,
                 };
                 (peer_id, muxer)
             })
@@ -249,7 +238,7 @@ impl Transport for QuicTransport {
     type Output = (PeerId, QuicMuxer);
     type Error = io::Error;
     type ListenerUpgrade = QuicUpgrade;
-    type Dial = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
+    type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
     fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
         let socket_addr =
@@ -258,14 +247,13 @@ impl Transport for QuicTransport {
         let client_config = self.config.client_config.clone();
         let server_config = self.config.server_config.clone();
 
-        let (mut endpoint, new_connections) =
-            quinn::Endpoint::server(server_config, socket_addr).unwrap();
+        let mut endpoint = quinn::Endpoint::server(server_config, socket_addr).unwrap();
         endpoint.set_default_client_config(client_config);
 
         let in_addr = InAddr::new(socket_addr.ip()).map_err(TransportError::Other)?;
 
         let listener_id = ListenerId::new();
-        let listener = Listener::new(listener_id, endpoint, new_connections, in_addr);
+        let listener = Listener::new(listener_id, endpoint, in_addr);
         self.listeners.push(listener);
         // Drop reference to dialer endpoint so that the endpoint is dropped once the last
         // connection that uses it is closed.
@@ -322,8 +310,7 @@ impl Transport for QuicTransport {
                     let client_config = self.config.client_config.clone();
                     let server_config = self.config.server_config.clone();
 
-                    let (mut endpoint, _) =
-                        quinn::Endpoint::server(server_config, server_addr).unwrap();
+                    let mut endpoint = quinn::Endpoint::server(server_config, server_addr).unwrap();
                     endpoint.set_default_client_config(client_config);
                     let _ = dialer.insert(endpoint.clone());
                     endpoint
@@ -368,8 +355,7 @@ struct Listener {
     listener_id: ListenerId,
     endpoint: quinn::Endpoint,
 
-    /// Channel where new connections are being sent.
-    new_connections: quinn::Incoming,
+    accept: BoxFuture<'static, Option<quinn::Connecting>>,
 
     /// The IP addresses of network interfaces on which the listening socket
     /// is accepting connections.
@@ -385,16 +371,13 @@ struct Listener {
 }
 
 impl Listener {
-    fn new(
-        listener_id: ListenerId,
-        endpoint: quinn::Endpoint,
-        new_connections: quinn::Incoming,
-        in_addr: InAddr,
-    ) -> Self {
+    fn new(listener_id: ListenerId, endpoint: quinn::Endpoint, in_addr: InAddr) -> Self {
+        let endpoint_c = endpoint.clone();
+        let accept = Box::pin(async move { endpoint_c.accept().await });
         Self {
             listener_id,
             endpoint,
-            new_connections,
+            accept,
             in_addr,
             report_closed: None,
         }
@@ -478,31 +461,36 @@ impl Listener {
 
 impl Stream for Listener {
     type Item = TransportEvent<<QuicTransport as Transport>::ListenerUpgrade, io::Error>;
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        if let Some(closed) = self.report_closed.as_mut() {
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let this = self.get_mut();
+        if let Some(closed) = this.report_closed.as_mut() {
             // Listener was closed.
             // Report the transport event if there is one. On the next iteration, return
             // `Poll::Ready(None)` to terminate the stream.
             return Poll::Ready(closed.take());
         }
-        if let Some(event) = self.poll_if_addr(cx) {
+        if let Some(event) = this.poll_if_addr(cx) {
             return Poll::Ready(Some(event));
         }
-        let connecting = match futures::ready!(self.new_connections.poll_next_unpin(cx)) {
-            Some(c) => c,
+        let connecting = match futures::ready!(this.accept.poll_unpin(cx)) {
+            Some(c) => {
+                let endpoint = this.endpoint.clone();
+                this.accept = Box::pin(async move { endpoint.accept().await });
+                c
+            }
             None => {
-                self.close(Err(io::Error::from(quinn::ConnectionError::LocallyClosed))); // TODO Error: TaskCrashed
-                return self.poll_next(cx);
+                this.close(Err(io::Error::from(quinn::ConnectionError::LocallyClosed))); // TODO Error: TaskCrashed
+                return Poll::Pending; // TODO recursive return this.poll_next
             }
         };
 
-        let local_addr = socketaddr_to_multiaddr(&self.socket_addr());
+        let local_addr = socketaddr_to_multiaddr(&this.socket_addr());
         let send_back_addr = socketaddr_to_multiaddr(&connecting.remote_address());
         let event = TransportEvent::Incoming {
             upgrade: QuicUpgrade::from_connecting(connecting),
             local_addr,
             send_back_addr,
-            listener_id: self.listener_id,
+            listener_id: this.listener_id,
         };
         Poll::Ready(Some(event))
     }

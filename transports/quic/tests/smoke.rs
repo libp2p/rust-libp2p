@@ -462,7 +462,9 @@ async fn endpoint_reuse() -> Result<()> {
     loop {
         select! {
             ev = swarm_a.select_next_some() => match ev {
-                SwarmEvent::ConnectionEstablished { ..} => panic!("Unexpected dial success."),
+                e @ SwarmEvent::ConnectionEstablished { .. } => {
+                    panic!("Unexpected dial success: {:?}", e)
+                },
                 SwarmEvent::OutgoingConnectionError {error, .. } => {
                     assert!(matches!(error, DialError::Transport(_)));
                     break
