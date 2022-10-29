@@ -22,6 +22,7 @@
 
 use libp2p_core::identity::error::SigningError;
 use libp2p_core::upgrade::ProtocolError;
+use prost_codec::{Codec, Error};
 use std::fmt;
 
 /// Error associated with publishing a gossipsub message.
@@ -101,8 +102,7 @@ pub enum GossipsubHandlerError {
     NegotiationProtocolError(ProtocolError),
 
     // TODO: replace with codec::Error?
-    /// IO error.
-    Io(std::io::Error),
+    Codec(Error),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -138,7 +138,7 @@ impl std::error::Error for ValidationError {}
 
 impl From<std::io::Error> for GossipsubHandlerError {
     fn from(error: std::io::Error) -> GossipsubHandlerError {
-        GossipsubHandlerError::Io(error)
+        GossipsubHandlerError::Codec(prost_codec::Error::Io(error))
     }
 }
 
@@ -157,7 +157,7 @@ impl fmt::Display for GossipsubHandlerError {
 impl std::error::Error for GossipsubHandlerError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            GossipsubHandlerError::Io(io) => Some(io),
+            GossipsubHandlerError::Codec(io) => Some(io),
             _ => None,
         }
     }

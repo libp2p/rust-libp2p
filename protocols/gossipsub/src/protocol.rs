@@ -144,10 +144,7 @@ impl<TSocket> InboundUpgrade<TSocket> for ProtocolConfig
 where
     TSocket: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
-    type Output = (
-        Framed<TSocket, GossipsubCodec<dyn ProtobufMessage>>,
-        PeerKind,
-    );
+    type Output = (Framed<TSocket, GossipsubCodec>, PeerKind);
     type Error = GossipsubHandlerError;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
@@ -157,11 +154,7 @@ where
         Box::pin(future::ok((
             Framed::new(
                 socket,
-                GossipsubCodec::new(
-                    length_codec,
-                    self.validation_mode,
-                    ProstCodec::new(length_codec),
-                ),
+                GossipsubCodec::new(length_codec, self.validation_mode),
             ),
             protocol_id.kind,
         )))
@@ -172,10 +165,7 @@ impl<TSocket> OutboundUpgrade<TSocket> for ProtocolConfig
 where
     TSocket: AsyncWrite + AsyncRead + Unpin + Send + 'static,
 {
-    type Output = (
-        Framed<TSocket, GossipsubCodec<dyn ProtobufMessage>>,
-        PeerKind,
-    );
+    type Output = (Framed<TSocket, GossipsubCodec>, PeerKind);
     type Error = GossipsubHandlerError;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
@@ -185,11 +175,7 @@ where
         Box::pin(future::ok((
             Framed::new(
                 socket,
-                GossipsubCodec::new(
-                    length_codec,
-                    self.validation_mode,
-                    ProstCodec::new(length_codec),
-                ),
+                GossipsubCodec::new(length_codec, self.validation_mode),
             ),
             protocol_id.kind,
         )))
@@ -198,25 +184,18 @@ where
 
 /* Gossip codec for the framing */
 
-pub struct GossipsubCodec<In> {
+pub struct GossipsubCodec {
     /// Codec to encode/decode the Unsigned varint length prefix of the frames.
     length_codec: codec::UviBytes,
     /// Determines the level of validation performed on incoming messages.
     validation_mode: ValidationMode,
-    /// Codec to handle encode/decode
-    codec: ProstCodec<In>,
 }
 
-impl GossipsubCodec<dyn ProtobufMessage> {
-    pub fn new(
-        length_codec: codec::UviBytes,
-        validation_mode: ValidationMode,
-        codec: ProstCodec<dyn ProtobufMessage>,
-    ) -> Self {
+impl GossipsubCodec {
+    pub fn new(length_codec: codec::UviBytes, validation_mode: ValidationMode) -> Self {
         GossipsubCodec {
             length_codec,
             validation_mode,
-            codec,
         }
     }
 
@@ -285,35 +264,38 @@ impl GossipsubCodec<dyn ProtobufMessage> {
     }
 }
 
-impl<In> Encoder for GossipsubCodec<In> {
+impl Encoder for GossipsubCodec {
     type Item = rpc_proto::Rpc;
     type Error = GossipsubHandlerError;
 
-    fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
+    fn encode(
+        &mut self,
+        item: Self::Item,
+        dst: &mut BytesMut,
+    ) -> Result<(), GossipsubHandlerError> {
         // TODO: Replace this with a call to the codec::encode
-        let mut buf = Vec::with_capacity(item.encoded_len());
+        let codec: prost_codec::Codec<Self::Item> = prost_codec::Codec::new(item.encoded_len());
 
-        item.encode(&mut buf)
-            .expect("Buffer has sufficient capacity");
-
-        // length prefix the protobuf message, ensuring the max limit is not hit
-        self.length_codec
-            .encode(Bytes::from(buf), dst)
-            .map_err(|_| GossipsubHandlerError::MaxTransmissionSize)
+        // I am trying to run `encode()`, then return
+        match codec.encode(item, dst) {
+            Some(p) => return Err(GossipsubHandlerError::Codec(p)),
+            None => return Ok(None),
+        }
     }
 }
 
-impl<In> Decoder for GossipsubCodec<In> {
+impl Decoder for GossipsubCodec {
     type Item = HandlerEvent;
     type Error = GossipsubHandlerError;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         // TODO: Replace with codec::decode call
+
         let packet = match self.length_codec.decode(src).map_err(|e| {
             if let std::io::ErrorKind::PermissionDenied = e.kind() {
                 GossipsubHandlerError::MaxTransmissionSize
             } else {
-                GossipsubHandlerError::Io(e)
+                GossipsubHandlerError::Codec(prost_codec::Error::Io(e))
             }
         })? {
             Some(p) => p,
