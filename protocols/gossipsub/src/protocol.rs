@@ -29,7 +29,6 @@ use crate::types::{
 };
 use asynchronous_codec::{Decoder, Encoder, Framed};
 use byteorder::{BigEndian, ByteOrder};
-use bytes::Bytes;
 use bytes::BytesMut;
 use futures::future;
 use futures::prelude::*;
@@ -38,7 +37,6 @@ use libp2p_core::{
 };
 use log::{debug, warn};
 use prost::Message as ProtobufMessage;
-use prost_codec::Codec as ProstCodec; //, Error};
 use std::{borrow::Cow, pin::Pin};
 use unsigned_varint::codec;
 
@@ -274,12 +272,12 @@ impl Encoder for GossipsubCodec {
         dst: &mut BytesMut,
     ) -> Result<(), GossipsubHandlerError> {
         // TODO: Replace this with a call to the codec::encode
-        let codec: prost_codec::Codec<Self::Item> = prost_codec::Codec::new(item.encoded_len());
+        let mut codec: prost_codec::Codec<Self::Item> = prost_codec::Codec::new(item.encoded_len());
 
         // I am trying to run `encode()`, then return
         match codec.encode(item, dst) {
-            Some(p) => return Err(GossipsubHandlerError::Codec(p)),
-            None => return Ok(None),
+            Ok(_) => Ok(()),
+            _ => Err(GossipsubHandlerError::MaxTransmissionSize),
         }
     }
 }

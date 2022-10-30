@@ -22,8 +22,8 @@
 
 use libp2p_core::identity::error::SigningError;
 use libp2p_core::upgrade::ProtocolError;
-use prost_codec::{Codec, Error};
-use std::fmt;
+use prost_codec::Error;
+use thiserror::Error;
 
 /// Error associated with publishing a gossipsub message.
 #[derive(Debug)]
@@ -88,20 +88,19 @@ impl From<SigningError> for PublishError {
 }
 
 /// Errors that can occur in the protocols handler.
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum GossipsubHandlerError {
-    /// The maximum number of inbound substreams created has been exceeded.
+    #[error("The maximum number of inbound substreams created has been exceeded.")]
     MaxInboundSubstreams,
-    /// The maximum number of outbound substreams created has been exceeded.
+    #[error("The maximum number of outbound substreams created has been exceeded.")]
     MaxOutboundSubstreams,
-    /// The message exceeds the maximum transmission size.
+    #[error("The message exceeds the maximum transmission size.")]
     MaxTransmissionSize,
-    /// Protocol negotiation timeout.
+    #[error("Protocol negotiation timeout.")]
     NegotiationTimeout,
-    /// Protocol negotiation failed.
+    #[error("Protocol negotiation failed.")]
     NegotiationProtocolError(ProtocolError),
-
-    // TODO: replace with codec::Error?
+    #[error("Failed to encode or decode")]
     Codec(Error),
 }
 
@@ -145,20 +144,5 @@ impl From<std::io::Error> for GossipsubHandlerError {
 impl From<std::io::Error> for PublishError {
     fn from(error: std::io::Error) -> PublishError {
         PublishError::TransformFailed(error)
-    }
-}
-
-impl fmt::Display for GossipsubHandlerError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
-    }
-}
-
-impl std::error::Error for GossipsubHandlerError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            GossipsubHandlerError::Codec(io) => Some(io),
-            _ => None,
-        }
     }
 }
