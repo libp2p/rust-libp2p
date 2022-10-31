@@ -43,9 +43,14 @@ prost-build = "0.11"
 anyhow = "1.0"
 env_logger = "0.9"
 hex-literal = "0.3"
-libp2p = { path = "../..", features = ["request-response", "webrtc"], default-features = false }
+libp2p = { path = "../..", features = ["request-response", "webrtc", "ping"], default-features = false }
+tokio = { version = "1.18", features = ["full"] }
 unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
 
 [[test]]
 name = "smoke"
+required-features = ["tokio"]
+
+[[example]]
+name = "listen_ping"
 required-features = ["tokio"]
