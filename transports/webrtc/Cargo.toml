@@ -28,7 +28,7 @@ rand = "0.8"
 ring = { git = "https://github.com/briansmith/ring", features = ["std"], rev = "abe9529fc063f575759f8166bba02db171a3a0f6" }
 rustls = "0.19.1" # Must match version in webrtc library.
 serde = { version = "1.0", features = ["derive"] }
-simple_x509 = "0.2.2"
+simple_x509 = "=0.2.2" # Version MUST be pinned to ensure a patch-update doesn't accidentially break deterministic certs.
 stun = "0.4"
 thiserror = "1"
 tinytemplate = "1.2"
