@@ -80,6 +80,12 @@ impl Certificate {
         Ok(Self { inner: certificate })
     }
 
+    /// Returns SHA-256 fingerprint of this certificate.
+    ///
+    /// # Panics
+    ///
+    /// This function will panic if there's no fingerprint with the SHA-256 algorithm (see
+    /// [`RTCCertificate::get_fingerprints`]).
     pub fn fingerprint(&self) -> Fingerprint {
         let fingerprints = self.inner.get_fingerprints().expect("to never fail");
         let sha256_fingerprint = fingerprints
@@ -90,6 +96,7 @@ impl Certificate {
         Fingerprint::try_from_rtc_dtls(sha256_fingerprint).expect("we filtered by sha-256")
     }
 
+    /// Returns this certificate in PEM format.
     pub fn to_pem(&self) -> &str {
         self.inner.pem()
     }
@@ -102,6 +109,7 @@ impl Certificate {
     }
 }
 
+/// Create a deterministic ECDSA keypair from the provided randomness source.
 fn make_keypair<R>(rng: &mut R) -> Result<(EcdsaKeyPair, Vec<u8>), Kind>
 where
     R: CryptoRng + Rng,

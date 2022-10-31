@@ -338,11 +338,6 @@ struct Config {
 
 impl Config {
     /// Returns a new [`Config`] with the given keys and certificate.
-    ///
-    /// # Panics
-    ///
-    /// This function will panic if there's no fingerprint with the SHA-256 algorithm (see
-    /// [`RTCCertificate::get_fingerprints`]).
     fn new(id_keys: identity::Keypair, certificate: Certificate) -> Self {
         let fingerprint = certificate.fingerprint();
 
