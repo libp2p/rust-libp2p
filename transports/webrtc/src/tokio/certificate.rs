@@ -87,14 +87,14 @@ where
     R: CryptoRng + Rng,
 {
     let rng = FixedSliceSequenceRandom {
-        bytes: &[&rng.gen::<[u8; 32]>()],
+        bytes: &[&rng.gen::<[u8; 32]>(), &rng.gen::<[u8; 32]>()],
         current: UnsafeCell::new(0),
     };
 
     let document = EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_FIXED_SIGNING, &rng)?;
     let der_bytes = document.as_ref().to_owned();
 
-    let key_pair = EcdsaKeyPair::from_pkcs8(&ECDSA_P256_SHA256_FIXED_SIGNING, &der_bytes)?;
+    let key_pair = EcdsaKeyPair::from_pkcs8(&ECDSA_P256_SHA256_FIXED_SIGNING, &der_bytes, &rng)?;
 
     Ok((key_pair, der_bytes))
 }

@@ -25,7 +25,7 @@ pem = "1.1.0"
 prost = "0.11"
 prost-codec = { version = "0.2.1", path = "../../misc/prost-codec" }
 rand = "0.8"
-ring = "0.16.20"
+ring = { git = "https://github.com/briansmith/ring", features = ["std"], rev = "abe9529fc063f575759f8166bba02db171a3a0f6" }
 rustls = "0.19.1" # Must match version in webrtc library.
 serde = { version = "1.0", features = ["derive"] }
 simple_x509 = "0.2.2"
@@ -34,7 +34,8 @@ thiserror = "1"
 tinytemplate = "1.2"
 tokio = { version = "1.18", features = ["net"], optional = true}
 tokio-util = { version = "0.7", features = ["compat"], optional = true }
-webrtc = { version = "0.5.0", optional = true }
+# webrtc = { version = "0.5.0", optional = true }
+webrtc = { git = "https://github.com/thomaseizinger/webrtc", optional = true, rev = "dc8d896784eb7ba8f5cecc2e5ae2917bb16c0c65" }
 
 [features]
 tokio = ["dep:tokio", "dep:tokio-util", "dep:webrtc"]
