@@ -189,15 +189,35 @@ mod tests {
 
     #[test]
     fn certificate_generation_is_deterministic() {
-        let (keypair1, _) = make_keypair(&mut ChaCha20Rng::from_seed([0u8; 32])).unwrap();
-        let (keypair2, _) = make_keypair(&mut ChaCha20Rng::from_seed([0u8; 32])).unwrap();
+        let keypair_seed = [0u8; 32];
+        let cert_seed = [1u8; 32];
+
+        let (keypair1, _) = make_keypair(&mut ChaCha20Rng::from_seed(keypair_seed)).unwrap();
+        let (keypair2, _) = make_keypair(&mut ChaCha20Rng::from_seed(keypair_seed)).unwrap();
 
         let (bytes1, _) =
-            make_minimal_certificate(&mut ChaCha20Rng::from_seed([1u8; 32]), &keypair1).unwrap();
+            make_minimal_certificate(&mut ChaCha20Rng::from_seed(cert_seed), &keypair1).unwrap();
         let (bytes2, _) =
-            make_minimal_certificate(&mut ChaCha20Rng::from_seed([1u8; 32]), &keypair2).unwrap();
+            make_minimal_certificate(&mut ChaCha20Rng::from_seed(cert_seed), &keypair2).unwrap();
 
         assert_eq!(bytes1, bytes2)
+    }
+
+    #[test]
+    fn different_seed_yields_different_certificate() {
+        let keypair_seed = [0u8; 32];
+        let cert1_seed = [1u8; 32];
+        let cert2_seed = [2u8; 32];
+
+        let (keypair1, _) = make_keypair(&mut ChaCha20Rng::from_seed(keypair_seed)).unwrap();
+        let (keypair2, _) = make_keypair(&mut ChaCha20Rng::from_seed(keypair_seed)).unwrap();
+
+        let (bytes1, _) =
+            make_minimal_certificate(&mut ChaCha20Rng::from_seed(cert1_seed), &keypair1).unwrap();
+        let (bytes2, _) =
+            make_minimal_certificate(&mut ChaCha20Rng::from_seed(cert2_seed), &keypair2).unwrap();
+
+        assert_ne!(bytes1, bytes2)
     }
 
     #[test]
