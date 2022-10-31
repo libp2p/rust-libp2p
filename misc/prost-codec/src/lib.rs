@@ -1,3 +1,5 @@
+#![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
+
 use asynchronous_codec::{Decoder, Encoder};
 use bytes::BytesMut;
 use prost::Message;

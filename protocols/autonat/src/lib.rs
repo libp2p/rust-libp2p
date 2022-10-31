@@ -19,6 +19,9 @@
 // DEALINGS IN THE SOFTWARE.
 
 //! Implementation of the AutoNAT protocol.
+
+#![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
+
 mod behaviour;
 mod protocol;
 
