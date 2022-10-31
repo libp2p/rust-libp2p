@@ -17,7 +17,7 @@ A set of examples showcasing how to use rust-libp2p.
 
     - [Gossipsub chat](./gossipsub-chat.rs)
 
-      Same as the chat example but using the Gossipsub protocol.
+      Same as the chat example but using mDNS and the Gossipsub protocol.
 
     - [Tokio based chat](./chat-tokio.rs)
 

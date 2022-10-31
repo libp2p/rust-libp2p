@@ -3,13 +3,14 @@
 Below is a high level roadmap for the rust-libp2p project. Items are ordered by priority (high to
 low).
 
-For a more detailed view see https://github.com/orgs/libp2p/projects/4/views/1.
+This is a living document. Input is always welcome e.g. via GitHub issues or pull requests.
+
+This is the roadmap of the Rust implementation of libp2p. See also the [general libp2p project
+roadmap](https://github.com/libp2p/specs/blob/master/ROADMAP.md).
 
 <!-- markdown-toc start - Don't edit this section. Run M-x markdown-toc-refresh-toc -->
 **Table of Contents**
 
-- [rust-libp2p Roadmap](#rust-libp2p-roadmap)
-    - [TLS support](#tls-support)
     - [Experimental QUIC support](#experimental-quic-support)
     - [WebRTC support (browser-to-server)](#webrtc-support-browser-to-server)
     - [Cross Behaviour communication](#cross-behaviour-communication)
@@ -25,17 +26,7 @@ For a more detailed view see https://github.com/orgs/libp2p/projects/4/views/1.
 
 <!-- markdown-toc end -->
 
-## TLS support
-
-| Category     | Status      | Target Completion | Tracking                                        | Dependencies                       | Dependents |
-|--------------|-------------|-------------------|-------------------------------------------------|------------------------------------|------------|
-| Connectivity | In progress | Q4/2022           | https://github.com/libp2p/rust-libp2p/pull/2945 | [QUIC](#experimental-quic-support) |            |
-
-
-This allows us to secure both TCP and QUIC connections using TLS. This is a requirement for QUIC
-support. Running TLS on top of TCP is a nice to have, since we already have noise.
-
-## Experimental QUIC support
+## QUIC support
 
 | Category     | Status      | Target Completion | Tracking                                          | Dependencies                                                        | Dependents |
 |--------------|-------------|-------------------|---------------------------------------------------|---------------------------------------------------------------------|------------|
@@ -43,11 +34,8 @@ support. Running TLS on top of TCP is a nice to have, since we already have nois
 
 QUIC has been on the roadmap for a long time. It enables various performance improvements as well as
 higher hole punching success rates. We are close to finishing a first version with
-https://github.com/libp2p/rust-libp2p/pull/2289.
-
-Long term there is lots more to do, see tracking issue
-https://github.com/libp2p/rust-libp2p/issues/2883. Though this will be tackled as a new roadmap
-item.
+https://github.com/libp2p/rust-libp2p/pull/2289. We will improve from there. See tracking issue
+https://github.com/libp2p/rust-libp2p/issues/2883.
 
 ## WebRTC support (browser-to-server)
 
@@ -71,7 +59,7 @@ stack. Though that should only happen after improved WASM support, see below.
 | Developer ergonomics | todo   | Q1/2023           | https://github.com/libp2p/rust-libp2p/issues/2680 | https://github.com/libp2p/rust-libp2p/issues/2832 | [Kademlia client mode](#kademlia-client-mode) |
 
 Today `NetworkBehaviour` implementations like Kademlia, GossipSub or Circuit Relay v2 can not
-communicate with each other, i.e. can not make use of information known by another
+communicate with each other, i.e. cannot make use of information known by another
 `NetworkBehaviour` implementation. Users need to write the wiring code by hand to e.g. enable
 Kademlia to learn protocols supported by a remote peer from Identify.
 
