@@ -18,15 +18,17 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::tokio::fingerprint::Fingerprint;
 use pem::Pem;
 use rand::{CryptoRng, Rng};
 use ring::signature::{EcdsaKeyPair, KeyPair, ECDSA_P256_SHA256_FIXED_SIGNING};
 use ring::test::rand::FixedSliceSequenceRandom;
-use std::cell::UnsafeCell;
-use std::time::{Duration, SystemTime};
 use webrtc::dtls::crypto::{CryptoPrivateKey, CryptoPrivateKeyKind};
 use webrtc::peer_connection::certificate::RTCCertificate;
+
+use crate::tokio::fingerprint::Fingerprint;
+
+use std::cell::UnsafeCell;
+use std::time::{Duration, SystemTime};
 
 #[derive(Clone, PartialEq)]
 pub struct Certificate {

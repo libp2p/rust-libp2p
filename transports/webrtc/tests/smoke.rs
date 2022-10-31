@@ -33,6 +33,7 @@ use libp2p::request_response::{
 use libp2p::swarm::{Swarm, SwarmBuilder, SwarmEvent};
 use libp2p::webrtc::tokio as webrtc;
 use rand::{thread_rng, RngCore};
+
 use std::{io, iter};
 
 #[tokio::test]
