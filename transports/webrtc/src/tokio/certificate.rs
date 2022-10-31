@@ -169,7 +169,7 @@ where
 
     let expiry = SystemTime::UNIX_EPOCH
         .checked_add(Duration::from_secs(UNIX_3000 as u64))
-        .expect("expiry to be always valid");
+        .expect("year 3000 to be representable by SystemTime");
 
     Ok((der_bytes, expiry))
 }
