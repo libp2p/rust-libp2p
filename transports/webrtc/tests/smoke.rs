@@ -32,7 +32,7 @@ use libp2p::request_response::{
 };
 use libp2p::swarm::{Swarm, SwarmBuilder, SwarmEvent};
 use libp2p::webrtc::tokio as webrtc;
-use rand::{thread_rng, RngCore};
+use rand::RngCore;
 
 use std::{io, iter};
 
@@ -470,10 +470,7 @@ impl RequestResponseCodec for PingCodec {
 fn create_swarm() -> Result<Swarm<RequestResponse<PingCodec>>> {
     let id_keys = identity::Keypair::generate_ed25519();
     let peer_id = id_keys.public().to_peer_id();
-    let transport = webrtc::Transport::new(
-        id_keys,
-        webrtc::Certificate::generate(&mut thread_rng()).unwrap(),
-    );
+    let transport = webrtc::Transport::new(id_keys)?;
 
     let protocols = iter::once((PingProtocol(), ProtocolSupport::Full));
     let cfg = RequestResponseConfig::default();

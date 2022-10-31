@@ -18,10 +18,13 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use pem::Pem;
-use rand::{CryptoRng, Rng};
+use hkdf::Hkdf;
+use libp2p_core::identity;
+use rand::{CryptoRng, Rng, SeedableRng};
+use rand_chacha::ChaCha20Rng;
 use ring::signature::{EcdsaKeyPair, KeyPair, ECDSA_P256_SHA256_FIXED_SIGNING};
 use ring::test::rand::FixedSliceSequenceRandom;
+use sha2::Sha256;
 use webrtc::dtls::crypto::{CryptoPrivateKey, CryptoPrivateKeyKind};
 use webrtc::peer_connection::certificate::RTCCertificate;
 
@@ -35,15 +38,23 @@ pub struct Certificate {
     inner: RTCCertificate,
 }
 impl Certificate {
-    /// Generate new certificate.
-    ///
-    /// This function is pure and will generate the same certificate provided the exact same randomness source.
-    pub fn generate<R>(rng: &mut R) -> Result<Self, Error>
-    where
-        R: CryptoRng + Rng,
-    {
-        let (key_pair, key_pair_der_bytes) = make_keypair(rng)?;
-        let (certificate, expiry) = make_minimal_certificate(rng, &key_pair)?;
+    pub fn new(identity: &identity::Keypair) -> Result<Self, CertificateError> {
+        let ed25519_keypair = match identity {
+            identity::Keypair::Ed25519(inner) => inner,
+            _ => return Err(CertificateError(Kind::UnsupportedKeypair)),
+        };
+
+        let hk = Hkdf::<Sha256>::from_prk(ed25519_keypair.secret().as_ref())
+            .expect("key length to be valid");
+        let mut seed = [0u8; 32];
+        hk.expand(b"libp2p-webrtc-certificate".as_slice(), &mut seed)
+            .expect("32 is a valid length for Sha256 to output");
+
+        let mut rng = ChaCha20Rng::from_seed(seed);
+
+        let (key_pair, key_pair_der_bytes) = make_keypair(&mut rng)?;
+
+        let (certificate, expiry) = make_minimal_certificate(&mut rng, &key_pair)?;
 
         let certificate = RTCCertificate::from_existing(
             webrtc::dtls::crypto::Certificate {
@@ -54,7 +65,7 @@ impl Certificate {
                 },
             },
             &pem::encode_config(
-                &Pem {
+                &pem::Pem {
                     tag: "CERTIFICATE".to_string(),
                     contents: certificate,
                 },
@@ -85,6 +96,7 @@ impl Certificate {
     }
 
     /// Returns this certificate in PEM format.
+    #[cfg(test)]
     pub fn to_pem(&self) -> &str {
         self.inner.pem()
     }
@@ -180,7 +192,7 @@ where
 
 #[derive(thiserror::Error, Debug)]
 #[error("Failed to generate certificate")]
-pub struct Error(#[from] Kind);
+pub struct CertificateError(#[from] Kind);
 
 #[derive(thiserror::Error, Debug)]
 enum Kind {
@@ -192,12 +204,13 @@ enum Kind {
     FailedToSign,
     #[error("Failed to DER-encode certificate")]
     FailedToEncode,
+    #[error("Only ED25519 keys are supported")]
+    UnsupportedKeypair,
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rand::thread_rng;
     use rand::SeedableRng;
     use rand_chacha::ChaCha20Rng;
 
@@ -251,19 +264,28 @@ mod tests {
     // must not change after that nodes has been deployed.
     #[test]
     fn certificate_snapshot_test() {
-        let rng = &mut ChaCha20Rng::from_seed([0u8; 32]);
+        let ed25519_keypair = identity::ed25519::Keypair::decode(
+            [
+                53, 9, 7, 245, 172, 170, 239, 116, 74, 71, 187, 78, 240, 228, 186, 179, 151, 77,
+                254, 157, 252, 125, 55, 88, 122, 71, 32, 138, 208, 235, 105, 116, 112, 48, 166,
+                200, 235, 76, 139, 188, 249, 115, 178, 226, 0, 75, 229, 47, 222, 197, 68, 15, 212,
+                233, 54, 5, 236, 0, 54, 166, 0, 75, 188, 237,
+            ]
+            .as_mut(),
+        )
+        .unwrap();
 
-        let certificate = Certificate::generate(rng).unwrap();
+        let certificate = Certificate::new(&identity::Keypair::Ed25519(ed25519_keypair)).unwrap();
 
         assert_eq!(
             certificate.to_pem(),
             "-----BEGIN CERTIFICATE-----
 MIIBEDCBvgIBADAKBggqhkjOPQQDAjAWMRQwEgYDVQQKDAtydXN0LWxpYnAycDAi
 GA8xOTk5MTIzMTEzMDAwMFoYDzI5OTkxMjMxMTMwMDAwWjAWMRQwEgYDVQQKDAty
-dXN0LWxpYnAycDBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABFSl0Byu8vlC6KNu
-TeN207dHFN6tMhJECnd+o/3Dr47JcOGdG5IUNXvdQDqhbQ9KcO9CdtgUy5BF7xlR
-9lhOdZQwCgYIKoZIzj0EAwIDQQDJeZkXegzKY/HsmwGmwWkj5Ugb4xFRdShOws27
-w7KDep+YY9SzpA3Tb91I0F1sbkb1LR195V4lMsQ6Jhqm4Ex6
+dXN0LWxpYnAycDBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABP7qJcaJtDqlVagl
+J8ZwSDFiI996MW8W4W05WboigwMfpDpBCfcOjeoERjjFepm/CAFhmxW6dt2mK67V
+w1hIsWkwCgYIKoZIzj0EAwIDQQB77aXmXxlEpqUSJbn/Xp+W+5Oje+lXHojeOTAN
+UaEhlIypY2gCreXJ0o2MsiCsT5NXfyHQJ5sSgiZtPx+ldICa
 -----END CERTIFICATE-----
 "
         )
@@ -271,7 +293,7 @@ w7KDep+YY9SzpA3Tb91I0F1sbkb1LR195V4lMsQ6Jhqm4Ex6
 
     #[test]
     fn cloned_certificate_is_equivalent() {
-        let certificate = Certificate::generate(&mut thread_rng()).unwrap();
+        let certificate = Certificate::new(&identity::Keypair::generate_ed25519()).unwrap();
 
         let cloned_certificate = certificate.clone();
 
