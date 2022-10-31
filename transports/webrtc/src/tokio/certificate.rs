@@ -38,6 +38,9 @@ pub struct Certificate {
     inner: RTCCertificate,
 }
 impl Certificate {
+    /// Derives a new certificate from the provided keypair.
+    ///
+    /// This derivation is pure and will yield the same certificate for the same keypair.
     pub fn new(identity: &identity::Keypair) -> Result<Self, CertificateError> {
         let ed25519_keypair = match identity {
             identity::Keypair::Ed25519(inner) => inner,
