@@ -34,7 +34,6 @@ use std::time::{Duration, SystemTime};
 pub struct Certificate {
     inner: RTCCertificate,
 }
-
 impl Certificate {
     /// Generate new certificate.
     ///
@@ -54,10 +53,15 @@ impl Certificate {
                     serialized_der: key_pair_der_bytes,
                 },
             },
-            &pem::encode(&Pem {
-                tag: "CERTIFICATE".to_string(),
-                contents: certificate,
-            }),
+            &pem::encode_config(
+                &Pem {
+                    tag: "CERTIFICATE".to_string(),
+                    contents: certificate,
+                },
+                pem::EncodeConfig {
+                    line_ending: pem::LineEnding::LF,
+                },
+            ),
             expiry,
         );
 
