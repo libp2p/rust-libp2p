@@ -164,7 +164,7 @@ where
         .sign_oid(Vec::from(ECDSA_SHA256_OID))
         .build()
         .sign(
-            |cert, _| Some(key_pair.sign(&rng, &cert).ok()?.as_ref().to_owned()),
+            |cert, _| Some(key_pair.sign(&rng, cert).ok()?.as_ref().to_owned()),
             &vec![], // We close over the keypair so no need to pass it.
         )
         .ok_or(Kind::FailedToSign)?;
@@ -251,7 +251,7 @@ mod tests {
     // must not change after that nodes has been deployed.
     #[test]
     fn certificate_snapshot_test() {
-        let rng = &mut ChaCha20Rng::from_seed([08; 32]);
+        let rng = &mut ChaCha20Rng::from_seed([0u8; 32]);
 
         let certificate = Certificate::generate(rng).unwrap();
 
@@ -260,10 +260,10 @@ mod tests {
             "-----BEGIN CERTIFICATE-----
 MIIBEDCBvgIBADAKBggqhkjOPQQDAjAWMRQwEgYDVQQKDAtydXN0LWxpYnAycDAi
 GA8xOTk5MTIzMTEzMDAwMFoYDzI5OTkxMjMxMTMwMDAwWjAWMRQwEgYDVQQKDAty
-dXN0LWxpYnAycDBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABK34lOiIEUBnrKQr
-52CMEDJvW5zVbxE7IQjqGNlwXlJgIfCn55LvExE9csJ/9M29QbatMVfVk2D95grU
-PDugDCUwCgYIKoZIzj0EAwIDQQDnfjBoTLnV/rUqiTcvGlGI3ujrVpmceiBmUHEN
-NDkFfzGJualwH7xdNUUAzrEoJHWqN9r8U5BmpfO2QO9spKpR
+dXN0LWxpYnAycDBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABFSl0Byu8vlC6KNu
+TeN207dHFN6tMhJECnd+o/3Dr47JcOGdG5IUNXvdQDqhbQ9KcO9CdtgUy5BF7xlR
+9lhOdZQwCgYIKoZIzj0EAwIDQQDJeZkXegzKY/HsmwGmwWkj5Ugb4xFRdShOws27
+w7KDep+YY9SzpA3Tb91I0F1sbkb1LR195V4lMsQ6Jhqm4Ex6
 -----END CERTIFICATE-----
 "
         )
