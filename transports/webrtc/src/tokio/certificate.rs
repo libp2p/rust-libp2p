@@ -35,24 +35,6 @@ pub struct Certificate {
     inner: RTCCertificate,
 }
 
-/// The year 2000.
-const UNIX_2000: i64 = 946645200;
-
-/// The year 3000.
-const UNIX_3000: i64 = 32503640400;
-
-/// OID for the organisation name. See <http://oid-info.com/get/2.5.4.10>.
-const ORGANISATION_NAME_OID: [u64; 4] = [2, 5, 4, 10];
-
-/// OID for Elliptic Curve Public Key Cryptography. See <http://oid-info.com/get/1.2.840.10045.2.1>.
-const EC_OID: [u64; 6] = [1, 2, 840, 10045, 2, 1];
-
-/// OID for 256-bit Elliptic Curve Cryptography (ECC) with the P256 curve. See <http://oid-info.com/get/1.2.840.10045.3.1.7>.
-const P256_OID: [u64; 7] = [1, 2, 840, 10045, 3, 1, 7];
-
-/// OID for the ECDSA signature algorithm with using SHA256 as the hash function. See <http://oid-info.com/get/1.2.840.10045.4.3.2>.
-const ECDSA_SHA256_OID: [u64; 7] = [1, 2, 840, 10045, 4, 3, 2];
-
 impl Certificate {
     /// Generate new certificate.
     ///
@@ -110,6 +92,24 @@ impl Certificate {
         self.inner.clone()
     }
 }
+
+/// The year 2000.
+const UNIX_2000: i64 = 946645200;
+
+/// The year 3000.
+const UNIX_3000: i64 = 32503640400;
+
+/// OID for the organisation name. See <http://oid-info.com/get/2.5.4.10>.
+const ORGANISATION_NAME_OID: [u64; 4] = [2, 5, 4, 10];
+
+/// OID for Elliptic Curve Public Key Cryptography. See <http://oid-info.com/get/1.2.840.10045.2.1>.
+const EC_OID: [u64; 6] = [1, 2, 840, 10045, 2, 1];
+
+/// OID for 256-bit Elliptic Curve Cryptography (ECC) with the P256 curve. See <http://oid-info.com/get/1.2.840.10045.3.1.7>.
+const P256_OID: [u64; 7] = [1, 2, 840, 10045, 3, 1, 7];
+
+/// OID for the ECDSA signature algorithm with using SHA256 as the hash function. See <http://oid-info.com/get/1.2.840.10045.4.3.2>.
+const ECDSA_SHA256_OID: [u64; 7] = [1, 2, 840, 10045, 4, 3, 2];
 
 /// Create a deterministic ECDSA keypair from the provided randomness source.
 fn make_keypair<R>(rng: &mut R) -> Result<(EcdsaKeyPair, Vec<u8>), Kind>
