@@ -229,6 +229,32 @@ mod tests {
         assert_eq!(key1.public_key().as_ref(), key2.public_key().as_ref());
     }
 
+    // YOU MUST NOT EVER CHANGE THE ASSERTION IN THIS TEST.
+    // THIS TEST FAILING MEANS YOU BROKE DETERMINISTIC CERTIFICATION GENERATION.
+    //
+    // libp2p essentially performs certificate pinning through the `/certhash` protocol
+    // in multiaddresses. Peers expect boot nodes to have a certain certificate hash which
+    // must not change after that nodes has been deployed.
+    #[test]
+    fn certificate_snapshot_test() {
+        let rng = &mut ChaCha20Rng::from_seed([08; 32]);
+
+        let certificate = Certificate::generate(rng).unwrap();
+
+        assert_eq!(
+            certificate.to_pem(),
+            "-----BEGIN CERTIFICATE-----
+MIIBEDCBvgIBADAKBggqhkjOPQQDAjAWMRQwEgYDVQQKDAtydXN0LWxpYnAycDAi
+GA8xOTk5MTIzMTEzMDAwMFoYDzI5OTkxMjMxMTMwMDAwWjAWMRQwEgYDVQQKDAty
+dXN0LWxpYnAycDBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABK34lOiIEUBnrKQr
+52CMEDJvW5zVbxE7IQjqGNlwXlJgIfCn55LvExE9csJ/9M29QbatMVfVk2D95grU
+PDugDCUwCgYIKoZIzj0EAwIDQQDnfjBoTLnV/rUqiTcvGlGI3ujrVpmceiBmUHEN
+NDkFfzGJualwH7xdNUUAzrEoJHWqN9r8U5BmpfO2QO9spKpR
+-----END CERTIFICATE-----
+"
+        )
+    }
+
     #[test]
     fn cloned_certificate_is_equivalent() {
         let certificate = Certificate::generate(&mut thread_rng()).unwrap();
