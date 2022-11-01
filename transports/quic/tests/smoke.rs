@@ -418,6 +418,7 @@ async fn concurrent_connections_and_streams() {
     }
 }
 
+#[ignore]
 #[async_std::test]
 async fn endpoint_reuse() -> Result<()> {
     setup_global_subscriber();
