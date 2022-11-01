@@ -92,11 +92,11 @@ impl StreamMuxer for QuicMuxer {
     ) -> Poll<Result<Self::Substream, Self::Error>> {
         let this = self.get_mut();
 
-        let substream = futures::ready!(this.incoming.poll_unpin(cx));
+        let (send, recv) = futures::ready!(this.incoming.poll_unpin(cx))?;
         let connection = this.connection.clone();
         this.incoming = Box::pin(async move { connection.accept_bi().await });
-        let substream = substream.map(|(send, recv)| QuicSubstream::new(send, recv));
-        Poll::Ready(substream)
+        let substream = QuicSubstream::new(send, recv);
+        Poll::Ready(Ok(substream))
     }
 
     fn poll_outbound(
@@ -105,11 +105,11 @@ impl StreamMuxer for QuicMuxer {
     ) -> Poll<Result<Self::Substream, Self::Error>> {
         let this = self.get_mut();
 
-        let substream = futures::ready!(this.outgoing.poll_unpin(cx));
+        let (send, recv) = futures::ready!(this.outgoing.poll_unpin(cx))?;
         let connection = this.connection.clone();
         this.outgoing = Box::pin(async move { connection.open_bi().await });
-        let substream = substream.map(|(send, recv)| QuicSubstream::new(send, recv));
-        Poll::Ready(substream)
+        let substream = QuicSubstream::new(send, recv);
+        Poll::Ready(Ok(substream))
     }
 
     fn poll(
@@ -161,23 +161,19 @@ impl Future for QuicUpgrade {
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let connecting = Pin::new(&mut self.get_mut().connecting);
 
-        connecting
-            .poll(cx)
-            .map_err(io::Error::from)
-            .map_ok(|new_connection| {
-                let connection = new_connection;
-                let peer_id = QuicUpgrade::remote_peer_id(&connection);
-                let connection_c = connection.clone();
-                let incoming = Box::pin(async move { connection_c.accept_bi().await });
-                let connection_c = connection.clone();
-                let outgoing = Box::pin(async move { connection_c.open_bi().await });
-                let muxer = QuicMuxer {
-                    connection,
-                    incoming,
-                    outgoing,
-                };
-                (peer_id, muxer)
-            })
+        let connection = futures::ready!(connecting.poll(cx))?;
+
+        let peer_id = QuicUpgrade::remote_peer_id(&connection);
+        let connection_c = connection.clone();
+        let incoming = Box::pin(async move { connection_c.accept_bi().await });
+        let connection_c = connection.clone();
+        let outgoing = Box::pin(async move { connection_c.open_bi().await });
+        let muxer = QuicMuxer {
+            connection,
+            incoming,
+            outgoing,
+        };
+        Poll::Ready(Ok((peer_id, muxer)))
     }
 }
 
