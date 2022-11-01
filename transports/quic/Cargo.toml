@@ -40,8 +40,13 @@ rustc-args = ["--cfg", "docsrs"]
 
 [dev-dependencies]
 async-std = { version = "1.12.0", features = ["attributes"] }
-libp2p = { path = "../..", features = ["request-response", "tcp", "yamux", "noise", "async-std"] }
 env_logger = "0.9.0"
+libp2p = { path = "../..", features = ["request-response", "tcp", "yamux", "noise", "async-std"] }
+libp2p-muxer-test-harness = { path = "../../muxers/test-harness" }
+quickcheck = "1"
 rand = "0.8.4"
 tokio = { version = "1.21.1", features = ["macros", "rt-multi-thread"] }
-quickcheck = "1"
+
+[[test]]
+name = "stream_compliance"
+required-features = ["async-std"]
