@@ -30,7 +30,7 @@ fn generate_tls_keypair() -> libp2p::identity::Keypair {
     libp2p::identity::Keypair::generate_ed25519()
 }
 
-async fn create_swarm<P: Provider>() -> Swarm<RequestResponse<PingCodec>> {
+fn create_swarm<P: Provider>() -> Swarm<RequestResponse<PingCodec>> {
     let keypair = generate_tls_keypair();
     let peer_id = keypair.public().to_peer_id();
     let mut config = quic::Config::new(&keypair);
@@ -72,8 +72,8 @@ async fn smoke<P: Provider>() {
     let _ = env_logger::try_init();
     let mut rng = rand::thread_rng();
 
-    let mut a = create_swarm::<P>().await;
-    let mut b = create_swarm::<P>().await;
+    let mut a = create_swarm::<P>();
+    let mut b = create_swarm::<P>();
 
     let addr = start_listening(&mut a, "/ip4/127.0.0.1/udp/0/quic").await;
 
@@ -292,8 +292,8 @@ impl RequestResponseCodec for PingCodec {
 #[async_std::test]
 async fn dial_failure() {
     let _ = env_logger::try_init();
-    let mut a = create_swarm::<quic::async_std::Provider>().await;
-    let mut b = create_swarm::<quic::async_std::Provider>().await;
+    let mut a = create_swarm::<quic::async_std::Provider>();
+    let mut b = create_swarm::<quic::async_std::Provider>();
 
     let addr = start_listening(&mut a, "/ip4/127.0.0.1/udp/0/quic").await;
 
@@ -338,7 +338,7 @@ fn concurrent_connections_and_streams() {
 
         // Spawn the listener nodes.
         for _ in 0..number_listeners {
-            let mut listener = pool.run_until(create_swarm::<P>());
+            let mut listener = create_swarm::<P>();
             let addr = pool.run_until(start_listening(&mut listener, "/ip4/127.0.0.1/udp/0/quic"));
 
             listeners.push((*listener.local_peer_id(), addr));
@@ -383,7 +383,7 @@ fn concurrent_connections_and_streams() {
                 .unwrap();
         }
 
-        let mut dialer = pool.run_until(create_swarm::<P>());
+        let mut dialer = create_swarm::<P>();
 
         // For each listener node start `number_streams` requests.
         for (listener_peer_id, listener_addr) in &listeners {
@@ -448,8 +448,8 @@ fn concurrent_connections_and_streams() {
 #[tokio::test]
 async fn endpoint_reuse() {
     let _ = env_logger::try_init();
-    let mut swarm_a = create_swarm::<quic::tokio::Provider>().await;
-    let mut swarm_b = create_swarm::<quic::tokio::Provider>().await;
+    let mut swarm_a = create_swarm::<quic::tokio::Provider>();
+    let mut swarm_b = create_swarm::<quic::tokio::Provider>();
     let b_peer_id = *swarm_b.local_peer_id();
 
     let a_addr = start_listening(&mut swarm_a, "/ip4/127.0.0.1/udp/0/quic").await;
@@ -540,8 +540,8 @@ async fn endpoint_reuse() {
 #[async_std::test]
 async fn ipv4_dial_ipv6() {
     let _ = env_logger::try_init();
-    let mut swarm_a = create_swarm::<quic::async_std::Provider>().await;
-    let mut swarm_b = create_swarm::<quic::async_std::Provider>().await;
+    let mut swarm_a = create_swarm::<quic::async_std::Provider>();
+    let mut swarm_b = create_swarm::<quic::async_std::Provider>();
 
     let a_addr = start_listening(&mut swarm_a, "/ip6/::1/udp/0/quic").await;
 
@@ -572,8 +572,8 @@ async fn wrong_peerid() {
     use libp2p::PeerId;
 
     let _ = env_logger::try_init();
-    let mut swarm_a = create_swarm::<quic::async_std::Provider>().await;
-    let mut swarm_b = create_swarm::<quic::async_std::Provider>().await;
+    let mut swarm_a = create_swarm::<quic::async_std::Provider>();
+    let mut swarm_b = create_swarm::<quic::async_std::Provider>();
 
     let a_addr = start_listening(&mut swarm_a, "/ip6/::1/udp/0/quic").await;
     let a_id = *swarm_a.local_peer_id();
