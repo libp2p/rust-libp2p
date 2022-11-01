@@ -23,10 +23,11 @@ use libp2p::core::identity;
 use libp2p::core::PeerId;
 use libp2p::multiaddr::Protocol;
 use libp2p::ping;
-use libp2p::swarm::SwarmEvent;
+use libp2p::swarm::{keep_alive, SwarmEvent};
 use libp2p::Swarm;
 use libp2p::{development_transport, rendezvous, Multiaddr};
 use std::time::Duration;
+use void::Void;
 
 const NAMESPACE: &str = "rendezvous";
 
@@ -44,11 +45,8 @@ async fn main() {
         development_transport(identity.clone()).await.unwrap(),
         MyBehaviour {
             rendezvous: rendezvous::client::Behaviour::new(identity.clone()),
-            ping: ping::Behaviour::new(
-                ping::Config::new()
-                    .with_interval(Duration::from_secs(1))
-                    .with_keep_alive(true),
-            ),
+            ping: ping::Behaviour::new(ping::Config::new().with_interval(Duration::from_secs(1))),
+            keep_alive: keep_alive::Behaviour,
         },
         PeerId::from(identity.public()),
     );
@@ -139,10 +137,17 @@ impl From<ping::Event> for MyEvent {
     }
 }
 
+impl From<Void> for MyEvent {
+    fn from(event: Void) -> Self {
+        void::unreachable(event)
+    }
+}
+
 #[derive(libp2p::NetworkBehaviour)]
 #[behaviour(event_process = false)]
 #[behaviour(out_event = "MyEvent")]
 struct MyBehaviour {
     rendezvous: rendezvous::client::Behaviour,
     ping: ping::Behaviour,
+    keep_alive: keep_alive::Behaviour,
 }

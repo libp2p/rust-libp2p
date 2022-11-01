@@ -54,6 +54,8 @@
 //!
 //![trust-dns-resolver]: https://docs.rs/trust-dns-resolver/latest/trust_dns_resolver/#dns-over-tls-and-dns-over-https
 
+#![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
+
 #[cfg(feature = "async-std")]
 use async_std_resolver::{AsyncStdConnection, AsyncStdConnectionProvider};
 use futures::{future::BoxFuture, prelude::*};
@@ -65,7 +67,6 @@ use libp2p_core::{
 };
 use parking_lot::Mutex;
 use smallvec::SmallVec;
-#[cfg(any(feature = "async-std", feature = "tokio"))]
 use std::io;
 use std::{
     convert::TryFrom,

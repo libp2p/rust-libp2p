@@ -23,6 +23,9 @@
 //!
 //! Libp2p nodes configured with a pre-shared key can only communicate with other nodes with
 //! the same key.
+
+#![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
+
 mod crypt_writer;
 use crypt_writer::CryptWriter;
 use futures::prelude::*;
@@ -30,7 +33,7 @@ use log::trace;
 use pin_project::pin_project;
 use rand::RngCore;
 use salsa20::{
-    cipher::{NewCipher, StreamCipher},
+    cipher::{KeyIvInit, StreamCipher},
     Salsa20, XSalsa20,
 };
 use sha3::{digest::ExtendableOutput, Shake128};
