@@ -16,14 +16,7 @@ futures = "0.3.21"
 thiserror = "1.0.26"
 tracing = "0.1"
 rand = "0.8.5"
-
-oid-registry = "0.6.0"
-webpki = "0.22.0"
-rcgen = "0.9.2"
-ring = "0.16.20"
-rustls = { version = "0.20.2", default-features = false, features = ["dangerous_configuration"] }
-x509-parser = "0.14.0"
-yasna = "0.5.0"
+rustls = "0.20.2"
 
 [dev-dependencies]
 anyhow = "1.0.41"
