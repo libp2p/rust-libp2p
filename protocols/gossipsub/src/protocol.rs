@@ -182,18 +182,24 @@ where
 
 /* Gossip codec for the framing */
 
-pub struct GossipsubCodec {
+pub struct GossipsubCodec<In> {
     /// Codec to encode/decode the Unsigned varint length prefix of the frames.
     length_codec: codec::UviBytes,
     /// Determines the level of validation performed on incoming messages.
     validation_mode: ValidationMode,
+    codec: prost_codec::Codec<In>,
 }
 
-impl GossipsubCodec {
-    pub fn new(length_codec: codec::UviBytes, validation_mode: ValidationMode) -> Self {
+impl<In> GossipsubCodec<In> {
+    pub fn new(
+        length_codec: codec::UviBytes,
+        validation_mode: ValidationMode,
+    ) -> GossipsubCodec<In> {
+        let mut codec = prost_codec::Codec::new(0);
         GossipsubCodec {
             length_codec,
             validation_mode,
+            codec,
         }
     }
 
