@@ -16,6 +16,7 @@ use std::fmt;
 use std::future::Future;
 use std::ops::{Deref, DerefMut};
 use std::task::{Context, Poll, Waker};
+use std::time::{Duration, Instant};
 use void::Void;
 
 /// A low-level building block for protocols that can be expressed as async functions.
@@ -266,8 +267,10 @@ where
             inbound_streams_limit: self.inbound_streams_limit,
             pending_outbound_streams: VecDeque::default(),
             pending_outbound_streams_limit: self.pending_outbound_streams_limit,
+            pending_outbound_stream_waker: None,
             failed_open: VecDeque::default(),
             state: self.state,
+            keep_alive: KeepAlive::Yes,
         }
     }
 
@@ -308,10 +311,13 @@ pub struct FromFn<TInbound, TOutbound, TOutboundInfo, TState> {
 
     pending_outbound_streams: VecDeque<TOutboundInfo>,
     pending_outbound_streams_limit: usize,
+    pending_outbound_stream_waker: Option<Waker>,
 
     failed_open: VecDeque<OpenError<TOutboundInfo>>,
 
     state: TState,
+
+    keep_alive: KeepAlive,
 }
 
 impl<TInbound, TOutbound, TOutboundInfo, TState> ConnectionHandler
@@ -380,6 +386,10 @@ where
                         .push_back(OpenError::LimitExceeded(open_info));
                 } else {
                     self.pending_outbound_streams.push_back(open_info);
+
+                    if let Some(waker) = self.pending_outbound_stream_waker.take() {
+                        waker.wake();
+                    }
                 }
             }
         }
@@ -405,14 +415,7 @@ where
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
-        if self.inbound_streams.is_empty()
-            && self.outbound_streams.is_empty()
-            && self.pending_outbound_streams.is_empty()
-        {
-            return KeepAlive::No;
-        }
-
-        KeepAlive::Yes
+        self.keep_alive
     }
 
     fn poll(
@@ -465,6 +468,20 @@ where
                     outbound_open_info,
                 ),
             });
+        } else {
+            self.pending_outbound_stream_waker = Some(cx.waker().clone());
+        }
+
+        if self.inbound_streams.is_empty()
+            && self.outbound_streams.is_empty()
+            && self.pending_outbound_streams.is_empty()
+        {
+            if self.keep_alive.is_yes() {
+                // TODO: Make configurable
+                self.keep_alive = KeepAlive::Until(Instant::now() + Duration::from_secs(10))
+            }
+        } else {
+            self.keep_alive = KeepAlive::Yes
         }
 
         Poll::Pending
@@ -474,37 +491,195 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{IntoConnectionHandler, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
+    use crate::{
+        IntoConnectionHandler, NetworkBehaviour, NetworkBehaviourAction, PollParameters, Swarm,
+        SwarmEvent,
+    };
+    use futures::{AsyncReadExt, AsyncWriteExt};
+    use libp2p::plaintext::PlainText2Config;
+    use libp2p::yamux;
     use libp2p_core::connection::ConnectionId;
-    use libp2p_core::{Multiaddr, PeerId};
+    use libp2p_core::transport::MemoryTransport;
+    use libp2p_core::upgrade::Version;
+    use libp2p_core::{identity, Multiaddr, PeerId, Transport};
+    use std::collections::HashMap;
+    use std::io;
+    use std::ops::AddAssign;
 
-    struct MyBehaviour {
+    #[async_std::test]
+    async fn greetings() {
+        let _ = env_logger::try_init();
+
+        let mut alice = make_swarm("Alice");
+        let mut bob = make_swarm("Bob");
+
+        let bob_peer_id = *bob.local_peer_id();
+
+        let listen_id = alice.listen_on("/memory/0".parse().unwrap()).unwrap();
+
+        let alice_listen_addr = loop {
+            if let SwarmEvent::NewListenAddr {
+                address,
+                listener_id,
+            } = alice.select_next_some().await
+            {
+                if listener_id == listen_id {
+                    break address;
+                }
+            }
+        };
+        bob.dial(alice_listen_addr).unwrap();
+
+        futures::future::join(
+            async {
+                loop {
+                    if let SwarmEvent::ConnectionEstablished { .. } = alice.select_next_some().await
+                    {
+                        break;
+                    }
+                }
+            },
+            async {
+                loop {
+                    if let SwarmEvent::ConnectionEstablished { .. } = bob.select_next_some().await {
+                        break;
+                    }
+                }
+            },
+        )
+        .await;
+
+        futures::future::join(
+            async {
+                alice.behaviour_mut().say_hello(bob_peer_id);
+
+                loop {
+                    if let SwarmEvent::Behaviour(greetings) = alice.select_next_some().await {
+                        assert_eq!(*greetings.get(&Name("Bob".to_owned())).unwrap(), 1);
+                        break;
+                    }
+                }
+            },
+            async {
+                loop {
+                    if let SwarmEvent::Behaviour(greetings) = bob.select_next_some().await {
+                        assert_eq!(*greetings.get(&Name("Alice".to_owned())).unwrap(), 1);
+                        break;
+                    }
+                }
+            },
+        )
+        .await;
+
+        alice.behaviour_mut().state.name = Name("Carol".to_owned());
+        bob.behaviour_mut().state.name = Name("Steve".to_owned());
+
+        futures::future::join(
+            async {
+                alice.behaviour_mut().say_hello(bob_peer_id);
+
+                loop {
+                    if let SwarmEvent::Behaviour(greetings) = alice.select_next_some().await {
+                        assert_eq!(*greetings.get(&Name("Bob".to_owned())).unwrap(), 1);
+                        assert_eq!(*greetings.get(&Name("Steve".to_owned())).unwrap(), 1);
+                        break;
+                    }
+                }
+            },
+            async {
+                loop {
+                    if let SwarmEvent::Behaviour(greetings) = bob.select_next_some().await {
+                        assert_eq!(*greetings.get(&Name("Alice".to_owned())).unwrap(), 1);
+                        assert_eq!(*greetings.get(&Name("Carol".to_owned())).unwrap(), 1);
+                        break;
+                    }
+                }
+            },
+        )
+        .await;
+    }
+
+    fn make_swarm(name: &'static str) -> Swarm<HelloBehaviour> {
+        let identity = identity::Keypair::generate_ed25519();
+
+        let transport = MemoryTransport::new()
+            .upgrade(Version::V1)
+            .authenticate(PlainText2Config {
+                local_public_key: identity.public(),
+            })
+            .multiplex(yamux::YamuxConfig::default())
+            .boxed();
+
+        let swarm = Swarm::new(
+            transport,
+            HelloBehaviour {
+                state: Shared::new(State {
+                    name: Name(name.to_owned()),
+                }),
+                pending_messages: Default::default(),
+                pending_events: Default::default(),
+                greeting_count: Default::default(),
+            },
+            identity.public().to_peer_id(),
+        );
+        swarm
+    }
+
+    struct HelloBehaviour {
         state: Shared<State>,
+        pending_messages: VecDeque<(PeerId, Name)>,
+        pending_events: VecDeque<HashMap<Name, u8>>,
+        greeting_count: HashMap<Name, u8>,
     }
 
-    #[derive(Debug, Default, Clone)]
+    #[derive(Debug, Clone)]
     struct State {
-        foo: String,
+        name: Name,
     }
 
-    impl MyBehaviour {
-        fn set_new_state(&mut self, foo: String) {
-            self.state.foo = foo;
+    #[derive(Debug, Clone, PartialEq, Hash, Eq)]
+    struct Name(String);
+
+    impl HelloBehaviour {
+        fn say_hello(&mut self, to: PeerId) {
+            self.pending_messages
+                .push_back((to, self.state.name.clone()));
         }
     }
 
-    impl NetworkBehaviour for MyBehaviour {
-        type ConnectionHandler = FromFnProto<(), (), (), State>;
-        type OutEvent = ();
+    impl NetworkBehaviour for HelloBehaviour {
+        type ConnectionHandler = FromFnProto<io::Result<Name>, io::Result<Name>, Name, State>;
+        type OutEvent = HashMap<Name, u8>;
 
         fn new_handler(&mut self) -> Self::ConnectionHandler {
             from_fn(
-                "/foo/bar/1.0.0",
-                State::default(),
+                "/hello-world/1.0.0",
+                self.state.clone(),
                 5,
                 5,
-                |stream, _, _, state| async move {},
-                |stream, _, _, state, ()| async move {},
+                |mut stream, _, _, state| {
+                    let my_name = state.name.to_owned();
+
+                    async move {
+                        let mut received_name = Vec::new();
+                        stream.read_to_end(&mut received_name).await?;
+
+                        stream.write_all(&my_name.0.as_bytes()).await?;
+                        stream.close().await?;
+
+                        Ok(Name(String::from_utf8(received_name).unwrap()))
+                    }
+                },
+                |mut stream, _, _, _, name: Name| async move {
+                    stream.write_all(&name.0.as_bytes()).await?;
+                    stream.flush().await?;
+                    stream.close().await?;
+
+                    let mut received_name = Vec::new();
+                    stream.read_to_end(&mut received_name).await?;
+
+                    Ok(Name(String::from_utf8(received_name).unwrap()))
+                },
             )
         }
 
@@ -537,10 +712,20 @@ mod tests {
             event: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent,
         ) {
             match event {
-                OutEvent::InboundFinished(()) => {}
-                OutEvent::OutboundFinished(()) => {}
-                OutEvent::FailedToOpen(OpenError::Timeout(())) => {}
-                OutEvent::FailedToOpen(OpenError::NegotiationFailed((), _neg_error)) => {}
+                OutEvent::InboundFinished(Ok(name)) => {
+                    self.greeting_count.entry(name).or_default().add_assign(1);
+
+                    self.pending_events.push_back(self.greeting_count.clone())
+                }
+                OutEvent::OutboundFinished(Ok(name)) => {
+                    self.greeting_count.entry(name).or_default().add_assign(1);
+
+                    self.pending_events.push_back(self.greeting_count.clone())
+                }
+                OutEvent::InboundFinished(_) => {}
+                OutEvent::OutboundFinished(_) => {}
+                OutEvent::FailedToOpen(OpenError::Timeout(_)) => {}
+                OutEvent::FailedToOpen(OpenError::NegotiationFailed(_, _neg_error)) => {}
                 OutEvent::FailedToOpen(OpenError::LimitExceeded(_)) => {}
             }
         }
@@ -548,10 +733,22 @@ mod tests {
         fn poll(
             &mut self,
             cx: &mut Context<'_>,
-            _params: &mut impl PollParameters,
+            _: &mut impl PollParameters,
         ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+            if let Some(greeting_count) = self.pending_events.pop_front() {
+                return Poll::Ready(NetworkBehaviourAction::GenerateEvent(greeting_count));
+            }
+
             if let Poll::Ready(action) = self.state.poll(cx) {
                 return Poll::Ready(action);
+            }
+
+            if let Some((to, name)) = self.pending_messages.pop_front() {
+                return Poll::Ready(NetworkBehaviourAction::NotifyHandler {
+                    peer_id: to,
+                    handler: NotifyHandler::Any,
+                    event: InEvent::NewOutbound(name),
+                });
             }
 
             Poll::Pending
