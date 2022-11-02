@@ -1,6 +1,8 @@
 # 0.41.0 [unreleased]
 
 - Update to `libp2p-core` `v0.37.0`.
+- Update to `yamux` `v.0.11.0`.
+- Remove `YamuxLocalConfig`, `Incoming` and `LocalIncoming` types. The latest version of `yamux` no longer requires these wrappers.
 
 # 0.40.0
 
