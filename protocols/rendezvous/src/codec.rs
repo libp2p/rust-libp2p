@@ -19,12 +19,11 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::DEFAULT_TTL;
-use asynchronous_codec::{Bytes, BytesMut, Decoder, Encoder};
+use asynchronous_codec::{BytesMut, Decoder, Encoder};
 use libp2p_core::{peer_record, signed_envelope, PeerRecord, SignedEnvelope};
 use rand::RngCore;
 use std::convert::{TryFrom, TryInto};
 use std::fmt;
-use unsigned_varint::codec::UviBytes;
 
 pub type Ttl = u64;
 
@@ -201,16 +200,14 @@ pub enum ErrorCode {
 }
 
 pub struct RendezvousCodec {
-    /// Codec to encode/decode the Unsigned varint length prefix of the frames.
-    length_codec: UviBytes,
+    inner: prost_codec::Codec<wire::Message>,
 }
 
 impl Default for RendezvousCodec {
     fn default() -> Self {
-        let mut length_codec = UviBytes::default();
-        length_codec.set_max_len(1024 * 1024); // 1MB
-
-        Self { length_codec }
+        Self {
+            inner: prost_codec::Codec::new(1024 * 1024), // 1MB
+        }
     }
 }
 
@@ -219,18 +216,7 @@ impl Encoder for RendezvousCodec {
     type Error = Error;
 
     fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        use prost::Message;
-
-        let message = wire::Message::from(item);
-
-        let mut buf = Vec::with_capacity(message.encoded_len());
-
-        message
-            .encode(&mut buf)
-            .expect("Buffer has sufficient capacity");
-
-        // Length prefix the protobuf message, ensuring the max limit is not hit
-        self.length_codec.encode(Bytes::from(buf), dst)?;
+        self.inner.encode(wire::Message::from(item), dst)?;
 
         Ok(())
     }
@@ -241,14 +227,10 @@ impl Decoder for RendezvousCodec {
     type Error = Error;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        use prost::Message;
-
-        let message = match self.length_codec.decode(src)? {
+        let message = match self.inner.decode(src)? {
             Some(p) => p,
             None => return Ok(None),
         };
-
-        let message = wire::Message::decode(message)?;
 
         Ok(Some(message.try_into()?))
     }
@@ -256,10 +238,8 @@ impl Decoder for RendezvousCodec {
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[error("Failed to encode message as bytes")]
-    Encode(#[from] prost::EncodeError),
-    #[error("Failed to decode message from bytes")]
-    Decode(#[from] prost::DecodeError),
+    #[error(transparent)]
+    Codec(#[from] prost_codec::Error),
     #[error("Failed to read/write")]
     Io(#[from] std::io::Error),
     #[error("Failed to convert wire message to internal data model")]
