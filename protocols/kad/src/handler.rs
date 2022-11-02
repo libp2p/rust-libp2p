@@ -35,6 +35,7 @@ use libp2p_swarm::{
     KeepAlive, NegotiatedSubstream, SubstreamProtocol,
 };
 use log::trace;
+use std::ops::ControlFlow;
 use std::{
     error, fmt, io, marker::PhantomData, pin::Pin, task::Context, task::Poll, time::Duration,
 };
@@ -807,11 +808,11 @@ where
                         }
                         return Poll::Ready(event);
                     }
-                    (Some(new_state), None, false) => {
+                    (Some(new_state), None, ControlFlow::Break(_)) => {
                         self.outbound_substreams.push(new_state);
                         break;
                     }
-                    (Some(new_state), None, true) => {
+                    (Some(new_state), None, ControlFlow::Continue(_)) => {
                         substream = new_state;
                         continue;
                     }
@@ -839,11 +840,11 @@ where
                         }
                         return Poll::Ready(event);
                     }
-                    (Some(new_state), None, false) => {
+                    (Some(new_state), None, ControlFlow::Break(_)) => {
                         self.inbound_substreams.push(new_state);
                         break;
                     }
-                    (Some(new_state), None, true) => {
+                    (Some(new_state), None, ControlFlow::Continue(_)) => {
                         substream = new_state;
                         continue;
                     }
@@ -893,14 +894,14 @@ fn advance_outbound_substream<TUserData>(
             io::Error,
         >,
     >,
-    bool,
+    ControlFlow<(), ()>,
 ) {
     match state {
         OutboundSubstreamState::PendingOpen(msg, user_data) => {
             let ev = ConnectionHandlerEvent::OutboundSubstreamRequest {
                 protocol: SubstreamProtocol::new(upgrade, (msg, user_data)),
             };
-            (None, Some(ev), false)
+            (None, Some(ev), ControlFlow::Break(()))
         }
         OutboundSubstreamState::PendingSend(mut substream, msg, user_data) => {
             match Sink::poll_ready(Pin::new(&mut substream), cx) {
@@ -908,7 +909,7 @@ fn advance_outbound_substream<TUserData>(
                     Ok(()) => (
                         Some(OutboundSubstreamState::PendingFlush(substream, user_data)),
                         None,
-                        true,
+                        ControlFlow::Continue(()),
                     ),
                     Err(error) => {
                         let event = user_data.map(|user_data| {
@@ -918,7 +919,7 @@ fn advance_outbound_substream<TUserData>(
                             })
                         });
 
-                        (None, event, false)
+                        (None, event, ControlFlow::Break(()))
                     }
                 },
                 Poll::Pending => (
@@ -926,7 +927,7 @@ fn advance_outbound_substream<TUserData>(
                         substream, msg, user_data,
                     )),
                     None,
-                    false,
+                    ControlFlow::Break(()),
                 ),
                 Poll::Ready(Err(error)) => {
                     let event = user_data.map(|user_data| {
@@ -936,7 +937,7 @@ fn advance_outbound_substream<TUserData>(
                         })
                     });
 
-                    (None, event, false)
+                    (None, event, ControlFlow::Break(()))
                 }
             }
         }
@@ -947,16 +948,20 @@ fn advance_outbound_substream<TUserData>(
                         (
                             Some(OutboundSubstreamState::WaitingAnswer(substream, user_data)),
                             None,
-                            true,
+                            ControlFlow::Continue(()),
                         )
                     } else {
-                        (Some(OutboundSubstreamState::Closing(substream)), None, true)
+                        (
+                            Some(OutboundSubstreamState::Closing(substream)),
+                            None,
+                            ControlFlow::Continue(()),
+                        )
                     }
                 }
                 Poll::Pending => (
                     Some(OutboundSubstreamState::PendingFlush(substream, user_data)),
                     None,
-                    false,
+                    ControlFlow::Break(()),
                 ),
                 Poll::Ready(Err(error)) => {
                     let event = user_data.map(|user_data| {
@@ -966,7 +971,7 @@ fn advance_outbound_substream<TUserData>(
                         })
                     });
 
-                    (None, event, false)
+                    (None, event, ControlFlow::Break(()))
                 }
             }
         }
@@ -978,39 +983,55 @@ fn advance_outbound_substream<TUserData>(
                     (
                         Some(new_state),
                         Some(ConnectionHandlerEvent::Custom(event)),
-                        true,
+                        ControlFlow::Continue(()),
                     )
                 }
                 Poll::Pending => (
                     Some(OutboundSubstreamState::WaitingAnswer(substream, user_data)),
                     None,
-                    false,
+                    ControlFlow::Break(()),
                 ),
                 Poll::Ready(Some(Err(error))) => {
                     let event = KademliaHandlerEvent::QueryError {
                         error: KademliaHandlerQueryErr::Io(error),
                         user_data,
                     };
-                    (None, Some(ConnectionHandlerEvent::Custom(event)), false)
+                    (
+                        None,
+                        Some(ConnectionHandlerEvent::Custom(event)),
+                        ControlFlow::Break(()),
+                    )
                 }
                 Poll::Ready(None) => {
                     let event = KademliaHandlerEvent::QueryError {
                         error: KademliaHandlerQueryErr::Io(io::ErrorKind::UnexpectedEof.into()),
                         user_data,
                     };
-                    (None, Some(ConnectionHandlerEvent::Custom(event)), false)
+                    (
+                        None,
+                        Some(ConnectionHandlerEvent::Custom(event)),
+                        ControlFlow::Break(()),
+                    )
                 }
             }
         }
         OutboundSubstreamState::ReportError(error, user_data) => {
             let event = KademliaHandlerEvent::QueryError { error, user_data };
-            (None, Some(ConnectionHandlerEvent::Custom(event)), false)
+            (
+                None,
+                Some(ConnectionHandlerEvent::Custom(event)),
+                ControlFlow::Break(()),
+            )
         }
         OutboundSubstreamState::Closing(mut stream) => {
             match Sink::poll_close(Pin::new(&mut stream), cx) {
-                Poll::Ready(Ok(())) => (None, None, false),
-                Poll::Pending => (Some(OutboundSubstreamState::Closing(stream)), None, false),
-                Poll::Ready(Err(_)) => (None, None, false),
+                Poll::Ready(Ok(())) => (None, None, ControlFlow::Break(())),
+                Poll::Pending => (
+                    Some(OutboundSubstreamState::Closing(stream)),
+                    None,
+                    ControlFlow::Break(()),
+                ),
+                Poll::Ready(Err(_)) => (None, None, ControlFlow::Break(())),
             }
         }
     }
@@ -1032,7 +1053,7 @@ fn advance_inbound_substream<TUserData>(
             io::Error,
         >,
     >,
-    bool,
+    ControlFlow<(), ()>,
 ) {
     match state {
         InboundSubstreamState::WaitingMessage {
@@ -1045,10 +1066,14 @@ fn advance_inbound_substream<TUserData>(
                     (
                         Some(InboundSubstreamState::WaitingUser(connection_id, substream)),
                         Some(ConnectionHandlerEvent::Custom(ev)),
-                        false,
+                        ControlFlow::Break(()),
                     )
                 } else {
-                    (Some(InboundSubstreamState::Closing(substream)), None, true)
+                    (
+                        Some(InboundSubstreamState::Closing(substream)),
+                        None,
+                        ControlFlow::Continue(()),
+                    )
                 }
             }
             Poll::Pending => (
@@ -1058,21 +1083,21 @@ fn advance_inbound_substream<TUserData>(
                     substream,
                 }),
                 None,
-                false,
+                ControlFlow::Break(()),
             ),
             Poll::Ready(None) => {
                 trace!("Inbound substream: EOF");
-                (None, None, false)
+                (None, None, ControlFlow::Break(()))
             }
             Poll::Ready(Some(Err(e))) => {
                 trace!("Inbound substream error: {:?}", e);
-                (None, None, false)
+                (None, None, ControlFlow::Break(()))
             }
         },
         InboundSubstreamState::WaitingUser(id, substream) => (
             Some(InboundSubstreamState::WaitingUser(id, substream)),
             None,
-            false,
+            ControlFlow::Break(()),
         ),
         InboundSubstreamState::PendingSend(id, mut substream, msg) => {
             match Sink::poll_ready(Pin::new(&mut substream), cx) {
@@ -1080,16 +1105,16 @@ fn advance_inbound_substream<TUserData>(
                     Ok(()) => (
                         Some(InboundSubstreamState::PendingFlush(id, substream)),
                         None,
-                        true,
+                        ControlFlow::Continue(()),
                     ),
-                    Err(_) => (None, None, false),
+                    Err(_) => (None, None, ControlFlow::Break(())),
                 },
                 Poll::Pending => (
                     Some(InboundSubstreamState::PendingSend(id, substream, msg)),
                     None,
-                    false,
+                    ControlFlow::Break(()),
                 ),
-                Poll::Ready(Err(_)) => (None, None, false),
+                Poll::Ready(Err(_)) => (None, None, ControlFlow::Break(())),
             }
         }
         InboundSubstreamState::PendingFlush(id, mut substream) => {
@@ -1101,21 +1126,25 @@ fn advance_inbound_substream<TUserData>(
                         substream,
                     }),
                     None,
-                    true,
+                    ControlFlow::Continue(()),
                 ),
                 Poll::Pending => (
                     Some(InboundSubstreamState::PendingFlush(id, substream)),
                     None,
-                    false,
+                    ControlFlow::Break(()),
                 ),
-                Poll::Ready(Err(_)) => (None, None, false),
+                Poll::Ready(Err(_)) => (None, None, ControlFlow::Break(())),
             }
         }
         InboundSubstreamState::Closing(mut stream) => {
             match Sink::poll_close(Pin::new(&mut stream), cx) {
-                Poll::Ready(Ok(())) => (None, None, false),
-                Poll::Pending => (Some(InboundSubstreamState::Closing(stream)), None, false),
-                Poll::Ready(Err(_)) => (None, None, false),
+                Poll::Ready(Ok(())) => (None, None, ControlFlow::Break(())),
+                Poll::Pending => (
+                    Some(InboundSubstreamState::Closing(stream)),
+                    None,
+                    ControlFlow::Break(()),
+                ),
+                Poll::Ready(Err(_)) => (None, None, ControlFlow::Break(())),
             }
         }
     }
