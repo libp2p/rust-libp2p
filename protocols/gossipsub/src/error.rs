@@ -137,7 +137,7 @@ impl std::error::Error for ValidationError {}
 
 impl From<std::io::Error> for GossipsubHandlerError {
     fn from(error: std::io::Error) -> GossipsubHandlerError {
-        GossipsubHandlerError::Codec(prost_codec::Error::Io(error))
+        GossipsubHandlerError::Codec(prost_codec::Error::from(error))
     }
 }
 
