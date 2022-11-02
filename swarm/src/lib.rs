@@ -70,6 +70,7 @@ pub mod keep_alive;
 pub use behaviour::{
     CloseConnection, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
 };
+pub use connection::pool::{ConnectionCounters, ConnectionLimits};
 pub use connection::{
     ConnectionError, ConnectionLimit, PendingConnectionError, PendingInboundConnectionError,
     PendingOutboundConnectionError,
@@ -81,9 +82,7 @@ pub use handler::{
 };
 pub use registry::{AddAddressResult, AddressRecord, AddressScore};
 
-use connection::pool::{
-    ConnectionCounters, ConnectionLimits, EstablishedConnection, Pool, PoolConfig, PoolEvent,
-};
+use connection::pool::{EstablishedConnection, Pool, PoolConfig, PoolEvent};
 use connection::IncomingInfo;
 use dial_opts::{DialOpts, PeerCondition};
 use either::Either;
