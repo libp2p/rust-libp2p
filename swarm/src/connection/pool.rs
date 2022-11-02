@@ -74,7 +74,7 @@ where
     >,
 
     /// The pending connections that are currently being negotiated.
-    pending: HashMap<ConnectionId, PendingConnectionInfo<THandler>>,
+    pending: HashMap<ConnectionId, PendingConnection<THandler>>,
 
     /// Next available identifier for a new connection / task.
     next_connection_id: ConnectionId,
@@ -140,7 +140,7 @@ impl<TInEvent> EstablishedConnectionInfo<TInEvent> {
     }
 }
 
-struct PendingConnectionInfo<THandler> {
+struct PendingConnection<THandler> {
     /// [`PeerId`] of the remote peer.
     peer_id: Option<PeerId>,
     /// Handler to handle connection once no longer pending but established.
@@ -150,7 +150,7 @@ struct PendingConnectionInfo<THandler> {
     abort_notifier: Option<oneshot::Sender<Void>>,
 }
 
-impl<THandler> PendingConnectionInfo<THandler> {
+impl<THandler> PendingConnection<THandler> {
     fn is_for_same_remote_as(&self, other: PeerId) -> bool {
         self.peer_id.map_or(false, |peer| peer == other)
     }
@@ -445,7 +445,7 @@ where
         self.counters.inc_pending(&endpoint);
         self.pending.insert(
             connection_id,
-            PendingConnectionInfo {
+            PendingConnection {
                 peer_id: peer,
                 handler,
                 endpoint,
@@ -492,7 +492,7 @@ where
         self.counters.inc_pending_incoming();
         self.pending.insert(
             connection_id,
-            PendingConnectionInfo {
+            PendingConnection {
                 peer_id: None,
                 handler,
                 endpoint: endpoint.into(),
@@ -586,7 +586,7 @@ where
                     output: (obtained_peer_id, mut muxer),
                     outgoing,
                 } => {
-                    let PendingConnectionInfo {
+                    let PendingConnection {
                         peer_id: expected_peer_id,
                         handler,
                         endpoint,
@@ -750,7 +750,7 @@ where
                     });
                 }
                 task::PendingConnectionEvent::PendingFailed { id, error } => {
-                    if let Some(PendingConnectionInfo {
+                    if let Some(PendingConnection {
                         peer_id,
                         handler,
                         endpoint,
