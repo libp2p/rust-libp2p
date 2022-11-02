@@ -183,13 +183,13 @@ pub async fn development_transport(
     keypair: identity::Keypair,
 ) -> std::io::Result<core::transport::Boxed<(PeerId, core::muxing::StreamMuxerBox)>> {
     let transport = {
-        let dns_tcp = dns::DnsConfig::system(tcp::TcpTransport::new(
-            tcp::GenTcpConfig::new().nodelay(true),
+        let dns_tcp = dns::DnsConfig::system(tcp::async_io::Transport::new(
+            tcp::Config::new().nodelay(true),
         ))
         .await?;
         let ws_dns_tcp = websocket::WsConfig::new(
-            dns::DnsConfig::system(tcp::TcpTransport::new(
-                tcp::GenTcpConfig::new().nodelay(true),
+            dns::DnsConfig::system(tcp::async_io::Transport::new(
+                tcp::Config::new().nodelay(true),
             ))
             .await?,
         );
@@ -243,11 +243,11 @@ pub fn tokio_development_transport(
     keypair: identity::Keypair,
 ) -> std::io::Result<core::transport::Boxed<(PeerId, core::muxing::StreamMuxerBox)>> {
     let transport = {
-        let dns_tcp = dns::TokioDnsConfig::system(tcp::TokioTcpTransport::new(
-            tcp::GenTcpConfig::new().nodelay(true),
+        let dns_tcp = dns::TokioDnsConfig::system(tcp::tokio::Transport::new(
+            tcp::Config::new().nodelay(true),
         ))?;
         let ws_dns_tcp = websocket::WsConfig::new(dns::TokioDnsConfig::system(
-            tcp::TokioTcpTransport::new(tcp::GenTcpConfig::new().nodelay(true)),
+            tcp::tokio::Transport::new(tcp::Config::new().nodelay(true)),
         )?);
         dns_tcp.or_transport(ws_dns_tcp)
     };
