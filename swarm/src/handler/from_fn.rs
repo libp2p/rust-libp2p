@@ -267,7 +267,6 @@ where
             inbound_streams_limit: self.inbound_streams_limit,
             pending_outbound_streams: VecDeque::default(),
             pending_outbound_streams_limit: self.pending_outbound_streams_limit,
-            pending_outbound_stream_waker: None,
             failed_open: VecDeque::default(),
             state: self.state,
             keep_alive: KeepAlive::Yes,
@@ -311,7 +310,6 @@ pub struct FromFn<TInbound, TOutbound, TOutboundInfo, TState> {
 
     pending_outbound_streams: VecDeque<TOutboundInfo>,
     pending_outbound_streams_limit: usize,
-    pending_outbound_stream_waker: Option<Waker>,
 
     failed_open: VecDeque<OpenError<TOutboundInfo>>,
 
@@ -386,10 +384,6 @@ where
                         .push_back(OpenError::LimitExceeded(open_info));
                 } else {
                     self.pending_outbound_streams.push_back(open_info);
-
-                    if let Some(waker) = self.pending_outbound_stream_waker.take() {
-                        waker.wake();
-                    }
                 }
             }
         }
@@ -468,8 +462,6 @@ where
                     outbound_open_info,
                 ),
             });
-        } else {
-            self.pending_outbound_stream_waker = Some(cx.waker().clone());
         }
 
         if self.inbound_streams.is_empty()
@@ -477,7 +469,7 @@ where
             && self.pending_outbound_streams.is_empty()
         {
             if self.keep_alive.is_yes() {
-                // TODO: Make configurable
+                // TODO: Make timeout configurable
                 self.keep_alive = KeepAlive::Until(Instant::now() + Duration::from_secs(10))
             }
         } else {
@@ -514,7 +506,6 @@ mod tests {
         let mut bob = make_swarm("Bob");
 
         let bob_peer_id = *bob.local_peer_id();
-
         let listen_id = alice.listen_on("/memory/0".parse().unwrap()).unwrap();
 
         let alice_listen_addr = loop {
@@ -532,19 +523,16 @@ mod tests {
 
         futures::future::join(
             async {
-                loop {
-                    if let SwarmEvent::ConnectionEstablished { .. } = alice.select_next_some().await
-                    {
-                        break;
-                    }
-                }
+                while !matches!(
+                    alice.select_next_some().await,
+                    SwarmEvent::ConnectionEstablished { .. }
+                ) {}
             },
             async {
-                loop {
-                    if let SwarmEvent::ConnectionEstablished { .. } = bob.select_next_some().await {
-                        break;
-                    }
-                }
+                while !matches!(
+                    bob.select_next_some().await,
+                    SwarmEvent::ConnectionEstablished { .. }
+                ) {}
             },
         )
         .await;
@@ -599,35 +587,9 @@ mod tests {
         .await;
     }
 
-    fn make_swarm(name: &'static str) -> Swarm<HelloBehaviour> {
-        let identity = identity::Keypair::generate_ed25519();
-
-        let transport = MemoryTransport::new()
-            .upgrade(Version::V1)
-            .authenticate(PlainText2Config {
-                local_public_key: identity.public(),
-            })
-            .multiplex(yamux::YamuxConfig::default())
-            .boxed();
-
-        let swarm = Swarm::new(
-            transport,
-            HelloBehaviour {
-                state: Shared::new(State {
-                    name: Name(name.to_owned()),
-                }),
-                pending_messages: Default::default(),
-                pending_events: Default::default(),
-                greeting_count: Default::default(),
-            },
-            identity.public().to_peer_id(),
-        );
-        swarm
-    }
-
     struct HelloBehaviour {
         state: Shared<State>,
-        pending_messages: VecDeque<(PeerId, Name)>,
+        pending_messages: VecDeque<PeerId>,
         pending_events: VecDeque<HashMap<Name, u8>>,
         greeting_count: HashMap<Name, u8>,
     }
@@ -642,18 +604,17 @@ mod tests {
 
     impl HelloBehaviour {
         fn say_hello(&mut self, to: PeerId) {
-            self.pending_messages
-                .push_back((to, self.state.name.clone()));
+            self.pending_messages.push_back(to);
         }
     }
 
     impl NetworkBehaviour for HelloBehaviour {
-        type ConnectionHandler = FromFnProto<io::Result<Name>, io::Result<Name>, Name, State>;
+        type ConnectionHandler = FromFnProto<io::Result<Name>, io::Result<Name>, (), State>;
         type OutEvent = HashMap<Name, u8>;
 
         fn new_handler(&mut self) -> Self::ConnectionHandler {
             from_fn(
-                "/hello-world/1.0.0",
+                "/hello/1.0.0",
                 self.state.clone(),
                 5,
                 5,
@@ -670,15 +631,19 @@ mod tests {
                         Ok(Name(String::from_utf8(received_name).unwrap()))
                     }
                 },
-                |mut stream, _, _, _, name: Name| async move {
-                    stream.write_all(&name.0.as_bytes()).await?;
-                    stream.flush().await?;
-                    stream.close().await?;
+                |mut stream, _, _, state, _| {
+                    let my_name = state.name.to_owned();
 
-                    let mut received_name = Vec::new();
-                    stream.read_to_end(&mut received_name).await?;
+                    async move {
+                        stream.write_all(&my_name.0.as_bytes()).await?;
+                        stream.flush().await?;
+                        stream.close().await?;
 
-                    Ok(Name(String::from_utf8(received_name).unwrap()))
+                        let mut received_name = Vec::new();
+                        stream.read_to_end(&mut received_name).await?;
+
+                        Ok(Name(String::from_utf8(received_name).unwrap()))
+                    }
                 },
             )
         }
@@ -743,16 +708,42 @@ mod tests {
                 return Poll::Ready(action);
             }
 
-            if let Some((to, name)) = self.pending_messages.pop_front() {
+            if let Some(to) = self.pending_messages.pop_front() {
                 return Poll::Ready(NetworkBehaviourAction::NotifyHandler {
                     peer_id: to,
                     handler: NotifyHandler::Any,
-                    event: InEvent::NewOutbound(name),
+                    event: InEvent::NewOutbound(()),
                 });
             }
 
             Poll::Pending
         }
+    }
+
+    fn make_swarm(name: &'static str) -> Swarm<HelloBehaviour> {
+        let identity = identity::Keypair::generate_ed25519();
+
+        let transport = MemoryTransport::new()
+            .upgrade(Version::V1)
+            .authenticate(PlainText2Config {
+                local_public_key: identity.public(),
+            })
+            .multiplex(yamux::YamuxConfig::default())
+            .boxed();
+
+        let swarm = Swarm::new(
+            transport,
+            HelloBehaviour {
+                state: Shared::new(State {
+                    name: Name(name.to_owned()),
+                }),
+                pending_messages: Default::default(),
+                pending_events: Default::default(),
+                greeting_count: Default::default(),
+            },
+            identity.public().to_peer_id(),
+        );
+        swarm
     }
 
     // TODO: Add test for max pending dials
