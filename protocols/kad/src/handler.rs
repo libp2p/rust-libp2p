@@ -196,14 +196,20 @@ enum InboundSubstreamState<TUserData> {
 }
 
 impl<TUserData> InboundSubstreamState<TUserData> {
-    fn answer_with(&mut self, msg: KadResponseMsg) -> Result<(), KadResponseMsg> {
+    fn try_answer_with(
+        &mut self,
+        id: KademliaRequestId,
+        msg: KadResponseMsg,
+    ) -> Result<(), KadResponseMsg> {
         match std::mem::replace(
             self,
             InboundSubstreamState::Poisoned {
                 phantom: PhantomData,
             },
         ) {
-            InboundSubstreamState::WaitingUser(conn_id, substream, mut waker) => {
+            InboundSubstreamState::WaitingUser(conn_id, substream, mut waker)
+                if conn_id == id.connec_unique_id =>
+            {
                 *self = InboundSubstreamState::PendingSend(conn_id, substream, msg);
 
                 if let Some(waker) = waker.take() {
@@ -212,7 +218,11 @@ impl<TUserData> InboundSubstreamState<TUserData> {
 
                 Ok(())
             }
-            _ => Err(msg),
+            other => {
+                *self = other;
+
+                Err(msg)
+            }
         }
     }
 
@@ -485,7 +495,7 @@ pub enum KademliaHandlerIn<TUserData> {
 
 /// Unique identifier for a request. Must be passed back in order to answer a request from
 /// the remote.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub struct KademliaRequestId {
     /// Unique identifier for an incoming connection.
     connec_unique_id: UniqueConnecId,
@@ -640,17 +650,7 @@ where
             KademliaHandlerIn::FindNodeRes {
                 closer_peers,
                 request_id,
-            } => {
-                for state in self.inbound_substreams.iter_mut() {
-                    if matches!(state, InboundSubstreamState::WaitingUser(ref conn_id, _, _) if conn_id == &request_id.connec_unique_id)
-                    {
-                        state
-                            .answer_with(KadResponseMsg::FindNode { closer_peers })
-                            .expect("stream is in `WaitingUser` state");
-                        break;
-                    }
-                }
-            }
+            } => self.answer_pending_request(request_id, KadResponseMsg::FindNode { closer_peers }),
             KademliaHandlerIn::GetProvidersReq { key, user_data } => {
                 let msg = KadRequestMsg::GetProviders { key };
                 self.outbound_substreams
@@ -663,20 +663,13 @@ where
                 closer_peers,
                 provider_peers,
                 request_id,
-            } => {
-                for state in self.inbound_substreams.iter_mut() {
-                    if matches!(state, InboundSubstreamState::WaitingUser(ref conn_id, _, _) if conn_id == &request_id.connec_unique_id)
-                    {
-                        state
-                            .answer_with(KadResponseMsg::GetProviders {
-                                closer_peers,
-                                provider_peers,
-                            })
-                            .expect("stream is in `WaitingUser` state");
-                        break;
-                    }
-                }
-            }
+            } => self.answer_pending_request(
+                request_id,
+                KadResponseMsg::GetProviders {
+                    closer_peers,
+                    provider_peers,
+                },
+            ),
             KademliaHandlerIn::AddProvider { key, provider } => {
                 let msg = KadRequestMsg::AddProvider { key, provider };
                 self.outbound_substreams
@@ -706,33 +699,20 @@ where
                 closer_peers,
                 request_id,
             } => {
-                for state in self.inbound_substreams.iter_mut() {
-                    if matches!(state, InboundSubstreamState::WaitingUser(ref conn_id, _, _) if conn_id == &request_id.connec_unique_id)
-                    {
-                        state
-                            .answer_with(KadResponseMsg::GetValue {
-                                record,
-                                closer_peers,
-                            })
-                            .expect("stream is in `WaitingUser` state");
-                        break;
-                    }
-                }
+                self.answer_pending_request(
+                    request_id,
+                    KadResponseMsg::GetValue {
+                        record,
+                        closer_peers,
+                    },
+                );
             }
             KademliaHandlerIn::PutRecordRes {
                 key,
                 request_id,
                 value,
             } => {
-                for state in self.inbound_substreams.iter_mut() {
-                    if matches!(state, InboundSubstreamState::WaitingUser(ref conn_id, _, _) if conn_id == &request_id.connec_unique_id)
-                    {
-                        state
-                            .answer_with(KadResponseMsg::PutValue { key, value })
-                            .expect("stream is in `WaitingUser` state");
-                        break;
-                    }
-                }
+                self.answer_pending_request(request_id, KadResponseMsg::PutValue { key, value });
             }
         }
     }
@@ -790,6 +770,22 @@ where
         }
 
         Poll::Pending
+    }
+}
+
+impl<TUserData> KademliaHandler<TUserData>
+where
+    TUserData: 'static + Clone + Send + Unpin + fmt::Debug,
+{
+    fn answer_pending_request(&mut self, request_id: KademliaRequestId, mut msg: KadResponseMsg) {
+        for state in self.inbound_substreams.iter_mut() {
+            match state.try_answer_with(request_id, msg) {
+                Ok(()) => return,
+                Err(m) => {
+                    msg = m;
+                }
+            }
+        }
     }
 }
 
