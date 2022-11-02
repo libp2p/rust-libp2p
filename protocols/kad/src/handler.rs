@@ -775,16 +775,10 @@ where
         }
 
         if let Poll::Ready(Some(event)) = self.outbound_substreams.poll_next_unpin(cx) {
-            if self.outbound_substreams.is_empty() {
-                self.keep_alive = KeepAlive::Until(Instant::now() + self.config.idle_timeout);
-            }
             return Poll::Ready(event);
         }
 
         if let Poll::Ready(Some(event)) = self.inbound_substreams.poll_next_unpin(cx) {
-            if self.inbound_substreams.is_empty() {
-                self.keep_alive = KeepAlive::Until(Instant::now() + self.config.idle_timeout);
-            }
             return Poll::Ready(event);
         }
 
