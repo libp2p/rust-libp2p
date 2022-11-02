@@ -1,3 +1,9 @@
+# 0.42.0 [unreleased]
+
+- Update to `libp2p-core` `v0.38.0`.
+
+- Update to `libp2p-swarm` `v0.41.0`.
+
 # 0.41.0
 
 - Remove deprecated `set_protocol_name()` from `KademliaConfig` & `KademliaProtocolConfig`.

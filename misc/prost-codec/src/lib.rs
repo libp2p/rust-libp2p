@@ -5,7 +5,6 @@ use bytes::BytesMut;
 use prost::Message;
 use std::io::Cursor;
 use std::marker::PhantomData;
-use thiserror::Error;
 use unsigned_varint::codec::UviBytes;
 
 /// [`Codec`] implements [`Encoder`] and [`Decoder`], uses [`unsigned_varint`]
@@ -36,17 +35,13 @@ impl<In: Message, Out> Encoder for Codec<In, Out> {
     type Item = In;
     type Error = Error;
 
-    fn encode(
-        &mut self,
-        item: Self::Item,
-        dst: &mut asynchronous_codec::BytesMut,
-    ) -> Result<(), Self::Error> {
+    fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
         let mut encoded_msg = BytesMut::new();
         item.encode(&mut encoded_msg)
             .expect("BytesMut to have sufficient capacity.");
-        self.uvi
-            .encode(encoded_msg.freeze(), dst)
-            .map_err(|e| e.into())
+        self.uvi.encode(encoded_msg.freeze(), dst)?;
+
+        Ok(())
     }
 }
 
@@ -54,30 +49,19 @@ impl<In, Out: Message + Default> Decoder for Codec<In, Out> {
     type Item = Out;
     type Error = Error;
 
-    fn decode(
-        &mut self,
-        src: &mut asynchronous_codec::BytesMut,
-    ) -> Result<Option<Self::Item>, Self::Error> {
-        Ok(self
-            .uvi
-            .decode(src)?
-            .map(|msg| Message::decode(Cursor::new(msg)))
-            .transpose()?)
+    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+        let msg = match self.uvi.decode(src)? {
+            None => return Ok(None),
+            Some(msg) => msg,
+        };
+
+        let message = Message::decode(Cursor::new(msg))
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+
+        Ok(Some(message))
     }
 }
 
-#[derive(Debug, Error)]
-pub enum Error {
-    #[error("Failed to decode response: {0}.")]
-    Decode(
-        #[from]
-        #[source]
-        prost::DecodeError,
-    ),
-    #[error("Io error {0}")]
-    Io(
-        #[from]
-        #[source]
-        std::io::Error,
-    ),
-}
+#[derive(thiserror::Error, Debug)]
+#[error("Failed to encode/decode message")]
+pub struct Error(#[from] std::io::Error);

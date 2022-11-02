@@ -1,3 +1,9 @@
+# 0.38.0 [unreleased]
+
+- Hide `prost::Error` from public API in `FromEnvelopeError::InvalidPeerRecord` and `signed_envelope::DecodingError`. See [PR 3058].
+
+[PR 3058]: https://github.com/libp2p/rust-libp2p/pull/3058
+
 # 0.37.0
 
 - Implement `Hash` and `Ord` for `PublicKey`. See [PR 2915].
