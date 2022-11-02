@@ -182,20 +182,18 @@ where
 
 /* Gossip codec for the framing */
 
-pub struct GossipsubCodec<In> {
+pub struct GossipsubCodec {
     /// Codec to encode/decode the Unsigned varint length prefix of the frames.
     length_codec: codec::UviBytes,
     /// Determines the level of validation performed on incoming messages.
     validation_mode: ValidationMode,
-    codec: prost_codec::Codec<In>,
+    /// The codec to handle common encoding/decoding of protobuf messages
+    codec: prost_codec::Codec<rpc_proto::Rpc>,
 }
 
-impl<In> GossipsubCodec<In> {
-    pub fn new(
-        length_codec: codec::UviBytes,
-        validation_mode: ValidationMode,
-    ) -> GossipsubCodec<In> {
-        let mut codec = prost_codec::Codec::new(0);
+impl GossipsubCodec {
+    pub fn new(length_codec: codec::UviBytes, validation_mode: ValidationMode) -> GossipsubCodec {
+        let codec = prost_codec::Codec::new(0);
         GossipsubCodec {
             length_codec,
             validation_mode,
@@ -277,11 +275,7 @@ impl Encoder for GossipsubCodec {
         item: Self::Item,
         dst: &mut BytesMut,
     ) -> Result<(), GossipsubHandlerError> {
-        // TODO: Replace this with a call to the codec::encode
-        let mut codec: prost_codec::Codec<Self::Item> = prost_codec::Codec::new(item.encoded_len());
-
-        // I am trying to run `encode()`, then return
-        match codec.encode(item, dst) {
+        match self.codec.encode(item, dst) {
             Ok(_) => Ok(()),
             _ => Err(GossipsubHandlerError::MaxTransmissionSize),
         }
