@@ -786,6 +786,8 @@ where
                 }
             }
         }
+
+        debug_assert!(false, "Cannot find inbound substream for {request_id:?}")
     }
 }
 
