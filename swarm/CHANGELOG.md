@@ -2,7 +2,7 @@
 
 - Update to `libp2p-core` `v0.38.0`.
 
-# 0.40.0
+# 0.40.1
 
 - Bump rand to 0.8 and quickcheck to 1. See [PR 2857].
 
