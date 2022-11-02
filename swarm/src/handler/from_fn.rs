@@ -48,14 +48,14 @@ pub fn from_fn<TInbound, TOutbound, TOutboundOpenInfo, TState, TInboundFuture, T
     state: TState,
     inbound_streams_limit: usize,
     pending_dial_limit: usize,
-    on_new_inbound: impl Fn(NegotiatedSubstream, PeerId, &ConnectedPoint, &mut TState) -> TInboundFuture
+    on_new_inbound: impl Fn(NegotiatedSubstream, PeerId, &ConnectedPoint, &TState) -> TInboundFuture
         + Send
         + 'static,
     on_new_outbound: impl Fn(
             NegotiatedSubstream,
             PeerId,
             &ConnectedPoint,
-            &mut TState,
+            &TState,
             TOutboundOpenInfo,
         ) -> TOutboundFuture
         + Send
@@ -219,7 +219,7 @@ pub struct FromFnProto<TInbound, TOutbound, TOutboundOpenInfo, TState> {
                 NegotiatedSubstream,
                 PeerId,
                 &ConnectedPoint,
-                &mut TState,
+                &TState,
             ) -> BoxFuture<'static, TInbound>
             + Send,
     >,
@@ -228,7 +228,7 @@ pub struct FromFnProto<TInbound, TOutbound, TOutboundOpenInfo, TState> {
                 NegotiatedSubstream,
                 PeerId,
                 &ConnectedPoint,
-                &mut TState,
+                &TState,
                 TOutboundOpenInfo,
             ) -> BoxFuture<'static, TOutbound>
             + Send,
@@ -289,7 +289,7 @@ pub struct FromFn<TInbound, TOutbound, TOutboundInfo, TState> {
                 NegotiatedSubstream,
                 PeerId,
                 &ConnectedPoint,
-                &mut TState,
+                &TState,
             ) -> BoxFuture<'static, TInbound>
             + Send,
     >,
@@ -298,7 +298,7 @@ pub struct FromFn<TInbound, TOutbound, TOutboundInfo, TState> {
                 NegotiatedSubstream,
                 PeerId,
                 &ConnectedPoint,
-                &mut TState,
+                &TState,
                 TOutboundInfo,
             ) -> BoxFuture<'static, TOutbound>
             + Send,
