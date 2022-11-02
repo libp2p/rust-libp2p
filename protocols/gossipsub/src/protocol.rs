@@ -283,7 +283,7 @@ impl Decoder for GossipsubCodec {
     type Item = HandlerEvent;
     type Error = GossipsubHandlerError;
 
-    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, GossipsubHandlerError> {
         let rpc = match self.codec.decode(src) {
             Ok(Some(p)) => p,
             _ => return Ok(None),
