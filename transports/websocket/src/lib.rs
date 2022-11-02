@@ -20,6 +20,8 @@
 
 //! Implementation of the libp2p `Transport` trait for Websockets.
 
+#![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
+
 pub mod error;
 pub mod framed;
 pub mod tls;
@@ -234,8 +236,8 @@ mod tests {
         futures::executor::block_on(connect(a))
     }
 
-    fn new_ws_config() -> WsConfig<tcp::TcpTransport> {
-        WsConfig::new(tcp::TcpTransport::new(tcp::GenTcpConfig::default()))
+    fn new_ws_config() -> WsConfig<tcp::async_io::Transport> {
+        WsConfig::new(tcp::async_io::Transport::new(tcp::Config::default()))
     }
 
     async fn connect(listen_addr: Multiaddr) {

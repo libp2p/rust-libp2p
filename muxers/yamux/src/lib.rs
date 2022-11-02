@@ -21,6 +21,8 @@
 //! Implements the Yamux multiplexing protocol for libp2p, see also the
 //! [specification](https://github.com/hashicorp/yamux/blob/master/spec.md).
 
+#![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
+
 use futures::{future, prelude::*, ready};
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
