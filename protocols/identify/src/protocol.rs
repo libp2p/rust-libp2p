@@ -259,39 +259,23 @@ impl TryFrom<structs_proto::Identify> for Info {
 
 #[derive(Debug, Error)]
 pub enum UpgradeError {
-    #[error("Failed to encode or decode")]
-    Codec(
-        #[from]
-        #[source]
-        prost_codec::Error,
-    ),
+    #[error(transparent)]
+    Codec(#[from] prost_codec::Error),
     #[error("I/O interaction failed")]
-    Io(
-        #[from]
-        #[source]
-        io::Error,
-    ),
+    Io(#[from] io::Error),
     #[error("Stream closed")]
     StreamClosed,
     #[error("Failed decoding multiaddr")]
-    Multiaddr(
-        #[from]
-        #[source]
-        multiaddr::Error,
-    ),
+    Multiaddr(#[from] multiaddr::Error),
     #[error("Failed decoding public key")]
-    PublicKey(
-        #[from]
-        #[source]
-        identity::error::DecodingError,
-    ),
+    PublicKey(#[from] identity::error::DecodingError),
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use futures::channel::oneshot;
-    use libp2p::tcp::TcpTransport;
+    use libp2p::tcp;
     use libp2p_core::{
         identity,
         upgrade::{self, apply_inbound, apply_outbound},
@@ -308,7 +292,7 @@ mod tests {
         let (tx, rx) = oneshot::channel();
 
         let bg_task = async_std::task::spawn(async move {
-            let mut transport = TcpTransport::default().boxed();
+            let mut transport = tcp::async_io::Transport::default().boxed();
 
             transport
                 .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
@@ -351,7 +335,7 @@ mod tests {
         });
 
         async_std::task::block_on(async move {
-            let mut transport = TcpTransport::default();
+            let mut transport = tcp::async_io::Transport::default();
 
             let socket = transport.dial(rx.await.unwrap()).unwrap().await.unwrap();
             let info = apply_outbound(socket, Protocol, upgrade::Version::V1)
