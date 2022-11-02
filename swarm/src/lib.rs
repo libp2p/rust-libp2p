@@ -53,6 +53,8 @@
 //! are supported, when to open a new outbound substream, etc.
 //!
 
+#![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
+
 mod connection;
 mod registry;
 #[cfg(test)]
@@ -1295,7 +1297,8 @@ where
     /// Configures the `Executor` to use for spawning background tasks.
     ///
     /// By default, unless another executor has been configured,
-    /// [`SwarmBuilder::build`] will try to set up a `ThreadPool`.
+    /// [`SwarmBuilder::build`] will try to set up a
+    /// [`ThreadPool`](futures::executor::ThreadPool).
     pub fn executor(mut self, e: Box<dyn Executor + Send>) -> Self {
         self.pool_config = self.pool_config.with_executor(e);
         self

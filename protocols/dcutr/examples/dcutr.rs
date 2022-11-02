@@ -30,7 +30,7 @@ use libp2p::identify;
 use libp2p::noise;
 use libp2p::relay::v2::client::{self, Client};
 use libp2p::swarm::{SwarmBuilder, SwarmEvent};
-use libp2p::tcp::{GenTcpConfig, TcpTransport};
+use libp2p::tcp;
 use libp2p::Transport;
 use libp2p::{dcutr, ping};
 use libp2p::{identity, NetworkBehaviour, PeerId};
@@ -90,8 +90,8 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let transport = OrTransport::new(
         relay_transport,
-        block_on(DnsConfig::system(TcpTransport::new(
-            GenTcpConfig::default().port_reuse(true),
+        block_on(DnsConfig::system(tcp::async_io::Transport::new(
+            tcp::Config::default().port_reuse(true),
         )))
         .unwrap(),
     )

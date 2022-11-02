@@ -35,6 +35,8 @@
 //!   define how to upgrade each individual substream to use a protocol.
 //!   See the `upgrade` module.
 
+#![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
+
 #[allow(clippy::derive_partial_eq_without_eq)]
 mod keys_proto {
     include!(concat!(env!("OUT_DIR"), "/keys_proto.rs"));
@@ -76,6 +78,10 @@ pub use signed_envelope::SignedEnvelope;
 pub use translation::address_translation;
 pub use transport::Transport;
 pub use upgrade::{InboundUpgrade, OutboundUpgrade, ProtocolName, UpgradeError, UpgradeInfo};
+
+#[derive(thiserror::Error, Debug)]
+#[error(transparent)]
+pub struct DecodeError(prost::DecodeError);
 
 use std::{future::Future, pin::Pin};
 
