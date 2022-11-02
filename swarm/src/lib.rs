@@ -1034,7 +1034,7 @@ where
                 Some((peer_id, handler, event)) => match handler {
                     PendingNotifyHandler::One(conn_id) => {
                         match this.pool.get_established(conn_id) {
-                            Some(mut conn) => match notify_one(&mut conn, event, cx) {
+                            Some(conn) => match notify_one(conn, event, cx) {
                                 None => continue,
                                 Some(event) => {
                                     this.pending_event = Some((peer_id, handler, event));
@@ -1127,8 +1127,8 @@ enum PendingNotifyHandler {
 ///
 /// Returns `None` if the connection is closing or the event has been
 /// successfully sent, in either case the event is consumed.
-fn notify_one<'a, THandlerInEvent>(
-    conn: &mut EstablishedConnection<'a, THandlerInEvent>,
+fn notify_one<THandlerInEvent>(
+    conn: &mut EstablishedConnection<THandlerInEvent>,
     event: THandlerInEvent,
     cx: &mut Context<'_>,
 ) -> Option<THandlerInEvent> {
@@ -1172,7 +1172,7 @@ where
     let mut pending = SmallVec::new();
     let mut event = Some(event); // (1)
     for id in ids.into_iter() {
-        if let Some(mut conn) = pool.get_established(id) {
+        if let Some(conn) = pool.get_established(id) {
             match conn.poll_ready_notify_handler(cx) {
                 Poll::Pending => pending.push(id),
                 Poll::Ready(Err(())) => {} // connection is closing

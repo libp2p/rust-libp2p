@@ -69,7 +69,7 @@ where
         PeerId,
         FnvHashMap<
             ConnectionId,
-            EstablishedConnectionInfo<<THandler::Handler as ConnectionHandler>::InEvent>,
+            EstablishedConnection<<THandler::Handler as ConnectionHandler>::InEvent>,
         >,
     >,
 
@@ -120,13 +120,41 @@ where
 }
 
 #[derive(Debug)]
-struct EstablishedConnectionInfo<TInEvent> {
+pub struct EstablishedConnection<TInEvent> {
     endpoint: ConnectedPoint,
     /// Channel endpoint to send commands to the task.
     sender: mpsc::Sender<task::Command<TInEvent>>,
 }
 
-impl<TInEvent> EstablishedConnectionInfo<TInEvent> {
+impl<TInEvent> EstablishedConnection<TInEvent> {
+    /// (Asynchronously) sends an event to the connection handler.
+    ///
+    /// If the handler is not ready to receive the event, either because
+    /// it is busy or the connection is about to close, the given event
+    /// is returned with an `Err`.
+    ///
+    /// If execution of this method is preceded by successful execution of
+    /// `poll_ready_notify_handler` without another intervening execution
+    /// of `notify_handler`, it only fails if the connection is now about
+    /// to close.
+    pub fn notify_handler(&mut self, event: TInEvent) -> Result<(), TInEvent> {
+        let cmd = task::Command::NotifyHandler(event);
+        self.sender.try_send(cmd).map_err(|e| match e.into_inner() {
+            task::Command::NotifyHandler(event) => event,
+            _ => unreachable!("Expect failed send to return initial event."),
+        })
+    }
+
+    /// Checks if `notify_handler` is ready to accept an event.
+    ///
+    /// Returns `Ok(())` if the handler is ready to receive an event via `notify_handler`.
+    ///
+    /// Returns `Err(())` if the background task associated with the connection
+    /// is terminating and the connection is about to close.
+    pub fn poll_ready_notify_handler(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), ()>> {
+        self.sender.poll_ready(cx).map_err(|_| ())
+    }
+
     /// Initiates a graceful close of the connection.
     ///
     /// Has no effect if the connection is already closing.
@@ -299,13 +327,10 @@ where
     pub fn get_established(
         &mut self,
         id: ConnectionId,
-    ) -> Option<EstablishedConnection<'_, THandlerInEvent<THandler>>> {
+    ) -> Option<&mut EstablishedConnection<THandlerInEvent<THandler>>> {
         self.established
-            .iter_mut()
-            .find_map(|(_, cs)| match cs.entry(id) {
-                hash_map::Entry::Occupied(entry) => Some(EstablishedConnection { entry }),
-                hash_map::Entry::Vacant(_) => None,
-            })
+            .values_mut()
+            .find_map(|connections| connections.get_mut(&id))
     }
 
     /// Returns true if we are connected to the given peer.
@@ -554,7 +579,7 @@ where
                     .established
                     .get_mut(&peer_id)
                     .expect("`Closed` event for established connection");
-                let EstablishedConnectionInfo { endpoint, .. } =
+                let EstablishedConnection { endpoint, .. } =
                     connections.remove(&id).expect("Connection to be present");
                 self.counters.dec_established(&endpoint);
                 let remaining_established_connection_ids: Vec<ConnectionId> =
@@ -718,7 +743,7 @@ where
                         mpsc::channel(self.task_command_buffer_size);
                     conns.insert(
                         id,
-                        EstablishedConnectionInfo {
+                        EstablishedConnection {
                             endpoint: endpoint.clone(),
                             sender: command_sender,
                         },
@@ -799,63 +824,6 @@ where
         while let Poll::Ready(Some(())) = self.local_spawns.poll_next_unpin(cx) {}
 
         Poll::Pending
-    }
-}
-
-/// An established connection in a pool.
-pub struct EstablishedConnection<'a, TInEvent> {
-    entry: hash_map::OccupiedEntry<'a, ConnectionId, EstablishedConnectionInfo<TInEvent>>,
-}
-
-impl<TInEvent> fmt::Debug for EstablishedConnection<'_, TInEvent>
-where
-    TInEvent: fmt::Debug,
-{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
-        f.debug_struct("EstablishedConnection")
-            .field("entry", &self.entry)
-            .finish()
-    }
-}
-
-impl<TInEvent> EstablishedConnection<'_, TInEvent> {
-    /// (Asynchronously) sends an event to the connection handler.
-    ///
-    /// If the handler is not ready to receive the event, either because
-    /// it is busy or the connection is about to close, the given event
-    /// is returned with an `Err`.
-    ///
-    /// If execution of this method is preceded by successful execution of
-    /// `poll_ready_notify_handler` without another intervening execution
-    /// of `notify_handler`, it only fails if the connection is now about
-    /// to close.
-    pub fn notify_handler(&mut self, event: TInEvent) -> Result<(), TInEvent> {
-        let cmd = task::Command::NotifyHandler(event);
-        self.entry
-            .get_mut()
-            .sender
-            .try_send(cmd)
-            .map_err(|e| match e.into_inner() {
-                task::Command::NotifyHandler(event) => event,
-                _ => unreachable!("Expect failed send to return initial event."),
-            })
-    }
-
-    /// Checks if `notify_handler` is ready to accept an event.
-    ///
-    /// Returns `Ok(())` if the handler is ready to receive an event via `notify_handler`.
-    ///
-    /// Returns `Err(())` if the background task associated with the connection
-    /// is terminating and the connection is about to close.
-    pub fn poll_ready_notify_handler(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), ()>> {
-        self.entry.get_mut().sender.poll_ready(cx).map_err(|_| ())
-    }
-
-    /// Initiates a graceful close of the connection.
-    ///
-    /// Has no effect if the connection is already closing.
-    pub fn start_close(mut self) {
-        self.entry.get_mut().start_close()
     }
 }
 
@@ -1013,7 +981,7 @@ impl ConnectionCounters {
 
 /// Counts the number of established connections to the given peer.
 fn num_peer_established<TInEvent>(
-    established: &FnvHashMap<PeerId, FnvHashMap<ConnectionId, EstablishedConnectionInfo<TInEvent>>>,
+    established: &FnvHashMap<PeerId, FnvHashMap<ConnectionId, EstablishedConnection<TInEvent>>>,
     peer: PeerId,
 ) -> u32 {
     established.get(&peer).map_or(0, |conns| {
