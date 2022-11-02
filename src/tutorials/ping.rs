@@ -127,12 +127,11 @@
 //! _what_ bytes to send on the network.
 //!
 //! To make this more concrete, let's take a look at a simple implementation of
-//! the [`NetworkBehaviour`] trait: the [`Ping`](crate::ping::Ping)
-//! [`NetworkBehaviour`]. As you might have guessed, similar to the good old
-//! `ping` network tool, libp2p [`Ping`](crate::ping::Ping) sends a ping to a
-//! peer and expects to receive a pong in turn. The
-//! [`Ping`](crate::ping::Ping) [`NetworkBehaviour`] does not care _how_ the
-//! ping and pong messages are sent on the network, whether they are sent via
+//! the [`NetworkBehaviour`] trait: the [`ping::Behaviour`](crate::ping::Behaviour).
+//! As you might have guessed, similar to the good old `ping` network tool,
+//! libp2p [`ping::Behaviour`](crate::ping::Behaviour) sends a ping to a peer and expects
+//! to receive a pong in turn. The [`ping::Behaviour`](crate::ping::Behaviour) does not care _how_
+//! the ping and pong messages are sent on the network, whether they are sent via
 //! TCP, whether they are encrypted via [noise](crate::noise) or just in
 //! [plaintext](crate::plaintext). It only cares about _what_ messages are sent
 //! on the network.
@@ -140,12 +139,10 @@
 //! The two traits [`Transport`] and [`NetworkBehaviour`] allow us to cleanly
 //! separate _how_ to send bytes from _what_ bytes to send.
 //!
-//! With the above in mind, let's extend our example, creating a
-//! [`Ping`](crate::ping::Ping) [`NetworkBehaviour`] at the end:
+//! With the above in mind, let's extend our example, creating a [`ping::Behaviour`](crate::ping::Behaviour) at the end:
 //!
 //! ```rust
-//! use libp2p::{identity, PeerId};
-//! use libp2p::ping::{Ping, PingConfig};
+//! use libp2p::{identity, PeerId, ping};
 //! use std::error::Error;
 //!
 //! #[async_std::main]
@@ -161,7 +158,7 @@
 //!     // For illustrative purposes, the ping protocol is configured to
 //!     // keep the connection alive, so a continuous sequence of pings
 //!     // can be observed.
-//!     let behaviour = Ping::new(PingConfig::new().with_keep_alive(true));
+//!     let behaviour = ping::Behaviour::new(ping::Config::new().with_keep_alive(true));
 //!
 //!     Ok(())
 //! }
@@ -177,8 +174,7 @@
 //! [`Transport`] to the [`NetworkBehaviour`].
 //!
 //! ```rust
-//! use libp2p::{identity, PeerId};
-//! use libp2p::ping::{Ping, PingConfig};
+//! use libp2p::{identity, PeerId, ping};
 //! use libp2p::swarm::Swarm;
 //! use std::error::Error;
 //!
@@ -195,7 +191,7 @@
 //!     // For illustrative purposes, the ping protocol is configured to
 //!     // keep the connection alive, so a continuous sequence of pings
 //!     // can be observed.
-//!     let behaviour = Ping::new(PingConfig::new().with_keep_alive(true));
+//!     let behaviour = ping::Behaviour::new(ping::Config::new().with_keep_alive(true));
 //!
 //!     let mut swarm = Swarm::new(transport, behaviour, local_peer_id);
 //!
@@ -230,8 +226,7 @@
 //! remote peer.
 //!
 //! ```rust
-//! use libp2p::{identity, Multiaddr, PeerId};
-//! use libp2p::ping::{Ping, PingConfig};
+//! use libp2p::{identity, Multiaddr, PeerId, ping};
 //! use libp2p::swarm::{Swarm, dial_opts::DialOpts};
 //! use std::error::Error;
 //!
@@ -248,7 +243,7 @@
 //!     // For illustrative purposes, the ping protocol is configured to
 //!     // keep the connection alive, so a continuous sequence of pings
 //!     // can be observed.
-//!     let behaviour = Ping::new(PingConfig::new().with_keep_alive(true));
+//!     let behaviour = ping::Behaviour::new(ping::Config::new().with_keep_alive(true));
 //!
 //!     let mut swarm = Swarm::new(transport, behaviour, local_peer_id);
 //!
@@ -276,9 +271,8 @@
 //!
 //! ```no_run
 //! use futures::prelude::*;
-//! use libp2p::ping::{Ping, PingConfig};
 //! use libp2p::swarm::{Swarm, SwarmEvent, dial_opts::DialOpts};
-//! use libp2p::{identity, Multiaddr, PeerId};
+//! use libp2p::{identity, Multiaddr, PeerId, ping};
 //! use std::error::Error;
 //!
 //! #[async_std::main]
@@ -294,7 +288,7 @@
 //!     // For illustrative purposes, the ping protocol is configured to
 //!     // keep the connection alive, so a continuous sequence of pings
 //!     // can be observed.
-//!     let behaviour = Ping::new(PingConfig::new().with_keep_alive(true));
+//!     let behaviour = ping::Behaviour::new(ping::Config::new().with_keep_alive(true));
 //!
 //!     let mut swarm = Swarm::new(transport, behaviour, local_peer_id);
 //!

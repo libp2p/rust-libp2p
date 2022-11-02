@@ -18,29 +18,39 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Basic example for a AutoNAT server that supports the /libp2p/autonat/1.0.0 and "/ipfs/0.1.0" protocols.
+//! Basic example that combines the AutoNAT and identify protocols.
 //!
-//! To start the server run:
+//! The identify protocol informs the local peer of its external addresses, that are then send in AutoNAT dial-back
+//! requests to the server.
+//!
+//! To run this example, follow the instructions in `examples/server` to start a server, then run in a new terminal:
 //! ```sh
-//! cargo run --example server -- --listen-port <port>
+//! cargo run --example client -- --server-address <server-addr> --server-peer-id <server-peer-id> --listen-port <port>
 //! ```
-//! The `listen-port` parameter is optional and allows to set a fixed port at which the local peer should listen.
+//! The `listen-port` parameter is optional and allows to set a fixed port at which the local client should listen.
 
 use clap::Parser;
 use futures::prelude::*;
 use libp2p::autonat;
-use libp2p::identify::{Identify, IdentifyConfig, IdentifyEvent};
+use libp2p::identify;
 use libp2p::multiaddr::Protocol;
 use libp2p::swarm::{Swarm, SwarmEvent};
 use libp2p::{identity, Multiaddr, NetworkBehaviour, PeerId};
 use std::error::Error;
 use std::net::Ipv4Addr;
+use std::time::Duration;
 
 #[derive(Debug, Parser)]
 #[clap(name = "libp2p autonat")]
 struct Opt {
     #[clap(long)]
     listen_port: Option<u16>,
+
+    #[clap(long)]
+    server_address: Multiaddr,
+
+    #[clap(long)]
+    server_peer_id: PeerId,
 }
 
 #[async_std::main]
@@ -64,6 +74,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .with(Protocol::Tcp(opt.listen_port.unwrap_or(0))),
     )?;
 
+    swarm
+        .behaviour_mut()
+        .auto_nat
+        .add_server(opt.server_peer_id, Some(opt.server_address));
+
     loop {
         match swarm.select_next_some().await {
             SwarmEvent::NewListenAddr { address, .. } => println!("Listening on {:?}", address),
@@ -76,33 +91,40 @@ async fn main() -> Result<(), Box<dyn Error>> {
 #[derive(NetworkBehaviour)]
 #[behaviour(out_event = "Event")]
 struct Behaviour {
-    identify: Identify,
+    identify: identify::Behaviour,
     auto_nat: autonat::Behaviour,
 }
 
 impl Behaviour {
     fn new(local_public_key: identity::PublicKey) -> Self {
         Self {
-            identify: Identify::new(IdentifyConfig::new(
+            identify: identify::Behaviour::new(identify::Config::new(
                 "/ipfs/0.1.0".into(),
                 local_public_key.clone(),
             )),
             auto_nat: autonat::Behaviour::new(
                 local_public_key.to_peer_id(),
-                autonat::Config::default(),
+                autonat::Config {
+                    retry_interval: Duration::from_secs(10),
+                    refresh_interval: Duration::from_secs(30),
+                    boot_delay: Duration::from_secs(5),
+                    throttle_server_period: Duration::ZERO,
+                    ..Default::default()
+                },
             ),
         }
     }
 }
 
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 enum Event {
     AutoNat(autonat::Event),
-    Identify(IdentifyEvent),
+    Identify(identify::Event),
 }
 
-impl From<IdentifyEvent> for Event {
-    fn from(v: IdentifyEvent) -> Self {
+impl From<identify::Event> for Event {
+    fn from(v: identify::Event) -> Self {
         Self::Identify(v)
     }
 }

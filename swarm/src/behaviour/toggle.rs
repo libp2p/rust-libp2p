@@ -23,8 +23,6 @@ use crate::handler::{
     KeepAlive, SubstreamProtocol,
 };
 use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper};
-#[allow(deprecated)]
-pub use crate::NetworkBehaviourEventProcess;
 use crate::{DialError, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use either::Either;
 use libp2p_core::{
@@ -232,18 +230,6 @@ where
     }
 }
 
-#[allow(deprecated)]
-impl<TEvent, TBehaviour> NetworkBehaviourEventProcess<TEvent> for Toggle<TBehaviour>
-where
-    TBehaviour: NetworkBehaviourEventProcess<TEvent>,
-{
-    fn inject_event(&mut self, event: TEvent) {
-        if let Some(inner) = self.inner.as_mut() {
-            inner.inject_event(event);
-        }
-    }
-}
-
 /// Implementation of `IntoConnectionHandler` that can be in the disabled state.
 pub struct ToggleIntoConnectionHandler<TInner> {
     inner: Option<TInner>,
@@ -425,7 +411,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::handler::DummyConnectionHandler;
+    use crate::dummy;
 
     /// A disabled [`ToggleConnectionHandler`] can receive listen upgrade errors in
     /// the following two cases:
@@ -443,7 +429,7 @@ mod tests {
     /// [`ToggleConnectionHandler`] should ignore the error in both of these cases.
     #[test]
     fn ignore_listen_upgrade_error_when_disabled() {
-        let mut handler = ToggleConnectionHandler::<DummyConnectionHandler> { inner: None };
+        let mut handler = ToggleConnectionHandler::<dummy::ConnectionHandler> { inner: None };
 
         handler.inject_listen_upgrade_error(Either::Right(()), ConnectionHandlerUpgrErr::Timeout);
     }

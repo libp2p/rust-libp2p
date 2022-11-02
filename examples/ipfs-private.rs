@@ -38,18 +38,15 @@ use libp2p::{
         either::EitherTransport, muxing::StreamMuxerBox, transport, transport::upgrade::Version,
     },
     gossipsub::{self, Gossipsub, GossipsubConfigBuilder, GossipsubEvent, MessageAuthenticity},
-    identify::{Identify, IdentifyConfig, IdentifyEvent},
-    identity,
+    identify, identity,
     multiaddr::Protocol,
-    noise,
-    ping::{self, PingEvent},
+    noise, ping,
     pnet::{PnetConfig, PreSharedKey},
     swarm::SwarmEvent,
-    tcp::TcpTransport,
+    tcp,
     yamux::YamuxConfig,
     Multiaddr, NetworkBehaviour, PeerId, Swarm, Transport,
 };
-use libp2p_tcp::GenTcpConfig;
 use std::{env, error::Error, fs, path::Path, str::FromStr, time::Duration};
 
 /// Builds the transport that serves as a common ground for all connections.
@@ -57,13 +54,10 @@ pub fn build_transport(
     key_pair: identity::Keypair,
     psk: Option<PreSharedKey>,
 ) -> transport::Boxed<(PeerId, StreamMuxerBox)> {
-    let noise_keys = noise::Keypair::<noise::X25519Spec>::new()
-        .into_authentic(&key_pair)
-        .unwrap();
-    let noise_config = noise::NoiseConfig::xx(noise_keys).into_authenticated();
+    let noise_config = noise::NoiseAuthenticated::xx(&key_pair).unwrap();
     let yamux_config = YamuxConfig::default();
 
-    let base_transport = TcpTransport::new(GenTcpConfig::default().nodelay(true));
+    let base_transport = tcp::async_io::Transport::new(tcp::Config::default().nodelay(true));
     let maybe_encrypted = match psk {
         Some(psk) => EitherTransport::Left(
             base_transport.and_then(move |socket, _| PnetConfig::new(psk).handshake(socket)),
@@ -161,14 +155,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
     #[behaviour(out_event = "MyBehaviourEvent")]
     struct MyBehaviour {
         gossipsub: Gossipsub,
-        identify: Identify,
+        identify: identify::Behaviour,
         ping: ping::Behaviour,
     }
 
     enum MyBehaviourEvent {
         Gossipsub(GossipsubEvent),
-        Identify(IdentifyEvent),
-        Ping(PingEvent),
+        Identify(identify::Event),
+        Ping(ping::Event),
     }
 
     impl From<GossipsubEvent> for MyBehaviourEvent {
@@ -177,14 +171,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    impl From<IdentifyEvent> for MyBehaviourEvent {
-        fn from(event: IdentifyEvent) -> Self {
+    impl From<identify::Event> for MyBehaviourEvent {
+        fn from(event: identify::Event) -> Self {
             MyBehaviourEvent::Identify(event)
         }
     }
 
-    impl From<PingEvent> for MyBehaviourEvent {
-        fn from(event: PingEvent) -> Self {
+    impl From<ping::Event> for MyBehaviourEvent {
+        fn from(event: ping::Event) -> Self {
             MyBehaviourEvent::Ping(event)
         }
     }
@@ -201,7 +195,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 gossipsub_config,
             )
             .expect("Valid configuration"),
-            identify: Identify::new(IdentifyConfig::new(
+            identify: identify::Behaviour::new(identify::Config::new(
                 "/ipfs/0.1.0".into(),
                 local_key.public(),
             )),

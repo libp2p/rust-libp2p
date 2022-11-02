@@ -138,7 +138,7 @@ impl BucketIndex {
         let rem = (self.0 % 8) as u32;
         let lower = usize::pow(2, rem);
         let upper = usize::pow(2, rem + 1);
-        bytes[31 - quot] = rng.gen_range(lower, upper) as u8;
+        bytes[31 - quot] = rng.gen_range(lower..upper) as u8;
         Distance(U256::from(bytes))
     }
 }
@@ -524,22 +524,21 @@ mod tests {
     use super::*;
     use libp2p_core::PeerId;
     use quickcheck::*;
-    use rand::Rng;
 
     type TestTable = KBucketsTable<KeyBytes, ()>;
 
     impl Arbitrary for TestTable {
-        fn arbitrary<G: Gen>(g: &mut G) -> TestTable {
+        fn arbitrary(g: &mut Gen) -> TestTable {
             let local_key = Key::from(PeerId::random());
-            let timeout = Duration::from_secs(g.gen_range(1, 360));
+            let timeout = Duration::from_secs(g.gen_range(1..360));
             let mut table = TestTable::new(local_key.clone().into(), timeout);
-            let mut num_total = g.gen_range(0, 100);
+            let mut num_total = g.gen_range(0..100);
             for (i, b) in &mut table.buckets.iter_mut().enumerate().rev() {
                 let ix = BucketIndex(i);
-                let num = g.gen_range(0, usize::min(K_VALUE.get(), num_total) + 1);
+                let num = g.gen_range(0..usize::min(K_VALUE.get(), num_total) + 1);
                 num_total -= num;
                 for _ in 0..num {
-                    let distance = ix.rand_distance(g);
+                    let distance = ix.rand_distance(&mut rand::thread_rng());
                     let key = local_key.for_distance(distance);
                     let node = Node {
                         key: key.clone(),
@@ -590,8 +589,15 @@ mod tests {
             assert!(bucket_ref.contains(&min));
             assert!(bucket_ref.contains(&max));
 
-            assert!(!bucket_ref.contains(&Distance(min.0 - 1)));
-            assert!(!bucket_ref.contains(&Distance(max.0 + 1)));
+            if min != Distance(0.into()) {
+                // ^ avoid underflow
+                assert!(!bucket_ref.contains(&Distance(min.0 - 1)));
+            }
+
+            if max != Distance(U256::max_value()) {
+                // ^ avoid overflow
+                assert!(!bucket_ref.contains(&Distance(max.0 + 1)));
+            }
         }
 
         quickcheck(prop as fn(_));
@@ -605,7 +611,7 @@ mod tests {
             let b = U256::from(2);
             let e = U256::from(ix);
             let lower = b.pow(e);
-            let upper = b.pow(e + U256::from(1)) - U256::from(1);
+            let upper = b.checked_pow(e + U256::from(1)).unwrap_or(U256::MAX) - U256::from(1);
             lower <= n && n <= upper
         }
         quickcheck(prop as fn(_) -> _);

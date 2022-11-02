@@ -23,12 +23,12 @@ use clap::Parser;
 use futures::executor::block_on;
 use futures::stream::StreamExt;
 use libp2p::core::upgrade;
-use libp2p::identify::{Identify, IdentifyConfig, IdentifyEvent};
+use libp2p::identify;
 use libp2p::multiaddr::Protocol;
-use libp2p::ping::{Ping, PingConfig, PingEvent};
+use libp2p::ping;
 use libp2p::relay::v2::relay::{self, Relay};
 use libp2p::swarm::{Swarm, SwarmEvent};
-use libp2p::tcp::TcpTransport;
+use libp2p::tcp;
 use libp2p::Transport;
 use libp2p::{identity, NetworkBehaviour, PeerId};
 use libp2p::{noise, Multiaddr};
@@ -46,22 +46,21 @@ fn main() -> Result<(), Box<dyn Error>> {
     let local_peer_id = PeerId::from(local_key.public());
     println!("Local peer id: {:?}", local_peer_id);
 
-    let tcp_transport = TcpTransport::default();
-
-    let noise_keys = noise::Keypair::<noise::X25519Spec>::new()
-        .into_authentic(&local_key)
-        .expect("Signing libp2p-noise static DH keypair failed.");
+    let tcp_transport = tcp::async_io::Transport::default();
 
     let transport = tcp_transport
         .upgrade(upgrade::Version::V1)
-        .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
-        .multiplex(libp2p_yamux::YamuxConfig::default())
+        .authenticate(
+            noise::NoiseAuthenticated::xx(&local_key)
+                .expect("Signing libp2p-noise static DH keypair failed."),
+        )
+        .multiplex(libp2p::yamux::YamuxConfig::default())
         .boxed();
 
     let behaviour = Behaviour {
         relay: Relay::new(local_peer_id, Default::default()),
-        ping: Ping::new(PingConfig::new()),
-        identify: Identify::new(IdentifyConfig::new(
+        ping: ping::Behaviour::new(ping::Config::new()),
+        identify: identify::Behaviour::new(identify::Config::new(
             "/TODO/0.0.1".to_string(),
             local_key.public(),
         )),
@@ -97,25 +96,25 @@ fn main() -> Result<(), Box<dyn Error>> {
 #[behaviour(out_event = "Event", event_process = false)]
 struct Behaviour {
     relay: Relay,
-    ping: Ping,
-    identify: Identify,
+    ping: ping::Behaviour,
+    identify: identify::Behaviour,
 }
 
 #[derive(Debug)]
 enum Event {
-    Ping(PingEvent),
-    Identify(IdentifyEvent),
+    Ping(ping::Event),
+    Identify(identify::Event),
     Relay(relay::Event),
 }
 
-impl From<PingEvent> for Event {
-    fn from(e: PingEvent) -> Self {
+impl From<ping::Event> for Event {
+    fn from(e: ping::Event) -> Self {
         Event::Ping(e)
     }
 }
 
-impl From<IdentifyEvent> for Event {
-    fn from(e: IdentifyEvent) -> Self {
+impl From<identify::Event> for Event {
+    fn from(e: identify::Event) -> Self {
         Event::Identify(e)
     }
 }

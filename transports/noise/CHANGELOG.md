@@ -1,6 +1,30 @@
+# 0.40.0
+
+- Update to `libp2p-core` `v0.37.0`.
+
+- Introduce `NoiseAuthenticated::xx` constructor, assuming a X25519 DH key exchange. An XX key exchange and X25519 keys
+  are the most common way of using noise in libp2p and thus deserve a convenience constructor. See [PR 2887].
+- Add `NoiseConfig::with_prologue` which allows users to set the noise prologue of the handshake. See [PR 2903].
+- Remove `Deref` implementation on `AuthenticKeypair`. See [PR 2909].
+- Make `handshake` module private. See [PR 2909].
+- Deprecate `AuthenticKeypair::into_identity`. See [PR 2909].
+
+[PR 2887]: https://github.com/libp2p/rust-libp2p/pull/2887
+[PR 2903]: https://github.com/libp2p/rust-libp2p/pull/2903
+[PR 2909]: https://github.com/libp2p/rust-libp2p/pull/2909
+
+# 0.39.0
+
+- Update to `libp2p-core` `v0.36.0`.
+
 # 0.38.0
 
+- Update prost requirement from 0.10 to 0.11 which no longer installs the protoc Protobuf compiler.
+  Thus you will need protoc installed locally. See [PR 2788].
+
 - Update to `libp2p-core` `v0.35.0`.
+
+[PR 2788]: https://github.com/libp2p/rust-libp2p/pull/2788
 
 # 0.37.0
 

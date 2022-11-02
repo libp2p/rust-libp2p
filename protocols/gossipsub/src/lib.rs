@@ -24,7 +24,7 @@
 //! # Overview
 //!
 //! *Note: The gossipsub protocol specifications
-//! (https://github.com/libp2p/specs/tree/master/pubsub/gossipsub) provide an outline for the
+//! (<https://github.com/libp2p/specs/tree/master/pubsub/gossipsub>) provide an outline for the
 //! routing protocol. They should be consulted for further detail.*
 //!
 //! Gossipsub  is a blend of meshsub for data and randomsub for mesh metadata. It provides bounded
@@ -97,11 +97,10 @@
 //!
 //! // Set up an encrypted TCP Transport over the Mplex
 //! // This is test transport (memory).
-//! let noise_keys = libp2p_noise::Keypair::<libp2p_noise::X25519Spec>::new().into_authentic(&local_key).unwrap();
 //! let transport = MemoryTransport::default()
 //!            .upgrade(libp2p_core::upgrade::Version::V1)
-//!            .authenticate(libp2p_noise::NoiseConfig::xx(noise_keys).into_authenticated())
-//!            .multiplex(libp2p_mplex::MplexConfig::new())
+//!            .authenticate(libp2p::noise::NoiseAuthenticated::xx(&local_key).unwrap())
+//!            .multiplex(libp2p::mplex::MplexConfig::new())
 //!            .boxed();
 //!
 //! // Create a Gossipsub topic
@@ -133,6 +132,8 @@
 //! let addr = swarm.listen_on(memory).unwrap();
 //! println!("Listening on {:?}", addr);
 //! ```
+
+#![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
 pub mod error;
 pub mod protocol;

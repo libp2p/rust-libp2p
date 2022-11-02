@@ -26,27 +26,32 @@
 //!
 //! # Usage
 //!
-//! This crate provides the `Mdns` struct which implements the `NetworkBehaviour` trait. This
-//! struct will automatically discover other libp2p nodes on the local network.
+//! This crate provides a `Mdns` and `TokioMdns`, depending on the enabled features, which
+//! implements the `NetworkBehaviour` trait. This struct will automatically discover other
+//! libp2p nodes on the local network.
 //!
-use lazy_static::lazy_static;
+
+#![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
+
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::time::Duration;
 
 mod behaviour;
+pub use crate::behaviour::{GenMdns, MdnsEvent};
 
-pub use crate::behaviour::{Mdns, MdnsEvent};
+#[cfg(feature = "async-io")]
+pub use crate::behaviour::Mdns;
+
+#[cfg(feature = "tokio")]
+pub use crate::behaviour::TokioMdns;
 
 /// The DNS service name for all libp2p peers used to query for addresses.
 const SERVICE_NAME: &[u8] = b"_p2p._udp.local";
 /// The meta query for looking up the `SERVICE_NAME`.
 const META_QUERY_SERVICE: &[u8] = b"_services._dns-sd._udp.local";
 
-lazy_static! {
-    pub static ref IPV4_MDNS_MULTICAST_ADDRESS: Ipv4Addr = Ipv4Addr::new(224, 0, 0, 251);
-    pub static ref IPV6_MDNS_MULTICAST_ADDRESS: Ipv6Addr =
-        Ipv6Addr::new(0xFF02, 0, 0, 0, 0, 0, 0, 0xFB);
-}
+pub const IPV4_MDNS_MULTICAST_ADDRESS: Ipv4Addr = Ipv4Addr::new(224, 0, 0, 251);
+pub const IPV6_MDNS_MULTICAST_ADDRESS: Ipv6Addr = Ipv6Addr::new(0xFF02, 0, 0, 0, 0, 0, 0, 0xFB);
 
 /// Configuration for mDNS.
 #[derive(Debug, Clone)]

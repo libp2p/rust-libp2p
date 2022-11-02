@@ -437,14 +437,13 @@ mod tests {
     use super::*;
     use libp2p_core::PeerId;
     use quickcheck::*;
-    use rand::Rng;
     use std::collections::VecDeque;
 
     impl Arbitrary for KBucket<Key<PeerId>, ()> {
-        fn arbitrary<G: Gen>(g: &mut G) -> KBucket<Key<PeerId>, ()> {
-            let timeout = Duration::from_secs(g.gen_range(1, g.size() as u64));
+        fn arbitrary(g: &mut Gen) -> KBucket<Key<PeerId>, ()> {
+            let timeout = Duration::from_secs(g.gen_range(1..g.size()) as u64);
             let mut bucket = KBucket::<Key<PeerId>, ()>::new(timeout);
-            let num_nodes = g.gen_range(1, K_VALUE.get() + 1);
+            let num_nodes = g.gen_range(1..K_VALUE.get() + 1);
             for _ in 0..num_nodes {
                 let key = Key::from(PeerId::random());
                 let node = Node {
@@ -462,8 +461,8 @@ mod tests {
     }
 
     impl Arbitrary for NodeStatus {
-        fn arbitrary<G: Gen>(g: &mut G) -> NodeStatus {
-            if g.gen() {
+        fn arbitrary(g: &mut Gen) -> NodeStatus {
+            if bool::arbitrary(g) {
                 NodeStatus::Connected
             } else {
                 NodeStatus::Disconnected
@@ -472,8 +471,8 @@ mod tests {
     }
 
     impl Arbitrary for Position {
-        fn arbitrary<G: Gen>(g: &mut G) -> Position {
-            Position(g.gen_range(0, K_VALUE.get()))
+        fn arbitrary(g: &mut Gen) -> Position {
+            Position(g.gen_range(0..K_VALUE.get()))
         }
     }
 
@@ -505,18 +504,15 @@ mod tests {
                     value: (),
                 };
                 let full = bucket.num_entries() == K_VALUE.get();
-                match bucket.insert(node, status) {
-                    InsertResult::Inserted => {
-                        let vec = match status {
-                            NodeStatus::Connected => &mut connected,
-                            NodeStatus::Disconnected => &mut disconnected,
-                        };
-                        if full {
-                            vec.pop_front();
-                        }
-                        vec.push_back((status, key.clone()));
+                if let InsertResult::Inserted = bucket.insert(node, status) {
+                    let vec = match status {
+                        NodeStatus::Connected => &mut connected,
+                        NodeStatus::Disconnected => &mut disconnected,
+                    };
+                    if full {
+                        vec.pop_front();
                     }
-                    _ => {}
+                    vec.push_back((status, key.clone()));
                 }
             }
 
@@ -534,7 +530,7 @@ mod tests {
             // All nodes before the first connected node must be disconnected and
             // in insertion order. Similarly, all remaining nodes must be connected
             // and in insertion order.
-            nodes == Vec::from(disconnected) && tail == Vec::from(connected)
+            disconnected == nodes && connected == tail
         }
 
         quickcheck(prop as fn(_) -> _);
@@ -636,7 +632,7 @@ mod tests {
 
         // The pending node has been discarded.
         assert!(bucket.pending().is_none());
-        assert!(bucket.iter().all(|(n, _)| &n.key != &key));
+        assert!(bucket.iter().all(|(n, _)| n.key != key));
 
         // The initially disconnected node is now the most-recently connected.
         assert_eq!(
