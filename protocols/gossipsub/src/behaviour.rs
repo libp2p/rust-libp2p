@@ -3257,27 +3257,30 @@ where
     fn on_address_change(
         &mut self,
         AddressChange {
-            peer_id, old, new, ..
+            peer_id,
+            old: endpoint_old,
+            new: endpoint_new,
+            ..
         }: AddressChange,
     ) {
         // Exchange IP in peer scoring system
         if let Some((peer_score, ..)) = &mut self.peer_score {
-            if let Some(ip) = get_ip_addr(old.get_remote_address()) {
+            if let Some(ip) = get_ip_addr(endpoint_old.get_remote_address()) {
                 peer_score.remove_ip(&peer_id, &ip);
             } else {
                 trace!(
                     "Couldn't extract ip from endpoint of peer {} with endpoint {:?}",
                     &peer_id,
-                    old
+                    endpoint_old
                 )
             }
-            if let Some(ip) = get_ip_addr(new.get_remote_address()) {
+            if let Some(ip) = get_ip_addr(endpoint_new.get_remote_address()) {
                 peer_score.add_ip(&peer_id, ip);
             } else {
                 trace!(
                     "Couldn't extract ip from endpoint of peer {} with endpoint {:?}",
                     peer_id,
-                    new
+                    endpoint_new
                 )
             }
         }

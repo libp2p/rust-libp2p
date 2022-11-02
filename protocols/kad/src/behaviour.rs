@@ -1815,20 +1815,61 @@ where
         }
     }
 
-    fn on_connection_closed(
+    fn on_address_change(
         &mut self,
-        ConnectionClosed {
-            peer_id,
-            remaining_established,
+        AddressChange {
+            peer_id: peer,
+            old,
+            new,
             ..
-        }: ConnectionClosed<<Self as NetworkBehaviour>::ConnectionHandler>,
+        }: AddressChange,
     ) {
-        if remaining_established == 0 {
-            for query in self.queries.iter_mut() {
-                query.on_failure(&peer_id);
+        let (old, new) = (old.get_remote_address(), new.get_remote_address());
+
+        // Update routing table.
+        if let Some(addrs) = self.kbuckets.entry(&kbucket::Key::from(peer)).value() {
+            if addrs.replace(old, new) {
+                debug!(
+                    "Address '{}' replaced with '{}' for peer '{}'.",
+                    old, new, peer
+                );
+            } else {
+                debug!(
+                    "Address '{}' not replaced with '{}' for peer '{}' as old address wasn't \
+                     present.",
+                    old, new, peer
+                );
             }
-            self.connection_updated(peer_id, None, NodeStatus::Disconnected);
-            self.connected_peers.remove(&peer_id);
+        } else {
+            debug!(
+                "Address '{}' not replaced with '{}' for peer '{}' as peer is not present in the \
+                 routing table.",
+                old, new, peer
+            );
+        }
+
+        // Update query address cache.
+        //
+        // Given two connected nodes: local node A and remote node B. Say node B
+        // is not in node A's routing table. Additionally node B is part of the
+        // `QueryInner::addresses` list of an ongoing query on node A. Say Node
+        // B triggers an address change and then disconnects. Later on the
+        // earlier mentioned query on node A would like to connect to node B.
+        // Without replacing the address in the `QueryInner::addresses` set node
+        // A would attempt to dial the old and not the new address.
+        //
+        // While upholding correctness, iterating through all discovered
+        // addresses of a peer in all currently ongoing queries might have a
+        // large performance impact. If so, the code below might be worth
+        // revisiting.
+        for query in self.queries.iter_mut() {
+            if let Some(addrs) = query.inner.addresses.get_mut(&peer) {
+                for addr in addrs.iter_mut() {
+                    if addr == old {
+                        *addr = new.clone();
+                    }
+                }
+            }
         }
     }
 
@@ -1876,58 +1917,20 @@ where
         }
     }
 
-    fn on_address_change(
+    fn on_connection_closed(
         &mut self,
-        AddressChange {
-            peer_id, old, new, ..
-        }: AddressChange,
+        ConnectionClosed {
+            peer_id,
+            remaining_established,
+            ..
+        }: ConnectionClosed<<Self as NetworkBehaviour>::ConnectionHandler>,
     ) {
-        let (old, new) = (old.get_remote_address(), new.get_remote_address());
-
-        // Update routing table.
-        if let Some(addrs) = self.kbuckets.entry(&kbucket::Key::from(peer_id)).value() {
-            if addrs.replace(old, new) {
-                debug!(
-                    "Address '{}' replaced with '{}' for peer '{}'.",
-                    old, new, peer_id
-                );
-            } else {
-                debug!(
-                    "Address '{}' not replaced with '{}' for peer '{}' as old address wasn't \
-                     present.",
-                    old, new, peer_id,
-                );
+        if remaining_established == 0 {
+            for query in self.queries.iter_mut() {
+                query.on_failure(&peer_id);
             }
-        } else {
-            debug!(
-                "Address '{}' not replaced with '{}' for peer '{}' as peer is not present in the \
-                 routing table.",
-                old, new, peer_id,
-            );
-        }
-
-        // Update query address cache.
-        //
-        // Given two connected nodes: local node A and remote node B. Say node B
-        // is not in node A's routing table. Additionally node B is part of the
-        // `QueryInner::addresses` list of an ongoing query on node A. Say Node
-        // B triggers an address change and then disconnects. Later on the
-        // earlier mentioned query on node A would like to connect to node B.
-        // Without replacing the address in the `QueryInner::addresses` set node
-        // A would attempt to dial the old and not the new address.
-        //
-        // While upholding correctness, iterating through all discovered
-        // addresses of a peer in all currently ongoing queries might have a
-        // large performance impact. If so, the code below might be worth
-        // revisiting.
-        for query in self.queries.iter_mut() {
-            if let Some(addrs) = query.inner.addresses.get_mut(&peer_id) {
-                for addr in addrs.iter_mut() {
-                    if addr == old {
-                        *addr = new.clone();
-                    }
-                }
-            }
+            self.connection_updated(peer_id, None, NodeStatus::Disconnected);
+            self.connected_peers.remove(&peer_id);
         }
     }
 }

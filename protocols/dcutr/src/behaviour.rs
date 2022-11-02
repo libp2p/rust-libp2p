@@ -88,12 +88,12 @@ impl Behaviour {
         ConnectionEstablished {
             peer_id,
             connection_id,
-            endpoint,
+            endpoint: connected_point,
             ..
         }: ConnectionEstablished,
     ) {
-        if endpoint.is_relayed() {
-            if endpoint.is_listener() && !self.direct_connections.contains_key(&peer_id) {
+        if connected_point.is_relayed() {
+            if connected_point.is_listener() && !self.direct_connections.contains_key(&peer_id) {
                 // TODO: Try dialing the remote peer directly. Specification:
                 //
                 // > The protocol starts with the completion of a relay connection from A to B. Upon
@@ -112,7 +112,7 @@ impl Behaviour {
                     NetworkBehaviourAction::GenerateEvent(
                         Event::InitiatedDirectConnectionUpgrade {
                             remote_peer_id: peer_id,
-                            local_relayed_addr: match endpoint {
+                            local_relayed_addr: match connected_point {
                                 ConnectedPoint::Listener { local_addr, .. } => local_addr.clone(),
                                 ConnectedPoint::Dialer { .. } => unreachable!("Due to outer if."),
                             },
@@ -172,11 +172,11 @@ impl Behaviour {
         ConnectionClosed {
             peer_id,
             connection_id,
-            endpoint,
+            endpoint: connected_point,
             ..
         }: ConnectionClosed<<Self as NetworkBehaviour>::ConnectionHandler>,
     ) {
-        if !endpoint.is_relayed() {
+        if !connected_point.is_relayed() {
             let connections = self
                 .direct_connections
                 .get_mut(&peer_id)
@@ -203,11 +203,11 @@ impl NetworkBehaviour for Behaviour {
     fn on_connection_handler_event(
         &mut self,
         event_source: PeerId,
-        connection_id: ConnectionId,
-        event: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as
+        connection: ConnectionId,
+        handler_event: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as
             ConnectionHandler>::OutEvent,
     ) {
-        match event {
+        match handler_event {
             Either::Left(handler::relayed::Event::InboundConnectRequest {
                 inbound_connect,
                 remote_addr,
@@ -215,7 +215,7 @@ impl NetworkBehaviour for Behaviour {
                 self.queued_actions.extend([
                     ActionBuilder::AcceptInboundConnect {
                         peer_id: event_source,
-                        handler: NotifyHandler::One(connection_id),
+                        handler: NotifyHandler::One(connection),
                         inbound_connect,
                     },
                     NetworkBehaviourAction::GenerateEvent(
@@ -244,7 +244,7 @@ impl NetworkBehaviour for Behaviour {
                             .condition(dial_opts::PeerCondition::Always)
                             .build(),
                         handler: handler::Prototype::DirectConnection {
-                            relayed_connection_id: connection_id,
+                            relayed_connection_id: connection,
                             role: handler::Role::Listener,
                         },
                     }
@@ -272,7 +272,7 @@ impl NetworkBehaviour for Behaviour {
                             .override_role()
                             .build(),
                         handler: handler::Prototype::DirectConnection {
-                            relayed_connection_id: connection_id,
+                            relayed_connection_id: connection,
                             role: handler::Role::Initiator { attempt },
                         },
                     }
