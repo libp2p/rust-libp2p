@@ -22,9 +22,9 @@
 
 pub use self::codec::{Cookie, ErrorCode, Namespace, NamespaceTooLong, Registration, Ttl};
 
+const PROTOCOL_IDENT: &str = "/rendezvous/1.0.0";
+
 mod codec;
-mod handler;
-mod substream_handler;
 
 /// If unspecified, rendezvous nodes should assume a TTL of 2h.
 ///

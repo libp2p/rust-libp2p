@@ -18,24 +18,31 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::codec::{Cookie, ErrorCode, Namespace, NewRegistration, Registration, Ttl};
-use crate::handler;
-use crate::handler::outbound;
-use crate::handler::outbound::OpenInfo;
-use crate::substream_handler::SubstreamConnectionHandler;
+use crate::codec::{
+    Cookie, Error, ErrorCode, Message, Namespace, NewRegistration, Registration, RendezvousCodec,
+    Ttl,
+};
+use crate::PROTOCOL_IDENT;
+use asynchronous_codec::Framed;
 use futures::future::BoxFuture;
 use futures::future::FutureExt;
 use futures::stream::FuturesUnordered;
 use futures::stream::StreamExt;
+use futures::SinkExt;
 use instant::Duration;
 use libp2p_core::connection::ConnectionId;
 use libp2p_core::identity::error::SigningError;
 use libp2p_core::identity::Keypair;
-use libp2p_core::{Multiaddr, PeerId, PeerRecord};
+use libp2p_core::{ConnectedPoint, Multiaddr, PeerId, PeerRecord};
+use libp2p_swarm::handler::from_fn;
+use libp2p_swarm::handler::from_fn::OutEvent;
 use libp2p_swarm::{
-    CloseConnection, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
+    CloseConnection, NegotiatedSubstream, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
+    PollParameters,
 };
 use std::collections::{HashMap, VecDeque};
+use std::future::Future;
+use std::io;
 use std::iter::FromIterator;
 use std::task::{Context, Poll};
 
@@ -43,7 +50,7 @@ pub struct Behaviour {
     events: VecDeque<
         NetworkBehaviourAction<
             Event,
-            SubstreamConnectionHandler<void::Void, outbound::Stream, outbound::OpenInfo>,
+            from_fn::FromFnProto<(), Result<OutboundEvent, Error>, OpenInfo, ()>,
         >,
     >,
     keypair: Keypair,
@@ -86,9 +93,7 @@ impl Behaviour {
         self.events
             .push_back(NetworkBehaviourAction::NotifyHandler {
                 peer_id: rendezvous_node,
-                event: handler::OutboundInEvent::NewSubstream {
-                    open_info: OpenInfo::UnregisterRequest(namespace),
-                },
+                event: from_fn::InEvent::NewOutbound(OpenInfo::UnregisterRequest(namespace)),
                 handler: NotifyHandler::Any,
             });
     }
@@ -110,13 +115,11 @@ impl Behaviour {
         self.events
             .push_back(NetworkBehaviourAction::NotifyHandler {
                 peer_id: rendezvous_node,
-                event: handler::OutboundInEvent::NewSubstream {
-                    open_info: OpenInfo::DiscoverRequest {
-                        namespace: ns,
-                        cookie,
-                        limit,
-                    },
-                },
+                event: from_fn::InEvent::NewOutbound(OpenInfo::DiscoverRequest {
+                    namespace: ns,
+                    cookie,
+                    limit,
+                }),
                 handler: NotifyHandler::Any,
             });
     }
@@ -163,15 +166,49 @@ pub enum Event {
     Expired { peer: PeerId },
 }
 
+#[derive(Debug, Clone)]
+pub enum OutboundEvent {
+    Registered {
+        namespace: Namespace,
+        ttl: Ttl,
+    },
+    RegisterFailed(Namespace, ErrorCode),
+    Discovered {
+        registrations: Vec<Registration>,
+        cookie: Cookie,
+    },
+    DiscoverFailed {
+        namespace: Option<Namespace>,
+        error: ErrorCode,
+    },
+}
+
+#[allow(clippy::large_enum_variant)]
+#[allow(clippy::enum_variant_names)]
+#[derive(Debug, Clone)]
+pub enum OpenInfo {
+    RegisterRequest(NewRegistration),
+    UnregisterRequest(Namespace),
+    DiscoverRequest {
+        namespace: Option<Namespace>,
+        cookie: Option<Cookie>,
+        limit: Option<Ttl>,
+    },
+}
+
 impl NetworkBehaviour for Behaviour {
-    type ConnectionHandler =
-        SubstreamConnectionHandler<void::Void, outbound::Stream, outbound::OpenInfo>;
+    type ConnectionHandler = from_fn::FromFnProto<(), Result<OutboundEvent, Error>, OpenInfo, ()>;
     type OutEvent = Event;
 
     fn new_handler(&mut self) -> Self::ConnectionHandler {
-        let initial_keep_alive = Duration::from_secs(30);
-
-        SubstreamConnectionHandler::new_outbound_only(initial_keep_alive)
+        from_fn::from_fn(
+            PROTOCOL_IDENT,
+            (),
+            10,
+            10,
+            |_, _, _, _| async {},
+            outbound_stream_handler,
+        )
     }
 
     fn addresses_of_peer(&mut self, peer: &PeerId) -> Vec<Multiaddr> {
@@ -185,30 +222,42 @@ impl NetworkBehaviour for Behaviour {
 
     fn inject_event(
         &mut self,
-        peer_id: PeerId,
-        connection_id: ConnectionId,
-        event: handler::OutboundOutEvent,
+        __id: PeerId,
+        _: ConnectionId,
+        event: from_fn::OutEvent<(), Result<OutboundEvent, Error>, OpenInfo>,
     ) {
-        let new_events = match event {
-            handler::OutboundOutEvent::InboundEvent { message, .. } => void::unreachable(message),
-            handler::OutboundOutEvent::OutboundEvent { message, .. } => handle_outbound_event(
-                message,
-                peer_id,
-                &mut self.discovered_peers,
-                &mut self.expiring_registrations,
-            ),
-            handler::OutboundOutEvent::InboundError { error, .. } => void::unreachable(error),
-            handler::OutboundOutEvent::OutboundError { error, .. } => {
-                log::warn!("Connection with peer {} failed: {}", peer_id, error);
-
-                vec![NetworkBehaviourAction::CloseConnection {
-                    peer_id,
-                    connection: CloseConnection::One(connection_id),
-                }]
-            }
-        };
-
-        self.events.extend(new_events);
+        match event {
+            OutEvent::InboundFinished(()) => {}
+            OutEvent::OutboundFinished(Ok(OutboundEvent::Discovered { .. })) => {}
+            OutEvent::OutboundFinished(Ok(OutboundEvent::Registered { .. })) => {}
+            OutEvent::OutboundFinished(Ok(OutboundEvent::DiscoverFailed { .. })) => {}
+            OutEvent::OutboundFinished(Ok(OutboundEvent::RegisterFailed(..))) => {}
+            OutEvent::OutboundFinished(Err(e)) => {}
+            OutEvent::FailedToOpen(from_fn::OpenError::Timeout(info)) => {}
+            OutEvent::FailedToOpen(from_fn::OpenError::NegotiationFailed(..)) => {}
+            OutEvent::FailedToOpen(from_fn::OpenError::LimitExceeded(..)) => {}
+        }
+        //
+        // let new_events = match event {
+        //     handler::OutboundOutEvent::InboundEvent { message, .. } => void::unreachable(message),
+        //     handler::OutboundOutEvent::OutboundEvent { message, .. } => handle_outbound_event(
+        //         message,
+        //         peer_id,
+        //         &mut self.discovered_peers,
+        //         &mut self.expiring_registrations,
+        //     ),
+        //     handler::OutboundOutEvent::InboundError { error, .. } => void::unreachable(error),
+        //     handler::OutboundOutEvent::OutboundError { error, .. } => {
+        //         log::warn!("Connection with peer {} failed: {}", peer_id, error);
+        //
+        //         vec![NetworkBehaviourAction::CloseConnection {
+        //             peer_id,
+        //             connection: CloseConnection::One(connection_id),
+        //         }]
+        //     }
+        // };
+        //
+        // self.events.extend(new_events);
     }
 
     fn poll(
@@ -237,13 +286,13 @@ impl NetworkBehaviour for Behaviour {
             let action = match PeerRecord::new(&self.keypair, external_addresses) {
                 Ok(peer_record) => NetworkBehaviourAction::NotifyHandler {
                     peer_id: rendezvous_node,
-                    event: handler::OutboundInEvent::NewSubstream {
-                        open_info: OpenInfo::RegisterRequest(NewRegistration {
+                    event: from_fn::InEvent::NewOutbound(OpenInfo::RegisterRequest(
+                        NewRegistration {
                             namespace,
                             record: peer_record,
                             ttl,
-                        }),
-                    },
+                        },
+                    )),
                     handler: NotifyHandler::Any,
                 },
                 Err(signing_error) => NetworkBehaviourAction::GenerateEvent(Event::RegisterFailed(
@@ -267,70 +316,137 @@ impl NetworkBehaviour for Behaviour {
     }
 }
 
-fn handle_outbound_event(
-    event: outbound::OutEvent,
-    peer_id: PeerId,
-    discovered_peers: &mut HashMap<(PeerId, Namespace), Vec<Multiaddr>>,
-    expiring_registrations: &mut FuturesUnordered<BoxFuture<'static, (PeerId, Namespace)>>,
-) -> Vec<
-    NetworkBehaviourAction<
-        Event,
-        SubstreamConnectionHandler<void::Void, outbound::Stream, outbound::OpenInfo>,
-    >,
-> {
-    match event {
-        outbound::OutEvent::Registered { namespace, ttl } => {
-            vec![NetworkBehaviourAction::GenerateEvent(Event::Registered {
-                rendezvous_node: peer_id,
-                ttl,
-                namespace,
-            })]
-        }
-        outbound::OutEvent::RegisterFailed(namespace, error) => {
-            vec![NetworkBehaviourAction::GenerateEvent(
-                Event::RegisterFailed(RegisterError::Remote {
-                    rendezvous_node: peer_id,
+// fn handle_outbound_event(
+//     event: outbound::OutEvent,
+//     peer_id: PeerId,
+//     discovered_peers: &mut HashMap<(PeerId, Namespace), Vec<Multiaddr>>,
+//     expiring_registrations: &mut FuturesUnordered<BoxFuture<'static, (PeerId, Namespace)>>,
+// ) -> Vec<
+//     NetworkBehaviourAction<
+//         Event,
+//         SubstreamConnectionHandler<void::Void, outbound::Stream, outbound::OpenInfo>,
+//     >,
+// > {
+//     match event {
+//         outbound::OutEvent::Registered { namespace, ttl } => {
+//             vec![NetworkBehaviourAction::GenerateEvent(Event::Registered {
+//                 rendezvous_node: peer_id,
+//                 ttl,
+//                 namespace,
+//             })]
+//         }
+//         outbound::OutEvent::RegisterFailed(namespace, error) => {
+//             vec![NetworkBehaviourAction::GenerateEvent(
+//                 Event::RegisterFailed(RegisterError::Remote {
+//                     rendezvous_node: peer_id,
+//                     namespace,
+//                     error,
+//                 }),
+//             )]
+//         }
+//         outbound::OutEvent::Discovered {
+//             registrations,
+//             cookie,
+//         } => {
+//             discovered_peers.extend(registrations.iter().map(|registration| {
+//                 let peer_id = registration.record.peer_id();
+//                 let namespace = registration.namespace.clone();
+//
+//                 let addresses = registration.record.addresses().to_vec();
+//
+//                 ((peer_id, namespace), addresses)
+//             }));
+//             expiring_registrations.extend(registrations.iter().cloned().map(|registration| {
+//                 async move {
+//                     // if the timer errors we consider it expired
+//                     futures_timer::Delay::new(Duration::from_secs(registration.ttl as u64)).await;
+//
+//                     (registration.record.peer_id(), registration.namespace)
+//                 }
+//                 .boxed()
+//             }));
+//
+//             vec![NetworkBehaviourAction::GenerateEvent(Event::Discovered {
+//                 rendezvous_node: peer_id,
+//                 registrations,
+//                 cookie,
+//             })]
+//         }
+//         outbound::OutEvent::DiscoverFailed { namespace, error } => {
+//             vec![NetworkBehaviourAction::GenerateEvent(
+//                 Event::DiscoverFailed {
+//                     rendezvous_node: peer_id,
+//                     namespace,
+//                     error,
+//                 },
+//             )]
+//         }
+//     }
+// }
+
+fn outbound_stream_handler(
+    substream: NegotiatedSubstream,
+    _: PeerId,
+    _: &ConnectedPoint,
+    _: &(),
+    request: OpenInfo,
+) -> impl Future<Output = Result<OutboundEvent, Error>> {
+    let mut substream = Framed::new(substream, RendezvousCodec::default());
+
+    async move {
+        substream
+            .send(match request.clone() {
+                OpenInfo::RegisterRequest(new_registration) => Message::Register(new_registration),
+                OpenInfo::UnregisterRequest(namespace) => Message::Unregister(namespace),
+                OpenInfo::DiscoverRequest {
                     namespace,
-                    error,
-                }),
-            )]
-        }
-        outbound::OutEvent::Discovered {
-            registrations,
-            cookie,
-        } => {
-            discovered_peers.extend(registrations.iter().map(|registration| {
-                let peer_id = registration.record.peer_id();
-                let namespace = registration.namespace.clone();
+                    cookie,
+                    limit,
+                } => Message::Discover {
+                    namespace,
+                    cookie,
+                    limit,
+                },
+            })
+            .await?;
 
-                let addresses = registration.record.addresses().to_vec();
+        let response = substream.next().await.transpose()?;
 
-                ((peer_id, namespace), addresses)
-            }));
-            expiring_registrations.extend(registrations.iter().cloned().map(|registration| {
-                async move {
-                    // if the timer errors we consider it expired
-                    futures_timer::Delay::new(Duration::from_secs(registration.ttl as u64)).await;
-
-                    (registration.record.peer_id(), registration.namespace)
+        let out_event = match (request, response) {
+            (OpenInfo::RegisterRequest(r), Some(Message::RegisterResponse(Ok(ttl)))) => {
+                OutboundEvent::Registered {
+                    namespace: r.namespace,
+                    ttl,
                 }
-                .boxed()
-            }));
-
-            vec![NetworkBehaviourAction::GenerateEvent(Event::Discovered {
-                rendezvous_node: peer_id,
+            }
+            (OpenInfo::RegisterRequest(r), Some(Message::RegisterResponse(Err(e)))) => {
+                OutboundEvent::RegisterFailed(r.namespace, e)
+            }
+            (
+                OpenInfo::DiscoverRequest { .. },
+                Some(Message::DiscoverResponse(Ok((registrations, cookie)))),
+            ) => OutboundEvent::Discovered {
                 registrations,
                 cookie,
-            })]
-        }
-        outbound::OutEvent::DiscoverFailed { namespace, error } => {
-            vec![NetworkBehaviourAction::GenerateEvent(
-                Event::DiscoverFailed {
-                    rendezvous_node: peer_id,
-                    namespace,
-                    error,
-                },
-            )]
-        }
+            },
+            (
+                OpenInfo::DiscoverRequest { namespace, .. },
+                Some(Message::DiscoverResponse(Err(error))),
+            ) => OutboundEvent::DiscoverFailed { namespace, error },
+            (OpenInfo::UnregisterRequest(_), None) => {
+                // All good.
+
+                todo!()
+            }
+            (_, None) => {
+                // EOF?
+                todo!()
+            }
+            _ => {
+                panic!("protocol violation") // TODO: Make two different codecs to avoid this?
+            }
+        };
+
+        Ok(out_event)
     }
 }

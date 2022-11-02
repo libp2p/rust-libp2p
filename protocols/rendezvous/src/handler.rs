@@ -22,7 +22,7 @@ use crate::codec;
 use crate::codec::Message;
 use void::Void;
 
-pub const PROTOCOL_IDENT: &[u8] = b"/rendezvous/1.0.0";
+pub const PROTOCOL_IDENT: &str = "/rendezvous/1.0.0";
 
 pub mod inbound;
 pub mod outbound;
