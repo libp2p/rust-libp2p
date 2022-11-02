@@ -68,11 +68,12 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
+    let local_pub_key = local_key.public();
     info!("Local peer id: {:?}", local_peer_id);
 
     let mut swarm = Swarm::new(
-        block_on(libp2p::development_transport(local_key.clone()))?,
-        Behaviour::new(local_key),
+        block_on(libp2p::development_transport(local_key))?,
+        Behaviour::new(local_pub_key),
         local_peer_id,
     );
 
@@ -121,12 +122,12 @@ struct Behaviour {
 }
 
 impl Behaviour {
-    fn new(local_key: libp2p::identity::Keypair) -> Self {
+    fn new(local_pub_key: libp2p::identity::PublicKey) -> Self {
         Self {
             ping: ping::Behaviour::default(),
             identify: identify::Behaviour::new(identify::Config::new(
                 "/ipfs/0.1.0".into(),
-                local_key.public(),
+                local_pub_key,
             )),
             keep_alive: keep_alive::Behaviour::default(),
         }

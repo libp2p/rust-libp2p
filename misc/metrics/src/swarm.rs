@@ -23,9 +23,10 @@ use prometheus_client::encoding::text::Encode;
 use prometheus_client::metrics::counter::Counter;
 use prometheus_client::metrics::family::Family;
 use prometheus_client::registry::Registry;
+use protocol_stack::MultiaddrExt;
 
 pub struct Metrics {
-    connections_incoming: Family<protocol_stack::Label, Counter>,
+    connections_incoming: Family<protocol_stack::Labels, Counter>,
     connections_incoming_error: Family<IncomingConnectionErrorLabels, Counter>,
 
     connections_established: Family<ConnectionEstablishedLabels, Counter>,
@@ -147,6 +148,7 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
                 self.connections_established
                     .get_or_create(&ConnectionEstablishedLabels {
                         role: endpoint.into(),
+                        proto_stack: endpoint.get_remote_address().protocol_stack(),
                     })
                     .inc();
             }
@@ -159,7 +161,7 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
             }
             libp2p_swarm::SwarmEvent::IncomingConnection { send_back_addr, .. } => {
                 self.connections_incoming
-                    .get_or_create(&protocol_stack::Label::for_multi_address(send_back_addr))
+                    .get_or_create(&send_back_addr.into())
                     .inc();
             }
             libp2p_swarm::SwarmEvent::IncomingConnectionError { error, .. } => {
@@ -249,6 +251,7 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
 #[derive(Encode, Hash, Clone, Eq, PartialEq)]
 struct ConnectionEstablishedLabels {
     role: Role,
+    proto_stack: String,
 }
 
 #[derive(Encode, Hash, Clone, Eq, PartialEq)]
