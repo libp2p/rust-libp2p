@@ -71,8 +71,8 @@ pub use behaviour::{
     CloseConnection, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
 };
 pub use connection::{
-    ConnectionCounters, ConnectionError, ConnectionLimit, ConnectionLimits, PendingConnectionError,
-    PendingInboundConnectionError, PendingOutboundConnectionError,
+    ConnectionError, ConnectionLimit, PendingConnectionError, PendingInboundConnectionError,
+    PendingOutboundConnectionError,
 };
 pub use handler::{
     ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerSelect, ConnectionHandlerUpgrErr,
@@ -81,8 +81,10 @@ pub use handler::{
 };
 pub use registry::{AddAddressResult, AddressRecord, AddressScore};
 
-use connection::pool::{Pool, PoolConfig, PoolEvent};
-use connection::{EstablishedConnection, IncomingInfo};
+use connection::pool::{
+    ConnectionCounters, ConnectionLimits, EstablishedConnection, Pool, PoolConfig, PoolEvent,
+};
+use connection::IncomingInfo;
 use dial_opts::{DialOpts, PeerCondition};
 use either::Either;
 use futures::{executor::ThreadPoolBuilder, prelude::*, stream::FusedStream};

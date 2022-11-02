@@ -26,7 +26,6 @@ pub use error::{
     ConnectionError, PendingConnectionError, PendingInboundConnectionError,
     PendingOutboundConnectionError,
 };
-pub use pool::{ConnectionCounters, ConnectionLimits, EstablishedConnection};
 
 use crate::handler::ConnectionHandler;
 use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper};
