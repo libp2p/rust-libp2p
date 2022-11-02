@@ -1,19 +1,21 @@
 use crate::handler::{InboundUpgradeSend, OutboundUpgradeSend};
 use crate::{
     ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, IntoConnectionHandler,
-    KeepAlive, NegotiatedSubstream, SubstreamProtocol,
+    KeepAlive, NegotiatedSubstream, NetworkBehaviourAction, NotifyHandler, SubstreamProtocol,
 };
 use futures::future::BoxFuture;
 use futures::future::FutureExt;
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
+use libp2p_core::connection::ConnectionId;
 use libp2p_core::upgrade::{NegotiationError, ReadyUpgrade};
 use libp2p_core::{ConnectedPoint, PeerId, UpgradeError};
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::error::Error;
 use std::fmt;
 use std::future::Future;
-use std::task::{Context, Poll};
+use std::ops::{Deref, DerefMut};
+use std::task::{Context, Poll, Waker};
 use void::Void;
 
 /// A low-level building block for protocols that can be expressed as async functions.
@@ -91,6 +93,93 @@ pub enum OpenError<OpenInfo> {
     Timeout(OpenInfo),
     LimitExceeded(OpenInfo),
     NegotiationFailed(OpenInfo, NegotiationError),
+}
+
+/// A wrapper for state that is shared across all connections.
+///
+/// Any update to the state will "automatically" be relayed to all connections, assuming this struct
+/// is correctly wired into your [`NetworkBehaviour`](crate::swarm::NetworkBehaviour).
+///
+/// This struct implements an observer pattern. All registered connections will receive updates that
+/// are made to the state.
+pub struct Shared<T> {
+    inner: T,
+
+    dirty: bool,
+    waker: Option<Waker>,
+    connections: HashSet<(PeerId, ConnectionId)>,
+    pending_update_events: VecDeque<(PeerId, ConnectionId, T)>,
+}
+
+impl<T> Shared<T>
+where
+    T: Clone,
+{
+    pub fn new(state: T) -> Self {
+        Self {
+            inner: state,
+            dirty: false,
+            waker: None,
+            connections: HashSet::default(),
+            pending_update_events: VecDeque::default(),
+        }
+    }
+
+    pub fn register_connection(&mut self, peer_id: PeerId, id: ConnectionId) {
+        self.connections.insert((peer_id, id));
+    }
+
+    pub fn unregister_connection(&mut self, peer_id: PeerId, id: ConnectionId) {
+        self.connections.remove(&(peer_id, id));
+    }
+
+    pub fn poll<TOut, THandler, TOpenInfo>(
+        &mut self,
+        cx: &mut Context<'_>,
+    ) -> Poll<NetworkBehaviourAction<TOut, THandler, InEvent<T, TOpenInfo>>>
+    where
+        THandler: IntoConnectionHandler,
+    {
+        if self.dirty {
+            self.pending_update_events = self
+                .connections
+                .iter()
+                .map(|(peer_id, conn_id)| (*peer_id, *conn_id, self.inner.clone()))
+                .collect();
+
+            self.dirty = false;
+        }
+
+        if let Some((peer_id, conn_id, state)) = self.pending_update_events.pop_front() {
+            return Poll::Ready(NetworkBehaviourAction::NotifyHandler {
+                peer_id,
+                handler: NotifyHandler::One(conn_id),
+                event: InEvent::UpdateState(state),
+            });
+        }
+
+        self.waker = Some(cx.waker().clone());
+        Poll::Pending
+    }
+}
+
+impl<T> Deref for Shared<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+impl<T> DerefMut for Shared<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.dirty = true;
+        if let Some(waker) = self.waker.take() {
+            waker.wake();
+        }
+
+        &mut self.inner
+    }
 }
 
 impl<OpenInfo> fmt::Display for OpenError<OpenInfo> {
@@ -387,28 +476,58 @@ mod tests {
     use super::*;
     use crate::{IntoConnectionHandler, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
     use libp2p_core::connection::ConnectionId;
-    use libp2p_core::PeerId;
+    use libp2p_core::{Multiaddr, PeerId};
 
-    struct MyBehaviour {}
+    struct MyBehaviour {
+        state: Shared<State>,
+    }
 
-    #[derive(Debug, Default)]
-    struct ConnectionState {
-        _foo: (),
+    #[derive(Debug, Default, Clone)]
+    struct State {
+        foo: String,
+    }
+
+    impl MyBehaviour {
+        fn set_new_state(&mut self, foo: String) {
+            self.state.foo = foo;
+        }
     }
 
     impl NetworkBehaviour for MyBehaviour {
-        type ConnectionHandler = FromFnProto<(), (), (), ConnectionState>;
+        type ConnectionHandler = FromFnProto<(), (), (), State>;
         type OutEvent = ();
 
         fn new_handler(&mut self) -> Self::ConnectionHandler {
             from_fn(
                 "/foo/bar/1.0.0",
-                ConnectionState::default(),
+                State::default(),
                 5,
                 5,
-                |_stream, _remote_peer_id, _connected_point, _state| async move {},
-                |_stream, _remote_peer_id, _connected_point, _state, ()| async move {},
+                |stream, _, _, state| async move {},
+                |stream, _, _, state, ()| async move {},
             )
+        }
+
+        fn inject_connection_established(
+            &mut self,
+            peer_id: &PeerId,
+            connection_id: &ConnectionId,
+            _endpoint: &ConnectedPoint,
+            _failed_addresses: Option<&Vec<Multiaddr>>,
+            _other_established: usize,
+        ) {
+            self.state.register_connection(*peer_id, *connection_id);
+        }
+
+        fn inject_connection_closed(
+            &mut self,
+            peer_id: &PeerId,
+            connection_id: &ConnectionId,
+            _: &ConnectedPoint,
+            _: <Self::ConnectionHandler as IntoConnectionHandler>::Handler,
+            _remaining_established: usize,
+        ) {
+            self.state.unregister_connection(*peer_id, *connection_id);
         }
 
         fn inject_event(
@@ -428,9 +547,13 @@ mod tests {
 
         fn poll(
             &mut self,
-            _cx: &mut Context<'_>,
+            cx: &mut Context<'_>,
             _params: &mut impl PollParameters,
         ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+            if let Poll::Ready(action) = self.state.poll(cx) {
+                return Poll::Ready(action);
+            }
+
             Poll::Pending
         }
     }
