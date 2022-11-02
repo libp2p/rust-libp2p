@@ -183,8 +183,6 @@ where
 /* Gossip codec for the framing */
 
 pub struct GossipsubCodec {
-    /// Codec to encode/decode the Unsigned varint length prefix of the frames.
-    length_codec: codec::UviBytes,
     /// Determines the level of validation performed on incoming messages.
     validation_mode: ValidationMode,
     /// The codec to handle common encoding/decoding of protobuf messages
@@ -195,7 +193,6 @@ impl GossipsubCodec {
     pub fn new(length_codec: codec::UviBytes, validation_mode: ValidationMode) -> GossipsubCodec {
         let codec = prost_codec::Codec::new(length_codec.max_len());
         GossipsubCodec {
-            length_codec,
             validation_mode,
             codec,
         }
@@ -287,22 +284,10 @@ impl Decoder for GossipsubCodec {
     type Error = GossipsubHandlerError;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        // TODO: Replace with codec::decode call
-
-        let packet = match self.length_codec.decode(src).map_err(|e| {
-            if let std::io::ErrorKind::PermissionDenied = e.kind() {
-                GossipsubHandlerError::MaxTransmissionSize
-            } else {
-                GossipsubHandlerError::Codec(prost_codec::Error::Io(e))
-            }
-        })? {
-            Some(p) => p,
-            None => return Ok(None),
+        let rpc = match self.codec.decode(src) {
+            Ok(Some(p)) => p,
+            _ => return Ok(None),
         };
-
-        // end of TODO
-
-        let rpc = rpc_proto::Rpc::decode(&packet[..]).map_err(std::io::Error::from)?;
 
         // Store valid messages.
         let mut messages = Vec::with_capacity(rpc.publish.len());
