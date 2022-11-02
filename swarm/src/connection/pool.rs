@@ -150,6 +150,12 @@ struct PendingConnectionInfo<THandler> {
     abort_notifier: Option<oneshot::Sender<Void>>,
 }
 
+impl<THandler> PendingConnectionInfo<THandler> {
+    fn is_for_same_remote_as(&self, other: PeerId) -> bool {
+        self.peer_id.map_or(false, |peer| peer == other)
+    }
+}
+
 impl<THandler: IntoConnectionHandler, TTrans: Transport> fmt::Debug for Pool<THandler, TTrans> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         f.debug_struct("Pool")
@@ -324,7 +330,7 @@ where
         let pending_connections = self
             .pending
             .iter()
-            .filter(|(_, PendingConnectionInfo { peer_id, .. })| peer_id.as_ref() == Some(&peer))
+            .filter(|(_, info)| info.is_for_same_remote_as(peer))
             .map(|(id, _)| *id)
             .collect::<Vec<_>>();
 
@@ -352,8 +358,7 @@ where
     /// Checks whether we are currently dialing the given peer.
     pub fn is_dialing(&self, peer: PeerId) -> bool {
         self.pending.iter().any(|(_, info)| {
-            matches!(info.endpoint, PendingPoint::Dialer { .. })
-                && info.peer_id.as_ref() == Some(&peer)
+            matches!(info.endpoint, PendingPoint::Dialer { .. }) && info.is_for_same_remote_as(peer)
         })
     }
 
