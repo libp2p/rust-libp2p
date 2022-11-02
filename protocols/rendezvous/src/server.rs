@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::codec::{Cookie, ErrorCode, Namespace, NewRegistration, Registration, Ttl};
-use crate::handler::inbound;
+use crate::handler::{inbound, PROTOCOL_IDENT};
 use crate::substream_handler::{InboundSubstreamId, SubstreamConnectionHandler};
 use crate::{handler, MAX_TTL, MIN_TTL};
 use bimap::BiMap;
@@ -29,10 +29,13 @@ use futures::stream::FuturesUnordered;
 use futures::{FutureExt, StreamExt};
 use libp2p_core::connection::ConnectionId;
 use libp2p_core::PeerId;
+use libp2p_swarm::handler::from_fn::FromFnProto;
 use libp2p_swarm::{
-    CloseConnection, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
+    from_fn, CloseConnection, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
+    PollParameters,
 };
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::io;
 use std::iter::FromIterator;
 use std::task::{Context, Poll};
 use std::time::Duration;
@@ -113,9 +116,13 @@ impl NetworkBehaviour for Behaviour {
     type OutEvent = Event;
 
     fn new_handler(&mut self) -> Self::ConnectionHandler {
-        let initial_keep_alive = Duration::from_secs(30);
+        // from_fn(
+        //     PROTOCOL_IDENT,
+        //     self.registrations.clone(),
+        //
+        // )
 
-        SubstreamConnectionHandler::new_inbound_only(initial_keep_alive)
+        todo!()
     }
 
     fn inject_event(
@@ -306,100 +313,20 @@ impl RegistrationId {
 struct ExpiredRegistration(Registration);
 
 pub struct Registrations {
-    registrations_for_peer: BiMap<(PeerId, Namespace), RegistrationId>,
-    registrations: HashMap<RegistrationId, Registration>,
-    cookies: HashMap<Cookie, HashSet<RegistrationId>>,
+    data: RegistrationData,
     min_ttl: Ttl,
     max_ttl: Ttl,
     next_expiry: FuturesUnordered<BoxFuture<'static, RegistrationId>>,
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum TtlOutOfRange {
-    #[error("Requested TTL ({requested}s) is too long; max {bound}s")]
-    TooLong { bound: Ttl, requested: Ttl },
-    #[error("Requested TTL ({requested}s) is too short; min {bound}s")]
-    TooShort { bound: Ttl, requested: Ttl },
+#[derive(Clone, Default)]
+struct RegistrationData {
+    registrations_for_peer: BiMap<(PeerId, Namespace), RegistrationId>,
+    registrations: HashMap<RegistrationId, Registration>,
+    cookies: HashMap<Cookie, HashSet<RegistrationId>>,
 }
 
-impl Default for Registrations {
-    fn default() -> Self {
-        Registrations::with_config(Config::default())
-    }
-}
-
-impl Registrations {
-    pub fn with_config(config: Config) -> Self {
-        Self {
-            registrations_for_peer: Default::default(),
-            registrations: Default::default(),
-            min_ttl: config.min_ttl,
-            max_ttl: config.max_ttl,
-            cookies: Default::default(),
-            next_expiry: FuturesUnordered::from_iter(vec![futures::future::pending().boxed()]),
-        }
-    }
-
-    pub fn add(
-        &mut self,
-        new_registration: NewRegistration,
-    ) -> Result<Registration, TtlOutOfRange> {
-        let ttl = new_registration.effective_ttl();
-        if ttl > self.max_ttl {
-            return Err(TtlOutOfRange::TooLong {
-                bound: self.max_ttl,
-                requested: ttl,
-            });
-        }
-        if ttl < self.min_ttl {
-            return Err(TtlOutOfRange::TooShort {
-                bound: self.min_ttl,
-                requested: ttl,
-            });
-        }
-
-        let namespace = new_registration.namespace;
-        let registration_id = RegistrationId::new();
-
-        if let Some(old_registration) = self
-            .registrations_for_peer
-            .get_by_left(&(new_registration.record.peer_id(), namespace.clone()))
-        {
-            self.registrations.remove(old_registration);
-        }
-
-        self.registrations_for_peer.insert(
-            (new_registration.record.peer_id(), namespace.clone()),
-            registration_id,
-        );
-
-        let registration = Registration {
-            namespace,
-            record: new_registration.record,
-            ttl,
-        };
-        self.registrations
-            .insert(registration_id, registration.clone());
-
-        let next_expiry = futures_timer::Delay::new(Duration::from_secs(ttl as u64))
-            .map(move |_| registration_id)
-            .boxed();
-
-        self.next_expiry.push(next_expiry);
-
-        Ok(registration)
-    }
-
-    pub fn remove(&mut self, namespace: Namespace, peer_id: PeerId) {
-        let reggo_to_remove = self
-            .registrations_for_peer
-            .remove_by_left(&(peer_id, namespace));
-
-        if let Some((_, reggo_to_remove)) = reggo_to_remove {
-            self.registrations.remove(&reggo_to_remove);
-        }
-    }
-
+impl RegistrationData {
     pub fn get(
         &mut self,
         discover_namespace: Option<Namespace>,
@@ -461,6 +388,103 @@ impl Registrations {
 
         Ok((registrations, new_cookie))
     }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum TtlOutOfRange {
+    #[error("Requested TTL ({requested}s) is too long; max {bound}s")]
+    TooLong { bound: Ttl, requested: Ttl },
+    #[error("Requested TTL ({requested}s) is too short; min {bound}s")]
+    TooShort { bound: Ttl, requested: Ttl },
+}
+
+impl Default for Registrations {
+    fn default() -> Self {
+        Registrations::with_config(Config::default())
+    }
+}
+
+impl Registrations {
+    pub fn with_config(config: Config) -> Self {
+        Self {
+            data: RegistrationData::default(),
+            min_ttl: config.min_ttl,
+            max_ttl: config.max_ttl,
+            next_expiry: FuturesUnordered::from_iter(vec![futures::future::pending().boxed()]),
+        }
+    }
+
+    pub fn add(
+        &mut self,
+        new_registration: NewRegistration,
+    ) -> Result<Registration, TtlOutOfRange> {
+        let ttl = new_registration.effective_ttl();
+        if ttl > self.max_ttl {
+            return Err(TtlOutOfRange::TooLong {
+                bound: self.max_ttl,
+                requested: ttl,
+            });
+        }
+        if ttl < self.min_ttl {
+            return Err(TtlOutOfRange::TooShort {
+                bound: self.min_ttl,
+                requested: ttl,
+            });
+        }
+
+        let namespace = new_registration.namespace;
+        let registration_id = RegistrationId::new();
+
+        if let Some(old_registration) = self
+            .data
+            .registrations_for_peer
+            .get_by_left(&(new_registration.record.peer_id(), namespace.clone()))
+        {
+            self.data.registrations.remove(old_registration);
+        }
+
+        self.data.registrations_for_peer.insert(
+            (new_registration.record.peer_id(), namespace.clone()),
+            registration_id,
+        );
+
+        let registration = Registration {
+            namespace,
+            record: new_registration.record,
+            ttl,
+        };
+        self.data
+            .registrations
+            .insert(registration_id, registration.clone());
+
+        let next_expiry = futures_timer::Delay::new(Duration::from_secs(ttl as u64))
+            .map(move |_| registration_id)
+            .boxed();
+
+        self.next_expiry.push(next_expiry);
+
+        Ok(registration)
+    }
+
+    pub fn remove(&mut self, namespace: Namespace, peer_id: PeerId) {
+        let reggo_to_remove = self
+            .data
+            .registrations_for_peer
+            .remove_by_left(&(peer_id, namespace));
+
+        if let Some((_, reggo_to_remove)) = reggo_to_remove {
+            self.data.registrations.remove(&reggo_to_remove);
+        }
+    }
+
+    pub fn get(
+        &mut self,
+        discover_namespace: Option<Namespace>,
+        cookie: Option<Cookie>,
+        limit: Option<u64>,
+    ) -> Result<(impl Iterator<Item = &Registration> + '_, Cookie), CookieNamespaceMismatch> {
+        self.data.get(discover_namespace, cookie, limit)
+    }
 
     fn poll(&mut self, cx: &mut Context<'_>) -> Poll<ExpiredRegistration> {
         let expired_registration = ready!(self.next_expiry.poll_next_unpin(cx)).expect(
@@ -468,16 +492,17 @@ impl Registrations {
         );
 
         // clean up our cookies
-        self.cookies.retain(|_, registrations| {
+        self.data.cookies.retain(|_, registrations| {
             registrations.remove(&expired_registration);
 
             // retain all cookies where there are still registrations left
             !registrations.is_empty()
         });
 
-        self.registrations_for_peer
+        self.data
+            .registrations_for_peer
             .remove_by_right(&expired_registration);
-        match self.registrations.remove(&expired_registration) {
+        match self.data.registrations.remove(&expired_registration) {
             None => self.poll(cx),
             Some(registration) => Poll::Ready(ExpiredRegistration(registration)),
         }
@@ -680,11 +705,11 @@ mod tests {
             .unwrap();
         let (_, _) = registrations.get(None, None, None).unwrap();
 
-        assert_eq!(registrations.cookies.len(), 1);
+        assert_eq!(registrations.data.cookies.len(), 1);
 
         let _ = registrations.next_event_in_at_most(3).await;
 
-        assert_eq!(registrations.cookies.len(), 0);
+        assert_eq!(registrations.data.cookies.len(), 0);
     }
 
     #[test]
