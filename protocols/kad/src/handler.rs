@@ -809,42 +809,6 @@ impl Default for KademliaHandlerConfig {
     }
 }
 
-/// Processes a Kademlia message that's expected to be a request from a remote.
-fn process_kad_request<TUserData>(
-    event: KadRequestMsg,
-    connec_unique_id: UniqueConnecId,
-) -> Result<KademliaHandlerEvent<TUserData>, io::Error> {
-    match event {
-        KadRequestMsg::Ping => {
-            // TODO: implement; although in practice the PING message is never
-            //       used, so we may consider removing it altogether
-            Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "the PING Kademlia message is not implemented",
-            ))
-        }
-        KadRequestMsg::FindNode { key } => Ok(KademliaHandlerEvent::FindNodeReq {
-            key,
-            request_id: KademliaRequestId { connec_unique_id },
-        }),
-        KadRequestMsg::GetProviders { key } => Ok(KademliaHandlerEvent::GetProvidersReq {
-            key,
-            request_id: KademliaRequestId { connec_unique_id },
-        }),
-        KadRequestMsg::AddProvider { key, provider } => {
-            Ok(KademliaHandlerEvent::AddProvider { key, provider })
-        }
-        KadRequestMsg::GetValue { key } => Ok(KademliaHandlerEvent::GetRecord {
-            key,
-            request_id: KademliaRequestId { connec_unique_id },
-        }),
-        KadRequestMsg::PutValue { record } => Ok(KademliaHandlerEvent::PutRecord {
-            record,
-            request_id: KademliaRequestId { connec_unique_id },
-        }),
-    }
-}
-
 impl<TUserData> Stream for OutboundSubstreamState<TUserData>
 where
     TUserData: Unpin,
@@ -1086,6 +1050,42 @@ where
                 InboundSubstreamState::Cancelled => return Poll::Ready(None),
             }
         }
+    }
+}
+
+/// Processes a Kademlia message that's expected to be a request from a remote.
+fn process_kad_request<TUserData>(
+    event: KadRequestMsg,
+    connec_unique_id: UniqueConnecId,
+) -> Result<KademliaHandlerEvent<TUserData>, io::Error> {
+    match event {
+        KadRequestMsg::Ping => {
+            // TODO: implement; although in practice the PING message is never
+            //       used, so we may consider removing it altogether
+            Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "the PING Kademlia message is not implemented",
+            ))
+        }
+        KadRequestMsg::FindNode { key } => Ok(KademliaHandlerEvent::FindNodeReq {
+            key,
+            request_id: KademliaRequestId { connec_unique_id },
+        }),
+        KadRequestMsg::GetProviders { key } => Ok(KademliaHandlerEvent::GetProvidersReq {
+            key,
+            request_id: KademliaRequestId { connec_unique_id },
+        }),
+        KadRequestMsg::AddProvider { key, provider } => {
+            Ok(KademliaHandlerEvent::AddProvider { key, provider })
+        }
+        KadRequestMsg::GetValue { key } => Ok(KademliaHandlerEvent::GetRecord {
+            key,
+            request_id: KademliaRequestId { connec_unique_id },
+        }),
+        KadRequestMsg::PutValue { record } => Ok(KademliaHandlerEvent::PutRecord {
+            record,
+            request_id: KademliaRequestId { connec_unique_id },
+        }),
     }
 }
 
