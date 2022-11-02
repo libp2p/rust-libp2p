@@ -261,7 +261,7 @@ where
                     first,
                     connection_id,
                     mut substream,
-                } => match Stream::poll_next(Pin::new(&mut substream), cx) {
+                } => match substream.poll_next_unpin(cx) {
                     Poll::Ready(Some(Ok(msg))) => {
                         if let Ok(ev) = process_kad_request(msg, connection_id) {
                             *this =
@@ -294,15 +294,13 @@ where
                     return Poll::Pending;
                 }
                 InboundSubstreamState::PendingSend(id, mut substream, msg) => {
-                    match Sink::poll_ready(Pin::new(&mut substream), cx) {
-                        Poll::Ready(Ok(())) => {
-                            match Sink::start_send(Pin::new(&mut substream), msg) {
-                                Ok(()) => {
-                                    *this = InboundSubstreamState::PendingFlush(id, substream);
-                                }
-                                Err(_) => return Poll::Ready(None),
+                    match substream.poll_ready_unpin(cx) {
+                        Poll::Ready(Ok(())) => match substream.start_send_unpin(msg) {
+                            Ok(()) => {
+                                *this = InboundSubstreamState::PendingFlush(id, substream);
                             }
-                        }
+                            Err(_) => return Poll::Ready(None),
+                        },
                         Poll::Pending => {
                             *this = InboundSubstreamState::PendingSend(id, substream, msg);
                             return Poll::Pending;
@@ -311,7 +309,7 @@ where
                     }
                 }
                 InboundSubstreamState::PendingFlush(id, mut substream) => {
-                    match Sink::poll_flush(Pin::new(&mut substream), cx) {
+                    match substream.poll_flush_unpin(cx) {
                         Poll::Ready(Ok(())) => {
                             *this = InboundSubstreamState::WaitingMessage {
                                 first: false,
@@ -326,15 +324,13 @@ where
                         Poll::Ready(Err(_)) => return Poll::Ready(None),
                     }
                 }
-                InboundSubstreamState::Closing(mut stream) => {
-                    match Sink::poll_close(Pin::new(&mut stream), cx) {
-                        Poll::Ready(Ok(())) | Poll::Ready(Err(_)) => return Poll::Ready(None),
-                        Poll::Pending => {
-                            *this = InboundSubstreamState::Closing(stream);
-                            return Poll::Pending;
-                        }
+                InboundSubstreamState::Closing(mut stream) => match stream.poll_close_unpin(cx) {
+                    Poll::Ready(Ok(())) | Poll::Ready(Err(_)) => return Poll::Ready(None),
+                    Poll::Pending => {
+                        *this = InboundSubstreamState::Closing(stream);
+                        return Poll::Pending;
                     }
-                }
+                },
                 InboundSubstreamState::Poisoned { .. } => unreachable!(),
                 InboundSubstreamState::Cancelled => return Poll::Ready(None),
             }
