@@ -238,250 +238,6 @@ impl<TUserData> InboundSubstreamState<TUserData> {
     }
 }
 
-impl<TUserData> Stream for InboundSubstreamState<TUserData>
-where
-    TUserData: Unpin,
-{
-    type Item = ConnectionHandlerEvent<
-        KademliaProtocolConfig,
-        (KadRequestMsg, Option<TUserData>),
-        KademliaHandlerEvent<TUserData>,
-        io::Error,
-    >;
-
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let this = self.get_mut();
-
-        loop {
-            match std::mem::replace(
-                this,
-                Self::Poisoned {
-                    phantom: PhantomData,
-                },
-            ) {
-                InboundSubstreamState::WaitingMessage {
-                    first,
-                    connection_id,
-                    mut substream,
-                } => match substream.poll_next_unpin(cx) {
-                    Poll::Ready(Some(Ok(msg))) => {
-                        if let Ok(ev) = process_kad_request(msg, connection_id) {
-                            *this =
-                                InboundSubstreamState::WaitingUser(connection_id, substream, None);
-                            return Poll::Ready(Some(ConnectionHandlerEvent::Custom(ev)));
-                        } else {
-                            *this = InboundSubstreamState::Closing(substream);
-                        }
-                    }
-                    Poll::Pending => {
-                        *this = InboundSubstreamState::WaitingMessage {
-                            first,
-                            connection_id,
-                            substream,
-                        };
-                        return Poll::Pending;
-                    }
-                    Poll::Ready(None) => {
-                        return Poll::Ready(None);
-                    }
-                    Poll::Ready(Some(Err(e))) => {
-                        trace!("Inbound substream error: {:?}", e);
-                        return Poll::Ready(None);
-                    }
-                },
-                InboundSubstreamState::WaitingUser(id, substream, _) => {
-                    *this =
-                        InboundSubstreamState::WaitingUser(id, substream, Some(cx.waker().clone()));
-
-                    return Poll::Pending;
-                }
-                InboundSubstreamState::PendingSend(id, mut substream, msg) => {
-                    match substream.poll_ready_unpin(cx) {
-                        Poll::Ready(Ok(())) => match substream.start_send_unpin(msg) {
-                            Ok(()) => {
-                                *this = InboundSubstreamState::PendingFlush(id, substream);
-                            }
-                            Err(_) => return Poll::Ready(None),
-                        },
-                        Poll::Pending => {
-                            *this = InboundSubstreamState::PendingSend(id, substream, msg);
-                            return Poll::Pending;
-                        }
-                        Poll::Ready(Err(_)) => return Poll::Ready(None),
-                    }
-                }
-                InboundSubstreamState::PendingFlush(id, mut substream) => {
-                    match substream.poll_flush_unpin(cx) {
-                        Poll::Ready(Ok(())) => {
-                            *this = InboundSubstreamState::WaitingMessage {
-                                first: false,
-                                connection_id: id,
-                                substream,
-                            };
-                        }
-                        Poll::Pending => {
-                            *this = InboundSubstreamState::PendingFlush(id, substream);
-                            return Poll::Pending;
-                        }
-                        Poll::Ready(Err(_)) => return Poll::Ready(None),
-                    }
-                }
-                InboundSubstreamState::Closing(mut stream) => match stream.poll_close_unpin(cx) {
-                    Poll::Ready(Ok(())) | Poll::Ready(Err(_)) => return Poll::Ready(None),
-                    Poll::Pending => {
-                        *this = InboundSubstreamState::Closing(stream);
-                        return Poll::Pending;
-                    }
-                },
-                InboundSubstreamState::Poisoned { .. } => unreachable!(),
-                InboundSubstreamState::Cancelled => return Poll::Ready(None),
-            }
-        }
-    }
-}
-
-impl<TUserData> Stream for OutboundSubstreamState<TUserData>
-where
-    TUserData: Unpin,
-{
-    type Item = ConnectionHandlerEvent<
-        KademliaProtocolConfig,
-        (KadRequestMsg, Option<TUserData>),
-        KademliaHandlerEvent<TUserData>,
-        io::Error,
-    >;
-
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let this = self.get_mut();
-
-        loop {
-            match std::mem::replace(this, OutboundSubstreamState::Poisoned) {
-                OutboundSubstreamState::PendingOpen(protocol) => {
-                    *this = OutboundSubstreamState::Done;
-                    return Poll::Ready(Some(ConnectionHandlerEvent::OutboundSubstreamRequest {
-                        protocol,
-                    }));
-                }
-                OutboundSubstreamState::PendingSend(mut substream, msg, user_data) => {
-                    match substream.poll_ready_unpin(cx) {
-                        Poll::Ready(Ok(())) => match substream.start_send_unpin(msg) {
-                            Ok(()) => {
-                                *this = OutboundSubstreamState::PendingFlush(substream, user_data);
-                            }
-                            Err(error) => {
-                                *this = OutboundSubstreamState::Done;
-                                let event = user_data.map(|user_data| {
-                                    ConnectionHandlerEvent::Custom(
-                                        KademliaHandlerEvent::QueryError {
-                                            error: KademliaHandlerQueryErr::Io(error),
-                                            user_data,
-                                        },
-                                    )
-                                });
-
-                                return Poll::Ready(event);
-                            }
-                        },
-                        Poll::Pending => {
-                            *this = OutboundSubstreamState::PendingSend(substream, msg, user_data);
-                            return Poll::Pending;
-                        }
-                        Poll::Ready(Err(error)) => {
-                            *this = OutboundSubstreamState::Done;
-                            let event = user_data.map(|user_data| {
-                                ConnectionHandlerEvent::Custom(KademliaHandlerEvent::QueryError {
-                                    error: KademliaHandlerQueryErr::Io(error),
-                                    user_data,
-                                })
-                            });
-
-                            return Poll::Ready(event);
-                        }
-                    }
-                }
-                OutboundSubstreamState::PendingFlush(mut substream, user_data) => {
-                    match substream.poll_flush_unpin(cx) {
-                        Poll::Ready(Ok(())) => {
-                            if let Some(user_data) = user_data {
-                                *this = OutboundSubstreamState::WaitingAnswer(substream, user_data);
-                            } else {
-                                *this = OutboundSubstreamState::Closing(substream);
-                            }
-                        }
-                        Poll::Pending => {
-                            *this = OutboundSubstreamState::PendingFlush(substream, user_data);
-                            return Poll::Pending;
-                        }
-                        Poll::Ready(Err(error)) => {
-                            *this = OutboundSubstreamState::Done;
-                            let event = user_data.map(|user_data| {
-                                ConnectionHandlerEvent::Custom(KademliaHandlerEvent::QueryError {
-                                    error: KademliaHandlerQueryErr::Io(error),
-                                    user_data,
-                                })
-                            });
-
-                            return Poll::Ready(event);
-                        }
-                    }
-                }
-                OutboundSubstreamState::WaitingAnswer(mut substream, user_data) => {
-                    match substream.poll_next_unpin(cx) {
-                        Poll::Ready(Some(Ok(msg))) => {
-                            *this = OutboundSubstreamState::Closing(substream);
-                            let event = process_kad_response(msg, user_data);
-
-                            return Poll::Ready(Some(ConnectionHandlerEvent::Custom(event)));
-                        }
-                        Poll::Pending => {
-                            *this = OutboundSubstreamState::WaitingAnswer(substream, user_data);
-                            return Poll::Pending;
-                        }
-                        Poll::Ready(Some(Err(error))) => {
-                            *this = OutboundSubstreamState::Done;
-                            let event = KademliaHandlerEvent::QueryError {
-                                error: KademliaHandlerQueryErr::Io(error),
-                                user_data,
-                            };
-
-                            return Poll::Ready(Some(ConnectionHandlerEvent::Custom(event)));
-                        }
-                        Poll::Ready(None) => {
-                            *this = OutboundSubstreamState::Done;
-                            let event = KademliaHandlerEvent::QueryError {
-                                error: KademliaHandlerQueryErr::Io(
-                                    io::ErrorKind::UnexpectedEof.into(),
-                                ),
-                                user_data,
-                            };
-
-                            return Poll::Ready(Some(ConnectionHandlerEvent::Custom(event)));
-                        }
-                    }
-                }
-                OutboundSubstreamState::ReportError(error, user_data) => {
-                    *this = OutboundSubstreamState::Done;
-                    let event = KademliaHandlerEvent::QueryError { error, user_data };
-
-                    return Poll::Ready(Some(ConnectionHandlerEvent::Custom(event)));
-                }
-                OutboundSubstreamState::Closing(mut stream) => match stream.poll_close_unpin(cx) {
-                    Poll::Ready(Ok(())) | Poll::Ready(Err(_)) => return Poll::Ready(None),
-                    Poll::Pending => {
-                        *this = OutboundSubstreamState::Closing(stream);
-                        return Poll::Pending;
-                    }
-                },
-                OutboundSubstreamState::Done => {
-                    *this = OutboundSubstreamState::Done;
-                    return Poll::Ready(None);
-                }
-                OutboundSubstreamState::Poisoned => unreachable!(),
-            }
-        }
-    }
-}
-
 /// Event produced by the Kademlia handler.
 #[derive(Debug)]
 pub enum KademliaHandlerEvent<TUserData> {
@@ -1086,6 +842,250 @@ fn process_kad_request<TUserData>(
             record,
             request_id: KademliaRequestId { connec_unique_id },
         }),
+    }
+}
+
+impl<TUserData> Stream for OutboundSubstreamState<TUserData>
+where
+    TUserData: Unpin,
+{
+    type Item = ConnectionHandlerEvent<
+        KademliaProtocolConfig,
+        (KadRequestMsg, Option<TUserData>),
+        KademliaHandlerEvent<TUserData>,
+        io::Error,
+    >;
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let this = self.get_mut();
+
+        loop {
+            match std::mem::replace(this, OutboundSubstreamState::Poisoned) {
+                OutboundSubstreamState::PendingOpen(protocol) => {
+                    *this = OutboundSubstreamState::Done;
+                    return Poll::Ready(Some(ConnectionHandlerEvent::OutboundSubstreamRequest {
+                        protocol,
+                    }));
+                }
+                OutboundSubstreamState::PendingSend(mut substream, msg, user_data) => {
+                    match substream.poll_ready_unpin(cx) {
+                        Poll::Ready(Ok(())) => match substream.start_send_unpin(msg) {
+                            Ok(()) => {
+                                *this = OutboundSubstreamState::PendingFlush(substream, user_data);
+                            }
+                            Err(error) => {
+                                *this = OutboundSubstreamState::Done;
+                                let event = user_data.map(|user_data| {
+                                    ConnectionHandlerEvent::Custom(
+                                        KademliaHandlerEvent::QueryError {
+                                            error: KademliaHandlerQueryErr::Io(error),
+                                            user_data,
+                                        },
+                                    )
+                                });
+
+                                return Poll::Ready(event);
+                            }
+                        },
+                        Poll::Pending => {
+                            *this = OutboundSubstreamState::PendingSend(substream, msg, user_data);
+                            return Poll::Pending;
+                        }
+                        Poll::Ready(Err(error)) => {
+                            *this = OutboundSubstreamState::Done;
+                            let event = user_data.map(|user_data| {
+                                ConnectionHandlerEvent::Custom(KademliaHandlerEvent::QueryError {
+                                    error: KademliaHandlerQueryErr::Io(error),
+                                    user_data,
+                                })
+                            });
+
+                            return Poll::Ready(event);
+                        }
+                    }
+                }
+                OutboundSubstreamState::PendingFlush(mut substream, user_data) => {
+                    match substream.poll_flush_unpin(cx) {
+                        Poll::Ready(Ok(())) => {
+                            if let Some(user_data) = user_data {
+                                *this = OutboundSubstreamState::WaitingAnswer(substream, user_data);
+                            } else {
+                                *this = OutboundSubstreamState::Closing(substream);
+                            }
+                        }
+                        Poll::Pending => {
+                            *this = OutboundSubstreamState::PendingFlush(substream, user_data);
+                            return Poll::Pending;
+                        }
+                        Poll::Ready(Err(error)) => {
+                            *this = OutboundSubstreamState::Done;
+                            let event = user_data.map(|user_data| {
+                                ConnectionHandlerEvent::Custom(KademliaHandlerEvent::QueryError {
+                                    error: KademliaHandlerQueryErr::Io(error),
+                                    user_data,
+                                })
+                            });
+
+                            return Poll::Ready(event);
+                        }
+                    }
+                }
+                OutboundSubstreamState::WaitingAnswer(mut substream, user_data) => {
+                    match substream.poll_next_unpin(cx) {
+                        Poll::Ready(Some(Ok(msg))) => {
+                            *this = OutboundSubstreamState::Closing(substream);
+                            let event = process_kad_response(msg, user_data);
+
+                            return Poll::Ready(Some(ConnectionHandlerEvent::Custom(event)));
+                        }
+                        Poll::Pending => {
+                            *this = OutboundSubstreamState::WaitingAnswer(substream, user_data);
+                            return Poll::Pending;
+                        }
+                        Poll::Ready(Some(Err(error))) => {
+                            *this = OutboundSubstreamState::Done;
+                            let event = KademliaHandlerEvent::QueryError {
+                                error: KademliaHandlerQueryErr::Io(error),
+                                user_data,
+                            };
+
+                            return Poll::Ready(Some(ConnectionHandlerEvent::Custom(event)));
+                        }
+                        Poll::Ready(None) => {
+                            *this = OutboundSubstreamState::Done;
+                            let event = KademliaHandlerEvent::QueryError {
+                                error: KademliaHandlerQueryErr::Io(
+                                    io::ErrorKind::UnexpectedEof.into(),
+                                ),
+                                user_data,
+                            };
+
+                            return Poll::Ready(Some(ConnectionHandlerEvent::Custom(event)));
+                        }
+                    }
+                }
+                OutboundSubstreamState::ReportError(error, user_data) => {
+                    *this = OutboundSubstreamState::Done;
+                    let event = KademliaHandlerEvent::QueryError { error, user_data };
+
+                    return Poll::Ready(Some(ConnectionHandlerEvent::Custom(event)));
+                }
+                OutboundSubstreamState::Closing(mut stream) => match stream.poll_close_unpin(cx) {
+                    Poll::Ready(Ok(())) | Poll::Ready(Err(_)) => return Poll::Ready(None),
+                    Poll::Pending => {
+                        *this = OutboundSubstreamState::Closing(stream);
+                        return Poll::Pending;
+                    }
+                },
+                OutboundSubstreamState::Done => {
+                    *this = OutboundSubstreamState::Done;
+                    return Poll::Ready(None);
+                }
+                OutboundSubstreamState::Poisoned => unreachable!(),
+            }
+        }
+    }
+}
+
+impl<TUserData> Stream for InboundSubstreamState<TUserData>
+where
+    TUserData: Unpin,
+{
+    type Item = ConnectionHandlerEvent<
+        KademliaProtocolConfig,
+        (KadRequestMsg, Option<TUserData>),
+        KademliaHandlerEvent<TUserData>,
+        io::Error,
+    >;
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let this = self.get_mut();
+
+        loop {
+            match std::mem::replace(
+                this,
+                Self::Poisoned {
+                    phantom: PhantomData,
+                },
+            ) {
+                InboundSubstreamState::WaitingMessage {
+                    first,
+                    connection_id,
+                    mut substream,
+                } => match substream.poll_next_unpin(cx) {
+                    Poll::Ready(Some(Ok(msg))) => {
+                        if let Ok(ev) = process_kad_request(msg, connection_id) {
+                            *this =
+                                InboundSubstreamState::WaitingUser(connection_id, substream, None);
+                            return Poll::Ready(Some(ConnectionHandlerEvent::Custom(ev)));
+                        } else {
+                            *this = InboundSubstreamState::Closing(substream);
+                        }
+                    }
+                    Poll::Pending => {
+                        *this = InboundSubstreamState::WaitingMessage {
+                            first,
+                            connection_id,
+                            substream,
+                        };
+                        return Poll::Pending;
+                    }
+                    Poll::Ready(None) => {
+                        return Poll::Ready(None);
+                    }
+                    Poll::Ready(Some(Err(e))) => {
+                        trace!("Inbound substream error: {:?}", e);
+                        return Poll::Ready(None);
+                    }
+                },
+                InboundSubstreamState::WaitingUser(id, substream, _) => {
+                    *this =
+                        InboundSubstreamState::WaitingUser(id, substream, Some(cx.waker().clone()));
+
+                    return Poll::Pending;
+                }
+                InboundSubstreamState::PendingSend(id, mut substream, msg) => {
+                    match substream.poll_ready_unpin(cx) {
+                        Poll::Ready(Ok(())) => match substream.start_send_unpin(msg) {
+                            Ok(()) => {
+                                *this = InboundSubstreamState::PendingFlush(id, substream);
+                            }
+                            Err(_) => return Poll::Ready(None),
+                        },
+                        Poll::Pending => {
+                            *this = InboundSubstreamState::PendingSend(id, substream, msg);
+                            return Poll::Pending;
+                        }
+                        Poll::Ready(Err(_)) => return Poll::Ready(None),
+                    }
+                }
+                InboundSubstreamState::PendingFlush(id, mut substream) => {
+                    match substream.poll_flush_unpin(cx) {
+                        Poll::Ready(Ok(())) => {
+                            *this = InboundSubstreamState::WaitingMessage {
+                                first: false,
+                                connection_id: id,
+                                substream,
+                            };
+                        }
+                        Poll::Pending => {
+                            *this = InboundSubstreamState::PendingFlush(id, substream);
+                            return Poll::Pending;
+                        }
+                        Poll::Ready(Err(_)) => return Poll::Ready(None),
+                    }
+                }
+                InboundSubstreamState::Closing(mut stream) => match stream.poll_close_unpin(cx) {
+                    Poll::Ready(Ok(())) | Poll::Ready(Err(_)) => return Poll::Ready(None),
+                    Poll::Pending => {
+                        *this = InboundSubstreamState::Closing(stream);
+                        return Poll::Pending;
+                    }
+                },
+                InboundSubstreamState::Poisoned { .. } => unreachable!(),
+                InboundSubstreamState::Cancelled => return Poll::Ready(None),
+            }
+        }
     }
 }
 
