@@ -86,7 +86,7 @@ use connection::{EstablishedConnection, IncomingInfo};
 use dial_opts::{DialOpts, PeerCondition};
 use either::Either;
 use futures::{executor::ThreadPoolBuilder, prelude::*, stream::FusedStream};
-use libp2p_core::connection::{ConnectionId, PendingPoint};
+use libp2p_core::connection::ConnectionId;
 use libp2p_core::muxing::SubstreamBox;
 use libp2p_core::{
     connection::ConnectedPoint,
@@ -395,15 +395,7 @@ where
                     // Check [`PeerCondition`] if provided.
                     let condition_matched = match condition {
                         PeerCondition::Disconnected => !self.is_connected(&peer_id),
-                        PeerCondition::NotDialing => {
-                            !self
-                                .pool
-                                .iter_pending_info()
-                                .any(move |(_, endpoint, peer)| {
-                                    matches!(endpoint, PendingPoint::Dialer { .. })
-                                        && peer.as_ref() == Some(&peer_id)
-                                })
-                        }
+                        PeerCondition::NotDialing => !self.pool.is_dialing(peer_id),
                         PeerCondition::Always => true,
                     };
                     if !condition_matched {

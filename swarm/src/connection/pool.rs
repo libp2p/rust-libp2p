@@ -349,19 +349,12 @@ where
         }
     }
 
-    /// Returns an iterator over all pending connection IDs together
-    /// with associated endpoints and expected peer IDs in the pool.
-    pub fn iter_pending_info(
-        &self,
-    ) -> impl Iterator<Item = (&ConnectionId, &PendingPoint, &Option<PeerId>)> + '_ {
-        self.pending.iter().map(
-            |(
-                id,
-                PendingConnectionInfo {
-                    peer_id, endpoint, ..
-                },
-            )| (id, endpoint, peer_id),
-        )
+    /// Checks whether we are currently dialing the given peer.
+    pub fn is_dialing(&self, peer: PeerId) -> bool {
+        self.pending.iter().any(|(_, info)| {
+            matches!(info.endpoint, PendingPoint::Dialer { .. })
+                && info.peer_id.as_ref() == Some(&peer)
+        })
     }
 
     /// Returns an iterator over all connected peers, i.e. those that have
