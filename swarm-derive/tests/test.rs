@@ -373,7 +373,7 @@ fn custom_out_event_no_type_parameters() {
             dummy::ConnectionHandler
         }
 
-        fn inject_event(
+        fn on_connection_handler_event(
             &mut self,
             _peer: PeerId,
             _connection: ConnectionId,
