@@ -193,7 +193,7 @@ pub struct GossipsubCodec {
 
 impl GossipsubCodec {
     pub fn new(length_codec: codec::UviBytes, validation_mode: ValidationMode) -> GossipsubCodec {
-        let codec = prost_codec::Codec::new(0);
+        let codec = prost_codec::Codec::new(length_codec.max_len());
         GossipsubCodec {
             length_codec,
             validation_mode,
