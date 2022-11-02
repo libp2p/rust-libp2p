@@ -154,6 +154,13 @@ impl<THandler> PendingConnectionInfo<THandler> {
     fn is_for_same_remote_as(&self, other: PeerId) -> bool {
         self.peer_id.map_or(false, |peer| peer == other)
     }
+
+    /// Aborts the connection attempt, closing the connection.
+    fn abort(&mut self) {
+        if let Some(notifier) = self.abort_notifier.take() {
+            drop(notifier);
+        }
+    }
 }
 
 impl<THandler: IntoConnectionHandler, TTrans: Transport> fmt::Debug for Pool<THandler, TTrans> {
@@ -326,21 +333,12 @@ where
             }
         }
 
-        #[allow(clippy::needless_collect)]
-        let pending_connections = self
+        for connection in self
             .pending
-            .iter()
-            .filter(|(_, info)| info.is_for_same_remote_as(peer))
-            .map(|(id, _)| *id)
-            .collect::<Vec<_>>();
-
-        for pending_connection in pending_connections {
-            let entry = self
-                .pending
-                .entry(pending_connection)
-                .expect_occupied("Iterating pending connections");
-
-            PendingConnection { entry }.abort();
+            .iter_mut()
+            .filter_map(|(_, info)| info.is_for_same_remote_as(peer).then_some(info))
+        {
+            connection.abort()
         }
     }
 
@@ -801,20 +799,6 @@ where
         while let Poll::Ready(Some(())) = self.local_spawns.poll_next_unpin(cx) {}
 
         Poll::Pending
-    }
-}
-
-/// A pending connection in a pool.
-pub struct PendingConnection<'a, THandler: IntoConnectionHandler> {
-    entry: hash_map::OccupiedEntry<'a, ConnectionId, PendingConnectionInfo<THandler>>,
-}
-
-impl<THandler: IntoConnectionHandler> PendingConnection<'_, THandler> {
-    /// Aborts the connection attempt, closing the connection.
-    pub fn abort(mut self) {
-        if let Some(notifier) = self.entry.get_mut().abort_notifier.take() {
-            drop(notifier);
-        }
     }
 }
 
