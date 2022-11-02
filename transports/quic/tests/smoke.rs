@@ -19,31 +19,6 @@ use std::io;
 use std::num::NonZeroU8;
 use std::time::Duration;
 
-fn generate_tls_keypair() -> libp2p::identity::Keypair {
-    libp2p::identity::Keypair::generate_ed25519()
-}
-
-fn create_transport<P: Provider>() -> (PeerId, Boxed<(PeerId, StreamMuxerBox)>) {
-    let keypair = generate_tls_keypair();
-    let peer_id = keypair.public().to_peer_id();
-    let mut config = quic::Config::new(&keypair);
-    config.handshake_timeout = Duration::from_secs(1);
-
-    let transport = quic::GenTransport::<P>::new(config)
-        .map(|(p, c), _| (p, StreamMuxerBox::new(c)))
-        .boxed();
-
-    (peer_id, transport)
-}
-
-async fn start_listening(transport: &mut Boxed<(PeerId, StreamMuxerBox)>, addr: &str) -> Multiaddr {
-    transport.listen_on(addr.parse().unwrap()).unwrap();
-    match transport.next().await {
-        Some(TransportEvent::NewAddress { listen_addr, .. }) => listen_addr,
-        e => panic!("{:?}", e),
-    }
-}
-
 #[cfg(feature = "tokio")]
 #[tokio::test]
 async fn tokio_smoke() {
@@ -54,20 +29,6 @@ async fn tokio_smoke() {
 #[async_std::test]
 async fn async_std_smoke() {
     smoke::<quic::async_std::Provider>().await
-}
-
-async fn smoke<P: Provider>() {
-    let _ = env_logger::try_init();
-
-    let (a_peer_id, mut a_transport) = create_transport::<P>();
-    let (b_peer_id, mut b_transport) = create_transport::<P>();
-
-    let addr = start_listening(&mut a_transport, "/ip4/127.0.0.1/udp/0/quic").await;
-    let ((a_connected, _, _), (b_connected, _)) =
-        connect(&mut a_transport, &mut b_transport, addr).await;
-
-    assert_eq!(a_connected, b_peer_id);
-    assert_eq!(b_connected, a_peer_id);
 }
 
 #[cfg(feature = "async-std")]
@@ -86,6 +47,115 @@ async fn dial_failure() {
             assert_eq!("Handshake with the remote timed out.", error.to_string())
         }
     };
+}
+
+#[cfg(feature = "tokio")]
+#[tokio::test]
+async fn endpoint_reuse() {
+    let _ = env_logger::try_init();
+    let (_, mut a_transport) = create_transport::<quic::tokio::Provider>();
+    let (_, mut b_transport) = create_transport::<quic::tokio::Provider>();
+
+    let a_addr = start_listening(&mut a_transport, "/ip4/127.0.0.1/udp/0/quic").await;
+    let ((_, b_send_back_addr, _), _) =
+        connect(&mut a_transport, &mut b_transport, a_addr.clone()).await;
+
+    // Expect the dial to fail since b is not listening on an address.
+    match dial(&mut a_transport, b_send_back_addr).await {
+        Ok(_) => panic!("Expected dial to fail"),
+        Err(error) => {
+            assert_eq!("Handshake with the remote timed out.", error.to_string())
+        }
+    };
+
+    let b_addr = start_listening(&mut b_transport, "/ip4/127.0.0.1/udp/0/quic").await;
+    let ((_, a_send_back_addr, _), _) = connect(&mut b_transport, &mut a_transport, b_addr).await;
+
+    assert_eq!(a_send_back_addr, a_addr);
+}
+
+#[cfg(feature = "async-std")]
+#[async_std::test]
+async fn ipv4_dial_ipv6() {
+    let _ = env_logger::try_init();
+    let (a_peer_id, mut a_transport) = create_transport::<quic::async_std::Provider>();
+    let (b_peer_id, mut b_transport) = create_transport::<quic::async_std::Provider>();
+
+    let a_addr = start_listening(&mut a_transport, "/ip6/::1/udp/0/quic").await;
+    let ((a_connected, _, _), (b_connected, _)) =
+        connect(&mut a_transport, &mut b_transport, a_addr).await;
+
+    assert_eq!(a_connected, b_peer_id);
+    assert_eq!(b_connected, a_peer_id);
+}
+
+#[cfg(feature = "async-std")]
+#[async_std::test]
+#[ignore] // Transport currently does not validate PeerId. Delete this test?
+async fn wrong_peerid() {
+    use libp2p::PeerId;
+
+    let (a_peer_id, mut a_transport) = create_transport::<quic::async_std::Provider>();
+    let (b_peer_id, mut b_transport) = create_transport::<quic::async_std::Provider>();
+
+    let a_addr = start_listening(&mut a_transport, "/ip6/::1/udp/0/quic").await;
+    let a_addr_random_peer = a_addr.with(Protocol::P2p(PeerId::random().into()));
+
+    let ((a_connected, _, _), (b_connected, _)) =
+        connect(&mut a_transport, &mut b_transport, a_addr_random_peer).await;
+
+    assert_ne!(a_connected, b_peer_id);
+    assert_eq!(b_connected, a_peer_id);
+}
+
+#[cfg(feature = "async-std")]
+fn new_tcp_quic_transport() -> (PeerId, Boxed<(PeerId, StreamMuxerBox)>) {
+    let keypair = generate_tls_keypair();
+    let peer_id = keypair.public().to_peer_id();
+    let mut config = quic::Config::new(&keypair);
+    config.handshake_timeout = Duration::from_secs(1);
+
+    let quic_transport = quic::async_std::Transport::new(config);
+    let tcp_transport = tcp::async_io::Transport::new(tcp::Config::default())
+        .upgrade(upgrade::Version::V1)
+        .authenticate(
+            noise::NoiseConfig::xx(
+                noise::Keypair::<noise::X25519Spec>::new()
+                    .into_authentic(&keypair)
+                    .unwrap(),
+            )
+            .into_authenticated(),
+        )
+        .multiplex(yamux::YamuxConfig::default());
+
+    let transport = OrTransport::new(quic_transport, tcp_transport)
+        .map(|either_output, _| match either_output {
+            EitherOutput::First((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
+            EitherOutput::Second((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
+        })
+        .boxed();
+
+    (peer_id, transport)
+}
+
+#[cfg(feature = "async-std")]
+#[async_std::test]
+async fn tcp_and_quic() {
+    let (a_peer_id, mut a_transport) = new_tcp_quic_transport();
+    let (b_peer_id, mut b_transport) = new_tcp_quic_transport();
+
+    let quic_addr = start_listening(&mut a_transport, "/ip4/127.0.0.1/udp/0/quic").await;
+    let tcp_addr = start_listening(&mut a_transport, "/ip4/127.0.0.1/tcp/0").await;
+
+    let ((a_connected, _, _), (b_connected, _)) =
+        connect(&mut a_transport, &mut b_transport, quic_addr).await;
+    assert_eq!(a_connected, b_peer_id);
+    assert_eq!(b_connected, a_peer_id);
+
+    let ((a_connected, _, _), (b_connected, _)) =
+        connect(&mut a_transport, &mut b_transport, tcp_addr).await;
+    assert_eq!(a_connected, b_peer_id);
+    assert_eq!(b_connected, a_peer_id);
 }
 
 // Note: This test should likely be ported to the muxer compliance test suite.
@@ -110,6 +180,45 @@ fn concurrent_connections_and_streams_tokio() {
     quickcheck::QuickCheck::new()
         .min_tests_passed(1)
         .quickcheck(prop::<quic::tokio::Provider> as fn(_, _) -> _);
+}
+
+async fn smoke<P: Provider>() {
+    let _ = env_logger::try_init();
+
+    let (a_peer_id, mut a_transport) = create_transport::<P>();
+    let (b_peer_id, mut b_transport) = create_transport::<P>();
+
+    let addr = start_listening(&mut a_transport, "/ip4/127.0.0.1/udp/0/quic").await;
+    let ((a_connected, _, _), (b_connected, _)) =
+        connect(&mut a_transport, &mut b_transport, addr).await;
+
+    assert_eq!(a_connected, b_peer_id);
+    assert_eq!(b_connected, a_peer_id);
+}
+
+fn generate_tls_keypair() -> libp2p::identity::Keypair {
+    libp2p::identity::Keypair::generate_ed25519()
+}
+
+fn create_transport<P: Provider>() -> (PeerId, Boxed<(PeerId, StreamMuxerBox)>) {
+    let keypair = generate_tls_keypair();
+    let peer_id = keypair.public().to_peer_id();
+    let mut config = quic::Config::new(&keypair);
+    config.handshake_timeout = Duration::from_secs(1);
+
+    let transport = quic::GenTransport::<P>::new(config)
+        .map(|(p, c), _| (p, StreamMuxerBox::new(c)))
+        .boxed();
+
+    (peer_id, transport)
+}
+
+async fn start_listening(transport: &mut Boxed<(PeerId, StreamMuxerBox)>, addr: &str) -> Multiaddr {
+    transport.listen_on(addr.parse().unwrap()).unwrap();
+    match transport.next().await {
+        Some(TransportEvent::NewAddress { listen_addr, .. }) => listen_addr,
+        e => panic!("{:?}", e),
+    }
 }
 
 fn prop<P: Provider + BlockOn>(
@@ -273,115 +382,6 @@ async fn open_outbound_streams<P: Provider, const BUFFER_SIZE: usize>(
         .await
         .is_ok()
     {}
-}
-
-#[cfg(feature = "tokio")]
-#[tokio::test]
-async fn endpoint_reuse() {
-    let _ = env_logger::try_init();
-    let (_, mut a_transport) = create_transport::<quic::tokio::Provider>();
-    let (_, mut b_transport) = create_transport::<quic::tokio::Provider>();
-
-    let a_addr = start_listening(&mut a_transport, "/ip4/127.0.0.1/udp/0/quic").await;
-    let ((_, b_send_back_addr, _), _) =
-        connect(&mut a_transport, &mut b_transport, a_addr.clone()).await;
-
-    // Expect the dial to fail since b is not listening on an address.
-    match dial(&mut a_transport, b_send_back_addr).await {
-        Ok(_) => panic!("Expected dial to fail"),
-        Err(error) => {
-            assert_eq!("Handshake with the remote timed out.", error.to_string())
-        }
-    };
-
-    let b_addr = start_listening(&mut b_transport, "/ip4/127.0.0.1/udp/0/quic").await;
-    let ((_, a_send_back_addr, _), _) = connect(&mut b_transport, &mut a_transport, b_addr).await;
-
-    assert_eq!(a_send_back_addr, a_addr);
-}
-
-#[cfg(feature = "async-std")]
-#[async_std::test]
-async fn ipv4_dial_ipv6() {
-    let _ = env_logger::try_init();
-    let (a_peer_id, mut a_transport) = create_transport::<quic::async_std::Provider>();
-    let (b_peer_id, mut b_transport) = create_transport::<quic::async_std::Provider>();
-
-    let a_addr = start_listening(&mut a_transport, "/ip6/::1/udp/0/quic").await;
-    let ((a_connected, _, _), (b_connected, _)) =
-        connect(&mut a_transport, &mut b_transport, a_addr).await;
-
-    assert_eq!(a_connected, b_peer_id);
-    assert_eq!(b_connected, a_peer_id);
-}
-
-#[cfg(feature = "async-std")]
-#[async_std::test]
-#[ignore] // Transport currently does not validate PeerId. Delete this test?
-async fn wrong_peerid() {
-    use libp2p::PeerId;
-
-    let (a_peer_id, mut a_transport) = create_transport::<quic::async_std::Provider>();
-    let (b_peer_id, mut b_transport) = create_transport::<quic::async_std::Provider>();
-
-    let a_addr = start_listening(&mut a_transport, "/ip6/::1/udp/0/quic").await;
-    let a_addr_random_peer = a_addr.with(Protocol::P2p(PeerId::random().into()));
-
-    let ((a_connected, _, _), (b_connected, _)) =
-        connect(&mut a_transport, &mut b_transport, a_addr_random_peer).await;
-
-    assert_ne!(a_connected, b_peer_id);
-    assert_eq!(b_connected, a_peer_id);
-}
-
-#[cfg(feature = "async-std")]
-fn new_tcp_quic_transport() -> (PeerId, Boxed<(PeerId, StreamMuxerBox)>) {
-    let keypair = generate_tls_keypair();
-    let peer_id = keypair.public().to_peer_id();
-    let mut config = quic::Config::new(&keypair);
-    config.handshake_timeout = Duration::from_secs(1);
-
-    let quic_transport = quic::async_std::Transport::new(config);
-    let tcp_transport = tcp::async_io::Transport::new(tcp::Config::default())
-        .upgrade(upgrade::Version::V1)
-        .authenticate(
-            noise::NoiseConfig::xx(
-                noise::Keypair::<noise::X25519Spec>::new()
-                    .into_authentic(&keypair)
-                    .unwrap(),
-            )
-            .into_authenticated(),
-        )
-        .multiplex(yamux::YamuxConfig::default());
-
-    let transport = OrTransport::new(quic_transport, tcp_transport)
-        .map(|either_output, _| match either_output {
-            EitherOutput::First((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
-            EitherOutput::Second((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
-        })
-        .boxed();
-
-    (peer_id, transport)
-}
-
-#[cfg(feature = "async-std")]
-#[async_std::test]
-async fn tcp_and_quic() {
-    let (a_peer_id, mut a_transport) = new_tcp_quic_transport();
-    let (b_peer_id, mut b_transport) = new_tcp_quic_transport();
-
-    let quic_addr = start_listening(&mut a_transport, "/ip4/127.0.0.1/udp/0/quic").await;
-    let tcp_addr = start_listening(&mut a_transport, "/ip4/127.0.0.1/tcp/0").await;
-
-    let ((a_connected, _, _), (b_connected, _)) =
-        connect(&mut a_transport, &mut b_transport, quic_addr).await;
-    assert_eq!(a_connected, b_peer_id);
-    assert_eq!(b_connected, a_peer_id);
-
-    let ((a_connected, _, _), (b_connected, _)) =
-        connect(&mut a_transport, &mut b_transport, tcp_addr).await;
-    assert_eq!(a_connected, b_peer_id);
-    assert_eq!(b_connected, a_peer_id);
 }
 
 /// Helper function for driving two transports until they established a connection.
