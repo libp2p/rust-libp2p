@@ -363,28 +363,25 @@ where
                     }));
                 }
                 OutboundSubstreamState::PendingSend(mut substream, msg, user_data) => {
-                    match Sink::poll_ready(Pin::new(&mut substream), cx) {
-                        Poll::Ready(Ok(())) => {
-                            match Sink::start_send(Pin::new(&mut substream), msg) {
-                                Ok(()) => {
-                                    *this =
-                                        OutboundSubstreamState::PendingFlush(substream, user_data);
-                                }
-                                Err(error) => {
-                                    *this = OutboundSubstreamState::Done;
-                                    let event = user_data.map(|user_data| {
-                                        ConnectionHandlerEvent::Custom(
-                                            KademliaHandlerEvent::QueryError {
-                                                error: KademliaHandlerQueryErr::Io(error),
-                                                user_data,
-                                            },
-                                        )
-                                    });
-
-                                    return Poll::Ready(event);
-                                }
+                    match substream.poll_ready_unpin(cx) {
+                        Poll::Ready(Ok(())) => match substream.start_send_unpin(msg) {
+                            Ok(()) => {
+                                *this = OutboundSubstreamState::PendingFlush(substream, user_data);
                             }
-                        }
+                            Err(error) => {
+                                *this = OutboundSubstreamState::Done;
+                                let event = user_data.map(|user_data| {
+                                    ConnectionHandlerEvent::Custom(
+                                        KademliaHandlerEvent::QueryError {
+                                            error: KademliaHandlerQueryErr::Io(error),
+                                            user_data,
+                                        },
+                                    )
+                                });
+
+                                return Poll::Ready(event);
+                            }
+                        },
                         Poll::Pending => {
                             *this = OutboundSubstreamState::PendingSend(substream, msg, user_data);
                             return Poll::Pending;
@@ -403,7 +400,7 @@ where
                     }
                 }
                 OutboundSubstreamState::PendingFlush(mut substream, user_data) => {
-                    match Sink::poll_flush(Pin::new(&mut substream), cx) {
+                    match substream.poll_flush_unpin(cx) {
                         Poll::Ready(Ok(())) => {
                             if let Some(user_data) = user_data {
                                 *this = OutboundSubstreamState::WaitingAnswer(substream, user_data);
@@ -429,7 +426,7 @@ where
                     }
                 }
                 OutboundSubstreamState::WaitingAnswer(mut substream, user_data) => {
-                    match Stream::poll_next(Pin::new(&mut substream), cx) {
+                    match substream.poll_next_unpin(cx) {
                         Poll::Ready(Some(Ok(msg))) => {
                             *this = OutboundSubstreamState::Closing(substream);
                             let event = process_kad_response(msg, user_data);
@@ -468,15 +465,13 @@ where
 
                     return Poll::Ready(Some(ConnectionHandlerEvent::Custom(event)));
                 }
-                OutboundSubstreamState::Closing(mut stream) => {
-                    match Sink::poll_close(Pin::new(&mut stream), cx) {
-                        Poll::Ready(Ok(())) | Poll::Ready(Err(_)) => return Poll::Ready(None),
-                        Poll::Pending => {
-                            *this = OutboundSubstreamState::Closing(stream);
-                            return Poll::Pending;
-                        }
+                OutboundSubstreamState::Closing(mut stream) => match stream.poll_close_unpin(cx) {
+                    Poll::Ready(Ok(())) | Poll::Ready(Err(_)) => return Poll::Ready(None),
+                    Poll::Pending => {
+                        *this = OutboundSubstreamState::Closing(stream);
+                        return Poll::Pending;
                     }
-                }
+                },
                 OutboundSubstreamState::Done => {
                     *this = OutboundSubstreamState::Done;
                     return Poll::Ready(None);
