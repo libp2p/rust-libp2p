@@ -272,10 +272,7 @@ impl Encoder for GossipsubCodec {
         item: Self::Item,
         dst: &mut BytesMut,
     ) -> Result<(), GossipsubHandlerError> {
-        match self.codec.encode(item, dst) {
-            Ok(_) => Ok(()),
-            _ => Err(GossipsubHandlerError::MaxTransmissionSize),
-        }
+        return Ok(self.codec.encode(item, dst)?);
     }
 }
 
@@ -284,10 +281,7 @@ impl Decoder for GossipsubCodec {
     type Error = GossipsubHandlerError;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, GossipsubHandlerError> {
-        let rpc = match self.codec.decode(src) {
-            Ok(Some(p)) => p,
-            _ => return Ok(None),
-        };
+        let rpc = self.codec.decode(src)?.unwrap();
 
         // Store valid messages.
         let mut messages = Vec::with_capacity(rpc.publish.len());

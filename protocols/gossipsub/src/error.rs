@@ -22,7 +22,7 @@
 
 use libp2p_core::identity::error::SigningError;
 use libp2p_core::upgrade::ProtocolError;
-use prost_codec::Error;
+use prost_codec::Error as ProstCodecError;
 use thiserror::Error;
 
 /// Error associated with publishing a gossipsub message.
@@ -101,7 +101,7 @@ pub enum GossipsubHandlerError {
     #[error("Protocol negotiation failed.")]
     NegotiationProtocolError(ProtocolError),
     #[error("Failed to encode or decode")]
-    Codec(Error),
+    Codec(#[source] ProstCodecError),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -144,5 +144,11 @@ impl From<std::io::Error> for GossipsubHandlerError {
 impl From<std::io::Error> for PublishError {
     fn from(error: std::io::Error) -> PublishError {
         PublishError::TransformFailed(error)
+    }
+}
+
+impl From<prost_codec::Error> for GossipsubHandlerError {
+    fn from(error: prost_codec::Error) -> GossipsubHandlerError {
+        GossipsubHandlerError::Codec(error)
     }
 }
