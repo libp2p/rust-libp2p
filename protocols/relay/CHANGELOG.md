@@ -1,6 +1,6 @@
 # 0.13.1 - [unreleased]
 
-- Replace `Client` and `Relay`'s NetworkBehaviour implemention `inject_*` methods with the new `on_*` methods.
+- Replace `Client` and `Relay`'s `NetworkBehaviour` implemention `inject_*` methods with the new `on_*` methods.
   See [PR 3011].
 
 [PR 3011]: https://github.com/libp2p/rust-libp2p/pull/3011

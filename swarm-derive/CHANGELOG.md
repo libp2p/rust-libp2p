@@ -1,3 +1,11 @@
+# 0.30.2 - [unreleased]
+
+- Replace `NetworkBehaviour` Derive macro deprecated `inject_*` method implementations
+  with the new `on_swarm_event` and `on_connection_handler_event`.
+  See [PR 3011].
+
+[PR 3011]: https://github.com/libp2p/rust-libp2p/pull/3011
+
 # 0.30.1
 
 - Fix an issue where the derive would generate bad code if the type parameters between the behaviour and a custom

@@ -10,6 +10,8 @@
 
 - Add new `on_connection_handler_event` method with the same signature as `inject_event`, make the
   default implementation of `inject_event` call `on_connection_handler_event` and deprecate it.
+  To migrate, users should replace the `NetworkBehaviour::inject_event` call
+  with `NetworkBehaviour::on_connection_handler_event`.
   See [PR 3011].
 
 [PR 3011]: https://github.com/libp2p/rust-libp2p/pull/3011

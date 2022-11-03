@@ -2351,13 +2351,6 @@ fn test_add_outbound_peers_if_min_is_not_satisfied() {
     );
 }
 
-//TODO add a test that ensures that new outbound connections are recognized as such.
-// This is at the moment done in behaviour with relying on the fact that the call to
-// `NetworkBehaviour::on_swarm_event` with `FromSwarm::ConnectionEstablished`
-// for the first connection is done before `inject_connected`
-// gets called. For all further connections `NetworkBehaviour::on_swarm_event`
-// should get called wit `FromSwarm::ConnectionEstablished` after `inject_connected`.
-
 #[test]
 fn test_prune_negative_scored_peers() {
     let config = GossipsubConfig::default();
