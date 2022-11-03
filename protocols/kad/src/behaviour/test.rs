@@ -711,7 +711,11 @@ fn put_record() {
                 );
                 assert_eq!(swarms[0].behaviour_mut().queries.size(), 0);
                 for k in records.keys() {
-                    swarms[0].behaviour_mut().store.remove(k);
+                    swarms[0]
+                        .behaviour_mut()
+                        .store
+                        .remove(k)
+                        .expect("Valid response from MemoryStore.");
                 }
                 assert_eq!(swarms[0].behaviour_mut().store.records().count(), 0);
                 // All records have been republished, thus the test is complete.

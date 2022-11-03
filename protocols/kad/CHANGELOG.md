@@ -4,6 +4,8 @@
 
 - Update to `libp2p-swarm` `v0.41.0`.
 
+- Change interface of the `RecordStore` trait. Add missed results for its operations.
+
 # 0.41.0
 
 - Remove deprecated `set_protocol_name()` from `KademliaConfig` & `KademliaProtocolConfig`.

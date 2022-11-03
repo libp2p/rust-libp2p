@@ -46,7 +46,7 @@ use libp2p_swarm::{
     dial_opts::{self, DialOpts},
     DialError, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
 };
-use log::{debug, info, warn};
+use log::{debug, error, info, warn};
 use smallvec::SmallVec;
 use std::collections::{BTreeMap, HashSet, VecDeque};
 use std::fmt;
@@ -686,7 +686,9 @@ where
 
         if let Some(record) = self.store.get(&key) {
             if record.is_expired(Instant::now()) {
-                self.store.remove(&key)
+                if let Err(ref err) = self.store.remove(&key) {
+                    warn!("Record removal failed: {:?}", err);
+                };
             } else {
                 records.push(PeerRecord {
                     peer: None,
@@ -815,12 +817,14 @@ where
     /// This is a _local_ operation. However, it also has the effect that
     /// the record will no longer be periodically re-published, allowing the
     /// record to eventually expire throughout the DHT.
-    pub fn remove_record(&mut self, key: &record::Key) {
+    pub fn remove_record(&mut self, key: &record::Key) -> store::Result<()> {
         if let Some(r) = self.store.get(key) {
             if r.publisher.as_ref() == Some(self.kbuckets.local_key().preimage()) {
-                self.store.remove(key)
+                return self.store.remove(key);
             }
         }
+
+        Ok(())
     }
 
     /// Gets a mutable reference to the record store.
@@ -2094,7 +2098,9 @@ where
                 let record = match self.store.get(&key) {
                     Some(record) => {
                         if record.is_expired(Instant::now()) {
-                            self.store.remove(&key);
+                            if let Err(ref err) = self.store.remove(&key) {
+                                error!("Record removal failed: {:?}", err);
+                            };
                             None
                         } else {
                             Some(record.into_owned())

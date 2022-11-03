@@ -131,8 +131,10 @@ impl<'a> RecordStore<'a> for MemoryStore {
         Ok(())
     }
 
-    fn remove(&'a mut self, k: &Key) {
+    fn remove(&'a mut self, k: &Key) -> Result<()> {
         self.records.remove(k);
+
+        Ok(())
     }
 
     fn records(&'a self) -> Self::RecordsIter {
@@ -234,7 +236,9 @@ mod tests {
             let mut store = MemoryStore::new(PeerId::random());
             assert!(store.put(r.clone()).is_ok());
             assert_eq!(Some(Cow::Borrowed(&r)), store.get(&r.key));
-            store.remove(&r.key);
+            store
+                .remove(&r.key)
+                .expect("Valid response from MemoryStore.");
             assert!(store.get(&r.key).is_none());
         }
         quickcheck(prop as fn(_))

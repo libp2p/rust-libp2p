@@ -44,6 +44,10 @@ pub enum Error {
     /// The store cannot store this value because it is too large.
     #[error("the value is too large to be stored")]
     ValueTooLarge,
+
+    /// The store cannot remove the value.
+    #[error("can't remove the value from the store")]
+    RemoveValueError,
 }
 
 /// Trait for types implementing a record store.
@@ -75,7 +79,7 @@ pub trait RecordStore<'a> {
     fn put(&'a mut self, r: Record) -> Result<()>;
 
     /// Removes the record with the given key from the store.
-    fn remove(&'a mut self, k: &Key);
+    fn remove(&'a mut self, k: &Key) -> Result<()>;
 
     /// Gets an iterator over all (value-) records currently stored.
     fn records(&'a self) -> Self::RecordsIter;

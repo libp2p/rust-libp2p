@@ -66,6 +66,7 @@ use futures::prelude::*;
 use futures_timer::Delay;
 use instant::Instant;
 use libp2p_core::PeerId;
+use log::error;
 use std::collections::HashSet;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -229,7 +230,9 @@ impl PutRecordJob {
         if let PeriodicJobState::Running(records) = &mut self.inner.state {
             for r in records {
                 if r.is_expired(now) {
-                    store.remove(&r.key)
+                    if let Err(ref err) = store.remove(&r.key) {
+                        error!("Record removal failed: {:?}", err);
+                    };
                 } else {
                     return Poll::Ready(r);
                 }
