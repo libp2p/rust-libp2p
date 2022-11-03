@@ -1,8 +1,8 @@
 use anyhow::Result;
 use futures::StreamExt;
 use libp2p::swarm::{keep_alive, SwarmBuilder};
-use libp2p::{ping, Swarm};
 use libp2p::Transport;
+use libp2p::{ping, Swarm};
 use libp2p_core::identity;
 use libp2p_core::muxing::StreamMuxerBox;
 use rand::thread_rng;
@@ -32,17 +32,15 @@ fn create_swarm() -> Result<Swarm<Behaviour>> {
         .map(|(peer_id, conn), _| (peer_id, StreamMuxerBox::new(conn)))
         .boxed();
 
-    Ok(
-        SwarmBuilder::new(transport, Behaviour::default(), peer_id)
-            .executor(Box::new(|fut| {
-                tokio::spawn(fut);
-            }))
-            .build(),
-    )
+    Ok(SwarmBuilder::new(transport, Behaviour::default(), peer_id)
+        .executor(Box::new(|fut| {
+            tokio::spawn(fut);
+        }))
+        .build())
 }
 
 #[derive(libp2p::NetworkBehaviour, Default)]
 struct Behaviour {
     ping: ping::Behaviour,
-    keep_alive: keep_alive::Behaviour
+    keep_alive: keep_alive::Behaviour,
 }

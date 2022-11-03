@@ -102,11 +102,7 @@ impl Connection {
     ) {
         rtc_conn
             .on_data_channel(Box::new(move |data_channel: Arc<RTCDataChannel>| {
-                log::debug!(
-                    "Incoming data channel '{}'-'{}'",
-                    data_channel.label(),
-                    data_channel.id()
-                );
+                log::debug!("Incoming data channel {}", data_channel.id());
 
                 let tx = tx.clone();
 
@@ -115,19 +111,20 @@ impl Connection {
                         .on_open({
                             let data_channel = data_channel.clone();
                             Box::new(move || {
-                                log::debug!(
-                                    "Data channel '{}'-'{}' open",
-                                    data_channel.label(),
-                                    data_channel.id()
-                                );
+                                log::debug!("Data channel {} open", data_channel.id());
 
                                 Box::pin(async move {
                                     let data_channel = data_channel.clone();
+                                    let id = data_channel.id();
                                     match data_channel.detach().await {
                                         Ok(detached) => {
                                             let mut tx = tx.lock().await;
                                             if let Err(e) = tx.try_send(detached.clone()) {
-                                                log::error!("Can't send data channel: {}", e);
+                                                log::error!(
+                                                    "Can't send data channel {}: {}",
+                                                    id,
+                                                    e
+                                                );
                                                 // We're not accepting data channels fast enough =>
                                                 // close this channel.
                                                 //
@@ -136,14 +133,15 @@ impl Connection {
                                                 // possible with the current API.
                                                 if let Err(e) = detached.close().await {
                                                     log::error!(
-                                                        "Failed to close data channel: {}",
+                                                        "Failed to close data channel {}: {}",
+                                                        id,
                                                         e
                                                     );
                                                 }
                                             }
                                         }
                                         Err(e) => {
-                                            log::error!("Can't detach data channel: {}", e);
+                                            log::error!("Can't detach data channel {}: {}", id, e);
                                         }
                                     };
                                 })
@@ -218,7 +216,7 @@ impl StreamMuxer for Connection {
             // No need to hold the lock during the DTLS handshake.
             drop(peer_conn);
 
-            log::trace!("Opening outbound substream {}", data_channel.id());
+            log::trace!("Opening data channel {}", data_channel.id());
 
             let (tx, rx) = oneshot::channel::<Arc<DetachedDataChannel>>();
 
@@ -235,6 +233,9 @@ impl StreamMuxer for Connection {
         match ready!(fut.as_mut().poll(cx)) {
             Ok(detached) => {
                 self.outbound_fut = None;
+
+                log::trace!("Outbound substream {}", detached.stream_identifier());
+
                 let (substream, drop_listener) = Substream::new(detached);
                 self.drop_listeners.push(drop_listener);
                 if let Some(waker) = self.no_drop_listeners_waker.take() {
@@ -283,25 +284,22 @@ pub(crate) async fn register_data_channel_open_handler(
         .on_open({
             let data_channel = data_channel.clone();
             Box::new(move || {
-                log::debug!(
-                    "Data channel '{}'-'{}' open",
-                    data_channel.label(),
-                    data_channel.id()
-                );
+                log::debug!("Data channel {} open", data_channel.id());
 
                 Box::pin(async move {
                     let data_channel = data_channel.clone();
+                    let id = data_channel.id();
                     match data_channel.detach().await {
                         Ok(detached) => {
                             if let Err(e) = data_channel_tx.send(detached.clone()) {
-                                log::error!("Can't send data channel: {:?}", e);
+                                log::error!("Can't send data channel {}: {:?}", id, e);
                                 if let Err(e) = detached.close().await {
-                                    log::error!("Failed to close data channel: {}", e);
+                                    log::error!("Failed to close data channel {}: {}", id, e);
                                 }
                             }
                         }
                         Err(e) => {
-                            log::error!("Can't detach data channel: {}", e);
+                            log::error!("Can't detach data channel {}: {}", id, e);
                         }
                     };
                 })
