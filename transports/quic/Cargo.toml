@@ -11,7 +11,7 @@ license = "MIT"
 if-watch = "2.0.0"
 libp2p-core = { version = "0.37.0", path = "../../core" }
 libp2p-tls = { version = "0.1.0-alpha", path = "../../transports/tls" }
-quinn = { version = "0.9.0", git = "https://github.com/quinn-rs/quinn.git", branch = "main", features = ["tls-rustls", "futures-io", "runtime-async-std"] }
+quinn = { version = "0.9.0", features = ["tls-rustls", "futures-io", "runtime-async-std"] }
 futures = "0.3.21"
 thiserror = "1.0.26"
 tracing = "0.1"
