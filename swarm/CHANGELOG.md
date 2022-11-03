@@ -1,4 +1,6 @@
-# 0.40.2 - [unreleased]
+# 0.41.0 [unreleased]
+
+- Update to `libp2p-core` `v0.38.0`.
 
 - Add new `on_swarm_event` method to `NetworkBehaviour` that accepts a `FromSwarm` enum and update
   `inject_*` methods to call `on_swarm_event` with the respective `FromSwarm` variant and deprecate
@@ -16,7 +18,7 @@
 
 [PR 3011]: https://github.com/libp2p/rust-libp2p/pull/3011
 
-# 0.40.0
+# 0.40.1
 
 - Bump rand to 0.8 and quickcheck to 1. See [PR 2857].
 

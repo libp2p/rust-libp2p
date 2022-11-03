@@ -1,4 +1,8 @@
-# 0.41.1 - [unreleased]
+# 0.42.0 [unreleased]
+
+- Update to `libp2p-core` `v0.38.0`.
+
+- Update to `libp2p-swarm` `v0.41.0`.
 
 - Replace `GenMdns`'s `NetworkBehaviour` implemention `inject_*` methods with the new `on_*` methods.
   See [PR 3011].
