@@ -110,7 +110,6 @@
   - `tcp-async-io` in favor of `tcp` + `async-std`
   - `mdns-async-io` in favor of `mdns` + `async-std`
   - `dns-async-std` in favor of `dns` + `async-std`
-
   See [PR 2962].
 
 - Update individual crates.
