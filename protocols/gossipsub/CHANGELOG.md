@@ -6,7 +6,9 @@
 
 - Update to `prost-codec` `v0.3.0`.
 
-- Refactoring GossipsubCodec to use common protobuf Codec.
+- Refactoring GossipsubCodec to use common protobuf Codec. See [PR 3070]
+
+[PR 3070]: https://github.com/libp2p/rust-libp2p/pull/3070
 
 # 0.42.0
 
