@@ -55,8 +55,9 @@ use libp2p::gossipsub::{
 use libp2p::{
     gossipsub, identity,
     mdns::{Mdns, MdnsConfig, MdnsEvent},
+    swarm::NetworkBehaviour,
     swarm::SwarmEvent,
-    NetworkBehaviour, PeerId, Swarm,
+    PeerId, Swarm,
 };
 use std::collections::hash_map::DefaultHasher;
 use std::error::Error;
