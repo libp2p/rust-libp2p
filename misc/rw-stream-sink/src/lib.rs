@@ -25,6 +25,8 @@
 //! Each call to [`AsyncWrite::poll_write`] will send one packet to the sink.
 //! Calls to [`AsyncRead::poll_read`] will read from the stream's incoming packets.
 
+#![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
+
 use futures::{prelude::*, ready};
 use std::{
     io::{self, Read},

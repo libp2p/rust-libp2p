@@ -555,7 +555,7 @@ mod tests {
     use futures::pin_mut;
     use libp2p::mplex::MplexConfig;
     use libp2p::noise;
-    use libp2p::tcp::{GenTcpConfig, TcpTransport};
+    use libp2p::tcp;
     use libp2p_core::{identity, muxing::StreamMuxerBox, transport, upgrade, PeerId, Transport};
     use libp2p_swarm::{Swarm, SwarmEvent};
     use std::time::Duration;
@@ -569,7 +569,7 @@ mod tests {
             .into_authentic(&id_keys)
             .unwrap();
         let pubkey = id_keys.public();
-        let transport = TcpTransport::new(GenTcpConfig::default().nodelay(true))
+        let transport = tcp::async_io::Transport::new(tcp::Config::default().nodelay(true))
             .upgrade(upgrade::Version::V1)
             .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
             .multiplex(MplexConfig::new())

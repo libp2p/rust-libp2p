@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 #![recursion_limit = "256"]
+#![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
 use heck::ToUpperCamelCase;
 use proc_macro::TokenStream;

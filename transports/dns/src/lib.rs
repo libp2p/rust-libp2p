@@ -18,7 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! # libp2p-dns
+//! # [DNS name resolution](https://github.com/libp2p/specs/blob/master/addressing/README.md#ip-and-name-resolution)
+//! [`Transport`] for libp2p.
 //!
 //! This crate provides the type [`GenDnsConfig`] with its instantiations
 //! [`DnsConfig`] and `TokioDnsConfig` for use with `async-std` and `tokio`,
@@ -53,6 +54,8 @@
 //! and provide a custom [`ResolverConfig`].
 //!
 //![trust-dns-resolver]: https://docs.rs/trust-dns-resolver/latest/trust_dns_resolver/#dns-over-tls-and-dns-over-https
+
+#![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
 #[cfg(feature = "async-std")]
 use async_std_resolver::{AsyncStdConnection, AsyncStdConnectionProvider};
