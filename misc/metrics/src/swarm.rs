@@ -148,7 +148,7 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
                 self.connections_established
                     .get_or_create(&ConnectionEstablishedLabels {
                         role: endpoint.into(),
-                        proto_stack: endpoint.get_remote_address().protocol_stack(),
+                        protocols: endpoint.get_remote_address().protocol_stack(),
                     })
                     .inc();
             }
@@ -156,7 +156,7 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
                 self.connections_closed
                     .get_or_create(&ConnectionClosedLabels {
                         role: endpoint.into(),
-                        proto_stack: endpoint.get_remote_address().protocol_stack(),
+                        protocols: endpoint.get_remote_address().protocol_stack(),
                     })
                     .inc();
             }
@@ -173,7 +173,7 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
                 self.connections_incoming_error
                     .get_or_create(&IncomingConnectionErrorLabels {
                         error: error.into(),
-                        proto_stack: send_back_addr.protocol_stack(),
+                        protocols: send_back_addr.protocol_stack(),
                     })
                     .inc();
             }
@@ -263,13 +263,13 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
 #[derive(Encode, Hash, Clone, Eq, PartialEq)]
 struct ConnectionEstablishedLabels {
     role: Role,
-    proto_stack: String,
+    protocols: String,
 }
 
 #[derive(Encode, Hash, Clone, Eq, PartialEq)]
 struct ConnectionClosedLabels {
     role: Role,
-    proto_stack: String,
+    protocols: String,
 }
 
 #[derive(Encode, Hash, Clone, Eq, PartialEq)]
@@ -317,7 +317,7 @@ enum OutgoingConnectionErrorError {
 #[derive(Encode, Hash, Clone, Eq, PartialEq)]
 struct IncomingConnectionErrorLabels {
     error: PendingInboundConnectionError,
-    proto_stack: String,
+    protocols: String,
 }
 
 #[derive(Encode, Hash, Clone, Eq, PartialEq)]

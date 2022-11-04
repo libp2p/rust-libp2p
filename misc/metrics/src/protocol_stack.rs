@@ -3,12 +3,12 @@ use prometheus_client::encoding::text::Encode;
 
 #[derive(Encode, Hash, Clone, Eq, PartialEq)]
 pub struct Labels {
-    address_stack: String,
+    protocols: String,
 }
 impl From<&Multiaddr> for Labels {
     fn from(ma: &Multiaddr) -> Self {
         Self {
-            address_stack: ma.protocol_stack(),
+            protocols: ma.protocol_stack(),
         }
     }
 }
