@@ -26,7 +26,7 @@ use futures::{
 };
 use libp2p_core::{upgrade, InboundUpgrade, OutboundUpgrade, PeerId, UpgradeInfo};
 use prost::Message;
-use std::{error, fmt, io, iter, pin::Pin};
+use std::{io, iter, pin::Pin};
 
 /// Implementation of `ConnectionUpgrade` for the floodsub protocol.
 #[derive(Debug, Clone, Default)]
@@ -59,7 +59,7 @@ where
     fn upgrade_inbound(self, mut socket: TSocket, _: Self::Info) -> Self::Future {
         Box::pin(async move {
             let packet = upgrade::read_length_prefixed(&mut socket, 2048).await?;
-            let rpc = rpc_proto::Rpc::decode(&packet[..])?;
+            let rpc = rpc_proto::Rpc::decode(&packet[..]).map_err(DecodeError)?;
 
             let mut messages = Vec::with_capacity(rpc.publish.len());
             for publish in rpc.publish.into_iter() {
@@ -92,53 +92,22 @@ where
 }
 
 /// Reach attempt interrupt errors.
-#[derive(Debug)]
+#[derive(thiserror::Error, Debug)]
 pub enum FloodsubDecodeError {
     /// Error when reading the packet from the socket.
-    ReadError(io::Error),
+    #[error("Failed to read from socket")]
+    ReadError(#[from] io::Error),
     /// Error when decoding the raw buffer into a protobuf.
-    ProtobufError(prost::DecodeError),
+    #[error("Failed to decode protobuf")]
+    ProtobufError(#[from] DecodeError),
     /// Error when parsing the `PeerId` in the message.
+    #[error("Failed to decode PeerId from message")]
     InvalidPeerId,
 }
 
-impl From<io::Error> for FloodsubDecodeError {
-    fn from(err: io::Error) -> Self {
-        FloodsubDecodeError::ReadError(err)
-    }
-}
-
-impl From<prost::DecodeError> for FloodsubDecodeError {
-    fn from(err: prost::DecodeError) -> Self {
-        FloodsubDecodeError::ProtobufError(err)
-    }
-}
-
-impl fmt::Display for FloodsubDecodeError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match *self {
-            FloodsubDecodeError::ReadError(ref err) => {
-                write!(f, "Error while reading from socket: {}", err)
-            }
-            FloodsubDecodeError::ProtobufError(ref err) => {
-                write!(f, "Error while decoding protobuf: {}", err)
-            }
-            FloodsubDecodeError::InvalidPeerId => {
-                write!(f, "Error while decoding PeerId from message")
-            }
-        }
-    }
-}
-
-impl error::Error for FloodsubDecodeError {
-    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-        match *self {
-            FloodsubDecodeError::ReadError(ref err) => Some(err),
-            FloodsubDecodeError::ProtobufError(ref err) => Some(err),
-            FloodsubDecodeError::InvalidPeerId => None,
-        }
-    }
-}
+#[derive(thiserror::Error, Debug)]
+#[error(transparent)]
+pub struct DecodeError(prost::DecodeError);
 
 /// An RPC received by the floodsub system.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

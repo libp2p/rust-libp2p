@@ -1,3 +1,11 @@
+# 0.41.0 [unreleased]
+
+- Remove `prost::Error` from public API. See [PR 3058].
+
+- Update to `libp2p-core` `v0.38.0`.
+
+[PR 3058]: https://github.com/libp2p/rust-libp2p/pull/3058
+
 # 0.40.0
 
 - Update to `libp2p-core` `v0.37.0`.

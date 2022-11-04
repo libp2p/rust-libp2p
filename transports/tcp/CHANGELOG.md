@@ -4,6 +4,8 @@
 
 - Remove `TcpListenStream` and `TcpListenerEvent` from public API. See [PR 2961].
 
+- Update to `libp2p-core` `v0.38.0`.
+
 [PR 2961]: https://github.com/libp2p/rust-libp2p/pull/2961
 
 # 0.37.0
