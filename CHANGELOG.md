@@ -75,7 +75,6 @@
   - Update to [`libp2p-wasm-ext` `v0.38.0`](transports/wasm-ext/CHANGELOG.md#0380).
   - Update to [`libp2p-websocket` `v0.40.0`](transports/websocket/CHANGELOG.md#0400).
   - Update to [`libp2p-yamux` `v0.42.0`](muxers/yamux/CHANGELOG.md#0420).
-  - Update to [`libp2p-gossipsub`_`v0.43.0`](protocols/gossipsub/CHANGELOG.md#0430).
 
 [PR 2945]: https://github.com/libp2p/rust-libp2p/pull/2945
 [PR 3001]: https://github.com/libp2p/rust-libp2p/pull/3001
