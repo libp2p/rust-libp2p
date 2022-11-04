@@ -191,7 +191,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     };
 
     // Build the list of statements to put in the body of `on_swarm_event()`
-    // for the FromSwarm::ConnectionEstablished variant.
+    // for the `FromSwarm::ConnectionEstablished` variant.
     let on_connection_established_stmts = {
         data_struct
             .fields
@@ -206,7 +206,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     };
 
     // Build the list of statements to put in the body of `on_swarm_event()`
-    // for the FromSwarm::AddressChange variant.
+    // for the `FromSwarm::AddressChange variant`.
     let on_address_change_stmts = {
         data_struct
             .fields
@@ -219,7 +219,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     };
 
     // Build the list of statements to put in the body of `on_swarm_event()`
-    // for the FromSwarm::ConnectionClosed variant.
+    // for the `FromSwarm::ConnectionClosed` variant.
     let on_connection_closed_stmts = {
         data_struct.fields
             .iter()
@@ -251,7 +251,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     };
 
     // Build the list of statements to put in the body of `on_swarm_event()`
-    // for the FromSwarm::DialFailure variant.
+    // for the `FromSwarm::DialFailure` variant.
     let on_dial_failure_stmts = {
         data_struct
             .fields
@@ -283,7 +283,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     };
 
     // Build the list of statements to put in the body of `on_swarm_event()`
-    // for the FromSwarm::ListenFailure variant.
+    // for the `FromSwarm::ListenFailure` variant.
     let on_listen_failure_stmts = {
         data_struct.fields
             .iter()
@@ -312,7 +312,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     };
 
     // Build the list of statements to put in the body of `on_swarm_event()`
-    // for the FromSwarm::NewListener variant.
+    // for the `FromSwarm::NewListener` variant.
     let on_new_listener_stmts = {
         data_struct
             .fields
@@ -325,7 +325,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     };
 
     // Build the list of statements to put in the body of `on_swarm_event()`
-    // for the FromSwarm::NewListenAddr variant.
+    // for the `FromSwarm::NewListenAddr` variant.
     let on_new_listen_addr_stmts = {
         data_struct
             .fields
@@ -338,7 +338,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     };
 
     // Build the list of statements to put in the body of `on_swarm_event()`
-    // for the FromSwarm::ExpiredListenAddr variant.
+    // for the `FromSwarm::ExpiredListenAddr` variant.
     let on_expired_listen_addr_stmts = {
         data_struct
             .fields
@@ -351,7 +351,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     };
 
     // Build the list of statements to put in the body of `on_swarm_event()`
-    // for the FromSwarm::NewExternalAddr variant.
+    // for the `FromSwarm::NewExternalAddr` variant.
     let on_new_external_addr_stmts = {
         data_struct
             .fields
@@ -364,7 +364,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     };
 
     // Build the list of statements to put in the body of `on_swarm_event()`
-    // for the FromSwarm::ExpiredExternalAddr variant.
+    // for the `FromSwarm::ExpiredExternalAddr` variant.
     let on_expired_external_addr_stmts = {
         data_struct
             .fields
@@ -377,7 +377,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     };
 
     // Build the list of statements to put in the body of `on_swarm_event()`
-    // for the FromSwarm::ListenerError variant.
+    // for the `FromSwarm::ListenerError` variant.
     let on_listener_error_stmts = {
         data_struct
             .fields
@@ -390,7 +390,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     };
 
     // Build the list of statements to put in the body of `on_swarm_event()`
-    // for the FromSwarm::ListenerClosed variant.
+    // for the `FromSwarm::ListenerClosed` variant.
     let on_listener_closed_stmts = {
         data_struct
             .fields
