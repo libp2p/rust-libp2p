@@ -3478,15 +3478,15 @@ where
                 self.on_connection_closed(connection_closed)
             }
             FromSwarm::AddressChange(address_change) => self.on_address_change(address_change),
-            FromSwarm::DialFailure(_) => {}
-            FromSwarm::ListenFailure(_) => {}
-            FromSwarm::NewListener(_) => {}
-            FromSwarm::NewListenAddr(_) => {}
-            FromSwarm::ExpiredListenAddr(_) => {}
-            FromSwarm::ListenerError(_) => {}
-            FromSwarm::ListenerClosed(_) => {}
-            FromSwarm::NewExternalAddr(_) => {}
-            FromSwarm::ExpiredExternalAddr(_) => {}
+            FromSwarm::DialFailure(_)
+            | FromSwarm::ListenFailure(_)
+            | FromSwarm::NewListener(_)
+            | FromSwarm::NewListenAddr(_)
+            | FromSwarm::ExpiredListenAddr(_)
+            | FromSwarm::ListenerError(_)
+            | FromSwarm::ListenerClosed(_)
+            | FromSwarm::NewExternalAddr(_)
+            | FromSwarm::ExpiredExternalAddr(_) => {}
         }
     }
 }

@@ -2373,11 +2373,11 @@ where
             FromSwarm::NewListenAddr(NewListenAddr { addr, .. }) => {
                 self.local_addrs.insert(addr.clone());
             }
-            FromSwarm::ListenFailure(_) => {}
-            FromSwarm::NewListener(_) => {}
-            FromSwarm::ListenerClosed(_) => {}
-            FromSwarm::ListenerError(_) => {}
-            FromSwarm::ExpiredExternalAddr(_) => {}
+            FromSwarm::ListenFailure(_)
+            | FromSwarm::NewListener(_)
+            | FromSwarm::ListenerClosed(_)
+            | FromSwarm::ListenerError(_)
+            | FromSwarm::ExpiredExternalAddr(_) => {}
         }
     }
 }

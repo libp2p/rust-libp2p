@@ -447,13 +447,13 @@ impl NetworkBehaviour for Behaviour {
                     self.pending_push.extend(self.connected.keys());
                 }
             }
-            FromSwarm::AddressChange(_) => {}
-            FromSwarm::ListenFailure(_) => {}
-            FromSwarm::NewListener(_) => {}
-            FromSwarm::ListenerError(_) => {}
-            FromSwarm::ListenerClosed(_) => {}
-            FromSwarm::NewExternalAddr(_) => {}
-            FromSwarm::ExpiredExternalAddr(_) => {}
+            FromSwarm::AddressChange(_)
+            | FromSwarm::ListenFailure(_)
+            | FromSwarm::NewListener(_)
+            | FromSwarm::ListenerError(_)
+            | FromSwarm::ListenerClosed(_)
+            | FromSwarm::NewExternalAddr(_)
+            | FromSwarm::ExpiredExternalAddr(_) => {}
         }
     }
 }
