@@ -32,7 +32,9 @@ pub type FramedDc = Framed<Compat<PollDataChannel>, prost_codec::Codec<Message>>
 
 pub fn new(data_channel: Arc<DataChannel>) -> FramedDc {
     let mut inner = PollDataChannel::new(data_channel);
-    inner.set_read_buf_capacity(16384);
+    inner.set_read_buf_capacity(MAX_MSG_LEN);
 
-    Framed::new(inner.compat(), prost_codec::Codec::new(MAX_MSG_LEN))
+    let mut framed = Framed::new(inner.compat(), prost_codec::Codec::new(MAX_MSG_LEN));
+    framed.set_send_high_water_mark(MAX_MSG_LEN);
+    framed
 }
