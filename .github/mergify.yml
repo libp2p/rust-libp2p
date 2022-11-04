@@ -29,7 +29,7 @@ pull_request_rules:
     actions:
       post_check:
         success_conditions:
-          - "title~=^(fix|feat|docs|refactor|chore)(?:\\(.+\\))?:"
+          - "title~=^(fix|feat|docs|refactor|chore|deps)(?:\\(.+\\))?:"
         title: |
           {% if check_succeed %}
           Title follows Conventional Commit
