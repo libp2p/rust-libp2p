@@ -1,6 +1,11 @@
 ## Description
 
 <!-- Please write a summary of your changes and why you made them.-->
+<!-- This section will appear as the commit message after merging. Please craft it accordingly. -->
+
+## Notes
+
+<!-- Any notes or remarks you'd like to make about the PR. -->
 
 ## Links to any relevant issues
 
