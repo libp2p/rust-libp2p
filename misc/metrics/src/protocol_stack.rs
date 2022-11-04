@@ -5,8 +5,8 @@ use prometheus_client::encoding::text::Encode;
 pub struct Labels {
     protocols: String,
 }
-impl From<&Multiaddr> for Labels {
-    fn from(ma: &Multiaddr) -> Self {
+impl Labels {
+    pub fn new(ma: &Multiaddr) -> Self {
         Self {
             protocols: ma.protocol_stack(),
         }
