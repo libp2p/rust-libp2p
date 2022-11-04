@@ -74,6 +74,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         mdns: Mdns,
     }
 
+    #[allow(clippy::large_enum_variant)]
     enum MyBehaviourEvent {
         Kademlia(KademliaEvent),
         Mdns(MdnsEvent),
