@@ -103,7 +103,7 @@
     - Update to [`libp2p-dns` `v0.37.0`](transports/dns/CHANGELOG.md#0370).
     - Update to [`libp2p-floodsub` `v0.40.0`](protocols/floodsub/CHANGELOG.md#0400).
     - Update to [`libp2p-gossipsub` `v0.42.0`](protocols/gossipsub/CHANGELOG.md#0420).
-    - Update to [`libp2p-identify` `v0.41.0`](protocols/identify/CHANGELOG.md#0410).
+    - Update to [`libp2p-identify` `v0.40.0`](protocols/identify/CHANGELOG.md#0400).
     - Update to [`libp2p-kad` `v0.41.0`](protocols/kad/CHANGELOG.md#0410).
     - Update to [`libp2p-mdns` `v0.41.0`](protocols/mdns/CHANGELOG.md#0410).
     - Update to [`libp2p-metrics` `v0.10.0`](misc/metrics/CHANGELOG.md#0100).
