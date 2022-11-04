@@ -4,9 +4,14 @@
 
 - Update to `libp2p-swarm` `v0.41.0`.
 
+- Update to `prost-codec` `v0.3.0`.
+
+- Refactoring GossipsubCodec to use common protobuf Codec. See [PR 3070].
+
 - Replace `Gossipsub`'s `NetworkBehaviour` implemention `inject_*` methods with the new `on_*` methods.
   See [PR 3011].
 
+[PR 3070]: https://github.com/libp2p/rust-libp2p/pull/3070
 [PR 3011]: https://github.com/libp2p/rust-libp2p/pull/3011
 
 # 0.42.0
