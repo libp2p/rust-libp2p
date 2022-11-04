@@ -101,7 +101,7 @@ pub enum GossipsubHandlerError {
     #[error("Protocol negotiation failed.")]
     NegotiationProtocolError(ProtocolError),
     #[error("Failed to encode or decode")]
-    Codec(#[source] ProstCodecError),
+    Codec(#[from] ProstCodecError),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -144,11 +144,5 @@ impl From<std::io::Error> for GossipsubHandlerError {
 impl From<std::io::Error> for PublishError {
     fn from(error: std::io::Error) -> PublishError {
         PublishError::TransformFailed(error)
-    }
-}
-
-impl From<prost_codec::Error> for GossipsubHandlerError {
-    fn from(error: prost_codec::Error) -> GossipsubHandlerError {
-        GossipsubHandlerError::Codec(error)
     }
 }
