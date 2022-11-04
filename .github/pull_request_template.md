@@ -1,11 +1,10 @@
-# Description
+## Description
 
 <!-- Please write a summary of your changes and why you made them.-->
 
 ## Links to any relevant issues
 
 <!-- Reference any related issues.-->
-
 
 ## Open Questions
 
@@ -19,6 +18,3 @@
 - [ ] I have made corresponding changes to the documentation
 - [ ] I have added tests that prove my fix is effective or that my feature works
 - [ ] A changelog entry has been made in the appropriate crates
-
-<!-- The below text will appear as the commit message body once we squash-merge the PR. -->
-## Commit message body
