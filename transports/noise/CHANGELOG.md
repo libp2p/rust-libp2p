@@ -1,7 +1,12 @@
-# 0.40.1 [unreleased]
+# 0.41.0 [unreleased]
+
+- Remove `prost::Error` from public API. See [PR 3058].
+
+- Update to `libp2p-core` `v0.38.0`.
 
 - Introduce more variants to `NoiseError` to better differentiate between failure cases during authentication. See [PR 2972].
 
+[PR 3058]: https://github.com/libp2p/rust-libp2p/pull/3058
 [PR 2972]: https://github.com/libp2p/rust-libp2p/pull/2972
 
 # 0.40.0

@@ -1,7 +1,13 @@
-# 0.37.1 [unreleased]
+# 0.38.0 [unreleased]
+
+- Remove deprecated functions `StreamMuxerExt::next_{inbound,outbound}`. See [PR 3031].
+
+- Hide `prost::Error` from public API in `FromEnvelopeError::InvalidPeerRecord` and `signed_envelope::DecodingError`. See [PR 3058].
 
 - Improve error messages in case keys cannot be decoded because of missing feature flags. See [PR 2972].
 
+[PR 3031]: https://github.com/libp2p/rust-libp2p/pull/3031
+[PR 3058]: https://github.com/libp2p/rust-libp2p/pull/3058
 [PR 2972]: https://github.com/libp2p/rust-libp2p/pull/2972
 
 # 0.37.0

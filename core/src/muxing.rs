@@ -159,24 +159,6 @@ pub trait StreamMuxerExt: StreamMuxer + Sized {
         Pin::new(self).poll_close(cx)
     }
 
-    /// Returns a future that resolves to the next inbound `Substream` opened by the remote.
-    #[deprecated(
-        since = "0.37.0",
-        note = "This future violates the `StreamMuxer` contract because it doesn't call `StreamMuxer::poll`."
-    )]
-    fn next_inbound(&mut self) -> NextInbound<'_, Self> {
-        NextInbound(self)
-    }
-
-    /// Returns a future that opens a new outbound `Substream` with the remote.
-    #[deprecated(
-        since = "0.37.0",
-        note = "This future violates the `StreamMuxer` contract because it doesn't call `StreamMuxer::poll`."
-    )]
-    fn next_outbound(&mut self) -> NextOutbound<'_, Self> {
-        NextOutbound(self)
-    }
-
     /// Returns a future for closing this [`StreamMuxer`].
     fn close(self) -> Close<Self> {
         Close(self)
@@ -185,33 +167,7 @@ pub trait StreamMuxerExt: StreamMuxer + Sized {
 
 impl<S> StreamMuxerExt for S where S: StreamMuxer {}
 
-pub struct NextInbound<'a, S>(&'a mut S);
-
-pub struct NextOutbound<'a, S>(&'a mut S);
-
 pub struct Close<S>(S);
-
-impl<'a, S> Future for NextInbound<'a, S>
-where
-    S: StreamMuxer + Unpin,
-{
-    type Output = Result<S::Substream, S::Error>;
-
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        self.0.poll_inbound_unpin(cx)
-    }
-}
-
-impl<'a, S> Future for NextOutbound<'a, S>
-where
-    S: StreamMuxer + Unpin,
-{
-    type Output = Result<S::Substream, S::Error>;
-
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        self.0.poll_outbound_unpin(cx)
-    }
-}
 
 impl<S> Future for Close<S>
 where

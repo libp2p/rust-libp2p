@@ -258,9 +258,19 @@ pub enum NoiseError {
     #[error("Authentication failed")]
     AuthenticationFailed,
     #[error(transparent)]
-    InvalidPayload(#[from] prost::DecodeError),
+    InvalidPayload(DecodeError),
     #[error(transparent)]
     SigningError(#[from] identity::error::SigningError),
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error(transparent)]
+pub struct DecodeError(prost::DecodeError);
+
+impl From<prost::DecodeError> for NoiseError {
+    fn from(e: prost::DecodeError) -> Self {
+        NoiseError::InvalidPayload(DecodeError(e))
+    }
 }
 
 // Handshake pattern IX /////////////////////////////////////////////////////
