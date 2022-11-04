@@ -1,14 +1,11 @@
 use crate::behaviour::{NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use crate::handler::{
-    ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive, SubstreamProtocol,
+    ConnectionHandlerEvent, FullyNegotiatedInbound, FullyNegotiatedOutbound, KeepAlive,
+    StreamEvent, SubstreamProtocol,
 };
-use crate::NegotiatedSubstream;
 use libp2p_core::connection::ConnectionId;
+use libp2p_core::upgrade::DeniedUpgrade;
 use libp2p_core::PeerId;
-use libp2p_core::{
-    upgrade::{DeniedUpgrade, InboundUpgrade, OutboundUpgrade},
-    Multiaddr,
-};
 use std::task::{Context, Poll};
 use void::Void;
 
@@ -59,44 +56,8 @@ impl crate::handler::ConnectionHandler for ConnectionHandler {
         SubstreamProtocol::new(DeniedUpgrade, ())
     }
 
-    fn inject_fully_negotiated_inbound(
-        &mut self,
-        protocol: <Self::InboundProtocol as InboundUpgrade<NegotiatedSubstream>>::Output,
-        _: Self::InboundOpenInfo,
-    ) {
-        void::unreachable(protocol);
-    }
-
-    fn inject_fully_negotiated_outbound(
-        &mut self,
-        protocol: <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Output,
-        _: Self::OutboundOpenInfo,
-    ) {
-        void::unreachable(protocol)
-    }
-
-    fn inject_event(&mut self, v: Self::InEvent) {
+    fn on_behaviour_event(&mut self, v: Self::InEvent) {
         void::unreachable(v)
-    }
-
-    fn inject_address_change(&mut self, _: &Multiaddr) {}
-
-    fn inject_dial_upgrade_error(
-        &mut self,
-        _: Self::OutboundOpenInfo,
-        _: ConnectionHandlerUpgrErr<
-            <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Error,
-        >,
-    ) {
-    }
-
-    fn inject_listen_upgrade_error(
-        &mut self,
-        _: Self::InboundOpenInfo,
-        _: ConnectionHandlerUpgrErr<
-            <Self::InboundProtocol as InboundUpgrade<NegotiatedSubstream>>::Error,
-        >,
-    ) {
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
@@ -115,5 +76,27 @@ impl crate::handler::ConnectionHandler for ConnectionHandler {
         >,
     > {
         Poll::Pending
+    }
+
+    fn on_event(
+        &mut self,
+        event: StreamEvent<
+            Self::InboundProtocol,
+            Self::OutboundProtocol,
+            Self::InboundOpenInfo,
+            Self::OutboundOpenInfo,
+        >,
+    ) {
+        match event {
+            StreamEvent::FullyNegotiatedInbound(FullyNegotiatedInbound { protocol, .. }) => {
+                void::unreachable(protocol)
+            }
+            StreamEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound { protocol, .. }) => {
+                void::unreachable(protocol)
+            }
+            StreamEvent::DialUpgradeError(_)
+            | StreamEvent::ListenUpgradeError(_)
+            | StreamEvent::AddressChange(_) => {}
+        }
     }
 }

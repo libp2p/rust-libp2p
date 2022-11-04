@@ -18,13 +18,13 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::handler::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
-    SubstreamProtocol,
-};
-use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend};
-use libp2p_core::Multiaddr;
+use crate::handler::{ConnectionHandler, ConnectionHandlerEvent, KeepAlive, SubstreamProtocol};
 use std::{fmt::Debug, marker::PhantomData, task::Context, task::Poll};
+
+use super::{
+    AddressChange, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
+    ListenUpgradeError, StreamEvent,
+};
 
 /// Wrapper around a protocol handler that turns the input event into something else.
 pub struct MapInEvent<TConnectionHandler, TNewIn, TMap> {
@@ -64,46 +64,11 @@ where
         self.inner.listen_protocol()
     }
 
-    fn inject_fully_negotiated_inbound(
-        &mut self,
-        protocol: <Self::InboundProtocol as InboundUpgradeSend>::Output,
-        info: Self::InboundOpenInfo,
-    ) {
-        self.inner.inject_fully_negotiated_inbound(protocol, info)
-    }
-
-    fn inject_fully_negotiated_outbound(
-        &mut self,
-        protocol: <Self::OutboundProtocol as OutboundUpgradeSend>::Output,
-        info: Self::OutboundOpenInfo,
-    ) {
-        self.inner.inject_fully_negotiated_outbound(protocol, info)
-    }
-
-    fn inject_event(&mut self, event: TNewIn) {
+    fn on_behaviour_event(&mut self, event: TNewIn) {
         if let Some(event) = (self.map)(event) {
+            #[allow(deprecated)]
             self.inner.inject_event(event);
         }
-    }
-
-    fn inject_address_change(&mut self, addr: &Multiaddr) {
-        self.inner.inject_address_change(addr)
-    }
-
-    fn inject_dial_upgrade_error(
-        &mut self,
-        info: Self::OutboundOpenInfo,
-        error: ConnectionHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>,
-    ) {
-        self.inner.inject_dial_upgrade_error(info, error)
-    }
-
-    fn inject_listen_upgrade_error(
-        &mut self,
-        info: Self::InboundOpenInfo,
-        error: ConnectionHandlerUpgrErr<<Self::InboundProtocol as InboundUpgradeSend>::Error>,
-    ) {
-        self.inner.inject_listen_upgrade_error(info, error)
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
@@ -122,5 +87,43 @@ where
         >,
     > {
         self.inner.poll(cx)
+    }
+
+    fn on_event(
+        &mut self,
+        event: StreamEvent<
+            Self::InboundProtocol,
+            Self::OutboundProtocol,
+            Self::InboundOpenInfo,
+            Self::OutboundOpenInfo,
+        >,
+    ) {
+        match event {
+            StreamEvent::FullyNegotiatedInbound(FullyNegotiatedInbound { protocol, info }) =>
+            {
+                #[allow(deprecated)]
+                self.inner.inject_fully_negotiated_inbound(protocol, info)
+            }
+            StreamEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound { protocol, info }) =>
+            {
+                #[allow(deprecated)]
+                self.inner.inject_fully_negotiated_outbound(protocol, info)
+            }
+            StreamEvent::AddressChange(AddressChange { new_address }) =>
+            {
+                #[allow(deprecated)]
+                self.inner.inject_address_change(new_address)
+            }
+            StreamEvent::DialUpgradeError(DialUpgradeError { info, error }) =>
+            {
+                #[allow(deprecated)]
+                self.inner.inject_dial_upgrade_error(info, error)
+            }
+            StreamEvent::ListenUpgradeError(ListenUpgradeError { info, error }) =>
+            {
+                #[allow(deprecated)]
+                self.inner.inject_listen_upgrade_error(info, error)
+            }
+        }
     }
 }

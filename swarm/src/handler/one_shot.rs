@@ -27,6 +27,8 @@ use instant::Instant;
 use smallvec::SmallVec;
 use std::{error, fmt::Debug, task::Context, task::Poll, time::Duration};
 
+use super::{DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound, StreamEvent};
+
 /// A [`ConnectionHandler`] that opens a new substream for each request.
 // TODO: Debug
 pub struct OneShotHandler<TInbound, TOutbound, TEvent>
@@ -132,40 +134,8 @@ where
         self.listen_protocol.clone()
     }
 
-    fn inject_fully_negotiated_inbound(
-        &mut self,
-        out: <Self::InboundProtocol as InboundUpgradeSend>::Output,
-        (): Self::InboundOpenInfo,
-    ) {
-        // If we're shutting down the connection for inactivity, reset the timeout.
-        if !self.keep_alive.is_yes() {
-            self.keep_alive = KeepAlive::Until(Instant::now() + self.config.keep_alive_timeout);
-        }
-
-        self.events_out.push(out.into());
-    }
-
-    fn inject_fully_negotiated_outbound(
-        &mut self,
-        out: <Self::OutboundProtocol as OutboundUpgradeSend>::Output,
-        _: Self::OutboundOpenInfo,
-    ) {
-        self.dial_negotiated -= 1;
-        self.events_out.push(out.into());
-    }
-
-    fn inject_event(&mut self, event: Self::InEvent) {
+    fn on_behaviour_event(&mut self, event: Self::InEvent) {
         self.send_request(event);
-    }
-
-    fn inject_dial_upgrade_error(
-        &mut self,
-        _info: Self::OutboundOpenInfo,
-        error: ConnectionHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>,
-    ) {
-        if self.pending_error.is_none() {
-            self.pending_error = Some(error);
-        }
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
@@ -211,6 +181,42 @@ where
         }
 
         Poll::Pending
+    }
+
+    fn on_event(
+        &mut self,
+        event: StreamEvent<
+            Self::InboundProtocol,
+            Self::OutboundProtocol,
+            Self::InboundOpenInfo,
+            Self::OutboundOpenInfo,
+        >,
+    ) {
+        match event {
+            StreamEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
+                protocol: out, ..
+            }) => {
+                // If we're shutting down the connection for inactivity, reset the timeout.
+                if !self.keep_alive.is_yes() {
+                    self.keep_alive =
+                        KeepAlive::Until(Instant::now() + self.config.keep_alive_timeout);
+                }
+
+                self.events_out.push(out.into());
+            }
+            StreamEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
+                protocol: out, ..
+            }) => {
+                self.dial_negotiated -= 1;
+                self.events_out.push(out.into());
+            }
+            StreamEvent::DialUpgradeError(DialUpgradeError { error, .. }) => {
+                if self.pending_error.is_none() {
+                    self.pending_error = Some(error);
+                }
+            }
+            StreamEvent::AddressChange(_) | StreamEvent::ListenUpgradeError(_) => {}
+        }
     }
 }
 
