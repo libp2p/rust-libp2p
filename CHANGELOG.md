@@ -51,7 +51,30 @@
   See [PR 3001].
 - Introduce [`libp2p-tls` `v0.1.0`](transports/tls/CHANGELOG.md#010). See [PR 2945].
 - Update individual crates.
+  - Update to [`libp2p-autonat` `v0.89.0`](protocols/autonat/CHANGELOG.md#090).
+  - Update to [`libp2p-core` `v0.38.0`](core/CHANGELOG.md#0380).
+  - Update to [`libp2p-dcutr` `v0.8.0`](protocols/dcutr/CHANGELOG.md#080).
+  - Update to [`libp2p-deflate` `v0.38.0`](transports/deflate/CHANGELOG.md#0380).
+  - Update to [`libp2p-dns` `v0.38.0`](transports/dns/CHANGELOG.md#0380).
+  - Update to [`libp2p-floodsub` `v0.41.0`](protocols/floodsub/CHANGELOG.md#0410).
+  - Update to [`libp2p-gossipsub` `v0.43.0`](protocols/gossipsub/CHANGELOG.md#0430).
+  - Update to [`libp2p-identify` `v0.41.0`](protocols/identify/CHANGELOG.md#0410).
+  - Update to [`libp2p-kad` `v0.42.0`](protocols/kad/CHANGELOG.md#0420).
+  - Update to [`libp2p-mdns` `v0.42.0`](protocols/mdns/CHANGELOG.md#0420).
+  - Update to [`libp2p-metrics` `v0.11.0`](misc/metrics/CHANGELOG.md#0110).
+  - Update to [`libp2p-mplex` `v0.38.0`](muxers/mplex/CHANGELOG.md#0380).
+  - Update to [`libp2p-noise` `v0.41.0`](transports/noise/CHANGELOG.md#0410).
+  - Update to [`libp2p-ping` `v0.41.0`](protocols/ping/CHANGELOG.md#0410).
+  - Update to [`libp2p-plaintext` `v0.38.0`](transports/plaintext/CHANGELOG.md#0380).
+  - Update to [`libp2p-relay` `v0.14.0`](protocols/relay/CHANGELOG.md#0140).
+  - Update to [`libp2p-rendezvous` `v0.11.0`](protocols/rendezovus/CHANGELOG.md#0110).
+  - Update to [`libp2p-request-response` `v0.23.0`](protocols/request-response/CHANGELOG.md#0230).
+  - Update to [`libp2p-swarm` `v0.41.0`](swarm/CHANGELOG.md#0410).
   - Update to [`libp2p-tcp` `v0.38.0`](transports/tcp/CHANGELOG.md#0380).
+  - Update to [`libp2p-uds` `v0.37.0`](transports/uds/CHANGELOG.md#0370).
+  - Update to [`libp2p-wasm-ext` `v0.38.0`](transports/wasm-ext/CHANGELOG.md#0380).
+  - Update to [`libp2p-websocket` `v0.40.0`](transports/websocket/CHANGELOG.md#0400).
+  - Update to [`libp2p-yamux` `v0.42.0`](muxers/yamux/CHANGELOG.md#0420).
 
 [PR 2945]: https://github.com/libp2p/rust-libp2p/pull/2945
 [PR 3001]: https://github.com/libp2p/rust-libp2p/pull/3001
