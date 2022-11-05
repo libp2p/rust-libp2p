@@ -18,9 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Implementation of the libp2p-specific Kademlia protocol.
-//!
-//! See [specification](https://github.com/libp2p/specs/blob/master/kad-dht/README.md) for details.
+//! Implementation of the libp2p-specific [Kademlia](https://github.com/libp2p/specs/blob/master/kad-dht/README.md) protocol.
 //!
 //! # Important Discrepancies
 //!
@@ -31,7 +29,7 @@
 //! to [`Kademlia::add_address`].
 //! If you choose not to use the Identify protocol, and do not provide an alternative peer
 //! discovery mechanism, a Kademlia node will not discover nodes beyond the network's
-//! [boot nodes](https://docs.libp2p.io/reference/glossary/#boot-node). Without the Identify protocol,
+//! [boot nodes](https://docs.libp2p.io/concepts/glossary/#boot-node). Without the Identify protocol,
 //! existing nodes in the kademlia network cannot obtain the listen addresses
 //! of nodes querying them, and thus will not be able to add them to their routing table.
 
