@@ -25,8 +25,8 @@ use webrtc::data::data_channel::{DataChannel, PollDataChannel};
 
 use std::sync::Arc;
 
+use super::{MAX_DATA_LEN, MAX_MSG_LEN, VARINT_LEN};
 use crate::message_proto::Message;
-use crate::tokio::substream::MAX_MSG_LEN;
 
 pub type FramedDc = Framed<Compat<PollDataChannel>, prost_codec::Codec<Message>>;
 
@@ -34,7 +34,12 @@ pub fn new(data_channel: Arc<DataChannel>) -> FramedDc {
     let mut inner = PollDataChannel::new(data_channel);
     inner.set_read_buf_capacity(MAX_MSG_LEN);
 
-    let mut framed = Framed::new(inner.compat(), prost_codec::Codec::new(MAX_MSG_LEN));
-    framed.set_send_high_water_mark(MAX_MSG_LEN);
+    let mut framed = Framed::new(
+        inner.compat(),
+        prost_codec::Codec::new(MAX_MSG_LEN - VARINT_LEN),
+    );
+    // If not set, `Framed` buffers up to 131kB of data before sending, which leads to "outbound
+    // packet larger than maximum message size" error in webrtc-rs.
+    framed.set_send_high_water_mark(MAX_DATA_LEN);
     framed
 }
