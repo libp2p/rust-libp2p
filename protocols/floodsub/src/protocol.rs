@@ -20,13 +20,19 @@
 
 use crate::rpc_proto;
 use crate::topic::Topic;
+use asynchronous_codec::Framed;
 use futures::{
     io::{AsyncRead, AsyncWrite},
-    AsyncWriteExt, Future,
+    Future,
 };
-use libp2p_core::{upgrade, InboundUpgrade, OutboundUpgrade, PeerId, UpgradeInfo};
+use futures::{SinkExt, StreamExt};
+use libp2p_core::{InboundUpgrade, OutboundUpgrade, PeerId, UpgradeInfo};
 use prost::Message;
 use std::{io, iter, pin::Pin};
+
+const MAX_MESSAGE_LEN_BYTES: usize = 2048;
+
+const PROTOCOL_NAME: &[u8] = b"/floodsub/1.0.0";
 
 /// Implementation of `ConnectionUpgrade` for the floodsub protocol.
 #[derive(Debug, Clone, Default)]
@@ -44,7 +50,7 @@ impl UpgradeInfo for FloodsubProtocol {
     type InfoIter = iter::Once<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
-        iter::once(b"/floodsub/1.0.0")
+        iter::once(PROTOCOL_NAME)
     }
 }
 
@@ -56,10 +62,18 @@ where
     type Error = FloodsubDecodeError;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-    fn upgrade_inbound(self, mut socket: TSocket, _: Self::Info) -> Self::Future {
+    fn upgrade_inbound(self, socket: TSocket, _: Self::Info) -> Self::Future {
         Box::pin(async move {
-            let packet = upgrade::read_length_prefixed(&mut socket, 2048).await?;
-            let rpc = rpc_proto::Rpc::decode(&packet[..]).map_err(DecodeError)?;
+            let mut framed = Framed::<TSocket, prost_codec::Codec<rpc_proto::Rpc>>::new(
+                socket,
+                prost_codec::Codec::new(MAX_MESSAGE_LEN_BYTES),
+            );
+
+            let rpc = framed
+                .next()
+                .await
+                .ok_or_else(|| FloodsubDecodeError::ReadError(io::ErrorKind::UnexpectedEof.into()))?
+                .map_err(DecodeError)?;
 
             let mut messages = Vec::with_capacity(rpc.publish.len());
             for publish in rpc.publish.into_iter() {
@@ -107,7 +121,7 @@ pub enum FloodsubDecodeError {
 
 #[derive(thiserror::Error, Debug)]
 #[error(transparent)]
-pub struct DecodeError(prost::DecodeError);
+pub struct DecodeError(prost_codec::Error);
 
 /// An RPC received by the floodsub system.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -123,7 +137,7 @@ impl UpgradeInfo for FloodsubRpc {
     type InfoIter = iter::Once<Self::Info>;
 
     fn protocol_info(&self) -> Self::InfoIter {
-        iter::once(b"/floodsub/1.0.0")
+        iter::once(PROTOCOL_NAME)
     }
 }
 
@@ -135,13 +149,22 @@ where
     type Error = io::Error;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
-    fn upgrade_outbound(self, mut socket: TSocket, _: Self::Info) -> Self::Future {
+    fn upgrade_outbound(self, socket: TSocket, _: Self::Info) -> Self::Future {
         Box::pin(async move {
             let bytes = self.into_bytes();
 
-            upgrade::write_length_prefixed(&mut socket, bytes).await?;
-            socket.close().await?;
-
+            let mut framed = Framed::new(
+                socket,
+                prost_codec::Codec::<std::vec::Vec<u8>>::new(MAX_MESSAGE_LEN_BYTES),
+            );
+            framed
+                .send(bytes)
+                .await
+                .map_err(|e| io::Error::new(std::io::ErrorKind::ConnectionRefused, e))?;
+            framed
+                .close()
+                .await
+                .map_err(|e| io::Error::new(std::io::ErrorKind::ConnectionReset, e))?;
             Ok(())
         })
     }
