@@ -29,18 +29,22 @@ use prost::Message;
 use std::{io, iter, pin::Pin};
 
 /// Implementation of `ConnectionUpgrade` for the floodsub protocol.
-#[derive(Debug, Clone, Default)]
+#[derive(Clone, Default)]
 pub struct FloodsubProtocol {
     codec: prost_codec::Codec<rpc_proto::Rpc>,
 }
 
-
 impl FloodsubProtocol {
     /// Builds a new `FloodsubProtocol`.
     pub fn new() -> FloodsubProtocol {
-        FloodsubProtocol {
-            codec: prost_codec::Codec::new(2048),
-        }
+        let codec = prost_codec::Codec::new(2048);
+        FloodsubProtocol { codec: codec }
+    }
+}
+
+impl std::fmt::Debug for FloodsubProtocol {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("FloodsubProtocol").finish()
     }
 }
 
