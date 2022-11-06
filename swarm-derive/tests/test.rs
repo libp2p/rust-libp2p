@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::prelude::*;
+use libp2p::swarm::behaviour::FromSwarm;
 use libp2p::swarm::{dummy, NetworkBehaviour, SwarmEvent};
 use libp2p::{identify, ping};
 use libp2p_swarm_derive::*;
@@ -389,6 +390,23 @@ fn custom_out_event_no_type_parameters() {
             _: &mut impl PollParameters,
         ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
             Poll::Pending
+        }
+
+        fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+            match event {
+                FromSwarm::ConnectionEstablished(_)
+                | FromSwarm::ConnectionClosed(_)
+                | FromSwarm::AddressChange(_)
+                | FromSwarm::DialFailure(_)
+                | FromSwarm::ListenFailure(_)
+                | FromSwarm::NewListener(_)
+                | FromSwarm::NewListenAddr(_)
+                | FromSwarm::ExpiredListenAddr(_)
+                | FromSwarm::ListenerError(_)
+                | FromSwarm::ListenerClosed(_)
+                | FromSwarm::NewExternalAddr(_)
+                | FromSwarm::ExpiredExternalAddr(_) => {}
+            }
         }
     }
 

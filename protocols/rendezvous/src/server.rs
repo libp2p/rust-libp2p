@@ -29,6 +29,7 @@ use futures::stream::FuturesUnordered;
 use futures::{FutureExt, StreamExt};
 use libp2p_core::connection::ConnectionId;
 use libp2p_core::PeerId;
+use libp2p_swarm::behaviour::FromSwarm;
 use libp2p_swarm::{
     CloseConnection, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
 };
@@ -159,6 +160,23 @@ impl NetworkBehaviour for Behaviour {
         }
 
         Poll::Pending
+    }
+
+    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+        match event {
+            FromSwarm::ConnectionEstablished(_)
+            | FromSwarm::ConnectionClosed(_)
+            | FromSwarm::AddressChange(_)
+            | FromSwarm::DialFailure(_)
+            | FromSwarm::ListenFailure(_)
+            | FromSwarm::NewListener(_)
+            | FromSwarm::NewListenAddr(_)
+            | FromSwarm::ExpiredListenAddr(_)
+            | FromSwarm::ListenerError(_)
+            | FromSwarm::ListenerClosed(_)
+            | FromSwarm::NewExternalAddr(_)
+            | FromSwarm::ExpiredExternalAddr(_) => {}
+        }
     }
 }
 
