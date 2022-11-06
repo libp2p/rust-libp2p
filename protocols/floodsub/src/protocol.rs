@@ -30,12 +30,17 @@ use std::{io, iter, pin::Pin};
 
 /// Implementation of `ConnectionUpgrade` for the floodsub protocol.
 #[derive(Debug, Clone, Default)]
-pub struct FloodsubProtocol {}
+pub struct FloodsubProtocol {
+    codec: prost_codec::Codec<rpc_proto::Rpc>,
+}
+
 
 impl FloodsubProtocol {
     /// Builds a new `FloodsubProtocol`.
     pub fn new() -> FloodsubProtocol {
-        FloodsubProtocol {}
+        FloodsubProtocol {
+            codec: prost_codec::Codec::new(2048),
+        }
     }
 }
 
@@ -59,6 +64,7 @@ where
     fn upgrade_inbound(self, mut socket: TSocket, _: Self::Info) -> Self::Future {
         Box::pin(async move {
             let packet = upgrade::read_length_prefixed(&mut socket, 2048).await?;
+            // Replace with prost_codec::Codec
             let rpc = rpc_proto::Rpc::decode(&packet[..]).map_err(DecodeError)?;
 
             let mut messages = Vec::with_capacity(rpc.publish.len());
@@ -105,6 +111,7 @@ pub enum FloodsubDecodeError {
     InvalidPeerId,
 }
 
+// TODO: Delete this and change references to prost_codec::Error?
 #[derive(thiserror::Error, Debug)]
 #[error(transparent)]
 pub struct DecodeError(prost::DecodeError);
