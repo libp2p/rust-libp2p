@@ -11,18 +11,18 @@ roadmap](https://github.com/libp2p/specs/blob/master/ROADMAP.md).
 <!-- markdown-toc start - Don't edit this section. Run M-x markdown-toc-refresh-toc -->
 **Table of Contents**
 
-    - [Experimental QUIC support](#experimental-quic-support)
-    - [WebRTC support (browser-to-server)](#webrtc-support-browser-to-server)
-    - [Cross Behaviour communication](#cross-behaviour-communication)
-    - [Generic connection management](#generic-connection-management)
-    - [Kademlia efficient querying](#kademlia-efficient-querying)
-    - [Kademlia client mode](#kademlia-client-mode)
-    - [Optimize Hole punching](#optimize-hole-punching)
-    - [Streaming response protocol aka. the ultimate escape hatch](#streaming-response-protocol-aka-the-ultimate-escape-hatch)
-    - [Improved WASM support](#improved-wasm-support)
-    - [Handshake optimizations](#handshake-optimizations)
-    - [Bitswap implementation](#bitswap-implementation)
-    - [WebTransport](#webtransport)
+- [QUIC support](#quic-support)
+- [WebRTC support (browser-to-server)](#webrtc-support-browser-to-server)
+- [Cross Behaviour communication](#cross-behaviour-communication)
+- [Generic connection management](#generic-connection-management)
+- [Kademlia efficient querying](#kademlia-efficient-querying)
+- [Kademlia client mode](#kademlia-client-mode)
+- [Optimize Hole punching](#optimize-hole-punching)
+- [Streaming response protocol aka. the ultimate escape hatch](#streaming-response-protocol-aka-the-ultimate-escape-hatch)
+- [Improved WASM support](#improved-wasm-support)
+- [Handshake optimizations](#handshake-optimizations)
+- [Bitswap implementation](#bitswap-implementation)
+- [WebTransport](#webtransport)
 
 <!-- markdown-toc end -->
 
@@ -30,7 +30,7 @@ roadmap](https://github.com/libp2p/specs/blob/master/ROADMAP.md).
 
 | Category     | Status      | Target Completion | Tracking                                          | Dependencies                                                        | Dependents |
 |--------------|-------------|-------------------|---------------------------------------------------|---------------------------------------------------------------------|------------|
-| Connectivity | In progress | Q4/2022           | https://github.com/libp2p/rust-libp2p/issues/2883 | [TLS](#tls-support), https://github.com/libp2p/test-plans/issues/53 |            |
+| Connectivity | In progress | Q4/2022           | https://github.com/libp2p/rust-libp2p/issues/2883 | https://github.com/libp2p/test-plans/issues/53 |            |
 
 QUIC has been on the roadmap for a long time. It enables various performance improvements as well as
 higher hole punching success rates. We are close to finishing a first version with
