@@ -18,9 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! The `pnet` protocol implements *Pre-shared Key Based Private Networks in libp2p*,
-//! as specified in [the spec](https://github.com/libp2p/specs/blob/master/pnet/Private-Networks-PSK-V1.md)
+//! Implementation of the [pnet](https://github.com/libp2p/specs/blob/master/pnet/Private-Networks-PSK-V1.md) protocol.
 //!
+//| The `pnet` protocol implements *Pre-shared Key Based Private Networks in libp2p*.
 //! Libp2p nodes configured with a pre-shared key can only communicate with other nodes with
 //! the same key.
 
