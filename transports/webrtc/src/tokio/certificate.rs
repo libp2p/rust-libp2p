@@ -52,7 +52,7 @@ impl Certificate {
     /// This function will panic if there's no fingerprint with the SHA-256 algorithm (see
     /// [`RTCCertificate::get_fingerprints`]).
     pub fn fingerprint(&self) -> Fingerprint {
-        let fingerprints = self.inner.get_fingerprints().expect("to never fail");
+        let fingerprints = self.inner.get_fingerprints();
         let sha256_fingerprint = fingerprints
             .iter()
             .find(|f| f.algorithm == "sha-256")
