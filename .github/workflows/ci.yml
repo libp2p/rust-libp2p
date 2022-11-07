@@ -45,11 +45,6 @@ jobs:
         include:
           - toolchain: wasm32-unknown-unknown
             args: "--features wasm-bindgen"
-    env:
-      CC: clang-11
-    defaults:
-      run:
-        shell: bash
     steps:
       - name: Install Protoc
         uses: arduino/setup-protoc@v1
@@ -63,16 +58,9 @@ jobs:
           target: ${{ matrix.toolchain }}
           override: true
 
-      - name: Install a recent version of clang
-        run: |
-          sudo bash -c "$(wget -O - https://apt.llvm.org/llvm.sh)"
-
-      - name: Install CMake
-        run: sudo apt-get install -y cmake
-
       - uses: Swatinem/rust-cache@22c9328bcba27aa81a32b1bef27c7e3c78052531 # v2.0.1
-        with:
-          key: ${{ matrix.toolchain }}
+      with:
+        key: ${{ matrix.toolchain }}
 
       - name: Build on ${{ matrix.toolchain }}
         # TODO: also run `cargo test`
