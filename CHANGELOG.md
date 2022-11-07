@@ -47,12 +47,9 @@
 # 0.50.0 - [unreleased]
 
 - Introduce [`libp2p-tls` `v0.1.0-alpha`](transports/tls/CHANGELOG.md#010-alpha). See [PR 2945].
-
 - Remove deprecated features: `tcp-tokio`, `mdns-tokio`, `dns-tokio`, `tcp-async-io`, `mdns-async-io`, `dns-async-std`.
   See [PR 3001].
-
 - Introduce [`libp2p-tls` `v0.1.0`](transports/tls/CHANGELOG.md#010). See [PR 2945].
-
 - Update individual crates.
   - Update to [`libp2p-autonat` `v0.89.0`](protocols/autonat/CHANGELOG.md#090).
   - Update to [`libp2p-core` `v0.38.0`](core/CHANGELOG.md#0380).
@@ -79,21 +76,6 @@
   - Update to [`libp2p-websocket` `v0.40.0`](transports/websocket/CHANGELOG.md#0400).
   - Update to [`libp2p-yamux` `v0.42.0`](muxers/yamux/CHANGELOG.md#0420).
 
-- Add new `on_swarm_event` method to `NetworkBehaviour` that accepts a `FromSwarm` enum and update
-  `inject_*` methods to call `on_swarm_event` with the respective `FromSwarm` variant and deprecate
-  `inject_*`.
-  To migrate, users should replace the `NetworkBehaviour::inject_*` calls with a single
-  implementation of `NetworkBehaviour::on_swarm_event` treating each `FromSwarm` variant in
-  the same way its corresponding `inject_*` call was treated.
-  See [PR 3011].
-
-- Add new `on_connection_handler_event` method with the same signature as `inject_event`, make the
-  default implementation of `inject_event` call `on_connection_handler_event` and deprecate it.
-  To migrate, users should replace the `NetworkBehaviour::inject_event` calls
-  with `NetworkBehaviour::on_connection_handler_event`.
-  See [PR 3011].
-
-[PR 3011]: https://github.com/libp2p/rust-libp2p/pull/3011
 [PR 2945]: https://github.com/libp2p/rust-libp2p/pull/2945
 [PR 3001]: https://github.com/libp2p/rust-libp2p/pull/3001
 [PR 2945]: https://github.com/libp2p/rust-libp2p/pull/2945
@@ -110,6 +92,7 @@
   - `tcp-async-io` in favor of `tcp` + `async-std`
   - `mdns-async-io` in favor of `mdns` + `async-std`
   - `dns-async-std` in favor of `dns` + `async-std`
+  
   See [PR 2962].
 
 - Update individual crates.
