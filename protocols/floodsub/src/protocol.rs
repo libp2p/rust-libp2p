@@ -28,6 +28,8 @@ use libp2p_core::{upgrade, InboundUpgrade, OutboundUpgrade, PeerId, UpgradeInfo}
 use prost::Message;
 use std::{io, iter, pin::Pin};
 
+const MAX_MESSAGE_LEN_BYTES: usize = 2048;
+
 /// Implementation of `ConnectionUpgrade` for the floodsub protocol.
 pub struct FloodsubProtocol {
     codec: prost_codec::Codec<rpc_proto::Rpc>,
@@ -36,7 +38,7 @@ pub struct FloodsubProtocol {
 impl FloodsubProtocol {
     /// Builds a new `FloodsubProtocol`.
     pub fn new() -> FloodsubProtocol {
-        let codec = prost_codec::Codec::new(2048);
+        let codec = prost_codec::Codec::new(MAX_MESSAGE_LEN_BYTES);
         FloodsubProtocol { codec }
     }
 }
@@ -50,16 +52,17 @@ impl std::fmt::Debug for FloodsubProtocol {
 impl Default for FloodsubProtocol {
     fn default() -> Self {
         Self {
-            codec: prost_codec::Codec::new(2048),
+            codec: prost_codec::Codec::new(MAX_MESSAGE_LEN_BYTES),
         }
     }
 }
 
+// The current error: Maybe if this was in prost_codec everyone would be happier
 impl Clone for FloodsubProtocol {
     fn clone(&self) -> Self {
         Self {
             // TODO: No. This is not the way.
-            codec: prost_codec::Codec::new(2048),
+            codec: prost_codec::Codec::new(MAX_MESSAGE_LEN_BYTES),
         }
     }
 }
@@ -83,9 +86,10 @@ where
 
     fn upgrade_inbound(self, mut socket: TSocket, _: Self::Info) -> Self::Future {
         Box::pin(async move {
-            let packet = upgrade::read_length_prefixed(&mut socket, 2048).await?;
+            let packet = upgrade::read_length_prefixed(&mut socket, MAX_MESSAGE_LEN_BYTES).await?;
             // Replace with prost_codec::Codec
-            let rpc = rpc_proto::Rpc::decode(&packet[..]).map_err(DecodeError)?;
+            let rpc = <prost_codec::Codec<rpc_proto::Rpc> as prost::Message>::decode(&packet[..])
+                .map_err(DecodeError)?;
 
             let mut messages = Vec::with_capacity(rpc.publish.len());
             for publish in rpc.publish.into_iter() {
