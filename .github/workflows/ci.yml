@@ -174,7 +174,7 @@ jobs:
           
           test "$ALL_FEATURES" = "$FULL_FEATURE"
 
-  gather_crates_for_semver_checks:
+  gather_published_crates:
     runs-on: ubuntu-latest
     outputs:
       members: ${{ steps.cargo-metadata.outputs.members }}
@@ -188,11 +188,11 @@ jobs:
 
   semver-check:
     runs-on: ubuntu-latest
-    needs: gather_crates_for_semver_checks
+    needs: gather_published_crates
     strategy:
       fail-fast: false
       matrix:
-        crate: ${{ fromJSON(needs.gather_crates_for_semver_checks.outputs.members) }}
+        crate: ${{ fromJSON(needs.gather_published_crates.outputs.members) }}
     steps:
       - name: Cancel Previous Runs
         uses: styfle/cancel-workflow-action@bb6001c4ea612bf59c3abfc4756fbceee4f870c7 # 0.10.0
