@@ -101,6 +101,13 @@ jobs:
 
   check-clippy:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        rust-version: [
+          stable,
+          beta
+        ]
     steps:
       - name: Install Protoc
         uses: arduino/setup-protoc@v1
@@ -110,7 +117,7 @@ jobs:
       - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
         with:
           profile: minimal
-          toolchain: stable
+          toolchain: ${{ matrix.rust-version }}
           override: true
           components: clippy
 
