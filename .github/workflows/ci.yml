@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test-desktop:
+  test-desktop: # Run tests, MSRV and semver checks for each crate.
     name: Build and test
     runs-on: ubuntu-latest
     strategy:
@@ -218,6 +218,6 @@ jobs:
     - uses: Swatinem/rust-cache@22c9328bcba27aa81a32b1bef27c7e3c78052531 # v2.0.1
 
     - run: cargo install cargo-semver-checks
-    
+
     - name: Semver Check
       run: cargo semver-checks check-release -p ${{ matrix.crate }}

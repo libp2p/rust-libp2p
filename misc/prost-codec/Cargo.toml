@@ -1,7 +1,7 @@
 [package]
 name = "prost-codec"
 edition = "2021"
-rust-version = "1.56.1"
+rust-version = "1.60.0"
 description = "Asynchronous de-/encoding of Protobuf structs using asynchronous-codec, unsigned-varint and prost."
 version = "0.3.0"
 authors = ["Max Inden <mail@max-inden.de>"]

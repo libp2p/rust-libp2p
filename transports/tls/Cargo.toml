@@ -2,6 +2,7 @@
 name = "libp2p-tls"
 version = "0.1.0-alpha"
 edition = "2021"
+rust-version = "1.60.0"
 license = "MIT"
 exclude = ["src/test_assets"]
 
