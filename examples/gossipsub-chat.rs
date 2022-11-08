@@ -54,7 +54,7 @@ use libp2p::gossipsub::{
 };
 use libp2p::{
     gossipsub, identity,
-    mdns::{Mdns, MdnsConfig, MdnsEvent},
+    mdns::{async_io::Mdns, MdnsConfig, MdnsEvent},
     swarm::SwarmEvent,
     NetworkBehaviour, PeerId, Swarm,
 };

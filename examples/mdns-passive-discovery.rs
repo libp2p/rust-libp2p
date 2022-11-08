@@ -21,7 +21,7 @@
 use futures::StreamExt;
 use libp2p::{
     identity,
-    mdns::{Mdns, MdnsConfig, MdnsEvent},
+    mdns::{async_io::Mdns, MdnsConfig, MdnsEvent},
     swarm::{Swarm, SwarmEvent},
     PeerId,
 };

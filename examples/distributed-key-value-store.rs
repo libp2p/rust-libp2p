@@ -49,7 +49,7 @@ use libp2p::kad::{
 };
 use libp2p::{
     development_transport, identity,
-    mdns::{Mdns, MdnsConfig, MdnsEvent},
+    mdns::{async_io::Mdns, MdnsConfig, MdnsEvent},
     swarm::SwarmEvent,
     NetworkBehaviour, PeerId, Swarm,
 };

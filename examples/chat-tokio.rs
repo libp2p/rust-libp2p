@@ -33,14 +33,16 @@ use libp2p::{
     core::upgrade,
     floodsub::{self, Floodsub, FloodsubEvent},
     identity,
-    mdns::{
-        MdnsEvent,
-        // `TokioMdns` is available through the `mdns-tokio` feature.
-        TokioMdns,
-    },
-    mplex, noise,
+    // `tokio::Mdns` is available through the `tokio` feature.
+    mdns::{tokio::Mdns, MdnsEvent},
+    mplex,
+    noise,
     swarm::{SwarmBuilder, SwarmEvent},
-    tcp, Multiaddr, NetworkBehaviour, PeerId, Transport,
+    tcp,
+    Multiaddr,
+    NetworkBehaviour,
+    PeerId,
+    Transport,
 };
 use std::error::Error;
 use tokio::io::{self, AsyncBufReadExt};
@@ -75,7 +77,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     #[behaviour(out_event = "MyBehaviourEvent")]
     struct MyBehaviour {
         floodsub: Floodsub,
-        mdns: TokioMdns,
+        mdns: Mdns,
     }
 
     #[allow(clippy::large_enum_variant)]
@@ -98,7 +100,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Create a Swarm to manage peers and events.
     let mut swarm = {
-        let mdns = TokioMdns::new(Default::default())?;
+        let mdns = Mdns::new(Default::default())?;
         let mut behaviour = MyBehaviour {
             floodsub: Floodsub::new(peer_id),
             mdns,

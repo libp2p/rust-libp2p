@@ -57,7 +57,7 @@ use futures::{
 use libp2p::{
     floodsub::{self, Floodsub, FloodsubEvent},
     identity,
-    mdns::{Mdns, MdnsConfig, MdnsEvent},
+    mdns::{async_io::Mdns, MdnsConfig, MdnsEvent},
     swarm::SwarmEvent,
     Multiaddr, NetworkBehaviour, PeerId, Swarm,
 };
