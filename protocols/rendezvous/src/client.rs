@@ -177,7 +177,7 @@ impl NetworkBehaviour for Behaviour {
     fn addresses_of_peer(&mut self, peer: &PeerId) -> Vec<Multiaddr> {
         self.discovered_peers
             .iter()
-            .filter_map(|((candidate, _), addresses)| (candidate == peer).then(|| addresses))
+            .filter_map(|((candidate, _), addresses)| (candidate == peer).then_some(addresses))
             .flatten()
             .cloned()
             .collect()
@@ -310,7 +310,7 @@ fn handle_outbound_event(
             expiring_registrations.extend(registrations.iter().cloned().map(|registration| {
                 async move {
                     // if the timer errors we consider it expired
-                    futures_timer::Delay::new(Duration::from_secs(registration.ttl as u64)).await;
+                    futures_timer::Delay::new(Duration::from_secs(registration.ttl)).await;
 
                     (registration.record.peer_id(), registration.namespace)
                 }

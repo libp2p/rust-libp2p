@@ -193,7 +193,7 @@ impl NetworkBehaviour for Behaviour {
                 .expect("Peer of direct connection to be tracked.");
             connections
                 .remove(connection_id)
-                .then(|| ())
+                .then_some(())
                 .expect("Direct connection to be tracked.");
             if connections.is_empty() {
                 self.direct_connections.remove(peer_id);
