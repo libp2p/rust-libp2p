@@ -5,6 +5,7 @@ use prometheus_client::encoding::text::Encode;
 pub struct Labels {
     protocols: String,
 }
+
 impl Labels {
     pub fn new(ma: &Multiaddr) -> Self {
         Self {
@@ -20,6 +21,7 @@ impl Labels {
 pub trait MultiaddrExt {
     fn protocol_stack(&self) -> String;
 }
+
 impl MultiaddrExt for Multiaddr {
     fn protocol_stack(&self) -> String {
         // Has potential to allocate multiple times, but this line expresses the intent here.
@@ -34,7 +36,7 @@ impl MultiaddrExt for Multiaddr {
     }
 }
 
-pub fn tag(proto: Protocol) -> &'static str {
+fn tag(proto: Protocol) -> &'static str {
     use Protocol::*;
     match proto {
         Certhash(_) => "certhash",

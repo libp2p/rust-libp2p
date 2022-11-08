@@ -162,7 +162,7 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
             }
             libp2p_swarm::SwarmEvent::IncomingConnection { send_back_addr, .. } => {
                 self.connections_incoming
-                    .get_or_create(&protocol_stack::Labels::new(&send_back_addr))
+                    .get_or_create(&protocol_stack::Labels::new(send_back_addr))
                     .inc();
             }
             libp2p_swarm::SwarmEvent::IncomingConnectionError {
@@ -239,18 +239,18 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
             }
             libp2p_swarm::SwarmEvent::NewListenAddr { address, .. } => {
                 self.new_listen_addr
-                    .get_or_create(&protocol_stack::Labels::new(&address))
+                    .get_or_create(&protocol_stack::Labels::new(address))
                     .inc();
             }
             libp2p_swarm::SwarmEvent::ExpiredListenAddr { address, .. } => {
                 self.expired_listen_addr
-                    .get_or_create(&protocol_stack::Labels::new(&address))
+                    .get_or_create(&protocol_stack::Labels::new(address))
                     .inc();
             }
             libp2p_swarm::SwarmEvent::ListenerClosed { addresses, .. } => {
                 for address in addresses {
                     self.listener_closed
-                        .get_or_create(&protocol_stack::Labels::new(&address))
+                        .get_or_create(&protocol_stack::Labels::new(address))
                         .inc();
                 }
             }
