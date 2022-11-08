@@ -126,7 +126,7 @@ pub trait ConnectionHandler: Send + 'static {
     #[deprecated(
         since = "0.41.0",
         note = "Handle `StreamEvent::FullyNegotiatedInbound` on `ConnectionHandler::on_event` instead.
-        the default of implemention of this inject_*` method delegates to it."
+        The default of implemention of this `inject_*` method delegates to it."
     )]
     fn inject_fully_negotiated_inbound(
         &mut self,
@@ -145,7 +145,7 @@ pub trait ConnectionHandler: Send + 'static {
     #[deprecated(
         since = "0.41.0",
         note = "Handle `StreamEvent::FullyNegotiatedOutbound` on `ConnectionHandler::on_event` instead.
-        the default of implemention of this inject_*` method delegates to it."
+        The default of implemention of this `inject_*` method delegates to it."
     )]
     fn inject_fully_negotiated_outbound(
         &mut self,
@@ -170,7 +170,7 @@ pub trait ConnectionHandler: Send + 'static {
     #[deprecated(
         since = "0.41.0",
         note = "Handle `StreamEvent::AddressChange` on `ConnectionHandler::on_event` instead.
-        the default of implemention of this inject_*` method delegates to it."
+        The default of implemention of this `inject_*` method delegates to it."
     )]
     fn inject_address_change(&mut self, new_address: &Multiaddr) {
         self.on_event(StreamEvent::AddressChange(AddressChange { new_address }))
@@ -180,7 +180,7 @@ pub trait ConnectionHandler: Send + 'static {
     #[deprecated(
         since = "0.41.0",
         note = "Handle `StreamEvent::DialUpgradeError` on `ConnectionHandler::on_event` instead.
-        the default of implemention of this inject_*` method delegates to it."
+        The default of implemention of this `inject_*` method delegates to it."
     )]
     fn inject_dial_upgrade_error(
         &mut self,
@@ -197,7 +197,7 @@ pub trait ConnectionHandler: Send + 'static {
     #[deprecated(
         since = "0.41.0",
         note = "Handle `StreamEvent::ListenUpgradeError` on `ConnectionHandler::on_event` instead.
-        the default of implemention of this inject_*` method delegates to it."
+        The default of implemention of this `inject_*` method delegates to it."
     )]
     fn inject_listen_upgrade_error(
         &mut self,
