@@ -20,7 +20,7 @@
 use futures::StreamExt;
 use libp2p::{
     identity,
-    mdns::{MdnsConfig, MdnsEvent, TokioMdns},
+    mdns::{tokio::Mdns, MdnsConfig, MdnsEvent},
     swarm::{Swarm, SwarmEvent},
     PeerId,
 };
@@ -53,11 +53,11 @@ async fn test_expired_tokio() -> Result<(), Box<dyn Error>> {
     run_peer_expiration_test(config).await
 }
 
-async fn create_swarm(config: MdnsConfig) -> Result<Swarm<TokioMdns>, Box<dyn Error>> {
+async fn create_swarm(config: MdnsConfig) -> Result<Swarm<Mdns>, Box<dyn Error>> {
     let id_keys = identity::Keypair::generate_ed25519();
     let peer_id = PeerId::from(id_keys.public());
     let transport = libp2p::tokio_development_transport(id_keys)?;
-    let behaviour = TokioMdns::new(config)?;
+    let behaviour = Mdns::new(config)?;
     let mut swarm = Swarm::new(transport, behaviour, peer_id);
     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
     Ok(swarm)

@@ -4,6 +4,9 @@
 
 - Update to `libp2p-swarm` `v0.41.0`.
 
+- Update to `if-watch` `0.3.0` and both rename `TokioMdns` to `Mdns` living in `tokio::Mdns`,
+and move `Mdns` to `async_io::Mdns`. see [PR 3096]
+
 # 0.41.0
 
 - Remove default features. If you previously depended on `async-io` you need to enable this explicitly now. See [PR 2918].
@@ -18,6 +21,7 @@
 
 - Update to `if-watch` `v2.0.0` and thus the `async` method `Mdns::new` and `TokioMdns::new` becomes synchronous. See [PR 2978].
 
+[PR 3096]: https://github.com/libp2p/rust-libp2p/pull/3096
 [PR 2918]: https://github.com/libp2p/rust-libp2p/pull/2918
 [PR 2939]: https://github.com/libp2p/rust-libp2p/pull/2939
 [PR 2977]: https://github.com/libp2p/rust-libp2p/pull/2977

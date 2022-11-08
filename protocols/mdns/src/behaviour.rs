@@ -26,7 +26,7 @@ use self::iface::InterfaceState;
 use crate::behaviour::{socket::AsyncSocket, timer::Builder};
 use crate::MdnsConfig;
 use futures::Stream;
-use if_watch::{IfEvent, IfWatcher};
+use if_watch::IfEvent;
 use libp2p_core::transport::ListenerId;
 use libp2p_core::{Multiaddr, PeerId};
 use libp2p_swarm::{
@@ -36,29 +36,53 @@ use smallvec::SmallVec;
 use std::collections::hash_map::{Entry, HashMap};
 use std::{cmp, fmt, io, net::IpAddr, pin::Pin, task::Context, task::Poll, time::Instant};
 
-#[cfg(feature = "async-io")]
-use crate::behaviour::{socket::asio::AsyncUdpSocket, timer::asio::AsyncTimer};
+/// A Fallible Default trait. Used on [`GenMdns`] to Allow accepting `IfWatcher`'s.
+pub trait TryDefault: Sized {
+    /// Fallible equivalent of [`Default::default`].
+    fn try_default() -> Result<Self, std::io::Error>;
+}
 
 /// The type of a [`GenMdns`] using the `async-io` implementation.
 #[cfg(feature = "async-io")]
-pub type Mdns = GenMdns<AsyncUdpSocket, AsyncTimer>;
+pub mod async_io {
+    use super::{GenMdns, TryDefault};
+    use crate::behaviour::{socket::asio::AsyncUdpSocket, timer::asio::AsyncTimer};
+    use if_watch::smol::IfWatcher;
 
-#[cfg(feature = "tokio")]
-use crate::behaviour::{socket::tokio::TokioUdpSocket, timer::tokio::TokioTimer};
+    pub type Mdns = GenMdns<AsyncUdpSocket, AsyncTimer, IfWatcher>;
+
+    impl TryDefault for IfWatcher {
+        fn try_default() -> Result<Self, std::io::Error> {
+            Self::new()
+        }
+    }
+}
 
 /// The type of a [`GenMdns`] using the `tokio` implementation.
 #[cfg(feature = "tokio")]
-pub type TokioMdns = GenMdns<TokioUdpSocket, TokioTimer>;
+pub mod tokio {
+    use super::{GenMdns, TryDefault};
+    use crate::behaviour::{socket::tokio::TokioUdpSocket, timer::tokio::TokioTimer};
+    use if_watch::tokio::IfWatcher;
+
+    pub type Mdns = GenMdns<TokioUdpSocket, TokioTimer, IfWatcher>;
+
+    impl TryDefault for IfWatcher {
+        fn try_default() -> Result<Self, std::io::Error> {
+            Self::new()
+        }
+    }
+}
 
 /// A `NetworkBehaviour` for mDNS. Automatically discovers peers on the local network and adds
 /// them to the topology.
 #[derive(Debug)]
-pub struct GenMdns<S, T> {
+pub struct GenMdns<S, T, W> {
     /// InterfaceState config.
     config: MdnsConfig,
 
     /// Iface watcher.
-    if_watch: IfWatcher,
+    if_watch: W,
 
     /// Mdns interface states.
     iface_states: HashMap<IpAddr, InterfaceState<S, T>>,
@@ -75,16 +99,16 @@ pub struct GenMdns<S, T> {
     closest_expiration: Option<T>,
 }
 
-impl<S, T> GenMdns<S, T>
+impl<S, T, W> GenMdns<S, T, W>
 where
     T: Builder,
+    W: TryDefault,
 {
     /// Builds a new `Mdns` behaviour.
     pub fn new(config: MdnsConfig) -> io::Result<Self> {
-        let if_watch = if_watch::IfWatcher::new()?;
         Ok(Self {
             config,
-            if_watch,
+            if_watch: TryDefault::try_default()?,
             iface_states: Default::default(),
             discovered_nodes: Default::default(),
             closest_expiration: Default::default(),
@@ -113,10 +137,11 @@ where
     }
 }
 
-impl<S, T> NetworkBehaviour for GenMdns<S, T>
+impl<S, T, W> NetworkBehaviour for GenMdns<S, T, W>
 where
     T: Builder + Stream,
     S: AsyncSocket,
+    W: TryDefault + Stream<Item = std::io::Result<IfEvent>> + Unpin + 'static,
 {
     type ConnectionHandler = dummy::ConnectionHandler;
     type OutEvent = MdnsEvent;

@@ -42,10 +42,10 @@ mod behaviour;
 pub use crate::behaviour::{GenMdns, MdnsEvent};
 
 #[cfg(feature = "async-io")]
-pub use crate::behaviour::Mdns;
+pub use crate::behaviour::async_io;
 
 #[cfg(feature = "tokio")]
-pub use crate::behaviour::TokioMdns;
+pub use crate::behaviour::tokio;
 
 /// The DNS service name for all libp2p peers used to query for addresses.
 const SERVICE_NAME: &[u8] = b"_p2p._udp.local";
