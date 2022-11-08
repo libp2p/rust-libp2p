@@ -18,6 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+//! Implementation of the libp2p-specific [mDNS](https://github.com/libp2p/specs/blob/master/discovery/mdns.md) protocol.
+//!
 //! mDNS is a protocol defined by [RFC 6762](https://tools.ietf.org/html/rfc6762) that allows
 //! querying nodes that correspond to a certain domain name.
 //!
