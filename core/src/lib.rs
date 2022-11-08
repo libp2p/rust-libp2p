@@ -51,6 +51,7 @@ mod peer_record_proto {
     include!(concat!(env!("OUT_DIR"), "/peer_record_proto.rs"));
 }
 
+use futures::executor::ThreadPool;
 /// Multi-address re-export.
 pub use multiaddr;
 pub type Negotiated<T> = multistream_select::Negotiated<T>;
@@ -100,5 +101,44 @@ pub trait Executor {
 impl<F: Fn(Pin<Box<dyn Future<Output = ()> + Send>>)> Executor for F {
     fn exec(&self, f: Pin<Box<dyn Future<Output = ()> + Send>>) {
         self(f)
+    }
+}
+
+impl Executor for ThreadPool {
+    fn exec(&self, future: Pin<Box<dyn Future<Output = ()> + Send>>) {
+        self.spawn_ok(future)
+    }
+}
+
+#[cfg(feature = "tokio")]
+#[derive(Clone, Copy, Debug, Default)]
+pub enum TokioExecutor<'a> {
+    #[default]
+    Empty,
+    Given(&'a tokio::runtime::Runtime),
+}
+
+#[cfg(feature = "tokio")]
+impl<'a> Executor for TokioExecutor<'a> {
+    fn exec(&self, future: Pin<Box<dyn Future<Output = ()> + Send>>) {
+        match self {
+            Self::Given(runtime) => {
+                let _ = runtime.spawn(future);
+            }
+            Self::Empty => {
+                let _ = tokio::spawn(future);
+            }
+        }
+    }
+}
+
+#[cfg(feature = "async-std")]
+#[derive(Default, Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub struct AsyncStdExecutor;
+
+#[cfg(feature = "async-std")]
+impl Executor for AsyncStdExecutor {
+    fn exec(&self, future: Pin<Box<dyn Future<Output = ()> + Send>>) {
+        let _ = async_std::task::spawn(future);
     }
 }

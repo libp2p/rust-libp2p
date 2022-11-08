@@ -86,7 +86,7 @@ use connection::pool::{EstablishedConnection, Pool, PoolConfig, PoolEvent};
 use connection::IncomingInfo;
 use dial_opts::{DialOpts, PeerCondition};
 use either::Either;
-use futures::{executor::ThreadPoolBuilder, prelude::*, stream::FusedStream};
+use futures::{prelude::*, stream::FusedStream};
 use libp2p_core::connection::ConnectionId;
 use libp2p_core::muxing::SubstreamBox;
 use libp2p_core::{
@@ -258,15 +258,16 @@ pub enum SwarmEvent<TBehaviourOutEvent, THandlerErr> {
 ///
 /// Note: Needs to be polled via `<Swarm as Stream>` in order to make
 /// progress.
-pub struct Swarm<TBehaviour>
+pub struct Swarm<TBehaviour, TExecutor = futures::executor::ThreadPool>
 where
     TBehaviour: NetworkBehaviour,
+    TExecutor: Executor,
 {
     /// [`Transport`] for dialing remote peers and listening for incoming connection.
     transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
 
     /// The nodes currently active.
-    pool: Pool<THandler<TBehaviour>, transport::Boxed<(PeerId, StreamMuxerBox)>>,
+    pool: Pool<THandler<TBehaviour>, transport::Boxed<(PeerId, StreamMuxerBox)>, TExecutor>,
 
     /// The local peer ID.
     local_peer_id: PeerId,
@@ -300,11 +301,24 @@ where
     pending_event: Option<(PeerId, PendingNotifyHandler, THandlerInEvent<TBehaviour>)>,
 }
 
-impl<TBehaviour> Unpin for Swarm<TBehaviour> where TBehaviour: NetworkBehaviour {}
+#[cfg(feature = "tokio")]
+pub type TokioSwarm<'a, TBehaviour> = Swarm<TBehaviour, libp2p_core::TokioExecutor<'a>>;
 
-impl<TBehaviour> Swarm<TBehaviour>
+#[cfg(feature = "async-std")]
+pub type AsyncStdSwarm<TBehaviour> = Swarm<TBehaviour, libp2p_core::AsyncStdExecutor>;
+
+impl<TBehaviour, TExecutor> Unpin for Swarm<TBehaviour, TExecutor>
 where
     TBehaviour: NetworkBehaviour,
+    TExecutor: Executor,
+{
+}
+
+impl<TBehaviour, TExecutor> Swarm<TBehaviour, TExecutor>
+where
+    TBehaviour: NetworkBehaviour,
+    TExecutor: Executor,
+    PoolConfig<TExecutor>: Default,
 {
     /// Builds a new `Swarm`.
     pub fn new(
@@ -314,7 +328,13 @@ where
     ) -> Self {
         SwarmBuilder::new(transport, behaviour, local_peer_id).build()
     }
+}
 
+impl<TBehaviour, TExecutor> Swarm<TBehaviour, TExecutor>
+where
+    TBehaviour: NetworkBehaviour,
+    TExecutor: Executor,
+{
     /// Returns information about the connections underlying the [`Swarm`].
     pub fn network_info(&self) -> NetworkInfo {
         let num_peers = self.pool.num_peers();
@@ -1045,7 +1065,12 @@ where
                         }
                     }
                     PendingNotifyHandler::Any(ids) => {
-                        match notify_any::<_, _, TBehaviour>(ids, &mut this.pool, event, cx) {
+                        match notify_any::<_, _, TBehaviour, TExecutor>(
+                            ids,
+                            &mut this.pool,
+                            event,
+                            cx,
+                        ) {
                             None => continue,
                             Some((event, ids)) => {
                                 let handler = PendingNotifyHandler::Any(ids);
@@ -1154,9 +1179,9 @@ fn notify_one<THandlerInEvent>(
 ///
 /// Returns `None` if either all connections are closing or the event
 /// was successfully sent to a handler, in either case the event is consumed.
-fn notify_any<TTrans, THandler, TBehaviour>(
+fn notify_any<TTrans, THandler, TBehaviour, TExecutor>(
     ids: SmallVec<[ConnectionId; 10]>,
-    pool: &mut Pool<THandler, TTrans>,
+    pool: &mut Pool<THandler, TTrans, TExecutor>,
     event: THandlerInEvent<TBehaviour>,
     cx: &mut Context<'_>,
 ) -> Option<(THandlerInEvent<TBehaviour>, SmallVec<[ConnectionId; 10]>)>
@@ -1164,6 +1189,7 @@ where
     TTrans: Transport,
     TTrans::Error: Send + 'static,
     TBehaviour: NetworkBehaviour,
+    TExecutor: Executor,
     THandler: IntoConnectionHandler,
     THandler::Handler: ConnectionHandler<
         InEvent = THandlerInEvent<TBehaviour>,
@@ -1205,9 +1231,10 @@ where
 ///
 /// Note: This stream is infinite and it is guaranteed that
 /// [`Stream::poll_next`] will never return `Poll::Ready(None)`.
-impl<TBehaviour> Stream for Swarm<TBehaviour>
+impl<TBehaviour, TExecutor> Stream for Swarm<TBehaviour, TExecutor>
 where
     TBehaviour: NetworkBehaviour,
+    TExecutor: Executor,
 {
     type Item = SwarmEvent<TBehaviourOutEvent<TBehaviour>, THandlerErr<TBehaviour>>;
 
@@ -1217,9 +1244,10 @@ where
 }
 
 /// The stream of swarm events never terminates, so we can implement fused for it.
-impl<TBehaviour> FusedStream for Swarm<TBehaviour>
+impl<TBehaviour, TExecutor> FusedStream for Swarm<TBehaviour, TExecutor>
 where
     TBehaviour: NetworkBehaviour,
+    TExecutor: Executor,
 {
     fn is_terminated(&self) -> bool {
         false
@@ -1258,17 +1286,29 @@ impl<'a> PollParameters for SwarmPollParameters<'a> {
 }
 
 /// A [`SwarmBuilder`] provides an API for configuring and constructing a [`Swarm`].
-pub struct SwarmBuilder<TBehaviour> {
+pub struct SwarmBuilder<TBehaviour, TExecutor = futures::executor::ThreadPool>
+where
+    TExecutor: Executor,
+{
     local_peer_id: PeerId,
     transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
     behaviour: TBehaviour,
-    pool_config: PoolConfig,
+    pool_config: PoolConfig<TExecutor>,
     connection_limits: ConnectionLimits,
 }
 
-impl<TBehaviour> SwarmBuilder<TBehaviour>
+#[cfg(feature = "tokio")]
+pub type TokioSwarmBuilder<'a, TBehaviour> =
+    SwarmBuilder<TBehaviour, libp2p_core::TokioExecutor<'a>>;
+
+#[cfg(feature = "async-std")]
+pub type AsyncStdSwarmBuilder<TBehaviour> = SwarmBuilder<TBehaviour, libp2p_core::AsyncStdExecutor>;
+
+impl<TBehaviour, TExecutor> SwarmBuilder<TBehaviour, TExecutor>
 where
     TBehaviour: NetworkBehaviour,
+    TExecutor: Executor,
+    PoolConfig<TExecutor>: Default,
 {
     /// Creates a new `SwarmBuilder` from the given transport, behaviour and
     /// local peer ID. The `Swarm` with its underlying `Network` is obtained
@@ -1286,15 +1326,36 @@ where
             connection_limits: Default::default(),
         }
     }
+}
 
+impl<TBehaviour, TExecutor> SwarmBuilder<TBehaviour, TExecutor>
+where
+    TBehaviour: NetworkBehaviour,
+    TExecutor: Executor,
+{
     /// Configures the `Executor` to use for spawning background tasks.
     ///
     /// By default, unless another executor has been configured,
     /// [`SwarmBuilder::build`] will try to set up a
     /// [`ThreadPool`](futures::executor::ThreadPool).
-    pub fn executor(mut self, e: Box<dyn Executor + Send>) -> Self {
-        self.pool_config = self.pool_config.with_executor(e);
-        self
+    pub fn executor<NExecutor>(self, executor: NExecutor) -> SwarmBuilder<TBehaviour, NExecutor>
+    where
+        NExecutor: Executor,
+    {
+        let Self {
+            local_peer_id,
+            transport,
+            behaviour,
+            pool_config,
+            connection_limits,
+        } = self;
+        SwarmBuilder {
+            local_peer_id,
+            transport,
+            behaviour,
+            pool_config: pool_config.with_executor(executor),
+            connection_limits,
+        }
     }
 
     /// Configures the number of events from the [`NetworkBehaviour`] in
@@ -1381,7 +1442,7 @@ where
     }
 
     /// Builds a `Swarm` with the current configuration.
-    pub fn build(mut self) -> Swarm<TBehaviour> {
+    pub fn build(mut self) -> Swarm<TBehaviour, TExecutor> {
         let supported_protocols = self
             .behaviour
             .new_handler()
@@ -1391,25 +1452,10 @@ where
             .map(|info| info.protocol_name().to_vec())
             .collect();
 
-        // If no executor has been explicitly configured, try to set up a thread pool.
-        let pool_config =
-            self.pool_config.or_else_with_executor(|| {
-                match ThreadPoolBuilder::new()
-                    .name_prefix("libp2p-swarm-task-")
-                    .create()
-                {
-                    Ok(tp) => Some(Box::new(move |f| tp.spawn_ok(f))),
-                    Err(err) => {
-                        log::warn!("Failed to create executor thread pool: {:?}", err);
-                        None
-                    }
-                }
-            });
-
         Swarm {
             local_peer_id: self.local_peer_id,
             transport: self.transport,
-            pool: Pool::new(self.local_peer_id, pool_config, self.connection_limits),
+            pool: Pool::new(self.local_peer_id, self.pool_config, self.connection_limits),
             behaviour: self.behaviour,
             supported_protocols,
             listened_addrs: HashMap::new(),
@@ -1565,6 +1611,7 @@ mod tests {
     use super::*;
     use crate::test::{CallTraceBehaviour, MockBehaviour};
     use futures::executor::block_on;
+    use futures::executor::ThreadPool;
     use futures::future::poll_fn;
     use futures::future::Either;
     use futures::{executor, future, ready};

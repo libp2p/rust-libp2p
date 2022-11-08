@@ -30,6 +30,10 @@ env_logger = "0.9"
 libp2p = { path = "..", features = ["full"] }
 quickcheck = { package = "quickcheck-ext", path = "../misc/quickcheck-ext" }
 
+[features]
+tokio = ["libp2p-core/tokio"]
+async-std = ["libp2p-core/async-std"]
+
 # Passing arguments to the docsrs builder in order to properly document cfg's. 
 # More information: https://docs.rs/about/builds#cross-compiling
 [package.metadata.docs.rs]

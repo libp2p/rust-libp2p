@@ -38,6 +38,9 @@ unsigned-varint = "0.7"
 void = "1"
 zeroize = "1"
 serde = { version = "1", optional = true, features = ["derive"] }
+# TODO make optional before commit
+tokio = { version = "1.15", features = ["rt"], optional = true }
+async-std = { version = "1.6.2", optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 ring = { version = "0.16.9", features = ["alloc", "std"], default-features = false, optional = true}
@@ -56,10 +59,12 @@ serde_json = "1.0"
 prost-build = "0.11"
 
 [features]
-secp256k1 = [ "libsecp256k1" ]
-ecdsa = [ "p256" ]
-rsa = [ "dep:ring" ]
+secp256k1 = ["libsecp256k1"]
+ecdsa = ["p256"]
+rsa = ["dep:ring"]
 serde = ["multihash/serde-codec", "dep:serde"]
+tokio = ["dep:tokio"]
+async-std = ["dep:async-std"]
 
 [[bench]]
 name = "peer_id"
