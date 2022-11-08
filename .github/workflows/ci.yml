@@ -48,7 +48,7 @@ jobs:
           toolchain: stable
           override: true
 
-      - uses: Swatinem/rust-cache@22c9328bcba27aa81a32b1bef27c7e3c78052531 # v2.0.1
+      - uses: Swatinem/rust-cache@b894d59a8d236e2979b247b80dac8d053ab340dd # v2.1.0
         with:
           key: ${{ matrix.crate }}
 
@@ -96,7 +96,7 @@ jobs:
           override: true
           target: ${{ matrix.target }}
 
-      - uses: Swatinem/rust-cache@22c9328bcba27aa81a32b1bef27c7e3c78052531 # v2.0.1
+      - uses: Swatinem/rust-cache@b894d59a8d236e2979b247b80dac8d053ab340dd # v2.1.0
 
       - run: cargo check --package libp2p --all-features --target=${{ matrix.target }}
 
@@ -120,7 +120,7 @@ jobs:
           toolchain: stable
           override: true
 
-      - uses: Swatinem/rust-cache@22c9328bcba27aa81a32b1bef27c7e3c78052531 # v2.0.1
+      - uses: Swatinem/rust-cache@b894d59a8d236e2979b247b80dac8d053ab340dd # v2.1.0
         with:
           key: ${{ matrix.runtime }}
 
@@ -141,7 +141,7 @@ jobs:
           toolchain: stable
           override: true
 
-      - uses: Swatinem/rust-cache@22c9328bcba27aa81a32b1bef27c7e3c78052531 # v2.0.1
+      - uses: Swatinem/rust-cache@b894d59a8d236e2979b247b80dac8d053ab340dd # v2.1.0
 
       - name: Check rustdoc links
         run: RUSTDOCFLAGS="--deny rustdoc::broken_intra_doc_links --deny warnings" cargo doc --verbose --workspace --no-deps --all-features --document-private-items
@@ -168,7 +168,7 @@ jobs:
           override: true
           components: clippy
 
-      - uses: Swatinem/rust-cache@22c9328bcba27aa81a32b1bef27c7e3c78052531 # v2.0.1
+      - uses: Swatinem/rust-cache@b894d59a8d236e2979b247b80dac8d053ab340dd # v2.1.0
 
       - name: Run cargo clippy
         uses: actions-rs/cargo@844f36862e911db73fe0815f00a4a2602c279505 # v1.0.3
@@ -190,7 +190,7 @@ jobs:
           toolchain: stable
           override: true
 
-      - uses: Swatinem/rust-cache@22c9328bcba27aa81a32b1bef27c7e3c78052531 # v2.0.1
+      - uses: Swatinem/rust-cache@b894d59a8d236e2979b247b80dac8d053ab340dd # v2.1.0
 
       - name: Run ipfs-kad example
         run: RUST_LOG=libp2p_swarm=debug,libp2p_kad=trace,libp2p_tcp=debug cargo run --example ipfs-kad --features full
