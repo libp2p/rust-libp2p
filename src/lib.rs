@@ -111,6 +111,7 @@ pub use libp2p_swarm as swarm;
 pub use libp2p_tcp as tcp;
 #[cfg(feature = "tls")]
 #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
+#[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
 #[doc(inline)]
 pub use libp2p_tls as tls;
 #[cfg(feature = "uds")]
