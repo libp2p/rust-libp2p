@@ -1,0 +1,28 @@
+defaults:
+  actions:
+    queue:
+      method: squash
+      commit_message_template: |
+        {{ title }} (#{{ number }})
+        
+        {{ body | get_section("## Commit Message body", "") }}   
+
+pull_request_rules:
+  - name: Ask to resolve conflict
+    conditions:
+      - conflict
+      - -draft # Draft PRs are allowed to have conflicts.
+    actions:
+      comment:
+        message: This pull request has merge conflicts. Could you please resolve them @{{author}}? 🙏
+
+  - name: Add to merge queue
+    conditions:
+      # All branch protection rules are implicit: https://docs.mergify.com/conditions/#about-branch-protection
+      - label=send-it
+    actions:
+      queue:
+
+queue_rules:
+  - name: default
+    conditions: []

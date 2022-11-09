@@ -36,9 +36,24 @@ pub enum NoiseError {
     /// upgrade failed.
     AuthenticationFailed,
     /// A handshake payload is invalid.
-    InvalidPayload(prost::DecodeError),
+    InvalidPayload(DecodeError),
     /// A signature was required and could not be created.
     SigningError(identity::error::SigningError),
+}
+
+#[derive(Debug)]
+pub struct DecodeError(prost::DecodeError);
+
+impl fmt::Display for DecodeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl Error for DecodeError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        self.0.source()
+    }
 }
 
 impl fmt::Display for NoiseError {
@@ -81,7 +96,7 @@ impl From<SnowError> for NoiseError {
 
 impl From<prost::DecodeError> for NoiseError {
     fn from(e: prost::DecodeError) -> Self {
-        NoiseError::InvalidPayload(e)
+        NoiseError::InvalidPayload(DecodeError(e))
     }
 }
 

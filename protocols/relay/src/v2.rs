@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 //! Implementation of the [libp2p circuit relay v2
-//! specification](https://github.com/libp2p/specs/issues/314).
+//! specification](https://github.com/libp2p/specs/blob/master/relay/circuit-v2.md).
 
 #[allow(clippy::derive_partial_eq_without_eq)]
 mod message_proto {
