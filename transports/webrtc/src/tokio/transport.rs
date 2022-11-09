@@ -359,7 +359,7 @@ fn socketaddr_to_multiaddr(socket_addr: &SocketAddr, certhash: Option<Fingerprin
         .with(Protocol::WebRTC);
 
     if let Some(fp) = certhash {
-        return addr.with(Protocol::Certhash(fp.to_multi_hash()));
+        return addr.with(Protocol::Certhash(fp.to_multihash()));
     }
 
     addr

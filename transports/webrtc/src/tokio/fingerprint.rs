@@ -73,7 +73,7 @@ impl Fingerprint {
     }
 
     /// Converts this fingerprint to [`type@Multihash`].
-    pub fn to_multi_hash(self) -> Multihash {
+    pub fn to_multihash(self) -> Multihash {
         Code::Sha2_256
             .wrap(&self.0)
             .expect("fingerprint's len to be 32 bytes")
