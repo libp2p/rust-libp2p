@@ -159,11 +159,11 @@ pub trait ConnectionHandler: Send + 'static {
     ) {
     }
 
-    /// Indicates to the handler that the error occurred during the multistream select protocol execution.
+    /// Indicates to the handler that the error occurred during the multistream select protocol execution but is not related to the given protocol.
     fn inject_listen_negotiation_error(
         &mut self,
-        _: Self::InboundOpenInfo,
-        _: ConnectionHandlerUpgrErr<<Self::InboundProtocol as InboundUpgradeSend>::Error>,
+        info: Self::UpgradeInfo,
+        error: ConnectionHandlerUpgrErr<<Self::InboundProtocol as InboundUpgradeSend>::Error>,
     ){
     }
 

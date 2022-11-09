@@ -645,6 +645,26 @@ impl ConnectionHandler for Handler {
         ));
     }
 
+    fn inject_listen_negotiation_error(
+            &mut self,
+            info: Self::UpgradeInfo,
+            error: ConnectionHandlerUpgrErr<<Self::InboundProtocol as InboundUpgradeSend>::Error>,
+        ) {
+        let non_fatal_error = match error {
+              ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(
+                upgrade::NegotiationError::Failed,
+            )) => ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(
+                upgrade::NegotiationError::Failed,
+            ))
+        };
+
+        self.queued_events.push_back(ConnectionHandlerEvent::Custom(
+            Event::CircuitReqReceiveFailed {
+                error: non_fatal_error,
+            },
+        ));
+    }
+
     fn inject_dial_upgrade_error(
         &mut self,
         open_info: Self::OutboundOpenInfo,
