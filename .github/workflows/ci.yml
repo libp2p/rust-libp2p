@@ -176,7 +176,7 @@ jobs:
           command: custom-clippy # cargo alias to allow reuse of config locally
 
   ipfs-integration-test:
-    name: Integration tests
+    name: IPFS Integration tests
     runs-on: ubuntu-latest
     steps:
       - name: Install Protoc
