@@ -142,7 +142,7 @@ pub trait NetworkBehaviour: 'static {
     ///
     /// Note that the handler is returned to the [`NetworkBehaviour`] on connection failure and
     /// connection closing.
-    // TODO: Mark as deprecated.
+    #[deprecated(since = "0.41.0", note = "Implement `new_inbound_handler` and `new_outbound_handler` instead.")]
     fn new_handler(&mut self) -> Self::ConnectionHandler;
 
     fn new_inbound_handler(&mut self) -> Self::ConnectionHandler {

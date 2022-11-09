@@ -28,7 +28,7 @@ use crate::{
     },
     transport::{Transport, TransportError},
     ConnectedPoint, ConnectionHandler, Executor, IntoConnectionHandler, Multiaddr,
-    NetworkBehaviour, PeerId, TBehaviourOutEvent,
+    PeerId,
 };
 use concurrent_dial::ConcurrentDial;
 use fnv::FnvHashMap;
