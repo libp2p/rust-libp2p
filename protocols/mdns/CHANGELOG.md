@@ -4,7 +4,7 @@
 
 - Update to `libp2p-swarm` `v0.41.0`.
 
-- Update to `if-watch` `0.3.0` and both rename `TokioMdns` to `Mdns` living in `tokio::Mdns`,
+- Update to `if-watch` `3.0.0` and both rename `TokioMdns` to `Mdns` living in `tokio::Mdns`,
 and move `Mdns` to `async_io::Mdns`. see [PR 3096]
 
 # 0.41.0
