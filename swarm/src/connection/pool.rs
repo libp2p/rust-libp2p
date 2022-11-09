@@ -31,7 +31,7 @@ use crate::{
 };
 use concurrent_dial::ConcurrentDial;
 use fnv::FnvHashMap;
-use futures::executor::ThreadPool;
+use futures::executor::ThreadPoolBuilder;
 use futures::prelude::*;
 use futures::{
     channel::{mpsc, oneshot},
@@ -53,21 +53,16 @@ use std::{
 use void::Void;
 
 mod concurrent_dial;
-mod task;
+#[cfg(any(feature = "tokio", feature = "async-std"))]
 pub mod executor;
+mod task;
 
-enum ExecSwitch<TExecutor>
-where
-    TExecutor: Executor,
-{
-    Executor(TExecutor),
+enum ExecSwitch {
+    Executor(Box<dyn Executor + Send>),
     LocalSpawn(FuturesUnordered<Pin<Box<dyn Future<Output = ()> + Send>>>),
 }
 
-impl<TExecutor> ExecSwitch<TExecutor>
-where
-    TExecutor: Executor,
-{
+impl ExecSwitch {
     // advance the local queue
     #[inline]
     fn advance_local(&mut self, cx: &mut Context) {
@@ -89,10 +84,9 @@ where
 }
 
 /// A connection `Pool` manages a set of connections for each peer.
-pub struct Pool<THandler, TTrans, TExecutor>
+pub struct Pool<THandler, TTrans>
 where
     TTrans: Transport,
-    TExecutor: Executor,
     THandler: IntoConnectionHandler,
 {
     local_id: PeerId,
@@ -131,7 +125,7 @@ where
 
     /// The executor to use for running the background tasks. Can either be a global executor
     /// or a local queue.
-    executor: ExecSwitch<TExecutor>,
+    executor: ExecSwitch,
 
     /// Sender distributed to pending tasks for reporting events back
     /// to the pool.
@@ -222,9 +216,7 @@ impl<THandler> PendingConnection<THandler> {
     }
 }
 
-impl<THandler: IntoConnectionHandler, TTrans: Transport, TExecutor: Executor> fmt::Debug
-    for Pool<THandler, TTrans, TExecutor>
-{
+impl<THandler: IntoConnectionHandler, TTrans: Transport> fmt::Debug for Pool<THandler, TTrans> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         f.debug_struct("Pool")
             .field("counters", &self.counters)
@@ -321,14 +313,13 @@ where
     },
 }
 
-impl<THandler, TTrans, TExecutor> Pool<THandler, TTrans, TExecutor>
+impl<THandler, TTrans> Pool<THandler, TTrans>
 where
     THandler: IntoConnectionHandler,
     TTrans: Transport,
-    TExecutor: Executor,
 {
     /// Creates a new empty `Pool`.
-    pub fn new(local_id: PeerId, config: PoolConfig<TExecutor>, limits: ConnectionLimits) -> Self {
+    pub fn new(local_id: PeerId, config: PoolConfig, limits: ConnectionLimits) -> Self {
         let (pending_connection_events_tx, pending_connection_events_rx) =
             mpsc::channel(config.task_event_buffer_size);
         let (established_connection_events_tx, established_connection_events_rx) =
@@ -440,10 +431,9 @@ where
     }
 }
 
-impl<THandler, TTrans, TExecutor> Pool<THandler, TTrans, TExecutor>
+impl<THandler, TTrans> Pool<THandler, TTrans>
 where
     THandler: IntoConnectionHandler,
-    TExecutor: Executor,
     TTrans: Transport + 'static,
     TTrans::Output: Send + 'static,
     TTrans::Error: Send + 'static,
@@ -1084,9 +1074,9 @@ impl ConnectionLimits {
 ///
 /// The default configuration specifies no dedicated task executor, a
 /// task event buffer size of 32, and a task command buffer size of 7.
-pub struct PoolConfig<TExecutor = ThreadPool> {
+pub struct PoolConfig {
     /// Executor to use to spawn tasks.
-    pub executor: Option<TExecutor>,
+    pub executor: Option<Box<dyn Executor + Send>>,
 
     /// Size of the task command buffer (per task).
     pub task_command_buffer_size: usize,
@@ -1107,62 +1097,42 @@ pub struct PoolConfig<TExecutor = ThreadPool> {
     max_negotiating_inbound_streams: usize,
 }
 
-macro_rules! impl_pool_config_default {
-    ($executor:ident) => {
-        PoolConfig {
-            $executor,
+impl Default for PoolConfig {
+    fn default() -> Self {
+        let executor: Option<Box<dyn Executor + Send>> = match ThreadPoolBuilder::new()
+            .name_prefix("libp2p-swarm-task-")
+            .create()
+        {
+            Ok(pool) => Some(Box::new(pool)),
+            Err(_) => None,
+        };
+        Self {
+            executor,
             task_event_buffer_size: 32,
             task_command_buffer_size: 7,
-            // Set to a default of 8 based on frequency of dialer connections
             dial_concurrency_factor: NonZeroU8::new(8).expect("8 > 0"),
             substream_upgrade_protocol_override: None,
             max_negotiating_inbound_streams: 128,
         }
-    };
-}
-
-impl Default for PoolConfig<ThreadPool> {
-    fn default() -> Self {
-        let executor = ThreadPool::new().ok();
-        impl_pool_config_default!(executor)
     }
 }
 
-#[cfg(feature = "tokio")]
-impl<'a> Default for PoolConfig<libp2p_core::TokioExecutor<'a>> {
-    fn default() -> Self {
-        let executor = Some(libp2p_core::TokioExecutor::default());
-        impl_pool_config_default!(executor)
-    }
-}
-
-#[cfg(feature = "async-std")]
-impl Default for PoolConfig<libp2p_core::AsyncStdExecutor> {
-    fn default() -> Self {
-        let executor = Some(libp2p_core::AsyncStdExecutor::default());
-        impl_pool_config_default!(executor)
-    }
-}
-
-impl<TExecutor> PoolConfig<TExecutor> {
-    /// Configures the executor to use for spawning connection background tasks.
-    pub fn with_executor<NExecutor: Executor>(self, executor: NExecutor) -> PoolConfig<NExecutor> {
-        let PoolConfig {
-            task_command_buffer_size,
-            task_event_buffer_size,
-            dial_concurrency_factor,
-            substream_upgrade_protocol_override,
-            max_negotiating_inbound_streams,
-            ..
-        } = self;
-        PoolConfig {
-            executor: Some(executor),
-            task_command_buffer_size,
-            task_event_buffer_size,
-            dial_concurrency_factor,
-            substream_upgrade_protocol_override,
-            max_negotiating_inbound_streams,
+impl PoolConfig {
+    pub fn new(executor: Option<Box<dyn Executor + Send>>) -> Self {
+        Self {
+            executor,
+            task_command_buffer_size: 32,
+            task_event_buffer_size: 7,
+            dial_concurrency_factor: NonZeroU8::new(8).expect("8 > 0"),
+            substream_upgrade_protocol_override: None,
+            max_negotiating_inbound_streams: 128,
         }
+    }
+
+    /// Configures the executor to use for spawning connection background tasks.
+    pub fn with_executor(mut self, executor: Box<dyn Executor + Send>) -> Self {
+        self.executor = Some(executor);
+        self
     }
 
     /// Sets the maximum number of events sent to a connection's background task
@@ -1210,15 +1180,11 @@ impl<TExecutor> PoolConfig<TExecutor> {
         self.max_negotiating_inbound_streams = v;
         self
     }
-}
 
-impl<TExecutor> PoolConfig<TExecutor>
-where
-    TExecutor: Executor + Send + 'static,
-{
     /// Configures the executor to use for spawning connection background tasks,
     /// only if no executor has already been configured.
-    pub fn or_else_with_executor<F>(self, f: F) -> PoolConfig<Box<dyn Executor + Send>>
+    #[allow(dead_code)] // TODO: Can we just remove this?
+    pub fn or_else_with_executor<F>(self, f: F) -> Self
     where
         F: FnOnce() -> Option<Box<dyn Executor + Send>>,
     {
@@ -1230,8 +1196,7 @@ where
             max_negotiating_inbound_streams,
             ..
         } = self;
-        let executor: Option<Box<dyn Executor + Send>> =
-            self.executor.map_or_else(f, |e| Some(Box::new(e)));
+        let executor: Option<Box<dyn Executor + Send>> = self.executor.map_or_else(f, |e| Some(e));
         PoolConfig {
             executor,
             task_command_buffer_size,

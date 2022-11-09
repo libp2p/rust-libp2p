@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use clap::Parser;
-use futures::executor::block_on;
+use futures::executor::{block_on, ThreadPool};
 use futures::future::FutureExt;
 use futures::stream::StreamExt;
 use libp2p::core::multiaddr::{Multiaddr, Protocol};
@@ -34,6 +34,7 @@ use libp2p::tcp;
 use libp2p::Transport;
 use libp2p::{dcutr, ping};
 use libp2p::{identity, NetworkBehaviour, PeerId};
+use libp2p_core::Executor;
 use log::info;
 use std::convert::TryInto;
 use std::error::Error;
@@ -155,7 +156,13 @@ fn main() -> Result<(), Box<dyn Error>> {
         dcutr: dcutr::behaviour::Behaviour::new(),
     };
 
-    let mut swarm = SwarmBuilder::new(transport, behaviour, local_peer_id)
+
+    let executor: Option<Box<dyn Executor + Send>> = match ThreadPool::new() {
+        Ok(tp) => Some(Box::new(tp)),
+        Err(_) => None,
+    };
+
+    let mut swarm = SwarmBuilder::new(transport, behaviour, local_peer_id, executor)
         .dial_concurrency_factor(10_u8.try_into().unwrap())
         .build();
 

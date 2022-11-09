@@ -53,11 +53,7 @@ where
         .timeout(Duration::from_secs(5))
         .boxed();
 
-    SwarmBuilder::new(transport, behaviour_fn(peer_id, identity), peer_id)
-        .executor(Box::new(|future| {
-            let _ = tokio::spawn(future);
-        }))
-        .build()
+    Swarm::with_tokio_executor(transport, behaviour_fn(peer_id, identity), peer_id)
 }
 
 fn get_rand_memory_address() -> Multiaddr {

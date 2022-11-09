@@ -102,7 +102,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         floodsub: Floodsub::new(peer_id),
         mdns,
     };
-    let mut swarm = libp2p_swarm::TokioSwarm::new(transport, behaviour, peer_id);
+    let mut swarm = libp2p_swarm::Swarm::with_tokio_executor(transport, behaviour, peer_id);
 
     // Reach out to another node if specified
     if let Some(to_dial) = std::env::args().nth(1) {

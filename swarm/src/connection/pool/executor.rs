@@ -1,6 +1,5 @@
-use std::{pin::Pin, future::Future};
 use libp2p_core::Executor;
-
+use std::{future::Future, pin::Pin};
 
 #[cfg(feature = "tokio")]
 #[derive(Default, Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
