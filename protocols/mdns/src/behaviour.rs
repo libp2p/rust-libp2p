@@ -35,6 +35,7 @@ use libp2p_swarm::{
 use smallvec::SmallVec;
 use std::collections::hash_map::{Entry, HashMap};
 use std::{cmp, fmt, io, net::IpAddr, pin::Pin, task::Context, task::Poll, time::Instant};
+use void::Void;
 
 #[cfg(feature = "async-io")]
 use crate::behaviour::{socket::asio::AsyncUdpSocket, timer::asio::AsyncTimer};
@@ -120,6 +121,7 @@ where
 {
     type ConnectionHandler = dummy::ConnectionHandler;
     type OutEvent = MdnsEvent;
+    type DialPayload = ();
 
     fn new_handler(&mut self) -> Self::ConnectionHandler {
         dummy::ConnectionHandler
@@ -131,6 +133,19 @@ where
             .filter(|(peer, _, _)| peer == peer_id)
             .map(|(_, addr, _)| addr.clone())
             .collect()
+    }
+
+    fn inject_connection_closed(
+        &mut self,
+        peer: &PeerId,
+        _: &libp2p_core::connection::ConnectionId,
+        _: &libp2p_core::ConnectedPoint,
+        _: Self::ConnectionHandler,
+        remaining_established: usize,
+    ) {
+        if remaining_established == 0 {
+            self.expire_node(peer);
+        }
     }
 
     fn inject_event(
@@ -149,24 +164,11 @@ where
         }
     }
 
-    fn inject_connection_closed(
-        &mut self,
-        peer: &PeerId,
-        _: &libp2p_core::connection::ConnectionId,
-        _: &libp2p_core::ConnectedPoint,
-        _: Self::ConnectionHandler,
-        remaining_established: usize,
-    ) {
-        if remaining_established == 0 {
-            self.expire_node(peer);
-        }
-    }
-
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
         params: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, dummy::ConnectionHandler>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Void>> {
         // Poll ifwatch.
         while let Poll::Ready(Some(event)) = Pin::new(&mut self.if_watch).poll_next(cx) {
             match event {

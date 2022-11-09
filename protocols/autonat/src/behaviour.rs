@@ -36,6 +36,7 @@ use libp2p_request_response::{
     handler::RequestResponseHandlerEvent, ProtocolSupport, RequestId, RequestResponse,
     RequestResponseConfig, RequestResponseEvent, RequestResponseMessage, ResponseChannel,
 };
+use libp2p_swarm::behaviour::THandlerInEvent;
 use libp2p_swarm::{
     DialError, IntoConnectionHandler, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
 };
@@ -303,6 +304,7 @@ impl Behaviour {
 impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = <RequestResponse<AutoNatCodec> as NetworkBehaviour>::ConnectionHandler;
     type OutEvent = Event;
+    type DialPayload = ();
 
     fn inject_connection_established(
         &mut self,
@@ -372,10 +374,10 @@ impl NetworkBehaviour for Behaviour {
     fn inject_dial_failure(
         &mut self,
         peer: Option<PeerId>,
-        handler: Self::ConnectionHandler,
+        initial_event: Option<Self::DialPayload>,
         error: &DialError,
     ) {
-        self.inner.inject_dial_failure(peer, handler, error);
+        self.inner.inject_dial_failure(peer, initial_event, error);
         if let Some(event) = self.as_server().on_outbound_dial_error(peer, error) {
             self.pending_out_events
                 .push_back(Event::InboundProbe(event));
@@ -487,14 +489,8 @@ impl NetworkBehaviour for Behaviour {
         self.inner.inject_event(peer_id, conn, event)
     }
 
-    fn inject_listen_failure(
-        &mut self,
-        local_addr: &Multiaddr,
-        send_back_addr: &Multiaddr,
-        handler: Self::ConnectionHandler,
-    ) {
-        self.inner
-            .inject_listen_failure(local_addr, send_back_addr, handler)
+    fn inject_listen_failure(&mut self, local_addr: &Multiaddr, send_back_addr: &Multiaddr) {
+        self.inner.inject_listen_failure(local_addr, send_back_addr)
     }
 
     fn inject_new_listener(&mut self, id: ListenerId) {
@@ -512,7 +508,7 @@ impl NetworkBehaviour for Behaviour {
 
 type Action = NetworkBehaviourAction<
     <Behaviour as NetworkBehaviour>::OutEvent,
-    <Behaviour as NetworkBehaviour>::ConnectionHandler,
+    THandlerInEvent<<Behaviour as NetworkBehaviour>::ConnectionHandler>,
 >;
 
 // Trait implemented for `AsClient` as `AsServer` to handle events from the inner [`RequestResponse`] Protocol.

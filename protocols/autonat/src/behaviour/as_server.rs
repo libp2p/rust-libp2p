@@ -30,7 +30,7 @@ use libp2p_request_response::{
 };
 use libp2p_swarm::{
     dial_opts::{DialOpts, PeerCondition},
-    DialError, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
+    DialError, NetworkBehaviourAction, PollParameters,
 };
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -137,7 +137,7 @@ impl<'a> HandleInnerEvent for AsServer<'a> {
                                 .override_dial_concurrency_factor(NonZeroU8::new(1).expect("1 > 0"))
                                 .addresses(addrs)
                                 .build(),
-                            handler: self.inner.new_handler(),
+                            dial_payload: (),
                         });
                     }
                     Err((status_text, error)) => {

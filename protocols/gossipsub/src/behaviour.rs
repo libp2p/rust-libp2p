@@ -200,7 +200,7 @@ impl From<MessageAuthenticity> for PublishConfig {
 }
 
 type GossipsubNetworkBehaviourAction =
-    NetworkBehaviourAction<GossipsubEvent, GossipsubHandler, Arc<GossipsubHandlerIn>>;
+    NetworkBehaviourAction<GossipsubEvent, Arc<GossipsubHandlerIn>>;
 
 /// Network behaviour that handles the gossipsub protocol.
 ///
@@ -1139,10 +1139,9 @@ where
         if !self.peer_topics.contains_key(peer_id) {
             // Connect to peer
             debug!("Connecting to explicit peer {:?}", peer_id);
-            let handler = self.new_handler();
             self.events.push_back(NetworkBehaviourAction::Dial {
                 opts: DialOpts::peer_id(*peer_id).build(),
-                handler,
+                dial_payload: (),
             });
         }
     }
@@ -1637,11 +1636,9 @@ where
                 // mark as px peer
                 self.px_peers.insert(peer_id);
 
-                // dial peer
-                let handler = self.new_handler();
                 self.events.push_back(NetworkBehaviourAction::Dial {
                     opts: DialOpts::peer_id(peer_id).build(),
-                    handler,
+                    dial_payload: (),
                 });
             }
         }
@@ -3045,6 +3042,7 @@ where
 {
     type ConnectionHandler = GossipsubHandler;
     type OutEvent = GossipsubEvent;
+    type DialPayload = ();
 
     fn new_handler(&mut self) -> Self::ConnectionHandler {
         let protocol_config = ProtocolConfig::new(
@@ -3437,7 +3435,7 @@ where
         &mut self,
         cx: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, GossipsubHandlerIn>> {
         if let Some(event) = self.events.pop_front() {
             return Poll::Ready(event.map_in(|e: Arc<GossipsubHandlerIn>| {
                 // clone send event reference if others references are present

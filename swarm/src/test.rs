@@ -19,8 +19,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
-    ConnectionHandler, DialError, IntoConnectionHandler, NetworkBehaviour, NetworkBehaviourAction,
-    PollParameters,
+    behaviour::THandlerInEvent, ConnectionHandler, DialError, IntoConnectionHandler,
+    NetworkBehaviour, NetworkBehaviourAction, PollParameters,
 };
 use libp2p_core::{
     connection::ConnectionId, multiaddr::Multiaddr, transport::ListenerId, ConnectedPoint, PeerId,
@@ -82,7 +82,8 @@ where
         &mut self,
         _: &mut Context,
         _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self::ConnectionHandler>>>
+    {
         self.next_action.take().map_or(Poll::Pending, Poll::Ready)
     }
 }
@@ -398,7 +399,8 @@ where
         &mut self,
         cx: &mut Context,
         args: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self::ConnectionHandler>>>
+    {
         self.poll += 1;
         self.inner.poll(cx, args)
     }

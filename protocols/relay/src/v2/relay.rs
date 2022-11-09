@@ -30,6 +30,7 @@ use instant::Instant;
 use libp2p_core::connection::{ConnectedPoint, ConnectionId};
 use libp2p_core::multiaddr::Protocol;
 use libp2p_core::PeerId;
+use libp2p_swarm::behaviour::THandlerInEvent;
 use libp2p_swarm::{
     dummy, ConnectionHandlerUpgrErr, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
     PollParameters,
@@ -217,6 +218,7 @@ impl Relay {
 impl NetworkBehaviour for Relay {
     type ConnectionHandler = handler::Prototype;
     type OutEvent = Event;
+    type DialPayload = ();
 
     fn new_handler(&mut self) -> Self::ConnectionHandler {
         handler::Prototype {
@@ -620,7 +622,8 @@ impl NetworkBehaviour for Relay {
         &mut self,
         _cx: &mut Context<'_>,
         poll_parameters: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self::ConnectionHandler>>>
+    {
         if let Some(action) = self.queued_actions.pop_front() {
             return Poll::Ready(action.build(poll_parameters));
         }
@@ -723,7 +726,7 @@ impl Add<u64> for CircuitId {
 /// before being returned in [`Relay::poll`].
 #[allow(clippy::large_enum_variant)]
 enum Action {
-    Done(NetworkBehaviourAction<Event, handler::Prototype>),
+    Done(NetworkBehaviourAction<Event, THandlerInEvent<handler::Prototype>>),
     AcceptReservationPrototype {
         inbound_reservation_req: inbound_hop::ReservationReq,
         handler: NotifyHandler,
@@ -731,8 +734,8 @@ enum Action {
     },
 }
 
-impl From<NetworkBehaviourAction<Event, handler::Prototype>> for Action {
-    fn from(action: NetworkBehaviourAction<Event, handler::Prototype>) -> Self {
+impl From<NetworkBehaviourAction<Event, THandlerInEvent<handler::Prototype>>> for Action {
+    fn from(action: NetworkBehaviourAction<Event, THandlerInEvent<handler::Prototype>>) -> Self {
         Self::Done(action)
     }
 }
@@ -741,7 +744,7 @@ impl Action {
     fn build(
         self,
         poll_parameters: &mut impl PollParameters,
-    ) -> NetworkBehaviourAction<Event, handler::Prototype> {
+    ) -> NetworkBehaviourAction<Event, THandlerInEvent<handler::Prototype>> {
         match self {
             Action::Done(action) => action,
             Action::AcceptReservationPrototype {

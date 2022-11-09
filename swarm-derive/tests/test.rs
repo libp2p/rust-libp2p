@@ -387,7 +387,8 @@ fn custom_out_event_no_type_parameters() {
             &mut self,
             _ctx: &mut Context,
             _: &mut impl PollParameters,
-        ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+        ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self::ConnectionHandler>>>
+        {
             Poll::Pending
         }
     }

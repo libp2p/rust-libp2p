@@ -26,6 +26,7 @@ use either::Either;
 use libp2p_core::connection::{ConnectedPoint, ConnectionId};
 use libp2p_core::multiaddr::Protocol;
 use libp2p_core::{Multiaddr, PeerId};
+use libp2p_swarm::behaviour::THandlerInEvent;
 use libp2p_swarm::dial_opts::{self, DialOpts};
 use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerUpgrErr, DialError, IntoConnectionHandler,
@@ -86,9 +87,24 @@ impl Behaviour {
 impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = handler::Prototype;
     type OutEvent = Event;
+    type DialPayload = handler::Prototype;
 
     fn new_handler(&mut self) -> Self::ConnectionHandler {
         handler::Prototype::UnknownConnection
+    }
+
+    fn new_inbound_handler(&mut self) -> Self::ConnectionHandler {
+        handler::Prototype::UnknownConnection
+    }
+
+    fn new_outbound_handler(
+        &mut self,
+        dial_payload: Option<Self::DialPayload>,
+    ) -> Self::ConnectionHandler {
+        match dial_payload {
+            Some(prototype) => prototype,
+            None => handler::Prototype::UnknownConnection,
+        }
     }
 
     fn addresses_of_peer(&mut self, _peer_id: &PeerId) -> Vec<Multiaddr> {
@@ -143,13 +159,13 @@ impl NetworkBehaviour for Behaviour {
     fn inject_dial_failure(
         &mut self,
         peer_id: Option<PeerId>,
-        handler: Self::ConnectionHandler,
+        dial_payload: Option<Self::DialPayload>,
         _error: &DialError,
     ) {
-        if let handler::Prototype::DirectConnection {
+        if let Some(handler::Prototype::DirectConnection {
             relayed_connection_id,
             role: handler::Role::Initiator { attempt },
-        } = handler
+        }) = dial_payload
         {
             let peer_id = peer_id.expect("Peer of `Prototype::DirectConnection` is always known.");
             if attempt < MAX_NUMBER_OF_UPGRADE_ATTEMPTS {
@@ -243,7 +259,7 @@ impl NetworkBehaviour for Behaviour {
                             .addresses(remote_addrs)
                             .condition(dial_opts::PeerCondition::Always)
                             .build(),
-                        handler: handler::Prototype::DirectConnection {
+                        dial_payload: handler::Prototype::DirectConnection {
                             relayed_connection_id: connection,
                             role: handler::Role::Listener,
                         },
@@ -271,7 +287,7 @@ impl NetworkBehaviour for Behaviour {
                             .addresses(remote_addrs)
                             .override_role()
                             .build(),
-                        handler: handler::Prototype::DirectConnection {
+                        dial_payload: handler::Prototype::DirectConnection {
                             relayed_connection_id: connection,
                             role: handler::Role::Initiator { attempt },
                         },
@@ -309,7 +325,13 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         _cx: &mut Context<'_>,
         poll_parameters: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+    ) -> Poll<
+        NetworkBehaviourAction<
+            Self::OutEvent,
+            THandlerInEvent<Self::ConnectionHandler>,
+            handler::Prototype,
+        >,
+    > {
         if let Some(action) = self.queued_actions.pop_front() {
             return Poll::Ready(action.build(poll_parameters));
         }
@@ -321,7 +343,7 @@ impl NetworkBehaviour for Behaviour {
 /// A [`NetworkBehaviourAction`], either complete, or still requiring data from [`PollParameters`]
 /// before being returned in [`Behaviour::poll`].
 enum ActionBuilder {
-    Done(NetworkBehaviourAction<Event, handler::Prototype>),
+    Done(NetworkBehaviourAction<Event, THandlerInEvent<handler::Prototype>, handler::Prototype>),
     Connect {
         attempt: u8,
         handler: NotifyHandler,
@@ -334,8 +356,16 @@ enum ActionBuilder {
     },
 }
 
-impl From<NetworkBehaviourAction<Event, handler::Prototype>> for ActionBuilder {
-    fn from(action: NetworkBehaviourAction<Event, handler::Prototype>) -> Self {
+impl From<NetworkBehaviourAction<Event, THandlerInEvent<handler::Prototype>, handler::Prototype>>
+    for ActionBuilder
+{
+    fn from(
+        action: NetworkBehaviourAction<
+            Event,
+            THandlerInEvent<handler::Prototype>,
+            handler::Prototype,
+        >,
+    ) -> Self {
         Self::Done(action)
     }
 }
@@ -344,7 +374,8 @@ impl ActionBuilder {
     fn build(
         self,
         poll_parameters: &mut impl PollParameters,
-    ) -> NetworkBehaviourAction<Event, handler::Prototype> {
+    ) -> NetworkBehaviourAction<Event, THandlerInEvent<handler::Prototype>, handler::Prototype>
+    {
         let obs_addrs = || {
             poll_parameters
                 .external_addresses()

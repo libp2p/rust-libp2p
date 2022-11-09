@@ -67,6 +67,7 @@ pub use handler::ProtocolSupport;
 use futures::channel::oneshot;
 use handler::{RequestProtocol, RequestResponseHandler, RequestResponseHandlerEvent};
 use libp2p_core::{connection::ConnectionId, ConnectedPoint, Multiaddr, PeerId};
+use libp2p_swarm::behaviour::THandlerInEvent;
 use libp2p_swarm::{
     dial_opts::DialOpts, DialError, IntoConnectionHandler, NetworkBehaviour,
     NetworkBehaviourAction, NotifyHandler, PollParameters,
@@ -315,7 +316,7 @@ where
     pending_events: VecDeque<
         NetworkBehaviourAction<
             RequestResponseEvent<TCodec::Request, TCodec::Response>,
-            RequestResponseHandler<TCodec>,
+            RequestProtocol<TCodec>,
         >,
     >,
     /// The currently connected peers, their pending outbound and inbound responses and their known,
@@ -384,10 +385,9 @@ where
         };
 
         if let Some(request) = self.try_send_request(peer, request) {
-            let handler = self.new_handler();
             self.pending_events.push_back(NetworkBehaviourAction::Dial {
                 opts: DialOpts::peer_id(*peer).build(),
-                handler,
+                dial_payload: (),
             });
             self.pending_outbound_requests
                 .entry(*peer)
@@ -690,7 +690,7 @@ where
     fn inject_dial_failure(
         &mut self,
         peer: Option<PeerId>,
-        _: Self::ConnectionHandler,
+        _: Option<Self::DialPayload>,
         _: &DialError,
     ) {
         if let Some(peer) = peer {
@@ -871,7 +871,8 @@ where
         &mut self,
         _: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self::ConnectionHandler>>>
+    {
         if let Some(ev) = self.pending_events.pop_front() {
             return Poll::Ready(ev);
         } else if self.pending_events.capacity() > EMPTY_QUEUE_SHRINK_THRESHOLD {
@@ -880,6 +881,8 @@ where
 
         Poll::Pending
     }
+
+    type DialPayload = ();
 }
 
 /// Internal threshold for when to shrink the capacity

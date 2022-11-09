@@ -34,6 +34,7 @@ use futures::ready;
 use futures::stream::StreamExt;
 use libp2p_core::connection::{ConnectedPoint, ConnectionId};
 use libp2p_core::{Multiaddr, PeerId};
+use libp2p_swarm::behaviour::THandlerInEvent;
 use libp2p_swarm::dial_opts::DialOpts;
 use libp2p_swarm::dummy;
 use libp2p_swarm::{
@@ -118,6 +119,7 @@ impl Client {
 impl NetworkBehaviour for Client {
     type ConnectionHandler = handler::Prototype;
     type OutEvent = Event;
+    type DialPayload = handler::In;
 
     fn new_handler(&mut self) -> Self::ConnectionHandler {
         handler::Prototype::new(self.local_peer_id, None)
@@ -231,7 +233,13 @@ impl NetworkBehaviour for Client {
         &mut self,
         cx: &mut Context<'_>,
         _poll_parameters: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+    ) -> Poll<
+        NetworkBehaviourAction<
+            Self::OutEvent,
+            THandlerInEvent<Self::ConnectionHandler>,
+            Self::DialPayload,
+        >,
+    > {
         if let Some(event) = self.queued_actions.pop_front() {
             return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event));
         }
@@ -252,19 +260,13 @@ impl NetworkBehaviour for Client {
                         handler: NotifyHandler::One(*connection_id),
                         event: Either::Left(handler::In::Reserve { to_listener }),
                     },
-                    None => {
-                        let handler = handler::Prototype::new(
-                            self.local_peer_id,
-                            Some(handler::In::Reserve { to_listener }),
-                        );
-                        NetworkBehaviourAction::Dial {
-                            opts: DialOpts::peer_id(relay_peer_id)
-                                .addresses(vec![relay_addr])
-                                .extend_addresses_through_behaviour()
-                                .build(),
-                            handler,
-                        }
-                    }
+                    None => NetworkBehaviourAction::Dial {
+                        opts: DialOpts::peer_id(relay_peer_id)
+                            .addresses(vec![relay_addr])
+                            .extend_addresses_through_behaviour()
+                            .build(),
+                        dial_payload: handler::In::Reserve { to_listener },
+                    },
                 }
             }
             Some(transport::TransportToBehaviourMsg::DialReq {
@@ -287,22 +289,16 @@ impl NetworkBehaviour for Client {
                             dst_peer_id,
                         }),
                     },
-                    None => {
-                        let handler = handler::Prototype::new(
-                            self.local_peer_id,
-                            Some(handler::In::EstablishCircuit {
-                                send_back,
-                                dst_peer_id,
-                            }),
-                        );
-                        NetworkBehaviourAction::Dial {
-                            opts: DialOpts::peer_id(relay_peer_id)
-                                .addresses(vec![relay_addr])
-                                .extend_addresses_through_behaviour()
-                                .build(),
-                            handler,
-                        }
-                    }
+                    None => NetworkBehaviourAction::Dial {
+                        opts: DialOpts::peer_id(relay_peer_id)
+                            .addresses(vec![relay_addr])
+                            .extend_addresses_through_behaviour()
+                            .build(),
+                        dial_payload: handler::In::EstablishCircuit {
+                            send_back,
+                            dst_peer_id,
+                        },
+                    },
                 }
             }
             None => unreachable!(

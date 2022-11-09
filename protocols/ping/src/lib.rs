@@ -48,6 +48,7 @@ mod protocol;
 use handler::Handler;
 pub use handler::{Config, Failure, Success};
 use libp2p_core::{connection::ConnectionId, PeerId};
+use libp2p_swarm::behaviour::THandlerInEvent;
 use libp2p_swarm::{NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use std::{
     collections::VecDeque,
@@ -116,9 +117,17 @@ impl Default for Behaviour {
 impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = Handler;
     type OutEvent = Event;
+    type DialPayload = ();
 
     fn new_handler(&mut self) -> Self::ConnectionHandler {
         Handler::new(self.config.clone())
+    }
+
+    fn new_outbound_handler(
+        &mut self,
+        dial_payload: Option<Self::DialPayload>,
+    ) -> Self::ConnectionHandler {
+        todo!()
     }
 
     fn inject_event(&mut self, peer: PeerId, _: ConnectionId, result: Result) {
@@ -129,7 +138,8 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         _: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self::ConnectionHandler>>>
+    {
         if let Some(e) = self.events.pop_back() {
             let Event { result, peer } = &e;
 

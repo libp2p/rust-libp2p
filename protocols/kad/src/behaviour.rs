@@ -42,6 +42,7 @@ use instant::Instant;
 use libp2p_core::{
     connection::ConnectionId, transport::ListenerId, ConnectedPoint, Multiaddr, PeerId,
 };
+use libp2p_swarm::behaviour::THandlerInEvent;
 use libp2p_swarm::{
     dial_opts::{self, DialOpts},
     DialError, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
@@ -99,7 +100,7 @@ pub struct Kademlia<TStore> {
     connection_idle_timeout: Duration,
 
     /// Queued events to return when the behaviour is being polled.
-    queued_events: VecDeque<NetworkBehaviourAction<KademliaEvent, KademliaHandlerProto<QueryId>>>,
+    queued_events: VecDeque<NetworkBehaviourAction<KademliaEvent, KademliaHandlerIn<QueryId>>>,
 
     /// The currently known addresses of the local node.
     local_addrs: HashSet<Multiaddr>,
@@ -567,10 +568,9 @@ where
                         RoutingUpdate::Failed
                     }
                     kbucket::InsertResult::Pending { disconnected } => {
-                        let handler = self.new_handler();
                         self.queued_events.push_back(NetworkBehaviourAction::Dial {
                             opts: DialOpts::peer_id(disconnected.into_preimage()).build(),
-                            handler,
+                            dial_payload: (),
                         });
                         RoutingUpdate::Pending
                     }
@@ -1161,11 +1161,10 @@ where
                                 //
                                 // Only try dialing peer if not currently connected.
                                 if !self.connected_peers.contains(disconnected.preimage()) {
-                                    let handler = self.new_handler();
                                     self.queued_events.push_back(NetworkBehaviourAction::Dial {
                                         opts: DialOpts::peer_id(disconnected.into_preimage())
                                             .build(),
-                                        handler,
+                                        dial_payload: (),
                                     })
                                 }
                             }
@@ -1785,6 +1784,7 @@ where
 {
     type ConnectionHandler = KademliaHandlerProto<QueryId>;
     type OutEvent = KademliaEvent;
+    type DialPayload = ();
 
     fn new_handler(&mut self) -> Self::ConnectionHandler {
         KademliaHandlerProto::new(KademliaHandlerConfig {
@@ -1916,7 +1916,7 @@ where
     fn inject_dial_failure(
         &mut self,
         peer_id: Option<PeerId>,
-        _: Self::ConnectionHandler,
+        _: Option<Self::DialPayload>,
         error: &DialError,
     ) {
         let peer_id = match peer_id {
@@ -2243,7 +2243,8 @@ where
         &mut self,
         cx: &mut Context<'_>,
         parameters: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self::ConnectionHandler>>>
+    {
         let now = Instant::now();
 
         // Calculate the available capacity for queries triggered by background jobs.
@@ -2341,10 +2342,9 @@ where
                                 });
                         } else if &peer_id != self.kbuckets.local_key().preimage() {
                             query.inner.pending_rpcs.push((peer_id, event));
-                            let handler = self.new_handler();
                             self.queued_events.push_back(NetworkBehaviourAction::Dial {
                                 opts: DialOpts::peer_id(peer_id).build(),
-                                handler,
+                                dial_payload: (),
                             });
                         }
                     }

@@ -25,6 +25,7 @@ use libp2p_core::{
     connection::ConnectionId, multiaddr::Protocol, transport::ListenerId, ConnectedPoint,
     Multiaddr, PeerId, PublicKey,
 };
+use libp2p_swarm::behaviour::THandlerInEvent;
 use libp2p_swarm::{
     dial_opts::DialOpts, AddressScore, ConnectionHandler, ConnectionHandlerUpgrErr, DialError,
     IntoConnectionHandler, NegotiatedSubstream, NetworkBehaviour, NetworkBehaviourAction,
@@ -54,7 +55,7 @@ pub struct Behaviour {
     /// Pending replies to send.
     pending_replies: VecDeque<Reply>,
     /// Pending events to be emitted when polled.
-    events: VecDeque<NetworkBehaviourAction<Event, Proto>>,
+    events: VecDeque<NetworkBehaviourAction<Event, Push>>,
     /// Peers to which an active push with current information about
     /// the local peer should be sent.
     pending_push: HashSet<PeerId>,
@@ -198,10 +199,9 @@ impl Behaviour {
     {
         for p in peers {
             if self.pending_push.insert(p) && !self.connected.contains_key(&p) {
-                let handler = self.new_handler();
                 self.events.push_back(NetworkBehaviourAction::Dial {
                     opts: DialOpts::peer_id(p).build(),
-                    handler,
+                    dial_payload: (),
                 });
             }
         }
@@ -263,7 +263,7 @@ impl NetworkBehaviour for Behaviour {
     fn inject_dial_failure(
         &mut self,
         peer_id: Option<PeerId>,
-        _: Self::ConnectionHandler,
+        _: Option<Self::DialPayload>,
         error: &DialError,
     ) {
         if let Some(peer_id) = peer_id {
@@ -356,7 +356,8 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         cx: &mut Context<'_>,
         params: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self::ConnectionHandler>>>
+    {
         if let Some(event) = self.events.pop_front() {
             return Poll::Ready(event);
         }
@@ -452,6 +453,8 @@ impl NetworkBehaviour for Behaviour {
     fn addresses_of_peer(&mut self, peer: &PeerId) -> Vec<Multiaddr> {
         self.discovered_peers.get(peer)
     }
+
+    type DialPayload = ();
 }
 
 /// Event emitted  by the `Identify` behaviour.

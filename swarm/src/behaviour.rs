@@ -30,10 +30,10 @@ use libp2p_core::{
 use std::{task::Context, task::Poll};
 
 /// Custom event that can be received by the [`ConnectionHandler`].
-pub(crate) type THandlerInEvent<THandler> =
+pub type THandlerInEvent<THandler> =
     <<THandler as IntoConnectionHandler>::Handler as ConnectionHandler>::InEvent;
 
-pub(crate) type THandlerOutEvent<THandler> =
+pub type THandlerOutEvent<THandler> =
     <<THandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent;
 
 /// A [`NetworkBehaviour`] defines the behaviour of the local node on the network.
@@ -429,7 +429,7 @@ pub enum NetworkBehaviourAction<TOutEvent, TInEvent, TDialPayload = ()> {
     ///     #     &mut self,
     ///     #     _: &mut Context<'_>,
     ///     #     _: &mut impl PollParameters,
-    ///     # ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+    ///     # ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self::ConnectionHandler>>> {
     ///     #     if let Some(action) = self.outbox_to_swarm.pop_front() {
     ///     #         return Poll::Ready(action);
     ///     #     }

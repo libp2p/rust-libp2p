@@ -28,6 +28,7 @@ use cuckoofilter::{CuckooError, CuckooFilter};
 use fnv::FnvHashSet;
 use libp2p_core::{connection::ConnectionId, PeerId};
 use libp2p_core::{ConnectedPoint, Multiaddr};
+use libp2p_swarm::behaviour::THandlerInEvent;
 use libp2p_swarm::{
     dial_opts::DialOpts, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, OneShotHandler,
     PollParameters,
@@ -41,12 +42,7 @@ use std::{collections::VecDeque, iter};
 /// Network behaviour that handles the floodsub protocol.
 pub struct Floodsub {
     /// Events that need to be yielded to the outside when polling.
-    events: VecDeque<
-        NetworkBehaviourAction<
-            FloodsubEvent,
-            OneShotHandler<FloodsubProtocol, FloodsubRpc, InnerMessage>,
-        >,
-    >,
+    events: VecDeque<NetworkBehaviourAction<FloodsubEvent, FloodsubRpc>>,
 
     config: FloodsubConfig,
 
@@ -107,10 +103,9 @@ impl Floodsub {
         }
 
         if self.target_peers.insert(peer_id) {
-            let handler = self.new_handler();
             self.events.push_back(NetworkBehaviourAction::Dial {
                 opts: DialOpts::peer_id(peer_id).build(),
-                handler,
+                dial_payload: (),
             });
         }
     }
@@ -281,6 +276,7 @@ impl Floodsub {
 impl NetworkBehaviour for Floodsub {
     type ConnectionHandler = OneShotHandler<FloodsubProtocol, FloodsubRpc, InnerMessage>;
     type OutEvent = FloodsubEvent;
+    type DialPayload = ();
 
     fn new_handler(&mut self) -> Self::ConnectionHandler {
         Default::default()
@@ -339,10 +335,9 @@ impl NetworkBehaviour for Floodsub {
         // We can be disconnected by the remote in case of inactivity for example, so we always
         // try to reconnect.
         if self.target_peers.contains(id) {
-            let handler = self.new_handler();
             self.events.push_back(NetworkBehaviourAction::Dial {
                 opts: DialOpts::peer_id(*id).build(),
-                handler,
+                dial_payload: (),
             });
         }
     }
@@ -470,7 +465,8 @@ impl NetworkBehaviour for Floodsub {
         &mut self,
         _: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self::ConnectionHandler>>>
+    {
         if let Some(event) = self.events.pop_front() {
             return Poll::Ready(event);
         }
