@@ -39,7 +39,6 @@ use std::task::{Context, Poll};
 /// # use libp2p_core::Transport;
 /// # use futures::future;
 /// # use std::pin::Pin;
-/// # use tokio as tokio;
 /// #
 /// # #[tokio::main]
 /// # async fn main() {
