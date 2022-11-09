@@ -54,6 +54,7 @@ use void::Void;
 
 mod concurrent_dial;
 mod task;
+pub mod executor;
 
 enum ExecSwitch<TExecutor>
 where

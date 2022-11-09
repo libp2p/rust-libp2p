@@ -23,6 +23,8 @@ rand = "0.8"
 smallvec = "1.6.1"
 thiserror = "1.0"
 void = "1"
+tokio = { version = "1.15", features = ["rt"], optional = true }
+async-std = { version = "1.6.2", optional = true }
 
 [dev-dependencies]
 async-std = { version = "1.6.2", features = ["attributes"] }
@@ -31,8 +33,8 @@ libp2p = { path = "..", features = ["full"] }
 quickcheck = { package = "quickcheck-ext", path = "../misc/quickcheck-ext" }
 
 [features]
-tokio = ["libp2p-core/tokio"]
-async-std = ["libp2p-core/async-std"]
+tokio = ["dep:tokio"]
+async-std = ["dep:async-std"]
 
 # Passing arguments to the docsrs builder in order to properly document cfg's. 
 # More information: https://docs.rs/about/builds#cross-compiling

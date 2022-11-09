@@ -110,35 +110,3 @@ impl Executor for ThreadPool {
     }
 }
 
-#[cfg(feature = "tokio")]
-#[derive(Clone, Copy, Debug, Default)]
-pub enum TokioExecutor<'a> {
-    #[default]
-    Empty,
-    Given(&'a tokio::runtime::Runtime),
-}
-
-#[cfg(feature = "tokio")]
-impl<'a> Executor for TokioExecutor<'a> {
-    fn exec(&self, future: Pin<Box<dyn Future<Output = ()> + Send>>) {
-        match self {
-            Self::Given(runtime) => {
-                let _ = runtime.spawn(future);
-            }
-            Self::Empty => {
-                let _ = tokio::spawn(future);
-            }
-        }
-    }
-}
-
-#[cfg(feature = "async-std")]
-#[derive(Default, Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub struct AsyncStdExecutor;
-
-#[cfg(feature = "async-std")]
-impl Executor for AsyncStdExecutor {
-    fn exec(&self, future: Pin<Box<dyn Future<Output = ()> + Send>>) {
-        let _ = async_std::task::spawn(future);
-    }
-}
