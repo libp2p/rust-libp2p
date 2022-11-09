@@ -156,7 +156,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         dcutr: dcutr::behaviour::Behaviour::new(),
     };
 
-
     let executor: Option<Box<dyn Executor + Send>> = match ThreadPool::new() {
         Ok(tp) => Some(Box::new(tp)),
         Err(_) => None,
