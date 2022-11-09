@@ -1,6 +1,6 @@
 # 0.38.0 [unreleased]
 
-- Update `if-watch` to version 3.0.0 and pass through `tokio` and `async-io` features. See [PR 3101].
+- Update to `if-watch`  `v3.0.0` and pass through `tokio` and `async-io` features. See [PR 3101].
 
 - Deprecate types with `Tcp` prefix (`GenTcpConfig`, `TcpTransport` and `TokioTcpTransport`) in favor of referencing them by module / crate. See [PR 2961].
 
