@@ -27,6 +27,7 @@ roadmap](https://github.com/libp2p/specs/blob/master/ROADMAP.md).
   - [Kademlia client mode](#kademlia-client-mode)
   - [Optimize Hole punching](#optimize-hole-punching)
   - [Streaming response protocol aka. the ultimate escape hatch](#streaming-response-protocol-aka-the-ultimate-escape-hatch)
+  - [WebRTC support (browser-to-browser)](#webrtc-support-browser-to-browser)
   - [Improved Wasm support](#improved-wasm-support)
   - [Handshake optimizations](#handshake-optimizations)
   - [Bitswap implementation](#bitswap-implementation)
@@ -52,11 +53,11 @@ roadmap](https://github.com/libp2p/specs/blob/master/ROADMAP.md).
 - [***➡️ test-plans/Benchmarking using remote runners***](https://github.com/libp2p/test-plans/blob/master/ROADMAP.md#2-benchmarking-using-remote-runners)
 
 #### Sometime Q2
+- [WebRTC support (browser-to-browser](#webrtc-support-browser-to-browser)
 - [Improved Wasm support](#improved-wasm-support)
 - [Handshake optimizations](#handshake-optimizations)
 
 ### Up Next
-- [WebRTC support (browser-to-browser](#2-webrtc-browser-to-browser)
 - [***➡️ test-plans/Expansive protocol test coverage***](https://github.com/libp2p/test-plans/blob/master/ROADMAP.md#d-expansive-protocol-test-coverage)
 - [Bitswap implementation](#bitswap-implementation)
 - [WebTransport](#webtransport)
@@ -78,7 +79,7 @@ https://github.com/libp2p/rust-libp2p/issues/2883.
 
 | Category     | Status      | Target Completion | Tracking                                 | Dependencies                                   | Dependents |
 |--------------|-------------|-------------------|------------------------------------------|------------------------------------------------|------------|
-| Connectivity | In progress | Q4/2022           | https://github.com/libp2p/specs/pull/412 | https://github.com/libp2p/test-plans/issues/53 |            |
+| Connectivity | In progress | Q4/2022           | https://github.com/libp2p/specs/pull/412 | https://github.com/libp2p/test-plans/issues/53 |    [WebRTC (browser-to-browser)](#webrtc-support-browser-to-browser)        |
 
 
 We are currently implementing WebRTC for **browser-to-server** connectivity in
@@ -163,11 +164,21 @@ for this, and I think we should not change directions here. That said, the ultim
 allowing users to create a stream and do whatever they want with it - will make it easier for
 newcomers to get started.
 
+### WebRTC support (browser-to-browser)
+
+| Category     | Status      | Target Completion | Tracking                                 | Dependencies                                   | Dependents |
+|--------------|-------------|-------------------|------------------------------------------|------------------------------------------------|------------|
+| Connectivity | todo        |     Q2/2023       | https://github.com/libp2p/specs/issues/475 | https://github.com/libp2p/rust-libp2p/pull/2622 https://github.com/libp2p/test-plans/issues/53 |            |
+
+
+Once WebRTC for browser-to-server is complete, we can begin work on **browser-to-browser** and complete the WebRTC connectivity story.
+The specification needs to be written and completed first.
+
 ### Improved Wasm support
 
 | Category             | Status | Target Completion | Tracking                                          | Dependencies | Dependents                                 |
 |----------------------|--------|-------------------|---------------------------------------------------|--------------|--------------------------------------------|
-| Developer ergonomics | todo   | Q2/2023           | https://github.com/libp2p/rust-libp2p/issues/2617 |              | WebRTC browser-to-browser and browser side |
+| Developer ergonomics | todo   | Q2/2023           | https://github.com/libp2p/rust-libp2p/issues/2617 |              | WebRTC browser-to-server and browser side |
 
 The project supports Wasm already today, though the developer experience is cumbersome at best.
 Properly supporting Wasm opens rust-libp2p to hole new set of use-cases. I would love for this to
