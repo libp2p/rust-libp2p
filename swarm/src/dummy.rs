@@ -1,4 +1,4 @@
-use crate::behaviour::{NetworkBehaviour, NetworkBehaviourAction, PollParameters};
+use crate::behaviour::{NetworkBehaviour, NetworkBehaviourAction, PollParameters, THandlerInEvent};
 use crate::handler::{InboundUpgradeSend, OutboundUpgradeSend};
 use crate::{ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive, SubstreamProtocol};
 use libp2p_core::connection::ConnectionId;
@@ -14,6 +14,7 @@ pub struct Behaviour;
 impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = ConnectionHandler;
     type OutEvent = Void;
+    type DialPayload = Void;
 
     fn new_handler(&mut self) -> Self::ConnectionHandler {
         ConnectionHandler
@@ -27,7 +28,13 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         _: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+    ) -> Poll<
+        NetworkBehaviourAction<
+            Self::OutEvent,
+            THandlerInEvent<Self::ConnectionHandler>,
+            Self::DialPayload,
+        >,
+    > {
         Poll::Pending
     }
 }

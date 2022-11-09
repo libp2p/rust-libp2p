@@ -266,7 +266,11 @@ where
     transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
 
     /// The nodes currently active.
-    pool: Pool<THandler<TBehaviour>, transport::Boxed<(PeerId, StreamMuxerBox)>>,
+    pool: Pool<
+        THandler<TBehaviour>,
+        transport::Boxed<(PeerId, StreamMuxerBox)>,
+        TBehaviour::DialPayload,
+    >,
 
     /// The local peer ID.
     local_peer_id: PeerId,
@@ -368,14 +372,13 @@ where
     /// swarm.dial("/ip6/::1/tcp/12345".parse::<Multiaddr>().unwrap());
     /// ```
     pub fn dial(&mut self, opts: impl Into<DialOpts>) -> Result<(), DialError> {
-        let handler = self.behaviour.new_handler();
-        self.dial_with_handler(opts.into(), handler)
+        self.dial_with_payload(opts.into(), None)
     }
 
-    fn dial_with_handler(
+    fn dial_with_payload(
         &mut self,
         swarm_dial_opts: DialOpts,
-        handler: <TBehaviour as NetworkBehaviour>::ConnectionHandler,
+        payload: Option<TBehaviour::DialPayload>,
     ) -> Result<(), DialError> {
         let (peer_id, addresses, dial_concurrency_factor_override, role_override) =
             match swarm_dial_opts.0 {
@@ -402,7 +405,7 @@ where
                     if !condition_matched {
                         self.behaviour.inject_dial_failure(
                             Some(peer_id),
-                            handler,
+                            payload,
                             &DialError::DialPeerConditionFalse(condition),
                         );
 
@@ -413,7 +416,7 @@ where
                     if self.banned_peers.contains(&peer_id) {
                         let error = DialError::Banned;
                         self.behaviour
-                            .inject_dial_failure(Some(peer_id), handler, &error);
+                            .inject_dial_failure(Some(peer_id), payload, &error);
                         return Err(error);
                     }
 
@@ -450,7 +453,7 @@ where
                         if addresses.is_empty() {
                             let error = DialError::NoAddresses;
                             self.behaviour
-                                .inject_dial_failure(Some(peer_id), handler, &error);
+                                .inject_dial_failure(Some(peer_id), payload, &error);
                             return Err(error);
                         };
 
@@ -525,14 +528,14 @@ where
         match self.pool.add_outgoing(
             dials,
             peer_id,
-            handler,
+            payload,
             role_override,
             dial_concurrency_factor_override,
         ) {
             Ok(_connection_id) => Ok(()),
-            Err((connection_limit, handler)) => {
+            Err((connection_limit, event)) => {
                 let error = DialError::ConnectionLimit(connection_limit);
-                self.behaviour.inject_dial_failure(peer_id, handler, &error);
+                self.behaviour.inject_dial_failure(peer_id, event, &error);
                 Err(error)
             }
         }
@@ -662,7 +665,11 @@ where
 
     fn handle_pool_event(
         &mut self,
-        event: PoolEvent<THandler<TBehaviour>, transport::Boxed<(PeerId, StreamMuxerBox)>>,
+        event: PoolEvent<
+            THandler<TBehaviour>,
+            transport::Boxed<(PeerId, StreamMuxerBox)>,
+            TBehaviour::DialPayload,
+        >,
     ) -> Option<SwarmEvent<TBehaviour::OutEvent, THandlerErr<TBehaviour>>> {
         match event {
             PoolEvent::ConnectionEstablished {
@@ -716,7 +723,7 @@ where
             PoolEvent::PendingOutboundConnectionError {
                 id: _,
                 error,
-                handler,
+                dial_payload: handler,
                 peer,
             } => {
                 let error = error.into();
@@ -739,11 +746,10 @@ where
                 send_back_addr,
                 local_addr,
                 error,
-                handler,
             } => {
                 log::debug!("Incoming connection failed: {:?}", error);
                 self.behaviour
-                    .inject_listen_failure(&local_addr, &send_back_addr, handler);
+                    .inject_listen_failure(&local_addr, &send_back_addr);
                 return Some(SwarmEvent::IncomingConnectionError {
                     local_addr,
                     send_back_addr,
@@ -838,10 +844,8 @@ where
                 local_addr,
                 send_back_addr,
             } => {
-                let handler = self.behaviour.new_handler();
                 match self.pool.add_incoming(
                     upgrade,
-                    handler,
                     IncomingInfo {
                         local_addr: &local_addr,
                         send_back_addr: &send_back_addr,
@@ -853,9 +857,9 @@ where
                             send_back_addr,
                         });
                     }
-                    Err((connection_limit, handler)) => {
+                    Err(connection_limit) => {
                         self.behaviour
-                            .inject_listen_failure(&local_addr, &send_back_addr, handler);
+                            .inject_listen_failure(&local_addr, &send_back_addr);
                         log::warn!("Incoming connection rejected: {:?}", connection_limit);
                     }
                 };
@@ -927,15 +931,19 @@ where
 
     fn handle_behaviour_event(
         &mut self,
-        event: NetworkBehaviourAction<TBehaviour::OutEvent, TBehaviour::ConnectionHandler>,
+        event: NetworkBehaviourAction<
+            TBehaviour::OutEvent,
+            THandlerInEvent<TBehaviour>,
+            TBehaviour::DialPayload,
+        >,
     ) -> Option<SwarmEvent<TBehaviour::OutEvent, THandlerErr<TBehaviour>>> {
         match event {
             NetworkBehaviourAction::GenerateEvent(event) => {
                 return Some(SwarmEvent::Behaviour(event))
             }
-            NetworkBehaviourAction::Dial { opts, handler } => {
+            NetworkBehaviourAction::Dial { opts, dial_payload } => {
                 let peer_id = opts.get_peer_id();
-                if let Ok(()) = self.dial_with_handler(opts, handler) {
+                if let Ok(()) = self.dial_with_payload(opts, Some(dial_payload)) {
                     if let Some(peer_id) = peer_id {
                         return Some(SwarmEvent::Dialing(peer_id));
                     }
@@ -1081,7 +1089,18 @@ where
             }
 
             // Poll the known peers.
-            match this.pool.poll(cx) {
+            match this.pool.poll(
+                |endpoint, payload| match (endpoint, payload) {
+                    (ConnectedPoint::Dialer { .. }, payload) => {
+                        this.behaviour.new_outbound_handler(payload)
+                    }
+                    (ConnectedPoint::Listener { .. }, None) => this.behaviour.new_inbound_handler(),
+                    (ConnectedPoint::Listener { .. }, Some(_)) => {
+                        panic!("Not sure what to do with dial payload as a listener")
+                    }
+                },
+                cx,
+            ) {
                 Poll::Pending => {}
                 Poll::Ready(pool_event) => {
                     if let Some(swarm_event) = this.handle_pool_event(pool_event) {
@@ -1156,7 +1175,7 @@ fn notify_one<THandlerInEvent>(
 /// was successfully sent to a handler, in either case the event is consumed.
 fn notify_any<TTrans, THandler, TBehaviour>(
     ids: SmallVec<[ConnectionId; 10]>,
-    pool: &mut Pool<THandler, TTrans>,
+    pool: &mut Pool<THandler, TTrans, TBehaviour::DialPayload>,
     event: THandlerInEvent<TBehaviour>,
     cx: &mut Context<'_>,
 ) -> Option<(THandlerInEvent<TBehaviour>, SmallVec<[ConnectionId; 10]>)>

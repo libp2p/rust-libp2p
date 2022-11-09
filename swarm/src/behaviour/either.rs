@@ -18,6 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::behaviour::THandlerInEvent;
 use crate::handler::{either::IntoEitherHandler, ConnectionHandler, IntoConnectionHandler};
 use crate::{DialError, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use either::Either;
@@ -34,6 +35,7 @@ where
 {
     type ConnectionHandler = IntoEitherHandler<L::ConnectionHandler, R::ConnectionHandler>;
     type OutEvent = Either<L::OutEvent, R::OutEvent>;
+    type DialPayload = Either<L::DialPayload, R::DialPayload>;
 
     fn new_handler(&mut self) -> Self::ConnectionHandler {
         match self {
@@ -136,34 +138,25 @@ where
     fn inject_dial_failure(
         &mut self,
         peer_id: Option<PeerId>,
-        handler: Self::ConnectionHandler,
+        dial_payload: Option<Either<L::DialPayload, R::DialPayload>>,
         error: &DialError,
     ) {
-        match (self, handler) {
-            (Either::Left(behaviour), IntoEitherHandler::Left(handler)) => {
-                behaviour.inject_dial_failure(peer_id, handler, error)
+        match (self, dial_payload) {
+            (Either::Left(behaviour), Some(Either::Left(payload))) => {
+                behaviour.inject_dial_failure(peer_id, Some(payload), error)
             }
-            (Either::Right(behaviour), IntoEitherHandler::Right(handler)) => {
-                behaviour.inject_dial_failure(peer_id, handler, error)
+            (Either::Left(behaviour), None) => behaviour.inject_dial_failure(peer_id, None, error),
+            (Either::Right(behaviour), Some(Either::Right(payload))) => {
+                behaviour.inject_dial_failure(peer_id, Some(payload), error)
             }
             _ => unreachable!(),
         }
     }
 
-    fn inject_listen_failure(
-        &mut self,
-        local_addr: &Multiaddr,
-        send_back_addr: &Multiaddr,
-        handler: Self::ConnectionHandler,
-    ) {
-        match (self, handler) {
-            (Either::Left(behaviour), IntoEitherHandler::Left(handler)) => {
-                behaviour.inject_listen_failure(local_addr, send_back_addr, handler)
-            }
-            (Either::Right(behaviour), IntoEitherHandler::Right(handler)) => {
-                behaviour.inject_listen_failure(local_addr, send_back_addr, handler)
-            }
-            _ => unreachable!(),
+    fn inject_listen_failure(&mut self, local_addr: &Multiaddr, send_back_addr: &Multiaddr) {
+        match self {
+            Either::Left(behaviour) => behaviour.inject_listen_failure(local_addr, send_back_addr),
+            Either::Right(behaviour) => behaviour.inject_listen_failure(local_addr, send_back_addr),
         }
     }
 
@@ -220,14 +213,22 @@ where
         &mut self,
         cx: &mut Context<'_>,
         params: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+    ) -> Poll<
+        NetworkBehaviourAction<
+            Self::OutEvent,
+            Either<THandlerInEvent<L::ConnectionHandler>, THandlerInEvent<R::ConnectionHandler>>,
+            Either<L::DialPayload, R::DialPayload>,
+        >,
+    > {
         let event = match self {
             Either::Left(behaviour) => futures::ready!(behaviour.poll(cx, params))
                 .map_out(Either::Left)
-                .map_handler_and_in(IntoEitherHandler::Left, Either::Left),
+                .map_in(Either::Left)
+                .map_dial_payload(Either::Left),
             Either::Right(behaviour) => futures::ready!(behaviour.poll(cx, params))
                 .map_out(Either::Right)
-                .map_handler_and_in(IntoEitherHandler::Right, Either::Right),
+                .map_in(Either::Right)
+                .map_dial_payload(Either::Right),
         };
 
         Poll::Ready(event)

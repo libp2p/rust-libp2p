@@ -18,6 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::behaviour::THandlerInEvent;
 use crate::handler::{
     ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, IntoConnectionHandler,
     KeepAlive, SubstreamProtocol,
@@ -70,6 +71,7 @@ where
 {
     type ConnectionHandler = ToggleIntoConnectionHandler<TBehaviour::ConnectionHandler>;
     type OutEvent = TBehaviour::OutEvent;
+    type DialPayload = TBehaviour::DialPayload;
 
     fn new_handler(&mut self) -> Self::ConnectionHandler {
         ToggleIntoConnectionHandler {
@@ -150,26 +152,17 @@ where
     fn inject_dial_failure(
         &mut self,
         peer_id: Option<PeerId>,
-        handler: Self::ConnectionHandler,
+        dial_payload: Option<Self::DialPayload>,
         error: &DialError,
     ) {
         if let Some(inner) = self.inner.as_mut() {
-            if let Some(handler) = handler.inner {
-                inner.inject_dial_failure(peer_id, handler, error)
-            }
+            inner.inject_dial_failure(peer_id, dial_payload, error)
         }
     }
 
-    fn inject_listen_failure(
-        &mut self,
-        local_addr: &Multiaddr,
-        send_back_addr: &Multiaddr,
-        handler: Self::ConnectionHandler,
-    ) {
+    fn inject_listen_failure(&mut self, local_addr: &Multiaddr, send_back_addr: &Multiaddr) {
         if let Some(inner) = self.inner.as_mut() {
-            if let Some(handler) = handler.inner {
-                inner.inject_listen_failure(local_addr, send_back_addr, handler)
-            }
+            inner.inject_listen_failure(local_addr, send_back_addr)
         }
     }
 
@@ -219,11 +212,15 @@ where
         &mut self,
         cx: &mut Context<'_>,
         params: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+    ) -> Poll<
+        NetworkBehaviourAction<
+            Self::OutEvent,
+            THandlerInEvent<Self::ConnectionHandler>,
+            Self::DialPayload,
+        >,
+    > {
         if let Some(inner) = self.inner.as_mut() {
-            inner.poll(cx, params).map(|action| {
-                action.map_handler(|h| ToggleIntoConnectionHandler { inner: Some(h) })
-            })
+            inner.poll(cx, params)
         } else {
             Poll::Pending
         }
