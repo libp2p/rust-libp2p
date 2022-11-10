@@ -1356,6 +1356,40 @@ where
         }
     }
 
+    /// Creates a new `SwarmBuilder` from the given transport, behaviour, local peer ID and
+    /// executor. The `Swarm` with its underlying `Network` is obtained via
+    /// [`SwarmBuilder::build`].
+    pub fn with_executor(
+        transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
+        behaviour: TBehaviour,
+        local_peer_id: PeerId,
+        executor: Box<dyn Executor + Send>,
+    ) -> Self {
+        Self {
+            local_peer_id,
+            transport,
+            behaviour,
+            pool_config: PoolConfig::new(Some(executor)),
+            connection_limits: Default::default(),
+        }
+    }
+
+    /// Creates a new `SwarmBuilder` from the given transport, behaviour and local peer ID. The
+    /// `Swarm` with its underlying `Network` is obtained via [`SwarmBuilder::build`].
+    pub fn without_executor(
+        transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
+        behaviour: TBehaviour,
+        local_peer_id: PeerId,
+    ) -> Self {
+        Self {
+            local_peer_id,
+            transport,
+            behaviour,
+            pool_config: PoolConfig::new(None),
+            connection_limits: Default::default(),
+        }
+    }
+
     /// Configures the `Executor` to use for spawning background tasks.
     ///
     /// By default, unless another executor has been configured,

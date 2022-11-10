@@ -1097,26 +1097,6 @@ pub struct PoolConfig {
     max_negotiating_inbound_streams: usize,
 }
 
-impl Default for PoolConfig {
-    fn default() -> Self {
-        let executor: Option<Box<dyn Executor + Send>> = match ThreadPoolBuilder::new()
-            .name_prefix("libp2p-swarm-task-")
-            .create()
-        {
-            Ok(pool) => Some(Box::new(pool)),
-            Err(_) => None,
-        };
-        Self {
-            executor,
-            task_event_buffer_size: 32,
-            task_command_buffer_size: 7,
-            dial_concurrency_factor: NonZeroU8::new(8).expect("8 > 0"),
-            substream_upgrade_protocol_override: None,
-            max_negotiating_inbound_streams: 128,
-        }
-    }
-}
-
 impl PoolConfig {
     pub fn new(executor: Option<Box<dyn Executor + Send>>) -> Self {
         Self {
@@ -1179,32 +1159,6 @@ impl PoolConfig {
     pub fn with_max_negotiating_inbound_streams(mut self, v: usize) -> Self {
         self.max_negotiating_inbound_streams = v;
         self
-    }
-
-    /// Configures the executor to use for spawning connection background tasks,
-    /// only if no executor has already been configured.
-    #[allow(dead_code)] // TODO: Can we just remove this?
-    pub fn or_else_with_executor<F>(self, f: F) -> Self
-    where
-        F: FnOnce() -> Option<Box<dyn Executor + Send>>,
-    {
-        let PoolConfig {
-            task_command_buffer_size,
-            task_event_buffer_size,
-            dial_concurrency_factor,
-            substream_upgrade_protocol_override,
-            max_negotiating_inbound_streams,
-            ..
-        } = self;
-        let executor: Option<Box<dyn Executor + Send>> = self.executor.map_or_else(f, |e| Some(e));
-        PoolConfig {
-            executor,
-            task_command_buffer_size,
-            task_event_buffer_size,
-            dial_concurrency_factor,
-            substream_upgrade_protocol_override,
-            max_negotiating_inbound_streams,
-        }
     }
 }
 
