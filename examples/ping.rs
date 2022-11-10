@@ -50,7 +50,7 @@ use std::error::Error;
 async fn main() -> Result<(), Box<dyn Error>> {
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
-    println!("Local peer id: {:?}", local_peer_id);
+    println!("Local peer id: {local_peer_id:?}");
 
     let transport = libp2p::development_transport(local_key).await?;
 
@@ -65,13 +65,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
     if let Some(addr) = std::env::args().nth(1) {
         let remote: Multiaddr = addr.parse()?;
         swarm.dial(remote)?;
-        println!("Dialed {}", addr)
+        println!("Dialed {addr}")
     }
 
     loop {
         match swarm.select_next_some().await {
-            SwarmEvent::NewListenAddr { address, .. } => println!("Listening on {:?}", address),
-            SwarmEvent::Behaviour(event) => println!("{:?}", event),
+            SwarmEvent::NewListenAddr { address, .. } => println!("Listening on {address:?}"),
+            SwarmEvent::Behaviour(event) => println!("{event:?}"),
             _ => {}
         }
     }
