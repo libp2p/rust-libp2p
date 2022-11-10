@@ -91,7 +91,7 @@ async fn ipv4_dial_ipv6() {
 
 #[cfg(feature = "async-std")]
 #[async_std::test]
-#[ignore] // Transport currently does not validate PeerId. Delete this test?
+#[ignore] // Transport currently does not validate PeerId. Enable once we make use of PeerId validation in rustls.
 async fn wrong_peerid() {
     use libp2p::PeerId;
 
