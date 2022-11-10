@@ -732,9 +732,7 @@ mod tests {
 
     impl std::fmt::Debug for Graph {
         fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            fmt.debug_list()
-                .entries(self.0.keys())
-                .finish()
+            fmt.debug_list().entries(self.0.keys()).finish()
         }
     }
 
