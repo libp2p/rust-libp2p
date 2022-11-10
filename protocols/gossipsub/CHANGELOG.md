@@ -8,7 +8,10 @@
 
 - Refactoring GossipsubCodec to use common protobuf Codec. See [PR 3070].
 
+- Fixed minor clippy issue. See [PR 3106].
+
 [PR 3070]: https://github.com/libp2p/rust-libp2p/pull/3070
+[PR 3106]: https://github.com/libp2p/rust-libp2p/pull/3106
 
 # 0.42.0
 

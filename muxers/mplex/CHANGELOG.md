@@ -2,6 +2,10 @@
 
 - Update to `libp2p-core` `v0.38.0`.
 
+- Fixed minor clippy issue. See [PR 3106].
+
+[PR 3106]: https://github.com/libp2p/rust-libp2p/pull/3106
+
 # 0.37.0
 
 - Bump rand to 0.8 and quickcheck to 1. See [PR 2857].
