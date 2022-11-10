@@ -59,7 +59,7 @@ prost-build = "0.11"
 secp256k1 = [ "libsecp256k1" ]
 ecdsa = [ "p256" ]
 rsa = [ "dep:ring" ]
-serde = [ "multihash/serde-codec", "dep:serde" ]
+serde = ["multihash/serde-codec", "dep:serde"]
 
 [[bench]]
 name = "peer_id"
