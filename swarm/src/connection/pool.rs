@@ -123,7 +123,7 @@ where
     /// See [`Connection::max_negotiating_inbound_streams`].
     max_negotiating_inbound_streams: usize,
 
-    /// The executor to use for running the background tasks. Can either be a global executor
+    /// The executor to use for running connection tasks. Can either be a global executor
     /// or a local queue.
     executor: ExecSwitch,
 
