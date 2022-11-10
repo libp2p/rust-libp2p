@@ -337,13 +337,12 @@ where
         behaviour: TBehaviour,
         local_peer_id: PeerId,
     ) -> Self {
-        SwarmBuilder::new(
+        SwarmBuilder::with_executor(
             transport,
             behaviour,
             local_peer_id,
-            Some(Box::new(crate::connection::pool::executor::TokioExecutor)),
+            Box::new(crate::connection::pool::executor::TokioExecutor),
         )
-        .build()
     }
 
     /// Builds a new `Swarm` with an async-std executor.
