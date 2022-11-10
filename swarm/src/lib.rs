@@ -309,7 +309,7 @@ where
 {
     /// Builds a new `Swarm`.
     #[deprecated(
-        since = "0.50",
+        since = "0.50.0",
         note = "This constructor is considered ambiguous regarding the executor. Use `Swarm::with_threadpool_executor` for the same behaviour."
     )]
     pub fn new(
@@ -1342,7 +1342,7 @@ where
     /// local peer ID. The `Swarm` with its underlying `Network` is obtained
     /// via [`SwarmBuilder::build`].
     #[deprecated(
-        since = "0.50",
+        since = "0.50.0",
         note = "Unnecessary since replaced by `SwarmBuilder::with_executor` and `SwarmBuilder::without_executor`."
     )]
     pub fn new(
@@ -1400,7 +1400,7 @@ where
     /// [`SwarmBuilder::build`] will try to set up a
     /// [`ThreadPool`](futures::executor::ThreadPool).
     #[deprecated(
-        since = "0.50",
+        since = "0.50.0",
         note = "Deprecated since executor creation now happens in `SwarmBuilder::with_executor`."
     )]
     pub fn executor(mut self, executor: Box<dyn Executor + Send>) -> Self {
@@ -1663,7 +1663,6 @@ mod tests {
     use super::*;
     use crate::test::{CallTraceBehaviour, MockBehaviour};
     use futures::executor::block_on;
-    use futures::executor::ThreadPool;
     use futures::future::poll_fn;
     use futures::future::Either;
     use futures::{executor, future, ready};
