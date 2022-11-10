@@ -45,7 +45,7 @@ libp2p = { path = "../..", features = ["tcp", "yamux", "noise", "async-std"] }
 libp2p-muxer-test-harness = { path = "../../muxers/test-harness" }
 quickcheck = "1"
 rand = "0.8.4"
-tokio = { version = "1.21.1", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1.21.1", features = ["macros", "rt-multi-thread", "time"] }
 
 [[test]]
 name = "stream_compliance"
