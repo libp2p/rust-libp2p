@@ -292,6 +292,7 @@ fn prop<P: Provider + BlockOn>(
         completed_streams_rx
             .take(completed_streams as usize)
             .collect::<Vec<_>>(),
+        Duration::from_secs(30),
     );
 
     quickcheck::TestResult::passed()
@@ -420,19 +421,21 @@ async fn dial(
 }
 
 trait BlockOn {
-    fn block_on<R>(future: impl Future<Output = R> + Send) -> R;
+    fn block_on<R>(future: impl Future<Output = R> + Send, timeout: Duration) -> R;
 }
 
 #[cfg(feature = "async-std")]
 impl BlockOn for libp2p_quic::async_std::Provider {
-    fn block_on<R>(future: impl Future<Output = R> + Send) -> R {
-        async_std::task::block_on(future)
+    fn block_on<R>(future: impl Future<Output = R> + Send, timeout: Duration) -> R {
+        async_std::task::block_on(async_std::future::timeout(timeout, future)).unwrap()
     }
 }
 
 #[cfg(feature = "tokio")]
 impl BlockOn for libp2p_quic::tokio::Provider {
-    fn block_on<R>(future: impl Future<Output = R> + Send) -> R {
-        tokio::runtime::Handle::current().block_on(future)
+    fn block_on<R>(future: impl Future<Output = R> + Send, timeout: Duration) -> R {
+        tokio::runtime::Handle::current()
+            .block_on(tokio::time::timeout(timeout, future))
+            .unwrap()
     }
 }
