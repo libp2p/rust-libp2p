@@ -327,7 +327,7 @@ where
         local_peer_id: PeerId,
         executor: Box<dyn Executor + Send>,
     ) -> Self {
-        SwarmBuilder::new(transport, behaviour, local_peer_id, Some(executor)).build()
+        SwarmBuilder::with_executor(transport, behaviour, local_peer_id, executor).build()
     }
 
     /// Builds a new `Swarm` with a tokio executor.
@@ -343,6 +343,7 @@ where
             local_peer_id,
             Box::new(crate::connection::pool::executor::TokioExecutor),
         )
+        .build()
     }
 
     /// Builds a new `Swarm` with an async-std executor.
@@ -352,13 +353,11 @@ where
         behaviour: TBehaviour,
         local_peer_id: PeerId,
     ) -> Self {
-        SwarmBuilder::new(
+        SwarmBuilder::with_executor(
             transport,
             behaviour,
             local_peer_id,
-            Some(Box::new(
-                crate::connection::pool::executor::AsyncStdExecutor,
-            )),
+            Box::new(crate::connection::pool::executor::AsyncStdExecutor),
         )
         .build()
     }
@@ -369,17 +368,19 @@ where
         behaviour: TBehaviour,
         local_peer_id: PeerId,
     ) -> Self {
-        let executor: Option<Box<dyn Executor + Send>> = match ThreadPoolBuilder::new()
+        let builder = match ThreadPoolBuilder::new()
             .name_prefix("libp2p-swarm-task-")
             .create()
         {
-            Ok(tp) => Some(Box::new(tp)),
+            Ok(tp) => {
+                SwarmBuilder::with_executor(transport, behaviour, local_peer_id, Box::new(tp))
+            }
             Err(err) => {
                 log::warn!("Failed to create executor thread pool: {:?}", err);
-                None
+                SwarmBuilder::without_executor(transport, behaviour, local_peer_id)
             }
         };
-        SwarmBuilder::new(transport, behaviour, local_peer_id, executor).build()
+        builder.build()
     }
 
     /// Returns information about the connections underlying the [`Swarm`].
@@ -1340,6 +1341,10 @@ where
     /// Creates a new `SwarmBuilder` from the given transport, behaviour and
     /// local peer ID. The `Swarm` with its underlying `Network` is obtained
     /// via [`SwarmBuilder::build`].
+    #[deprecated(
+        since = "0.50",
+        note = "Unnecessary since replaced by `SwarmBuilder::with_executor` and `SwarmBuilder::without_executor`."
+    )]
     pub fn new(
         transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
         behaviour: TBehaviour,
@@ -1394,6 +1399,10 @@ where
     /// By default, unless another executor has been configured,
     /// [`SwarmBuilder::build`] will try to set up a
     /// [`ThreadPool`](futures::executor::ThreadPool).
+    #[deprecated(
+        since = "0.50",
+        note = "Deprecated since executor creation now happens in `SwarmBuilder::with_executor`."
+    )]
     pub fn executor(mut self, executor: Box<dyn Executor + Send>) -> Self {
         self.pool_config = self.pool_config.with_executor(executor);
         self

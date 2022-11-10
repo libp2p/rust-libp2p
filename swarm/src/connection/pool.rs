@@ -31,7 +31,6 @@ use crate::{
 };
 use concurrent_dial::ConcurrentDial;
 use fnv::FnvHashMap;
-use futures::executor::ThreadPoolBuilder;
 use futures::prelude::*;
 use futures::{
     channel::{mpsc, oneshot},
