@@ -1,3 +1,12 @@
+# 0.41.1 [unreleased]
+
+- Yield from `StreamMuxer::poll` as soon as we receive a single substream.
+  This fixes [issue 3041].
+  See [PR 3071].
+
+[PR 3071]: https://github.com/libp2p/rust-libp2p/pull/3071/
+[issue 3041]: https://github.com/libp2p/rust-libp2p/issues/3041/
+
 # 0.41.0
 
 - Update to `libp2p-core` `v0.37.0`.
