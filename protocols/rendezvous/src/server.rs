@@ -27,7 +27,7 @@ use asynchronous_codec::Framed;
 use bimap::BiMap;
 use futures::future::BoxFuture;
 use futures::stream::FuturesUnordered;
-use futures::{ready, SinkExt};
+use futures::{ready, SinkExt, Stream};
 use futures::{FutureExt, StreamExt};
 use libp2p_core::connection::ConnectionId;
 use libp2p_core::{ConnectedPoint, Multiaddr, PeerId};
@@ -155,26 +155,26 @@ impl NetworkBehaviour for Behaviour {
         event: from_fn::OutEvent<Result<Option<InboundOutEvent>, Error>, Void, Void>,
     ) {
         match event {
-            from_fn::OutEvent::InboundFinished(Ok(Some(InboundOutEvent::NewRegistration(
+            from_fn::OutEvent::InboundEmitted(Ok(Some(InboundOutEvent::NewRegistration(
                 new_registration,
             )))) => self
                 .registrations
                 .add(new_registration, &mut self.registration_data),
-            from_fn::OutEvent::InboundFinished(Ok(Some(InboundOutEvent::Unregister(
+            from_fn::OutEvent::InboundEmitted(Ok(Some(InboundOutEvent::Unregister(
                 namespace,
             )))) => self
                 .registrations
                 .remove(namespace, peer_id, &mut self.registration_data),
-            from_fn::OutEvent::OutboundFinished(_) => {}
+            from_fn::OutEvent::OutboundEmitted(_) => {}
             from_fn::OutEvent::FailedToOpen(never) => match never {
                 from_fn::OpenError::Timeout(never) => void::unreachable(never),
                 from_fn::OpenError::LimitExceeded(never) => void::unreachable(never),
                 from_fn::OpenError::NegotiationFailed(never, _) => void::unreachable(never),
             },
-            from_fn::OutEvent::InboundFinished(Err(error)) => {
+            from_fn::OutEvent::InboundEmitted(Err(error)) => {
                 log::debug!("Inbound stream from {peer_id} failed: {error}");
             }
-            from_fn::OutEvent::InboundFinished(Ok(None)) => {}
+            from_fn::OutEvent::InboundEmitted(Ok(None)) => {}
         }
     }
 

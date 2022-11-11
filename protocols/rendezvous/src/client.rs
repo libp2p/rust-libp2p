@@ -223,12 +223,12 @@ impl NetworkBehaviour for Behaviour {
         event: from_fn::OutEvent<Void, Result<OutboundEvent, Error>, OpenInfo>,
     ) {
         match event {
-            from_fn::OutEvent::InboundFinished(never) => void::unreachable(never),
-            from_fn::OutEvent::OutboundFinished(Ok(OutboundEvent::Discovered { .. })) => {}
-            from_fn::OutEvent::OutboundFinished(Ok(OutboundEvent::Registered { .. })) => {}
-            from_fn::OutEvent::OutboundFinished(Ok(OutboundEvent::DiscoverFailed { .. })) => {}
-            from_fn::OutEvent::OutboundFinished(Ok(OutboundEvent::RegisterFailed(..))) => {}
-            from_fn::OutEvent::OutboundFinished(Err(e)) => {}
+            from_fn::OutEvent::InboundEmitted(never) => void::unreachable(never),
+            from_fn::OutEvent::OutboundEmitted(Ok(OutboundEvent::Discovered { .. })) => {}
+            from_fn::OutEvent::OutboundEmitted(Ok(OutboundEvent::Registered { .. })) => {}
+            from_fn::OutEvent::OutboundEmitted(Ok(OutboundEvent::DiscoverFailed { .. })) => {}
+            from_fn::OutEvent::OutboundEmitted(Ok(OutboundEvent::RegisterFailed(..))) => {}
+            from_fn::OutEvent::OutboundEmitted(Err(e)) => {}
             from_fn::OutEvent::FailedToOpen(from_fn::OpenError::Timeout(info)) => {}
             from_fn::OutEvent::FailedToOpen(from_fn::OpenError::NegotiationFailed(..)) => {}
             from_fn::OutEvent::FailedToOpen(from_fn::OpenError::LimitExceeded(..)) => {}

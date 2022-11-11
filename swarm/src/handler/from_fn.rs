@@ -3,10 +3,8 @@ use crate::{
     ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, IntoConnectionHandler,
     KeepAlive, NegotiatedSubstream, NetworkBehaviourAction, NotifyHandler, SubstreamProtocol,
 };
-use futures::future::BoxFuture;
-use futures::future::FutureExt;
-use futures::stream::FuturesUnordered;
-use futures::StreamExt;
+use futures::stream::{BoxStream, SelectAll};
+use futures::{Stream, StreamExt};
 use libp2p_core::connection::ConnectionId;
 use libp2p_core::either::EitherOutput;
 use libp2p_core::upgrade::{DeniedUpgrade, EitherUpgrade, NegotiationError, ReadyUpgrade};
@@ -70,7 +68,7 @@ pub struct WantOutboundHandler<TState, TInbound> {
                     PeerId,
                     &ConnectedPoint,
                     &TState,
-                ) -> BoxFuture<'static, TInbound>
+                ) -> BoxStream<'static, TInbound>
                 + Send,
         >,
     >,
@@ -100,15 +98,30 @@ impl Builder<WantState> {
 }
 
 impl<TState> Builder<WantInboundHandler<TState>> {
-    pub fn with_inbound_handler<TInbound, TInboundFuture>(
+    pub fn with_inbound_handler<TInbound, TInboundStream>(
         self,
         max_inbound: usize,
-        handler: impl Fn(NegotiatedSubstream, PeerId, &ConnectedPoint, &TState) -> TInboundFuture
+        handler: impl Fn(NegotiatedSubstream, PeerId, &ConnectedPoint, &TState) -> TInboundStream
             + Send
             + 'static,
     ) -> Builder<WantOutboundHandler<TState, TInbound>>
     where
-        TInboundFuture: Future<Output = TInbound> + Send + 'static,
+        TInboundStream: Future<Output = TInbound> + Send + 'static,
+    {
+        self.with_streaming_inbound_handler(max_inbound, move |stream, peer, endpoint, state| {
+            futures::stream::once(handler(stream, peer, endpoint, state))
+        })
+    }
+
+    pub fn with_streaming_inbound_handler<TInbound, TInboundStream>(
+        self,
+        max_inbound: usize,
+        handler: impl Fn(NegotiatedSubstream, PeerId, &ConnectedPoint, &TState) -> TInboundStream
+            + Send
+            + 'static,
+    ) -> Builder<WantOutboundHandler<TState, TInbound>>
+    where
+        TInboundStream: Stream<Item = TInbound> + Send + 'static,
     {
         Builder {
             protocol: self.protocol,
@@ -135,7 +148,7 @@ impl<TState> Builder<WantInboundHandler<TState>> {
 }
 
 impl<TState, TInbound> Builder<WantOutboundHandler<TState, TInbound>> {
-    pub fn with_outbound_handler<TOutbound, TOutboundFuture, TOutboundInfo>(
+    pub fn with_outbound_handler<TOutbound, TOutboundStream, TOutboundInfo>(
         self,
         max_pending_outbound: usize,
         handler: impl Fn(
@@ -144,12 +157,36 @@ impl<TState, TInbound> Builder<WantOutboundHandler<TState, TInbound>> {
                 &ConnectedPoint,
                 &TState,
                 TOutboundInfo,
-            ) -> TOutboundFuture
+            ) -> TOutboundStream
             + Send
             + 'static,
     ) -> FromFnProto<TInbound, TOutbound, TOutboundInfo, TState>
     where
-        TOutboundFuture: Future<Output = TOutbound> + Send + 'static,
+        TOutboundStream: Future<Output = TOutbound> + Send + 'static,
+    {
+        self.with_streaming_outbound_handler(
+            max_pending_outbound,
+            move |stream, peer, endpoint, state, info| {
+                futures::stream::once(handler(stream, peer, endpoint, state, info))
+            },
+        )
+    }
+
+    pub fn with_streaming_outbound_handler<TOutbound, TOutboundStream, TOutboundInfo>(
+        self,
+        max_pending_outbound: usize,
+        handler: impl Fn(
+                NegotiatedSubstream,
+                PeerId,
+                &ConnectedPoint,
+                &TState,
+                TOutboundInfo,
+            ) -> TOutboundStream
+            + Send
+            + 'static,
+    ) -> FromFnProto<TInbound, TOutbound, TOutboundInfo, TState>
+    where
+        TOutboundStream: Stream<Item = TOutbound> + Send + 'static,
     {
         FromFnProto {
             protocol: self.protocol,
@@ -167,9 +204,7 @@ impl<TState, TInbound> Builder<WantOutboundHandler<TState, TInbound>> {
         FromFnProto {
             protocol: self.protocol,
             on_new_inbound: self.phase.inbound_handler,
-            on_new_outbound: Box::new(|_, _, _, _, info| {
-                async move { void::unreachable(info) }.boxed()
-            }),
+            on_new_outbound: Box::new(|_, _, _, _, info| void::unreachable(info)),
             inbound_streams_limit: self.phase.max_inbound,
             pending_outbound_streams_limit: 0,
             state: self.phase.state,
@@ -179,8 +214,8 @@ impl<TState, TInbound> Builder<WantOutboundHandler<TState, TInbound>> {
 
 #[derive(Debug)]
 pub enum OutEvent<I, O, OpenInfo> {
-    InboundFinished(I),
-    OutboundFinished(O),
+    InboundEmitted(I),
+    OutboundEmitted(O),
     FailedToOpen(OpenError<OpenInfo>),
 }
 
@@ -322,7 +357,7 @@ pub struct FromFnProto<TInbound, TOutbound, TOutboundOpenInfo, TState> {
                     PeerId,
                     &ConnectedPoint,
                     &TState,
-                ) -> BoxFuture<'static, TInbound>
+                ) -> BoxStream<'static, TInbound>
                 + Send,
         >,
     >,
@@ -333,7 +368,7 @@ pub struct FromFnProto<TInbound, TOutbound, TOutboundOpenInfo, TState> {
                 &ConnectedPoint,
                 &TState,
                 TOutboundOpenInfo,
-            ) -> BoxFuture<'static, TOutbound>
+            ) -> BoxStream<'static, TOutbound>
             + Send,
     >,
 
@@ -362,8 +397,8 @@ where
             protocol: self.protocol,
             remote_peer_id: *remote_peer_id,
             connected_point: connected_point.clone(),
-            inbound_streams: FuturesUnordered::default(),
-            outbound_streams: FuturesUnordered::default(),
+            inbound_streams: SelectAll::default(),
+            outbound_streams: SelectAll::default(),
             on_new_inbound: self.on_new_inbound,
             on_new_outbound: self.on_new_outbound,
             inbound_streams_limit: self.inbound_streams_limit,
@@ -389,8 +424,8 @@ pub struct FromFn<TInbound, TOutbound, TOutboundInfo, TState> {
     remote_peer_id: PeerId,
     connected_point: ConnectedPoint,
 
-    inbound_streams: FuturesUnordered<BoxFuture<'static, TInbound>>,
-    outbound_streams: FuturesUnordered<BoxFuture<'static, TOutbound>>,
+    inbound_streams: SelectAll<BoxStream<'static, TInbound>>,
+    outbound_streams: SelectAll<BoxStream<'static, TOutbound>>,
 
     on_new_inbound: Option<
         Box<
@@ -399,7 +434,7 @@ pub struct FromFn<TInbound, TOutbound, TOutboundInfo, TState> {
                     PeerId,
                     &ConnectedPoint,
                     &TState,
-                ) -> BoxFuture<'static, TInbound>
+                ) -> BoxStream<'static, TInbound>
                 + Send,
         >,
     >,
@@ -410,7 +445,7 @@ pub struct FromFn<TInbound, TOutbound, TOutboundInfo, TState> {
                 &ConnectedPoint,
                 &TState,
                 TOutboundInfo,
-            ) -> BoxFuture<'static, TOutbound>
+            ) -> BoxStream<'static, TOutbound>
             + Send,
     >,
 
@@ -553,7 +588,7 @@ where
 
         match self.outbound_streams.poll_next_unpin(cx) {
             Poll::Ready(Some(outbound_done)) => {
-                return Poll::Ready(ConnectionHandlerEvent::Custom(OutEvent::OutboundFinished(
+                return Poll::Ready(ConnectionHandlerEvent::Custom(OutEvent::OutboundEmitted(
                     outbound_done,
                 )));
             }
@@ -566,7 +601,7 @@ where
 
         match self.inbound_streams.poll_next_unpin(cx) {
             Poll::Ready(Some(inbound_done)) => {
-                return Poll::Ready(ConnectionHandlerEvent::Custom(OutEvent::InboundFinished(
+                return Poll::Ready(ConnectionHandlerEvent::Custom(OutEvent::InboundEmitted(
                     inbound_done,
                 )));
             }
@@ -795,18 +830,18 @@ mod tests {
             event: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent,
         ) {
             match event {
-                OutEvent::InboundFinished(Ok(name)) => {
+                OutEvent::InboundEmitted(Ok(name)) => {
                     self.greeting_count.entry(name).or_default().add_assign(1);
 
                     self.pending_events.push_back(self.greeting_count.clone())
                 }
-                OutEvent::OutboundFinished(Ok(name)) => {
+                OutEvent::OutboundEmitted(Ok(name)) => {
                     self.greeting_count.entry(name).or_default().add_assign(1);
 
                     self.pending_events.push_back(self.greeting_count.clone())
                 }
-                OutEvent::InboundFinished(_) => {}
-                OutEvent::OutboundFinished(_) => {}
+                OutEvent::InboundEmitted(_) => {}
+                OutEvent::OutboundEmitted(_) => {}
                 OutEvent::FailedToOpen(OpenError::Timeout(_)) => {}
                 OutEvent::FailedToOpen(OpenError::NegotiationFailed(_, _neg_error)) => {}
                 OutEvent::FailedToOpen(OpenError::LimitExceeded(_)) => {}
