@@ -66,7 +66,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Create a random PeerId
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
+<<<<<<< HEAD
     println!("Local peer id: {:?}", local_peer_id);
+=======
+    println!("Local peer id: {local_peer_id}");
+>>>>>>> c32f03c3 (*: Fix newly raised clippy warnings (#3106))
 
     // Set up an encrypted TCP Transport over the Mplex and Yamux protocols
     let transport = libp2p::development_transport(local_key.clone()).await?;
@@ -133,6 +137,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         select! {
             line = stdin.select_next_some() => {
                 if let Err(e) = swarm
+<<<<<<< HEAD
                     .behaviour_mut()
                     .publish(topic.clone(), line.expect("Stdin not to close").as_bytes())
                 {
@@ -141,6 +146,27 @@ async fn main() -> Result<(), Box<dyn Error>> {
             },
             event = swarm.select_next_some() => match event {
                 SwarmEvent::Behaviour(GossipsubEvent::Message {
+=======
+                    .behaviour_mut().gossipsub
+                    .publish(topic.clone(), line.expect("Stdin not to close").as_bytes()) {
+                    println!("Publish error: {e:?}");
+                }
+            },
+            event = swarm.select_next_some() => match event {
+                SwarmEvent::Behaviour(MyBehaviourEvent::Mdns(MdnsEvent::Discovered(list))) => {
+                    for (peer_id, _multiaddr) in list {
+                        println!("mDNS discovered a new peer: {peer_id}");
+                        swarm.behaviour_mut().gossipsub.add_explicit_peer(&peer_id);
+                    }
+                },
+                SwarmEvent::Behaviour(MyBehaviourEvent::Mdns(MdnsEvent::Expired(list))) => {
+                    for (peer_id, _multiaddr) in list {
+                        println!("mDNS discover peer has expired: {peer_id}");
+                        swarm.behaviour_mut().gossipsub.remove_explicit_peer(&peer_id);
+                    }
+                },
+                SwarmEvent::Behaviour(MyBehaviourEvent::Gossipsub(GossipsubEvent::Message {
+>>>>>>> c32f03c3 (*: Fix newly raised clippy warnings (#3106))
                     propagation_source: peer_id,
                     message_id: id,
                     message,

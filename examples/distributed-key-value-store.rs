@@ -113,7 +113,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         line = stdin.select_next_some() => handle_input_line(&mut swarm.behaviour_mut().kademlia, line.expect("Stdin not to close")),
         event = swarm.select_next_some() => match event {
             SwarmEvent::NewListenAddr { address, .. } => {
-                println!("Listening in {:?}", address);
+                println!("Listening in {address:?}");
             },
             SwarmEvent::Behaviour(MyBehaviourEvent::Mdns(MdnsEvent::Discovered(list))) => {
                 for (peer_id, multiaddr) in list {
@@ -132,7 +132,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         }
                     }
                     QueryResult::GetProviders(Err(err)) => {
-                        eprintln!("Failed to get providers: {:?}", err);
+                        eprintln!("Failed to get providers: {err:?}");
                     }
                     QueryResult::GetRecord(Ok(ok)) => {
                         for PeerRecord {
@@ -148,7 +148,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         }
                     }
                     QueryResult::GetRecord(Err(err)) => {
-                        eprintln!("Failed to get record: {:?}", err);
+                        eprintln!("Failed to get record: {err:?}");
                     }
                     QueryResult::PutRecord(Ok(PutRecordOk { key })) => {
                         println!(
@@ -157,7 +157,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         );
                     }
                     QueryResult::PutRecord(Err(err)) => {
-                        eprintln!("Failed to put record: {:?}", err);
+                        eprintln!("Failed to put record: {err:?}");
                     }
                     QueryResult::StartProviding(Ok(AddProviderOk { key })) => {
                         println!(
@@ -166,7 +166,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         );
                     }
                     QueryResult::StartProviding(Err(err)) => {
-                        eprintln!("Failed to put provider record: {:?}", err);
+                        eprintln!("Failed to put provider record: {err:?}");
                     }
                     _ => {}
                 }
