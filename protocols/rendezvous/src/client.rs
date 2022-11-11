@@ -35,7 +35,6 @@ use libp2p_core::identity::error::SigningError;
 use libp2p_core::identity::Keypair;
 use libp2p_core::{ConnectedPoint, Multiaddr, PeerId, PeerRecord};
 use libp2p_swarm::handler::from_fn;
-use libp2p_swarm::handler::from_fn::OutEvent;
 use libp2p_swarm::{
     CloseConnection, NegotiatedSubstream, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
     PollParameters,
