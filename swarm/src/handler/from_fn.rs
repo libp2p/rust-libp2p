@@ -15,6 +15,7 @@ use std::error::Error;
 use std::fmt;
 use std::future::Future;
 use std::ops::{Deref, DerefMut};
+use std::sync::Arc;
 use std::task::{Context, Poll, Waker};
 use std::time::{Duration, Instant};
 use void::Void;
@@ -79,7 +80,7 @@ where
                 on_new_outbound(stream, remote_peer_id, connected_point, state, info).boxed()
             },
         ),
-        state: state.inner.clone(),
+        state: state.shared.clone(),
     }
 }
 
@@ -107,10 +108,12 @@ pub enum OpenError<OpenInfo> {
 pub struct Shared<T> {
     inner: T,
 
+    shared: Arc<T>,
+
     dirty: bool,
     waker: Option<Waker>,
     connections: HashSet<(PeerId, ConnectionId)>,
-    pending_update_events: VecDeque<(PeerId, ConnectionId, T)>,
+    pending_update_events: VecDeque<(PeerId, ConnectionId, Arc<T>)>,
 }
 
 impl<T> Shared<T>
@@ -119,7 +122,8 @@ where
 {
     pub fn new(state: T) -> Self {
         Self {
-            inner: state,
+            inner: state.clone(),
+            shared: Arc::new(state),
             dirty: false,
             waker: None,
             connections: HashSet::default(),
@@ -143,10 +147,12 @@ where
         THandler: IntoConnectionHandler,
     {
         if self.dirty {
+            self.shared = Arc::new(self.inner.clone());
+
             self.pending_update_events = self
                 .connections
                 .iter()
-                .map(|(peer_id, conn_id)| (*peer_id, *conn_id, self.inner.clone()))
+                .map(|(peer_id, conn_id)| (*peer_id, *conn_id, self.shared.clone()))
                 .collect();
 
             self.dirty = false;
@@ -209,7 +215,7 @@ where
 
 #[derive(Debug)]
 pub enum InEvent<TState, TOutboundOpenInfo> {
-    UpdateState(TState),
+    UpdateState(Arc<TState>),
     NewOutbound(TOutboundOpenInfo),
 }
 
@@ -239,7 +245,7 @@ pub struct FromFnProto<TInbound, TOutbound, TOutboundOpenInfo, TState> {
     inbound_streams_limit: usize,
     pending_outbound_streams_limit: usize,
 
-    state: TState,
+    state: Arc<TState>,
 }
 
 impl<TInbound, TOutbound, TOutboundOpenInfo, TState> IntoConnectionHandler
@@ -248,7 +254,7 @@ where
     TInbound: fmt::Debug + Send + 'static,
     TOutbound: fmt::Debug + Send + 'static,
     TOutboundOpenInfo: fmt::Debug + Send + 'static,
-    TState: fmt::Debug + Send + 'static,
+    TState: fmt::Debug + Send + Sync + 'static,
 {
     type Handler = FromFn<TInbound, TOutbound, TOutboundOpenInfo, TState>;
 
@@ -314,7 +320,7 @@ pub struct FromFn<TInbound, TOutbound, TOutboundInfo, TState> {
 
     failed_open: VecDeque<OpenError<TOutboundInfo>>,
 
-    state: TState,
+    state: Arc<TState>,
 
     keep_alive: KeepAlive,
 }
@@ -325,7 +331,7 @@ where
     TOutboundInfo: fmt::Debug + Send + 'static,
     TInbound: fmt::Debug + Send + 'static,
     TOutbound: fmt::Debug + Send + 'static,
-    TState: fmt::Debug + Send + 'static,
+    TState: fmt::Debug + Send + Sync + 'static,
 {
     type InEvent = InEvent<TState, TOutboundInfo>;
     type OutEvent = OutEvent<TInbound, TOutbound, TOutboundInfo>;
