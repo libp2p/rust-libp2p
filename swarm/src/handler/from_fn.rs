@@ -45,43 +45,144 @@ use void::Void;
 /// substreams, may be outdated and only eventually-consistent.
 ///
 /// [`NetworkBehaviour`]: crate::NetworkBehaviour
-pub fn from_fn<TInbound, TOutbound, TOutboundOpenInfo, TState, TInboundFuture, TOutboundFuture>(
-    protocol: &'static str,
-    state: &Shared<TState>,
-    inbound_streams_limit: usize,
-    pending_dial_limit: usize,
-    on_new_inbound: impl Fn(NegotiatedSubstream, PeerId, &ConnectedPoint, &TState) -> TInboundFuture
-        + Send
-        + 'static,
-    on_new_outbound: impl Fn(
-            NegotiatedSubstream,
-            PeerId,
-            &ConnectedPoint,
-            &TState,
-            TOutboundOpenInfo,
-        ) -> TOutboundFuture
-        + Send
-        + 'static,
-) -> FromFnProto<TInbound, TOutbound, TOutboundOpenInfo, TState>
-where
-    TState: Clone,
-    TInboundFuture: Future<Output = TInbound> + Send + 'static,
-    TOutboundFuture: Future<Output = TOutbound> + Send + 'static,
-{
-    FromFnProto {
+pub fn from_fn(protocol: &'static str) -> Builder<WantState> {
+    Builder {
         protocol,
-        inbound_streams_limit,
-        pending_outbound_streams_limit: pending_dial_limit,
-        on_new_inbound: Box::new(move |stream, remote_peer_id, connected_point, state| {
-            on_new_inbound(stream, remote_peer_id, connected_point, state).boxed()
-        }),
-        on_new_outbound: Box::new(
-            move |stream, remote_peer_id, connected_point, state, info| {
-                on_new_outbound(stream, remote_peer_id, connected_point, state, info).boxed()
-            },
-        ),
-        state: state.shared.clone(),
+        phase: WantState {},
     }
+}
+
+pub struct Builder<TPhase> {
+    protocol: &'static str,
+    phase: TPhase,
+}
+
+pub struct WantState {}
+
+pub struct WantInboundHandler<TState> {
+    state: Arc<TState>,
+}
+
+pub struct WantOutboundHandler<TState, TInbound> {
+    state: Arc<TState>,
+    max_inbound: usize,
+    inbound_handler: Box<
+        dyn Fn(
+                NegotiatedSubstream,
+                PeerId,
+                &ConnectedPoint,
+                &TState,
+            ) -> BoxFuture<'static, TInbound>
+            + Send,
+    >,
+}
+
+impl Builder<WantState> {
+    pub fn with_state<TState>(
+        self,
+        shared: &Shared<TState>,
+    ) -> Builder<WantInboundHandler<TState>> {
+        Builder {
+            protocol: self.protocol,
+            phase: WantInboundHandler {
+                state: shared.shared.clone(),
+            },
+        }
+    }
+
+    pub fn without_state(self) -> Builder<WantInboundHandler<()>> {
+        Builder {
+            protocol: self.protocol,
+            phase: WantInboundHandler {
+                state: Arc::new(()),
+            },
+        }
+    }
+}
+
+impl<TState> Builder<WantInboundHandler<TState>> {
+    pub fn with_inbound_handler<TInbound, TInboundFuture>(
+        self,
+        max_inbound: usize,
+        handler: impl Fn(NegotiatedSubstream, PeerId, &ConnectedPoint, &TState) -> TInboundFuture
+            + Send
+            + 'static,
+    ) -> Builder<WantOutboundHandler<TState, TInbound>>
+    where
+        TInboundFuture: Future<Output = TInbound> + Send + 'static,
+    {
+        Builder {
+            protocol: self.protocol,
+            phase: WantOutboundHandler {
+                state: self.phase.state,
+                max_inbound,
+                inbound_handler: Box::new(move |stream, peer, endpoint, state| {
+                    handler(stream, peer, endpoint, state).boxed()
+                }),
+            },
+        }
+    }
+
+    pub fn without_inbound_handler(self) -> Builder<WantOutboundHandler<TState, Dropped>> {
+        Builder {
+            protocol: self.protocol,
+            phase: WantOutboundHandler {
+                state: self.phase.state,
+                max_inbound: 1,
+                inbound_handler: Box::new(move |_, peer, _, _| {
+                    async move { Dropped { peer } }.boxed()
+                }),
+            },
+        }
+    }
+}
+
+impl<TState, TInbound> Builder<WantOutboundHandler<TState, TInbound>> {
+    pub fn with_outbound_handler<TOutbound, TOutboundFuture, TOutboundInfo>(
+        self,
+        max_pending_outbound: usize,
+        handler: impl Fn(
+                NegotiatedSubstream,
+                PeerId,
+                &ConnectedPoint,
+                &TState,
+                TOutboundInfo,
+            ) -> TOutboundFuture
+            + Send
+            + 'static,
+    ) -> FromFnProto<TInbound, TOutbound, TOutboundInfo, TState>
+    where
+        TOutboundFuture: Future<Output = TOutbound> + Send + 'static,
+    {
+        FromFnProto {
+            protocol: self.protocol,
+            on_new_inbound: self.phase.inbound_handler,
+            on_new_outbound: Box::new(move |stream, peer, endpoint, state, info| {
+                handler(stream, peer, endpoint, state, info).boxed()
+            }),
+            inbound_streams_limit: self.phase.max_inbound,
+            pending_outbound_streams_limit: max_pending_outbound,
+            state: self.phase.state,
+        }
+    }
+
+    pub fn without_outbound_handler(self) -> FromFnProto<TInbound, Void, Void, TState> {
+        FromFnProto {
+            protocol: self.protocol,
+            on_new_inbound: self.phase.inbound_handler,
+            on_new_outbound: Box::new(|_, _, _, _, info| {
+                async move { void::unreachable(info) }.boxed()
+            }),
+            inbound_streams_limit: self.phase.max_inbound,
+            pending_outbound_streams_limit: 0,
+            state: self.phase.state,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct Dropped {
+    pub peer: PeerId,
 }
 
 #[derive(Debug)]
@@ -620,12 +721,9 @@ mod tests {
         type OutEvent = HashMap<Name, u8>;
 
         fn new_handler(&mut self) -> Self::ConnectionHandler {
-            from_fn(
-                "/hello/1.0.0",
-                &self.state,
-                5,
-                5,
-                |mut stream, _, _, state| {
+            from_fn("/hello/1.0.0")
+                .with_state(&self.state)
+                .with_inbound_handler(5, |mut stream, _, _, state| {
                     let my_name = state.name.to_owned();
 
                     async move {
@@ -637,8 +735,8 @@ mod tests {
 
                         Ok(Name(String::from_utf8(received_name).unwrap()))
                     }
-                },
-                |mut stream, _, _, state, _| {
+                })
+                .with_outbound_handler(5, |mut stream, _, _, state, _| {
                     let my_name = state.name.to_owned();
 
                     async move {
@@ -651,8 +749,7 @@ mod tests {
 
                         Ok(Name(String::from_utf8(received_name).unwrap()))
                     }
-                },
-            )
+                })
         }
 
         fn inject_connection_established(

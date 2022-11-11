@@ -118,14 +118,10 @@ impl NetworkBehaviour for Behaviour {
     type OutEvent = Event;
 
     fn new_handler(&mut self) -> Self::ConnectionHandler {
-        from_fn(
-            PROTOCOL_IDENT,
-            &self.registration_data,
-            10,
-            10,
-            inbound_stream_handler,
-            |_, _, _, _, never| async move { void::unreachable(never) },
-        )
+        from_fn(PROTOCOL_IDENT)
+            .with_state(&self.registration_data)
+            .with_inbound_handler(10, inbound_stream_handler)
+            .without_outbound_handler()
     }
 
     fn inject_connection_established(
