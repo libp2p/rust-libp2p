@@ -43,6 +43,7 @@ use std::collections::{HashMap, VecDeque};
 use std::future::Future;
 use std::io;
 use std::iter::FromIterator;
+use std::sync::Arc;
 use std::task::{Context, Poll};
 use void::Void;
 
@@ -380,69 +381,67 @@ impl NetworkBehaviour for Behaviour {
 //     }
 // }
 
-fn outbound_stream_handler(
+async fn outbound_stream_handler(
     substream: NegotiatedSubstream,
     _: PeerId,
     _: ConnectedPoint,
-    _: &(),
+    _: Arc<()>,
     request: OpenInfo,
-) -> impl Future<Output = Result<OutboundEvent, Error>> {
+) -> Result<OutboundEvent, Error> {
     let mut substream = Framed::new(substream, RendezvousCodec::default());
 
-    async move {
-        substream
-            .send(match request.clone() {
-                OpenInfo::RegisterRequest(new_registration) => Message::Register(new_registration),
-                OpenInfo::UnregisterRequest(namespace) => Message::Unregister(namespace),
-                OpenInfo::DiscoverRequest {
-                    namespace,
-                    cookie,
-                    limit,
-                } => Message::Discover {
-                    namespace,
-                    cookie,
-                    limit,
-                },
-            })
-            .await?;
-
-        let response = substream.next().await.transpose()?;
-
-        let out_event = match (request, response) {
-            (OpenInfo::RegisterRequest(r), Some(Message::RegisterResponse(Ok(ttl)))) => {
-                OutboundEvent::Registered {
-                    namespace: r.namespace,
-                    ttl,
-                }
-            }
-            (OpenInfo::RegisterRequest(r), Some(Message::RegisterResponse(Err(e)))) => {
-                OutboundEvent::RegisterFailed(r.namespace, e)
-            }
-            (
-                OpenInfo::DiscoverRequest { .. },
-                Some(Message::DiscoverResponse(Ok((registrations, cookie)))),
-            ) => OutboundEvent::Discovered {
-                registrations,
+    substream
+        .send(match request.clone() {
+            OpenInfo::RegisterRequest(new_registration) => Message::Register(new_registration),
+            OpenInfo::UnregisterRequest(namespace) => Message::Unregister(namespace),
+            OpenInfo::DiscoverRequest {
+                namespace,
                 cookie,
+                limit,
+            } => Message::Discover {
+                namespace,
+                cookie,
+                limit,
             },
-            (
-                OpenInfo::DiscoverRequest { namespace, .. },
-                Some(Message::DiscoverResponse(Err(error))),
-            ) => OutboundEvent::DiscoverFailed { namespace, error },
-            (OpenInfo::UnregisterRequest(_), None) => {
-                // All good.
+        })
+        .await?;
 
-                todo!()
-            }
-            (_, None) => {
-                // EOF?
-                todo!()
-            }
-            _ => {
-                panic!("protocol violation") // TODO: Make two different codecs to avoid this?
-            }
-        };
+    let response = substream.next().await.transpose()?;
 
-        Ok(out_event)
-    }
+    let out_event = match (request, response) {
+        (OpenInfo::RegisterRequest(r), Some(Message::RegisterResponse(Ok(ttl)))) => {
+            OutboundEvent::Registered {
+                namespace: r.namespace,
+                ttl,
+            }
+        }
+        (OpenInfo::RegisterRequest(r), Some(Message::RegisterResponse(Err(e)))) => {
+            OutboundEvent::RegisterFailed(r.namespace, e)
+        }
+        (
+            OpenInfo::DiscoverRequest { .. },
+            Some(Message::DiscoverResponse(Ok((registrations, cookie)))),
+        ) => OutboundEvent::Discovered {
+            registrations,
+            cookie,
+        },
+        (
+            OpenInfo::DiscoverRequest { namespace, .. },
+            Some(Message::DiscoverResponse(Err(error))),
+        ) => OutboundEvent::DiscoverFailed { namespace, error },
+        (OpenInfo::UnregisterRequest(_), None) => {
+            // All good.
+
+            todo!()
+        }
+        (_, None) => {
+            // EOF?
+            todo!()
+        }
+        _ => {
+            panic!("protocol violation") // TODO: Make two different codecs to avoid this?
+        }
+    };
+
+    Ok(out_event)
 }

@@ -101,7 +101,7 @@ impl<TState> Builder<WantInboundHandler<TState>> {
     pub fn with_inbound_handler<TInbound, TInboundStream>(
         self,
         max_inbound: usize,
-        handler: impl Fn(NegotiatedSubstream, PeerId, ConnectedPoint, &TState) -> TInboundStream
+        handler: impl Fn(NegotiatedSubstream, PeerId, ConnectedPoint, Arc<TState>) -> TInboundStream
             + Send
             + 'static,
     ) -> Builder<WantOutboundHandler<TState, TInbound>>
@@ -116,7 +116,7 @@ impl<TState> Builder<WantInboundHandler<TState>> {
     pub fn with_streaming_inbound_handler<TInbound, TInboundStream>(
         self,
         max_inbound: usize,
-        handler: impl Fn(NegotiatedSubstream, PeerId, ConnectedPoint, &TState) -> TInboundStream
+        handler: impl Fn(NegotiatedSubstream, PeerId, ConnectedPoint, Arc<TState>) -> TInboundStream
             + Send
             + 'static,
     ) -> Builder<WantOutboundHandler<TState, TInbound>>
@@ -129,7 +129,7 @@ impl<TState> Builder<WantInboundHandler<TState>> {
                 state: self.phase.state,
                 max_inbound,
                 inbound_handler: Some(Box::new(move |stream, peer, endpoint, state| {
-                    handler(stream, peer, endpoint, &state).boxed()
+                    handler(stream, peer, endpoint, state).boxed()
                 })),
             },
         }
@@ -155,7 +155,7 @@ impl<TState, TInbound> Builder<WantOutboundHandler<TState, TInbound>> {
                 NegotiatedSubstream,
                 PeerId,
                 ConnectedPoint,
-                &TState,
+                Arc<TState>,
                 TOutboundInfo,
             ) -> TOutboundStream
             + Send
@@ -179,7 +179,7 @@ impl<TState, TInbound> Builder<WantOutboundHandler<TState, TInbound>> {
                 NegotiatedSubstream,
                 PeerId,
                 ConnectedPoint,
-                &TState,
+                Arc<TState>,
                 TOutboundInfo,
             ) -> TOutboundStream
             + Send
@@ -192,7 +192,7 @@ impl<TState, TInbound> Builder<WantOutboundHandler<TState, TInbound>> {
             protocol: self.protocol,
             on_new_inbound: self.phase.inbound_handler,
             on_new_outbound: Box::new(move |stream, peer, endpoint, state, info| {
-                handler(stream, peer, endpoint, &state, info).boxed()
+                handler(stream, peer, endpoint, state, info).boxed()
             }),
             inbound_streams_limit: self.phase.max_inbound,
             pending_outbound_streams_limit: max_pending_outbound,
@@ -772,32 +772,24 @@ mod tests {
         fn new_handler(&mut self) -> Self::ConnectionHandler {
             from_fn("/hello/1.0.0")
                 .with_state(&self.state)
-                .with_inbound_handler(5, |mut stream, _, _, state| {
-                    let my_name = state.name.to_owned();
+                .with_inbound_handler(5, |mut stream, _, _, state| async move {
+                    let mut received_name = Vec::new();
+                    stream.read_to_end(&mut received_name).await?;
 
-                    async move {
-                        let mut received_name = Vec::new();
-                        stream.read_to_end(&mut received_name).await?;
+                    stream.write_all(state.name.0.as_bytes()).await?;
+                    stream.close().await?;
 
-                        stream.write_all(&my_name.0.as_bytes()).await?;
-                        stream.close().await?;
-
-                        Ok(Name(String::from_utf8(received_name).unwrap()))
-                    }
+                    Ok(Name(String::from_utf8(received_name).unwrap()))
                 })
-                .with_outbound_handler(5, |mut stream, _, _, state, _| {
-                    let my_name = state.name.to_owned();
+                .with_outbound_handler(5, |mut stream, _, _, state, _| async move {
+                    stream.write_all(state.name.0.as_bytes()).await?;
+                    stream.flush().await?;
+                    stream.close().await?;
 
-                    async move {
-                        stream.write_all(&my_name.0.as_bytes()).await?;
-                        stream.flush().await?;
-                        stream.close().await?;
+                    let mut received_name = Vec::new();
+                    stream.read_to_end(&mut received_name).await?;
 
-                        let mut received_name = Vec::new();
-                        stream.read_to_end(&mut received_name).await?;
-
-                        Ok(Name(String::from_utf8(received_name).unwrap()))
-                    }
+                    Ok(Name(String::from_utf8(received_name).unwrap()))
                 })
         }
 

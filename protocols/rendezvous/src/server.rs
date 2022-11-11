@@ -40,6 +40,7 @@ use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::io;
 use std::iter::FromIterator;
+use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::Duration;
 use void::Void;
@@ -198,71 +199,68 @@ impl NetworkBehaviour for Behaviour {
     }
 }
 
-fn inbound_stream_handler(
+async fn inbound_stream_handler(
     substream: NegotiatedSubstream,
     _: PeerId,
     _: ConnectedPoint,
-    registrations: &RegistrationData,
-) -> impl Future<Output = Result<Option<InboundOutEvent>, Error>> {
-    let mut registrations = registrations.clone();
+    registrations: Arc<RegistrationData>,
+) -> Result<Option<InboundOutEvent>, Error> {
     let mut substream = Framed::new(substream, RendezvousCodec::default());
 
-    async move {
-        let message = substream
-            .next()
-            .await
-            .ok_or_else(|| Error::Io(io::ErrorKind::UnexpectedEof.into()))??;
+    let message = substream
+        .next()
+        .await
+        .ok_or_else(|| Error::Io(io::ErrorKind::UnexpectedEof.into()))??;
 
-        let out_event = match message {
-            Message::Register(new_registration) => {
-                // TODO: Validate registration
+    let out_event = match message {
+        Message::Register(new_registration) => {
+            // TODO: Validate registration
 
+            substream
+                .send(Message::RegisterResponse(Ok(
+                    new_registration.effective_ttl()
+                )))
+                .await?;
+            substream.close().await?;
+
+            Some(InboundOutEvent::NewRegistration(new_registration))
+        }
+        Message::Unregister(namespace) => {
+            substream.close().await?;
+
+            Some(InboundOutEvent::Unregister(namespace))
+        }
+        Message::Discover {
+            namespace,
+            cookie,
+            limit,
+        } => match registrations.get(namespace, cookie, limit) {
+            Ok((registrations, cookie)) => {
                 substream
-                    .send(Message::RegisterResponse(Ok(
-                        new_registration.effective_ttl()
-                    )))
+                    .send(Message::DiscoverResponse(Ok((
+                        registrations.cloned().collect(),
+                        cookie,
+                    ))))
                     .await?;
                 substream.close().await?;
 
-                Some(InboundOutEvent::NewRegistration(new_registration))
+                None
             }
-            Message::Unregister(namespace) => {
+            Err(e) => {
+                substream
+                    .send(Message::DiscoverResponse(Err(ErrorCode::InvalidCookie)))
+                    .await?;
                 substream.close().await?;
 
-                Some(InboundOutEvent::Unregister(namespace))
+                None
             }
-            Message::Discover {
-                namespace,
-                cookie,
-                limit,
-            } => match registrations.get(namespace, cookie, limit) {
-                Ok((registrations, cookie)) => {
-                    substream
-                        .send(Message::DiscoverResponse(Ok((
-                            registrations.cloned().collect(),
-                            cookie,
-                        ))))
-                        .await?;
-                    substream.close().await?;
+        },
+        Message::DiscoverResponse(_) | Message::RegisterResponse(_) => {
+            panic!("protocol violation")
+        }
+    };
 
-                    None
-                }
-                Err(e) => {
-                    substream
-                        .send(Message::DiscoverResponse(Err(ErrorCode::InvalidCookie)))
-                        .await?;
-                    substream.close().await?;
-
-                    None
-                }
-            },
-            Message::DiscoverResponse(_) | Message::RegisterResponse(_) => {
-                panic!("protocol violation")
-            }
-        };
-
-        Ok(out_event)
-    }
+    Ok(out_event)
 }
 
 #[derive(Debug)]
@@ -298,7 +296,7 @@ pub struct RegistrationData {
 
 impl RegistrationData {
     pub fn get(
-        &mut self,
+        &self,
         discover_namespace: Option<Namespace>,
         cookie: Option<Cookie>,
         limit: Option<u64>,
@@ -348,8 +346,8 @@ impl RegistrationData {
         let new_cookie = discover_namespace
             .map(Cookie::for_namespace)
             .unwrap_or_else(Cookie::for_all_namespaces);
-        self.cookies
-            .insert(new_cookie.clone(), reggos_of_last_discover);
+        // self.cookies
+        //     .insert(new_cookie.clone(), reggos_of_last_discover);
 
         let reggos = &self.registrations;
         let registrations = ids
