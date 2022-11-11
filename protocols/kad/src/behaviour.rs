@@ -666,13 +666,16 @@ where
     where
         K: Into<kbucket::Key<K>> + Into<Vec<u8>> + Clone,
     {
+        let target: kbucket::Key<K> = key.clone().into();
+        let key: Vec<u8> = key.clone().into();
         let info = QueryInfo::GetClosestPeers {
-            key: key.clone().into(),
+            key: key.clone(),
+            count: 0,
         };
-        let target: kbucket::Key<K> = key.into();
-        let peers = self.kbuckets.closest_keys(&target);
+        let peer_keys: Vec<kbucket::Key<PeerId>> = self.kbuckets.closest_keys(&target).collect();
         let inner = QueryInner::new(info);
-        self.queries.add_iter_closest(target.clone(), peers, inner)
+        self.queries
+            .add_iter_closest(target.clone(), peer_keys.clone(), inner)
     }
 
     /// Returns closest peers to the given key; takes peers from local routing table only.
@@ -1300,7 +1303,7 @@ where
                 })
             }
 
-            QueryInfo::GetClosestPeers { key, .. } => {
+            QueryInfo::GetClosestPeers { key, count } => {
                 Some(KademliaEvent::OutboundQueryProgressed {
                     id: query_id,
                     stats: result.stats,
@@ -1309,7 +1312,7 @@ where
                         peers: result.peers.collect(),
                     })),
                     step: ProgressStep {
-                        count: 1,
+                        count: count + 1,
                         last: true,
                     },
                 })
@@ -1527,15 +1530,20 @@ where
                 },
             }),
 
-            QueryInfo::GetClosestPeers { key } => Some(KademliaEvent::OutboundQueryProgressed {
-                id: query_id,
-                stats: result.stats,
-                result: QueryResult::GetClosestPeers(Err(GetClosestPeersError::Timeout {
-                    key,
-                    peers: result.peers.collect(),
-                })),
-                step: ProgressStep::single(),
-            }),
+            QueryInfo::GetClosestPeers { key, count } => {
+                Some(KademliaEvent::OutboundQueryProgressed {
+                    id: query_id,
+                    stats: result.stats,
+                    result: QueryResult::GetClosestPeers(Err(GetClosestPeersError::Timeout {
+                        key,
+                        peers: result.peers.collect(),
+                    })),
+                    step: ProgressStep {
+                        count: count + 1,
+                        last: true,
+                    },
+                })
+            }
 
             QueryInfo::PutRecord {
                 record,
@@ -2967,7 +2975,12 @@ pub enum QueryInfo {
     },
 
     /// A query initiated by [`Kademlia::get_closest_peers`].
-    GetClosestPeers { key: Vec<u8> },
+    GetClosestPeers {
+        /// The key being queried (the preimage).
+        key: Vec<u8>,
+        /// Current index of events.
+        count: usize,
+    },
 
     /// A (repeated) query initiated by [`Kademlia::get_providers`].
     GetProviders {

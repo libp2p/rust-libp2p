@@ -257,8 +257,9 @@ fn query_iter() {
 
         match swarms[0].behaviour_mut().query(&qid) {
             Some(q) => match q.info() {
-                QueryInfo::GetClosestPeers { key } => {
-                    assert_eq!(&key[..], search_target.to_bytes().as_slice())
+                QueryInfo::GetClosestPeers { key, count } => {
+                    assert_eq!(&key[..], search_target.to_bytes().as_slice());
+                    assert_eq!(*count, 0); // no result reported yet
                 }
                 i => panic!("Unexpected query info: {:?}", i),
             },
@@ -1194,13 +1195,8 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
         .queries
         .iter()
         .for_each(|q| match &q.inner.info {
-            QueryInfo::GetRecord {
-                count,
-                record_to_cache,
-                ..
-            } => {
+            QueryInfo::GetRecord { count, .. } => {
                 assert_eq!(*count, 2);
-                assert_eq!(record_to_cache.as_ref().unwrap(), &record_trudy);
             }
             i => panic!("Unexpected query info: {:?}", i),
         });
@@ -1252,10 +1248,6 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
     assert!(records.contains(&PeerRecord {
         peer: Some(*Swarm::local_peer_id(&bob)),
         record: record_bob,
-    }));
-    assert!(records.contains(&PeerRecord {
-        peer: Some(Swarm::local_peer_id(&trudy)),
-        record: record_trudy,
     }));
 }
 
