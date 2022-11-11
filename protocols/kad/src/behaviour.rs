@@ -2402,6 +2402,7 @@ pub struct PeerRecord {
 ///
 /// See [`NetworkBehaviour::poll`].
 #[derive(Debug, Clone)]
+#[allow(clippy::large_enum_variant)]
 pub enum KademliaEvent {
     /// An inbound request has been received and handled.
     //

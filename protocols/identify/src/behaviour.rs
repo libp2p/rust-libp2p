@@ -131,7 +131,7 @@ impl Config {
             initial_delay: Duration::from_millis(500),
             interval: Duration::from_secs(5 * 60),
             push_listen_addr_updates: false,
-            cache_size: 0,
+            cache_size: 100,
         }
     }
 
@@ -555,7 +555,7 @@ mod tests {
     use futures::pin_mut;
     use libp2p::mplex::MplexConfig;
     use libp2p::noise;
-    use libp2p::tcp::{GenTcpConfig, TcpTransport};
+    use libp2p::tcp;
     use libp2p_core::{identity, muxing::StreamMuxerBox, transport, upgrade, PeerId, Transport};
     use libp2p_swarm::{Swarm, SwarmEvent};
     use std::time::Duration;
@@ -569,7 +569,7 @@ mod tests {
             .into_authentic(&id_keys)
             .unwrap();
         let pubkey = id_keys.public();
-        let transport = TcpTransport::new(GenTcpConfig::default().nodelay(true))
+        let transport = tcp::async_io::Transport::new(tcp::Config::default().nodelay(true))
             .upgrade(upgrade::Version::V1)
             .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
             .multiplex(MplexConfig::new())
@@ -748,9 +748,7 @@ mod tests {
         let mut swarm2 = {
             let (pubkey, transport) = transport();
             let protocol = Behaviour::new(
-                Config::new("a".to_string(), pubkey.clone())
-                    .with_cache_size(100)
-                    .with_agent_version("b".to_string()),
+                Config::new("a".to_string(), pubkey.clone()).with_agent_version("b".to_string()),
             );
 
             Swarm::new(transport, protocol, pubkey.to_peer_id())

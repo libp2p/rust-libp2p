@@ -18,6 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+//! Implementation of the libp2p-specific [mDNS](https://github.com/libp2p/specs/blob/master/discovery/mdns.md) protocol.
+//!
 //! mDNS is a protocol defined by [RFC 6762](https://tools.ietf.org/html/rfc6762) that allows
 //! querying nodes that correspond to a certain domain name.
 //!
@@ -30,6 +32,9 @@
 //! implements the `NetworkBehaviour` trait. This struct will automatically discover other
 //! libp2p nodes on the local network.
 //!
+
+#![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
+
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::time::Duration;
 

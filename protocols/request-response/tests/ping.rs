@@ -25,14 +25,15 @@ use futures::{channel::mpsc, prelude::*, AsyncWriteExt};
 use libp2p::core::{
     identity,
     muxing::StreamMuxerBox,
-    transport::{self, Transport},
+    transport,
     upgrade::{self, read_length_prefixed, write_length_prefixed},
     Multiaddr, PeerId,
 };
 use libp2p::noise::NoiseAuthenticated;
 use libp2p::request_response::*;
 use libp2p::swarm::{Swarm, SwarmEvent};
-use libp2p::tcp::{GenTcpConfig, TcpTransport};
+use libp2p::tcp;
+use libp2p_core::Transport;
 use rand::{self, Rng};
 use std::{io, iter};
 
@@ -298,7 +299,7 @@ fn mk_transport() -> (PeerId, transport::Boxed<(PeerId, StreamMuxerBox)>) {
 
     (
         peer_id,
-        TcpTransport::new(GenTcpConfig::default().nodelay(true))
+        tcp::async_io::Transport::new(tcp::Config::default().nodelay(true))
             .upgrade(upgrade::Version::V1)
             .authenticate(NoiseAuthenticated::xx(&id_keys).unwrap())
             .multiplex(libp2p::yamux::YamuxConfig::default())
