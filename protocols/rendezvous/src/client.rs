@@ -202,7 +202,7 @@ impl NetworkBehaviour for Behaviour {
     fn new_handler(&mut self) -> Self::ConnectionHandler {
         from_fn::from_fn(
             PROTOCOL_IDENT,
-            (),
+            &from_fn::Shared::new(()),
             10,
             10,
             |_, _, _, _| async {},

@@ -120,7 +120,7 @@ impl NetworkBehaviour for Behaviour {
     fn new_handler(&mut self) -> Self::ConnectionHandler {
         from_fn(
             PROTOCOL_IDENT,
-            self.registration_data.clone(),
+            &self.registration_data,
             10,
             10,
             inbound_stream_handler,

@@ -46,7 +46,7 @@ use void::Void;
 /// [`NetworkBehaviour`]: crate::NetworkBehaviour
 pub fn from_fn<TInbound, TOutbound, TOutboundOpenInfo, TState, TInboundFuture, TOutboundFuture>(
     protocol: &'static str,
-    state: TState,
+    state: &Shared<TState>,
     inbound_streams_limit: usize,
     pending_dial_limit: usize,
     on_new_inbound: impl Fn(NegotiatedSubstream, PeerId, &ConnectedPoint, &TState) -> TInboundFuture
@@ -63,6 +63,7 @@ pub fn from_fn<TInbound, TOutbound, TOutboundOpenInfo, TState, TInboundFuture, T
         + 'static,
 ) -> FromFnProto<TInbound, TOutbound, TOutboundOpenInfo, TState>
 where
+    TState: Clone,
     TInboundFuture: Future<Output = TInbound> + Send + 'static,
     TOutboundFuture: Future<Output = TOutbound> + Send + 'static,
 {
@@ -78,7 +79,7 @@ where
                 on_new_outbound(stream, remote_peer_id, connected_point, state, info).boxed()
             },
         ),
-        state,
+        state: state.inner.clone(),
     }
 }
 
@@ -615,7 +616,7 @@ mod tests {
         fn new_handler(&mut self) -> Self::ConnectionHandler {
             from_fn(
                 "/hello/1.0.0",
-                self.state.clone(),
+                &self.state,
                 5,
                 5,
                 |mut stream, _, _, state| {
