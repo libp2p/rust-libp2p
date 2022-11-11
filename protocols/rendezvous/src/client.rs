@@ -226,15 +226,15 @@ impl NetworkBehaviour for Behaviour {
         event: from_fn::OutEvent<(), Result<OutboundEvent, Error>, OpenInfo>,
     ) {
         match event {
-            OutEvent::InboundFinished(()) => {}
-            OutEvent::OutboundFinished(Ok(OutboundEvent::Discovered { .. })) => {}
-            OutEvent::OutboundFinished(Ok(OutboundEvent::Registered { .. })) => {}
-            OutEvent::OutboundFinished(Ok(OutboundEvent::DiscoverFailed { .. })) => {}
-            OutEvent::OutboundFinished(Ok(OutboundEvent::RegisterFailed(..))) => {}
-            OutEvent::OutboundFinished(Err(e)) => {}
-            OutEvent::FailedToOpen(from_fn::OpenError::Timeout(info)) => {}
-            OutEvent::FailedToOpen(from_fn::OpenError::NegotiationFailed(..)) => {}
-            OutEvent::FailedToOpen(from_fn::OpenError::LimitExceeded(..)) => {}
+            from_fn::OutEvent::InboundFinished(()) => {}
+            from_fn::OutEvent::OutboundFinished(Ok(OutboundEvent::Discovered { .. })) => {}
+            from_fn::OutEvent::OutboundFinished(Ok(OutboundEvent::Registered { .. })) => {}
+            from_fn::OutEvent::OutboundFinished(Ok(OutboundEvent::DiscoverFailed { .. })) => {}
+            from_fn::OutEvent::OutboundFinished(Ok(OutboundEvent::RegisterFailed(..))) => {}
+            from_fn::OutEvent::OutboundFinished(Err(e)) => {}
+            from_fn::OutEvent::FailedToOpen(from_fn::OpenError::Timeout(info)) => {}
+            from_fn::OutEvent::FailedToOpen(from_fn::OpenError::NegotiationFailed(..)) => {}
+            from_fn::OutEvent::FailedToOpen(from_fn::OpenError::LimitExceeded(..)) => {}
         }
         //
         // let new_events = match event {
