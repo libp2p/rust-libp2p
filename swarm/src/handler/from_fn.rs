@@ -34,15 +34,11 @@ use void::Void;
 ///
 /// Inbound substreams may be opened at any time by the remote. To facilitate this one and more usecases,
 /// the supplied callbacks for inbound and outbound substream are given access to the handler's `state`
-/// field. This `state` field can contain arbitrary data and can be updated by the [`NetworkBehaviour`]
-/// via [`InEvent::UpdateState`].
+/// field. State can be shared between the [`NetworkBehaviour`] and a [`FromFn`] [`ConnectionHandler`]
+/// via the [`Shared`] abstraction.
 ///
-/// The design of this [`ConnectionHandler`] trades boilerplate (you don't have to write your own handler)
-/// and simplicity (small API surface) for eventual consistency, depending on your protocol design:
-///
-/// Most likely, the [`NetworkBehaviour`] is the authoritive source of `TState` but updates to it have
-/// to be manually performed via [`InEvent::UpdateState`]. Thus, the state given to newly created
-/// substreams, may be outdated and only eventually-consistent.
+/// [`Shared`] tracks a piece of state and updates all registered [`ConnectionHandler`]s whenever the
+/// state changes.
 ///
 /// [`NetworkBehaviour`]: crate::NetworkBehaviour
 pub fn from_fn(protocol: &'static str) -> Builder<WantState> {
