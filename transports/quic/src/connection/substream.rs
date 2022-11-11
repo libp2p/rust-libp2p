@@ -191,7 +191,10 @@ impl AsyncWrite for Substream {
                 Poll::Ready(Err(io::Error::new(io::ErrorKind::ConnectionReset, err)))
             }
             Err(quinn_proto::FinishError::UnknownStream) => {
-                Poll::Ready(Err(io::ErrorKind::BrokenPipe.into()))
+                // We never make up IDs so the stream must have existed at some point if we get to here.
+                // `UnknownStream` is also emitted in case the stream is already finished, hence just
+                // return `Ok(())` here.
+                Poll::Ready(Ok(()))
             }
         }
     }
