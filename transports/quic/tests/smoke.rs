@@ -203,10 +203,8 @@ fn generate_tls_keypair() -> libp2p::identity::Keypair {
 fn create_transport<P: Provider>() -> (PeerId, Boxed<(PeerId, StreamMuxerBox)>) {
     let keypair = generate_tls_keypair();
     let peer_id = keypair.public().to_peer_id();
-    let mut config = quic::Config::new(&keypair);
-    config.handshake_timeout = Duration::from_secs(1);
 
-    let transport = quic::GenTransport::<P>::new(config)
+    let transport = quic::GenTransport::<P>::new(quic::Config::new(&keypair))
         .map(|(p, c), _| (p, StreamMuxerBox::new(c)))
         .boxed();
 
