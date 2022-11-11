@@ -35,7 +35,6 @@ use libp2p_core::identity::error::SigningError;
 use libp2p_core::identity::Keypair;
 use libp2p_core::{ConnectedPoint, Multiaddr, PeerId, PeerRecord};
 use libp2p_swarm::handler::from_fn;
-use libp2p_swarm::handler::from_fn::Dropped;
 use libp2p_swarm::{
     CloseConnection, NegotiatedSubstream, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
     PollParameters,
@@ -45,12 +44,13 @@ use std::future::Future;
 use std::io;
 use std::iter::FromIterator;
 use std::task::{Context, Poll};
+use void::Void;
 
 pub struct Behaviour {
     events: VecDeque<
         NetworkBehaviourAction<
             Event,
-            from_fn::FromFnProto<Dropped, Result<OutboundEvent, Error>, OpenInfo, ()>,
+            from_fn::FromFnProto<Void, Result<OutboundEvent, Error>, OpenInfo, ()>,
         >,
     >,
     keypair: Keypair,
@@ -197,8 +197,7 @@ pub enum OpenInfo {
 }
 
 impl NetworkBehaviour for Behaviour {
-    type ConnectionHandler =
-        from_fn::FromFnProto<Dropped, Result<OutboundEvent, Error>, OpenInfo, ()>;
+    type ConnectionHandler = from_fn::FromFnProto<Void, Result<OutboundEvent, Error>, OpenInfo, ()>;
     type OutEvent = Event;
 
     fn new_handler(&mut self) -> Self::ConnectionHandler {
@@ -221,10 +220,10 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         __id: PeerId,
         _: ConnectionId,
-        event: from_fn::OutEvent<Dropped, Result<OutboundEvent, Error>, OpenInfo>,
+        event: from_fn::OutEvent<Void, Result<OutboundEvent, Error>, OpenInfo>,
     ) {
         match event {
-            from_fn::OutEvent::InboundFinished(Dropped { .. }) => {}
+            from_fn::OutEvent::InboundFinished(never) => void::unreachable(never),
             from_fn::OutEvent::OutboundFinished(Ok(OutboundEvent::Discovered { .. })) => {}
             from_fn::OutEvent::OutboundFinished(Ok(OutboundEvent::Registered { .. })) => {}
             from_fn::OutEvent::OutboundFinished(Ok(OutboundEvent::DiscoverFailed { .. })) => {}

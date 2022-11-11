@@ -8,7 +8,8 @@ use futures::future::FutureExt;
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use libp2p_core::connection::ConnectionId;
-use libp2p_core::upgrade::{NegotiationError, ReadyUpgrade};
+use libp2p_core::either::EitherOutput;
+use libp2p_core::upgrade::{DeniedUpgrade, EitherUpgrade, NegotiationError, ReadyUpgrade};
 use libp2p_core::{ConnectedPoint, PeerId, UpgradeError};
 use std::collections::{HashSet, VecDeque};
 use std::error::Error;
@@ -62,14 +63,16 @@ pub struct WantInboundHandler<TState> {
 pub struct WantOutboundHandler<TState, TInbound> {
     state: Arc<TState>,
     max_inbound: usize,
-    inbound_handler: Box<
-        dyn Fn(
-                NegotiatedSubstream,
-                PeerId,
-                &ConnectedPoint,
-                &TState,
-            ) -> BoxFuture<'static, TInbound>
-            + Send,
+    inbound_handler: Option<
+        Box<
+            dyn Fn(
+                    NegotiatedSubstream,
+                    PeerId,
+                    &ConnectedPoint,
+                    &TState,
+                ) -> BoxFuture<'static, TInbound>
+                + Send,
+        >,
     >,
 }
 
@@ -112,22 +115,20 @@ impl<TState> Builder<WantInboundHandler<TState>> {
             phase: WantOutboundHandler {
                 state: self.phase.state,
                 max_inbound,
-                inbound_handler: Box::new(move |stream, peer, endpoint, state| {
+                inbound_handler: Some(Box::new(move |stream, peer, endpoint, state| {
                     handler(stream, peer, endpoint, state).boxed()
-                }),
+                })),
             },
         }
     }
 
-    pub fn without_inbound_handler(self) -> Builder<WantOutboundHandler<TState, Dropped>> {
+    pub fn without_inbound_handler(self) -> Builder<WantOutboundHandler<TState, Void>> {
         Builder {
             protocol: self.protocol,
             phase: WantOutboundHandler {
                 state: self.phase.state,
-                max_inbound: 1,
-                inbound_handler: Box::new(move |_, peer, _, _| {
-                    async move { Dropped { peer } }.boxed()
-                }),
+                max_inbound: 0,
+                inbound_handler: None,
             },
         }
     }
@@ -174,11 +175,6 @@ impl<TState, TInbound> Builder<WantOutboundHandler<TState, TInbound>> {
             state: self.phase.state,
         }
     }
-}
-
-#[derive(Debug)]
-pub struct Dropped {
-    pub peer: PeerId,
 }
 
 #[derive(Debug)]
@@ -319,14 +315,16 @@ pub enum InEvent<TState, TOutboundOpenInfo> {
 pub struct FromFnProto<TInbound, TOutbound, TOutboundOpenInfo, TState> {
     protocol: &'static str,
 
-    on_new_inbound: Box<
-        dyn Fn(
-                NegotiatedSubstream,
-                PeerId,
-                &ConnectedPoint,
-                &TState,
-            ) -> BoxFuture<'static, TInbound>
-            + Send,
+    on_new_inbound: Option<
+        Box<
+            dyn Fn(
+                    NegotiatedSubstream,
+                    PeerId,
+                    &ConnectedPoint,
+                    &TState,
+                ) -> BoxFuture<'static, TInbound>
+                + Send,
+        >,
     >,
     on_new_outbound: Box<
         dyn Fn(
@@ -378,7 +376,11 @@ where
     }
 
     fn inbound_protocol(&self) -> <Self::Handler as ConnectionHandler>::InboundProtocol {
-        ReadyUpgrade::new(self.protocol)
+        if self.on_new_inbound.is_some() {
+            EitherUpgrade::B(ReadyUpgrade::new(self.protocol))
+        } else {
+            EitherUpgrade::A(DeniedUpgrade)
+        }
     }
 }
 
@@ -390,14 +392,16 @@ pub struct FromFn<TInbound, TOutbound, TOutboundInfo, TState> {
     inbound_streams: FuturesUnordered<BoxFuture<'static, TInbound>>,
     outbound_streams: FuturesUnordered<BoxFuture<'static, TOutbound>>,
 
-    on_new_inbound: Box<
-        dyn Fn(
-                NegotiatedSubstream,
-                PeerId,
-                &ConnectedPoint,
-                &TState,
-            ) -> BoxFuture<'static, TInbound>
-            + Send,
+    on_new_inbound: Option<
+        Box<
+            dyn Fn(
+                    NegotiatedSubstream,
+                    PeerId,
+                    &ConnectedPoint,
+                    &TState,
+                ) -> BoxFuture<'static, TInbound>
+                + Send,
+        >,
     >,
     on_new_outbound: Box<
         dyn Fn(
@@ -433,13 +437,17 @@ where
     type InEvent = InEvent<TState, TOutboundInfo>;
     type OutEvent = OutEvent<TInbound, TOutbound, TOutboundInfo>;
     type Error = Void;
-    type InboundProtocol = ReadyUpgrade<&'static str>;
+    type InboundProtocol = EitherUpgrade<DeniedUpgrade, ReadyUpgrade<&'static str>>;
     type OutboundProtocol = ReadyUpgrade<&'static str>;
     type InboundOpenInfo = ();
     type OutboundOpenInfo = TOutboundInfo;
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
-        SubstreamProtocol::new(ReadyUpgrade::new(self.protocol), ())
+        if self.on_new_inbound.is_some() {
+            SubstreamProtocol::new(EitherUpgrade::B(ReadyUpgrade::new(self.protocol)), ())
+        } else {
+            SubstreamProtocol::new(EitherUpgrade::A(DeniedUpgrade), ())
+        }
     }
 
     fn inject_fully_negotiated_inbound(
@@ -447,21 +455,31 @@ where
         protocol: <Self::InboundProtocol as InboundUpgradeSend>::Output,
         _: Self::InboundOpenInfo,
     ) {
-        if self.inbound_streams.len() >= self.inbound_streams_limit {
-            log::debug!(
-                "Dropping inbound substream because limit ({}) would be exceeded",
-                self.inbound_streams_limit
-            );
-            return;
-        }
+        match protocol {
+            EitherOutput::First(never) => void::unreachable(never),
+            EitherOutput::Second(protocol) => {
+                if self.inbound_streams.len() >= self.inbound_streams_limit {
+                    log::debug!(
+                        "Dropping inbound substream because limit ({}) would be exceeded",
+                        self.inbound_streams_limit
+                    );
+                    return;
+                }
 
-        let inbound_future = (self.on_new_inbound)(
-            protocol,
-            self.remote_peer_id,
-            &self.connected_point,
-            &mut self.state,
-        );
-        self.inbound_streams.push(inbound_future);
+                let on_new_inbound = self
+                    .on_new_inbound
+                    .as_ref()
+                    .expect("to have callback when protocol was negotiated");
+
+                let inbound_future = (on_new_inbound)(
+                    protocol,
+                    self.remote_peer_id,
+                    &self.connected_point,
+                    &mut self.state,
+                );
+                self.inbound_streams.push(inbound_future);
+            }
+        }
     }
 
     fn inject_fully_negotiated_outbound(
