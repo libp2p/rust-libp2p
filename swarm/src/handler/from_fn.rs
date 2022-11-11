@@ -66,8 +66,8 @@ pub struct WantOutboundHandler<TState, TInbound> {
             dyn Fn(
                     NegotiatedSubstream,
                     PeerId,
-                    &ConnectedPoint,
-                    &TState,
+                    ConnectedPoint,
+                    Arc<TState>,
                 ) -> BoxStream<'static, TInbound>
                 + Send,
         >,
@@ -101,7 +101,7 @@ impl<TState> Builder<WantInboundHandler<TState>> {
     pub fn with_inbound_handler<TInbound, TInboundStream>(
         self,
         max_inbound: usize,
-        handler: impl Fn(NegotiatedSubstream, PeerId, &ConnectedPoint, &TState) -> TInboundStream
+        handler: impl Fn(NegotiatedSubstream, PeerId, ConnectedPoint, &TState) -> TInboundStream
             + Send
             + 'static,
     ) -> Builder<WantOutboundHandler<TState, TInbound>>
@@ -116,7 +116,7 @@ impl<TState> Builder<WantInboundHandler<TState>> {
     pub fn with_streaming_inbound_handler<TInbound, TInboundStream>(
         self,
         max_inbound: usize,
-        handler: impl Fn(NegotiatedSubstream, PeerId, &ConnectedPoint, &TState) -> TInboundStream
+        handler: impl Fn(NegotiatedSubstream, PeerId, ConnectedPoint, &TState) -> TInboundStream
             + Send
             + 'static,
     ) -> Builder<WantOutboundHandler<TState, TInbound>>
@@ -129,7 +129,7 @@ impl<TState> Builder<WantInboundHandler<TState>> {
                 state: self.phase.state,
                 max_inbound,
                 inbound_handler: Some(Box::new(move |stream, peer, endpoint, state| {
-                    handler(stream, peer, endpoint, state).boxed()
+                    handler(stream, peer, endpoint, &state).boxed()
                 })),
             },
         }
@@ -154,7 +154,7 @@ impl<TState, TInbound> Builder<WantOutboundHandler<TState, TInbound>> {
         handler: impl Fn(
                 NegotiatedSubstream,
                 PeerId,
-                &ConnectedPoint,
+                ConnectedPoint,
                 &TState,
                 TOutboundInfo,
             ) -> TOutboundStream
@@ -178,7 +178,7 @@ impl<TState, TInbound> Builder<WantOutboundHandler<TState, TInbound>> {
         handler: impl Fn(
                 NegotiatedSubstream,
                 PeerId,
-                &ConnectedPoint,
+                ConnectedPoint,
                 &TState,
                 TOutboundInfo,
             ) -> TOutboundStream
@@ -192,7 +192,7 @@ impl<TState, TInbound> Builder<WantOutboundHandler<TState, TInbound>> {
             protocol: self.protocol,
             on_new_inbound: self.phase.inbound_handler,
             on_new_outbound: Box::new(move |stream, peer, endpoint, state, info| {
-                handler(stream, peer, endpoint, state, info).boxed()
+                handler(stream, peer, endpoint, &state, info).boxed()
             }),
             inbound_streams_limit: self.phase.max_inbound,
             pending_outbound_streams_limit: max_pending_outbound,
@@ -355,8 +355,8 @@ pub struct FromFnProto<TInbound, TOutbound, TOutboundOpenInfo, TState> {
             dyn Fn(
                     NegotiatedSubstream,
                     PeerId,
-                    &ConnectedPoint,
-                    &TState,
+                    ConnectedPoint,
+                    Arc<TState>,
                 ) -> BoxStream<'static, TInbound>
                 + Send,
         >,
@@ -365,8 +365,8 @@ pub struct FromFnProto<TInbound, TOutbound, TOutboundOpenInfo, TState> {
         dyn Fn(
                 NegotiatedSubstream,
                 PeerId,
-                &ConnectedPoint,
-                &TState,
+                ConnectedPoint,
+                Arc<TState>,
                 TOutboundOpenInfo,
             ) -> BoxStream<'static, TOutbound>
             + Send,
@@ -432,8 +432,8 @@ pub struct FromFn<TInbound, TOutbound, TOutboundInfo, TState> {
             dyn Fn(
                     NegotiatedSubstream,
                     PeerId,
-                    &ConnectedPoint,
-                    &TState,
+                    ConnectedPoint,
+                    Arc<TState>,
                 ) -> BoxStream<'static, TInbound>
                 + Send,
         >,
@@ -442,8 +442,8 @@ pub struct FromFn<TInbound, TOutbound, TOutboundInfo, TState> {
         dyn Fn(
                 NegotiatedSubstream,
                 PeerId,
-                &ConnectedPoint,
-                &TState,
+                ConnectedPoint,
+                Arc<TState>,
                 TOutboundInfo,
             ) -> BoxStream<'static, TOutbound>
             + Send,
@@ -509,8 +509,8 @@ where
                 let inbound_future = (on_new_inbound)(
                     protocol,
                     self.remote_peer_id,
-                    &self.connected_point,
-                    &mut self.state,
+                    self.connected_point.clone(),
+                    Arc::clone(&self.state),
                 );
                 self.inbound_streams.push(inbound_future);
             }
@@ -525,8 +525,8 @@ where
         let outbound_future = (self.on_new_outbound)(
             protocol,
             self.remote_peer_id,
-            &self.connected_point,
-            &mut self.state,
+            self.connected_point.clone(),
+            Arc::clone(&self.state),
             info,
         );
         self.outbound_streams.push(outbound_future);

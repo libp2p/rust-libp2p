@@ -27,7 +27,7 @@ use asynchronous_codec::Framed;
 use bimap::BiMap;
 use futures::future::BoxFuture;
 use futures::stream::FuturesUnordered;
-use futures::{ready, SinkExt, Stream};
+use futures::{ready, SinkExt};
 use futures::{FutureExt, StreamExt};
 use libp2p_core::connection::ConnectionId;
 use libp2p_core::{ConnectedPoint, Multiaddr, PeerId};
@@ -160,11 +160,10 @@ impl NetworkBehaviour for Behaviour {
             )))) => self
                 .registrations
                 .add(new_registration, &mut self.registration_data),
-            from_fn::OutEvent::InboundEmitted(Ok(Some(InboundOutEvent::Unregister(
-                namespace,
-            )))) => self
-                .registrations
-                .remove(namespace, peer_id, &mut self.registration_data),
+            from_fn::OutEvent::InboundEmitted(Ok(Some(InboundOutEvent::Unregister(namespace)))) => {
+                self.registrations
+                    .remove(namespace, peer_id, &mut self.registration_data)
+            }
             from_fn::OutEvent::OutboundEmitted(_) => {}
             from_fn::OutEvent::FailedToOpen(never) => match never {
                 from_fn::OpenError::Timeout(never) => void::unreachable(never),
@@ -202,7 +201,7 @@ impl NetworkBehaviour for Behaviour {
 fn inbound_stream_handler(
     substream: NegotiatedSubstream,
     _: PeerId,
-    _: &ConnectedPoint,
+    _: ConnectedPoint,
     registrations: &RegistrationData,
 ) -> impl Future<Output = Result<Option<InboundOutEvent>, Error>> {
     let mut registrations = registrations.clone();

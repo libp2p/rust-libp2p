@@ -383,7 +383,7 @@ impl NetworkBehaviour for Behaviour {
 fn outbound_stream_handler(
     substream: NegotiatedSubstream,
     _: PeerId,
-    _: &ConnectedPoint,
+    _: ConnectedPoint,
     _: &(),
     request: OpenInfo,
 ) -> impl Future<Output = Result<OutboundEvent, Error>> {
