@@ -634,7 +634,10 @@ where
     {
         let target: kbucket::Key<K> = key.clone().into();
         let key: Vec<u8> = key.into();
-        let info = QueryInfo::GetClosestPeers { key, count: 0 };
+        let info = QueryInfo::GetClosestPeers {
+            key,
+            step: ProgressStep::first(),
+        };
         let peer_keys: Vec<kbucket::Key<PeerId>> = self.kbuckets.closest_keys(&target).collect();
         let inner = QueryInner::new(info);
         self.queries.add_iter_closest(target, peer_keys, inner)
@@ -667,10 +670,12 @@ where
             None
         };
 
+        let step = ProgressStep::first();
+
         let target = kbucket::Key::new(key.clone());
         let info = QueryInfo::GetRecord {
             key,
-            count: 1,
+            step: step.next(),
             found_a_record: record.is_some(),
         };
         let peers = self.kbuckets.closest_keys(&target);
@@ -685,7 +690,7 @@ where
                 KademliaEvent::OutboundQueryProgressed {
                     id,
                     result: QueryResult::GetRecord(Ok(GetRecordOk { record })),
-                    step: ProgressStep::first(),
+                    step,
                     stats,
                 },
             ));
@@ -827,6 +832,7 @@ where
         let info = QueryInfo::Bootstrap {
             peer: *local_key.preimage(),
             remaining: None,
+            step: ProgressStep::first(),
         };
         let peers = self.kbuckets.closest_keys(&local_key).collect::<Vec<_>>();
         if peers.is_empty() {
@@ -907,8 +913,8 @@ where
 
         let info = QueryInfo::GetProviders {
             key: key.clone(),
-            count: 1,
             providers_found: providers.len(),
+            step: ProgressStep::first(),
         };
 
         let target = kbucket::Key::new(key.clone());
@@ -1185,7 +1191,11 @@ where
         log::trace!("Query {:?} finished.", query_id);
         let result = q.into_result();
         match result.inner.info {
-            QueryInfo::Bootstrap { peer, remaining } => {
+            QueryInfo::Bootstrap {
+                peer,
+                remaining,
+                mut step,
+            } => {
                 let local_key = self.kbuckets.local_key().clone();
                 let mut remaining = remaining.unwrap_or_else(|| {
                     debug_assert_eq!(&peer, local_key.preimage());
@@ -1231,12 +1241,15 @@ where
                     let info = QueryInfo::Bootstrap {
                         peer: *target.preimage(),
                         remaining: Some(remaining),
+                        step: step.next(),
                     };
                     let peers = self.kbuckets.closest_keys(&target);
                     let inner = QueryInner::new(info);
                     self.queries
                         .continue_iter_closest(query_id, target.clone(), peers, inner);
-                }
+                } else {
+                    step.last = true;
+                };
 
                 Some(KademliaEvent::OutboundQueryProgressed {
                     id: query_id,
@@ -1245,11 +1258,13 @@ where
                         peer,
                         num_remaining,
                     })),
-                    step: ProgressStep::single(),
+                    step,
                 })
             }
 
-            QueryInfo::GetClosestPeers { key, count } => {
+            QueryInfo::GetClosestPeers { key, mut step } => {
+                step.last = true;
+
                 Some(KademliaEvent::OutboundQueryProgressed {
                     id: query_id,
                     stats: result.stats,
@@ -1257,26 +1272,30 @@ where
                         key,
                         peers: result.peers.collect(),
                     })),
-                    step: ProgressStep::nth_last(count + 1),
+                    step,
                 })
             }
 
             QueryInfo::GetProviders {
                 key,
-                count,
+                mut step,
                 providers_found,
                 ..
-            } => Some(KademliaEvent::OutboundQueryProgressed {
-                id: query_id,
-                stats: result.stats,
-                result: QueryResult::GetProviders(Ok(GetProvidersOk {
-                    key,
-                    providers: Default::default(),
-                    providers_so_far: providers_found,
-                    closest_peers: result.peers.collect(),
-                })),
-                step: ProgressStep::nth_last(count + 1),
-            }),
+            } => {
+                step.last = true;
+
+                Some(KademliaEvent::OutboundQueryProgressed {
+                    id: query_id,
+                    stats: result.stats,
+                    result: QueryResult::GetProviders(Ok(GetProvidersOk {
+                        key,
+                        providers: Default::default(),
+                        providers_so_far: providers_found,
+                        closest_peers: result.peers.collect(),
+                    })),
+                    step,
+                })
+            }
 
             QueryInfo::AddProvider {
                 context,
@@ -1311,21 +1330,23 @@ where
                     id: query_id,
                     stats: get_closest_peers_stats.merge(result.stats),
                     result: QueryResult::StartProviding(Ok(AddProviderOk { key })),
-                    step: ProgressStep::single(),
+                    step: ProgressStep::first_and_last(),
                 }),
                 AddProviderContext::Republish => Some(KademliaEvent::OutboundQueryProgressed {
                     id: query_id,
                     stats: get_closest_peers_stats.merge(result.stats),
                     result: QueryResult::RepublishProvider(Ok(AddProviderOk { key })),
-                    step: ProgressStep::single(),
+                    step: ProgressStep::first_and_last(),
                 }),
             },
 
             QueryInfo::GetRecord {
                 key,
-                count,
+                mut step,
                 found_a_record,
             } => {
+                step.last = true;
+
                 let results = if found_a_record {
                     Ok(GetRecordOk {
                         record: Default::default(),
@@ -1340,7 +1361,7 @@ where
                     id: query_id,
                     stats: result.stats,
                     result: QueryResult::GetRecord(results),
-                    step: ProgressStep::nth_last(count + 1),
+                    step,
                 })
             }
 
@@ -1391,14 +1412,14 @@ where
                             id: query_id,
                             stats: get_closest_peers_stats.merge(result.stats),
                             result: QueryResult::PutRecord(mk_result(record.key)),
-                            step: ProgressStep::single(),
+                            step: ProgressStep::first_and_last(),
                         })
                     }
                     PutRecordContext::Republish => Some(KademliaEvent::OutboundQueryProgressed {
                         id: query_id,
                         stats: get_closest_peers_stats.merge(result.stats),
                         result: QueryResult::RepublishRecord(mk_result(record.key)),
-                        step: ProgressStep::single(),
+                        step: ProgressStep::first_and_last(),
                     }),
                     PutRecordContext::Replicate => {
                         debug!("Record replicated: {:?}", record.key);
@@ -1422,21 +1443,25 @@ where
             QueryInfo::Bootstrap {
                 peer,
                 mut remaining,
+                mut step,
             } => {
                 let num_remaining = remaining.as_ref().map(|r| r.len().saturating_sub(1) as u32);
 
-                if let Some(mut remaining) = remaining.take() {
-                    // Continue with the next bootstrap query if `remaining` is not empty.
-                    if let Some(target) = remaining.next() {
-                        let info = QueryInfo::Bootstrap {
-                            peer: target.clone().into_preimage(),
-                            remaining: Some(remaining),
-                        };
-                        let peers = self.kbuckets.closest_keys(&target);
-                        let inner = QueryInner::new(info);
-                        self.queries
-                            .continue_iter_closest(query_id, target.clone(), peers, inner);
-                    }
+                // Continue with the next bootstrap query if `remaining` is not empty.
+                if let Some((target, remaining)) =
+                    remaining.take().and_then(|mut r| Some((r.next()?, r)))
+                {
+                    let info = QueryInfo::Bootstrap {
+                        peer: target.clone().into_preimage(),
+                        remaining: Some(remaining),
+                        step: step.next(),
+                    };
+                    let peers = self.kbuckets.closest_keys(&target);
+                    let inner = QueryInner::new(info);
+                    self.queries
+                        .continue_iter_closest(query_id, target.clone(), peers, inner);
+                } else {
+                    step.last = true;
                 }
 
                 Some(KademliaEvent::OutboundQueryProgressed {
@@ -1446,7 +1471,7 @@ where
                         peer,
                         num_remaining,
                     })),
-                    step: ProgressStep::single(),
+                    step,
                 })
             }
 
@@ -1455,17 +1480,19 @@ where
                     id: query_id,
                     stats: result.stats,
                     result: QueryResult::StartProviding(Err(AddProviderError::Timeout { key })),
-                    step: ProgressStep::single(),
+                    step: ProgressStep::first_and_last(),
                 },
                 AddProviderContext::Republish => KademliaEvent::OutboundQueryProgressed {
                     id: query_id,
                     stats: result.stats,
                     result: QueryResult::RepublishProvider(Err(AddProviderError::Timeout { key })),
-                    step: ProgressStep::single(),
+                    step: ProgressStep::first_and_last(),
                 },
             }),
 
-            QueryInfo::GetClosestPeers { key, count } => {
+            QueryInfo::GetClosestPeers { key, mut step } => {
+                step.last = true;
+
                 Some(KademliaEvent::OutboundQueryProgressed {
                     id: query_id,
                     stats: result.stats,
@@ -1473,7 +1500,7 @@ where
                         key,
                         peers: result.peers.collect(),
                     })),
-                    step: ProgressStep::nth_last(count + 1),
+                    step,
                 })
             }
 
@@ -1497,14 +1524,14 @@ where
                             id: query_id,
                             stats: result.stats,
                             result: QueryResult::PutRecord(err),
-                            step: ProgressStep::single(),
+                            step: ProgressStep::first_and_last(),
                         })
                     }
                     PutRecordContext::Republish => Some(KademliaEvent::OutboundQueryProgressed {
                         id: query_id,
                         stats: result.stats,
                         result: QueryResult::RepublishRecord(err),
-                        step: ProgressStep::single(),
+                        step: ProgressStep::first_and_last(),
                     }),
                     PutRecordContext::Replicate => match phase {
                         PutRecordPhase::GetClosestPeers => {
@@ -1531,16 +1558,20 @@ where
                 }
             }
 
-            QueryInfo::GetRecord { key, count, .. } => {
+            QueryInfo::GetRecord { key, mut step, .. } => {
+                step.last = true;
+
                 Some(KademliaEvent::OutboundQueryProgressed {
                     id: query_id,
                     stats: result.stats,
                     result: QueryResult::GetRecord(Err(GetRecordError::Timeout { key })),
-                    step: ProgressStep::nth_last(count + 1),
+                    step,
                 })
             }
 
-            QueryInfo::GetProviders { key, count, .. } => {
+            QueryInfo::GetProviders { key, mut step, .. } => {
+                step.last = true;
+
                 Some(KademliaEvent::OutboundQueryProgressed {
                     id: query_id,
                     stats: result.stats,
@@ -1548,7 +1579,7 @@ where
                         key,
                         closest_peers: result.peers.collect(),
                     })),
-                    step: ProgressStep::nth_last(count + 1),
+                    step,
                 })
             }
         }
@@ -2052,12 +2083,11 @@ where
                     if let QueryInfo::GetProviders {
                         ref key,
                         ref mut providers_found,
-                        ref mut count,
+                        ref mut step,
                         ..
                     } = query.inner.info
                     {
                         *providers_found += provider_peers.len();
-                        *count += 1;
                         let providers = provider_peers.iter().map(|p| p.node_id).collect();
 
                         self.queued_events
@@ -2070,10 +2100,11 @@ where
                                         providers_so_far: *providers_found,
                                         closest_peers,
                                     })),
-                                    step: ProgressStep::nth(*count),
+                                    step: step.clone(),
                                     stats,
                                 },
                             ));
+                        *step = step.next();
                     }
                 }
             }
@@ -2148,7 +2179,7 @@ where
                     let stats = query.stats().clone();
                     if let QueryInfo::GetRecord {
                         key,
-                        ref mut count,
+                        ref mut step,
                         ref mut found_a_record,
                     } = &mut query.inner.info
                     {
@@ -2159,7 +2190,6 @@ where
                                 record,
                             };
 
-                            *count += 1;
                             self.queued_events
                                 .push_back(NetworkBehaviourAction::GenerateEvent(
                                     KademliaEvent::OutboundQueryProgressed {
@@ -2167,10 +2197,12 @@ where
                                         result: QueryResult::GetRecord(Ok(GetRecordOk {
                                             record: Some(record),
                                         })),
-                                        step: ProgressStep::nth(*count),
+                                        step: step.clone(),
                                         stats,
                                     },
                                 ));
+
+                            *step = step.next();
                         } else {
                             log::trace!("Record with key {:?} not found at {}", key, source);
                         }
@@ -2491,27 +2523,29 @@ pub struct ProgressStep {
 }
 
 impl ProgressStep {
-    /// Generates the first step.
+    // TODO Why the pub?
     pub(crate) fn first() -> Self {
-        Self::nth(1)
-    }
-
-    /// Generates an index for the case only a single event is emitted.
-    pub(crate) fn single() -> Self {
-        Self::nth_last(1)
-    }
-
-    pub(crate) fn nth(count: usize) -> Self {
         Self {
-            count: NonZeroUsize::new(count).unwrap(),
+            count: NonZeroUsize::new(1).expect("1 to be greater than 0."),
             last: false,
         }
     }
 
-    pub(crate) fn nth_last(count: usize) -> Self {
+    pub(crate) fn first_and_last() -> Self {
+        let mut first = ProgressStep::first();
+        first.last = true;
+        first
+    }
+
+    pub(crate) fn next(&self) -> Self {
+        assert!(!self.last);
+
         Self {
-            count: NonZeroUsize::new(count).unwrap(),
-            last: true,
+            count: self
+                .count
+                .checked_add(1)
+                .expect("Not to exhaust usize space."),
+            last: false,
         }
     }
 }
@@ -2883,6 +2917,7 @@ pub enum QueryInfo {
         /// yet completed and `Some` with an exhausted iterator
         /// if bootstrapping is complete.
         remaining: Option<vec::IntoIter<kbucket::Key<PeerId>>>,
+        step: ProgressStep,
     },
 
     /// A query initiated by [`Kademlia::get_closest_peers`].
@@ -2890,7 +2925,7 @@ pub enum QueryInfo {
         /// The key being queried (the preimage).
         key: Vec<u8>,
         /// Current index of events.
-        count: usize,
+        step: ProgressStep,
     },
 
     /// A (repeated) query initiated by [`Kademlia::get_providers`].
@@ -2900,7 +2935,7 @@ pub enum QueryInfo {
         /// The number of providers found so far.
         providers_found: usize,
         /// Current index of events.
-        count: usize,
+        step: ProgressStep,
     },
 
     /// A (repeated) query initiated by [`Kademlia::start_providing`].
@@ -2929,7 +2964,7 @@ pub enum QueryInfo {
         /// The key to look for.
         key: record::Key,
         /// Current index of events.
-        count: usize,
+        step: ProgressStep,
         /// Did we find at least one record?
         found_a_record: bool,
     },
