@@ -592,7 +592,7 @@ fn put_record() {
                             assert!(stats.num_successes() >= replication_factor.get() as u32);
                             assert!(stats.num_requests() >= stats.num_successes());
                             assert_eq!(stats.num_failures(), 0);
-                            assert_eq!(index.count, 1);
+                            assert_eq!(usize::from(index.count), 1);
                             assert!(index.last);
                             match res {
                                 Err(e) => panic!("{:?}", e),
@@ -774,14 +774,14 @@ fn get_record() {
                         },
                     ))) => {
                         assert_eq!(id, qid);
-                        if count == 1 {
+                        if usize::from(count) == 1 {
                             assert!(r.is_none());
                         }
-                        if count == 2 {
+                        if usize::from(count) == 2 {
                             assert_eq!(r.expect("missing record").record, record);
                         }
                         if last {
-                            assert_eq!(count, 3);
+                            assert_eq!(usize::from(count), 3);
                         }
                         return Poll::Ready(());
                     }

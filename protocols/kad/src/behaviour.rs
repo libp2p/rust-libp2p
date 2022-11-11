@@ -633,15 +633,11 @@ where
         K: Into<kbucket::Key<K>> + Into<Vec<u8>> + Clone,
     {
         let target: kbucket::Key<K> = key.clone().into();
-        let key: Vec<u8> = key.clone().into();
-        let info = QueryInfo::GetClosestPeers {
-            key: key.clone(),
-            count: 0,
-        };
+        let key: Vec<u8> = key.into();
+        let info = QueryInfo::GetClosestPeers { key, count: 0 };
         let peer_keys: Vec<kbucket::Key<PeerId>> = self.kbuckets.closest_keys(&target).collect();
         let inner = QueryInner::new(info);
-        self.queries
-            .add_iter_closest(target.clone(), peer_keys.clone(), inner)
+        self.queries.add_iter_closest(target, peer_keys, inner)
     }
 
     /// Returns closest peers to the given key; takes peers from local routing table only.
@@ -689,10 +685,7 @@ where
                 KademliaEvent::OutboundQueryProgressed {
                     id,
                     result: QueryResult::GetRecord(Ok(GetRecordOk { record })),
-                    step: ProgressStep {
-                        count: 1,
-                        last: false,
-                    },
+                    step: ProgressStep::first(),
                     stats,
                 },
             ));
@@ -936,10 +929,7 @@ where
                         providers,
                         closest_peers: Default::default(),
                     })),
-                    step: ProgressStep {
-                        count: 1,
-                        last: false,
-                    },
+                    step: ProgressStep::first(),
                     stats,
                 },
             ));
@@ -1255,10 +1245,7 @@ where
                         peer,
                         num_remaining,
                     })),
-                    step: ProgressStep {
-                        count: 1,
-                        last: true,
-                    },
+                    step: ProgressStep::single(),
                 })
             }
 
@@ -1270,10 +1257,7 @@ where
                         key,
                         peers: result.peers.collect(),
                     })),
-                    step: ProgressStep {
-                        count: count + 1,
-                        last: true,
-                    },
+                    step: ProgressStep::nth_last(count + 1),
                 })
             }
 
@@ -1291,10 +1275,7 @@ where
                     providers_so_far: providers_found,
                     closest_peers: result.peers.collect(),
                 })),
-                step: ProgressStep {
-                    count: count + 1,
-                    last: true,
-                },
+                step: ProgressStep::nth_last(count + 1),
             }),
 
             QueryInfo::AddProvider {
@@ -1359,10 +1340,7 @@ where
                     id: query_id,
                     stats: result.stats,
                     result: QueryResult::GetRecord(results),
-                    step: ProgressStep {
-                        count: count + 1,
-                        last: true,
-                    },
+                    step: ProgressStep::nth_last(count + 1),
                 })
             }
 
@@ -1495,10 +1473,7 @@ where
                         key,
                         peers: result.peers.collect(),
                     })),
-                    step: ProgressStep {
-                        count: count + 1,
-                        last: true,
-                    },
+                    step: ProgressStep::nth_last(count + 1),
                 })
             }
 
@@ -1561,10 +1536,7 @@ where
                     id: query_id,
                     stats: result.stats,
                     result: QueryResult::GetRecord(Err(GetRecordError::Timeout { key })),
-                    step: ProgressStep {
-                        count: count + 1,
-                        last: true,
-                    },
+                    step: ProgressStep::nth_last(count + 1),
                 })
             }
 
@@ -1576,10 +1548,7 @@ where
                         key,
                         closest_peers: result.peers.collect(),
                     })),
-                    step: ProgressStep {
-                        count: count + 1,
-                        last: true,
-                    },
+                    step: ProgressStep::nth_last(count + 1),
                 })
             }
         }
@@ -2101,10 +2070,7 @@ where
                                         providers_so_far: *providers_found,
                                         closest_peers,
                                     })),
-                                    step: ProgressStep {
-                                        count: *count,
-                                        last: false,
-                                    },
+                                    step: ProgressStep::nth(*count),
                                     stats,
                                 },
                             ));
@@ -2201,10 +2167,7 @@ where
                                         result: QueryResult::GetRecord(Ok(GetRecordOk {
                                             record: Some(record),
                                         })),
-                                        step: ProgressStep {
-                                            count: *count,
-                                            last: false,
-                                        },
+                                        step: ProgressStep::nth(*count),
                                         stats,
                                     },
                                 ));
@@ -2522,16 +2485,32 @@ pub enum KademliaEvent {
 #[derive(Debug, Clone)]
 pub struct ProgressStep {
     /// The index into the event
-    pub count: usize,
+    pub count: NonZeroUsize,
     /// Is this the final event?
     pub last: bool,
 }
 
 impl ProgressStep {
+    /// Generates the first step.
+    pub(crate) fn first() -> Self {
+        Self::nth(1)
+    }
+
     /// Generates an index for the case only a single event is emitted.
     pub(crate) fn single() -> Self {
+        Self::nth_last(1)
+    }
+
+    pub(crate) fn nth(count: usize) -> Self {
         Self {
-            count: 1,
+            count: NonZeroUsize::new(count).unwrap(),
+            last: false,
+        }
+    }
+
+    pub(crate) fn nth_last(count: usize) -> Self {
+        Self {
+            count: NonZeroUsize::new(count).unwrap(),
             last: true,
         }
     }
