@@ -758,8 +758,6 @@ fn get_record() {
 
     let record = Record::new(random_multihash(), vec![4, 5, 6]);
 
-    let expected_cache_candidate = *Swarm::local_peer_id(&swarms[1]);
-
     swarms[2].behaviour_mut().store.put(record.clone()).unwrap();
     let qid = swarms[0].behaviour_mut().get_record(record.key.clone());
 
@@ -770,11 +768,7 @@ fn get_record() {
                     Poll::Ready(Some(SwarmEvent::Behaviour(
                         KademliaEvent::OutboundQueryProgressed {
                             id,
-                            result:
-                                QueryResult::GetRecord(Ok(GetRecordOk {
-                                    record: r,
-                                    cache_candidates,
-                                })),
+                            result: QueryResult::GetRecord(Ok(GetRecordOk { record: r })),
                             step: ProgressStep { count, last },
                             ..
                         },
@@ -788,11 +782,6 @@ fn get_record() {
                         }
                         if last {
                             assert_eq!(count, 3);
-                            assert_eq!(cache_candidates.len(), 1);
-                            assert_eq!(
-                                cache_candidates.values().next(),
-                                Some(&expected_cache_candidate)
-                            );
                         }
                         return Poll::Ready(());
                     }

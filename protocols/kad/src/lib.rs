@@ -63,8 +63,7 @@ pub use behaviour::{
     QueryResult, QueryStats,
 };
 pub use behaviour::{
-    Kademlia, KademliaBucketInserts, KademliaCaching, KademliaConfig, KademliaEvent,
-    KademliaStoreInserts, Quorum,
+    Kademlia, KademliaBucketInserts, KademliaConfig, KademliaEvent, KademliaStoreInserts, Quorum,
 };
 pub use protocol::KadConnectionType;
 pub use query::QueryId;

@@ -50,7 +50,7 @@ use libp2p_swarm::{
 };
 use log::{debug, info, warn};
 use smallvec::SmallVec;
-use std::collections::{BTreeMap, HashSet, VecDeque};
+use std::collections::{HashSet, VecDeque};
 use std::fmt;
 use std::num::NonZeroUsize;
 use std::task::{Context, Poll};
@@ -105,9 +105,6 @@ pub struct Kademlia<TStore> {
 
     /// The currently known addresses of the local node.
     local_addrs: HashSet<Multiaddr>,
-
-    /// See [`KademliaConfig::caching`].
-    caching: KademliaCaching,
 
     /// The record storage.
     store: TStore,
@@ -176,24 +173,6 @@ pub struct KademliaConfig {
     provider_publication_interval: Option<Duration>,
     connection_idle_timeout: Duration,
     kbucket_inserts: KademliaBucketInserts,
-    caching: KademliaCaching,
-}
-
-/// The configuration for Kademlia "write-back" caching after successful
-/// lookups via [`Kademlia::get_record`].
-#[derive(Debug, Clone)]
-pub enum KademliaCaching {
-    /// Caching is disabled and the peers closest to records being looked up
-    /// that do not return a record are not tracked, i.e.
-    /// [`GetRecordOk::cache_candidates`] is always empty.
-    Disabled,
-    /// Up to `max_peers` peers not returning a record that are closest to the key
-    /// being looked up are tracked and returned in [`GetRecordOk::cache_candidates`].
-    /// Furthermore, if [`Kademlia::get_record`] is used with a quorum of 1, the
-    /// found record is automatically sent to (i.e. cached at) these peers. For lookups with a
-    /// quorum > 1, the write-back operation must be performed explicitly, if
-    /// desired and after choosing a record from the results, via [`Kademlia::put_record_to`].
-    Enabled { max_peers: u16 },
 }
 
 impl Default for KademliaConfig {
@@ -210,7 +189,6 @@ impl Default for KademliaConfig {
             provider_record_ttl: Some(Duration::from_secs(24 * 60 * 60)),
             connection_idle_timeout: Duration::from_secs(10),
             kbucket_inserts: KademliaBucketInserts::OnConnected,
-            caching: KademliaCaching::Enabled { max_peers: 1 },
         }
     }
 }
@@ -385,17 +363,6 @@ impl KademliaConfig {
         self.kbucket_inserts = inserts;
         self
     }
-
-    /// Sets the [`KademliaCaching`] strategy to use for successful lookups.
-    ///
-    /// The default is [`KademliaCaching::Enabled`] with a `max_peers` of 1.
-    /// Hence, with default settings and a lookup quorum of 1, a successful lookup
-    /// will result in the record being cached at the closest node to the key that
-    /// did not return the record, i.e. the standard Kademlia behaviour.
-    pub fn set_caching(&mut self, c: KademliaCaching) -> &mut Self {
-        self.caching = c;
-        self
-    }
 }
 
 impl<TStore> Kademlia<TStore>
@@ -448,7 +415,6 @@ where
             provider_record_ttl: config.provider_record_ttl,
             connection_idle_timeout: config.connection_idle_timeout,
             local_addrs: HashSet::new(),
-            caching: config.caching,
         }
     }
 
@@ -710,7 +676,6 @@ where
             key,
             count: 1,
             found_a_record: record.is_some(),
-            cache_candidates: BTreeMap::new(),
         };
         let peers = self.kbuckets.closest_keys(&target);
         let inner = QueryInner::new(info);
@@ -723,10 +688,7 @@ where
             .push_back(NetworkBehaviourAction::GenerateEvent(
                 KademliaEvent::OutboundQueryProgressed {
                     id,
-                    result: QueryResult::GetRecord(Ok(GetRecordOk {
-                        record,
-                        cache_candidates: Default::default(),
-                    })),
+                    result: QueryResult::GetRecord(Ok(GetRecordOk { record })),
                     step: ProgressStep {
                         count: 1,
                         last: false,
@@ -787,19 +749,16 @@ where
     ///
     /// If the record's expiration is `None`, the configured record TTL is used.
     ///
-    /// > **Note**: This is not a regular Kademlia DHT operation. It may be
+    /// > **Note**: This is not a regular Kademlia DHT operation. It needs to be
     /// > used to selectively update or store a record to specific peers
     /// > for the purpose of e.g. making sure these peers have the latest
     /// > "version" of a record or to "cache" a record at further peers
     /// > to increase the lookup success rate on the DHT for other peers.
     /// >
-    /// > In particular, if lookups are performed with a quorum > 1 multiple
-    /// > possibly different records may be returned and the standard Kademlia
+    /// > In particular, there is no automatic storing of records performed, and this
+    /// > method must be used to ensure the standard Kademlia
     /// > procedure of "caching" (i.e. storing) a found record at the closest
-    /// > node to the key that _did not_ return it cannot be employed
-    /// > transparently. In that case, client code can explicitly choose
-    /// > which record to store at which peers for analogous write-back
-    /// > caching or for other reasons.
+    /// > node to the key that _did not_ return it.
     pub fn put_record_to<I>(&mut self, mut record: Record, peers: I, quorum: Quorum) -> QueryId
     where
         I: ExactSizeIterator<Item = PeerId>,
@@ -1385,12 +1344,10 @@ where
                 key,
                 count,
                 found_a_record,
-                cache_candidates,
             } => {
                 let results = if found_a_record {
                     Ok(GetRecordOk {
                         record: Default::default(),
-                        cache_candidates,
                     })
                 } else {
                     Err(GetRecordError::NotFound {
@@ -2226,7 +2183,6 @@ where
                     if let QueryInfo::GetRecord {
                         key,
                         ref mut count,
-                        cache_candidates,
                         ref mut found_a_record,
                     } = &mut query.inner.info
                     {
@@ -2244,7 +2200,6 @@ where
                                         id: user_data,
                                         result: QueryResult::GetRecord(Ok(GetRecordOk {
                                             record: Some(record),
-                                            cache_candidates: cache_candidates.clone(),
                                         })),
                                         step: ProgressStep {
                                             count: *count,
@@ -2255,19 +2210,6 @@ where
                                 ));
                         } else {
                             log::trace!("Record with key {:?} not found at {}", key, source);
-                            if let KademliaCaching::Enabled { max_peers } = self.caching {
-                                let source_key = kbucket::Key::from(source);
-                                let target_key = kbucket::Key::from(key.clone());
-                                let distance = source_key.distance(&target_key);
-                                cache_candidates.insert(distance, source);
-                                if cache_candidates.len() > max_peers as usize {
-                                    // TODO: `pop_last()` would be nice once stabilised.
-                                    // See https://github.com/rust-lang/rust/issues/62924.
-                                    let last =
-                                        *cache_candidates.keys().next_back().expect("len > 0");
-                                    cache_candidates.remove(&last);
-                                }
-                            }
                         }
                     }
                 }
@@ -2664,16 +2606,6 @@ pub type GetRecordResult = Result<GetRecordOk, GetRecordError>;
 pub struct GetRecordOk {
     /// The record found in this iteration, including the peer that returned it.
     pub record: Option<PeerRecord>,
-    /// If caching is enabled, these are the peers closest
-    /// _to the record key_ (not the local node) that were queried but
-    /// did not return the record, sorted by distance to the record key
-    /// from closest to farthest. How many of these are tracked is configured
-    /// by [`KademliaConfig::set_caching`]. If the lookup used a quorum of
-    /// 1, these peers will be sent the record as a means of caching.
-    /// If the lookup used a quorum > 1, you may wish to use these
-    /// candidates with [`Kademlia::put_record_to`] after selecting
-    /// one of the returned records.
-    pub cache_candidates: BTreeMap<kbucket::Distance, PeerId>,
 }
 
 /// The error result of [`Kademlia::get_record`].
@@ -3021,9 +2953,6 @@ pub enum QueryInfo {
         count: usize,
         /// Did we find at least one record?
         found_a_record: bool,
-        /// The peers closest to the `key` that were queried but did not return a record,
-        /// i.e. the peers that are candidates for caching the record.
-        cache_candidates: BTreeMap<kbucket::Distance, PeerId>,
     },
 }
 
