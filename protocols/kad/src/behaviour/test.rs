@@ -820,10 +820,8 @@ fn get_record_many() {
             let mut records = Vec::new();
             let quorum = quorum.eval(swarm.behaviour().replication_factor());
             loop {
-                if i == 0 {
-                    if records.len() >= quorum.get() {
-                        swarm.behaviour_mut().query_mut(&qid).unwrap().finish();
-                    }
+                if i == 0 && records.len() >= quorum.get() {
+                    swarm.behaviour_mut().query_mut(&qid).unwrap().finish();
                 }
                 match swarm.poll_next_unpin(ctx) {
                     Poll::Ready(Some(SwarmEvent::Behaviour(
@@ -1105,12 +1103,7 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
     // Make `bob` and `trudy` aware of their version of the record searched by
     // `alice`.
     bob.1.behaviour_mut().store.put(record_bob.clone()).unwrap();
-    trudy
-        .1
-        .behaviour_mut()
-        .store
-        .put(record_trudy.clone())
-        .unwrap();
+    trudy.1.behaviour_mut().store.put(record_trudy).unwrap();
 
     // Make `trudy` and `bob` known to `alice`.
     alice
@@ -1134,7 +1127,7 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
 
     // Poll only `alice` and `trudy` expecting `alice` not yet to return a query
     // result as it is not able to connect to `bob` just yet.
-    let addr_trudy = Swarm::local_peer_id(&trudy).clone();
+    let addr_trudy = *Swarm::local_peer_id(&trudy);
     block_on(poll_fn(|ctx| {
         for (i, swarm) in [&mut alice, &mut trudy].iter_mut().enumerate() {
             loop {
@@ -1376,7 +1369,7 @@ fn get_providers_single() {
             }
         });
 
-        let query_id = single_swarm.behaviour_mut().get_providers(key.clone());
+        let query_id = single_swarm.behaviour_mut().get_providers(key);
 
         let mut found_key = None;
         block_on(async {
@@ -1413,7 +1406,7 @@ fn get_providers_limit<const N: usize>() {
         // Let first peer know of second peer and second peer know of third peer.
         for i in 0..2 {
             let (peer_id, address) = (
-                Swarm::local_peer_id(&swarms[i + 1].1).clone(),
+                *Swarm::local_peer_id(&swarms[i + 1].1),
                 swarms[i + 1].0.clone(),
             );
             swarms[i].1.behaviour_mut().add_address(&peer_id, address);
@@ -1426,8 +1419,8 @@ fn get_providers_limit<const N: usize>() {
             .collect::<Vec<_>>();
 
         // Provide the content on peer 2 and 3.
-        for i in 1..3 {
-            swarms[i]
+        for swarm in swarms.iter_mut().take(3).skip(1) {
+            swarm
                 .behaviour_mut()
                 .start_providing(key.clone())
                 .expect("could not provide");
@@ -1467,7 +1460,7 @@ fn get_providers_limit<const N: usize>() {
                                     // Providers should be either 2 or 3
                                     assert_ne!(swarm.local_peer_id(), provider);
                                 }
-                                all_providers.extend(providers.clone());
+                                all_providers.extend(providers);
 
                                 // If we have all providers, finish.
                                 if all_providers.len() == N {
