@@ -94,14 +94,14 @@ impl<T> From<Key<T>> for KeyBytes {
 
 impl From<Multihash> for Key<Multihash> {
     fn from(m: Multihash) -> Self {
-        let bytes = KeyBytes(Sha256::digest(&m.to_bytes()));
+        let bytes = KeyBytes(Sha256::digest(m.to_bytes()));
         Key { preimage: m, bytes }
     }
 }
 
 impl From<PeerId> for Key<PeerId> {
     fn from(p: PeerId) -> Self {
-        let bytes = KeyBytes(Sha256::digest(&p.to_bytes()));
+        let bytes = KeyBytes(Sha256::digest(p.to_bytes()));
         Key { preimage: p, bytes }
     }
 }

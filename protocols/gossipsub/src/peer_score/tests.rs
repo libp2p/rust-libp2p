@@ -890,7 +890,7 @@ fn test_score_ip_colocation() {
     let n_shared = 3.0;
     let ip_surplus = n_shared - ip_colocation_factor_threshold;
     let penalty = ip_surplus * ip_surplus;
-    let expected = ip_colocation_factor_weight * penalty as f64;
+    let expected = ip_colocation_factor_weight * penalty;
 
     assert_eq!(score_b, expected, "Peer B should have expected score");
     assert_eq!(score_c, expected, "Peer C should have expected score");
