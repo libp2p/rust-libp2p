@@ -34,7 +34,6 @@ use libp2p::tcp;
 use libp2p::Transport;
 use libp2p::{dcutr, ping};
 use libp2p::{identity, NetworkBehaviour, PeerId};
-use libp2p_core::Executor;
 use log::info;
 use std::convert::TryInto;
 use std::error::Error;
@@ -156,12 +155,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         dcutr: dcutr::behaviour::Behaviour::new(),
     };
 
-    let executor: Option<Box<dyn Executor + Send>> = match ThreadPool::new() {
-        Ok(tp) => Some(Box::new(tp)),
-        Err(_) => None,
-    };
-
-    let mut swarm = SwarmBuilder::new(transport, behaviour, local_peer_id, executor)
+    let mut swarm = match ThreadPool::new() {
+        Ok(tp) => SwarmBuilder::with_executor(transport, behaviour, local_peer_id, Box::new(tp)),
+        Err(_) => SwarmBuilder::without_executor(transport, behaviour, local_peer_id),
+    }
         .dial_concurrency_factor(10_u8.try_into().unwrap())
         .build();
 
