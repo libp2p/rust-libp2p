@@ -168,8 +168,13 @@ impl NetworkBehaviour for Behaviour {
             from_fn::OutEvent::OutboundEmitted(_) => {}
             from_fn::OutEvent::FailedToOpen(never) => match never {
                 from_fn::OpenError::Timeout(never) => void::unreachable(never),
-                from_fn::OpenError::LimitExceeded(never) => void::unreachable(never),
+                from_fn::OpenError::LimitExceeded {
+                    open_info: never, ..
+                } => void::unreachable(never),
                 from_fn::OpenError::NegotiationFailed(never, _) => void::unreachable(never),
+                from_fn::OpenError::Unsupported {
+                    open_info: never, ..
+                } => void::unreachable(never),
             },
             from_fn::OutEvent::InboundEmitted(Err(error)) => {
                 log::debug!("Inbound stream from {peer_id} failed: {error}");

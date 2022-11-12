@@ -232,7 +232,8 @@ impl NetworkBehaviour for Behaviour {
             from_fn::OutEvent::OutboundEmitted(Err(e)) => {}
             from_fn::OutEvent::FailedToOpen(from_fn::OpenError::Timeout(info)) => {}
             from_fn::OutEvent::FailedToOpen(from_fn::OpenError::NegotiationFailed(..)) => {}
-            from_fn::OutEvent::FailedToOpen(from_fn::OpenError::LimitExceeded(..)) => {}
+            from_fn::OutEvent::FailedToOpen(from_fn::OpenError::LimitExceeded { .. }) => {}
+            from_fn::OutEvent::FailedToOpen(from_fn::OpenError::Unsupported { .. }) => {}
         }
         //
         // let new_events = match event {
