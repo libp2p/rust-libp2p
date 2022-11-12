@@ -721,7 +721,7 @@ mod test {
     async fn test_dialer_drop() {
         let keypair = libp2p_core::identity::Keypair::generate_ed25519();
         let config = Config::new(&keypair);
-        let mut transport = crate::async_std::Transport::new(config);
+        let mut transport = crate::tokio::Transport::new(config);
 
         let _dial = transport
             .dial("/ip4/123.45.67.8/udp/1234/quic".parse().unwrap())
