@@ -70,7 +70,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Create a random PeerId
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
-    println!("Local peer id: {:?}", local_peer_id);
+    println!("Local peer id: {local_peer_id:?}");
 
     // Set up an encrypted DNS-enabled TCP Transport over the Mplex and Yamux protocols
     let transport = libp2p::development_transport(local_key).await?;
@@ -122,7 +122,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     if let Some(to_dial) = std::env::args().nth(1) {
         let addr: Multiaddr = to_dial.parse()?;
         swarm.dial(addr)?;
-        println!("Dialed {:?}", to_dial)
+        println!("Dialed {to_dial:?}")
     }
 
     // Read full lines from stdin
@@ -140,7 +140,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 .publish(floodsub_topic.clone(), line.expect("Stdin not to close").as_bytes()),
             event = swarm.select_next_some() => match event {
                 SwarmEvent::NewListenAddr { address, .. } => {
-                    println!("Listening on {:?}", address);
+                    println!("Listening on {address:?}");
                 }
                 SwarmEvent::Behaviour(OutEvent::Floodsub(
                     FloodsubEvent::Message(message)
