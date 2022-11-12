@@ -12,14 +12,6 @@ async fn close_implies_flush() {
 }
 
 #[async_std::test]
-#[ignore] // Hangs forever, same as yamux. We can't read from a stream that we have never written to.
-async fn dialer_can_receive() {
-    let (alice, bob) = connected_peers().await;
-
-    libp2p_muxer_test_harness::dialer_can_receive(alice, bob).await;
-}
-
-#[async_std::test]
 async fn read_after_close() {
     let (alice, bob) = connected_peers().await;
 
