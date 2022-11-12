@@ -75,7 +75,6 @@ pub use connection::{
     ConnectionError, ConnectionLimit, PendingConnectionError, PendingInboundConnectionError,
     PendingOutboundConnectionError,
 };
-use futures::executor::ThreadPoolBuilder;
 pub use handler::{
     ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerSelect, ConnectionHandlerUpgrErr,
     IntoConnectionHandler, IntoConnectionHandlerSelect, KeepAlive, OneShotHandler,
@@ -87,7 +86,7 @@ use connection::pool::{EstablishedConnection, Pool, PoolConfig, PoolEvent};
 use connection::IncomingInfo;
 use dial_opts::{DialOpts, PeerCondition};
 use either::Either;
-use futures::{prelude::*, stream::FusedStream};
+use futures::{executor::ThreadPoolBuilder, prelude::*, stream::FusedStream};
 use libp2p_core::connection::ConnectionId;
 use libp2p_core::muxing::SubstreamBox;
 use libp2p_core::{
@@ -381,6 +380,21 @@ where
             }
         };
         builder.build()
+    }
+
+    /// Builds a new `Swarm` without an executor, instead using the current task.
+    ///
+    /// ## ⚠️  Performance warning
+    /// All connections will be polled on the current task, thus quite bad performance
+    /// characteristics should be expected. Whenever possible use an executor and
+    /// [`Swarm::with_executor`].
+    pub fn without_executor(
+        transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
+        behaviour: TBehaviour,
+        local_peer_id: PeerId,
+    ) -> Self {
+        SwarmBuilder::without_executor(transport, behaviour, local_peer_id)
+            .build()
     }
 
     /// Returns information about the connections underlying the [`Swarm`].
@@ -1349,8 +1363,12 @@ where
         transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
         behaviour: TBehaviour,
         local_peer_id: PeerId,
-        executor: Option<Box<dyn Executor + Send>>,
     ) -> Self {
+        let executor: Option<Box<dyn Executor + Send>> = match ThreadPoolBuilder::new().name_prefix("libp2p-swarm-task-")
+            .create().ok() {
+                Some(tp) => Some(Box::new(tp)),
+                None => None,
+            };
         SwarmBuilder {
             local_peer_id,
             transport,
@@ -1380,6 +1398,11 @@ where
 
     /// Creates a new `SwarmBuilder` from the given transport, behaviour and local peer ID. The
     /// `Swarm` with its underlying `Network` is obtained via [`SwarmBuilder::build`].
+    ///
+    /// ## ⚠️  Performance warning
+    /// All connections will be polled on the current task, thus quite bad performance
+    /// characteristics should be expected. Whenever possible use an executor and
+    /// [`SwarmBuilder::with_executor`].
     pub fn without_executor(
         transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
         behaviour: TBehaviour,
@@ -1698,7 +1721,7 @@ mod tests {
             .multiplex(yamux::YamuxConfig::default())
             .boxed();
         let behaviour = CallTraceBehaviour::new(MockBehaviour::new(handler_proto));
-        SwarmBuilder::new(transport, behaviour, local_public_key.into(), None)
+        SwarmBuilder::new(transport, behaviour, local_public_key.into())
     }
 
     fn swarms_connected<TBehaviour>(
