@@ -137,7 +137,7 @@ impl From<Config> for QuinnConfig {
         server_config.migration(false);
 
         let mut client_config = quinn_proto::ClientConfig::new(client_tls_config);
-        client_config.transport = transport;
+        client_config.transport_config(transport);
 
         let endpoint_config = quinn_proto::EndpointConfig::default();
 
