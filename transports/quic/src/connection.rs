@@ -131,6 +131,24 @@ impl Connection {
     fn poll_event(&mut self, cx: &mut Context<'_>) -> Poll<Option<quinn_proto::Event>> {
         let mut inner = self.state.lock();
         loop {
+            // Sending the pending event to the endpoint. If the endpoint is too busy, we just
+            // stop the processing here.
+            // We don't deliver substream-related events to the user as long as
+            // `to_endpoint` is full. This should propagate the back-pressure of `to_endpoint`
+            // being full to the user.
+            if let Some(to_endpoint) = self.pending_to_endpoint.take() {
+                match self.endpoint_channel.try_send(to_endpoint, cx) {
+                    Ok(Ok(())) => {}
+                    Ok(Err(to_endpoint)) => {
+                        self.pending_to_endpoint = Some(to_endpoint);
+                        return Poll::Pending;
+                    }
+                    Err(endpoint::Disconnected {}) => {
+                        return Poll::Ready(None);
+                    }
+                }
+            }
+
             match self.from_endpoint.poll_next_unpin(cx) {
                 Poll::Ready(Some(event)) => {
                     inner.connection.handle_event(event);
@@ -140,24 +158,6 @@ impl Connection {
                     return Poll::Ready(None);
                 }
                 Poll::Pending => {}
-            }
-
-            // Sending the pending event to the endpoint. If the endpoint is too busy, we just
-            // stop the processing here.
-            // However we don't deliver substream-related events to the user as long as
-            // `to_endpoint` is full. This should propagate the back-pressure of `to_endpoint`
-            // being full to the user.
-            if let Some(to_endpoint) = self.pending_to_endpoint.take() {
-                match self.endpoint_channel.try_send(to_endpoint, cx) {
-                    Ok(Ok(())) => continue, // The endpoint may send back an event.
-                    Ok(Err(to_endpoint)) => {
-                        self.pending_to_endpoint = Some(to_endpoint);
-                        return Poll::Pending;
-                    }
-                    Err(endpoint::Disconnected {}) => {
-                        return Poll::Ready(None);
-                    }
-                }
             }
 
             // The maximum amount of segments which can be transmitted in a single Transmit
@@ -208,7 +208,7 @@ impl Connection {
                 continue;
             }
 
-            // The final step consists in handling the events related to the various substreams.
+            // The final step consists in returning the events related to the various substreams.
             if let Some(ev) = inner.connection.poll() {
                 return Poll::Ready(Some(ev));
             }
