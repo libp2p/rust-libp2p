@@ -82,7 +82,6 @@ impl Connection {
         connection_id: quinn_proto::ConnectionHandle,
         from_endpoint: mpsc::Receiver<quinn_proto::ConnectionEvent>,
     ) -> Self {
-        debug_assert!(!connection.is_closed());
         let state = State {
             connection,
             substreams: HashMap::new(),
