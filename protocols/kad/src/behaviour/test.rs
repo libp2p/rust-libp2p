@@ -257,9 +257,9 @@ fn query_iter() {
 
         match swarms[0].behaviour_mut().query(&qid) {
             Some(q) => match q.info() {
-                QueryInfo::GetClosestPeers { key, count } => {
+                QueryInfo::GetClosestPeers { key, step } => {
                     assert_eq!(&key[..], search_target.to_bytes().as_slice());
-                    assert_eq!(*count, 0); // no result reported yet
+                    assert_eq!(usize::from(step.count), 1);
                 }
                 i => panic!("Unexpected query info: {:?}", i),
             },
@@ -768,17 +768,20 @@ fn get_record() {
                     Poll::Ready(Some(SwarmEvent::Behaviour(
                         KademliaEvent::OutboundQueryProgressed {
                             id,
-                            result: QueryResult::GetRecord(Ok(GetRecordOk { record: r })),
+                            result: QueryResult::GetRecord(Ok(r)),
                             step: ProgressStep { count, last },
                             ..
                         },
                     ))) => {
                         assert_eq!(id, qid);
                         if usize::from(count) == 1 {
-                            assert!(r.is_none());
+                            assert!(matches!(r, GetRecordOk::NoAdditionalRecord));
                         }
                         if usize::from(count) == 2 {
-                            assert_eq!(r.expect("missing record").record, record);
+                            assert!(matches!(r, GetRecordOk::FoundRecord(_)));
+                            if let GetRecordOk::FoundRecord(r) = r {
+                                assert_eq!(r.record, record);
+                            }
                         }
                         if last {
                             assert_eq!(usize::from(count), 3);
@@ -827,13 +830,13 @@ fn get_record_many() {
                     Poll::Ready(Some(SwarmEvent::Behaviour(
                         KademliaEvent::OutboundQueryProgressed {
                             id,
-                            result: QueryResult::GetRecord(Ok(GetRecordOk { record: r, .. })),
+                            result: QueryResult::GetRecord(Ok(r)),
                             step: ProgressStep { count: _, last },
                             ..
                         },
                     ))) => {
                         assert_eq!(id, qid);
-                        if let Some(r) = r {
+                        if let GetRecordOk::FoundRecord(r) = r {
                             assert_eq!(r.record, record);
                             records.push(r);
                         }
@@ -1149,11 +1152,10 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
                             );
                         }
                         match result {
-                            Ok(GetRecordOk { record, .. }) => {
-                                if let Some(record) = record {
-                                    assert_eq!(record.peer, Some(addr_trudy));
-                                }
+                            Ok(GetRecordOk::FoundRecord(r)) => {
+                                assert_eq!(r.peer, Some(addr_trudy));
                             }
+                            Ok(_) => {}
                             Err(e) => panic!("{:?}", e),
                         }
                     }
@@ -1177,8 +1179,8 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
         .queries
         .iter()
         .for_each(|q| match &q.inner.info {
-            QueryInfo::GetRecord { count, .. } => {
-                assert_eq!(*count, 2);
+            QueryInfo::GetRecord { step, .. } => {
+                assert_eq!(usize::from(step.count), 3);
             }
             i => panic!("Unexpected query info: {:?}", i),
         });
@@ -1202,7 +1204,7 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
                         }
                         match result {
                             Ok(ok) => {
-                                if let Some(record) = ok.record {
+                                if let GetRecordOk::FoundRecord(record) = ok {
                                     records.push(record);
                                 }
                                 if records.len() == 1 {

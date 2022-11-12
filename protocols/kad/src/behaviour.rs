@@ -689,7 +689,7 @@ where
             .push_back(NetworkBehaviourAction::GenerateEvent(
                 KademliaEvent::OutboundQueryProgressed {
                     id,
-                    result: QueryResult::GetRecord(Ok(GetRecordOk { record })),
+                    result: QueryResult::GetRecord(Ok(record.into())),
                     step,
                     stats,
                 },
@@ -1348,9 +1348,7 @@ where
                 step.last = true;
 
                 let results = if found_a_record {
-                    Ok(GetRecordOk {
-                        record: Default::default(),
-                    })
+                    Ok(GetRecordOk::NoAdditionalRecord)
                 } else {
                     Err(GetRecordError::NotFound {
                         key,
@@ -2194,9 +2192,9 @@ where
                                 .push_back(NetworkBehaviourAction::GenerateEvent(
                                     KademliaEvent::OutboundQueryProgressed {
                                         id: user_data,
-                                        result: QueryResult::GetRecord(Ok(GetRecordOk {
-                                            record: Some(record),
-                                        })),
+                                        result: QueryResult::GetRecord(Ok(
+                                            GetRecordOk::FoundRecord(record),
+                                        )),
                                         step: step.clone(),
                                         stats,
                                     },
@@ -2616,9 +2614,18 @@ pub type GetRecordResult = Result<GetRecordOk, GetRecordError>;
 
 /// The successful result of [`Kademlia::get_record`].
 #[derive(Debug, Clone)]
-pub struct GetRecordOk {
-    /// The record found in this iteration, including the peer that returned it.
-    pub record: Option<PeerRecord>,
+pub enum GetRecordOk {
+    FoundRecord(PeerRecord),
+    NoAdditionalRecord,
+}
+
+impl From<Option<PeerRecord>> for GetRecordOk {
+    fn from(r: Option<PeerRecord>) -> Self {
+        match r {
+            Some(r) => GetRecordOk::FoundRecord(r),
+            None => GetRecordOk::NoAdditionalRecord,
+        }
+    }
 }
 
 /// The error result of [`Kademlia::get_record`].
