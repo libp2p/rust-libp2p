@@ -27,8 +27,8 @@ use futures::{
     task::Context,
     task::Poll,
 };
-use once_cell::sync::Lazy;
 use multiaddr::{Multiaddr, Protocol};
+use once_cell::sync::Lazy;
 use parking_lot::Mutex;
 use rw_stream_sink::RwStreamSink;
 use std::{
@@ -37,7 +37,6 @@ use std::{
     num::NonZeroU64,
     pin::Pin,
 };
-
 
 static HUB: Lazy<Hub> = Lazy::new(|| Hub(Mutex::new(FnvHashMap::default())));
 
