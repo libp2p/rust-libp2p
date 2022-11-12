@@ -67,7 +67,7 @@ pub mod dummy;
 pub mod handler;
 pub mod keep_alive;
 
-/// Bundles all symbols required for the `libp2p_swarm_derive::NetworkBehavior` macro.
+/// Bundles all symbols required for the [`libp2p_swarm_derive::NetworkBehavior`] macro.
 #[doc(hidden)]
 pub mod derive_prelude {
     pub use crate::ConnectionHandler;
