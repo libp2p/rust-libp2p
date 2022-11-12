@@ -35,7 +35,6 @@ use std::{
     task::{Context, Poll},
     time::{Duration, Instant},
 };
-use x509_parser::nom::AsBytes;
 
 // The `Driver` drops packets if the channel to the connection
 // or transport is full.
@@ -618,7 +617,7 @@ impl<P: Provider> Future for Driver<P> {
             // Poll for new packets from the remote.
             match self.provider_socket.poll_recv_from(cx) {
                 Poll::Ready(Ok((bytes, packet_src))) => {
-                    let bytes_mut = bytes.as_bytes().into();
+                    let bytes_mut = bytes.as_slice().into();
                     match self.handle_datagram(bytes_mut, packet_src) {
                         ControlFlow::Continue(()) => continue,
                         ControlFlow::Break(()) => break,

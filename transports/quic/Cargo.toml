@@ -9,7 +9,6 @@ license = "MIT"
 
 [dependencies]
 async-std = { version = "1.12.0", default-features = false, optional = true }
-async-trait = "0.1.50"
 bytes = "1.2.1"
 futures = "0.3.15"
 futures-timer = "3.0.2"
@@ -23,9 +22,6 @@ rand = "0.8.5"
 rustls = { version = "0.20.2", default-features = false }
 thiserror = "1.0.26"
 tokio = { version = "1.21.1", default-features = false, features = ["net", "rt"], optional = true }
-webpki = "0.22.0"
-x509-parser = "0.13.0"
-yasna = "0.5.0"
 
 [features]
 tokio = ["dep:tokio"]
@@ -44,7 +40,6 @@ env_logger = "0.9.0"
 libp2p = { path = "../..", features = ["tcp", "yamux", "noise", "async-std"] }
 libp2p-muxer-test-harness = { path = "../../muxers/test-harness" }
 quickcheck = "1"
-rand = "0.8.4"
 tokio = { version = "1.21.1", features = ["macros", "rt-multi-thread", "time"] }
 
 [[test]]

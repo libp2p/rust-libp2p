@@ -25,7 +25,6 @@ use std::{
     task::{Context, Poll},
 };
 use tokio::{io::ReadBuf, net::UdpSocket};
-use x509_parser::nom::AsBytes;
 
 use crate::GenTransport;
 
@@ -55,7 +54,7 @@ impl super::Provider for Provider {
             Some(pending) => pending,
             None => return Poll::Ready(Ok(())),
         };
-        match self.socket.poll_send_to(cx, data.as_bytes(), *addr) {
+        match self.socket.poll_send_to(cx, data.as_slice(), *addr) {
             Poll::Ready(result) => {
                 self.next_packet_out = None;
                 Poll::Ready(result.map(|_| ()))
