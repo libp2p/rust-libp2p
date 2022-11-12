@@ -111,147 +111,146 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Kick it off.
     loop {
         select! {
-            line = stdin.select_next_some() => handle_input_line(&mut swarm.behaviour_mut().kademlia, line.expect("Stdin not to close")),
-            event = swarm.select_next_some() => match event {
-                SwarmEvent::NewListenAddr { address, .. } => {
-                    println!("Listening in {:?}", address);
-                },
-                SwarmEvent::Behaviour(MyBehaviourEvent::Mdns(MdnsEvent::Discovered(list))) => {
-                    for (peer_id, multiaddr) in list {
-                        swarm.behaviour_mut().kademlia.add_address(&peer_id, multiaddr);
-                    }
+        line = stdin.select_next_some() => handle_input_line(&mut swarm.behaviour_mut().kademlia, line.expect("Stdin not to close")),
+        event = swarm.select_next_some() => match event {
+            SwarmEvent::NewListenAddr { address, .. } => {
+                println!("Listening in {address:?}");
+            },
+            SwarmEvent::Behaviour(MyBehaviourEvent::Mdns(MdnsEvent::Discovered(list))) => {
+                for (peer_id, multiaddr) in list {
+                    swarm.behaviour_mut().kademlia.add_address(&peer_id, multiaddr);
                 }
-                SwarmEvent::Behaviour(MyBehaviourEvent::Kademlia(KademliaEvent::OutboundQueryProgressed { result, ..})) => {
-                    match result {
-                        QueryResult::GetProviders(Ok(GetProvidersOk::FoundProviders { key, providers, .. })) => {
-                            for peer in providers {
-                                println!(
-                                    "Peer {:?} provides key {:?}",
-                                    peer,
-                                    std::str::from_utf8(key.as_ref()).unwrap()
-                                );
-                            }
-                        }
-                        QueryResult::GetProviders(Err(err)) => {
-                            eprintln!("Failed to get providers: {:?}", err);
-                        }
-                        QueryResult::GetRecord(Ok(
-                            GetRecordOk::FoundRecord(PeerRecord {
-                                record: Record { key, value, .. },
-                                ..
-                            })
-                        )) => {
-                            println!(
-                                "Got record {:?} {:?}",
-                                std::str::from_utf8(key.as_ref()).unwrap(),
-                                std::str::from_utf8(&value).unwrap(),
-                            );
-                        }
-                        QueryResult::GetRecord(Ok(_)) => {}
-                        QueryResult::GetRecord(Err(err)) => {
-                            eprintln!("Failed to get record: {:?}", err);
-                        }
-                        QueryResult::PutRecord(Ok(PutRecordOk { key })) => {
-                            println!(
-                                "Successfully put record {:?}",
-                                std::str::from_utf8(key.as_ref()).unwrap()
-                            );
-                        }
-                        QueryResult::PutRecord(Err(err)) => {
-                            eprintln!("Failed to put record: {:?}", err);
-                        }
-                        QueryResult::StartProviding(Ok(AddProviderOk { key })) => {
-                            println!(
-                                "Successfully put provider record {:?}",
-                                std::str::from_utf8(key.as_ref()).unwrap()
-                            );
-                        }
-                        QueryResult::StartProviding(Err(err)) => {
-                            eprintln!("Failed to put provider record: {:?}", err);
-                        }
-                        _ => {}
-                    }
-                }
-                _ => {}
             }
+            SwarmEvent::Behaviour(MyBehaviourEvent::Kademlia(KademliaEvent::OutboundQueryProgressed { result, ..})) => {
+                match result {
+                    QueryResult::GetProviders(Ok(GetProvidersOk::FoundProviders { key, providers, .. })) => {
+                        for peer in providers {
+                            println!(
+                                "Peer {peer:?} provides key {:?}",
+                                std::str::from_utf8(key.as_ref()).unwrap()
+                            );
+                        }
+                    }
+                    QueryResult::GetProviders(Err(err)) => {
+                        eprintln!("Failed to get providers: {err:?}");
+                    }
+                    QueryResult::GetRecord(Ok(
+                        GetRecordOk::FoundRecord(PeerRecord {
+                            record: Record { key, value, .. },
+                            ..
+                        })
+                    )) => {
+                        println!(
+                            "Got record {:?} {:?}",
+                            std::str::from_utf8(key.as_ref()).unwrap(),
+                            std::str::from_utf8(&value).unwrap(),
+                        );
+                    }
+                    QueryResult::GetRecord(Ok(_)) => {}
+                    QueryResult::GetRecord(Err(err)) => {
+                        eprintln!("Failed to get record: {err:?}");
+                    }
+                    QueryResult::PutRecord(Ok(PutRecordOk { key })) => {
+                        println!(
+                            "Successfully put record {:?}",
+                            std::str::from_utf8(key.as_ref()).unwrap()
+                        );
+                    }
+                    QueryResult::PutRecord(Err(err)) => {
+                        eprintln!("Failed to put record: {err:?}");
+                    }
+                    QueryResult::StartProviding(Ok(AddProviderOk { key })) => {
+                        println!(
+                            "Successfully put provider record {:?}",
+                            std::str::from_utf8(key.as_ref()).unwrap()
+                        );
+                    }
+                    QueryResult::StartProviding(Err(err)) => {
+                        eprintln!("Failed to put provider record: {err:?}");
+                    }
+                    _ => {}
+                }
+            }
+            _ => {}
+        }
         }
     }
+}
 
-    fn handle_input_line(kademlia: &mut Kademlia<MemoryStore>, line: String) {
-        let mut args = line.split(' ');
+fn handle_input_line(kademlia: &mut Kademlia<MemoryStore>, line: String) {
+    let mut args = line.split(' ');
 
-        match args.next() {
-            Some("GET") => {
-                let key = {
-                    match args.next() {
-                        Some(key) => Key::new(&key),
-                        None => {
-                            eprintln!("Expected key");
-                            return;
-                        }
+    match args.next() {
+        Some("GET") => {
+            let key = {
+                match args.next() {
+                    Some(key) => Key::new(&key),
+                    None => {
+                        eprintln!("Expected key");
+                        return;
                     }
-                };
-                kademlia.get_record(key);
-            }
-            Some("GET_PROVIDERS") => {
-                let key = {
-                    match args.next() {
-                        Some(key) => Key::new(&key),
-                        None => {
-                            eprintln!("Expected key");
-                            return;
-                        }
+                }
+            };
+            kademlia.get_record(key);
+        }
+        Some("GET_PROVIDERS") => {
+            let key = {
+                match args.next() {
+                    Some(key) => Key::new(&key),
+                    None => {
+                        eprintln!("Expected key");
+                        return;
                     }
-                };
-                kademlia.get_providers(key);
-            }
-            Some("PUT") => {
-                let key = {
-                    match args.next() {
-                        Some(key) => Key::new(&key),
-                        None => {
-                            eprintln!("Expected key");
-                            return;
-                        }
+                }
+            };
+            kademlia.get_providers(key);
+        }
+        Some("PUT") => {
+            let key = {
+                match args.next() {
+                    Some(key) => Key::new(&key),
+                    None => {
+                        eprintln!("Expected key");
+                        return;
                     }
-                };
-                let value = {
-                    match args.next() {
-                        Some(value) => value.as_bytes().to_vec(),
-                        None => {
-                            eprintln!("Expected value");
-                            return;
-                        }
+                }
+            };
+            let value = {
+                match args.next() {
+                    Some(value) => value.as_bytes().to_vec(),
+                    None => {
+                        eprintln!("Expected value");
+                        return;
                     }
-                };
-                let record = Record {
-                    key,
-                    value,
-                    publisher: None,
-                    expires: None,
-                };
-                kademlia
-                    .put_record(record, Quorum::One)
-                    .expect("Failed to store record locally.");
-            }
-            Some("PUT_PROVIDER") => {
-                let key = {
-                    match args.next() {
-                        Some(key) => Key::new(&key),
-                        None => {
-                            eprintln!("Expected key");
-                            return;
-                        }
+                }
+            };
+            let record = Record {
+                key,
+                value,
+                publisher: None,
+                expires: None,
+            };
+            kademlia
+                .put_record(record, Quorum::One)
+                .expect("Failed to store record locally.");
+        }
+        Some("PUT_PROVIDER") => {
+            let key = {
+                match args.next() {
+                    Some(key) => Key::new(&key),
+                    None => {
+                        eprintln!("Expected key");
+                        return;
                     }
-                };
+                }
+            };
 
-                kademlia
-                    .start_providing(key)
-                    .expect("Failed to start providing key");
-            }
-            _ => {
-                eprintln!("expected GET, GET_PROVIDERS, PUT or PUT_PROVIDER");
-            }
+            kademlia
+                .start_providing(key)
+                .expect("Failed to start providing key");
+        }
+        _ => {
+            eprintln!("expected GET, GET_PROVIDERS, PUT or PUT_PROVIDER");
         }
     }
 }
