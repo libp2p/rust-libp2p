@@ -45,6 +45,8 @@ pub struct Provider {
 }
 
 impl super::Provider for Provider {
+    type IfWatcher = if_watch::smol::IfWatcher;
+
     fn from_socket(socket: std::net::UdpSocket) -> io::Result<Self> {
         let socket = Arc::new(socket.into());
         let recv_stream = ReceiveStream::new(Arc::clone(&socket));
@@ -90,6 +92,17 @@ impl super::Provider for Provider {
 
     fn spawn(future: impl Future<Output = ()> + Send + 'static) {
         spawn(future);
+    }
+
+    fn new_if_watcher() -> io::Result<Self::IfWatcher> {
+        if_watch::smol::IfWatcher::new()
+    }
+
+    fn poll_if_event(
+        watcher: &mut Self::IfWatcher,
+        cx: &mut Context<'_>,
+    ) -> Poll<io::Result<if_watch::IfEvent>> {
+        watcher.poll_if_event(cx)
     }
 }
 

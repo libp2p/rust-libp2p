@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::Future;
+use if_watch::IfEvent;
 use std::{
     io,
     net::SocketAddr,
@@ -36,6 +37,8 @@ const RECEIVE_BUFFER_SIZE: usize = 65536;
 /// Provider for non-blocking receiving and sending on a [`std::net::UdpSocket`]
 /// and spawning tasks.
 pub trait Provider: Unpin + Send + Sized + 'static {
+    type IfWatcher: Unpin + Send;
+
     /// Create a new providing that is wrapping the socket.
     ///
     /// Note: The socket must be set to non-blocking.
@@ -61,4 +64,13 @@ pub trait Provider: Unpin + Send + Sized + 'static {
     ///
     /// This is used to spawn the task that is driving the endpoint.
     fn spawn(future: impl Future<Output = ()> + Send + 'static);
+
+    /// Create a new [`if_watch`] watcher that reports [`IfEvent`]s for network interface changes.
+    fn new_if_watcher() -> io::Result<Self::IfWatcher>;
+
+    /// Poll for an address change event.
+    fn poll_if_event(
+        watcher: &mut Self::IfWatcher,
+        cx: &mut Context<'_>,
+    ) -> Poll<io::Result<IfEvent>>;
 }

@@ -40,6 +40,8 @@ pub struct Provider {
 }
 
 impl super::Provider for Provider {
+    type IfWatcher = if_watch::tokio::IfWatcher;
+
     fn from_socket(socket: std::net::UdpSocket) -> std::io::Result<Self> {
         let socket = UdpSocket::from_std(socket)?;
         Ok(Provider {
@@ -81,5 +83,16 @@ impl super::Provider for Provider {
 
     fn spawn(future: impl Future<Output = ()> + Send + 'static) {
         tokio::spawn(future);
+    }
+
+    fn new_if_watcher() -> io::Result<Self::IfWatcher> {
+        if_watch::tokio::IfWatcher::new()
+    }
+
+    fn poll_if_event(
+        watcher: &mut Self::IfWatcher,
+        cx: &mut Context<'_>,
+    ) -> Poll<io::Result<if_watch::IfEvent>> {
+        watcher.poll_if_event(cx)
     }
 }

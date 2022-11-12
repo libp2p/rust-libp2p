@@ -28,7 +28,7 @@ use futures::ready;
 use futures::stream::StreamExt;
 use futures::{prelude::*, stream::SelectAll};
 
-use if_watch::{IfEvent, IfWatcher};
+use if_watch::IfEvent;
 
 use libp2p_core::{
     multiaddr::{Multiaddr, Protocol},
@@ -37,8 +37,8 @@ use libp2p_core::{
 };
 use std::collections::hash_map::{DefaultHasher, Entry};
 use std::collections::{HashMap, VecDeque};
+use std::fmt;
 use std::hash::{Hash, Hasher};
-use std::marker::PhantomData;
 use std::net::IpAddr;
 use std::task::Waker;
 use std::time::Duration;
@@ -50,19 +50,18 @@ use std::{
 
 /// Implementation of the [`Transport`] trait for QUIC.
 #[derive(Debug)]
-pub struct GenTransport<P> {
+pub struct GenTransport<P: Provider> {
     /// Config for the inner [`quinn_proto`] structs.
     quinn_config: QuinnConfig,
     /// Timeout for the [`Connecting`] future.
     handshake_timeout: Duration,
     /// Streams of active [`Listener`]s.
-    listeners: SelectAll<Listener>,
+    listeners: SelectAll<Listener<P>>,
     /// Dialer for each socket family if no matching listener exists.
     dialer: HashMap<SocketFamily, Dialer>,
-    _marker: PhantomData<P>,
 }
 
-impl<P> GenTransport<P> {
+impl<P: Provider> GenTransport<P> {
     /// Create a new [`GenTransport`] with the given [`Config`].
     pub fn new(config: Config) -> Self {
         let handshake_timeout = config.handshake_timeout;
@@ -72,7 +71,6 @@ impl<P> GenTransport<P> {
             quinn_config,
             handshake_timeout,
             dialer: HashMap::new(),
-            _marker: Default::default(),
         }
     }
 }
@@ -87,7 +85,7 @@ impl<P: Provider> Transport for GenTransport<P> {
         let socket_addr =
             multiaddr_to_socketaddr(&addr).ok_or(TransportError::MultiaddrNotSupported(addr))?;
         let listener_id = ListenerId::new();
-        let listener = Listener::new::<P>(
+        let listener = Listener::new(
             listener_id,
             socket_addr,
             self.quinn_config.clone(),
@@ -297,8 +295,7 @@ impl DialerState {
 }
 
 /// Listener for incoming connections.
-#[derive(Debug)]
-struct Listener {
+struct Listener<P: Provider> {
     /// Id of the listener.
     listener_id: ListenerId,
 
@@ -315,7 +312,7 @@ struct Listener {
     /// Watcher for network interface changes.
     ///
     /// None if we are only listening on a single interface.
-    if_watcher: Option<IfWatcher>,
+    if_watcher: Option<P::IfWatcher>,
 
     /// Whether the listener was closed and the stream should terminate.
     is_closed: bool,
@@ -324,8 +321,8 @@ struct Listener {
     pending_event: Option<<Self as Stream>::Item>,
 }
 
-impl Listener {
-    fn new<P: Provider>(
+impl<P: Provider> Listener<P> {
+    fn new(
         listener_id: ListenerId,
         socket_addr: SocketAddr,
         config: QuinnConfig,
@@ -337,7 +334,7 @@ impl Listener {
         let if_watcher;
         let pending_event;
         if socket_addr.ip().is_unspecified() {
-            if_watcher = Some(IfWatcher::new()?);
+            if_watcher = Some(P::new_if_watcher()?);
             pending_event = None;
         } else {
             if_watcher = None;
@@ -380,7 +377,7 @@ impl Listener {
             None => return Poll::Pending,
         };
         loop {
-            match ready!(if_watcher.poll_if_event(cx)) {
+            match ready!(P::poll_if_event(if_watcher, cx)) {
                 Ok(IfEvent::Up(inet)) => {
                     if let Some(listen_addr) =
                         ip_to_listenaddr(self.endpoint_channel.socket_addr(), inet.addr())
@@ -425,7 +422,7 @@ impl Listener {
     }
 }
 
-impl Stream for Listener {
+impl<P: Provider> Stream for Listener<P> {
     type Item = TransportEvent<Connecting, Error>;
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         loop {
@@ -469,7 +466,21 @@ impl Stream for Listener {
     }
 }
 
-impl Drop for Listener {
+impl<P: Provider> fmt::Debug for Listener<P> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Listener")
+            .field("listener_id", &self.listener_id)
+            .field("endpoint_channel", &self.endpoint_channel)
+            .field("dialer_state", &self.dialer_state)
+            .field("new_connections_rx", &self.new_connections_rx)
+            .field("handshake_timeout", &self.handshake_timeout)
+            .field("is_closed", &self.is_closed)
+            .field("pending_event", &self.pending_event)
+            .finish()
+    }
+}
+
+impl<P: Provider> Drop for Listener<P> {
     fn drop(&mut self) {
         self.endpoint_channel.send_on_drop(ToEndpoint::Decoupled);
     }
@@ -499,7 +510,7 @@ impl From<IpAddr> for SocketFamily {
     }
 }
 
-/// Turn an [`IpAddr`] reported byt the [`IfWatcher`] into a
+/// Turn an [`IpAddr`] reported by the interface watcher into a
 /// listen-address for the endpoint.
 ///
 /// For this, the `ip` is combined with the port that the endpoint
