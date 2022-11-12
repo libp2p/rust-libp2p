@@ -25,7 +25,7 @@ use prometheus_client::metrics::histogram::{exponential_buckets, Histogram};
 use prometheus_client::registry::{Registry, Unit};
 
 pub struct Metrics {
-    query_result_get_record_ok: Histogram,
+    query_result_get_record_ok: Counter,
     query_result_get_record_error: Family<GetRecordResult, Counter>,
 
     query_result_get_closest_peers_ok: Histogram,
@@ -48,7 +48,7 @@ impl Metrics {
     pub fn new(registry: &mut Registry) -> Self {
         let sub_registry = registry.sub_registry_with_prefix("kad");
 
-        let query_result_get_record_ok = Histogram::new(exponential_buckets(1.0, 2.0, 10));
+        let query_result_get_record_ok = Counter::default();
         sub_registry.register(
             "query_result_get_record_ok",
             "Number of records returned by a successful Kademlia get record query.",
@@ -181,7 +181,7 @@ impl super::Recorder<libp2p_kad::KademliaEvent> for Metrics {
                 match result {
                     libp2p_kad::QueryResult::GetRecord(result) => match result {
                         Ok(libp2p_kad::GetRecordOk::FoundRecord(_)) => {
-                            self.query_result_get_record_ok.observe(1.);
+                            self.query_result_get_record_ok.inc();
                         }
                         Ok(libp2p_kad::GetRecordOk::FinishedWithNoAdditionalRecord) => {}
                         Err(error) => {
