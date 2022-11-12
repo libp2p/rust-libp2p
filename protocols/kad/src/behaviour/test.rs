@@ -782,7 +782,10 @@ fn get_record() {
                             }
                         } else if last {
                             assert_eq!(usize::from(count), 2);
-                            assert!(matches!(r, GetRecordOk::FinishedWithNoAdditionalRecord));
+                            assert!(matches!(
+                                r,
+                                GetRecordOk::FinishedWithNoAdditionalRecord { .. }
+                            ));
                         }
                         return Poll::Ready(());
                     }

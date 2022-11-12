@@ -183,7 +183,7 @@ impl super::Recorder<libp2p_kad::KademliaEvent> for Metrics {
                         Ok(libp2p_kad::GetRecordOk::FoundRecord(_)) => {
                             self.query_result_get_record_ok.inc();
                         }
-                        Ok(libp2p_kad::GetRecordOk::FinishedWithNoAdditionalRecord) => {}
+                        Ok(libp2p_kad::GetRecordOk::FinishedWithNoAdditionalRecord { .. }) => {}
                         Err(error) => {
                             self.query_result_get_record_error
                                 .get_or_create(&error.into())
