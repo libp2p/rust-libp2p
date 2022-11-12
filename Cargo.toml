@@ -29,6 +29,7 @@ full = [
     "ping",
     "plaintext",
     "pnet",
+    "macros",
     "relay",
     "rendezvous",
     "request-response",
@@ -45,38 +46,39 @@ full = [
     "websocket",
     "yamux",
 ]
+async-std = ["libp2p-mdns?/async-io", "libp2p-tcp?/async-io", "libp2p-dns?/async-std"]
 autonat = ["dep:libp2p-autonat"]
 dcutr = ["dep:libp2p-dcutr", "libp2p-metrics?/dcutr"]
 deflate = ["dep:libp2p-deflate"]
 dns = ["dep:libp2p-dns"]
+ecdsa = ["libp2p-core/ecdsa"]
 floodsub = ["dep:libp2p-floodsub"]
+gossipsub = ["dep:libp2p-gossipsub", "libp2p-metrics?/gossipsub"]
 identify = ["dep:libp2p-identify", "libp2p-metrics?/identify"]
 kad = ["dep:libp2p-kad", "libp2p-metrics?/kad"]
-gossipsub = ["dep:libp2p-gossipsub", "libp2p-metrics?/gossipsub"]
+macros = ["libp2p-swarm/macros"]
+mdns = ["dep:libp2p-mdns"]
 tls = ["dep:libp2p-tls"]
 metrics = ["dep:libp2p-metrics"]
-mdns = ["dep:libp2p-mdns"]
 mplex = ["dep:libp2p-mplex"]
 noise = ["dep:libp2p-noise"]
 ping = ["dep:libp2p-ping", "libp2p-metrics?/ping"]
 plaintext = ["dep:libp2p-plaintext"]
 pnet = ["dep:libp2p-pnet"]
 relay = ["dep:libp2p-relay", "libp2p-metrics?/relay"]
-request-response = ["dep:libp2p-request-response"]
 rendezvous = ["dep:libp2p-rendezvous"]
+request-response = ["dep:libp2p-request-response"]
+rsa = ["libp2p-core/rsa"]
+secp256k1 = ["libp2p-core/secp256k1"]
+serde = ["libp2p-core/serde", "libp2p-kad?/serde", "libp2p-gossipsub?/serde"]
 tcp = ["dep:libp2p-tcp"]
+tokio = ["libp2p-mdns?/tokio", "libp2p-tcp?/tokio", "libp2p-dns?/tokio"]
 uds = ["dep:libp2p-uds"]
 wasm-bindgen = ["futures-timer/wasm-bindgen", "instant/wasm-bindgen", "getrandom/js"]
 wasm-ext = ["dep:libp2p-wasm-ext"]
 wasm-ext-websocket = ["wasm-ext", "libp2p-wasm-ext?/websocket"]
 websocket = ["dep:libp2p-websocket"]
 yamux = ["dep:libp2p-yamux"]
-secp256k1 = ["libp2p-core/secp256k1"]
-rsa = ["libp2p-core/rsa"]
-ecdsa = ["libp2p-core/ecdsa"]
-serde = ["libp2p-core/serde", "libp2p-kad?/serde", "libp2p-gossipsub?/serde"]
-tokio = ["libp2p-mdns?/tokio", "libp2p-tcp?/tokio", "libp2p-dns?/tokio"]
-async-std = ["libp2p-mdns?/async-io", "libp2p-tcp?/async-io", "libp2p-dns?/async-std"]
 
 [dependencies]
 bytes = "1"
@@ -102,7 +104,6 @@ libp2p-relay = { version = "0.14.0", path = "protocols/relay", optional = true }
 libp2p-rendezvous = { version = "0.11.0", path = "protocols/rendezvous", optional = true }
 libp2p-request-response = { version = "0.23.0", path = "protocols/request-response", optional = true }
 libp2p-swarm = { version = "0.41.0", path = "swarm" }
-libp2p-swarm-derive = { version = "0.30.1", path = "swarm-derive" }
 libp2p-uds = { version = "0.37.0", path = "transports/uds", optional = true }
 libp2p-wasm-ext = { version = "0.38.0", path = "transports/wasm-ext", optional = true }
 libp2p-yamux = { version = "0.42.0", path = "muxers/yamux", optional = true }

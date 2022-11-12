@@ -31,8 +31,8 @@ use futures::prelude::*;
 use libp2p::autonat;
 use libp2p::identify;
 use libp2p::multiaddr::Protocol;
-use libp2p::swarm::{Swarm, SwarmEvent};
-use libp2p::{identity, Multiaddr, NetworkBehaviour, PeerId};
+use libp2p::swarm::{NetworkBehaviour, Swarm, SwarmEvent};
+use libp2p::{identity, Multiaddr, PeerId};
 use std::error::Error;
 use std::net::Ipv4Addr;
 

@@ -90,11 +90,12 @@ pub(crate) type THandlerOutEvent<THandler> =
 /// addition to the event `enum` itself.
 ///
 /// ``` rust
-/// # use libp2p::identify;
-/// # use libp2p::ping;
-/// # use libp2p::NetworkBehaviour;
+/// # use libp2p_identify as identify;
+/// # use libp2p_ping as ping;
+/// # use libp2p_swarm_derive::NetworkBehaviour;
 /// #[derive(NetworkBehaviour)]
 /// #[behaviour(out_event = "Event")]
+/// # #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
 /// struct MyBehaviour {
 ///   identify: identify::Behaviour,
 ///   ping: ping::Behaviour,
@@ -315,19 +316,19 @@ pub enum NetworkBehaviourAction<
     /// ```rust
     /// # use futures::executor::block_on;
     /// # use futures::stream::StreamExt;
-    /// # use libp2p::core::connection::ConnectionId;
-    /// # use libp2p::core::identity;
-    /// # use libp2p::core::transport::{MemoryTransport, Transport};
-    /// # use libp2p::core::upgrade::{self, DeniedUpgrade, InboundUpgrade, OutboundUpgrade};
-    /// # use libp2p::core::PeerId;
-    /// # use libp2p::plaintext::PlainText2Config;
-    /// # use libp2p::swarm::{
+    /// # use libp2p_core::connection::ConnectionId;
+    /// # use libp2p_core::identity;
+    /// # use libp2p_core::transport::{MemoryTransport, Transport};
+    /// # use libp2p_core::upgrade::{self, DeniedUpgrade, InboundUpgrade, OutboundUpgrade};
+    /// # use libp2p_core::PeerId;
+    /// # use libp2p_plaintext::PlainText2Config;
+    /// # use libp2p_swarm::{
     /// #     DialError, IntoConnectionHandler, KeepAlive, NegotiatedSubstream,
     /// #     NetworkBehaviour, NetworkBehaviourAction, PollParameters, ConnectionHandler,
     /// #     ConnectionHandlerEvent, ConnectionHandlerUpgrErr, SubstreamProtocol, Swarm, SwarmEvent,
     /// # };
-    /// # use libp2p::swarm::dial_opts::{DialOpts, PeerCondition};
-    /// # use libp2p::yamux;
+    /// # use libp2p_swarm::dial_opts::{DialOpts, PeerCondition};
+    /// # use libp2p_yamux as yamux;
     /// # use std::collections::VecDeque;
     /// # use std::task::{Context, Poll};
     /// # use void::Void;
