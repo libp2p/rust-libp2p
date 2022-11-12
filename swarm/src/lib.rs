@@ -1343,7 +1343,7 @@ where
     /// via [`SwarmBuilder::build`].
     #[deprecated(
         since = "0.50.0",
-        note = "Unnecessary since replaced by `SwarmBuilder::with_executor` and `SwarmBuilder::without_executor`."
+        note = "Use `SwarmBuilder::with_executor` or `SwarmBuilder::without_executor` instead."
     )]
     pub fn new(
         transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
@@ -1401,7 +1401,7 @@ where
     /// [`ThreadPool`](futures::executor::ThreadPool).
     #[deprecated(
         since = "0.50.0",
-        note = "Deprecated since executor creation now happens in `SwarmBuilder::with_executor`."
+        note = "Use `SwarmBuilder::with_executor` instead."
     )]
     pub fn executor(mut self, executor: Box<dyn Executor + Send>) -> Self {
         self.pool_config = self.pool_config.with_executor(executor);
@@ -1493,7 +1493,6 @@ where
 
     /// Builds a `Swarm` with the current configuration.
     ///
-    /// If no executor was given, no executor will be set.
     pub fn build(mut self) -> Swarm<TBehaviour> {
         let supported_protocols = self
             .behaviour
