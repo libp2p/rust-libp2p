@@ -338,5 +338,5 @@ mod tests {
     }
 
     // Hack to work around borrow-checker.
-    static TEST_KEY: Lazy<Keypair<X25519>> = Lazy::new(|| Keypair::<X25519>::new());
+    static TEST_KEY: Lazy<Keypair<X25519>> = Lazy::new(Keypair::<X25519>::new);
 }
