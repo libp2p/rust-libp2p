@@ -324,13 +324,13 @@ mod network {
 
         /// Find the providers for the given file on the DHT.
         pub async fn get_providers(&mut self, file_name: String) -> HashSet<PeerId> {
-            let (sender, mut receiver) = mpsc::channel(0);
+            let (sender, receiver) = oneshot::channel();
             self.sender
                 .send(Command::GetProviders { file_name, sender })
                 .await
                 .expect("Command receiver not to be dropped.");
             let mut out = HashSet::new();
-            while let Some(h) = receiver.next().await {
+            if let Ok(h) = receiver.await {
                 out.extend(h);
             }
             out
@@ -373,7 +373,7 @@ mod network {
         event_sender: mpsc::Sender<Event>,
         pending_dial: HashMap<PeerId, oneshot::Sender<Result<(), Box<dyn Error + Send>>>>,
         pending_start_providing: HashMap<QueryId, oneshot::Sender<()>>,
-        pending_get_providers: HashMap<QueryId, mpsc::Sender<HashSet<PeerId>>>,
+        pending_get_providers: HashMap<QueryId, oneshot::Sender<HashSet<PeerId>>>,
         pending_request_file:
             HashMap<RequestId, oneshot::Sender<Result<Vec<u8>, Box<dyn Error + Send>>>>,
     }
@@ -432,13 +432,17 @@ mod network {
                 SwarmEvent::Behaviour(ComposedEvent::Kademlia(
                     KademliaEvent::OutboundQueryProgressed {
                         id,
-                        result: QueryResult::GetProviders(Ok(GetProvidersOk { providers, .. })),
+                        result:
+                            QueryResult::GetProviders(Ok(GetProvidersOk::FoundProviders {
+                                providers,
+                                ..
+                            })),
                         ..
                     },
                 )) => {
                     let _ = self
                         .pending_get_providers
-                        .get_mut(&id)
+                        .remove(&id)
                         .expect("Completed query to be previously pending.")
                         .send(providers);
                 }
@@ -641,7 +645,7 @@ mod network {
         },
         GetProviders {
             file_name: String,
-            sender: mpsc::Sender<HashSet<PeerId>>,
+            sender: oneshot::Sender<HashSet<PeerId>>,
         },
         RequestFile {
             file_name: String,

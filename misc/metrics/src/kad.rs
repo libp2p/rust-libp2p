@@ -18,7 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use libp2p_kad::{GetProvidersOk, GetRecordOk};
 use prometheus_client::encoding::text::Encode;
 use prometheus_client::metrics::counter::Counter;
 use prometheus_client::metrics::family::Family;
@@ -181,10 +180,10 @@ impl super::Recorder<libp2p_kad::KademliaEvent> for Metrics {
 
                 match result {
                     libp2p_kad::QueryResult::GetRecord(result) => match result {
-                        Ok(GetRecordOk::FoundRecord(_)) => {
+                        Ok(libp2p_kad::GetRecordOk::FoundRecord(_)) => {
                             self.query_result_get_record_ok.observe(1.);
                         }
-                        Ok(GetRecordOk::NoAdditionalRecord) => {}
+                        Ok(libp2p_kad::GetRecordOk::FinishedWithNoAdditionalRecord) => {}
                         Err(error) => {
                             self.query_result_get_record_error
                                 .get_or_create(&error.into())
@@ -202,10 +201,13 @@ impl super::Recorder<libp2p_kad::KademliaEvent> for Metrics {
                         }
                     },
                     libp2p_kad::QueryResult::GetProviders(result) => match result {
-                        Ok(GetProvidersOk { providers, .. }) => {
+                        Ok(libp2p_kad::GetProvidersOk::FoundProviders { providers, .. }) => {
                             self.query_result_get_providers_ok
                                 .observe(providers.len() as f64);
                         }
+                        Ok(libp2p_kad::GetProvidersOk::FinishedWithNoAdditionalRecord {
+                            ..
+                        }) => {}
                         Err(error) => {
                             self.query_result_get_providers_error
                                 .get_or_create(&error.into())

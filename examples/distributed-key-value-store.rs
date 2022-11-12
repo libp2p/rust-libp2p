@@ -123,7 +123,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 }
                 SwarmEvent::Behaviour(MyBehaviourEvent::Kademlia(KademliaEvent::OutboundQueryProgressed { result, ..})) => {
                     match result {
-                        QueryResult::GetProviders(Ok(GetProvidersOk { key, providers, .. })) => {
+                        QueryResult::GetProviders(Ok(GetProvidersOk::FoundProviders { key, providers, .. })) => {
                             for peer in providers {
                                 println!(
                                     "Peer {:?} provides key {:?}",

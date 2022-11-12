@@ -775,16 +775,14 @@ fn get_record() {
                     ))) => {
                         assert_eq!(id, qid);
                         if usize::from(count) == 1 {
-                            assert!(matches!(r, GetRecordOk::NoAdditionalRecord));
-                        }
-                        if usize::from(count) == 2 {
+                            assert!(!last);
                             assert!(matches!(r, GetRecordOk::FoundRecord(_)));
                             if let GetRecordOk::FoundRecord(r) = r {
                                 assert_eq!(r.record, record);
                             }
-                        }
-                        if last {
-                            assert_eq!(usize::from(count), 3);
+                        } else if last {
+                            assert_eq!(usize::from(count), 2);
+                            assert!(matches!(r, GetRecordOk::FinishedWithNoAdditionalRecord));
                         }
                         return Poll::Ready(());
                     }
@@ -1180,7 +1178,7 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
         .iter()
         .for_each(|q| match &q.inner.info {
             QueryInfo::GetRecord { step, .. } => {
-                assert_eq!(usize::from(step.count), 3);
+                assert_eq!(usize::from(step.count), 2);
             }
             i => panic!("Unexpected query info: {:?}", i),
         });
@@ -1373,23 +1371,27 @@ fn get_providers_single() {
 
         let query_id = single_swarm.behaviour_mut().get_providers(key);
 
-        let mut found_key = None;
         block_on(async {
             loop {
                 match single_swarm.next().await.unwrap() {
                     SwarmEvent::Behaviour(KademliaEvent::OutboundQueryProgressed {
                         id,
-                        result: QueryResult::GetProviders(Ok(GetProvidersOk { key, providers, .. })),
+                        result: QueryResult::GetProviders(Ok(ok)),
                         step: index,
                         ..
                     }) if id == query_id => {
                         if index.last {
-                            assert_eq!(key, found_key.unwrap());
+                            assert!(matches!(
+                                ok,
+                                GetProvidersOk::FinishedWithNoAdditionalRecord { .. }
+                            ));
                             break;
                         } else {
-                            found_key = Some(key);
-                            assert_eq!(providers.len(), 1);
-                            assert!(providers.contains(single_swarm.local_peer_id()));
+                            assert!(matches!(ok, GetProvidersOk::FoundProviders { .. }));
+                            if let GetProvidersOk::FoundProviders { providers, .. } = ok {
+                                assert_eq!(providers.len(), 1);
+                                assert!(providers.contains(single_swarm.local_peer_id()));
+                            }
                         }
                     }
                     SwarmEvent::Behaviour(e) => panic!("Unexpected event: {:?}", e),
@@ -1440,35 +1442,38 @@ fn get_providers_limit<const N: usize>() {
                         Poll::Ready(Some(SwarmEvent::Behaviour(
                             KademliaEvent::OutboundQueryProgressed {
                                 id,
-                                result:
-                                    QueryResult::GetProviders(Ok(GetProvidersOk {
-                                        key: found_key,
-                                        providers,
-                                        ..
-                                    })),
+                                result: QueryResult::GetProviders(Ok(ok)),
                                 step: index,
                                 ..
                             },
                         ))) if i == 0 && id == query_id => {
                             if index.last {
-                                assert_eq!(key, found_key);
-                                assert!(providers.is_empty());
+                                assert!(matches!(
+                                    ok,
+                                    GetProvidersOk::FinishedWithNoAdditionalRecord { .. }
+                                ));
                                 assert_eq!(all_providers.len(), N);
                                 return Poll::Ready(());
                             } else {
-                                // There are a total of 2 providers.
-                                assert_eq!(key, found_key);
-                                for provider in &providers {
-                                    // Providers should be either 2 or 3
-                                    assert_ne!(swarm.local_peer_id(), provider);
-                                }
-                                all_providers.extend(providers);
+                                assert!(matches!(ok, GetProvidersOk::FoundProviders { .. }));
+                                if let GetProvidersOk::FoundProviders {
+                                    key: found_key,
+                                    providers,
+                                } = ok
+                                {
+                                    // There are a total of 2 providers.
+                                    assert_eq!(key, found_key);
+                                    for provider in &providers {
+                                        // Providers should be either 2 or 3
+                                        assert_ne!(swarm.local_peer_id(), provider);
+                                    }
+                                    all_providers.extend(providers);
 
-                                // If we have all providers, finish.
-                                if all_providers.len() == N {
-                                    swarm.behaviour_mut().query_mut(&id).unwrap().finish();
+                                    // If we have all providers, finish.
+                                    if all_providers.len() == N {
+                                        swarm.behaviour_mut().query_mut(&id).unwrap().finish();
+                                    }
                                 }
-
                                 return Poll::Ready(());
                             }
                         }
