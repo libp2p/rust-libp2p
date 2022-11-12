@@ -188,7 +188,7 @@ impl Channel {
         socket_addr: SocketAddr,
         new_connections: Option<mpsc::Sender<Connection>>,
     ) -> Result<Self, Error> {
-        let socket = std::net::UdpSocket::bind(&socket_addr)?;
+        let socket = std::net::UdpSocket::bind(socket_addr)?;
         // NOT blocking, as per man:bind(2), as we pass an IP address.
         socket.set_nonblocking(true)?;
         // Capacity 0 to back-pressure the rest of the application if
