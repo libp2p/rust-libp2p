@@ -39,8 +39,8 @@ use libp2p::{
         TokioMdns,
     },
     mplex, noise,
-    swarm::{SwarmBuilder, SwarmEvent},
-    tcp, Multiaddr, NetworkBehaviour, PeerId, Transport,
+    swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent},
+    tcp, Multiaddr, PeerId, Transport,
 };
 use std::error::Error;
 use tokio::io::{self, AsyncBufReadExt};
