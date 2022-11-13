@@ -50,7 +50,7 @@ pub trait TopicSubscriptionFilter {
             }
         }
         self.filter_incoming_subscription_set(
-            filtered_subscriptions.values().copied().collect(),
+            filtered_subscriptions.into_values().collect(),
             currently_subscribed_topics,
         )
     }
