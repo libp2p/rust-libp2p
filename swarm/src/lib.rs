@@ -1515,7 +1515,6 @@ where
     }
 
     /// Builds a `Swarm` with the current configuration.
-    ///
     pub fn build(mut self) -> Swarm<TBehaviour> {
         let supported_protocols = self
             .behaviour
