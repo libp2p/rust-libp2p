@@ -64,6 +64,7 @@ mod upgrade;
 pub mod behaviour;
 pub mod dial_opts;
 pub mod dummy;
+pub mod executor;
 pub mod handler;
 pub mod keep_alive;
 
@@ -86,6 +87,7 @@ use connection::pool::{EstablishedConnection, Pool, PoolConfig, PoolEvent};
 use connection::IncomingInfo;
 use dial_opts::{DialOpts, PeerCondition};
 use either::Either;
+use executor::Executor;
 use futures::{executor::ThreadPoolBuilder, prelude::*, stream::FusedStream};
 use libp2p_core::connection::ConnectionId;
 use libp2p_core::muxing::SubstreamBox;
@@ -96,7 +98,7 @@ use libp2p_core::{
     muxing::StreamMuxerBox,
     transport::{self, ListenerId, TransportError, TransportEvent},
     upgrade::ProtocolName,
-    Endpoint, Executor, Multiaddr, Negotiated, PeerId, Transport,
+    Endpoint, Multiaddr, Negotiated, PeerId, Transport,
 };
 use registry::{AddressIntoIter, Addresses};
 use smallvec::SmallVec;
@@ -340,7 +342,7 @@ where
             transport,
             behaviour,
             local_peer_id,
-            crate::connection::pool::executor::TokioExecutor,
+            crate::executor::TokioExecutor,
         )
     }
 
@@ -351,13 +353,12 @@ where
         behaviour: TBehaviour,
         local_peer_id: PeerId,
     ) -> Self {
-        SwarmBuilder::with_executor(
+        Self::with_executor(
             transport,
             behaviour,
             local_peer_id,
-            crate::connection::pool::executor::AsyncStdExecutor,
+            crate::executor::AsyncStdExecutor,
         )
-        .build()
     }
 
     /// Builds a new `Swarm` with a threadpool executor.

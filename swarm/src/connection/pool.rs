@@ -52,8 +52,6 @@ use std::{
 use void::Void;
 
 mod concurrent_dial;
-#[cfg(any(feature = "tokio", feature = "async-std"))]
-pub mod executor;
 mod task;
 
 enum ExecSwitch {
