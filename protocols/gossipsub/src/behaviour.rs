@@ -1265,9 +1265,9 @@ where
             // Ask in random order
             let mut iwant_ids_vec: Vec<_> = iwant_ids.into_iter().collect();
             let mut rng = thread_rng();
-            iwant_ids_vec.partial_shuffle(&mut rng, iask as usize);
+            iwant_ids_vec.partial_shuffle(&mut rng, iask);
 
-            iwant_ids_vec.truncate(iask as usize);
+            iwant_ids_vec.truncate(iask);
             *iasked += iask;
 
             for message_id in &iwant_ids_vec {

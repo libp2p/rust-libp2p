@@ -253,7 +253,7 @@ impl PeerScore {
 
                 // P2: first message deliveries
                 let p2 = {
-                    let v = topic_stats.first_message_deliveries as f64;
+                    let v = topic_stats.first_message_deliveries;
                     if v < topic_params.first_message_deliveries_cap {
                         v
                     } else {
