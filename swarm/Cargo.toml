@@ -17,6 +17,7 @@ futures = "0.3.1"
 futures-timer = "3.0.2"
 instant = "0.1.11"
 libp2p-core = { version = "0.38.0", path = "../core" }
+libp2p-swarm-derive = { version = "0.30.2", path = "../swarm-derive", optional = true }
 log = "0.4"
 pin-project = "1.0.0"
 rand = "0.8"
@@ -26,17 +27,32 @@ void = "1"
 tokio = { version = "1.15", features = ["rt"], optional = true }
 async-std = { version = "1.6.2", optional = true }
 
+[features]
+macros = ["dep:libp2p-swarm-derive"]
+
 [dev-dependencies]
 async-std = { version = "1.6.2", features = ["attributes"] }
+either = "1.6.0"
 env_logger = "0.9"
-libp2p = { path = "..", features = ["full"] }
+futures = "0.3.1"
+libp2p-identify = { path = "../protocols/identify" }
+libp2p-kad = { path = "../protocols/kad" }
+libp2p-ping = { path = "../protocols/ping" }
+libp2p-plaintext = { path = "../transports/plaintext" }
+libp2p-swarm-derive = { version = "0.30.2", path = "../swarm-derive" }
+libp2p-yamux = { path = "../muxers/yamux" }
 quickcheck = { package = "quickcheck-ext", path = "../misc/quickcheck-ext" }
+void = "1"
+
+[[test]]
+name = "swarm_derive"
+required-features = ["macros"]
 
 [features]
 tokio = ["dep:tokio"]
 async-std = ["dep:async-std"]
 
-# Passing arguments to the docsrs builder in order to properly document cfg's. 
+# Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
 [package.metadata.docs.rs]
 all-features = true

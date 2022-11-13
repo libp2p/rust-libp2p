@@ -143,7 +143,7 @@ impl From<Void> for MyEvent {
     }
 }
 
-#[derive(libp2p::NetworkBehaviour)]
+#[derive(libp2p::swarm::NetworkBehaviour)]
 #[behaviour(event_process = false)]
 #[behaviour(out_event = "MyEvent")]
 struct MyBehaviour {

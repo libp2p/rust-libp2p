@@ -29,11 +29,11 @@ use libp2p::core::transport::choice::OrTransport;
 use libp2p::core::transport::{Boxed, MemoryTransport, Transport};
 use libp2p::core::PublicKey;
 use libp2p::core::{identity, upgrade, PeerId};
+use libp2p::ping;
 use libp2p::plaintext::PlainText2Config;
 use libp2p::relay::v2::client;
 use libp2p::relay::v2::relay;
 use libp2p::swarm::{AddressScore, NetworkBehaviour, Swarm, SwarmEvent};
-use libp2p::{ping, NetworkBehaviour};
 use std::time::Duration;
 
 #[test]

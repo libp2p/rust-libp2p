@@ -30,10 +30,9 @@ use libp2p::core::{
 use libp2p::mplex;
 use libp2p::noise;
 use libp2p::ping;
-use libp2p::swarm::{Swarm, SwarmEvent};
+use libp2p::swarm::{NetworkBehaviour, Swarm, SwarmEvent};
 use libp2p::tcp;
 use libp2p::yamux;
-use libp2p::NetworkBehaviour;
 use libp2p_swarm::keep_alive;
 use quickcheck::*;
 use std::{num::NonZeroU8, time::Duration};

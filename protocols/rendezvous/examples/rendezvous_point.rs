@@ -23,9 +23,8 @@ use libp2p::core::identity;
 use libp2p::core::PeerId;
 use libp2p::identify;
 use libp2p::ping;
-use libp2p::swarm::{keep_alive, Swarm, SwarmEvent};
-use libp2p::NetworkBehaviour;
-use libp2p::{rendezvous, tokio_development_transport};
+use libp2p::swarm::{keep_alive, NetworkBehaviour, Swarm, SwarmEvent};
+use libp2p::{tokio_development_transport, rendezvous};
 use void::Void;
 
 /// Examples for the rendezvous protocol:

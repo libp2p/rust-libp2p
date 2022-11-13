@@ -42,10 +42,10 @@ use libp2p::{
     multiaddr::Protocol,
     noise, ping,
     pnet::{PnetConfig, PreSharedKey},
-    swarm::SwarmEvent,
+    swarm::{NetworkBehaviour, SwarmEvent},
     tcp,
     yamux::YamuxConfig,
-    Multiaddr, NetworkBehaviour, PeerId, Swarm, Transport,
+    Multiaddr, PeerId, Swarm, Transport,
 };
 use std::{env, error::Error, fs, path::Path, str::FromStr, time::Duration};
 
