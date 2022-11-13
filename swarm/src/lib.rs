@@ -64,7 +64,7 @@ mod upgrade;
 pub mod behaviour;
 pub mod dial_opts;
 pub mod dummy;
-pub mod executor;
+mod executor;
 pub mod handler;
 pub mod keep_alive;
 
@@ -95,6 +95,7 @@ pub use connection::{
     ConnectionError, ConnectionLimit, PendingConnectionError, PendingInboundConnectionError,
     PendingOutboundConnectionError,
 };
+pub use executor::Executor;
 pub use handler::{
     ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerSelect, ConnectionHandlerUpgrErr,
     IntoConnectionHandler, IntoConnectionHandlerSelect, KeepAlive, OneShotHandler,
@@ -108,7 +109,6 @@ use connection::pool::{EstablishedConnection, Pool, PoolConfig, PoolEvent};
 use connection::IncomingInfo;
 use dial_opts::{DialOpts, PeerCondition};
 use either::Either;
-use executor::Executor;
 use futures::{executor::ThreadPoolBuilder, prelude::*, stream::FusedStream};
 use libp2p_core::connection::ConnectionId;
 use libp2p_core::muxing::SubstreamBox;

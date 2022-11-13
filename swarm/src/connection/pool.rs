@@ -1181,14 +1181,4 @@ mod tests {
     impl Executor for Dummy {
         fn exec(&self, _: Pin<Box<dyn Future<Output = ()> + Send>>) {}
     }
-
-    // TODO: This test has to be redesigned.
-    #[test]
-    fn set_executor() {
-        PoolConfig::new(None)
-            .with_executor(Box::new(Dummy))
-            .with_executor(Box::new(|f| {
-                async_std::task::spawn(f);
-            }));
-    }
 }
