@@ -407,7 +407,12 @@ where
         behaviour: TBehaviour,
         local_peer_id: PeerId,
     ) -> Self {
-        Self::with_executor(transport, behaviour, local_peer_id, crate::executor::WasmBindgenExecutor)
+        Self::with_executor(
+            transport,
+            behaviour,
+            local_peer_id,
+            crate::executor::WasmBindgenExecutor,
+        )
     }
 
     /// Builds a new `Swarm` without an executor, instead using the current task.
