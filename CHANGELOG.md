@@ -53,7 +53,6 @@
 - Remove `NetworkBehaviour` macro export from root crate in favor of re-exported macro from `libp2p::swarm`.
   Change your import from `libp2p::NetworkBehaviour` to `libp2p::swarm::NetworkBehaviour`. See [PR 3055].
 - Feature-gate `NetworkBehaviour` macro behind `macros` feature flag. See [PR 3055].
-- Deprecate `development_transport` and `tokio_development_transport`. See [PR 3056].
 - Update individual crates.
   - Update to [`libp2p-autonat` `v0.89.0`](protocols/autonat/CHANGELOG.md#090).
   - Update to [`libp2p-core` `v0.38.0`](core/CHANGELOG.md#0380).
@@ -84,7 +83,6 @@
 [PR 3001]: https://github.com/libp2p/rust-libp2p/pull/3001
 [PR 2945]: https://github.com/libp2p/rust-libp2p/pull/2945
 [PR 3055]: https://github.com/libp2p/rust-libp2p/pull/3055
-[PR 3056]: https://github.com/libp2p/rust-libp2p/pull/3056
 
 # 0.49.0
 
