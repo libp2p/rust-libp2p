@@ -309,7 +309,7 @@ where
     /// Builds a new `Swarm`.
     #[deprecated(
         since = "0.50.0",
-        note = "This constructor is considered ambiguous regarding the executor. Use `Swarm::with_threadpool_executor` for the same behaviour."
+        note = "This constructor is considered ambiguous regarding the executor. Use one of the new, executor-specific constructors or `Swarm::with_threadpool_executor` for the same behaviour."
     )]
     pub fn new(
         transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
