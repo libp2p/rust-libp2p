@@ -46,3 +46,15 @@ impl Executor for AsyncStdExecutor {
         let _ = async_std::task::spawn(future);
     }
 }
+
+
+#[cfg(feature = "wasm-bindgen")]
+#[derive(Default, Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) struct WasmBindgenExecutor;
+
+#[cfg(feature = "wasm-bindgen")]
+impl Executor for WasmBindgenExecutor {
+    fn exec(&self, future: Pin<Box<dyn Future<Output = ()> + Send>>) {
+       wasm_bindgen_futures::spawn_local(future) 
+    }
+}

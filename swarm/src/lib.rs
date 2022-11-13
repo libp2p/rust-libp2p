@@ -401,6 +401,15 @@ where
         builder.build()
     }
 
+    #[cfg(feature = "wasm-bindgen")]
+    pub fn with_wasm_executor(
+        transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
+        behaviour: TBehaviour,
+        local_peer_id: PeerId,
+    ) -> Self {
+        Self::with_executor(transport, behaviour, local_peer_id, crate::executor::WasmBindgenExecutor)
+    }
+
     /// Builds a new `Swarm` without an executor, instead using the current task.
     ///
     /// ## ⚠️  Performance warning
