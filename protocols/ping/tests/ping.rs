@@ -44,7 +44,8 @@ fn ping_pong() {
         let cfg = ping::Config::new().with_interval(Duration::from_millis(10));
 
         let (peer1_id, trans) = mk_transport(muxer);
-        let mut swarm1 = Swarm::with_async_std_executor(trans, Behaviour::new(cfg.clone()), peer1_id);
+        let mut swarm1 =
+            Swarm::with_async_std_executor(trans, Behaviour::new(cfg.clone()), peer1_id);
 
         let (peer2_id, trans) = mk_transport(muxer);
         let mut swarm2 = Swarm::with_async_std_executor(trans, Behaviour::new(cfg), peer2_id);
@@ -128,7 +129,8 @@ fn max_failures() {
             .with_max_failures(max_failures.into());
 
         let (peer1_id, trans) = mk_transport(muxer);
-        let mut swarm1 = Swarm::with_async_std_executor(trans, Behaviour::new(cfg.clone()), peer1_id);
+        let mut swarm1 =
+            Swarm::with_async_std_executor(trans, Behaviour::new(cfg.clone()), peer1_id);
 
         let (peer2_id, trans) = mk_transport(muxer);
         let mut swarm2 = Swarm::with_async_std_executor(trans, Behaviour::new(cfg), peer2_id);

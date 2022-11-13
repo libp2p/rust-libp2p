@@ -25,7 +25,7 @@ use libp2p::multiaddr::Protocol;
 use libp2p::ping;
 use libp2p::swarm::{keep_alive, SwarmEvent};
 use libp2p::Swarm;
-use libp2p::{tokio_development_transport, rendezvous, Multiaddr};
+use libp2p::{rendezvous, tokio_development_transport, Multiaddr};
 use std::time::Duration;
 use void::Void;
 

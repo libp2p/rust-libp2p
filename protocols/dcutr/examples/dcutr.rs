@@ -156,11 +156,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
 
     let mut swarm = match ThreadPool::new() {
-        Ok(tp) => SwarmBuilder::with_executor(transport, behaviour, local_peer_id, Box::new(tp)),
+        Ok(tp) => SwarmBuilder::with_executor(transport, behaviour, local_peer_id, tp),
         Err(_) => SwarmBuilder::without_executor(transport, behaviour, local_peer_id),
     }
-        .dial_concurrency_factor(10_u8.try_into().unwrap())
-        .build();
+    .dial_concurrency_factor(10_u8.try_into().unwrap())
+    .build();
 
     swarm
         .listen_on(

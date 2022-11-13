@@ -324,7 +324,7 @@ where
         transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
         behaviour: TBehaviour,
         local_peer_id: PeerId,
-        executor: Box<dyn Executor + Send>,
+        executor: impl Executor + Send + 'static,
     ) -> Self {
         SwarmBuilder::with_executor(transport, behaviour, local_peer_id, executor).build()
     }
@@ -340,7 +340,7 @@ where
             transport,
             behaviour,
             local_peer_id,
-            Box::new(crate::connection::pool::executor::TokioExecutor),
+            crate::connection::pool::executor::TokioExecutor,
         )
     }
 
@@ -355,7 +355,7 @@ where
             transport,
             behaviour,
             local_peer_id,
-            Box::new(crate::connection::pool::executor::AsyncStdExecutor),
+            crate::connection::pool::executor::AsyncStdExecutor,
         )
         .build()
     }
@@ -370,9 +370,7 @@ where
             .name_prefix("libp2p-swarm-task-")
             .create()
         {
-            Ok(tp) => {
-                SwarmBuilder::with_executor(transport, behaviour, local_peer_id, Box::new(tp))
-            }
+            Ok(tp) => SwarmBuilder::with_executor(transport, behaviour, local_peer_id, tp),
             Err(err) => {
                 log::warn!("Failed to create executor thread pool: {:?}", err);
                 SwarmBuilder::without_executor(transport, behaviour, local_peer_id)
@@ -392,8 +390,7 @@ where
         behaviour: TBehaviour,
         local_peer_id: PeerId,
     ) -> Self {
-        SwarmBuilder::without_executor(transport, behaviour, local_peer_id)
-            .build()
+        SwarmBuilder::without_executor(transport, behaviour, local_peer_id).build()
     }
 
     /// Returns information about the connections underlying the [`Swarm`].
@@ -1363,11 +1360,14 @@ where
         behaviour: TBehaviour,
         local_peer_id: PeerId,
     ) -> Self {
-        let executor: Option<Box<dyn Executor + Send>> = match ThreadPoolBuilder::new().name_prefix("libp2p-swarm-task-")
-            .create().ok() {
-                Some(tp) => Some(Box::new(tp)),
-                None => None,
-            };
+        let executor: Option<Box<dyn Executor + Send>> = match ThreadPoolBuilder::new()
+            .name_prefix("libp2p-swarm-task-")
+            .create()
+            .ok()
+        {
+            Some(tp) => Some(Box::new(tp)),
+            None => None,
+        };
         SwarmBuilder {
             local_peer_id,
             transport,
@@ -1384,13 +1384,13 @@ where
         transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
         behaviour: TBehaviour,
         local_peer_id: PeerId,
-        executor: Box<dyn Executor + Send>,
+        executor: impl Executor + Send + 'static,
     ) -> Self {
         Self {
             local_peer_id,
             transport,
             behaviour,
-            pool_config: PoolConfig::new(Some(executor)),
+            pool_config: PoolConfig::new(Some(Box::new(executor))),
             connection_limits: Default::default(),
         }
     }
@@ -1421,10 +1421,7 @@ where
     /// By default, unless another executor has been configured,
     /// [`SwarmBuilder::build`] will try to set up a
     /// [`ThreadPool`](futures::executor::ThreadPool).
-    #[deprecated(
-        since = "0.50.0",
-        note = "Use `SwarmBuilder::with_executor` instead."
-    )]
+    #[deprecated(since = "0.50.0", note = "Use `SwarmBuilder::with_executor` instead.")]
     pub fn executor(mut self, executor: Box<dyn Executor + Send>) -> Self {
         self.pool_config = self.pool_config.with_executor(executor);
         self
@@ -1682,8 +1679,8 @@ fn p2p_addr(peer: Option<PeerId>, addr: Multiaddr) -> Result<Multiaddr, Multiadd
 mod tests {
     use super::*;
     use crate::test::{CallTraceBehaviour, MockBehaviour};
-    use futures::executor::ThreadPool;
     use futures::executor::block_on;
+    use futures::executor::ThreadPool;
     use futures::future::poll_fn;
     use futures::future::Either;
     use futures::{executor, future, ready};
@@ -1721,7 +1718,9 @@ mod tests {
             .boxed();
         let behaviour = CallTraceBehaviour::new(MockBehaviour::new(handler_proto));
         match ThreadPool::new().ok() {
-            Some(tp) => SwarmBuilder::with_executor(transport, behaviour, local_public_key.into(), Box::new(tp)),
+            Some(tp) => {
+                SwarmBuilder::with_executor(transport, behaviour, local_public_key.into(), tp)
+            }
             None => SwarmBuilder::without_executor(transport, behaviour, local_public_key.into()),
         }
     }
