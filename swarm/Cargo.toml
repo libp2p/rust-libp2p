@@ -29,6 +29,8 @@ async-std = { version = "1.6.2", optional = true }
 
 [features]
 macros = ["dep:libp2p-swarm-derive"]
+tokio = ["dep:tokio"]
+async-std = ["dep:async-std"]
 
 [dev-dependencies]
 async-std = { version = "1.6.2", features = ["attributes"] }
@@ -47,10 +49,6 @@ void = "1"
 [[test]]
 name = "swarm_derive"
 required-features = ["macros"]
-
-[features]
-tokio = ["dep:tokio"]
-async-std = ["dep:async-std"]
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
