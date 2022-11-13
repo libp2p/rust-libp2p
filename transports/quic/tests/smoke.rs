@@ -38,7 +38,7 @@ async fn dial_failure() {
     let mut a = create_transport::<quic::async_std::Provider>().1;
     let mut b = create_transport::<quic::async_std::Provider>().1;
 
-    let addr = start_listening(&mut a, "/ip4/127.0.0.1/udp/0/quic").await;
+    let addr = start_listening(&mut a, "/ip4/127.0.0.1/udp/0/quic-v1").await;
     drop(a); // stop a so b can never reach it
 
     match dial(&mut b, addr).await {
@@ -56,7 +56,7 @@ async fn endpoint_reuse() {
     let (_, mut a_transport) = create_transport::<quic::tokio::Provider>();
     let (_, mut b_transport) = create_transport::<quic::tokio::Provider>();
 
-    let a_addr = start_listening(&mut a_transport, "/ip4/127.0.0.1/udp/0/quic").await;
+    let a_addr = start_listening(&mut a_transport, "/ip4/127.0.0.1/udp/0/quic-v1").await;
     let ((_, b_send_back_addr, _), _) =
         connect(&mut a_transport, &mut b_transport, a_addr.clone()).await;
 
@@ -68,7 +68,7 @@ async fn endpoint_reuse() {
         }
     };
 
-    let b_addr = start_listening(&mut b_transport, "/ip4/127.0.0.1/udp/0/quic").await;
+    let b_addr = start_listening(&mut b_transport, "/ip4/127.0.0.1/udp/0/quic-v1").await;
     let ((_, a_send_back_addr, _), _) = connect(&mut b_transport, &mut a_transport, b_addr).await;
 
     assert_eq!(a_send_back_addr, a_addr);
@@ -81,7 +81,7 @@ async fn ipv4_dial_ipv6() {
     let (a_peer_id, mut a_transport) = create_transport::<quic::async_std::Provider>();
     let (b_peer_id, mut b_transport) = create_transport::<quic::async_std::Provider>();
 
-    let a_addr = start_listening(&mut a_transport, "/ip6/::1/udp/0/quic").await;
+    let a_addr = start_listening(&mut a_transport, "/ip6/::1/udp/0/quic-v1").await;
     let ((a_connected, _, _), (b_connected, _)) =
         connect(&mut a_transport, &mut b_transport, a_addr).await;
 
@@ -98,7 +98,7 @@ async fn wrong_peerid() {
     let (a_peer_id, mut a_transport) = create_transport::<quic::async_std::Provider>();
     let (b_peer_id, mut b_transport) = create_transport::<quic::async_std::Provider>();
 
-    let a_addr = start_listening(&mut a_transport, "/ip6/::1/udp/0/quic").await;
+    let a_addr = start_listening(&mut a_transport, "/ip6/::1/udp/0/quic-v1").await;
     let a_addr_random_peer = a_addr.with(Protocol::P2p(PeerId::random().into()));
 
     let ((a_connected, _, _), (b_connected, _)) =
@@ -144,7 +144,7 @@ async fn tcp_and_quic() {
     let (a_peer_id, mut a_transport) = new_tcp_quic_transport();
     let (b_peer_id, mut b_transport) = new_tcp_quic_transport();
 
-    let quic_addr = start_listening(&mut a_transport, "/ip4/127.0.0.1/udp/0/quic").await;
+    let quic_addr = start_listening(&mut a_transport, "/ip4/127.0.0.1/udp/0/quic-v1").await;
     let tcp_addr = start_listening(&mut a_transport, "/ip4/127.0.0.1/tcp/0").await;
 
     let ((a_connected, _, _), (b_connected, _)) =
@@ -188,7 +188,7 @@ async fn smoke<P: Provider>() {
     let (a_peer_id, mut a_transport) = create_transport::<P>();
     let (b_peer_id, mut b_transport) = create_transport::<P>();
 
-    let addr = start_listening(&mut a_transport, "/ip4/127.0.0.1/udp/0/quic").await;
+    let addr = start_listening(&mut a_transport, "/ip4/127.0.0.1/udp/0/quic-v1").await;
     let ((a_connected, _, _), (b_connected, _)) =
         connect(&mut a_transport, &mut b_transport, addr).await;
 
@@ -243,7 +243,7 @@ fn prop<P: Provider + BlockOn>(
 
             async move {
                 let (peer_id, mut listener) = create_transport::<P>();
-                let addr = start_listening(&mut listener, "/ip4/127.0.0.1/udp/0/quic").await;
+                let addr = start_listening(&mut listener, "/ip4/127.0.0.1/udp/0/quic-v1").await;
 
                 listeners_tx.send((peer_id, addr)).await.unwrap();
 

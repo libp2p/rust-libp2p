@@ -543,10 +543,10 @@ fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Option<SocketAddr> {
     }
 
     match (proto1, proto2, proto3) {
-        (Protocol::Ip4(ip), Protocol::Udp(port), Protocol::Quic) => {
+        (Protocol::Ip4(ip), Protocol::Udp(port), Protocol::QuicV1) => {
             Some(SocketAddr::new(ip.into(), port))
         }
-        (Protocol::Ip6(ip), Protocol::Udp(port), Protocol::Quic) => {
+        (Protocol::Ip6(ip), Protocol::Udp(port), Protocol::QuicV1) => {
             Some(SocketAddr::new(ip.into(), port))
         }
         _ => None,
@@ -574,7 +574,7 @@ fn is_quic_addr(addr: &Multiaddr) -> bool {
 
     matches!(first, Ip4(_) | Ip6(_) | Dns(_) | Dns4(_) | Dns6(_))
         && matches!(second, Udp(_))
-        && matches!(third, Quic)
+        && matches!(third, QuicV1)
         && matches!(fourth, Some(P2p(_)) | None)
         && matches!(fifth, None)
 }
@@ -584,7 +584,7 @@ fn socketaddr_to_multiaddr(socket_addr: &SocketAddr) -> Multiaddr {
     Multiaddr::empty()
         .with(socket_addr.ip().into())
         .with(Protocol::Udp(socket_addr.port()))
-        .with(Protocol::Quic)
+        .with(Protocol::QuicV1)
 }
 
 #[cfg(test)]
@@ -605,7 +605,7 @@ mod test {
 
         assert_eq!(
             multiaddr_to_socketaddr(
-                &"/ip4/127.0.0.1/udp/12345/quic"
+                &"/ip4/127.0.0.1/udp/12345/quic-v1"
                     .parse::<Multiaddr>()
                     .unwrap()
             ),
@@ -616,7 +616,7 @@ mod test {
         );
         assert_eq!(
             multiaddr_to_socketaddr(
-                &"/ip4/255.255.255.255/udp/8080/quic"
+                &"/ip4/255.255.255.255/udp/8080/quic-v1"
                     .parse::<Multiaddr>()
                     .unwrap()
             ),
@@ -627,7 +627,7 @@ mod test {
         );
         assert_eq!(
             multiaddr_to_socketaddr(
-                &"/ip4/127.0.0.1/udp/55148/quic/p2p/12D3KooW9xk7Zp1gejwfwNpfm6L9zH5NL4Bx5rm94LRYJJHJuARZ"
+                &"/ip4/127.0.0.1/udp/55148/quic-v1/p2p/12D3KooW9xk7Zp1gejwfwNpfm6L9zH5NL4Bx5rm94LRYJJHJuARZ"
                     .parse::<Multiaddr>()
                     .unwrap()
             ),
@@ -637,7 +637,7 @@ mod test {
             ))
         );
         assert_eq!(
-            multiaddr_to_socketaddr(&"/ip6/::1/udp/12345/quic".parse::<Multiaddr>().unwrap()),
+            multiaddr_to_socketaddr(&"/ip6/::1/udp/12345/quic-v1".parse::<Multiaddr>().unwrap()),
             Some(SocketAddr::new(
                 IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)),
                 12345,
@@ -645,7 +645,7 @@ mod test {
         );
         assert_eq!(
             multiaddr_to_socketaddr(
-                &"/ip6/ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff/udp/8080/quic"
+                &"/ip6/ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff/udp/8080/quic-v1"
                     .parse::<Multiaddr>()
                     .unwrap()
             ),
@@ -672,7 +672,7 @@ mod test {
         // is temporarily empty.
         for _ in 0..2 {
             let id = transport
-                .listen_on("/ip4/0.0.0.0/udp/0/quic".parse().unwrap())
+                .listen_on("/ip4/0.0.0.0/udp/0/quic-v1".parse().unwrap())
                 .unwrap();
 
             // Copy channel to use it later.
@@ -696,7 +696,7 @@ mod test {
                     assert!(
                         matches!(listen_addr.iter().nth(1), Some(Protocol::Udp(port)) if port != 0)
                     );
-                    assert!(matches!(listen_addr.iter().nth(2), Some(Protocol::Quic)));
+                    assert!(matches!(listen_addr.iter().nth(2), Some(Protocol::QuicV1)));
                 }
                 e => panic!("Unexpected event: {:?}", e),
             }
@@ -735,7 +735,7 @@ mod test {
         let mut transport = crate::tokio::Transport::new(config);
 
         let _dial = transport
-            .dial("/ip4/123.45.67.8/udp/1234/quic".parse().unwrap())
+            .dial("/ip4/123.45.67.8/udp/1234/quic-v1".parse().unwrap())
             .unwrap();
 
         // Expect a dialer and its background task to exist.
@@ -765,7 +765,7 @@ mod test {
 
         // Start listening so that the dialer and driver are dropped.
         let _ = transport
-            .listen_on("/ip4/0.0.0.0/udp/0/quic".parse().unwrap())
+            .listen_on("/ip4/0.0.0.0/udp/0/quic-v1".parse().unwrap())
             .unwrap();
         assert!(!transport.dialer.contains_key(&SocketFamily::Ipv4));
 
