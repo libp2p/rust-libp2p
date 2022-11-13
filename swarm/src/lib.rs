@@ -331,7 +331,7 @@ where
 {
     /// Builds a new `Swarm`.
     #[deprecated(
-        since = "0.50.0",
+        since = "0.41.0",
         note = "This constructor is considered ambiguous regarding the executor. Use one of the new, executor-specific constructors or `Swarm::with_threadpool_executor` for the same behaviour."
     )]
     pub fn new(
@@ -1374,7 +1374,7 @@ where
     /// local peer ID. The `Swarm` with its underlying `Network` is obtained
     /// via [`SwarmBuilder::build`].
     #[deprecated(
-        since = "0.50.0",
+        since = "0.41.0",
         note = "Use `SwarmBuilder::with_executor` or `SwarmBuilder::without_executor` instead."
     )]
     pub fn new(
@@ -1443,7 +1443,7 @@ where
     /// By default, unless another executor has been configured,
     /// [`SwarmBuilder::build`] will try to set up a
     /// [`ThreadPool`](futures::executor::ThreadPool).
-    #[deprecated(since = "0.50.0", note = "Use `SwarmBuilder::with_executor` instead.")]
+    #[deprecated(since = "0.41.0", note = "Use `SwarmBuilder::with_executor` instead.")]
     pub fn executor(mut self, executor: Box<dyn Executor + Send>) -> Self {
         self.pool_config = self.pool_config.with_executor(executor);
         self
