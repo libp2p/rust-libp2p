@@ -22,13 +22,11 @@ use futures::StreamExt;
 use libp2p::core::identity;
 use libp2p::core::PeerId;
 use libp2p::ping;
-use libp2p::swarm::{SwarmBuilder, SwarmEvent};
+use libp2p::swarm::{AddressScore, NetworkBehaviour, SwarmBuilder, SwarmEvent};
 use libp2p::{
     core::{upgrade::Version, Transport},
-    noise, rendezvous, tcp, yamux,
+    noise, rendezvous, tcp, yamux, Multiaddr,
 };
-use libp2p::{Multiaddr, NetworkBehaviour};
-use libp2p_swarm::AddressScore;
 use std::time::Duration;
 
 #[tokio::main]

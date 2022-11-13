@@ -79,6 +79,10 @@ pub use translation::address_translation;
 pub use transport::Transport;
 pub use upgrade::{InboundUpgrade, OutboundUpgrade, ProtocolName, UpgradeError, UpgradeInfo};
 
+#[derive(thiserror::Error, Debug)]
+#[error(transparent)]
+pub struct DecodeError(prost::DecodeError);
+
 use std::{future::Future, pin::Pin};
 
 /// Implemented on objects that can run a `Future` in the background.

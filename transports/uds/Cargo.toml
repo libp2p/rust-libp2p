@@ -3,7 +3,7 @@ name = "libp2p-uds"
 edition = "2021"
 rust-version = "1.56.1"
 description = "Unix domain sockets transport for libp2p"
-version = "0.36.0"
+version = "0.37.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -12,7 +12,7 @@ categories = ["network-programming", "asynchronous"]
 
 [target.'cfg(all(unix, not(target_os = "emscripten")))'.dependencies]
 async-std = { version = "1.6.2", optional = true }
-libp2p-core = { version = "0.37.0", path = "../../core" }
+libp2p-core = { version = "0.38.0", path = "../../core" }
 log = "0.4.1"
 futures = "0.3.1"
 tokio = { version = "1.15", default-features = false, features = ["net"], optional = true }

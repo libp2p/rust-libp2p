@@ -53,10 +53,10 @@ use futures::executor::block_on;
 use futures::stream::StreamExt;
 use libp2p::core::Multiaddr;
 use libp2p::metrics::{Metrics, Recorder};
-use libp2p::swarm::SwarmEvent;
+use libp2p::swarm::{NetworkBehaviour, SwarmEvent};
 use libp2p::{
     core::{upgrade::Version, Transport},
-    identity, noise, ping, tcp, yamux, NetworkBehaviour, PeerId, Swarm,
+    identity, noise, ping, tcp, yamux, PeerId, Swarm,
 };
 use libp2p_swarm::keep_alive;
 use log::info;

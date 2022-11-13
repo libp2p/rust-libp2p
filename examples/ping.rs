@@ -41,10 +41,10 @@
 //! and begin pinging each other.
 
 use futures::prelude::*;
-use libp2p::swarm::{Swarm, SwarmEvent};
+use libp2p::swarm::{NetworkBehaviour, Swarm, SwarmEvent};
 use libp2p::{
     core::{upgrade::Version, Transport},
-    identity, noise, ping, tcp, yamux, Multiaddr, NetworkBehaviour, PeerId,
+    identity, noise, ping, tcp, yamux, Multiaddr, PeerId,
 };
 use libp2p_swarm::keep_alive;
 use std::error::Error;
@@ -53,7 +53,7 @@ use std::error::Error;
 async fn main() -> Result<(), Box<dyn Error>> {
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
-    println!("Local peer id: {:?}", local_peer_id);
+    println!("Local peer id: {local_peer_id:?}");
 
     let transport = tcp::async_io::Transport::default()
         .upgrade(Version::V1)
@@ -72,13 +72,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
     if let Some(addr) = std::env::args().nth(1) {
         let remote: Multiaddr = addr.parse()?;
         swarm.dial(remote)?;
-        println!("Dialed {}", addr)
+        println!("Dialed {addr}")
     }
 
     loop {
         match swarm.select_next_some().await {
-            SwarmEvent::NewListenAddr { address, .. } => println!("Listening on {:?}", address),
-            SwarmEvent::Behaviour(event) => println!("{:?}", event),
+            SwarmEvent::NewListenAddr { address, .. } => println!("Listening on {address:?}"),
+            SwarmEvent::Behaviour(event) => println!("{event:?}"),
             _ => {}
         }
     }

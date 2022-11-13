@@ -23,8 +23,7 @@ use libp2p::core::identity;
 use libp2p::core::PeerId;
 use libp2p::identify;
 use libp2p::ping;
-use libp2p::swarm::{keep_alive, SwarmBuilder, SwarmEvent};
-use libp2p::NetworkBehaviour;
+use libp2p::swarm::{keep_alive, NetworkBehaviour, SwarmBuilder, SwarmEvent};
 use libp2p::{core::upgrade::Version, core::Transport, noise, rendezvous, tcp, yamux};
 use void::Void;
 
