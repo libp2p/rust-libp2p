@@ -19,7 +19,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! libp2p circuit relay implementations
+//! Implementation of libp2p [circuit relay](https://github.com/libp2p/specs/blob/master/relay/README.md) protocol.
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 

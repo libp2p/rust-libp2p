@@ -314,6 +314,7 @@ fn with_either() {
 fn custom_event_with_either() {
     use either::Either;
 
+    #[allow(clippy::large_enum_variant)]
     enum BehaviourOutEvent {
         Kad(libp2p_kad::KademliaEvent),
         PingOrIdentify(Either<ping::Event, identify::Event>),

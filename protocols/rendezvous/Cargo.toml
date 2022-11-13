@@ -3,7 +3,7 @@ name = "libp2p-rendezvous"
 edition = "2021"
 rust-version = "1.56.1"
 description = "Rendezvous protocol for libp2p"
-version = "0.10.0"
+version = "0.11.0"
 authors = ["The COMIT guys <hello@comit.network>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -12,19 +12,20 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 asynchronous-codec = "0.6"
-libp2p-core = { version = "0.37.0", path = "../../core" }
-libp2p-swarm = { version = "0.40.0", path = "../../swarm" }
-prost = "0.11"
-void = "1"
-log = "0.4"
-futures = { version = "0.3", default-features = false, features = ["std"] }
-thiserror = "1"
-unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
 bimap = "0.6.1"
-sha2 = "0.10"
-rand = "0.8"
+futures = { version = "0.3", default-features = false, features = ["std"] }
 futures-timer = "3.0.2"
 instant = "0.1.11"
+libp2p-core = { version = "0.38.0", path = "../../core" }
+libp2p-swarm = { version = "0.41.0", path = "../../swarm" }
+log = "0.4"
+prost = "0.11"
+prost-codec = { version = "0.3.0", path = "../../misc/prost-codec" }
+rand = "0.8"
+sha2 = "0.10"
+thiserror = "1"
+unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
+void = "1"
 
 [dev-dependencies]
 async-trait = "0.1"

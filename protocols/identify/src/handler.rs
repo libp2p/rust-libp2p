@@ -91,6 +91,7 @@ pub struct Handler {
 
 /// Event produced by the `IdentifyHandler`.
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum Event {
     /// We obtained identification information from the remote.
     Identified(Info),

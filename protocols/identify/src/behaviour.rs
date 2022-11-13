@@ -131,7 +131,7 @@ impl Config {
             initial_delay: Duration::from_millis(500),
             interval: Duration::from_secs(5 * 60),
             push_listen_addr_updates: false,
-            cache_size: 0,
+            cache_size: 100,
         }
     }
 
@@ -748,9 +748,7 @@ mod tests {
         let mut swarm2 = {
             let (pubkey, transport) = transport();
             let protocol = Behaviour::new(
-                Config::new("a".to_string(), pubkey.clone())
-                    .with_cache_size(100)
-                    .with_agent_version("b".to_string()),
+                Config::new("a".to_string(), pubkey.clone()).with_agent_version("b".to_string()),
             );
 
             Swarm::new(transport, protocol, pubkey.to_peer_id())
