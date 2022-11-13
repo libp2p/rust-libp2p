@@ -68,7 +68,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             behaviour.add_address(&PeerId::from_str(peer)?, bootaddr.clone());
         }
 
-        Swarm::new(transport, behaviour, local_peer_id)
+        Swarm::with_async_std_executor(transport, behaviour, local_peer_id)
     };
 
     // Order Kademlia to search for a peer.

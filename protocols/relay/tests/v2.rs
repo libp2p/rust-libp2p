@@ -291,7 +291,7 @@ fn build_relay() -> Swarm<Relay> {
 
     let transport = upgrade_transport(MemoryTransport::default().boxed(), local_public_key);
 
-    Swarm::new(
+    Swarm::with_threadpool_executor(
         transport,
         Relay {
             ping: ping::Behaviour::new(ping::Config::new()),
@@ -318,7 +318,7 @@ fn build_client() -> Swarm<Client> {
         local_public_key,
     );
 
-    Swarm::new(
+    Swarm::with_threadpool_executor(
         transport,
         Client {
             ping: ping::Behaviour::new(ping::Config::new()),

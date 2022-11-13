@@ -54,7 +54,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let transport = libp2p::development_transport(local_key).await?;
 
-    let mut swarm = Swarm::new(transport, Behaviour::default(), local_peer_id);
+    let mut swarm = Swarm::with_async_std_executor(transport, Behaviour::default(), local_peer_id);
 
     // Tell the swarm to listen on all interfaces and a random, OS-assigned
     // port.

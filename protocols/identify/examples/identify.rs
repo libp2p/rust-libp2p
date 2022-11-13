@@ -55,7 +55,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         local_key.public(),
     ));
 
-    let mut swarm = Swarm::new(transport, behaviour, local_peer_id);
+    let mut swarm = Swarm::with_async_std_executor(transport, behaviour, local_peer_id);
 
     // Tell the swarm to listen on all interfaces and a random, OS-assigned
     // port.

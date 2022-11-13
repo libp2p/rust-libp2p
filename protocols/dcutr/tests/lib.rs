@@ -99,7 +99,7 @@ fn build_relay() -> Swarm<relay::Relay> {
 
     let transport = build_transport(MemoryTransport::default().boxed(), local_public_key);
 
-    Swarm::new(
+    Swarm::with_threadpool_executor(
         transport,
         relay::Relay::new(
             local_peer_id,
@@ -123,7 +123,7 @@ fn build_client() -> Swarm<Client> {
         local_public_key,
     );
 
-    Swarm::new(
+    Swarm::with_threadpool_executor(
         transport,
         Client {
             relay: behaviour,

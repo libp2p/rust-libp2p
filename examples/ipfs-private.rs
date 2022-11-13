@@ -204,7 +204,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
         println!("Subscribing to {gossipsub_topic:?}");
         behaviour.gossipsub.subscribe(&gossipsub_topic).unwrap();
-        Swarm::new(transport, behaviour, local_peer_id)
+        Swarm::with_async_std_executor(transport, behaviour, local_peer_id)
     };
 
     // Reach out to other nodes if specified

@@ -1684,6 +1684,7 @@ fn p2p_addr(peer: Option<PeerId>, addr: Multiaddr) -> Result<Multiaddr, Multiadd
 mod tests {
     use super::*;
     use crate::test::{CallTraceBehaviour, MockBehaviour};
+    use futures::executor::ThreadPool;
     use futures::executor::block_on;
     use futures::future::poll_fn;
     use futures::future::Either;
@@ -1721,7 +1722,10 @@ mod tests {
             .multiplex(yamux::YamuxConfig::default())
             .boxed();
         let behaviour = CallTraceBehaviour::new(MockBehaviour::new(handler_proto));
-        SwarmBuilder::new(transport, behaviour, local_public_key.into())
+        match ThreadPool::new().ok() {
+            Some(tp) => SwarmBuilder::with_executor(transport, behaviour, local_public_key.into(), Box::new(tp)),
+            None => SwarmBuilder::without_executor(transport, behaviour, local_public_key.into()),
+        }
     }
 
     fn swarms_connected<TBehaviour>(
