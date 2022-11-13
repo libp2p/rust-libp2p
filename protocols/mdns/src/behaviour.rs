@@ -20,6 +20,7 @@
 
 mod iface;
 mod socket;
+#[cfg(any(feature = "tokio", feature = "async-io"))]
 mod timer;
 
 use self::iface::InterfaceState;
