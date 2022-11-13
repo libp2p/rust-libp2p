@@ -60,7 +60,6 @@ enum ExecSwitch {
 }
 
 impl ExecSwitch {
-    // advance the local queue
     #[inline]
     fn advance_local(&mut self, cx: &mut Context) {
         match self {

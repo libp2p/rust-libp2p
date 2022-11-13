@@ -8,7 +8,7 @@
 
 - Feature-gate `NetworkBehaviour` macro behind `macros` feature flag. See [PR 3055].
 
-- Made Swarm executor aware. See [PR 3097] for details.
+- Make executor in Swarm constructor explicit. See [PR 3097].
   
   Supported executors:
   - Tokio
@@ -49,12 +49,12 @@
     ```
 
     Now
-    ```
+    ```rust
     let swarm = Swarm::with_threadpool_executor(transport, behaviour, peer_id);
     ```
   - Without
     
-    Spawns the tasks on the current task, this results in bad performance so try to use an executor if possible. Previously this was just a fallback for ThreadPool.
+    Spawns the tasks on the current task, this may result in bad performance so try to use an executor where possible. Previously this was just a fallback when no executor was specified and constructing a `ThreadPool` failed.
 
     New
     ```rust
