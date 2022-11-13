@@ -73,7 +73,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
-    info!("Local peer id: {:?}", local_peer_id);
+    info!("Local peer id: {local_peer_id:?}");
 
     let mut swarm = Swarm::new(
         tcp::async_io::Transport::default()

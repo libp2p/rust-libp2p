@@ -54,22 +54,22 @@ use std::{
     task::{Context, Poll},
 };
 
-#[deprecated(since = "0.39.1", note = "Use libp2p_ping::Config instead.")]
+#[deprecated(since = "0.39.1", note = "Use libp2p::ping::Config instead.")]
 pub type PingConfig = Config;
 
-#[deprecated(since = "0.39.1", note = "Use libp2p_ping::Event instead.")]
+#[deprecated(since = "0.39.1", note = "Use libp2p::ping::Event instead.")]
 pub type PingEvent = Event;
 
-#[deprecated(since = "0.39.1", note = "Use libp2p_ping::Success instead.")]
+#[deprecated(since = "0.39.1", note = "Use libp2p::ping::Success instead.")]
 pub type PingSuccess = Success;
 
-#[deprecated(since = "0.39.1", note = "Use libp2p_ping::Failure instead.")]
+#[deprecated(since = "0.39.1", note = "Use libp2p::ping::Failure instead.")]
 pub type PingFailure = Failure;
 
-#[deprecated(since = "0.39.1", note = "Use libp2p_ping::Result instead.")]
+#[deprecated(since = "0.39.1", note = "Use libp2p::ping::Result instead.")]
 pub type PingResult = Result;
 
-#[deprecated(since = "0.39.1", note = "Use libp2p_ping::Behaviour instead.")]
+#[deprecated(since = "0.39.1", note = "Use libp2p::ping::Behaviour instead.")]
 pub type Ping = Behaviour;
 
 pub use self::protocol::PROTOCOL_NAME;
