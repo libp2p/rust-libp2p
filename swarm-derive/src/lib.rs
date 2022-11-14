@@ -24,6 +24,7 @@
 use heck::ToUpperCamelCase;
 use proc_macro::TokenStream;
 use quote::quote;
+use syn::parse::Parse;
 use syn::{parse_macro_input, Data, DataStruct, DeriveInput};
 
 /// Generates a delegating `NetworkBehaviour` implementation for the struct this is used for. See
@@ -47,30 +48,32 @@ fn build(ast: &DeriveInput) -> TokenStream {
 fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     let name = &ast.ident;
     let (_, ty_generics, where_clause) = ast.generics.split_for_impl();
-    let multiaddr = quote! {::libp2p::core::Multiaddr};
-    let trait_to_impl = quote! {::libp2p::swarm::NetworkBehaviour};
-    let either_ident = quote! {::libp2p::core::either::EitherOutput};
-    let network_behaviour_action = quote! {::libp2p::swarm::NetworkBehaviourAction};
-    let into_connection_handler = quote! {::libp2p::swarm::IntoConnectionHandler};
-    let connection_handler = quote! {::libp2p::swarm::ConnectionHandler};
-    let into_proto_select_ident = quote! {::libp2p::swarm::IntoConnectionHandlerSelect};
-    let peer_id = quote! {::libp2p::core::PeerId};
-    let connection_id = quote! {::libp2p::core::connection::ConnectionId};
-    let from_swarm = quote! {::libp2p::swarm::behaviour::FromSwarm};
-    let connection_established = quote! {::libp2p::swarm::behaviour::ConnectionEstablished};
-    let address_change = quote! {::libp2p::swarm::behaviour::AddressChange};
-    let connection_closed = quote! {::libp2p::swarm::behaviour::ConnectionClosed};
-    let dial_failure = quote! {::libp2p::swarm::behaviour::DialFailure};
-    let listen_failure = quote! {::libp2p::swarm::behaviour::ListenFailure};
-    let new_listener = quote! {::libp2p::swarm::behaviour::NewListener};
-    let new_listen_addr = quote! {::libp2p::swarm::behaviour::NewListenAddr};
-    let expired_listen_addr = quote! {::libp2p::swarm::behaviour::ExpiredListenAddr};
-    let new_external_addr = quote! {::libp2p::swarm::behaviour::NewExternalAddr};
-    let expired_external_addr = quote! {::libp2p::swarm::behaviour::ExpiredExternalAddr};
-    let listener_error = quote! {::libp2p::swarm::behaviour::ListenerError};
-    let listener_closed = quote! {::libp2p::swarm::behaviour::ListenerClosed};
+    let prelude_path = parse_attribute_value_by_key::<syn::Path>(ast, "prelude")
+        .unwrap_or_else(|| syn::parse_quote! { ::libp2p::swarm::derive_prelude });
 
-    let poll_parameters = quote! {::libp2p::swarm::PollParameters};
+    let multiaddr = quote! { #prelude_path::Multiaddr };
+    let trait_to_impl = quote! { #prelude_path::NetworkBehaviour };
+    let either_ident = quote! { #prelude_path::EitherOutput };
+    let network_behaviour_action = quote! { #prelude_path::NetworkBehaviourAction };
+    let into_connection_handler = quote! { #prelude_path::IntoConnectionHandler };
+    let connection_handler = quote! { #prelude_path::ConnectionHandler };
+    let into_proto_select_ident = quote! { #prelude_path::IntoConnectionHandlerSelect };
+    let peer_id = quote! { #prelude_path::PeerId };
+    let connection_id = quote! { #prelude_path::ConnectionId };
+    let poll_parameters = quote! { #prelude_path::PollParameters };
+    let from_swarm = quote! { #prelude_path::FromSwarm };
+    let connection_established = quote! { #prelude_path::ConnectionEstablished };
+    let address_change = quote! { #prelude_path::AddressChange };
+    let connection_closed = quote! { #prelude_path::ConnectionClosed };
+    let dial_failure = quote! { #prelude_path::DialFailure };
+    let listen_failure = quote! { #prelude_path::ListenFailure };
+    let new_listener = quote! { #prelude_path::NewListener };
+    let new_listen_addr = quote! { #prelude_path::NewListenAddr };
+    let expired_listen_addr = quote! { #prelude_path::ExpiredListenAddr };
+    let new_external_addr = quote! { #prelude_path::NewExternalAddr };
+    let expired_external_addr = quote! { #prelude_path::ExpiredExternalAddr };
+    let listener_error = quote! { #prelude_path::ListenerError };
+    let listener_closed = quote! { #prelude_path::ListenerClosed };
 
     // Build the generics.
     let impl_generics = {
@@ -84,22 +87,8 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         // If we find a `#[behaviour(out_event = "Foo")]` attribute on the
         // struct, we set `Foo` as the out event. If not, the `OutEvent` is
         // generated.
-        let user_provided_out_event_name: Option<syn::Type> = ast
-            .attrs
-            .iter()
-            .filter_map(get_meta_items)
-            .flatten()
-            .filter_map(|meta_item| {
-                if let syn::NestedMeta::Meta(syn::Meta::NameValue(ref m)) = meta_item {
-                    if m.path.is_ident("out_event") {
-                        if let syn::Lit::Str(ref s) = m.lit {
-                            return Some(syn::parse_str(&s.value()).unwrap());
-                        }
-                    }
-                }
-                None
-            })
-            .next();
+        let user_provided_out_event_name =
+            parse_attribute_value_by_key::<syn::Type>(ast, "out_event");
 
         match user_provided_out_event_name {
             // User provided `OutEvent`.
@@ -602,7 +591,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             }
 
             fn poll(&mut self, cx: &mut std::task::Context, poll_params: &mut impl #poll_parameters) -> std::task::Poll<#network_behaviour_action<Self::OutEvent, Self::ConnectionHandler>> {
-                use libp2p::futures::prelude::*;
+                use #prelude_path::futures::*;
                 #(#poll_stmts)*
                 std::task::Poll::Pending
             }
@@ -652,6 +641,30 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     };
 
     final_quote.into()
+}
+
+/// Parses the `value` of a key=value pair in the `#[behaviour]` attribute into the requested type.
+///
+/// Only `String` values are supported, e.g. `#[behaviour(foo="bar")]`.
+fn parse_attribute_value_by_key<T>(ast: &DeriveInput, key: &str) -> Option<T>
+where
+    T: Parse,
+{
+    ast.attrs
+        .iter()
+        .filter_map(get_meta_items)
+        .flatten()
+        .filter_map(|meta_item| {
+            if let syn::NestedMeta::Meta(syn::Meta::NameValue(ref m)) = meta_item {
+                if m.path.is_ident(key) {
+                    if let syn::Lit::Str(ref s) = m.lit {
+                        return Some(syn::parse_str(&s.value()).unwrap());
+                    }
+                }
+            }
+            None
+        })
+        .next()
 }
 
 fn get_meta_items(attr: &syn::Attribute) -> Option<Vec<syn::NestedMeta>> {
