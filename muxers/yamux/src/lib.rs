@@ -99,6 +99,12 @@ where
         Poll::Ready(Ok(stream))
     }
 
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<YamuxResult<()>> {
+        ready!(self.connection.poll_close(cx)?);
+
+        Poll::Ready(Ok(()))
+    }
+
     fn poll(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -116,12 +122,6 @@ where
 
             this.inbound_stream_buffer.push_back(inbound_stream);
         }
-    }
-
-    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<YamuxResult<()>> {
-        ready!(self.connection.poll_close(cx)?);
-
-        Poll::Ready(Ok(()))
     }
 }
 
