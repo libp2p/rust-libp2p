@@ -279,7 +279,7 @@ where
 
 /// The Yamux [`StreamMuxer`] error type.
 #[derive(Debug, Error)]
-#[error("yamux error: {0}")]
+#[error(transparent)]
 pub struct YamuxError(#[from] ConnectionError);
 
 impl From<YamuxError> for io::Error {
