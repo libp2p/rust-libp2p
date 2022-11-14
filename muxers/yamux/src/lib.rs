@@ -94,7 +94,9 @@ where
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Result<Self::Substream, Self::Error>> {
-        self.connection.poll_new_outbound(cx).map_err(YamuxError)
+        let stream = ready!(self.connection.poll_new_outbound(cx)?);
+
+        Poll::Ready(Ok(stream))
     }
 
     fn poll(
@@ -117,7 +119,9 @@ where
     }
 
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<YamuxResult<()>> {
-        self.connection.poll_close(cx).map_err(YamuxError)
+        ready!(self.connection.poll_close(cx)?);
+
+        Poll::Ready(Ok(()))
     }
 }
 
@@ -126,13 +130,11 @@ where
     S: AsyncRead + AsyncWrite + Unpin + 'static,
 {
     fn poll_inner(&mut self, cx: &mut Context<'_>) -> Poll<Result<yamux::Stream, YamuxError>> {
-        self.connection.poll_next_inbound(cx).map(|maybe_stream| {
-            let stream = maybe_stream
-                .transpose()?
-                .ok_or(YamuxError(ConnectionError::Closed))?;
+        let stream = ready!(self.connection.poll_next_inbound(cx))
+            .transpose()?
+            .ok_or(YamuxError(ConnectionError::Closed))?;
 
-            Ok(stream)
-        })
+        Poll::Ready(Ok(stream))
     }
 }
 
@@ -278,12 +280,12 @@ where
 /// The Yamux [`StreamMuxer`] error type.
 #[derive(Debug, Error)]
 #[error("yamux error: {0}")]
-pub struct YamuxError(#[from] yamux::ConnectionError);
+pub struct YamuxError(#[from] ConnectionError);
 
 impl From<YamuxError> for io::Error {
     fn from(err: YamuxError) -> Self {
         match err.0 {
-            yamux::ConnectionError::Io(e) => e,
+            ConnectionError::Io(e) => e,
             e => io::Error::new(io::ErrorKind::Other, e),
         }
     }
