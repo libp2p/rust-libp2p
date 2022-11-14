@@ -19,8 +19,9 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::handler::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, IntoConnectionHandler,
-    KeepAlive, SubstreamProtocol,
+    AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent,
+    ConnectionHandlerUpgrErr, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
+    IntoConnectionHandler, KeepAlive, ListenUpgradeError, SubstreamProtocol,
 };
 use crate::upgrade::SendWrapper;
 use either::Either;
@@ -28,11 +29,6 @@ use libp2p_core::either::{EitherError, EitherOutput};
 use libp2p_core::upgrade::{EitherUpgrade, UpgradeError};
 use libp2p_core::{ConnectedPoint, PeerId};
 use std::task::{Context, Poll};
-
-use super::{
-    AddressChange, ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound,
-    FullyNegotiatedOutbound, ListenUpgradeError,
-};
 
 pub enum IntoEitherHandler<L, R> {
     Left(L),

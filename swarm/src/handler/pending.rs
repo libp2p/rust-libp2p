@@ -19,12 +19,13 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::handler::{ConnectionHandler, ConnectionHandlerEvent, KeepAlive, SubstreamProtocol};
+use crate::handler::{
+    ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, FullyNegotiatedInbound,
+    FullyNegotiatedOutbound, KeepAlive, SubstreamProtocol,
+};
 use libp2p_core::upgrade::PendingUpgrade;
 use std::task::{Context, Poll};
 use void::Void;
-
-use super::{ConnectionEvent, FullyNegotiatedInbound, FullyNegotiatedOutbound};
 
 /// Implementation of [`ConnectionHandler`] that returns a pending upgrade.
 #[derive(Clone, Debug)]

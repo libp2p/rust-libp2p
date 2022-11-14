@@ -19,8 +19,9 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::handler::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, IntoConnectionHandler,
-    KeepAlive, SubstreamProtocol,
+    ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr,
+    DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound, IntoConnectionHandler,
+    KeepAlive, ListenUpgradeError, SubstreamProtocol,
 };
 use crate::upgrade::SendWrapper;
 
@@ -30,11 +31,6 @@ use libp2p_core::{
     ConnectedPoint, PeerId,
 };
 use std::{cmp, task::Context, task::Poll};
-
-use super::{
-    ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
-    ListenUpgradeError,
-};
 
 /// Implementation of `IntoConnectionHandler` that combines two protocols into one.
 #[derive(Debug, Clone)]
@@ -425,7 +421,7 @@ where
 
     fn on_connection_event(
         &mut self,
-        event: super::ConnectionEvent<
+        event: ConnectionEvent<
             Self::InboundProtocol,
             Self::OutboundProtocol,
             Self::InboundOpenInfo,

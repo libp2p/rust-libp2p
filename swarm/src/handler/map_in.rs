@@ -18,13 +18,12 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::handler::{ConnectionHandler, ConnectionHandlerEvent, KeepAlive, SubstreamProtocol};
-use std::{fmt::Debug, marker::PhantomData, task::Context, task::Poll};
-
-use super::{
-    AddressChange, ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound,
-    FullyNegotiatedOutbound, ListenUpgradeError,
+use crate::handler::{
+    AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
+    FullyNegotiatedInbound, FullyNegotiatedOutbound, KeepAlive, ListenUpgradeError,
+    SubstreamProtocol,
 };
+use std::{fmt::Debug, marker::PhantomData, task::Context, task::Poll};
 
 /// Wrapper around a protocol handler that turns the input event into something else.
 pub struct MapInEvent<TConnectionHandler, TNewIn, TMap> {
