@@ -93,6 +93,12 @@ pub use libp2p_plaintext as plaintext;
 #[cfg(feature = "pnet")]
 #[doc(inline)]
 pub use libp2p_pnet as pnet;
+#[cfg(feature = "quic")]
+#[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
+pub mod quic {
+    #[doc(inline)]
+    pub use libp2p_quic::*;
+}
 #[cfg(feature = "relay")]
 #[doc(inline)]
 pub use libp2p_relay as relay;
