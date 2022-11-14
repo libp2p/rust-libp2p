@@ -151,6 +151,7 @@
 - Drop support for gossipsub in wasm32-unknown-unknown target (see [PR 2506]).
 
 [PR 2442]: https://github.com/libp2p/rust-libp2p/pull/2442
+
 [PR 2506]: https://github.com/libp2p/rust-libp2p/pull/2506
 
 # 0.3.0 [2022-01-27]

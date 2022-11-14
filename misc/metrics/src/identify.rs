@@ -180,7 +180,7 @@ impl super::Recorder<libp2p_identify::Event> for Metrics {
                     .observe(info.listen_addrs.len() as f64);
                 for listen_addr in &info.listen_addrs {
                     self.listen_addresses
-                        .get_or_create(&protocol_stack::Labels::new(&listen_addr))
+                        .get_or_create(&protocol_stack::Labels::new(listen_addr))
                         .inc();
                 }
             }
