@@ -4,6 +4,12 @@
 
 - Update to `libp2p-swarm` `v0.41.0`.
 
+- Update to `prost-codec` `v0.3.0`.
+
+- Refactoring GossipsubCodec to use common protobuf Codec. See [PR 3070].
+
+[PR 3070]: https://github.com/libp2p/rust-libp2p/pull/3070
+
 # 0.42.0
 
 - Bump rand to 0.8 and quickcheck to 1. See [PR 2857].
