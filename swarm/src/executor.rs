@@ -26,7 +26,7 @@ impl Executor for ThreadPool {
 }
 
 #[cfg(feature = "tokio")]
-#[derive(Default, Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Default, Debug, Clone, Copy)]
 pub(crate) struct TokioExecutor;
 
 #[cfg(feature = "tokio")]
@@ -37,7 +37,7 @@ impl Executor for TokioExecutor {
 }
 
 #[cfg(feature = "async-std")]
-#[derive(Default, Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Default, Debug, Clone, Copy)]
 pub(crate) struct AsyncStdExecutor;
 
 #[cfg(feature = "async-std")]

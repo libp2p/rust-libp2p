@@ -840,7 +840,6 @@ where
             }
         }
 
-        // Advance the tasks in `local_spawns`.
         self.executor.advance_local(cx);
 
         Poll::Pending
