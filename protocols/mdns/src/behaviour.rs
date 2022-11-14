@@ -24,7 +24,7 @@ mod timer;
 
 use self::iface::InterfaceState;
 use crate::behaviour::{socket::AsyncSocket, timer::Builder};
-use crate::MdnsConfig;
+use crate::Config;
 use futures::Stream;
 use if_watch::IfEvent;
 use libp2p_core::transport::ListenerId;
@@ -48,13 +48,13 @@ pub trait WatcherProvider {
 /// The type of a [`GenMdns`] using the `async-io` implementation.
 #[cfg(feature = "async-io")]
 pub mod async_io {
-    use super::{GenMdns, WatcherProvider};
+    use super::WatcherProvider;
     use crate::behaviour::{socket::asio::AsyncUdpSocket, timer::asio::AsyncTimer};
     use if_watch::smol::IfWatcher;
 
-    pub type Mdns = GenMdns<AsyncUdpSocket, AsyncTimer>;
+    pub type Behaviour = super::Behaviour<AsyncUdpSocket, AsyncTimer>;
 
-    impl WatcherProvider for Mdns {
+    impl WatcherProvider for Behaviour {
         type Watcher = IfWatcher;
 
         fn new_watcher() -> Result<Self::Watcher, std::io::Error> {
@@ -66,13 +66,13 @@ pub mod async_io {
 /// The type of a [`GenMdns`] using the `tokio` implementation.
 #[cfg(feature = "tokio")]
 pub mod tokio {
-    use super::{GenMdns, WatcherProvider};
+    use super::WatcherProvider;
     use crate::behaviour::{socket::tokio::TokioUdpSocket, timer::tokio::TokioTimer};
     use if_watch::tokio::IfWatcher;
 
-    pub type Mdns = GenMdns<TokioUdpSocket, TokioTimer>;
+    pub type Behaviour = super::Behaviour<TokioUdpSocket, TokioTimer>;
 
-    impl WatcherProvider for Mdns {
+    impl WatcherProvider for Behaviour {
         type Watcher = IfWatcher;
 
         fn new_watcher() -> Result<Self::Watcher, std::io::Error> {
@@ -84,12 +84,12 @@ pub mod tokio {
 /// A `NetworkBehaviour` for mDNS. Automatically discovers peers on the local network and adds
 /// them to the topology.
 #[derive(Debug)]
-pub struct GenMdns<S, T>
+pub struct Behaviour<S, T>
 where
     Self: WatcherProvider,
 {
     /// InterfaceState config.
-    config: MdnsConfig,
+    config: Config,
 
     /// Iface watcher.
     if_watch: <Self as WatcherProvider>::Watcher,
@@ -109,13 +109,13 @@ where
     closest_expiration: Option<T>,
 }
 
-impl<S, T> GenMdns<S, T>
+impl<S, T> Behaviour<S, T>
 where
     Self: WatcherProvider,
     T: Builder,
 {
     /// Builds a new `Mdns` behaviour.
-    pub fn new(config: MdnsConfig) -> io::Result<Self> {
+    pub fn new(config: Config) -> io::Result<Self> {
         Ok(Self {
             config,
             if_watch: Self::new_watcher()?,
@@ -147,14 +147,14 @@ where
     }
 }
 
-impl<S, T> NetworkBehaviour for GenMdns<S, T>
+impl<S, T> NetworkBehaviour for Behaviour<S, T>
 where
     Self: WatcherProvider,
     T: Builder + Stream,
     S: AsyncSocket,
 {
     type ConnectionHandler = dummy::ConnectionHandler;
-    type OutEvent = MdnsEvent;
+    type OutEvent = Event;
 
     fn new_handler(&mut self) -> Self::ConnectionHandler {
         dummy::ConnectionHandler
@@ -251,7 +251,7 @@ where
             }
         }
         if !discovered.is_empty() {
-            let event = MdnsEvent::Discovered(DiscoveredAddrsIter {
+            let event = Event::Discovered(DiscoveredAddrsIter {
                 inner: discovered.into_iter(),
             });
             return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event));
@@ -270,7 +270,7 @@ where
             true
         });
         if !expired.is_empty() {
-            let event = MdnsEvent::Expired(ExpiredAddrsIter {
+            let event = Event::Expired(ExpiredAddrsIter {
                 inner: expired.into_iter(),
             });
             return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event));
@@ -287,7 +287,7 @@ where
 
 /// Event that can be produced by the `Mdns` behaviour.
 #[derive(Debug)]
-pub enum MdnsEvent {
+pub enum Event {
     /// Discovered nodes through mDNS.
     Discovered(DiscoveredAddrsIter),
 

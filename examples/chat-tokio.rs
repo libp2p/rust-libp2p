@@ -32,9 +32,7 @@ use futures::StreamExt;
 use libp2p::{
     core::upgrade,
     floodsub::{self, Floodsub, FloodsubEvent},
-    identity,
-    mdns::{tokio::Mdns, MdnsEvent},
-    mplex, noise,
+    identity, mdns, mplex, noise,
     swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent},
     tcp, Multiaddr, PeerId, Transport,
 };
@@ -71,13 +69,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
     #[behaviour(out_event = "MyBehaviourEvent")]
     struct MyBehaviour {
         floodsub: Floodsub,
-        mdns: Mdns,
+        mdns: mdns::tokio::Behaviour,
     }
 
     #[allow(clippy::large_enum_variant)]
     enum MyBehaviourEvent {
         Floodsub(FloodsubEvent),
-        Mdns(MdnsEvent),
+        Mdns(mdns::Event),
     }
 
     impl From<FloodsubEvent> for MyBehaviourEvent {
@@ -86,15 +84,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    impl From<MdnsEvent> for MyBehaviourEvent {
-        fn from(event: MdnsEvent) -> Self {
+    impl From<mdns::Event> for MyBehaviourEvent {
+        fn from(event: mdns::Event) -> Self {
             MyBehaviourEvent::Mdns(event)
         }
     }
 
     // Create a Swarm to manage peers and events.
     let mut swarm = {
-        let mdns = Mdns::new(Default::default())?;
+        let mdns = mdns::tokio::Behaviour::new(Default::default())?;
         let mut behaviour = MyBehaviour {
             floodsub: Floodsub::new(peer_id),
             mdns,
@@ -145,12 +143,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     }
                     SwarmEvent::Behaviour(MyBehaviourEvent::Mdns(event)) => {
                         match event {
-                            MdnsEvent::Discovered(list) => {
+                            mdns::Event::Discovered(list) => {
                                 for (peer, _) in list {
                                     swarm.behaviour_mut().floodsub.add_node_to_partial_view(peer);
                                 }
                             }
-                            MdnsEvent::Expired(list) => {
+                            mdns::Event::Expired(list) => {
                                 for (peer, _) in list {
                                     if !swarm.behaviour().mdns.has_node(&peer) {
                                         swarm.behaviour_mut().floodsub.remove_node_from_partial_view(&peer);
