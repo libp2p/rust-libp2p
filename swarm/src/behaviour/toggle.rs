@@ -18,6 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::behaviour::{inject_from_swarm, FromSwarm};
 use crate::handler::{
     ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, IntoConnectionHandler,
     KeepAlive, SubstreamProtocol,
@@ -82,10 +83,10 @@ where
             .unwrap_or_else(Vec::new)
     }
 
-    fn on_swarm_event(&mut self, event: super::FromSwarm<Self::ConnectionHandler>) {
+    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
         if let Some(behaviour) = &mut self.inner {
             if let Some(event) = event.maybe_map_handler(|h| h.inner, |h| h.inner) {
-                behaviour.on_swarm_event(event);
+                inject_from_swarm(behaviour, event);
             }
         }
     }
@@ -97,7 +98,8 @@ where
         event: crate::THandlerOutEvent<Self>,
     ) {
         if let Some(behaviour) = &mut self.inner {
-            behaviour.on_connection_handler_event(peer_id, connection_id, event)
+            #[allow(deprecated)]
+            behaviour.inject_event(peer_id, connection_id, event)
         }
     }
 

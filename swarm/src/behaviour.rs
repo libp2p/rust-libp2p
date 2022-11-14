@@ -90,11 +90,12 @@ pub(crate) type THandlerOutEvent<THandler> =
 /// addition to the event `enum` itself.
 ///
 /// ``` rust
-/// # use libp2p::identify;
-/// # use libp2p::ping;
-/// # use libp2p::NetworkBehaviour;
+/// # use libp2p_identify as identify;
+/// # use libp2p_ping as ping;
+/// # use libp2p_swarm_derive::NetworkBehaviour;
 /// #[derive(NetworkBehaviour)]
 /// #[behaviour(out_event = "Event")]
+/// # #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
 /// struct MyBehaviour {
 ///   identify: identify::Behaviour,
 ///   ping: ping::Behaviour,
@@ -443,19 +444,19 @@ pub enum NetworkBehaviourAction<
     /// ```rust
     /// # use futures::executor::block_on;
     /// # use futures::stream::StreamExt;
-    /// # use libp2p::core::connection::ConnectionId;
-    /// # use libp2p::core::identity;
-    /// # use libp2p::core::transport::{MemoryTransport, Transport};
-    /// # use libp2p::core::upgrade::{self, DeniedUpgrade, InboundUpgrade, OutboundUpgrade};
-    /// # use libp2p::core::PeerId;
-    /// # use libp2p::plaintext::PlainText2Config;
-    /// # use libp2p::swarm::{
+    /// # use libp2p_core::connection::ConnectionId;
+    /// # use libp2p_core::identity;
+    /// # use libp2p_core::transport::{MemoryTransport, Transport};
+    /// # use libp2p_core::upgrade::{self, DeniedUpgrade, InboundUpgrade, OutboundUpgrade};
+    /// # use libp2p_core::PeerId;
+    /// # use libp2p_plaintext::PlainText2Config;
+    /// # use libp2p_swarm::{
     /// #     DialError, IntoConnectionHandler, KeepAlive, NegotiatedSubstream,
     /// #     NetworkBehaviour, NetworkBehaviourAction, PollParameters, ConnectionHandler,
     /// #     ConnectionHandlerEvent, ConnectionHandlerUpgrErr, SubstreamProtocol, Swarm, SwarmEvent,
     /// # };
-    /// # use libp2p::swarm::dial_opts::{DialOpts, PeerCondition};
-    /// # use libp2p::yamux;
+    /// # use libp2p_swarm::dial_opts::{DialOpts, PeerCondition};
+    /// # use libp2p_yamux as yamux;
     /// # use std::collections::VecDeque;
     /// # use std::task::{Context, Poll};
     /// # use void::Void;
@@ -1107,6 +1108,106 @@ impl<'a, Handler: IntoConnectionHandler> FromSwarm<'a, Handler> {
             FromSwarm::ExpiredExternalAddr(ExpiredExternalAddr { addr }) => {
                 Some(FromSwarm::ExpiredExternalAddr(ExpiredExternalAddr { addr }))
             }
+        }
+    }
+}
+
+/// Helper function to call [`NetworkBehaviour`]'s `inject_*` methods given a `FromSwarm.
+/// TODO: Remove this function when we remove the remaining `inject_*` calls
+/// from [`Either`] and [`Toggle`].
+pub(crate) fn inject_from_swarm<T: NetworkBehaviour>(
+    behaviour: &mut T,
+    event: FromSwarm<T::ConnectionHandler>,
+) {
+    match event {
+        FromSwarm::ConnectionEstablished(ConnectionEstablished {
+            peer_id,
+            connection_id,
+            endpoint,
+            failed_addresses,
+            other_established,
+        }) => {
+            #[allow(deprecated)]
+            behaviour.inject_connection_established(
+                &peer_id,
+                &connection_id,
+                endpoint,
+                Some(&failed_addresses.into()),
+                other_established,
+            );
+        }
+        FromSwarm::ConnectionClosed(ConnectionClosed {
+            peer_id,
+            connection_id,
+            endpoint,
+            handler,
+            remaining_established,
+        }) => {
+            #[allow(deprecated)]
+            behaviour.inject_connection_closed(
+                &peer_id,
+                &connection_id,
+                endpoint,
+                handler,
+                remaining_established,
+            );
+        }
+        FromSwarm::AddressChange(AddressChange {
+            peer_id,
+            connection_id,
+            old,
+            new,
+        }) => {
+            #[allow(deprecated)]
+            behaviour.inject_address_change(&peer_id, &connection_id, old, new);
+        }
+        FromSwarm::DialFailure(DialFailure {
+            peer_id,
+            handler,
+            error,
+        }) => {
+            #[allow(deprecated)]
+            behaviour.inject_dial_failure(peer_id, handler, error);
+        }
+        FromSwarm::ListenFailure(ListenFailure {
+            local_addr,
+            send_back_addr,
+            handler,
+        }) => {
+            #[allow(deprecated)]
+            behaviour.inject_listen_failure(local_addr, send_back_addr, handler);
+        }
+        FromSwarm::NewListener(NewListener { listener_id }) => {
+            #[allow(deprecated)]
+            behaviour.inject_new_listener(listener_id);
+        }
+        FromSwarm::NewListenAddr(NewListenAddr { listener_id, addr }) => {
+            #[allow(deprecated)]
+            behaviour.inject_new_listen_addr(listener_id, addr);
+        }
+        FromSwarm::ExpiredListenAddr(ExpiredListenAddr { listener_id, addr }) => {
+            #[allow(deprecated)]
+            behaviour.inject_expired_listen_addr(listener_id, addr);
+        }
+        FromSwarm::ListenerError(ListenerError { listener_id, err }) => {
+            #[allow(deprecated)]
+            behaviour.inject_listener_error(listener_id, err);
+        }
+        FromSwarm::ListenerClosed(ListenerClosed {
+            listener_id,
+            reason,
+        }) => {
+            #[allow(deprecated)]
+            behaviour.inject_listener_closed(listener_id, reason);
+        }
+        FromSwarm::NewExternalAddr(NewExternalAddr { addr }) => {
+            #[allow(deprecated)]
+            behaviour.inject_new_external_addr(addr);
+        }
+        FromSwarm::ExpiredExternalAddr(ExpiredExternalAddr { addr }) =>
+        {
+            #[allow(deprecated)]
+            behaviour.inject_expired_external_addr(addr)
         }
     }
 }
