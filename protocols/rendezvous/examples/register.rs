@@ -22,9 +22,9 @@ use futures::StreamExt;
 use libp2p::core::identity;
 use libp2p::core::PeerId;
 use libp2p::ping;
-use libp2p::swarm::{Swarm, SwarmEvent};
+use libp2p::swarm::{NetworkBehaviour, Swarm, SwarmEvent};
+use libp2p::Multiaddr;
 use libp2p::{development_transport, rendezvous};
-use libp2p::{Multiaddr, NetworkBehaviour};
 use libp2p_swarm::AddressScore;
 use std::time::Duration;
 

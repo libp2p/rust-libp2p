@@ -27,7 +27,7 @@ jobs:
 
     - uses: actions/checkout@v3
 
-    - uses: Swatinem/rust-cache@b894d59a8d236e2979b247b80dac8d053ab340dd # v2.1.0
+    - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
       with:
         key: ${{ matrix.args }}
 
@@ -70,7 +70,7 @@ jobs:
     - name: Install CMake
       run: sudo apt-get install -y cmake
 
-    - uses: Swatinem/rust-cache@b894d59a8d236e2979b247b80dac8d053ab340dd # v2.1.0
+    - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
       with:
         key: ${{ matrix.toolchain }}
 
@@ -94,7 +94,7 @@ jobs:
         toolchain: stable
         override: true
 
-    - uses: Swatinem/rust-cache@b894d59a8d236e2979b247b80dac8d053ab340dd # v2.1.0
+    - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
 
     - name: Check rustdoc links
       run: RUSTDOCFLAGS="--deny rustdoc::broken_intra_doc_links --deny warnings" cargo doc --verbose --workspace --no-deps --all-features --document-private-items
@@ -114,7 +114,7 @@ jobs:
         override: true
         components: clippy
 
-    - uses: Swatinem/rust-cache@b894d59a8d236e2979b247b80dac8d053ab340dd # v2.1.0
+    - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
 
     - name: Run cargo clippy
       uses: actions-rs/cargo@844f36862e911db73fe0815f00a4a2602c279505 # v1.0.3
@@ -136,7 +136,7 @@ jobs:
         toolchain: stable
         override: true
 
-    - uses: Swatinem/rust-cache@b894d59a8d236e2979b247b80dac8d053ab340dd # v2.1.0
+    - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
 
     - name: Run ipfs-kad example
       run: RUST_LOG=libp2p_swarm=debug,libp2p_kad=trace,libp2p_tcp=debug cargo run --example ipfs-kad --features full
@@ -215,7 +215,7 @@ jobs:
     - name: Install Protoc
       uses: arduino/setup-protoc@v1
 
-    - uses: Swatinem/rust-cache@b894d59a8d236e2979b247b80dac8d053ab340dd # v2.1.0
+    - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
 
     - run: cargo install cargo-semver-checks
     
