@@ -1,6 +1,6 @@
 use crate::identity::error::SigningError;
 use crate::identity::Keypair;
-use crate::{identity, PublicKey};
+use crate::{identity, DecodeError, PublicKey};
 use std::convert::TryInto;
 use std::fmt;
 use unsigned_varint::encode::usize_buffer;
@@ -94,7 +94,7 @@ impl SignedEnvelope {
     pub fn from_protobuf_encoding(bytes: &[u8]) -> Result<Self, DecodingError> {
         use prost::Message;
 
-        let envelope = crate::envelope_proto::Envelope::decode(bytes)?;
+        let envelope = crate::envelope_proto::Envelope::decode(bytes).map_err(DecodeError)?;
 
         Ok(Self {
             key: envelope
@@ -140,46 +140,17 @@ fn signature_payload(domain_separation: String, payload_type: &[u8], payload: &[
 }
 
 /// Errors that occur whilst decoding a [`SignedEnvelope`] from its byte representation.
-#[derive(Debug)]
+#[derive(thiserror::Error, Debug)]
 pub enum DecodingError {
     /// Decoding the provided bytes as a signed envelope failed.
-    InvalidEnvelope(prost::DecodeError),
+    #[error("Failed to decode envelope")]
+    InvalidEnvelope(#[from] DecodeError),
     /// The public key in the envelope could not be converted to our internal public key type.
-    InvalidPublicKey(identity::error::DecodingError),
+    #[error("Failed to convert public key")]
+    InvalidPublicKey(#[from] identity::error::DecodingError),
     /// The public key in the envelope could not be converted to our internal public key type.
+    #[error("Public key is missing from protobuf struct")]
     MissingPublicKey,
-}
-
-impl From<prost::DecodeError> for DecodingError {
-    fn from(e: prost::DecodeError) -> Self {
-        Self::InvalidEnvelope(e)
-    }
-}
-
-impl From<identity::error::DecodingError> for DecodingError {
-    fn from(e: identity::error::DecodingError) -> Self {
-        Self::InvalidPublicKey(e)
-    }
-}
-
-impl fmt::Display for DecodingError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::InvalidEnvelope(_) => write!(f, "Failed to decode envelope"),
-            Self::InvalidPublicKey(_) => write!(f, "Failed to convert public key"),
-            Self::MissingPublicKey => write!(f, "Public key is missing from protobuf struct"),
-        }
-    }
-}
-
-impl std::error::Error for DecodingError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Self::InvalidEnvelope(inner) => Some(inner),
-            Self::InvalidPublicKey(inner) => Some(inner),
-            Self::MissingPublicKey => None,
-        }
-    }
 }
 
 /// Errors that occur whilst extracting the payload of a [`SignedEnvelope`].

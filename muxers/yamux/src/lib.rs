@@ -18,8 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Implements the Yamux multiplexing protocol for libp2p, see also the
-//! [specification](https://github.com/hashicorp/yamux/blob/master/spec.md).
+//! Implementation of the [Yamux](https://github.com/hashicorp/yamux/blob/master/spec.md)  multiplexing protocol for libp2p.
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 

@@ -310,7 +310,7 @@ fn handle_outbound_event(
             expiring_registrations.extend(registrations.iter().cloned().map(|registration| {
                 async move {
                     // if the timer errors we consider it expired
-                    futures_timer::Delay::new(Duration::from_secs(registration.ttl as u64)).await;
+                    futures_timer::Delay::new(Duration::from_secs(registration.ttl)).await;
 
                     (registration.record.peer_id(), registration.namespace)
                 }
