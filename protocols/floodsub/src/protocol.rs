@@ -20,10 +20,12 @@
 
 use crate::rpc_proto;
 use crate::topic::Topic;
+use asynchronous_codec::Framed;
 use futures::{
     io::{AsyncRead, AsyncWrite},
     AsyncWriteExt, Future,
 };
+
 use libp2p_core::{upgrade, InboundUpgrade, OutboundUpgrade, PeerId, UpgradeInfo};
 use prost::Message;
 use std::{io, iter, pin::Pin};
@@ -86,6 +88,16 @@ where
 
     fn upgrade_inbound(self, mut socket: TSocket, _: Self::Info) -> Self::Future {
         Box::pin(async move {
+            // From Thomas:
+            // What you probably want to do here is use a Framed to wrap
+            // the incoming socket and immediately read a message from it
+            // using its Stream::next implementation.
+            //
+            // Framed is an abstraction on top of a codec to
+            // read and write from a socket in entire messages instead of
+            // raw bytes!
+
+            Framed::new(socket, FloodsubProtocol::new());
             let packet = upgrade::read_length_prefixed(&mut socket, MAX_MESSAGE_LEN_BYTES).await?;
             // Replace with prost_codec::Codec
             let rpc = self.codec.decode();
