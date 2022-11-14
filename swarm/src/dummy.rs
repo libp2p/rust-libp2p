@@ -1,6 +1,6 @@
 use crate::behaviour::{NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use crate::handler::{
-    DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound, StreamEvent,
+    ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
 use crate::{ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive, SubstreamProtocol};
 use libp2p_core::connection::ConnectionId;
@@ -73,9 +73,9 @@ impl crate::handler::ConnectionHandler for ConnectionHandler {
         Poll::Pending
     }
 
-    fn on_event(
+    fn on_connection_event(
         &mut self,
-        event: StreamEvent<
+        event: ConnectionEvent<
             Self::InboundProtocol,
             Self::OutboundProtocol,
             Self::InboundOpenInfo,
@@ -83,13 +83,13 @@ impl crate::handler::ConnectionHandler for ConnectionHandler {
         >,
     ) {
         match event {
-            StreamEvent::FullyNegotiatedInbound(FullyNegotiatedInbound { protocol, .. }) => {
-                void::unreachable(protocol)
-            }
-            StreamEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound { protocol, .. }) => {
-                void::unreachable(protocol)
-            }
-            StreamEvent::DialUpgradeError(DialUpgradeError { info: _, error }) => match error {
+            ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
+                protocol, ..
+            }) => void::unreachable(protocol),
+            ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
+                protocol, ..
+            }) => void::unreachable(protocol),
+            ConnectionEvent::DialUpgradeError(DialUpgradeError { info: _, error }) => match error {
                 ConnectionHandlerUpgrErr::Timeout => unreachable!(),
                 ConnectionHandlerUpgrErr::Timer => unreachable!(),
                 ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)) => void::unreachable(e),
@@ -97,7 +97,7 @@ impl crate::handler::ConnectionHandler for ConnectionHandler {
                     unreachable!("Denied upgrade does not support any protocols")
                 }
             },
-            StreamEvent::AddressChange(_) | StreamEvent::ListenUpgradeError(_) => {}
+            ConnectionEvent::AddressChange(_) | ConnectionEvent::ListenUpgradeError(_) => {}
         }
     }
 }

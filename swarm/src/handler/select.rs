@@ -32,8 +32,8 @@ use libp2p_core::{
 use std::{cmp, task::Context, task::Poll};
 
 use super::{
-    DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound, ListenUpgradeError,
-    StreamEvent,
+    ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
+    ListenUpgradeError,
 };
 
 /// Implementation of `IntoConnectionHandler` that combines two protocols into one.
@@ -423,9 +423,9 @@ where
         Poll::Pending
     }
 
-    fn on_event(
+    fn on_connection_event(
         &mut self,
-        event: super::StreamEvent<
+        event: super::ConnectionEvent<
             Self::InboundProtocol,
             Self::OutboundProtocol,
             Self::InboundOpenInfo,
@@ -433,22 +433,22 @@ where
         >,
     ) {
         match event {
-            StreamEvent::FullyNegotiatedOutbound(fully_negotiated_outbound) => {
+            ConnectionEvent::FullyNegotiatedOutbound(fully_negotiated_outbound) => {
                 self.on_fully_negotiated_outbound(fully_negotiated_outbound)
             }
-            StreamEvent::FullyNegotiatedInbound(fully_negotiated_inbound) => {
+            ConnectionEvent::FullyNegotiatedInbound(fully_negotiated_inbound) => {
                 self.on_fully_negotiated_inbound(fully_negotiated_inbound)
             }
-            StreamEvent::AddressChange(address) => {
+            ConnectionEvent::AddressChange(address) => {
                 #[allow(deprecated)]
                 self.proto1.inject_address_change(address.new_address);
                 #[allow(deprecated)]
                 self.proto2.inject_address_change(address.new_address)
             }
-            StreamEvent::DialUpgradeError(dial_upgrade_error) => {
+            ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
                 self.on_dial_upgrade_error(dial_upgrade_error)
             }
-            StreamEvent::ListenUpgradeError(listen_upgrade_error) => {
+            ConnectionEvent::ListenUpgradeError(listen_upgrade_error) => {
                 self.on_listen_upgrade_error(listen_upgrade_error)
             }
         }

@@ -34,8 +34,8 @@ use libp2p_core::connection::ConnectionId;
 use libp2p_core::either::EitherError;
 use libp2p_core::{upgrade, ConnectedPoint, Multiaddr, PeerId};
 use libp2p_swarm::handler::{
-    DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound, ListenUpgradeError,
-    SendWrapper, StreamEvent,
+    ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
+    ListenUpgradeError, SendWrapper,
 };
 use libp2p_swarm::{
     dummy, ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr,
@@ -952,9 +952,9 @@ impl ConnectionHandler for Handler {
         Poll::Pending
     }
 
-    fn on_event(
+    fn on_connection_event(
         &mut self,
-        event: StreamEvent<
+        event: ConnectionEvent<
             Self::InboundProtocol,
             Self::OutboundProtocol,
             Self::InboundOpenInfo,
@@ -962,19 +962,19 @@ impl ConnectionHandler for Handler {
         >,
     ) {
         match event {
-            StreamEvent::FullyNegotiatedInbound(fully_negotiated_inbound) => {
+            ConnectionEvent::FullyNegotiatedInbound(fully_negotiated_inbound) => {
                 self.on_fully_negotiated_inbound(fully_negotiated_inbound)
             }
-            StreamEvent::FullyNegotiatedOutbound(fully_negotiated_outbound) => {
+            ConnectionEvent::FullyNegotiatedOutbound(fully_negotiated_outbound) => {
                 self.on_fully_negotiated_outbound(fully_negotiated_outbound)
             }
-            StreamEvent::ListenUpgradeError(listen_upgrade_error) => {
+            ConnectionEvent::ListenUpgradeError(listen_upgrade_error) => {
                 self.on_listen_upgrade_error(listen_upgrade_error)
             }
-            StreamEvent::DialUpgradeError(dial_upgrade_error) => {
+            ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
                 self.on_dial_upgrade_error(dial_upgrade_error)
             }
-            StreamEvent::AddressChange(_) => {}
+            ConnectionEvent::AddressChange(_) => {}
         }
     }
 }

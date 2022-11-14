@@ -27,7 +27,7 @@ use instant::Instant;
 use smallvec::SmallVec;
 use std::{error, fmt::Debug, task::Context, task::Poll, time::Duration};
 
-use super::{DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound, StreamEvent};
+use super::{ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound};
 
 /// A [`ConnectionHandler`] that opens a new substream for each request.
 // TODO: Debug
@@ -183,9 +183,9 @@ where
         Poll::Pending
     }
 
-    fn on_event(
+    fn on_connection_event(
         &mut self,
-        event: StreamEvent<
+        event: ConnectionEvent<
             Self::InboundProtocol,
             Self::OutboundProtocol,
             Self::InboundOpenInfo,
@@ -193,8 +193,9 @@ where
         >,
     ) {
         match event {
-            StreamEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
-                protocol: out, ..
+            ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
+                protocol: out,
+                ..
             }) => {
                 // If we're shutting down the connection for inactivity, reset the timeout.
                 if !self.keep_alive.is_yes() {
@@ -204,18 +205,19 @@ where
 
                 self.events_out.push(out.into());
             }
-            StreamEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
-                protocol: out, ..
+            ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
+                protocol: out,
+                ..
             }) => {
                 self.dial_negotiated -= 1;
                 self.events_out.push(out.into());
             }
-            StreamEvent::DialUpgradeError(DialUpgradeError { error, .. }) => {
+            ConnectionEvent::DialUpgradeError(DialUpgradeError { error, .. }) => {
                 if self.pending_error.is_none() {
                     self.pending_error = Some(error);
                 }
             }
-            StreamEvent::AddressChange(_) | StreamEvent::ListenUpgradeError(_) => {}
+            ConnectionEvent::AddressChange(_) | ConnectionEvent::ListenUpgradeError(_) => {}
         }
     }
 }

@@ -25,7 +25,7 @@ use futures_timer::Delay;
 use libp2p_core::upgrade::ReadyUpgrade;
 use libp2p_core::{upgrade::NegotiationError, UpgradeError};
 use libp2p_swarm::handler::{
-    DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound, StreamEvent,
+    ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
 use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
@@ -385,9 +385,9 @@ impl ConnectionHandler for Handler {
         Poll::Pending
     }
 
-    fn on_event(
+    fn on_connection_event(
         &mut self,
-        event: StreamEvent<
+        event: ConnectionEvent<
             Self::InboundProtocol,
             Self::OutboundProtocol,
             Self::InboundOpenInfo,
@@ -395,23 +395,23 @@ impl ConnectionHandler for Handler {
         >,
     ) {
         match event {
-            StreamEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
+            ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
                 protocol: stream,
                 ..
             }) => {
                 self.inbound = Some(protocol::recv_ping(stream).boxed());
             }
-            StreamEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
+            ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
                 protocol: stream,
                 ..
             }) => {
                 self.timer.reset(self.config.timeout);
                 self.outbound = Some(OutboundState::Ping(protocol::send_ping(stream).boxed()));
             }
-            StreamEvent::DialUpgradeError(dial_upgrade_error) => {
+            ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
                 self.on_dial_upgrade_error(dial_upgrade_error)
             }
-            StreamEvent::AddressChange(_) | StreamEvent::ListenUpgradeError(_) => {}
+            ConnectionEvent::AddressChange(_) | ConnectionEvent::ListenUpgradeError(_) => {}
         }
     }
 }

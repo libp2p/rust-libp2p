@@ -70,14 +70,14 @@ pub use select::{ConnectionHandlerSelect, IntoConnectionHandlerSelect};
 ///   1. Dialing by initiating a new outbound substream. In order to do so,
 ///      [`ConnectionHandler::poll()`] must return an [`ConnectionHandlerEvent::OutboundSubstreamRequest`],
 ///      providing an instance of [`libp2p_core::upgrade::OutboundUpgrade`] that is used to negotiate the
-///      protocol(s). Upon success, [`ConnectionHandler::on_event`] is called with
-///      [`StreamEvent::FullyNegotiatedOutbound`] translating the final output of the upgrade.
+///      protocol(s). Upon success, [`ConnectionHandler::on_connection_event`] is called with
+///      [`ConnectionEvent::FullyNegotiatedOutbound`] translating the final output of the upgrade.
 ///
 ///   2. Listening by accepting a new inbound substream. When a new inbound substream
 ///      is created on a connection, [`ConnectionHandler::listen_protocol`] is called
 ///      to obtain an instance of [`libp2p_core::upgrade::InboundUpgrade`] that is used to
 ///      negotiate the protocol(s). Upon success,
-///      [`ConnectionHandler::on_event`] is called with [`StreamEvent::FullyNegotiatedInbound`]
+///      [`ConnectionHandler::on_connection_event`] is called with [`ConnectionEvent::FullyNegotiatedInbound`]
 ///      translating the final output of the upgrade.
 ///
 ///
@@ -125,7 +125,7 @@ pub trait ConnectionHandler: Send + 'static {
     /// an excessive amount of inbound substreams.
     #[deprecated(
         since = "0.41.0",
-        note = "Handle `StreamEvent::FullyNegotiatedInbound` on `ConnectionHandler::on_event` instead.
+        note = "Handle `ConnectionEvent::FullyNegotiatedInbound` on `ConnectionHandler::on_connection_event` instead.
         The default of implemention of this `inject_*` method delegates to it."
     )]
     fn inject_fully_negotiated_inbound(
@@ -133,7 +133,7 @@ pub trait ConnectionHandler: Send + 'static {
         protocol: <Self::InboundProtocol as InboundUpgradeSend>::Output,
         info: Self::InboundOpenInfo,
     ) {
-        self.on_event(StreamEvent::FullyNegotiatedInbound(
+        self.on_connection_event(ConnectionEvent::FullyNegotiatedInbound(
             FullyNegotiatedInbound { protocol, info },
         ))
     }
@@ -144,7 +144,7 @@ pub trait ConnectionHandler: Send + 'static {
     /// [`ConnectionHandlerEvent::OutboundSubstreamRequest`].
     #[deprecated(
         since = "0.41.0",
-        note = "Handle `StreamEvent::FullyNegotiatedOutbound` on `ConnectionHandler::on_event` instead.
+        note = "Handle `ConnectionEvent::FullyNegotiatedOutbound` on `ConnectionHandler::on_connection_event` instead.
         The default of implemention of this `inject_*` method delegates to it."
     )]
     fn inject_fully_negotiated_outbound(
@@ -152,7 +152,7 @@ pub trait ConnectionHandler: Send + 'static {
         protocol: <Self::OutboundProtocol as OutboundUpgradeSend>::Output,
         info: Self::OutboundOpenInfo,
     ) {
-        self.on_event(StreamEvent::FullyNegotiatedOutbound(
+        self.on_connection_event(ConnectionEvent::FullyNegotiatedOutbound(
             FullyNegotiatedOutbound { protocol, info },
         ))
     }
@@ -169,17 +169,19 @@ pub trait ConnectionHandler: Send + 'static {
     /// Notifies the handler of a change in the address of the remote.
     #[deprecated(
         since = "0.41.0",
-        note = "Handle `StreamEvent::AddressChange` on `ConnectionHandler::on_event` instead.
+        note = "Handle `ConnectionEvent::AddressChange` on `ConnectionHandler::on_connection_event` instead.
         The default of implemention of this `inject_*` method delegates to it."
     )]
     fn inject_address_change(&mut self, new_address: &Multiaddr) {
-        self.on_event(StreamEvent::AddressChange(AddressChange { new_address }))
+        self.on_connection_event(ConnectionEvent::AddressChange(AddressChange {
+            new_address,
+        }))
     }
 
     /// Indicates to the handler that upgrading an outbound substream to the given protocol has failed.
     #[deprecated(
         since = "0.41.0",
-        note = "Handle `StreamEvent::DialUpgradeError` on `ConnectionHandler::on_event` instead.
+        note = "Handle `ConnectionEvent::DialUpgradeError` on `ConnectionHandler::on_connection_event` instead.
         The default of implemention of this `inject_*` method delegates to it."
     )]
     fn inject_dial_upgrade_error(
@@ -187,7 +189,7 @@ pub trait ConnectionHandler: Send + 'static {
         info: Self::OutboundOpenInfo,
         error: ConnectionHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>,
     ) {
-        self.on_event(StreamEvent::DialUpgradeError(DialUpgradeError {
+        self.on_connection_event(ConnectionEvent::DialUpgradeError(DialUpgradeError {
             info,
             error,
         }))
@@ -196,7 +198,7 @@ pub trait ConnectionHandler: Send + 'static {
     /// Indicates to the handler that upgrading an inbound substream to the given protocol has failed.
     #[deprecated(
         since = "0.41.0",
-        note = "Handle `StreamEvent::ListenUpgradeError` on `ConnectionHandler::on_event` instead.
+        note = "Handle `ConnectionEvent::ListenUpgradeError` on `ConnectionHandler::on_connection_event` instead.
         The default of implemention of this `inject_*` method delegates to it."
     )]
     fn inject_listen_upgrade_error(
@@ -204,7 +206,7 @@ pub trait ConnectionHandler: Send + 'static {
         info: Self::InboundOpenInfo,
         error: ConnectionHandlerUpgrErr<<Self::InboundProtocol as InboundUpgradeSend>::Error>,
     ) {
-        self.on_event(StreamEvent::ListenUpgradeError(ListenUpgradeError {
+        self.on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
             info,
             error,
         }))
@@ -279,9 +281,9 @@ pub trait ConnectionHandler: Send + 'static {
     /// informs the handler about an event coming from the outside in the handler.
     fn on_behaviour_event(&mut self, _event: Self::InEvent) {}
 
-    fn on_event(
+    fn on_connection_event(
         &mut self,
-        _event: StreamEvent<
+        _event: ConnectionEvent<
             Self::InboundProtocol,
             Self::OutboundProtocol,
             Self::InboundOpenInfo,
@@ -293,7 +295,7 @@ pub trait ConnectionHandler: Send + 'static {
 
 /// Enumeration with the list of the possible stream events
 /// to pass to [`on_event`](ConnectionHandler::on_event).
-pub enum StreamEvent<'a, IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IOI, OOI> {
+pub enum ConnectionEvent<'a, IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IOI, OOI> {
     /// Informs the handler about the output of a successful upgrade on a new inbound substream.
     FullyNegotiatedInbound(FullyNegotiatedInbound<IP, IOI>),
     /// Informs the handler about successful upgrade on a new outbound stream.
@@ -306,7 +308,7 @@ pub enum StreamEvent<'a, IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IOI, O
     ListenUpgradeError(ListenUpgradeError<IOI, IP>),
 }
 
-/// [`StreamEvent`] variant that informs the handler about
+/// [`ConnectionEvent`] variant that informs the handler about
 /// the output of a successful upgrade on a new inbound substream.
 ///
 /// Note that it is up to the [`ConnectionHandler`] implementation to manage the lifetime of the
@@ -319,7 +321,7 @@ pub struct FullyNegotiatedInbound<IP: InboundUpgradeSend, IOI> {
     pub info: IOI,
 }
 
-/// [`StreamEvent`] variant that informs the handler about successful upgrade on a new outbound stream.
+/// [`ConnectionEvent`] variant that informs the handler about successful upgrade on a new outbound stream.
 ///
 /// The `protocol` field is the information that was previously passed to
 /// [`ConnectionHandlerEvent::OutboundSubstreamRequest`].
@@ -328,19 +330,19 @@ pub struct FullyNegotiatedOutbound<OP: OutboundUpgradeSend, OOI> {
     pub info: OOI,
 }
 
-/// [`StreamEvent`] variant that informs the handler about a change in the address of the remote.
+/// [`ConnectionEvent`] variant that informs the handler about a change in the address of the remote.
 pub struct AddressChange<'a> {
     pub new_address: &'a Multiaddr,
 }
 
-/// [`StreamEvent`] variant that informs the handler
+/// [`ConnectionEvent`] variant that informs the handler
 /// that upgrading an outbound substream to the given protocol has failed.
 pub struct DialUpgradeError<OOI, OP: OutboundUpgradeSend> {
     pub info: OOI,
     pub error: ConnectionHandlerUpgrErr<OP::Error>,
 }
 
-/// [`StreamEvent`] variant that informs the handler
+/// [`ConnectionEvent`] variant that informs the handler
 /// that upgrading an inbound substream to the given protocol has failed.
 pub struct ListenUpgradeError<IOI, IP: InboundUpgradeSend> {
     pub info: IOI,

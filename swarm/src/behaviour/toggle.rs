@@ -19,9 +19,9 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::handler::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, DialUpgradeError,
-    FullyNegotiatedInbound, FullyNegotiatedOutbound, IntoConnectionHandler, KeepAlive,
-    ListenUpgradeError, StreamEvent, SubstreamProtocol,
+    ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr,
+    DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound, IntoConnectionHandler,
+    KeepAlive, ListenUpgradeError, SubstreamProtocol,
 };
 use crate::upgrade::SendWrapper;
 use crate::{DialError, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
@@ -395,9 +395,9 @@ where
         }
     }
 
-    fn on_event(
+    fn on_connection_event(
         &mut self,
-        event: StreamEvent<
+        event: ConnectionEvent<
             Self::InboundProtocol,
             Self::OutboundProtocol,
             Self::InboundOpenInfo,
@@ -405,10 +405,10 @@ where
         >,
     ) {
         match event {
-            StreamEvent::FullyNegotiatedInbound(fully_negotiated_inbound) => {
+            ConnectionEvent::FullyNegotiatedInbound(fully_negotiated_inbound) => {
                 self.on_fully_negotiated_inbound(fully_negotiated_inbound)
             }
-            StreamEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
+            ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
                 protocol: out,
                 info,
             }) =>
@@ -419,13 +419,13 @@ where
                     .expect("Can't receive an outbound substream if disabled; QED")
                     .inject_fully_negotiated_outbound(out, info)
             }
-            StreamEvent::AddressChange(address_change) => {
+            ConnectionEvent::AddressChange(address_change) => {
                 if let Some(inner) = self.inner.as_mut() {
                     #[allow(deprecated)]
                     inner.inject_address_change(address_change.new_address)
                 }
             }
-            StreamEvent::DialUpgradeError(DialUpgradeError { info, error: err }) =>
+            ConnectionEvent::DialUpgradeError(DialUpgradeError { info, error: err }) =>
             {
                 #[allow(deprecated)]
                 self.inner
@@ -433,7 +433,7 @@ where
                     .expect("Can't receive an outbound substream if disabled; QED")
                     .inject_dial_upgrade_error(info, err)
             }
-            StreamEvent::ListenUpgradeError(listen_upgrade_error) => {
+            ConnectionEvent::ListenUpgradeError(listen_upgrade_error) => {
                 self.on_listen_upgrade_error(listen_upgrade_error)
             }
         }
@@ -463,7 +463,7 @@ mod tests {
     fn ignore_listen_upgrade_error_when_disabled() {
         let mut handler = ToggleConnectionHandler::<dummy::ConnectionHandler> { inner: None };
 
-        handler.on_event(StreamEvent::ListenUpgradeError(ListenUpgradeError {
+        handler.on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
             info: Either::Right(()),
             error: ConnectionHandlerUpgrErr::Timeout,
         }));

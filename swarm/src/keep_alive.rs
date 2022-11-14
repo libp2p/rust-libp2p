@@ -1,7 +1,7 @@
 use crate::behaviour::{NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use crate::handler::{
-    ConnectionHandlerEvent, FullyNegotiatedInbound, FullyNegotiatedOutbound, KeepAlive,
-    StreamEvent, SubstreamProtocol,
+    ConnectionEvent, ConnectionHandlerEvent, FullyNegotiatedInbound, FullyNegotiatedOutbound,
+    KeepAlive, SubstreamProtocol,
 };
 use libp2p_core::connection::ConnectionId;
 use libp2p_core::upgrade::DeniedUpgrade;
@@ -78,9 +78,9 @@ impl crate::handler::ConnectionHandler for ConnectionHandler {
         Poll::Pending
     }
 
-    fn on_event(
+    fn on_connection_event(
         &mut self,
-        event: StreamEvent<
+        event: ConnectionEvent<
             Self::InboundProtocol,
             Self::OutboundProtocol,
             Self::InboundOpenInfo,
@@ -88,15 +88,15 @@ impl crate::handler::ConnectionHandler for ConnectionHandler {
         >,
     ) {
         match event {
-            StreamEvent::FullyNegotiatedInbound(FullyNegotiatedInbound { protocol, .. }) => {
-                void::unreachable(protocol)
-            }
-            StreamEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound { protocol, .. }) => {
-                void::unreachable(protocol)
-            }
-            StreamEvent::DialUpgradeError(_)
-            | StreamEvent::ListenUpgradeError(_)
-            | StreamEvent::AddressChange(_) => {}
+            ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
+                protocol, ..
+            }) => void::unreachable(protocol),
+            ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
+                protocol, ..
+            }) => void::unreachable(protocol),
+            ConnectionEvent::DialUpgradeError(_)
+            | ConnectionEvent::ListenUpgradeError(_)
+            | ConnectionEvent::AddressChange(_) => {}
         }
     }
 }

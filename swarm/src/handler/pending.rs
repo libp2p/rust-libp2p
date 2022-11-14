@@ -24,7 +24,7 @@ use libp2p_core::upgrade::PendingUpgrade;
 use std::task::{Context, Poll};
 use void::Void;
 
-use super::{FullyNegotiatedInbound, FullyNegotiatedOutbound, StreamEvent};
+use super::{ConnectionEvent, FullyNegotiatedInbound, FullyNegotiatedOutbound};
 
 /// Implementation of [`ConnectionHandler`] that returns a pending upgrade.
 #[derive(Clone, Debug)]
@@ -73,9 +73,9 @@ impl ConnectionHandler for PendingConnectionHandler {
         Poll::Pending
     }
 
-    fn on_event(
+    fn on_connection_event(
         &mut self,
-        event: StreamEvent<
+        event: ConnectionEvent<
             Self::InboundProtocol,
             Self::OutboundProtocol,
             Self::InboundOpenInfo,
@@ -83,10 +83,10 @@ impl ConnectionHandler for PendingConnectionHandler {
         >,
     ) {
         match event {
-            StreamEvent::FullyNegotiatedInbound(FullyNegotiatedInbound { protocol, .. }) => {
-                void::unreachable(protocol)
-            }
-            StreamEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
+            ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
+                protocol, ..
+            }) => void::unreachable(protocol),
+            ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
                 protocol,
                 info: _info,
             }) => {
@@ -96,9 +96,9 @@ impl ConnectionHandler for PendingConnectionHandler {
                     void::unreachable(_info);
                 }
             }
-            StreamEvent::AddressChange(_)
-            | StreamEvent::DialUpgradeError(_)
-            | StreamEvent::ListenUpgradeError(_) => {}
+            ConnectionEvent::AddressChange(_)
+            | ConnectionEvent::DialUpgradeError(_)
+            | ConnectionEvent::ListenUpgradeError(_) => {}
         }
     }
 }

@@ -24,8 +24,8 @@ use crate::codec::RequestResponseCodec;
 use crate::{RequestId, EMPTY_QUEUE_SHRINK_THRESHOLD};
 
 use libp2p_swarm::handler::{
-    DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound, ListenUpgradeError,
-    StreamEvent,
+    ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
+    ListenUpgradeError,
 };
 pub use protocol::{ProtocolSupport, RequestProtocol, ResponseProtocol};
 
@@ -392,9 +392,9 @@ where
         Poll::Pending
     }
 
-    fn on_event(
+    fn on_connection_event(
         &mut self,
-        event: StreamEvent<
+        event: ConnectionEvent<
             Self::InboundProtocol,
             Self::OutboundProtocol,
             Self::InboundOpenInfo,
@@ -402,10 +402,10 @@ where
         >,
     ) {
         match event {
-            StreamEvent::FullyNegotiatedInbound(fully_negotiated_inbound) => {
+            ConnectionEvent::FullyNegotiatedInbound(fully_negotiated_inbound) => {
                 self.on_fully_negotiated_inbound(fully_negotiated_inbound)
             }
-            StreamEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
+            ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
                 protocol: response,
                 info: request_id,
             }) => {
@@ -415,13 +415,13 @@ where
                         response,
                     });
             }
-            StreamEvent::DialUpgradeError(dial_upgrade_error) => {
+            ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
                 self.on_dial_upgrade_error(dial_upgrade_error)
             }
-            StreamEvent::ListenUpgradeError(listen_upgrade_error) => {
+            ConnectionEvent::ListenUpgradeError(listen_upgrade_error) => {
                 self.on_listen_upgrade_error(listen_upgrade_error)
             }
-            StreamEvent::AddressChange(_) => {}
+            ConnectionEvent::AddressChange(_) => {}
         }
     }
 }

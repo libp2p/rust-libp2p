@@ -28,7 +28,7 @@ use libp2p_core::either::{EitherError, EitherOutput};
 use libp2p_core::upgrade::{EitherUpgrade, SelectUpgrade};
 use libp2p_core::{ConnectedPoint, PeerId};
 use libp2p_swarm::handler::{
-    DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound, StreamEvent,
+    ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
 use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, IntoConnectionHandler,
@@ -258,9 +258,9 @@ impl ConnectionHandler for Handler {
         Poll::Pending
     }
 
-    fn on_event(
+    fn on_connection_event(
         &mut self,
-        event: StreamEvent<
+        event: ConnectionEvent<
             Self::InboundProtocol,
             Self::OutboundProtocol,
             Self::InboundOpenInfo,
@@ -268,16 +268,16 @@ impl ConnectionHandler for Handler {
         >,
     ) {
         match event {
-            StreamEvent::FullyNegotiatedInbound(fully_negotiated_inbound) => {
+            ConnectionEvent::FullyNegotiatedInbound(fully_negotiated_inbound) => {
                 self.on_fully_negotiated_inbound(fully_negotiated_inbound)
             }
-            StreamEvent::FullyNegotiatedOutbound(fully_negotiated_outbound) => {
+            ConnectionEvent::FullyNegotiatedOutbound(fully_negotiated_outbound) => {
                 self.on_fully_negotiated_outbound(fully_negotiated_outbound)
             }
-            StreamEvent::DialUpgradeError(dial_upgrade_error) => {
+            ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
                 self.on_dial_upgrade_error(dial_upgrade_error)
             }
-            StreamEvent::AddressChange(_) | StreamEvent::ListenUpgradeError(_) => {}
+            ConnectionEvent::AddressChange(_) | ConnectionEvent::ListenUpgradeError(_) => {}
         }
     }
 }

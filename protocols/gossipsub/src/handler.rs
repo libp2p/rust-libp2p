@@ -27,8 +27,9 @@ use futures::StreamExt;
 use instant::Instant;
 use libp2p_core::upgrade::{NegotiationError, UpgradeError};
 use libp2p_swarm::handler::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, DialUpgradeError,
-    FullyNegotiatedInbound, FullyNegotiatedOutbound, KeepAlive, StreamEvent, SubstreamProtocol,
+    ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr,
+    DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound, KeepAlive,
+    SubstreamProtocol,
 };
 use libp2p_swarm::NegotiatedSubstream;
 use log::{error, trace, warn};
@@ -556,9 +557,9 @@ impl ConnectionHandler for GossipsubHandler {
         Poll::Pending
     }
 
-    fn on_event(
+    fn on_connection_event(
         &mut self,
-        event: StreamEvent<
+        event: ConnectionEvent<
             Self::InboundProtocol,
             Self::OutboundProtocol,
             Self::InboundOpenInfo,
@@ -566,18 +567,18 @@ impl ConnectionHandler for GossipsubHandler {
         >,
     ) {
         match event {
-            StreamEvent::FullyNegotiatedInbound(fully_negotiated_inbound) => {
+            ConnectionEvent::FullyNegotiatedInbound(fully_negotiated_inbound) => {
                 self.on_fully_negotiated_inbound(fully_negotiated_inbound)
             }
-            StreamEvent::FullyNegotiatedOutbound(fully_negotiated_outbound) => {
+            ConnectionEvent::FullyNegotiatedOutbound(fully_negotiated_outbound) => {
                 self.on_fully_negotiated_outbound(fully_negotiated_outbound)
             }
-            StreamEvent::DialUpgradeError(DialUpgradeError { error: e, .. }) => {
+            ConnectionEvent::DialUpgradeError(DialUpgradeError { error: e, .. }) => {
                 self.outbound_substream_establishing = false;
                 warn!("Dial upgrade error {:?}", e);
                 self.upgrade_errors.push_back(e);
             }
-            StreamEvent::AddressChange(_) | StreamEvent::ListenUpgradeError(_) => {}
+            ConnectionEvent::AddressChange(_) | ConnectionEvent::ListenUpgradeError(_) => {}
         }
     }
 }
