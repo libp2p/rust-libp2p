@@ -67,26 +67,48 @@ pub mod dummy;
 pub mod handler;
 pub mod keep_alive;
 
+/// Bundles all symbols required for the [`libp2p_swarm_derive::NetworkBehaviour`] macro.
+#[doc(hidden)]
+pub mod derive_prelude {
+    pub use crate::ConnectionHandler;
+    pub use crate::DialError;
+    pub use crate::IntoConnectionHandler;
+    pub use crate::IntoConnectionHandlerSelect;
+    pub use crate::NetworkBehaviour;
+    pub use crate::NetworkBehaviourAction;
+    pub use crate::PollParameters;
+    pub use futures::prelude as futures;
+    pub use libp2p_core::connection::ConnectionId;
+    pub use libp2p_core::either::EitherOutput;
+    pub use libp2p_core::transport::ListenerId;
+    pub use libp2p_core::ConnectedPoint;
+    pub use libp2p_core::Multiaddr;
+    pub use libp2p_core::PeerId;
+}
+
 pub use behaviour::{
     CloseConnection, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
 };
+pub use connection::pool::{ConnectionCounters, ConnectionLimits};
 pub use connection::{
-    ConnectionCounters, ConnectionError, ConnectionLimit, ConnectionLimits, PendingConnectionError,
-    PendingInboundConnectionError, PendingOutboundConnectionError,
+    ConnectionError, ConnectionLimit, PendingConnectionError, PendingInboundConnectionError,
+    PendingOutboundConnectionError,
 };
 pub use handler::{
     ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerSelect, ConnectionHandlerUpgrErr,
     IntoConnectionHandler, IntoConnectionHandlerSelect, KeepAlive, OneShotHandler,
     OneShotHandlerConfig, SubstreamProtocol,
 };
+#[cfg(feature = "macros")]
+pub use libp2p_swarm_derive::NetworkBehaviour;
 pub use registry::{AddAddressResult, AddressRecord, AddressScore};
 
-use connection::pool::{Pool, PoolConfig, PoolEvent};
-use connection::{EstablishedConnection, IncomingInfo};
+use connection::pool::{EstablishedConnection, Pool, PoolConfig, PoolEvent};
+use connection::IncomingInfo;
 use dial_opts::{DialOpts, PeerCondition};
 use either::Either;
 use futures::{executor::ThreadPoolBuilder, prelude::*, stream::FusedStream};
-use libp2p_core::connection::{ConnectionId, PendingPoint};
+use libp2p_core::connection::ConnectionId;
 use libp2p_core::muxing::SubstreamBox;
 use libp2p_core::{
     connection::ConnectedPoint,
@@ -395,15 +417,7 @@ where
                     // Check [`PeerCondition`] if provided.
                     let condition_matched = match condition {
                         PeerCondition::Disconnected => !self.is_connected(&peer_id),
-                        PeerCondition::NotDialing => {
-                            !self
-                                .pool
-                                .iter_pending_info()
-                                .any(move |(_, endpoint, peer)| {
-                                    matches!(endpoint, PendingPoint::Dialer { .. })
-                                        && peer.as_ref() == Some(&peer_id)
-                                })
-                        }
+                        PeerCondition::NotDialing => !self.pool.is_dialing(peer_id),
                         PeerCondition::Always => true,
                     };
                     if !condition_matched {
@@ -1042,7 +1056,7 @@ where
                 Some((peer_id, handler, event)) => match handler {
                     PendingNotifyHandler::One(conn_id) => {
                         match this.pool.get_established(conn_id) {
-                            Some(mut conn) => match notify_one(&mut conn, event, cx) {
+                            Some(conn) => match notify_one(conn, event, cx) {
                                 None => continue,
                                 Some(event) => {
                                     this.pending_event = Some((peer_id, handler, event));
@@ -1135,8 +1149,8 @@ enum PendingNotifyHandler {
 ///
 /// Returns `None` if the connection is closing or the event has been
 /// successfully sent, in either case the event is consumed.
-fn notify_one<'a, THandlerInEvent>(
-    conn: &mut EstablishedConnection<'a, THandlerInEvent>,
+fn notify_one<THandlerInEvent>(
+    conn: &mut EstablishedConnection<THandlerInEvent>,
     event: THandlerInEvent,
     cx: &mut Context<'_>,
 ) -> Option<THandlerInEvent> {
@@ -1180,7 +1194,7 @@ where
     let mut pending = SmallVec::new();
     let mut event = Some(event); // (1)
     for id in ids.into_iter() {
-        if let Some(mut conn) = pool.get_established(id) {
+        if let Some(conn) = pool.get_established(id) {
             match conn.poll_ready_notify_handler(cx) {
                 Poll::Pending => pending.push(id),
                 Poll::Ready(Err(())) => {} // connection is closing
@@ -1575,12 +1589,12 @@ mod tests {
     use futures::future::poll_fn;
     use futures::future::Either;
     use futures::{executor, future, ready};
-    use libp2p::core::{identity, multiaddr, transport, upgrade};
-    use libp2p::plaintext;
-    use libp2p::yamux;
     use libp2p_core::multiaddr::multiaddr;
     use libp2p_core::transport::TransportEvent;
     use libp2p_core::Endpoint;
+    use libp2p_core::{identity, multiaddr, transport, upgrade};
+    use libp2p_plaintext as plaintext;
+    use libp2p_yamux as yamux;
     use quickcheck::*;
 
     // Test execution state.

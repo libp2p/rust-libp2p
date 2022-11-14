@@ -18,6 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+//! Implementation of the [Gossipsub](https://github.com/libp2p/specs/blob/master/pubsub/gossipsub/README.md) protocol.
+//!
 //! Gossipsub is a P2P pubsub (publish/subscription) routing layer designed to extend upon
 //! floodsub and meshsub routing protocols.
 //!

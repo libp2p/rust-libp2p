@@ -23,7 +23,6 @@ use prometheus_client::encoding::text::Encode;
 use prometheus_client::metrics::counter::Counter;
 use prometheus_client::metrics::family::Family;
 use prometheus_client::registry::Registry;
-use protocol_stack::MultiaddrExt;
 
 pub struct Metrics {
     connections_incoming: Family<protocol_stack::Labels, Counter>,
@@ -148,7 +147,7 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
                 self.connections_established
                     .get_or_create(&ConnectionEstablishedLabels {
                         role: endpoint.into(),
-                        protocols: endpoint.get_remote_address().protocol_stack(),
+                        protocols: protocol_stack::as_string(endpoint.get_remote_address()),
                     })
                     .inc();
             }
@@ -156,7 +155,7 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
                 self.connections_closed
                     .get_or_create(&ConnectionClosedLabels {
                         role: endpoint.into(),
-                        protocols: endpoint.get_remote_address().protocol_stack(),
+                        protocols: protocol_stack::as_string(endpoint.get_remote_address()),
                     })
                     .inc();
             }
@@ -173,7 +172,7 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
                 self.connections_incoming_error
                     .get_or_create(&IncomingConnectionErrorLabels {
                         error: error.into(),
-                        protocols: send_back_addr.protocol_stack(),
+                        protocols: protocol_stack::as_string(send_back_addr),
                     })
                     .inc();
             }

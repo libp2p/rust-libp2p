@@ -1,10 +1,14 @@
 # 0.41.0 [unreleased]
 
+- Change default `cache_size` of `Config` to 100. See [PR 2995].
+
 - Update to `prost-codec` `v0.3.0`.
 
 - Update to `libp2p-core` `v0.38.0`.
 
 - Update to `libp2p-swarm` `v0.41.0`.
+
+[PR 2995]: https://github.com/libp2p/rust-libp2p/pull/2995
 
 # 0.40.0
 
