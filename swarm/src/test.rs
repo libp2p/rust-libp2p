@@ -19,8 +19,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
-    ConnectionHandler, DialError, IntoConnectionHandler, NetworkBehaviour, NetworkBehaviourAction,
-    PollParameters,
+    ConnectionHandler, DialError, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
+    TryIntoConnectionHandler,
 };
 use libp2p_core::{
     connection::ConnectionId, multiaddr::Multiaddr, transport::ListenerId, ConnectedPoint, PeerId,
@@ -102,7 +102,7 @@ where
     pub inject_event: Vec<(
         PeerId,
         ConnectionId,
-        <<TInner::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent,
+        <<TInner::ConnectionHandler as TryIntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent,
     )>,
     pub inject_dial_failure: Vec<Option<PeerId>>,
     pub inject_new_listener: Vec<ListenerId>,
@@ -221,7 +221,7 @@ where
 impl<TInner> NetworkBehaviour for CallTraceBehaviour<TInner>
 where
     TInner: NetworkBehaviour,
-    <<TInner::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent:
+    <<TInner::ConnectionHandler as TryIntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent:
         Clone,
 {
     type ConnectionHandler = TInner::ConnectionHandler;
@@ -282,7 +282,7 @@ where
         p: &PeerId,
         c: &ConnectionId,
         e: &ConnectedPoint,
-        handler: <Self::ConnectionHandler as IntoConnectionHandler>::Handler,
+        handler: <Self::ConnectionHandler as TryIntoConnectionHandler>::Handler,
         remaining_established: usize,
     ) {
         let mut other_closed_connections = self
@@ -329,7 +329,7 @@ where
         &mut self,
         p: PeerId,
         c: ConnectionId,
-        e: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent,
+        e: <<Self::ConnectionHandler as TryIntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent,
     ) {
         assert!(
             self.inject_connection_established

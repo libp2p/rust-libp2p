@@ -56,9 +56,9 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     let trait_to_impl = quote! { #prelude_path::NetworkBehaviour };
     let either_ident = quote! { #prelude_path::EitherOutput };
     let network_behaviour_action = quote! { #prelude_path::NetworkBehaviourAction };
-    let into_connection_handler = quote! { #prelude_path::IntoConnectionHandler };
+    let try_into_connection_handler = quote! { #prelude_path::TryIntoConnectionHandler };
     let connection_handler = quote! { #prelude_path::ConnectionHandler };
-    let into_proto_select_ident = quote! { #prelude_path::IntoConnectionHandlerSelect };
+    let try_into_proto_select_ident = quote! { #prelude_path::TryIntoConnectionHandlerSelect };
     let peer_id = quote! { #prelude_path::PeerId };
     let connection_id = quote! { #prelude_path::ConnectionId };
     let dial_errors = quote! {Option<&Vec<#prelude_path::Multiaddr>> };
@@ -395,7 +395,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             let ty = &field.ty;
             let field_info = quote! { <#ty as #trait_to_impl>::ConnectionHandler };
             match ph_ty {
-                Some(ev) => ph_ty = Some(quote! { #into_proto_select_ident<#ev, #field_info> }),
+                Some(ev) => ph_ty = Some(quote! { #try_into_proto_select_ident<#ev, #field_info> }),
                 ref mut ev @ None => *ev = Some(field_info),
             }
         }
@@ -420,7 +420,8 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
             match out_handler {
                 Some(h) => {
-                    out_handler = Some(quote! { #into_connection_handler::select(#h, #builder) })
+                    out_handler =
+                        Some(quote! { #try_into_connection_handler::select(#h, #builder) })
                 }
                 ref mut h @ None => *h = Some(builder),
             }
@@ -470,7 +471,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
                 match out_handler {
                     Some(h) => {
-                        out_handler = Some(quote! { #into_connection_handler::select(#h, #builder) })
+                        out_handler = Some(quote! { #try_into_connection_handler::select(#h, #builder) })
                     }
                     ref mut h @ None => *h = Some(builder),
                 }
@@ -545,7 +546,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             type OutEvent = #out_event_reference;
 
             fn new_handler(&mut self) -> Self::ConnectionHandler {
-                use #into_connection_handler;
+                use #try_into_connection_handler;
                 #new_handler
             }
 
@@ -563,7 +564,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 #(#inject_address_change_stmts);*
             }
 
-            fn inject_connection_closed(&mut self, peer_id: &#peer_id, connection_id: &#connection_id, endpoint: &#connected_point, handlers: <Self::ConnectionHandler as #into_connection_handler>::Handler, remaining_established: usize) {
+            fn inject_connection_closed(&mut self, peer_id: &#peer_id, connection_id: &#connection_id, endpoint: &#connected_point, handlers: <Self::ConnectionHandler as #try_into_connection_handler>::Handler, remaining_established: usize) {
                 #(#inject_connection_closed_stmts);*
             }
 
@@ -607,7 +608,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 &mut self,
                 peer_id: #peer_id,
                 connection_id: #connection_id,
-                event: <<Self::ConnectionHandler as #into_connection_handler>::Handler as #connection_handler>::OutEvent
+                event: <<Self::ConnectionHandler as #try_into_connection_handler>::Handler as #connection_handler>::OutEvent
             ) {
                 match event {
                     #(#inject_node_event_stmts),*

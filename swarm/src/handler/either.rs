@@ -19,8 +19,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::handler::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, IntoConnectionHandler,
-    KeepAlive, SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
+    SubstreamProtocol, TryIntoConnectionHandler,
 };
 use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper};
 use either::Either;
@@ -34,21 +34,30 @@ pub enum IntoEitherHandler<L, R> {
     Right(R),
 }
 
-/// Implementation of a [`IntoConnectionHandler`] that represents either of two [`IntoConnectionHandler`]
+/// Implementation of a [`TryIntoConnectionHandler`] that represents either of two [`TryIntoConnectionHandler`]
 /// implementations.
-impl<L, R> IntoConnectionHandler for IntoEitherHandler<L, R>
+impl<L, R> TryIntoConnectionHandler for IntoEitherHandler<L, R>
 where
-    L: IntoConnectionHandler,
-    R: IntoConnectionHandler,
+    L: TryIntoConnectionHandler,
+    R: TryIntoConnectionHandler,
 {
     type Handler = Either<L::Handler, R::Handler>;
+    type Error = Either<L::Error, R::Error>;
 
-    fn into_handler(self, p: &PeerId, c: &ConnectedPoint) -> Self::Handler {
+    fn try_into_handler(
+        self,
+        remote_peer_id: &PeerId,
+        connected_point: &ConnectedPoint,
+    ) -> Result<Self::Handler, Self::Error> {
         match self {
-            IntoEitherHandler::Left(into_handler) => Either::Left(into_handler.into_handler(p, c)),
-            IntoEitherHandler::Right(into_handler) => {
-                Either::Right(into_handler.into_handler(p, c))
-            }
+            IntoEitherHandler::Left(inner) => inner
+                .try_into_handler(remote_peer_id, connected_point)
+                .map(Either::Left)
+                .map_err(Either::Left),
+            IntoEitherHandler::Right(inner) => inner
+                .try_into_handler(remote_peer_id, connected_point)
+                .map(Either::Right)
+                .map_err(Either::Right),
         }
     }
 

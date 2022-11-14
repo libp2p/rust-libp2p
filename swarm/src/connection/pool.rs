@@ -20,6 +20,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::connection::Connection;
+use crate::handler::TryIntoConnectionHandler;
 use crate::{
     behaviour::{THandlerInEvent, THandlerOutEvent},
     connection::{
@@ -27,7 +28,7 @@ use crate::{
         PendingInboundConnectionError, PendingOutboundConnectionError,
     },
     transport::{Transport, TransportError},
-    ConnectedPoint, ConnectionHandler, Executor, IntoConnectionHandler, Multiaddr, PeerId,
+    ConnectedPoint, ConnectionHandler, Executor, Multiaddr, PeerId,
 };
 use concurrent_dial::ConcurrentDial;
 use fnv::FnvHashMap;
@@ -55,7 +56,7 @@ mod concurrent_dial;
 mod task;
 
 /// A connection `Pool` manages a set of connections for each peer.
-pub struct Pool<THandler: IntoConnectionHandler, TTrans>
+pub struct Pool<THandler: TryIntoConnectionHandler, TTrans>
 where
     TTrans: Transport,
 {
@@ -191,7 +192,7 @@ impl<THandler> PendingConnection<THandler> {
     }
 }
 
-impl<THandler: IntoConnectionHandler, TTrans: Transport> fmt::Debug for Pool<THandler, TTrans> {
+impl<THandler: TryIntoConnectionHandler, TTrans: Transport> fmt::Debug for Pool<THandler, TTrans> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         f.debug_struct("Pool")
             .field("counters", &self.counters)
@@ -201,7 +202,7 @@ impl<THandler: IntoConnectionHandler, TTrans: Transport> fmt::Debug for Pool<THa
 
 /// Event that can happen on the `Pool`.
 #[derive(Debug)]
-pub enum PoolEvent<THandler: IntoConnectionHandler, TTrans>
+pub enum PoolEvent<THandler: TryIntoConnectionHandler, TTrans>
 where
     TTrans: Transport,
 {
@@ -218,6 +219,14 @@ where
         /// Addresses are dialed in parallel. Contains the addresses and errors
         /// of dial attempts that failed before the one successful dial.
         concurrent_dial_errors: Option<Vec<(Multiaddr, TransportError<TTrans::Error>)>>,
+    },
+
+    /// An upgraded connection has been denied.
+    ConnectionDenied {
+        id: ConnectionId,
+        peer_id: PeerId,
+        endpoint: ConnectedPoint,
+        error: <THandler as TryIntoConnectionHandler>::Error,
     },
 
     /// An established connection was closed.
@@ -290,7 +299,7 @@ where
 
 impl<THandler, TTrans> Pool<THandler, TTrans>
 where
-    THandler: IntoConnectionHandler,
+    THandler: TryIntoConnectionHandler,
     TTrans: Transport,
 {
     /// Creates a new empty `Pool`.
@@ -409,7 +418,7 @@ where
 
 impl<THandler, TTrans> Pool<THandler, TTrans>
 where
-    THandler: IntoConnectionHandler,
+    THandler: TryIntoConnectionHandler,
     TTrans: Transport + 'static,
     TTrans::Output: Send + 'static,
     TTrans::Error: Send + 'static,
@@ -531,9 +540,10 @@ where
     pub fn poll(&mut self, cx: &mut Context<'_>) -> Poll<PoolEvent<THandler, TTrans>>
     where
         TTrans: Transport<Output = (PeerId, StreamMuxerBox)>,
-        THandler: IntoConnectionHandler + 'static,
-        THandler::Handler: ConnectionHandler + Send,
-        <THandler::Handler as ConnectionHandler>::OutboundOpenInfo: Send,
+        THandler: TryIntoConnectionHandler + 'static,
+        <THandler as TryIntoConnectionHandler>::Handler: ConnectionHandler + Send,
+        <<THandler as TryIntoConnectionHandler>::Handler as ConnectionHandler>::OutboundOpenInfo:
+            Send,
     {
         // Poll for events of established connections.
         //
@@ -749,9 +759,21 @@ where
                         },
                     );
 
+                    let handler = match handler.try_into_handler(&obtained_peer_id, &endpoint) {
+                        Ok(handler) => handler,
+                        Err(error) => {
+                            return Poll::Ready(PoolEvent::ConnectionDenied {
+                                peer_id: obtained_peer_id,
+                                endpoint,
+                                id,
+                                error,
+                            })
+                        }
+                    };
+
                     let connection = Connection::new(
                         muxer,
-                        handler.into_handler(&obtained_peer_id, &endpoint),
+                        handler,
                         self.substream_upgrade_protocol_override,
                         self.max_negotiating_inbound_streams,
                     );

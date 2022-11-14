@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::handler::{either::IntoEitherHandler, ConnectionHandler, IntoConnectionHandler};
+use crate::handler::{either::IntoEitherHandler, ConnectionHandler, TryIntoConnectionHandler};
 use crate::{DialError, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use either::Either;
 use libp2p_core::{
@@ -80,7 +80,7 @@ where
         peer_id: &PeerId,
         connection: &ConnectionId,
         endpoint: &ConnectedPoint,
-        handler: <Self::ConnectionHandler as IntoConnectionHandler>::Handler,
+        handler: <Self::ConnectionHandler as TryIntoConnectionHandler>::Handler,
         remaining_established: usize,
     ) {
         match (self, handler) {
@@ -120,7 +120,7 @@ where
         &mut self,
         peer_id: PeerId,
         connection: ConnectionId,
-        event: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent,
+        event: <<Self::ConnectionHandler as TryIntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent,
     ) {
         match (self, event) {
             (Either::Left(behaviour), Either::Left(event)) => {

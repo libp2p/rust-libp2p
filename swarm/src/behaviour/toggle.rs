@@ -19,8 +19,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::handler::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, IntoConnectionHandler,
-    KeepAlive, SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
+    SubstreamProtocol, TryIntoConnectionHandler,
 };
 use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper};
 use crate::{DialError, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
@@ -108,7 +108,7 @@ where
         peer_id: &PeerId,
         connection: &ConnectionId,
         endpoint: &ConnectedPoint,
-        handler: <Self::ConnectionHandler as IntoConnectionHandler>::Handler,
+        handler: <Self::ConnectionHandler as TryIntoConnectionHandler>::Handler,
         remaining_established: usize,
     ) {
         if let Some(inner) = self.inner.as_mut() {
@@ -140,7 +140,7 @@ where
         &mut self,
         peer_id: PeerId,
         connection: ConnectionId,
-        event: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent,
+        event: <<Self::ConnectionHandler as TryIntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent,
     ) {
         if let Some(inner) = self.inner.as_mut() {
             inner.inject_event(peer_id, connection, event);
@@ -230,26 +230,28 @@ where
     }
 }
 
-/// Implementation of `IntoConnectionHandler` that can be in the disabled state.
+/// Implementation of [`TryIntoConnectionHandler`] that can be in the disabled state.
 pub struct ToggleIntoConnectionHandler<TInner> {
     inner: Option<TInner>,
 }
 
-impl<TInner> IntoConnectionHandler for ToggleIntoConnectionHandler<TInner>
+impl<TInner> TryIntoConnectionHandler for ToggleIntoConnectionHandler<TInner>
 where
-    TInner: IntoConnectionHandler,
+    TInner: TryIntoConnectionHandler,
 {
     type Handler = ToggleConnectionHandler<TInner::Handler>;
+    type Error = TInner::Error;
 
-    fn into_handler(
+    fn try_into_handler(
         self,
         remote_peer_id: &PeerId,
         connected_point: &ConnectedPoint,
-    ) -> Self::Handler {
-        ToggleConnectionHandler {
-            inner: self
-                .inner
-                .map(|h| h.into_handler(remote_peer_id, connected_point)),
+    ) -> Result<Self::Handler, Self::Error> {
+        match self.inner {
+            Some(inner) => Ok(ToggleConnectionHandler {
+                inner: Some(inner.try_into_handler(remote_peer_id, connected_point)?),
+            }),
+            None => Ok(ToggleConnectionHandler { inner: None }),
         }
     }
 

@@ -207,6 +207,7 @@ enum CliArgument {
 mod network {
     use super::*;
     use async_trait::async_trait;
+    use either::Either;
     use futures::channel::{mpsc, oneshot};
     use libp2p::core::either::EitherError;
     use libp2p::core::upgrade::{read_length_prefixed, write_length_prefixed, ProtocolName};
@@ -224,6 +225,7 @@ mod network {
     };
     use std::collections::{hash_map, HashMap, HashSet};
     use std::iter;
+    use void::Void;
 
     /// Creates the network components, namely:
     ///
@@ -412,6 +414,7 @@ mod network {
             event: SwarmEvent<
                 ComposedEvent,
                 EitherError<ConnectionHandlerUpgrErr<io::Error>, io::Error>,
+                Either<Void, Void>,
             >,
         ) {
             match event {

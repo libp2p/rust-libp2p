@@ -51,12 +51,15 @@ pub use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper, U
 use instant::Instant;
 use libp2p_core::{upgrade::UpgradeError, ConnectedPoint, Multiaddr, PeerId};
 use std::{cmp::Ordering, error, fmt, task::Context, task::Poll, time::Duration};
+use void::Void;
 
 pub use map_in::MapInEvent;
 pub use map_out::MapOutEvent;
 pub use one_shot::{OneShotHandler, OneShotHandlerConfig};
 pub use pending::PendingConnectionHandler;
-pub use select::{ConnectionHandlerSelect, IntoConnectionHandlerSelect};
+pub use select::{
+    ConnectionHandlerSelect, IntoConnectionHandlerSelect, TryIntoConnectionHandlerSelect,
+};
 
 /// A handler for a set of protocols used on a connection with a remote.
 ///
@@ -460,6 +463,7 @@ where
 }
 
 /// Prototype for a [`ConnectionHandler`].
+#[deprecated(since = "0.41.0", note = "Implement `TryIntoConnectionHandler` instead.")]
 pub trait IntoConnectionHandler: Send + 'static {
     /// The protocols handler.
     type Handler: ConnectionHandler;
@@ -486,6 +490,35 @@ pub trait IntoConnectionHandler: Send + 'static {
     }
 }
 
+/// Prototype for a [`ConnectionHandler`].
+pub trait TryIntoConnectionHandler: Send + 'static {
+    /// The protocols handler.
+    type Handler: ConnectionHandler;
+
+    type Error: error::Error + Send + 'static;
+
+    /// Builds the protocols handler.
+    ///
+    /// The `PeerId` is the id of the node the handler is going to handle.
+    fn try_into_handler(
+        self,
+        remote_peer_id: &PeerId,
+        connected_point: &ConnectedPoint,
+    ) -> Result<Self::Handler, Self::Error>;
+
+    /// Return the handler's inbound protocol.
+    fn inbound_protocol(&self) -> <Self::Handler as ConnectionHandler>::InboundProtocol;
+
+    /// Builds an implementation of [`IntoConnectionHandler`] that handles both this protocol and the
+    /// other one together.
+    fn select<TProto2>(self, other: TProto2) -> TryIntoConnectionHandlerSelect<Self, TProto2>
+    where
+        Self: Sized,
+    {
+        TryIntoConnectionHandlerSelect::new(self, other)
+    }
+}
+
 impl<T> IntoConnectionHandler for T
 where
     T: ConnectionHandler,
@@ -498,6 +531,26 @@ where
 
     fn inbound_protocol(&self) -> <Self::Handler as ConnectionHandler>::InboundProtocol {
         self.listen_protocol().into_upgrade().0
+    }
+}
+
+impl<T> TryIntoConnectionHandler for T
+where
+    T: IntoConnectionHandler,
+{
+    type Handler = T::Handler;
+    type Error = Void;
+
+    fn try_into_handler(
+        self,
+        remote_peer_id: &PeerId,
+        connected_point: &ConnectedPoint,
+    ) -> Result<Self::Handler, Self::Error> {
+        Ok(self.into_handler(remote_peer_id, connected_point))
+    }
+
+    fn inbound_protocol(&self) -> <Self::Handler as ConnectionHandler>::InboundProtocol {
+        self.inbound_protocol()
     }
 }
 
