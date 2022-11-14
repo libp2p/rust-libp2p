@@ -5,7 +5,7 @@ defaults:
       commit_message_template: |
         {{ title }} (#{{ number }})
         
-        {{ body | get_section("## Commit Message body", "") }}   
+        {{ body | get_section("## Description", "") }}   
 
 pull_request_rules:
   - name: Ask to resolve conflict
