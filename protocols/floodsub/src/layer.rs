@@ -105,7 +105,6 @@ impl Floodsub {
         if self.target_peers.insert(peer_id) {
             self.events.push_back(NetworkBehaviourAction::Dial {
                 opts: DialOpts::peer_id(peer_id).build(),
-                dial_payload: (),
             });
         }
     }
@@ -276,9 +275,8 @@ impl Floodsub {
 impl NetworkBehaviour for Floodsub {
     type ConnectionHandler = OneShotHandler<FloodsubProtocol, FloodsubRpc, InnerMessage>;
     type OutEvent = FloodsubEvent;
-    type DialPayload = ();
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
+    fn new_handler(&mut self, _: &PeerId, _: &ConnectedPoint) -> Self::ConnectionHandler {
         Default::default()
     }
 
@@ -337,7 +335,6 @@ impl NetworkBehaviour for Floodsub {
         if self.target_peers.contains(id) {
             self.events.push_back(NetworkBehaviourAction::Dial {
                 opts: DialOpts::peer_id(*id).build(),
-                dial_payload: (),
             });
         }
     }

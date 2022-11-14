@@ -25,6 +25,7 @@ pub mod rate_limiter;
 
 use crate::v2::message_proto;
 use crate::v2::protocol::inbound_hop;
+use crate::v2::relay::handler::Handler;
 use either::Either;
 use instant::Instant;
 use libp2p_core::connection::{ConnectedPoint, ConnectionId};
@@ -216,17 +217,22 @@ impl Relay {
 }
 
 impl NetworkBehaviour for Relay {
-    type ConnectionHandler = handler::Prototype;
+    type ConnectionHandler = Either<Handler, dummy::ConnectionHandler>;
     type OutEvent = Event;
-    type DialPayload = ();
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
-        handler::Prototype {
-            config: handler::Config {
-                reservation_duration: self.config.reservation_duration,
-                max_circuit_duration: self.config.max_circuit_duration,
-                max_circuit_bytes: self.config.max_circuit_bytes,
-            },
+    fn new_handler(&mut self, _: &PeerId, endpoint: &ConnectedPoint) -> Self::ConnectionHandler {
+        if endpoint.is_relayed() {
+            // Deny all substreams on relayed connection.
+            Either::Right(dummy::ConnectionHandler)
+        } else {
+            Either::Left(Handler::new(
+                endpoint.clone(),
+                handler::Config {
+                    reservation_duration: self.config.reservation_duration,
+                    max_circuit_duration: self.config.max_circuit_duration,
+                    max_circuit_bytes: self.config.max_circuit_bytes,
+                },
+            ))
         }
     }
 
@@ -726,7 +732,7 @@ impl Add<u64> for CircuitId {
 /// before being returned in [`Relay::poll`].
 #[allow(clippy::large_enum_variant)]
 enum Action {
-    Done(NetworkBehaviourAction<Event, THandlerInEvent<handler::Prototype>>),
+    Done(NetworkBehaviourAction<Event, THandlerInEvent<Either<Handler, dummy::ConnectionHandler>>>),
     AcceptReservationPrototype {
         inbound_reservation_req: inbound_hop::ReservationReq,
         handler: NotifyHandler,
@@ -734,8 +740,15 @@ enum Action {
     },
 }
 
-impl From<NetworkBehaviourAction<Event, THandlerInEvent<handler::Prototype>>> for Action {
-    fn from(action: NetworkBehaviourAction<Event, THandlerInEvent<handler::Prototype>>) -> Self {
+impl From<NetworkBehaviourAction<Event, THandlerInEvent<Either<Handler, dummy::ConnectionHandler>>>>
+    for Action
+{
+    fn from(
+        action: NetworkBehaviourAction<
+            Event,
+            THandlerInEvent<Either<Handler, dummy::ConnectionHandler>>,
+        >,
+    ) -> Self {
         Self::Done(action)
     }
 }
@@ -744,7 +757,8 @@ impl Action {
     fn build(
         self,
         poll_parameters: &mut impl PollParameters,
-    ) -> NetworkBehaviourAction<Event, THandlerInEvent<handler::Prototype>> {
+    ) -> NetworkBehaviourAction<Event, THandlerInEvent<Either<Handler, dummy::ConnectionHandler>>>
+    {
         match self {
             Action::Done(action) => action,
             Action::AcceptReservationPrototype {

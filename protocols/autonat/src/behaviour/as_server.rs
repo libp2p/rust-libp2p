@@ -137,7 +137,6 @@ impl<'a> HandleInnerEvent for AsServer<'a> {
                                 .override_dial_concurrency_factor(NonZeroU8::new(1).expect("1 > 0"))
                                 .addresses(addrs)
                                 .build(),
-                            dial_payload: (),
                         });
                     }
                     Err((status_text, error)) => {

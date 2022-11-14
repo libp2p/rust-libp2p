@@ -27,8 +27,7 @@ use crate::{
         PendingInboundConnectionError, PendingOutboundConnectionError,
     },
     transport::{Transport, TransportError},
-    ConnectedPoint, ConnectionHandler, Executor, IntoConnectionHandler, Multiaddr,
-    PeerId,
+    ConnectedPoint, ConnectionHandler, Executor, Multiaddr, PeerId,
 };
 use concurrent_dial::ConcurrentDial;
 use fnv::FnvHashMap;
@@ -56,7 +55,7 @@ mod concurrent_dial;
 mod task;
 
 /// A connection `Pool` manages a set of connections for each peer.
-pub struct Pool<THandler: IntoConnectionHandler, TTrans, TDialPayload>
+pub struct Pool<THandler: ConnectionHandler, TTrans>
 where
     TTrans: Transport,
 {
@@ -66,16 +65,11 @@ where
     counters: ConnectionCounters,
 
     /// The managed connections of each peer that are currently considered established.
-    established: FnvHashMap<
-        PeerId,
-        FnvHashMap<
-            ConnectionId,
-            EstablishedConnection<<THandler::Handler as ConnectionHandler>::InEvent>,
-        >,
-    >,
+    established:
+        FnvHashMap<PeerId, FnvHashMap<ConnectionId, EstablishedConnection<THandler::InEvent>>>,
 
     /// The pending connections that are currently being negotiated.
-    pending: HashMap<ConnectionId, PendingConnection<TDialPayload>>,
+    pending: HashMap<ConnectionId, PendingConnection>,
 
     /// Next available identifier for a new connection / task.
     next_connection_id: ConnectionId,
@@ -112,12 +106,10 @@ where
 
     /// Sender distributed to established tasks for reporting events back
     /// to the pool.
-    established_connection_events_tx:
-        mpsc::Sender<task::EstablishedConnectionEvent<THandler::Handler>>,
+    established_connection_events_tx: mpsc::Sender<task::EstablishedConnectionEvent<THandler>>,
 
     /// Receiver for events reported from established tasks.
-    established_connection_events_rx:
-        mpsc::Receiver<task::EstablishedConnectionEvent<THandler::Handler>>,
+    established_connection_events_rx: mpsc::Receiver<task::EstablishedConnectionEvent<THandler>>,
 }
 
 #[derive(Debug)]
@@ -169,16 +161,15 @@ impl<TInEvent> EstablishedConnection<TInEvent> {
     }
 }
 
-struct PendingConnection<TDialPayload> {
+struct PendingConnection {
     /// [`PeerId`] of the remote peer.
     peer_id: Option<PeerId>,
-    dial_payload: Option<TDialPayload>,
     endpoint: PendingPoint,
     /// When dropped, notifies the task which then knows to terminate.
     abort_notifier: Option<oneshot::Sender<Void>>,
 }
 
-impl<TDialPayload> PendingConnection<TDialPayload> {
+impl PendingConnection {
     fn is_for_same_remote_as(&self, other: PeerId) -> bool {
         self.peer_id.map_or(false, |peer| peer == other)
     }
@@ -191,9 +182,7 @@ impl<TDialPayload> PendingConnection<TDialPayload> {
     }
 }
 
-impl<THandler: IntoConnectionHandler, TTrans: Transport, TDialPayload> fmt::Debug
-    for Pool<THandler, TTrans, TDialPayload>
-{
+impl<THandler: ConnectionHandler, TTrans: Transport> fmt::Debug for Pool<THandler, TTrans> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         f.debug_struct("Pool")
             .field("counters", &self.counters)
@@ -203,7 +192,7 @@ impl<THandler: IntoConnectionHandler, TTrans: Transport, TDialPayload> fmt::Debu
 
 /// Event that can happen on the `Pool`.
 #[derive(Debug)]
-pub enum PoolEvent<THandler: IntoConnectionHandler, TTrans, TDialPayload>
+pub enum PoolEvent<THandler: ConnectionHandler, TTrans>
 where
     TTrans: Transport,
 {
@@ -239,10 +228,10 @@ where
         connected: Connected,
         /// The error that occurred, if any. If `None`, the connection
         /// was closed by the local peer.
-        error: Option<ConnectionError<<THandler::Handler as ConnectionHandler>::Error>>,
+        error: Option<ConnectionError<THandler::Error>>,
         /// The remaining established connections to the same peer.
         remaining_established_connection_ids: Vec<ConnectionId>,
-        handler: THandler::Handler,
+        handler: THandler,
     },
 
     /// An outbound connection attempt failed.
@@ -251,8 +240,6 @@ where
         id: ConnectionId,
         /// The error that occurred.
         error: PendingOutboundConnectionError<TTrans::Error>,
-        /// TODO
-        dial_payload: Option<TDialPayload>,
         /// The (expected) peer of the failed connection.
         peer: Option<PeerId>,
     },
@@ -288,9 +275,9 @@ where
     },
 }
 
-impl<THandler, TTrans, TDialPayload> Pool<THandler, TTrans, TDialPayload>
+impl<THandler, TTrans> Pool<THandler, TTrans>
 where
-    THandler: IntoConnectionHandler,
+    THandler: ConnectionHandler,
     TTrans: Transport,
 {
     /// Creates a new empty `Pool`.
@@ -407,9 +394,9 @@ where
     }
 }
 
-impl<THandler, TTrans, TDialPayload> Pool<THandler, TTrans, TDialPayload>
+impl<THandler, TTrans> Pool<THandler, TTrans>
 where
-    THandler: IntoConnectionHandler,
+    THandler: ConnectionHandler,
     TTrans: Transport + 'static,
     TTrans::Output: Send + 'static,
     TTrans::Error: Send + 'static,
@@ -434,16 +421,15 @@ where
             >,
         >,
         peer: Option<PeerId>,
-        dial_payload: Option<TDialPayload>,
         role_override: Endpoint,
         dial_concurrency_factor_override: Option<NonZeroU8>,
-    ) -> Result<ConnectionId, (ConnectionLimit, Option<TDialPayload>)>
+    ) -> Result<ConnectionId, ConnectionLimit>
     where
         TTrans: Send,
         TTrans::Dial: Send + 'static,
     {
         if let Err(limit) = self.counters.check_max_pending_outgoing() {
-            return Err((limit, dial_payload));
+            return Err(limit);
         };
 
         let dial = ConcurrentDial::new(
@@ -472,7 +458,6 @@ where
             connection_id,
             PendingConnection {
                 peer_id: peer,
-                dial_payload,
                 endpoint,
                 abort_notifier: Some(abort_notifier),
             },
@@ -516,7 +501,6 @@ where
             connection_id,
             PendingConnection {
                 peer_id: None,
-                dial_payload: None,
                 endpoint: endpoint.into(),
                 abort_notifier: Some(abort_notifier),
             },
@@ -527,14 +511,13 @@ where
     /// Polls the connection pool for events.
     pub fn poll(
         &mut self,
-        mut new_handler_fn: impl FnMut(&ConnectedPoint, Option<TDialPayload>) -> THandler,
+        mut new_handler_fn: impl FnMut(&PeerId, &ConnectedPoint) -> THandler,
         cx: &mut Context<'_>,
-    ) -> Poll<PoolEvent<THandler, TTrans, TDialPayload>>
+    ) -> Poll<PoolEvent<THandler, TTrans>>
     where
         TTrans: Transport<Output = (PeerId, StreamMuxerBox)>,
-        THandler: IntoConnectionHandler + 'static,
-        THandler::Handler: ConnectionHandler + Send,
-        <THandler::Handler as ConnectionHandler>::OutboundOpenInfo: Send,
+        THandler: ConnectionHandler + 'static,
+        <THandler as ConnectionHandler>::OutboundOpenInfo: Send,
     {
         // Poll for events of established connections.
         //
@@ -614,7 +597,6 @@ where
                 } => {
                     let PendingConnection {
                         peer_id: expected_peer_id,
-                        dial_payload,
                         endpoint,
                         abort_notifier: _,
                     } = self
@@ -716,7 +698,6 @@ where
                                     id,
                                     error: error
                                         .map(|t| vec![(endpoint.get_remote_address().clone(), t)]),
-                                    dial_payload,
                                     peer: expected_peer_id.or(Some(obtained_peer_id)),
                                 })
                             }
@@ -751,8 +732,7 @@ where
 
                     let connection = Connection::new(
                         muxer,
-                        new_handler_fn(&endpoint, dial_payload)
-                            .into_handler(&obtained_peer_id, &endpoint),
+                        new_handler_fn(&obtained_peer_id, &endpoint),
                         self.substream_upgrade_protocol_override,
                         self.max_negotiating_inbound_streams,
                     );
@@ -778,7 +758,6 @@ where
                 task::PendingConnectionEvent::PendingFailed { id, error } => {
                     if let Some(PendingConnection {
                         peer_id,
-                        dial_payload: initial_event,
                         endpoint,
                         abort_notifier: _,
                     }) = self.pending.remove(&id)
@@ -790,7 +769,6 @@ where
                                 return Poll::Ready(PoolEvent::PendingOutboundConnectionError {
                                     id,
                                     error,
-                                    dial_payload: initial_event,
                                     peer: peer_id,
                                 });
                             }

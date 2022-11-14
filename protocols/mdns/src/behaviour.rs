@@ -28,7 +28,7 @@ use crate::MdnsConfig;
 use futures::Stream;
 use if_watch::{IfEvent, IfWatcher};
 use libp2p_core::transport::ListenerId;
-use libp2p_core::{Multiaddr, PeerId};
+use libp2p_core::{ConnectedPoint, Multiaddr, PeerId};
 use libp2p_swarm::{
     dummy, ConnectionHandler, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
 };
@@ -121,9 +121,8 @@ where
 {
     type ConnectionHandler = dummy::ConnectionHandler;
     type OutEvent = MdnsEvent;
-    type DialPayload = ();
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
+    fn new_handler(&mut self, _: &PeerId, _: &ConnectedPoint) -> Self::ConnectionHandler {
         dummy::ConnectionHandler
     }
 

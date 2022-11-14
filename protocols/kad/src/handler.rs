@@ -32,8 +32,8 @@ use libp2p_core::{
     ConnectedPoint, PeerId,
 };
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, IntoConnectionHandler,
-    KeepAlive, NegotiatedSubstream, SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
+    NegotiatedSubstream, SubstreamProtocol,
 };
 use log::trace;
 use std::task::Waker;
@@ -43,38 +43,23 @@ use std::{
 
 const MAX_NUM_INBOUND_SUBSTREAMS: usize = 32;
 
-/// A prototype from which [`KademliaHandler`]s can be constructed.
-pub struct KademliaHandlerProto<T> {
-    config: KademliaHandlerConfig,
-    _type: PhantomData<T>,
-}
-
-impl<T> KademliaHandlerProto<T> {
-    pub fn new(config: KademliaHandlerConfig) -> Self {
-        KademliaHandlerProto {
-            config,
-            _type: PhantomData,
-        }
-    }
-}
-
-impl<T: Clone + fmt::Debug + Send + 'static + Unpin> IntoConnectionHandler
-    for KademliaHandlerProto<T>
-{
-    type Handler = KademliaHandler<T>;
-
-    fn into_handler(self, remote_peer_id: &PeerId, endpoint: &ConnectedPoint) -> Self::Handler {
-        KademliaHandler::new(self.config, endpoint.clone(), *remote_peer_id)
-    }
-
-    fn inbound_protocol(&self) -> <Self::Handler as ConnectionHandler>::InboundProtocol {
-        if self.config.allow_listening {
-            upgrade::EitherUpgrade::A(self.config.protocol_config.clone())
-        } else {
-            upgrade::EitherUpgrade::B(upgrade::DeniedUpgrade)
-        }
-    }
-}
+// impl<T: Clone + fmt::Debug + Send + 'static + Unpin> IntoConnectionHandler
+//     for KademliaHandlerProto<T>
+// {
+//     type Handler = KademliaHandler<T>;
+//
+//     fn into_handler(self, remote_peer_id: &PeerId, endpoint: &ConnectedPoint) -> Self::Handler {
+//         KademliaHandler::new(self.config, endpoint.clone(), *remote_peer_id)
+//     }
+//
+//     fn inbound_protocol(&self) -> <Self::Handler as ConnectionHandler>::InboundProtocol {
+//         if self.config.allow_listening {
+//             upgrade::EitherUpgrade::A(self.config.protocol_config.clone())
+//         } else {
+//             upgrade::EitherUpgrade::B(upgrade::DeniedUpgrade)
+//         }
+//     }
+// }
 
 /// Protocol handler that manages substreams for the Kademlia protocol
 /// on a single connection with a peer.

@@ -36,8 +36,8 @@ use libp2p_core::{upgrade, ConnectedPoint, Multiaddr, PeerId};
 use libp2p_swarm::handler::SendWrapper;
 use libp2p_swarm::handler::{InboundUpgradeSend, OutboundUpgradeSend};
 use libp2p_swarm::{
-    dummy, ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr,
-    IntoConnectionHandler, KeepAlive, NegotiatedSubstream, SubstreamProtocol,
+    dummy, ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
+    NegotiatedSubstream, SubstreamProtocol,
 };
 use std::collections::VecDeque;
 use std::fmt;
@@ -341,38 +341,39 @@ pub struct Prototype {
     pub config: Config,
 }
 
-impl IntoConnectionHandler for Prototype {
-    type Handler = Either<Handler, dummy::ConnectionHandler>;
-
-    fn into_handler(self, _remote_peer_id: &PeerId, endpoint: &ConnectedPoint) -> Self::Handler {
-        if endpoint.is_relayed() {
-            // Deny all substreams on relayed connection.
-            Either::Right(dummy::ConnectionHandler)
-        } else {
-            Either::Left(Handler {
-                endpoint: endpoint.clone(),
-                config: self.config,
-                queued_events: Default::default(),
-                pending_error: Default::default(),
-                reservation_request_future: Default::default(),
-                circuit_accept_futures: Default::default(),
-                circuit_deny_futures: Default::default(),
-                alive_lend_out_substreams: Default::default(),
-                circuits: Default::default(),
-                active_reservation: Default::default(),
-                keep_alive: KeepAlive::Yes,
-            })
-        }
-    }
-
-    fn inbound_protocol(&self) -> <Self::Handler as ConnectionHandler>::InboundProtocol {
-        upgrade::EitherUpgrade::A(SendWrapper(inbound_hop::Upgrade {
-            reservation_duration: self.config.reservation_duration,
-            max_circuit_duration: self.config.max_circuit_duration,
-            max_circuit_bytes: self.config.max_circuit_bytes,
-        }))
-    }
-}
+// TODO
+// impl IntoConnectionHandler for Prototype {
+//     type Handler = Either<Handler, dummy::ConnectionHandler>;
+//
+//     fn into_handler(self, _remote_peer_id: &PeerId, endpoint: &ConnectedPoint) -> Self::Handler {
+//         if endpoint.is_relayed() {
+//             // Deny all substreams on relayed connection.
+//             Either::Right(dummy::ConnectionHandler)
+//         } else {
+//             Either::Left(Handler {
+//                 endpoint: endpoint.clone(),
+//                 config: self.config,
+//                 queued_events: Default::default(),
+//                 pending_error: Default::default(),
+//                 reservation_request_future: Default::default(),
+//                 circuit_accept_futures: Default::default(),
+//                 circuit_deny_futures: Default::default(),
+//                 alive_lend_out_substreams: Default::default(),
+//                 circuits: Default::default(),
+//                 active_reservation: Default::default(),
+//                 keep_alive: KeepAlive::Yes,
+//             })
+//         }
+//     }
+//
+//     fn inbound_protocol(&self) -> <Self::Handler as ConnectionHandler>::InboundProtocol {
+//         upgrade::EitherUpgrade::A(SendWrapper(inbound_hop::Upgrade {
+//             reservation_duration: self.config.reservation_duration,
+//             max_circuit_duration: self.config.max_circuit_duration,
+//             max_circuit_bytes: self.config.max_circuit_bytes,
+//         }))
+//     }
+// }
 
 /// [`ConnectionHandler`] that manages substreams for a relay on a single
 /// connection with a peer.
@@ -427,6 +428,24 @@ pub struct Handler {
     alive_lend_out_substreams: FuturesUnordered<oneshot::Receiver<()>>,
     /// Futures relaying data for circuit between two peers.
     circuits: Futures<(CircuitId, PeerId, Result<(), std::io::Error>)>,
+}
+
+impl Handler {
+    pub fn new(endpoint: ConnectedPoint, config: Config) -> Self {
+        Self {
+            endpoint,
+            config,
+            queued_events: Default::default(),
+            pending_error: Default::default(),
+            keep_alive: KeepAlive::Yes,
+            reservation_request_future: Default::default(),
+            active_reservation: Default::default(),
+            circuit_accept_futures: Default::default(),
+            circuit_deny_futures: Default::default(),
+            alive_lend_out_substreams: Default::default(),
+            circuits: Default::default(),
+        }
+    }
 }
 
 enum ReservationRequestFuture {

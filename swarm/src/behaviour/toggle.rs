@@ -20,8 +20,8 @@
 
 use crate::behaviour::THandlerInEvent;
 use crate::handler::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, IntoConnectionHandler,
-    KeepAlive, SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
+    SubstreamProtocol,
 };
 use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper};
 use crate::{DialError, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
@@ -69,13 +69,19 @@ impl<TBehaviour> NetworkBehaviour for Toggle<TBehaviour>
 where
     TBehaviour: NetworkBehaviour,
 {
-    type ConnectionHandler = ToggleIntoConnectionHandler<TBehaviour::ConnectionHandler>;
+    type ConnectionHandler = ToggleConnectionHandler<TBehaviour::ConnectionHandler>;
     type OutEvent = TBehaviour::OutEvent;
-    type DialPayload = TBehaviour::DialPayload;
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
-        ToggleIntoConnectionHandler {
-            inner: self.inner.as_mut().map(|i| i.new_handler()),
+    fn new_handler(
+        &mut self,
+        peer: &PeerId,
+        connected_point: &ConnectedPoint,
+    ) -> Self::ConnectionHandler {
+        ToggleConnectionHandler {
+            inner: self
+                .inner
+                .as_mut()
+                .map(|i| i.new_handler(peer, connected_point)),
         }
     }
 
@@ -110,7 +116,7 @@ where
         peer_id: &PeerId,
         connection: &ConnectionId,
         endpoint: &ConnectedPoint,
-        handler: <Self::ConnectionHandler as IntoConnectionHandler>::Handler,
+        handler: Self::ConnectionHandler,
         remaining_established: usize,
     ) {
         if let Some(inner) = self.inner.as_mut() {
@@ -142,21 +148,16 @@ where
         &mut self,
         peer_id: PeerId,
         connection: ConnectionId,
-        event: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent,
+        event: <Self::ConnectionHandler as ConnectionHandler>::OutEvent,
     ) {
         if let Some(inner) = self.inner.as_mut() {
             inner.inject_event(peer_id, connection, event);
         }
     }
 
-    fn inject_dial_failure(
-        &mut self,
-        peer_id: Option<PeerId>,
-        dial_payload: Option<Self::DialPayload>,
-        error: &DialError,
-    ) {
+    fn inject_dial_failure(&mut self, _peer_id: Option<PeerId>, _error: &DialError) {
         if let Some(inner) = self.inner.as_mut() {
-            inner.inject_dial_failure(peer_id, dial_payload, error)
+            inner.inject_dial_failure(_peer_id, _error)
         }
     }
 
@@ -212,49 +213,12 @@ where
         &mut self,
         cx: &mut Context<'_>,
         params: &mut impl PollParameters,
-    ) -> Poll<
-        NetworkBehaviourAction<
-            Self::OutEvent,
-            THandlerInEvent<Self::ConnectionHandler>,
-            Self::DialPayload,
-        >,
-    > {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self::ConnectionHandler>>>
+    {
         if let Some(inner) = self.inner.as_mut() {
             inner.poll(cx, params)
         } else {
             Poll::Pending
-        }
-    }
-}
-
-/// Implementation of `IntoConnectionHandler` that can be in the disabled state.
-pub struct ToggleIntoConnectionHandler<TInner> {
-    inner: Option<TInner>,
-}
-
-impl<TInner> IntoConnectionHandler for ToggleIntoConnectionHandler<TInner>
-where
-    TInner: IntoConnectionHandler,
-{
-    type Handler = ToggleConnectionHandler<TInner::Handler>;
-
-    fn into_handler(
-        self,
-        remote_peer_id: &PeerId,
-        connected_point: &ConnectedPoint,
-    ) -> Self::Handler {
-        ToggleConnectionHandler {
-            inner: self
-                .inner
-                .map(|h| h.into_handler(remote_peer_id, connected_point)),
-        }
-    }
-
-    fn inbound_protocol(&self) -> <Self::Handler as ConnectionHandler>::InboundProtocol {
-        if let Some(inner) = self.inner.as_ref() {
-            EitherUpgrade::A(SendWrapper(inner.inbound_protocol()))
-        } else {
-            EitherUpgrade::B(SendWrapper(DeniedUpgrade))
         }
     }
 }

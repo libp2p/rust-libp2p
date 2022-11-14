@@ -69,8 +69,8 @@ use handler::{RequestProtocol, RequestResponseHandler, RequestResponseHandlerEve
 use libp2p_core::{connection::ConnectionId, ConnectedPoint, Multiaddr, PeerId};
 use libp2p_swarm::behaviour::THandlerInEvent;
 use libp2p_swarm::{
-    dial_opts::DialOpts, DialError, IntoConnectionHandler, NetworkBehaviour,
-    NetworkBehaviourAction, NotifyHandler, PollParameters,
+    dial_opts::DialOpts, DialError, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
+    PollParameters,
 };
 use smallvec::SmallVec;
 use std::{
@@ -387,7 +387,6 @@ where
         if let Some(request) = self.try_send_request(peer, request) {
             self.pending_events.push_back(NetworkBehaviourAction::Dial {
                 opts: DialOpts::peer_id(*peer).build(),
-                dial_payload: (),
             });
             self.pending_outbound_requests
                 .entry(*peer)
@@ -569,7 +568,7 @@ where
     type ConnectionHandler = RequestResponseHandler<TCodec>;
     type OutEvent = RequestResponseEvent<TCodec::Request, TCodec::Response>;
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
+    fn new_handler(&mut self, _: &PeerId, _: &ConnectedPoint) -> Self::ConnectionHandler {
         RequestResponseHandler::new(
             self.inbound_protocols.clone(),
             self.codec.clone(),
@@ -645,7 +644,7 @@ where
         peer_id: &PeerId,
         conn: &ConnectionId,
         _: &ConnectedPoint,
-        _: <Self::ConnectionHandler as IntoConnectionHandler>::Handler,
+        _: Self::ConnectionHandler,
         remaining_established: usize,
     ) {
         let connections = self
@@ -687,13 +686,8 @@ where
         }
     }
 
-    fn inject_dial_failure(
-        &mut self,
-        peer: Option<PeerId>,
-        _: Option<Self::DialPayload>,
-        _: &DialError,
-    ) {
-        if let Some(peer) = peer {
+    fn inject_dial_failure(&mut self, _peer_id: Option<PeerId>, _error: &DialError) {
+        if let Some(peer) = _peer_id {
             // If there are pending outgoing requests when a dial failure occurs,
             // it is implied that we are not connected to the peer, since pending
             // outgoing requests are drained when a connection is established and
@@ -881,8 +875,6 @@ where
 
         Poll::Pending
     }
-
-    type DialPayload = ();
 }
 
 /// Internal threshold for when to shrink the capacity

@@ -19,8 +19,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::handler::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, IntoConnectionHandler,
-    KeepAlive, SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
+    SubstreamProtocol,
 };
 use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper};
 use either::Either;
@@ -28,41 +28,6 @@ use libp2p_core::either::{EitherError, EitherOutput};
 use libp2p_core::upgrade::{EitherUpgrade, UpgradeError};
 use libp2p_core::{ConnectedPoint, Multiaddr, PeerId};
 use std::task::{Context, Poll};
-
-pub enum IntoEitherHandler<L, R> {
-    Left(L),
-    Right(R),
-}
-
-/// Implementation of a [`IntoConnectionHandler`] that represents either of two [`IntoConnectionHandler`]
-/// implementations.
-impl<L, R> IntoConnectionHandler for IntoEitherHandler<L, R>
-where
-    L: IntoConnectionHandler,
-    R: IntoConnectionHandler,
-{
-    type Handler = Either<L::Handler, R::Handler>;
-
-    fn into_handler(self, p: &PeerId, c: &ConnectedPoint) -> Self::Handler {
-        match self {
-            IntoEitherHandler::Left(into_handler) => Either::Left(into_handler.into_handler(p, c)),
-            IntoEitherHandler::Right(into_handler) => {
-                Either::Right(into_handler.into_handler(p, c))
-            }
-        }
-    }
-
-    fn inbound_protocol(&self) -> <Self::Handler as ConnectionHandler>::InboundProtocol {
-        match self {
-            IntoEitherHandler::Left(into_handler) => {
-                EitherUpgrade::A(SendWrapper(into_handler.inbound_protocol()))
-            }
-            IntoEitherHandler::Right(into_handler) => {
-                EitherUpgrade::B(SendWrapper(into_handler.inbound_protocol()))
-            }
-        }
-    }
-}
 
 /// Implementation of a [`ConnectionHandler`] that represents either of two [`ConnectionHandler`]
 /// implementations.

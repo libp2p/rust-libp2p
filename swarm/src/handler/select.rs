@@ -19,8 +19,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::handler::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, IntoConnectionHandler,
-    KeepAlive, SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
+    SubstreamProtocol,
 };
 use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper};
 
@@ -30,52 +30,6 @@ use libp2p_core::{
     ConnectedPoint, Multiaddr, PeerId,
 };
 use std::{cmp, task::Context, task::Poll};
-
-/// Implementation of `IntoConnectionHandler` that combines two protocols into one.
-#[derive(Debug, Clone)]
-pub struct IntoConnectionHandlerSelect<TProto1, TProto2> {
-    /// The first protocol.
-    proto1: TProto1,
-    /// The second protocol.
-    proto2: TProto2,
-}
-
-impl<TProto1, TProto2> IntoConnectionHandlerSelect<TProto1, TProto2> {
-    /// Builds a `IntoConnectionHandlerSelect`.
-    pub(crate) fn new(proto1: TProto1, proto2: TProto2) -> Self {
-        IntoConnectionHandlerSelect { proto1, proto2 }
-    }
-
-    pub fn into_inner(self) -> (TProto1, TProto2) {
-        (self.proto1, self.proto2)
-    }
-}
-
-impl<TProto1, TProto2> IntoConnectionHandler for IntoConnectionHandlerSelect<TProto1, TProto2>
-where
-    TProto1: IntoConnectionHandler,
-    TProto2: IntoConnectionHandler,
-{
-    type Handler = ConnectionHandlerSelect<TProto1::Handler, TProto2::Handler>;
-
-    fn into_handler(
-        self,
-        remote_peer_id: &PeerId,
-        connected_point: &ConnectedPoint,
-    ) -> Self::Handler {
-        ConnectionHandlerSelect {
-            proto1: self.proto1.into_handler(remote_peer_id, connected_point),
-            proto2: self.proto2.into_handler(remote_peer_id, connected_point),
-        }
-    }
-
-    fn inbound_protocol(&self) -> <Self::Handler as ConnectionHandler>::InboundProtocol {
-        SelectUpgrade::new(
-            SendWrapper(self.proto1.inbound_protocol()),
-            SendWrapper(self.proto2.inbound_protocol()),
-        )
-    }
-}
 
 /// Implementation of [`ConnectionHandler`] that combines two protocols into one.
 #[derive(Debug, Clone)]

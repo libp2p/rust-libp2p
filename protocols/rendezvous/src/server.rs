@@ -28,7 +28,7 @@ use futures::ready;
 use futures::stream::FuturesUnordered;
 use futures::{FutureExt, StreamExt};
 use libp2p_core::connection::ConnectionId;
-use libp2p_core::PeerId;
+use libp2p_core::{ConnectedPoint, PeerId};
 use libp2p_swarm::behaviour::THandlerInEvent;
 use libp2p_swarm::{
     CloseConnection, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
@@ -110,9 +110,8 @@ pub enum Event {
 impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = SubstreamConnectionHandler<inbound::Stream, Void, ()>;
     type OutEvent = Event;
-    type DialPayload = ();
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
+    fn new_handler(&mut self, _: &PeerId, _: &ConnectedPoint) -> Self::ConnectionHandler {
         let initial_keep_alive = Duration::from_secs(30);
 
         SubstreamConnectionHandler::new_inbound_only(initial_keep_alive)

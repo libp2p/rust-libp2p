@@ -47,7 +47,7 @@ mod protocol;
 
 use handler::Handler;
 pub use handler::{Config, Failure, Success};
-use libp2p_core::{connection::ConnectionId, PeerId};
+use libp2p_core::{connection::ConnectionId, ConnectedPoint, PeerId};
 use libp2p_swarm::behaviour::THandlerInEvent;
 use libp2p_swarm::{NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use std::{
@@ -117,17 +117,9 @@ impl Default for Behaviour {
 impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = Handler;
     type OutEvent = Event;
-    type DialPayload = ();
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
+    fn new_handler(&mut self, _: &PeerId, _: &ConnectedPoint) -> Self::ConnectionHandler {
         Handler::new(self.config.clone())
-    }
-
-    fn new_outbound_handler(
-        &mut self,
-        dial_payload: Option<Self::DialPayload>,
-    ) -> Self::ConnectionHandler {
-        todo!()
     }
 
     fn inject_event(&mut self, peer: PeerId, _: ConnectionId, result: Result) {

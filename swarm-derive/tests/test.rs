@@ -19,6 +19,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::prelude::*;
+use libp2p::core::ConnectedPoint;
+use libp2p::swarm::behaviour::THandlerInEvent;
 use libp2p::swarm::{dummy, NetworkBehaviour, SwarmEvent};
 use libp2p::{identify, ping};
 use libp2p_swarm_derive::*;
@@ -355,9 +357,7 @@ fn generated_out_event_derive_debug() {
 #[test]
 fn custom_out_event_no_type_parameters() {
     use libp2p::core::connection::ConnectionId;
-    use libp2p::swarm::{
-        ConnectionHandler, IntoConnectionHandler, NetworkBehaviourAction, PollParameters,
-    };
+    use libp2p::swarm::{ConnectionHandler, NetworkBehaviourAction, PollParameters};
     use libp2p::PeerId;
     use std::task::Context;
     use std::task::Poll;
@@ -370,7 +370,7 @@ fn custom_out_event_no_type_parameters() {
         type ConnectionHandler = dummy::ConnectionHandler;
         type OutEvent = void::Void;
 
-        fn new_handler(&mut self) -> Self::ConnectionHandler {
+        fn new_handler(&mut self, _: &PeerId, _: &ConnectedPoint) -> Self::ConnectionHandler {
             dummy::ConnectionHandler
         }
 
@@ -378,7 +378,7 @@ fn custom_out_event_no_type_parameters() {
             &mut self,
             _peer: PeerId,
             _connection: ConnectionId,
-            message: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent,
+            message: <Self::ConnectionHandler as ConnectionHandler>::OutEvent,
         ) {
             void::unreachable(message);
         }

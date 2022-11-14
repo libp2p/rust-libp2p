@@ -233,7 +233,7 @@ where
            // peer_connections.connections should never be empty.
         let mut active_connections = peer_connections.connections.len();
         for conn_id in peer_connections.connections.clone() {
-            let handler = gs.new_handler();
+            let handler = gs.new_handler(todo!(), todo!());
             active_connections = active_connections.checked_sub(1).unwrap();
             gs.inject_connection_closed(
                 peer_id,
@@ -1356,10 +1356,7 @@ fn test_explicit_peer_gets_connected() {
         .events
         .iter()
         .filter(|e| match e {
-            NetworkBehaviourAction::Dial {
-                opts,
-                initial_in_event: _,
-            } => opts.get_peer_id() == Some(peer),
+            NetworkBehaviourAction::Dial { opts } => opts.get_peer_id() == Some(peer),
             _ => false,
         })
         .count();
@@ -1400,10 +1397,7 @@ fn test_explicit_peer_reconnects() {
         gs.events
             .iter()
             .filter(|e| match e {
-                NetworkBehaviourAction::Dial {
-                    opts,
-                    initial_in_event: _,
-                } => opts.get_peer_id() == Some(*peer),
+                NetworkBehaviourAction::Dial { opts } => opts.get_peer_id() == Some(*peer),
                 _ => false,
             })
             .count(),
@@ -1418,10 +1412,7 @@ fn test_explicit_peer_reconnects() {
         gs.events
             .iter()
             .filter(|e| match e {
-                NetworkBehaviourAction::Dial {
-                    opts,
-                    initial_in_event: _,
-                } => opts.get_peer_id() == Some(*peer),
+                NetworkBehaviourAction::Dial { opts } => opts.get_peer_id() == Some(*peer),
                 _ => false,
             })
             .count()
@@ -1801,10 +1792,7 @@ fn test_connect_to_px_peers_on_handle_prune() {
         .events
         .iter()
         .filter_map(|e| match e {
-            NetworkBehaviourAction::Dial {
-                opts,
-                initial_in_event: _,
-            } => opts.get_peer_id(),
+            NetworkBehaviourAction::Dial { opts } => opts.get_peer_id(),
             _ => None,
         })
         .collect();

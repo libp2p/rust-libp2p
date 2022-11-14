@@ -31,7 +31,7 @@ use instant::Duration;
 use libp2p_core::connection::ConnectionId;
 use libp2p_core::identity::error::SigningError;
 use libp2p_core::identity::Keypair;
-use libp2p_core::{Multiaddr, PeerId, PeerRecord};
+use libp2p_core::{ConnectedPoint, Multiaddr, PeerId, PeerRecord};
 use libp2p_swarm::behaviour::THandlerInEvent;
 use libp2p_swarm::{
     CloseConnection, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
@@ -164,9 +164,8 @@ impl NetworkBehaviour for Behaviour {
     type ConnectionHandler =
         SubstreamConnectionHandler<void::Void, outbound::Stream, outbound::OpenInfo>;
     type OutEvent = Event;
-    type DialPayload = ();
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
+    fn new_handler(&mut self, _: &PeerId, _: &ConnectedPoint) -> Self::ConnectionHandler {
         let initial_keep_alive = Duration::from_secs(30);
 
         SubstreamConnectionHandler::new_outbound_only(initial_keep_alive)

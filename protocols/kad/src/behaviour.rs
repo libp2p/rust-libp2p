@@ -24,7 +24,7 @@ mod test;
 
 use crate::addresses::Addresses;
 use crate::handler::{
-    KademliaHandlerConfig, KademliaHandlerEvent, KademliaHandlerIn, KademliaHandlerProto,
+    KademliaHandler, KademliaHandlerConfig, KademliaHandlerEvent, KademliaHandlerIn,
     KademliaRequestId,
 };
 use crate::jobs::*;
@@ -570,7 +570,6 @@ where
                     kbucket::InsertResult::Pending { disconnected } => {
                         self.queued_events.push_back(NetworkBehaviourAction::Dial {
                             opts: DialOpts::peer_id(disconnected.into_preimage()).build(),
-                            dial_payload: (),
                         });
                         RoutingUpdate::Pending
                     }
@@ -1164,7 +1163,6 @@ where
                                     self.queued_events.push_back(NetworkBehaviourAction::Dial {
                                         opts: DialOpts::peer_id(disconnected.into_preimage())
                                             .build(),
-                                        dial_payload: (),
                                     })
                                 }
                             }
@@ -1782,16 +1780,23 @@ where
     for<'a> TStore: RecordStore<'a>,
     TStore: Send + 'static,
 {
-    type ConnectionHandler = KademliaHandlerProto<QueryId>;
+    type ConnectionHandler = KademliaHandler<QueryId>;
     type OutEvent = KademliaEvent;
-    type DialPayload = ();
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
-        KademliaHandlerProto::new(KademliaHandlerConfig {
-            protocol_config: self.protocol_config.clone(),
-            allow_listening: true,
-            idle_timeout: self.connection_idle_timeout,
-        })
+    fn new_handler(
+        &mut self,
+        peer: &PeerId,
+        connected_point: &ConnectedPoint,
+    ) -> Self::ConnectionHandler {
+        KademliaHandler::new(
+            KademliaHandlerConfig {
+                protocol_config: self.protocol_config.clone(),
+                allow_listening: true,
+                idle_timeout: self.connection_idle_timeout,
+            },
+            connected_point.clone(),
+            *peer,
+        )
     }
 
     fn addresses_of_peer(&mut self, peer_id: &PeerId) -> Vec<Multiaddr> {
@@ -1913,19 +1918,14 @@ where
         }
     }
 
-    fn inject_dial_failure(
-        &mut self,
-        peer_id: Option<PeerId>,
-        _: Option<Self::DialPayload>,
-        error: &DialError,
-    ) {
-        let peer_id = match peer_id {
+    fn inject_dial_failure(&mut self, _peer_id: Option<PeerId>, _error: &DialError) {
+        let peer_id = match _peer_id {
             Some(id) => id,
             // Not interested in dial failures to unknown peers.
             None => return,
         };
 
-        match error {
+        match _error {
             DialError::Banned
             | DialError::ConnectionLimit(_)
             | DialError::LocalPeerId
@@ -1935,7 +1935,7 @@ where
             | DialError::ConnectionIo(_)
             | DialError::Transport(_)
             | DialError::NoAddresses => {
-                if let DialError::Transport(addresses) = error {
+                if let DialError::Transport(addresses) = _error {
                     for (addr, _) in addresses {
                         self.address_failed(peer_id, addr)
                     }
@@ -1962,7 +1962,7 @@ where
         id: &PeerId,
         _: &ConnectionId,
         _: &ConnectedPoint,
-        _: <Self::ConnectionHandler as libp2p_swarm::IntoConnectionHandler>::Handler,
+        _: Self::ConnectionHandler,
         remaining_established: usize,
     ) {
         if remaining_established == 0 {
@@ -2344,7 +2344,6 @@ where
                             query.inner.pending_rpcs.push((peer_id, event));
                             self.queued_events.push_back(NetworkBehaviourAction::Dial {
                                 opts: DialOpts::peer_id(peer_id).build(),
-                                dial_payload: (),
                             });
                         }
                     }

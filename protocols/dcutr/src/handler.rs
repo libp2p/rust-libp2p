@@ -25,7 +25,7 @@ use libp2p_core::upgrade::{self, DeniedUpgrade};
 use libp2p_core::{ConnectedPoint, PeerId};
 use libp2p_swarm::dummy;
 use libp2p_swarm::handler::SendWrapper;
-use libp2p_swarm::{ConnectionHandler, IntoConnectionHandler};
+use libp2p_swarm::ConnectionHandler;
 
 pub mod direct;
 pub mod relayed;
@@ -43,39 +43,40 @@ pub enum Role {
     Listener,
 }
 
-impl IntoConnectionHandler for Prototype {
-    type Handler = Either<relayed::Handler, Either<direct::Handler, dummy::ConnectionHandler>>;
-
-    fn into_handler(self, _remote_peer_id: &PeerId, endpoint: &ConnectedPoint) -> Self::Handler {
-        match self {
-            Self::UnknownConnection => {
-                if endpoint.is_relayed() {
-                    Either::Left(relayed::Handler::new(endpoint.clone()))
-                } else {
-                    Either::Right(Either::Right(dummy::ConnectionHandler))
-                }
-            }
-            Self::DirectConnection {
-                relayed_connection_id,
-                ..
-            } => {
-                assert!(
-                    !endpoint.is_relayed(),
-                    "`Prototype::DirectConnection` is never created for relayed connection."
-                );
-                Either::Right(Either::Left(direct::Handler::new(relayed_connection_id)))
-            }
-        }
-    }
-
-    fn inbound_protocol(&self) -> <Self::Handler as ConnectionHandler>::InboundProtocol {
-        match self {
-            Prototype::UnknownConnection => upgrade::EitherUpgrade::A(SendWrapper(
-                upgrade::EitherUpgrade::A(protocol::inbound::Upgrade {}),
-            )),
-            Prototype::DirectConnection { .. } => {
-                upgrade::EitherUpgrade::A(SendWrapper(upgrade::EitherUpgrade::B(DeniedUpgrade)))
-            }
-        }
-    }
-}
+// TODO
+// impl IntoConnectionHandler for Prototype {
+//     type Handler = Either<relayed::Handler, Either<direct::Handler, dummy::ConnectionHandler>>;
+//
+//     fn into_handler(self, _remote_peer_id: &PeerId, endpoint: &ConnectedPoint) -> Self::Handler {
+//         match self {
+//             Self::UnknownConnection => {
+//                 if endpoint.is_relayed() {
+//                     Either::Left(relayed::Handler::new(endpoint.clone()))
+//                 } else {
+//                     Either::Right(Either::Right(dummy::ConnectionHandler))
+//                 }
+//             }
+//             Self::DirectConnection {
+//                 relayed_connection_id,
+//                 ..
+//             } => {
+//                 assert!(
+//                     !endpoint.is_relayed(),
+//                     "`Prototype::DirectConnection` is never created for relayed connection."
+//                 );
+//                 Either::Right(Either::Left(direct::Handler::new(relayed_connection_id)))
+//             }
+//         }
+//     }
+//
+//     fn inbound_protocol(&self) -> <Self::Handler as ConnectionHandler>::InboundProtocol {
+//         match self {
+//             Prototype::UnknownConnection => upgrade::EitherUpgrade::A(SendWrapper(
+//                 upgrade::EitherUpgrade::A(protocol::inbound::Upgrade {}),
+//             )),
+//             Prototype::DirectConnection { .. } => {
+//                 upgrade::EitherUpgrade::A(SendWrapper(upgrade::EitherUpgrade::B(DeniedUpgrade)))
+//             }
+//         }
+//     }
+// }

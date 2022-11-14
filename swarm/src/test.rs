@@ -19,8 +19,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
-    behaviour::THandlerInEvent, ConnectionHandler, DialError, IntoConnectionHandler,
-    NetworkBehaviour, NetworkBehaviourAction, PollParameters,
+    behaviour::THandlerInEvent, ConnectionHandler, DialError, NetworkBehaviour,
+    NetworkBehaviourAction, PollParameters,
 };
 use libp2p_core::{
     connection::ConnectionId, multiaddr::Multiaddr, transport::ListenerId, ConnectedPoint, PeerId,
@@ -43,7 +43,7 @@ where
     /// The next action to return from `poll`.
     ///
     /// An action is only returned once.
-    pub next_action: Option<NetworkBehaviourAction<TOutEvent, THandler>>,
+    pub next_action: Option<NetworkBehaviourAction<TOutEvent, THandlerInEvent<THandler>>>,
 }
 
 impl<THandler, TOutEvent> MockBehaviour<THandler, TOutEvent>
@@ -68,7 +68,7 @@ where
     type ConnectionHandler = THandler;
     type OutEvent = TOutEvent;
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
+    fn new_handler(&mut self, _: &PeerId, _: &ConnectedPoint) -> Self::ConnectionHandler {
         self.handler_proto.clone()
     }
 
@@ -103,7 +103,7 @@ where
     pub inject_event: Vec<(
         PeerId,
         ConnectionId,
-        <<TInner::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent,
+        <TInner::ConnectionHandler as ConnectionHandler>::OutEvent,
     )>,
     pub inject_dial_failure: Vec<Option<PeerId>>,
     pub inject_new_listener: Vec<ListenerId>,
@@ -222,14 +222,17 @@ where
 impl<TInner> NetworkBehaviour for CallTraceBehaviour<TInner>
 where
     TInner: NetworkBehaviour,
-    <<TInner::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent:
-        Clone,
+    <TInner::ConnectionHandler as ConnectionHandler>::OutEvent: Clone,
 {
     type ConnectionHandler = TInner::ConnectionHandler;
     type OutEvent = TInner::OutEvent;
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
-        self.inner.new_handler()
+    fn new_handler(
+        &mut self,
+        peer: &PeerId,
+        connected_point: &ConnectedPoint,
+    ) -> Self::ConnectionHandler {
+        self.inner.new_handler(peer, connected_point)
     }
 
     fn addresses_of_peer(&mut self, p: &PeerId) -> Vec<Multiaddr> {
@@ -283,7 +286,7 @@ where
         p: &PeerId,
         c: &ConnectionId,
         e: &ConnectedPoint,
-        handler: <Self::ConnectionHandler as IntoConnectionHandler>::Handler,
+        handler: Self::ConnectionHandler,
         remaining_established: usize,
     ) {
         let mut other_closed_connections = self
@@ -330,7 +333,7 @@ where
         &mut self,
         p: PeerId,
         c: ConnectionId,
-        e: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent,
+        e: <Self::ConnectionHandler as ConnectionHandler>::OutEvent,
     ) {
         assert!(
             self.inject_connection_established
@@ -350,14 +353,9 @@ where
         self.inner.inject_event(p, c, e);
     }
 
-    fn inject_dial_failure(
-        &mut self,
-        p: Option<PeerId>,
-        handler: Self::ConnectionHandler,
-        error: &DialError,
-    ) {
-        self.inject_dial_failure.push(p);
-        self.inner.inject_dial_failure(p, handler, error);
+    fn inject_dial_failure(&mut self, _peer_id: Option<PeerId>, _error: &DialError) {
+        self.inject_dial_failure.push(_peer_id);
+        self.inner.inject_dial_failure(_peer_id, _error);
     }
 
     fn inject_new_listener(&mut self, id: ListenerId) {

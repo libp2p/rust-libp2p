@@ -23,6 +23,7 @@
 mod handler;
 pub mod transport;
 
+use crate::v2::client::handler::Handler;
 use crate::v2::protocol::{self, inbound_stop, outbound_hop};
 use bytes::Bytes;
 use either::Either;
@@ -117,12 +118,41 @@ impl Client {
 }
 
 impl NetworkBehaviour for Client {
-    type ConnectionHandler = handler::Prototype;
+    type ConnectionHandler = Either<Handler, dummy::ConnectionHandler>;
     type OutEvent = Event;
-    type DialPayload = handler::In;
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
-        handler::Prototype::new(self.local_peer_id, None)
+    fn new_handler(
+        &mut self,
+        peer: &PeerId,
+        connected_point: &ConnectedPoint,
+    ) -> Self::ConnectionHandler {
+        if connected_point.is_relayed() {
+            // if let Some(event) = self.initial_in {
+            //     log::debug!(
+            //         "Established relayed instead of direct connection to {:?}, \
+            //          dropping initial in event {:?}.",
+            //         remote_peer_id, event
+            //     );
+            // }
+
+            // TODO: Check local state for initial in?
+
+            // Deny all substreams on relayed connection.
+            Either::Right(dummy::ConnectionHandler)
+        } else {
+            let mut handler = Handler::new(
+                self.local_peer_id,
+                *peer,
+                connected_point.get_remote_address().clone(),
+            );
+
+            // if let Some(event) = self.initial_in {
+            //     handler.inject_event(event)
+            // }
+            // TODO: Grab event from local state
+
+            Either::Left(handler)
+        }
     }
 
     fn inject_connection_established(
@@ -233,13 +263,8 @@ impl NetworkBehaviour for Client {
         &mut self,
         cx: &mut Context<'_>,
         _poll_parameters: &mut impl PollParameters,
-    ) -> Poll<
-        NetworkBehaviourAction<
-            Self::OutEvent,
-            THandlerInEvent<Self::ConnectionHandler>,
-            Self::DialPayload,
-        >,
-    > {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self::ConnectionHandler>>>
+    {
         if let Some(event) = self.queued_actions.pop_front() {
             return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event));
         }
@@ -265,7 +290,7 @@ impl NetworkBehaviour for Client {
                             .addresses(vec![relay_addr])
                             .extend_addresses_through_behaviour()
                             .build(),
-                        dial_payload: handler::In::Reserve { to_listener },
+                        // dial_payload: handler::In::Reserve { to_listener }, TODO
                     },
                 }
             }
@@ -294,10 +319,10 @@ impl NetworkBehaviour for Client {
                             .addresses(vec![relay_addr])
                             .extend_addresses_through_behaviour()
                             .build(),
-                        dial_payload: handler::In::EstablishCircuit {
-                            send_back,
-                            dst_peer_id,
-                        },
+                        // dial_payload: handler::In::EstablishCircuit {
+                        //     send_back,
+                        //     dst_peer_id,
+                        // },
                     },
                 }
             }

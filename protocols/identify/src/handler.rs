@@ -26,40 +26,14 @@ use futures::prelude::*;
 use futures_timer::Delay;
 use libp2p_core::either::{EitherError, EitherOutput};
 use libp2p_core::upgrade::{EitherUpgrade, InboundUpgrade, OutboundUpgrade, SelectUpgrade};
-use libp2p_core::{ConnectedPoint, PeerId};
+use libp2p_core::PeerId;
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, IntoConnectionHandler,
-    KeepAlive, NegotiatedSubstream, SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
+    NegotiatedSubstream, SubstreamProtocol,
 };
 use log::warn;
 use smallvec::SmallVec;
 use std::{io, pin::Pin, task::Context, task::Poll, time::Duration};
-
-pub struct Proto {
-    initial_delay: Duration,
-    interval: Duration,
-}
-
-impl Proto {
-    pub fn new(initial_delay: Duration, interval: Duration) -> Self {
-        Proto {
-            initial_delay,
-            interval,
-        }
-    }
-}
-
-impl IntoConnectionHandler for Proto {
-    type Handler = Handler;
-
-    fn into_handler(self, remote_peer_id: &PeerId, _endpoint: &ConnectedPoint) -> Self::Handler {
-        Handler::new(self.initial_delay, self.interval, *remote_peer_id)
-    }
-
-    fn inbound_protocol(&self) -> <Self::Handler as ConnectionHandler>::InboundProtocol {
-        SelectUpgrade::new(Protocol, PushProtocol::inbound())
-    }
-}
 
 /// Protocol handler for sending and receiving identification requests.
 ///

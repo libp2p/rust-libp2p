@@ -995,7 +995,7 @@ mod test {
         let mut gossipsub: Gossipsub =
             Gossipsub::new(MessageAuthenticity::Anonymous, builder).expect("Correct configuration");
 
-        let handler = gossipsub.new_handler();
+        let handler = gossipsub.new_handler(todo!(), todo!());
         let (protocol_config, _) = handler.listen_protocol().into_upgrade();
         let protocol_ids = protocol_config.protocol_info();
 
@@ -1023,7 +1023,7 @@ mod test {
         let mut gossipsub: Gossipsub =
             Gossipsub::new(MessageAuthenticity::Anonymous, builder).expect("Correct configuration");
 
-        let handler = gossipsub.new_handler();
+        let handler = gossipsub.new_handler(todo!(), todo!());
         let (protocol_config, _) = handler.listen_protocol().into_upgrade();
         let protocol_ids = protocol_config.protocol_info();
 

@@ -37,9 +37,7 @@ use libp2p_request_response::{
     RequestResponseConfig, RequestResponseEvent, RequestResponseMessage, ResponseChannel,
 };
 use libp2p_swarm::behaviour::THandlerInEvent;
-use libp2p_swarm::{
-    DialError, IntoConnectionHandler, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
-};
+use libp2p_swarm::{DialError, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use std::{
     collections::{HashMap, VecDeque},
     iter,
@@ -304,7 +302,6 @@ impl Behaviour {
 impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = <RequestResponse<AutoNatCodec> as NetworkBehaviour>::ConnectionHandler;
     type OutEvent = Event;
-    type DialPayload = ();
 
     fn inject_connection_established(
         &mut self,
@@ -358,7 +355,7 @@ impl NetworkBehaviour for Behaviour {
         peer: &PeerId,
         conn: &ConnectionId,
         endpoint: &ConnectedPoint,
-        handler: <Self::ConnectionHandler as IntoConnectionHandler>::Handler,
+        handler: Self::ConnectionHandler,
         remaining_established: usize,
     ) {
         self.inner
@@ -371,14 +368,9 @@ impl NetworkBehaviour for Behaviour {
         }
     }
 
-    fn inject_dial_failure(
-        &mut self,
-        peer: Option<PeerId>,
-        initial_event: Option<Self::DialPayload>,
-        error: &DialError,
-    ) {
-        self.inner.inject_dial_failure(peer, initial_event, error);
-        if let Some(event) = self.as_server().on_outbound_dial_error(peer, error) {
+    fn inject_dial_failure(&mut self, _peer_id: Option<PeerId>, _error: &DialError) {
+        self.inner.inject_dial_failure(_peer_id, _error);
+        if let Some(event) = self.as_server().on_outbound_dial_error(_peer_id, _error) {
             self.pending_out_events
                 .push_back(Event::InboundProbe(event));
         }
@@ -472,8 +464,12 @@ impl NetworkBehaviour for Behaviour {
         }
     }
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
-        self.inner.new_handler()
+    fn new_handler(
+        &mut self,
+        peer: &PeerId,
+        connected_point: &ConnectedPoint,
+    ) -> Self::ConnectionHandler {
+        self.inner.new_handler(peer, connected_point)
     }
 
     fn addresses_of_peer(&mut self, peer: &PeerId) -> Vec<Multiaddr> {

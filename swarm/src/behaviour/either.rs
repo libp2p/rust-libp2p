@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::behaviour::THandlerInEvent;
-use crate::handler::{either::IntoEitherHandler, ConnectionHandler, IntoConnectionHandler};
+use crate::handler::ConnectionHandler;
 use crate::{DialError, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use either::Either;
 use libp2p_core::{
@@ -33,14 +33,17 @@ where
     L: NetworkBehaviour,
     R: NetworkBehaviour,
 {
-    type ConnectionHandler = IntoEitherHandler<L::ConnectionHandler, R::ConnectionHandler>;
+    type ConnectionHandler = Either<L::ConnectionHandler, R::ConnectionHandler>;
     type OutEvent = Either<L::OutEvent, R::OutEvent>;
-    type DialPayload = Either<L::DialPayload, R::DialPayload>;
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
+    fn new_handler(
+        &mut self,
+        peer: &PeerId,
+        connected_point: &ConnectedPoint,
+    ) -> Self::ConnectionHandler {
         match self {
-            Either::Left(a) => IntoEitherHandler::Left(a.new_handler()),
-            Either::Right(b) => IntoEitherHandler::Right(b.new_handler()),
+            Either::Left(a) => Either::Left(a.new_handler(peer, connected_point)),
+            Either::Right(b) => Either::Right(b.new_handler(peer, connected_point)),
         }
     }
 
@@ -82,7 +85,7 @@ where
         peer_id: &PeerId,
         connection: &ConnectionId,
         endpoint: &ConnectedPoint,
-        handler: <Self::ConnectionHandler as IntoConnectionHandler>::Handler,
+        handler: Self::ConnectionHandler,
         remaining_established: usize,
     ) {
         match (self, handler) {
@@ -122,7 +125,7 @@ where
         &mut self,
         peer_id: PeerId,
         connection: ConnectionId,
-        event: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent,
+        event: <Self::ConnectionHandler as ConnectionHandler>::OutEvent,
     ) {
         match (self, event) {
             (Either::Left(behaviour), Either::Left(event)) => {
@@ -135,21 +138,10 @@ where
         }
     }
 
-    fn inject_dial_failure(
-        &mut self,
-        peer_id: Option<PeerId>,
-        dial_payload: Option<Either<L::DialPayload, R::DialPayload>>,
-        error: &DialError,
-    ) {
-        match (self, dial_payload) {
-            (Either::Left(behaviour), Some(Either::Left(payload))) => {
-                behaviour.inject_dial_failure(peer_id, Some(payload), error)
-            }
-            (Either::Left(behaviour), None) => behaviour.inject_dial_failure(peer_id, None, error),
-            (Either::Right(behaviour), Some(Either::Right(payload))) => {
-                behaviour.inject_dial_failure(peer_id, Some(payload), error)
-            }
-            _ => unreachable!(),
+    fn inject_dial_failure(&mut self, _peer_id: Option<PeerId>, _error: &DialError) {
+        match self {
+            Either::Left(behaviour) => behaviour.inject_dial_failure(_peer_id, _error),
+            Either::Right(behaviour) => behaviour.inject_dial_failure(_peer_id, _error),
         }
     }
 
@@ -217,18 +209,15 @@ where
         NetworkBehaviourAction<
             Self::OutEvent,
             Either<THandlerInEvent<L::ConnectionHandler>, THandlerInEvent<R::ConnectionHandler>>,
-            Either<L::DialPayload, R::DialPayload>,
         >,
     > {
         let event = match self {
             Either::Left(behaviour) => futures::ready!(behaviour.poll(cx, params))
                 .map_out(Either::Left)
-                .map_in(Either::Left)
-                .map_dial_payload(Either::Left),
+                .map_in(Either::Left),
             Either::Right(behaviour) => futures::ready!(behaviour.poll(cx, params))
                 .map_out(Either::Right)
-                .map_in(Either::Right)
-                .map_dial_payload(Either::Right),
+                .map_in(Either::Right),
         };
 
         Poll::Ready(event)

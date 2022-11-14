@@ -41,8 +41,7 @@ use libp2p_core::{
     multiaddr::Protocol::Ip6, ConnectedPoint, Multiaddr, PeerId,
 };
 use libp2p_swarm::{
-    dial_opts::DialOpts, IntoConnectionHandler, NetworkBehaviour, NetworkBehaviourAction,
-    NotifyHandler, PollParameters,
+    dial_opts::DialOpts, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
 };
 use wasm_timer::Instant;
 
@@ -1141,7 +1140,6 @@ where
             debug!("Connecting to explicit peer {:?}", peer_id);
             self.events.push_back(NetworkBehaviourAction::Dial {
                 opts: DialOpts::peer_id(*peer_id).build(),
-                dial_payload: (),
             });
         }
     }
@@ -1638,7 +1636,6 @@ where
 
                 self.events.push_back(NetworkBehaviourAction::Dial {
                     opts: DialOpts::peer_id(peer_id).build(),
-                    dial_payload: (),
                 });
             }
         }
@@ -3042,9 +3039,8 @@ where
 {
     type ConnectionHandler = GossipsubHandler;
     type OutEvent = GossipsubEvent;
-    type DialPayload = ();
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
+    fn new_handler(&mut self, _: &PeerId, _: &ConnectedPoint) -> Self::ConnectionHandler {
         let protocol_config = ProtocolConfig::new(
             self.config.protocol_id().clone(),
             self.config.custom_id_version().clone(),
@@ -3148,7 +3144,7 @@ where
         peer_id: &PeerId,
         connection_id: &ConnectionId,
         endpoint: &ConnectedPoint,
-        _: <Self::ConnectionHandler as IntoConnectionHandler>::Handler,
+        _: Self::ConnectionHandler,
         remaining_established: usize,
     ) {
         // Remove IP from peer scoring system

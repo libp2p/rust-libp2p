@@ -29,8 +29,8 @@ use libp2p_core::{Multiaddr, PeerId};
 use libp2p_swarm::behaviour::THandlerInEvent;
 use libp2p_swarm::dial_opts::{self, DialOpts};
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerUpgrErr, DialError, IntoConnectionHandler,
-    NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
+    dummy, ConnectionHandler, ConnectionHandlerUpgrErr, DialError, NetworkBehaviour,
+    NetworkBehaviourAction, NotifyHandler, PollParameters,
 };
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::task::{Context, Poll};
@@ -75,6 +75,9 @@ pub struct Behaviour {
     direct_connections: HashMap<PeerId, HashSet<ConnectionId>>,
 }
 
+type Handler =
+    Either<handler::relayed::Handler, Either<handler::direct::Handler, dummy::ConnectionHandler>>;
+
 impl Behaviour {
     pub fn new() -> Self {
         Behaviour {
@@ -85,26 +88,17 @@ impl Behaviour {
 }
 
 impl NetworkBehaviour for Behaviour {
-    type ConnectionHandler = handler::Prototype;
+    type ConnectionHandler = Handler;
     type OutEvent = Event;
-    type DialPayload = handler::Prototype;
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
-        handler::Prototype::UnknownConnection
-    }
-
-    fn new_inbound_handler(&mut self) -> Self::ConnectionHandler {
-        handler::Prototype::UnknownConnection
-    }
-
-    fn new_outbound_handler(
+    fn new_handler(
         &mut self,
-        dial_payload: Option<Self::DialPayload>,
+        peer: &PeerId,
+        connected_point: &ConnectedPoint,
     ) -> Self::ConnectionHandler {
-        match dial_payload {
-            Some(prototype) => prototype,
-            None => handler::Prototype::UnknownConnection,
-        }
+        // handler::Prototype::UnknownConnection
+
+        todo!()
     }
 
     fn addresses_of_peer(&mut self, _peer_id: &PeerId) -> Vec<Multiaddr> {
@@ -156,42 +150,38 @@ impl NetworkBehaviour for Behaviour {
         }
     }
 
-    fn inject_dial_failure(
-        &mut self,
-        peer_id: Option<PeerId>,
-        dial_payload: Option<Self::DialPayload>,
-        _error: &DialError,
-    ) {
-        if let Some(handler::Prototype::DirectConnection {
-            relayed_connection_id,
-            role: handler::Role::Initiator { attempt },
-        }) = dial_payload
-        {
-            let peer_id = peer_id.expect("Peer of `Prototype::DirectConnection` is always known.");
-            if attempt < MAX_NUMBER_OF_UPGRADE_ATTEMPTS {
-                self.queued_actions.push_back(ActionBuilder::Connect {
-                    peer_id,
-                    handler: NotifyHandler::One(relayed_connection_id),
-                    attempt: attempt + 1,
-                });
-            } else {
-                self.queued_actions.extend([
-                    NetworkBehaviourAction::NotifyHandler {
-                        peer_id,
-                        handler: NotifyHandler::One(relayed_connection_id),
-                        event: Either::Left(
-                            handler::relayed::Command::UpgradeFinishedDontKeepAlive,
-                        ),
-                    }
-                    .into(),
-                    NetworkBehaviourAction::GenerateEvent(Event::DirectConnectionUpgradeFailed {
-                        remote_peer_id: peer_id,
-                        error: UpgradeError::Dial,
-                    })
-                    .into(),
-                ]);
-            }
-        }
+    fn inject_dial_failure(&mut self, _peer_id: Option<PeerId>, _error: &DialError) {
+        // TODO: Track state in behaviour
+        // if let Some(handler::Prototype::DirectConnection {
+        //     relayed_connection_id,
+        //     role: handler::Role::Initiator { attempt },
+        // }) = dial_payload
+        // {
+        //     let peer_id = _peer_id.expect("Peer of `Prototype::DirectConnection` is always known.");
+        //     if attempt < MAX_NUMBER_OF_UPGRADE_ATTEMPTS {
+        //         self.queued_actions.push_back(ActionBuilder::Connect {
+        //             peer_id,
+        //             handler: NotifyHandler::One(relayed_connection_id),
+        //             attempt: attempt + 1,
+        //         });
+        //     } else {
+        //         self.queued_actions.extend([
+        //             NetworkBehaviourAction::NotifyHandler {
+        //                 peer_id,
+        //                 handler: NotifyHandler::One(relayed_connection_id),
+        //                 event: Either::Left(
+        //                     handler::relayed::Command::UpgradeFinishedDontKeepAlive,
+        //                 ),
+        //             }
+        //             .into(),
+        //             NetworkBehaviourAction::GenerateEvent(Event::DirectConnectionUpgradeFailed {
+        //                 remote_peer_id: peer_id,
+        //                 error: UpgradeError::Dial,
+        //             })
+        //             .into(),
+        //         ]);
+        //     }
+        // }
     }
 
     fn inject_connection_closed(
@@ -199,7 +189,7 @@ impl NetworkBehaviour for Behaviour {
         peer_id: &PeerId,
         connection_id: &ConnectionId,
         connected_point: &ConnectedPoint,
-        _handler: <<Self as NetworkBehaviour>::ConnectionHandler as IntoConnectionHandler>::Handler,
+        _handler: Self::ConnectionHandler,
         _remaining_established: usize,
     ) {
         if !connected_point.is_relayed() {
@@ -221,7 +211,7 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         event_source: PeerId,
         connection: ConnectionId,
-        handler_event: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent,
+        handler_event: <Self::ConnectionHandler as ConnectionHandler>::OutEvent,
     ) {
         match handler_event {
             Either::Left(handler::relayed::Event::InboundConnectRequest {
@@ -259,10 +249,10 @@ impl NetworkBehaviour for Behaviour {
                             .addresses(remote_addrs)
                             .condition(dial_opts::PeerCondition::Always)
                             .build(),
-                        dial_payload: handler::Prototype::DirectConnection {
-                            relayed_connection_id: connection,
-                            role: handler::Role::Listener,
-                        },
+                        // dial_payload: handler::Prototype::DirectConnection {
+                        //     relayed_connection_id: connection,
+                        //     role: handler::Role::Listener,
+                        // },
                     }
                     .into(),
                 );
@@ -287,10 +277,10 @@ impl NetworkBehaviour for Behaviour {
                             .addresses(remote_addrs)
                             .override_role()
                             .build(),
-                        dial_payload: handler::Prototype::DirectConnection {
-                            relayed_connection_id: connection,
-                            role: handler::Role::Initiator { attempt },
-                        },
+                        // dial_payload: handler::Prototype::DirectConnection {
+                        //     relayed_connection_id: connection,
+                        //     role: handler::Role::Initiator { attempt },
+                        // },
                     }
                     .into(),
                 );
@@ -325,13 +315,8 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         _cx: &mut Context<'_>,
         poll_parameters: &mut impl PollParameters,
-    ) -> Poll<
-        NetworkBehaviourAction<
-            Self::OutEvent,
-            THandlerInEvent<Self::ConnectionHandler>,
-            handler::Prototype,
-        >,
-    > {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self::ConnectionHandler>>>
+    {
         if let Some(action) = self.queued_actions.pop_front() {
             return Poll::Ready(action.build(poll_parameters));
         }
@@ -343,7 +328,7 @@ impl NetworkBehaviour for Behaviour {
 /// A [`NetworkBehaviourAction`], either complete, or still requiring data from [`PollParameters`]
 /// before being returned in [`Behaviour::poll`].
 enum ActionBuilder {
-    Done(NetworkBehaviourAction<Event, THandlerInEvent<handler::Prototype>, handler::Prototype>),
+    Done(NetworkBehaviourAction<Event, THandlerInEvent<Handler>>),
     Connect {
         attempt: u8,
         handler: NotifyHandler,
@@ -356,16 +341,8 @@ enum ActionBuilder {
     },
 }
 
-impl From<NetworkBehaviourAction<Event, THandlerInEvent<handler::Prototype>, handler::Prototype>>
-    for ActionBuilder
-{
-    fn from(
-        action: NetworkBehaviourAction<
-            Event,
-            THandlerInEvent<handler::Prototype>,
-            handler::Prototype,
-        >,
-    ) -> Self {
+impl From<NetworkBehaviourAction<Event, THandlerInEvent<Handler>>> for ActionBuilder {
+    fn from(action: NetworkBehaviourAction<Event, THandlerInEvent<Handler>>) -> Self {
         Self::Done(action)
     }
 }
@@ -374,8 +351,7 @@ impl ActionBuilder {
     fn build(
         self,
         poll_parameters: &mut impl PollParameters,
-    ) -> NetworkBehaviourAction<Event, THandlerInEvent<handler::Prototype>, handler::Prototype>
-    {
+    ) -> NetworkBehaviourAction<Event, THandlerInEvent<Handler>> {
         let obs_addrs = || {
             poll_parameters
                 .external_addresses()

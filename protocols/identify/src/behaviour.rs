@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::handler::{self, Proto, Push};
+use crate::handler::{self, Handler, Push};
 use crate::protocol::{Info, ReplySubstream, UpgradeError};
 use futures::prelude::*;
 use libp2p_core::{
@@ -28,8 +28,7 @@ use libp2p_core::{
 use libp2p_swarm::behaviour::THandlerInEvent;
 use libp2p_swarm::{
     dial_opts::DialOpts, AddressScore, ConnectionHandler, ConnectionHandlerUpgrErr, DialError,
-    IntoConnectionHandler, NegotiatedSubstream, NetworkBehaviour, NetworkBehaviourAction,
-    NotifyHandler, PollParameters,
+    NegotiatedSubstream, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
 };
 use lru::LruCache;
 use std::num::NonZeroUsize;
@@ -201,7 +200,6 @@ impl Behaviour {
             if self.pending_push.insert(p) && !self.connected.contains_key(&p) {
                 self.events.push_back(NetworkBehaviourAction::Dial {
                     opts: DialOpts::peer_id(p).build(),
-                    dial_payload: (),
                 });
             }
         }
@@ -209,11 +207,11 @@ impl Behaviour {
 }
 
 impl NetworkBehaviour for Behaviour {
-    type ConnectionHandler = Proto;
+    type ConnectionHandler = Handler;
     type OutEvent = Event;
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
-        Proto::new(self.config.initial_delay, self.config.interval)
+    fn new_handler(&mut self, peer: &PeerId, _: &ConnectedPoint) -> Self::ConnectionHandler {
+        Handler::new(self.config.initial_delay, self.config.interval, *peer)
     }
 
     fn inject_connection_established(
@@ -249,7 +247,7 @@ impl NetworkBehaviour for Behaviour {
         peer_id: &PeerId,
         conn: &ConnectionId,
         _: &ConnectedPoint,
-        _: <Self::ConnectionHandler as IntoConnectionHandler>::Handler,
+        _: Self::ConnectionHandler,
         remaining_established: usize,
     ) {
         if remaining_established == 0 {
@@ -260,20 +258,15 @@ impl NetworkBehaviour for Behaviour {
         }
     }
 
-    fn inject_dial_failure(
-        &mut self,
-        peer_id: Option<PeerId>,
-        _: Option<Self::DialPayload>,
-        error: &DialError,
-    ) {
-        if let Some(peer_id) = peer_id {
+    fn inject_dial_failure(&mut self, _peer_id: Option<PeerId>, _error: &DialError) {
+        if let Some(peer_id) = _peer_id {
             if !self.connected.contains_key(&peer_id) {
                 self.pending_push.remove(&peer_id);
             }
         }
 
-        if let Some(entry) = peer_id.and_then(|id| self.discovered_peers.get_mut(&id)) {
-            if let DialError::Transport(errors) = error {
+        if let Some(entry) = _peer_id.and_then(|id| self.discovered_peers.get_mut(&id)) {
+            if let DialError::Transport(errors) = _error {
                 for (addr, _error) in errors {
                     entry.remove(addr);
                 }
@@ -297,7 +290,7 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         peer_id: PeerId,
         connection: ConnectionId,
-        event: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent,
+        event: <Self::ConnectionHandler as ConnectionHandler>::OutEvent,
     ) {
         match event {
             handler::Event::Identified(mut info) => {
@@ -453,8 +446,6 @@ impl NetworkBehaviour for Behaviour {
     fn addresses_of_peer(&mut self, peer: &PeerId) -> Vec<Multiaddr> {
         self.discovered_peers.get(peer)
     }
-
-    type DialPayload = ();
 }
 
 /// Event emitted  by the `Identify` behaviour.
