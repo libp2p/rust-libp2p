@@ -7,7 +7,7 @@ use std::{future::Future, pin::Pin};
 /// >           [`futures::stream::FuturesUnordered`], please note that passing an `Executor` is
 /// >           optional, and that `FuturesUnordered` (or a similar struct) will automatically
 /// >           be used as fallback by libp2p. The `Executor` trait should therefore only be
-/// >           about running `Future`s in the background.
+/// >           about running `Future`s on a separate task.
 pub trait Executor {
     /// Run the given future in the background until it ends.
     fn exec(&self, future: Pin<Box<dyn Future<Output = ()> + Send>>);

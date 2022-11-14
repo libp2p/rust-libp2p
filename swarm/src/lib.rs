@@ -1399,7 +1399,7 @@ where
         }
     }
 
-    /// Creates a new `SwarmBuilder` from the given transport, behaviour, local peer ID and
+    /// Creates a new [`SwarmBuilder`] from the given transport, behaviour, local peer ID and
     /// executor. The `Swarm` with its underlying `Network` is obtained via
     /// [`SwarmBuilder::build`].
     pub fn with_executor(
@@ -1417,7 +1417,7 @@ where
         }
     }
 
-    /// Creates a new `SwarmBuilder` from the given transport, behaviour and local peer ID. The
+    /// Creates a new [`SwarmBuilder`] from the given transport, behaviour and local peer ID. The
     /// `Swarm` with its underlying `Network` is obtained via [`SwarmBuilder::build`].
     ///
     /// ## ⚠️  Performance warning
