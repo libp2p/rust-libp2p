@@ -1111,3 +1111,103 @@ impl<'a, Handler: IntoConnectionHandler> FromSwarm<'a, Handler> {
         }
     }
 }
+
+/// Helper function to call [`NetworkBehaviour`]'s `inject_*` methods given a `FromSwarm.
+/// TODO: Remove this function when we remove the remaining `inject_*` calls
+/// from [`Either`] and [`Toggle`].
+pub(crate) fn inject_from_swarm<T: NetworkBehaviour>(
+    behaviour: &mut T,
+    event: FromSwarm<T::ConnectionHandler>,
+) {
+    match event {
+        FromSwarm::ConnectionEstablished(ConnectionEstablished {
+            peer_id,
+            connection_id,
+            endpoint,
+            failed_addresses,
+            other_established,
+        }) => {
+            #[allow(deprecated)]
+            behaviour.inject_connection_established(
+                &peer_id,
+                &connection_id,
+                endpoint,
+                Some(&failed_addresses.into()),
+                other_established,
+            );
+        }
+        FromSwarm::ConnectionClosed(ConnectionClosed {
+            peer_id,
+            connection_id,
+            endpoint,
+            handler,
+            remaining_established,
+        }) => {
+            #[allow(deprecated)]
+            behaviour.inject_connection_closed(
+                &peer_id,
+                &connection_id,
+                endpoint,
+                handler,
+                remaining_established,
+            );
+        }
+        FromSwarm::AddressChange(AddressChange {
+            peer_id,
+            connection_id,
+            old,
+            new,
+        }) => {
+            #[allow(deprecated)]
+            behaviour.inject_address_change(&peer_id, &connection_id, old, new);
+        }
+        FromSwarm::DialFailure(DialFailure {
+            peer_id,
+            handler,
+            error,
+        }) => {
+            #[allow(deprecated)]
+            behaviour.inject_dial_failure(peer_id, handler, error);
+        }
+        FromSwarm::ListenFailure(ListenFailure {
+            local_addr,
+            send_back_addr,
+            handler,
+        }) => {
+            #[allow(deprecated)]
+            behaviour.inject_listen_failure(local_addr, send_back_addr, handler);
+        }
+        FromSwarm::NewListener(NewListener { listener_id }) => {
+            #[allow(deprecated)]
+            behaviour.inject_new_listener(listener_id);
+        }
+        FromSwarm::NewListenAddr(NewListenAddr { listener_id, addr }) => {
+            #[allow(deprecated)]
+            behaviour.inject_new_listen_addr(listener_id, addr);
+        }
+        FromSwarm::ExpiredListenAddr(ExpiredListenAddr { listener_id, addr }) => {
+            #[allow(deprecated)]
+            behaviour.inject_expired_listen_addr(listener_id, addr);
+        }
+        FromSwarm::ListenerError(ListenerError { listener_id, err }) => {
+            #[allow(deprecated)]
+            behaviour.inject_listener_error(listener_id, err);
+        }
+        FromSwarm::ListenerClosed(ListenerClosed {
+            listener_id,
+            reason,
+        }) => {
+            #[allow(deprecated)]
+            behaviour.inject_listener_closed(listener_id, reason);
+        }
+        FromSwarm::NewExternalAddr(NewExternalAddr { addr }) => {
+            #[allow(deprecated)]
+            behaviour.inject_new_external_addr(addr);
+        }
+        FromSwarm::ExpiredExternalAddr(ExpiredExternalAddr { addr }) =>
+        {
+            #[allow(deprecated)]
+            behaviour.inject_expired_external_addr(addr)
+        }
+    }
+}
