@@ -1326,7 +1326,7 @@ mod tests {
         let quic_addr = Multiaddr::empty()
             .with(Protocol::Ip4(Ipv4Addr::new(87, 65, 43, 21)))
             .with(Protocol::Udp(1))
-            .with(Protocol::Quic);
+            .with(Protocol::QuicV1);
 
         assert!(transport
             .address_translation(&tcp_listen_addr, &quic_addr)
