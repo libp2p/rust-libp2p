@@ -1918,14 +1918,14 @@ where
         }
     }
 
-    fn inject_dial_failure(&mut self, _peer_id: Option<PeerId>, _error: &DialError) {
-        let peer_id = match _peer_id {
+    fn inject_dial_failure(&mut self, peer_id: Option<PeerId>, error: &DialError) {
+        let peer_id = match peer_id {
             Some(id) => id,
             // Not interested in dial failures to unknown peers.
             None => return,
         };
 
-        match _error {
+        match error {
             DialError::Banned
             | DialError::ConnectionLimit(_)
             | DialError::LocalPeerId
@@ -1935,7 +1935,7 @@ where
             | DialError::ConnectionIo(_)
             | DialError::Transport(_)
             | DialError::NoAddresses => {
-                if let DialError::Transport(addresses) = _error {
+                if let DialError::Transport(addresses) = error {
                     for (addr, _) in addresses {
                         self.address_failed(peer_id, addr)
                     }

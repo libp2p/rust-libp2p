@@ -122,7 +122,11 @@ where
     type ConnectionHandler = dummy::ConnectionHandler;
     type OutEvent = MdnsEvent;
 
-    fn new_handler(&mut self, _: &PeerId, _: &libp2p_core::ConnectedPoint) -> Self::ConnectionHandler {
+    fn new_handler(
+        &mut self,
+        _: &PeerId,
+        _: &libp2p_core::ConnectedPoint,
+    ) -> Self::ConnectionHandler {
         dummy::ConnectionHandler
     }
 

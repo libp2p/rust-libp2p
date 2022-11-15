@@ -138,10 +138,10 @@ where
         }
     }
 
-    fn inject_dial_failure(&mut self, _peer_id: Option<PeerId>, _error: &DialError) {
+    fn inject_dial_failure(&mut self, peer_id: Option<PeerId>, error: &DialError) {
         match self {
-            Either::Left(behaviour) => behaviour.inject_dial_failure(_peer_id, _error),
-            Either::Right(behaviour) => behaviour.inject_dial_failure(_peer_id, _error),
+            Either::Left(behaviour) => behaviour.inject_dial_failure(peer_id, error),
+            Either::Right(behaviour) => behaviour.inject_dial_failure(peer_id, error),
         }
     }
 

@@ -155,9 +155,9 @@ where
         }
     }
 
-    fn inject_dial_failure(&mut self, _peer_id: Option<PeerId>, _error: &DialError) {
+    fn inject_dial_failure(&mut self, peer_id: Option<PeerId>, error: &DialError) {
         if let Some(inner) = self.inner.as_mut() {
-            inner.inject_dial_failure(_peer_id, _error)
+            inner.inject_dial_failure(peer_id, error)
         }
     }
 

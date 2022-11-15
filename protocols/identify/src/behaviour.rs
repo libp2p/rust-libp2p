@@ -258,15 +258,15 @@ impl NetworkBehaviour for Behaviour {
         }
     }
 
-    fn inject_dial_failure(&mut self, _peer_id: Option<PeerId>, _error: &DialError) {
-        if let Some(peer_id) = _peer_id {
+    fn inject_dial_failure(&mut self, peer_id: Option<PeerId>, error: &DialError) {
+        if let Some(peer_id) = peer_id {
             if !self.connected.contains_key(&peer_id) {
                 self.pending_push.remove(&peer_id);
             }
         }
 
-        if let Some(entry) = _peer_id.and_then(|id| self.discovered_peers.get_mut(&id)) {
-            if let DialError::Transport(errors) = _error {
+        if let Some(entry) = peer_id.and_then(|id| self.discovered_peers.get_mut(&id)) {
+            if let DialError::Transport(errors) = error {
                 for (addr, _error) in errors {
                     entry.remove(addr);
                 }

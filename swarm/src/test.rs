@@ -353,9 +353,9 @@ where
         self.inner.inject_event(p, c, e);
     }
 
-    fn inject_dial_failure(&mut self, _peer_id: Option<PeerId>, _error: &DialError) {
-        self.inject_dial_failure.push(_peer_id);
-        self.inner.inject_dial_failure(_peer_id, _error);
+    fn inject_dial_failure(&mut self, peer_id: Option<PeerId>, error: &DialError) {
+        self.inject_dial_failure.push(peer_id);
+        self.inner.inject_dial_failure(peer_id, error);
     }
 
     fn inject_new_listener(&mut self, id: ListenerId) {

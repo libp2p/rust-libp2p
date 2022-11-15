@@ -368,9 +368,9 @@ impl NetworkBehaviour for Behaviour {
         }
     }
 
-    fn inject_dial_failure(&mut self, _peer_id: Option<PeerId>, _error: &DialError) {
-        self.inner.inject_dial_failure(_peer_id, _error);
-        if let Some(event) = self.as_server().on_outbound_dial_error(_peer_id, _error) {
+    fn inject_dial_failure(&mut self, peer_id: Option<PeerId>, error: &DialError) {
+        self.inner.inject_dial_failure(peer_id, error);
+        if let Some(event) = self.as_server().on_outbound_dial_error(peer_id, error) {
             self.pending_out_events
                 .push_back(Event::InboundProbe(event));
         }
