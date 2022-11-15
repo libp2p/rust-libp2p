@@ -4,6 +4,11 @@
 
 - Update to `libp2p-swarm` `v0.41.0`.
 
+- Update `rust-version` to reflect the actual MSRV: 1.62.0. See [PR 3090].
+
+[PR 3090]: https://github.com/libp2p/rust-libp2p/pull/3090
+
+
 # 0.40.0
 
 - Bump rand to 0.8 and quickcheck to 1. See [PR 2857].

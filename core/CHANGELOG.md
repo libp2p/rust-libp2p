@@ -4,8 +4,13 @@
 
 - Hide `prost::Error` from public API in `FromEnvelopeError::InvalidPeerRecord` and `signed_envelope::DecodingError`. See [PR 3058].
 
+- Update `rust-version` to reflect the actual MSRV: 1.60.0. See [PR 3090].
+
+- Update `multistream-select` to `v0.12.1`. See [PR 3090].
+
 [PR 3031]: https://github.com/libp2p/rust-libp2p/pull/3031
 [PR 3058]: https://github.com/libp2p/rust-libp2p/pull/3058
+[PR 3090]: https://github.com/libp2p/rust-libp2p/pull/3090
 
 # 0.37.0
 

@@ -8,7 +8,10 @@
 
 - Refactoring GossipsubCodec to use common protobuf Codec. See [PR 3070].
 
+- Update `rust-version` to reflect the actual MSRV: 1.62.0. See [PR 3090].
+
 [PR 3070]: https://github.com/libp2p/rust-libp2p/pull/3070
+[PR 3090]: https://github.com/libp2p/rust-libp2p/pull/3090
 
 # 0.42.0
 

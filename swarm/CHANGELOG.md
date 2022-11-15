@@ -7,7 +7,10 @@
   `serde::Serialize`. See [PR 3055].
 - Feature-gate `NetworkBehaviour` macro behind `macros` feature flag. See [PR 3055].
 
+- Update `rust-version` to reflect the actual MSRV: 1.62.0. See [PR 3090].
+
 [PR 3055]: https://github.com/libp2p/rust-libp2p/pull/3055
+[PR 3090]: https://github.com/libp2p/rust-libp2p/pull/3090
 
 # 0.40.1
 

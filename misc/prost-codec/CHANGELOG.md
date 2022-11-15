@@ -2,7 +2,10 @@
 
 - Don't leak `prost` dependency in `Error` type. See [PR 3058].
 
+- Update `rust-version` to reflect the actual MSRV: 1.60.0. See [PR 3090].
+
 [PR 3058]: https://github.com/libp2p/rust-libp2p/pull/3058/
+[PR 3090]: https://github.com/libp2p/rust-libp2p/pull/3090
 
 # 0.2.0
 

@@ -71,6 +71,7 @@
   - Update to [`libp2p-noise` `v0.41.0`](transports/noise/CHANGELOG.md#0410).
   - Update to [`libp2p-ping` `v0.41.0`](protocols/ping/CHANGELOG.md#0410).
   - Update to [`libp2p-plaintext` `v0.38.0`](transports/plaintext/CHANGELOG.md#0380).
+  - Update to [`libp2p-pnet` `v0.22.2`](transports/pnet/CHANGELOG.md#0222).
   - Update to [`libp2p-relay` `v0.14.0`](protocols/relay/CHANGELOG.md#0140).
   - Update to [`libp2p-rendezvous` `v0.11.0`](protocols/rendezovus/CHANGELOG.md#0110).
   - Update to [`libp2p-request-response` `v0.23.0`](protocols/request-response/CHANGELOG.md#0230).
