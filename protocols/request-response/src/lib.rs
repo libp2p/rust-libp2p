@@ -686,7 +686,7 @@ where
         }
     }
 
-    fn inject_dial_failure(&mut self, peer_id: Option<PeerId>, error: &DialError) {
+    fn inject_dial_failure(&mut self, peer_id: Option<PeerId>, _: &DialError) {
         if let Some(peer) = peer_id {
             // If there are pending outgoing requests when a dial failure occurs,
             // it is implied that we are not connected to the peer, since pending
