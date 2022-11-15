@@ -25,21 +25,21 @@ use prometheus_client::metrics::family::Family;
 use prometheus_client::registry::Registry;
 
 pub struct Metrics {
-    connections_incoming: Family<protocol_stack::Labels, Counter>,
+    connections_incoming: Family<AddressLabels, Counter>,
     connections_incoming_error: Family<IncomingConnectionErrorLabels, Counter>,
 
     connections_established: Family<ConnectionEstablishedLabels, Counter>,
     connections_closed: Family<ConnectionClosedLabels, Counter>,
 
-    new_listen_addr: Family<protocol_stack::Labels, Counter>,
-    expired_listen_addr: Family<protocol_stack::Labels, Counter>,
+    new_listen_addr: Family<AddressLabels, Counter>,
+    expired_listen_addr: Family<AddressLabels, Counter>,
 
-    listener_closed: Family<protocol_stack::Labels, Counter>,
+    listener_closed: Family<AddressLabels, Counter>,
     listener_error: Counter,
 
     dial_attempt: Counter,
     outgoing_connection_error: Family<OutgoingConnectionErrorLabels, Counter>,
-    connected_to_banned_peer: Family<protocol_stack::Labels, Counter>,
+    connected_to_banned_peer: Family<AddressLabels, Counter>,
 }
 
 impl Metrics {
@@ -161,7 +161,9 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
             }
             libp2p_swarm::SwarmEvent::IncomingConnection { send_back_addr, .. } => {
                 self.connections_incoming
-                    .get_or_create(&protocol_stack::Labels::new(send_back_addr))
+                    .get_or_create(&AddressLabels {
+                        protocols: protocol_stack::as_string(send_back_addr),
+                    })
                     .inc();
             }
             libp2p_swarm::SwarmEvent::IncomingConnectionError {
@@ -233,23 +235,31 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
             }
             libp2p_swarm::SwarmEvent::BannedPeer { endpoint, .. } => {
                 self.connected_to_banned_peer
-                    .get_or_create(&protocol_stack::Labels::new(endpoint.get_remote_address()))
+                    .get_or_create(&AddressLabels {
+                        protocols: protocol_stack::as_string(endpoint.get_remote_address()),
+                    })
                     .inc();
             }
             libp2p_swarm::SwarmEvent::NewListenAddr { address, .. } => {
                 self.new_listen_addr
-                    .get_or_create(&protocol_stack::Labels::new(address))
+                    .get_or_create(&AddressLabels {
+                        protocols: protocol_stack::as_string(address),
+                    })
                     .inc();
             }
             libp2p_swarm::SwarmEvent::ExpiredListenAddr { address, .. } => {
                 self.expired_listen_addr
-                    .get_or_create(&protocol_stack::Labels::new(address))
+                    .get_or_create(&AddressLabels {
+                        protocols: protocol_stack::as_string(address),
+                    })
                     .inc();
             }
             libp2p_swarm::SwarmEvent::ListenerClosed { addresses, .. } => {
                 for address in addresses {
                     self.listener_closed
-                        .get_or_create(&protocol_stack::Labels::new(address))
+                        .get_or_create(&AddressLabels {
+                            protocols: protocol_stack::as_string(address),
+                        })
                         .inc();
                 }
             }
@@ -272,6 +282,11 @@ struct ConnectionEstablishedLabels {
 #[derive(Encode, Hash, Clone, Eq, PartialEq)]
 struct ConnectionClosedLabels {
     role: Role,
+    protocols: String,
+}
+
+#[derive(Encode, Hash, Clone, Eq, PartialEq)]
+struct AddressLabels {
     protocols: String,
 }
 

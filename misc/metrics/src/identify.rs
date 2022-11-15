@@ -20,7 +20,7 @@
 
 use crate::protocol_stack;
 use libp2p_core::PeerId;
-use prometheus_client::encoding::text::{EncodeMetric, Encoder};
+use prometheus_client::encoding::text::{Encode, EncodeMetric, Encoder};
 use prometheus_client::metrics::counter::Counter;
 use prometheus_client::metrics::family::Family;
 use prometheus_client::metrics::histogram::{exponential_buckets, Histogram};
@@ -38,7 +38,7 @@ pub struct Metrics {
     received_info_listen_addrs: Histogram,
     received_info_protocols: Histogram,
     sent: Counter,
-    listen_addresses: Family<protocol_stack::Labels, Counter>,
+    listen_addresses: Family<AddressLabels, Counter>,
 }
 
 impl Metrics {
@@ -180,7 +180,9 @@ impl super::Recorder<libp2p_identify::Event> for Metrics {
                     .observe(info.listen_addrs.len() as f64);
                 for listen_addr in &info.listen_addrs {
                     self.listen_addresses
-                        .get_or_create(&protocol_stack::Labels::new(listen_addr))
+                        .get_or_create(&AddressLabels {
+                            protocols: protocol_stack::as_string(listen_addr),
+                        })
                         .inc();
                 }
             }
@@ -204,6 +206,11 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
             }
         }
     }
+}
+
+#[derive(Encode, Hash, Clone, Eq, PartialEq)]
+struct AddressLabels {
+    protocols: String,
 }
 
 #[derive(Default, Clone)]
