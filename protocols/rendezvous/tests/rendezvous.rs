@@ -366,7 +366,7 @@ async fn new_impersonating_client() -> Swarm<rendezvous::client::Behaviour> {
     eve
 }
 
-#[derive(libp2p::NetworkBehaviour)]
+#[derive(libp2p::swarm::NetworkBehaviour)]
 #[behaviour(event_process = false, out_event = "CombinedEvent")]
 struct CombinedBehaviour {
     client: rendezvous::client::Behaviour,
