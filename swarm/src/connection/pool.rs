@@ -60,7 +60,6 @@ enum ExecSwitch {
 }
 
 impl ExecSwitch {
-    #[inline]
     fn advance_local(&mut self, cx: &mut Context) {
         match self {
             ExecSwitch::Executor(_) => {}
@@ -70,7 +69,6 @@ impl ExecSwitch {
         }
     }
 
-    #[inline]
     fn spawn(&mut self, task: BoxFuture<'static, ()>) {
         match self {
             Self::Executor(executor) => executor.exec(task),
