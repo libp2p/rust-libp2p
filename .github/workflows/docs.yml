@@ -3,7 +3,6 @@ on:
   push:
     branches:
       - master
-      - host-master-docs
 
 jobs:
   build:
