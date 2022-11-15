@@ -219,9 +219,7 @@ mod network {
         ProtocolSupport, RequestId, RequestResponse, RequestResponseCodec, RequestResponseEvent,
         RequestResponseMessage, ResponseChannel,
     };
-    use libp2p::swarm::{
-        ConnectionHandlerUpgrErr, NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent,
-    };
+    use libp2p::swarm::{ConnectionHandlerUpgrErr, NetworkBehaviour, Swarm, SwarmEvent};
     use std::collections::{hash_map, HashMap, HashSet};
     use std::iter;
 
@@ -252,7 +250,7 @@ mod network {
 
         // Build the Swarm, connecting the lower layer transport logic with the
         // higher layer network behaviour logic.
-        let swarm = SwarmBuilder::new(
+        let swarm = Swarm::with_threadpool_executor(
             libp2p::development_transport(id_keys).await?,
             ComposedBehaviour {
                 kademlia: Kademlia::new(peer_id, MemoryStore::new(peer_id)),
@@ -263,8 +261,7 @@ mod network {
                 ),
             },
             peer_id,
-        )
-        .build();
+        );
 
         let (command_sender, command_receiver) = mpsc::channel(0);
         let (event_sender, event_receiver) = mpsc::channel(0);

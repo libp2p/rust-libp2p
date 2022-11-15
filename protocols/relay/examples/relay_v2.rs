@@ -66,7 +66,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         )),
     };
 
-    let mut swarm = Swarm::new(transport, behaviour, local_peer_id);
+    let mut swarm = Swarm::without_executor(transport, behaviour, local_peer_id);
 
     // Listen on all interfaces
     let listen_addr = Multiaddr::empty()
