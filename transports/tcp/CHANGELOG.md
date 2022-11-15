@@ -1,5 +1,7 @@
 # 0.38.0 [unreleased]
 
+- Update to `if-watch`  `v3.0.0` and pass through `tokio` and `async-io` features. See [PR 3101].
+
 - Deprecate types with `Tcp` prefix (`GenTcpConfig`, `TcpTransport` and `TokioTcpTransport`) in favor of referencing them by module / crate. See [PR 2961].
 
 - Remove `TcpListenStream` and `TcpListenerEvent` from public API. See [PR 2961].
@@ -8,6 +10,7 @@
 
 - Update `rust-version` to reflect the actual MSRV: 1.60.0. See [PR 3090].
 
+[PR 3101]: https://github.com/libp2p/rust-libp2p/pull/3101
 [PR 2961]: https://github.com/libp2p/rust-libp2p/pull/2961
 [PR 3090]: https://github.com/libp2p/rust-libp2p/pull/3090
 

@@ -24,9 +24,13 @@ rand = "0.8"
 smallvec = "1.6.1"
 thiserror = "1.0"
 void = "1"
+tokio = { version = "1.15", features = ["rt"], optional = true }
+async-std = { version = "1.6.2", optional = true }
 
 [features]
 macros = ["dep:libp2p-swarm-derive"]
+tokio = ["dep:tokio"]
+async-std = ["dep:async-std"]
 
 [dev-dependencies]
 async-std = { version = "1.6.2", features = ["attributes"] }

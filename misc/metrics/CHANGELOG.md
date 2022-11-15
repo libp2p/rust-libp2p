@@ -16,8 +16,11 @@
 
 - Update to `libp2p-gossipsub` `v0.43.0`.
 
+- Add `protocol_stack` metrics. See [PR 2982].
+
 - Update `rust-version` to reflect the actual MSRV: 1.62.0. See [PR 3090].
 
+[PR 2982]: https://github.com/libp2p/rust-libp2p/pull/2982/
 [PR 3090]: https://github.com/libp2p/rust-libp2p/pull/3090
 
 # 0.10.0

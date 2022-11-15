@@ -39,7 +39,7 @@ use libp2p::{
         TokioMdns,
     },
     mplex, noise,
-    swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent},
+    swarm::{NetworkBehaviour, SwarmEvent},
     tcp, Multiaddr, PeerId, Transport,
 };
 use std::error::Error;
@@ -97,23 +97,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     // Create a Swarm to manage peers and events.
-    let mut swarm = {
-        let mdns = TokioMdns::new(Default::default())?;
-        let mut behaviour = MyBehaviour {
-            floodsub: Floodsub::new(peer_id),
-            mdns,
-        };
-
-        behaviour.floodsub.subscribe(floodsub_topic.clone());
-
-        SwarmBuilder::new(transport, behaviour, peer_id)
-            // We want the connection background tasks to be spawned
-            // onto the tokio runtime.
-            .executor(Box::new(|fut| {
-                tokio::spawn(fut);
-            }))
-            .build()
+    let mdns = TokioMdns::new(Default::default())?;
+    let behaviour = MyBehaviour {
+        floodsub: Floodsub::new(peer_id),
+        mdns,
     };
+    let mut swarm = libp2p_swarm::Swarm::with_tokio_executor(transport, behaviour, peer_id);
 
     // Reach out to another node if specified
     if let Some(to_dial) = std::env::args().nth(1) {

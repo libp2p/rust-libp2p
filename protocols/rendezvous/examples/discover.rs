@@ -25,7 +25,7 @@ use libp2p::multiaddr::Protocol;
 use libp2p::ping;
 use libp2p::swarm::{keep_alive, SwarmEvent};
 use libp2p::Swarm;
-use libp2p::{development_transport, rendezvous, Multiaddr};
+use libp2p::{rendezvous, tokio_development_transport, Multiaddr};
 use std::time::Duration;
 use void::Void;
 
@@ -41,8 +41,8 @@ async fn main() {
         .parse()
         .unwrap();
 
-    let mut swarm = Swarm::new(
-        development_transport(identity.clone()).await.unwrap(),
+    let mut swarm = Swarm::with_tokio_executor(
+        tokio_development_transport(identity.clone()).unwrap(),
         MyBehaviour {
             rendezvous: rendezvous::client::Behaviour::new(identity.clone()),
             ping: ping::Behaviour::new(ping::Config::new().with_interval(Duration::from_secs(1))),

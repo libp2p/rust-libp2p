@@ -47,7 +47,8 @@ full = [
     "websocket",
     "yamux",
 ]
-async-std = ["libp2p-mdns?/async-io", "libp2p-tcp?/async-io", "libp2p-dns?/async-std", "libp2p-quic?/async-std"]
+
+async-std = ["libp2p-swarm/async-std", "libp2p-mdns?/async-io", "libp2p-tcp?/async-io", "libp2p-dns?/async-std", "libp2p-quic?/async-std"]
 autonat = ["dep:libp2p-autonat"]
 dcutr = ["dep:libp2p-dcutr", "libp2p-metrics?/dcutr"]
 deflate = ["dep:libp2p-deflate"]
@@ -74,7 +75,7 @@ rsa = ["libp2p-core/rsa"]
 secp256k1 = ["libp2p-core/secp256k1"]
 serde = ["libp2p-core/serde", "libp2p-kad?/serde", "libp2p-gossipsub?/serde"]
 tcp = ["dep:libp2p-tcp"]
-tokio = ["libp2p-mdns?/tokio", "libp2p-tcp?/tokio", "libp2p-dns?/tokio", "libp2p-quic?/tokio"]
+tokio = ["libp2p-swarm/tokio", "libp2p-mdns?/tokio", "libp2p-tcp?/tokio", "libp2p-dns?/tokio", "libp2p-quic?/tokio"]
 uds = ["dep:libp2p-uds"]
 wasm-bindgen = ["futures-timer/wasm-bindgen", "instant/wasm-bindgen", "getrandom/js"]
 wasm-ext = ["dep:libp2p-wasm-ext"]
