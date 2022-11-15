@@ -20,7 +20,8 @@
 
 use crate::rpc_proto;
 use crate::topic::Topic;
-use asynchronous_codec::Framed;
+use asynchronous_codec::{Decoder, Encoder, Framed};
+use bytes::BytesMut;
 use futures::{
     io::{AsyncRead, AsyncWrite},
     AsyncWriteExt, Future,
@@ -67,6 +68,29 @@ impl Clone for FloodsubProtocol {
         }
     }
 }
+impl Decoder for FloodsubProtocol {
+    type Item = rpc_proto::Rpc;
+
+    type Error = prost_codec::Error;
+
+    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<rpc_proto::Rpc>, prost_codec::Error> {
+        let blah = match self.codec.decode(src)? {
+            Some(p) => p,
+            None => return Ok(None),
+        };
+        return Ok(Some(blah));
+    }
+}
+
+impl Encoder for FloodsubProtocol {
+    type Item = rpc_proto::Rpc;
+
+    type Error = prost_codec::Error;
+
+    fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
+        Ok(self.codec.encode(item, dst)?)
+    }
+}
 
 impl UpgradeInfo for FloodsubProtocol {
     type Info = &'static [u8];
@@ -96,7 +120,8 @@ where
             // read and write from a socket in entire messages instead of
             // raw bytes!
 
-            let mut framed = Framed::new(socket, FloodsubProtocol::new());
+            let mut framed =
+                Framed::<TSocket, FloodsubProtocol>::new(socket, FloodsubProtocol::new());
             let rpc = framed.next().await; // TODO Needs error handling
 
             let mut messages = Vec::with_capacity(rpc.publish.len());
