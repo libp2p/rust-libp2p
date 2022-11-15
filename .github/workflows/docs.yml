@@ -15,7 +15,10 @@ jobs:
     - name: Checkout 
       uses: actions/checkout@v3
     - name: Build Documentation
-      run: carto doc --no-deps --workspace -F full
+      run: cargo +nightly doc --no-deps --workspace -F full
+      env:
+        RUSTDOCFLAGS: "-C docsrs"
+        RUSTFLAGS: "-C docsrs"
     - name: Add index file
       run: |
         mkdir host-docs
