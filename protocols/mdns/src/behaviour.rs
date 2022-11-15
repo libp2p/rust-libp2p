@@ -28,7 +28,7 @@ use crate::MdnsConfig;
 use futures::Stream;
 use if_watch::{IfEvent, IfWatcher};
 use libp2p_core::transport::ListenerId;
-use libp2p_core::{ConnectedPoint, Multiaddr, PeerId};
+use libp2p_core::{Multiaddr, PeerId};
 use libp2p_swarm::{
     dummy, ConnectionHandler, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
 };
@@ -122,7 +122,7 @@ where
     type ConnectionHandler = dummy::ConnectionHandler;
     type OutEvent = MdnsEvent;
 
-    fn new_handler(&mut self, _: &PeerId, _: &ConnectedPoint) -> Self::ConnectionHandler {
+    fn new_handler(&mut self, _: &PeerId, _: &libp2p_core::ConnectedPoint) -> Self::ConnectionHandler {
         dummy::ConnectionHandler
     }
 
@@ -132,19 +132,6 @@ where
             .filter(|(peer, _, _)| peer == peer_id)
             .map(|(_, addr, _)| addr.clone())
             .collect()
-    }
-
-    fn inject_connection_closed(
-        &mut self,
-        peer: &PeerId,
-        _: &libp2p_core::connection::ConnectionId,
-        _: &libp2p_core::ConnectedPoint,
-        _: Self::ConnectionHandler,
-        remaining_established: usize,
-    ) {
-        if remaining_established == 0 {
-            self.expire_node(peer);
-        }
     }
 
     fn inject_event(
@@ -160,6 +147,19 @@ where
         log::trace!("waking interface state because listening address changed");
         for iface in self.iface_states.values_mut() {
             iface.fire_timer();
+        }
+    }
+
+    fn inject_connection_closed(
+        &mut self,
+        peer: &PeerId,
+        _: &libp2p_core::connection::ConnectionId,
+        _: &libp2p_core::ConnectedPoint,
+        _: Self::ConnectionHandler,
+        remaining_established: usize,
+    ) {
+        if remaining_established == 0 {
+            self.expire_node(peer);
         }
     }
 

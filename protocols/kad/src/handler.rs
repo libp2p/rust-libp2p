@@ -43,24 +43,6 @@ use std::{
 
 const MAX_NUM_INBOUND_SUBSTREAMS: usize = 32;
 
-// impl<T: Clone + fmt::Debug + Send + 'static + Unpin> IntoConnectionHandler
-//     for KademliaHandlerProto<T>
-// {
-//     type Handler = KademliaHandler<T>;
-//
-//     fn into_handler(self, remote_peer_id: &PeerId, endpoint: &ConnectedPoint) -> Self::Handler {
-//         KademliaHandler::new(self.config, endpoint.clone(), *remote_peer_id)
-//     }
-//
-//     fn inbound_protocol(&self) -> <Self::Handler as ConnectionHandler>::InboundProtocol {
-//         if self.config.allow_listening {
-//             upgrade::EitherUpgrade::A(self.config.protocol_config.clone())
-//         } else {
-//             upgrade::EitherUpgrade::B(upgrade::DeniedUpgrade)
-//         }
-//     }
-// }
-
 /// Protocol handler that manages substreams for the Kademlia protocol
 /// on a single connection with a peer.
 ///
