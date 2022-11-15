@@ -19,8 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use super::dns;
-use crate::{META_QUERY_SERVICE, SERVICE_NAME};
-use dns_parser::{Packet, RData};
+use crate::{META_QUERY_SERVICE_FQDN, SERVICE_NAME_FQDN};
 use libp2p_core::{
     address_translation,
     multiaddr::{Multiaddr, Protocol},
@@ -28,6 +27,10 @@ use libp2p_core::{
 };
 use std::time::Instant;
 use std::{convert::TryFrom, fmt, net::SocketAddr, str, time::Duration};
+use trust_dns_proto::{
+    op::Message,
+    rr::{Name, RData},
+};
 
 /// A valid mDNS packet received by the service.
 #[derive(Debug)]
@@ -44,33 +47,33 @@ impl MdnsPacket {
     pub fn new_from_bytes(
         buf: &[u8],
         from: SocketAddr,
-    ) -> Result<Option<MdnsPacket>, dns_parser::Error> {
-        let packet = Packet::parse(buf)?;
+    ) -> Result<Option<MdnsPacket>, trust_dns_proto::error::ProtoError> {
+        let packet = Message::from_vec(buf)?;
 
-        if !packet.header.query {
-            return Ok(Some(MdnsPacket::Response(MdnsResponse::new(packet, from))));
+        if packet.query().is_none() {
+            return Ok(Some(MdnsPacket::Response(MdnsResponse::new(&packet, from))));
         }
 
         if packet
-            .questions
+            .queries()
             .iter()
-            .any(|q| q.qname.to_string().as_bytes() == SERVICE_NAME)
+            .any(|q| q.name().to_utf8() == SERVICE_NAME_FQDN)
         {
             return Ok(Some(MdnsPacket::Query(MdnsQuery {
                 from,
-                query_id: packet.header.id,
+                query_id: packet.header().id(),
             })));
         }
 
         if packet
-            .questions
+            .queries()
             .iter()
-            .any(|q| q.qname.to_string().as_bytes() == META_QUERY_SERVICE)
+            .any(|q| q.name().to_utf8() == META_QUERY_SERVICE_FQDN)
         {
             // TODO: what if multiple questions, one with SERVICE_NAME and one with META_QUERY_SERVICE?
             return Ok(Some(MdnsPacket::ServiceDiscovery(MdnsServiceDiscovery {
                 from,
-                query_id: packet.header.id,
+                query_id: packet.header().id(),
             })));
         }
 
@@ -144,21 +147,21 @@ pub struct MdnsResponse {
 
 impl MdnsResponse {
     /// Creates a new `MdnsResponse` based on the provided `Packet`.
-    pub fn new(packet: Packet<'_>, from: SocketAddr) -> MdnsResponse {
+    pub fn new(packet: &Message, from: SocketAddr) -> MdnsResponse {
         let peers = packet
-            .answers
+            .answers()
             .iter()
             .filter_map(|record| {
-                if record.name.to_string().as_bytes() != SERVICE_NAME {
+                if record.name().to_string() != SERVICE_NAME_FQDN {
                     return None;
                 }
 
-                let record_value = match record.data {
-                    RData::PTR(record) => record.0.to_string(),
+                let record_value = match record.data() {
+                    Some(RData::PTR(record)) => record,
                     _ => return None,
                 };
 
-                MdnsPeer::new(&packet, record_value, record.ttl)
+                MdnsPeer::new(packet, record_value, record.ttl())
             })
             .collect();
 
@@ -225,17 +228,17 @@ pub struct MdnsPeer {
 
 impl MdnsPeer {
     /// Creates a new `MdnsPeer` based on the provided `Packet`.
-    pub fn new(packet: &Packet<'_>, record_value: String, ttl: u32) -> Option<MdnsPeer> {
+    pub fn new(packet: &Message, record_value: &Name, ttl: u32) -> Option<MdnsPeer> {
         let mut my_peer_id: Option<PeerId> = None;
         let addrs = packet
-            .additional
+            .additionals()
             .iter()
             .filter_map(|add_record| {
-                if add_record.name.to_string() != record_value {
+                if add_record.name() != record_value {
                     return None;
                 }
 
-                if let RData::TXT(ref txt) = add_record.data {
+                if let Some(RData::TXT(ref txt)) = add_record.data() {
                     Some(txt)
                 } else {
                     None
@@ -337,16 +340,16 @@ mod tests {
         );
 
         for bytes in packets {
-            let packet = Packet::parse(&bytes).expect("unable to parse packet");
+            let packet = Message::from_vec(&bytes).expect("unable to parse packet");
             let record_value = packet
-                .answers
+                .answers()
                 .iter()
                 .filter_map(|record| {
-                    if record.name.to_string().as_bytes() != SERVICE_NAME {
+                    if record.name().to_utf8() != SERVICE_NAME_FQDN {
                         return None;
                     }
-                    let record_value = match record.data {
-                        RData::PTR(record) => record.0.to_string(),
+                    let record_value = match record.data() {
+                        Some(RData::PTR(record)) => record,
                         _ => return None,
                     };
                     Some(record_value)

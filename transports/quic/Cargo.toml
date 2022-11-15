@@ -1,0 +1,47 @@
+[package]
+name = "libp2p-quic"
+version = "0.7.0-alpha"
+authors = ["Parity Technologies <admin@parity.io>"]
+edition = "2021"
+description = "TLS based QUIC transport implementation for libp2p"
+repository = "https://github.com/libp2p/rust-libp2p"
+license = "MIT"
+
+[dependencies]
+async-std = { version = "1.12.0", default-features = false, optional = true }
+bytes = "1.2.1"
+futures = "0.3.15"
+futures-timer = "3.0.2"
+if-watch = "3.0.0"
+libp2p-core = { version = "0.38.0", path = "../../core" }
+libp2p-tls = { version = "0.1.0-alpha", path = "../tls" }
+log = "0.4"
+parking_lot = "0.12.0"
+quinn-proto = { version = "0.9.0", default-features = false, features = ["tls-rustls"] }
+rand = "0.8.5"
+rustls = { version = "0.20.2", default-features = false }
+thiserror = "1.0.26"
+tokio = { version = "1.21.1", default-features = false, features = ["net", "rt"], optional = true }
+
+[features]
+tokio = ["dep:tokio", "if-watch/tokio"]
+async-std = ["dep:async-std", "if-watch/smol"]
+
+# Passing arguments to the docsrs builder in order to properly document cfg's. 
+# More information: https://docs.rs/about/builds#cross-compiling
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+rustc-args = ["--cfg", "docsrs"]
+
+[dev-dependencies]
+async-std = { version = "1.12.0", features = ["attributes"] }
+env_logger = "0.9.0"
+libp2p = { path = "../..", features = ["tcp", "yamux", "noise", "async-std"] }
+libp2p-muxer-test-harness = { path = "../../muxers/test-harness" }
+quickcheck = "1"
+tokio = { version = "1.21.1", features = ["macros", "rt-multi-thread", "time"] }
+
+[[test]]
+name = "stream_compliance"
+required-features = ["async-std"]

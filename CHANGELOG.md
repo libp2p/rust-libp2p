@@ -25,6 +25,7 @@
 - [`libp2p-noise` CHANGELOG](transports/noise/CHANGELOG.md)
 - [`libp2p-plaintext` CHANGELOG](transports/plaintext/CHANGELOG.md)
 - [`libp2p-pnet` CHANGELOG](transports/pnet/CHANGELOG.md)
+- [`libp2p-quic` CHANGELOG](transports/quic/CHANGELOG.md)
 - [`libp2p-tcp` CHANGELOG](transports/tcp/CHANGELOG.md)
 - [`libp2p-uds` CHANGELOG](transports/uds/CHANGELOG.md)
 - [`libp2p-wasm-ext` CHANGELOG](transports/wasm-ext/CHANGELOG.md)
@@ -47,6 +48,7 @@
 # 0.50.0 - [unreleased]
 
 - Introduce [`libp2p-tls` `v0.1.0-alpha`](transports/tls/CHANGELOG.md#010-alpha). See [PR 2945].
+- Introduce [`libp2p-quic` `v0.7.0-alpha`](transports/quic/CHANGELOG.md#070-alpha). See [PR 2289].
 - Remove deprecated features: `tcp-tokio`, `mdns-tokio`, `dns-tokio`, `tcp-async-io`, `mdns-async-io`, `dns-async-std`.
   See [PR 3001].
 - Introduce [`libp2p-tls` `v0.1.0`](transports/tls/CHANGELOG.md#010). See [PR 2945].
@@ -82,6 +84,7 @@
 [PR 2945]: https://github.com/libp2p/rust-libp2p/pull/2945
 [PR 3001]: https://github.com/libp2p/rust-libp2p/pull/3001
 [PR 2945]: https://github.com/libp2p/rust-libp2p/pull/2945
+[PR 2289]: https://github.com/libp2p/rust-libp2p/pull/2289
 [PR 3055]: https://github.com/libp2p/rust-libp2p/pull/3055
 
 # 0.49.0
