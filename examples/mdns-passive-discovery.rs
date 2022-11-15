@@ -45,7 +45,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Create a Swarm that establishes connections through the given transport.
     // Note that the MDNS behaviour itself will not actually inititiate any connections,
     // as it only uses UDP.
-    let mut swarm = Swarm::new(transport, behaviour, peer_id);
+    let mut swarm = Swarm::with_async_std_executor(transport, behaviour, peer_id);
     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
 
     loop {

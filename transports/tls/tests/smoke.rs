@@ -65,7 +65,7 @@ fn make_swarm() -> Swarm<keep_alive::Behaviour> {
         .multiplex(libp2p::yamux::YamuxConfig::default())
         .boxed();
 
-    Swarm::new(
+    Swarm::without_executor(
         transport,
         keep_alive::Behaviour,
         identity.public().to_peer_id(),
