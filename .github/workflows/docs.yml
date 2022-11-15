@@ -19,8 +19,8 @@ jobs:
     - name: Build Documentation
       run: cargo +nightly doc --no-deps --workspace -F full
       env:
-        RUSTDOCFLAGS: "-C docsrs"
-        RUSTFLAGS: "-C docsrs"
+        RUSTDOCFLAGS: "--cfg docsrs"
+        RUSTFLAGS: "--cfg docsrs"
     - name: Add index file
       run: |
         mkdir host-docs
