@@ -36,8 +36,12 @@ use smallvec::SmallVec;
 use std::collections::hash_map::{Entry, HashMap};
 use std::{cmp, fmt, io, net::IpAddr, pin::Pin, task::Context, task::Poll, time::Instant};
 
-/// Trait used to provide the network interface watcher to [`GenMdns`].
-pub trait WatcherProvider {
+/// The interface for non-blocking TCP I/O providers.
+pub trait Provider {
+    /// The Async Socket type.
+    type Socket;
+    /// The Async Timer type.
+    type Timer: Builder;
     /// The IfWatcher type.
     type Watcher: Stream<Item = std::io::Result<IfEvent>> + fmt::Debug + Unpin;
 
@@ -45,57 +49,67 @@ pub trait WatcherProvider {
     fn new_watcher() -> Result<Self::Watcher, std::io::Error>;
 }
 
-/// The type of a [`GenMdns`] using the `async-io` implementation.
+/// The type of a [`Behaviour`] using the `async-io` implementation.
 #[cfg(feature = "async-io")]
 pub mod async_io {
-    use super::WatcherProvider;
+    use super::Provider;
     use crate::behaviour::{socket::asio::AsyncUdpSocket, timer::asio::AsyncTimer};
     use if_watch::smol::IfWatcher;
 
-    pub type Behaviour = super::Behaviour<AsyncUdpSocket, AsyncTimer>;
+    #[doc(hidden)]
+    pub enum AsyncIo {}
 
-    impl WatcherProvider for Behaviour {
+    impl Provider for AsyncIo {
+        type Socket = AsyncUdpSocket;
+        type Timer = AsyncTimer;
         type Watcher = IfWatcher;
 
         fn new_watcher() -> Result<Self::Watcher, std::io::Error> {
             IfWatcher::new()
         }
     }
+
+    pub type Behaviour = super::Behaviour<AsyncIo>;
 }
 
-/// The type of a [`GenMdns`] using the `tokio` implementation.
+/// The type of a [`Behaviour`] using the `tokio` implementation.
 #[cfg(feature = "tokio")]
 pub mod tokio {
-    use super::WatcherProvider;
+    use super::Provider;
     use crate::behaviour::{socket::tokio::TokioUdpSocket, timer::tokio::TokioTimer};
     use if_watch::tokio::IfWatcher;
 
-    pub type Behaviour = super::Behaviour<TokioUdpSocket, TokioTimer>;
+    #[doc(hidden)]
+    pub enum Tokio {}
 
-    impl WatcherProvider for Behaviour {
+    impl Provider for Tokio {
+        type Socket = TokioUdpSocket;
+        type Timer = TokioTimer;
         type Watcher = IfWatcher;
 
         fn new_watcher() -> Result<Self::Watcher, std::io::Error> {
             IfWatcher::new()
         }
     }
+
+    pub type Behaviour = super::Behaviour<Tokio>;
 }
 
 /// A `NetworkBehaviour` for mDNS. Automatically discovers peers on the local network and adds
 /// them to the topology.
 #[derive(Debug)]
-pub struct Behaviour<S, T>
+pub struct Behaviour<P>
 where
-    Self: WatcherProvider,
+    P: Provider,
 {
     /// InterfaceState config.
     config: Config,
 
     /// Iface watcher.
-    if_watch: <Self as WatcherProvider>::Watcher,
+    if_watch: P::Watcher,
 
     /// Mdns interface states.
-    iface_states: HashMap<IpAddr, InterfaceState<S, T>>,
+    iface_states: HashMap<IpAddr, InterfaceState<P::Socket, P::Timer>>,
 
     /// List of nodes that we have discovered, the address, and when their TTL expires.
     ///
@@ -106,19 +120,19 @@ where
     /// Future that fires when the TTL of at least one node in `discovered_nodes` expires.
     ///
     /// `None` if `discovered_nodes` is empty.
-    closest_expiration: Option<T>,
+    closest_expiration: Option<P::Timer>,
 }
 
-impl<S, T> Behaviour<S, T>
+impl<P> Behaviour<P>
 where
-    Self: WatcherProvider,
-    T: Builder,
+    P: Provider,
+    P::Timer: Builder,
 {
     /// Builds a new `Mdns` behaviour.
     pub fn new(config: Config) -> io::Result<Self> {
         Ok(Self {
             config,
-            if_watch: Self::new_watcher()?,
+            if_watch: P::new_watcher()?,
             iface_states: Default::default(),
             discovered_nodes: Default::default(),
             closest_expiration: Default::default(),
@@ -143,15 +157,15 @@ where
                 *expires = now;
             }
         }
-        self.closest_expiration = Some(T::at(now));
+        self.closest_expiration = Some(P::Timer::at(now));
     }
 }
 
-impl<S, T> NetworkBehaviour for Behaviour<S, T>
+impl<P> NetworkBehaviour for Behaviour<P>
 where
-    Self: WatcherProvider,
-    T: Builder + Stream,
-    S: AsyncSocket,
+    P: Provider + 'static,
+    P::Timer: Builder + Stream,
+    P::Socket: AsyncSocket,
 {
     type ConnectionHandler = dummy::ConnectionHandler;
     type OutEvent = Event;
@@ -276,7 +290,7 @@ where
             return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event));
         }
         if let Some(closest_expiration) = closest_expiration {
-            let mut timer = T::at(closest_expiration);
+            let mut timer = P::Timer::at(closest_expiration);
             let _ = Pin::new(&mut timer).poll_next(cx);
 
             self.closest_expiration = Some(timer);
