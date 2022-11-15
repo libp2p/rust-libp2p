@@ -26,7 +26,7 @@ use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper};
 use either::Either;
 use libp2p_core::either::{EitherError, EitherOutput};
 use libp2p_core::upgrade::{EitherUpgrade, UpgradeError};
-use libp2p_core::{ConnectedPoint, Multiaddr, PeerId};
+use libp2p_core::Multiaddr;
 use std::task::{Context, Poll};
 
 /// Implementation of a [`ConnectionHandler`] that represents either of two [`ConnectionHandler`]

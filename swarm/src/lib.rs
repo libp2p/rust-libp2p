@@ -94,7 +94,6 @@ use libp2p_core::{
     multihash::Multihash,
     muxing::StreamMuxerBox,
     transport::{self, ListenerId, TransportError, TransportEvent},
-    upgrade::ProtocolName,
     Endpoint, Executor, Multiaddr, Negotiated, PeerId, Transport,
 };
 use registry::{AddressIntoIter, Addresses};
@@ -108,7 +107,6 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
 };
-use upgrade::UpgradeInfoSend as _;
 
 /// Substream for which a protocol has been chosen.
 ///
@@ -1363,18 +1361,7 @@ where
     }
 
     /// Builds a `Swarm` with the current configuration.
-    pub fn build(mut self) -> Swarm<TBehaviour> {
-        let supported_protocols = todo!();
-
-        // let supported_protocols = self
-        //     .behaviour
-        //     .new_handler()
-        //     .inbound_protocol()
-        //     .protocol_info()
-        //     .into_iter()
-        //     .map(|info| info.protocol_name().to_vec())
-        //     .collect();
-
+    pub fn build(self) -> Swarm<TBehaviour> {
         // If no executor has been explicitly configured, try to set up a thread pool.
         let pool_config =
             self.pool_config.or_else_with_executor(|| {
@@ -1395,7 +1382,7 @@ where
             transport: self.transport,
             pool: Pool::new(self.local_peer_id, pool_config, self.connection_limits),
             behaviour: self.behaviour,
-            supported_protocols,
+            supported_protocols: Default::default(),
             listened_addrs: HashMap::new(),
             external_addrs: Addresses::default(),
             banned_peers: HashSet::new(),

@@ -32,6 +32,7 @@ use libp2p_swarm::{
     dummy, ConnectionHandler, ConnectionHandlerUpgrErr, DialError, NetworkBehaviour,
     NetworkBehaviourAction, NotifyHandler, PollParameters,
 };
+use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::task::{Context, Poll};
 use thiserror::Error;
@@ -73,6 +74,10 @@ pub struct Behaviour {
 
     /// All direct (non-relayed) connections.
     direct_connections: HashMap<PeerId, HashSet<ConnectionId>>,
+
+    awaiting_direct_inbound_connections: HashMap<PeerId, ConnectionId>,
+
+    awaiting_direct_outbound_connections: HashMap<PeerId, (ConnectionId, u8)>,
 }
 
 type Handler =
@@ -83,6 +88,8 @@ impl Behaviour {
         Behaviour {
             queued_actions: Default::default(),
             direct_connections: Default::default(),
+            awaiting_direct_inbound_connections: Default::default(),
+            awaiting_direct_outbound_connections: Default::default(),
         }
     }
 }
@@ -96,9 +103,53 @@ impl NetworkBehaviour for Behaviour {
         peer: &PeerId,
         connected_point: &ConnectedPoint,
     ) -> Self::ConnectionHandler {
-        // handler::Prototype::UnknownConnection
+        match (
+            self.awaiting_direct_inbound_connections.entry(*peer),
+            self.awaiting_direct_outbound_connections.entry(*peer),
+        ) {
+            (Entry::Vacant(_), Entry::Occupied(occupied)) => {
+                if connected_point.is_relayed() {
+                    log::debug!(
+                        "Unexpected relay connection whilst awaiting direct outbound connection"
+                    );
 
-        todo!()
+                    return Either::Left(handler::relayed::Handler::new(connected_point.clone()));
+                }
+
+                let (relayed_connection_id, _) = occupied.remove();
+
+                Either::Right(Either::Left(handler::direct::Handler::new(
+                    relayed_connection_id,
+                )))
+            }
+            (Entry::Occupied(occupied), Entry::Vacant(_)) => {
+                if connected_point.is_relayed() {
+                    log::debug!(
+                        "Unexpected relay connection whilst awaiting direct inbound connection"
+                    );
+
+                    return Either::Left(handler::relayed::Handler::new(connected_point.clone()));
+                }
+
+                let relayed_connection_id = occupied.remove();
+
+                Either::Right(Either::Left(handler::direct::Handler::new(
+                    relayed_connection_id,
+                )))
+            }
+            (Entry::Vacant(_), Entry::Vacant(_)) => {
+                if connected_point.is_relayed() {
+                    Either::Right(Either::Right(dummy::ConnectionHandler))
+                } else {
+                    Either::Left(handler::relayed::Handler::new(connected_point.clone()))
+                }
+            }
+            (Entry::Occupied(_), Entry::Occupied(_)) => {
+                debug_assert!(false, "Should not have a pending outbound and pending inbound connection to same peer simultaneously");
+
+                Either::Right(Either::Right(dummy::ConnectionHandler))
+            }
+        }
     }
 
     fn addresses_of_peer(&mut self, _peer_id: &PeerId) -> Vec<Multiaddr> {
@@ -150,38 +201,39 @@ impl NetworkBehaviour for Behaviour {
         }
     }
 
-    fn inject_dial_failure(&mut self, _peer_id: Option<PeerId>, _error: &DialError) {
-        // TODO: Track state in behaviour
-        // if let Some(handler::Prototype::DirectConnection {
-        //     relayed_connection_id,
-        //     role: handler::Role::Initiator { attempt },
-        // }) = dial_payload
-        // {
-        //     let peer_id = _peer_id.expect("Peer of `Prototype::DirectConnection` is always known.");
-        //     if attempt < MAX_NUMBER_OF_UPGRADE_ATTEMPTS {
-        //         self.queued_actions.push_back(ActionBuilder::Connect {
-        //             peer_id,
-        //             handler: NotifyHandler::One(relayed_connection_id),
-        //             attempt: attempt + 1,
-        //         });
-        //     } else {
-        //         self.queued_actions.extend([
-        //             NetworkBehaviourAction::NotifyHandler {
-        //                 peer_id,
-        //                 handler: NotifyHandler::One(relayed_connection_id),
-        //                 event: Either::Left(
-        //                     handler::relayed::Command::UpgradeFinishedDontKeepAlive,
-        //                 ),
-        //             }
-        //             .into(),
-        //             NetworkBehaviourAction::GenerateEvent(Event::DirectConnectionUpgradeFailed {
-        //                 remote_peer_id: peer_id,
-        //                 error: UpgradeError::Dial,
-        //             })
-        //             .into(),
-        //         ]);
-        //     }
-        // }
+    fn inject_dial_failure(&mut self, maybe_peer_id: Option<PeerId>, _error: &DialError) {
+        let peer_id = match maybe_peer_id {
+            Some(peer_id) => peer_id,
+            None => return,
+        };
+
+        let (relayed_connection_id, attempt) =
+            match self.awaiting_direct_outbound_connections.remove(&peer_id) {
+                Some((relayed_connection_id, attempt)) => (relayed_connection_id, attempt),
+                None => return,
+            };
+
+        if attempt < MAX_NUMBER_OF_UPGRADE_ATTEMPTS {
+            self.queued_actions.push_back(ActionBuilder::Connect {
+                peer_id,
+                handler: NotifyHandler::One(relayed_connection_id),
+                attempt: attempt + 1,
+            });
+        } else {
+            self.queued_actions.extend([
+                NetworkBehaviourAction::NotifyHandler {
+                    peer_id,
+                    handler: NotifyHandler::One(relayed_connection_id),
+                    event: Either::Left(handler::relayed::Command::UpgradeFinishedDontKeepAlive),
+                }
+                .into(),
+                NetworkBehaviourAction::GenerateEvent(Event::DirectConnectionUpgradeFailed {
+                    remote_peer_id: peer_id,
+                    error: UpgradeError::Dial,
+                })
+                .into(),
+            ]);
+        }
     }
 
     fn inject_connection_closed(
@@ -249,13 +301,11 @@ impl NetworkBehaviour for Behaviour {
                             .addresses(remote_addrs)
                             .condition(dial_opts::PeerCondition::Always)
                             .build(),
-                        // dial_payload: handler::Prototype::DirectConnection {
-                        //     relayed_connection_id: connection,
-                        //     role: handler::Role::Listener,
-                        // },
                     }
                     .into(),
                 );
+                self.awaiting_direct_inbound_connections
+                    .insert(event_source, connection);
             }
             Either::Left(handler::relayed::Event::OutboundNegotiationFailed { error }) => {
                 self.queued_actions.push_back(
@@ -277,13 +327,11 @@ impl NetworkBehaviour for Behaviour {
                             .addresses(remote_addrs)
                             .override_role()
                             .build(),
-                        // dial_payload: handler::Prototype::DirectConnection {
-                        //     relayed_connection_id: connection,
-                        //     role: handler::Role::Initiator { attempt },
-                        // },
                     }
                     .into(),
                 );
+                self.awaiting_direct_outbound_connections
+                    .insert(event_source, (connection, attempt));
             }
             Either::Right(Either::Left(
                 handler::direct::Event::DirectConnectionUpgradeSucceeded {

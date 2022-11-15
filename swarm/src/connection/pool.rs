@@ -433,9 +433,7 @@ where
         TTrans: Send,
         TTrans::Dial: Send + 'static,
     {
-        if let Err(limit) = self.counters.check_max_pending_outgoing() {
-            return Err(limit);
-        };
+        self.counters.check_max_pending_outgoing()?;
 
         let dial = ConcurrentDial::new(
             dials,

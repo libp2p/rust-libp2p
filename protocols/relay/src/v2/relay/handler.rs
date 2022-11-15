@@ -23,7 +23,6 @@ use crate::v2::message_proto::Status;
 use crate::v2::protocol::{inbound_hop, outbound_stop};
 use crate::v2::relay::CircuitId;
 use bytes::Bytes;
-use either::Either;
 use futures::channel::oneshot::{self, Canceled};
 use futures::future::{BoxFuture, FutureExt, TryFutureExt};
 use futures::io::AsyncWriteExt;
@@ -33,10 +32,9 @@ use instant::Instant;
 use libp2p_core::connection::ConnectionId;
 use libp2p_core::either::EitherError;
 use libp2p_core::{upgrade, ConnectedPoint, Multiaddr, PeerId};
-use libp2p_swarm::handler::SendWrapper;
 use libp2p_swarm::handler::{InboundUpgradeSend, OutboundUpgradeSend};
 use libp2p_swarm::{
-    dummy, ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
+    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
     NegotiatedSubstream, SubstreamProtocol,
 };
 use std::collections::VecDeque;
@@ -336,44 +334,6 @@ impl fmt::Debug for Event {
         }
     }
 }
-
-pub struct Prototype {
-    pub config: Config,
-}
-
-// TODO
-// impl IntoConnectionHandler for Prototype {
-//     type Handler = Either<Handler, dummy::ConnectionHandler>;
-//
-//     fn into_handler(self, _remote_peer_id: &PeerId, endpoint: &ConnectedPoint) -> Self::Handler {
-//         if endpoint.is_relayed() {
-//             // Deny all substreams on relayed connection.
-//             Either::Right(dummy::ConnectionHandler)
-//         } else {
-//             Either::Left(Handler {
-//                 endpoint: endpoint.clone(),
-//                 config: self.config,
-//                 queued_events: Default::default(),
-//                 pending_error: Default::default(),
-//                 reservation_request_future: Default::default(),
-//                 circuit_accept_futures: Default::default(),
-//                 circuit_deny_futures: Default::default(),
-//                 alive_lend_out_substreams: Default::default(),
-//                 circuits: Default::default(),
-//                 active_reservation: Default::default(),
-//                 keep_alive: KeepAlive::Yes,
-//             })
-//         }
-//     }
-//
-//     fn inbound_protocol(&self) -> <Self::Handler as ConnectionHandler>::InboundProtocol {
-//         upgrade::EitherUpgrade::A(SendWrapper(inbound_hop::Upgrade {
-//             reservation_duration: self.config.reservation_duration,
-//             max_circuit_duration: self.config.max_circuit_duration,
-//             max_circuit_bytes: self.config.max_circuit_bytes,
-//         }))
-//     }
-// }
 
 /// [`ConnectionHandler`] that manages substreams for a relay on a single
 /// connection with a peer.

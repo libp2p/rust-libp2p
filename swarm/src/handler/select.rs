@@ -27,7 +27,7 @@ use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper};
 use libp2p_core::{
     either::{EitherError, EitherOutput},
     upgrade::{EitherUpgrade, NegotiationError, ProtocolError, SelectUpgrade, UpgradeError},
-    ConnectedPoint, Multiaddr, PeerId,
+    Multiaddr,
 };
 use std::{cmp, task::Context, task::Poll};
 

@@ -37,7 +37,7 @@ use libp2p_core::connection::{ConnectedPoint, ConnectionId};
 use libp2p_core::{Multiaddr, PeerId};
 use libp2p_swarm::behaviour::THandlerInEvent;
 use libp2p_swarm::dial_opts::DialOpts;
-use libp2p_swarm::dummy;
+use libp2p_swarm::{dummy, ConnectionHandler};
 use libp2p_swarm::{
     ConnectionHandlerUpgrErr, NegotiatedSubstream, NetworkBehaviour, NetworkBehaviourAction,
     NotifyHandler, PollParameters,
@@ -98,6 +98,8 @@ pub struct Client {
     /// connection.
     directly_connected_peers: HashMap<PeerId, Vec<ConnectionId>>,
 
+    initial_events: HashMap<PeerId, handler::In>,
+
     /// Queue of actions to return when polled.
     queued_actions: VecDeque<Event>,
 }
@@ -111,6 +113,7 @@ impl Client {
             local_peer_id,
             from_transport,
             directly_connected_peers: Default::default(),
+            initial_events: Default::default(),
             queued_actions: Default::default(),
         };
         (transport, behaviour)
@@ -127,15 +130,14 @@ impl NetworkBehaviour for Client {
         connected_point: &ConnectedPoint,
     ) -> Self::ConnectionHandler {
         if connected_point.is_relayed() {
-            // if let Some(event) = self.initial_in {
-            //     log::debug!(
-            //         "Established relayed instead of direct connection to {:?}, \
-            //          dropping initial in event {:?}.",
-            //         remote_peer_id, event
-            //     );
-            // }
-
-            // TODO: Check local state for initial in?
+            if let Some(event) = self.initial_events.remove(peer) {
+                log::debug!(
+                    "Established relayed instead of direct connection to {:?}, \
+                     dropping initial in event {:?}.",
+                    peer,
+                    event
+                );
+            }
 
             // Deny all substreams on relayed connection.
             Either::Right(dummy::ConnectionHandler)
@@ -146,10 +148,9 @@ impl NetworkBehaviour for Client {
                 connected_point.get_remote_address().clone(),
             );
 
-            // if let Some(event) = self.initial_in {
-            //     handler.inject_event(event)
-            // }
-            // TODO: Grab event from local state
+            if let Some(event) = self.initial_events.remove(peer) {
+                handler.inject_event(event)
+            }
 
             Either::Left(handler)
         }
@@ -285,13 +286,17 @@ impl NetworkBehaviour for Client {
                         handler: NotifyHandler::One(*connection_id),
                         event: Either::Left(handler::In::Reserve { to_listener }),
                     },
-                    None => NetworkBehaviourAction::Dial {
-                        opts: DialOpts::peer_id(relay_peer_id)
-                            .addresses(vec![relay_addr])
-                            .extend_addresses_through_behaviour()
-                            .build(),
-                        // dial_payload: handler::In::Reserve { to_listener }, TODO
-                    },
+                    None => {
+                        self.initial_events
+                            .insert(relay_peer_id, handler::In::Reserve { to_listener });
+
+                        NetworkBehaviourAction::Dial {
+                            opts: DialOpts::peer_id(relay_peer_id)
+                                .addresses(vec![relay_addr])
+                                .extend_addresses_through_behaviour()
+                                .build(),
+                        }
+                    }
                 }
             }
             Some(transport::TransportToBehaviourMsg::DialReq {
@@ -314,16 +319,22 @@ impl NetworkBehaviour for Client {
                             dst_peer_id,
                         }),
                     },
-                    None => NetworkBehaviourAction::Dial {
-                        opts: DialOpts::peer_id(relay_peer_id)
-                            .addresses(vec![relay_addr])
-                            .extend_addresses_through_behaviour()
-                            .build(),
-                        // dial_payload: handler::In::EstablishCircuit {
-                        //     send_back,
-                        //     dst_peer_id,
-                        // },
-                    },
+                    None => {
+                        self.initial_events.insert(
+                            relay_peer_id,
+                            handler::In::EstablishCircuit {
+                                send_back,
+                                dst_peer_id,
+                            },
+                        );
+
+                        NetworkBehaviourAction::Dial {
+                            opts: DialOpts::peer_id(relay_peer_id)
+                                .addresses(vec![relay_addr])
+                                .extend_addresses_through_behaviour()
+                                .build(),
+                        }
+                    }
                 }
             }
             None => unreachable!(
