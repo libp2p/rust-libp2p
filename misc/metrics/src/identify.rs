@@ -18,9 +18,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::protocol_stack;
 use libp2p_core::PeerId;
-use prometheus_client::encoding::text::{EncodeMetric, Encoder};
+use prometheus_client::encoding::text::{Encode, EncodeMetric, Encoder};
 use prometheus_client::metrics::counter::Counter;
+use prometheus_client::metrics::family::Family;
 use prometheus_client::metrics::histogram::{exponential_buckets, Histogram};
 use prometheus_client::metrics::MetricType;
 use prometheus_client::registry::Registry;
@@ -36,6 +38,7 @@ pub struct Metrics {
     received_info_listen_addrs: Histogram,
     received_info_protocols: Histogram,
     sent: Counter,
+    listen_addresses: Family<AddressLabels, Counter>,
 }
 
 impl Metrics {
@@ -100,6 +103,13 @@ impl Metrics {
             Box::new(sent.clone()),
         );
 
+        let listen_addresses = Family::default();
+        sub_registry.register(
+            "listen_addresses",
+            "Number of listen addresses for remote peer per protocol stack",
+            Box::new(listen_addresses.clone()),
+        );
+
         Self {
             protocols,
             error,
@@ -108,6 +118,7 @@ impl Metrics {
             received_info_listen_addrs,
             received_info_protocols,
             sent,
+            listen_addresses,
         }
     }
 }
@@ -167,6 +178,13 @@ impl super::Recorder<libp2p_identify::Event> for Metrics {
                     .observe(info.protocols.len() as f64);
                 self.received_info_listen_addrs
                     .observe(info.listen_addrs.len() as f64);
+                for listen_addr in &info.listen_addrs {
+                    self.listen_addresses
+                        .get_or_create(&AddressLabels {
+                            protocols: protocol_stack::as_string(listen_addr),
+                        })
+                        .inc();
+                }
             }
             libp2p_identify::Event::Sent { .. } => {
                 self.sent.inc();
@@ -188,6 +206,11 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
             }
         }
     }
+}
+
+#[derive(Encode, Hash, Clone, Eq, PartialEq)]
+struct AddressLabels {
+    protocols: String,
 }
 
 #[derive(Default, Clone)]
