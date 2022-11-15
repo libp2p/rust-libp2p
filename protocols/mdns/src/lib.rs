@@ -50,6 +50,13 @@ pub type MdnsConfig = Config;
 )]
 pub type MdnsEvent = Event;
 
+#[deprecated(
+    since = "0.42.0",
+    note = "Use the async-io prefixed `Mdns`, i.e. `libp2p::mdns::async_io::Mdns`"
+)]
+#[cfg(feature = "async-io")]
+pub type Mdns = async_io::Behaviour;
+
 mod behaviour;
 pub use crate::behaviour::{Behaviour, Event};
 
