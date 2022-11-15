@@ -97,11 +97,8 @@ where
             // read and write from a socket in entire messages instead of
             // raw bytes!
 
-            Framed::new(socket, FloodsubProtocol::new());
-            let packet = upgrade::read_length_prefixed(&mut socket, MAX_MESSAGE_LEN_BYTES).await?;
-            // Replace with prost_codec::Codec
-            let rpc = self.codec.decode();
-            // prost_codec::Codec::<rpc_proto::Rpc>::decode(&packet[..]).map_err(DecodeError)?;
+            let mut framed = Framed::new(socket, FloodsubProtocol::new());
+            let rpc = framed.next().await; // TODO Needs error handling
 
             let mut messages = Vec::with_capacity(rpc.publish.len());
             for publish in rpc.publish.into_iter() {
