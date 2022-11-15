@@ -656,6 +656,7 @@ where
                 endpoint,
                 other_established_connection_ids,
                 concurrent_dial_errors,
+                supported_protocols,
             } => {
                 if self.banned_peers.contains(&peer_id) {
                     // Mark the connection for the banned peer as banned, thus withholding any
@@ -690,6 +691,8 @@ where
                         failed_addresses.as_ref(),
                         non_banned_established,
                     );
+                    self.supported_protocols = supported_protocols;
+
                     return Some(SwarmEvent::ConnectionEstablished {
                         peer_id,
                         num_established,

@@ -20,6 +20,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::connection::Connection;
+use crate::upgrade::UpgradeInfoSend;
 use crate::{
     behaviour::{THandlerInEvent, THandlerOutEvent},
     connection::{
@@ -40,6 +41,8 @@ use futures::{
 };
 use libp2p_core::connection::{ConnectionId, Endpoint, PendingPoint};
 use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerExt};
+use libp2p_core::ProtocolName;
+use smallvec::SmallVec;
 use std::{
     collections::{hash_map, HashMap},
     convert::TryFrom as _,
@@ -209,6 +212,8 @@ where
         /// Addresses are dialed in parallel. Contains the addresses and errors
         /// of dial attempts that failed before the one successful dial.
         concurrent_dial_errors: Option<Vec<(Multiaddr, TransportError<TTrans::Error>)>>,
+
+        supported_protocols: SmallVec<[Vec<u8>; 16]>,
     },
 
     /// An established connection was closed.
@@ -730,9 +735,17 @@ where
                         },
                     );
 
+                    let handler = new_handler_fn(&obtained_peer_id, &endpoint);
+                    let supported_protocols = handler
+                        .listen_protocol()
+                        .upgrade()
+                        .protocol_info()
+                        .map(|p| p.protocol_name().to_owned())
+                        .collect();
+
                     let connection = Connection::new(
                         muxer,
-                        new_handler_fn(&obtained_peer_id, &endpoint),
+                        handler,
                         self.substream_upgrade_protocol_override,
                         self.max_negotiating_inbound_streams,
                     );
@@ -753,6 +766,7 @@ where
                         id,
                         other_established_connection_ids,
                         concurrent_dial_errors,
+                        supported_protocols,
                     });
                 }
                 task::PendingConnectionEvent::PendingFailed { id, error } => {

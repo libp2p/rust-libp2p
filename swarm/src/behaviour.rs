@@ -259,7 +259,7 @@ pub trait PollParameters {
     ///
     /// The iterator's elements are the ASCII names as reported on the wire.
     ///
-    /// Note that the list is computed once at initialization and never refreshed.
+    /// This list refreshed every time a new connection is established.
     fn supported_protocols(&self) -> Self::SupportedProtocolsIter;
 
     /// Returns the list of the addresses we're listening on.
