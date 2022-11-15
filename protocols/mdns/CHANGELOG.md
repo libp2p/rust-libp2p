@@ -5,7 +5,7 @@
 - Update to `libp2p-swarm` `v0.41.0`.
 
 - Update to `if-watch` `3.0.0` and both rename `TokioMdns` to `Behaviour` living in `tokio::Behaviour`,
-and move and rename `Mdns` to `async_io::Behaviour`. See [PR 3096]
+and move and rename `Mdns` to `async_io::Behaviour`. See [PR 3096].
 
 - Remove the remaning `Mdns` prefixes from types as per [discussion 2174].
   I.e the `Mdns` prefix has been removed from various types like `MdnsEvent`.
