@@ -29,6 +29,7 @@ full = [
     "ping",
     "plaintext",
     "pnet",
+    "quic",
     "macros",
     "relay",
     "rendezvous",
@@ -46,7 +47,7 @@ full = [
     "websocket",
     "yamux",
 ]
-async-std = ["libp2p-mdns?/async-io", "libp2p-tcp?/async-io", "libp2p-dns?/async-std"]
+async-std = ["libp2p-mdns?/async-io", "libp2p-tcp?/async-io", "libp2p-dns?/async-std", "libp2p-quic?/async-std"]
 autonat = ["dep:libp2p-autonat"]
 dcutr = ["dep:libp2p-dcutr", "libp2p-metrics?/dcutr"]
 deflate = ["dep:libp2p-deflate"]
@@ -65,6 +66,7 @@ noise = ["dep:libp2p-noise"]
 ping = ["dep:libp2p-ping", "libp2p-metrics?/ping"]
 plaintext = ["dep:libp2p-plaintext"]
 pnet = ["dep:libp2p-pnet"]
+quic = ["dep:libp2p-quic"]
 relay = ["dep:libp2p-relay", "libp2p-metrics?/relay"]
 rendezvous = ["dep:libp2p-rendezvous"]
 request-response = ["dep:libp2p-request-response"]
@@ -72,7 +74,7 @@ rsa = ["libp2p-core/rsa"]
 secp256k1 = ["libp2p-core/secp256k1"]
 serde = ["libp2p-core/serde", "libp2p-kad?/serde", "libp2p-gossipsub?/serde"]
 tcp = ["dep:libp2p-tcp"]
-tokio = ["libp2p-mdns?/tokio", "libp2p-tcp?/tokio", "libp2p-dns?/tokio"]
+tokio = ["libp2p-mdns?/tokio", "libp2p-tcp?/tokio", "libp2p-dns?/tokio", "libp2p-quic?/tokio"]
 uds = ["dep:libp2p-uds"]
 wasm-bindgen = ["futures-timer/wasm-bindgen", "instant/wasm-bindgen", "getrandom/js"]
 wasm-ext = ["dep:libp2p-wasm-ext"]
@@ -115,6 +117,7 @@ smallvec = "1.6.1"
 libp2p-deflate = { version = "0.38.0", path = "transports/deflate", optional = true }
 libp2p-dns = { version = "0.38.0", path = "transports/dns", optional = true }
 libp2p-mdns = { version = "0.42.0", path = "protocols/mdns", optional = true }
+libp2p-quic = { version = "0.7.0-alpha", path = "transports/quic", optional = true }
 libp2p-tcp = { version = "0.38.0", path = "transports/tcp", optional = true }
 libp2p-websocket = { version = "0.40.0", path = "transports/websocket", optional = true }
 libp2p-tls = { version = "0.1.0-alpha", path = "transports/tls", optional = true }
@@ -160,6 +163,7 @@ members = [
     "transports/tls",
     "transports/plaintext",
     "transports/pnet",
+    "transports/quic",
     "transports/tcp",
     "transports/uds",
     "transports/websocket",

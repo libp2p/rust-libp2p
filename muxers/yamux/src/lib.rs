@@ -31,6 +31,7 @@ use futures::{
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use std::collections::VecDeque;
+use std::task::Waker;
 use std::{
     fmt, io, iter, mem,
     pin::Pin,
@@ -55,6 +56,8 @@ pub struct Yamux<S> {
     /// This buffer stores inbound streams that are created whilst [`StreamMuxer::poll`] is called.
     /// Once the buffer is full, new inbound streams are dropped.
     inbound_stream_buffer: VecDeque<yamux::Stream>,
+    /// Waker to be called when new inbound streams are available.
+    inbound_stream_waker: Option<Waker>,
 }
 
 const MAX_BUFFERED_INBOUND_STREAMS: usize = 25;
@@ -81,6 +84,7 @@ where
             },
             control: ctrl,
             inbound_stream_buffer: VecDeque::default(),
+            inbound_stream_waker: None,
         }
     }
 }
@@ -101,6 +105,7 @@ where
             },
             control: ctrl,
             inbound_stream_buffer: VecDeque::default(),
+            inbound_stream_waker: None,
         }
     }
 }
@@ -122,6 +127,8 @@ where
             return Poll::Ready(Ok(stream));
         }
 
+        self.inbound_stream_waker = Some(cx.waker().clone());
+
         self.poll_inner(cx)
     }
 
@@ -140,17 +147,22 @@ where
     ) -> Poll<Result<StreamMuxerEvent, Self::Error>> {
         let this = self.get_mut();
 
-        loop {
-            let inbound_stream = ready!(this.poll_inner(cx))?;
+        let inbound_stream = ready!(this.poll_inner(cx))?;
 
-            if this.inbound_stream_buffer.len() >= MAX_BUFFERED_INBOUND_STREAMS {
-                log::warn!("dropping {inbound_stream} because buffer is full");
-                drop(inbound_stream);
-                continue;
-            }
-
+        if this.inbound_stream_buffer.len() >= MAX_BUFFERED_INBOUND_STREAMS {
+            log::warn!("dropping {inbound_stream} because buffer is full");
+            drop(inbound_stream);
+        } else {
             this.inbound_stream_buffer.push_back(inbound_stream);
+
+            if let Some(waker) = this.inbound_stream_waker.take() {
+                waker.wake()
+            }
         }
+
+        // Schedule an immediate wake-up, allowing other code to run.
+        cx.waker().wake_by_ref();
+        Poll::Pending
     }
 
     fn poll_close(mut self: Pin<&mut Self>, c: &mut Context<'_>) -> Poll<YamuxResult<()>> {
