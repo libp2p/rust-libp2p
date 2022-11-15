@@ -59,11 +59,10 @@ impl Default for FloodsubProtocol {
     }
 }
 
-// The current error: Maybe if this was in prost_codec everyone would be happier
+// TODO: Maybe if this was in prost_codec everyone would be happier
 impl Clone for FloodsubProtocol {
     fn clone(&self) -> Self {
         Self {
-            // TODO: No. This is not the way.
             codec: prost_codec::Codec::new(MAX_MESSAGE_LEN_BYTES),
         }
     }
