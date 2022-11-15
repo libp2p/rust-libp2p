@@ -49,7 +49,7 @@ jobs:
       # cargo separates build artifacts by Rust compiler version, meaning we can compile with different versions but cache all artifacts.
       - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
         with:
-          key: msrv-${{ steps.parse-msrv.outputs.version }}
+          key: ${{ matrix.crate }}-msrv-${{ steps.parse-msrv.outputs.version }}
 
       - name: Check if ${{ matrix.crate }} compiles on MSRV (Rust ${{ steps.parse-msrv.outputs.version }})
         run: cargo +${{ steps.parse-msrv.outputs.version }} check --package ${{ matrix.crate }} --all-features
