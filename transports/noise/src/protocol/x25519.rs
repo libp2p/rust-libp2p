@@ -25,9 +25,9 @@
 
 use crate::{NoiseConfig, NoiseError, Protocol, ProtocolParams};
 use curve25519_dalek::edwards::CompressedEdwardsY;
-use lazy_static::lazy_static;
 use libp2p_core::UpgradeInfo;
 use libp2p_core::{identity, identity::ed25519};
+use once_cell::sync::Lazy;
 use rand::Rng;
 use sha2::{Digest, Sha512};
 use x25519_dalek::{x25519, X25519_BASEPOINT_BYTES};
@@ -35,20 +35,24 @@ use zeroize::Zeroize;
 
 use super::*;
 
-lazy_static! {
-    static ref PARAMS_IK: ProtocolParams = "Noise_IK_25519_ChaChaPoly_SHA256"
+static PARAMS_IK: Lazy<ProtocolParams> = Lazy::new(|| {
+    "Noise_IK_25519_ChaChaPoly_SHA256"
         .parse()
         .map(ProtocolParams)
-        .expect("Invalid protocol name");
-    static ref PARAMS_IX: ProtocolParams = "Noise_IX_25519_ChaChaPoly_SHA256"
+        .expect("Invalid protocol name")
+});
+static PARAMS_IX: Lazy<ProtocolParams> = Lazy::new(|| {
+    "Noise_IX_25519_ChaChaPoly_SHA256"
         .parse()
         .map(ProtocolParams)
-        .expect("Invalid protocol name");
-    static ref PARAMS_XX: ProtocolParams = "Noise_XX_25519_ChaChaPoly_SHA256"
+        .expect("Invalid protocol name")
+});
+static PARAMS_XX: Lazy<ProtocolParams> = Lazy::new(|| {
+    "Noise_XX_25519_ChaChaPoly_SHA256"
         .parse()
         .map(ProtocolParams)
-        .expect("Invalid protocol name");
-}
+        .expect("Invalid protocol name")
+});
 
 /// A X25519 key.
 #[derive(Clone)]

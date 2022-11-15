@@ -209,7 +209,7 @@ impl PublicKey {
         }
 
         let key_len = bitstr_head[1].checked_sub(1)? as usize;
-        let key_buf = asn1_buf.get(4 + oids_len + 3..4 + oids_len + 3 + key_len as usize)?;
+        let key_buf = asn1_buf.get(4 + oids_len + 3..4 + oids_len + 3 + key_len)?;
         Some(key_buf)
     }
 }

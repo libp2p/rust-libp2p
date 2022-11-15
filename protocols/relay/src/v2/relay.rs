@@ -298,8 +298,8 @@ impl NetworkBehaviour for Relay {
                     // Deny if it exceeds `max_reservations`.
                     || self
                         .reservations
-                        .iter()
-                        .map(|(_, cs)| cs.len())
+                        .values()
+                        .map(|cs| cs.len())
                         .sum::<usize>()
                         >= self.config.max_reservations
                     // Deny if it exceeds the allowed rate of reservations.
