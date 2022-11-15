@@ -14,6 +14,8 @@ jobs:
       uses: arduino/setup-protoc@v1
     - name: Checkout 
       uses: actions/checkout@v3
+    - name: Install nightly toolchain
+      run: rustup toolchain install nightly 
     - name: Build Documentation
       run: cargo +nightly doc --no-deps --workspace -F full
       env:
