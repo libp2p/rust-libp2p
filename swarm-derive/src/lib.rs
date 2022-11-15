@@ -231,7 +231,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                         let (handlers, handler) = handlers.into_inner()
                     }
                 };
-                let on = match field.ident {
+                let inject = match field.ident {
                     Some(ref i) => quote! {
                     #[allow(deprecated)]
                     self.#i.inject_connection_closed(&peer_id, &connection_id, endpoint, handler, remaining_established);},
@@ -242,7 +242,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
                 quote! {
                     #handler;
-                    #on;
+                    #inject;
                 }
             })
     };
@@ -267,7 +267,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                     }
                 };
 
-                let on = match field.ident {
+                let inject = match field.ident {
                     Some(ref i) => quote! {
                     #[allow(deprecated)]
                     self.#i.inject_dial_failure(peer_id, handler, error);},
@@ -278,7 +278,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
                 quote! {
                     #handler;
-                    #on;
+                    #inject;
                 }
             })
     };
@@ -297,7 +297,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                         }
                     };
 
-                    let on = match field.ident {
+                    let inject = match field.ident {
                         Some(ref i) => quote! {
                         #[allow(deprecated)]
                         self.#i.inject_listen_failure(local_addr, send_back_addr, handler);},
@@ -308,7 +308,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
                     quote! {
                         #handler;
-                        #on;
+                        #inject;
                     }
                 },
             )
