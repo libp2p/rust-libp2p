@@ -28,7 +28,7 @@ use libp2p::core::upgrade::SelectUpgrade;
 use libp2p::core::{identity, Multiaddr, PeerId, Transport};
 use libp2p::mplex::MplexConfig;
 use libp2p::noise::NoiseAuthenticated;
-use libp2p::swarm::{AddressScore, NetworkBehaviour, Swarm, SwarmBuilder, SwarmEvent};
+use libp2p::swarm::{AddressScore, NetworkBehaviour, Swarm, SwarmEvent};
 use libp2p::yamux::YamuxConfig;
 use std::fmt::Debug;
 use std::time::Duration;
@@ -53,11 +53,7 @@ where
         .timeout(Duration::from_secs(5))
         .boxed();
 
-    SwarmBuilder::new(transport, behaviour_fn(peer_id, identity), peer_id)
-        .executor(Box::new(|future| {
-            let _ = tokio::spawn(future);
-        }))
-        .build()
+    Swarm::with_tokio_executor(transport, behaviour_fn(peer_id, identity), peer_id)
 }
 
 fn get_rand_memory_address() -> Multiaddr {

@@ -54,10 +54,34 @@ use void::Void;
 mod concurrent_dial;
 mod task;
 
+enum ExecSwitch {
+    Executor(Box<dyn Executor + Send>),
+    LocalSpawn(FuturesUnordered<Pin<Box<dyn Future<Output = ()> + Send>>>),
+}
+
+impl ExecSwitch {
+    fn advance_local(&mut self, cx: &mut Context) {
+        match self {
+            ExecSwitch::Executor(_) => {}
+            ExecSwitch::LocalSpawn(local) => {
+                while let Poll::Ready(Some(())) = local.poll_next_unpin(cx) {}
+            }
+        }
+    }
+
+    fn spawn(&mut self, task: BoxFuture<'static, ()>) {
+        match self {
+            Self::Executor(executor) => executor.exec(task),
+            Self::LocalSpawn(local) => local.push(task),
+        }
+    }
+}
+
 /// A connection `Pool` manages a set of connections for each peer.
-pub struct Pool<THandler: IntoConnectionHandler, TTrans>
+pub struct Pool<THandler, TTrans>
 where
     TTrans: Transport,
+    THandler: IntoConnectionHandler,
 {
     local_id: PeerId,
 
@@ -93,14 +117,9 @@ where
     /// See [`Connection::max_negotiating_inbound_streams`].
     max_negotiating_inbound_streams: usize,
 
-    /// The executor to use for running the background tasks. If `None`,
-    /// the tasks are kept in `local_spawns` instead and polled on the
-    /// current thread when the [`Pool`] is polled for new events.
-    executor: Option<Box<dyn Executor + Send>>,
-
-    /// If no `executor` is configured, tasks are kept in this set and
-    /// polled on the current thread when the [`Pool`] is polled for new events.
-    local_spawns: FuturesUnordered<Pin<Box<dyn Future<Output = ()> + Send>>>,
+    /// The executor to use for running connection tasks. Can either be a global executor
+    /// or a local queue.
+    executor: ExecSwitch,
 
     /// Sender distributed to pending tasks for reporting events back
     /// to the pool.
@@ -299,6 +318,10 @@ where
             mpsc::channel(config.task_event_buffer_size);
         let (established_connection_events_tx, established_connection_events_rx) =
             mpsc::channel(config.task_event_buffer_size);
+        let executor = match config.executor {
+            Some(exec) => ExecSwitch::Executor(exec),
+            None => ExecSwitch::LocalSpawn(Default::default()),
+        };
         Pool {
             local_id,
             counters: ConnectionCounters::new(limits),
@@ -309,8 +332,7 @@ where
             dial_concurrency_factor: config.dial_concurrency_factor,
             substream_upgrade_protocol_override: config.substream_upgrade_protocol_override,
             max_negotiating_inbound_streams: config.max_negotiating_inbound_streams,
-            executor: config.executor,
-            local_spawns: FuturesUnordered::new(),
+            executor,
             pending_connection_events_tx,
             pending_connection_events_rx,
             established_connection_events_tx,
@@ -399,11 +421,7 @@ where
     }
 
     fn spawn(&mut self, task: BoxFuture<'static, ()>) {
-        if let Some(executor) = &mut self.executor {
-            executor.exec(task);
-        } else {
-            self.local_spawns.push(task);
-        }
+        self.executor.spawn(task)
     }
 }
 
@@ -820,8 +838,7 @@ where
             }
         }
 
-        // Advance the tasks in `local_spawns`.
-        while let Poll::Ready(Some(())) = self.local_spawns.poll_next_unpin(cx) {}
+        self.executor.advance_local(cx);
 
         Poll::Pending
     }
@@ -1073,34 +1090,21 @@ pub struct PoolConfig {
     max_negotiating_inbound_streams: usize,
 }
 
-impl Default for PoolConfig {
-    fn default() -> Self {
-        PoolConfig {
-            executor: None,
-            task_event_buffer_size: 32,
-            task_command_buffer_size: 7,
-            // Set to a default of 8 based on frequency of dialer connections
+impl PoolConfig {
+    pub fn new(executor: Option<Box<dyn Executor + Send>>) -> Self {
+        Self {
+            executor,
+            task_command_buffer_size: 32,
+            task_event_buffer_size: 7,
             dial_concurrency_factor: NonZeroU8::new(8).expect("8 > 0"),
             substream_upgrade_protocol_override: None,
             max_negotiating_inbound_streams: 128,
         }
     }
-}
 
-impl PoolConfig {
     /// Configures the executor to use for spawning connection background tasks.
-    pub fn with_executor(mut self, e: Box<dyn Executor + Send>) -> Self {
-        self.executor = Some(e);
-        self
-    }
-
-    /// Configures the executor to use for spawning connection background tasks,
-    /// only if no executor has already been configured.
-    pub fn or_else_with_executor<F>(mut self, f: F) -> Self
-    where
-        F: FnOnce() -> Option<Box<dyn Executor + Send>>,
-    {
-        self.executor = self.executor.or_else(f);
+    pub fn with_executor(mut self, executor: Box<dyn Executor + Send>) -> Self {
+        self.executor = Some(executor);
         self
     }
 
@@ -1173,14 +1177,5 @@ mod tests {
 
     impl Executor for Dummy {
         fn exec(&self, _: Pin<Box<dyn Future<Output = ()> + Send>>) {}
-    }
-
-    #[test]
-    fn set_executor() {
-        PoolConfig::default()
-            .with_executor(Box::new(Dummy))
-            .with_executor(Box::new(|f| {
-                async_std::task::spawn(f);
-            }));
     }
 }

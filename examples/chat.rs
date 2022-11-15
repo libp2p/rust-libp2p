@@ -115,7 +115,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         };
 
         behaviour.floodsub.subscribe(floodsub_topic.clone());
-        Swarm::new(transport, behaviour, local_peer_id)
+        Swarm::with_threadpool_executor(transport, behaviour, local_peer_id)
     };
 
     // Reach out to another node if specified
