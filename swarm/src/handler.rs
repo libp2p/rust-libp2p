@@ -126,7 +126,7 @@ pub trait ConnectionHandler: Send + 'static {
     #[deprecated(
         since = "0.41.0",
         note = "Handle `ConnectionEvent::FullyNegotiatedInbound` on `ConnectionHandler::on_connection_event` instead.
-        The default of implemention of this `inject_*` method delegates to it."
+        The default implemention of this `inject_*` method delegates to it."
     )]
     fn inject_fully_negotiated_inbound(
         &mut self,
@@ -145,7 +145,7 @@ pub trait ConnectionHandler: Send + 'static {
     #[deprecated(
         since = "0.41.0",
         note = "Handle `ConnectionEvent::FullyNegotiatedOutbound` on `ConnectionHandler::on_connection_event` instead.
-        The default of implemention of this `inject_*` method delegates to it."
+        The default implemention of this `inject_*` method delegates to it."
     )]
     fn inject_fully_negotiated_outbound(
         &mut self,
@@ -170,7 +170,7 @@ pub trait ConnectionHandler: Send + 'static {
     #[deprecated(
         since = "0.41.0",
         note = "Handle `ConnectionEvent::AddressChange` on `ConnectionHandler::on_connection_event` instead.
-        The default of implemention of this `inject_*` method delegates to it."
+        The default implemention of this `inject_*` method delegates to it."
     )]
     fn inject_address_change(&mut self, new_address: &Multiaddr) {
         self.on_connection_event(ConnectionEvent::AddressChange(AddressChange {
@@ -182,7 +182,7 @@ pub trait ConnectionHandler: Send + 'static {
     #[deprecated(
         since = "0.41.0",
         note = "Handle `ConnectionEvent::DialUpgradeError` on `ConnectionHandler::on_connection_event` instead.
-        The default of implemention of this `inject_*` method delegates to it."
+        The default implemention of this `inject_*` method delegates to it."
     )]
     fn inject_dial_upgrade_error(
         &mut self,
@@ -199,7 +199,7 @@ pub trait ConnectionHandler: Send + 'static {
     #[deprecated(
         since = "0.41.0",
         note = "Handle `ConnectionEvent::ListenUpgradeError` on `ConnectionHandler::on_connection_event` instead.
-        The default of implemention of this `inject_*` method delegates to it."
+        The default implemention of this `inject_*` method delegates to it."
     )]
     fn inject_listen_upgrade_error(
         &mut self,
@@ -278,7 +278,7 @@ pub trait ConnectionHandler: Send + 'static {
         ConnectionHandlerSelect::new(self, other)
     }
 
-    /// informs the handler about an event coming from the outside in the handler.
+    /// Informs the handler about an event from the [`NetworkBehaviour`].
     fn on_behaviour_event(&mut self, _event: Self::InEvent) {}
 
     fn on_connection_event(
@@ -298,7 +298,7 @@ pub trait ConnectionHandler: Send + 'static {
 pub enum ConnectionEvent<'a, IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IOI, OOI> {
     /// Informs the handler about the output of a successful upgrade on a new inbound substream.
     FullyNegotiatedInbound(FullyNegotiatedInbound<IP, IOI>),
-    /// Informs the handler about successful upgrade on a new outbound stream.
+    /// Informs the handler about the output of a successful upgrade on a new outbound stream.
     FullyNegotiatedOutbound(FullyNegotiatedOutbound<OP, OOI>),
     /// Informs the handler about a change in the address of the remote.
     AddressChange(AddressChange<'a>),
