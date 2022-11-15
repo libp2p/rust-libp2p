@@ -1,4 +1,4 @@
-# 0.41.1 [unreleased]
+# 0.41.1
 
 - Yield from `StreamMuxer::poll` as soon as we receive a single substream.
   This fixes [issue 3041].
