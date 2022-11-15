@@ -233,7 +233,7 @@ where
            // peer_connections.connections should never be empty.
         let mut active_connections = peer_connections.connections.len();
         for conn_id in peer_connections.connections.clone() {
-            let handler = gs.new_handler(todo!(), todo!());
+            let handler = gs.new_handler(peer_id, &fake_endpoint);
             active_connections = active_connections.checked_sub(1).unwrap();
             gs.inject_connection_closed(
                 peer_id,

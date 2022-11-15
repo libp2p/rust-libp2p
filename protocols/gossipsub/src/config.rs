@@ -889,7 +889,7 @@ mod test {
     use crate::types::PeerKind;
     use crate::Topic;
     use crate::{Gossipsub, MessageAuthenticity};
-    use libp2p_core::UpgradeInfo;
+    use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr, UpgradeInfo};
     use libp2p_swarm::{ConnectionHandler, NetworkBehaviour};
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
@@ -995,7 +995,7 @@ mod test {
         let mut gossipsub: Gossipsub =
             Gossipsub::new(MessageAuthenticity::Anonymous, builder).expect("Correct configuration");
 
-        let handler = gossipsub.new_handler(todo!(), todo!());
+        let handler = gossipsub.new_handler(&PeerId::random(), &fake_endpoint());
         let (protocol_config, _) = handler.listen_protocol().into_upgrade();
         let protocol_ids = protocol_config.protocol_info();
 
@@ -1023,7 +1023,7 @@ mod test {
         let mut gossipsub: Gossipsub =
             Gossipsub::new(MessageAuthenticity::Anonymous, builder).expect("Correct configuration");
 
-        let handler = gossipsub.new_handler(todo!(), todo!());
+        let handler = gossipsub.new_handler(&PeerId::random(), &fake_endpoint());
         let (protocol_config, _) = handler.listen_protocol().into_upgrade();
         let protocol_ids = protocol_config.protocol_info();
 
@@ -1031,5 +1031,12 @@ mod test {
 
         assert_eq!(protocol_ids[0].protocol_id, b"purple".to_vec());
         assert_eq!(protocol_ids[0].kind, PeerKind::Gossipsub);
+    }
+
+    fn fake_endpoint() -> ConnectedPoint {
+        ConnectedPoint::Dialer {
+            address: Multiaddr::empty(),
+            role_override: Endpoint::Dialer,
+        }
     }
 }
