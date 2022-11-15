@@ -46,6 +46,7 @@ jobs:
 
       # By default, this action already includes the active Rust toolchain in the cache key.
       # We also install a separate toolchain for the MSRV check so all we need to do is add that to the key to make sure it invalidates when we update the MSRV.
+      # cargo separates build artifacts by Rust compiler version, meaning we can compile with different versions but cache all artifacts.
       - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
         with:
           key: msrv-${{ steps.parse-msrv.outputs.version }}
