@@ -195,6 +195,7 @@ impl<THandler: ConnectionHandler, TTrans: Transport> fmt::Debug for Pool<THandle
 
 /// Event that can happen on the `Pool`.
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum PoolEvent<THandler: ConnectionHandler, TTrans>
 where
     TTrans: Transport,
