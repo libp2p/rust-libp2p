@@ -52,6 +52,8 @@ jobs:
         with:
           key: ${{ matrix.crate }}
 
+      - run: cargo check --package ${{ matrix.crate }} --no-default-features
+
       - run: cargo test --package ${{ matrix.crate }} --all-features
 
       - name: Check if crate has been released
