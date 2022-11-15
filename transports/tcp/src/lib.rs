@@ -41,7 +41,7 @@ use futures::{
     prelude::*,
 };
 use futures_timer::Delay;
-use if_watch::{IfEvent, IfWatcher};
+use if_watch::IfEvent;
 use libp2p_core::{
     address_translation,
     multiaddr::{Multiaddr, Protocol},
@@ -385,7 +385,7 @@ where
             return TcpListenStream::<T>::new(
                 id,
                 listener,
-                Some(IfWatcher::new()?),
+                Some(T::new_if_watcher()?),
                 self.port_reuse.clone(),
             );
         }
@@ -656,7 +656,7 @@ where
     /// become or stop being available.
     ///
     /// `None` if the socket is only listening on a single interface.
-    if_watcher: Option<IfWatcher>,
+    if_watcher: Option<T::IfWatcher>,
     /// The port reuse configuration for outgoing connections.
     ///
     /// If enabled, all IP addresses on which this listening stream
@@ -680,7 +680,7 @@ where
     fn new(
         listener_id: ListenerId,
         listener: TcpListener,
-        if_watcher: Option<IfWatcher>,
+        if_watcher: Option<T::IfWatcher>,
         port_reuse: PortReuse,
     ) -> io::Result<Self> {
         let listen_addr = listener.local_addr()?;
@@ -706,7 +706,7 @@ where
     fn disable_port_reuse(&mut self) {
         match &self.if_watcher {
             Some(if_watcher) => {
-                for ip_net in if_watcher.iter() {
+                for ip_net in T::addrs(if_watcher) {
                     self.port_reuse
                         .unregister(ip_net.addr(), self.listen_addr.port());
                 }
@@ -749,7 +749,7 @@ where
         }
 
         if let Some(if_watcher) = me.if_watcher.as_mut() {
-            while let Poll::Ready(event) = if_watcher.poll_if_event(cx) {
+            while let Poll::Ready(Some(event)) = if_watcher.poll_next_unpin(cx) {
                 match event {
                     Ok(IfEvent::Up(inet)) => {
                         let ip = inet.addr();
@@ -986,11 +986,11 @@ mod tests {
                 let (ready_tx, ready_rx) = mpsc::channel(1);
                 let listener = listener::<tokio::Tcp>(addr, ready_tx);
                 let dialer = dialer::<tokio::Tcp>(ready_rx);
-                let rt = tokio_crate::runtime::Builder::new_current_thread()
+                let rt = ::tokio::runtime::Builder::new_current_thread()
                     .enable_io()
                     .build()
                     .unwrap();
-                let tasks = tokio_crate::task::LocalSet::new();
+                let tasks = ::tokio::task::LocalSet::new();
                 let listener = tasks.spawn_local(listener);
                 tasks.block_on(&rt, dialer);
                 tasks.block_on(&rt, listener).unwrap();
@@ -1055,11 +1055,11 @@ mod tests {
                 let (ready_tx, ready_rx) = mpsc::channel(1);
                 let listener = listener::<tokio::Tcp>(addr, ready_tx);
                 let dialer = dialer::<tokio::Tcp>(ready_rx);
-                let rt = tokio_crate::runtime::Builder::new_current_thread()
+                let rt = ::tokio::runtime::Builder::new_current_thread()
                     .enable_io()
                     .build()
                     .unwrap();
-                let tasks = tokio_crate::task::LocalSet::new();
+                let tasks = ::tokio::task::LocalSet::new();
                 let listener = tasks.spawn_local(listener);
                 tasks.block_on(&rt, dialer);
                 tasks.block_on(&rt, listener).unwrap();
@@ -1162,11 +1162,11 @@ mod tests {
                 let (port_reuse_tx, port_reuse_rx) = oneshot::channel();
                 let listener = listener::<tokio::Tcp>(addr.clone(), ready_tx, port_reuse_rx);
                 let dialer = dialer::<tokio::Tcp>(addr, ready_rx, port_reuse_tx);
-                let rt = tokio_crate::runtime::Builder::new_current_thread()
+                let rt = ::tokio::runtime::Builder::new_current_thread()
                     .enable_io()
                     .build()
                     .unwrap();
-                let tasks = tokio_crate::task::LocalSet::new();
+                let tasks = ::tokio::task::LocalSet::new();
                 let listener = tasks.spawn_local(listener);
                 tasks.block_on(&rt, dialer);
                 tasks.block_on(&rt, listener).unwrap();
@@ -1220,7 +1220,7 @@ mod tests {
             #[cfg(feature = "tokio")]
             {
                 let listener = listen_twice::<tokio::Tcp>(addr);
-                let rt = tokio_crate::runtime::Builder::new_current_thread()
+                let rt = ::tokio::runtime::Builder::new_current_thread()
                     .enable_io()
                     .build()
                     .unwrap();
@@ -1253,7 +1253,7 @@ mod tests {
 
             #[cfg(feature = "tokio")]
             {
-                let rt = tokio_crate::runtime::Builder::new_current_thread()
+                let rt = ::tokio::runtime::Builder::new_current_thread()
                     .enable_io()
                     .build()
                     .unwrap();
