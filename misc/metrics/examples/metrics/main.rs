@@ -71,7 +71,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let local_pub_key = local_key.public();
     info!("Local peer id: {:?}", local_peer_id);
 
-    let mut swarm = Swarm::new(
+    let mut swarm = Swarm::without_executor(
         block_on(libp2p::development_transport(local_key))?,
         Behaviour::new(local_pub_key),
         local_peer_id,

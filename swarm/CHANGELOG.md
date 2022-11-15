@@ -5,9 +5,70 @@
 - Export `NetworkBehaviour` derive as `libp2p_swarm::NetworkBehaviour`.
   This follows the convention of other popular libraries. `serde` for example exports the `Serialize` trait and macro as
   `serde::Serialize`. See [PR 3055].
+
 - Feature-gate `NetworkBehaviour` macro behind `macros` feature flag. See [PR 3055].
 
+- Make executor in Swarm constructor explicit. See [PR 3097].
+  
+  Supported executors:
+  - Tokio
+
+    Previously
+    ```rust
+    let swarm = SwarmBuilder::new(transport, behaviour, peer_id)
+        .executor(Box::new(|fut| {
+                tokio::spawn(fut);
+        }))
+        .build();
+    ```
+    Now
+    ```rust
+    let swarm = Swarm::with_tokio_executor(transport, behaviour, peer_id);
+    ```
+  - Async Std
+    
+    Previously
+    ```rust
+    let swarm = SwarmBuilder::new(transport, behaviour, peer_id)
+        .executor(Box::new(|fut| {
+                async_std::task::spawn(fut);
+        }))
+        .build();
+    ```
+    Now
+    ```rust
+    let swarm = Swarm::with_async_std_executor(transport, behaviour, peer_id);
+    ```
+  - ThreadPool (see [Issue 3107])
+    
+    In most cases ThreadPool can be replaced by executors or spawning on the local task.
+
+    Previously
+    ```rust
+    let swarm = Swarm::new(transport, behaviour, peer_id);
+    ```
+
+    Now
+    ```rust
+    let swarm = Swarm::with_threadpool_executor(transport, behaviour, peer_id);
+    ```
+  - Without
+    
+    Spawns the tasks on the current task, this may result in bad performance so try to use an executor where possible. Previously this was just a fallback when no executor was specified and constructing a `ThreadPool` failed.
+
+    New
+    ```rust
+    let swarm = Swarm::without_executor(transport, behaviour, peer_id);
+    ```
+  
+  Deprecated APIs:
+  - `Swarm::new`
+  - `SwarmBuilder::new`
+  - `SwarmBuilder::executor`
+
 [PR 3055]: https://github.com/libp2p/rust-libp2p/pull/3055
+[PR 3097]: https://github.com/libp2p/rust-libp2p/pull/3097
+[Issue 3107]: https://github.com/libp2p/rust-libp2p/issues/3107
 
 # 0.40.1
 
