@@ -139,9 +139,9 @@ impl NetworkBehaviour for Behaviour {
             }
             (Entry::Vacant(_), Entry::Vacant(_)) => {
                 if connected_point.is_relayed() {
-                    Either::Right(Either::Right(dummy::ConnectionHandler))
-                } else {
                     Either::Left(handler::relayed::Handler::new(connected_point.clone()))
+                } else {
+                    Either::Right(Either::Right(dummy::ConnectionHandler))
                 }
             }
             (Entry::Occupied(_), Entry::Occupied(_)) => {
