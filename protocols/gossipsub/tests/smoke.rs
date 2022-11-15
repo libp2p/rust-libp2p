@@ -171,7 +171,7 @@ fn build_node() -> (Multiaddr, Swarm<Gossipsub>) {
         .build()
         .unwrap();
     let behaviour = Gossipsub::new(MessageAuthenticity::Author(peer_id), config).unwrap();
-    let mut swarm = Swarm::new(transport, behaviour, peer_id);
+    let mut swarm = Swarm::without_executor(transport, behaviour, peer_id);
 
     let port = 1 + random::<u64>();
     let mut addr: Multiaddr = Protocol::Memory(port).into();

@@ -25,7 +25,7 @@ use libp2p::identify;
 use libp2p::ping;
 use libp2p::swarm::{keep_alive, NetworkBehaviour, Swarm, SwarmEvent};
 use libp2p::Multiaddr;
-use libp2p::{development_transport, rendezvous};
+use libp2p::{rendezvous, tokio_development_transport};
 use std::time::Duration;
 use void::Void;
 
@@ -40,8 +40,8 @@ async fn main() {
 
     let identity = identity::Keypair::generate_ed25519();
 
-    let mut swarm = Swarm::new(
-        development_transport(identity.clone()).await.unwrap(),
+    let mut swarm = Swarm::with_tokio_executor(
+        tokio_development_transport(identity.clone()).unwrap(),
         MyBehaviour {
             identify: identify::Behaviour::new(identify::Config::new(
                 "rendezvous-example/1.0.0".to_string(),

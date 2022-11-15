@@ -16,6 +16,10 @@
 
 - Update to `libp2p-gossipsub` `v0.43.0`.
 
+- Add `protocol_stack` metrics. See [PR 2982].
+
+[PR 2982]: https://github.com/libp2p/rust-libp2p/pull/2982/
+
 # 0.10.0
 
 - Update to `libp2p-swarm` `v0.40.0`.

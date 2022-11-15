@@ -39,7 +39,7 @@ async fn init_swarm(config: Config) -> Swarm<Behaviour> {
     let local_id = PeerId::from_public_key(&keypair.public());
     let transport = development_transport(keypair).await.unwrap();
     let behaviour = Behaviour::new(local_id, config);
-    Swarm::new(transport, behaviour, local_id)
+    Swarm::with_async_std_executor(transport, behaviour, local_id)
 }
 
 async fn init_server(config: Option<Config>) -> (Swarm<Behaviour>, PeerId, Multiaddr) {
