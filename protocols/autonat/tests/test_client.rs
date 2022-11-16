@@ -43,7 +43,7 @@ async fn init_swarm(config: Config) -> Swarm<Behaviour> {
         .multiplex(yamux::YamuxConfig::default())
         .boxed();
     let behaviour = Behaviour::new(local_id, config);
-    Swarm::new(transport, behaviour, local_id)
+    Swarm::with_async_std_executor(transport, behaviour, local_id)
 }
 
 async fn spawn_server(kill: oneshot::Receiver<()>) -> (PeerId, Multiaddr) {

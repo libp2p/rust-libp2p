@@ -64,7 +64,7 @@ async fn create_swarm(config: MdnsConfig) -> Result<Swarm<Mdns>, Box<dyn Error>>
         .multiplex(libp2p_yamux::YamuxConfig::default())
         .boxed();
     let behaviour = Mdns::new(config)?;
-    let mut swarm = Swarm::new(transport, behaviour, peer_id);
+    let mut swarm = Swarm::with_async_std_executor(transport, behaviour, peer_id);
     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
     Ok(swarm)
 }

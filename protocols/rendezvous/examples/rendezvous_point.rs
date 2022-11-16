@@ -42,7 +42,7 @@ async fn main() {
     let key = identity::ed25519::SecretKey::from_bytes(bytes).expect("we always pass 32 bytes");
     let identity = identity::Keypair::Ed25519(key.into());
 
-    let mut swarm = Swarm::new(
+    let mut swarm = Swarm::with_tokio_executor(
         libp2p_tcp::tokio::Transport::default()
             .upgrade(Version::V1)
             .authenticate(libp2p_noise::NoiseAuthenticated::xx(&identity).unwrap())
