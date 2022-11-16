@@ -18,7 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::DEFAULT_TTL;
 use asynchronous_codec::{BytesMut, Decoder, Encoder};
 use libp2p_core::{peer_record, signed_envelope, PeerRecord, SignedEnvelope};
 use rand::RngCore;
@@ -30,7 +29,7 @@ pub type Ttl = u64;
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone)]
 pub enum Message {
-    Register(NewRegistration),
+    Register(NewRegistrationRequest),
     RegisterResponse(Result<Ttl, ErrorCode>),
     Unregister(Namespace),
     Discover {
@@ -161,24 +160,10 @@ impl Cookie {
 pub struct InvalidCookie;
 
 #[derive(Debug, Clone)]
-pub struct NewRegistration {
+pub struct NewRegistrationRequest {
     pub namespace: Namespace,
     pub record: PeerRecord,
     pub ttl: Option<u64>,
-}
-
-impl NewRegistration {
-    pub fn new(namespace: Namespace, record: PeerRecord, ttl: Option<Ttl>) -> Self {
-        Self {
-            namespace,
-            record,
-            ttl,
-        }
-    }
-
-    pub fn effective_ttl(&self) -> Ttl {
-        self.ttl.unwrap_or(DEFAULT_TTL)
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -251,7 +236,7 @@ impl From<Message> for wire::Message {
         use wire::message::*;
 
         match message {
-            Message::Register(NewRegistration {
+            Message::Register(NewRegistrationRequest {
                 namespace,
                 record,
                 ttl,
@@ -375,16 +360,20 @@ impl TryFrom<wire::Message> for Message {
                         signed_peer_record: Some(signed_peer_record),
                     }),
                 ..
-            } => Message::Register(NewRegistration {
-                namespace: ns
+            } => {
+                let namespace = ns
                     .map(Namespace::new)
                     .transpose()?
-                    .ok_or(ConversionError::MissingNamespace)?,
-                ttl,
-                record: PeerRecord::from_signed_envelope(SignedEnvelope::from_protobuf_encoding(
-                    &signed_peer_record,
-                )?)?,
-            }),
+                    .ok_or(ConversionError::MissingNamespace)?;
+                let record = PeerRecord::from_signed_envelope(
+                    SignedEnvelope::from_protobuf_encoding(&signed_peer_record)?,
+                )?;
+                Message::Register(NewRegistrationRequest {
+                    namespace,
+                    record,
+                    ttl,
+                })
+            }
             wire::Message {
                 r#type: Some(1),
                 register_response:

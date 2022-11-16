@@ -19,10 +19,10 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::codec::{
-    Cookie, Error, ErrorCode, Message, Namespace, NewRegistration, Registration, RendezvousCodec,
-    Ttl,
+    Cookie, Error, ErrorCode, Message, Namespace, NewRegistrationRequest, Registration,
+    RendezvousCodec, Ttl,
 };
-use crate::{MAX_TTL, MIN_TTL, PROTOCOL_IDENT};
+use crate::{DEFAULT_TTL, MAX_TTL, MIN_TTL, PROTOCOL_IDENT};
 use asynchronous_codec::Framed;
 use bimap::BiMap;
 use futures::future::BoxFuture;
@@ -30,24 +30,28 @@ use futures::stream::FuturesUnordered;
 use futures::{ready, SinkExt};
 use futures::{FutureExt, StreamExt};
 use libp2p_core::connection::ConnectionId;
-use libp2p_core::{ConnectedPoint, Multiaddr, PeerId};
+use libp2p_core::{ConnectedPoint, Multiaddr, PeerId, PeerRecord};
 use libp2p_swarm::handler::from_fn;
 use libp2p_swarm::{
-    from_fn, CloseConnection, IntoConnectionHandler, NegotiatedSubstream, NetworkBehaviour,
-    NetworkBehaviourAction, PollParameters,
+    from_fn, IntoConnectionHandler, NegotiatedSubstream, NetworkBehaviour, NetworkBehaviourAction,
+    PollParameters,
 };
-use std::collections::{HashMap, HashSet};
-use std::future::Future;
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::io;
-use std::iter::FromIterator;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::Duration;
 use void::Void;
 
 pub struct Behaviour {
-    registrations: Registrations,
-    registration_data: from_fn::Shared<RegistrationData>,
+    next_expiry: FuturesUnordered<BoxFuture<'static, RegistrationId>>,
+    registrations: from_fn::Shared<Registrations>,
+    events: VecDeque<
+        NetworkBehaviourAction<
+            Event,
+            from_fn::FromFnProto<Result<Option<InboundOutEvent>, Error>, Void, Void, Registrations>,
+        >,
+    >,
 }
 
 pub struct Config {
@@ -80,8 +84,39 @@ impl Behaviour {
     /// Create a new instance of the rendezvous [`NetworkBehaviour`].
     pub fn new(config: Config) -> Self {
         Self {
-            registrations: Registrations::with_config(config),
-            registration_data: from_fn::Shared::new(RegistrationData::default()),
+            next_expiry: FuturesUnordered::new(),
+            registrations: from_fn::Shared::new(Registrations::with_config(config)),
+            events: Default::default(),
+        }
+    }
+
+    fn poll_expiry_timers(&mut self, cx: &mut Context<'_>) -> Poll<Option<ExpiredRegistration>> {
+        loop {
+            let expired_registration = match ready!(self.next_expiry.poll_next_unpin(cx)) {
+                Some(r) => r,
+                None => return Poll::Ready(None), // TODO: Register waker and return Pending?
+            };
+
+            // clean up our cookies
+            self.registrations.cookies.retain(|_, registrations| {
+                registrations.remove(&expired_registration);
+
+                // retain all cookies where there are still registrations left
+                !registrations.is_empty()
+            });
+
+            self.registrations
+                .registrations_for_peer
+                .remove_by_right(&expired_registration);
+
+            match self
+                .registrations
+                .registrations
+                .remove(&expired_registration)
+            {
+                Some(registration) => return Poll::Ready(Some(ExpiredRegistration(registration))),
+                None => continue,
+            }
         }
     }
 }
@@ -115,12 +150,12 @@ pub enum Event {
 
 impl NetworkBehaviour for Behaviour {
     type ConnectionHandler =
-        from_fn::FromFnProto<Result<Option<InboundOutEvent>, Error>, Void, Void, RegistrationData>;
+        from_fn::FromFnProto<Result<Option<InboundOutEvent>, Error>, Void, Void, Registrations>;
     type OutEvent = Event;
 
     fn new_handler(&mut self) -> Self::ConnectionHandler {
         from_fn(PROTOCOL_IDENT)
-            .with_state(&self.registration_data)
+            .with_state(&self.registrations)
             .with_inbound_handler(10, inbound_stream_handler)
             .without_outbound_handler()
     }
@@ -133,7 +168,7 @@ impl NetworkBehaviour for Behaviour {
         _: Option<&Vec<Multiaddr>>,
         _: usize,
     ) {
-        self.registration_data
+        self.registrations
             .register_connection(*peer_id, *connection_id)
     }
 
@@ -145,27 +180,73 @@ impl NetworkBehaviour for Behaviour {
         _: <Self::ConnectionHandler as IntoConnectionHandler>::Handler,
         _remaining_established: usize,
     ) {
-        self.registration_data
+        self.registrations
             .unregister_connection(*peer_id, *connection_id)
     }
 
     fn inject_event(
         &mut self,
-        peer_id: PeerId,
+        peer: PeerId,
         _: ConnectionId,
         event: from_fn::OutEvent<Result<Option<InboundOutEvent>, Error>, Void, Void>,
     ) {
-        match event {
+        let new_events = match event {
             from_fn::OutEvent::InboundEmitted(Ok(Some(InboundOutEvent::NewRegistration(
                 new_registration,
-            )))) => self
-                .registrations
-                .add(new_registration, &mut self.registration_data),
-            from_fn::OutEvent::InboundEmitted(Ok(Some(InboundOutEvent::Unregister(namespace)))) => {
-                self.registrations
-                    .remove(namespace, peer_id, &mut self.registration_data)
+            )))) => {
+                let (registration, expiry) = self.registrations.add(new_registration);
+                self.next_expiry.push(expiry);
+
+                vec![NetworkBehaviourAction::GenerateEvent(
+                    Event::PeerRegistered { peer, registration },
+                )]
             }
-            from_fn::OutEvent::OutboundEmitted(_) => {}
+            from_fn::OutEvent::InboundEmitted(Ok(Some(InboundOutEvent::RegistrationFailed {
+                error,
+                namespace,
+            }))) => {
+                vec![NetworkBehaviourAction::GenerateEvent(
+                    Event::PeerNotRegistered {
+                        peer,
+                        error,
+                        namespace,
+                    },
+                )]
+            }
+            from_fn::OutEvent::InboundEmitted(Ok(Some(InboundOutEvent::Discovered {
+                cookie,
+                registrations,
+                previous_registrations,
+            }))) => {
+                self.registrations
+                    .cookies
+                    .insert(cookie, previous_registrations);
+
+                vec![NetworkBehaviourAction::GenerateEvent(
+                    Event::DiscoverServed {
+                        enquirer: peer,
+                        registrations,
+                    },
+                )]
+            }
+            from_fn::OutEvent::InboundEmitted(Ok(Some(InboundOutEvent::DiscoverFailed {
+                error,
+            }))) => {
+                vec![NetworkBehaviourAction::GenerateEvent(
+                    Event::DiscoverNotServed {
+                        enquirer: peer,
+                        error,
+                    },
+                )]
+            }
+            from_fn::OutEvent::InboundEmitted(Ok(Some(InboundOutEvent::Unregister(namespace)))) => {
+                self.registrations.remove(namespace.clone(), peer);
+
+                vec![NetworkBehaviourAction::GenerateEvent(
+                    Event::PeerUnregistered { peer, namespace },
+                )]
+            }
+            from_fn::OutEvent::OutboundEmitted(never) => void::unreachable(never),
             from_fn::OutEvent::FailedToOpen(never) => match never {
                 from_fn::OpenError::Timeout(never) => void::unreachable(never),
                 from_fn::OpenError::LimitExceeded {
@@ -177,10 +258,16 @@ impl NetworkBehaviour for Behaviour {
                 } => void::unreachable(never),
             },
             from_fn::OutEvent::InboundEmitted(Err(error)) => {
-                log::debug!("Inbound stream from {peer_id} failed: {error}");
+                log::debug!("Inbound stream from {peer} failed: {error}");
+
+                vec![]
             }
-            from_fn::OutEvent::InboundEmitted(Ok(None)) => {}
-        }
+            from_fn::OutEvent::InboundEmitted(Ok(None)) => {
+                vec![]
+            }
+        };
+
+        self.events.extend(new_events)
     }
 
     fn poll(
@@ -188,15 +275,17 @@ impl NetworkBehaviour for Behaviour {
         cx: &mut Context<'_>,
         _: &mut impl PollParameters,
     ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
-        if let Poll::Ready(ExpiredRegistration(registration)) =
-            self.registrations.poll(&mut self.registration_data, cx)
-        {
+        if let Some(event) = self.events.pop_front() {
+            return Poll::Ready(event);
+        }
+
+        if let Poll::Ready(Some(ExpiredRegistration(registration))) = self.poll_expiry_timers(cx) {
             return Poll::Ready(NetworkBehaviourAction::GenerateEvent(
                 Event::RegistrationExpired(registration),
             ));
         }
 
-        if let Poll::Ready(action) = self.registration_data.poll(cx) {
+        if let Poll::Ready(action) = self.registrations.poll(cx) {
             return Poll::Ready(action);
         }
 
@@ -206,9 +295,9 @@ impl NetworkBehaviour for Behaviour {
 
 async fn inbound_stream_handler(
     substream: NegotiatedSubstream,
-    _: PeerId,
+    peer: PeerId,
     _: ConnectedPoint,
-    registrations: Arc<RegistrationData>,
+    registrations: Arc<Registrations>,
 ) -> Result<Option<InboundOutEvent>, Error> {
     let mut substream = Framed::new(substream, RendezvousCodec::default());
 
@@ -219,45 +308,57 @@ async fn inbound_stream_handler(
 
     let out_event = match message {
         Message::Register(new_registration) => {
-            // TODO: Validate registration
+            let namespace = new_registration.namespace.clone();
 
-            substream
-                .send(Message::RegisterResponse(Ok(
-                    new_registration.effective_ttl()
-                )))
-                .await?;
-            substream.close().await?;
+            match registrations.new_registration(peer, new_registration) {
+                Ok(new_registration) => {
+                    substream
+                        .send(Message::RegisterResponse(Ok(
+                            new_registration.effective_ttl()
+                        )))
+                        .await?;
 
-            Some(InboundOutEvent::NewRegistration(new_registration))
+                    Some(InboundOutEvent::NewRegistration(new_registration))
+                }
+                Err(error) => {
+                    substream
+                        .send(Message::RegisterResponse(Err(error)))
+                        .await?;
+
+                    Some(InboundOutEvent::RegistrationFailed { namespace, error })
+                }
+            }
         }
-        Message::Unregister(namespace) => {
-            substream.close().await?;
-
-            Some(InboundOutEvent::Unregister(namespace))
-        }
+        Message::Unregister(namespace) => Some(InboundOutEvent::Unregister(namespace)),
         Message::Discover {
             namespace,
             cookie,
             limit,
         } => match registrations.get(namespace, cookie, limit) {
-            Ok((registrations, cookie)) => {
+            Ok((registrations, cookie, sent_registrations)) => {
+                let registrations = registrations.cloned().collect::<Vec<_>>();
+
                 substream
                     .send(Message::DiscoverResponse(Ok((
-                        registrations.cloned().collect(),
-                        cookie,
+                        registrations.clone(),
+                        cookie.clone(),
                     ))))
                     .await?;
-                substream.close().await?;
 
-                None
+                Some(InboundOutEvent::Discovered {
+                    cookie,
+                    registrations,
+                    previous_registrations: sent_registrations,
+                })
             }
-            Err(e) => {
+            Err(_) => {
                 substream
                     .send(Message::DiscoverResponse(Err(ErrorCode::InvalidCookie)))
                     .await?;
-                substream.close().await?;
 
-                None
+                Some(InboundOutEvent::DiscoverFailed {
+                    error: ErrorCode::InvalidCookie,
+                })
             }
         },
         Message::DiscoverResponse(_) | Message::RegisterResponse(_) => {
@@ -265,17 +366,32 @@ async fn inbound_stream_handler(
         }
     };
 
+    substream.close().await?;
+
     Ok(out_event)
 }
 
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum InboundOutEvent {
     NewRegistration(NewRegistration),
+    RegistrationFailed {
+        namespace: Namespace,
+        error: ErrorCode,
+    },
+    Discovered {
+        cookie: Cookie,
+        registrations: Vec<Registration>,
+        previous_registrations: HashSet<RegistrationId>,
+    },
+    DiscoverFailed {
+        error: ErrorCode,
+    },
     Unregister(Namespace),
 }
 
 #[derive(Debug, Eq, PartialEq, Hash, Copy, Clone)]
-struct RegistrationId(u64);
+pub struct RegistrationId(u64);
 
 impl RegistrationId {
     fn new() -> Self {
@@ -286,26 +402,129 @@ impl RegistrationId {
 #[derive(Debug, PartialEq)]
 struct ExpiredRegistration(Registration);
 
+#[derive(Debug, Clone)]
 pub struct Registrations {
     min_ttl: Ttl,
     max_ttl: Ttl,
-    next_expiry: FuturesUnordered<BoxFuture<'static, RegistrationId>>,
-}
 
-#[derive(Debug, Clone, Default)]
-pub struct RegistrationData {
     registrations_for_peer: BiMap<(PeerId, Namespace), RegistrationId>,
     registrations: HashMap<RegistrationId, Registration>,
     cookies: HashMap<Cookie, HashSet<RegistrationId>>,
 }
 
-impl RegistrationData {
+#[derive(Debug)]
+pub struct NewRegistration {
+    namespace: Namespace,
+    record: PeerRecord,
+    ttl: Option<u64>,
+}
+
+impl NewRegistration {
+    pub fn effective_ttl(&self) -> Ttl {
+        self.ttl.unwrap_or(DEFAULT_TTL)
+    }
+}
+
+impl Default for Registrations {
+    fn default() -> Self {
+        Registrations::with_config(Config::default())
+    }
+}
+
+impl Registrations {
+    pub fn with_config(config: Config) -> Self {
+        Self {
+            min_ttl: config.min_ttl,
+            max_ttl: config.max_ttl,
+            registrations_for_peer: Default::default(),
+            registrations: Default::default(),
+            cookies: Default::default(),
+        }
+    }
+
+    pub fn new_registration(
+        &self,
+        from: PeerId,
+        new_registration: NewRegistrationRequest,
+    ) -> Result<NewRegistration, ErrorCode> {
+        let ttl = new_registration.ttl.unwrap_or(DEFAULT_TTL);
+
+        if ttl > self.max_ttl {
+            return Err(ErrorCode::InvalidTtl);
+        }
+        if ttl < self.min_ttl {
+            return Err(ErrorCode::InvalidTtl);
+        }
+
+        if new_registration.record.peer_id() != from {
+            return Err(ErrorCode::NotAuthorized);
+        }
+
+        Ok(NewRegistration {
+            namespace: new_registration.namespace,
+            record: new_registration.record,
+            ttl: new_registration.ttl,
+        })
+    }
+
+    pub fn add(
+        &mut self,
+        new_registration: NewRegistration,
+    ) -> (Registration, BoxFuture<'static, RegistrationId>) {
+        let ttl = new_registration.effective_ttl();
+        let namespace = new_registration.namespace;
+        let registration_id = RegistrationId::new();
+
+        if let Some(old_registration) = self
+            .registrations_for_peer
+            .get_by_left(&(new_registration.record.peer_id(), namespace.clone()))
+        {
+            self.registrations.remove(old_registration);
+        }
+
+        self.registrations_for_peer.insert(
+            (new_registration.record.peer_id(), namespace.clone()),
+            registration_id,
+        );
+
+        let registration = Registration {
+            namespace,
+            record: new_registration.record,
+            ttl,
+        };
+        self.registrations
+            .insert(registration_id, registration.clone());
+
+        let expiry = futures_timer::Delay::new(Duration::from_secs(ttl as u64))
+            .map(move |_| registration_id)
+            .boxed();
+
+        (registration, expiry)
+    }
+
+    pub fn remove(&mut self, namespace: Namespace, peer_id: PeerId) {
+        let reggo_to_remove = self
+            .registrations_for_peer
+            .remove_by_left(&(peer_id, namespace));
+
+        if let Some((_, reggo_to_remove)) = reggo_to_remove {
+            self.registrations.remove(&reggo_to_remove);
+        }
+    }
+
     pub fn get(
         &self,
         discover_namespace: Option<Namespace>,
         cookie: Option<Cookie>,
         limit: Option<u64>,
-    ) -> Result<(impl Iterator<Item = &Registration> + '_, Cookie), CookieNamespaceMismatch> {
+    ) -> Result<
+        (
+            impl Iterator<Item = &Registration> + '_,
+            Cookie,
+            HashSet<RegistrationId>,
+        ),
+        CookieNamespaceMismatch,
+    > {
         let cookie_namespace = cookie.as_ref().and_then(|cookie| cookie.namespace());
 
         match (discover_namespace.as_ref(), cookie_namespace) {
@@ -351,15 +570,13 @@ impl RegistrationData {
         let new_cookie = discover_namespace
             .map(Cookie::for_namespace)
             .unwrap_or_else(Cookie::for_all_namespaces);
-        // self.cookies
-        //     .insert(new_cookie.clone(), reggos_of_last_discover);
 
         let reggos = &self.registrations;
         let registrations = ids
             .into_iter()
             .map(move |id| reggos.get(&id).expect("bad internal datastructure"));
 
-        Ok((registrations, new_cookie))
+        Ok((registrations, new_cookie, reggos_of_last_discover))
     }
 }
 
@@ -371,371 +588,164 @@ pub enum TtlOutOfRange {
     TooShort { bound: Ttl, requested: Ttl },
 }
 
-impl Default for Registrations {
-    fn default() -> Self {
-        Registrations::with_config(Config::default())
-    }
-}
-
-impl Registrations {
-    pub fn with_config(config: Config) -> Self {
-        Self {
-            min_ttl: config.min_ttl,
-            max_ttl: config.max_ttl,
-            next_expiry: FuturesUnordered::from_iter(vec![futures::future::pending().boxed()]),
-        }
-    }
-
-    pub fn add(&mut self, new_registration: NewRegistration, data: &mut RegistrationData) {
-        // TOOD: Assume validation has by done by newtype.
-        let ttl = new_registration.effective_ttl();
-        // if ttl > self.max_ttl {
-        //     return Err(TtlOutOfRange::TooLong {
-        //         bound: self.max_ttl,
-        //         requested: ttl,
-        //     });
-        // }
-        // if ttl < self.min_ttl {
-        //     return Err(TtlOutOfRange::TooShort {
-        //         bound: self.min_ttl,
-        //         requested: ttl,
-        //     });
-        // }
-
-        let namespace = new_registration.namespace;
-        let registration_id = RegistrationId::new();
-
-        if let Some(old_registration) = data
-            .registrations_for_peer
-            .get_by_left(&(new_registration.record.peer_id(), namespace.clone()))
-        {
-            data.registrations.remove(old_registration);
-        }
-
-        data.registrations_for_peer.insert(
-            (new_registration.record.peer_id(), namespace.clone()),
-            registration_id,
-        );
-
-        let registration = Registration {
-            namespace,
-            record: new_registration.record,
-            ttl,
-        };
-        data.registrations.insert(registration_id, registration);
-
-        let next_expiry = futures_timer::Delay::new(Duration::from_secs(ttl as u64))
-            .map(move |_| registration_id)
-            .boxed();
-
-        self.next_expiry.push(next_expiry);
-    }
-
-    pub fn remove(&self, namespace: Namespace, peer_id: PeerId, data: &mut RegistrationData) {
-        let reggo_to_remove = data
-            .registrations_for_peer
-            .remove_by_left(&(peer_id, namespace));
-
-        if let Some((_, reggo_to_remove)) = reggo_to_remove {
-            data.registrations.remove(&reggo_to_remove);
-        }
-    }
-
-    fn poll(
-        &mut self,
-        data: &mut RegistrationData,
-        cx: &mut Context<'_>,
-    ) -> Poll<ExpiredRegistration> {
-        let expired_registration = ready!(self.next_expiry.poll_next_unpin(cx)).expect(
-            "This stream should never finish because it is initialised with a pending future",
-        );
-
-        // clean up our cookies
-        data.cookies.retain(|_, registrations| {
-            registrations.remove(&expired_registration);
-
-            // retain all cookies where there are still registrations left
-            !registrations.is_empty()
-        });
-
-        data.registrations_for_peer
-            .remove_by_right(&expired_registration);
-        match data.registrations.remove(&expired_registration) {
-            None => self.poll(data, cx),
-            Some(registration) => Poll::Ready(ExpiredRegistration(registration)),
-        }
-    }
-}
-
 #[derive(Debug, thiserror::Error, Eq, PartialEq)]
 #[error("The provided cookie is not valid for a DISCOVER request for the given namespace")]
 pub struct CookieNamespaceMismatch;
 
 #[cfg(test)]
 mod tests {
-    // use instant::SystemTime;
-    // use std::option::Option::None;
-    //
-    // use libp2p_core::{identity, PeerRecord};
-    //
-    // use super::*;
-    //
-    // #[test]
-    // fn given_cookie_from_discover_when_discover_again_then_only_get_diff() {
-    //     let mut registrations = Registrations::default();
-    //     registrations.add(new_dummy_registration("foo")).unwrap();
-    //     registrations.add(new_dummy_registration("foo")).unwrap();
-    //
-    //     let (initial_discover, cookie) = registrations.get(None, None, None).unwrap();
-    //     assert_eq!(initial_discover.count(), 2);
-    //
-    //     let (subsequent_discover, _) = registrations.get(None, Some(cookie), None).unwrap();
-    //     assert_eq!(subsequent_discover.count(), 0);
-    // }
-    //
-    // #[test]
-    // fn given_registrations_when_discover_all_then_all_are_returned() {
-    //     let mut registrations = Registrations::default();
-    //     registrations.add(new_dummy_registration("foo")).unwrap();
-    //     registrations.add(new_dummy_registration("foo")).unwrap();
-    //
-    //     let (discover, _) = registrations.get(None, None, None).unwrap();
-    //
-    //     assert_eq!(discover.count(), 2);
-    // }
-    //
-    // #[test]
-    // fn given_registrations_when_discover_only_for_specific_namespace_then_only_those_are_returned()
-    // {
-    //     let mut registrations = Registrations::default();
-    //     registrations.add(new_dummy_registration("foo")).unwrap();
-    //     registrations.add(new_dummy_registration("bar")).unwrap();
-    //
-    //     let (discover, _) = registrations
-    //         .get(Some(Namespace::from_static("foo")), None, None)
-    //         .unwrap();
-    //
-    //     assert_eq!(
-    //         discover.map(|r| &r.namespace).collect::<Vec<_>>(),
-    //         vec!["foo"]
-    //     );
-    // }
-    //
-    // #[test]
-    // fn given_reregistration_old_registration_is_discarded() {
-    //     let alice = identity::Keypair::generate_ed25519();
-    //     let mut registrations = Registrations::default();
-    //     registrations
-    //         .add(new_registration("foo", alice.clone(), None))
-    //         .unwrap();
-    //     registrations
-    //         .add(new_registration("foo", alice, None))
-    //         .unwrap();
-    //
-    //     let (discover, _) = registrations
-    //         .get(Some(Namespace::from_static("foo")), None, None)
-    //         .unwrap();
-    //
-    //     assert_eq!(
-    //         discover.map(|r| &r.namespace).collect::<Vec<_>>(),
-    //         vec!["foo"]
-    //     );
-    // }
-    //
-    // #[test]
-    // fn given_cookie_from_2nd_discover_does_not_return_nodes_from_first_discover() {
-    //     let mut registrations = Registrations::default();
-    //     registrations.add(new_dummy_registration("foo")).unwrap();
-    //     registrations.add(new_dummy_registration("foo")).unwrap();
-    //
-    //     let (initial_discover, cookie1) = registrations.get(None, None, None).unwrap();
-    //     assert_eq!(initial_discover.count(), 2);
-    //
-    //     let (subsequent_discover, cookie2) = registrations.get(None, Some(cookie1), None).unwrap();
-    //     assert_eq!(subsequent_discover.count(), 0);
-    //
-    //     let (subsequent_discover, _) = registrations.get(None, Some(cookie2), None).unwrap();
-    //     assert_eq!(subsequent_discover.count(), 0);
-    // }
-    //
-    // #[test]
-    // fn cookie_from_different_discover_request_is_not_valid() {
-    //     let mut registrations = Registrations::default();
-    //     registrations.add(new_dummy_registration("foo")).unwrap();
-    //     registrations.add(new_dummy_registration("bar")).unwrap();
-    //
-    //     let (_, foo_discover_cookie) = registrations
-    //         .get(Some(Namespace::from_static("foo")), None, None)
-    //         .unwrap();
-    //     let result = registrations.get(
-    //         Some(Namespace::from_static("bar")),
-    //         Some(foo_discover_cookie),
-    //         None,
-    //     );
-    //
-    //     assert!(matches!(result, Err(CookieNamespaceMismatch)))
-    // }
-    //
-    // #[tokio::test]
-    // async fn given_two_registration_ttls_one_expires_one_lives() {
-    //     let mut registrations = Registrations::with_config(Config {
-    //         min_ttl: 0,
-    //         max_ttl: 4,
-    //     });
-    //
-    //     let start_time = SystemTime::now();
-    //
-    //     registrations
-    //         .add(new_dummy_registration_with_ttl("foo", 1))
-    //         .unwrap();
-    //     registrations
-    //         .add(new_dummy_registration_with_ttl("bar", 4))
-    //         .unwrap();
-    //
-    //     let event = registrations.next_event().await;
-    //
-    //     let elapsed = start_time.elapsed().unwrap();
-    //     assert!(elapsed.as_secs() >= 1);
-    //     assert!(elapsed.as_secs() < 2);
-    //
-    //     assert_eq!(event.0.namespace, Namespace::from_static("foo"));
-    //
-    //     {
-    //         let (mut discovered_foo, _) = registrations
-    //             .get(Some(Namespace::from_static("foo")), None, None)
-    //             .unwrap();
-    //         assert!(discovered_foo.next().is_none());
-    //     }
-    //     let (mut discovered_bar, _) = registrations
-    //         .get(Some(Namespace::from_static("bar")), None, None)
-    //         .unwrap();
-    //     assert!(discovered_bar.next().is_some());
-    // }
-    //
-    // #[tokio::test]
-    // async fn given_peer_unregisters_before_expiry_do_not_emit_registration_expired() {
-    //     let mut registrations = Registrations::with_config(Config {
-    //         min_ttl: 1,
-    //         max_ttl: 10,
-    //     });
-    //     let dummy_registration = new_dummy_registration_with_ttl("foo", 2);
-    //     let namespace = dummy_registration.namespace.clone();
-    //     let peer_id = dummy_registration.record.peer_id();
-    //
-    //     registrations.add(dummy_registration).unwrap();
-    //     registrations.no_event_for(1).await;
-    //     registrations.remove(namespace, peer_id);
-    //
-    //     registrations.no_event_for(3).await
-    // }
-    //
-    // /// FuturesUnordered stop polling for ready futures when poll_next() is called until a None
-    // /// value is returned. To prevent the next_expiry future from going to "sleep", next_expiry
-    // /// is initialised with a future that always returns pending. This test ensures that
-    // /// FuturesUnordered does not stop polling for ready futures.
-    // #[tokio::test]
-    // async fn given_all_registrations_expired_then_successfully_handle_new_registration_and_expiry()
-    // {
-    //     let mut registrations = Registrations::with_config(Config {
-    //         min_ttl: 0,
-    //         max_ttl: 10,
-    //     });
-    //     let dummy_registration = new_dummy_registration_with_ttl("foo", 1);
-    //
-    //     registrations.add(dummy_registration.clone()).unwrap();
-    //     let _ = registrations.next_event_in_at_most(2).await;
-    //
-    //     registrations.no_event_for(1).await;
-    //
-    //     registrations.add(dummy_registration).unwrap();
-    //     let _ = registrations.next_event_in_at_most(2).await;
-    // }
-    //
-    // #[tokio::test]
-    // async fn cookies_are_cleaned_up_if_registrations_expire() {
-    //     let mut registrations = Registrations::with_config(Config {
-    //         min_ttl: 1,
-    //         max_ttl: 10,
-    //     });
-    //
-    //     registrations
-    //         .add(new_dummy_registration_with_ttl("foo", 2))
-    //         .unwrap();
-    //     let (_, _) = registrations.get(None, None, None).unwrap();
-    //
-    //     assert_eq!(registrations.data.cookies.len(), 1);
-    //
-    //     let _ = registrations.next_event_in_at_most(3).await;
-    //
-    //     assert_eq!(registrations.data.cookies.len(), 0);
-    // }
-    //
-    // #[test]
-    // fn given_limit_discover_only_returns_n_results() {
-    //     let mut registrations = Registrations::default();
-    //     registrations.add(new_dummy_registration("foo")).unwrap();
-    //     registrations.add(new_dummy_registration("foo")).unwrap();
-    //
-    //     let (registrations, _) = registrations.get(None, None, Some(1)).unwrap();
-    //
-    //     assert_eq!(registrations.count(), 1);
-    // }
-    //
-    // #[test]
-    // fn given_limit_cookie_can_be_used_for_pagination() {
-    //     let mut registrations = Registrations::default();
-    //     registrations.add(new_dummy_registration("foo")).unwrap();
-    //     registrations.add(new_dummy_registration("foo")).unwrap();
-    //
-    //     let (discover1, cookie) = registrations.get(None, None, Some(1)).unwrap();
-    //     assert_eq!(discover1.count(), 1);
-    //
-    //     let (discover2, _) = registrations.get(None, Some(cookie), None).unwrap();
-    //     assert_eq!(discover2.count(), 1);
-    // }
-    //
-    // fn new_dummy_registration(namespace: &'static str) -> NewRegistration {
-    //     let identity = identity::Keypair::generate_ed25519();
-    //
-    //     new_registration(namespace, identity, None)
-    // }
-    //
-    // fn new_dummy_registration_with_ttl(namespace: &'static str, ttl: Ttl) -> NewRegistration {
-    //     let identity = identity::Keypair::generate_ed25519();
-    //
-    //     new_registration(namespace, identity, Some(ttl))
-    // }
-    //
-    // fn new_registration(
-    //     namespace: &'static str,
-    //     identity: identity::Keypair,
-    //     ttl: Option<Ttl>,
-    // ) -> NewRegistration {
-    //     NewRegistration::new(
-    //         Namespace::from_static(namespace),
-    //         PeerRecord::new(&identity, vec!["/ip4/127.0.0.1/tcp/1234".parse().unwrap()]).unwrap(),
-    //         ttl,
-    //     )
-    // }
-    //
-    // /// Defines utility functions that make the tests more readable.
-    // impl Registrations {
-    //     async fn next_event(&mut self) -> ExpiredRegistration {
-    //         futures::future::poll_fn(|cx| self.poll(cx)).await
-    //     }
-    //
-    //     /// Polls [`Registrations`] for `seconds` and panics if it returns a event during this time.
-    //     async fn no_event_for(&mut self, seconds: u64) {
-    //         tokio::time::timeout(Duration::from_secs(seconds), self.next_event())
-    //             .await
-    //             .unwrap_err();
-    //     }
-    //
-    //     /// Polls [`Registrations`] for at most `seconds` and panics if doesn't return an event within that time.
-    //     async fn next_event_in_at_most(&mut self, seconds: u64) -> ExpiredRegistration {
-    //         tokio::time::timeout(Duration::from_secs(seconds), self.next_event())
-    //             .await
-    //             .unwrap()
-    //     }
-    // }
+    use libp2p_core::{identity, PeerRecord};
+
+    use super::*;
+
+    #[test]
+    fn given_cookie_from_discover_when_discover_again_then_only_get_diff() {
+        let mut registrations = Registrations::default();
+        registrations.add(new_dummy_registration("foo"));
+        registrations.add(new_dummy_registration("foo"));
+
+        let (initial_discover, cookie, existing_registrations) =
+            registrations.get(None, None, None).unwrap();
+        assert_eq!(initial_discover.count(), 2);
+        registrations
+            .cookies
+            .insert(cookie.clone(), existing_registrations);
+
+        let (subsequent_discover, _, _) = registrations.get(None, Some(cookie), None).unwrap();
+        assert_eq!(subsequent_discover.count(), 0);
+    }
+
+    #[test]
+    fn given_registrations_when_discover_all_then_all_are_returned() {
+        let mut registrations = Registrations::default();
+        registrations.add(new_dummy_registration("foo"));
+        registrations.add(new_dummy_registration("foo"));
+
+        let (discover, _, _) = registrations.get(None, None, None).unwrap();
+
+        assert_eq!(discover.count(), 2);
+    }
+
+    #[test]
+    fn given_registrations_when_discover_only_for_specific_namespace_then_only_those_are_returned()
+    {
+        let mut registrations = Registrations::default();
+        registrations.add(new_dummy_registration("foo"));
+        registrations.add(new_dummy_registration("bar"));
+
+        let (discover, _, _) = registrations
+            .get(Some(Namespace::from_static("foo")), None, None)
+            .unwrap();
+
+        assert_eq!(
+            discover.map(|r| &r.namespace).collect::<Vec<_>>(),
+            vec!["foo"]
+        );
+    }
+
+    #[test]
+    fn given_reregistration_old_registration_is_discarded() {
+        let alice = identity::Keypair::generate_ed25519();
+        let mut registrations = Registrations::default();
+        registrations.add(new_registration("foo", alice.clone(), None));
+        registrations.add(new_registration("foo", alice, None));
+
+        let (discover, _, _) = registrations
+            .get(Some(Namespace::from_static("foo")), None, None)
+            .unwrap();
+
+        assert_eq!(
+            discover.map(|r| &r.namespace).collect::<Vec<_>>(),
+            vec!["foo"]
+        );
+    }
+
+    #[test]
+    fn given_cookie_from_2nd_discover_does_not_return_nodes_from_first_discover() {
+        let mut registrations = Registrations::default();
+        registrations.add(new_dummy_registration("foo"));
+        registrations.add(new_dummy_registration("foo"));
+
+        let (initial_discover, cookie1, existing_registrations) =
+            registrations.get(None, None, None).unwrap();
+        assert_eq!(initial_discover.count(), 2);
+        registrations
+            .cookies
+            .insert(cookie1.clone(), existing_registrations);
+
+        let (subsequent_discover, cookie2, existing_registrations) =
+            registrations.get(None, Some(cookie1), None).unwrap();
+        assert_eq!(subsequent_discover.count(), 0);
+        registrations
+            .cookies
+            .insert(cookie2.clone(), existing_registrations);
+
+        let (subsequent_discover, _, _) = registrations.get(None, Some(cookie2), None).unwrap();
+        assert_eq!(subsequent_discover.count(), 0);
+    }
+
+    #[test]
+    fn cookie_from_different_discover_request_is_not_valid() {
+        let mut registrations = Registrations::default();
+        registrations.add(new_dummy_registration("foo"));
+        registrations.add(new_dummy_registration("bar"));
+
+        let (_, foo_discover_cookie, _) = registrations
+            .get(Some(Namespace::from_static("foo")), None, None)
+            .unwrap();
+        let result = registrations.get(
+            Some(Namespace::from_static("bar")),
+            Some(foo_discover_cookie),
+            None,
+        );
+
+        assert!(matches!(result, Err(CookieNamespaceMismatch)))
+    }
+
+    #[test]
+    fn given_limit_discover_only_returns_n_results() {
+        let mut registrations = Registrations::default();
+        registrations.add(new_dummy_registration("foo"));
+        registrations.add(new_dummy_registration("foo"));
+
+        let (registrations, _, _) = registrations.get(None, None, Some(1)).unwrap();
+
+        assert_eq!(registrations.count(), 1);
+    }
+
+    #[test]
+    fn given_limit_cookie_can_be_used_for_pagination() {
+        let mut registrations = Registrations::default();
+        registrations.add(new_dummy_registration("foo"));
+        registrations.add(new_dummy_registration("foo"));
+
+        let (discover1, cookie, existing_registrations) =
+            registrations.get(None, None, Some(1)).unwrap();
+        assert_eq!(discover1.count(), 1);
+        registrations
+            .cookies
+            .insert(cookie.clone(), existing_registrations);
+
+        let (discover2, _, _) = registrations.get(None, Some(cookie), None).unwrap();
+        assert_eq!(discover2.count(), 1);
+    }
+
+    fn new_dummy_registration(namespace: &'static str) -> NewRegistration {
+        let identity = identity::Keypair::generate_ed25519();
+
+        new_registration(namespace, identity, None)
+    }
+
+    fn new_registration(
+        namespace: &'static str,
+        identity: identity::Keypair,
+        ttl: Option<Ttl>,
+    ) -> NewRegistration {
+        NewRegistration {
+            namespace: Namespace::from_static(namespace),
+            record: PeerRecord::new(&identity, vec!["/ip4/127.0.0.1/tcp/1234".parse().unwrap()])
+                .unwrap(),
+            ttl,
+        }
+    }
 }

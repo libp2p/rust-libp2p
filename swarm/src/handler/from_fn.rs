@@ -676,12 +676,12 @@ mod tests {
         SwarmEvent,
     };
     use futures::{AsyncReadExt, AsyncWriteExt};
-    use libp2p::plaintext::PlainText2Config;
-    use libp2p::yamux;
     use libp2p_core::connection::ConnectionId;
     use libp2p_core::transport::MemoryTransport;
     use libp2p_core::upgrade::Version;
     use libp2p_core::{identity, Multiaddr, PeerId, Transport};
+    use libp2p_plaintext::PlainText2Config;
+    use libp2p_yamux as yamux;
     use std::collections::HashMap;
     use std::io;
     use std::ops::AddAssign;
@@ -908,7 +908,7 @@ mod tests {
             .multiplex(yamux::YamuxConfig::default())
             .boxed();
 
-        let swarm = Swarm::new(
+        Swarm::without_executor(
             transport,
             HelloBehaviour {
                 state: Shared::new(State {
@@ -919,8 +919,7 @@ mod tests {
                 greeting_count: Default::default(),
             },
             identity.public().to_peer_id(),
-        );
-        swarm
+        )
     }
 
     // TODO: Add test for max pending dials

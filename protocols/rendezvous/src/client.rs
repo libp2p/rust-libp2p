@@ -19,8 +19,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::codec::{
-    Cookie, Error, ErrorCode, Message, Namespace, NewRegistration, Registration, RendezvousCodec,
-    Ttl,
+    Cookie, Error, ErrorCode, Message, Namespace, NewRegistrationRequest, Registration,
+    RendezvousCodec, Ttl,
 };
 use crate::PROTOCOL_IDENT;
 use asynchronous_codec::Framed;
@@ -29,22 +29,19 @@ use futures::future::FutureExt;
 use futures::stream::FuturesUnordered;
 use futures::stream::StreamExt;
 use futures::SinkExt;
-use instant::Duration;
 use libp2p_core::connection::ConnectionId;
 use libp2p_core::identity::error::SigningError;
 use libp2p_core::identity::Keypair;
 use libp2p_core::{ConnectedPoint, Multiaddr, PeerId, PeerRecord};
 use libp2p_swarm::handler::from_fn;
 use libp2p_swarm::{
-    CloseConnection, NegotiatedSubstream, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
-    PollParameters,
+    NegotiatedSubstream, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
 };
 use std::collections::{HashMap, VecDeque};
-use std::future::Future;
-use std::io;
 use std::iter::FromIterator;
 use std::sync::Arc;
 use std::task::{Context, Poll};
+use std::time::Duration;
 use void::Void;
 
 pub struct Behaviour {
@@ -188,7 +185,7 @@ pub enum OutboundEvent {
 #[allow(clippy::enum_variant_names)]
 #[derive(Debug, Clone)]
 pub enum OpenInfo {
-    RegisterRequest(NewRegistration),
+    RegisterRequest(NewRegistrationRequest),
     UnregisterRequest(Namespace),
     DiscoverRequest {
         namespace: Option<Namespace>,
@@ -219,43 +216,94 @@ impl NetworkBehaviour for Behaviour {
 
     fn inject_event(
         &mut self,
-        __id: PeerId,
+        peer_id: PeerId,
         _: ConnectionId,
         event: from_fn::OutEvent<Void, Result<OutboundEvent, Error>, OpenInfo>,
     ) {
-        match event {
+        let new_events = match event {
             from_fn::OutEvent::InboundEmitted(never) => void::unreachable(never),
-            from_fn::OutEvent::OutboundEmitted(Ok(OutboundEvent::Discovered { .. })) => {}
-            from_fn::OutEvent::OutboundEmitted(Ok(OutboundEvent::Registered { .. })) => {}
-            from_fn::OutEvent::OutboundEmitted(Ok(OutboundEvent::DiscoverFailed { .. })) => {}
-            from_fn::OutEvent::OutboundEmitted(Ok(OutboundEvent::RegisterFailed(..))) => {}
-            from_fn::OutEvent::OutboundEmitted(Err(e)) => {}
-            from_fn::OutEvent::FailedToOpen(from_fn::OpenError::Timeout(info)) => {}
-            from_fn::OutEvent::FailedToOpen(from_fn::OpenError::NegotiationFailed(..)) => {}
-            from_fn::OutEvent::FailedToOpen(from_fn::OpenError::LimitExceeded { .. }) => {}
-            from_fn::OutEvent::FailedToOpen(from_fn::OpenError::Unsupported { .. }) => {}
-        }
-        //
-        // let new_events = match event {
-        //     handler::OutboundOutEvent::InboundEvent { message, .. } => void::unreachable(message),
-        //     handler::OutboundOutEvent::OutboundEvent { message, .. } => handle_outbound_event(
-        //         message,
-        //         peer_id,
-        //         &mut self.discovered_peers,
-        //         &mut self.expiring_registrations,
-        //     ),
-        //     handler::OutboundOutEvent::InboundError { error, .. } => void::unreachable(error),
-        //     handler::OutboundOutEvent::OutboundError { error, .. } => {
-        //         log::warn!("Connection with peer {} failed: {}", peer_id, error);
-        //
-        //         vec![NetworkBehaviourAction::CloseConnection {
-        //             peer_id,
-        //             connection: CloseConnection::One(connection_id),
-        //         }]
-        //     }
-        // };
-        //
-        // self.events.extend(new_events);
+            from_fn::OutEvent::OutboundEmitted(Ok(OutboundEvent::Discovered {
+                registrations,
+                cookie,
+            })) => {
+                self.discovered_peers
+                    .extend(registrations.iter().map(|registration| {
+                        let peer_id = registration.record.peer_id();
+                        let namespace = registration.namespace.clone();
+                        let addresses = registration.record.addresses().to_vec();
+
+                        ((peer_id, namespace), addresses)
+                    }));
+                self.expiring_registrations
+                    .extend(registrations.iter().cloned().map(|registration| {
+                        async move {
+                            // if the timer errors we consider it expired
+                            futures_timer::Delay::new(Duration::from_secs(registration.ttl as u64))
+                                .await;
+
+                            (registration.record.peer_id(), registration.namespace)
+                        }
+                        .boxed()
+                    }));
+
+                vec![NetworkBehaviourAction::GenerateEvent(Event::Discovered {
+                    rendezvous_node: peer_id,
+                    registrations,
+                    cookie,
+                })]
+            }
+            from_fn::OutEvent::OutboundEmitted(Ok(OutboundEvent::Registered {
+                namespace,
+                ttl,
+            })) => {
+                vec![NetworkBehaviourAction::GenerateEvent(Event::Registered {
+                    rendezvous_node: peer_id,
+                    ttl,
+                    namespace,
+                })]
+            }
+            from_fn::OutEvent::OutboundEmitted(Ok(OutboundEvent::DiscoverFailed {
+                namespace,
+                error,
+            })) => {
+                vec![NetworkBehaviourAction::GenerateEvent(
+                    Event::DiscoverFailed {
+                        rendezvous_node: peer_id,
+                        namespace,
+                        error,
+                    },
+                )]
+            }
+            from_fn::OutEvent::OutboundEmitted(Ok(OutboundEvent::RegisterFailed(
+                namespace,
+                error,
+            ))) => {
+                vec![NetworkBehaviourAction::GenerateEvent(
+                    Event::RegisterFailed(RegisterError::Remote {
+                        rendezvous_node: peer_id,
+                        namespace,
+                        error,
+                    }),
+                )]
+            }
+            from_fn::OutEvent::OutboundEmitted(Err(_)) => {
+                todo!()
+            }
+            from_fn::OutEvent::FailedToOpen(from_fn::OpenError::Timeout(_)) => {
+                todo!()
+            }
+            from_fn::OutEvent::FailedToOpen(from_fn::OpenError::NegotiationFailed(..)) => {
+                todo!()
+            }
+            from_fn::OutEvent::FailedToOpen(from_fn::OpenError::LimitExceeded { .. }) => {
+                todo!()
+            }
+            from_fn::OutEvent::FailedToOpen(from_fn::OpenError::Unsupported { .. }) => {
+                todo!()
+            }
+        };
+
+        self.events.extend(new_events);
     }
 
     fn poll(
@@ -285,7 +333,7 @@ impl NetworkBehaviour for Behaviour {
                 Ok(peer_record) => NetworkBehaviourAction::NotifyHandler {
                     peer_id: rendezvous_node,
                     event: from_fn::InEvent::NewOutbound(OpenInfo::RegisterRequest(
-                        NewRegistration {
+                        NewRegistrationRequest {
                             namespace,
                             record: peer_record,
                             ttl,
@@ -313,74 +361,6 @@ impl NetworkBehaviour for Behaviour {
         Poll::Pending
     }
 }
-
-// fn handle_outbound_event(
-//     event: outbound::OutEvent,
-//     peer_id: PeerId,
-//     discovered_peers: &mut HashMap<(PeerId, Namespace), Vec<Multiaddr>>,
-//     expiring_registrations: &mut FuturesUnordered<BoxFuture<'static, (PeerId, Namespace)>>,
-// ) -> Vec<
-//     NetworkBehaviourAction<
-//         Event,
-//         SubstreamConnectionHandler<void::Void, outbound::Stream, outbound::OpenInfo>,
-//     >,
-// > {
-//     match event {
-//         outbound::OutEvent::Registered { namespace, ttl } => {
-//             vec![NetworkBehaviourAction::GenerateEvent(Event::Registered {
-//                 rendezvous_node: peer_id,
-//                 ttl,
-//                 namespace,
-//             })]
-//         }
-//         outbound::OutEvent::RegisterFailed(namespace, error) => {
-//             vec![NetworkBehaviourAction::GenerateEvent(
-//                 Event::RegisterFailed(RegisterError::Remote {
-//                     rendezvous_node: peer_id,
-//                     namespace,
-//                     error,
-//                 }),
-//             )]
-//         }
-//         outbound::OutEvent::Discovered {
-//             registrations,
-//             cookie,
-//         } => {
-//             discovered_peers.extend(registrations.iter().map(|registration| {
-//                 let peer_id = registration.record.peer_id();
-//                 let namespace = registration.namespace.clone();
-//
-//                 let addresses = registration.record.addresses().to_vec();
-//
-//                 ((peer_id, namespace), addresses)
-//             }));
-//             expiring_registrations.extend(registrations.iter().cloned().map(|registration| {
-//                 async move {
-//                     // if the timer errors we consider it expired
-//                     futures_timer::Delay::new(Duration::from_secs(registration.ttl as u64)).await;
-//
-//                     (registration.record.peer_id(), registration.namespace)
-//                 }
-//                 .boxed()
-//             }));
-//
-//             vec![NetworkBehaviourAction::GenerateEvent(Event::Discovered {
-//                 rendezvous_node: peer_id,
-//                 registrations,
-//                 cookie,
-//             })]
-//         }
-//         outbound::OutEvent::DiscoverFailed { namespace, error } => {
-//             vec![NetworkBehaviourAction::GenerateEvent(
-//                 Event::DiscoverFailed {
-//                     rendezvous_node: peer_id,
-//                     namespace,
-//                     error,
-//                 },
-//             )]
-//         }
-//     }
-// }
 
 async fn outbound_stream_handler(
     substream: NegotiatedSubstream,
@@ -443,6 +423,8 @@ async fn outbound_stream_handler(
             panic!("protocol violation") // TODO: Make two different codecs to avoid this?
         }
     };
+
+    substream.close().await?;
 
     Ok(out_event)
 }

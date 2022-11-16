@@ -274,7 +274,7 @@ async fn registration_on_clients_expire() {
     let roberts_peer_id = *robert.local_peer_id();
     robert.spawn_into_runtime();
 
-    let registration_ttl = 3;
+    let registration_ttl = 2;
 
     alice
         .behaviour_mut()
@@ -292,7 +292,7 @@ async fn registration_on_clients_expire() {
         }
     };
 
-    tokio::time::sleep(Duration::from_secs(registration_ttl + 5)).await;
+    tokio::time::sleep(Duration::from_secs(registration_ttl + 3)).await;
 
     let event = bob.select_next_some().await;
     let error = bob.dial(*alice.local_peer_id()).unwrap_err();
