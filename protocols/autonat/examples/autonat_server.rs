@@ -31,8 +31,8 @@ use futures::prelude::*;
 use libp2p::autonat;
 use libp2p::identify;
 use libp2p::multiaddr::Protocol;
-use libp2p::swarm::{Swarm, SwarmEvent};
-use libp2p::{identity, Multiaddr, NetworkBehaviour, PeerId};
+use libp2p::swarm::{NetworkBehaviour, Swarm, SwarmEvent};
+use libp2p::{identity, Multiaddr, PeerId};
 use std::error::Error;
 use std::net::Ipv4Addr;
 
@@ -57,7 +57,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let behaviour = Behaviour::new(local_key.public());
 
-    let mut swarm = Swarm::new(transport, behaviour, local_peer_id);
+    let mut swarm = Swarm::with_async_std_executor(transport, behaviour, local_peer_id);
     swarm.listen_on(
         Multiaddr::empty()
             .with(Protocol::Ip4(Ipv4Addr::UNSPECIFIED))

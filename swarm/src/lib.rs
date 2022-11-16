@@ -64,29 +64,53 @@ mod upgrade;
 pub mod behaviour;
 pub mod dial_opts;
 pub mod dummy;
+mod executor;
 pub mod handler;
 pub mod keep_alive;
+
+/// Bundles all symbols required for the [`libp2p_swarm_derive::NetworkBehaviour`] macro.
+#[doc(hidden)]
+pub mod derive_prelude {
+    pub use crate::ConnectionHandler;
+    pub use crate::DialError;
+    pub use crate::IntoConnectionHandler;
+    pub use crate::IntoConnectionHandlerSelect;
+    pub use crate::NetworkBehaviour;
+    pub use crate::NetworkBehaviourAction;
+    pub use crate::PollParameters;
+    pub use futures::prelude as futures;
+    pub use libp2p_core::connection::ConnectionId;
+    pub use libp2p_core::either::EitherOutput;
+    pub use libp2p_core::transport::ListenerId;
+    pub use libp2p_core::ConnectedPoint;
+    pub use libp2p_core::Multiaddr;
+    pub use libp2p_core::PeerId;
+}
 
 pub use behaviour::{
     CloseConnection, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
 };
+pub use connection::pool::{ConnectionCounters, ConnectionLimits};
 pub use connection::{
-    ConnectionCounters, ConnectionError, ConnectionLimit, ConnectionLimits, PendingConnectionError,
-    PendingInboundConnectionError, PendingOutboundConnectionError,
+    ConnectionError, ConnectionLimit, PendingConnectionError, PendingInboundConnectionError,
+    PendingOutboundConnectionError,
 };
+pub use executor::Executor;
 pub use handler::{
     from_fn::from_fn, ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerSelect,
     ConnectionHandlerUpgrErr, IntoConnectionHandler, IntoConnectionHandlerSelect, KeepAlive,
     OneShotHandler, OneShotHandlerConfig, SubstreamProtocol,
 };
+#[cfg(feature = "macros")]
+pub use libp2p_swarm_derive::NetworkBehaviour;
 pub use registry::{AddAddressResult, AddressRecord, AddressScore};
 
-use connection::pool::{Pool, PoolConfig, PoolEvent};
-use connection::{EstablishedConnection, IncomingInfo};
+use connection::pool::{EstablishedConnection, Pool, PoolConfig, PoolEvent};
+use connection::IncomingInfo;
 use dial_opts::{DialOpts, PeerCondition};
 use either::Either;
 use futures::{executor::ThreadPoolBuilder, prelude::*, stream::FusedStream};
-use libp2p_core::connection::{ConnectionId, PendingPoint};
+use libp2p_core::connection::ConnectionId;
 use libp2p_core::muxing::SubstreamBox;
 use libp2p_core::{
     connection::ConnectedPoint,
@@ -95,7 +119,7 @@ use libp2p_core::{
     muxing::StreamMuxerBox,
     transport::{self, ListenerId, TransportError, TransportEvent},
     upgrade::ProtocolName,
-    Endpoint, Executor, Multiaddr, Negotiated, PeerId, Transport,
+    Endpoint, Multiaddr, Negotiated, PeerId, Transport,
 };
 use registry::{AddressIntoIter, Addresses};
 use smallvec::SmallVec;
@@ -306,12 +330,89 @@ where
     TBehaviour: NetworkBehaviour,
 {
     /// Builds a new `Swarm`.
+    #[deprecated(
+        since = "0.41.0",
+        note = "This constructor is considered ambiguous regarding the executor. Use one of the new, executor-specific constructors or `Swarm::with_threadpool_executor` for the same behaviour."
+    )]
     pub fn new(
         transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
         behaviour: TBehaviour,
         local_peer_id: PeerId,
     ) -> Self {
-        SwarmBuilder::new(transport, behaviour, local_peer_id).build()
+        Self::with_threadpool_executor(transport, behaviour, local_peer_id)
+    }
+
+    /// Builds a new `Swarm` with a provided executor.
+    pub fn with_executor(
+        transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
+        behaviour: TBehaviour,
+        local_peer_id: PeerId,
+        executor: impl Executor + Send + 'static,
+    ) -> Self {
+        SwarmBuilder::with_executor(transport, behaviour, local_peer_id, executor).build()
+    }
+
+    /// Builds a new `Swarm` with a tokio executor.
+    #[cfg(feature = "tokio")]
+    pub fn with_tokio_executor(
+        transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
+        behaviour: TBehaviour,
+        local_peer_id: PeerId,
+    ) -> Self {
+        Self::with_executor(
+            transport,
+            behaviour,
+            local_peer_id,
+            crate::executor::TokioExecutor,
+        )
+    }
+
+    /// Builds a new `Swarm` with an async-std executor.
+    #[cfg(feature = "async-std")]
+    pub fn with_async_std_executor(
+        transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
+        behaviour: TBehaviour,
+        local_peer_id: PeerId,
+    ) -> Self {
+        Self::with_executor(
+            transport,
+            behaviour,
+            local_peer_id,
+            crate::executor::AsyncStdExecutor,
+        )
+    }
+
+    /// Builds a new `Swarm` with a threadpool executor.
+    pub fn with_threadpool_executor(
+        transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
+        behaviour: TBehaviour,
+        local_peer_id: PeerId,
+    ) -> Self {
+        let builder = match ThreadPoolBuilder::new()
+            .name_prefix("libp2p-swarm-task-")
+            .create()
+        {
+            Ok(tp) => SwarmBuilder::with_executor(transport, behaviour, local_peer_id, tp),
+            Err(err) => {
+                log::warn!("Failed to create executor thread pool: {:?}", err);
+                SwarmBuilder::without_executor(transport, behaviour, local_peer_id)
+            }
+        };
+        builder.build()
+    }
+
+    /// Builds a new `Swarm` without an executor, instead using the current task.
+    ///
+    /// ## ⚠️  Performance warning
+    /// All connections will be polled on the current task, thus quite bad performance
+    /// characteristics should be expected. Whenever possible use an executor and
+    /// [`Swarm::with_executor`].
+    pub fn without_executor(
+        transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
+        behaviour: TBehaviour,
+        local_peer_id: PeerId,
+    ) -> Self {
+        SwarmBuilder::without_executor(transport, behaviour, local_peer_id).build()
     }
 
     /// Returns information about the connections underlying the [`Swarm`].
@@ -395,15 +496,7 @@ where
                     // Check [`PeerCondition`] if provided.
                     let condition_matched = match condition {
                         PeerCondition::Disconnected => !self.is_connected(&peer_id),
-                        PeerCondition::NotDialing => {
-                            !self
-                                .pool
-                                .iter_pending_info()
-                                .any(move |(_, endpoint, peer)| {
-                                    matches!(endpoint, PendingPoint::Dialer { .. })
-                                        && peer.as_ref() == Some(&peer_id)
-                                })
-                        }
+                        PeerCondition::NotDialing => !self.pool.is_dialing(peer_id),
                         PeerCondition::Always => true,
                     };
                     if !condition_matched {
@@ -1042,7 +1135,7 @@ where
                 Some((peer_id, handler, event)) => match handler {
                     PendingNotifyHandler::One(conn_id) => {
                         match this.pool.get_established(conn_id) {
-                            Some(mut conn) => match notify_one(&mut conn, event, cx) {
+                            Some(conn) => match notify_one(conn, event, cx) {
                                 None => continue,
                                 Some(event) => {
                                     this.pending_event = Some((peer_id, handler, event));
@@ -1135,8 +1228,8 @@ enum PendingNotifyHandler {
 ///
 /// Returns `None` if the connection is closing or the event has been
 /// successfully sent, in either case the event is consumed.
-fn notify_one<'a, THandlerInEvent>(
-    conn: &mut EstablishedConnection<'a, THandlerInEvent>,
+fn notify_one<THandlerInEvent>(
+    conn: &mut EstablishedConnection<THandlerInEvent>,
     event: THandlerInEvent,
     cx: &mut Context<'_>,
 ) -> Option<THandlerInEvent> {
@@ -1180,7 +1273,7 @@ where
     let mut pending = SmallVec::new();
     let mut event = Some(event); // (1)
     for id in ids.into_iter() {
-        if let Some(mut conn) = pool.get_established(id) {
+        if let Some(conn) = pool.get_established(id) {
             match conn.poll_ready_notify_handler(cx) {
                 Poll::Pending => pending.push(id),
                 Poll::Ready(Err(())) => {} // connection is closing
@@ -1280,16 +1373,67 @@ where
     /// Creates a new `SwarmBuilder` from the given transport, behaviour and
     /// local peer ID. The `Swarm` with its underlying `Network` is obtained
     /// via [`SwarmBuilder::build`].
+    #[deprecated(
+        since = "0.41.0",
+        note = "Use `SwarmBuilder::with_executor` or `SwarmBuilder::without_executor` instead."
+    )]
     pub fn new(
         transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
         behaviour: TBehaviour,
         local_peer_id: PeerId,
     ) -> Self {
+        let executor: Option<Box<dyn Executor + Send>> = match ThreadPoolBuilder::new()
+            .name_prefix("libp2p-swarm-task-")
+            .create()
+            .ok()
+        {
+            Some(tp) => Some(Box::new(tp)),
+            None => None,
+        };
         SwarmBuilder {
             local_peer_id,
             transport,
             behaviour,
-            pool_config: Default::default(),
+            pool_config: PoolConfig::new(executor),
+            connection_limits: Default::default(),
+        }
+    }
+
+    /// Creates a new [`SwarmBuilder`] from the given transport, behaviour, local peer ID and
+    /// executor. The `Swarm` with its underlying `Network` is obtained via
+    /// [`SwarmBuilder::build`].
+    pub fn with_executor(
+        transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
+        behaviour: TBehaviour,
+        local_peer_id: PeerId,
+        executor: impl Executor + Send + 'static,
+    ) -> Self {
+        Self {
+            local_peer_id,
+            transport,
+            behaviour,
+            pool_config: PoolConfig::new(Some(Box::new(executor))),
+            connection_limits: Default::default(),
+        }
+    }
+
+    /// Creates a new [`SwarmBuilder`] from the given transport, behaviour and local peer ID. The
+    /// `Swarm` with its underlying `Network` is obtained via [`SwarmBuilder::build`].
+    ///
+    /// ## ⚠️  Performance warning
+    /// All connections will be polled on the current task, thus quite bad performance
+    /// characteristics should be expected. Whenever possible use an executor and
+    /// [`SwarmBuilder::with_executor`].
+    pub fn without_executor(
+        transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
+        behaviour: TBehaviour,
+        local_peer_id: PeerId,
+    ) -> Self {
+        Self {
+            local_peer_id,
+            transport,
+            behaviour,
+            pool_config: PoolConfig::new(None),
             connection_limits: Default::default(),
         }
     }
@@ -1297,9 +1441,11 @@ where
     /// Configures the `Executor` to use for spawning background tasks.
     ///
     /// By default, unless another executor has been configured,
-    /// [`SwarmBuilder::build`] will try to set up a `ThreadPool`.
-    pub fn executor(mut self, e: Box<dyn Executor + Send>) -> Self {
-        self.pool_config = self.pool_config.with_executor(e);
+    /// [`SwarmBuilder::build`] will try to set up a
+    /// [`ThreadPool`](futures::executor::ThreadPool).
+    #[deprecated(since = "0.41.0", note = "Use `SwarmBuilder::with_executor` instead.")]
+    pub fn executor(mut self, executor: Box<dyn Executor + Send>) -> Self {
+        self.pool_config = self.pool_config.with_executor(executor);
         self
     }
 
@@ -1397,25 +1543,10 @@ where
             .map(|info| info.protocol_name().to_vec())
             .collect();
 
-        // If no executor has been explicitly configured, try to set up a thread pool.
-        let pool_config =
-            self.pool_config.or_else_with_executor(|| {
-                match ThreadPoolBuilder::new()
-                    .name_prefix("libp2p-swarm-task-")
-                    .create()
-                {
-                    Ok(tp) => Some(Box::new(move |f| tp.spawn_ok(f))),
-                    Err(err) => {
-                        log::warn!("Failed to create executor thread pool: {:?}", err);
-                        None
-                    }
-                }
-            });
-
         Swarm {
             local_peer_id: self.local_peer_id,
             transport: self.transport,
-            pool: Pool::new(self.local_peer_id, pool_config, self.connection_limits),
+            pool: Pool::new(self.local_peer_id, self.pool_config, self.connection_limits),
             behaviour: self.behaviour,
             supported_protocols,
             listened_addrs: HashMap::new(),
@@ -1571,15 +1702,16 @@ mod tests {
     use super::*;
     use crate::test::{CallTraceBehaviour, MockBehaviour};
     use futures::executor::block_on;
+    use futures::executor::ThreadPool;
     use futures::future::poll_fn;
     use futures::future::Either;
     use futures::{executor, future, ready};
-    use libp2p::core::{identity, multiaddr, transport, upgrade};
-    use libp2p::plaintext;
-    use libp2p::yamux;
     use libp2p_core::multiaddr::multiaddr;
     use libp2p_core::transport::TransportEvent;
     use libp2p_core::Endpoint;
+    use libp2p_core::{identity, multiaddr, transport, upgrade};
+    use libp2p_plaintext as plaintext;
+    use libp2p_yamux as yamux;
     use quickcheck::*;
 
     // Test execution state.
@@ -1607,7 +1739,12 @@ mod tests {
             .multiplex(yamux::YamuxConfig::default())
             .boxed();
         let behaviour = CallTraceBehaviour::new(MockBehaviour::new(handler_proto));
-        SwarmBuilder::new(transport, behaviour, local_public_key.into())
+        match ThreadPool::new().ok() {
+            Some(tp) => {
+                SwarmBuilder::with_executor(transport, behaviour, local_public_key.into(), tp)
+            }
+            None => SwarmBuilder::without_executor(transport, behaviour, local_public_key.into()),
+        }
     }
 
     fn swarms_connected<TBehaviour>(

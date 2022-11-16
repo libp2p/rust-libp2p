@@ -54,10 +54,34 @@ use void::Void;
 mod concurrent_dial;
 mod task;
 
+enum ExecSwitch {
+    Executor(Box<dyn Executor + Send>),
+    LocalSpawn(FuturesUnordered<Pin<Box<dyn Future<Output = ()> + Send>>>),
+}
+
+impl ExecSwitch {
+    fn advance_local(&mut self, cx: &mut Context) {
+        match self {
+            ExecSwitch::Executor(_) => {}
+            ExecSwitch::LocalSpawn(local) => {
+                while let Poll::Ready(Some(())) = local.poll_next_unpin(cx) {}
+            }
+        }
+    }
+
+    fn spawn(&mut self, task: BoxFuture<'static, ()>) {
+        match self {
+            Self::Executor(executor) => executor.exec(task),
+            Self::LocalSpawn(local) => local.push(task),
+        }
+    }
+}
+
 /// A connection `Pool` manages a set of connections for each peer.
-pub struct Pool<THandler: IntoConnectionHandler, TTrans>
+pub struct Pool<THandler, TTrans>
 where
     TTrans: Transport,
+    THandler: IntoConnectionHandler,
 {
     local_id: PeerId,
 
@@ -69,12 +93,12 @@ where
         PeerId,
         FnvHashMap<
             ConnectionId,
-            EstablishedConnectionInfo<<THandler::Handler as ConnectionHandler>::InEvent>,
+            EstablishedConnection<<THandler::Handler as ConnectionHandler>::InEvent>,
         >,
     >,
 
     /// The pending connections that are currently being negotiated.
-    pending: HashMap<ConnectionId, PendingConnectionInfo<THandler>>,
+    pending: HashMap<ConnectionId, PendingConnection<THandler>>,
 
     /// Next available identifier for a new connection / task.
     next_connection_id: ConnectionId,
@@ -93,14 +117,9 @@ where
     /// See [`Connection::max_negotiating_inbound_streams`].
     max_negotiating_inbound_streams: usize,
 
-    /// The executor to use for running the background tasks. If `None`,
-    /// the tasks are kept in `local_spawns` instead and polled on the
-    /// current thread when the [`Pool`] is polled for new events.
-    executor: Option<Box<dyn Executor + Send>>,
-
-    /// If no `executor` is configured, tasks are kept in this set and
-    /// polled on the current thread when the [`Pool`] is polled for new events.
-    local_spawns: FuturesUnordered<Pin<Box<dyn Future<Output = ()> + Send>>>,
+    /// The executor to use for running connection tasks. Can either be a global executor
+    /// or a local queue.
+    executor: ExecSwitch,
 
     /// Sender distributed to pending tasks for reporting events back
     /// to the pool.
@@ -120,15 +139,41 @@ where
 }
 
 #[derive(Debug)]
-struct EstablishedConnectionInfo<TInEvent> {
-    /// [`PeerId`] of the remote peer.
-    peer_id: PeerId,
+pub struct EstablishedConnection<TInEvent> {
     endpoint: ConnectedPoint,
     /// Channel endpoint to send commands to the task.
     sender: mpsc::Sender<task::Command<TInEvent>>,
 }
 
-impl<TInEvent> EstablishedConnectionInfo<TInEvent> {
+impl<TInEvent> EstablishedConnection<TInEvent> {
+    /// (Asynchronously) sends an event to the connection handler.
+    ///
+    /// If the handler is not ready to receive the event, either because
+    /// it is busy or the connection is about to close, the given event
+    /// is returned with an `Err`.
+    ///
+    /// If execution of this method is preceded by successful execution of
+    /// `poll_ready_notify_handler` without another intervening execution
+    /// of `notify_handler`, it only fails if the connection is now about
+    /// to close.
+    pub fn notify_handler(&mut self, event: TInEvent) -> Result<(), TInEvent> {
+        let cmd = task::Command::NotifyHandler(event);
+        self.sender.try_send(cmd).map_err(|e| match e.into_inner() {
+            task::Command::NotifyHandler(event) => event,
+            _ => unreachable!("Expect failed send to return initial event."),
+        })
+    }
+
+    /// Checks if `notify_handler` is ready to accept an event.
+    ///
+    /// Returns `Ok(())` if the handler is ready to receive an event via `notify_handler`.
+    ///
+    /// Returns `Err(())` if the background task associated with the connection
+    /// is terminating and the connection is about to close.
+    pub fn poll_ready_notify_handler(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), ()>> {
+        self.sender.poll_ready(cx).map_err(|_| ())
+    }
+
     /// Initiates a graceful close of the connection.
     ///
     /// Has no effect if the connection is already closing.
@@ -142,7 +187,7 @@ impl<TInEvent> EstablishedConnectionInfo<TInEvent> {
     }
 }
 
-struct PendingConnectionInfo<THandler> {
+struct PendingConnection<THandler> {
     /// [`PeerId`] of the remote peer.
     peer_id: Option<PeerId>,
     /// Handler to handle connection once no longer pending but established.
@@ -150,6 +195,19 @@ struct PendingConnectionInfo<THandler> {
     endpoint: PendingPoint,
     /// When dropped, notifies the task which then knows to terminate.
     abort_notifier: Option<oneshot::Sender<Void>>,
+}
+
+impl<THandler> PendingConnection<THandler> {
+    fn is_for_same_remote_as(&self, other: PeerId) -> bool {
+        self.peer_id.map_or(false, |peer| peer == other)
+    }
+
+    /// Aborts the connection attempt, closing the connection.
+    fn abort(&mut self) {
+        if let Some(notifier) = self.abort_notifier.take() {
+            drop(notifier);
+        }
+    }
 }
 
 impl<THandler: IntoConnectionHandler, TTrans: Transport> fmt::Debug for Pool<THandler, TTrans> {
@@ -260,6 +318,10 @@ where
             mpsc::channel(config.task_event_buffer_size);
         let (established_connection_events_tx, established_connection_events_rx) =
             mpsc::channel(config.task_event_buffer_size);
+        let executor = match config.executor {
+            Some(exec) => ExecSwitch::Executor(exec),
+            None => ExecSwitch::LocalSpawn(Default::default()),
+        };
         Pool {
             local_id,
             counters: ConnectionCounters::new(limits),
@@ -270,8 +332,7 @@ where
             dial_concurrency_factor: config.dial_concurrency_factor,
             substream_upgrade_protocol_override: config.substream_upgrade_protocol_override,
             max_negotiating_inbound_streams: config.max_negotiating_inbound_streams,
-            executor: config.executor,
-            local_spawns: FuturesUnordered::new(),
+            executor,
             pending_connection_events_tx,
             pending_connection_events_rx,
             established_connection_events_tx,
@@ -284,33 +345,14 @@ where
         &self.counters
     }
 
-    /// Gets an entry representing a connection in the pool.
-    ///
-    /// Returns `None` if the pool has no connection with the given ID.
-    pub fn get(&mut self, id: ConnectionId) -> Option<PoolConnection<'_, THandler>> {
-        if let hash_map::Entry::Occupied(entry) = self.pending.entry(id) {
-            Some(PoolConnection::Pending(PendingConnection { entry }))
-        } else {
-            self.established
-                .iter_mut()
-                .find_map(|(_, cs)| match cs.entry(id) {
-                    hash_map::Entry::Occupied(entry) => {
-                        Some(PoolConnection::Established(EstablishedConnection { entry }))
-                    }
-                    hash_map::Entry::Vacant(_) => None,
-                })
-        }
-    }
-
     /// Gets an established connection from the pool by ID.
     pub fn get_established(
         &mut self,
         id: ConnectionId,
-    ) -> Option<EstablishedConnection<'_, THandlerInEvent<THandler>>> {
-        match self.get(id) {
-            Some(PoolConnection::Established(c)) => Some(c),
-            _ => None,
-        }
+    ) -> Option<&mut EstablishedConnection<THandlerInEvent<THandler>>> {
+        self.established
+            .values_mut()
+            .find_map(|connections| connections.get_mut(&id))
     }
 
     /// Returns true if we are connected to the given peer.
@@ -338,21 +380,12 @@ where
             }
         }
 
-        #[allow(clippy::needless_collect)]
-        let pending_connections = self
+        for connection in self
             .pending
-            .iter()
-            .filter(|(_, PendingConnectionInfo { peer_id, .. })| peer_id.as_ref() == Some(&peer))
-            .map(|(id, _)| *id)
-            .collect::<Vec<_>>();
-
-        for pending_connection in pending_connections {
-            let entry = self
-                .pending
-                .entry(pending_connection)
-                .expect_occupied("Iterating pending connections");
-
-            PendingConnection { entry }.abort();
+            .iter_mut()
+            .filter_map(|(_, info)| info.is_for_same_remote_as(peer).then_some(info))
+        {
+            connection.abort()
         }
     }
 
@@ -367,19 +400,11 @@ where
         }
     }
 
-    /// Returns an iterator over all pending connection IDs together
-    /// with associated endpoints and expected peer IDs in the pool.
-    pub fn iter_pending_info(
-        &self,
-    ) -> impl Iterator<Item = (&ConnectionId, &PendingPoint, &Option<PeerId>)> + '_ {
-        self.pending.iter().map(
-            |(
-                id,
-                PendingConnectionInfo {
-                    peer_id, endpoint, ..
-                },
-            )| (id, endpoint, peer_id),
-        )
+    /// Checks whether we are currently dialing the given peer.
+    pub fn is_dialing(&self, peer: PeerId) -> bool {
+        self.pending.iter().any(|(_, info)| {
+            matches!(info.endpoint, PendingPoint::Dialer { .. }) && info.is_for_same_remote_as(peer)
+        })
     }
 
     /// Returns an iterator over all connected peers, i.e. those that have
@@ -396,11 +421,7 @@ where
     }
 
     fn spawn(&mut self, task: BoxFuture<'static, ()>) {
-        if let Some(executor) = &mut self.executor {
-            executor.exec(task);
-        } else {
-            self.local_spawns.push(task);
-        }
+        self.executor.spawn(task)
     }
 }
 
@@ -467,7 +488,7 @@ where
         self.counters.inc_pending(&endpoint);
         self.pending.insert(
             connection_id,
-            PendingConnectionInfo {
+            PendingConnection {
                 peer_id: peer,
                 handler,
                 endpoint,
@@ -514,7 +535,7 @@ where
         self.counters.inc_pending_incoming();
         self.pending.insert(
             connection_id,
-            PendingConnectionInfo {
+            PendingConnection {
                 peer_id: None,
                 handler,
                 endpoint: endpoint.into(),
@@ -576,7 +597,7 @@ where
                     .established
                     .get_mut(&peer_id)
                     .expect("`Closed` event for established connection");
-                let EstablishedConnectionInfo { endpoint, .. } =
+                let EstablishedConnection { endpoint, .. } =
                     connections.remove(&id).expect("Connection to be present");
                 self.counters.dec_established(&endpoint);
                 let remaining_established_connection_ids: Vec<ConnectionId> =
@@ -608,7 +629,7 @@ where
                     output: (obtained_peer_id, mut muxer),
                     outgoing,
                 } => {
-                    let PendingConnectionInfo {
+                    let PendingConnection {
                         peer_id: expected_peer_id,
                         handler,
                         endpoint,
@@ -740,8 +761,7 @@ where
                         mpsc::channel(self.task_command_buffer_size);
                     conns.insert(
                         id,
-                        EstablishedConnectionInfo {
-                            peer_id: obtained_peer_id,
+                        EstablishedConnection {
                             endpoint: endpoint.clone(),
                             sender: command_sender,
                         },
@@ -764,21 +784,16 @@ where
                         .boxed(),
                     );
 
-                    match self.get(id) {
-                        Some(PoolConnection::Established(connection)) => {
-                            return Poll::Ready(PoolEvent::ConnectionEstablished {
-                                peer_id: connection.peer_id(),
-                                endpoint: connection.endpoint().clone(),
-                                id: connection.id(),
-                                other_established_connection_ids,
-                                concurrent_dial_errors,
-                            })
-                        }
-                        _ => unreachable!("since `entry` is an `EstablishedEntry`."),
-                    }
+                    return Poll::Ready(PoolEvent::ConnectionEstablished {
+                        peer_id: obtained_peer_id,
+                        endpoint,
+                        id,
+                        other_established_connection_ids,
+                        concurrent_dial_errors,
+                    });
                 }
                 task::PendingConnectionEvent::PendingFailed { id, error } => {
-                    if let Some(PendingConnectionInfo {
+                    if let Some(PendingConnection {
                         peer_id,
                         handler,
                         endpoint,
@@ -823,102 +838,9 @@ where
             }
         }
 
-        // Advance the tasks in `local_spawns`.
-        while let Poll::Ready(Some(())) = self.local_spawns.poll_next_unpin(cx) {}
+        self.executor.advance_local(cx);
 
         Poll::Pending
-    }
-}
-
-/// A connection in a [`Pool`].
-pub enum PoolConnection<'a, THandler: IntoConnectionHandler> {
-    Pending(PendingConnection<'a, THandler>),
-    Established(EstablishedConnection<'a, THandlerInEvent<THandler>>),
-}
-
-/// A pending connection in a pool.
-pub struct PendingConnection<'a, THandler: IntoConnectionHandler> {
-    entry: hash_map::OccupiedEntry<'a, ConnectionId, PendingConnectionInfo<THandler>>,
-}
-
-impl<THandler: IntoConnectionHandler> PendingConnection<'_, THandler> {
-    /// Aborts the connection attempt, closing the connection.
-    pub fn abort(mut self) {
-        if let Some(notifier) = self.entry.get_mut().abort_notifier.take() {
-            drop(notifier);
-        }
-    }
-}
-
-/// An established connection in a pool.
-pub struct EstablishedConnection<'a, TInEvent> {
-    entry: hash_map::OccupiedEntry<'a, ConnectionId, EstablishedConnectionInfo<TInEvent>>,
-}
-
-impl<TInEvent> fmt::Debug for EstablishedConnection<'_, TInEvent>
-where
-    TInEvent: fmt::Debug,
-{
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
-        f.debug_struct("EstablishedConnection")
-            .field("entry", &self.entry)
-            .finish()
-    }
-}
-
-impl<TInEvent> EstablishedConnection<'_, TInEvent> {
-    /// Returns information about the connected endpoint.
-    pub fn endpoint(&self) -> &ConnectedPoint {
-        &self.entry.get().endpoint
-    }
-
-    /// Returns the identity of the connected peer.
-    pub fn peer_id(&self) -> PeerId {
-        self.entry.get().peer_id
-    }
-
-    /// Returns the local connection ID.
-    pub fn id(&self) -> ConnectionId {
-        *self.entry.key()
-    }
-
-    /// (Asynchronously) sends an event to the connection handler.
-    ///
-    /// If the handler is not ready to receive the event, either because
-    /// it is busy or the connection is about to close, the given event
-    /// is returned with an `Err`.
-    ///
-    /// If execution of this method is preceded by successful execution of
-    /// `poll_ready_notify_handler` without another intervening execution
-    /// of `notify_handler`, it only fails if the connection is now about
-    /// to close.
-    pub fn notify_handler(&mut self, event: TInEvent) -> Result<(), TInEvent> {
-        let cmd = task::Command::NotifyHandler(event);
-        self.entry
-            .get_mut()
-            .sender
-            .try_send(cmd)
-            .map_err(|e| match e.into_inner() {
-                task::Command::NotifyHandler(event) => event,
-                _ => unreachable!("Expect failed send to return initial event."),
-            })
-    }
-
-    /// Checks if `notify_handler` is ready to accept an event.
-    ///
-    /// Returns `Ok(())` if the handler is ready to receive an event via `notify_handler`.
-    ///
-    /// Returns `Err(())` if the background task associated with the connection
-    /// is terminating and the connection is about to close.
-    pub fn poll_ready_notify_handler(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), ()>> {
-        self.entry.get_mut().sender.poll_ready(cx).map_err(|_| ())
-    }
-
-    /// Initiates a graceful close of the connection.
-    ///
-    /// Has no effect if the connection is already closing.
-    pub fn start_close(mut self) {
-        self.entry.get_mut().start_close()
     }
 }
 
@@ -1076,7 +998,7 @@ impl ConnectionCounters {
 
 /// Counts the number of established connections to the given peer.
 fn num_peer_established<TInEvent>(
-    established: &FnvHashMap<PeerId, FnvHashMap<ConnectionId, EstablishedConnectionInfo<TInEvent>>>,
+    established: &FnvHashMap<PeerId, FnvHashMap<ConnectionId, EstablishedConnection<TInEvent>>>,
     peer: PeerId,
 ) -> u32 {
     established.get(&peer).map_or(0, |conns| {
@@ -1168,34 +1090,21 @@ pub struct PoolConfig {
     max_negotiating_inbound_streams: usize,
 }
 
-impl Default for PoolConfig {
-    fn default() -> Self {
-        PoolConfig {
-            executor: None,
-            task_event_buffer_size: 32,
-            task_command_buffer_size: 7,
-            // Set to a default of 8 based on frequency of dialer connections
+impl PoolConfig {
+    pub fn new(executor: Option<Box<dyn Executor + Send>>) -> Self {
+        Self {
+            executor,
+            task_command_buffer_size: 32,
+            task_event_buffer_size: 7,
             dial_concurrency_factor: NonZeroU8::new(8).expect("8 > 0"),
             substream_upgrade_protocol_override: None,
             max_negotiating_inbound_streams: 128,
         }
     }
-}
 
-impl PoolConfig {
     /// Configures the executor to use for spawning connection background tasks.
-    pub fn with_executor(mut self, e: Box<dyn Executor + Send>) -> Self {
-        self.executor = Some(e);
-        self
-    }
-
-    /// Configures the executor to use for spawning connection background tasks,
-    /// only if no executor has already been configured.
-    pub fn or_else_with_executor<F>(mut self, f: F) -> Self
-    where
-        F: FnOnce() -> Option<Box<dyn Executor + Send>>,
-    {
-        self.executor = self.executor.or_else(f);
+    pub fn with_executor(mut self, executor: Box<dyn Executor + Send>) -> Self {
+        self.executor = Some(executor);
         self
     }
 
@@ -1268,14 +1177,5 @@ mod tests {
 
     impl Executor for Dummy {
         fn exec(&self, _: Pin<Box<dyn Future<Output = ()> + Send>>) {}
-    }
-
-    #[test]
-    fn set_executor() {
-        PoolConfig::default()
-            .with_executor(Box::new(Dummy))
-            .with_executor(Box::new(|f| {
-                async_std::task::spawn(f);
-            }));
     }
 }

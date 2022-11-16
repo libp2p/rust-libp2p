@@ -34,7 +34,6 @@ use libp2p::plaintext::PlainText2Config;
 use libp2p::relay::v2::client;
 use libp2p::relay::v2::relay;
 use libp2p::swarm::{AddressScore, NetworkBehaviour, Swarm, SwarmEvent};
-use libp2p::NetworkBehaviour;
 use std::time::Duration;
 
 #[test]
@@ -99,7 +98,7 @@ fn build_relay() -> Swarm<relay::Relay> {
 
     let transport = build_transport(MemoryTransport::default().boxed(), local_public_key);
 
-    Swarm::new(
+    Swarm::with_threadpool_executor(
         transport,
         relay::Relay::new(
             local_peer_id,
@@ -123,7 +122,7 @@ fn build_client() -> Swarm<Client> {
         local_public_key,
     );
 
-    Swarm::new(
+    Swarm::with_threadpool_executor(
         transport,
         Client {
             relay: behaviour,

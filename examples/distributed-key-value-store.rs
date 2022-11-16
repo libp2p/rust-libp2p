@@ -50,8 +50,8 @@ use libp2p::kad::{
 use libp2p::{
     development_transport, identity,
     mdns::{Mdns, MdnsConfig, MdnsEvent},
-    swarm::SwarmEvent,
-    NetworkBehaviour, PeerId, Swarm,
+    swarm::{NetworkBehaviour, SwarmEvent},
+    PeerId, Swarm,
 };
 use std::error::Error;
 
@@ -74,6 +74,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         mdns: Mdns,
     }
 
+    #[allow(clippy::large_enum_variant)]
     enum MyBehaviourEvent {
         Kademlia(KademliaEvent),
         Mdns(MdnsEvent),
@@ -98,7 +99,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let kademlia = Kademlia::new(local_peer_id, store);
         let mdns = Mdns::new(MdnsConfig::default())?;
         let behaviour = MyBehaviour { kademlia, mdns };
-        Swarm::new(transport, behaviour, local_peer_id)
+        Swarm::with_async_std_executor(transport, behaviour, local_peer_id)
     };
 
     // Read full lines from stdin
@@ -113,7 +114,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         line = stdin.select_next_some() => handle_input_line(&mut swarm.behaviour_mut().kademlia, line.expect("Stdin not to close")),
         event = swarm.select_next_some() => match event {
             SwarmEvent::NewListenAddr { address, .. } => {
-                println!("Listening in {:?}", address);
+                println!("Listening in {address:?}");
             },
             SwarmEvent::Behaviour(MyBehaviourEvent::Mdns(MdnsEvent::Discovered(list))) => {
                 for (peer_id, multiaddr) in list {
@@ -132,7 +133,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         }
                     }
                     QueryResult::GetProviders(Err(err)) => {
-                        eprintln!("Failed to get providers: {:?}", err);
+                        eprintln!("Failed to get providers: {err:?}");
                     }
                     QueryResult::GetRecord(Ok(ok)) => {
                         for PeerRecord {
@@ -148,7 +149,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         }
                     }
                     QueryResult::GetRecord(Err(err)) => {
-                        eprintln!("Failed to get record: {:?}", err);
+                        eprintln!("Failed to get record: {err:?}");
                     }
                     QueryResult::PutRecord(Ok(PutRecordOk { key })) => {
                         println!(
@@ -157,7 +158,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         );
                     }
                     QueryResult::PutRecord(Err(err)) => {
-                        eprintln!("Failed to put record: {:?}", err);
+                        eprintln!("Failed to put record: {err:?}");
                     }
                     QueryResult::StartProviding(Ok(AddProviderOk { key })) => {
                         println!(
@@ -166,7 +167,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         );
                     }
                     QueryResult::StartProviding(Err(err)) => {
-                        eprintln!("Failed to put provider record: {:?}", err);
+                        eprintln!("Failed to put provider record: {err:?}");
                     }
                     _ => {}
                 }

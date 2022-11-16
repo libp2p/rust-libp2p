@@ -48,7 +48,7 @@ fn is_response_outbound() {
 
     let (peer1_id, trans) = mk_transport();
     let ping_proto1 = RequestResponse::new(PingCodec(), protocols, cfg);
-    let mut swarm1 = Swarm::new(trans, ping_proto1, peer1_id);
+    let mut swarm1 = Swarm::without_executor(trans, ping_proto1, peer1_id);
 
     let request_id1 = swarm1
         .behaviour_mut()
@@ -87,11 +87,11 @@ fn ping_protocol() {
 
     let (peer1_id, trans) = mk_transport();
     let ping_proto1 = RequestResponse::new(PingCodec(), protocols.clone(), cfg.clone());
-    let mut swarm1 = Swarm::new(trans, ping_proto1, peer1_id);
+    let mut swarm1 = Swarm::without_executor(trans, ping_proto1, peer1_id);
 
     let (peer2_id, trans) = mk_transport();
     let ping_proto2 = RequestResponse::new(PingCodec(), protocols, cfg);
-    let mut swarm2 = Swarm::new(trans, ping_proto2, peer2_id);
+    let mut swarm2 = Swarm::without_executor(trans, ping_proto2, peer2_id);
 
     let (mut tx, mut rx) = mpsc::channel::<Multiaddr>(1);
 
@@ -176,11 +176,11 @@ fn emits_inbound_connection_closed_failure() {
 
     let (peer1_id, trans) = mk_transport();
     let ping_proto1 = RequestResponse::new(PingCodec(), protocols.clone(), cfg.clone());
-    let mut swarm1 = Swarm::new(trans, ping_proto1, peer1_id);
+    let mut swarm1 = Swarm::without_executor(trans, ping_proto1, peer1_id);
 
     let (peer2_id, trans) = mk_transport();
     let ping_proto2 = RequestResponse::new(PingCodec(), protocols, cfg);
-    let mut swarm2 = Swarm::new(trans, ping_proto2, peer2_id);
+    let mut swarm2 = Swarm::without_executor(trans, ping_proto2, peer2_id);
 
     let addr = "/ip4/127.0.0.1/tcp/0".parse().unwrap();
     swarm1.listen_on(addr).unwrap();
@@ -245,11 +245,11 @@ fn emits_inbound_connection_closed_if_channel_is_dropped() {
 
     let (peer1_id, trans) = mk_transport();
     let ping_proto1 = RequestResponse::new(PingCodec(), protocols.clone(), cfg.clone());
-    let mut swarm1 = Swarm::new(trans, ping_proto1, peer1_id);
+    let mut swarm1 = Swarm::without_executor(trans, ping_proto1, peer1_id);
 
     let (peer2_id, trans) = mk_transport();
     let ping_proto2 = RequestResponse::new(PingCodec(), protocols, cfg);
-    let mut swarm2 = Swarm::new(trans, ping_proto2, peer2_id);
+    let mut swarm2 = Swarm::without_executor(trans, ping_proto2, peer2_id);
 
     let addr = "/ip4/127.0.0.1/tcp/0".parse().unwrap();
     swarm1.listen_on(addr).unwrap();
