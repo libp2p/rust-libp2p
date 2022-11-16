@@ -24,7 +24,7 @@ use libp2p::core::PeerId;
 use libp2p::ping;
 use libp2p::swarm::{NetworkBehaviour, Swarm, SwarmEvent};
 use libp2p::Multiaddr;
-use libp2p::{development_transport, rendezvous};
+use libp2p::{rendezvous, tokio_development_transport};
 use libp2p_swarm::AddressScore;
 use std::time::Duration;
 
@@ -39,8 +39,8 @@ async fn main() {
 
     let identity = identity::Keypair::generate_ed25519();
 
-    let mut swarm = Swarm::new(
-        development_transport(identity.clone()).await.unwrap(),
+    let mut swarm = Swarm::with_tokio_executor(
+        tokio_development_transport(identity.clone()).unwrap(),
         MyBehaviour {
             rendezvous: rendezvous::client::Behaviour::new(identity.clone()),
             ping: ping::Behaviour::new(ping::Config::new().with_interval(Duration::from_secs(1))),

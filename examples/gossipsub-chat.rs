@@ -106,7 +106,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut swarm = {
         let mdns = mdns::async_io::Behaviour::new(mdns::Config::default())?;
         let behaviour = MyBehaviour { gossipsub, mdns };
-        Swarm::new(transport, behaviour, local_peer_id)
+        Swarm::with_async_std_executor(transport, behaviour, local_peer_id)
     };
 
     // Read full lines from stdin

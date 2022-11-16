@@ -12,7 +12,10 @@ and move and rename `Mdns` to `async_io::Behaviour`. See [PR 3096].
   Users should prefer importing the identify protocol as a module (`use libp2p::mdns;`),
   and refer to its types via `mdns::`. For example: `mdns::Behaviour` or `mdns::Event`.
 
+- Use `trust-dns-proto` to parse DNS messages. See [PR 3102].
+
 [discussion 2174]: https://github.com/libp2p/rust-libp2p/discussions/2174
+[PR 3102]: https://github.com/libp2p/rust-libp2p/pull/3102
 
 # 0.41.0
 

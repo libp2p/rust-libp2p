@@ -584,7 +584,7 @@ mod tests {
             let protocol = Behaviour::new(
                 Config::new("a".to_string(), pubkey.clone()).with_agent_version("b".to_string()),
             );
-            let swarm = Swarm::new(transport, protocol, pubkey.to_peer_id());
+            let swarm = Swarm::with_async_std_executor(transport, protocol, pubkey.to_peer_id());
             (swarm, pubkey)
         };
 
@@ -593,7 +593,7 @@ mod tests {
             let protocol = Behaviour::new(
                 Config::new("c".to_string(), pubkey.clone()).with_agent_version("d".to_string()),
             );
-            let swarm = Swarm::new(transport, protocol, pubkey.to_peer_id());
+            let swarm = Swarm::with_async_std_executor(transport, protocol, pubkey.to_peer_id());
             (swarm, pubkey)
         };
 
@@ -661,7 +661,7 @@ mod tests {
         let (mut swarm1, pubkey1) = {
             let (pubkey, transport) = transport();
             let protocol = Behaviour::new(Config::new("a".to_string(), pubkey.clone()));
-            let swarm = Swarm::new(transport, protocol, pubkey.to_peer_id());
+            let swarm = Swarm::with_async_std_executor(transport, protocol, pubkey.to_peer_id());
             (swarm, pubkey)
         };
 
@@ -670,7 +670,7 @@ mod tests {
             let protocol = Behaviour::new(
                 Config::new("a".to_string(), pubkey.clone()).with_agent_version("b".to_string()),
             );
-            let swarm = Swarm::new(transport, protocol, pubkey.to_peer_id());
+            let swarm = Swarm::with_async_std_executor(transport, protocol, pubkey.to_peer_id());
             (swarm, pubkey)
         };
 
@@ -742,7 +742,7 @@ mod tests {
                     .with_initial_delay(Duration::from_secs(10)),
             );
 
-            Swarm::new(transport, protocol, pubkey.to_peer_id())
+            Swarm::with_async_std_executor(transport, protocol, pubkey.to_peer_id())
         };
 
         let mut swarm2 = {
@@ -751,7 +751,7 @@ mod tests {
                 Config::new("a".to_string(), pubkey.clone()).with_agent_version("b".to_string()),
             );
 
-            Swarm::new(transport, protocol, pubkey.to_peer_id())
+            Swarm::with_async_std_executor(transport, protocol, pubkey.to_peer_id())
         };
 
         let swarm1_peer_id = *swarm1.local_peer_id();

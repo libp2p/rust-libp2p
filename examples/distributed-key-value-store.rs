@@ -98,7 +98,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let kademlia = Kademlia::new(local_peer_id, store);
         let mdns = mdns::async_io::Behaviour::new(mdns::Config::default())?;
         let behaviour = MyBehaviour { kademlia, mdns };
-        Swarm::new(transport, behaviour, local_peer_id)
+        Swarm::with_async_std_executor(transport, behaviour, local_peer_id)
     };
 
     // Read full lines from stdin
