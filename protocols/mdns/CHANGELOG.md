@@ -4,6 +4,10 @@
 
 - Update to `libp2p-swarm` `v0.41.0`.
 
+- Use `trust-dns-proto` to parse DNS messages. See [PR 3102].
+
+[PR 3102]: https://github.com/libp2p/rust-libp2p/pull/3102
+
 # 0.41.0
 
 - Remove default features. If you previously depended on `async-io` you need to enable this explicitly now. See [PR 2918].

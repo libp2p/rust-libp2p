@@ -72,6 +72,7 @@ pub use identity::PublicKey;
 pub use multiaddr::Multiaddr;
 pub use multihash;
 pub use muxing::StreamMuxer;
+pub use peer_id::ParseError;
 pub use peer_id::PeerId;
 pub use peer_record::PeerRecord;
 pub use signed_envelope::SignedEnvelope;
