@@ -86,6 +86,7 @@ pub use self::{
 };
 pub use crate::Negotiated;
 pub use multistream_select::{NegotiatedComplete, NegotiationError, ProtocolError, Version};
+use std::fmt::{Display, Write};
 
 /// Types serving as protocol names.
 ///
@@ -132,6 +133,26 @@ impl<T: AsRef<[u8]>> ProtocolName for T {
     fn protocol_name(&self) -> &[u8] {
         self.as_ref()
     }
+}
+
+pub struct DisplayProtocolName<N>(N);
+impl<N: ProtocolName> Display for DisplayProtocolName<N> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for byte in self.0.protocol_name() {
+            if (b' '..=b'~').contains(byte) {
+                f.write_char(char::from(*byte))?;
+            } else {
+                write!(f, "<{:02X}>", byte)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+#[test]
+fn protocol_name_display() {
+    assert_eq!(DisplayProtocolName("hello").to_string(), "hello");
+    assert_eq!(DisplayProtocolName("hellö/").to_string(), "hell<C3><B6>/");
 }
 
 /// Common trait for upgrades that can be applied on inbound substreams, outbound substreams,

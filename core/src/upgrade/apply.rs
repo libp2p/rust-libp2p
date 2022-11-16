@@ -18,7 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::upgrade::{InboundUpgrade, OutboundUpgrade, ProtocolName, UpgradeError};
+use crate::upgrade::{
+    DisplayProtocolName, InboundUpgrade, OutboundUpgrade, ProtocolName, UpgradeError,
+};
 use crate::{connection::ConnectedPoint, Negotiated};
 use futures::{future::Either, prelude::*};
 use log::debug;
@@ -26,6 +28,7 @@ use multistream_select::{self, DialerSelectFuture, ListenerSelectFuture};
 use std::{iter, mem, pin::Pin, task::Context, task::Poll};
 
 pub use multistream_select::Version;
+use smallvec::SmallVec;
 
 // TODO: Still needed?
 /// Applies an upgrade to the inbound and outbound direction of a connection or substream.
@@ -105,6 +108,7 @@ where
     },
     Upgrade {
         future: Pin<Box<U::Future>>,
+        name: SmallVec<[u8; 32]>,
     },
     Undefined,
 }
@@ -137,22 +141,30 @@ where
                             return Poll::Pending;
                         }
                     };
+                    let name = SmallVec::from_slice(info.protocol_name());
                     self.inner = InboundUpgradeApplyState::Upgrade {
                         future: Box::pin(upgrade.upgrade_inbound(io, info.0)),
+                        name,
                     };
                 }
-                InboundUpgradeApplyState::Upgrade { mut future } => {
+                InboundUpgradeApplyState::Upgrade { mut future, name } => {
                     match Future::poll(Pin::new(&mut future), cx) {
                         Poll::Pending => {
-                            self.inner = InboundUpgradeApplyState::Upgrade { future };
+                            self.inner = InboundUpgradeApplyState::Upgrade { future, name };
                             return Poll::Pending;
                         }
                         Poll::Ready(Ok(x)) => {
-                            debug!("Successfully applied negotiated protocol");
+                            log::trace!(
+                                "Successfully applied negotiated inbound protocol {}",
+                                DisplayProtocolName(name)
+                            );
                             return Poll::Ready(Ok(x));
                         }
                         Poll::Ready(Err(e)) => {
-                            debug!("Failed to apply negotiated protocol");
+                            debug!(
+                                "Failed to apply negotiated inbound protocol {}",
+                                DisplayProtocolName(name)
+                            );
                             return Poll::Ready(Err(UpgradeError::Apply(e)));
                         }
                     }
@@ -185,6 +197,7 @@ where
     },
     Upgrade {
         future: Pin<Box<U::Future>>,
+        name: SmallVec<[u8; 32]>,
     },
     Undefined,
 }
@@ -217,22 +230,30 @@ where
                             return Poll::Pending;
                         }
                     };
+                    let name = SmallVec::from_slice(info.protocol_name());
                     self.inner = OutboundUpgradeApplyState::Upgrade {
                         future: Box::pin(upgrade.upgrade_outbound(connection, info.0)),
+                        name,
                     };
                 }
-                OutboundUpgradeApplyState::Upgrade { mut future } => {
+                OutboundUpgradeApplyState::Upgrade { mut future, name } => {
                     match Future::poll(Pin::new(&mut future), cx) {
                         Poll::Pending => {
-                            self.inner = OutboundUpgradeApplyState::Upgrade { future };
+                            self.inner = OutboundUpgradeApplyState::Upgrade { future, name };
                             return Poll::Pending;
                         }
                         Poll::Ready(Ok(x)) => {
-                            debug!("Successfully applied negotiated protocol");
+                            log::trace!(
+                                "Successfully applied negotiated outbound protocol {}",
+                                DisplayProtocolName(name)
+                            );
                             return Poll::Ready(Ok(x));
                         }
                         Poll::Ready(Err(e)) => {
-                            debug!("Failed to apply negotiated protocol");
+                            debug!(
+                                "Failed to apply negotiated outbound protocol {}",
+                                DisplayProtocolName(name)
+                            );
                             return Poll::Ready(Err(UpgradeError::Apply(e)));
                         }
                     }
