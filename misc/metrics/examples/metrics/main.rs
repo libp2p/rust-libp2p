@@ -54,7 +54,7 @@ use futures::stream::StreamExt;
 use libp2p::core::Multiaddr;
 use libp2p::metrics::{Metrics, Recorder};
 use libp2p::swarm::{NetworkBehaviour, SwarmEvent};
-use libp2p::{identity, ping, PeerId, Swarm};
+use libp2p::{identify, identity, ping, PeerId, Swarm};
 use libp2p_swarm::keep_alive;
 use log::info;
 use prometheus_client::registry::Registry;
@@ -68,11 +68,12 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
+    let local_pub_key = local_key.public();
     info!("Local peer id: {:?}", local_peer_id);
 
     let mut swarm = Swarm::without_executor(
         block_on(libp2p::development_transport(local_key))?,
-        Behaviour::default(),
+        Behaviour::new(local_pub_key),
         local_peer_id,
     );
 
@@ -95,6 +96,10 @@ fn main() -> Result<(), Box<dyn Error>> {
                     info!("{:?}", ping_event);
                     metrics.record(&ping_event);
                 }
+                SwarmEvent::Behaviour(BehaviourEvent::Identify(identify_event)) => {
+                    info!("{:?}", identify_event);
+                    metrics.record(&identify_event);
+                }
                 swarm_event => {
                     info!("{:?}", swarm_event);
                     metrics.record(&swarm_event);
@@ -109,8 +114,22 @@ fn main() -> Result<(), Box<dyn Error>> {
 ///
 /// For illustrative purposes, this includes the [`keep_alive::Behaviour`]) behaviour so the ping actually happen
 /// and can be observed via the metrics.
-#[derive(NetworkBehaviour, Default)]
+#[derive(NetworkBehaviour)]
 struct Behaviour {
+    identify: identify::Behaviour,
     keep_alive: keep_alive::Behaviour,
     ping: ping::Behaviour,
+}
+
+impl Behaviour {
+    fn new(local_pub_key: libp2p::identity::PublicKey) -> Self {
+        Self {
+            ping: ping::Behaviour::default(),
+            identify: identify::Behaviour::new(identify::Config::new(
+                "/ipfs/0.1.0".into(),
+                local_pub_key,
+            )),
+            keep_alive: keep_alive::Behaviour::default(),
+        }
+    }
 }
