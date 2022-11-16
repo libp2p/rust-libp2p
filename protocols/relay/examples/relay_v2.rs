@@ -27,10 +27,10 @@ use libp2p::identify;
 use libp2p::multiaddr::Protocol;
 use libp2p::ping;
 use libp2p::relay::v2::relay::{self, Relay};
-use libp2p::swarm::{Swarm, SwarmEvent};
+use libp2p::swarm::{NetworkBehaviour, Swarm, SwarmEvent};
 use libp2p::tcp;
 use libp2p::Transport;
-use libp2p::{identity, NetworkBehaviour, PeerId};
+use libp2p::{identity, PeerId};
 use libp2p::{noise, Multiaddr};
 use std::error::Error;
 use std::net::{Ipv4Addr, Ipv6Addr};
@@ -66,7 +66,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         )),
     };
 
-    let mut swarm = Swarm::new(transport, behaviour, local_peer_id);
+    let mut swarm = Swarm::without_executor(transport, behaviour, local_peer_id);
 
     // Listen on all interfaces
     let listen_addr = Multiaddr::empty()

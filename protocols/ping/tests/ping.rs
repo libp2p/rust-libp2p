@@ -30,10 +30,9 @@ use libp2p::core::{
 use libp2p::mplex;
 use libp2p::noise;
 use libp2p::ping;
-use libp2p::swarm::{Swarm, SwarmEvent};
+use libp2p::swarm::{NetworkBehaviour, Swarm, SwarmEvent};
 use libp2p::tcp;
 use libp2p::yamux;
-use libp2p::NetworkBehaviour;
 use libp2p_swarm::keep_alive;
 use quickcheck::*;
 use std::{num::NonZeroU8, time::Duration};
@@ -44,10 +43,11 @@ fn ping_pong() {
         let cfg = ping::Config::new().with_interval(Duration::from_millis(10));
 
         let (peer1_id, trans) = mk_transport(muxer);
-        let mut swarm1 = Swarm::new(trans, Behaviour::new(cfg.clone()), peer1_id);
+        let mut swarm1 =
+            Swarm::with_async_std_executor(trans, Behaviour::new(cfg.clone()), peer1_id);
 
         let (peer2_id, trans) = mk_transport(muxer);
-        let mut swarm2 = Swarm::new(trans, Behaviour::new(cfg), peer2_id);
+        let mut swarm2 = Swarm::with_async_std_executor(trans, Behaviour::new(cfg), peer2_id);
 
         let (mut tx, mut rx) = mpsc::channel::<Multiaddr>(1);
 
@@ -128,10 +128,11 @@ fn max_failures() {
             .with_max_failures(max_failures.into());
 
         let (peer1_id, trans) = mk_transport(muxer);
-        let mut swarm1 = Swarm::new(trans, Behaviour::new(cfg.clone()), peer1_id);
+        let mut swarm1 =
+            Swarm::with_async_std_executor(trans, Behaviour::new(cfg.clone()), peer1_id);
 
         let (peer2_id, trans) = mk_transport(muxer);
-        let mut swarm2 = Swarm::new(trans, Behaviour::new(cfg), peer2_id);
+        let mut swarm2 = Swarm::with_async_std_executor(trans, Behaviour::new(cfg), peer2_id);
 
         let (mut tx, mut rx) = mpsc::channel::<Multiaddr>(1);
 
@@ -198,10 +199,10 @@ fn max_failures() {
 #[test]
 fn unsupported_doesnt_fail() {
     let (peer1_id, trans) = mk_transport(MuxerChoice::Mplex);
-    let mut swarm1 = Swarm::new(trans, keep_alive::Behaviour, peer1_id);
+    let mut swarm1 = Swarm::with_async_std_executor(trans, keep_alive::Behaviour, peer1_id);
 
     let (peer2_id, trans) = mk_transport(MuxerChoice::Mplex);
-    let mut swarm2 = Swarm::new(trans, Behaviour::default(), peer2_id);
+    let mut swarm2 = Swarm::with_async_std_executor(trans, Behaviour::default(), peer2_id);
 
     let (mut tx, mut rx) = mpsc::channel::<Multiaddr>(1);
 

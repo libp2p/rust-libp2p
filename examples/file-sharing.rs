@@ -149,7 +149,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             // Locate all nodes providing the file.
             let providers = network_client.get_providers(name.clone()).await;
             if providers.is_empty() {
-                return Err(format!("Could not find provider for file {}.", name).into());
+                return Err(format!("Could not find provider for file {name}.").into());
             }
 
             // Request the content of the file from each node.
@@ -219,8 +219,7 @@ mod network {
         ProtocolSupport, RequestId, RequestResponse, RequestResponseCodec, RequestResponseEvent,
         RequestResponseMessage, ResponseChannel,
     };
-    use libp2p::swarm::{ConnectionHandlerUpgrErr, SwarmBuilder, SwarmEvent};
-    use libp2p::{NetworkBehaviour, Swarm};
+    use libp2p::swarm::{ConnectionHandlerUpgrErr, NetworkBehaviour, Swarm, SwarmEvent};
     use std::collections::{hash_map, HashMap, HashSet};
     use std::iter;
 
@@ -251,7 +250,7 @@ mod network {
 
         // Build the Swarm, connecting the lower layer transport logic with the
         // higher layer network behaviour logic.
-        let swarm = SwarmBuilder::new(
+        let swarm = Swarm::with_threadpool_executor(
             libp2p::development_transport(id_keys).await?,
             ComposedBehaviour {
                 kademlia: Kademlia::new(peer_id, MemoryStore::new(peer_id)),
@@ -262,8 +261,7 @@ mod network {
                 ),
             },
             peer_id,
-        )
-        .build();
+        );
 
         let (command_sender, command_receiver) = mpsc::channel(0);
         let (event_sender, event_receiver) = mpsc::channel(0);
@@ -506,8 +504,8 @@ mod network {
                     }
                 }
                 SwarmEvent::IncomingConnectionError { .. } => {}
-                SwarmEvent::Dialing(peer_id) => eprintln!("Dialing {}", peer_id),
-                e => panic!("{:?}", e),
+                SwarmEvent::Dialing(peer_id) => eprintln!("Dialing {peer_id}"),
+                e => panic!("{e:?}"),
             }
         }
 

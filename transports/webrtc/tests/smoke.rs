@@ -30,7 +30,7 @@ use libp2p::request_response::{
     ProtocolName, ProtocolSupport, RequestResponse, RequestResponseCodec, RequestResponseConfig,
     RequestResponseEvent, RequestResponseMessage,
 };
-use libp2p::swarm::{Swarm, SwarmBuilder, SwarmEvent};
+use libp2p::swarm::{Swarm, SwarmEvent};
 use libp2p::webrtc::tokio as webrtc;
 use rand::{thread_rng, RngCore};
 
@@ -482,9 +482,5 @@ fn create_swarm() -> Result<Swarm<RequestResponse<PingCodec>>> {
         .map(|(peer_id, conn), _| (peer_id, StreamMuxerBox::new(conn)))
         .boxed();
 
-    Ok(SwarmBuilder::new(transport, behaviour, peer_id)
-        .executor(Box::new(|fut| {
-            tokio::spawn(fut);
-        }))
-        .build())
+    Ok(Swarm::with_tokio_executor(transport, behaviour, peer_id))
 }

@@ -66,7 +66,7 @@ fn build_node_with_config(cfg: KademliaConfig) -> (Multiaddr, TestSwarm) {
     let store = MemoryStore::new(local_id);
     let behaviour = Kademlia::with_config(local_id, store, cfg);
 
-    let mut swarm = Swarm::new(transport, behaviour, local_id);
+    let mut swarm = Swarm::without_executor(transport, behaviour, local_id);
 
     let address: Multiaddr = Protocol::Memory(random::<u64>()).into();
     swarm.listen_on(address.clone()).unwrap();

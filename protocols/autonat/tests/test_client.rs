@@ -40,7 +40,7 @@ async fn init_swarm(config: Config) -> Swarm<Behaviour> {
     let local_id = PeerId::from_public_key(&keypair.public());
     let transport = development_transport(keypair).await.unwrap();
     let behaviour = Behaviour::new(local_id, config);
-    Swarm::new(transport, behaviour, local_id)
+    Swarm::with_async_std_executor(transport, behaviour, local_id)
 }
 
 async fn spawn_server(kill: oneshot::Receiver<()>) -> (PeerId, Multiaddr) {

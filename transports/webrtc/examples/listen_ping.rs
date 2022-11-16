@@ -1,11 +1,12 @@
 use anyhow::Result;
 use futures::StreamExt;
-use libp2p::swarm::{keep_alive, SwarmBuilder};
+use libp2p::swarm::{keep_alive, NetworkBehaviour};
 use libp2p::Transport;
 use libp2p::{ping, Swarm};
 use libp2p_core::identity;
 use libp2p_core::muxing::StreamMuxerBox;
 use rand::thread_rng;
+use void::Void;
 
 /// An example WebRTC server that will accept connections and run the ping protocol on them.
 #[tokio::main]
@@ -32,15 +33,30 @@ fn create_swarm() -> Result<Swarm<Behaviour>> {
         .map(|(peer_id, conn), _| (peer_id, StreamMuxerBox::new(conn)))
         .boxed();
 
-    Ok(SwarmBuilder::new(transport, Behaviour::default(), peer_id)
-        .executor(Box::new(|fut| {
-            tokio::spawn(fut);
-        }))
-        .build())
+    Ok(Swarm::with_tokio_executor(transport, Behaviour::default(), peer_id))
 }
 
-#[derive(libp2p::NetworkBehaviour, Default)]
+#[derive(NetworkBehaviour, Default)]
+#[behaviour(out_event = "Event", event_process = false)]
 struct Behaviour {
     ping: ping::Behaviour,
     keep_alive: keep_alive::Behaviour,
+}
+
+#[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
+enum Event {
+    Ping(ping::Event),
+}
+
+impl From<ping::Event> for Event {
+    fn from(e: ping::Event) -> Self {
+        Event::Ping(e)
+    }
+}
+
+impl From<Void> for Event {
+    fn from(event: Void) -> Self {
+        void::unreachable(event)
+    }
 }

@@ -39,8 +39,8 @@ use libp2p::{
         TokioMdns,
     },
     mplex, noise,
-    swarm::{SwarmBuilder, SwarmEvent},
-    tcp, Multiaddr, NetworkBehaviour, PeerId, Transport,
+    swarm::{NetworkBehaviour, SwarmEvent},
+    tcp, Multiaddr, PeerId, Transport,
 };
 use std::error::Error;
 use tokio::io::{self, AsyncBufReadExt};
@@ -53,7 +53,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Create a random PeerId
     let id_keys = identity::Keypair::generate_ed25519();
     let peer_id = PeerId::from(id_keys.public());
-    println!("Local peer id: {:?}", peer_id);
+    println!("Local peer id: {peer_id:?}");
 
     // Create a tokio-based TCP transport use noise for authenticated
     // encryption and Mplex for multiplexing of substreams on a TCP stream.
@@ -97,29 +97,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     // Create a Swarm to manage peers and events.
-    let mut swarm = {
-        let mdns = TokioMdns::new(Default::default())?;
-        let mut behaviour = MyBehaviour {
-            floodsub: Floodsub::new(peer_id),
-            mdns,
-        };
-
-        behaviour.floodsub.subscribe(floodsub_topic.clone());
-
-        SwarmBuilder::new(transport, behaviour, peer_id)
-            // We want the connection background tasks to be spawned
-            // onto the tokio runtime.
-            .executor(Box::new(|fut| {
-                tokio::spawn(fut);
-            }))
-            .build()
+    let mdns = TokioMdns::new(Default::default())?;
+    let behaviour = MyBehaviour {
+        floodsub: Floodsub::new(peer_id),
+        mdns,
     };
+    let mut swarm = libp2p_swarm::Swarm::with_tokio_executor(transport, behaviour, peer_id);
 
     // Reach out to another node if specified
     if let Some(to_dial) = std::env::args().nth(1) {
         let addr: Multiaddr = to_dial.parse()?;
         swarm.dial(addr)?;
-        println!("Dialed {:?}", to_dial);
+        println!("Dialed {to_dial:?}");
     }
 
     // Read full lines from stdin
@@ -138,7 +127,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             event = swarm.select_next_some() => {
                 match event {
                     SwarmEvent::NewListenAddr { address, .. } => {
-                        println!("Listening on {:?}", address);
+                        println!("Listening on {address:?}");
                     }
                     SwarmEvent::Behaviour(MyBehaviourEvent::Floodsub(FloodsubEvent::Message(message))) => {
                         println!(

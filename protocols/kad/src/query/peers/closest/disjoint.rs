@@ -732,9 +732,7 @@ mod tests {
 
     impl std::fmt::Debug for Graph {
         fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            fmt.debug_list()
-                .entries(self.0.iter().map(|(id, _)| id))
-                .finish()
+            fmt.debug_list().entries(self.0.keys()).finish()
         }
     }
 
@@ -796,8 +794,8 @@ mod tests {
         fn get_closest_peer(&self, target: &KeyBytes) -> PeerId {
             *self
                 .0
-                .iter()
-                .map(|(peer_id, _)| (target.distance(&Key::from(*peer_id)), peer_id))
+                .keys()
+                .map(|peer_id| (target.distance(&Key::from(*peer_id)), peer_id))
                 .fold(None, |acc, (distance_b, peer_id_b)| match acc {
                     None => Some((distance_b, peer_id_b)),
                     Some((distance_a, peer_id_a)) => {

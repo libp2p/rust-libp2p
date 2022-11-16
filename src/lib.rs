@@ -93,6 +93,12 @@ pub use libp2p_plaintext as plaintext;
 #[cfg(feature = "pnet")]
 #[doc(inline)]
 pub use libp2p_pnet as pnet;
+#[cfg(feature = "quic")]
+#[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
+pub mod quic {
+    #[doc(inline)]
+    pub use libp2p_quic::*;
+}
 #[cfg(feature = "relay")]
 #[doc(inline)]
 pub use libp2p_relay as relay;
@@ -149,7 +155,6 @@ pub use self::multiaddr::{multiaddr as build_multiaddr, Multiaddr};
 pub use self::simple::SimpleProtocol;
 pub use self::swarm::Swarm;
 pub use self::transport_ext::TransportExt;
-pub use libp2p_swarm_derive::NetworkBehaviour;
 
 /// Builds a `Transport` based on TCP/IP that supports the most commonly-used features of libp2p:
 ///
