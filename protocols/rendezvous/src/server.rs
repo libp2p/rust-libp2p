@@ -404,12 +404,11 @@ struct ExpiredRegistration(Registration);
 
 #[derive(Debug, Clone)]
 pub struct Registrations {
-    min_ttl: Ttl,
-    max_ttl: Ttl,
-
     registrations_for_peer: BiMap<(PeerId, Namespace), RegistrationId>,
     registrations: HashMap<RegistrationId, Registration>,
     cookies: HashMap<Cookie, HashSet<RegistrationId>>,
+    min_ttl: Ttl,
+    max_ttl: Ttl,
 }
 
 #[derive(Debug)]
@@ -440,31 +439,6 @@ impl Registrations {
             registrations: Default::default(),
             cookies: Default::default(),
         }
-    }
-
-    pub fn new_registration(
-        &self,
-        from: PeerId,
-        new_registration: NewRegistrationRequest,
-    ) -> Result<NewRegistration, ErrorCode> {
-        let ttl = new_registration.ttl.unwrap_or(DEFAULT_TTL);
-
-        if ttl > self.max_ttl {
-            return Err(ErrorCode::InvalidTtl);
-        }
-        if ttl < self.min_ttl {
-            return Err(ErrorCode::InvalidTtl);
-        }
-
-        if new_registration.record.peer_id() != from {
-            return Err(ErrorCode::NotAuthorized);
-        }
-
-        Ok(NewRegistration {
-            namespace: new_registration.namespace,
-            record: new_registration.record,
-            ttl: new_registration.ttl,
-        })
     }
 
     pub fn add(
@@ -500,6 +474,31 @@ impl Registrations {
             .boxed();
 
         (registration, expiry)
+    }
+
+    pub fn new_registration(
+        &self,
+        from: PeerId,
+        new_registration: NewRegistrationRequest,
+    ) -> Result<NewRegistration, ErrorCode> {
+        let ttl = new_registration.ttl.unwrap_or(DEFAULT_TTL);
+
+        if ttl > self.max_ttl {
+            return Err(ErrorCode::InvalidTtl);
+        }
+        if ttl < self.min_ttl {
+            return Err(ErrorCode::InvalidTtl);
+        }
+
+        if new_registration.record.peer_id() != from {
+            return Err(ErrorCode::NotAuthorized);
+        }
+
+        Ok(NewRegistration {
+            namespace: new_registration.namespace,
+            record: new_registration.record,
+            ttl: new_registration.ttl,
+        })
     }
 
     pub fn remove(&mut self, namespace: Namespace, peer_id: PeerId) {
@@ -578,14 +577,6 @@ impl Registrations {
 
         Ok((registrations, new_cookie, reggos_of_last_discover))
     }
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum TtlOutOfRange {
-    #[error("Requested TTL ({requested}s) is too long; max {bound}s")]
-    TooLong { bound: Ttl, requested: Ttl },
-    #[error("Requested TTL ({requested}s) is too short; min {bound}s")]
-    TooShort { bound: Ttl, requested: Ttl },
 }
 
 #[derive(Debug, thiserror::Error, Eq, PartialEq)]
