@@ -217,7 +217,7 @@ jobs:
 
     - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
 
-    - run: cargo install cargo-semver-checks
+    - run: cargo install cargo-semver-checks --locked
     
     - name: Semver Check
       run: cargo semver-checks check-release -p ${{ matrix.crate }}
