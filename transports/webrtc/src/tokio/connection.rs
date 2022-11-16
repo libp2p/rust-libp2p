@@ -100,57 +100,49 @@ impl Connection {
         rtc_conn: &RTCPeerConnection,
         tx: Arc<FutMutex<mpsc::Sender<Arc<DetachedDataChannel>>>>,
     ) {
-        rtc_conn
-            .on_data_channel(Box::new(move |data_channel: Arc<RTCDataChannel>| {
-                log::debug!("Incoming data channel {}", data_channel.id());
+        rtc_conn.on_data_channel(Box::new(move |data_channel: Arc<RTCDataChannel>| {
+            log::debug!("Incoming data channel {}", data_channel.id());
 
-                let tx = tx.clone();
+            let tx = tx.clone();
 
-                Box::pin(async move {
-                    data_channel
-                        .on_open({
+            Box::pin(async move {
+                data_channel.on_open({
+                    let data_channel = data_channel.clone();
+                    Box::new(move || {
+                        log::debug!("Data channel {} open", data_channel.id());
+
+                        Box::pin(async move {
                             let data_channel = data_channel.clone();
-                            Box::new(move || {
-                                log::debug!("Data channel {} open", data_channel.id());
-
-                                Box::pin(async move {
-                                    let data_channel = data_channel.clone();
-                                    let id = data_channel.id();
-                                    match data_channel.detach().await {
-                                        Ok(detached) => {
-                                            let mut tx = tx.lock().await;
-                                            if let Err(e) = tx.try_send(detached.clone()) {
-                                                log::error!(
-                                                    "Can't send data channel {}: {}",
-                                                    id,
-                                                    e
-                                                );
-                                                // We're not accepting data channels fast enough =>
-                                                // close this channel.
-                                                //
-                                                // Ideally we'd refuse to accept a data channel
-                                                // during the negotiation process, but it's not
-                                                // possible with the current API.
-                                                if let Err(e) = detached.close().await {
-                                                    log::error!(
-                                                        "Failed to close data channel {}: {}",
-                                                        id,
-                                                        e
-                                                    );
-                                                }
-                                            }
+                            let id = data_channel.id();
+                            match data_channel.detach().await {
+                                Ok(detached) => {
+                                    let mut tx = tx.lock().await;
+                                    if let Err(e) = tx.try_send(detached.clone()) {
+                                        log::error!("Can't send data channel {}: {}", id, e);
+                                        // We're not accepting data channels fast enough =>
+                                        // close this channel.
+                                        //
+                                        // Ideally we'd refuse to accept a data channel
+                                        // during the negotiation process, but it's not
+                                        // possible with the current API.
+                                        if let Err(e) = detached.close().await {
+                                            log::error!(
+                                                "Failed to close data channel {}: {}",
+                                                id,
+                                                e
+                                            );
                                         }
-                                        Err(e) => {
-                                            log::error!("Can't detach data channel {}: {}", id, e);
-                                        }
-                                    };
-                                })
-                            })
+                                    }
+                                }
+                                Err(e) => {
+                                    log::error!("Can't detach data channel {}: {}", id, e);
+                                }
+                            };
                         })
-                        .await;
-                })
-            }))
-            .await;
+                    })
+                });
+            })
+        }));
     }
 }
 
@@ -280,30 +272,28 @@ pub(crate) async fn register_data_channel_open_handler(
     data_channel: Arc<RTCDataChannel>,
     data_channel_tx: Sender<Arc<DetachedDataChannel>>,
 ) {
-    data_channel
-        .on_open({
-            let data_channel = data_channel.clone();
-            Box::new(move || {
-                log::debug!("Data channel {} open", data_channel.id());
+    data_channel.on_open({
+        let data_channel = data_channel.clone();
+        Box::new(move || {
+            log::debug!("Data channel {} open", data_channel.id());
 
-                Box::pin(async move {
-                    let data_channel = data_channel.clone();
-                    let id = data_channel.id();
-                    match data_channel.detach().await {
-                        Ok(detached) => {
-                            if let Err(e) = data_channel_tx.send(detached.clone()) {
-                                log::error!("Can't send data channel {}: {:?}", id, e);
-                                if let Err(e) = detached.close().await {
-                                    log::error!("Failed to close data channel {}: {}", id, e);
-                                }
+            Box::pin(async move {
+                let data_channel = data_channel.clone();
+                let id = data_channel.id();
+                match data_channel.detach().await {
+                    Ok(detached) => {
+                        if let Err(e) = data_channel_tx.send(detached.clone()) {
+                            log::error!("Can't send data channel {}: {:?}", id, e);
+                            if let Err(e) = detached.close().await {
+                                log::error!("Failed to close data channel {}: {}", id, e);
                             }
                         }
-                        Err(e) => {
-                            log::error!("Can't detach data channel {}: {}", id, e);
-                        }
-                    };
-                })
+                    }
+                    Err(e) => {
+                        log::error!("Can't detach data channel {}: {}", id, e);
+                    }
+                };
             })
         })
-        .await;
+    });
 }
