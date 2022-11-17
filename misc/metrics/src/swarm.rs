@@ -20,8 +20,8 @@
 
 use crate::protocol_stack;
 use prometheus_client::encoding::text::Encode;
-use prometheus_client::metrics::counter::Counter;
-use prometheus_client::metrics::family::Family;
+use prometheus_client::metrics;
+use metrics::{counter::Counter,family::Family,histogram::Histogram};
 use prometheus_client::registry::Registry;
 
 pub struct Metrics {
@@ -29,6 +29,7 @@ pub struct Metrics {
     connections_incoming_error: Family<IncomingConnectionErrorLabels, Counter>,
 
     connections_established: Family<ConnectionEstablishedLabels, Counter>,
+    connection_duration: Family<AddressLabels,Histogram>,
     connections_closed: Family<ConnectionClosedLabels, Counter>,
 
     new_listen_addr: Family<AddressLabels, Counter>,
@@ -123,6 +124,13 @@ impl Metrics {
             Box::new(connections_closed.clone()),
         );
 
+        let connection_duration = Family::new_with_constructor(create_connection_duration_histogram as fn()->Histogram);
+        sub_registry.register(
+            "connection_duration",
+            "Histogram of milliseconds it has taken to move a connection from pending to established",
+            Box::new(connection_duration.clone())
+        );
+
         Self {
             connections_incoming,
             connections_incoming_error,
@@ -135,6 +143,7 @@ impl Metrics {
             dial_attempt,
             outgoing_connection_error,
             connected_to_banned_peer,
+            connection_duration,
         }
     }
 }
@@ -143,13 +152,15 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
     fn record(&self, event: &libp2p_swarm::SwarmEvent<TBvEv, THandleErr>) {
         match event {
             libp2p_swarm::SwarmEvent::Behaviour(_) => {}
-            libp2p_swarm::SwarmEvent::ConnectionEstablished { endpoint, .. } => {
+            libp2p_swarm::SwarmEvent::ConnectionEstablished { endpoint, time_taken, .. } => {
+                let protocols  = protocol_stack::as_string(endpoint.get_remote_address());
                 self.connections_established
                     .get_or_create(&ConnectionEstablishedLabels {
                         role: endpoint.into(),
-                        protocols: protocol_stack::as_string(endpoint.get_remote_address()),
+                        protocols: protocols.clone(),
                     })
                     .inc();
+                self.connection_duration.get_or_create(&AddressLabels { protocols}).observe(time_taken.as_micros().clamp(0,1000000) as f64 / 1e3);
             }
             libp2p_swarm::SwarmEvent::ConnectionClosed { endpoint, .. } => {
                 self.connections_closed
@@ -371,4 +382,9 @@ impl<TTransErr> From<&libp2p_swarm::PendingInboundConnectionError<TTransErr>>
             libp2p_swarm::PendingInboundConnectionError::IO(_) => PendingInboundConnectionError::Io,
         }
     }
+}
+
+fn create_connection_duration_histogram() -> Histogram {
+    // Histogram::new((1..99).map(|i|10. * i as f64))
+    Histogram::new(metrics::histogram::exponential_buckets(1.,2.,10))
 }
