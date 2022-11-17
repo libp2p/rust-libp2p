@@ -27,11 +27,12 @@ use crate::v2::message_proto;
 use crate::v2::protocol::inbound_hop;
 use either::Either;
 use instant::Instant;
-use libp2p_core::connection::{ConnectedPoint, ConnectionId};
+use libp2p_core::connection::ConnectionId;
 use libp2p_core::multiaddr::Protocol;
 use libp2p_core::PeerId;
+use libp2p_swarm::behaviour::{ConnectionClosed, FromSwarm};
 use libp2p_swarm::{
-    dummy, ConnectionHandlerUpgrErr, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
+    ConnectionHandlerUpgrErr, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
     PollParameters,
 };
 use std::collections::{hash_map, HashMap, HashSet, VecDeque};
@@ -212,6 +213,39 @@ impl Relay {
             queued_actions: Default::default(),
         }
     }
+
+    fn on_connection_closed(
+        &mut self,
+        ConnectionClosed {
+            peer_id,
+            connection_id,
+            ..
+        }: ConnectionClosed<<Self as NetworkBehaviour>::ConnectionHandler>,
+    ) {
+        if let hash_map::Entry::Occupied(mut peer) = self.reservations.entry(peer_id) {
+            peer.get_mut().remove(&connection_id);
+            if peer.get().is_empty() {
+                peer.remove();
+            }
+        }
+
+        for circuit in self
+            .circuits
+            .remove_by_connection(peer_id, connection_id)
+            .iter()
+            // Only emit [`CircuitClosed`] for accepted requests.
+            .filter(|c| matches!(c.status, CircuitStatus::Accepted))
+        {
+            self.queued_actions.push_back(
+                NetworkBehaviourAction::GenerateEvent(Event::CircuitClosed {
+                    src_peer_id: circuit.src_peer_id,
+                    dst_peer_id: circuit.dst_peer_id,
+                    error: Some(std::io::ErrorKind::ConnectionAborted.into()),
+                })
+                .into(),
+            );
+        }
+    }
 }
 
 impl NetworkBehaviour for Relay {
@@ -228,40 +262,26 @@ impl NetworkBehaviour for Relay {
         }
     }
 
-    fn inject_connection_closed(
-        &mut self,
-        peer: &PeerId,
-        connection: &ConnectionId,
-        _: &ConnectedPoint,
-        _handler: Either<handler::Handler, dummy::ConnectionHandler>,
-        _remaining_established: usize,
-    ) {
-        if let hash_map::Entry::Occupied(mut peer) = self.reservations.entry(*peer) {
-            peer.get_mut().remove(connection);
-            if peer.get().is_empty() {
-                peer.remove();
+    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+        match event {
+            FromSwarm::ConnectionClosed(connection_closed) => {
+                self.on_connection_closed(connection_closed)
             }
-        }
-
-        for circuit in self
-            .circuits
-            .remove_by_connection(*peer, *connection)
-            .iter()
-            // Only emit [`CircuitClosed`] for accepted requests.
-            .filter(|c| matches!(c.status, CircuitStatus::Accepted))
-        {
-            self.queued_actions.push_back(
-                NetworkBehaviourAction::GenerateEvent(Event::CircuitClosed {
-                    src_peer_id: circuit.src_peer_id,
-                    dst_peer_id: circuit.dst_peer_id,
-                    error: Some(std::io::ErrorKind::ConnectionAborted.into()),
-                })
-                .into(),
-            );
+            FromSwarm::ConnectionEstablished(_)
+            | FromSwarm::DialFailure(_)
+            | FromSwarm::AddressChange(_)
+            | FromSwarm::ListenFailure(_)
+            | FromSwarm::NewListener(_)
+            | FromSwarm::NewListenAddr(_)
+            | FromSwarm::ExpiredListenAddr(_)
+            | FromSwarm::ListenerError(_)
+            | FromSwarm::ListenerClosed(_)
+            | FromSwarm::NewExternalAddr(_)
+            | FromSwarm::ExpiredExternalAddr(_) => {}
         }
     }
 
-    fn inject_event(
+    fn on_connection_handler_event(
         &mut self,
         event_source: PeerId,
         connection: ConnectionId,

@@ -18,17 +18,16 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::behaviour::{inject_from_swarm, FromSwarm};
 use crate::handler::{
     ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, IntoConnectionHandler,
     KeepAlive, SubstreamProtocol,
 };
 use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper};
-use crate::{DialError, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
+use crate::{NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use either::Either;
 use libp2p_core::{
-    connection::ConnectionId,
     either::{EitherError, EitherOutput},
-    transport::ListenerId,
     upgrade::{DeniedUpgrade, EitherUpgrade},
     ConnectedPoint, Multiaddr, PeerId,
 };
@@ -84,134 +83,23 @@ where
             .unwrap_or_else(Vec::new)
     }
 
-    fn inject_connection_established(
-        &mut self,
-        peer_id: &PeerId,
-        connection: &ConnectionId,
-        endpoint: &ConnectedPoint,
-        errors: Option<&Vec<Multiaddr>>,
-        other_established: usize,
-    ) {
-        if let Some(inner) = self.inner.as_mut() {
-            inner.inject_connection_established(
-                peer_id,
-                connection,
-                endpoint,
-                errors,
-                other_established,
-            )
-        }
-    }
-
-    fn inject_connection_closed(
-        &mut self,
-        peer_id: &PeerId,
-        connection: &ConnectionId,
-        endpoint: &ConnectedPoint,
-        handler: <Self::ConnectionHandler as IntoConnectionHandler>::Handler,
-        remaining_established: usize,
-    ) {
-        if let Some(inner) = self.inner.as_mut() {
-            if let Some(handler) = handler.inner {
-                inner.inject_connection_closed(
-                    peer_id,
-                    connection,
-                    endpoint,
-                    handler,
-                    remaining_established,
-                )
+    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+        if let Some(behaviour) = &mut self.inner {
+            if let Some(event) = event.maybe_map_handler(|h| h.inner, |h| h.inner) {
+                inject_from_swarm(behaviour, event);
             }
         }
     }
 
-    fn inject_address_change(
-        &mut self,
-        peer_id: &PeerId,
-        connection: &ConnectionId,
-        old: &ConnectedPoint,
-        new: &ConnectedPoint,
-    ) {
-        if let Some(inner) = self.inner.as_mut() {
-            inner.inject_address_change(peer_id, connection, old, new)
-        }
-    }
-
-    fn inject_event(
+    fn on_connection_handler_event(
         &mut self,
         peer_id: PeerId,
-        connection: ConnectionId,
-        event: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent,
+        connection_id: libp2p_core::connection::ConnectionId,
+        event: crate::THandlerOutEvent<Self>,
     ) {
-        if let Some(inner) = self.inner.as_mut() {
-            inner.inject_event(peer_id, connection, event);
-        }
-    }
-
-    fn inject_dial_failure(
-        &mut self,
-        peer_id: Option<PeerId>,
-        handler: Self::ConnectionHandler,
-        error: &DialError,
-    ) {
-        if let Some(inner) = self.inner.as_mut() {
-            if let Some(handler) = handler.inner {
-                inner.inject_dial_failure(peer_id, handler, error)
-            }
-        }
-    }
-
-    fn inject_listen_failure(
-        &mut self,
-        local_addr: &Multiaddr,
-        send_back_addr: &Multiaddr,
-        handler: Self::ConnectionHandler,
-    ) {
-        if let Some(inner) = self.inner.as_mut() {
-            if let Some(handler) = handler.inner {
-                inner.inject_listen_failure(local_addr, send_back_addr, handler)
-            }
-        }
-    }
-
-    fn inject_new_listener(&mut self, id: ListenerId) {
-        if let Some(inner) = self.inner.as_mut() {
-            inner.inject_new_listener(id)
-        }
-    }
-
-    fn inject_new_listen_addr(&mut self, id: ListenerId, addr: &Multiaddr) {
-        if let Some(inner) = self.inner.as_mut() {
-            inner.inject_new_listen_addr(id, addr)
-        }
-    }
-
-    fn inject_expired_listen_addr(&mut self, id: ListenerId, addr: &Multiaddr) {
-        if let Some(inner) = self.inner.as_mut() {
-            inner.inject_expired_listen_addr(id, addr)
-        }
-    }
-
-    fn inject_new_external_addr(&mut self, addr: &Multiaddr) {
-        if let Some(inner) = self.inner.as_mut() {
-            inner.inject_new_external_addr(addr)
-        }
-    }
-
-    fn inject_expired_external_addr(&mut self, addr: &Multiaddr) {
-        if let Some(inner) = self.inner.as_mut() {
-            inner.inject_expired_external_addr(addr)
-        }
-    }
-
-    fn inject_listener_error(&mut self, id: ListenerId, err: &(dyn std::error::Error + 'static)) {
-        if let Some(inner) = self.inner.as_mut() {
-            inner.inject_listener_error(id, err)
-        }
-    }
-
-    fn inject_listener_closed(&mut self, id: ListenerId, reason: Result<(), &std::io::Error>) {
-        if let Some(inner) = self.inner.as_mut() {
-            inner.inject_listener_closed(id, reason)
+        if let Some(behaviour) = &mut self.inner {
+            #[allow(deprecated)]
+            behaviour.inject_event(peer_id, connection_id, event)
         }
     }
 

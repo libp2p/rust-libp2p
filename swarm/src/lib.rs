@@ -71,6 +71,19 @@ pub mod keep_alive;
 /// Bundles all symbols required for the [`libp2p_swarm_derive::NetworkBehaviour`] macro.
 #[doc(hidden)]
 pub mod derive_prelude {
+    pub use crate::behaviour::AddressChange;
+    pub use crate::behaviour::ConnectionClosed;
+    pub use crate::behaviour::ConnectionEstablished;
+    pub use crate::behaviour::DialFailure;
+    pub use crate::behaviour::ExpiredExternalAddr;
+    pub use crate::behaviour::ExpiredListenAddr;
+    pub use crate::behaviour::FromSwarm;
+    pub use crate::behaviour::ListenFailure;
+    pub use crate::behaviour::ListenerClosed;
+    pub use crate::behaviour::ListenerError;
+    pub use crate::behaviour::NewExternalAddr;
+    pub use crate::behaviour::NewListenAddr;
+    pub use crate::behaviour::NewListener;
     pub use crate::ConnectionHandler;
     pub use crate::DialError;
     pub use crate::IntoConnectionHandler;
@@ -432,6 +445,7 @@ where
     /// Depending on the underlying transport, one listener may have multiple listening addresses.
     pub fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<io::Error>> {
         let id = self.transport.listen_on(addr)?;
+        #[allow(deprecated)]
         self.behaviour.inject_new_listener(id);
         Ok(id)
     }
@@ -500,6 +514,7 @@ where
                         PeerCondition::Always => true,
                     };
                     if !condition_matched {
+                        #[allow(deprecated)]
                         self.behaviour.inject_dial_failure(
                             Some(peer_id),
                             handler,
@@ -512,6 +527,7 @@ where
                     // Check if peer is banned.
                     if self.banned_peers.contains(&peer_id) {
                         let error = DialError::Banned;
+                        #[allow(deprecated)]
                         self.behaviour
                             .inject_dial_failure(Some(peer_id), handler, &error);
                         return Err(error);
@@ -549,6 +565,7 @@ where
 
                         if addresses.is_empty() {
                             let error = DialError::NoAddresses;
+                            #[allow(deprecated)]
                             self.behaviour
                                 .inject_dial_failure(Some(peer_id), handler, &error);
                             return Err(error);
@@ -632,6 +649,7 @@ where
             Ok(_connection_id) => Ok(()),
             Err((connection_limit, handler)) => {
                 let error = DialError::ConnectionLimit(connection_limit);
+                #[allow(deprecated)]
                 self.behaviour.inject_dial_failure(peer_id, handler, &error);
                 Err(error)
             }
@@ -673,12 +691,14 @@ where
         let result = self.external_addrs.add(a.clone(), s);
         let expired = match &result {
             AddAddressResult::Inserted { expired } => {
+                #[allow(deprecated)]
                 self.behaviour.inject_new_external_addr(&a);
                 expired
             }
             AddAddressResult::Updated { expired } => expired,
         };
         for a in expired {
+            #[allow(deprecated)]
             self.behaviour.inject_expired_external_addr(&a.addr);
         }
         result
@@ -692,6 +712,7 @@ where
     /// otherwise.
     pub fn remove_external_address(&mut self, addr: &Multiaddr) -> bool {
         if self.external_addrs.remove(addr) {
+            #[allow(deprecated)]
             self.behaviour.inject_expired_external_addr(addr);
             true
         } else {
@@ -798,6 +819,7 @@ where
                     let failed_addresses = concurrent_dial_errors
                         .as_ref()
                         .map(|es| es.iter().map(|(a, _)| a).cloned().collect());
+                    #[allow(deprecated)]
                     self.behaviour.inject_connection_established(
                         &peer_id,
                         &id,
@@ -821,6 +843,7 @@ where
             } => {
                 let error = error.into();
 
+                #[allow(deprecated)]
                 self.behaviour.inject_dial_failure(peer, handler, &error);
 
                 if let Some(peer) = peer {
@@ -842,6 +865,7 @@ where
                 handler,
             } => {
                 log::debug!("Incoming connection failed: {:?}", error);
+                #[allow(deprecated)]
                 self.behaviour
                     .inject_listen_failure(&local_addr, &send_back_addr, handler);
                 return Some(SwarmEvent::IncomingConnectionError {
@@ -882,6 +906,7 @@ where
                         .into_iter()
                         .filter(|conn_id| !self.banned_peer_connections.contains(conn_id))
                         .count();
+                    #[allow(deprecated)]
                     self.behaviour.inject_connection_closed(
                         &peer_id,
                         &id,
@@ -901,6 +926,7 @@ where
                 if self.banned_peer_connections.contains(&id) {
                     log::debug!("Ignoring event from banned peer: {} {:?}.", peer_id, id);
                 } else {
+                    #[allow(deprecated)]
                     self.behaviour.inject_event(peer_id, id, event);
                 }
             }
@@ -911,6 +937,7 @@ where
                 old_endpoint,
             } => {
                 if !self.banned_peer_connections.contains(&id) {
+                    #[allow(deprecated)]
                     self.behaviour.inject_address_change(
                         &peer_id,
                         &id,
@@ -954,6 +981,7 @@ where
                         });
                     }
                     Err((connection_limit, handler)) => {
+                        #[allow(deprecated)]
                         self.behaviour
                             .inject_listen_failure(&local_addr, &send_back_addr, handler);
                         log::warn!("Incoming connection rejected: {:?}", connection_limit);
@@ -969,6 +997,7 @@ where
                 if !addrs.contains(&listen_addr) {
                     addrs.push(listen_addr.clone())
                 }
+                #[allow(deprecated)]
                 self.behaviour
                     .inject_new_listen_addr(listener_id, &listen_addr);
                 return Some(SwarmEvent::NewListenAddr {
@@ -988,6 +1017,7 @@ where
                 if let Some(addrs) = self.listened_addrs.get_mut(&listener_id) {
                     addrs.retain(|a| a != &listen_addr);
                 }
+                #[allow(deprecated)]
                 self.behaviour
                     .inject_expired_listen_addr(listener_id, &listen_addr);
                 return Some(SwarmEvent::ExpiredListenAddr {
@@ -1002,8 +1032,10 @@ where
                 log::debug!("Listener {:?}; Closed by {:?}.", listener_id, reason);
                 let addrs = self.listened_addrs.remove(&listener_id).unwrap_or_default();
                 for addr in addrs.iter() {
+                    #[allow(deprecated)]
                     self.behaviour.inject_expired_listen_addr(listener_id, addr);
                 }
+                #[allow(deprecated)]
                 self.behaviour.inject_listener_closed(
                     listener_id,
                     match &reason {
@@ -1018,6 +1050,7 @@ where
                 });
             }
             TransportEvent::ListenerError { listener_id, error } => {
+                #[allow(deprecated)]
                 self.behaviour.inject_listener_error(listener_id, &error);
                 return Some(SwarmEvent::ListenerError { listener_id, error });
             }
@@ -1868,7 +1901,7 @@ mod tests {
                         // The banned connection was established. Check that it was not reported to
                         // the behaviour of the banning swarm.
                         assert_eq!(
-                            swarm2.behaviour.inject_connection_established.len(), s2_expected_conns,
+                            swarm2.behaviour.on_connection_established.len(), s2_expected_conns,
                             "No additional closed connections should be reported for the banned peer"
                         );
 
@@ -1882,7 +1915,7 @@ mod tests {
                     if swarm2.network_info().num_peers() == 0 {
                         // The banned connection has closed. Check that it was not reported.
                         assert_eq!(
-                            swarm2.behaviour.inject_connection_closed.len(), s2_expected_conns,
+                            swarm2.behaviour.on_connection_closed.len(), s2_expected_conns,
                             "No additional closed connections should be reported for the banned peer"
                         );
                         assert!(swarm2.banned_peer_connections.is_empty());
@@ -1897,7 +1930,7 @@ mod tests {
                     }
                 }
                 Stage::Reconnecting => {
-                    if swarm1.behaviour.inject_connection_established.len() == s1_expected_conns
+                    if swarm1.behaviour.on_connection_established.len() == s1_expected_conns
                         && swarm2.behaviour.assert_connected(s2_expected_conns, 2)
                     {
                         return Poll::Ready(());
@@ -2082,9 +2115,8 @@ mod tests {
                 State::Connecting => {
                     if swarms_connected(&swarm1, &swarm2, num_connections) {
                         disconnected_conn_id = {
-                            let conn_id = swarm2.behaviour.inject_connection_established
-                                [num_connections / 2]
-                                .1;
+                            let conn_id =
+                                swarm2.behaviour.on_connection_established[num_connections / 2].1;
                             swarm2.behaviour.inner().next_action.replace(
                                 NetworkBehaviourAction::CloseConnection {
                                     peer_id: swarm1_id,
@@ -2100,20 +2132,17 @@ mod tests {
                     for s in &[&swarm1, &swarm2] {
                         assert!(s
                             .behaviour
-                            .inject_connection_closed
+                            .on_connection_closed
                             .iter()
                             .all(|(.., remaining_conns)| *remaining_conns > 0));
-                        assert_eq!(
-                            s.behaviour.inject_connection_established.len(),
-                            num_connections
-                        );
+                        assert_eq!(s.behaviour.on_connection_established.len(), num_connections);
                         s.behaviour.assert_connected(num_connections, 1);
                     }
                     if [&swarm1, &swarm2]
                         .iter()
-                        .all(|s| s.behaviour.inject_connection_closed.len() == 1)
+                        .all(|s| s.behaviour.on_connection_closed.len() == 1)
                     {
-                        let conn_id = swarm2.behaviour.inject_connection_closed[0].1;
+                        let conn_id = swarm2.behaviour.on_connection_closed[0].1;
                         assert_eq!(Some(conn_id), disconnected_conn_id);
                         return Poll::Ready(());
                     }
