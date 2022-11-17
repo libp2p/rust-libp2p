@@ -62,7 +62,7 @@ async fn create_swarm(config: MdnsConfig) -> Result<Swarm<Mdns>, Box<dyn Error>>
     let peer_id = PeerId::from(id_keys.public());
     let transport = libp2p::development_transport(id_keys).await?;
     let behaviour = Mdns::new(config)?;
-    let mut swarm = Swarm::new(transport, behaviour, peer_id);
+    let mut swarm = Swarm::with_async_std_executor(transport, behaviour, peer_id);
     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
     Ok(swarm)
 }
