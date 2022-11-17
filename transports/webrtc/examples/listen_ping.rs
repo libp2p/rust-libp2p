@@ -33,7 +33,11 @@ fn create_swarm() -> Result<Swarm<Behaviour>> {
         .map(|(peer_id, conn), _| (peer_id, StreamMuxerBox::new(conn)))
         .boxed();
 
-    Ok(Swarm::with_tokio_executor(transport, Behaviour::default(), peer_id))
+    Ok(Swarm::with_tokio_executor(
+        transport,
+        Behaviour::default(),
+        peer_id,
+    ))
 }
 
 #[derive(NetworkBehaviour, Default)]
