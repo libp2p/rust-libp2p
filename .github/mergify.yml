@@ -12,6 +12,7 @@ pull_request_rules:
     conditions:
       - conflict
       - -draft # Draft PRs are allowed to have conflicts.
+      - -author=dependabot[bot]
     actions:
       comment:
         message: This pull request has merge conflicts. Could you please resolve them @{{author}}? 🙏
