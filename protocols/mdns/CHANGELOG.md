@@ -9,12 +9,19 @@ and move and rename `Mdns` to `async_io::Behaviour`. See [PR 3096].
 
 - Remove the remaning `Mdns` prefixes from types as per [discussion 2174].
   I.e the `Mdns` prefix has been removed from various types like `MdnsEvent`.
-  Users should prefer importing the identify protocol as a module (`use libp2p::mdns;`),
+  Users should prefer importing the mdns protocol as a module (`use libp2p::mdns;`),
   and refer to its types via `mdns::`. For example: `mdns::Behaviour` or `mdns::Event`.
 
 - Use `trust-dns-proto` to parse DNS messages. See [PR 3102].
 
+- Replace `GenMdns`'s `NetworkBehaviour` implemention `inject_*` methods with the new `on_*` methods.
+  See [PR 3011].
+
+- Use `trust-dns-proto` to parse DNS messages. See [PR 3102].
+
 [discussion 2174]: https://github.com/libp2p/rust-libp2p/discussions/2174
+[PR 3096]: https://github.com/libp2p/rust-libp2p/pull/3096
+[PR 3011]: https://github.com/libp2p/rust-libp2p/pull/3011
 [PR 3102]: https://github.com/libp2p/rust-libp2p/pull/3102
 
 # 0.41.0
@@ -31,7 +38,6 @@ and move and rename `Mdns` to `async_io::Behaviour`. See [PR 3096].
 
 - Update to `if-watch` `v2.0.0` and thus the `async` method `Mdns::new` and `TokioMdns::new` becomes synchronous. See [PR 2978].
 
-[PR 3096]: https://github.com/libp2p/rust-libp2p/pull/3096
 [PR 2918]: https://github.com/libp2p/rust-libp2p/pull/2918
 [PR 2939]: https://github.com/libp2p/rust-libp2p/pull/2939
 [PR 2977]: https://github.com/libp2p/rust-libp2p/pull/2977
