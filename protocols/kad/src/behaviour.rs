@@ -2562,21 +2562,20 @@ pub struct ProgressStep {
 }
 
 impl ProgressStep {
-    // TODO Why the pub?
-    pub(crate) fn first() -> Self {
+    fn first() -> Self {
         Self {
             count: NonZeroUsize::new(1).expect("1 to be greater than 0."),
             last: false,
         }
     }
 
-    pub(crate) fn first_and_last() -> Self {
+    fn first_and_last() -> Self {
         let mut first = ProgressStep::first();
         first.last = true;
         first
     }
 
-    pub(crate) fn next(&self) -> Self {
+    fn next(&self) -> Self {
         assert!(!self.last);
 
         Self {
