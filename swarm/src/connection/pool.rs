@@ -196,7 +196,7 @@ struct PendingConnection<THandler> {
     endpoint: PendingPoint,
     /// When dropped, notifies the task which then knows to terminate.
     abort_notifier: Option<oneshot::Sender<Void>>,
-    //The moment we became aware of this possible connection, useful for timing metrics
+    /// The moment we became aware of this possible connection, useful for timing metrics.
     creation: Instant,
 }
 
@@ -240,7 +240,7 @@ where
         /// Addresses are dialed in parallel. Contains the addresses and errors
         /// of dial attempts that failed before the one successful dial.
         concurrent_dial_errors: Option<Vec<(Multiaddr, TransportError<TTrans::Error>)>>,
-        /// How long it took to establish this connection
+        /// How long it took to establish this connection.
         time_taken: std::time::Duration,
 
     },
@@ -808,7 +808,7 @@ where
                         handler,
                         endpoint,
                         abort_notifier: _,
-                        creation: _,//Ignoring the time it took for the connection to _fail_
+                        creation: _,// Ignoring the time it took for the connection to _fail_.
                     }) = self.pending.remove(&id)
                     {
                         self.counters.dec_pending(&endpoint);

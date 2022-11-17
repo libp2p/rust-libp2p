@@ -125,7 +125,7 @@ impl Metrics {
 
         let connection_duration = Family::new_with_constructor(create_connection_duration_histogram as fn()->Histogram);
         sub_registry.register(
-            "connection_duration",
+            "connection_establishment_duration",
             "Histogram of milliseconds it has taken to move a connection from pending to established",
             Box::new(connection_duration.clone())
         );
