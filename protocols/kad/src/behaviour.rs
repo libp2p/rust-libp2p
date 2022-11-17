@@ -955,10 +955,16 @@ where
             .map(|p| p.provider)
             .collect();
 
+        let step = ProgressStep::first();
+
         let info = QueryInfo::GetProviders {
             key: key.clone(),
             providers_found: providers.len(),
-            step: ProgressStep::first(),
+            step: if providers.is_empty() {
+                step.clone()
+            } else {
+                step.next()
+            },
         };
 
         let target = kbucket::Key::new(key.clone());
@@ -978,14 +984,10 @@ where
                             key,
                             providers,
                         })),
-                        step: ProgressStep::first(),
+                        step,
                         stats,
                     },
                 ));
-            let query = self.query_mut(&id).expect("just inserted");
-            if let QueryInfo::GetProviders { step, .. } = &mut query.query.inner.info {
-                *step = step.next();
-            }
         }
         id
     }
