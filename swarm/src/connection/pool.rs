@@ -240,7 +240,7 @@ where
         /// Addresses are dialed in parallel. Contains the addresses and errors
         /// of dial attempts that failed before the one successful dial.
         concurrent_dial_errors: Option<Vec<(Multiaddr, TransportError<TTrans::Error>)>>,
-        /// How long it took to establish this connection
+        /// How long it took to establish this connection.
         time_taken: std::time::Duration,
 
     },
