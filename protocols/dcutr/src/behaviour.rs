@@ -26,10 +26,11 @@ use either::Either;
 use libp2p_core::connection::{ConnectedPoint, ConnectionId};
 use libp2p_core::multiaddr::Protocol;
 use libp2p_core::{Multiaddr, PeerId};
+use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm};
 use libp2p_swarm::dial_opts::{self, DialOpts};
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerUpgrErr, DialError, IntoConnectionHandler,
-    NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
+    ConnectionHandler, ConnectionHandlerUpgrErr, IntoConnectionHandler, NetworkBehaviour,
+    NetworkBehaviourAction, NotifyHandler, PollParameters,
 };
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::task::{Context, Poll};
@@ -81,30 +82,18 @@ impl Behaviour {
             direct_connections: Default::default(),
         }
     }
-}
 
-impl NetworkBehaviour for Behaviour {
-    type ConnectionHandler = handler::Prototype;
-    type OutEvent = Event;
-
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
-        handler::Prototype::UnknownConnection
-    }
-
-    fn addresses_of_peer(&mut self, _peer_id: &PeerId) -> Vec<Multiaddr> {
-        vec![]
-    }
-
-    fn inject_connection_established(
+    fn on_connection_established(
         &mut self,
-        peer_id: &PeerId,
-        connection_id: &ConnectionId,
-        connected_point: &ConnectedPoint,
-        _failed_addresses: Option<&Vec<Multiaddr>>,
-        _other_established: usize,
+        ConnectionEstablished {
+            peer_id,
+            connection_id,
+            endpoint: connected_point,
+            ..
+        }: ConnectionEstablished,
     ) {
         if connected_point.is_relayed() {
-            if connected_point.is_listener() && !self.direct_connections.contains_key(peer_id) {
+            if connected_point.is_listener() && !self.direct_connections.contains_key(&peer_id) {
                 // TODO: Try dialing the remote peer directly. Specification:
                 //
                 // > The protocol starts with the completion of a relay connection from A to B. Upon
@@ -116,13 +105,13 @@ impl NetworkBehaviour for Behaviour {
                 // https://github.com/libp2p/specs/blob/master/relay/DCUtR.md#the-protocol
                 self.queued_actions.extend([
                     ActionBuilder::Connect {
-                        peer_id: *peer_id,
+                        peer_id,
                         attempt: 1,
-                        handler: NotifyHandler::One(*connection_id),
+                        handler: NotifyHandler::One(connection_id),
                     },
                     NetworkBehaviourAction::GenerateEvent(
                         Event::InitiatedDirectConnectionUpgrade {
-                            remote_peer_id: *peer_id,
+                            remote_peer_id: peer_id,
                             local_relayed_addr: match connected_point {
                                 ConnectedPoint::Listener { local_addr, .. } => local_addr.clone(),
                                 ConnectedPoint::Dialer { .. } => unreachable!("Due to outer if."),
@@ -134,17 +123,17 @@ impl NetworkBehaviour for Behaviour {
             }
         } else {
             self.direct_connections
-                .entry(*peer_id)
+                .entry(peer_id)
                 .or_default()
-                .insert(*connection_id);
+                .insert(connection_id);
         }
     }
 
-    fn inject_dial_failure(
+    fn on_dial_failure(
         &mut self,
-        peer_id: Option<PeerId>,
-        handler: Self::ConnectionHandler,
-        _error: &DialError,
+        DialFailure {
+            peer_id, handler, ..
+        }: DialFailure<<Self as NetworkBehaviour>::ConnectionHandler>,
     ) {
         if let handler::Prototype::DirectConnection {
             relayed_connection_id,
@@ -178,34 +167,45 @@ impl NetworkBehaviour for Behaviour {
         }
     }
 
-    fn inject_connection_closed(
+    fn on_connection_closed(
         &mut self,
-        peer_id: &PeerId,
-        connection_id: &ConnectionId,
-        connected_point: &ConnectedPoint,
-        _handler: <<Self as NetworkBehaviour>::ConnectionHandler as IntoConnectionHandler>::Handler,
-        _remaining_established: usize,
+        ConnectionClosed {
+            peer_id,
+            connection_id,
+            endpoint: connected_point,
+            ..
+        }: ConnectionClosed<<Self as NetworkBehaviour>::ConnectionHandler>,
     ) {
         if !connected_point.is_relayed() {
             let connections = self
                 .direct_connections
-                .get_mut(peer_id)
+                .get_mut(&peer_id)
                 .expect("Peer of direct connection to be tracked.");
             connections
-                .remove(connection_id)
+                .remove(&connection_id)
                 .then(|| ())
                 .expect("Direct connection to be tracked.");
             if connections.is_empty() {
-                self.direct_connections.remove(peer_id);
+                self.direct_connections.remove(&peer_id);
             }
         }
     }
+}
 
-    fn inject_event(
+impl NetworkBehaviour for Behaviour {
+    type ConnectionHandler = handler::Prototype;
+    type OutEvent = Event;
+
+    fn new_handler(&mut self) -> Self::ConnectionHandler {
+        handler::Prototype::UnknownConnection
+    }
+
+    fn on_connection_handler_event(
         &mut self,
         event_source: PeerId,
         connection: ConnectionId,
-        handler_event: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent,
+        handler_event: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as
+            ConnectionHandler>::OutEvent,
     ) {
         match handler_event {
             Either::Left(handler::relayed::Event::InboundConnectRequest {
@@ -315,6 +315,27 @@ impl NetworkBehaviour for Behaviour {
         }
 
         Poll::Pending
+    }
+
+    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+        match event {
+            FromSwarm::ConnectionEstablished(connection_established) => {
+                self.on_connection_established(connection_established)
+            }
+            FromSwarm::ConnectionClosed(connection_closed) => {
+                self.on_connection_closed(connection_closed)
+            }
+            FromSwarm::DialFailure(dial_failure) => self.on_dial_failure(dial_failure),
+            FromSwarm::AddressChange(_)
+            | FromSwarm::ListenFailure(_)
+            | FromSwarm::NewListener(_)
+            | FromSwarm::NewListenAddr(_)
+            | FromSwarm::ExpiredListenAddr(_)
+            | FromSwarm::ListenerError(_)
+            | FromSwarm::ListenerClosed(_)
+            | FromSwarm::NewExternalAddr(_)
+            | FromSwarm::ExpiredExternalAddr(_) => {}
+        }
     }
 }
 

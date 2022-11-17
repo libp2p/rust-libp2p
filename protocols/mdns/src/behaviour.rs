@@ -27,8 +27,8 @@ use crate::behaviour::{socket::AsyncSocket, timer::Builder};
 use crate::MdnsConfig;
 use futures::Stream;
 use if_watch::{IfEvent, IfWatcher};
-use libp2p_core::transport::ListenerId;
 use libp2p_core::{Multiaddr, PeerId};
+use libp2p_swarm::behaviour::{ConnectionClosed, FromSwarm};
 use libp2p_swarm::{
     dummy, ConnectionHandler, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
 };
@@ -133,7 +133,7 @@ where
             .collect()
     }
 
-    fn inject_event(
+    fn on_connection_handler_event(
         &mut self,
         _: PeerId,
         _: libp2p_core::connection::ConnectionId,
@@ -142,23 +142,33 @@ where
         void::unreachable(ev)
     }
 
-    fn inject_new_listen_addr(&mut self, _id: ListenerId, _addr: &Multiaddr) {
-        log::trace!("waking interface state because listening address changed");
-        for iface in self.iface_states.values_mut() {
-            iface.fire_timer();
-        }
-    }
-
-    fn inject_connection_closed(
-        &mut self,
-        peer: &PeerId,
-        _: &libp2p_core::connection::ConnectionId,
-        _: &libp2p_core::ConnectedPoint,
-        _: Self::ConnectionHandler,
-        remaining_established: usize,
-    ) {
-        if remaining_established == 0 {
-            self.expire_node(peer);
+    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+        match event {
+            FromSwarm::ConnectionClosed(ConnectionClosed {
+                peer_id,
+                remaining_established,
+                ..
+            }) => {
+                if remaining_established == 0 {
+                    self.expire_node(&peer_id);
+                }
+            }
+            FromSwarm::NewListener(_) => {
+                log::trace!("waking interface state because listening address changed");
+                for iface in self.iface_states.values_mut() {
+                    iface.fire_timer();
+                }
+            }
+            FromSwarm::ConnectionEstablished(_)
+            | FromSwarm::DialFailure(_)
+            | FromSwarm::AddressChange(_)
+            | FromSwarm::ListenFailure(_)
+            | FromSwarm::NewListenAddr(_)
+            | FromSwarm::ExpiredListenAddr(_)
+            | FromSwarm::ListenerError(_)
+            | FromSwarm::ListenerClosed(_)
+            | FromSwarm::NewExternalAddr(_)
+            | FromSwarm::ExpiredExternalAddr(_) => {}
         }
     }
 

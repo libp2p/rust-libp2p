@@ -21,7 +21,7 @@
 use futures::StreamExt;
 use libp2p_identify as identify;
 use libp2p_ping as ping;
-use libp2p_swarm::{dummy, NetworkBehaviour, SwarmEvent};
+use libp2p_swarm::{behaviour::FromSwarm, dummy, NetworkBehaviour, SwarmEvent};
 use std::fmt::Debug;
 
 /// Small utility to check that a type implements `NetworkBehaviour`.
@@ -390,7 +390,7 @@ fn custom_out_event_no_type_parameters() {
             dummy::ConnectionHandler
         }
 
-        fn inject_event(
+        fn on_connection_handler_event(
             &mut self,
             _peer: PeerId,
             _connection: ConnectionId,
@@ -405,6 +405,23 @@ fn custom_out_event_no_type_parameters() {
             _: &mut impl PollParameters,
         ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
             Poll::Pending
+        }
+
+        fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+            match event {
+                FromSwarm::ConnectionEstablished(_)
+                | FromSwarm::ConnectionClosed(_)
+                | FromSwarm::AddressChange(_)
+                | FromSwarm::DialFailure(_)
+                | FromSwarm::ListenFailure(_)
+                | FromSwarm::NewListener(_)
+                | FromSwarm::NewListenAddr(_)
+                | FromSwarm::ExpiredListenAddr(_)
+                | FromSwarm::ListenerError(_)
+                | FromSwarm::ListenerClosed(_)
+                | FromSwarm::NewExternalAddr(_)
+                | FromSwarm::ExpiredExternalAddr(_) => {}
+            }
         }
     }
 

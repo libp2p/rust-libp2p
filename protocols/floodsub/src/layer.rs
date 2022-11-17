@@ -27,11 +27,12 @@ use crate::FloodsubConfig;
 use cuckoofilter::{CuckooError, CuckooFilter};
 use fnv::FnvHashSet;
 use libp2p_core::{connection::ConnectionId, PeerId};
-use libp2p_core::{ConnectedPoint, Multiaddr};
+use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm};
 use libp2p_swarm::{
     dial_opts::DialOpts, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, OneShotHandler,
     PollParameters,
 };
+use libp2p_swarm::{ConnectionHandler, IntoConnectionHandler};
 use log::warn;
 use smallvec::SmallVec;
 use std::collections::hash_map::{DefaultHasher, HashMap};
@@ -276,23 +277,14 @@ impl Floodsub {
                 });
         }
     }
-}
 
-impl NetworkBehaviour for Floodsub {
-    type ConnectionHandler = OneShotHandler<FloodsubProtocol, FloodsubRpc, InnerMessage>;
-    type OutEvent = FloodsubEvent;
-
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
-        Default::default()
-    }
-
-    fn inject_connection_established(
+    fn on_connection_established(
         &mut self,
-        id: &PeerId,
-        _: &ConnectionId,
-        _: &ConnectedPoint,
-        _: Option<&Vec<Multiaddr>>,
-        other_established: usize,
+        ConnectionEstablished {
+            peer_id,
+            other_established,
+            ..
+        }: ConnectionEstablished,
     ) {
         if other_established > 0 {
             // We only care about the first time a peer connects.
@@ -300,11 +292,11 @@ impl NetworkBehaviour for Floodsub {
         }
 
         // We need to send our subscriptions to the newly-connected node.
-        if self.target_peers.contains(id) {
+        if self.target_peers.contains(&peer_id) {
             for topic in self.subscribed_topics.iter().cloned() {
                 self.events
                     .push_back(NetworkBehaviourAction::NotifyHandler {
-                        peer_id: *id,
+                        peer_id,
                         handler: NotifyHandler::Any,
                         event: FloodsubRpc {
                             messages: Vec::new(),
@@ -317,41 +309,51 @@ impl NetworkBehaviour for Floodsub {
             }
         }
 
-        self.connected_peers.insert(*id, SmallVec::new());
+        self.connected_peers.insert(peer_id, SmallVec::new());
     }
 
-    fn inject_connection_closed(
+    fn on_connection_closed(
         &mut self,
-        id: &PeerId,
-        _: &ConnectionId,
-        _: &ConnectedPoint,
-        _: Self::ConnectionHandler,
-        remaining_established: usize,
+        ConnectionClosed {
+            peer_id,
+            remaining_established,
+            ..
+        }: ConnectionClosed<<Self as NetworkBehaviour>::ConnectionHandler>,
     ) {
         if remaining_established > 0 {
             // we only care about peer disconnections
             return;
         }
 
-        let was_in = self.connected_peers.remove(id);
+        let was_in = self.connected_peers.remove(&peer_id);
         debug_assert!(was_in.is_some());
 
         // We can be disconnected by the remote in case of inactivity for example, so we always
         // try to reconnect.
-        if self.target_peers.contains(id) {
+        if self.target_peers.contains(&peer_id) {
             let handler = self.new_handler();
             self.events.push_back(NetworkBehaviourAction::Dial {
-                opts: DialOpts::peer_id(*id).build(),
+                opts: DialOpts::peer_id(peer_id).build(),
                 handler,
             });
         }
     }
+}
 
-    fn inject_event(
+impl NetworkBehaviour for Floodsub {
+    type ConnectionHandler = OneShotHandler<FloodsubProtocol, FloodsubRpc, InnerMessage>;
+    type OutEvent = FloodsubEvent;
+
+    fn new_handler(&mut self) -> Self::ConnectionHandler {
+        Default::default()
+    }
+
+    fn on_connection_handler_event(
         &mut self,
         propagation_source: PeerId,
-        _connection: ConnectionId,
-        event: InnerMessage,
+        _connection_id: ConnectionId,
+        event: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as
+            ConnectionHandler>::OutEvent,
     ) {
         // We ignore successful sends or timeouts.
         let event = match event {
@@ -476,6 +478,27 @@ impl NetworkBehaviour for Floodsub {
         }
 
         Poll::Pending
+    }
+
+    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+        match event {
+            FromSwarm::ConnectionEstablished(connection_established) => {
+                self.on_connection_established(connection_established)
+            }
+            FromSwarm::ConnectionClosed(connection_closed) => {
+                self.on_connection_closed(connection_closed)
+            }
+            FromSwarm::AddressChange(_)
+            | FromSwarm::DialFailure(_)
+            | FromSwarm::ListenFailure(_)
+            | FromSwarm::NewListener(_)
+            | FromSwarm::NewListenAddr(_)
+            | FromSwarm::ExpiredListenAddr(_)
+            | FromSwarm::ListenerError(_)
+            | FromSwarm::ListenerClosed(_)
+            | FromSwarm::NewExternalAddr(_)
+            | FromSwarm::ExpiredExternalAddr(_) => {}
+        }
     }
 }
 
