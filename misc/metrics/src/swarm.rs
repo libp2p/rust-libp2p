@@ -20,8 +20,7 @@
 
 use crate::protocol_stack;
 use prometheus_client::encoding::text::Encode;
-use prometheus_client::metrics;
-use metrics::{counter::Counter,family::Family,histogram::Histogram};
+use prometheus_client::metrics::{counter::Counter,family::Family,histogram::{exponential_buckets,Histogram}};
 use prometheus_client::registry::Registry;
 
 pub struct Metrics {
@@ -29,7 +28,7 @@ pub struct Metrics {
     connections_incoming_error: Family<IncomingConnectionErrorLabels, Counter>,
 
     connections_established: Family<ConnectionEstablishedLabels, Counter>,
-    connection_duration: Family<AddressLabels,Histogram>,
+    connection_duration: Family<AddressLabels, Histogram>,
     connections_closed: Family<ConnectionClosedLabels, Counter>,
 
     new_listen_addr: Family<AddressLabels, Counter>,
@@ -160,7 +159,7 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
                         protocols: protocols.clone(),
                     })
                     .inc();
-                self.connection_duration.get_or_create(&AddressLabels { protocols}).observe(time_taken.as_micros().clamp(0,1000000) as f64 / 1e3);
+                self.connection_duration.get_or_create(&AddressLabels { protocols}).observe(time_taken.as_millis().clamp(0,10000) as f64 / 1e6);
             }
             libp2p_swarm::SwarmEvent::ConnectionClosed { endpoint, .. } => {
                 self.connections_closed
@@ -385,6 +384,5 @@ impl<TTransErr> From<&libp2p_swarm::PendingInboundConnectionError<TTransErr>>
 }
 
 fn create_connection_duration_histogram() -> Histogram {
-    // Histogram::new((1..99).map(|i|10. * i as f64))
-    Histogram::new(metrics::histogram::exponential_buckets(1.,2.,10))
+    Histogram::new(exponential_buckets(1e-3,2.,10))
 }

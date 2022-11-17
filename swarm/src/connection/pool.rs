@@ -38,6 +38,7 @@ use futures::{
     ready,
     stream::FuturesUnordered,
 };
+use instant::Instant;
 use libp2p_core::connection::{ConnectionId, Endpoint, PendingPoint};
 use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerExt};
 use std::{
@@ -48,7 +49,6 @@ use std::{
     pin::Pin,
     task::Context,
     task::Poll,
-    time::Instant,
 };
 use void::Void;
 
