@@ -54,7 +54,8 @@
     ```
   - Without
     
-    Spawns the tasks on the current task, this may result in bad performance so try to use an executor where possible. Previously this was just a fallback when no executor was specified and constructing a `ThreadPool` failed.
+    Spawns the tasks on the current task, this may result in bad performance so try to use an executor where possible.
+    Previously this was just a fallback when no executor was specified and constructing a `ThreadPool` failed.
 
     New
     ```rust
@@ -65,6 +66,10 @@
   - `Swarm::new`
   - `SwarmBuilder::new`
   - `SwarmBuilder::executor`
+
+- Remove `IntoConnectionHandler` abstraction and change the signature of `NetworkBehaviour::new_handler` to accept `PeerId` and `ConnectedPoint`.
+  Previously, this information was only available as part of `IntoConnectionHandler::into_handler` but it is now passed to the `NetworkBehaviour` directly.
+  See [PR 3099].
 
 [PR 3055]: https://github.com/libp2p/rust-libp2p/pull/3055
 [PR 3097]: https://github.com/libp2p/rust-libp2p/pull/3097
