@@ -242,7 +242,6 @@ where
         concurrent_dial_errors: Option<Vec<(Multiaddr, TransportError<TTrans::Error>)>>,
         /// How long it took to establish this connection.
         time_taken: std::time::Duration,
-
     },
 
     /// An established connection was closed.
@@ -642,7 +641,7 @@ where
                         handler,
                         endpoint,
                         abort_notifier: _,
-                        creation
+                        creation,
                     } = self
                         .pending
                         .remove(&id)
@@ -799,7 +798,7 @@ where
                         id,
                         other_established_connection_ids,
                         concurrent_dial_errors,
-                        time_taken
+                        time_taken,
                     });
                 }
                 task::PendingConnectionEvent::PendingFailed { id, error } => {
@@ -808,7 +807,7 @@ where
                         handler,
                         endpoint,
                         abort_notifier: _,
-                        creation: _,// Ignoring the time it took for the connection to _fail_.
+                        creation: _, // Ignoring the time it took for the connection to fail.
                     }) = self.pending.remove(&id)
                     {
                         self.counters.dec_pending(&endpoint);
