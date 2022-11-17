@@ -278,7 +278,7 @@ pub trait ConnectionHandler: Send + 'static {
         ConnectionHandlerSelect::new(self, other)
     }
 
-    /// Informs the handler about an event from the [`NetworkBehaviour`].
+    /// Informs the handler about an event from the [`NetworkBehaviour`](super::NetworkBehaviour).
     fn on_behaviour_event(&mut self, _event: Self::InEvent) {}
 
     fn on_connection_event(
@@ -294,7 +294,7 @@ pub trait ConnectionHandler: Send + 'static {
 }
 
 /// Enumeration with the list of the possible stream events
-/// to pass to [`on_event`](ConnectionHandler::on_event).
+/// to pass to [`on_connection_event`](ConnectionHandler::on_connection_event).
 pub enum ConnectionEvent<'a, IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IOI, OOI> {
     /// Informs the handler about the output of a successful upgrade on a new inbound substream.
     FullyNegotiatedInbound(FullyNegotiatedInbound<IP, IOI>),
