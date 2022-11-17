@@ -808,7 +808,7 @@ where
                         handler,
                         endpoint,
                         abort_notifier: _,
-                        creation: _,//Ignoring the time it took for the connection to _fail_
+                        creation: _,// Ignoring the time it took for the connection to _fail_.
                     }) = self.pending.remove(&id)
                     {
                         self.counters.dec_pending(&endpoint);
