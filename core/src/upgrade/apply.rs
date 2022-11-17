@@ -154,10 +154,7 @@ where
                             return Poll::Pending;
                         }
                         Poll::Ready(Ok(x)) => {
-                            log::trace!(
-                                "Upgraded inbound stream to {}",
-                                DisplayProtocolName(name)
-                            );
+                            log::trace!("Upgraded inbound stream to {}", DisplayProtocolName(name));
                             return Poll::Ready(Ok(x));
                         }
                         Poll::Ready(Err(e)) => {
@@ -244,14 +241,14 @@ where
                         }
                         Poll::Ready(Ok(x)) => {
                             log::trace!(
-                                "Successfully applied negotiated outbound protocol {}",
+                                "Upgraded outbound stream to {}",
                                 DisplayProtocolName(name)
                             );
                             return Poll::Ready(Ok(x));
                         }
                         Poll::Ready(Err(e)) => {
                             debug!(
-                                "Failed to apply negotiated outbound protocol {}",
+                                "Failed to upgrade outbound stream to {}",
                                 DisplayProtocolName(name)
                             );
                             return Poll::Ready(Err(UpgradeError::Apply(e)));

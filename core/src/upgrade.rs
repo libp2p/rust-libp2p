@@ -86,7 +86,7 @@ pub use self::{
 };
 pub use crate::Negotiated;
 pub use multistream_select::{NegotiatedComplete, NegotiationError, ProtocolError, Version};
-use std::fmt::{Display, Write};
+use std::fmt;
 
 /// Types serving as protocol names.
 ///
@@ -136,8 +136,9 @@ impl<T: AsRef<[u8]>> ProtocolName for T {
 }
 
 pub struct DisplayProtocolName<N>(N);
-impl<N: ProtocolName> Display for DisplayProtocolName<N> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl<N: ProtocolName> fmt::Display for DisplayProtocolName<N> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use fmt::Write;
         for byte in self.0.protocol_name() {
             if (b' '..=b'~').contains(byte) {
                 f.write_char(char::from(*byte))?;
