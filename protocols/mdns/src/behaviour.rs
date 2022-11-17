@@ -36,12 +36,12 @@ use smallvec::SmallVec;
 use std::collections::hash_map::{Entry, HashMap};
 use std::{cmp, fmt, io, net::IpAddr, pin::Pin, task::Context, task::Poll, time::Instant};
 
-/// The interface for non-blocking TCP I/O providers.
-pub trait Provider {
+/// An abstraction to allow for compatibility with various async runtimes.
+pub trait Provider: 'static {
     /// The Async Socket type.
-    type Socket;
+    type Socket: AsyncSocket;
     /// The Async Timer type.
-    type Timer: Builder;
+    type Timer: Builder + Stream;
     /// The IfWatcher type.
     type Watcher: Stream<Item = std::io::Result<IfEvent>> + fmt::Debug + Unpin;
 
@@ -126,7 +126,6 @@ where
 impl<P> Behaviour<P>
 where
     P: Provider,
-    P::Timer: Builder,
 {
     /// Builds a new `Mdns` behaviour.
     pub fn new(config: Config) -> io::Result<Self> {
@@ -163,9 +162,7 @@ where
 
 impl<P> NetworkBehaviour for Behaviour<P>
 where
-    P: Provider + 'static,
-    P::Timer: Builder + Stream,
-    P::Socket: AsyncSocket,
+    P: Provider,
 {
     type ConnectionHandler = dummy::ConnectionHandler;
     type OutEvent = Event;
