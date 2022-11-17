@@ -11,6 +11,10 @@
 - Replace `Gossipsub`'s `NetworkBehaviour` implemention `inject_*` methods with the new `on_*` methods.
   See [PR 3011].
 
+- Replace `GossipsubHandler`'s `ConnectionHandler` implemention `inject_*` methods with the new `on_*` methods.
+  See [PR 3085].
+
+[PR 3085]: https://github.com/libp2p/rust-libp2p/pull/3085
 [PR 3070]: https://github.com/libp2p/rust-libp2p/pull/3070
 [PR 3011]: https://github.com/libp2p/rust-libp2p/pull/3011
 

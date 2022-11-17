@@ -1,5 +1,7 @@
 use crate::behaviour::{FromSwarm, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
-use crate::handler::{InboundUpgradeSend, OutboundUpgradeSend};
+use crate::handler::{
+    ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
+};
 use crate::{ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive, SubstreamProtocol};
 use libp2p_core::connection::ConnectionId;
 use libp2p_core::upgrade::DeniedUpgrade;
@@ -66,39 +68,8 @@ impl crate::handler::ConnectionHandler for ConnectionHandler {
         SubstreamProtocol::new(DeniedUpgrade, ())
     }
 
-    fn inject_fully_negotiated_inbound(
-        &mut self,
-        protocol: <Self::InboundProtocol as InboundUpgradeSend>::Output,
-        _: Self::InboundOpenInfo,
-    ) {
-        void::unreachable(protocol)
-    }
-
-    fn inject_fully_negotiated_outbound(
-        &mut self,
-        protocol: <Self::OutboundProtocol as OutboundUpgradeSend>::Output,
-        _: Self::OutboundOpenInfo,
-    ) {
-        void::unreachable(protocol)
-    }
-
-    fn inject_event(&mut self, event: Self::InEvent) {
+    fn on_behaviour_event(&mut self, event: Self::InEvent) {
         void::unreachable(event)
-    }
-
-    fn inject_dial_upgrade_error(
-        &mut self,
-        _: Self::OutboundOpenInfo,
-        error: ConnectionHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>,
-    ) {
-        match error {
-            ConnectionHandlerUpgrErr::Timeout => unreachable!(),
-            ConnectionHandlerUpgrErr::Timer => unreachable!(),
-            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)) => void::unreachable(e),
-            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(_)) => {
-                unreachable!("Denied upgrade does not support any protocols")
-            }
-        }
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
@@ -117,5 +88,33 @@ impl crate::handler::ConnectionHandler for ConnectionHandler {
         >,
     > {
         Poll::Pending
+    }
+
+    fn on_connection_event(
+        &mut self,
+        event: ConnectionEvent<
+            Self::InboundProtocol,
+            Self::OutboundProtocol,
+            Self::InboundOpenInfo,
+            Self::OutboundOpenInfo,
+        >,
+    ) {
+        match event {
+            ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
+                protocol, ..
+            }) => void::unreachable(protocol),
+            ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
+                protocol, ..
+            }) => void::unreachable(protocol),
+            ConnectionEvent::DialUpgradeError(DialUpgradeError { info: _, error }) => match error {
+                ConnectionHandlerUpgrErr::Timeout => unreachable!(),
+                ConnectionHandlerUpgrErr::Timer => unreachable!(),
+                ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)) => void::unreachable(e),
+                ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(_)) => {
+                    unreachable!("Denied upgrade does not support any protocols")
+                }
+            },
+            ConnectionEvent::AddressChange(_) | ConnectionEvent::ListenUpgradeError(_) => {}
+        }
     }
 }

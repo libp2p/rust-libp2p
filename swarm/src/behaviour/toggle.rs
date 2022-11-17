@@ -20,10 +20,11 @@
 
 use crate::behaviour::{inject_from_swarm, FromSwarm};
 use crate::handler::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, IntoConnectionHandler,
-    KeepAlive, SubstreamProtocol,
+    ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr,
+    DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound, IntoConnectionHandler,
+    KeepAlive, ListenUpgradeError, SubstreamProtocol,
 };
-use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper};
+use crate::upgrade::SendWrapper;
 use crate::{NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use either::Either;
 use libp2p_core::{
@@ -155,6 +156,73 @@ pub struct ToggleConnectionHandler<TInner> {
     inner: Option<TInner>,
 }
 
+impl<TInner> ToggleConnectionHandler<TInner>
+where
+    TInner: ConnectionHandler,
+{
+    fn on_fully_negotiated_inbound(
+        &mut self,
+        FullyNegotiatedInbound {
+            protocol: out,
+            info,
+        }: FullyNegotiatedInbound<
+            <Self as ConnectionHandler>::InboundProtocol,
+            <Self as ConnectionHandler>::InboundOpenInfo,
+        >,
+    ) {
+        let out = match out {
+            EitherOutput::First(out) => out,
+            EitherOutput::Second(v) => void::unreachable(v),
+        };
+
+        if let Either::Left(info) = info {
+            #[allow(deprecated)]
+            self.inner
+                .as_mut()
+                .expect("Can't receive an inbound substream if disabled; QED")
+                .inject_fully_negotiated_inbound(out, info)
+        } else {
+            panic!("Unexpected Either::Right in enabled `inject_fully_negotiated_inbound`.")
+        }
+    }
+
+    fn on_listen_upgrade_error(
+        &mut self,
+        ListenUpgradeError { info, error: err }: ListenUpgradeError<
+            <Self as ConnectionHandler>::InboundOpenInfo,
+            <Self as ConnectionHandler>::InboundProtocol,
+        >,
+    ) {
+        let (inner, info) = match (self.inner.as_mut(), info) {
+            (Some(inner), Either::Left(info)) => (inner, info),
+            // Ignore listen upgrade errors in disabled state.
+            (None, Either::Right(())) => return,
+            (Some(_), Either::Right(())) => panic!(
+                "Unexpected `Either::Right` inbound info through \
+                 `inject_listen_upgrade_error` in enabled state.",
+            ),
+            (None, Either::Left(_)) => panic!(
+                "Unexpected `Either::Left` inbound info through \
+                 `inject_listen_upgrade_error` in disabled state.",
+            ),
+        };
+
+        let err = match err {
+            ConnectionHandlerUpgrErr::Timeout => ConnectionHandlerUpgrErr::Timeout,
+            ConnectionHandlerUpgrErr::Timer => ConnectionHandlerUpgrErr::Timer,
+            ConnectionHandlerUpgrErr::Upgrade(err) => {
+                ConnectionHandlerUpgrErr::Upgrade(err.map_err(|err| match err {
+                    EitherError::A(e) => e,
+                    EitherError::B(v) => void::unreachable(v),
+                }))
+            }
+        };
+
+        #[allow(deprecated)]
+        inner.inject_listen_upgrade_error(info, err)
+    }
+}
+
 impl<TInner> ConnectionHandler for ToggleConnectionHandler<TInner>
 where
     TInner: ConnectionHandler,
@@ -182,92 +250,12 @@ where
         }
     }
 
-    fn inject_fully_negotiated_inbound(
-        &mut self,
-        out: <Self::InboundProtocol as InboundUpgradeSend>::Output,
-        info: Self::InboundOpenInfo,
-    ) {
-        let out = match out {
-            EitherOutput::First(out) => out,
-            EitherOutput::Second(v) => void::unreachable(v),
-        };
-
-        if let Either::Left(info) = info {
-            self.inner
-                .as_mut()
-                .expect("Can't receive an inbound substream if disabled; QED")
-                .inject_fully_negotiated_inbound(out, info)
-        } else {
-            panic!("Unexpected Either::Right in enabled `inject_fully_negotiated_inbound`.")
-        }
-    }
-
-    fn inject_fully_negotiated_outbound(
-        &mut self,
-        out: <Self::OutboundProtocol as OutboundUpgradeSend>::Output,
-        info: Self::OutboundOpenInfo,
-    ) {
-        self.inner
-            .as_mut()
-            .expect("Can't receive an outbound substream if disabled; QED")
-            .inject_fully_negotiated_outbound(out, info)
-    }
-
-    fn inject_event(&mut self, event: Self::InEvent) {
+    fn on_behaviour_event(&mut self, event: Self::InEvent) {
+        #[allow(deprecated)]
         self.inner
             .as_mut()
             .expect("Can't receive events if disabled; QED")
             .inject_event(event)
-    }
-
-    fn inject_address_change(&mut self, addr: &Multiaddr) {
-        if let Some(inner) = self.inner.as_mut() {
-            inner.inject_address_change(addr)
-        }
-    }
-
-    fn inject_dial_upgrade_error(
-        &mut self,
-        info: Self::OutboundOpenInfo,
-        err: ConnectionHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>,
-    ) {
-        self.inner
-            .as_mut()
-            .expect("Can't receive an outbound substream if disabled; QED")
-            .inject_dial_upgrade_error(info, err)
-    }
-
-    fn inject_listen_upgrade_error(
-        &mut self,
-        info: Self::InboundOpenInfo,
-        err: ConnectionHandlerUpgrErr<<Self::InboundProtocol as InboundUpgradeSend>::Error>,
-    ) {
-        let (inner, info) = match (self.inner.as_mut(), info) {
-            (Some(inner), Either::Left(info)) => (inner, info),
-            // Ignore listen upgrade errors in disabled state.
-            (None, Either::Right(())) => return,
-            (Some(_), Either::Right(())) => panic!(
-                "Unexpected `Either::Right` inbound info through \
-                 `inject_listen_upgrade_error` in enabled state.",
-            ),
-            (None, Either::Left(_)) => panic!(
-                "Unexpected `Either::Left` inbound info through \
-                 `inject_listen_upgrade_error` in disabled state.",
-            ),
-        };
-
-        let err = match err {
-            ConnectionHandlerUpgrErr::Timeout => ConnectionHandlerUpgrErr::Timeout,
-            ConnectionHandlerUpgrErr::Timer => ConnectionHandlerUpgrErr::Timer,
-            ConnectionHandlerUpgrErr::Upgrade(err) => {
-                ConnectionHandlerUpgrErr::Upgrade(err.map_err(|err| match err {
-                    EitherError::A(e) => e,
-                    EitherError::B(v) => void::unreachable(v),
-                }))
-            }
-        };
-
-        inner.inject_listen_upgrade_error(info, err)
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
@@ -292,6 +280,50 @@ where
             inner.poll(cx)
         } else {
             Poll::Pending
+        }
+    }
+
+    fn on_connection_event(
+        &mut self,
+        event: ConnectionEvent<
+            Self::InboundProtocol,
+            Self::OutboundProtocol,
+            Self::InboundOpenInfo,
+            Self::OutboundOpenInfo,
+        >,
+    ) {
+        match event {
+            ConnectionEvent::FullyNegotiatedInbound(fully_negotiated_inbound) => {
+                self.on_fully_negotiated_inbound(fully_negotiated_inbound)
+            }
+            ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
+                protocol: out,
+                info,
+            }) =>
+            {
+                #[allow(deprecated)]
+                self.inner
+                    .as_mut()
+                    .expect("Can't receive an outbound substream if disabled; QED")
+                    .inject_fully_negotiated_outbound(out, info)
+            }
+            ConnectionEvent::AddressChange(address_change) => {
+                if let Some(inner) = self.inner.as_mut() {
+                    #[allow(deprecated)]
+                    inner.inject_address_change(address_change.new_address)
+                }
+            }
+            ConnectionEvent::DialUpgradeError(DialUpgradeError { info, error: err }) =>
+            {
+                #[allow(deprecated)]
+                self.inner
+                    .as_mut()
+                    .expect("Can't receive an outbound substream if disabled; QED")
+                    .inject_dial_upgrade_error(info, err)
+            }
+            ConnectionEvent::ListenUpgradeError(listen_upgrade_error) => {
+                self.on_listen_upgrade_error(listen_upgrade_error)
+            }
         }
     }
 }
@@ -319,6 +351,9 @@ mod tests {
     fn ignore_listen_upgrade_error_when_disabled() {
         let mut handler = ToggleConnectionHandler::<dummy::ConnectionHandler> { inner: None };
 
-        handler.inject_listen_upgrade_error(Either::Right(()), ConnectionHandlerUpgrErr::Timeout);
+        handler.on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
+            info: Either::Right(()),
+            error: ConnectionHandlerUpgrErr::Timeout,
+        }));
     }
 }

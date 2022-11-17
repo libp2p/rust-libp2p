@@ -26,10 +26,9 @@ use crate::record::{self, Record};
 use futures::prelude::*;
 use futures::stream::SelectAll;
 use instant::Instant;
-use libp2p_core::{
-    either::EitherOutput,
-    upgrade::{self, InboundUpgrade, OutboundUpgrade},
-    ConnectedPoint, PeerId,
+use libp2p_core::{either::EitherOutput, upgrade, ConnectedPoint, PeerId};
+use libp2p_swarm::handler::{
+    ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
 use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, IntoConnectionHandler,
@@ -507,7 +506,7 @@ struct UniqueConnecId(u64);
 
 impl<TUserData> KademliaHandler<TUserData>
 where
-    TUserData: Unpin,
+    TUserData: Clone + fmt::Debug + Send + 'static + Unpin,
 {
     /// Create a [`KademliaHandler`] using the given configuration.
     pub fn new(
@@ -528,34 +527,16 @@ where
             protocol_status: ProtocolStatus::Unconfirmed,
         }
     }
-}
 
-impl<TUserData> ConnectionHandler for KademliaHandler<TUserData>
-where
-    TUserData: Clone + fmt::Debug + Send + 'static + Unpin,
-{
-    type InEvent = KademliaHandlerIn<TUserData>;
-    type OutEvent = KademliaHandlerEvent<TUserData>;
-    type Error = io::Error; // TODO: better error type?
-    type InboundProtocol = upgrade::EitherUpgrade<KademliaProtocolConfig, upgrade::DeniedUpgrade>;
-    type OutboundProtocol = KademliaProtocolConfig;
-    // Message of the request to send to the remote, and user data if we expect an answer.
-    type OutboundOpenInfo = (KadRequestMsg, Option<TUserData>);
-    type InboundOpenInfo = ();
-
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
-        if self.config.allow_listening {
-            SubstreamProtocol::new(self.config.protocol_config.clone(), ())
-                .map_upgrade(upgrade::EitherUpgrade::A)
-        } else {
-            SubstreamProtocol::new(upgrade::EitherUpgrade::B(upgrade::DeniedUpgrade), ())
-        }
-    }
-
-    fn inject_fully_negotiated_outbound(
+    fn on_fully_negotiated_outbound(
         &mut self,
-        protocol: <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Output,
-        (msg, user_data): Self::OutboundOpenInfo,
+        FullyNegotiatedOutbound {
+            protocol,
+            info: (msg, user_data),
+        }: FullyNegotiatedOutbound<
+            <Self as ConnectionHandler>::OutboundProtocol,
+            <Self as ConnectionHandler>::OutboundOpenInfo,
+        >,
     ) {
         self.outbound_substreams
             .push(OutboundSubstreamState::PendingSend(
@@ -569,10 +550,12 @@ where
         }
     }
 
-    fn inject_fully_negotiated_inbound(
+    fn on_fully_negotiated_inbound(
         &mut self,
-        protocol: <Self::InboundProtocol as InboundUpgrade<NegotiatedSubstream>>::Output,
-        (): Self::InboundOpenInfo,
+        FullyNegotiatedInbound { protocol, .. }: FullyNegotiatedInbound<
+            <Self as ConnectionHandler>::InboundProtocol,
+            <Self as ConnectionHandler>::InboundOpenInfo,
+        >,
     ) {
         // If `self.allow_listening` is false, then we produced a `DeniedUpgrade` and `protocol`
         // is a `Void`.
@@ -623,7 +606,49 @@ where
             });
     }
 
-    fn inject_event(&mut self, message: KademliaHandlerIn<TUserData>) {
+    fn on_dial_upgrade_error(
+        &mut self,
+        DialUpgradeError {
+            info: (_, user_data),
+            error,
+            ..
+        }: DialUpgradeError<
+            <Self as ConnectionHandler>::OutboundOpenInfo,
+            <Self as ConnectionHandler>::OutboundProtocol,
+        >,
+    ) {
+        // TODO: cache the fact that the remote doesn't support kademlia at all, so that we don't
+        //       continue trying
+        if let Some(user_data) = user_data {
+            self.outbound_substreams
+                .push(OutboundSubstreamState::ReportError(error.into(), user_data));
+        }
+    }
+}
+
+impl<TUserData> ConnectionHandler for KademliaHandler<TUserData>
+where
+    TUserData: Clone + fmt::Debug + Send + 'static + Unpin,
+{
+    type InEvent = KademliaHandlerIn<TUserData>;
+    type OutEvent = KademliaHandlerEvent<TUserData>;
+    type Error = io::Error; // TODO: better error type?
+    type InboundProtocol = upgrade::EitherUpgrade<KademliaProtocolConfig, upgrade::DeniedUpgrade>;
+    type OutboundProtocol = KademliaProtocolConfig;
+    // Message of the request to send to the remote, and user data if we expect an answer.
+    type OutboundOpenInfo = (KadRequestMsg, Option<TUserData>);
+    type InboundOpenInfo = ();
+
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+        if self.config.allow_listening {
+            SubstreamProtocol::new(self.config.protocol_config.clone(), ())
+                .map_upgrade(upgrade::EitherUpgrade::A)
+        } else {
+            SubstreamProtocol::new(upgrade::EitherUpgrade::B(upgrade::DeniedUpgrade), ())
+        }
+    }
+
+    fn on_behaviour_event(&mut self, message: KademliaHandlerIn<TUserData>) {
         match message {
             KademliaHandlerIn::Reset(request_id) => {
                 if let Some(state) = self
@@ -717,19 +742,6 @@ where
         }
     }
 
-    fn inject_dial_upgrade_error(
-        &mut self,
-        (_, user_data): Self::OutboundOpenInfo,
-        error: ConnectionHandlerUpgrErr<io::Error>,
-    ) {
-        // TODO: cache the fact that the remote doesn't support kademlia at all, so that we don't
-        //       continue trying
-        if let Some(user_data) = user_data {
-            self.outbound_substreams
-                .push(OutboundSubstreamState::ReportError(error.into(), user_data));
-        }
-    }
-
     fn connection_keep_alive(&self) -> KeepAlive {
         self.keep_alive
     }
@@ -770,6 +782,29 @@ where
         }
 
         Poll::Pending
+    }
+
+    fn on_connection_event(
+        &mut self,
+        event: ConnectionEvent<
+            Self::InboundProtocol,
+            Self::OutboundProtocol,
+            Self::InboundOpenInfo,
+            Self::OutboundOpenInfo,
+        >,
+    ) {
+        match event {
+            ConnectionEvent::FullyNegotiatedOutbound(fully_negotiated_outbound) => {
+                self.on_fully_negotiated_outbound(fully_negotiated_outbound)
+            }
+            ConnectionEvent::FullyNegotiatedInbound(fully_negotiated_inbound) => {
+                self.on_fully_negotiated_inbound(fully_negotiated_inbound)
+            }
+            ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
+                self.on_dial_upgrade_error(dial_upgrade_error)
+            }
+            ConnectionEvent::AddressChange(_) | ConnectionEvent::ListenUpgradeError(_) => {}
+        }
     }
 }
 
