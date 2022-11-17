@@ -329,11 +329,7 @@ mod network {
                 .send(Command::GetProviders { file_name, sender })
                 .await
                 .expect("Command receiver not to be dropped.");
-            let mut out = HashSet::new();
-            if let Ok(h) = receiver.await {
-                out.extend(h);
-            }
-            out
+            receiver.await.expect("Sender not to be dropped.")
         }
 
         /// Request the content of the given file from the given peer.
