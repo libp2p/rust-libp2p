@@ -1,4 +1,4 @@
-use crate::behaviour::{NetworkBehaviour, NetworkBehaviourAction, PollParameters};
+use crate::behaviour::{FromSwarm, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use crate::handler::{
     ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive, SubstreamProtocol,
 };
@@ -29,7 +29,7 @@ impl NetworkBehaviour for Behaviour {
         ConnectionHandler
     }
 
-    fn inject_event(&mut self, _: PeerId, _: ConnectionId, event: Void) {
+    fn on_connection_handler_event(&mut self, _: PeerId, _: ConnectionId, event: Void) {
         void::unreachable(event)
     }
 
@@ -39,6 +39,23 @@ impl NetworkBehaviour for Behaviour {
         _: &mut impl PollParameters,
     ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
         Poll::Pending
+    }
+
+    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+        match event {
+            FromSwarm::ConnectionEstablished(_)
+            | FromSwarm::ConnectionClosed(_)
+            | FromSwarm::AddressChange(_)
+            | FromSwarm::DialFailure(_)
+            | FromSwarm::ListenFailure(_)
+            | FromSwarm::NewListener(_)
+            | FromSwarm::NewListenAddr(_)
+            | FromSwarm::ExpiredListenAddr(_)
+            | FromSwarm::ListenerError(_)
+            | FromSwarm::ListenerClosed(_)
+            | FromSwarm::NewExternalAddr(_)
+            | FromSwarm::ExpiredExternalAddr(_) => {}
+        }
     }
 }
 

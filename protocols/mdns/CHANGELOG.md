@@ -4,8 +4,12 @@
 
 - Update to `libp2p-swarm` `v0.41.0`.
 
+- Replace `GenMdns`'s `NetworkBehaviour` implemention `inject_*` methods with the new `on_*` methods.
+  See [PR 3011].
+
 - Use `trust-dns-proto` to parse DNS messages. See [PR 3102].
 
+[PR 3011]: https://github.com/libp2p/rust-libp2p/pull/3011
 [PR 3102]: https://github.com/libp2p/rust-libp2p/pull/3102
 
 # 0.41.0

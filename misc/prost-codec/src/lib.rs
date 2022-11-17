@@ -65,3 +65,9 @@ impl<In, Out: Message + Default> Decoder for Codec<In, Out> {
 #[derive(thiserror::Error, Debug)]
 #[error("Failed to encode/decode message")]
 pub struct Error(#[from] std::io::Error);
+
+impl From<Error> for std::io::Error {
+    fn from(e: Error) -> Self {
+        e.0
+    }
+}

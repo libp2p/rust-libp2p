@@ -68,8 +68,9 @@ use futures::channel::oneshot;
 use handler::{RequestProtocol, RequestResponseHandler, RequestResponseHandlerEvent};
 use libp2p_core::{connection::ConnectionId, ConnectedPoint, Multiaddr, PeerId};
 use libp2p_swarm::{
-    dial_opts::DialOpts, DialError, IntoConnectionHandler, NetworkBehaviour,
-    NetworkBehaviourAction, NotifyHandler, PollParameters,
+    behaviour::{AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm},
+    dial_opts::DialOpts,
+    IntoConnectionHandler, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
 };
 use smallvec::SmallVec;
 use std::{
@@ -560,6 +561,134 @@ where
             .get_mut(peer)
             .and_then(|connections| connections.iter_mut().find(|c| c.id == connection))
     }
+
+    fn on_address_change(
+        &mut self,
+        AddressChange {
+            peer_id,
+            connection_id,
+            new,
+            ..
+        }: AddressChange,
+    ) {
+        let new_address = match new {
+            ConnectedPoint::Dialer { address, .. } => Some(address.clone()),
+            ConnectedPoint::Listener { .. } => None,
+        };
+        let connections = self
+            .connected
+            .get_mut(&peer_id)
+            .expect("Address change can only happen on an established connection.");
+
+        let connection = connections
+            .iter_mut()
+            .find(|c| c.id == connection_id)
+            .expect("Address change can only happen on an established connection.");
+        connection.address = new_address;
+    }
+
+    fn on_connection_established(
+        &mut self,
+        ConnectionEstablished {
+            peer_id,
+            connection_id,
+            endpoint,
+            other_established,
+            ..
+        }: ConnectionEstablished,
+    ) {
+        let address = match endpoint {
+            ConnectedPoint::Dialer { address, .. } => Some(address.clone()),
+            ConnectedPoint::Listener { .. } => None,
+        };
+        self.connected
+            .entry(peer_id)
+            .or_default()
+            .push(Connection::new(connection_id, address));
+
+        if other_established == 0 {
+            if let Some(pending) = self.pending_outbound_requests.remove(&peer_id) {
+                for request in pending {
+                    let request = self.try_send_request(&peer_id, request);
+                    assert!(request.is_none());
+                }
+            }
+        }
+    }
+
+    fn on_connection_closed(
+        &mut self,
+        ConnectionClosed {
+            peer_id,
+            connection_id,
+            remaining_established,
+            ..
+        }: ConnectionClosed<<Self as NetworkBehaviour>::ConnectionHandler>,
+    ) {
+        let connections = self
+            .connected
+            .get_mut(&peer_id)
+            .expect("Expected some established connection to peer before closing.");
+
+        let connection = connections
+            .iter()
+            .position(|c| c.id == connection_id)
+            .map(|p: usize| connections.remove(p))
+            .expect("Expected connection to be established before closing.");
+
+        debug_assert_eq!(connections.is_empty(), remaining_established == 0);
+        if connections.is_empty() {
+            self.connected.remove(&peer_id);
+        }
+
+        for request_id in connection.pending_outbound_responses {
+            self.pending_events
+                .push_back(NetworkBehaviourAction::GenerateEvent(
+                    RequestResponseEvent::InboundFailure {
+                        peer: peer_id,
+                        request_id,
+                        error: InboundFailure::ConnectionClosed,
+                    },
+                ));
+        }
+
+        for request_id in connection.pending_inbound_responses {
+            self.pending_events
+                .push_back(NetworkBehaviourAction::GenerateEvent(
+                    RequestResponseEvent::OutboundFailure {
+                        peer: peer_id,
+                        request_id,
+                        error: OutboundFailure::ConnectionClosed,
+                    },
+                ));
+        }
+    }
+
+    fn on_dial_failure(
+        &mut self,
+        DialFailure { peer_id, .. }: DialFailure<<Self as NetworkBehaviour>::ConnectionHandler>,
+    ) {
+        if let Some(peer) = peer_id {
+            // If there are pending outgoing requests when a dial failure occurs,
+            // it is implied that we are not connected to the peer, since pending
+            // outgoing requests are drained when a connection is established and
+            // only created when a peer is not connected when a request is made.
+            // Thus these requests must be considered failed, even if there is
+            // another, concurrent dialing attempt ongoing.
+            if let Some(pending) = self.pending_outbound_requests.remove(&peer) {
+                for request in pending {
+                    self.pending_events
+                        .push_back(NetworkBehaviourAction::GenerateEvent(
+                            RequestResponseEvent::OutboundFailure {
+                                peer,
+                                request_id: request.request_id,
+                                error: OutboundFailure::DialFailure,
+                            },
+                        ));
+                }
+            }
+        }
+    }
 }
 
 impl<TCodec> NetworkBehaviour for RequestResponse<TCodec>
@@ -590,136 +719,33 @@ where
         addresses
     }
 
-    fn inject_address_change(
-        &mut self,
-        peer: &PeerId,
-        conn: &ConnectionId,
-        _old: &ConnectedPoint,
-        new: &ConnectedPoint,
-    ) {
-        let new_address = match new {
-            ConnectedPoint::Dialer { address, .. } => Some(address.clone()),
-            ConnectedPoint::Listener { .. } => None,
-        };
-        let connections = self
-            .connected
-            .get_mut(peer)
-            .expect("Address change can only happen on an established connection.");
-
-        let connection = connections
-            .iter_mut()
-            .find(|c| &c.id == conn)
-            .expect("Address change can only happen on an established connection.");
-        connection.address = new_address;
-    }
-
-    fn inject_connection_established(
-        &mut self,
-        peer: &PeerId,
-        conn: &ConnectionId,
-        endpoint: &ConnectedPoint,
-        _errors: Option<&Vec<Multiaddr>>,
-        other_established: usize,
-    ) {
-        let address = match endpoint {
-            ConnectedPoint::Dialer { address, .. } => Some(address.clone()),
-            ConnectedPoint::Listener { .. } => None,
-        };
-        self.connected
-            .entry(*peer)
-            .or_default()
-            .push(Connection::new(*conn, address));
-
-        if other_established == 0 {
-            if let Some(pending) = self.pending_outbound_requests.remove(peer) {
-                for request in pending {
-                    let request = self.try_send_request(peer, request);
-                    assert!(request.is_none());
-                }
+    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+        match event {
+            FromSwarm::ConnectionEstablished(connection_established) => {
+                self.on_connection_established(connection_established)
             }
-        }
-    }
-
-    fn inject_connection_closed(
-        &mut self,
-        peer_id: &PeerId,
-        conn: &ConnectionId,
-        _: &ConnectedPoint,
-        _: <Self::ConnectionHandler as IntoConnectionHandler>::Handler,
-        remaining_established: usize,
-    ) {
-        let connections = self
-            .connected
-            .get_mut(peer_id)
-            .expect("Expected some established connection to peer before closing.");
-
-        let connection = connections
-            .iter()
-            .position(|c| &c.id == conn)
-            .map(|p: usize| connections.remove(p))
-            .expect("Expected connection to be established before closing.");
-
-        debug_assert_eq!(connections.is_empty(), remaining_established == 0);
-        if connections.is_empty() {
-            self.connected.remove(peer_id);
-        }
-
-        for request_id in connection.pending_outbound_responses {
-            self.pending_events
-                .push_back(NetworkBehaviourAction::GenerateEvent(
-                    RequestResponseEvent::InboundFailure {
-                        peer: *peer_id,
-                        request_id,
-                        error: InboundFailure::ConnectionClosed,
-                    },
-                ));
-        }
-
-        for request_id in connection.pending_inbound_responses {
-            self.pending_events
-                .push_back(NetworkBehaviourAction::GenerateEvent(
-                    RequestResponseEvent::OutboundFailure {
-                        peer: *peer_id,
-                        request_id,
-                        error: OutboundFailure::ConnectionClosed,
-                    },
-                ));
-        }
-    }
-
-    fn inject_dial_failure(
-        &mut self,
-        peer: Option<PeerId>,
-        _: Self::ConnectionHandler,
-        _: &DialError,
-    ) {
-        if let Some(peer) = peer {
-            // If there are pending outgoing requests when a dial failure occurs,
-            // it is implied that we are not connected to the peer, since pending
-            // outgoing requests are drained when a connection is established and
-            // only created when a peer is not connected when a request is made.
-            // Thus these requests must be considered failed, even if there is
-            // another, concurrent dialing attempt ongoing.
-            if let Some(pending) = self.pending_outbound_requests.remove(&peer) {
-                for request in pending {
-                    self.pending_events
-                        .push_back(NetworkBehaviourAction::GenerateEvent(
-                            RequestResponseEvent::OutboundFailure {
-                                peer,
-                                request_id: request.request_id,
-                                error: OutboundFailure::DialFailure,
-                            },
-                        ));
-                }
+            FromSwarm::ConnectionClosed(connection_closed) => {
+                self.on_connection_closed(connection_closed)
             }
+            FromSwarm::AddressChange(address_change) => self.on_address_change(address_change),
+            FromSwarm::DialFailure(dial_failure) => self.on_dial_failure(dial_failure),
+            FromSwarm::ListenFailure(_) => {}
+            FromSwarm::NewListener(_) => {}
+            FromSwarm::NewListenAddr(_) => {}
+            FromSwarm::ExpiredListenAddr(_) => {}
+            FromSwarm::ListenerError(_) => {}
+            FromSwarm::ListenerClosed(_) => {}
+            FromSwarm::NewExternalAddr(_) => {}
+            FromSwarm::ExpiredExternalAddr(_) => {}
         }
     }
 
-    fn inject_event(
+    fn on_connection_handler_event(
         &mut self,
         peer: PeerId,
         connection: ConnectionId,
-        event: RequestResponseHandlerEvent<TCodec>,
+        event: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as
+            libp2p_swarm::ConnectionHandler>::OutEvent,
     ) {
         match event {
             RequestResponseHandlerEvent::Response {

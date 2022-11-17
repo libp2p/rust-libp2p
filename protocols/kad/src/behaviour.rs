@@ -39,8 +39,10 @@ use crate::record::{
 use crate::K_VALUE;
 use fnv::{FnvHashMap, FnvHashSet};
 use instant::Instant;
-use libp2p_core::{
-    connection::ConnectionId, transport::ListenerId, ConnectedPoint, Multiaddr, PeerId,
+use libp2p_core::{connection::ConnectionId, ConnectedPoint, Multiaddr, PeerId};
+use libp2p_swarm::behaviour::{
+    AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, ExpiredListenAddr,
+    FromSwarm, NewExternalAddr, NewListenAddr,
 };
 use libp2p_swarm::{
     dial_opts::{self, DialOpts},
@@ -1771,6 +1773,166 @@ where
             }
         }
     }
+
+    fn on_connection_established(
+        &mut self,
+        ConnectionEstablished {
+            peer_id,
+            failed_addresses,
+            other_established,
+            ..
+        }: ConnectionEstablished,
+    ) {
+        for addr in failed_addresses {
+            self.address_failed(peer_id, addr);
+        }
+
+        // When a connection is established, we don't know yet whether the
+        // remote supports the configured protocol name. Only once a connection
+        // handler reports [`KademliaHandlerEvent::ProtocolConfirmed`] do we
+        // update the local routing table.
+
+        // Peer's first connection.
+        if other_established == 0 {
+            // Queue events for sending pending RPCs to the connected peer.
+            // There can be only one pending RPC for a particular peer and query per definition.
+            for (peer_id, event) in self.queries.iter_mut().filter_map(|q| {
+                q.inner
+                    .pending_rpcs
+                    .iter()
+                    .position(|(p, _)| p == &peer_id)
+                    .map(|p| q.inner.pending_rpcs.remove(p))
+            }) {
+                self.queued_events
+                    .push_back(NetworkBehaviourAction::NotifyHandler {
+                        peer_id,
+                        event,
+                        handler: NotifyHandler::Any,
+                    });
+            }
+
+            self.connected_peers.insert(peer_id);
+        }
+    }
+
+    fn on_address_change(
+        &mut self,
+        AddressChange {
+            peer_id: peer,
+            old,
+            new,
+            ..
+        }: AddressChange,
+    ) {
+        let (old, new) = (old.get_remote_address(), new.get_remote_address());
+
+        // Update routing table.
+        if let Some(addrs) = self.kbuckets.entry(&kbucket::Key::from(peer)).value() {
+            if addrs.replace(old, new) {
+                debug!(
+                    "Address '{}' replaced with '{}' for peer '{}'.",
+                    old, new, peer
+                );
+            } else {
+                debug!(
+                    "Address '{}' not replaced with '{}' for peer '{}' as old address wasn't \
+                     present.",
+                    old, new, peer
+                );
+            }
+        } else {
+            debug!(
+                "Address '{}' not replaced with '{}' for peer '{}' as peer is not present in the \
+                 routing table.",
+                old, new, peer
+            );
+        }
+
+        // Update query address cache.
+        //
+        // Given two connected nodes: local node A and remote node B. Say node B
+        // is not in node A's routing table. Additionally node B is part of the
+        // `QueryInner::addresses` list of an ongoing query on node A. Say Node
+        // B triggers an address change and then disconnects. Later on the
+        // earlier mentioned query on node A would like to connect to node B.
+        // Without replacing the address in the `QueryInner::addresses` set node
+        // A would attempt to dial the old and not the new address.
+        //
+        // While upholding correctness, iterating through all discovered
+        // addresses of a peer in all currently ongoing queries might have a
+        // large performance impact. If so, the code below might be worth
+        // revisiting.
+        for query in self.queries.iter_mut() {
+            if let Some(addrs) = query.inner.addresses.get_mut(&peer) {
+                for addr in addrs.iter_mut() {
+                    if addr == old {
+                        *addr = new.clone();
+                    }
+                }
+            }
+        }
+    }
+
+    fn on_dial_failure(
+        &mut self,
+        DialFailure { peer_id, error, .. }: DialFailure<
+            <Self as NetworkBehaviour>::ConnectionHandler,
+        >,
+    ) {
+        let peer_id = match peer_id {
+            Some(id) => id,
+            // Not interested in dial failures to unknown peers.
+            None => return,
+        };
+
+        match error {
+            DialError::Banned
+            | DialError::ConnectionLimit(_)
+            | DialError::LocalPeerId
+            | DialError::InvalidPeerId { .. }
+            | DialError::WrongPeerId { .. }
+            | DialError::Aborted
+            | DialError::ConnectionIo(_)
+            | DialError::Transport(_)
+            | DialError::NoAddresses => {
+                if let DialError::Transport(addresses) = error {
+                    for (addr, _) in addresses {
+                        self.address_failed(peer_id, addr)
+                    }
+                }
+
+                for query in self.queries.iter_mut() {
+                    query.on_failure(&peer_id);
+                }
+            }
+            DialError::DialPeerConditionFalse(
+                dial_opts::PeerCondition::Disconnected | dial_opts::PeerCondition::NotDialing,
+            ) => {
+                // We might (still) be connected, or about to be connected, thus do not report the
+                // failure to the queries.
+            }
+            DialError::DialPeerConditionFalse(dial_opts::PeerCondition::Always) => {
+                unreachable!("DialPeerCondition::Always can not trigger DialPeerConditionFalse.");
+            }
+        }
+    }
+
+    fn on_connection_closed(
+        &mut self,
+        ConnectionClosed {
+            peer_id,
+            remaining_established,
+            ..
+        }: ConnectionClosed<<Self as NetworkBehaviour>::ConnectionHandler>,
+    ) {
+        if remaining_established == 0 {
+            for query in self.queries.iter_mut() {
+                query.on_failure(&peer_id);
+            }
+            self.connection_updated(peer_id, None, NodeStatus::Disconnected);
+            self.connected_peers.remove(&peer_id);
+        }
+    }
 }
 
 /// Exponentially decrease the given duration (base 2).
@@ -1817,164 +1979,7 @@ where
         peer_addrs
     }
 
-    fn inject_connection_established(
-        &mut self,
-        peer_id: &PeerId,
-        _: &ConnectionId,
-        _: &ConnectedPoint,
-        errors: Option<&Vec<Multiaddr>>,
-        other_established: usize,
-    ) {
-        for addr in errors.map(|a| a.iter()).into_iter().flatten() {
-            self.address_failed(*peer_id, addr);
-        }
-
-        // When a connection is established, we don't know yet whether the
-        // remote supports the configured protocol name. Only once a connection
-        // handler reports [`KademliaHandlerEvent::ProtocolConfirmed`] do we
-        // update the local routing table.
-
-        // Peer's first connection.
-        if other_established == 0 {
-            // Queue events for sending pending RPCs to the connected peer.
-            // There can be only one pending RPC for a particular peer and query per definition.
-            for (peer_id, event) in self.queries.iter_mut().filter_map(|q| {
-                q.inner
-                    .pending_rpcs
-                    .iter()
-                    .position(|(p, _)| p == peer_id)
-                    .map(|p| q.inner.pending_rpcs.remove(p))
-            }) {
-                self.queued_events
-                    .push_back(NetworkBehaviourAction::NotifyHandler {
-                        peer_id,
-                        event,
-                        handler: NotifyHandler::Any,
-                    });
-            }
-
-            self.connected_peers.insert(*peer_id);
-        }
-    }
-
-    fn inject_address_change(
-        &mut self,
-        peer: &PeerId,
-        _: &ConnectionId,
-        old: &ConnectedPoint,
-        new: &ConnectedPoint,
-    ) {
-        let (old, new) = (old.get_remote_address(), new.get_remote_address());
-
-        // Update routing table.
-        if let Some(addrs) = self.kbuckets.entry(&kbucket::Key::from(*peer)).value() {
-            if addrs.replace(old, new) {
-                debug!(
-                    "Address '{}' replaced with '{}' for peer '{}'.",
-                    old, new, peer
-                );
-            } else {
-                debug!(
-                    "Address '{}' not replaced with '{}' for peer '{}' as old address wasn't \
-                     present.",
-                    old, new, peer,
-                );
-            }
-        } else {
-            debug!(
-                "Address '{}' not replaced with '{}' for peer '{}' as peer is not present in the \
-                 routing table.",
-                old, new, peer,
-            );
-        }
-
-        // Update query address cache.
-        //
-        // Given two connected nodes: local node A and remote node B. Say node B
-        // is not in node A's routing table. Additionally node B is part of the
-        // `QueryInner::addresses` list of an ongoing query on node A. Say Node
-        // B triggers an address change and then disconnects. Later on the
-        // earlier mentioned query on node A would like to connect to node B.
-        // Without replacing the address in the `QueryInner::addresses` set node
-        // A would attempt to dial the old and not the new address.
-        //
-        // While upholding correctness, iterating through all discovered
-        // addresses of a peer in all currently ongoing queries might have a
-        // large performance impact. If so, the code below might be worth
-        // revisiting.
-        for query in self.queries.iter_mut() {
-            if let Some(addrs) = query.inner.addresses.get_mut(peer) {
-                for addr in addrs.iter_mut() {
-                    if addr == old {
-                        *addr = new.clone();
-                    }
-                }
-            }
-        }
-    }
-
-    fn inject_dial_failure(
-        &mut self,
-        peer_id: Option<PeerId>,
-        _: Self::ConnectionHandler,
-        error: &DialError,
-    ) {
-        let peer_id = match peer_id {
-            Some(id) => id,
-            // Not interested in dial failures to unknown peers.
-            None => return,
-        };
-
-        match error {
-            DialError::Banned
-            | DialError::ConnectionLimit(_)
-            | DialError::LocalPeerId
-            | DialError::InvalidPeerId { .. }
-            | DialError::WrongPeerId { .. }
-            | DialError::Aborted
-            | DialError::ConnectionIo(_)
-            | DialError::Transport(_)
-            | DialError::NoAddresses => {
-                if let DialError::Transport(addresses) = error {
-                    for (addr, _) in addresses {
-                        self.address_failed(peer_id, addr)
-                    }
-                }
-
-                for query in self.queries.iter_mut() {
-                    query.on_failure(&peer_id);
-                }
-            }
-            DialError::DialPeerConditionFalse(
-                dial_opts::PeerCondition::Disconnected | dial_opts::PeerCondition::NotDialing,
-            ) => {
-                // We might (still) be connected, or about to be connected, thus do not report the
-                // failure to the queries.
-            }
-            DialError::DialPeerConditionFalse(dial_opts::PeerCondition::Always) => {
-                unreachable!("DialPeerCondition::Always can not trigger DialPeerConditionFalse.");
-            }
-        }
-    }
-
-    fn inject_connection_closed(
-        &mut self,
-        id: &PeerId,
-        _: &ConnectionId,
-        _: &ConnectedPoint,
-        _: <Self::ConnectionHandler as libp2p_swarm::IntoConnectionHandler>::Handler,
-        remaining_established: usize,
-    ) {
-        if remaining_established == 0 {
-            for query in self.queries.iter_mut() {
-                query.on_failure(id);
-            }
-            self.connection_updated(*id, None, NodeStatus::Disconnected);
-            self.connected_peers.remove(id);
-        }
-    }
-
-    fn inject_event(
+    fn on_connection_handler_event(
         &mut self,
         source: PeerId,
         connection: ConnectionId,
@@ -2225,20 +2230,6 @@ where
         };
     }
 
-    fn inject_new_listen_addr(&mut self, _id: ListenerId, addr: &Multiaddr) {
-        self.local_addrs.insert(addr.clone());
-    }
-
-    fn inject_expired_listen_addr(&mut self, _id: ListenerId, addr: &Multiaddr) {
-        self.local_addrs.remove(addr);
-    }
-
-    fn inject_new_external_addr(&mut self, addr: &Multiaddr) {
-        if self.local_addrs.len() < MAX_LOCAL_EXTERNAL_ADDRS {
-            self.local_addrs.insert(addr.clone());
-        }
-    }
-
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
@@ -2358,6 +2349,35 @@ where
             if self.queued_events.is_empty() {
                 return Poll::Pending;
             }
+        }
+    }
+
+    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+        match event {
+            FromSwarm::ConnectionEstablished(connection_established) => {
+                self.on_connection_established(connection_established)
+            }
+            FromSwarm::ConnectionClosed(connection_closed) => {
+                self.on_connection_closed(connection_closed)
+            }
+            FromSwarm::DialFailure(dial_failure) => self.on_dial_failure(dial_failure),
+            FromSwarm::AddressChange(address_change) => self.on_address_change(address_change),
+            FromSwarm::ExpiredListenAddr(ExpiredListenAddr { addr, .. }) => {
+                self.local_addrs.remove(addr);
+            }
+            FromSwarm::NewExternalAddr(NewExternalAddr { addr }) => {
+                if self.local_addrs.len() < MAX_LOCAL_EXTERNAL_ADDRS {
+                    self.local_addrs.insert(addr.clone());
+                }
+            }
+            FromSwarm::NewListenAddr(NewListenAddr { addr, .. }) => {
+                self.local_addrs.insert(addr.clone());
+            }
+            FromSwarm::ListenFailure(_)
+            | FromSwarm::NewListener(_)
+            | FromSwarm::ListenerClosed(_)
+            | FromSwarm::ListenerError(_)
+            | FromSwarm::ExpiredExternalAddr(_) => {}
         }
     }
 }
