@@ -1,3 +1,4 @@
 disallowed-methods = [
   { path = "futures::channel::mpsc::unbounded", reason = "does not enforce backpressure" },
 ]
+type-complexity-threshold = 430
