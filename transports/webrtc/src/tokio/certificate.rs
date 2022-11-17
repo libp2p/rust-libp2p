@@ -31,7 +31,7 @@ pub struct Certificate {
 impl Certificate {
     /// Generate new certificate.
     ///
-    /// `_rng` argument is ignored for now. See https://github.com/melekes/rust-libp2p/pull/12.
+    /// `_rng` argument is ignored for now. See <https://github.com/melekes/rust-libp2p/pull/12>.
     pub fn generate<R>(_rng: &mut R) -> Result<Self, Error>
     where
         R: CryptoRng + Rng,
