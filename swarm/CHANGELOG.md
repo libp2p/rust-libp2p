@@ -2,6 +2,20 @@
 
 - Update to `libp2p-core` `v0.38.0`.
 
+- Add new `on_connection_event` method to `ConnectionHandler` that accepts a `ConnectionEvent` enum and update
+  `inject_*` methods to call `on_connection_event` with the respective `ConnectionEvent` variant and deprecate
+  `inject_*`.
+  To migrate, users should replace the `ConnectionHandler::inject_*` calls with a single
+  implementation of `ConnectionHandler::on_connection_event` treating each `ConnectionEvent` variant in
+  the same way its corresponding `inject_*` call was treated.
+  See [PR 3085].
+
+- Add new `on_behaviour_event` method with the same signature as `inject_event`, make the
+  default implementation of `inject_event` call `on_behaviour_event` and deprecate it.
+  To migrate, users should replace the `ConnectionHandler::inject_event` call
+  with `ConnectionHandler::on_behaviour_event`.
+  See [PR 3085].
+
 - Add new `on_swarm_event` method to `NetworkBehaviour` that accepts a `FromSwarm` enum and update
   `inject_*` methods to call `on_swarm_event` with the respective `FromSwarm` variant and deprecate
   `inject_*`.
@@ -80,6 +94,7 @@
   - `SwarmBuilder::new`
   - `SwarmBuilder::executor`
 
+[PR 3085]: https://github.com/libp2p/rust-libp2p/pull/3085
 [PR 3011]: https://github.com/libp2p/rust-libp2p/pull/3011
 [PR 3055]: https://github.com/libp2p/rust-libp2p/pull/3055
 [PR 3097]: https://github.com/libp2p/rust-libp2p/pull/3097

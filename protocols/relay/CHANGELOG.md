@@ -9,6 +9,10 @@
 - Replace `Client` and `Relay`'s `NetworkBehaviour` implemention `inject_*` methods with the new `on_*` methods.
   See [PR 3011].
 
+- Replace `client::Handler` and `relay::Handler`'s `ConnectionHandler` implemention `inject_*` methods
+  with the new `on_*` methods. See [PR 3085].
+
+[PR 3085]: https://github.com/libp2p/rust-libp2p/pull/3085
 [PR 3011]: https://github.com/libp2p/rust-libp2p/pull/3011
 
 # 0.13.0
