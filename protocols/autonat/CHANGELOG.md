@@ -6,6 +6,11 @@
 
 - Update to `libp2p-request-response` `v0.23.0`.
 
+- Replace `Behaviour`'s `NetworkBehaviour` implemention `inject_*` methods with the new `on_*` methods.
+  See [PR 3011].
+
+[PR 3011]: https://github.com/libp2p/rust-libp2p/pull/3011
+
 # 0.8.0
 
 - Update to `libp2p-core` `v0.37.0`.
