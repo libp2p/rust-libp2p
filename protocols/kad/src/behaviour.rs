@@ -451,7 +451,7 @@ where
     }
 
     /// Returns the currently configured `replication_factor`.
-    pub(crate) fn replication_factor(&self) -> NonZeroUsize {
+    fn replication_factor(&self) -> NonZeroUsize {
         self.queries.config().replication_factor
     }
 
