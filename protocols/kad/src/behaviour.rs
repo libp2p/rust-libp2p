@@ -702,12 +702,23 @@ where
             None
         };
 
+        let step = ProgressStep::first();
+
         let target = kbucket::Key::new(key.clone());
-        let info = QueryInfo::GetRecord {
-            key,
-            step: ProgressStep::first(),
-            found_a_record: record.is_some(),
-            cache_candidates: BTreeMap::new(),
+        let info = if record.is_some() {
+            QueryInfo::GetRecord {
+                key,
+                step: step.next(),
+                found_a_record: true,
+                cache_candidates: BTreeMap::new(),
+            }
+        } else {
+            QueryInfo::GetRecord {
+                key,
+                step: step.clone(),
+                found_a_record: false,
+                cache_candidates: BTreeMap::new(),
+            }
         };
         let peers = self.kbuckets.closest_keys(&target);
         let inner = QueryInner::new(info);
@@ -722,14 +733,10 @@ where
                     KademliaEvent::OutboundQueryProgressed {
                         id,
                         result: QueryResult::GetRecord(Ok(GetRecordOk::FoundRecord(record))),
-                        step: ProgressStep::first(),
+                        step,
                         stats,
                     },
                 ));
-            let query = self.query_mut(&id).expect("just inserted");
-            if let QueryInfo::GetRecord { step, .. } = &mut query.query.inner.info {
-                *step = step.next();
-            }
         }
 
         id
