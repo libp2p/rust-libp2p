@@ -411,56 +411,7 @@ pub enum NetworkBehaviourAction<TOutEvent, TInEvent> {
     GenerateEvent(TOutEvent),
 
     /// Instructs the swarm to start a dial.
-    ///
-    /// On success, [`NetworkBehaviour::inject_connection_established`] is invoked.
-    /// On failure, [`NetworkBehaviour::inject_dial_failure`] is invoked.
-    ///
-    /// Note that the provided handler is returned to the [`NetworkBehaviour`] on connection failure
-    /// and connection closing. Thus it can be used to carry state, which otherwise would have to be
-    /// tracked in the [`NetworkBehaviour`] itself. E.g. a message destined to an unconnected peer
-    /// can be included in the handler, and thus directly send on connection success or extracted by
-    /// the [`NetworkBehaviour`] on connection failure.
-    ///
-    /// # Example carrying state in the handler
-    ///
-    /// ```rust
-    /// # use futures::executor::block_on;
-    /// # use futures::stream::StreamExt;
-    /// # use libp2p_core::connection::ConnectionId;
-    /// # use libp2p_core::identity;
-    /// # use libp2p_core::transport::{MemoryTransport, Transport};
-    /// # use libp2p_core::upgrade::{self, DeniedUpgrade, InboundUpgrade, OutboundUpgrade};
-    /// # use libp2p_core::PeerId;
-    /// # use libp2p_plaintext::PlainText2Config;
-    /// # use libp2p_swarm::{
-    /// #     DialError, IntoConnectionHandler, KeepAlive, NegotiatedSubstream,
-    /// #     NetworkBehaviour, NetworkBehaviourAction, PollParameters, ConnectionHandler,
-    /// #     ConnectionHandlerEvent, ConnectionHandlerUpgrErr, SubstreamProtocol, Swarm, SwarmEvent,
-    /// # };
-    /// # use libp2p_swarm::dial_opts::{DialOpts, PeerCondition};
-    /// # use libp2p_yamux as yamux;
-    /// # use std::collections::VecDeque;
-    /// # use std::task::{Context, Poll};
-    /// # use void::Void;
-    /// #
-    /// # let local_key = identity::Keypair::generate_ed25519();
-    /// # let local_public_key = local_key.public();
-    /// # let local_peer_id = PeerId::from(local_public_key.clone());
-    /// #
-    /// # let transport = MemoryTransport::default()
-    /// #     .upgrade(upgrade::Version::V1)
-    /// #     .authenticate(PlainText2Config { local_public_key })
-    /// #     .multiplex(yamux::YamuxConfig::default())
-    /// #     .boxed();
-    /// #
-    /// # let mut swarm = Swarm::new(transport, MyBehaviour::default(), local_peer_id);
-    /// #
-    /// // Super precious message that we should better not lose.
-    /// let message = PreciousMessage("My precious message".to_string());
-    ///
-    /// // Unfortunately this peer is offline, thus sending our message to it will fail.
-    /// let offline_peer = PeerId::random();
-    ///
+    /// 
     /// In case the dial fails, the behaviour is notified via [`NetworkBehaviour::inject_dial_failure`].
     Dial { opts: DialOpts },
 
