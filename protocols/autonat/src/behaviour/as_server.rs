@@ -346,7 +346,7 @@ impl<'a> AsServer<'a> {
                     addr.push(Protocol::P2p(peer.into()))
                 }
                 // Only collect distinct addresses.
-                distinct.insert(addr.clone()).then(|| addr)
+                distinct.insert(addr.clone()).then_some(addr)
             })
             .collect()
     }
