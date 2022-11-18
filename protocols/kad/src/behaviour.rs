@@ -2572,7 +2572,7 @@ impl ProgressStep {
 
     fn next(&self) -> Self {
         assert!(!self.last);
-        let count = NonZeroUsize::new(self.count.get() + 1).expect("Not to exhaust usize space.");
+        let count = NonZeroUsize::new(self.count.get() + 1).expect("Adding 1 not to result in 0.");
 
         Self { count, last: false }
     }
