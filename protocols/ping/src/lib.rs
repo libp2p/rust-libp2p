@@ -48,7 +48,8 @@ use crate::protocol::{recv_ping, send_ping};
 use futures::future::Either;
 use futures_timer::Delay;
 use libp2p_core::connection::ConnectionId;
-use libp2p_core::{ConnectedPoint, Multiaddr, PeerId};
+use libp2p_core::PeerId;
+use libp2p_swarm::behaviour::{ConnectionEstablished, FromSwarm};
 use libp2p_swarm::handler::from_fn;
 use libp2p_swarm::{
     CloseConnection, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
@@ -266,18 +267,7 @@ impl NetworkBehaviour for Behaviour {
             })
     }
 
-    fn inject_connection_established(
-        &mut self,
-        peer: &PeerId,
-        connection: &ConnectionId,
-        _: &ConnectedPoint,
-        _: Option<&Vec<Multiaddr>>,
-        _: usize,
-    ) {
-        self.actions.push_back(start_ping_action(peer, connection));
-    }
-
-    fn inject_event(
+    fn on_connection_handler_event(
         &mut self,
         peer: PeerId,
         connection: ConnectionId,
@@ -332,6 +322,32 @@ impl NetworkBehaviour for Behaviour {
         }
     }
 
+    fn on_swarm_event(
+        &mut self,
+        event: libp2p_swarm::behaviour::FromSwarm<Self::ConnectionHandler>,
+    ) {
+        match event {
+            FromSwarm::ConnectionEstablished(ConnectionEstablished {
+                peer_id,
+                connection_id,
+                ..
+            }) => self
+                .actions
+                .push_back(start_ping_action(peer_id, connection_id)),
+            FromSwarm::ConnectionClosed(_)
+            | FromSwarm::AddressChange(_)
+            | FromSwarm::DialFailure(_)
+            | FromSwarm::ListenFailure(_)
+            | FromSwarm::NewListener(_)
+            | FromSwarm::NewListenAddr(_)
+            | FromSwarm::ExpiredListenAddr(_)
+            | FromSwarm::ListenerError(_)
+            | FromSwarm::ListenerClosed(_)
+            | FromSwarm::NewExternalAddr(_)
+            | FromSwarm::ExpiredExternalAddr(_) => {}
+        }
+    }
+
     fn poll(
         &mut self,
         _: &mut Context<'_>,
@@ -365,7 +381,8 @@ impl NetworkBehaviour for Behaviour {
                     }
                 }
 
-                self.actions.push_back(start_ping_action(peer, connection));
+                self.actions
+                    .push_back(start_ping_action(*peer, *connection));
 
                 return Poll::Ready(NetworkBehaviourAction::GenerateEvent(Event {
                     peer: *peer,
@@ -379,12 +396,12 @@ impl NetworkBehaviour for Behaviour {
 }
 
 fn start_ping_action(
-    peer: &PeerId,
-    connection: &ConnectionId,
+    peer_id: PeerId,
+    connection: ConnectionId,
 ) -> NetworkBehaviourAction<Event, Handler> {
     NetworkBehaviourAction::NotifyHandler {
-        peer_id: *peer,
-        handler: NotifyHandler::One(*connection),
+        peer_id,
+        handler: NotifyHandler::One(connection),
         event: from_fn::InEvent::NewOutbound(()),
     }
 }
