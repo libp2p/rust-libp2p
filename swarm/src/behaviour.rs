@@ -411,7 +411,7 @@ pub enum NetworkBehaviourAction<TOutEvent, TInEvent> {
     GenerateEvent(TOutEvent),
 
     /// Instructs the swarm to start a dial.
-    /// 
+    ///
     /// In case the dial fails, the behaviour is notified via [`NetworkBehaviour::inject_dial_failure`].
     Dial { opts: DialOpts },
 
