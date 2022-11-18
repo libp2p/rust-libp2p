@@ -8,8 +8,11 @@
 
 - Update to `libp2p-core` `v0.38.0`.
 
+- Update `rust-version` to reflect the actual MSRV: 1.60.0. See [PR 3090].
+
 [PR 3101]: https://github.com/libp2p/rust-libp2p/pull/3101
 [PR 2961]: https://github.com/libp2p/rust-libp2p/pull/2961
+[PR 3090]: https://github.com/libp2p/rust-libp2p/pull/3090
 
 # 0.37.0
 

@@ -2,6 +2,7 @@
 name = "libp2p-tls"
 version = "0.1.0-alpha"
 edition = "2021"
+rust-version = "1.60.0"
 license = "MIT"
 exclude = ["src/test_assets"]
 
@@ -25,7 +26,7 @@ features = ["dangerous_configuration"] # Must enable this to allow for custom ve
 [dev-dependencies]
 hex = "0.4.3"
 hex-literal = "0.3.4"
-libp2p = { path = "../..", features = ["yamux"], default-features = false }
+libp2p = { path = "../..", features = ["yamux", "rsa", "ecdsa", "secp256k1"], default-features = false }
 tokio = { version = "1.21.1", features = ["full"] }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.

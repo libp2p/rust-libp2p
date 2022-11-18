@@ -150,7 +150,7 @@ impl<'a> HandleInnerEvent for AsClient<'a> {
                     // Update observed address score if it is finite.
                     let score = params
                         .external_addresses()
-                        .find_map(|r| (r.addr == address).then(|| r.score))
+                        .find_map(|r| (r.addr == address).then_some(r.score))
                         .unwrap_or(AddressScore::Finite(0));
                     if let AddressScore::Finite(finite_score) = score {
                         action = Some(NetworkBehaviourAction::ReportObservedAddr {
@@ -266,7 +266,7 @@ impl<'a> AsClient<'a> {
                 // Filter servers for which no qualified address is known.
                 // This is the case if the connection is relayed or the address is
                 // not global (in case of Config::only_global_ips).
-                addrs.values().any(|a| a.is_some()).then(|| id)
+                addrs.values().any(|a| a.is_some()).then_some(id)
             }));
         }
 
