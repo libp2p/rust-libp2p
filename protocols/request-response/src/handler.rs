@@ -23,6 +23,10 @@ mod protocol;
 use crate::codec::RequestResponseCodec;
 use crate::{RequestId, EMPTY_QUEUE_SHRINK_THRESHOLD};
 
+use libp2p_swarm::handler::{
+    ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
+    ListenUpgradeError,
+};
 pub use protocol::{ProtocolSupport, RequestProtocol, ResponseProtocol};
 
 use futures::{channel::oneshot, future::BoxFuture, prelude::*, stream::FuturesUnordered};
@@ -86,7 +90,7 @@ where
 
 impl<TCodec> RequestResponseHandler<TCodec>
 where
-    TCodec: RequestResponseCodec,
+    TCodec: RequestResponseCodec + Send + Clone + 'static,
 {
     pub(super) fn new(
         inbound_protocols: SmallVec<[TCodec::Protocol; 2]>,
@@ -106,6 +110,83 @@ where
             pending_events: VecDeque::new(),
             pending_error: None,
             inbound_request_id,
+        }
+    }
+
+    fn on_fully_negotiated_inbound(
+        &mut self,
+        FullyNegotiatedInbound {
+            protocol: sent,
+            info: request_id,
+        }: FullyNegotiatedInbound<
+            <Self as ConnectionHandler>::InboundProtocol,
+            <Self as ConnectionHandler>::InboundOpenInfo,
+        >,
+    ) {
+        if sent {
+            self.pending_events
+                .push_back(RequestResponseHandlerEvent::ResponseSent(request_id))
+        } else {
+            self.pending_events
+                .push_back(RequestResponseHandlerEvent::ResponseOmission(request_id))
+        }
+    }
+
+    fn on_dial_upgrade_error(
+        &mut self,
+        DialUpgradeError { info, error }: DialUpgradeError<
+            <Self as ConnectionHandler>::OutboundOpenInfo,
+            <Self as ConnectionHandler>::OutboundProtocol,
+        >,
+    ) {
+        match error {
+            ConnectionHandlerUpgrErr::Timeout => {
+                self.pending_events
+                    .push_back(RequestResponseHandlerEvent::OutboundTimeout(info));
+            }
+            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)) => {
+                // The remote merely doesn't support the protocol(s) we requested.
+                // This is no reason to close the connection, which may
+                // successfully communicate with other protocols already.
+                // An event is reported to permit user code to react to the fact that
+                // the remote peer does not support the requested protocol(s).
+                self.pending_events.push_back(
+                    RequestResponseHandlerEvent::OutboundUnsupportedProtocols(info),
+                );
+            }
+            _ => {
+                // Anything else is considered a fatal error or misbehaviour of
+                // the remote peer and results in closing the connection.
+                self.pending_error = Some(error);
+            }
+        }
+    }
+    fn on_listen_upgrade_error(
+        &mut self,
+        ListenUpgradeError { info, error }: ListenUpgradeError<
+            <Self as ConnectionHandler>::InboundOpenInfo,
+            <Self as ConnectionHandler>::InboundProtocol,
+        >,
+    ) {
+        match error {
+            ConnectionHandlerUpgrErr::Timeout => self
+                .pending_events
+                .push_back(RequestResponseHandlerEvent::InboundTimeout(info)),
+            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)) => {
+                // The local peer merely doesn't support the protocol(s) requested.
+                // This is no reason to close the connection, which may
+                // successfully communicate with other protocols already.
+                // An event is reported to permit user code to react to the fact that
+                // the local peer does not support the requested protocol(s).
+                self.pending_events.push_back(
+                    RequestResponseHandlerEvent::InboundUnsupportedProtocols(info),
+                );
+            }
+            _ => {
+                // Anything else is considered a fatal error or misbehaviour of
+                // the remote peer and results in closing the connection.
+                self.pending_error = Some(error);
+            }
         }
     }
 }
@@ -236,86 +317,9 @@ where
         SubstreamProtocol::new(proto, request_id).with_timeout(self.substream_timeout)
     }
 
-    fn inject_fully_negotiated_inbound(&mut self, sent: bool, request_id: RequestId) {
-        if sent {
-            self.pending_events
-                .push_back(RequestResponseHandlerEvent::ResponseSent(request_id))
-        } else {
-            self.pending_events
-                .push_back(RequestResponseHandlerEvent::ResponseOmission(request_id))
-        }
-    }
-
-    fn inject_fully_negotiated_outbound(
-        &mut self,
-        response: TCodec::Response,
-        request_id: RequestId,
-    ) {
-        self.pending_events
-            .push_back(RequestResponseHandlerEvent::Response {
-                request_id,
-                response,
-            });
-    }
-
-    fn inject_event(&mut self, request: Self::InEvent) {
+    fn on_behaviour_event(&mut self, request: Self::InEvent) {
         self.keep_alive = KeepAlive::Yes;
         self.outbound.push_back(request);
-    }
-
-    fn inject_dial_upgrade_error(
-        &mut self,
-        info: RequestId,
-        error: ConnectionHandlerUpgrErr<io::Error>,
-    ) {
-        match error {
-            ConnectionHandlerUpgrErr::Timeout => {
-                self.pending_events
-                    .push_back(RequestResponseHandlerEvent::OutboundTimeout(info));
-            }
-            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)) => {
-                // The remote merely doesn't support the protocol(s) we requested.
-                // This is no reason to close the connection, which may
-                // successfully communicate with other protocols already.
-                // An event is reported to permit user code to react to the fact that
-                // the remote peer does not support the requested protocol(s).
-                self.pending_events.push_back(
-                    RequestResponseHandlerEvent::OutboundUnsupportedProtocols(info),
-                );
-            }
-            _ => {
-                // Anything else is considered a fatal error or misbehaviour of
-                // the remote peer and results in closing the connection.
-                self.pending_error = Some(error);
-            }
-        }
-    }
-
-    fn inject_listen_upgrade_error(
-        &mut self,
-        info: RequestId,
-        error: ConnectionHandlerUpgrErr<io::Error>,
-    ) {
-        match error {
-            ConnectionHandlerUpgrErr::Timeout => self
-                .pending_events
-                .push_back(RequestResponseHandlerEvent::InboundTimeout(info)),
-            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)) => {
-                // The local peer merely doesn't support the protocol(s) requested.
-                // This is no reason to close the connection, which may
-                // successfully communicate with other protocols already.
-                // An event is reported to permit user code to react to the fact that
-                // the local peer does not support the requested protocol(s).
-                self.pending_events.push_back(
-                    RequestResponseHandlerEvent::InboundUnsupportedProtocols(info),
-                );
-            }
-            _ => {
-                // Anything else is considered a fatal error or misbehaviour of
-                // the remote peer and results in closing the connection.
-                self.pending_error = Some(error);
-            }
-        }
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
@@ -386,5 +390,38 @@ where
         }
 
         Poll::Pending
+    }
+
+    fn on_connection_event(
+        &mut self,
+        event: ConnectionEvent<
+            Self::InboundProtocol,
+            Self::OutboundProtocol,
+            Self::InboundOpenInfo,
+            Self::OutboundOpenInfo,
+        >,
+    ) {
+        match event {
+            ConnectionEvent::FullyNegotiatedInbound(fully_negotiated_inbound) => {
+                self.on_fully_negotiated_inbound(fully_negotiated_inbound)
+            }
+            ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
+                protocol: response,
+                info: request_id,
+            }) => {
+                self.pending_events
+                    .push_back(RequestResponseHandlerEvent::Response {
+                        request_id,
+                        response,
+                    });
+            }
+            ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
+                self.on_dial_upgrade_error(dial_upgrade_error)
+            }
+            ConnectionEvent::ListenUpgradeError(listen_upgrade_error) => {
+                self.on_listen_upgrade_error(listen_upgrade_error)
+            }
+            ConnectionEvent::AddressChange(_) => {}
+        }
     }
 }

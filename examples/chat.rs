@@ -56,8 +56,7 @@ use futures::{
 };
 use libp2p::{
     floodsub::{self, Floodsub, FloodsubEvent},
-    identity,
-    mdns::{Mdns, MdnsConfig, MdnsEvent},
+    identity, mdns,
     swarm::{NetworkBehaviour, SwarmEvent},
     Multiaddr, PeerId, Swarm,
 };
@@ -84,18 +83,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
     #[behaviour(out_event = "OutEvent")]
     struct MyBehaviour {
         floodsub: Floodsub,
-        mdns: Mdns,
+        mdns: mdns::async_io::Behaviour,
     }
 
     #[allow(clippy::large_enum_variant)]
     #[derive(Debug)]
     enum OutEvent {
         Floodsub(FloodsubEvent),
-        Mdns(MdnsEvent),
+        Mdns(mdns::Event),
     }
 
-    impl From<MdnsEvent> for OutEvent {
-        fn from(v: MdnsEvent) -> Self {
+    impl From<mdns::Event> for OutEvent {
+        fn from(v: mdns::Event) -> Self {
             Self::Mdns(v)
         }
     }
@@ -108,7 +107,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Create a Swarm to manage peers and events
     let mut swarm = {
-        let mdns = Mdns::new(MdnsConfig::default())?;
+        let mdns = mdns::async_io::Behaviour::new(mdns::Config::default())?;
         let mut behaviour = MyBehaviour {
             floodsub: Floodsub::new(local_peer_id),
             mdns,
@@ -152,7 +151,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     );
                 }
                 SwarmEvent::Behaviour(OutEvent::Mdns(
-                    MdnsEvent::Discovered(list)
+                    mdns::Event::Discovered(list)
                 )) => {
                     for (peer, _) in list {
                         swarm
@@ -161,7 +160,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                             .add_node_to_partial_view(peer);
                     }
                 }
-                SwarmEvent::Behaviour(OutEvent::Mdns(MdnsEvent::Expired(
+                SwarmEvent::Behaviour(OutEvent::Mdns(mdns::Event::Expired(
                     list
                 ))) => {
                     for (peer, _) in list {
