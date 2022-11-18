@@ -52,6 +52,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         .unwrap_or_else(|| syn::parse_quote! { ::libp2p::swarm::derive_prelude });
 
     let multiaddr = quote! { #prelude_path::Multiaddr };
+    let connection_denied = quote! { #prelude_path::ConnectionDenied };
     let trait_to_impl = quote! { #prelude_path::NetworkBehaviour };
     let either_ident = quote! { #prelude_path::EitherOutput };
     let network_behaviour_action = quote! { #prelude_path::NetworkBehaviourAction };
@@ -463,7 +464,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             };
 
             let builder = quote! {
-                #field_name.new_handler(peer, connected_point)
+                #field_name.new_handler(peer, connected_point)?
             };
 
             match out_handler {
@@ -558,9 +559,11 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             type ConnectionHandler = #connection_handler_ty;
             type OutEvent = #out_event_reference;
 
-            fn new_handler(&mut self, peer: &#peer_id, connected_point: &#connected_point) -> Self::ConnectionHandler {
+            #[allow(clippy::needless_question_mark)]
+            fn new_handler(&mut self, peer: &#peer_id, connected_point: &#connected_point) -> Result<Self::ConnectionHandler, #connection_denied> {
                 use #connection_handler;
-                #new_handler
+
+                Ok(#new_handler)
             }
 
             fn addresses_of_peer(&mut self, peer_id: &#peer_id) -> Vec<#multiaddr> {

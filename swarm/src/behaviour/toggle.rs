@@ -18,8 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::behaviour::THandlerInEvent;
 use crate::behaviour::{inject_from_swarm, FromSwarm};
+use crate::behaviour::{ConnectionDenied, THandlerInEvent};
 use crate::handler::{
     ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr,
     DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound, KeepAlive,
@@ -76,13 +76,13 @@ where
         &mut self,
         peer: &PeerId,
         connected_point: &ConnectedPoint,
-    ) -> Self::ConnectionHandler {
-        ToggleConnectionHandler {
-            inner: self
-                .inner
-                .as_mut()
-                .map(|i| i.new_handler(peer, connected_point)),
-        }
+    ) -> Result<Self::ConnectionHandler, ConnectionDenied> {
+        Ok(ToggleConnectionHandler {
+            inner: match self.inner.as_mut() {
+                None => None,
+                Some(inner) => Some(inner.new_handler(peer, connected_point)?),
+            },
+        })
     }
 
     fn addresses_of_peer(&mut self, peer_id: &PeerId) -> Vec<Multiaddr> {

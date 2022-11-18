@@ -66,6 +66,7 @@ use crate::types::{
 };
 use crate::types::{GossipsubRpc, PeerConnections, PeerKind};
 use crate::{rpc_proto, TopicScoreParams};
+use libp2p_swarm::behaviour::ConnectionDenied;
 use std::{cmp::Ordering::Equal, fmt::Debug};
 use wasm_timer::Interval;
 
@@ -3297,7 +3298,11 @@ where
     type ConnectionHandler = GossipsubHandler;
     type OutEvent = GossipsubEvent;
 
-    fn new_handler(&mut self, _: &PeerId, _: &ConnectedPoint) -> Self::ConnectionHandler {
+    fn new_handler(
+        &mut self,
+        _: &PeerId,
+        _: &ConnectedPoint,
+    ) -> Result<Self::ConnectionHandler, ConnectionDenied> {
         let protocol_config = ProtocolConfig::new(
             self.config.protocol_id().clone(),
             self.config.custom_id_version().clone(),
@@ -3306,7 +3311,10 @@ where
             self.config.support_floodsub(),
         );
 
-        GossipsubHandler::new(protocol_config, self.config.idle_timeout())
+        Ok(GossipsubHandler::new(
+            protocol_config,
+            self.config.idle_timeout(),
+        ))
     }
 
     fn on_connection_handler_event(

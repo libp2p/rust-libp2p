@@ -29,8 +29,8 @@ use futures::stream::FuturesUnordered;
 use futures::{FutureExt, StreamExt};
 use libp2p_core::connection::ConnectionId;
 use libp2p_core::{ConnectedPoint, PeerId};
-use libp2p_swarm::behaviour::FromSwarm;
 use libp2p_swarm::behaviour::THandlerInEvent;
+use libp2p_swarm::behaviour::{ConnectionDenied, FromSwarm};
 use libp2p_swarm::{
     CloseConnection, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
 };
@@ -112,10 +112,16 @@ impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = SubstreamConnectionHandler<inbound::Stream, Void, ()>;
     type OutEvent = Event;
 
-    fn new_handler(&mut self, _: &PeerId, _: &ConnectedPoint) -> Self::ConnectionHandler {
+    fn new_handler(
+        &mut self,
+        _: &PeerId,
+        _: &ConnectedPoint,
+    ) -> Result<Self::ConnectionHandler, ConnectionDenied> {
         let initial_keep_alive = Duration::from_secs(30);
 
-        SubstreamConnectionHandler::new_inbound_only(initial_keep_alive)
+        Ok(SubstreamConnectionHandler::new_inbound_only(
+            initial_keep_alive,
+        ))
     }
 
     fn on_connection_handler_event(

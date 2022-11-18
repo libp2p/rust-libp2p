@@ -41,8 +41,8 @@ use fnv::{FnvHashMap, FnvHashSet};
 use instant::Instant;
 use libp2p_core::{connection::ConnectionId, ConnectedPoint, Multiaddr, PeerId};
 use libp2p_swarm::behaviour::{
-    AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, ExpiredListenAddr,
-    FromSwarm, NewExternalAddr, NewListenAddr, THandlerInEvent,
+    AddressChange, ConnectionClosed, ConnectionDenied, ConnectionEstablished, DialFailure,
+    ExpiredListenAddr, FromSwarm, NewExternalAddr, NewListenAddr, THandlerInEvent,
 };
 use libp2p_swarm::{
     dial_opts::{self, DialOpts},
@@ -1943,8 +1943,8 @@ where
         &mut self,
         remote_peer_id: &PeerId,
         endpoint: &ConnectedPoint,
-    ) -> Self::ConnectionHandler {
-        KademliaHandler::new(
+    ) -> Result<Self::ConnectionHandler, ConnectionDenied> {
+        Ok(KademliaHandler::new(
             KademliaHandlerConfig {
                 protocol_config: self.protocol_config.clone(),
                 allow_listening: true,
@@ -1952,7 +1952,7 @@ where
             },
             endpoint.clone(),
             *remote_peer_id,
-        )
+        ))
     }
 
     fn addresses_of_peer(&mut self, peer_id: &PeerId) -> Vec<Multiaddr> {

@@ -19,8 +19,9 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::behaviour::{
-    ConnectionClosed, ConnectionEstablished, DialFailure, ExpiredExternalAddr, ExpiredListenAddr,
-    FromSwarm, ListenerClosed, ListenerError, NewExternalAddr, NewListenAddr, NewListener,
+    ConnectionClosed, ConnectionDenied, ConnectionEstablished, DialFailure, ExpiredExternalAddr,
+    ExpiredListenAddr, FromSwarm, ListenerClosed, ListenerError, NewExternalAddr, NewListenAddr,
+    NewListener,
 };
 use crate::{
     behaviour::THandlerInEvent, ConnectionHandler, NetworkBehaviour, NetworkBehaviourAction,
@@ -72,8 +73,12 @@ where
     type ConnectionHandler = THandler;
     type OutEvent = TOutEvent;
 
-    fn new_handler(&mut self, _: &PeerId, _: &ConnectedPoint) -> Self::ConnectionHandler {
-        self.handler_proto.clone()
+    fn new_handler(
+        &mut self,
+        _: &PeerId,
+        _: &ConnectedPoint,
+    ) -> Result<Self::ConnectionHandler, ConnectionDenied> {
+        Ok(self.handler_proto.clone())
     }
 
     fn addresses_of_peer(&mut self, p: &PeerId) -> Vec<Multiaddr> {
@@ -370,7 +375,11 @@ where
     type ConnectionHandler = TInner::ConnectionHandler;
     type OutEvent = TInner::OutEvent;
 
-    fn new_handler(&mut self, peer: &PeerId, endpoint: &ConnectedPoint) -> Self::ConnectionHandler {
+    fn new_handler(
+        &mut self,
+        peer: &PeerId,
+        endpoint: &ConnectedPoint,
+    ) -> Result<Self::ConnectionHandler, ConnectionDenied> {
         self.inner.new_handler(peer, endpoint)
     }
 

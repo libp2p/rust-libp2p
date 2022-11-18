@@ -32,8 +32,8 @@ use libp2p_core::connection::ConnectionId;
 use libp2p_core::identity::error::SigningError;
 use libp2p_core::identity::Keypair;
 use libp2p_core::{ConnectedPoint, Multiaddr, PeerId, PeerRecord};
-use libp2p_swarm::behaviour::FromSwarm;
 use libp2p_swarm::behaviour::THandlerInEvent;
+use libp2p_swarm::behaviour::{ConnectionDenied, FromSwarm};
 use libp2p_swarm::{
     CloseConnection, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
 };
@@ -166,10 +166,16 @@ impl NetworkBehaviour for Behaviour {
         SubstreamConnectionHandler<void::Void, outbound::Stream, outbound::OpenInfo>;
     type OutEvent = Event;
 
-    fn new_handler(&mut self, _: &PeerId, _: &ConnectedPoint) -> Self::ConnectionHandler {
+    fn new_handler(
+        &mut self,
+        _: &PeerId,
+        _: &ConnectedPoint,
+    ) -> Result<Self::ConnectionHandler, ConnectionDenied> {
         let initial_keep_alive = Duration::from_secs(30);
 
-        SubstreamConnectionHandler::new_outbound_only(initial_keep_alive)
+        Ok(SubstreamConnectionHandler::new_outbound_only(
+            initial_keep_alive,
+        ))
     }
 
     fn addresses_of_peer(&mut self, peer: &PeerId) -> Vec<Multiaddr> {

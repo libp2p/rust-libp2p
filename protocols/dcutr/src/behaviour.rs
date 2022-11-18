@@ -27,7 +27,8 @@ use libp2p_core::connection::{ConnectedPoint, ConnectionId};
 use libp2p_core::multiaddr::Protocol;
 use libp2p_core::{Multiaddr, PeerId};
 use libp2p_swarm::behaviour::{
-    ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm, THandlerInEvent,
+    ConnectionClosed, ConnectionDenied, ConnectionEstablished, DialFailure, FromSwarm,
+    THandlerInEvent,
 };
 use libp2p_swarm::dial_opts::{self, DialOpts};
 use libp2p_swarm::{
@@ -215,7 +216,7 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         peer: &PeerId,
         connected_point: &ConnectedPoint,
-    ) -> Self::ConnectionHandler {
+    ) -> Result<Self::ConnectionHandler, ConnectionDenied> {
         match (
             self.awaiting_direct_inbound_connections.entry(*peer),
             self.awaiting_direct_outbound_connections.entry(*peer),
@@ -226,14 +227,16 @@ impl NetworkBehaviour for Behaviour {
                         "Unexpected relay connection whilst awaiting direct outbound connection"
                     );
 
-                    return Either::Left(handler::relayed::Handler::new(connected_point.clone()));
+                    return Ok(Either::Left(handler::relayed::Handler::new(
+                        connected_point.clone(),
+                    )));
                 }
 
                 let (relayed_connection_id, _) = occupied.remove();
 
-                Either::Right(Either::Left(handler::direct::Handler::new(
+                Ok(Either::Right(Either::Left(handler::direct::Handler::new(
                     relayed_connection_id,
-                )))
+                ))))
             }
             (Entry::Occupied(occupied), Entry::Vacant(_)) => {
                 if connected_point.is_relayed() {
@@ -241,26 +244,30 @@ impl NetworkBehaviour for Behaviour {
                         "Unexpected relay connection whilst awaiting direct inbound connection"
                     );
 
-                    return Either::Left(handler::relayed::Handler::new(connected_point.clone()));
+                    return Ok(Either::Left(handler::relayed::Handler::new(
+                        connected_point.clone(),
+                    )));
                 }
 
                 let relayed_connection_id = occupied.remove();
 
-                Either::Right(Either::Left(handler::direct::Handler::new(
+                Ok(Either::Right(Either::Left(handler::direct::Handler::new(
                     relayed_connection_id,
-                )))
+                ))))
             }
             (Entry::Vacant(_), Entry::Vacant(_)) => {
                 if connected_point.is_relayed() {
-                    Either::Left(handler::relayed::Handler::new(connected_point.clone()))
+                    Ok(Either::Left(handler::relayed::Handler::new(
+                        connected_point.clone(),
+                    )))
                 } else {
-                    Either::Right(Either::Right(dummy::ConnectionHandler))
+                    Ok(Either::Right(Either::Right(dummy::ConnectionHandler)))
                 }
             }
             (Entry::Occupied(_), Entry::Occupied(_)) => {
                 debug_assert!(false, "Should not have a pending outbound and pending inbound connection to same peer simultaneously");
 
-                Either::Right(Either::Right(dummy::ConnectionHandler))
+                Ok(Either::Right(Either::Right(dummy::ConnectionHandler)))
             }
         }
     }

@@ -73,6 +73,7 @@ pub mod keep_alive;
 pub mod derive_prelude {
     pub use crate::behaviour::AddressChange;
     pub use crate::behaviour::ConnectionClosed;
+    pub use crate::behaviour::ConnectionDenied;
     pub use crate::behaviour::ConnectionEstablished;
     pub use crate::behaviour::DialFailure;
     pub use crate::behaviour::ExpiredExternalAddr;

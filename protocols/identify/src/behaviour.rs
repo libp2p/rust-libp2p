@@ -25,7 +25,8 @@ use libp2p_core::{
     connection::ConnectionId, multiaddr::Protocol, ConnectedPoint, Multiaddr, PeerId, PublicKey,
 };
 use libp2p_swarm::behaviour::{
-    ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm, THandlerInEvent,
+    ConnectionClosed, ConnectionDenied, ConnectionEstablished, DialFailure, FromSwarm,
+    THandlerInEvent,
 };
 use libp2p_swarm::{
     dial_opts::DialOpts, AddressScore, ConnectionHandler, ConnectionHandlerUpgrErr, DialError,
@@ -238,8 +239,16 @@ impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = Handler;
     type OutEvent = Event;
 
-    fn new_handler(&mut self, peer: &PeerId, _: &ConnectedPoint) -> Self::ConnectionHandler {
-        Handler::new(self.config.initial_delay, self.config.interval, *peer)
+    fn new_handler(
+        &mut self,
+        peer: &PeerId,
+        _: &ConnectedPoint,
+    ) -> Result<Self::ConnectionHandler, ConnectionDenied> {
+        Ok(Handler::new(
+            self.config.initial_delay,
+            self.config.interval,
+            *peer,
+        ))
     }
 
     fn on_connection_handler_event(

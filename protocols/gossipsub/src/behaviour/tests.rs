@@ -235,7 +235,7 @@ where
            // peer_connections.connections should never be empty.
         let mut active_connections = peer_connections.connections.len();
         for connection_id in peer_connections.connections.clone() {
-            let handler = gs.new_handler(peer_id, &fake_endpoint);
+            let handler = gs.new_handler(peer_id, &fake_endpoint).unwrap();
             active_connections = active_connections.checked_sub(1).unwrap();
             gs.on_swarm_event(FromSwarm::ConnectionClosed(ConnectionClosed {
                 peer_id: *peer_id,

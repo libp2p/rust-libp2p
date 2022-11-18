@@ -67,7 +67,7 @@ pub use handler::ProtocolSupport;
 use futures::channel::oneshot;
 use handler::{RequestProtocol, RequestResponseHandler, RequestResponseHandlerEvent};
 use libp2p_core::{connection::ConnectionId, ConnectedPoint, Multiaddr, PeerId};
-use libp2p_swarm::behaviour::THandlerInEvent;
+use libp2p_swarm::behaviour::{ConnectionDenied, THandlerInEvent};
 use libp2p_swarm::{
     behaviour::{AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm},
     dial_opts::DialOpts,
@@ -694,14 +694,18 @@ where
     type ConnectionHandler = RequestResponseHandler<TCodec>;
     type OutEvent = RequestResponseEvent<TCodec::Request, TCodec::Response>;
 
-    fn new_handler(&mut self, _: &PeerId, _: &ConnectedPoint) -> Self::ConnectionHandler {
-        RequestResponseHandler::new(
+    fn new_handler(
+        &mut self,
+        _: &PeerId,
+        _: &ConnectedPoint,
+    ) -> Result<Self::ConnectionHandler, ConnectionDenied> {
+        Ok(RequestResponseHandler::new(
             self.inbound_protocols.clone(),
             self.codec.clone(),
             self.config.connection_keep_alive,
             self.config.request_timeout,
             self.next_inbound_id.clone(),
-        )
+        ))
     }
 
     fn addresses_of_peer(&mut self, peer: &PeerId) -> Vec<Multiaddr> {

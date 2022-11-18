@@ -35,8 +35,8 @@ use futures::ready;
 use futures::stream::StreamExt;
 use libp2p_core::connection::ConnectionId;
 use libp2p_core::{ConnectedPoint, PeerId};
-use libp2p_swarm::behaviour::THandlerInEvent;
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm};
+use libp2p_swarm::behaviour::{ConnectionDenied, THandlerInEvent};
 use libp2p_swarm::dial_opts::DialOpts;
 use libp2p_swarm::{dummy, ConnectionHandler};
 use libp2p_swarm::{
@@ -159,7 +159,7 @@ impl NetworkBehaviour for Client {
         &mut self,
         peer: &PeerId,
         connected_point: &ConnectedPoint,
-    ) -> Self::ConnectionHandler {
+    ) -> Result<Self::ConnectionHandler, ConnectionDenied> {
         if connected_point.is_relayed() {
             if let Some(event) = self.initial_events.remove(peer) {
                 log::debug!(
@@ -171,7 +171,7 @@ impl NetworkBehaviour for Client {
             }
 
             // Deny all substreams on relayed connection.
-            Either::Right(dummy::ConnectionHandler)
+            Ok(Either::Right(dummy::ConnectionHandler))
         } else {
             let mut handler = Handler::new(
                 self.local_peer_id,
@@ -184,7 +184,7 @@ impl NetworkBehaviour for Client {
                 handler.inject_event(event)
             }
 
-            Either::Left(handler)
+            Ok(Either::Left(handler))
         }
     }
 

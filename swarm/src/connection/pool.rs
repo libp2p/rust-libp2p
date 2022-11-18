@@ -19,6 +19,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::behaviour::ConnectionDenied;
 use crate::connection::Connection;
 use crate::upgrade::UpgradeInfoSend;
 use crate::{
@@ -533,7 +534,7 @@ where
     /// Polls the connection pool for events.
     pub fn poll(
         &mut self,
-        mut new_handler_fn: impl FnMut(&PeerId, &ConnectedPoint) -> THandler,
+        mut new_handler_fn: impl FnMut(&PeerId, &ConnectedPoint) -> Result<THandler, ConnectionDenied>,
         cx: &mut Context<'_>,
     ) -> Poll<PoolEvent<THandler, TTrans>>
     where
@@ -752,7 +753,8 @@ where
                         },
                     );
 
-                    let handler = new_handler_fn(&obtained_peer_id, &endpoint);
+                    let handler =
+                        new_handler_fn(&obtained_peer_id, &endpoint).expect("empty to empty");
                     let supported_protocols = handler
                         .listen_protocol()
                         .upgrade()

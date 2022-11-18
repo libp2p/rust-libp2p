@@ -21,6 +21,7 @@
 use futures::StreamExt;
 use libp2p_identify as identify;
 use libp2p_ping as ping;
+use libp2p_swarm::behaviour::ConnectionDenied;
 use libp2p_swarm::{behaviour::FromSwarm, dummy, NetworkBehaviour, SwarmEvent};
 use std::fmt::Debug;
 
@@ -386,8 +387,12 @@ fn custom_out_event_no_type_parameters() {
         type ConnectionHandler = dummy::ConnectionHandler;
         type OutEvent = void::Void;
 
-        fn new_handler(&mut self, _: &PeerId, _: &ConnectedPoint) -> Self::ConnectionHandler {
-            dummy::ConnectionHandler
+        fn new_handler(
+            &mut self,
+            _: &PeerId,
+            _: &ConnectedPoint,
+        ) -> Result<Self::ConnectionHandler, ConnectionDenied> {
+            Ok(dummy::ConnectionHandler)
         }
 
         fn on_connection_handler_event(

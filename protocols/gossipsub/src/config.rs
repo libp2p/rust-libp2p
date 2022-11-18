@@ -995,7 +995,9 @@ mod test {
         let mut gossipsub: Gossipsub =
             Gossipsub::new(MessageAuthenticity::Anonymous, builder).expect("Correct configuration");
 
-        let handler = gossipsub.new_handler(&PeerId::random(), &fake_endpoint());
+        let handler = gossipsub
+            .new_handler(&PeerId::random(), &fake_endpoint())
+            .unwrap();
         let (protocol_config, _) = handler.listen_protocol().into_upgrade();
         let protocol_ids = protocol_config.protocol_info();
 
@@ -1023,7 +1025,9 @@ mod test {
         let mut gossipsub: Gossipsub =
             Gossipsub::new(MessageAuthenticity::Anonymous, builder).expect("Correct configuration");
 
-        let handler = gossipsub.new_handler(&PeerId::random(), &fake_endpoint());
+        let handler = gossipsub
+            .new_handler(&PeerId::random(), &fake_endpoint())
+            .unwrap();
         let (protocol_config, _) = handler.listen_protocol().into_upgrade();
         let protocol_ids = protocol_config.protocol_info();
 

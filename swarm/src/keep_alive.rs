@@ -1,5 +1,6 @@
 use crate::behaviour::{
-    FromSwarm, NetworkBehaviour, NetworkBehaviourAction, PollParameters, THandlerInEvent,
+    ConnectionDenied, FromSwarm, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
+    THandlerInEvent,
 };
 use crate::handler::{
     ConnectionEvent, ConnectionHandlerEvent, FullyNegotiatedInbound, FullyNegotiatedOutbound,
@@ -24,8 +25,12 @@ impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = ConnectionHandler;
     type OutEvent = Void;
 
-    fn new_handler(&mut self, _: &PeerId, _: &ConnectedPoint) -> Self::ConnectionHandler {
-        ConnectionHandler
+    fn new_handler(
+        &mut self,
+        _: &PeerId,
+        _: &ConnectedPoint,
+    ) -> Result<Self::ConnectionHandler, ConnectionDenied> {
+        Ok(ConnectionHandler)
     }
 
     fn on_connection_handler_event(&mut self, _: PeerId, _: ConnectionId, event: Void) {
