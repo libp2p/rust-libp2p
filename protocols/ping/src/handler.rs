@@ -24,6 +24,9 @@ use futures::prelude::*;
 use futures_timer::Delay;
 use libp2p_core::upgrade::ReadyUpgrade;
 use libp2p_core::{upgrade::NegotiationError, UpgradeError};
+use libp2p_swarm::handler::{
+    ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
+};
 use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
     NegotiatedSubstream, SubstreamProtocol,
@@ -224,33 +227,14 @@ impl Handler {
             state: State::Active,
         }
     }
-}
 
-impl ConnectionHandler for Handler {
-    type InEvent = Void;
-    type OutEvent = crate::Result;
-    type Error = Failure;
-    type InboundProtocol = ReadyUpgrade<&'static [u8]>;
-    type OutboundProtocol = ReadyUpgrade<&'static [u8]>;
-    type OutboundOpenInfo = ();
-    type InboundOpenInfo = ();
-
-    fn listen_protocol(&self) -> SubstreamProtocol<ReadyUpgrade<&'static [u8]>, ()> {
-        SubstreamProtocol::new(ReadyUpgrade::new(PROTOCOL_NAME), ())
-    }
-
-    fn inject_fully_negotiated_inbound(&mut self, stream: NegotiatedSubstream, (): ()) {
-        self.inbound = Some(protocol::recv_ping(stream).boxed());
-    }
-
-    fn inject_fully_negotiated_outbound(&mut self, stream: NegotiatedSubstream, (): ()) {
-        self.timer.reset(self.config.timeout);
-        self.outbound = Some(OutboundState::Ping(protocol::send_ping(stream).boxed()));
-    }
-
-    fn inject_event(&mut self, _: Void) {}
-
-    fn inject_dial_upgrade_error(&mut self, _info: (), error: ConnectionHandlerUpgrErr<Void>) {
+    fn on_dial_upgrade_error(
+        &mut self,
+        DialUpgradeError { error, .. }: DialUpgradeError<
+            <Self as ConnectionHandler>::OutboundOpenInfo,
+            <Self as ConnectionHandler>::OutboundProtocol,
+        >,
+    ) {
         self.outbound = None; // Request a new substream on the next `poll`.
 
         let error = match error {
@@ -267,6 +251,22 @@ impl ConnectionHandler for Handler {
 
         self.pending_errors.push_front(error);
     }
+}
+
+impl ConnectionHandler for Handler {
+    type InEvent = Void;
+    type OutEvent = crate::Result;
+    type Error = Failure;
+    type InboundProtocol = ReadyUpgrade<&'static [u8]>;
+    type OutboundProtocol = ReadyUpgrade<&'static [u8]>;
+    type OutboundOpenInfo = ();
+    type InboundOpenInfo = ();
+
+    fn listen_protocol(&self) -> SubstreamProtocol<ReadyUpgrade<&'static [u8]>, ()> {
+        SubstreamProtocol::new(ReadyUpgrade::new(PROTOCOL_NAME), ())
+    }
+
+    fn on_behaviour_event(&mut self, _: Void) {}
 
     fn connection_keep_alive(&self) -> KeepAlive {
         if self.config.keep_alive {
@@ -383,6 +383,36 @@ impl ConnectionHandler for Handler {
         }
 
         Poll::Pending
+    }
+
+    fn on_connection_event(
+        &mut self,
+        event: ConnectionEvent<
+            Self::InboundProtocol,
+            Self::OutboundProtocol,
+            Self::InboundOpenInfo,
+            Self::OutboundOpenInfo,
+        >,
+    ) {
+        match event {
+            ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
+                protocol: stream,
+                ..
+            }) => {
+                self.inbound = Some(protocol::recv_ping(stream).boxed());
+            }
+            ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
+                protocol: stream,
+                ..
+            }) => {
+                self.timer.reset(self.config.timeout);
+                self.outbound = Some(OutboundState::Ping(protocol::send_ping(stream).boxed()));
+            }
+            ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
+                self.on_dial_upgrade_error(dial_upgrade_error)
+            }
+            ConnectionEvent::AddressChange(_) | ConnectionEvent::ListenUpgradeError(_) => {}
+        }
     }
 }
 

@@ -11,175 +11,235 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test-desktop:
-    name: Build and test
+  test:
+    name: Test ${{ matrix.crate }}
     runs-on: ubuntu-latest
+    needs: gather_published_crates
     strategy:
+      fail-fast: false
       matrix:
-        args: [
-          "--no-default-features",
-          "--all-features",
-          "--benches --all-features",
-        ]
+        crate: ${{ fromJSON(needs.gather_published_crates.outputs.members) }}
     steps:
-    - name: Install Protoc
-      uses: arduino/setup-protoc@v1
+      - name: Install Protoc
+        uses: arduino/setup-protoc@64c0c85d18e984422218383b81c52f8b077404d3 # v1.1.2
 
-    - uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
-    - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
-      with:
-        key: ${{ matrix.args }}
+      - name: Get MSRV for ${{ matrix.crate }}
+        id: parse-msrv
+        run: |
+          RUST_VERSION=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[] | select(.name == "${{ matrix.crate }}") | .rust_version')
+          echo "version=${RUST_VERSION}" >> $GITHUB_OUTPUT
 
-    - run: cargo test --workspace ${{ matrix.args }}
+      - name: Install Rust ${{ steps.parse-msrv.outputs.version }} for MSRV check
+        uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
+        with:
+          profile: minimal
+          toolchain: ${{ steps.parse-msrv.outputs.version }}
 
-  test-wasm:
-    name: Build on WASM
-    runs-on: ubuntu-latest
+      - name: Update to latest stable Rust
+        uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+
+      # By default, this action already includes the active Rust toolchain in the cache key.
+      # We also install a separate toolchain for the MSRV check so all we need to do is add that to the key to make sure it invalidates when we update the MSRV.
+      # cargo separates build artifacts by Rust compiler version, meaning we can compile with different versions but cache all artifacts.
+      - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
+        with:
+          key: ${{ matrix.crate }}-msrv-${{ steps.parse-msrv.outputs.version }}
+
+      - name: Check if ${{ matrix.crate }} compiles on MSRV (Rust ${{ steps.parse-msrv.outputs.version }})
+        run: cargo +${{ steps.parse-msrv.outputs.version }} check --package ${{ matrix.crate }} --all-features
+
+      - name: Check if we compile without any features activated
+        run: cargo check --package ${{ matrix.crate }} --no-default-features
+
+      - name: Run all tests
+        run: cargo test --package ${{ matrix.crate }} --all-features
+
+      - name: Check if crate has been released
+        id: check-released
+        run: |
+          RESPONSE_CODE=$(curl https://crates.io/api/v1/crates/${{ matrix.crate }} --silent --write-out "%{http_code}" --output /dev/null)
+          echo "code=${RESPONSE_CODE}"
+          echo "code=${RESPONSE_CODE}" >> $GITHUB_OUTPUT
+
+      - name: Check public API for semver violations
+        if: steps.check-released.outputs.code == 200 # Workaround until https://github.com/obi1kenobi/cargo-semver-check/issues/146 is shipped.
+        run: |
+          cargo install cargo-semver-checks
+          cargo semver-checks check-release -p ${{ matrix.crate }}
+
+  cross:
+    name: Compile on ${{ matrix.target }}
     strategy:
       matrix:
-        toolchain: [
-          wasm32-unknown-emscripten,
-          wasm32-wasi
-        ]
         include:
-          - toolchain: wasm32-unknown-unknown
-            args: "--features wasm-bindgen"
-    env:
-      CC: clang-11
-    defaults:
-      run:
-        shell: bash
+          - target: "wasm32-unknown-unknown"
+            os: ubuntu-latest
+          - target: "wasm32-unknown-emscripten"
+            os: ubuntu-latest
+          - target: "wasm32-wasi"
+            os: ubuntu-latest
+          - target: "x86_64-apple-darwin"
+            os: macos-latest
+          - target: "x86_64-pc-windows-msvc"
+            os: windows-latest
+    runs-on: ${{ matrix.os }}
     steps:
-    - name: Install Protoc
-      uses: arduino/setup-protoc@v1
+      - name: Install Protoc
+        uses: arduino/setup-protoc@64c0c85d18e984422218383b81c52f8b077404d3 # v1.1.2
 
-    - uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
-    - name: Install Rust ${{ matrix.toolchain }}
-      uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
-      with:
-        toolchain: stable
-        target: ${{ matrix.toolchain }}
-        override: true
+      - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+          target: ${{ matrix.target }}
 
-    - name: Install a recent version of clang
-      run: |
-        sudo bash -c "$(wget -O - https://apt.llvm.org/llvm.sh)"
+      - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
 
-    - name: Install CMake
-      run: sudo apt-get install -y cmake
+      - run: cargo check --package libp2p --all-features --target=${{ matrix.target }}
 
-    - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
-      with:
-        key: ${{ matrix.toolchain }}
+  feature_matrix: # Test various feature combinations work correctly
+    name: Compile with select features (${{ matrix.features }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - features: "mdns tcp dns tokio"
+          - features: "mdns tcp dns async-std"
+    steps:
+      - name: Install Protoc
+        uses: arduino/setup-protoc@64c0c85d18e984422218383b81c52f8b077404d3 # v1.1.2
 
-    - name: Build on ${{ matrix.toolchain }}
-      # TODO: also run `cargo test`
-      # TODO: ideally we would build `--workspace`, but not all crates compile for WASM
-      run: cargo build --target=${{ matrix.toolchain }} ${{ matrix.args }}
+      - uses: actions/checkout@v3
+
+      - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+
+      - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
+        with:
+          key: ${{ matrix.runtime }}
+
+      - run: cargo check --package libp2p --features="${{ matrix.features }}"
 
   check-rustdoc-links:
     name: Check rustdoc intra-doc links
     runs-on: ubuntu-latest
     steps:
-    - name: Install Protoc
-      uses: arduino/setup-protoc@v1
+      - name: Install Protoc
+        uses: arduino/setup-protoc@64c0c85d18e984422218383b81c52f8b077404d3 # v1.1.2
 
-    - uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
-    - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
-      with:
-        profile: minimal
-        toolchain: stable
-        override: true
+      - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
 
-    - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
+      - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
 
-    - name: Check rustdoc links
-      run: RUSTDOCFLAGS="--deny rustdoc::broken_intra_doc_links --deny warnings" cargo doc --verbose --workspace --no-deps --all-features --document-private-items
+      - name: Check rustdoc links
+        run: RUSTDOCFLAGS="--deny rustdoc::broken_intra_doc_links --deny warnings" cargo doc --verbose --workspace --no-deps --all-features --document-private-items
 
-  check-clippy:
+  clippy:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        rust-version: [
+          stable,
+          beta
+        ]
+    steps:
+      - name: Install Protoc
+        uses: arduino/setup-protoc@64c0c85d18e984422218383b81c52f8b077404d3 # v1.1.2
+
+      - uses: actions/checkout@v3
+
+      - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
+        with:
+          profile: minimal
+          toolchain: ${{ matrix.rust-version }}
+          override: true
+          components: clippy
+
+      - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
+
+      - name: Run cargo clippy
+        uses: actions-rs/cargo@844f36862e911db73fe0815f00a4a2602c279505 # v1.0.3
+        with:
+          command: custom-clippy # cargo alias to allow reuse of config locally
+
+  ipfs-integration-test:
+    name: IPFS Integration tests
     runs-on: ubuntu-latest
     steps:
-    - name: Install Protoc
-      uses: arduino/setup-protoc@v1
+      - name: Install Protoc
+        uses: arduino/setup-protoc@64c0c85d18e984422218383b81c52f8b077404d3 # v1.1.2
 
-    - uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
-    - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
-      with:
-        profile: minimal
-        toolchain: stable
-        override: true
-        components: clippy
+      - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
 
-    - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
+      - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
 
-    - name: Run cargo clippy
-      uses: actions-rs/cargo@844f36862e911db73fe0815f00a4a2602c279505 # v1.0.3
-      with:
-        command: custom-clippy # cargo alias to allow reuse of config locally
-
-  integration-test:
-    name: Integration tests
-    runs-on: ubuntu-latest
-    steps:
-    - name: Install Protoc
-      uses: arduino/setup-protoc@v1
-
-    - uses: actions/checkout@v3
-
-    - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
-      with:
-        profile: minimal
-        toolchain: stable
-        override: true
-
-    - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
-
-    - name: Run ipfs-kad example
-      run: RUST_LOG=libp2p_swarm=debug,libp2p_kad=trace,libp2p_tcp=debug cargo run --example ipfs-kad --features full
+      - name: Run ipfs-kad example
+        run: RUST_LOG=libp2p_swarm=debug,libp2p_kad=trace,libp2p_tcp=debug cargo run --example ipfs-kad --features full
 
   rustfmt:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
-    - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
-      with:
-        profile: minimal
-        toolchain: stable
-        override: true
-        components: rustfmt
+      - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+          components: rustfmt
 
-    - name: Check formatting
-      run: cargo fmt -- --check
+      - name: Check formatting
+        run: cargo fmt -- --check
 
   manifest_lint:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
-    - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
-      with:
-        profile: minimal
-        toolchain: stable
-        override: true
+      - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
 
-    - name: Ensure `full` feature contains all features
-      run: |
-        ALL_FEATURES=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[] | select(.name == "libp2p") | .features | keys | map(select(. != "full")) | sort | join(" ")')
-        FULL_FEATURE=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[] | select(.name == "libp2p") | .features["full"] | sort | join(" ")')
-        
-        test "$ALL_FEATURES = $FULL_FEATURE"
+      - name: Ensure `full` feature contains all features
+        run: |
+          ALL_FEATURES=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[] | select(.name == "libp2p") | .features | keys | map(select(. != "full")) | sort | join(" ")')
+          FULL_FEATURE=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[] | select(.name == "libp2p") | .features["full"] | sort | join(" ")')
+          
+          test "$ALL_FEATURES = $FULL_FEATURE"
+          
+          echo "$ALL_FEATURES";
+          echo "$FULL_FEATURE";
+          
+          test "$ALL_FEATURES" = "$FULL_FEATURE"
 
-        echo "$ALL_FEATURES";
-        echo "$FULL_FEATURE";
-        
-        test "$ALL_FEATURES" = "$FULL_FEATURE"
-
-  gather_crates_for_semver_checks:
+  gather_published_crates:
     runs-on: ubuntu-latest
     outputs:
       members: ${{ steps.cargo-metadata.outputs.members }}
@@ -189,35 +249,4 @@ jobs:
       - id: cargo-metadata
         run: |
           WORKSPACE_MEMBERS=$(cargo metadata --format-version=1 --no-deps | jq -c '.packages | .[] | select(.publish == null) | .name' | jq -s '.' | jq -c '.')
-          echo "::set-output name=members::${WORKSPACE_MEMBERS}"
-
-  semver-check:
-    runs-on: ubuntu-latest
-    needs: gather_crates_for_semver_checks
-    strategy:
-      fail-fast: false
-      matrix:
-        crate: ${{ fromJSON(needs.gather_crates_for_semver_checks.outputs.members) }}
-    steps:
-    - name: Cancel Previous Runs
-      uses: styfle/cancel-workflow-action@bb6001c4ea612bf59c3abfc4756fbceee4f870c7 # 0.10.0
-      with:
-        access_token: ${{ github.token }}
-
-    - uses: actions/checkout@v3
-
-    - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
-      with:
-        profile: minimal
-        toolchain: stable
-        override: true
-
-    - name: Install Protoc
-      uses: arduino/setup-protoc@v1
-
-    - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
-
-    - run: cargo install cargo-semver-checks
-    
-    - name: Semver Check
-      run: cargo semver-checks check-release -p ${{ matrix.crate }}
+          echo "members=${WORKSPACE_MEMBERS}" >> $GITHUB_OUTPUT

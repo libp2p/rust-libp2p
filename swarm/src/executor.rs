@@ -25,22 +25,34 @@ impl Executor for ThreadPool {
     }
 }
 
-#[cfg(feature = "tokio")]
+#[cfg(all(
+    feature = "tokio",
+    not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown"))
+))]
 #[derive(Default, Debug, Clone, Copy)]
 pub(crate) struct TokioExecutor;
 
-#[cfg(feature = "tokio")]
+#[cfg(all(
+    feature = "tokio",
+    not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown"))
+))]
 impl Executor for TokioExecutor {
     fn exec(&self, future: Pin<Box<dyn Future<Output = ()> + Send>>) {
         let _ = tokio::spawn(future);
     }
 }
 
-#[cfg(feature = "async-std")]
+#[cfg(all(
+    feature = "async-std",
+    not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown"))
+))]
 #[derive(Default, Debug, Clone, Copy)]
 pub(crate) struct AsyncStdExecutor;
 
-#[cfg(feature = "async-std")]
+#[cfg(all(
+    feature = "async-std",
+    not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown"))
+))]
 impl Executor for AsyncStdExecutor {
     fn exec(&self, future: Pin<Box<dyn Future<Output = ()> + Send>>) {
         let _ = async_std::task::spawn(future);
