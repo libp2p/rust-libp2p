@@ -803,6 +803,7 @@ fn get_record() {
 
 #[test]
 fn get_record_many() {
+    // TODO: Randomise
     let num_nodes = 12;
     let mut swarms = build_connected_nodes(num_nodes, 3)
         .into_iter()
@@ -822,7 +823,7 @@ fn get_record_many() {
     block_on(poll_fn(move |ctx| {
         for (i, swarm) in swarms.iter_mut().enumerate() {
             let mut records = Vec::new();
-            let quorum = quorum.eval(swarm.behaviour().replication_factor());
+            let quorum = quorum.eval(swarm.behaviour().queries.config().replication_factor);
             loop {
                 if i == 0 && records.len() >= quorum.get() {
                     swarm.behaviour_mut().query_mut(&qid).unwrap().finish();
@@ -1499,7 +1500,7 @@ fn get_providers_limit_n_1() {
 
 #[test]
 fn get_providers_limit_n_2() {
-    get_providers_limit::<1>();
+    get_providers_limit::<2>();
 }
 
 #[test]

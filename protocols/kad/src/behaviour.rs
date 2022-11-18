@@ -450,11 +450,6 @@ where
         }
     }
 
-    /// Returns the currently configured `replication_factor`.
-    fn replication_factor(&self) -> NonZeroUsize {
-        self.queries.config().replication_factor
-    }
-
     /// Gets an iterator over immutable references to all running queries.
     pub fn iter_queries(&self) -> impl Iterator<Item = QueryRef<'_>> {
         self.queries.iter().filter_map(|query| {
