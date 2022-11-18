@@ -206,7 +206,7 @@ impl ListenStream {
     ) -> Self {
         ListenStream {
             listener_id,
-            listen_addr: udp_mux.listen_addr(),
+            listen_addr: dbg!(udp_mux.listen_addr()),
             config,
             udp_mux,
             report_closed: None,
@@ -235,7 +235,7 @@ impl ListenStream {
         while let Poll::Ready(event) = self.if_watcher.poll_if_event(cx) {
             match event {
                 Ok(IfEvent::Up(inet)) => {
-                    let ip = inet.addr();
+                    let ip = dbg!(inet.addr());
                     if self.listen_addr.is_ipv4() == ip.is_ipv4()
                         || self.listen_addr.is_ipv6() == ip.is_ipv6()
                     {
