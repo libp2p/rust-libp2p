@@ -604,7 +604,7 @@ impl Default for CloseConnection {
 
 /// Enumeration with the list of the possible events
 /// to pass to [`on_swarm_event`](NetworkBehaviour::on_swarm_event).
-pub enum FromSwarm<'a, Handler: ConnectionHandler> {
+pub enum FromSwarm<'a, Handler> {
     /// Informs the behaviour about a newly established connection to a peer.
     ConnectionEstablished(ConnectionEstablished<'a>),
     /// Informs the behaviour about a closed connection to a peer.
@@ -658,7 +658,7 @@ pub struct ConnectionEstablished<'a> {
 /// This event is always paired with an earlier
 /// [`FromSwarm::ConnectionEstablished`] with the same peer ID, connection ID
 /// and endpoint.
-pub struct ConnectionClosed<'a, Handler: ConnectionHandler> {
+pub struct ConnectionClosed<'a, Handler> {
     pub peer_id: PeerId,
     pub connection_id: ConnectionId,
     pub endpoint: &'a ConnectedPoint,
@@ -745,14 +745,11 @@ pub struct ExpiredExternalAddr<'a> {
     pub addr: &'a Multiaddr,
 }
 
-impl<'a, Handler: ConnectionHandler> FromSwarm<'a, Handler> {
+impl<'a, Handler> FromSwarm<'a, Handler> {
     fn map_handler<NewHandler>(
         self,
         map_handler: impl FnOnce(Handler) -> NewHandler,
-    ) -> FromSwarm<'a, NewHandler>
-    where
-        NewHandler: ConnectionHandler,
-    {
+    ) -> FromSwarm<'a, NewHandler> {
         self.maybe_map_handler(|h| Some(map_handler(h)))
             .expect("To return Some as all closures return Some.")
     }
@@ -760,10 +757,7 @@ impl<'a, Handler: ConnectionHandler> FromSwarm<'a, Handler> {
     fn maybe_map_handler<NewHandler>(
         self,
         map_handler: impl FnOnce(Handler) -> Option<NewHandler>,
-    ) -> Option<FromSwarm<'a, NewHandler>>
-    where
-        NewHandler: ConnectionHandler,
-    {
+    ) -> Option<FromSwarm<'a, NewHandler>> {
         match self {
             FromSwarm::ConnectionClosed(ConnectionClosed {
                 peer_id,
