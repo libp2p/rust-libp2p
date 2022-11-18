@@ -419,18 +419,6 @@ impl<TInner> Query<TInner> {
             stats: self.stats,
         }
     }
-
-    pub fn as_intermediary_result(&self) -> impl Iterator<Item = PeerId> + '_ {
-        match self.peer_iter {
-            QueryPeerIter::Closest(ref iter) => {
-                Either::Left(Either::Left(iter.as_intermediary_result()))
-            }
-            QueryPeerIter::ClosestDisjoint(ref iter) => {
-                Either::Left(Either::Right(iter.as_intermediary_result()))
-            }
-            QueryPeerIter::Fixed(ref iter) => Either::Right(iter.as_intermediary_result()),
-        }
-    }
 }
 
 /// The result of a `Query`.

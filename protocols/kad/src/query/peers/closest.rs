@@ -365,19 +365,6 @@ impl ClosestPeersIter {
         self.state == State::Finished
     }
 
-    pub fn as_intermediary_result(&self) -> impl Iterator<Item = PeerId> + '_ {
-        self.closest_peers
-            .iter()
-            .filter_map(|(_, peer)| {
-                if let PeerState::Succeeded = peer.state {
-                    Some(peer.key.clone().into_preimage())
-                } else {
-                    None
-                }
-            })
-            .take(self.config.num_results.get())
-    }
-
     /// Consumes the iterator, returning the closest peers.
     pub fn into_result(self) -> impl Iterator<Item = PeerId> {
         self.closest_peers
