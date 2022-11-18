@@ -54,9 +54,7 @@ use libp2p::gossipsub::{
 };
 use libp2p::{
     core::{upgrade::Version, Transport},
-    gossipsub, identity,
-    mdns::{Mdns, MdnsConfig, MdnsEvent},
-    noise,
+    gossipsub, identity, mdns, noise,
     swarm::NetworkBehaviour,
     swarm::SwarmEvent,
     tcp, yamux, PeerId, Swarm,
@@ -83,7 +81,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     #[derive(NetworkBehaviour)]
     struct MyBehaviour {
         gossipsub: Gossipsub,
-        mdns: Mdns,
+        mdns: mdns::async_io::Behaviour,
     }
 
     // To content-address message, we can take the hash of message and use it as an ID.
@@ -113,7 +111,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Create a Swarm to manage peers and events
     let mut swarm = {
-        let mdns = Mdns::new(MdnsConfig::default())?;
+        let mdns = mdns::async_io::Behaviour::new(mdns::Config::default())?;
         let behaviour = MyBehaviour { gossipsub, mdns };
         Swarm::with_async_std_executor(transport, behaviour, local_peer_id)
     };
@@ -137,13 +135,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 }
             },
             event = swarm.select_next_some() => match event {
-                SwarmEvent::Behaviour(MyBehaviourEvent::Mdns(MdnsEvent::Discovered(list))) => {
+                SwarmEvent::Behaviour(MyBehaviourEvent::Mdns(mdns::Event::Discovered(list))) => {
                     for (peer_id, _multiaddr) in list {
                         println!("mDNS discovered a new peer: {peer_id}");
                         swarm.behaviour_mut().gossipsub.add_explicit_peer(&peer_id);
                     }
                 },
-                SwarmEvent::Behaviour(MyBehaviourEvent::Mdns(MdnsEvent::Expired(list))) => {
+                SwarmEvent::Behaviour(MyBehaviourEvent::Mdns(mdns::Event::Expired(list))) => {
                     for (peer_id, _multiaddr) in list {
                         println!("mDNS discover peer has expired: {peer_id}");
                         swarm.behaviour_mut().gossipsub.remove_explicit_peer(&peer_id);

@@ -1,14 +1,11 @@
-use crate::behaviour::{NetworkBehaviour, NetworkBehaviourAction, PollParameters};
+use crate::behaviour::{FromSwarm, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use crate::handler::{
-    ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive, SubstreamProtocol,
+    ConnectionEvent, ConnectionHandlerEvent, FullyNegotiatedInbound, FullyNegotiatedOutbound,
+    KeepAlive, SubstreamProtocol,
 };
-use crate::NegotiatedSubstream;
 use libp2p_core::connection::ConnectionId;
+use libp2p_core::upgrade::DeniedUpgrade;
 use libp2p_core::PeerId;
-use libp2p_core::{
-    upgrade::{DeniedUpgrade, InboundUpgrade, OutboundUpgrade},
-    Multiaddr,
-};
 use std::task::{Context, Poll};
 use void::Void;
 
@@ -29,7 +26,7 @@ impl NetworkBehaviour for Behaviour {
         ConnectionHandler
     }
 
-    fn inject_event(&mut self, _: PeerId, _: ConnectionId, event: Void) {
+    fn on_connection_handler_event(&mut self, _: PeerId, _: ConnectionId, event: Void) {
         void::unreachable(event)
     }
 
@@ -39,6 +36,23 @@ impl NetworkBehaviour for Behaviour {
         _: &mut impl PollParameters,
     ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
         Poll::Pending
+    }
+
+    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+        match event {
+            FromSwarm::ConnectionEstablished(_)
+            | FromSwarm::ConnectionClosed(_)
+            | FromSwarm::AddressChange(_)
+            | FromSwarm::DialFailure(_)
+            | FromSwarm::ListenFailure(_)
+            | FromSwarm::NewListener(_)
+            | FromSwarm::NewListenAddr(_)
+            | FromSwarm::ExpiredListenAddr(_)
+            | FromSwarm::ListenerError(_)
+            | FromSwarm::ListenerClosed(_)
+            | FromSwarm::NewExternalAddr(_)
+            | FromSwarm::ExpiredExternalAddr(_) => {}
+        }
     }
 }
 
@@ -59,44 +73,8 @@ impl crate::handler::ConnectionHandler for ConnectionHandler {
         SubstreamProtocol::new(DeniedUpgrade, ())
     }
 
-    fn inject_fully_negotiated_inbound(
-        &mut self,
-        protocol: <Self::InboundProtocol as InboundUpgrade<NegotiatedSubstream>>::Output,
-        _: Self::InboundOpenInfo,
-    ) {
-        void::unreachable(protocol);
-    }
-
-    fn inject_fully_negotiated_outbound(
-        &mut self,
-        protocol: <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Output,
-        _: Self::OutboundOpenInfo,
-    ) {
-        void::unreachable(protocol)
-    }
-
-    fn inject_event(&mut self, v: Self::InEvent) {
+    fn on_behaviour_event(&mut self, v: Self::InEvent) {
         void::unreachable(v)
-    }
-
-    fn inject_address_change(&mut self, _: &Multiaddr) {}
-
-    fn inject_dial_upgrade_error(
-        &mut self,
-        _: Self::OutboundOpenInfo,
-        _: ConnectionHandlerUpgrErr<
-            <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Error,
-        >,
-    ) {
-    }
-
-    fn inject_listen_upgrade_error(
-        &mut self,
-        _: Self::InboundOpenInfo,
-        _: ConnectionHandlerUpgrErr<
-            <Self::InboundProtocol as InboundUpgrade<NegotiatedSubstream>>::Error,
-        >,
-    ) {
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
@@ -115,5 +93,27 @@ impl crate::handler::ConnectionHandler for ConnectionHandler {
         >,
     > {
         Poll::Pending
+    }
+
+    fn on_connection_event(
+        &mut self,
+        event: ConnectionEvent<
+            Self::InboundProtocol,
+            Self::OutboundProtocol,
+            Self::InboundOpenInfo,
+            Self::OutboundOpenInfo,
+        >,
+    ) {
+        match event {
+            ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
+                protocol, ..
+            }) => void::unreachable(protocol),
+            ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
+                protocol, ..
+            }) => void::unreachable(protocol),
+            ConnectionEvent::DialUpgradeError(_)
+            | ConnectionEvent::ListenUpgradeError(_)
+            | ConnectionEvent::AddressChange(_) => {}
+        }
     }
 }

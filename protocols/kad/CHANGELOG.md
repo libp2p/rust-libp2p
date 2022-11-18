@@ -4,6 +4,15 @@
 
 - Update to `libp2p-swarm` `v0.41.0`.
 
+- Replace `Kademlia`'s `NetworkBehaviour` implemention `inject_*` methods with the new `on_*` methods.
+  See [PR 3011].
+
+- Replace `KademliaHandler`'s `ConnectionHandler` implemention `inject_*` methods with the new `on_*` methods.
+  See [PR 3085].
+
+[PR 3085]: https://github.com/libp2p/rust-libp2p/pull/3085
+[PR 3011]: https://github.com/libp2p/rust-libp2p/pull/3011
+
 # 0.41.0
 
 - Remove deprecated `set_protocol_name()` from `KademliaConfig` & `KademliaProtocolConfig`.

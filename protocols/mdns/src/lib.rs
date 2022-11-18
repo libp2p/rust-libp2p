@@ -38,14 +38,33 @@
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::time::Duration;
 
+#[deprecated(
+    since = "0.42.0",
+    note = "Use re-exports that omit `Mdns` prefix, i.e. `libp2p::mdns::Config`"
+)]
+pub type MdnsConfig = Config;
+
+#[deprecated(
+    since = "0.42.0",
+    note = "Use re-exports that omit `Mdns` prefix, i.e. `libp2p::mdns::Event`"
+)]
+pub type MdnsEvent = Event;
+
+#[deprecated(
+    since = "0.42.0",
+    note = "Use the async-io prefixed `Mdns`, i.e. `libp2p::mdns::async_io::Mdns`"
+)]
+#[cfg(feature = "async-io")]
+pub type Mdns = async_io::Behaviour;
+
 mod behaviour;
-pub use crate::behaviour::{GenMdns, MdnsEvent};
+pub use crate::behaviour::{Behaviour, Event};
 
 #[cfg(feature = "async-io")]
-pub use crate::behaviour::Mdns;
+pub use crate::behaviour::async_io;
 
 #[cfg(feature = "tokio")]
-pub use crate::behaviour::TokioMdns;
+pub use crate::behaviour::tokio;
 
 /// The DNS service name for all libp2p peers used to query for addresses.
 const SERVICE_NAME: &[u8] = b"_p2p._udp.local";
@@ -61,7 +80,7 @@ pub const IPV6_MDNS_MULTICAST_ADDRESS: Ipv6Addr = Ipv6Addr::new(0xFF02, 0, 0, 0,
 
 /// Configuration for mDNS.
 #[derive(Debug, Clone)]
-pub struct MdnsConfig {
+pub struct Config {
     /// TTL to use for mdns records.
     pub ttl: Duration,
     /// Interval at which to poll the network for new peers. This isn't
@@ -74,7 +93,7 @@ pub struct MdnsConfig {
     pub enable_ipv6: bool,
 }
 
-impl Default for MdnsConfig {
+impl Default for Config {
     fn default() -> Self {
         Self {
             ttl: Duration::from_secs(6 * 60),

@@ -1277,7 +1277,7 @@ fn manual_bucket_inserts() {
 }
 
 #[test]
-fn network_behaviour_inject_address_change() {
+fn network_behaviour_on_address_change() {
     let local_peer_id = PeerId::random();
 
     let remote_peer_id = PeerId::random();
@@ -1293,7 +1293,13 @@ fn network_behaviour_inject_address_change() {
     };
 
     // Mimick a connection being established.
-    kademlia.inject_connection_established(&remote_peer_id, &connection_id, &endpoint, None, 0);
+    kademlia.on_swarm_event(FromSwarm::ConnectionEstablished(ConnectionEstablished {
+        peer_id: remote_peer_id,
+        connection_id,
+        endpoint: &endpoint,
+        failed_addresses: &[],
+        other_established: 0,
+    }));
 
     // At this point the remote is not yet known to support the
     // configured protocol name, so the peer is not yet in the
@@ -1302,7 +1308,7 @@ fn network_behaviour_inject_address_change() {
 
     // Mimick the connection handler confirming the protocol for
     // the test connection, so that the peer is added to the routing table.
-    kademlia.inject_event(
+    kademlia.on_connection_handler_event(
         remote_peer_id,
         connection_id,
         KademliaHandlerEvent::ProtocolConfirmed { endpoint },
@@ -1313,18 +1319,18 @@ fn network_behaviour_inject_address_change() {
         kademlia.addresses_of_peer(&remote_peer_id),
     );
 
-    kademlia.inject_address_change(
-        &remote_peer_id,
-        &connection_id,
-        &ConnectedPoint::Dialer {
+    kademlia.on_swarm_event(FromSwarm::AddressChange(AddressChange {
+        peer_id: remote_peer_id,
+        connection_id,
+        old: &ConnectedPoint::Dialer {
             address: old_address,
             role_override: Endpoint::Dialer,
         },
-        &ConnectedPoint::Dialer {
+        new: &ConnectedPoint::Dialer {
             address: new_address.clone(),
             role_override: Endpoint::Dialer,
         },
-    );
+    }));
 
     assert_eq!(
         vec![new_address],
