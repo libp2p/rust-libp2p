@@ -94,11 +94,14 @@
   - `SwarmBuilder::new`
   - `SwarmBuilder::executor`
 
+- Update `rust-version` to reflect the actual MSRV: 1.62.0. See [PR 3090].
+
 [PR 3085]: https://github.com/libp2p/rust-libp2p/pull/3085
 [PR 3011]: https://github.com/libp2p/rust-libp2p/pull/3011
 [PR 3055]: https://github.com/libp2p/rust-libp2p/pull/3055
 [PR 3097]: https://github.com/libp2p/rust-libp2p/pull/3097
 [Issue 3107]: https://github.com/libp2p/rust-libp2p/issues/3107
+[PR 3090]: https://github.com/libp2p/rust-libp2p/pull/3090
 
 # 0.40.1
 
