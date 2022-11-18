@@ -128,6 +128,7 @@ pub use libp2p_uds as uds;
 pub use libp2p_wasm_ext as wasm_ext;
 #[cfg(feature = "webrtc")]
 #[cfg_attr(docsrs, doc(cfg(feature = "webrtc")))]
+#[cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))]
 #[doc(inline)]
 pub use libp2p_webrtc as webrtc;
 #[cfg(feature = "websocket")]
