@@ -1,3 +1,4 @@
+use crate::behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm};
 use crate::handler::{InboundUpgradeSend, OutboundUpgradeSend};
 use crate::{
     ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, IntoConnectionHandler,
@@ -271,12 +272,27 @@ where
         }
     }
 
-    pub fn register_connection(&mut self, peer_id: PeerId, id: ConnectionId) {
-        self.connections.insert((peer_id, id));
-    }
-
-    pub fn unregister_connection(&mut self, peer_id: PeerId, id: ConnectionId) {
-        self.connections.remove(&(peer_id, id));
+    pub fn on_swarm_event<H>(&mut self, event: &FromSwarm<H>)
+    where
+        H: IntoConnectionHandler,
+    {
+        match event {
+            FromSwarm::ConnectionEstablished(ConnectionEstablished {
+                peer_id,
+                connection_id,
+                ..
+            }) => {
+                self.connections.insert((*peer_id, *connection_id));
+            }
+            FromSwarm::ConnectionClosed(ConnectionClosed {
+                peer_id,
+                connection_id,
+                ..
+            }) => {
+                self.connections.remove(&(*peer_id, *connection_id));
+            }
+            _ => {}
+        }
     }
 
     pub fn poll<TOut, THandler, TOpenInfo>(
@@ -679,7 +695,7 @@ mod tests {
     use libp2p_core::connection::ConnectionId;
     use libp2p_core::transport::MemoryTransport;
     use libp2p_core::upgrade::Version;
-    use libp2p_core::{identity, Multiaddr, PeerId, Transport};
+    use libp2p_core::{identity, PeerId, Transport};
     use libp2p_plaintext::PlainText2Config;
     use libp2p_yamux as yamux;
     use std::collections::HashMap;
@@ -824,32 +840,14 @@ mod tests {
                 })
         }
 
-        fn inject_connection_established(
-            &mut self,
-            peer_id: &PeerId,
-            connection_id: &ConnectionId,
-            _endpoint: &ConnectedPoint,
-            _failed_addresses: Option<&Vec<Multiaddr>>,
-            _other_established: usize,
-        ) {
-            self.state.register_connection(*peer_id, *connection_id);
+        fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+            self.state.on_swarm_event(&event);
         }
 
-        fn inject_connection_closed(
-            &mut self,
-            peer_id: &PeerId,
-            connection_id: &ConnectionId,
-            _: &ConnectedPoint,
-            _: <Self::ConnectionHandler as IntoConnectionHandler>::Handler,
-            _remaining_established: usize,
-        ) {
-            self.state.unregister_connection(*peer_id, *connection_id);
-        }
-
-        fn inject_event(
+        fn on_connection_handler_event(
             &mut self,
             _peer_id: PeerId,
-            _connection: ConnectionId,
+            _connection_id: ConnectionId,
             event: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent,
         ) {
             match event {
