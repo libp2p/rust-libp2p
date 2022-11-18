@@ -8,6 +8,10 @@
 
 - Update to `libp2p-swarm` `v0.41.0`.
 
+- Replace `Behaviour`'s `NetworkBehaviour` implemention `inject_*` methods with the new `on_*` methods.
+  See [PR 3011].
+
+[PR 3011]: https://github.com/libp2p/rust-libp2p/pull/3011
 [PR 2995]: https://github.com/libp2p/rust-libp2p/pull/2995
 
 # 0.40.0

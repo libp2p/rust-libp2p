@@ -29,6 +29,8 @@ use libp2p_core::upgrade::{EitherUpgrade, UpgradeError};
 use libp2p_core::{ConnectedPoint, Multiaddr, PeerId};
 use std::task::{Context, Poll};
 
+/// Auxiliary type to allow implementing [`IntoConnectionHandler`]. As [`IntoConnectionHandler`] is
+/// already implemented for T, we cannot implement it for Either<A, B>.
 pub enum IntoEitherHandler<L, R> {
     Left(L),
     Right(R),
@@ -59,6 +61,29 @@ where
             }
             IntoEitherHandler::Right(into_handler) => {
                 EitherUpgrade::B(SendWrapper(into_handler.inbound_protocol()))
+            }
+        }
+    }
+}
+
+// Taken from https://github.com/bluss/either.
+impl<L, R> IntoEitherHandler<L, R> {
+    /// Returns the left value.
+    pub fn unwrap_left(self) -> L {
+        match self {
+            IntoEitherHandler::Left(l) => l,
+            IntoEitherHandler::Right(_) => {
+                panic!("called `IntoEitherHandler::unwrap_left()` on a `Right` value.",)
+            }
+        }
+    }
+
+    /// Returns the right value.
+    pub fn unwrap_right(self) -> R {
+        match self {
+            IntoEitherHandler::Right(r) => r,
+            IntoEitherHandler::Left(_) => {
+                panic!("called `IntoEitherHandler::unwrap_right()` on a `Left` value.",)
             }
         }
     }

@@ -1,11 +1,15 @@
 # 0.11.0 [unreleased]
 
-- De- and encode protobuf messages using `prost-codec`. See [PR 3058]. 
+- De- and encode protobuf messages using `prost-codec`. See [PR 3058].
 
 - Update to `libp2p-core` `v0.38.0`.
 
 - Update to `libp2p-swarm` `v0.41.0`.
 
+- Replace `Client` and `Server`'s `NetworkBehaviour` implemention `inject_*` methods with the new `on_*` methods.
+  See [PR 3011].
+
+[PR 3011]: https://github.com/libp2p/rust-libp2p/pull/3011
 [PR 3058]: https://github.com/libp2p/rust-libp2p/pull/3058
 
 # 0.10.0
