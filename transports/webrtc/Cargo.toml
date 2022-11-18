@@ -16,7 +16,7 @@ bytes = "1"
 futures = "0.3"
 futures-timer = "3"
 hex = "0.4"
-if-watch = "2.0"
+if-watch = "3.0"
 libp2p-core = { version = "0.38.0", path = "../../core"  }
 libp2p-noise = { version = "0.41.0", path = "../../transports/noise" }
 log = "0.4"
@@ -34,7 +34,7 @@ tokio-util = { version = "0.7", features = ["compat"], optional = true }
 webrtc = { version = "0.6.0", optional = true }
 
 [features]
-tokio = ["dep:tokio", "dep:tokio-util", "dep:webrtc"]
+tokio = ["dep:tokio", "dep:tokio-util", "dep:webrtc", "if-watch/tokio"]
 pem = ["webrtc?/pem"]
 
 [build-dependencies]
