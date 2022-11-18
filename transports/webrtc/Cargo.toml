@@ -6,6 +6,7 @@ description = "WebRTC transport for libp2p"
 repository = "https://github.com/libp2p/rust-libp2p"
 license = "MIT"
 edition = "2021"
+rust-version = "1.60.0"
 keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
