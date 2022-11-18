@@ -26,11 +26,13 @@ use either::Either;
 use libp2p_core::connection::{ConnectedPoint, ConnectionId};
 use libp2p_core::multiaddr::Protocol;
 use libp2p_core::{Multiaddr, PeerId};
-use libp2p_swarm::behaviour::THandlerInEvent;
+use libp2p_swarm::behaviour::{
+    ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm, THandlerInEvent,
+};
 use libp2p_swarm::dial_opts::{self, DialOpts};
 use libp2p_swarm::{
-    dummy, ConnectionHandler, ConnectionHandlerUpgrErr, DialError, NetworkBehaviour,
-    NetworkBehaviourAction, NotifyHandler, PollParameters,
+    dummy, ConnectionHandler, ConnectionHandlerUpgrErr, NetworkBehaviour, NetworkBehaviourAction,
+    NotifyHandler, PollParameters,
 };
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -92,6 +94,117 @@ impl Behaviour {
             awaiting_direct_outbound_connections: Default::default(),
         }
     }
+
+    fn on_connection_established(
+        &mut self,
+        ConnectionEstablished {
+            peer_id,
+            connection_id,
+            endpoint: connected_point,
+            ..
+        }: ConnectionEstablished,
+    ) {
+        if connected_point.is_relayed() {
+            if connected_point.is_listener() && !self.direct_connections.contains_key(&peer_id) {
+                // TODO: Try dialing the remote peer directly. Specification:
+                //
+                // > The protocol starts with the completion of a relay connection from A to B. Upon
+                // observing the new connection, the inbound peer (here B) checks the addresses
+                // advertised by A via identify. If that set includes public addresses, then A may
+                // be reachable by a direct connection, in which case B attempts a unilateral
+                // connection upgrade by initiating a direct connection to A.
+                //
+                // https://github.com/libp2p/specs/blob/master/relay/DCUtR.md#the-protocol
+                self.queued_actions.extend([
+                    ActionBuilder::Connect {
+                        peer_id,
+                        attempt: 1,
+                        handler: NotifyHandler::One(connection_id),
+                    },
+                    NetworkBehaviourAction::GenerateEvent(
+                        Event::InitiatedDirectConnectionUpgrade {
+                            remote_peer_id: peer_id,
+                            local_relayed_addr: match connected_point {
+                                ConnectedPoint::Listener { local_addr, .. } => local_addr.clone(),
+                                ConnectedPoint::Dialer { .. } => unreachable!("Due to outer if."),
+                            },
+                        },
+                    )
+                    .into(),
+                ]);
+            }
+        } else {
+            self.direct_connections
+                .entry(peer_id)
+                .or_default()
+                .insert(connection_id);
+        }
+    }
+
+    fn on_dial_failure(
+        &mut self,
+        DialFailure {
+            peer_id: maybe_peer_id,
+            ..
+        }: DialFailure,
+    ) {
+        let peer_id = match maybe_peer_id {
+            Some(peer_id) => peer_id,
+            None => return,
+        };
+
+        let (relayed_connection_id, attempt) =
+            match self.awaiting_direct_outbound_connections.remove(&peer_id) {
+                Some((relayed_connection_id, attempt)) => (relayed_connection_id, attempt),
+                None => return,
+            };
+
+        if attempt < MAX_NUMBER_OF_UPGRADE_ATTEMPTS {
+            self.queued_actions.push_back(ActionBuilder::Connect {
+                peer_id,
+                handler: NotifyHandler::One(relayed_connection_id),
+                attempt: attempt + 1,
+            });
+        } else {
+            self.queued_actions.extend([
+                NetworkBehaviourAction::NotifyHandler {
+                    peer_id,
+                    handler: NotifyHandler::One(relayed_connection_id),
+                    event: Either::Left(handler::relayed::Command::UpgradeFinishedDontKeepAlive),
+                }
+                .into(),
+                NetworkBehaviourAction::GenerateEvent(Event::DirectConnectionUpgradeFailed {
+                    remote_peer_id: peer_id,
+                    error: UpgradeError::Dial,
+                })
+                .into(),
+            ]);
+        }
+    }
+
+    fn on_connection_closed(
+        &mut self,
+        ConnectionClosed {
+            peer_id,
+            connection_id,
+            endpoint: connected_point,
+            ..
+        }: ConnectionClosed<<Self as NetworkBehaviour>::ConnectionHandler>,
+    ) {
+        if !connected_point.is_relayed() {
+            let connections = self
+                .direct_connections
+                .get_mut(&peer_id)
+                .expect("Peer of direct connection to be tracked.");
+            connections
+                .remove(&connection_id)
+                .then(|| ())
+                .expect("Direct connection to be tracked.");
+            if connections.is_empty() {
+                self.direct_connections.remove(&peer_id);
+            }
+        }
+    }
 }
 
 impl NetworkBehaviour for Behaviour {
@@ -151,115 +264,7 @@ impl NetworkBehaviour for Behaviour {
             }
         }
     }
-
-    fn addresses_of_peer(&mut self, _peer_id: &PeerId) -> Vec<Multiaddr> {
-        vec![]
-    }
-
-    fn inject_connection_established(
-        &mut self,
-        peer_id: &PeerId,
-        connection_id: &ConnectionId,
-        connected_point: &ConnectedPoint,
-        _failed_addresses: Option<&Vec<Multiaddr>>,
-        _other_established: usize,
-    ) {
-        if connected_point.is_relayed() {
-            if connected_point.is_listener() && !self.direct_connections.contains_key(peer_id) {
-                // TODO: Try dialing the remote peer directly. Specification:
-                //
-                // > The protocol starts with the completion of a relay connection from A to B. Upon
-                // observing the new connection, the inbound peer (here B) checks the addresses
-                // advertised by A via identify. If that set includes public addresses, then A may
-                // be reachable by a direct connection, in which case B attempts a unilateral
-                // connection upgrade by initiating a direct connection to A.
-                //
-                // https://github.com/libp2p/specs/blob/master/relay/DCUtR.md#the-protocol
-                self.queued_actions.extend([
-                    ActionBuilder::Connect {
-                        peer_id: *peer_id,
-                        attempt: 1,
-                        handler: NotifyHandler::One(*connection_id),
-                    },
-                    NetworkBehaviourAction::GenerateEvent(
-                        Event::InitiatedDirectConnectionUpgrade {
-                            remote_peer_id: *peer_id,
-                            local_relayed_addr: match connected_point {
-                                ConnectedPoint::Listener { local_addr, .. } => local_addr.clone(),
-                                ConnectedPoint::Dialer { .. } => unreachable!("Due to outer if."),
-                            },
-                        },
-                    )
-                    .into(),
-                ]);
-            }
-        } else {
-            self.direct_connections
-                .entry(*peer_id)
-                .or_default()
-                .insert(*connection_id);
-        }
-    }
-
-    fn inject_dial_failure(&mut self, maybe_peer_id: Option<PeerId>, _error: &DialError) {
-        let peer_id = match maybe_peer_id {
-            Some(peer_id) => peer_id,
-            None => return,
-        };
-
-        let (relayed_connection_id, attempt) =
-            match self.awaiting_direct_outbound_connections.remove(&peer_id) {
-                Some((relayed_connection_id, attempt)) => (relayed_connection_id, attempt),
-                None => return,
-            };
-
-        if attempt < MAX_NUMBER_OF_UPGRADE_ATTEMPTS {
-            self.queued_actions.push_back(ActionBuilder::Connect {
-                peer_id,
-                handler: NotifyHandler::One(relayed_connection_id),
-                attempt: attempt + 1,
-            });
-        } else {
-            self.queued_actions.extend([
-                NetworkBehaviourAction::NotifyHandler {
-                    peer_id,
-                    handler: NotifyHandler::One(relayed_connection_id),
-                    event: Either::Left(handler::relayed::Command::UpgradeFinishedDontKeepAlive),
-                }
-                .into(),
-                NetworkBehaviourAction::GenerateEvent(Event::DirectConnectionUpgradeFailed {
-                    remote_peer_id: peer_id,
-                    error: UpgradeError::Dial,
-                })
-                .into(),
-            ]);
-        }
-    }
-
-    fn inject_connection_closed(
-        &mut self,
-        peer_id: &PeerId,
-        connection_id: &ConnectionId,
-        connected_point: &ConnectedPoint,
-        _handler: Self::ConnectionHandler,
-        _remaining_established: usize,
-    ) {
-        if !connected_point.is_relayed() {
-            let connections = self
-                .direct_connections
-                .get_mut(peer_id)
-                .expect("Peer of direct connection to be tracked.");
-            connections
-                .remove(connection_id)
-                .then(|| ())
-                .expect("Direct connection to be tracked.");
-            if connections.is_empty() {
-                self.direct_connections.remove(peer_id);
-            }
-        }
-    }
-
-    fn inject_event(
+    fn on_connection_handler_event(
         &mut self,
         event_source: PeerId,
         connection: ConnectionId,
@@ -370,6 +375,27 @@ impl NetworkBehaviour for Behaviour {
         }
 
         Poll::Pending
+    }
+
+    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+        match event {
+            FromSwarm::ConnectionEstablished(connection_established) => {
+                self.on_connection_established(connection_established)
+            }
+            FromSwarm::ConnectionClosed(connection_closed) => {
+                self.on_connection_closed(connection_closed)
+            }
+            FromSwarm::DialFailure(dial_failure) => self.on_dial_failure(dial_failure),
+            FromSwarm::AddressChange(_)
+            | FromSwarm::ListenFailure(_)
+            | FromSwarm::NewListener(_)
+            | FromSwarm::NewListenAddr(_)
+            | FromSwarm::ExpiredListenAddr(_)
+            | FromSwarm::ListenerError(_)
+            | FromSwarm::ListenerClosed(_)
+            | FromSwarm::NewExternalAddr(_)
+            | FromSwarm::ExpiredExternalAddr(_) => {}
+        }
     }
 }
 

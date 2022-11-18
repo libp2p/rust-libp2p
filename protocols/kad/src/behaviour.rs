@@ -39,10 +39,11 @@ use crate::record::{
 use crate::K_VALUE;
 use fnv::{FnvHashMap, FnvHashSet};
 use instant::Instant;
-use libp2p_core::{
-    connection::ConnectionId, transport::ListenerId, ConnectedPoint, Multiaddr, PeerId,
+use libp2p_core::{connection::ConnectionId, ConnectedPoint, Multiaddr, PeerId};
+use libp2p_swarm::behaviour::{
+    AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, ExpiredListenAddr,
+    FromSwarm, NewExternalAddr, NewListenAddr, THandlerInEvent,
 };
-use libp2p_swarm::behaviour::THandlerInEvent;
 use libp2p_swarm::{
     dial_opts::{self, DialOpts},
     DialError, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
@@ -1768,70 +1769,18 @@ where
             }
         }
     }
-}
 
-/// Exponentially decrease the given duration (base 2).
-fn exp_decrease(ttl: Duration, exp: u32) -> Duration {
-    Duration::from_secs(ttl.as_secs().checked_shr(exp).unwrap_or(0))
-}
-
-impl<TStore> NetworkBehaviour for Kademlia<TStore>
-where
-    for<'a> TStore: RecordStore<'a>,
-    TStore: Send + 'static,
-{
-    type ConnectionHandler = KademliaHandler<QueryId>;
-    type OutEvent = KademliaEvent;
-
-    fn new_handler(
+    fn on_connection_established(
         &mut self,
-        peer: &PeerId,
-        connected_point: &ConnectedPoint,
-    ) -> Self::ConnectionHandler {
-        KademliaHandler::new(
-            KademliaHandlerConfig {
-                protocol_config: self.protocol_config.clone(),
-                allow_listening: true,
-                idle_timeout: self.connection_idle_timeout,
-            },
-            connected_point.clone(),
-            *peer,
-        )
-    }
-
-    fn addresses_of_peer(&mut self, peer_id: &PeerId) -> Vec<Multiaddr> {
-        // We should order addresses from decreasing likelyhood of connectivity, so start with
-        // the addresses of that peer in the k-buckets.
-        let key = kbucket::Key::from(*peer_id);
-        let mut peer_addrs =
-            if let kbucket::Entry::Present(mut entry, _) = self.kbuckets.entry(&key) {
-                let addrs = entry.value().iter().cloned().collect::<Vec<_>>();
-                debug_assert!(!addrs.is_empty(), "Empty peer addresses in routing table.");
-                addrs
-            } else {
-                Vec::new()
-            };
-
-        // We add to that a temporary list of addresses from the ongoing queries.
-        for query in self.queries.iter() {
-            if let Some(addrs) = query.inner.addresses.get(peer_id) {
-                peer_addrs.extend(addrs.iter().cloned())
-            }
-        }
-
-        peer_addrs
-    }
-
-    fn inject_connection_established(
-        &mut self,
-        peer_id: &PeerId,
-        _: &ConnectionId,
-        _: &ConnectedPoint,
-        errors: Option<&Vec<Multiaddr>>,
-        other_established: usize,
+        ConnectionEstablished {
+            peer_id,
+            failed_addresses,
+            other_established,
+            ..
+        }: ConnectionEstablished,
     ) {
-        for addr in errors.map(|a| a.iter()).into_iter().flatten() {
-            self.address_failed(*peer_id, addr);
+        for addr in failed_addresses {
+            self.address_failed(peer_id, addr);
         }
 
         // When a connection is established, we don't know yet whether the
@@ -1847,7 +1796,7 @@ where
                 q.inner
                     .pending_rpcs
                     .iter()
-                    .position(|(p, _)| p == peer_id)
+                    .position(|(p, _)| p == &peer_id)
                     .map(|p| q.inner.pending_rpcs.remove(p))
             }) {
                 self.queued_events
@@ -1858,21 +1807,23 @@ where
                     });
             }
 
-            self.connected_peers.insert(*peer_id);
+            self.connected_peers.insert(peer_id);
         }
     }
 
-    fn inject_address_change(
+    fn on_address_change(
         &mut self,
-        peer: &PeerId,
-        _: &ConnectionId,
-        old: &ConnectedPoint,
-        new: &ConnectedPoint,
+        AddressChange {
+            peer_id: peer,
+            old,
+            new,
+            ..
+        }: AddressChange,
     ) {
         let (old, new) = (old.get_remote_address(), new.get_remote_address());
 
         // Update routing table.
-        if let Some(addrs) = self.kbuckets.entry(&kbucket::Key::from(*peer)).value() {
+        if let Some(addrs) = self.kbuckets.entry(&kbucket::Key::from(peer)).value() {
             if addrs.replace(old, new) {
                 debug!(
                     "Address '{}' replaced with '{}' for peer '{}'.",
@@ -1882,14 +1833,14 @@ where
                 debug!(
                     "Address '{}' not replaced with '{}' for peer '{}' as old address wasn't \
                      present.",
-                    old, new, peer,
+                    old, new, peer
                 );
             }
         } else {
             debug!(
                 "Address '{}' not replaced with '{}' for peer '{}' as peer is not present in the \
                  routing table.",
-                old, new, peer,
+                old, new, peer
             );
         }
 
@@ -1908,7 +1859,7 @@ where
         // large performance impact. If so, the code below might be worth
         // revisiting.
         for query in self.queries.iter_mut() {
-            if let Some(addrs) = query.inner.addresses.get_mut(peer) {
+            if let Some(addrs) = query.inner.addresses.get_mut(&peer) {
                 for addr in addrs.iter_mut() {
                     if addr == old {
                         *addr = new.clone();
@@ -1918,7 +1869,7 @@ where
         }
     }
 
-    fn inject_dial_failure(&mut self, peer_id: Option<PeerId>, error: &DialError) {
+    fn on_dial_failure(&mut self, DialFailure { peer_id, error, .. }: DialFailure) {
         let peer_id = match peer_id {
             Some(id) => id,
             // Not interested in dial failures to unknown peers.
@@ -1957,24 +1908,77 @@ where
         }
     }
 
-    fn inject_connection_closed(
+    fn on_connection_closed(
         &mut self,
-        id: &PeerId,
-        _: &ConnectionId,
-        _: &ConnectedPoint,
-        _: Self::ConnectionHandler,
-        remaining_established: usize,
+        ConnectionClosed {
+            peer_id,
+            remaining_established,
+            ..
+        }: ConnectionClosed<<Self as NetworkBehaviour>::ConnectionHandler>,
     ) {
         if remaining_established == 0 {
             for query in self.queries.iter_mut() {
-                query.on_failure(id);
+                query.on_failure(&peer_id);
             }
-            self.connection_updated(*id, None, NodeStatus::Disconnected);
-            self.connected_peers.remove(id);
+            self.connection_updated(peer_id, None, NodeStatus::Disconnected);
+            self.connected_peers.remove(&peer_id);
         }
     }
+}
 
-    fn inject_event(
+/// Exponentially decrease the given duration (base 2).
+fn exp_decrease(ttl: Duration, exp: u32) -> Duration {
+    Duration::from_secs(ttl.as_secs().checked_shr(exp).unwrap_or(0))
+}
+
+impl<TStore> NetworkBehaviour for Kademlia<TStore>
+where
+    for<'a> TStore: RecordStore<'a>,
+    TStore: Send + 'static,
+{
+    type ConnectionHandler = KademliaHandler<QueryId>;
+    type OutEvent = KademliaEvent;
+
+    fn new_handler(
+        &mut self,
+        remote_peer_id: &PeerId,
+        endpoint: &ConnectedPoint,
+    ) -> Self::ConnectionHandler {
+        KademliaHandler::new(
+            KademliaHandlerConfig {
+                protocol_config: self.protocol_config.clone(),
+                allow_listening: true,
+                idle_timeout: self.connection_idle_timeout,
+            },
+            endpoint.clone(),
+            *remote_peer_id,
+        )
+    }
+
+    fn addresses_of_peer(&mut self, peer_id: &PeerId) -> Vec<Multiaddr> {
+        // We should order addresses from decreasing likelyhood of connectivity, so start with
+        // the addresses of that peer in the k-buckets.
+        let key = kbucket::Key::from(*peer_id);
+        let mut peer_addrs =
+            if let kbucket::Entry::Present(mut entry, _) = self.kbuckets.entry(&key) {
+                let addrs = entry.value().iter().cloned().collect::<Vec<_>>();
+                debug_assert!(!addrs.is_empty(), "Empty peer addresses in routing table.");
+                addrs
+            } else {
+                Vec::new()
+            };
+
+        // We add to that a temporary list of addresses from the ongoing queries.
+        for query in self.queries.iter() {
+            if let Some(addrs) = query.inner.addresses.get(peer_id) {
+                peer_addrs.extend(addrs.iter().cloned())
+            }
+        }
+
+        peer_addrs
+    }
+
+    fn on_connection_handler_event(
         &mut self,
         source: PeerId,
         connection: ConnectionId,
@@ -2225,20 +2229,6 @@ where
         };
     }
 
-    fn inject_new_listen_addr(&mut self, _id: ListenerId, addr: &Multiaddr) {
-        self.local_addrs.insert(addr.clone());
-    }
-
-    fn inject_expired_listen_addr(&mut self, _id: ListenerId, addr: &Multiaddr) {
-        self.local_addrs.remove(addr);
-    }
-
-    fn inject_new_external_addr(&mut self, addr: &Multiaddr) {
-        if self.local_addrs.len() < MAX_LOCAL_EXTERNAL_ADDRS {
-            self.local_addrs.insert(addr.clone());
-        }
-    }
-
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
@@ -2357,6 +2347,35 @@ where
             if self.queued_events.is_empty() {
                 return Poll::Pending;
             }
+        }
+    }
+
+    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+        match event {
+            FromSwarm::ConnectionEstablished(connection_established) => {
+                self.on_connection_established(connection_established)
+            }
+            FromSwarm::ConnectionClosed(connection_closed) => {
+                self.on_connection_closed(connection_closed)
+            }
+            FromSwarm::DialFailure(dial_failure) => self.on_dial_failure(dial_failure),
+            FromSwarm::AddressChange(address_change) => self.on_address_change(address_change),
+            FromSwarm::ExpiredListenAddr(ExpiredListenAddr { addr, .. }) => {
+                self.local_addrs.remove(addr);
+            }
+            FromSwarm::NewExternalAddr(NewExternalAddr { addr }) => {
+                if self.local_addrs.len() < MAX_LOCAL_EXTERNAL_ADDRS {
+                    self.local_addrs.insert(addr.clone());
+                }
+            }
+            FromSwarm::NewListenAddr(NewListenAddr { addr, .. }) => {
+                self.local_addrs.insert(addr.clone());
+            }
+            FromSwarm::ListenFailure(_)
+            | FromSwarm::NewListener(_)
+            | FromSwarm::ListenerClosed(_)
+            | FromSwarm::ListenerError(_)
+            | FromSwarm::ExpiredExternalAddr(_) => {}
         }
     }
 }

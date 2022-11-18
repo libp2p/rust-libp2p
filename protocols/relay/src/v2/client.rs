@@ -33,9 +33,10 @@ use futures::future::{BoxFuture, FutureExt};
 use futures::io::{AsyncRead, AsyncWrite};
 use futures::ready;
 use futures::stream::StreamExt;
-use libp2p_core::connection::{ConnectedPoint, ConnectionId};
-use libp2p_core::{Multiaddr, PeerId};
+use libp2p_core::connection::ConnectionId;
+use libp2p_core::{ConnectedPoint, PeerId};
 use libp2p_swarm::behaviour::THandlerInEvent;
+use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm};
 use libp2p_swarm::dial_opts::DialOpts;
 use libp2p_swarm::{dummy, ConnectionHandler};
 use libp2p_swarm::{
@@ -118,6 +119,36 @@ impl Client {
         };
         (transport, behaviour)
     }
+
+    fn on_connection_closed(
+        &mut self,
+        ConnectionClosed {
+            peer_id,
+            connection_id,
+            endpoint,
+            ..
+        }: ConnectionClosed<<Self as NetworkBehaviour>::ConnectionHandler>,
+    ) {
+        if !endpoint.is_relayed() {
+            match self.directly_connected_peers.entry(peer_id) {
+                hash_map::Entry::Occupied(mut connections) => {
+                    let position = connections
+                        .get()
+                        .iter()
+                        .position(|c| c == &connection_id)
+                        .expect("Connection to be known.");
+                    connections.get_mut().remove(position);
+
+                    if connections.get().is_empty() {
+                        connections.remove();
+                    }
+                }
+                hash_map::Entry::Vacant(_) => {
+                    unreachable!("`inject_connection_closed` for unconnected peer.")
+                }
+            };
+        }
+    }
 }
 
 impl NetworkBehaviour for Client {
@@ -149,6 +180,7 @@ impl NetworkBehaviour for Client {
             );
 
             if let Some(event) = self.initial_events.remove(peer) {
+                #[allow(deprecated)]
                 handler.inject_event(event)
             }
 
@@ -156,52 +188,38 @@ impl NetworkBehaviour for Client {
         }
     }
 
-    fn inject_connection_established(
-        &mut self,
-        peer_id: &PeerId,
-        connection_id: &ConnectionId,
-        endpoint: &ConnectedPoint,
-        _failed_addresses: Option<&Vec<Multiaddr>>,
-        _other_established: usize,
-    ) {
-        if !endpoint.is_relayed() {
-            self.directly_connected_peers
-                .entry(*peer_id)
-                .or_default()
-                .push(*connection_id);
+    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+        match event {
+            FromSwarm::ConnectionEstablished(ConnectionEstablished {
+                peer_id,
+                connection_id,
+                endpoint,
+                ..
+            }) => {
+                if !endpoint.is_relayed() {
+                    self.directly_connected_peers
+                        .entry(peer_id)
+                        .or_default()
+                        .push(connection_id);
+                }
+            }
+            FromSwarm::ConnectionClosed(connection_closed) => {
+                self.on_connection_closed(connection_closed)
+            }
+            FromSwarm::AddressChange(_)
+            | FromSwarm::DialFailure(_)
+            | FromSwarm::ListenFailure(_)
+            | FromSwarm::NewListener(_)
+            | FromSwarm::NewListenAddr(_)
+            | FromSwarm::ExpiredListenAddr(_)
+            | FromSwarm::ListenerError(_)
+            | FromSwarm::ListenerClosed(_)
+            | FromSwarm::NewExternalAddr(_)
+            | FromSwarm::ExpiredExternalAddr(_) => {}
         }
     }
 
-    fn inject_connection_closed(
-        &mut self,
-        peer_id: &PeerId,
-        connection_id: &ConnectionId,
-        endpoint: &ConnectedPoint,
-        _handler: Either<handler::Handler, dummy::ConnectionHandler>,
-        _remaining_established: usize,
-    ) {
-        if !endpoint.is_relayed() {
-            match self.directly_connected_peers.entry(*peer_id) {
-                hash_map::Entry::Occupied(mut connections) => {
-                    let position = connections
-                        .get()
-                        .iter()
-                        .position(|c| c == connection_id)
-                        .expect("Connection to be known.");
-                    connections.get_mut().remove(position);
-
-                    if connections.get().is_empty() {
-                        connections.remove();
-                    }
-                }
-                hash_map::Entry::Vacant(_) => {
-                    unreachable!("`inject_connection_closed` for unconnected peer.")
-                }
-            };
-        }
-    }
-
-    fn inject_event(
+    fn on_connection_handler_event(
         &mut self,
         event_source: PeerId,
         _connection: ConnectionId,
