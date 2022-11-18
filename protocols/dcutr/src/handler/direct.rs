@@ -22,6 +22,7 @@
 
 use libp2p_core::connection::ConnectionId;
 use libp2p_core::upgrade::{DeniedUpgrade, InboundUpgrade, OutboundUpgrade};
+use libp2p_swarm::handler::ConnectionEvent;
 use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
     NegotiatedSubstream, SubstreamProtocol,
@@ -75,7 +76,7 @@ impl ConnectionHandler for Handler {
     ) {
     }
 
-    fn inject_event(&mut self, _: Self::InEvent) {}
+    fn on_behaviour_event(&mut self, _: Self::InEvent) {}
 
     fn inject_dial_upgrade_error(
         &mut self,
@@ -110,5 +111,23 @@ impl ConnectionHandler for Handler {
             ));
         }
         Poll::Pending
+    }
+
+    fn on_connection_event(
+        &mut self,
+        event: ConnectionEvent<
+            Self::InboundProtocol,
+            Self::OutboundProtocol,
+            Self::InboundOpenInfo,
+            Self::OutboundOpenInfo,
+        >,
+    ) {
+        match event {
+            ConnectionEvent::FullyNegotiatedInbound(_)
+            | ConnectionEvent::FullyNegotiatedOutbound(_)
+            | ConnectionEvent::DialUpgradeError(_)
+            | ConnectionEvent::ListenUpgradeError(_)
+            | ConnectionEvent::AddressChange(_) => {}
+        }
     }
 }

@@ -309,6 +309,7 @@ impl snow::types::Random for Rng {}
 mod tests {
     use super::*;
     use crate::X25519;
+    use once_cell::sync::Lazy;
 
     #[test]
     fn handshake_hashes_disagree_if_prologue_differs() {
@@ -337,7 +338,5 @@ mod tests {
     }
 
     // Hack to work around borrow-checker.
-    lazy_static::lazy_static! {
-        static ref TEST_KEY: Keypair<X25519> = Keypair::<X25519>::new();
-    }
+    static TEST_KEY: Lazy<Keypair<X25519>> = Lazy::new(Keypair::<X25519>::new);
 }

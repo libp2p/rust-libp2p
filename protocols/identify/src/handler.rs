@@ -25,8 +25,11 @@ use futures::future::BoxFuture;
 use futures::prelude::*;
 use futures_timer::Delay;
 use libp2p_core::either::{EitherError, EitherOutput};
-use libp2p_core::upgrade::{EitherUpgrade, InboundUpgrade, OutboundUpgrade, SelectUpgrade};
+use libp2p_core::upgrade::{EitherUpgrade, SelectUpgrade};
 use libp2p_core::{ConnectedPoint, PeerId};
+use libp2p_swarm::handler::{
+    ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
+};
 use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, IntoConnectionHandler,
     KeepAlive, NegotiatedSubstream, SubstreamProtocol,
@@ -119,25 +122,15 @@ impl Handler {
             interval,
         }
     }
-}
 
-impl ConnectionHandler for Handler {
-    type InEvent = Push;
-    type OutEvent = Event;
-    type Error = io::Error;
-    type InboundProtocol = SelectUpgrade<Protocol, PushProtocol<InboundPush>>;
-    type OutboundProtocol = EitherUpgrade<Protocol, PushProtocol<OutboundPush>>;
-    type OutboundOpenInfo = ();
-    type InboundOpenInfo = ();
-
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
-        SubstreamProtocol::new(SelectUpgrade::new(Protocol, PushProtocol::inbound()), ())
-    }
-
-    fn inject_fully_negotiated_inbound(
+    fn on_fully_negotiated_inbound(
         &mut self,
-        output: <Self::InboundProtocol as InboundUpgrade<NegotiatedSubstream>>::Output,
-        _: Self::InboundOpenInfo,
+        FullyNegotiatedInbound {
+            protocol: output, ..
+        }: FullyNegotiatedInbound<
+            <Self as ConnectionHandler>::InboundProtocol,
+            <Self as ConnectionHandler>::InboundOpenInfo,
+        >,
     ) {
         match output {
             EitherOutput::First(substream) => self
@@ -155,10 +148,14 @@ impl ConnectionHandler for Handler {
         }
     }
 
-    fn inject_fully_negotiated_outbound(
+    fn on_fully_negotiated_outbound(
         &mut self,
-        output: <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Output,
-        _: Self::OutboundOpenInfo,
+        FullyNegotiatedOutbound {
+            protocol: output, ..
+        }: FullyNegotiatedOutbound<
+            <Self as ConnectionHandler>::OutboundProtocol,
+            <Self as ConnectionHandler>::OutboundOpenInfo,
+        >,
     ) {
         match output {
             EitherOutput::First(remote_info) => {
@@ -174,21 +171,11 @@ impl ConnectionHandler for Handler {
         }
     }
 
-    fn inject_event(&mut self, Push(push): Self::InEvent) {
-        self.events
-            .push(ConnectionHandlerEvent::OutboundSubstreamRequest {
-                protocol: SubstreamProtocol::new(
-                    EitherUpgrade::B(PushProtocol::outbound(push)),
-                    (),
-                ),
-            });
-    }
-
-    fn inject_dial_upgrade_error(
+    fn on_dial_upgrade_error(
         &mut self,
-        _info: Self::OutboundOpenInfo,
-        err: ConnectionHandlerUpgrErr<
-            <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Error,
+        DialUpgradeError { error: err, .. }: DialUpgradeError<
+            <Self as ConnectionHandler>::OutboundOpenInfo,
+            <Self as ConnectionHandler>::OutboundProtocol,
         >,
     ) {
         use libp2p_core::upgrade::UpgradeError;
@@ -204,6 +191,30 @@ impl ConnectionHandler for Handler {
             )));
         self.keep_alive = KeepAlive::No;
         self.trigger_next_identify.reset(self.interval);
+    }
+}
+
+impl ConnectionHandler for Handler {
+    type InEvent = Push;
+    type OutEvent = Event;
+    type Error = io::Error;
+    type InboundProtocol = SelectUpgrade<Protocol, PushProtocol<InboundPush>>;
+    type OutboundProtocol = EitherUpgrade<Protocol, PushProtocol<OutboundPush>>;
+    type OutboundOpenInfo = ();
+    type InboundOpenInfo = ();
+
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+        SubstreamProtocol::new(SelectUpgrade::new(Protocol, PushProtocol::inbound()), ())
+    }
+
+    fn on_behaviour_event(&mut self, Push(push): Self::InEvent) {
+        self.events
+            .push(ConnectionHandlerEvent::OutboundSubstreamRequest {
+                protocol: SubstreamProtocol::new(
+                    EitherUpgrade::B(PushProtocol::outbound(push)),
+                    (),
+                ),
+            });
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
@@ -245,5 +256,28 @@ impl ConnectionHandler for Handler {
         }
 
         Poll::Pending
+    }
+
+    fn on_connection_event(
+        &mut self,
+        event: ConnectionEvent<
+            Self::InboundProtocol,
+            Self::OutboundProtocol,
+            Self::InboundOpenInfo,
+            Self::OutboundOpenInfo,
+        >,
+    ) {
+        match event {
+            ConnectionEvent::FullyNegotiatedInbound(fully_negotiated_inbound) => {
+                self.on_fully_negotiated_inbound(fully_negotiated_inbound)
+            }
+            ConnectionEvent::FullyNegotiatedOutbound(fully_negotiated_outbound) => {
+                self.on_fully_negotiated_outbound(fully_negotiated_outbound)
+            }
+            ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
+                self.on_dial_upgrade_error(dial_upgrade_error)
+            }
+            ConnectionEvent::AddressChange(_) | ConnectionEvent::ListenUpgradeError(_) => {}
+        }
     }
 }

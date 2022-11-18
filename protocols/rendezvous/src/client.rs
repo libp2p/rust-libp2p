@@ -32,6 +32,7 @@ use libp2p_core::connection::ConnectionId;
 use libp2p_core::identity::error::SigningError;
 use libp2p_core::identity::Keypair;
 use libp2p_core::{Multiaddr, PeerId, PeerRecord};
+use libp2p_swarm::behaviour::FromSwarm;
 use libp2p_swarm::{
     CloseConnection, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
 };
@@ -177,13 +178,13 @@ impl NetworkBehaviour for Behaviour {
     fn addresses_of_peer(&mut self, peer: &PeerId) -> Vec<Multiaddr> {
         self.discovered_peers
             .iter()
-            .filter_map(|((candidate, _), addresses)| (candidate == peer).then(|| addresses))
+            .filter_map(|((candidate, _), addresses)| (candidate == peer).then_some(addresses))
             .flatten()
             .cloned()
             .collect()
     }
 
-    fn inject_event(
+    fn on_connection_handler_event(
         &mut self,
         peer_id: PeerId,
         connection_id: ConnectionId,
@@ -265,6 +266,23 @@ impl NetworkBehaviour for Behaviour {
 
         Poll::Pending
     }
+
+    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+        match event {
+            FromSwarm::ConnectionEstablished(_)
+            | FromSwarm::ConnectionClosed(_)
+            | FromSwarm::AddressChange(_)
+            | FromSwarm::DialFailure(_)
+            | FromSwarm::ListenFailure(_)
+            | FromSwarm::NewListener(_)
+            | FromSwarm::NewListenAddr(_)
+            | FromSwarm::ExpiredListenAddr(_)
+            | FromSwarm::ListenerError(_)
+            | FromSwarm::ListenerClosed(_)
+            | FromSwarm::NewExternalAddr(_)
+            | FromSwarm::ExpiredExternalAddr(_) => {}
+        }
+    }
 }
 
 fn handle_outbound_event(
@@ -310,7 +328,7 @@ fn handle_outbound_event(
             expiring_registrations.extend(registrations.iter().cloned().map(|registration| {
                 async move {
                     // if the timer errors we consider it expired
-                    futures_timer::Delay::new(Duration::from_secs(registration.ttl as u64)).await;
+                    futures_timer::Delay::new(Duration::from_secs(registration.ttl)).await;
 
                     (registration.record.peer_id(), registration.namespace)
                 }

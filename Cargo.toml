@@ -1,7 +1,7 @@
 [package]
 name = "libp2p"
 edition = "2021"
-rust-version = "1.60.0"
+rust-version = "1.62.0"
 description = "Peer-to-peer networking library"
 version = "0.50.0"
 authors = ["Parity Technologies <admin@parity.io>"]
@@ -32,6 +32,8 @@ full = [
     "ping",
     "plaintext",
     "pnet",
+    "quic",
+    "macros",
     "relay",
     "rendezvous",
     "request-response",
@@ -45,44 +47,50 @@ full = [
     "wasm-bindgen",
     "wasm-ext",
     "wasm-ext-websocket",
+    "webrtc",
     "websocket",
     "yamux",
 ]
+
+async-std = ["libp2p-swarm/async-std", "libp2p-mdns?/async-io", "libp2p-tcp?/async-io", "libp2p-dns?/async-std", "libp2p-quic?/async-std", "libp2p-onion?/async-std"]
 autonat = ["dep:libp2p-autonat"]
 dcutr = ["dep:libp2p-dcutr", "libp2p-metrics?/dcutr"]
 deflate = ["dep:libp2p-deflate"]
 dns = ["dep:libp2p-dns"]
+ecdsa = ["libp2p-core/ecdsa"]
 floodsub = ["dep:libp2p-floodsub"]
+gossipsub = ["dep:libp2p-gossipsub", "libp2p-metrics?/gossipsub"]
 identify = ["dep:libp2p-identify", "libp2p-metrics?/identify"]
 kad = ["dep:libp2p-kad", "libp2p-metrics?/kad"]
-gossipsub = ["dep:libp2p-gossipsub", "libp2p-metrics?/gossipsub"]
+macros = ["libp2p-swarm/macros"]
+mdns = ["dep:libp2p-mdns"]
 tls = ["dep:libp2p-tls"]
 metrics = ["dep:libp2p-metrics"]
-mdns = ["dep:libp2p-mdns"]
 mplex = ["dep:libp2p-mplex"]
 noise = ["dep:libp2p-noise"]
+onion = ["dep:libp2p-onion"]
+onion-native-tls = ["dep:libp2p-onion", "libp2p-onion?/native-tls"]
+onion-rustls = ["dep:libp2p-onion", "libp2p-onion?/rustls"]
 ping = ["dep:libp2p-ping", "libp2p-metrics?/ping"]
 plaintext = ["dep:libp2p-plaintext"]
 pnet = ["dep:libp2p-pnet"]
+quic = ["dep:libp2p-quic"]
 relay = ["dep:libp2p-relay", "libp2p-metrics?/relay"]
-request-response = ["dep:libp2p-request-response"]
 rendezvous = ["dep:libp2p-rendezvous"]
+request-response = ["dep:libp2p-request-response"]
+rsa = ["libp2p-core/rsa"]
+secp256k1 = ["libp2p-core/secp256k1"]
+serde = ["libp2p-core/serde", "libp2p-kad?/serde", "libp2p-gossipsub?/serde"]
 tcp = ["dep:libp2p-tcp"]
+tokio = ["libp2p-swarm/tokio", "libp2p-mdns?/tokio", "libp2p-tcp?/tokio", "libp2p-dns?/tokio", "libp2p-quic?/tokio", "libp2p-webrtc?/tokio", "libp2p-onion?/tokio"]
 uds = ["dep:libp2p-uds"]
 wasm-bindgen = ["futures-timer/wasm-bindgen", "instant/wasm-bindgen", "getrandom/js"]
 wasm-ext = ["dep:libp2p-wasm-ext"]
 wasm-ext-websocket = ["wasm-ext", "libp2p-wasm-ext?/websocket"]
+webrtc = ["dep:libp2p-webrtc", "libp2p-webrtc?/pem"]
 websocket = ["dep:libp2p-websocket"]
 yamux = ["dep:libp2p-yamux"]
-secp256k1 = ["libp2p-core/secp256k1"]
-rsa = ["libp2p-core/rsa"]
-ecdsa = ["libp2p-core/ecdsa"]
-serde = ["libp2p-core/serde", "libp2p-kad?/serde", "libp2p-gossipsub?/serde"]
-onion = ["dep:libp2p-onion"]
-onion-native-tls = ["dep:libp2p-onion", "libp2p-onion?/native-tls"]
-onion-rustls = ["dep:libp2p-onion", "libp2p-onion?/rustls"]
-tokio = ["libp2p-mdns?/tokio", "libp2p-tcp?/tokio", "libp2p-dns?/tokio", "libp2p-onion?/tokio"]
-async-std = ["libp2p-mdns?/async-io", "libp2p-tcp?/async-io", "libp2p-dns?/async-std", "libp2p-onion?/async-std"]
+
 
 [dependencies]
 bytes = "1"
@@ -90,7 +98,6 @@ futures = "0.3.1"
 futures-timer = "3.0.2" # Explicit dependency to be used in `wasm-bindgen` feature
 getrandom = "0.2.3" # Explicit dependency to be used in `wasm-bindgen` feature
 instant = "0.1.11" # Explicit dependency to be used in `wasm-bindgen` feature
-lazy_static = "1.2"
 
 libp2p-autonat = { version = "0.9.0", path = "protocols/autonat", optional = true }
 libp2p-core = { version = "0.38.0", path = "core" }
@@ -103,16 +110,15 @@ libp2p-mplex = { version = "0.38.0", path = "muxers/mplex", optional = true }
 libp2p-noise = { version = "0.41.0", path = "transports/noise", optional = true }
 libp2p-ping = { version = "0.41.0", path = "protocols/ping", optional = true }
 libp2p-plaintext = { version = "0.38.0", path = "transports/plaintext", optional = true }
-libp2p-pnet = { version = "0.22.1", path = "transports/pnet", optional = true }
+libp2p-pnet = { version = "0.22.2", path = "transports/pnet", optional = true }
 libp2p-relay = { version = "0.14.0", path = "protocols/relay", optional = true }
 libp2p-rendezvous = { version = "0.11.0", path = "protocols/rendezvous", optional = true }
 libp2p-request-response = { version = "0.23.0", path = "protocols/request-response", optional = true }
 libp2p-swarm = { version = "0.41.0", path = "swarm" }
-libp2p-swarm-derive = { version = "0.30.1", path = "swarm-derive" }
 libp2p-uds = { version = "0.37.0", path = "transports/uds", optional = true }
 libp2p-wasm-ext = { version = "0.38.0", path = "transports/wasm-ext", optional = true }
 libp2p-yamux = { version = "0.42.0", path = "muxers/yamux", optional = true }
-multiaddr = { version = "0.15.0" }
+multiaddr = { version = "0.16.0" }
 parking_lot = "0.12.0"
 pin-project = "1.0.0"
 smallvec = "1.6.1"
@@ -122,9 +128,11 @@ libp2p-deflate = { version = "0.38.0", path = "transports/deflate", optional = t
 libp2p-dns = { version = "0.38.0", path = "transports/dns", optional = true }
 libp2p-mdns = { version = "0.42.0", path = "protocols/mdns", optional = true }
 libp2p-onion = { version = "0.1.0-alpha", path = "transports/onion", default-features = false, optional = true }
+libp2p-quic = { version = "0.7.0-alpha", path = "transports/quic", optional = true }
 libp2p-tcp = { version = "0.38.0", path = "transports/tcp", optional = true }
-libp2p-websocket = { version = "0.40.0", path = "transports/websocket", optional = true }
 libp2p-tls = { version = "0.1.0-alpha", path = "transports/tls", optional = true }
+libp2p-webrtc = { version = "0.1.0-alpha", path = "transports/webrtc", optional = true }
+libp2p-websocket = { version = "0.40.0", path = "transports/websocket", optional = true }
 
 [target.'cfg(not(target_os = "unknown"))'.dependencies]
 libp2p-gossipsub = { version = "0.43.0", path = "protocols/gossipsub", optional = true }
@@ -167,11 +175,14 @@ members = [
     "transports/onion",
     "transports/plaintext",
     "transports/pnet",
+    "transports/quic",
     "transports/tcp",
     "transports/tls",
     "transports/uds",
     "transports/wasm-ext",
     "transports/websocket",
+    "transports/wasm-ext",
+    "transports/webrtc"
 ]
 
 [[example]]
