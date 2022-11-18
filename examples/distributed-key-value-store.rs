@@ -48,8 +48,7 @@ use libp2p::kad::{
     Quorum, Record,
 };
 use libp2p::{
-    development_transport, identity,
-    mdns::{Mdns, MdnsConfig, MdnsEvent},
+    development_transport, identity, mdns,
     swarm::{NetworkBehaviour, SwarmEvent},
     PeerId, Swarm,
 };
@@ -71,13 +70,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
     #[behaviour(out_event = "MyBehaviourEvent")]
     struct MyBehaviour {
         kademlia: Kademlia<MemoryStore>,
-        mdns: Mdns,
+        mdns: mdns::async_io::Behaviour,
     }
 
     #[allow(clippy::large_enum_variant)]
     enum MyBehaviourEvent {
         Kademlia(KademliaEvent),
-        Mdns(MdnsEvent),
+        Mdns(mdns::Event),
     }
 
     impl From<KademliaEvent> for MyBehaviourEvent {
@@ -86,8 +85,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    impl From<MdnsEvent> for MyBehaviourEvent {
-        fn from(event: MdnsEvent) -> Self {
+    impl From<mdns::Event> for MyBehaviourEvent {
+        fn from(event: mdns::Event) -> Self {
             MyBehaviourEvent::Mdns(event)
         }
     }
@@ -97,7 +96,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         // Create a Kademlia behaviour.
         let store = MemoryStore::new(local_peer_id);
         let kademlia = Kademlia::new(local_peer_id, store);
-        let mdns = Mdns::new(MdnsConfig::default())?;
+        let mdns = mdns::async_io::Behaviour::new(mdns::Config::default())?;
         let behaviour = MyBehaviour { kademlia, mdns };
         Swarm::with_async_std_executor(transport, behaviour, local_peer_id)
     };
@@ -116,7 +115,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             SwarmEvent::NewListenAddr { address, .. } => {
                 println!("Listening in {address:?}");
             },
-            SwarmEvent::Behaviour(MyBehaviourEvent::Mdns(MdnsEvent::Discovered(list))) => {
+            SwarmEvent::Behaviour(MyBehaviourEvent::Mdns(mdns::Event::Discovered(list))) => {
                 for (peer_id, multiaddr) in list {
                     swarm.behaviour_mut().kademlia.add_address(&peer_id, multiaddr);
                 }

@@ -20,8 +20,7 @@
 
 use futures::StreamExt;
 use libp2p::{
-    identity,
-    mdns::{Mdns, MdnsConfig, MdnsEvent},
+    identity, mdns,
     swarm::{Swarm, SwarmEvent},
     PeerId,
 };
@@ -40,7 +39,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let transport = libp2p::development_transport(id_keys).await?;
 
     // Create an MDNS network behaviour.
-    let behaviour = Mdns::new(MdnsConfig::default())?;
+    let behaviour = mdns::async_io::Behaviour::new(mdns::Config::default())?;
 
     // Create a Swarm that establishes connections through the given transport.
     // Note that the MDNS behaviour itself will not actually inititiate any connections,
@@ -50,12 +49,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     loop {
         match swarm.select_next_some().await {
-            SwarmEvent::Behaviour(MdnsEvent::Discovered(peers)) => {
+            SwarmEvent::Behaviour(mdns::Event::Discovered(peers)) => {
                 for (peer, addr) in peers {
                     println!("discovered {peer} {addr}");
                 }
             }
-            SwarmEvent::Behaviour(MdnsEvent::Expired(expired)) => {
+            SwarmEvent::Behaviour(mdns::Event::Expired(expired)) => {
                 for (peer, addr) in expired {
                     println!("expired {peer} {addr}");
                 }

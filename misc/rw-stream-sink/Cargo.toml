@@ -2,6 +2,7 @@
 name = "rw-stream-sink"
 edition = "2021"
 description = "Adaptator between Stream/Sink and AsyncRead/AsyncWrite"
+rust-version = "1.60.0"
 version = "0.3.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
