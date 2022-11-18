@@ -184,10 +184,6 @@ pub use self::transport_ext::TransportExt;
         note = "The `tcp-async-io` and `dns-async-std` features are deprecated. Use the new `tcp` and `dns` features together with the `async-std` feature."
     )
 )]
-#[deprecated(
-    since = "0.50.0",
-    note = "Compose your own transport, specific to your needs."
-)]
 pub async fn development_transport(
     keypair: identity::Keypair,
 ) -> std::io::Result<core::transport::Boxed<(PeerId, core::muxing::StreamMuxerBox)>> {
@@ -247,10 +243,6 @@ pub async fn development_transport(
         since = "0.49.0",
         note = "The `tcp-tokio` and `dns-tokio` features are deprecated. Use the new `tcp` and `dns` feature together with the `tokio` feature."
     )
-)]
-#[deprecated(
-    since = "0.50.0",
-    note = "Compose your own transport, specific to your needs."
 )]
 pub fn tokio_development_transport(
     keypair: identity::Keypair,
