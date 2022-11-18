@@ -132,7 +132,7 @@ impl Metrics {
         );
         sub_registry.register(
             "connection_establishment_duration",
-            "Time it took (locally) to finish establishing connections",
+            "Time it took (locally) to establish connections",
             Box::new(connection_establishment_duration.clone()),
         );
 
