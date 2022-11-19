@@ -366,7 +366,10 @@ where
     }
 
     /// Builds a new `Swarm` with a tokio executor.
-    #[cfg(feature = "tokio")]
+    #[cfg(all(
+        feature = "tokio",
+        not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown"))
+    ))]
     pub fn with_tokio_executor(
         transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
         behaviour: TBehaviour,
@@ -381,7 +384,10 @@ where
     }
 
     /// Builds a new `Swarm` with an async-std executor.
-    #[cfg(feature = "async-std")]
+    #[cfg(all(
+        feature = "async-std",
+        not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown"))
+    ))]
     pub fn with_async_std_executor(
         transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
         behaviour: TBehaviour,

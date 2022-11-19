@@ -288,7 +288,7 @@ fn prop<P: Provider + BlockOn>(
     // Wait for all streams to complete.
     P::block_on(
         completed_streams_rx
-            .take(completed_streams as usize)
+            .take(completed_streams)
             .collect::<Vec<_>>(),
         Duration::from_secs(30),
     );

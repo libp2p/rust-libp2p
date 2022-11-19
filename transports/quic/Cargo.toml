@@ -3,12 +3,13 @@ name = "libp2p-quic"
 version = "0.7.0-alpha"
 authors = ["Parity Technologies <admin@parity.io>"]
 edition = "2021"
+rust-version = "1.62.0"
 description = "TLS based QUIC transport implementation for libp2p"
 repository = "https://github.com/libp2p/rust-libp2p"
 license = "MIT"
 
 [dependencies]
-async-std = { version = "1.12.0", default-features = false, optional = true }
+async-std = { version = "1.12.0", optional = true }
 bytes = "1.2.1"
 futures = "0.3.15"
 futures-timer = "3.0.2"
