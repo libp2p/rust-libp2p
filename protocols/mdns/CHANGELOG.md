@@ -17,10 +17,13 @@ and move and rename `Mdns` to `async_io::Behaviour`. See [PR 3096].
 
 - Use `trust-dns-proto` to parse DNS messages. See [PR 3102].
 
+- Update `rust-version` to reflect the actual MSRV: 1.62.0. See [PR 3090].
+
 [discussion 2174]: https://github.com/libp2p/rust-libp2p/discussions/2174
 [PR 3096]: https://github.com/libp2p/rust-libp2p/pull/3096
 [PR 3011]: https://github.com/libp2p/rust-libp2p/pull/3011
 [PR 3102]: https://github.com/libp2p/rust-libp2p/pull/3102
+[PR 3090]: https://github.com/libp2p/rust-libp2p/pull/3090
 
 # 0.41.0
 
