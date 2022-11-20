@@ -20,7 +20,8 @@
 
 use crate::rpc_proto;
 use crate::topic::Topic;
-use asynchronous_codec::Framed;
+use asynchronous_codec::{BytesMut, Decoder, Encoder, Framed};
+
 use futures::StreamExt;
 use futures::{
     io::{AsyncRead, AsyncWrite},
@@ -62,6 +63,29 @@ impl Clone for FloodsubProtocol {
         }
     }
 }
+impl Decoder for FloodsubProtocol {
+    type Item = rpc_proto::Rpc;
+
+    type Error = prost_codec::Error;
+
+    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<rpc_proto::Rpc>, prost_codec::Error> {
+        let blah = match self.codec.decode(src)? {
+            Some(p) => p,
+            None => return Ok(None),
+        };
+        return Ok(Some(blah));
+    }
+}
+
+impl Encoder for FloodsubProtocol {
+    type Item = rpc_proto::Rpc;
+
+    type Error = prost_codec::Error;
+
+    fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
+        Ok(self.codec.encode(item, dst)?)
+    }
+}
 
 impl UpgradeInfo for FloodsubProtocol {
     type Info = &'static [u8];
@@ -82,39 +106,24 @@ where
 
     fn upgrade_inbound(self, mut socket: TSocket, _: Self::Info) -> Self::Future {
         Box::pin(async move {
-            // From Thomas:
-            // What you probably want to do here is use a Framed to wrap
-            // the incoming socket and immediately read a message from it
-            // using its Stream::next implementation.
-            //
-            // Framed is an abstraction on top of a codec to
-            // read and write from a socket in entire messages instead of
-            // raw bytes!
-
             let mut framed = Framed::<TSocket, prost_codec::Codec<rpc_proto::Rpc>>::new(
                 socket,
-                prost_codec::Codec::new(MAX_MESSAGE_LEN_BYTES),
+                // Nick is confused why this isn't a call to FloodsubProtol.codec()
+                self.codec,
+                // prost_codec::Codec::new(MAX_MESSAGE_LEN_BYTES),
             );
             let rpc = framed.next().await.ok_or(DecodeError);
 
-            // Replace messages and the next 2 blocks?
-            // let mut messages: Vec<FloodsubMessage>; //::with_capacity(rpc. //.publish.len());
-            // for publish in rpc.into_iter() {
-            //     messages.push(FloodsubMessage {
-            //         source: PeerId::from_bytes(&publish.unwrap())// unwrap_or_default())
-            //             .map_err(|_| FloodsubDecodeError::InvalidPeerId)?,
-            //         data: publish.data.unwrap_or_default(),
-            //         sequence_number: publish.seqno.unwrap_or_default(),
-            //         topics: publish.topic_ids.into_iter().map(Topic::new).collect(),
-            //     });
-            // }
-
-            // It seems like framed should cough up the codec, yet it doesn't. It seems to think
+            // It seems like rpc should contain a Codec, yet it doesn't. It seems to think
             // it is a rpc_proto::Rpc object.
-            let messages = rpc.unwrap_or_default();
+            let rpc_messages = rpc.unwrap_or_default().decode();
+
+            // Question: should the `FloodsubProtocol::Decode` do some/all of the processing
+            // being done below? It seems like that would be the spot to encapsulate this type
+            // of Floodsub-specific logic.
 
             Ok(FloodsubRpc {
-                messages: rpc_proto::Rpc::decode(rpc.unwrap().Item),
+                messages: rpc_messages,
                 subscriptions: rpc
                     .subscriptions
                     .into_iter()
