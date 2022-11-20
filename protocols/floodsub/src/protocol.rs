@@ -20,8 +20,8 @@
 
 use crate::rpc_proto;
 use crate::topic::Topic;
-use asynchronous_codec::{Decoder, Encoder, Framed};
-use bytes::BytesMut;
+use asynchronous_codec::Framed;
+use futures::StreamExt;
 use futures::{
     io::{AsyncRead, AsyncWrite},
     AsyncWriteExt, Future,
@@ -46,11 +46,11 @@ impl FloodsubProtocol {
     }
 }
 
-impl std::fmt::Debug for FloodsubProtocol {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("FloodsubProtocol").finish()
-    }
-}
+// impl std::fmt::Debug for FloodsubProtocol {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         f.debug_struct("FloodsubProtocol").finish()
+//     }
+// }
 
 impl Default for FloodsubProtocol {
     fn default() -> Self {
@@ -68,29 +68,29 @@ impl Clone for FloodsubProtocol {
         }
     }
 }
-impl Decoder for FloodsubProtocol {
-    type Item = rpc_proto::Rpc;
+// impl Decoder for FloodsubProtocol {
+//     type Item = rpc_proto::Rpc;
 
-    type Error = prost_codec::Error;
+//     type Error = prost_codec::Error;
 
-    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<rpc_proto::Rpc>, prost_codec::Error> {
-        let blah = match self.codec.decode(src)? {
-            Some(p) => p,
-            None => return Ok(None),
-        };
-        return Ok(Some(blah));
-    }
-}
+//     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<rpc_proto::Rpc>, prost_codec::Error> {
+//         let blah = match self.codec.decode(src)? {
+//             Some(p) => p,
+//             None => return Ok(None),
+//         };
+//         return Ok(Some(blah));
+//     }
+// }
 
-impl Encoder for FloodsubProtocol {
-    type Item = rpc_proto::Rpc;
+// impl Encoder for FloodsubProtocol {
+//     type Item = rpc_proto::Rpc;
 
-    type Error = prost_codec::Error;
+//     type Error = prost_codec::Error;
 
-    fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        Ok(self.codec.encode(item, dst)?)
-    }
-}
+//     fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
+//         Ok(self.codec.encode(item, dst)?)
+//     }
+// }
 
 impl UpgradeInfo for FloodsubProtocol {
     type Info = &'static [u8];
@@ -120,12 +120,18 @@ where
             // read and write from a socket in entire messages instead of
             // raw bytes!
 
-            let mut framed =
-                Framed::<TSocket, FloodsubProtocol>::new(socket, FloodsubProtocol::new());
-            let rpc = framed.next().await; // TODO Needs error handling
+            let mut framed = Framed::<TSocket, prost_codec::Codec<rpc_proto::Rpc>>::new(
+                socket,
+                prost_codec::Codec::new(MAX_MESSAGE_LEN_BYTES),
+            );
+            let rpc = framed
+                .next()
+                .await
+                .ok_or(FloodsubDecodeError::InvalidPeerId)?; // TODO Needs CORRECT error handling
 
-            let mut messages = Vec::with_capacity(rpc.publish.len());
-            for publish in rpc.publish.into_iter() {
+            // Replace messages and the next 2 blocks?
+            let mut messages: Vec<FloodsubMessage>; //::with_capacity(rpc. //.publish.len());
+            for publish in rpc.into_iter() {
                 messages.push(FloodsubMessage {
                     source: PeerId::from_bytes(&publish.from.unwrap_or_default())
                         .map_err(|_| FloodsubDecodeError::InvalidPeerId)?,
