@@ -46,12 +46,6 @@ impl FloodsubProtocol {
     }
 }
 
-// impl std::fmt::Debug for FloodsubProtocol {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         f.debug_struct("FloodsubProtocol").finish()
-//     }
-// }
-
 impl Default for FloodsubProtocol {
     fn default() -> Self {
         Self {
@@ -68,29 +62,6 @@ impl Clone for FloodsubProtocol {
         }
     }
 }
-// impl Decoder for FloodsubProtocol {
-//     type Item = rpc_proto::Rpc;
-
-//     type Error = prost_codec::Error;
-
-//     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<rpc_proto::Rpc>, prost_codec::Error> {
-//         let blah = match self.codec.decode(src)? {
-//             Some(p) => p,
-//             None => return Ok(None),
-//         };
-//         return Ok(Some(blah));
-//     }
-// }
-
-// impl Encoder for FloodsubProtocol {
-//     type Item = rpc_proto::Rpc;
-
-//     type Error = prost_codec::Error;
-
-//     fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
-//         Ok(self.codec.encode(item, dst)?)
-//     }
-// }
 
 impl UpgradeInfo for FloodsubProtocol {
     type Info = &'static [u8];
@@ -106,7 +77,7 @@ where
     TSocket: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
     type Output = FloodsubRpc;
-    type Error = FloodsubDecodeError;
+    type Error = DecodeError;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
     fn upgrade_inbound(self, mut socket: TSocket, _: Self::Info) -> Self::Future {
@@ -124,25 +95,26 @@ where
                 socket,
                 prost_codec::Codec::new(MAX_MESSAGE_LEN_BYTES),
             );
-            let rpc = framed
-                .next()
-                .await
-                .ok_or(FloodsubDecodeError::InvalidPeerId)?; // TODO Needs CORRECT error handling
+            let rpc = framed.next().await.ok_or(DecodeError);
 
             // Replace messages and the next 2 blocks?
-            let mut messages: Vec<FloodsubMessage>; //::with_capacity(rpc. //.publish.len());
-            for publish in rpc.into_iter() {
-                messages.push(FloodsubMessage {
-                    source: PeerId::from_bytes(&publish.from.unwrap_or_default())
-                        .map_err(|_| FloodsubDecodeError::InvalidPeerId)?,
-                    data: publish.data.unwrap_or_default(),
-                    sequence_number: publish.seqno.unwrap_or_default(),
-                    topics: publish.topic_ids.into_iter().map(Topic::new).collect(),
-                });
-            }
+            // let mut messages: Vec<FloodsubMessage>; //::with_capacity(rpc. //.publish.len());
+            // for publish in rpc.into_iter() {
+            //     messages.push(FloodsubMessage {
+            //         source: PeerId::from_bytes(&publish.unwrap())// unwrap_or_default())
+            //             .map_err(|_| FloodsubDecodeError::InvalidPeerId)?,
+            //         data: publish.data.unwrap_or_default(),
+            //         sequence_number: publish.seqno.unwrap_or_default(),
+            //         topics: publish.topic_ids.into_iter().map(Topic::new).collect(),
+            //     });
+            // }
+
+            // It seems like framed should cough up the codec, yet it doesn't. It seems to think
+            // it is a rpc_proto::Rpc object.
+            let messages = rpc.unwrap_or_default();
 
             Ok(FloodsubRpc {
-                messages,
+                messages: rpc_proto::Rpc::decode(rpc.unwrap().Item),
                 subscriptions: rpc
                     .subscriptions
                     .into_iter()
@@ -174,10 +146,9 @@ pub enum FloodsubDecodeError {
     InvalidPeerId,
 }
 
-// TODO: Delete this and change references to prost_codec::Error?
 #[derive(thiserror::Error, Debug)]
 #[error(transparent)]
-pub struct DecodeError(prost::DecodeError);
+pub struct DecodeError(prost_codec::Error);
 
 /// An RPC received by the floodsub system.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
