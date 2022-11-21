@@ -28,7 +28,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
         with:
-          shared-key: master-${{ hashFiles('**/Cargo.toml') }} # Other jobs can use this cache key to restore. They MUST NEVER save to this cache key.
+          shared-key: master # Other jobs can use this cache key to restore. They MUST NEVER save to this cache key.
 
       - name: Compile workspace with stable Rust
         run: |
