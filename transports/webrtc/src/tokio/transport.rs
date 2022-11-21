@@ -254,7 +254,7 @@ impl ListenStream {
         while let Poll::Ready(event) = if_watcher.poll_if_event(cx) {
             match event {
                 Ok(IfEvent::Up(inet)) => {
-                    let ip = dbg!(inet.addr());
+                    let ip = inet.addr();
                     if self.listen_addr.is_ipv4() == ip.is_ipv4()
                         || self.listen_addr.is_ipv6() == ip.is_ipv6()
                     {
