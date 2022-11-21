@@ -24,7 +24,7 @@ jobs:
           echo "versions=${RUST_VERSIONS}" >> $GITHUB_OUTPUT
 
       - name: Install Rust versions
-        run: echo ${{ steps.find-rust-versions.outputs.versions }} | jq '.[]' | xargs rustup install
+        run: echo "${{ steps.find-rust-versions.outputs.versions }}" | jq '.[]' | xargs rustup install
 
       - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
         with:
