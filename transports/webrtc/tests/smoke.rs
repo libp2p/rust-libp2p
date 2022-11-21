@@ -153,7 +153,7 @@ fn prop(number_listeners: NonZeroU8, number_streams: NonZeroU8) -> quickcheck::T
         .block_on(tokio::time::timeout(
             Duration::from_secs(30),
             completed_streams_rx
-                .take(completed_streams as usize)
+                .take(completed_streams)
                 .collect::<Vec<_>>(),
         ))
         .unwrap();
