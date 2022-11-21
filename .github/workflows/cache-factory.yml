@@ -37,3 +37,10 @@ jobs:
           
           echo ${{ steps.find-rust-versions.outputs.versions }} | xargs -I '{}' cargo +'{}' build --no-default-features --workspace
           echo ${{ steps.find-rust-versions.outputs.versions }} | xargs -I '{}' cargo +'{}' build --all-features --workspace
+
+      - name: Render docs
+        run: cargo +stable doc --all-features --workspace
+
+      - name: Install tools
+        run: |
+          cargo install cargo-semver-checks --locked
