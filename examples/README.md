@@ -57,3 +57,16 @@ A set of examples showcasing how to use rust-libp2p.
   While obviously showcasing how to build a basic file sharing application with the Kademlia and
   Request-Response protocol, the actual goal of this example is **to show how to integrate
   rust-libp2p into a larger application**.
+
+- [Chat with Identify and Kademlia DHT](kad-identify-chat/main.rs)
+
+  The kad-identify-chat example implements simple chat functionality using the `Identify` protocol
+  and the `Kademlia` DHT for peer discovery and routing. Broadcast messages are propagated using the
+  `Gossipsub` behaviour, direct messages are sent using the `RequestResponse` behaviour.
+
+  The primary purpose of this example is to demonstrate how these behaviours interact.
+  
+  A secondary purpose of this example is to show what integration of libp2p in a complete
+  application might look like. This is similar to the [file sharing example](file-sharing.rs),
+  but where that example is purposely more barebones, this example is a bit more expansive and 
+  uses common crates like `thiserror` and `anyhow`. It also uses the tokio runtime instead of async_std.
