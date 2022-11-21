@@ -3,7 +3,7 @@
 use futures::channel::mpsc;
 use futures::future::Either;
 use futures::stream::StreamExt;
-use futures::{future, AsyncReadExt, AsyncWriteExt, SinkExt};
+use futures::{future, AsyncReadExt, AsyncWriteExt, FutureExt, SinkExt};
 use libp2p::core::multiaddr::Protocol;
 use libp2p::core::Transport;
 use libp2p::{noise, tcp, yamux, Multiaddr};
@@ -35,8 +35,8 @@ async fn async_std_smoke() {
 #[async_std::test]
 async fn dial_failure() {
     let _ = env_logger::try_init();
-    let mut a = create_transport::<quic::async_std::Provider>().1;
-    let mut b = create_transport::<quic::async_std::Provider>().1;
+    let mut a = create_default_transport::<quic::async_std::Provider>().1;
+    let mut b = create_default_transport::<quic::async_std::Provider>().1;
 
     let addr = start_listening(&mut a, "/ip4/127.0.0.1/udp/0/quic-v1").await;
     drop(a); // stop a so b can never reach it
@@ -53,8 +53,8 @@ async fn dial_failure() {
 #[tokio::test]
 async fn endpoint_reuse() {
     let _ = env_logger::try_init();
-    let (_, mut a_transport) = create_transport::<quic::tokio::Provider>();
-    let (_, mut b_transport) = create_transport::<quic::tokio::Provider>();
+    let (_, mut a_transport) = create_default_transport::<quic::tokio::Provider>();
+    let (_, mut b_transport) = create_default_transport::<quic::tokio::Provider>();
 
     let a_addr = start_listening(&mut a_transport, "/ip4/127.0.0.1/udp/0/quic-v1").await;
     let ((_, b_send_back_addr, _), _) =
@@ -78,8 +78,8 @@ async fn endpoint_reuse() {
 #[async_std::test]
 async fn ipv4_dial_ipv6() {
     let _ = env_logger::try_init();
-    let (a_peer_id, mut a_transport) = create_transport::<quic::async_std::Provider>();
-    let (b_peer_id, mut b_transport) = create_transport::<quic::async_std::Provider>();
+    let (a_peer_id, mut a_transport) = create_default_transport::<quic::async_std::Provider>();
+    let (b_peer_id, mut b_transport) = create_default_transport::<quic::async_std::Provider>();
 
     let a_addr = start_listening(&mut a_transport, "/ip6/::1/udp/0/quic-v1").await;
     let ((a_connected, _, _), (b_connected, _)) =
@@ -95,8 +95,8 @@ async fn ipv4_dial_ipv6() {
 async fn wrong_peerid() {
     use libp2p::PeerId;
 
-    let (a_peer_id, mut a_transport) = create_transport::<quic::async_std::Provider>();
-    let (b_peer_id, mut b_transport) = create_transport::<quic::async_std::Provider>();
+    let (a_peer_id, mut a_transport) = create_default_transport::<quic::async_std::Provider>();
+    let (b_peer_id, mut b_transport) = create_default_transport::<quic::async_std::Provider>();
 
     let a_addr = start_listening(&mut a_transport, "/ip6/::1/udp/0/quic-v1").await;
     let a_addr_random_peer = a_addr.with(Protocol::P2p(PeerId::random().into()));
@@ -182,11 +182,103 @@ fn concurrent_connections_and_streams_tokio() {
         .quickcheck(prop::<quic::tokio::Provider> as fn(_, _) -> _);
 }
 
+#[cfg(feature = "tokio")]
+#[tokio::test]
+async fn draft_29_support() {
+    use std::task::Poll;
+
+    use futures::{future::poll_fn, select};
+    use libp2p::TransportError;
+
+    let _ = env_logger::try_init();
+
+    let (_, mut a_transport) =
+        create_transport::<quic::tokio::Provider>(|cfg| cfg.support_draft_29 = true);
+    let (_, mut b_transport) =
+        create_transport::<quic::tokio::Provider>(|cfg| cfg.support_draft_29 = true);
+
+    // If a server supports draft-29 all its QUIC addresses can be dialed on draft-29 or version-1
+    let a_quic_addr = start_listening(&mut a_transport, "/ip4/127.0.0.1/udp/0/quic").await;
+    let a_quic_mapped_addr = a_quic_addr
+        .clone()
+        .into_iter()
+        .map(|p| {
+            if matches!(p, Protocol::QuicV1) {
+                Protocol::Quic
+            } else {
+                p
+            }
+        })
+        .collect();
+    let a_quicv1_addr = start_listening(&mut a_transport, "/ip4/127.0.0.1/udp/0/quic-v1").await;
+    let a_quic_v1_mapped_addr = a_quic_addr
+        .clone()
+        .into_iter()
+        .map(|p| {
+            if matches!(p, Protocol::Quic) {
+                Protocol::QuicV1
+            } else {
+                p
+            }
+        })
+        .collect();
+
+    connect(&mut a_transport, &mut b_transport, a_quic_addr.clone()).await;
+    connect(&mut a_transport, &mut b_transport, a_quic_mapped_addr).await;
+    connect(&mut a_transport, &mut b_transport, a_quicv1_addr).await;
+    connect(&mut a_transport, &mut b_transport, a_quic_v1_mapped_addr).await;
+
+    let (_, mut c_transport) =
+        create_transport::<quic::tokio::Provider>(|cfg| cfg.support_draft_29 = false);
+    assert!(matches!(
+        c_transport.dial(a_quic_addr.clone()),
+        Err(TransportError::MultiaddrNotSupported(_))
+    ));
+
+    // Test disabling draft-29 on a server.
+    let (_, mut d_transport) =
+        create_transport::<quic::tokio::Provider>(|cfg| cfg.support_draft_29 = false);
+    assert!(matches!(
+        d_transport.listen_on("/ip4/127.0.0.1/udp/0/quic".parse().unwrap()),
+        Err(TransportError::MultiaddrNotSupported(_))
+    ));
+    let d_quic_v1_addr = start_listening(&mut a_transport, "/ip4/127.0.0.1/udp/0/quic").await;
+    let d_quic_addr_mapped = d_quic_v1_addr
+        .into_iter()
+        .map(|p| {
+            if matches!(p, Protocol::QuicV1) {
+                Protocol::Quic
+            } else {
+                p
+            }
+        })
+        .collect();
+    let dial = b_transport.dial(d_quic_addr_mapped).unwrap();
+    let drive_transports = poll_fn::<(), _>(|cx| {
+        let _ = b_transport.poll_next_unpin(cx);
+        let _ = d_transport.poll_next_unpin(cx);
+        Poll::Pending
+    });
+    select! {
+        _ = drive_transports.fuse() => {}
+        result = dial.fuse() => {
+            #[allow(clippy::single_match)]
+            match result {
+                Ok(_) => panic!("Unexpected success dialing version-1-only server with draft-29."),
+                // FIXME: We currently get a Handshake timeout if the server does not support our version.
+                // Correct would be to get an quinn error "VersionMismatch".
+                Err(_) => {}
+                // Err(e) => assert!(format!("{:?}", e).contains("VersionMismatch"), "Got unexpected error {}", e),
+            }
+        }
+    }
+}
+
 async fn smoke<P: Provider>() {
     let _ = env_logger::try_init();
 
-    let (a_peer_id, mut a_transport) = create_transport::<P>();
-    let (b_peer_id, mut b_transport) = create_transport::<P>();
+    let (a_peer_id, mut a_transport) = create_default_transport::<P>();
+    let (b_peer_id, mut b_transport) = create_default_transport::<P>();
 
     let addr = start_listening(&mut a_transport, "/ip4/127.0.0.1/udp/0/quic-v1").await;
     let ((a_connected, _, _), (b_connected, _)) =
@@ -200,11 +292,18 @@ fn generate_tls_keypair() -> libp2p::identity::Keypair {
     libp2p::identity::Keypair::generate_ed25519()
 }
 
-fn create_transport<P: Provider>() -> (PeerId, Boxed<(PeerId, StreamMuxerBox)>) {
+fn create_default_transport<P: Provider>() -> (PeerId, Boxed<(PeerId, StreamMuxerBox)>) {
+    create_transport::<P>(|_| {})
+}
+
+fn create_transport<P: Provider>(
+    with_config: impl Fn(&mut quic::Config),
+) -> (PeerId, Boxed<(PeerId, StreamMuxerBox)>) {
     let keypair = generate_tls_keypair();
     let peer_id = keypair.public().to_peer_id();
-
-    let transport = quic::GenTransport::<P>::new(quic::Config::new(&keypair))
+    let mut config = quic::Config::new(&keypair);
+    with_config(&mut config);
+    let transport = quic::GenTransport::<P>::new(config)
         .map(|(p, c), _| (p, StreamMuxerBox::new(c)))
         .boxed();
 
@@ -242,7 +341,7 @@ fn prop<P: Provider + BlockOn>(
             let mut listeners_tx = listeners_tx.clone();
 
             async move {
-                let (peer_id, mut listener) = create_transport::<P>();
+                let (peer_id, mut listener) = create_default_transport::<P>();
                 let addr = start_listening(&mut listener, "/ip4/127.0.0.1/udp/0/quic-v1").await;
 
                 listeners_tx.send((peer_id, addr)).await.unwrap();
@@ -265,7 +364,7 @@ fn prop<P: Provider + BlockOn>(
 
     // For each listener node start `number_streams` requests.
     P::spawn(async move {
-        let (_, mut dialer) = create_transport::<P>();
+        let (_, mut dialer) = create_default_transport::<P>();
 
         while let Some((_, listener_addr)) = listeners_rx.next().await {
             let (_, connection) = dial(&mut dialer, listener_addr.clone()).await.unwrap();
