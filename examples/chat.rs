@@ -55,11 +55,10 @@ use futures::{
     select,
 };
 use libp2p::{
-    core::{upgrade::Version, Transport},
     floodsub::{self, Floodsub, FloodsubEvent},
-    identity, mdns, noise,
+    identity, mdns,
     swarm::{NetworkBehaviour, SwarmEvent},
-    tcp, yamux, Multiaddr, PeerId, Swarm,
+    Multiaddr, PeerId, Swarm,
 };
 use std::error::Error;
 
@@ -72,11 +71,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let local_peer_id = PeerId::from(local_key.public());
     println!("Local peer id: {local_peer_id:?}");
 
-    let transport = tcp::async_io::Transport::default()
-        .upgrade(Version::V1)
-        .authenticate(noise::NoiseAuthenticated::xx(&local_key)?)
-        .multiplex(yamux::YamuxConfig::default())
-        .boxed();
+    // Set up an encrypted DNS-enabled TCP Transport over the Mplex and Yamux protocols
+    let transport = libp2p::development_transport(local_key).await?;
 
     // Create a Floodsub topic
     let floodsub_topic = floodsub::Topic::new("chat");

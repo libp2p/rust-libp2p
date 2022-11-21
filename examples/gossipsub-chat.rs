@@ -53,11 +53,7 @@ use libp2p::gossipsub::{
     ValidationMode,
 };
 use libp2p::{
-    core::{upgrade::Version, Transport},
-    gossipsub, identity, mdns, noise,
-    swarm::NetworkBehaviour,
-    swarm::SwarmEvent,
-    tcp, yamux, PeerId, Swarm,
+    gossipsub, identity, mdns, swarm::NetworkBehaviour, swarm::SwarmEvent, PeerId, Swarm,
 };
 use std::collections::hash_map::DefaultHasher;
 use std::error::Error;
@@ -71,11 +67,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let local_peer_id = PeerId::from(local_key.public());
     println!("Local peer id: {local_peer_id}");
 
-    let transport = tcp::async_io::Transport::default()
-        .upgrade(Version::V1)
-        .authenticate(noise::NoiseAuthenticated::xx(&local_key).unwrap())
-        .multiplex(yamux::YamuxConfig::default())
-        .boxed();
+    // Set up an encrypted DNS-enabled TCP Transport over the Mplex protocol.
+    let transport = libp2p::development_transport(local_key.clone()).await?;
 
     // We create a custom network behaviour that combines Gossipsub and Mdns.
     #[derive(NetworkBehaviour)]

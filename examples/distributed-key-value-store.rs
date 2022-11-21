@@ -48,10 +48,9 @@ use libp2p::kad::{
     Quorum, Record,
 };
 use libp2p::{
-    core::{upgrade::Version, Transport},
-    identity, mdns, noise,
+    development_transport, identity, mdns,
     swarm::{NetworkBehaviour, SwarmEvent},
-    tcp, yamux, PeerId, Swarm,
+    PeerId, Swarm,
 };
 use std::error::Error;
 
@@ -63,11 +62,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
 
-    let transport = tcp::async_io::Transport::default()
-        .upgrade(Version::V1)
-        .authenticate(noise::NoiseAuthenticated::xx(&local_key)?)
-        .multiplex(yamux::YamuxConfig::default())
-        .boxed();
+    // Set up a an encrypted DNS-enabled TCP Transport over the Mplex protocol.
+    let transport = development_transport(local_key).await?;
 
     // We create a custom network behaviour that combines Kademlia and mDNS.
     #[derive(NetworkBehaviour)]
@@ -117,7 +113,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         line = stdin.select_next_some() => handle_input_line(&mut swarm.behaviour_mut().kademlia, line.expect("Stdin not to close")),
         event = swarm.select_next_some() => match event {
             SwarmEvent::NewListenAddr { address, .. } => {
-                println!("Listening in {:?}", address);
+                println!("Listening in {address:?}");
             },
             SwarmEvent::Behaviour(MyBehaviourEvent::Mdns(mdns::Event::Discovered(list))) => {
                 for (peer_id, multiaddr) in list {
@@ -136,7 +132,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         }
                     }
                     QueryResult::GetProviders(Err(err)) => {
-                        eprintln!("Failed to get providers: {:?}", err);
+                        eprintln!("Failed to get providers: {err:?}");
                     }
                     QueryResult::GetRecord(Ok(ok)) => {
                         for PeerRecord {
@@ -152,7 +148,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         }
                     }
                     QueryResult::GetRecord(Err(err)) => {
-                        eprintln!("Failed to get record: {:?}", err);
+                        eprintln!("Failed to get record: {err:?}");
                     }
                     QueryResult::PutRecord(Ok(PutRecordOk { key })) => {
                         println!(
@@ -161,7 +157,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         );
                     }
                     QueryResult::PutRecord(Err(err)) => {
-                        eprintln!("Failed to put record: {:?}", err);
+                        eprintln!("Failed to put record: {err:?}");
                     }
                     QueryResult::StartProviding(Ok(AddProviderOk { key })) => {
                         println!(
@@ -170,7 +166,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         );
                     }
                     QueryResult::StartProviding(Err(err)) => {
-                        eprintln!("Failed to put provider record: {:?}", err);
+                        eprintln!("Failed to put provider record: {err:?}");
                     }
                     _ => {}
                 }

@@ -81,11 +81,8 @@ use async_std::io;
 use async_std::task::spawn;
 use clap::Parser;
 use futures::prelude::*;
-use libp2p::core::{upgrade::Version, Multiaddr, PeerId, Transport};
+use libp2p::core::{Multiaddr, PeerId};
 use libp2p::multiaddr::Protocol;
-use libp2p::noise;
-use libp2p::tcp;
-use libp2p::yamux;
 use std::error::Error;
 use std::io::Write;
 use std::path::PathBuf;
@@ -254,11 +251,7 @@ mod network {
         // Build the Swarm, connecting the lower layer transport logic with the
         // higher layer network behaviour logic.
         let swarm = Swarm::with_threadpool_executor(
-            tcp::async_io::Transport::default()
-                .upgrade(Version::V1)
-                .authenticate(noise::NoiseAuthenticated::xx(&id_keys)?)
-                .multiplex(yamux::YamuxConfig::default())
-                .boxed(),
+            libp2p::development_transport(id_keys).await?,
             ComposedBehaviour {
                 kademlia: Kademlia::new(peer_id, MemoryStore::new(peer_id)),
                 request_response: RequestResponse::new(
