@@ -24,7 +24,7 @@ url = "2.1"
 webpki-roots = "0.22"
 
 [dev-dependencies]
-libp2p-tcp = { path = "../tcp" }
+libp2p-tcp = { path = "../tcp", features = ["async-io"] }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling

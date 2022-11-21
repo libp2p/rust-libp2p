@@ -30,8 +30,8 @@ env_logger = "0.9"
 libp2p-mplex = { path = "../../muxers/mplex" }
 libp2p-yamux = { path = "../../muxers/yamux" }
 libp2p-noise = { path = "../../transports/noise" }
-libp2p-swarm = { path = "../../swarm" }
-libp2p-tcp = { path = "../../transports/tcp" }
+libp2p-swarm = { path = "../../swarm", features = ["async-std"] }
+libp2p-tcp = { path = "../../transports/tcp", features = ["async-io"] }
 
 [build-dependencies]
 prost-build = "0.11"

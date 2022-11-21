@@ -30,7 +30,7 @@ void = "1"
 [dev-dependencies]
 async-trait = "0.1"
 env_logger = "0.9.0"
-libp2p-swarm = { path = "../../swarm", features = ["macros"] }
+libp2p-swarm = { path = "../../swarm", features = ["macros", "tokio"] }
 libp2p-mplex = { path = "../../muxers/mplex" }
 libp2p-noise = { path = "../../transports/noise" }
 libp2p-ping = { path = "../ping" }

@@ -24,7 +24,8 @@ void = "1.0"
 async-std = "1.6.2"
 libp2p-mplex = { path = "../../muxers/mplex" }
 libp2p-noise = { path = "../../transports/noise" }
-libp2p-tcp = { path = "../../transports/tcp" }
+libp2p-swarm = { path = "../../swarm", features = ["async-std", "macros"] }
+libp2p-tcp = { path = "../../transports/tcp", features = ["async-io"] }
 libp2p-yamux = { path = "../../muxers/yamux" }
 quickcheck = { package = "quickcheck-ext", path = "../../misc/quickcheck-ext" }
 
