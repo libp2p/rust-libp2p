@@ -24,11 +24,11 @@ use async_trait::async_trait;
 use futures::prelude::*;
 use std::io;
 
-/// A `RequestResponseCodec` defines the request and response types
+/// A `Codec` defines the request and response types
 /// for a [`RequestResponse`](crate::RequestResponse) protocol or
 /// protocol family and how they are encoded / decoded on an I/O stream.
 #[async_trait]
-pub trait RequestResponseCodec {
+pub trait Codec {
     /// The type of protocol(s) or protocol versions being negotiated.
     type Protocol: ProtocolName + Send + Clone;
     /// The type of inbound and outbound requests.

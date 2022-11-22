@@ -20,7 +20,7 @@
 
 mod protocol;
 
-use crate::codec::RequestResponseCodec;
+use crate::codec::Codec;
 use crate::{RequestId, EMPTY_QUEUE_SHRINK_THRESHOLD};
 
 use libp2p_swarm::handler::{
@@ -58,7 +58,7 @@ pub type RequestResponseHandler<TCodec> = Handler<TCodec>;
 #[doc(hidden)]
 pub struct Handler<TCodec>
 where
-    TCodec: RequestResponseCodec,
+    TCodec: Codec,
 {
     /// The supported inbound protocols.
     inbound_protocols: SmallVec<[TCodec::Protocol; 2]>,
@@ -96,7 +96,7 @@ where
 
 impl<TCodec> Handler<TCodec>
 where
-    TCodec: RequestResponseCodec + Send + Clone + 'static,
+    TCodec: Codec + Send + Clone + 'static,
 {
     pub(super) fn new(
         inbound_protocols: SmallVec<[TCodec::Protocol; 2]>,
@@ -205,7 +205,7 @@ pub type RequestResponseHandlerEvent<TCodec> = HandlerEvent<TCodec>;
 #[doc(hidden)]
 pub enum HandlerEvent<TCodec>
 where
-    TCodec: RequestResponseCodec,
+    TCodec: Codec,
 {
     /// A request has been received.
     Request {
@@ -235,7 +235,7 @@ where
     InboundUnsupportedProtocols(RequestId),
 }
 
-impl<TCodec: RequestResponseCodec> fmt::Debug for HandlerEvent<TCodec> {
+impl<TCodec: Codec> fmt::Debug for HandlerEvent<TCodec> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             HandlerEvent::Request {
@@ -283,7 +283,7 @@ impl<TCodec: RequestResponseCodec> fmt::Debug for HandlerEvent<TCodec> {
 
 impl<TCodec> ConnectionHandler for Handler<TCodec>
 where
-    TCodec: RequestResponseCodec + Send + Clone + 'static,
+    TCodec: Codec + Send + Clone + 'static,
 {
     type InEvent = RequestProtocol<TCodec>;
     type OutEvent = HandlerEvent<TCodec>;

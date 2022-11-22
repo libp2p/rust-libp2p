@@ -27,8 +27,8 @@ use futures::{
 };
 use libp2p::core::{identity, muxing::StreamMuxerBox, upgrade, Transport as _};
 use libp2p::request_response::{
-    self, ProtocolName, ProtocolSupport, RequestResponse, RequestResponseCodec,
-    RequestResponseConfig, RequestResponseEvent,
+    self, ProtocolName, ProtocolSupport, RequestResponse, RequestResponseConfig,
+    RequestResponseEvent,
 };
 use libp2p::swarm::{Swarm, SwarmEvent};
 use libp2p::webrtc::tokio as webrtc;
@@ -407,7 +407,7 @@ impl ProtocolName for PingProtocol {
 }
 
 #[async_trait]
-impl RequestResponseCodec for PingCodec {
+impl request_response::Codec for PingCodec {
     type Protocol = PingProtocol;
     type Request = Ping;
     type Response = Pong;

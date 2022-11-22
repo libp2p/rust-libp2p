@@ -216,8 +216,7 @@ mod network {
     use libp2p::kad::{GetProvidersOk, Kademlia, KademliaEvent, QueryId, QueryResult};
     use libp2p::multiaddr::Protocol;
     use libp2p::request_response::{
-        self, ProtocolSupport, RequestId, RequestResponse, RequestResponseCodec,
-        RequestResponseEvent, ResponseChannel,
+        self, ProtocolSupport, RequestId, RequestResponse, RequestResponseEvent, ResponseChannel,
     };
     use libp2p::swarm::{ConnectionHandlerUpgrErr, NetworkBehaviour, Swarm, SwarmEvent};
     use std::collections::{hash_map, HashMap, HashSet};
@@ -663,7 +662,7 @@ mod network {
     }
 
     #[async_trait]
-    impl RequestResponseCodec for FileExchangeCodec {
+    impl request_response::Codec for FileExchangeCodec {
         type Protocol = FileExchangeProtocol;
         type Request = FileRequest;
         type Response = FileResponse;

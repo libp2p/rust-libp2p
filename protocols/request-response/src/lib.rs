@@ -26,7 +26,7 @@
 //! request/response protocol or protocol family, whereby each request is
 //! sent over a new substream on a connection. `RequestResponse` is generic
 //! over the actual messages being sent, which are defined in terms of a
-//! [`RequestResponseCodec`]. Creating a request/response protocol thus amounts
+//! [`Codec`]. Creating a request/response protocol thus amounts
 //! to providing an implementation of this trait which can then be
 //! given to [`RequestResponse::new`]. Further configuration options are
 //! available via the [`RequestResponseConfig`].
@@ -43,7 +43,7 @@
 //!
 //! A single [`RequestResponse`] instance can be used with an entire
 //! protocol family that share the same request and response types.
-//! For that purpose, [`RequestResponseCodec::Protocol`] is typically
+//! For that purpose, [`Codec::Protocol`] is typically
 //! instantiated with a sum type.
 //!
 //! ## Limited Protocol Support
@@ -61,7 +61,7 @@
 pub mod codec;
 pub mod handler;
 
-pub use codec::{ProtocolName, RequestResponseCodec};
+pub use codec::{Codec, ProtocolName};
 pub use handler::ProtocolSupport;
 
 use futures::channel::oneshot;
@@ -305,7 +305,7 @@ impl RequestResponseConfig {
 /// A request/response protocol for some message codec.
 pub struct RequestResponse<TCodec>
 where
-    TCodec: RequestResponseCodec + Clone + Send + 'static,
+    TCodec: Codec + Clone + Send + 'static,
 {
     /// The supported inbound protocols.
     inbound_protocols: SmallVec<[TCodec::Protocol; 2]>,
@@ -338,7 +338,7 @@ where
 
 impl<TCodec> RequestResponse<TCodec>
 where
-    TCodec: RequestResponseCodec + Clone + Send + 'static,
+    TCodec: Codec + Clone + Send + 'static,
 {
     /// Creates a new `RequestResponse` behaviour for the given
     /// protocols, codec and configuration.
@@ -700,7 +700,7 @@ where
 
 impl<TCodec> NetworkBehaviour for RequestResponse<TCodec>
 where
-    TCodec: RequestResponseCodec + Send + Clone + 'static,
+    TCodec: Codec + Send + Clone + 'static,
 {
     type ConnectionHandler = Handler<TCodec>;
     type OutEvent = RequestResponseEvent<TCodec::Request, TCodec::Response>;

@@ -30,7 +30,10 @@ use libp2p::core::{
     Multiaddr, PeerId,
 };
 use libp2p::noise::NoiseAuthenticated;
-use libp2p::request_response::*;
+use libp2p::request_response::{
+    self, InboundFailure, Message, OutboundFailure, ProtocolName, ProtocolSupport, RequestResponse,
+    RequestResponseConfig, RequestResponseEvent,
+};
 use libp2p::swarm::{Swarm, SwarmEvent};
 use libp2p::tcp;
 use libp2p_core::Transport;
@@ -325,7 +328,7 @@ impl ProtocolName for PingProtocol {
 }
 
 #[async_trait]
-impl RequestResponseCodec for PingCodec {
+impl request_response::Codec for PingCodec {
     type Protocol = PingProtocol;
     type Request = Ping;
     type Response = Pong;
