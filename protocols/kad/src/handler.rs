@@ -170,8 +170,8 @@ enum InboundSubstreamState<TUserData> {
         connection_id: UniqueConnecId,
         substream: KadInStreamSink<NegotiatedSubstream>,
     },
-    /// Waiting for the user to send a [`KademliaHandlerIn`] event containing the response.
-    WaitingUser(
+    /// Waiting for the behaviour to send a [`KademliaHandlerIn`] event containing the response.
+    WaitingBehaviour(
         UniqueConnecId,
         KadInStreamSink<NegotiatedSubstream>,
         Option<Waker>,
@@ -206,7 +206,7 @@ impl<TUserData> InboundSubstreamState<TUserData> {
                 phantom: PhantomData,
             },
         ) {
-            InboundSubstreamState::WaitingUser(conn_id, substream, mut waker)
+            InboundSubstreamState::WaitingBehaviour(conn_id, substream, mut waker)
                 if conn_id == id.connec_unique_id =>
             {
                 *self = InboundSubstreamState::PendingSend(conn_id, substream, msg);
@@ -233,7 +233,7 @@ impl<TUserData> InboundSubstreamState<TUserData> {
             },
         ) {
             InboundSubstreamState::WaitingMessage { substream, .. }
-            | InboundSubstreamState::WaitingUser(_, substream, _)
+            | InboundSubstreamState::WaitingBehaviour(_, substream, _)
             | InboundSubstreamState::PendingSend(_, substream, _)
             | InboundSubstreamState::PendingFlush(_, substream)
             | InboundSubstreamState::Closing(substream) => {
@@ -655,7 +655,7 @@ where
                     .inbound_substreams
                     .iter_mut()
                     .find(|state| match state {
-                        InboundSubstreamState::WaitingUser(conn_id, _, _) => {
+                        InboundSubstreamState::WaitingBehaviour(conn_id, _, _) => {
                             conn_id == &request_id.connec_unique_id
                         }
                         _ => false,
@@ -1010,7 +1010,8 @@ where
                         *this = InboundSubstreamState::Closing(substream);
                     }
                     Poll::Ready(Some(Ok(KadRequestMsg::FindNode { key }))) => {
-                        *this = InboundSubstreamState::WaitingUser(connection_id, substream, None);
+                        *this =
+                            InboundSubstreamState::WaitingBehaviour(connection_id, substream, None);
                         return Poll::Ready(Some(ConnectionHandlerEvent::Custom(
                             KademliaHandlerEvent::FindNodeReq {
                                 key,
@@ -1021,7 +1022,8 @@ where
                         )));
                     }
                     Poll::Ready(Some(Ok(KadRequestMsg::GetProviders { key }))) => {
-                        *this = InboundSubstreamState::WaitingUser(connection_id, substream, None);
+                        *this =
+                            InboundSubstreamState::WaitingBehaviour(connection_id, substream, None);
                         return Poll::Ready(Some(ConnectionHandlerEvent::Custom(
                             KademliaHandlerEvent::GetProvidersReq {
                                 key,
@@ -1042,7 +1044,8 @@ where
                         )));
                     }
                     Poll::Ready(Some(Ok(KadRequestMsg::GetValue { key }))) => {
-                        *this = InboundSubstreamState::WaitingUser(connection_id, substream, None);
+                        *this =
+                            InboundSubstreamState::WaitingBehaviour(connection_id, substream, None);
                         return Poll::Ready(Some(ConnectionHandlerEvent::Custom(
                             KademliaHandlerEvent::GetRecord {
                                 key,
@@ -1053,7 +1056,8 @@ where
                         )));
                     }
                     Poll::Ready(Some(Ok(KadRequestMsg::PutValue { record }))) => {
-                        *this = InboundSubstreamState::WaitingUser(connection_id, substream, None);
+                        *this =
+                            InboundSubstreamState::WaitingBehaviour(connection_id, substream, None);
                         return Poll::Ready(Some(ConnectionHandlerEvent::Custom(
                             KademliaHandlerEvent::PutRecord {
                                 record,
@@ -1078,9 +1082,12 @@ where
                         *this = InboundSubstreamState::Closing(substream);
                     }
                 },
-                InboundSubstreamState::WaitingUser(id, substream, _) => {
-                    *this =
-                        InboundSubstreamState::WaitingUser(id, substream, Some(cx.waker().clone()));
+                InboundSubstreamState::WaitingBehaviour(id, substream, _) => {
+                    *this = InboundSubstreamState::WaitingBehaviour(
+                        id,
+                        substream,
+                        Some(cx.waker().clone()),
+                    );
 
                     return Poll::Pending;
                 }
