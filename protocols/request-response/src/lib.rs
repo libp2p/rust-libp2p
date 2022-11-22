@@ -65,7 +65,7 @@ pub use codec::{ProtocolName, RequestResponseCodec};
 pub use handler::ProtocolSupport;
 
 use futures::channel::oneshot;
-use handler::{RequestProtocol, RequestResponseHandler, RequestResponseHandlerEvent};
+use handler::{Handler, HandlerEvent, RequestProtocol};
 use libp2p_core::{connection::ConnectionId, ConnectedPoint, Multiaddr, PeerId};
 use libp2p_swarm::{
     behaviour::{AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm},
@@ -323,7 +323,7 @@ where
     pending_events: VecDeque<
         NetworkBehaviourAction<
             RequestResponseEvent<TCodec::Request, TCodec::Response>,
-            RequestResponseHandler<TCodec>,
+            Handler<TCodec>,
         >,
     >,
     /// The currently connected peers, their pending outbound and inbound responses and their known,
@@ -702,11 +702,11 @@ impl<TCodec> NetworkBehaviour for RequestResponse<TCodec>
 where
     TCodec: RequestResponseCodec + Send + Clone + 'static,
 {
-    type ConnectionHandler = RequestResponseHandler<TCodec>;
+    type ConnectionHandler = Handler<TCodec>;
     type OutEvent = RequestResponseEvent<TCodec::Request, TCodec::Response>;
 
     fn new_handler(&mut self) -> Self::ConnectionHandler {
-        RequestResponseHandler::new(
+        Handler::new(
             self.inbound_protocols.clone(),
             self.codec.clone(),
             self.config.connection_keep_alive,
@@ -755,7 +755,7 @@ where
             libp2p_swarm::ConnectionHandler>::OutEvent,
     ) {
         match event {
-            RequestResponseHandlerEvent::Response {
+            HandlerEvent::Response {
                 request_id,
                 response,
             } => {
@@ -774,7 +774,7 @@ where
                         RequestResponseEvent::Message { peer, message },
                     ));
             }
-            RequestResponseHandlerEvent::Request {
+            HandlerEvent::Request {
                 request_id,
                 request,
                 sender,
@@ -808,7 +808,7 @@ where
                     }
                 }
             }
-            RequestResponseHandlerEvent::ResponseSent(request_id) => {
+            HandlerEvent::ResponseSent(request_id) => {
                 let removed = self.remove_pending_outbound_response(&peer, connection, request_id);
                 debug_assert!(
                     removed,
@@ -820,7 +820,7 @@ where
                         RequestResponseEvent::ResponseSent { peer, request_id },
                     ));
             }
-            RequestResponseHandlerEvent::ResponseOmission(request_id) => {
+            HandlerEvent::ResponseOmission(request_id) => {
                 let removed = self.remove_pending_outbound_response(&peer, connection, request_id);
                 debug_assert!(
                     removed,
@@ -836,7 +836,7 @@ where
                         },
                     ));
             }
-            RequestResponseHandlerEvent::OutboundTimeout(request_id) => {
+            HandlerEvent::OutboundTimeout(request_id) => {
                 let removed = self.remove_pending_inbound_response(&peer, connection, &request_id);
                 debug_assert!(
                     removed,
@@ -852,8 +852,8 @@ where
                         },
                     ));
             }
-            RequestResponseHandlerEvent::InboundTimeout(request_id) => {
-                // Note: `RequestResponseHandlerEvent::InboundTimeout` is emitted both for timing
+            HandlerEvent::InboundTimeout(request_id) => {
+                // Note: `HandlerEvent::InboundTimeout` is emitted both for timing
                 // out to receive the request and for timing out sending the response. In the former
                 // case the request is never added to `pending_outbound_responses` and thus one can
                 // not assert the request_id to be present before removing it.
@@ -868,7 +868,7 @@ where
                         },
                     ));
             }
-            RequestResponseHandlerEvent::OutboundUnsupportedProtocols(request_id) => {
+            HandlerEvent::OutboundUnsupportedProtocols(request_id) => {
                 let removed = self.remove_pending_inbound_response(&peer, connection, &request_id);
                 debug_assert!(
                     removed,
@@ -884,9 +884,9 @@ where
                         },
                     ));
             }
-            RequestResponseHandlerEvent::InboundUnsupportedProtocols(request_id) => {
+            HandlerEvent::InboundUnsupportedProtocols(request_id) => {
                 // Note: No need to call `self.remove_pending_outbound_response`,
-                // `RequestResponseHandlerEvent::Request` was never emitted for this request and
+                // `HandlerEvent::Request` was never emitted for this request and
                 // thus request was never added to `pending_outbound_responses`.
                 self.pending_events
                     .push_back(NetworkBehaviourAction::GenerateEvent(

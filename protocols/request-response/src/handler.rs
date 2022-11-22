@@ -48,9 +48,15 @@ use std::{
     time::Duration,
 };
 
+#[deprecated(
+    since = "0.23.0",
+    note = "Use re-exports that omit `RequestResponse` prefix, i.e. `libp2p::request_response::handler::Handler`"
+)]
+pub type RequestResponseHandler<TCodec> = Handler<TCodec>;
+
 /// A connection handler of a `RequestResponse` protocol.
 #[doc(hidden)]
-pub struct RequestResponseHandler<TCodec>
+pub struct Handler<TCodec>
 where
     TCodec: RequestResponseCodec,
 {
@@ -69,7 +75,7 @@ where
     /// A pending fatal error that results in the connection being closed.
     pending_error: Option<ConnectionHandlerUpgrErr<io::Error>>,
     /// Queue of events to emit in `poll()`.
-    pending_events: VecDeque<RequestResponseHandlerEvent<TCodec>>,
+    pending_events: VecDeque<HandlerEvent<TCodec>>,
     /// Outbound upgrades waiting to be emitted as an `OutboundSubstreamRequest`.
     outbound: VecDeque<RequestProtocol<TCodec>>,
     /// Inbound upgrades waiting for the incoming request.
@@ -88,7 +94,7 @@ where
     inbound_request_id: Arc<AtomicU64>,
 }
 
-impl<TCodec> RequestResponseHandler<TCodec>
+impl<TCodec> Handler<TCodec>
 where
     TCodec: RequestResponseCodec + Send + Clone + 'static,
 {
@@ -125,10 +131,10 @@ where
     ) {
         if sent {
             self.pending_events
-                .push_back(RequestResponseHandlerEvent::ResponseSent(request_id))
+                .push_back(HandlerEvent::ResponseSent(request_id))
         } else {
             self.pending_events
-                .push_back(RequestResponseHandlerEvent::ResponseOmission(request_id))
+                .push_back(HandlerEvent::ResponseOmission(request_id))
         }
     }
 
@@ -142,7 +148,7 @@ where
         match error {
             ConnectionHandlerUpgrErr::Timeout => {
                 self.pending_events
-                    .push_back(RequestResponseHandlerEvent::OutboundTimeout(info));
+                    .push_back(HandlerEvent::OutboundTimeout(info));
             }
             ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)) => {
                 // The remote merely doesn't support the protocol(s) we requested.
@@ -150,9 +156,8 @@ where
                 // successfully communicate with other protocols already.
                 // An event is reported to permit user code to react to the fact that
                 // the remote peer does not support the requested protocol(s).
-                self.pending_events.push_back(
-                    RequestResponseHandlerEvent::OutboundUnsupportedProtocols(info),
-                );
+                self.pending_events
+                    .push_back(HandlerEvent::OutboundUnsupportedProtocols(info));
             }
             _ => {
                 // Anything else is considered a fatal error or misbehaviour of
@@ -171,16 +176,15 @@ where
         match error {
             ConnectionHandlerUpgrErr::Timeout => self
                 .pending_events
-                .push_back(RequestResponseHandlerEvent::InboundTimeout(info)),
+                .push_back(HandlerEvent::InboundTimeout(info)),
             ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)) => {
                 // The local peer merely doesn't support the protocol(s) requested.
                 // This is no reason to close the connection, which may
                 // successfully communicate with other protocols already.
                 // An event is reported to permit user code to react to the fact that
                 // the local peer does not support the requested protocol(s).
-                self.pending_events.push_back(
-                    RequestResponseHandlerEvent::InboundUnsupportedProtocols(info),
-                );
+                self.pending_events
+                    .push_back(HandlerEvent::InboundUnsupportedProtocols(info));
             }
             _ => {
                 // Anything else is considered a fatal error or misbehaviour of
@@ -191,9 +195,15 @@ where
     }
 }
 
-/// The events emitted by the [`RequestResponseHandler`].
+#[deprecated(
+    since = "0.23.0",
+    note = "Use re-exports that omit `RequestResponse` prefix, i.e. `libp2p::request_response::handler::HandlerEvent`"
+)]
+pub type RequestResponseHandlerEvent<TCodec> = HandlerEvent<TCodec>;
+
+/// The events emitted by the [`Handler`].
 #[doc(hidden)]
-pub enum RequestResponseHandlerEvent<TCodec>
+pub enum HandlerEvent<TCodec>
 where
     TCodec: RequestResponseCodec,
 {
@@ -225,58 +235,58 @@ where
     InboundUnsupportedProtocols(RequestId),
 }
 
-impl<TCodec: RequestResponseCodec> fmt::Debug for RequestResponseHandlerEvent<TCodec> {
+impl<TCodec: RequestResponseCodec> fmt::Debug for HandlerEvent<TCodec> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            RequestResponseHandlerEvent::Request {
+            HandlerEvent::Request {
                 request_id,
                 request: _,
                 sender: _,
             } => f
-                .debug_struct("RequestResponseHandlerEvent::Request")
+                .debug_struct("HandlerEvent::Request")
                 .field("request_id", request_id)
                 .finish(),
-            RequestResponseHandlerEvent::Response {
+            HandlerEvent::Response {
                 request_id,
                 response: _,
             } => f
-                .debug_struct("RequestResponseHandlerEvent::Response")
+                .debug_struct("HandlerEvent::Response")
                 .field("request_id", request_id)
                 .finish(),
-            RequestResponseHandlerEvent::ResponseSent(request_id) => f
-                .debug_tuple("RequestResponseHandlerEvent::ResponseSent")
+            HandlerEvent::ResponseSent(request_id) => f
+                .debug_tuple("HandlerEvent::ResponseSent")
                 .field(request_id)
                 .finish(),
-            RequestResponseHandlerEvent::ResponseOmission(request_id) => f
-                .debug_tuple("RequestResponseHandlerEvent::ResponseOmission")
+            HandlerEvent::ResponseOmission(request_id) => f
+                .debug_tuple("HandlerEvent::ResponseOmission")
                 .field(request_id)
                 .finish(),
-            RequestResponseHandlerEvent::OutboundTimeout(request_id) => f
-                .debug_tuple("RequestResponseHandlerEvent::OutboundTimeout")
+            HandlerEvent::OutboundTimeout(request_id) => f
+                .debug_tuple("HandlerEvent::OutboundTimeout")
                 .field(request_id)
                 .finish(),
-            RequestResponseHandlerEvent::OutboundUnsupportedProtocols(request_id) => f
-                .debug_tuple("RequestResponseHandlerEvent::OutboundUnsupportedProtocols")
+            HandlerEvent::OutboundUnsupportedProtocols(request_id) => f
+                .debug_tuple("HandlerEvent::OutboundUnsupportedProtocols")
                 .field(request_id)
                 .finish(),
-            RequestResponseHandlerEvent::InboundTimeout(request_id) => f
-                .debug_tuple("RequestResponseHandlerEvent::InboundTimeout")
+            HandlerEvent::InboundTimeout(request_id) => f
+                .debug_tuple("HandlerEvent::InboundTimeout")
                 .field(request_id)
                 .finish(),
-            RequestResponseHandlerEvent::InboundUnsupportedProtocols(request_id) => f
-                .debug_tuple("RequestResponseHandlerEvent::InboundUnsupportedProtocols")
+            HandlerEvent::InboundUnsupportedProtocols(request_id) => f
+                .debug_tuple("HandlerEvent::InboundUnsupportedProtocols")
                 .field(request_id)
                 .finish(),
         }
     }
 }
 
-impl<TCodec> ConnectionHandler for RequestResponseHandler<TCodec>
+impl<TCodec> ConnectionHandler for Handler<TCodec>
 where
     TCodec: RequestResponseCodec + Send + Clone + 'static,
 {
     type InEvent = RequestProtocol<TCodec>;
-    type OutEvent = RequestResponseHandlerEvent<TCodec>;
+    type OutEvent = HandlerEvent<TCodec>;
     type Error = ConnectionHandlerUpgrErr<io::Error>;
     type InboundProtocol = ResponseProtocol<TCodec>;
     type OutboundProtocol = RequestProtocol<TCodec>;
@@ -309,7 +319,7 @@ where
         };
 
         // The handler waits for the request to come in. It then emits
-        // `RequestResponseHandlerEvent::Request` together with a
+        // `HandlerEvent::Request` together with a
         // `ResponseChannel`.
         self.inbound
             .push(rq_recv.map_ok(move |rq| (rq, rs_send)).boxed());
@@ -350,13 +360,11 @@ where
                 Ok(((id, rq), rs_sender)) => {
                     // We received an inbound request.
                     self.keep_alive = KeepAlive::Yes;
-                    return Poll::Ready(ConnectionHandlerEvent::Custom(
-                        RequestResponseHandlerEvent::Request {
-                            request_id: id,
-                            request: rq,
-                            sender: rs_sender,
-                        },
-                    ));
+                    return Poll::Ready(ConnectionHandlerEvent::Custom(HandlerEvent::Request {
+                        request_id: id,
+                        request: rq,
+                        sender: rs_sender,
+                    }));
                 }
                 Err(oneshot::Canceled) => {
                     // The inbound upgrade has errored or timed out reading
@@ -409,11 +417,10 @@ where
                 protocol: response,
                 info: request_id,
             }) => {
-                self.pending_events
-                    .push_back(RequestResponseHandlerEvent::Response {
-                        request_id,
-                        response,
-                    });
+                self.pending_events.push_back(HandlerEvent::Response {
+                    request_id,
+                    response,
+                });
             }
             ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
                 self.on_dial_upgrade_error(dial_upgrade_error)
