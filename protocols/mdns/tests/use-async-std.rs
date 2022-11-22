@@ -58,7 +58,7 @@ async fn test_expired_async_std() -> Result<(), Box<dyn Error>> {
 async fn create_swarm(config: Config) -> Result<Swarm<Behaviour>, Box<dyn Error>> {
     let id_keys = identity::Keypair::generate_ed25519();
     let peer_id = PeerId::from(id_keys.public());
-    let transport = libp2p_tcp::tokio::Transport::default()
+    let transport = libp2p_tcp::async_io::Transport::default()
         .upgrade(Version::V1)
         .authenticate(libp2p_noise::NoiseAuthenticated::xx(&id_keys).unwrap())
         .multiplex(libp2p_yamux::YamuxConfig::default())
