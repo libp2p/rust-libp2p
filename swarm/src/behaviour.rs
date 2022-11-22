@@ -421,6 +421,10 @@ pub trait PollParameters {
     fn external_addresses(&self) -> Self::ExternalAddressesIter;
 
     /// Returns the peer id of the local node.
+    #[deprecated(
+        since = "0.41.0",
+        note = "Pass the node's `PeerId` into the behaviour instead."
+    )]
     fn local_peer_id(&self) -> &PeerId;
 }
 
