@@ -39,9 +39,10 @@ impl DecodingError {
         }
     }
 
-    pub(crate) fn failed_to_parse<E>(what: &'static str, source: impl Into<Option<E>>) -> Self
+    pub(crate) fn failed_to_parse<E, S>(what: &'static str, source: S) -> Self
     where
         E: Error + Send + Sync + 'static,
+        S: Into<Option<E>>,
     {
         Self {
             msg: format!("failed to parse {what}"),
