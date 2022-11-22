@@ -1004,14 +1004,67 @@ where
                     connection_id,
                     mut substream,
                 } => match substream.poll_next_unpin(cx) {
-                    Poll::Ready(Some(Ok(msg))) => {
-                        if let Ok(ev) = process_kad_request(msg, connection_id) {
-                            *this =
-                                InboundSubstreamState::WaitingUser(connection_id, substream, None);
-                            return Poll::Ready(Some(ConnectionHandlerEvent::Custom(ev)));
-                        } else {
-                            *this = InboundSubstreamState::Closing(substream);
-                        }
+                    Poll::Ready(Some(Ok(KadRequestMsg::Ping))) => {
+                        log::warn!("Kademlia PING messages are unsupported");
+
+                        *this = InboundSubstreamState::Closing(substream);
+                    }
+                    Poll::Ready(Some(Ok(KadRequestMsg::FindNode { key }))) => {
+                        *this = InboundSubstreamState::WaitingUser(connection_id, substream, None);
+                        return Poll::Ready(Some(ConnectionHandlerEvent::Custom(
+                            KademliaHandlerEvent::FindNodeReq {
+                                key,
+                                request_id: KademliaRequestId {
+                                    connec_unique_id: connection_id,
+                                },
+                            },
+                        )));
+                    }
+                    Poll::Ready(Some(Ok(KadRequestMsg::GetProviders { key }))) => {
+                        *this = InboundSubstreamState::WaitingUser(connection_id, substream, None);
+                        return Poll::Ready(Some(ConnectionHandlerEvent::Custom(
+                            KademliaHandlerEvent::GetProvidersReq {
+                                key,
+                                request_id: KademliaRequestId {
+                                    connec_unique_id: connection_id,
+                                },
+                            },
+                        )));
+                    }
+                    Poll::Ready(Some(Ok(KadRequestMsg::AddProvider { key, provider }))) => {
+                        *this = InboundSubstreamState::WaitingMessage {
+                            first: false,
+                            connection_id,
+                            substream,
+                        };
+                        return Poll::Ready(Some(ConnectionHandlerEvent::Custom(
+                            KademliaHandlerEvent::AddProvider { key, provider },
+                        )));
+                    }
+                    Poll::Ready(Some(Ok(KadRequestMsg::GetValue { key }))) => {
+                        *this = InboundSubstreamState::WaitingUser(connection_id, substream, None);
+                        return Poll::Ready(Some(ConnectionHandlerEvent::Custom(
+                            KademliaHandlerEvent::GetRecord {
+                                key,
+                                request_id: KademliaRequestId {
+                                    connec_unique_id: connection_id,
+                                },
+                            },
+                        )));
+                    }
+                    Poll::Ready(Some(Ok(KadRequestMsg::PutValue { record }))) => {
+                        *this = InboundSubstreamState::WaitingUser(connection_id, substream, None);
+                        return Poll::Ready(Some(ConnectionHandlerEvent::Custom(
+                            KademliaHandlerEvent::PutRecord {
+                                record,
+                                request_id: KademliaRequestId {
+                                    connec_unique_id: connection_id,
+                                },
+                            },
+                        )));
+                    }
+                    Poll::Ready(Some(Err(e))) => {
+                        *this = InboundSubstreamState::Closing(substream);
                     }
                     Poll::Pending => {
                         *this = InboundSubstreamState::WaitingMessage {
@@ -1022,11 +1075,7 @@ where
                         return Poll::Pending;
                     }
                     Poll::Ready(None) => {
-                        return Poll::Ready(None);
-                    }
-                    Poll::Ready(Some(Err(e))) => {
-                        trace!("Inbound substream error: {:?}", e);
-                        return Poll::Ready(None);
+                        *this = InboundSubstreamState::Closing(substream);
                     }
                 },
                 InboundSubstreamState::WaitingUser(id, substream, _) => {
@@ -1077,42 +1126,6 @@ where
                 InboundSubstreamState::Cancelled => return Poll::Ready(None),
             }
         }
-    }
-}
-
-/// Processes a Kademlia message that's expected to be a request from a remote.
-fn process_kad_request<TUserData>(
-    event: KadRequestMsg,
-    connec_unique_id: UniqueConnecId,
-) -> Result<KademliaHandlerEvent<TUserData>, io::Error> {
-    match event {
-        KadRequestMsg::Ping => {
-            // TODO: implement; although in practice the PING message is never
-            //       used, so we may consider removing it altogether
-            Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "the PING Kademlia message is not implemented",
-            ))
-        }
-        KadRequestMsg::FindNode { key } => Ok(KademliaHandlerEvent::FindNodeReq {
-            key,
-            request_id: KademliaRequestId { connec_unique_id },
-        }),
-        KadRequestMsg::GetProviders { key } => Ok(KademliaHandlerEvent::GetProvidersReq {
-            key,
-            request_id: KademliaRequestId { connec_unique_id },
-        }),
-        KadRequestMsg::AddProvider { key, provider } => {
-            Ok(KademliaHandlerEvent::AddProvider { key, provider })
-        }
-        KadRequestMsg::GetValue { key } => Ok(KademliaHandlerEvent::GetRecord {
-            key,
-            request_id: KademliaRequestId { connec_unique_id },
-        }),
-        KadRequestMsg::PutValue { record } => Ok(KademliaHandlerEvent::PutRecord {
-            record,
-            request_id: KademliaRequestId { connec_unique_id },
-        }),
     }
 }
 
