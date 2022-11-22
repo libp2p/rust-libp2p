@@ -1067,13 +1067,6 @@ where
                             },
                         )));
                     }
-                    Poll::Ready(None) => {
-                        return Poll::Ready(None);
-                    }
-                    Poll::Ready(Some(Err(e))) => {
-                        trace!("Inbound substream error: {:?}", e);
-                        return Poll::Ready(None);
-                    }
                     Poll::Pending => {
                         *this = InboundSubstreamState::WaitingMessage {
                             first,
@@ -1081,6 +1074,13 @@ where
                             substream,
                         };
                         return Poll::Pending;
+                    }
+                    Poll::Ready(None) => {
+                        return Poll::Ready(None);
+                    }
+                    Poll::Ready(Some(Err(e))) => {
+                        trace!("Inbound substream error: {:?}", e);
+                        return Poll::Ready(None);
                     }
                 },
                 InboundSubstreamState::WaitingBehaviour(id, substream, _) => {
