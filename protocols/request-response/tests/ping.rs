@@ -31,8 +31,8 @@ use libp2p::core::{
 };
 use libp2p::noise::NoiseAuthenticated;
 use libp2p::request_response::{
-    self, InboundFailure, Message, OutboundFailure, ProtocolName, ProtocolSupport, RequestResponse,
-    RequestResponseConfig, RequestResponseEvent,
+    self, Event, InboundFailure, Message, OutboundFailure, ProtocolName, ProtocolSupport,
+    RequestResponse, RequestResponseConfig,
 };
 use libp2p::swarm::{Swarm, SwarmEvent};
 use libp2p::tcp;
@@ -58,7 +58,7 @@ fn is_response_outbound() {
         .send_request(&offline_peer, ping.clone());
 
     match futures::executor::block_on(swarm1.select_next_some()) {
-        SwarmEvent::Behaviour(RequestResponseEvent::OutboundFailure {
+        SwarmEvent::Behaviour(Event::OutboundFailure {
             peer,
             request_id: req_id,
             error: _error,
@@ -108,7 +108,7 @@ fn ping_protocol() {
         loop {
             match swarm1.select_next_some().await {
                 SwarmEvent::NewListenAddr { address, .. } => tx.send(address).await.unwrap(),
-                SwarmEvent::Behaviour(RequestResponseEvent::Message {
+                SwarmEvent::Behaviour(Event::Message {
                     peer,
                     message:
                         Message::Request {
@@ -122,7 +122,7 @@ fn ping_protocol() {
                         .send_response(channel, pong.clone())
                         .unwrap();
                 }
-                SwarmEvent::Behaviour(RequestResponseEvent::ResponseSent { peer, .. }) => {
+                SwarmEvent::Behaviour(Event::ResponseSent { peer, .. }) => {
                     assert_eq!(&peer, &peer2_id);
                 }
                 SwarmEvent::Behaviour(e) => panic!("Peer1: Unexpected event: {:?}", e),
@@ -142,7 +142,7 @@ fn ping_protocol() {
 
         loop {
             match swarm2.select_next_some().await {
-                SwarmEvent::Behaviour(RequestResponseEvent::Message {
+                SwarmEvent::Behaviour(Event::Message {
                     peer,
                     message:
                         Message::Response {
@@ -199,7 +199,7 @@ fn emits_inbound_connection_closed_failure() {
         let _channel = loop {
             futures::select!(
                 event = swarm1.select_next_some() => match event {
-                    SwarmEvent::Behaviour(RequestResponseEvent::Message {
+                    SwarmEvent::Behaviour(Event::Message {
                         peer,
                         message: Message::Request { request, channel, .. }
                     }) => {
@@ -223,7 +223,7 @@ fn emits_inbound_connection_closed_failure() {
 
         loop {
             match swarm1.select_next_some().await {
-                SwarmEvent::Behaviour(RequestResponseEvent::InboundFailure {
+                SwarmEvent::Behaviour(Event::InboundFailure {
                     error: InboundFailure::ConnectionClosed,
                     ..
                 }) => break,
@@ -268,7 +268,7 @@ fn emits_inbound_connection_closed_if_channel_is_dropped() {
         let event = loop {
             futures::select!(
                 event = swarm1.select_next_some() => {
-                    if let SwarmEvent::Behaviour(RequestResponseEvent::Message {
+                    if let SwarmEvent::Behaviour(Event::Message {
                         peer,
                         message: Message::Request { request, channel, .. }
                     }) = event {
@@ -288,7 +288,7 @@ fn emits_inbound_connection_closed_if_channel_is_dropped() {
         };
 
         let error = match event {
-            RequestResponseEvent::OutboundFailure { error, .. } => error,
+            Event::OutboundFailure { error, .. } => error,
             e => panic!("unexpected event from peer 2: {:?}", e),
         };
 

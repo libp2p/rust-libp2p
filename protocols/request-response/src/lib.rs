@@ -33,11 +33,11 @@
 //!
 //! Requests are sent using [`RequestResponse::send_request`] and the
 //! responses received as [`Message::Response`] via
-//! [`RequestResponseEvent::Message`].
+//! [`Event::Message`].
 //!
 //! Responses are sent using [`RequestResponse::send_response`] upon
 //! receiving a [`Message::Request`] via
-//! [`RequestResponseEvent::Message`].
+//! [`Event::Message`].
 //!
 //! ## Protocol Families
 //!
@@ -83,6 +83,12 @@ use std::{
 
 #[deprecated(
     since = "0.23.0",
+    note = "Use re-exports that omit `RequestResponse` prefix, i.e. `libp2p::request_response::Event`"
+)]
+pub type RequestResponseEvent<TRequest, TResponse> = Event<TRequest, TResponse>;
+
+#[deprecated(
+    since = "0.23.0",
     note = "Use re-exports that omit `RequestResponse` prefix, i.e. `libp2p::request_response::Message`"
 )]
 pub type RequestResponseMessage<TRequest, TResponse, TChannelResponse> =
@@ -100,7 +106,7 @@ pub enum Message<TRequest, TResponse, TChannelResponse = TResponse> {
         /// The channel waiting for the response.
         ///
         /// If this channel is dropped instead of being used to send a response
-        /// via [`RequestResponse::send_response`], a [`RequestResponseEvent::InboundFailure`]
+        /// via [`RequestResponse::send_response`], a [`Event::InboundFailure`]
         /// with [`InboundFailure::ResponseOmission`] is emitted.
         channel: ResponseChannel<TChannelResponse>,
     },
@@ -117,7 +123,7 @@ pub enum Message<TRequest, TResponse, TChannelResponse = TResponse> {
 
 /// The events emitted by a [`RequestResponse`] protocol.
 #[derive(Debug)]
-pub enum RequestResponseEvent<TRequest, TResponse, TChannelResponse = TResponse> {
+pub enum Event<TRequest, TResponse, TChannelResponse = TResponse> {
     /// An incoming message (request or response).
     Message {
         /// The peer who sent the message.
@@ -320,12 +326,8 @@ where
     /// The protocol codec for reading and writing requests and responses.
     codec: TCodec,
     /// Pending events to return from `poll`.
-    pending_events: VecDeque<
-        NetworkBehaviourAction<
-            RequestResponseEvent<TCodec::Request, TCodec::Response>,
-            Handler<TCodec>,
-        >,
-    >,
+    pending_events:
+        VecDeque<NetworkBehaviourAction<Event<TCodec::Request, TCodec::Response>, Handler<TCodec>>>,
     /// The currently connected peers, their pending outbound and inbound responses and their known,
     /// reachable addresses, if any.
     connected: HashMap<PeerId, SmallVec<[Connection; 2]>>,
@@ -411,8 +413,8 @@ where
     /// If the [`ResponseChannel`] is already closed due to a timeout or the
     /// connection being closed, the response is returned as an `Err` for
     /// further handling. Once the response has been successfully sent on the
-    /// corresponding connection, [`RequestResponseEvent::ResponseSent`] is
-    /// emitted. In all other cases [`RequestResponseEvent::InboundFailure`]
+    /// corresponding connection, [`Event::ResponseSent`] is
+    /// emitted. In all other cases [`Event::InboundFailure`]
     /// will be or has been emitted.
     ///
     /// The provided `ResponseChannel` is obtained from an inbound
@@ -651,7 +653,7 @@ where
         for request_id in connection.pending_outbound_responses {
             self.pending_events
                 .push_back(NetworkBehaviourAction::GenerateEvent(
-                    RequestResponseEvent::InboundFailure {
+                    Event::InboundFailure {
                         peer: peer_id,
                         request_id,
                         error: InboundFailure::ConnectionClosed,
@@ -662,7 +664,7 @@ where
         for request_id in connection.pending_inbound_responses {
             self.pending_events
                 .push_back(NetworkBehaviourAction::GenerateEvent(
-                    RequestResponseEvent::OutboundFailure {
+                    Event::OutboundFailure {
                         peer: peer_id,
                         request_id,
                         error: OutboundFailure::ConnectionClosed,
@@ -686,7 +688,7 @@ where
                 for request in pending {
                     self.pending_events
                         .push_back(NetworkBehaviourAction::GenerateEvent(
-                            RequestResponseEvent::OutboundFailure {
+                            Event::OutboundFailure {
                                 peer,
                                 request_id: request.request_id,
                                 error: OutboundFailure::DialFailure,
@@ -703,7 +705,7 @@ where
     TCodec: Codec + Send + Clone + 'static,
 {
     type ConnectionHandler = Handler<TCodec>;
-    type OutEvent = RequestResponseEvent<TCodec::Request, TCodec::Response>;
+    type OutEvent = Event<TCodec::Request, TCodec::Response>;
 
     fn new_handler(&mut self) -> Self::ConnectionHandler {
         Handler::new(
@@ -770,9 +772,10 @@ where
                     response,
                 };
                 self.pending_events
-                    .push_back(NetworkBehaviourAction::GenerateEvent(
-                        RequestResponseEvent::Message { peer, message },
-                    ));
+                    .push_back(NetworkBehaviourAction::GenerateEvent(Event::Message {
+                        peer,
+                        message,
+                    }));
             }
             HandlerEvent::Request {
                 request_id,
@@ -786,20 +789,21 @@ where
                     channel,
                 };
                 self.pending_events
-                    .push_back(NetworkBehaviourAction::GenerateEvent(
-                        RequestResponseEvent::Message { peer, message },
-                    ));
+                    .push_back(NetworkBehaviourAction::GenerateEvent(Event::Message {
+                        peer,
+                        message,
+                    }));
 
                 match self.get_connection_mut(&peer, connection) {
                     Some(connection) => {
                         let inserted = connection.pending_outbound_responses.insert(request_id);
                         debug_assert!(inserted, "Expect id of new request to be unknown.");
                     }
-                    // Connection closed after `RequestResponseEvent::Request` has been emitted.
+                    // Connection closed after `Event::Request` has been emitted.
                     None => {
                         self.pending_events
                             .push_back(NetworkBehaviourAction::GenerateEvent(
-                                RequestResponseEvent::InboundFailure {
+                                Event::InboundFailure {
                                     peer,
                                     request_id,
                                     error: InboundFailure::ConnectionClosed,
@@ -816,9 +820,10 @@ where
                 );
 
                 self.pending_events
-                    .push_back(NetworkBehaviourAction::GenerateEvent(
-                        RequestResponseEvent::ResponseSent { peer, request_id },
-                    ));
+                    .push_back(NetworkBehaviourAction::GenerateEvent(Event::ResponseSent {
+                        peer,
+                        request_id,
+                    }));
             }
             HandlerEvent::ResponseOmission(request_id) => {
                 let removed = self.remove_pending_outbound_response(&peer, connection, request_id);
@@ -829,7 +834,7 @@ where
 
                 self.pending_events
                     .push_back(NetworkBehaviourAction::GenerateEvent(
-                        RequestResponseEvent::InboundFailure {
+                        Event::InboundFailure {
                             peer,
                             request_id,
                             error: InboundFailure::ResponseOmission,
@@ -845,7 +850,7 @@ where
 
                 self.pending_events
                     .push_back(NetworkBehaviourAction::GenerateEvent(
-                        RequestResponseEvent::OutboundFailure {
+                        Event::OutboundFailure {
                             peer,
                             request_id,
                             error: OutboundFailure::Timeout,
@@ -861,7 +866,7 @@ where
 
                 self.pending_events
                     .push_back(NetworkBehaviourAction::GenerateEvent(
-                        RequestResponseEvent::InboundFailure {
+                        Event::InboundFailure {
                             peer,
                             request_id,
                             error: InboundFailure::Timeout,
@@ -877,7 +882,7 @@ where
 
                 self.pending_events
                     .push_back(NetworkBehaviourAction::GenerateEvent(
-                        RequestResponseEvent::OutboundFailure {
+                        Event::OutboundFailure {
                             peer,
                             request_id,
                             error: OutboundFailure::UnsupportedProtocols,
@@ -890,7 +895,7 @@ where
                 // thus request was never added to `pending_outbound_responses`.
                 self.pending_events
                     .push_back(NetworkBehaviourAction::GenerateEvent(
-                        RequestResponseEvent::InboundFailure {
+                        Event::InboundFailure {
                             peer,
                             request_id,
                             error: InboundFailure::UnsupportedProtocols,

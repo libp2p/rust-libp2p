@@ -216,7 +216,7 @@ mod network {
     use libp2p::kad::{GetProvidersOk, Kademlia, KademliaEvent, QueryId, QueryResult};
     use libp2p::multiaddr::Protocol;
     use libp2p::request_response::{
-        self, ProtocolSupport, RequestId, RequestResponse, RequestResponseEvent, ResponseChannel,
+        self, ProtocolSupport, RequestId, RequestResponse, ResponseChannel,
     };
     use libp2p::swarm::{ConnectionHandlerUpgrErr, NetworkBehaviour, Swarm, SwarmEvent};
     use std::collections::{hash_map, HashMap, HashSet};
@@ -439,7 +439,7 @@ mod network {
                 }
                 SwarmEvent::Behaviour(ComposedEvent::Kademlia(_)) => {}
                 SwarmEvent::Behaviour(ComposedEvent::RequestResponse(
-                    RequestResponseEvent::Message { message, .. },
+                    request_response::Event::Message { message, .. },
                 )) => match message {
                     request_response::Message::Request {
                         request, channel, ..
@@ -464,7 +464,7 @@ mod network {
                     }
                 },
                 SwarmEvent::Behaviour(ComposedEvent::RequestResponse(
-                    RequestResponseEvent::OutboundFailure {
+                    request_response::Event::OutboundFailure {
                         request_id, error, ..
                     },
                 )) => {
@@ -475,7 +475,7 @@ mod network {
                         .send(Err(Box::new(error)));
                 }
                 SwarmEvent::Behaviour(ComposedEvent::RequestResponse(
-                    RequestResponseEvent::ResponseSent { .. },
+                    request_response::Event::ResponseSent { .. },
                 )) => {}
                 SwarmEvent::NewListenAddr { address, .. } => {
                     let local_peer_id = *self.swarm.local_peer_id();
@@ -590,12 +590,12 @@ mod network {
 
     #[derive(Debug)]
     enum ComposedEvent {
-        RequestResponse(RequestResponseEvent<FileRequest, FileResponse>),
+        RequestResponse(request_response::Event<FileRequest, FileResponse>),
         Kademlia(KademliaEvent),
     }
 
-    impl From<RequestResponseEvent<FileRequest, FileResponse>> for ComposedEvent {
-        fn from(event: RequestResponseEvent<FileRequest, FileResponse>) -> Self {
+    impl From<request_response::Event<FileRequest, FileResponse>> for ComposedEvent {
+        fn from(event: request_response::Event<FileRequest, FileResponse>) -> Self {
             ComposedEvent::RequestResponse(event)
         }
     }

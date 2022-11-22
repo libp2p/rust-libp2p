@@ -29,7 +29,7 @@ use futures_timer::Delay;
 use instant::Instant;
 use libp2p_core::{connection::ConnectionId, Multiaddr, PeerId};
 use libp2p_request_response::{
-    self as request_response, OutboundFailure, RequestId, RequestResponse, RequestResponseEvent,
+    self as request_response, OutboundFailure, RequestId, RequestResponse,
 };
 use libp2p_swarm::{AddressScore, NetworkBehaviourAction, PollParameters};
 use rand::{seq::SliceRandom, thread_rng};
@@ -105,12 +105,12 @@ impl<'a> HandleInnerEvent for AsClient<'a> {
     fn handle_event(
         &mut self,
         params: &mut impl PollParameters,
-        event: RequestResponseEvent<DialRequest, DialResponse>,
+        event: request_response::Event<DialRequest, DialResponse>,
     ) -> (VecDeque<Event>, Option<Action>) {
         let mut events = VecDeque::new();
         let mut action = None;
         match event {
-            RequestResponseEvent::Message {
+            request_response::Event::Message {
                 peer,
                 message:
                     request_response::Message::Response {
@@ -160,7 +160,7 @@ impl<'a> HandleInnerEvent for AsClient<'a> {
                     }
                 }
             }
-            RequestResponseEvent::OutboundFailure {
+            request_response::Event::OutboundFailure {
                 peer,
                 error,
                 request_id,

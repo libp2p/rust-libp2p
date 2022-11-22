@@ -28,7 +28,6 @@ use futures::{
 use libp2p::core::{identity, muxing::StreamMuxerBox, upgrade, Transport as _};
 use libp2p::request_response::{
     self, ProtocolName, ProtocolSupport, RequestResponse, RequestResponseConfig,
-    RequestResponseEvent,
 };
 use libp2p::swarm::{Swarm, SwarmEvent};
 use libp2p::webrtc::tokio as webrtc;
@@ -105,7 +104,7 @@ async fn smoke() -> Result<()> {
     let pair = select(a.next(), b.next());
     match pair.await {
         Either::Left((
-            Some(SwarmEvent::Behaviour(RequestResponseEvent::Message {
+            Some(SwarmEvent::Behaviour(request_response::Event::Message {
                 message:
                     request_response::Message::Request {
                         request: Ping(ping),
@@ -125,14 +124,14 @@ async fn smoke() -> Result<()> {
     }
 
     match a.next().await {
-        Some(SwarmEvent::Behaviour(RequestResponseEvent::ResponseSent { .. })) => {}
+        Some(SwarmEvent::Behaviour(request_response::Event::ResponseSent { .. })) => {}
         e => panic!("{:?}", e),
     }
 
     let pair = select(a.next(), b.next());
     match pair.await {
         Either::Right((
-            Some(SwarmEvent::Behaviour(RequestResponseEvent::Message {
+            Some(SwarmEvent::Behaviour(request_response::Event::Message {
                 message:
                     request_response::Message::Response {
                         response: Pong(pong),
@@ -156,7 +155,7 @@ async fn smoke() -> Result<()> {
     let pair = select(a.next(), b.next());
     match pair.await {
         Either::Right((
-            Some(SwarmEvent::Behaviour(RequestResponseEvent::Message {
+            Some(SwarmEvent::Behaviour(request_response::Event::Message {
                 message:
                     request_response::Message::Request {
                         request: Ping(data),
@@ -176,14 +175,14 @@ async fn smoke() -> Result<()> {
     }
 
     match b.next().await {
-        Some(SwarmEvent::Behaviour(RequestResponseEvent::ResponseSent { .. })) => {}
+        Some(SwarmEvent::Behaviour(request_response::Event::ResponseSent { .. })) => {}
         e => panic!("{:?}", e),
     }
 
     let pair = select(a.next(), b.next());
     match pair.await {
         Either::Left((
-            Some(SwarmEvent::Behaviour(RequestResponseEvent::Message {
+            Some(SwarmEvent::Behaviour(request_response::Event::Message {
                 message:
                     request_response::Message::Response {
                         response: Pong(data),
@@ -244,7 +243,7 @@ async fn dial_failure() -> Result<()> {
     };
 
     match b.next().await {
-        Some(SwarmEvent::Behaviour(RequestResponseEvent::OutboundFailure { .. })) => {}
+        Some(SwarmEvent::Behaviour(request_response::Event::OutboundFailure { .. })) => {}
         e => panic!("{:?}", e),
     };
 
@@ -288,7 +287,7 @@ async fn concurrent_connections_and_streams() {
                     Some(SwarmEvent::ConnectionEstablished { .. }) => {
                         log::debug!("listener ConnectionEstablished");
                     }
-                    Some(SwarmEvent::Behaviour(RequestResponseEvent::Message {
+                    Some(SwarmEvent::Behaviour(request_response::Event::Message {
                         message:
                             request_response::Message::Request {
                                 request: Ping(ping),
@@ -303,7 +302,9 @@ async fn concurrent_connections_and_streams() {
                             .send_response(channel, Pong(ping))
                             .unwrap();
                     }
-                    Some(SwarmEvent::Behaviour(RequestResponseEvent::ResponseSent { .. })) => {
+                    Some(SwarmEvent::Behaviour(request_response::Event::ResponseSent {
+                        ..
+                    })) => {
                         log::debug!("listener ResponseSent");
                     }
                     Some(SwarmEvent::ConnectionClosed { .. }) => {}
@@ -354,7 +355,7 @@ async fn concurrent_connections_and_streams() {
                         .send_request(&peer_id, Ping(data.clone()));
                 }
             }
-            Some(SwarmEvent::Behaviour(RequestResponseEvent::Message {
+            Some(SwarmEvent::Behaviour(request_response::Event::Message {
                 message:
                     request_response::Message::Response {
                         response: Pong(pong),

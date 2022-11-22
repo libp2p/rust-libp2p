@@ -33,7 +33,7 @@ use libp2p_core::{
 };
 use libp2p_request_response::{
     self as request_response, ProtocolSupport, RequestId, RequestResponse, RequestResponseConfig,
-    RequestResponseEvent, ResponseChannel,
+    ResponseChannel,
 };
 use libp2p_swarm::{
     behaviour::{
@@ -432,21 +432,21 @@ impl NetworkBehaviour for Behaviour {
             match self.inner.poll(cx, params) {
                 Poll::Ready(NetworkBehaviourAction::GenerateEvent(event)) => {
                     let (mut events, action) = match event {
-                        RequestResponseEvent::Message {
+                        request_response::Event::Message {
                             message: request_response::Message::Response { .. },
                             ..
                         }
-                        | RequestResponseEvent::OutboundFailure { .. } => {
+                        | request_response::Event::OutboundFailure { .. } => {
                             self.as_client().handle_event(params, event)
                         }
-                        RequestResponseEvent::Message {
+                        request_response::Event::Message {
                             message: request_response::Message::Request { .. },
                             ..
                         }
-                        | RequestResponseEvent::InboundFailure { .. } => {
+                        | request_response::Event::InboundFailure { .. } => {
                             self.as_server().handle_event(params, event)
                         }
-                        RequestResponseEvent::ResponseSent { .. } => (VecDeque::new(), None),
+                        request_response::Event::ResponseSent { .. } => (VecDeque::new(), None),
                     };
                     self.pending_out_events.append(&mut events);
                     if let Some(action) = action {
@@ -547,7 +547,7 @@ trait HandleInnerEvent {
     fn handle_event(
         &mut self,
         params: &mut impl PollParameters,
-        event: RequestResponseEvent<DialRequest, DialResponse>,
+        event: request_response::Event<DialRequest, DialResponse>,
     ) -> (VecDeque<Event>, Option<Action>);
 }
 
