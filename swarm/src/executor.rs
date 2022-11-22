@@ -61,7 +61,7 @@ impl Executor for AsyncStdExecutor {
 
 #[cfg(feature = "wasm-bindgen")]
 #[derive(Default, Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) struct WasmBindgenExecutor;
+pub struct WasmBindgenExecutor;
 
 #[cfg(feature = "wasm-bindgen")]
 impl Executor for WasmBindgenExecutor {
