@@ -1456,6 +1456,44 @@ where
         }
     }
 
+    /// Builds a new [`SwarmBuilder`] from the given transport, behaviour, local peer ID and a
+    /// `tokio` executor.
+    #[cfg(all(
+        feature = "tokio",
+        not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown"))
+    ))]
+    pub fn with_tokio_executor(
+        transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
+        behaviour: TBehaviour,
+        local_peer_id: PeerId,
+    ) -> Self {
+        Self::with_executor(
+            transport,
+            behaviour,
+            local_peer_id,
+            crate::executor::TokioExecutor,
+        )
+    }
+
+    /// Builds a new [`SwarmBuilder`] from the given transport, behaviour, local peer ID and a
+    /// `async-std` executor.
+    #[cfg(all(
+        feature = "async-std",
+        not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown"))
+    ))]
+    pub fn with_async_std_executor(
+        transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
+        behaviour: TBehaviour,
+        local_peer_id: PeerId,
+    ) -> Self {
+        Self::with_executor(
+            transport,
+            behaviour,
+            local_peer_id,
+            crate::executor::AsyncStdExecutor,
+        )
+    }
+
     /// Creates a new [`SwarmBuilder`] from the given transport, behaviour and local peer ID. The
     /// `Swarm` with its underlying `Network` is obtained via [`SwarmBuilder::build`].
     ///
