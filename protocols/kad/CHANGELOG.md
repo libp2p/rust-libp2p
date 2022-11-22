@@ -14,12 +14,12 @@
 
 - Fix bad state transition on incoming `AddProvider` messages.
   This would eventually lead to warning that says: "New inbound substream to PeerId exceeds inbound substream limit. No older substream waiting to be reused."
-  See [PR XXXX].
+  See [PR 3152].
 
 [PR 3085]: https://github.com/libp2p/rust-libp2p/pull/3085
 [PR 3011]: https://github.com/libp2p/rust-libp2p/pull/3011
 [PR 3090]: https://github.com/libp2p/rust-libp2p/pull/3090
-[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+[PR 3152]: https://github.com/libp2p/rust-libp2p/pull/3152
 
 # 0.41.0
 
