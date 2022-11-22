@@ -61,7 +61,7 @@ async fn create_swarm(config: Config) -> Result<Swarm<Behaviour>, Box<dyn Error>
     let id_keys = identity::Keypair::generate_ed25519();
     let peer_id = PeerId::from(id_keys.public());
     let transport = libp2p::development_transport(id_keys).await?;
-    let behaviour = Behaviour::new(config)?;
+    let behaviour = Behaviour::new(config, peer_id)?;
     let mut swarm = Swarm::with_async_std_executor(transport, behaviour, peer_id);
     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
     Ok(swarm)

@@ -126,7 +126,7 @@ fn build_client() -> Swarm<Client> {
         transport,
         Client {
             relay: behaviour,
-            dcutr: dcutr::behaviour::Behaviour::new(),
+            dcutr: dcutr::behaviour::Behaviour::new(local_peer_id),
         },
         local_peer_id,
     )
