@@ -1,3 +1,9 @@
+# 0.22.2 [unreleased]
+
+- Update `rust-version` to reflect the actual MSRV: 1.60.0. See [PR 3090].
+
+[PR 3090]: https://github.com/libp2p/rust-libp2p/pull/3090
+
 # 0.22.1
 
 - Bump rand to 0.8 and quickcheck to 1. See [PR 2857].

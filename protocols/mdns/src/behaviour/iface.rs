@@ -24,7 +24,7 @@ mod query;
 use self::dns::{build_query, build_query_response, build_service_discovery_response};
 use self::query::MdnsPacket;
 use crate::behaviour::{socket::AsyncSocket, timer::Builder};
-use crate::MdnsConfig;
+use crate::Config;
 use libp2p_core::{Multiaddr, PeerId};
 use libp2p_swarm::PollParameters;
 use socket2::{Domain, Socket, Type};
@@ -74,7 +74,7 @@ where
     T: Builder + futures::Stream,
 {
     /// Builds a new [`InterfaceState`].
-    pub fn new(addr: IpAddr, config: MdnsConfig) -> io::Result<Self> {
+    pub fn new(addr: IpAddr, config: Config) -> io::Result<Self> {
         log::info!("creating instance on iface {}", addr);
         let recv_socket = match addr {
             IpAddr::V4(addr) => {

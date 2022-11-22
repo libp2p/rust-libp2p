@@ -1,7 +1,7 @@
 [package]
 name = "libp2p-wasm-ext"
 edition = "2021"
-rust-version = "1.56.1"
+rust-version = "1.60.0"
 description = "Allows passing in an external transport in a WASM environment"
 version = "0.38.0"
 authors = ["Pierre Krieger <pierre.krieger1708@gmail.com>"]
