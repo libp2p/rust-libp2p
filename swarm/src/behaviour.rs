@@ -19,9 +19,11 @@
 // DEALINGS IN THE SOFTWARE.
 
 mod either;
+mod external_addresses;
 mod listen_addresses;
 pub mod toggle;
 
+pub use external_addresses::ExternalAddresses;
 pub use listen_addresses::ListenAddresses;
 
 use crate::dial_opts::DialOpts;
@@ -412,6 +414,10 @@ pub trait PollParameters {
     fn listened_addresses(&self) -> Self::ListenedAddressesIter;
 
     /// Returns the list of the addresses nodes can use to reach us.
+    #[deprecated(
+        since = "0.41.0",
+        note = "Use `libp2p_swarm::ExternalAddresses` instead."
+    )]
     fn external_addresses(&self) -> Self::ExternalAddressesIter;
 
     /// Returns the peer id of the local node.

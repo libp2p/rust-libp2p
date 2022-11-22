@@ -101,8 +101,8 @@ pub mod derive_prelude {
 }
 
 pub use behaviour::{
-    CloseConnection, ListenAddresses, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
-    PollParameters,
+    CloseConnection, ExternalAddresses, ListenAddresses, NetworkBehaviour, NetworkBehaviourAction,
+    NotifyHandler, PollParameters,
 };
 pub use connection::pool::{ConnectionCounters, ConnectionLimits};
 pub use connection::{
