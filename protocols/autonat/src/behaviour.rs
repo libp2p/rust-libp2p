@@ -35,7 +35,7 @@ use libp2p_request_response::{
     ProtocolSupport, RequestId, RequestResponse, RequestResponseConfig, RequestResponseEvent,
     RequestResponseMessage, ResponseChannel,
 };
-use libp2p_swarm::behaviour::{ConnectionDenied, THandlerInEvent};
+use libp2p_swarm::behaviour::THandlerInEvent;
 use libp2p_swarm::{
     behaviour::{
         AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, ExpiredExternalAddr,
@@ -50,6 +50,7 @@ use std::{
     task::{Context, Poll},
     time::Duration,
 };
+use void::Void;
 
 /// Config for the [`Behaviour`].
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -410,6 +411,7 @@ impl Behaviour {
 
 impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = <RequestResponse<AutoNatCodec> as NetworkBehaviour>::ConnectionHandler;
+    type ConnectionDenied = Void;
     type OutEvent = Event;
 
     fn poll(&mut self, cx: &mut Context<'_>, params: &mut impl PollParameters) -> Poll<Action> {
@@ -461,7 +463,7 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         peer: &PeerId,
         connected_point: &ConnectedPoint,
-    ) -> Result<Self::ConnectionHandler, ConnectionDenied> {
+    ) -> Result<Self::ConnectionHandler, Self::ConnectionDenied> {
         self.inner.new_handler(peer, connected_point)
     }
 

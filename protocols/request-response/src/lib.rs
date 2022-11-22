@@ -67,7 +67,7 @@ pub use handler::ProtocolSupport;
 use futures::channel::oneshot;
 use handler::{RequestProtocol, RequestResponseHandler, RequestResponseHandlerEvent};
 use libp2p_core::{connection::ConnectionId, ConnectedPoint, Multiaddr, PeerId};
-use libp2p_swarm::behaviour::{ConnectionDenied, THandlerInEvent};
+use libp2p_swarm::behaviour::THandlerInEvent;
 use libp2p_swarm::{
     behaviour::{AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm},
     dial_opts::DialOpts,
@@ -81,6 +81,7 @@ use std::{
     task::{Context, Poll},
     time::Duration,
 };
+use void::Void;
 
 /// An inbound request or response.
 #[derive(Debug)]
@@ -692,13 +693,14 @@ where
     TCodec: RequestResponseCodec + Send + Clone + 'static,
 {
     type ConnectionHandler = RequestResponseHandler<TCodec>;
+    type ConnectionDenied = Void;
     type OutEvent = RequestResponseEvent<TCodec::Request, TCodec::Response>;
 
     fn new_handler(
         &mut self,
         _: &PeerId,
         _: &ConnectedPoint,
-    ) -> Result<Self::ConnectionHandler, ConnectionDenied> {
+    ) -> Result<Self::ConnectionHandler, Self::ConnectionDenied> {
         Ok(RequestResponseHandler::new(
             self.inbound_protocols.clone(),
             self.codec.clone(),

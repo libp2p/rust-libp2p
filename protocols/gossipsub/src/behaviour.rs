@@ -35,6 +35,7 @@ use log::{debug, error, trace, warn};
 use prometheus_client::registry::Registry;
 use prost::Message;
 use rand::{seq::SliceRandom, thread_rng};
+use void::Void;
 
 use libp2p_core::{
     connection::ConnectionId, identity::Keypair, multiaddr::Protocol::Ip4,
@@ -66,7 +67,6 @@ use crate::types::{
 };
 use crate::types::{GossipsubRpc, PeerConnections, PeerKind};
 use crate::{rpc_proto, TopicScoreParams};
-use libp2p_swarm::behaviour::ConnectionDenied;
 use std::{cmp::Ordering::Equal, fmt::Debug};
 use wasm_timer::Interval;
 
@@ -3296,13 +3296,14 @@ where
     F: Send + 'static + TopicSubscriptionFilter,
 {
     type ConnectionHandler = GossipsubHandler;
+    type ConnectionDenied = Void;
     type OutEvent = GossipsubEvent;
 
     fn new_handler(
         &mut self,
         _: &PeerId,
         _: &ConnectedPoint,
-    ) -> Result<Self::ConnectionHandler, ConnectionDenied> {
+    ) -> Result<Self::ConnectionHandler, Self::ConnectionDenied> {
         let protocol_config = ProtocolConfig::new(
             self.config.protocol_id().clone(),
             self.config.custom_id_version().clone(),

@@ -27,8 +27,8 @@ use crate::FloodsubConfig;
 use cuckoofilter::{CuckooError, CuckooFilter};
 use fnv::FnvHashSet;
 use libp2p_core::{connection::ConnectionId, ConnectedPoint, PeerId};
+use libp2p_swarm::behaviour::THandlerInEvent;
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm};
-use libp2p_swarm::behaviour::{ConnectionDenied, THandlerInEvent};
 use libp2p_swarm::ConnectionHandler;
 use libp2p_swarm::{
     dial_opts::DialOpts, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, OneShotHandler,
@@ -39,6 +39,7 @@ use smallvec::SmallVec;
 use std::collections::hash_map::{DefaultHasher, HashMap};
 use std::task::{Context, Poll};
 use std::{collections::VecDeque, iter};
+use void::Void;
 
 /// Network behaviour that handles the floodsub protocol.
 pub struct Floodsub {
@@ -334,13 +335,14 @@ impl Floodsub {
 
 impl NetworkBehaviour for Floodsub {
     type ConnectionHandler = OneShotHandler<FloodsubProtocol, FloodsubRpc, InnerMessage>;
+    type ConnectionDenied = Void;
     type OutEvent = FloodsubEvent;
 
     fn new_handler(
         &mut self,
         _: &PeerId,
         _: &ConnectedPoint,
-    ) -> Result<Self::ConnectionHandler, ConnectionDenied> {
+    ) -> Result<Self::ConnectionHandler, Self::ConnectionDenied> {
         Ok(Default::default())
     }
 

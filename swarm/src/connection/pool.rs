@@ -19,7 +19,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::behaviour::ConnectionDenied;
 use crate::connection::Connection;
 use crate::upgrade::UpgradeInfoSend;
 use crate::{
@@ -216,7 +215,7 @@ impl<THandler: ConnectionHandler, TTrans: Transport> fmt::Debug for Pool<THandle
 /// Event that can happen on the `Pool`.
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
-pub enum PoolEvent<THandler: ConnectionHandler, TTrans>
+pub enum PoolEvent<THandler: ConnectionHandler, TTrans, TReason>
 where
     TTrans: Transport,
 {
@@ -258,6 +257,13 @@ where
         /// The remaining established connections to the same peer.
         remaining_established_connection_ids: Vec<ConnectionId>,
         handler: THandler,
+    },
+
+    ConnectionDenied {
+        id: ConnectionId,
+        peer_id: PeerId,
+        endpoint: ConnectedPoint,
+        reason: TReason,
     },
 
     /// An outbound connection attempt failed.
@@ -532,11 +538,11 @@ where
     }
 
     /// Polls the connection pool for events.
-    pub fn poll(
+    pub fn poll<TReason>(
         &mut self,
-        mut new_handler_fn: impl FnMut(&PeerId, &ConnectedPoint) -> Result<THandler, ConnectionDenied>,
+        mut new_handler_fn: impl FnMut(&PeerId, &ConnectedPoint) -> Result<THandler, TReason>,
         cx: &mut Context<'_>,
-    ) -> Poll<PoolEvent<THandler, TTrans>>
+    ) -> Poll<PoolEvent<THandler, TTrans, TReason>>
     where
         TTrans: Transport<Output = (PeerId, StreamMuxerBox)>,
         THandler: ConnectionHandler + 'static,
@@ -753,8 +759,17 @@ where
                         },
                     );
 
-                    let handler =
-                        new_handler_fn(&obtained_peer_id, &endpoint).expect("empty to empty");
+                    let handler = match new_handler_fn(&obtained_peer_id, &endpoint) {
+                        Ok(handler) => handler,
+                        Err(reason) => {
+                            return Poll::Ready(PoolEvent::ConnectionDenied {
+                                id,
+                                peer_id: obtained_peer_id,
+                                endpoint,
+                                reason,
+                            })
+                        }
+                    };
                     let supported_protocols = handler
                         .listen_protocol()
                         .upgrade()

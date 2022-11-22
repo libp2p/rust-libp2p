@@ -18,10 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::behaviour::THandlerInEvent;
 use crate::behaviour::{
     self, inject_from_swarm, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
 };
-use crate::behaviour::{ConnectionDenied, THandlerInEvent};
 use either::Either;
 use libp2p_core::{ConnectedPoint, Multiaddr, PeerId};
 use std::{task::Context, task::Poll};
@@ -33,16 +33,22 @@ where
     R: NetworkBehaviour,
 {
     type ConnectionHandler = Either<L::ConnectionHandler, R::ConnectionHandler>;
+    type ConnectionDenied = Either<L::ConnectionDenied, R::ConnectionDenied>;
     type OutEvent = Either<L::OutEvent, R::OutEvent>;
 
     fn new_handler(
         &mut self,
         peer: &PeerId,
         connected_point: &ConnectedPoint,
-    ) -> Result<Self::ConnectionHandler, ConnectionDenied> {
+    ) -> Result<Self::ConnectionHandler, Self::ConnectionDenied> {
         Ok(match self {
-            Either::Left(a) => Either::Left(a.new_handler(peer, connected_point)?),
-            Either::Right(b) => Either::Right(b.new_handler(peer, connected_point)?),
+            Either::Left(a) => {
+                Either::Left(a.new_handler(peer, connected_point).map_err(Either::Left)?)
+            }
+            Either::Right(b) => Either::Right(
+                b.new_handler(peer, connected_point)
+                    .map_err(Either::Right)?,
+            ),
         })
     }
 
