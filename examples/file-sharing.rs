@@ -216,8 +216,8 @@ mod network {
     use libp2p::kad::{GetProvidersOk, Kademlia, KademliaEvent, QueryId, QueryResult};
     use libp2p::multiaddr::Protocol;
     use libp2p::request_response::{
-        ProtocolSupport, RequestId, RequestResponse, RequestResponseCodec, RequestResponseEvent,
-        RequestResponseMessage, ResponseChannel,
+        self, ProtocolSupport, RequestId, RequestResponse, RequestResponseCodec,
+        RequestResponseEvent, ResponseChannel,
     };
     use libp2p::swarm::{ConnectionHandlerUpgrErr, NetworkBehaviour, Swarm, SwarmEvent};
     use std::collections::{hash_map, HashMap, HashSet};
@@ -442,7 +442,7 @@ mod network {
                 SwarmEvent::Behaviour(ComposedEvent::RequestResponse(
                     RequestResponseEvent::Message { message, .. },
                 )) => match message {
-                    RequestResponseMessage::Request {
+                    request_response::Message::Request {
                         request, channel, ..
                     } => {
                         self.event_sender
@@ -453,7 +453,7 @@ mod network {
                             .await
                             .expect("Event receiver not to be dropped.");
                     }
-                    RequestResponseMessage::Response {
+                    request_response::Message::Response {
                         request_id,
                         response,
                     } => {

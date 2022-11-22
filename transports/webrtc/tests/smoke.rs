@@ -27,8 +27,8 @@ use futures::{
 };
 use libp2p::core::{identity, muxing::StreamMuxerBox, upgrade, Transport as _};
 use libp2p::request_response::{
-    ProtocolName, ProtocolSupport, RequestResponse, RequestResponseCodec, RequestResponseConfig,
-    RequestResponseEvent, RequestResponseMessage,
+    self, ProtocolName, ProtocolSupport, RequestResponse, RequestResponseCodec,
+    RequestResponseConfig, RequestResponseEvent,
 };
 use libp2p::swarm::{Swarm, SwarmEvent};
 use libp2p::webrtc::tokio as webrtc;
@@ -107,7 +107,7 @@ async fn smoke() -> Result<()> {
         Either::Left((
             Some(SwarmEvent::Behaviour(RequestResponseEvent::Message {
                 message:
-                    RequestResponseMessage::Request {
+                    request_response::Message::Request {
                         request: Ping(ping),
                         channel,
                         ..
@@ -134,7 +134,7 @@ async fn smoke() -> Result<()> {
         Either::Right((
             Some(SwarmEvent::Behaviour(RequestResponseEvent::Message {
                 message:
-                    RequestResponseMessage::Response {
+                    request_response::Message::Response {
                         response: Pong(pong),
                         ..
                     },
@@ -158,7 +158,7 @@ async fn smoke() -> Result<()> {
         Either::Right((
             Some(SwarmEvent::Behaviour(RequestResponseEvent::Message {
                 message:
-                    RequestResponseMessage::Request {
+                    request_response::Message::Request {
                         request: Ping(data),
                         channel,
                         ..
@@ -185,7 +185,7 @@ async fn smoke() -> Result<()> {
         Either::Left((
             Some(SwarmEvent::Behaviour(RequestResponseEvent::Message {
                 message:
-                    RequestResponseMessage::Response {
+                    request_response::Message::Response {
                         response: Pong(data),
                         ..
                     },
@@ -290,7 +290,7 @@ async fn concurrent_connections_and_streams() {
                     }
                     Some(SwarmEvent::Behaviour(RequestResponseEvent::Message {
                         message:
-                            RequestResponseMessage::Request {
+                            request_response::Message::Request {
                                 request: Ping(ping),
                                 channel,
                                 ..
@@ -356,7 +356,7 @@ async fn concurrent_connections_and_streams() {
             }
             Some(SwarmEvent::Behaviour(RequestResponseEvent::Message {
                 message:
-                    RequestResponseMessage::Response {
+                    request_response::Message::Response {
                         response: Pong(pong),
                         ..
                     },

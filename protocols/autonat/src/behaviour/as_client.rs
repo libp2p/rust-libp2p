@@ -29,7 +29,7 @@ use futures_timer::Delay;
 use instant::Instant;
 use libp2p_core::{connection::ConnectionId, Multiaddr, PeerId};
 use libp2p_request_response::{
-    OutboundFailure, RequestId, RequestResponse, RequestResponseEvent, RequestResponseMessage,
+    self as request_response, OutboundFailure, RequestId, RequestResponse, RequestResponseEvent,
 };
 use libp2p_swarm::{AddressScore, NetworkBehaviourAction, PollParameters};
 use rand::{seq::SliceRandom, thread_rng};
@@ -113,7 +113,7 @@ impl<'a> HandleInnerEvent for AsClient<'a> {
             RequestResponseEvent::Message {
                 peer,
                 message:
-                    RequestResponseMessage::Response {
+                    request_response::Message::Response {
                         request_id,
                         response,
                     },

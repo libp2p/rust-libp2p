@@ -25,7 +25,7 @@ use super::{
 use instant::Instant;
 use libp2p_core::{connection::ConnectionId, multiaddr::Protocol, Multiaddr, PeerId};
 use libp2p_request_response::{
-    InboundFailure, RequestId, RequestResponse, RequestResponseEvent, RequestResponseMessage,
+    self as request_response, InboundFailure, RequestId, RequestResponse, RequestResponseEvent,
     ResponseChannel,
 };
 use libp2p_swarm::{
@@ -106,7 +106,7 @@ impl<'a> HandleInnerEvent for AsServer<'a> {
             RequestResponseEvent::Message {
                 peer,
                 message:
-                    RequestResponseMessage::Request {
+                    request_response::Message::Request {
                         request_id,
                         request,
                         channel,

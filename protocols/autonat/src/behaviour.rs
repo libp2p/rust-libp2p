@@ -32,8 +32,8 @@ use libp2p_core::{
     connection::ConnectionId, multiaddr::Protocol, ConnectedPoint, Endpoint, Multiaddr, PeerId,
 };
 use libp2p_request_response::{
-    ProtocolSupport, RequestId, RequestResponse, RequestResponseConfig, RequestResponseEvent,
-    RequestResponseMessage, ResponseChannel,
+    self as request_response, ProtocolSupport, RequestId, RequestResponse, RequestResponseConfig,
+    RequestResponseEvent, ResponseChannel,
 };
 use libp2p_swarm::{
     behaviour::{
@@ -433,14 +433,14 @@ impl NetworkBehaviour for Behaviour {
                 Poll::Ready(NetworkBehaviourAction::GenerateEvent(event)) => {
                     let (mut events, action) = match event {
                         RequestResponseEvent::Message {
-                            message: RequestResponseMessage::Response { .. },
+                            message: request_response::Message::Response { .. },
                             ..
                         }
                         | RequestResponseEvent::OutboundFailure { .. } => {
                             self.as_client().handle_event(params, event)
                         }
                         RequestResponseEvent::Message {
-                            message: RequestResponseMessage::Request { .. },
+                            message: request_response::Message::Request { .. },
                             ..
                         }
                         | RequestResponseEvent::InboundFailure { .. } => {

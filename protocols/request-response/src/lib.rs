@@ -32,11 +32,11 @@
 //! available via the [`RequestResponseConfig`].
 //!
 //! Requests are sent using [`RequestResponse::send_request`] and the
-//! responses received as [`RequestResponseMessage::Response`] via
+//! responses received as [`Message::Response`] via
 //! [`RequestResponseEvent::Message`].
 //!
 //! Responses are sent using [`RequestResponse::send_response`] upon
-//! receiving a [`RequestResponseMessage::Request`] via
+//! receiving a [`Message::Request`] via
 //! [`RequestResponseEvent::Message`].
 //!
 //! ## Protocol Families
@@ -81,9 +81,16 @@ use std::{
     time::Duration,
 };
 
+#[deprecated(
+    since = "0.23.0",
+    note = "Use re-exports that omit `RequestResponse` prefix, i.e. `libp2p::request_response::Message`"
+)]
+pub type RequestResponseMessage<TRequest, TResponse, TChannelResponse> =
+    Message<TRequest, TResponse, TChannelResponse>;
+
 /// An inbound request or response.
 #[derive(Debug)]
-pub enum RequestResponseMessage<TRequest, TResponse, TChannelResponse = TResponse> {
+pub enum Message<TRequest, TResponse, TChannelResponse = TResponse> {
     /// A request message.
     Request {
         /// The ID of this request.
@@ -116,7 +123,7 @@ pub enum RequestResponseEvent<TRequest, TResponse, TChannelResponse = TResponse>
         /// The peer who sent the message.
         peer: PeerId,
         /// The incoming message.
-        message: RequestResponseMessage<TRequest, TResponse, TChannelResponse>,
+        message: Message<TRequest, TResponse, TChannelResponse>,
     },
     /// An outbound request failed.
     OutboundFailure {
@@ -409,7 +416,7 @@ where
     /// will be or has been emitted.
     ///
     /// The provided `ResponseChannel` is obtained from an inbound
-    /// [`RequestResponseMessage::Request`].
+    /// [`Message::Request`].
     pub fn send_response(
         &mut self,
         ch: ResponseChannel<TCodec::Response>,
@@ -758,7 +765,7 @@ where
                     "Expect request_id to be pending before receiving response.",
                 );
 
-                let message = RequestResponseMessage::Response {
+                let message = Message::Response {
                     request_id,
                     response,
                 };
@@ -773,7 +780,7 @@ where
                 sender,
             } => {
                 let channel = ResponseChannel { sender };
-                let message = RequestResponseMessage::Request {
+                let message = Message::Request {
                     request_id,
                     request,
                     channel,
