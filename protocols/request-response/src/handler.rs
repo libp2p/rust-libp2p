@@ -54,8 +54,7 @@ use std::{
 )]
 pub type RequestResponseHandler<TCodec> = Handler<TCodec>;
 
-/// A connection handler of a `Behaviour` protocol.
-#[doc(hidden)]
+/// A connection handler of a [`Behaviour`](super::Behaviour) protocol.
 pub struct Handler<TCodec>
 where
     TCodec: Codec,
@@ -202,7 +201,6 @@ where
 pub type RequestResponseHandlerEvent<TCodec> = HandlerEvent<TCodec>;
 
 /// The events emitted by the [`Handler`].
-#[doc(hidden)]
 pub enum HandlerEvent<TCodec>
 where
     TCodec: Codec,
