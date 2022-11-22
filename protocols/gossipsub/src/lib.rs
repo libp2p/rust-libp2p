@@ -122,7 +122,7 @@
 //!     // subscribe to the topic
 //!     gossipsub.subscribe(&topic);
 //!     // create the swarm
-//!     libp2p_swarm::Swarm::new(
+//!     libp2p_swarm::Swarm::without_executor(
 //!         transport,
 //!         gossipsub,
 //!         local_peer_id,
