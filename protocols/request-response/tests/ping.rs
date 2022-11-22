@@ -31,8 +31,8 @@ use libp2p::core::{
 };
 use libp2p::noise::NoiseAuthenticated;
 use libp2p::request_response::{
-    self, Event, InboundFailure, Message, OutboundFailure, ProtocolName, ProtocolSupport,
-    RequestResponse, RequestResponseConfig,
+    self, Config, Event, InboundFailure, Message, OutboundFailure, ProtocolName, ProtocolSupport,
+    RequestResponse,
 };
 use libp2p::swarm::{Swarm, SwarmEvent};
 use libp2p::tcp;
@@ -47,7 +47,7 @@ fn is_response_outbound() {
     let offline_peer = PeerId::random();
 
     let protocols = iter::once((PingProtocol(), ProtocolSupport::Full));
-    let cfg = RequestResponseConfig::default();
+    let cfg = Config::default();
 
     let (peer1_id, trans) = mk_transport();
     let ping_proto1 = RequestResponse::new(PingCodec(), protocols, cfg);
@@ -86,7 +86,7 @@ fn ping_protocol() {
     let pong = Pong("pong".to_string().into_bytes());
 
     let protocols = iter::once((PingProtocol(), ProtocolSupport::Full));
-    let cfg = RequestResponseConfig::default();
+    let cfg = Config::default();
 
     let (peer1_id, trans) = mk_transport();
     let ping_proto1 = RequestResponse::new(PingCodec(), protocols.clone(), cfg.clone());
@@ -175,7 +175,7 @@ fn emits_inbound_connection_closed_failure() {
     let ping = Ping("ping".to_string().into_bytes());
 
     let protocols = iter::once((PingProtocol(), ProtocolSupport::Full));
-    let cfg = RequestResponseConfig::default();
+    let cfg = Config::default();
 
     let (peer1_id, trans) = mk_transport();
     let ping_proto1 = RequestResponse::new(PingCodec(), protocols.clone(), cfg.clone());
@@ -244,7 +244,7 @@ fn emits_inbound_connection_closed_if_channel_is_dropped() {
     let ping = Ping("ping".to_string().into_bytes());
 
     let protocols = iter::once((PingProtocol(), ProtocolSupport::Full));
-    let cfg = RequestResponseConfig::default();
+    let cfg = Config::default();
 
     let (peer1_id, trans) = mk_transport();
     let ping_proto1 = RequestResponse::new(PingCodec(), protocols.clone(), cfg.clone());

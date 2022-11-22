@@ -29,7 +29,7 @@
 //! [`Codec`]. Creating a request/response protocol thus amounts
 //! to providing an implementation of this trait which can then be
 //! given to [`RequestResponse::new`]. Further configuration options are
-//! available via the [`RequestResponseConfig`].
+//! available via the [`Config`].
 //!
 //! Requests are sent using [`RequestResponse::send_request`] and the
 //! responses received as [`Message::Response`] via
@@ -280,12 +280,12 @@ impl fmt::Display for RequestId {
 
 /// The configuration for a `RequestResponse` protocol.
 #[derive(Debug, Clone)]
-pub struct RequestResponseConfig {
+pub struct Config {
     request_timeout: Duration,
     connection_keep_alive: Duration,
 }
 
-impl Default for RequestResponseConfig {
+impl Default for Config {
     fn default() -> Self {
         Self {
             connection_keep_alive: Duration::from_secs(10),
@@ -294,7 +294,7 @@ impl Default for RequestResponseConfig {
     }
 }
 
-impl RequestResponseConfig {
+impl Config {
     /// Sets the keep-alive timeout of idle connections.
     pub fn set_connection_keep_alive(&mut self, v: Duration) -> &mut Self {
         self.connection_keep_alive = v;
@@ -322,7 +322,7 @@ where
     /// The next (inbound) request ID.
     next_inbound_id: Arc<AtomicU64>,
     /// The protocol configuration.
-    config: RequestResponseConfig,
+    config: Config,
     /// The protocol codec for reading and writing requests and responses.
     codec: TCodec,
     /// Pending events to return from `poll`.
@@ -344,7 +344,7 @@ where
 {
     /// Creates a new `RequestResponse` behaviour for the given
     /// protocols, codec and configuration.
-    pub fn new<I>(codec: TCodec, protocols: I, cfg: RequestResponseConfig) -> Self
+    pub fn new<I>(codec: TCodec, protocols: I, cfg: Config) -> Self
     where
         I: IntoIterator<Item = (TCodec::Protocol, ProtocolSupport)>,
     {

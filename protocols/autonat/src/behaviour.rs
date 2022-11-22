@@ -32,8 +32,7 @@ use libp2p_core::{
     connection::ConnectionId, multiaddr::Protocol, ConnectedPoint, Endpoint, Multiaddr, PeerId,
 };
 use libp2p_request_response::{
-    self as request_response, ProtocolSupport, RequestId, RequestResponse, RequestResponseConfig,
-    ResponseChannel,
+    self as request_response, ProtocolSupport, RequestId, RequestResponse, ResponseChannel,
 };
 use libp2p_swarm::{
     behaviour::{
@@ -218,7 +217,7 @@ pub struct Behaviour {
 impl Behaviour {
     pub fn new(local_peer_id: PeerId, config: Config) -> Self {
         let protocols = iter::once((AutoNatProtocol, ProtocolSupport::Full));
-        let mut cfg = RequestResponseConfig::default();
+        let mut cfg = request_response::Config::default();
         cfg.set_request_timeout(config.timeout);
         let inner = RequestResponse::new(AutoNatCodec, protocols, cfg);
         Self {
