@@ -32,7 +32,7 @@ use libp2p_core::{
     connection::ConnectionId, multiaddr::Protocol, ConnectedPoint, Endpoint, Multiaddr, PeerId,
 };
 use libp2p_request_response::{
-    self as request_response, ProtocolSupport, RequestId, RequestResponse, ResponseChannel,
+    self as request_response, ProtocolSupport, RequestId, ResponseChannel,
 };
 use libp2p_swarm::{
     behaviour::{
@@ -166,7 +166,7 @@ pub struct Behaviour {
     local_peer_id: PeerId,
 
     // Inner behaviour for sending requests and receiving the response.
-    inner: RequestResponse<AutoNatCodec>,
+    inner: request_response::Behaviour<AutoNatCodec>,
 
     config: Config,
 
@@ -219,7 +219,7 @@ impl Behaviour {
         let protocols = iter::once((AutoNatProtocol, ProtocolSupport::Full));
         let mut cfg = request_response::Config::default();
         cfg.set_request_timeout(config.timeout);
-        let inner = RequestResponse::new(AutoNatCodec, protocols, cfg);
+        let inner = request_response::Behaviour::new(AutoNatCodec, protocols, cfg);
         Self {
             local_peer_id,
             inner,
@@ -418,7 +418,8 @@ impl Behaviour {
 }
 
 impl NetworkBehaviour for Behaviour {
-    type ConnectionHandler = <RequestResponse<AutoNatCodec> as NetworkBehaviour>::ConnectionHandler;
+    type ConnectionHandler =
+        <request_response::Behaviour<AutoNatCodec> as NetworkBehaviour>::ConnectionHandler;
     type OutEvent = Event;
 
     fn poll(&mut self, cx: &mut Context<'_>, params: &mut impl PollParameters) -> Poll<Action> {
@@ -541,7 +542,7 @@ type Action = NetworkBehaviourAction<
     <Behaviour as NetworkBehaviour>::ConnectionHandler,
 >;
 
-// Trait implemented for `AsClient` as `AsServer` to handle events from the inner [`RequestResponse`] Protocol.
+// Trait implemented for `AsClient` as `AsServer` to handle events from the inner [`request_response::Behaviour`] Protocol.
 trait HandleInnerEvent {
     fn handle_event(
         &mut self,

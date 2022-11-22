@@ -26,7 +26,7 @@ use futures::{
     stream::StreamExt,
 };
 use libp2p::core::{identity, muxing::StreamMuxerBox, upgrade, Transport as _};
-use libp2p::request_response::{self, ProtocolName, ProtocolSupport, RequestResponse};
+use libp2p::request_response::{self, ProtocolName, ProtocolSupport};
 use libp2p::swarm::{Swarm, SwarmEvent};
 use libp2p::webrtc::tokio as webrtc;
 use rand::{thread_rng, RngCore};
@@ -466,7 +466,7 @@ impl request_response::Codec for PingCodec {
     }
 }
 
-fn create_swarm() -> Result<Swarm<RequestResponse<PingCodec>>> {
+fn create_swarm() -> Result<Swarm<request_response::Behaviour<PingCodec>>> {
     let id_keys = identity::Keypair::generate_ed25519();
     let peer_id = id_keys.public().to_peer_id();
     let transport = webrtc::Transport::new(
@@ -476,7 +476,7 @@ fn create_swarm() -> Result<Swarm<RequestResponse<PingCodec>>> {
 
     let protocols = iter::once((PingProtocol(), ProtocolSupport::Full));
     let cfg = request_response::Config::default();
-    let behaviour = RequestResponse::new(PingCodec(), protocols, cfg);
+    let behaviour = request_response::Behaviour::new(PingCodec(), protocols, cfg);
     let transport = transport
         .map(|(peer_id, conn), _| (peer_id, StreamMuxerBox::new(conn)))
         .boxed();

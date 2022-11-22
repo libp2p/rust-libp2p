@@ -28,9 +28,7 @@ use futures::FutureExt;
 use futures_timer::Delay;
 use instant::Instant;
 use libp2p_core::{connection::ConnectionId, Multiaddr, PeerId};
-use libp2p_request_response::{
-    self as request_response, OutboundFailure, RequestId, RequestResponse,
-};
+use libp2p_request_response::{self as request_response, OutboundFailure, RequestId};
 use libp2p_swarm::{AddressScore, NetworkBehaviourAction, PollParameters};
 use rand::{seq::SliceRandom, thread_rng};
 use std::{
@@ -83,7 +81,7 @@ pub enum OutboundProbeEvent {
 
 /// View over [`super::Behaviour`] in a client role.
 pub struct AsClient<'a> {
-    pub inner: &'a mut RequestResponse<AutoNatCodec>,
+    pub inner: &'a mut request_response::Behaviour<AutoNatCodec>,
     pub local_peer_id: PeerId,
     pub config: &'a Config,
     pub connected: &'a HashMap<PeerId, HashMap<ConnectionId, Option<Multiaddr>>>,

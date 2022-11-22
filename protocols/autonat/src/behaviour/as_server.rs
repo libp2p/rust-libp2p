@@ -25,7 +25,7 @@ use super::{
 use instant::Instant;
 use libp2p_core::{connection::ConnectionId, multiaddr::Protocol, Multiaddr, PeerId};
 use libp2p_request_response::{
-    self as request_response, InboundFailure, RequestId, RequestResponse, ResponseChannel,
+    self as request_response, InboundFailure, RequestId, ResponseChannel,
 };
 use libp2p_swarm::{
     dial_opts::{DialOpts, PeerCondition},
@@ -74,7 +74,7 @@ pub enum InboundProbeEvent {
 
 /// View over [`super::Behaviour`] in a server role.
 pub struct AsServer<'a> {
-    pub inner: &'a mut RequestResponse<AutoNatCodec>,
+    pub inner: &'a mut request_response::Behaviour<AutoNatCodec>,
     pub config: &'a Config,
     pub connected: &'a HashMap<PeerId, HashMap<ConnectionId, Option<Multiaddr>>>,
     pub probe_id: &'a mut ProbeId,

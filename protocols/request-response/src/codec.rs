@@ -25,7 +25,7 @@ use futures::prelude::*;
 use std::io;
 
 /// A `Codec` defines the request and response types
-/// for a [`RequestResponse`](crate::RequestResponse) protocol or
+/// for a [`Behaviour`](crate::Behaviour) protocol or
 /// protocol family and how they are encoded / decoded on an I/O stream.
 #[async_trait]
 pub trait Codec {

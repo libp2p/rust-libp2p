@@ -215,9 +215,7 @@ mod network {
     use libp2p::kad::record::store::MemoryStore;
     use libp2p::kad::{GetProvidersOk, Kademlia, KademliaEvent, QueryId, QueryResult};
     use libp2p::multiaddr::Protocol;
-    use libp2p::request_response::{
-        self, ProtocolSupport, RequestId, RequestResponse, ResponseChannel,
-    };
+    use libp2p::request_response::{self, ProtocolSupport, RequestId, ResponseChannel};
     use libp2p::swarm::{ConnectionHandlerUpgrErr, NetworkBehaviour, Swarm, SwarmEvent};
     use std::collections::{hash_map, HashMap, HashSet};
     use std::iter;
@@ -253,7 +251,7 @@ mod network {
             libp2p::development_transport(id_keys).await?,
             ComposedBehaviour {
                 kademlia: Kademlia::new(peer_id, MemoryStore::new(peer_id)),
-                request_response: RequestResponse::new(
+                request_response: request_response::Behaviour::new(
                     FileExchangeCodec(),
                     iter::once((FileExchangeProtocol(), ProtocolSupport::Full)),
                     Default::default(),
@@ -584,7 +582,7 @@ mod network {
     #[derive(NetworkBehaviour)]
     #[behaviour(out_event = "ComposedEvent")]
     struct ComposedBehaviour {
-        request_response: RequestResponse<FileExchangeCodec>,
+        request_response: request_response::Behaviour<FileExchangeCodec>,
         kademlia: Kademlia<MemoryStore>,
     }
 

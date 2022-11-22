@@ -12,6 +12,13 @@
 
 - Update `rust-version` to reflect the actual MSRV: 1.62.0. See [PR 3090].
 
+- Rename types as per [discussion 2174].
+  `RequestResponse` has been renamed to `Behaviour`.
+  The `RequestResponse` prefix has been removed from various types like `RequestResponseEvent`.
+  Users should prefer importing the request_response protocol as a module (`use libp2p::request_response;`),
+  and refer to its types via `request_response::`. For example: `request_response::Behaviour` or `request_response::Event`.
+
+[discussion 2174]: https://github.com/libp2p/rust-libp2p/discussions/2174
 [PR 3085]: https://github.com/libp2p/rust-libp2p/pull/3085
 [PR 3011]: https://github.com/libp2p/rust-libp2p/pull/3011
 [PR 3090]: https://github.com/libp2p/rust-libp2p/pull/3090
