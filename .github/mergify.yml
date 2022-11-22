@@ -5,13 +5,14 @@ defaults:
       commit_message_template: |
         {{ title }} (#{{ number }})
         
-        {{ body | get_section("## Commit Message body", "") }}   
+        {{ body | get_section("## Description", "") }}   
 
 pull_request_rules:
   - name: Ask to resolve conflict
     conditions:
       - conflict
       - -draft # Draft PRs are allowed to have conflicts.
+      - -author=dependabot[bot]
     actions:
       comment:
         message: This pull request has merge conflicts. Could you please resolve them @{{author}}? 🙏

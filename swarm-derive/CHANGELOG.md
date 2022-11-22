@@ -1,3 +1,18 @@
+# 0.30.2 - [unreleased]
+
+- Replace `NetworkBehaviour` Derive macro deprecated `inject_*` method implementations
+  with the new `on_swarm_event` and `on_connection_handler_event`.
+  See [PR 3011].
+
+- Add `prelude` configuration option.
+  The derive-macro generates code that needs to refer to various symbols. See [PR 3055].
+
+- Update `rust-version` to reflect the actual MSRV: 1.60.0. See [PR 3090].
+
+[PR 3011]: https://github.com/libp2p/rust-libp2p/pull/3011
+[PR 3055]: https://github.com/libp2p/rust-libp2p/pull/3055
+[PR 3090]: https://github.com/libp2p/rust-libp2p/pull/3090
+
 # 0.30.1
 
 - Fix an issue where the derive would generate bad code if the type parameters between the behaviour and a custom

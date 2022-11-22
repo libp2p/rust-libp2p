@@ -19,15 +19,16 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::handler::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, IntoConnectionHandler,
-    KeepAlive, SubstreamProtocol,
+    ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr,
+    DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound, IntoConnectionHandler,
+    KeepAlive, ListenUpgradeError, SubstreamProtocol,
 };
-use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper};
+use crate::upgrade::SendWrapper;
 
 use libp2p_core::{
     either::{EitherError, EitherOutput},
     upgrade::{EitherUpgrade, NegotiationError, ProtocolError, SelectUpgrade, UpgradeError},
-    ConnectedPoint, Multiaddr, PeerId,
+    ConnectedPoint, PeerId,
 };
 use std::{cmp, task::Context, task::Poll};
 
@@ -97,45 +98,30 @@ impl<TProto1, TProto2> ConnectionHandlerSelect<TProto1, TProto2> {
     }
 }
 
-impl<TProto1, TProto2> ConnectionHandler for ConnectionHandlerSelect<TProto1, TProto2>
+impl<TProto1, TProto2> ConnectionHandlerSelect<TProto1, TProto2>
 where
     TProto1: ConnectionHandler,
     TProto2: ConnectionHandler,
 {
-    type InEvent = EitherOutput<TProto1::InEvent, TProto2::InEvent>;
-    type OutEvent = EitherOutput<TProto1::OutEvent, TProto2::OutEvent>;
-    type Error = EitherError<TProto1::Error, TProto2::Error>;
-    type InboundProtocol = SelectUpgrade<
-        SendWrapper<<TProto1 as ConnectionHandler>::InboundProtocol>,
-        SendWrapper<<TProto2 as ConnectionHandler>::InboundProtocol>,
-    >;
-    type OutboundProtocol = EitherUpgrade<
-        SendWrapper<TProto1::OutboundProtocol>,
-        SendWrapper<TProto2::OutboundProtocol>,
-    >;
-    type OutboundOpenInfo = EitherOutput<TProto1::OutboundOpenInfo, TProto2::OutboundOpenInfo>;
-    type InboundOpenInfo = (TProto1::InboundOpenInfo, TProto2::InboundOpenInfo);
-
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
-        let proto1 = self.proto1.listen_protocol();
-        let proto2 = self.proto2.listen_protocol();
-        let timeout = *std::cmp::max(proto1.timeout(), proto2.timeout());
-        let (u1, i1) = proto1.into_upgrade();
-        let (u2, i2) = proto2.into_upgrade();
-        let choice = SelectUpgrade::new(SendWrapper(u1), SendWrapper(u2));
-        SubstreamProtocol::new(choice, (i1, i2)).with_timeout(timeout)
-    }
-
-    fn inject_fully_negotiated_outbound(
+    fn on_fully_negotiated_outbound(
         &mut self,
-        protocol: <Self::OutboundProtocol as OutboundUpgradeSend>::Output,
-        endpoint: Self::OutboundOpenInfo,
+        FullyNegotiatedOutbound {
+            protocol,
+            info: endpoint,
+        }: FullyNegotiatedOutbound<
+            <Self as ConnectionHandler>::OutboundProtocol,
+            <Self as ConnectionHandler>::OutboundOpenInfo,
+        >,
     ) {
         match (protocol, endpoint) {
-            (EitherOutput::First(protocol), EitherOutput::First(info)) => {
+            (EitherOutput::First(protocol), EitherOutput::First(info)) =>
+            {
+                #[allow(deprecated)]
                 self.proto1.inject_fully_negotiated_outbound(protocol, info)
             }
-            (EitherOutput::Second(protocol), EitherOutput::Second(info)) => {
+            (EitherOutput::Second(protocol), EitherOutput::Second(info)) =>
+            {
+                #[allow(deprecated)]
                 self.proto2.inject_fully_negotiated_outbound(protocol, info)
             }
             (EitherOutput::First(_), EitherOutput::Second(_)) => {
@@ -147,45 +133,47 @@ where
         }
     }
 
-    fn inject_fully_negotiated_inbound(
+    fn on_fully_negotiated_inbound(
         &mut self,
-        protocol: <Self::InboundProtocol as InboundUpgradeSend>::Output,
-        (i1, i2): Self::InboundOpenInfo,
+        FullyNegotiatedInbound {
+            protocol,
+            info: (i1, i2),
+        }: FullyNegotiatedInbound<
+            <Self as ConnectionHandler>::InboundProtocol,
+            <Self as ConnectionHandler>::InboundOpenInfo,
+        >,
     ) {
         match protocol {
-            EitherOutput::First(protocol) => {
+            EitherOutput::First(protocol) =>
+            {
+                #[allow(deprecated)]
                 self.proto1.inject_fully_negotiated_inbound(protocol, i1)
             }
-            EitherOutput::Second(protocol) => {
+            EitherOutput::Second(protocol) =>
+            {
+                #[allow(deprecated)]
                 self.proto2.inject_fully_negotiated_inbound(protocol, i2)
             }
         }
     }
 
-    fn inject_event(&mut self, event: Self::InEvent) {
-        match event {
-            EitherOutput::First(event) => self.proto1.inject_event(event),
-            EitherOutput::Second(event) => self.proto2.inject_event(event),
-        }
-    }
-
-    fn inject_address_change(&mut self, new_address: &Multiaddr) {
-        self.proto1.inject_address_change(new_address);
-        self.proto2.inject_address_change(new_address)
-    }
-
-    fn inject_dial_upgrade_error(
+    fn on_dial_upgrade_error(
         &mut self,
-        info: Self::OutboundOpenInfo,
-        error: ConnectionHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>,
+        DialUpgradeError { info, error }: DialUpgradeError<
+            <Self as ConnectionHandler>::OutboundOpenInfo,
+            <Self as ConnectionHandler>::OutboundProtocol,
+        >,
     ) {
         match (info, error) {
+            #[allow(deprecated)]
             (EitherOutput::First(info), ConnectionHandlerUpgrErr::Timer) => self
                 .proto1
                 .inject_dial_upgrade_error(info, ConnectionHandlerUpgrErr::Timer),
+            #[allow(deprecated)]
             (EitherOutput::First(info), ConnectionHandlerUpgrErr::Timeout) => self
                 .proto1
                 .inject_dial_upgrade_error(info, ConnectionHandlerUpgrErr::Timeout),
+            #[allow(deprecated)]
             (
                 EitherOutput::First(info),
                 ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(err)),
@@ -193,6 +181,7 @@ where
                 info,
                 ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(err)),
             ),
+            #[allow(deprecated)]
             (
                 EitherOutput::First(info),
                 ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::A(err))),
@@ -206,12 +195,15 @@ where
             ) => {
                 panic!("Wrong API usage; the upgrade error doesn't match the outbound open info");
             }
+            #[allow(deprecated)]
             (EitherOutput::Second(info), ConnectionHandlerUpgrErr::Timeout) => self
                 .proto2
                 .inject_dial_upgrade_error(info, ConnectionHandlerUpgrErr::Timeout),
+            #[allow(deprecated)]
             (EitherOutput::Second(info), ConnectionHandlerUpgrErr::Timer) => self
                 .proto2
                 .inject_dial_upgrade_error(info, ConnectionHandlerUpgrErr::Timer),
+            #[allow(deprecated)]
             (
                 EitherOutput::Second(info),
                 ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(err)),
@@ -219,6 +211,7 @@ where
                 info,
                 ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(err)),
             ),
+            #[allow(deprecated)]
             (
                 EitherOutput::Second(info),
                 ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::B(err))),
@@ -235,31 +228,42 @@ where
         }
     }
 
-    fn inject_listen_upgrade_error(
+    fn on_listen_upgrade_error(
         &mut self,
-        (i1, i2): Self::InboundOpenInfo,
-        error: ConnectionHandlerUpgrErr<<Self::InboundProtocol as InboundUpgradeSend>::Error>,
+        ListenUpgradeError {
+            info: (i1, i2),
+            error,
+        }: ListenUpgradeError<
+            <Self as ConnectionHandler>::InboundOpenInfo,
+            <Self as ConnectionHandler>::InboundProtocol,
+        >,
     ) {
         match error {
             ConnectionHandlerUpgrErr::Timer => {
+                #[allow(deprecated)]
                 self.proto1
                     .inject_listen_upgrade_error(i1, ConnectionHandlerUpgrErr::Timer);
+                #[allow(deprecated)]
                 self.proto2
                     .inject_listen_upgrade_error(i2, ConnectionHandlerUpgrErr::Timer)
             }
             ConnectionHandlerUpgrErr::Timeout => {
+                #[allow(deprecated)]
                 self.proto1
                     .inject_listen_upgrade_error(i1, ConnectionHandlerUpgrErr::Timeout);
+                #[allow(deprecated)]
                 self.proto2
                     .inject_listen_upgrade_error(i2, ConnectionHandlerUpgrErr::Timeout)
             }
             ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)) => {
+                #[allow(deprecated)]
                 self.proto1.inject_listen_upgrade_error(
                     i1,
                     ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(
                         NegotiationError::Failed,
                     )),
                 );
+                #[allow(deprecated)]
                 self.proto2.inject_listen_upgrade_error(
                     i2,
                     ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(
@@ -291,27 +295,72 @@ where
                         e2 = NegotiationError::ProtocolError(ProtocolError::TooManyProtocols)
                     }
                 }
+                #[allow(deprecated)]
                 self.proto1.inject_listen_upgrade_error(
                     i1,
                     ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(e1)),
                 );
+                #[allow(deprecated)]
                 self.proto2.inject_listen_upgrade_error(
                     i2,
                     ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(e2)),
                 )
             }
-            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::A(e))) => {
+            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::A(e))) =>
+            {
+                #[allow(deprecated)]
                 self.proto1.inject_listen_upgrade_error(
                     i1,
                     ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)),
                 )
             }
-            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::B(e))) => {
+            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::B(e))) =>
+            {
+                #[allow(deprecated)]
                 self.proto2.inject_listen_upgrade_error(
                     i2,
                     ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)),
                 )
             }
+        }
+    }
+}
+
+impl<TProto1, TProto2> ConnectionHandler for ConnectionHandlerSelect<TProto1, TProto2>
+where
+    TProto1: ConnectionHandler,
+    TProto2: ConnectionHandler,
+{
+    type InEvent = EitherOutput<TProto1::InEvent, TProto2::InEvent>;
+    type OutEvent = EitherOutput<TProto1::OutEvent, TProto2::OutEvent>;
+    type Error = EitherError<TProto1::Error, TProto2::Error>;
+    type InboundProtocol = SelectUpgrade<
+        SendWrapper<<TProto1 as ConnectionHandler>::InboundProtocol>,
+        SendWrapper<<TProto2 as ConnectionHandler>::InboundProtocol>,
+    >;
+    type OutboundProtocol = EitherUpgrade<
+        SendWrapper<TProto1::OutboundProtocol>,
+        SendWrapper<TProto2::OutboundProtocol>,
+    >;
+    type OutboundOpenInfo = EitherOutput<TProto1::OutboundOpenInfo, TProto2::OutboundOpenInfo>;
+    type InboundOpenInfo = (TProto1::InboundOpenInfo, TProto2::InboundOpenInfo);
+
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+        let proto1 = self.proto1.listen_protocol();
+        let proto2 = self.proto2.listen_protocol();
+        let timeout = *std::cmp::max(proto1.timeout(), proto2.timeout());
+        let (u1, i1) = proto1.into_upgrade();
+        let (u2, i2) = proto2.into_upgrade();
+        let choice = SelectUpgrade::new(SendWrapper(u1), SendWrapper(u2));
+        SubstreamProtocol::new(choice, (i1, i2)).with_timeout(timeout)
+    }
+
+    fn on_behaviour_event(&mut self, event: Self::InEvent) {
+        match event {
+            #[allow(deprecated)]
+            EitherOutput::First(event) => self.proto1.inject_event(event),
+            #[allow(deprecated)]
+            EitherOutput::Second(event) => self.proto2.inject_event(event),
         }
     }
 
@@ -368,5 +417,36 @@ where
         };
 
         Poll::Pending
+    }
+
+    fn on_connection_event(
+        &mut self,
+        event: ConnectionEvent<
+            Self::InboundProtocol,
+            Self::OutboundProtocol,
+            Self::InboundOpenInfo,
+            Self::OutboundOpenInfo,
+        >,
+    ) {
+        match event {
+            ConnectionEvent::FullyNegotiatedOutbound(fully_negotiated_outbound) => {
+                self.on_fully_negotiated_outbound(fully_negotiated_outbound)
+            }
+            ConnectionEvent::FullyNegotiatedInbound(fully_negotiated_inbound) => {
+                self.on_fully_negotiated_inbound(fully_negotiated_inbound)
+            }
+            ConnectionEvent::AddressChange(address) => {
+                #[allow(deprecated)]
+                self.proto1.inject_address_change(address.new_address);
+                #[allow(deprecated)]
+                self.proto2.inject_address_change(address.new_address)
+            }
+            ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
+                self.on_dial_upgrade_error(dial_upgrade_error)
+            }
+            ConnectionEvent::ListenUpgradeError(listen_upgrade_error) => {
+                self.on_listen_upgrade_error(listen_upgrade_error)
+            }
+        }
     }
 }

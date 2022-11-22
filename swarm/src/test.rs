@@ -18,8 +18,12 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::behaviour::{
+    ConnectionClosed, ConnectionEstablished, DialFailure, ExpiredExternalAddr, ExpiredListenAddr,
+    FromSwarm, ListenerClosed, ListenerError, NewExternalAddr, NewListenAddr, NewListener,
+};
 use crate::{
-    ConnectionHandler, DialError, IntoConnectionHandler, NetworkBehaviour, NetworkBehaviourAction,
+    ConnectionHandler, IntoConnectionHandler, NetworkBehaviour, NetworkBehaviourAction,
     PollParameters,
 };
 use libp2p_core::{
@@ -76,14 +80,38 @@ where
         self.addresses.get(p).map_or(Vec::new(), |v| v.clone())
     }
 
-    fn inject_event(&mut self, _: PeerId, _: ConnectionId, _: THandler::OutEvent) {}
-
     fn poll(
         &mut self,
         _: &mut Context,
         _: &mut impl PollParameters,
     ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
         self.next_action.take().map_or(Poll::Pending, Poll::Ready)
+    }
+
+    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+        match event {
+            FromSwarm::ConnectionEstablished(_)
+            | FromSwarm::ConnectionClosed(_)
+            | FromSwarm::AddressChange(_)
+            | FromSwarm::DialFailure(_)
+            | FromSwarm::ListenFailure(_)
+            | FromSwarm::NewListener(_)
+            | FromSwarm::NewListenAddr(_)
+            | FromSwarm::ExpiredListenAddr(_)
+            | FromSwarm::ListenerError(_)
+            | FromSwarm::ListenerClosed(_)
+            | FromSwarm::NewExternalAddr(_)
+            | FromSwarm::ExpiredExternalAddr(_) => {}
+        }
+    }
+
+    fn on_connection_handler_event(
+        &mut self,
+        _peer_id: PeerId,
+        _connection_id: ConnectionId,
+        _event: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as
+            ConnectionHandler>::OutEvent,
+    ) {
     }
 }
 
@@ -97,43 +125,45 @@ where
     inner: TInner,
 
     pub addresses_of_peer: Vec<PeerId>,
-    pub inject_connection_established: Vec<(PeerId, ConnectionId, ConnectedPoint, usize)>,
-    pub inject_connection_closed: Vec<(PeerId, ConnectionId, ConnectedPoint, usize)>,
-    pub inject_event: Vec<(
+    pub on_connection_established: Vec<(PeerId, ConnectionId, ConnectedPoint, usize)>,
+    pub on_connection_closed: Vec<(PeerId, ConnectionId, ConnectedPoint, usize)>,
+    pub on_event: Vec<(
         PeerId,
         ConnectionId,
         <<TInner::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent,
     )>,
-    pub inject_dial_failure: Vec<Option<PeerId>>,
-    pub inject_new_listener: Vec<ListenerId>,
-    pub inject_new_listen_addr: Vec<(ListenerId, Multiaddr)>,
-    pub inject_new_external_addr: Vec<Multiaddr>,
-    pub inject_expired_listen_addr: Vec<(ListenerId, Multiaddr)>,
-    pub inject_expired_external_addr: Vec<Multiaddr>,
-    pub inject_listener_error: Vec<ListenerId>,
-    pub inject_listener_closed: Vec<(ListenerId, bool)>,
+    pub on_dial_failure: Vec<Option<PeerId>>,
+    pub on_new_listener: Vec<ListenerId>,
+    pub on_new_listen_addr: Vec<(ListenerId, Multiaddr)>,
+    pub on_new_external_addr: Vec<Multiaddr>,
+    pub on_expired_listen_addr: Vec<(ListenerId, Multiaddr)>,
+    pub on_expired_external_addr: Vec<Multiaddr>,
+    pub on_listener_error: Vec<ListenerId>,
+    pub on_listener_closed: Vec<(ListenerId, bool)>,
     pub poll: usize,
 }
 
 impl<TInner> CallTraceBehaviour<TInner>
 where
     TInner: NetworkBehaviour,
+    <<TInner::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent:
+        Clone,
 {
     pub fn new(inner: TInner) -> Self {
         Self {
             inner,
             addresses_of_peer: Vec::new(),
-            inject_connection_established: Vec::new(),
-            inject_connection_closed: Vec::new(),
-            inject_event: Vec::new(),
-            inject_dial_failure: Vec::new(),
-            inject_new_listener: Vec::new(),
-            inject_new_listen_addr: Vec::new(),
-            inject_new_external_addr: Vec::new(),
-            inject_expired_listen_addr: Vec::new(),
-            inject_expired_external_addr: Vec::new(),
-            inject_listener_error: Vec::new(),
-            inject_listener_closed: Vec::new(),
+            on_connection_established: Vec::new(),
+            on_connection_closed: Vec::new(),
+            on_event: Vec::new(),
+            on_dial_failure: Vec::new(),
+            on_new_listener: Vec::new(),
+            on_new_listen_addr: Vec::new(),
+            on_new_external_addr: Vec::new(),
+            on_expired_listen_addr: Vec::new(),
+            on_expired_external_addr: Vec::new(),
+            on_listener_error: Vec::new(),
+            on_listener_closed: Vec::new(),
             poll: 0,
         }
     }
@@ -141,15 +171,15 @@ where
     #[allow(dead_code)]
     pub fn reset(&mut self) {
         self.addresses_of_peer = Vec::new();
-        self.inject_connection_established = Vec::new();
-        self.inject_connection_closed = Vec::new();
-        self.inject_event = Vec::new();
-        self.inject_dial_failure = Vec::new();
-        self.inject_new_listen_addr = Vec::new();
-        self.inject_new_external_addr = Vec::new();
-        self.inject_expired_listen_addr = Vec::new();
-        self.inject_listener_error = Vec::new();
-        self.inject_listener_closed = Vec::new();
+        self.on_connection_established = Vec::new();
+        self.on_connection_closed = Vec::new();
+        self.on_event = Vec::new();
+        self.on_dial_failure = Vec::new();
+        self.on_new_listen_addr = Vec::new();
+        self.on_new_external_addr = Vec::new();
+        self.on_expired_listen_addr = Vec::new();
+        self.on_listener_error = Vec::new();
+        self.on_listener_closed = Vec::new();
         self.poll = 0;
     }
 
@@ -158,12 +188,12 @@ where
     }
 
     pub fn num_connections_to_peer(&self, peer: PeerId) -> usize {
-        self.inject_connection_established
+        self.on_connection_established
             .iter()
             .filter(|(peer_id, _, _, _)| *peer_id == peer)
             .count()
             - self
-                .inject_connection_closed
+                .on_connection_closed
                 .iter()
                 .filter(|(peer_id, _, _, _)| *peer_id == peer)
                 .count()
@@ -178,9 +208,9 @@ where
         expected_closed_connections: usize,
         expected_disconnections: usize,
     ) -> bool {
-        if self.inject_connection_closed.len() == expected_closed_connections {
+        if self.on_connection_closed.len() == expected_closed_connections {
             assert_eq!(
-                self.inject_connection_closed
+                self.on_connection_closed
                     .iter()
                     .filter(|(.., remaining_established)| { *remaining_established == 0 })
                     .count(),
@@ -201,9 +231,9 @@ where
         expected_established_connections: usize,
         expected_connections: usize,
     ) -> bool {
-        if self.inject_connection_established.len() == expected_established_connections {
+        if self.on_connection_established.len() == expected_established_connections {
             assert_eq!(
-                self.inject_connection_established
+                self.on_connection_established
                     .iter()
                     .filter(|(.., reported_aditional_connections)| {
                         *reported_aditional_connections == 0
@@ -216,40 +246,23 @@ where
 
         false
     }
-}
 
-impl<TInner> NetworkBehaviour for CallTraceBehaviour<TInner>
-where
-    TInner: NetworkBehaviour,
-    <<TInner::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent:
-        Clone,
-{
-    type ConnectionHandler = TInner::ConnectionHandler;
-    type OutEvent = TInner::OutEvent;
-
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
-        self.inner.new_handler()
-    }
-
-    fn addresses_of_peer(&mut self, p: &PeerId) -> Vec<Multiaddr> {
-        self.addresses_of_peer.push(*p);
-        self.inner.addresses_of_peer(p)
-    }
-
-    fn inject_connection_established(
+    fn on_connection_established(
         &mut self,
-        p: &PeerId,
-        c: &ConnectionId,
-        e: &ConnectedPoint,
-        errors: Option<&Vec<Multiaddr>>,
-        other_established: usize,
+        ConnectionEstablished {
+            peer_id,
+            connection_id,
+            endpoint,
+            failed_addresses,
+            other_established,
+        }: ConnectionEstablished,
     ) {
         let mut other_peer_connections = self
-            .inject_connection_established
+            .on_connection_established
             .iter()
             .rev() // take last to first
             .filter_map(|(peer, .., other_established)| {
-                if p == peer {
+                if &peer_id == peer {
                     Some(other_established)
                 } else {
                     None
@@ -271,26 +284,39 @@ where
         } else {
             assert_eq!(other_established, 0)
         }
-        self.inject_connection_established
-            .push((*p, *c, e.clone(), other_established));
-        self.inner
-            .inject_connection_established(p, c, e, errors, other_established);
+        self.on_connection_established.push((
+            peer_id,
+            connection_id,
+            endpoint.clone(),
+            other_established,
+        ));
+        let errors = Some(failed_addresses.to_vec());
+        #[allow(deprecated)]
+        self.inner.inject_connection_established(
+            &peer_id,
+            &connection_id,
+            endpoint,
+            errors.as_ref(),
+            other_established,
+        );
     }
 
-    fn inject_connection_closed(
+    fn on_connection_closed(
         &mut self,
-        p: &PeerId,
-        c: &ConnectionId,
-        e: &ConnectedPoint,
-        handler: <Self::ConnectionHandler as IntoConnectionHandler>::Handler,
-        remaining_established: usize,
+        ConnectionClosed {
+            peer_id,
+            connection_id,
+            endpoint,
+            handler,
+            remaining_established,
+        }: ConnectionClosed<<Self as NetworkBehaviour>::ConnectionHandler>,
     ) {
         let mut other_closed_connections = self
-            .inject_connection_established
+            .on_connection_established
             .iter()
             .rev() // take last to first
             .filter_map(|(peer, .., remaining_established)| {
-                if p == peer {
+                if &peer_id == peer {
                     Some(remaining_established)
                 } else {
                     None
@@ -313,85 +339,131 @@ where
             assert_eq!(remaining_established, 0)
         }
         assert!(
-            self.inject_connection_established
+            self.on_connection_established
                 .iter()
-                .any(|(peer, conn_id, endpoint, _)| (peer, conn_id, endpoint) == (p, c, e)),
+                .any(|(peer, conn_id, endpoint, _)| (peer, conn_id, endpoint)
+                    == (&peer_id, &connection_id, endpoint)),
             "`inject_connection_closed` is called only for connections for \
             which `inject_connection_established` was called first."
         );
-        self.inject_connection_closed
-            .push((*p, *c, e.clone(), remaining_established));
-        self.inner
-            .inject_connection_closed(p, c, e, handler, remaining_established);
+        self.on_connection_closed.push((
+            peer_id,
+            connection_id,
+            endpoint.clone(),
+            remaining_established,
+        ));
+        #[allow(deprecated)]
+        self.inner.inject_connection_closed(
+            &peer_id,
+            &connection_id,
+            endpoint,
+            handler,
+            remaining_established,
+        );
+    }
+}
+
+impl<TInner> NetworkBehaviour for CallTraceBehaviour<TInner>
+where
+    TInner: NetworkBehaviour,
+    <<TInner::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent:
+        Clone,
+{
+    type ConnectionHandler = TInner::ConnectionHandler;
+    type OutEvent = TInner::OutEvent;
+
+    fn new_handler(&mut self) -> Self::ConnectionHandler {
+        self.inner.new_handler()
     }
 
-    fn inject_event(
+    fn addresses_of_peer(&mut self, p: &PeerId) -> Vec<Multiaddr> {
+        self.addresses_of_peer.push(*p);
+        self.inner.addresses_of_peer(p)
+    }
+
+    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+        match event {
+            FromSwarm::ConnectionEstablished(connection_established) => {
+                self.on_connection_established(connection_established)
+            }
+            FromSwarm::ConnectionClosed(connection_closed) => {
+                self.on_connection_closed(connection_closed)
+            }
+            FromSwarm::DialFailure(DialFailure {
+                peer_id,
+                handler,
+                error,
+            }) => {
+                self.on_dial_failure.push(peer_id);
+                #[allow(deprecated)]
+                self.inner.inject_dial_failure(peer_id, handler, error);
+            }
+            FromSwarm::NewListener(NewListener { listener_id }) => {
+                self.on_new_listener.push(listener_id);
+                #[allow(deprecated)]
+                self.inner.inject_new_listener(listener_id);
+            }
+            FromSwarm::NewListenAddr(NewListenAddr { listener_id, addr }) => {
+                self.on_new_listen_addr.push((listener_id, addr.clone()));
+                #[allow(deprecated)]
+                self.inner.inject_new_listen_addr(listener_id, addr);
+            }
+            FromSwarm::ExpiredListenAddr(ExpiredListenAddr { listener_id, addr }) => {
+                self.on_expired_listen_addr
+                    .push((listener_id, addr.clone()));
+                #[allow(deprecated)]
+                self.inner.inject_expired_listen_addr(listener_id, addr);
+            }
+            FromSwarm::NewExternalAddr(NewExternalAddr { addr }) => {
+                self.on_new_external_addr.push(addr.clone());
+                #[allow(deprecated)]
+                self.inner.inject_new_external_addr(addr);
+            }
+            FromSwarm::ExpiredExternalAddr(ExpiredExternalAddr { addr }) => {
+                self.on_expired_external_addr.push(addr.clone());
+                #[allow(deprecated)]
+                self.inner.inject_expired_external_addr(addr);
+            }
+            FromSwarm::ListenerError(ListenerError { listener_id, err }) => {
+                self.on_listener_error.push(listener_id);
+                #[allow(deprecated)]
+                self.inner.inject_listener_error(listener_id, err);
+            }
+            FromSwarm::ListenerClosed(ListenerClosed {
+                listener_id,
+                reason,
+            }) => {
+                self.on_listener_closed.push((listener_id, reason.is_ok()));
+                #[allow(deprecated)]
+                self.inner.inject_listener_closed(listener_id, reason);
+            }
+            _ => {}
+        }
+    }
+
+    fn on_connection_handler_event(
         &mut self,
         p: PeerId,
         c: ConnectionId,
         e: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent,
     ) {
         assert!(
-            self.inject_connection_established
+            self.on_connection_established
                 .iter()
                 .any(|(peer_id, conn_id, ..)| *peer_id == p && c == *conn_id),
-            "`inject_event` is called for reported connections."
+            "`on_connection_handler_event` is called for reported connections."
         );
         assert!(
             !self
-                .inject_connection_closed
+                .on_connection_closed
                 .iter()
                 .any(|(peer_id, conn_id, ..)| *peer_id == p && c == *conn_id),
-            "`inject_event` is never called for closed connections."
+            "`on_connection_handler_event` is never called for closed connections."
         );
 
-        self.inject_event.push((p, c, e.clone()));
+        self.on_event.push((p, c, e.clone()));
+        #[allow(deprecated)]
         self.inner.inject_event(p, c, e);
-    }
-
-    fn inject_dial_failure(
-        &mut self,
-        p: Option<PeerId>,
-        handler: Self::ConnectionHandler,
-        error: &DialError,
-    ) {
-        self.inject_dial_failure.push(p);
-        self.inner.inject_dial_failure(p, handler, error);
-    }
-
-    fn inject_new_listener(&mut self, id: ListenerId) {
-        self.inject_new_listener.push(id);
-        self.inner.inject_new_listener(id);
-    }
-
-    fn inject_new_listen_addr(&mut self, id: ListenerId, a: &Multiaddr) {
-        self.inject_new_listen_addr.push((id, a.clone()));
-        self.inner.inject_new_listen_addr(id, a);
-    }
-
-    fn inject_expired_listen_addr(&mut self, id: ListenerId, a: &Multiaddr) {
-        self.inject_expired_listen_addr.push((id, a.clone()));
-        self.inner.inject_expired_listen_addr(id, a);
-    }
-
-    fn inject_new_external_addr(&mut self, a: &Multiaddr) {
-        self.inject_new_external_addr.push(a.clone());
-        self.inner.inject_new_external_addr(a);
-    }
-
-    fn inject_expired_external_addr(&mut self, a: &Multiaddr) {
-        self.inject_expired_external_addr.push(a.clone());
-        self.inner.inject_expired_external_addr(a);
-    }
-
-    fn inject_listener_error(&mut self, l: ListenerId, e: &(dyn std::error::Error + 'static)) {
-        self.inject_listener_error.push(l);
-        self.inner.inject_listener_error(l, e);
-    }
-
-    fn inject_listener_closed(&mut self, l: ListenerId, r: Result<(), &std::io::Error>) {
-        self.inject_listener_closed.push((l, r.is_ok()));
-        self.inner.inject_listener_closed(l, r);
     }
 
     fn poll(

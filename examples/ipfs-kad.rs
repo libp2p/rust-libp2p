@@ -68,7 +68,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             behaviour.add_address(&PeerId::from_str(peer)?, bootaddr.clone());
         }
 
-        Swarm::new(transport, behaviour, local_peer_id)
+        Swarm::with_async_std_executor(transport, behaviour, local_peer_id)
     };
 
     // Order Kademlia to search for a peer.
@@ -78,7 +78,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         identity::Keypair::generate_ed25519().public().into()
     };
 
-    println!("Searching for the closest peers to {:?}", to_search);
+    println!("Searching for the closest peers to {to_search:?}");
     swarm.behaviour_mut().get_closest_peers(to_search);
 
     // Kick it off!
@@ -102,7 +102,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     }
                     Err(GetClosestPeersError::Timeout { peers, .. }) => {
                         if !peers.is_empty() {
-                            println!("Query timed out with closest peers: {:#?}", peers)
+                            println!("Query timed out with closest peers: {peers:#?}")
                         } else {
                             // The example is considered failed as there
                             // should always be at least 1 reachable peer.
