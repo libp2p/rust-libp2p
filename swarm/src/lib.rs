@@ -323,9 +323,6 @@ where
     /// similar mechanisms.
     external_addrs: Addresses,
 
-    /// List of nodes for which we deny any incoming connection.
-    banned_peers: HashSet<PeerId>,
-
     /// Connections for which we withhold any reporting. These belong to banned peers.
     ///
     /// Note: Connections to a peer that are established at the time of banning that peer
@@ -524,14 +521,6 @@ where
                         return Err(DialError::DialPeerConditionFalse(condition));
                     }
 
-                    // Check if peer is banned.
-                    if self.banned_peers.contains(&peer_id) {
-                        let error = DialError::Banned;
-                        #[allow(deprecated)]
-                        self.behaviour.inject_dial_failure(Some(peer_id), &error);
-                        return Err(error);
-                    }
-
                     // Retrieve the addresses to dial.
                     let addresses = {
                         let mut addresses = match swarm_dial_opts.0 {
@@ -717,25 +706,6 @@ where
         }
     }
 
-    /// Bans a peer by its peer ID.
-    ///
-    /// Any incoming connection and any dialing attempt will immediately be rejected.
-    /// This function has no effect if the peer is already banned.
-    pub fn ban_peer_id(&mut self, peer_id: PeerId) {
-        if self.banned_peers.insert(peer_id) {
-            // Note that established connections to the now banned peer are closed but not
-            // added to [`Swarm::banned_peer_connections`]. They have been previously reported
-            // as open to the behaviour and need be reported as closed once closing the
-            // connection finishes.
-            self.pool.disconnect(peer_id);
-        }
-    }
-
-    /// Unbans a peer.
-    pub fn unban_peer_id(&mut self, peer_id: PeerId) {
-        self.banned_peers.remove(&peer_id);
-    }
-
     /// Disconnects a peer by its peer ID, closing all connections to said peer.
     ///
     /// Returns `Ok(())` if there was one or more established connections to the peer.
@@ -797,49 +767,41 @@ where
                 concurrent_dial_errors,
                 supported_protocols,
             } => {
-                if self.banned_peers.contains(&peer_id) {
-                    // Mark the connection for the banned peer as banned, thus withholding any
-                    // future events from the connection to the behaviour.
-                    self.banned_peer_connections.insert(id);
-                    self.pool.disconnect(peer_id);
-                    return Some(SwarmEvent::BannedPeer { peer_id, endpoint });
-                } else {
-                    let num_established = NonZeroU32::new(
-                        u32::try_from(other_established_connection_ids.len() + 1).unwrap(),
-                    )
-                    .expect("n + 1 is always non-zero; qed");
-                    let non_banned_established = other_established_connection_ids
-                        .into_iter()
-                        .filter(|conn_id| !self.banned_peer_connections.contains(conn_id))
-                        .count();
+                let num_established = NonZeroU32::new(
+                    u32::try_from(other_established_connection_ids.len() + 1).unwrap(),
+                )
+                .expect("n + 1 is always non-zero; qed");
+                let non_banned_established = other_established_connection_ids
+                    .into_iter()
+                    .filter(|conn_id| !self.banned_peer_connections.contains(conn_id))
+                    .count();
 
-                    log::debug!(
+                log::debug!(
                             "Connection established: {:?} {:?}; Total (peer): {}. Total non-banned (peer): {}",
                             peer_id,
                             endpoint,
                             num_established,
                             non_banned_established + 1,
                         );
-                    let failed_addresses = concurrent_dial_errors
-                        .as_ref()
-                        .map(|es| es.iter().map(|(a, _)| a).cloned().collect());
-                    #[allow(deprecated)]
-                    self.behaviour.inject_connection_established(
-                        &peer_id,
-                        &id,
-                        &endpoint,
-                        failed_addresses.as_ref(),
-                        non_banned_established,
-                    );
-                    self.supported_protocols = supported_protocols;
+                let failed_addresses = concurrent_dial_errors
+                    .as_ref()
+                    .map(|es| es.iter().map(|(a, _)| a).cloned().collect());
+                #[allow(deprecated)]
+                self.behaviour.inject_connection_established(
+                    &peer_id,
+                    &id,
+                    &endpoint,
+                    failed_addresses.as_ref(),
+                    non_banned_established,
+                );
+                self.supported_protocols = supported_protocols;
 
-                    return Some(SwarmEvent::ConnectionEstablished {
-                        peer_id,
-                        num_established,
-                        endpoint,
-                        concurrent_dial_errors,
-                    });
-                }
+                return Some(SwarmEvent::ConnectionEstablished {
+                    peer_id,
+                    num_established,
+                    endpoint,
+                    concurrent_dial_errors,
+                });
             }
             PoolEvent::PendingOutboundConnectionError { id: _, error, peer } => {
                 let error = error.into();
@@ -1596,7 +1558,6 @@ where
             supported_protocols: Default::default(),
             listened_addrs: HashMap::new(),
             external_addrs: Addresses::default(),
-            banned_peers: HashSet::new(),
             banned_peer_connections: HashSet::new(),
             pending_event: None,
         }
@@ -1831,129 +1792,6 @@ mod tests {
                 == 0
             && !swarm1.is_connected(swarm2.local_peer_id())
             && !swarm2.is_connected(swarm1.local_peer_id())
-    }
-
-    /// Establishes multiple connections between two peers,
-    /// after which one peer bans the other.
-    ///
-    /// The test expects both behaviours to be notified via pairs of
-    /// [`NetworkBehaviour::inject_connection_established`] / [`NetworkBehaviour::inject_connection_closed`]
-    /// calls while unbanned.
-    ///
-    /// While the ban is in effect, further dials occur. For these connections no
-    /// [`NetworkBehaviour::inject_connection_established`], [`NetworkBehaviour::inject_connection_closed`]
-    /// calls should be registered.
-    #[test]
-    fn test_connect_disconnect_ban() {
-        // Since the test does not try to open any substreams, we can
-        // use the dummy protocols handler.
-        let handler_proto = keep_alive::ConnectionHandler;
-
-        let mut swarm1 = new_test_swarm::<_, ()>(handler_proto.clone()).build();
-        let mut swarm2 = new_test_swarm::<_, ()>(handler_proto).build();
-
-        let addr1: Multiaddr = multiaddr::Protocol::Memory(rand::random::<u64>()).into();
-        let addr2: Multiaddr = multiaddr::Protocol::Memory(rand::random::<u64>()).into();
-
-        swarm1.listen_on(addr1).unwrap();
-        swarm2.listen_on(addr2.clone()).unwrap();
-
-        let swarm1_id = *swarm1.local_peer_id();
-
-        enum Stage {
-            /// Waiting for the peers to connect. Banning has not occurred.
-            Connecting,
-            /// Ban occurred.
-            Banned,
-            // Ban is in place and a dial is ongoing.
-            BannedDial,
-            // Mid-ban dial was registered and the peer was unbanned.
-            Unbanned,
-            // There are dial attempts ongoing for the no longer banned peers.
-            Reconnecting,
-        }
-
-        let num_connections = 10;
-
-        for _ in 0..num_connections {
-            swarm1.dial(addr2.clone()).unwrap();
-        }
-
-        let mut s1_expected_conns = num_connections;
-        let mut s2_expected_conns = num_connections;
-
-        let mut stage = Stage::Connecting;
-
-        executor::block_on(future::poll_fn(move |cx| loop {
-            let poll1 = Swarm::poll_next_event(Pin::new(&mut swarm1), cx);
-            let poll2 = Swarm::poll_next_event(Pin::new(&mut swarm2), cx);
-            match stage {
-                Stage::Connecting => {
-                    if swarm1.behaviour.assert_connected(s1_expected_conns, 1)
-                        && swarm2.behaviour.assert_connected(s2_expected_conns, 1)
-                    {
-                        // Setup to test that already established connections are correctly closed
-                        // and reported as such after the peer is banned.
-                        swarm2.ban_peer_id(swarm1_id);
-                        stage = Stage::Banned;
-                    }
-                }
-                Stage::Banned => {
-                    if swarm1.behaviour.assert_disconnected(s1_expected_conns, 1)
-                        && swarm2.behaviour.assert_disconnected(s2_expected_conns, 1)
-                    {
-                        // Setup to test that new connections of banned peers are not reported.
-                        swarm1.dial(addr2.clone()).unwrap();
-                        s1_expected_conns += 1;
-                        stage = Stage::BannedDial;
-                    }
-                }
-                Stage::BannedDial => {
-                    if swarm2.network_info().num_peers() == 1 {
-                        // The banned connection was established. Check that it was not reported to
-                        // the behaviour of the banning swarm.
-                        assert_eq!(
-                            swarm2.behaviour.on_connection_established.len(), s2_expected_conns,
-                            "No additional closed connections should be reported for the banned peer"
-                        );
-
-                        // Setup to test that the banned connection is not reported upon closing
-                        // even if the peer is unbanned.
-                        swarm2.unban_peer_id(swarm1_id);
-                        stage = Stage::Unbanned;
-                    }
-                }
-                Stage::Unbanned => {
-                    if swarm2.network_info().num_peers() == 0 {
-                        // The banned connection has closed. Check that it was not reported.
-                        assert_eq!(
-                            swarm2.behaviour.on_connection_closed.len(), s2_expected_conns,
-                            "No additional closed connections should be reported for the banned peer"
-                        );
-                        assert!(swarm2.banned_peer_connections.is_empty());
-
-                        // Setup to test that a ban lifted does not affect future connections.
-                        for _ in 0..num_connections {
-                            swarm1.dial(addr2.clone()).unwrap();
-                        }
-                        s1_expected_conns += num_connections;
-                        s2_expected_conns += num_connections;
-                        stage = Stage::Reconnecting;
-                    }
-                }
-                Stage::Reconnecting => {
-                    if swarm1.behaviour.on_connection_established.len() == s1_expected_conns
-                        && swarm2.behaviour.assert_connected(s2_expected_conns, 2)
-                    {
-                        return Poll::Ready(());
-                    }
-                }
-            }
-
-            if poll1.is_pending() && poll2.is_pending() {
-                return Poll::Pending;
-            }
-        }))
     }
 
     /// Establishes multiple connections between two peers,
