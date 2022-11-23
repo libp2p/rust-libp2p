@@ -72,35 +72,35 @@ impl<TInner> BandwidthLogging<TInner> {
     }
 }
 
-pub trait AttachBandwidthLogger {
+pub trait WithBandwidthSinks {
     type Output;
 
-    fn attach(self, sinks: Arc<BandwidthSinks>) -> Self::Output;
+    fn with_bandwidth_sinks(self, sinks: Arc<BandwidthSinks>) -> Self::Output;
 }
 
 #[cfg(all(feature = "tcp", feature = "async-std"))]
-impl AttachBandwidthLogger for libp2p_tcp::async_io::Stream {
+impl WithBandwidthSinks for libp2p_tcp::async_io::Stream {
     type Output = BandwidthConnecLogging<Self>;
 
-    fn attach(self, sinks: Arc<BandwidthSinks>) -> Self::Output {
+    fn with_bandwidth_sinks(self, sinks: Arc<BandwidthSinks>) -> Self::Output {
         BandwidthConnecLogging { inner: self, sinks }
     }
 }
 
 #[cfg(all(feature = "tcp", feature = "tokio"))]
-impl AttachBandwidthLogger for libp2p_tcp::tokio::Stream {
+impl WithBandwidthSinks for libp2p_tcp::tokio::Stream {
     type Output = BandwidthConnecLogging<Self>;
 
-    fn attach(self, sinks: Arc<BandwidthSinks>) -> Self::Output {
+    fn with_bandwidth_sinks(self, sinks: Arc<BandwidthSinks>) -> Self::Output {
         BandwidthConnecLogging { inner: self, sinks }
     }
 }
 
 #[cfg(feature = "webrtc")]
-impl AttachBandwidthLogger for (PeerId, libp2p_webrtc::tokio::Connection) {
+impl WithBandwidthSinks for (PeerId, libp2p_webrtc::tokio::Connection) {
     type Output = (PeerId, Connection<libp2p_webrtc::tokio::Connection>);
 
-    fn attach(self, sinks: Arc<BandwidthSinks>) -> Self::Output {
+    fn with_bandwidth_sinks(self, sinks: Arc<BandwidthSinks>) -> Self::Output {
         (
             self.0,
             Connection {
@@ -169,9 +169,9 @@ impl UpdateBandwidthSinks for libp2p_webrtc::tokio::Connection {
 impl<TInner> Transport for BandwidthLogging<TInner>
 where
     TInner: Transport,
-    TInner::Output: AttachBandwidthLogger,
+    TInner::Output: WithBandwidthSinks,
 {
-    type Output = <TInner::Output as AttachBandwidthLogger>::Output;
+    type Output = <TInner::Output as WithBandwidthSinks>::Output;
     type Error = TInner::Error;
     type ListenerUpgrade = BandwidthFuture<TInner::ListenerUpgrade>;
     type Dial = BandwidthFuture<TInner::Dial>;
@@ -235,15 +235,15 @@ pub struct BandwidthFuture<TInner> {
 impl<TInner, TOk, TErr> Future for BandwidthFuture<TInner>
 where
     TInner: Future<Output = Result<TOk, TErr>>,
-    TOk: AttachBandwidthLogger,
+    TOk: WithBandwidthSinks,
 {
-    type Output = Result<<TOk as AttachBandwidthLogger>::Output, TErr>;
+    type Output = Result<<TOk as WithBandwidthSinks>::Output, TErr>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
         let inner = ready!(this.inner.poll(cx))?;
 
-        let output = inner.attach(this.sinks.clone());
+        let output = inner.with_bandwidth_sinks(this.sinks.clone());
 
         Poll::Ready(Ok(output))
     }
