@@ -25,10 +25,10 @@ mod payload_proto {
     include!(concat!(env!("OUT_DIR"), "/payload.proto.rs"));
 }
 
-use crate::error::NoiseError;
 use crate::io::{framed::NoiseFramed, NoiseOutput};
 use crate::protocol::{KeypairIdentity, Protocol, PublicKey};
 use crate::LegacyConfig;
+use crate::NoiseError;
 use bytes::Bytes;
 use futures::prelude::*;
 use libp2p_core::identity;
@@ -118,7 +118,7 @@ impl<T> State<T> {
                 if C::verify(&id_pk, &dh_pk, &self.dh_remote_pubkey_sig) {
                     RemoteIdentity::IdentityKey(id_pk)
                 } else {
-                    return Err(NoiseError::InvalidKey);
+                    return Err(NoiseError::BadSignature);
                 }
             }
         };
@@ -208,11 +208,10 @@ where
     let pb = pb_result?;
 
     if !pb.identity_key.is_empty() {
-        let pk = identity::PublicKey::from_protobuf_encoding(&pb.identity_key)
-            .map_err(|_| NoiseError::InvalidKey)?;
+        let pk = identity::PublicKey::from_protobuf_encoding(&pb.identity_key)?;
         if let Some(ref k) = state.id_remote_pubkey {
             if k != &pk {
-                return Err(NoiseError::InvalidKey);
+                return Err(NoiseError::UnexpectedKey);
             }
         }
         state.id_remote_pubkey = Some(pk);

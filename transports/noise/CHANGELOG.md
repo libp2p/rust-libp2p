@@ -6,8 +6,11 @@
 
 - Update `rust-version` to reflect the actual MSRV: 1.60.0. See [PR 3090].
 
+- Introduce more variants to `NoiseError` to better differentiate between failure cases during authentication. See [PR 2972].
+
 [PR 3058]: https://github.com/libp2p/rust-libp2p/pull/3058
 [PR 3090]: https://github.com/libp2p/rust-libp2p/pull/3090
+[PR 2972]: https://github.com/libp2p/rust-libp2p/pull/2972
 
 # 0.40.0
 

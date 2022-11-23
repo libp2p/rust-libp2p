@@ -94,28 +94,23 @@ impl<T> NoiseFramed<T, snow::HandshakeState> {
     where
         C: Protocol<C> + AsRef<[u8]>,
     {
-        let dh_remote_pubkey = match self.session.get_remote_static() {
-            None => None,
-            Some(k) => match C::public_from_bytes(k) {
-                Err(e) => return Err(e),
-                Ok(dh_pk) => Some(dh_pk),
-            },
+        let dh_remote_pubkey = self
+            .session
+            .get_remote_static()
+            .map(C::public_from_bytes)
+            .transpose()?;
+
+        let io = NoiseFramed {
+            session: self.session.into_transport_mode()?,
+            io: self.io,
+            read_state: ReadState::Ready,
+            write_state: WriteState::Ready,
+            read_buffer: self.read_buffer,
+            write_buffer: self.write_buffer,
+            decrypt_buffer: self.decrypt_buffer,
         };
-        match self.session.into_transport_mode() {
-            Err(e) => Err(e.into()),
-            Ok(s) => {
-                let io = NoiseFramed {
-                    session: s,
-                    io: self.io,
-                    read_state: ReadState::Ready,
-                    write_state: WriteState::Ready,
-                    read_buffer: self.read_buffer,
-                    write_buffer: self.write_buffer,
-                    decrypt_buffer: self.decrypt_buffer,
-                };
-                Ok((dh_remote_pubkey, NoiseOutput::new(io)))
-            }
-        }
+
+        Ok((dh_remote_pubkey, NoiseOutput::new(io)))
     }
 }
 
