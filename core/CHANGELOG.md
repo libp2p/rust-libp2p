@@ -10,10 +10,13 @@
 
 - Update `multistream-select` to `v0.12.1`. See [PR 3090].
 
+- Improve error messages in case keys cannot be decoded because of missing feature flags. See [PR 2972].
+
 [PR 3031]: https://github.com/libp2p/rust-libp2p/pull/3031
 [PR 3058]: https://github.com/libp2p/rust-libp2p/pull/3058
 [PR 3097]: https://github.com/libp2p/rust-libp2p/pull/3097
 [PR 3090]: https://github.com/libp2p/rust-libp2p/pull/3090
+[PR 2972]: https://github.com/libp2p/rust-libp2p/pull/2972
 
 # 0.37.0
 
