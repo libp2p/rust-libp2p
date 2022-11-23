@@ -139,6 +139,7 @@ tokio = { version = "1.15", features = ["io-util", "io-std", "macros", "rt", "rt
 [workspace]
 members = [
     "core",
+    "misc/async-bounded-queue",
     "misc/metrics",
     "misc/multistream-select",
     "misc/rw-stream-sink",
