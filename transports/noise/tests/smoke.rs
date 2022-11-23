@@ -27,10 +27,10 @@ use libp2p_core::identity;
 use libp2p_core::transport::{self, Transport};
 use libp2p_core::upgrade::{self, apply_inbound, apply_outbound, Negotiated};
 use libp2p_noise::{
-    Keypair, NoiseAuthenticated, NoiseConfig, NoiseError, NoiseOutput, RemoteIdentity, X25519Spec,
-    X25519,
+    Keypair, NoiseAuthenticated, NoiseConfig, NoiseOutput, RemoteIdentity, X25519Spec, X25519,
 };
 use libp2p_tcp as tcp;
+use libp2p_noise::NoiseError;
 use log::info;
 use quickcheck::*;
 use std::{convert::TryInto, io, net::TcpStream};

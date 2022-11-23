@@ -24,20 +24,21 @@ log = "0.4"
 multiaddr = { version = "0.16.0" }
 multihash = { version = "0.16", default-features = false, features = ["std", "multihash-impl", "identity", "sha2"] }
 multistream-select = { version = "0.12.1", path = "../misc/multistream-select" }
-p256 = { version = "0.11.1", default-features = false, features = ["ecdsa"], optional = true }
+p256 = { version = "0.11.1", default-features = false, features = ["ecdsa", "std"], optional = true }
 parking_lot = "0.12.0"
 pin-project = "1.0.0"
 prost = "0.11"
 once_cell = "1.16.0"
 rand = "0.8"
 rw-stream-sink = { version = "0.3.0", path = "../misc/rw-stream-sink" }
+sec1 = { version = "0.3.0", features = ["std"] } # Activate `std` feature until https://github.com/RustCrypto/traits/pull/1131 is released.
+serde = { version = "1", optional = true, features = ["derive"] }
 sha2 = "0.10.0"
 smallvec = "1.6.1"
 thiserror = "1.0"
 unsigned-varint = "0.7"
 void = "1"
 zeroize = "1"
-serde = { version = "1", optional = true, features = ["derive"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 ring = { version = "0.16.9", features = ["alloc", "std"], default-features = false, optional = true}
