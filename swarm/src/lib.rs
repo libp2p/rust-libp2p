@@ -1660,15 +1660,43 @@ impl fmt::Display for DialError {
                 f,
                 "Dial error: Pending connection attempt has been aborted."
             ),
-            DialError::InvalidPeerId(multihash) => write!(f, "Dial error: multihash {:?} is not a PeerId", multihash),
-            DialError::WrongPeerId { obtained, endpoint} => write!(f, "Dial error: Unexpected peer ID {} at {:?}.", obtained, endpoint),
+            DialError::InvalidPeerId(multihash) => {
+                write!(f, "Dial error: multihash {:?} is not a PeerId", multihash)
+            }
+            DialError::WrongPeerId { obtained, endpoint } => write!(
+                f,
+                "Dial error: Unexpected peer ID {} at {:?}.",
+                obtained, endpoint
+            ),
             DialError::ConnectionIo(e) => write!(
                 f,
-                "Dial error: An I/O error occurred on the connection: {:?}.", e
+                "Dial error: An I/O error occurred on the connection: {:?}.",
+                e
             ),
-            DialError::Transport(e) => write!(f, "An error occurred while negotiating the transport protocol(s) on a connection: {:?}.", e),
+            DialError::Transport(errors) => {
+                write!(f, "Failed to negotiate transport protocol(s): [")?;
+
+                for (addr, error) in errors {
+                    write!(f, "({addr}")?;
+                    print_error_chain(f, error)?;
+                    write!(f, ")")?;
+                }
+                write!(f, "]")?;
+
+                Ok(())
+            }
         }
     }
+}
+
+fn print_error_chain(f: &mut fmt::Formatter<'_>, e: &dyn error::Error) -> fmt::Result {
+    write!(f, ": {e}")?;
+
+    if let Some(source) = e.source() {
+        print_error_chain(f, source)?;
+    }
+
+    Ok(())
 }
 
 impl error::Error for DialError {
@@ -1745,13 +1773,16 @@ mod tests {
     use futures::future::poll_fn;
     use futures::future::Either;
     use futures::{executor, future, ready};
+    use libp2p_core::either::EitherError;
     use libp2p_core::multiaddr::multiaddr;
+    use libp2p_core::transport::memory::MemoryTransportError;
     use libp2p_core::transport::TransportEvent;
-    use libp2p_core::Endpoint;
     use libp2p_core::{identity, multiaddr, transport, upgrade};
+    use libp2p_core::{Endpoint, UpgradeError};
     use libp2p_plaintext as plaintext;
     use libp2p_yamux as yamux;
     use quickcheck::*;
+    use void::Void;
 
     // Test execution state.
     // Connection => Disconnecting => Connecting.
@@ -2609,5 +2640,24 @@ mod tests {
             } => {}
             e => panic!("Unexpected swarm event {:?}.", e),
         }
+    }
+
+    #[test]
+    fn dial_error_prints_sources() {
+        // This constitutes a fairly typical error for chained transports.
+        let error = DialError::Transport(vec![(
+            "/ip4/127.0.0.1/tcp/80".parse().unwrap(),
+            TransportError::Other(io::Error::new(
+                io::ErrorKind::Other,
+                EitherError::<_, Void>::A(EitherError::<Void, _>::B(UpgradeError::Apply(
+                    MemoryTransportError::Unreachable,
+                ))),
+            )),
+        )]);
+
+        let string = format!("{error}");
+
+        // Unfortunately, we have some "empty" errors that lead to multiple colons without text but that is the best we can do.
+        assert_eq!("Failed to negotiate transport protocol(s): [(/ip4/127.0.0.1/tcp/80: : Handshake failed: No listener on the given port.)]", string)
     }
 }
