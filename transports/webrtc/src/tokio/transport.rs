@@ -260,8 +260,7 @@ impl ListenStream {
                     {
                         return Poll::Ready(TransportEvent::NewAddress {
                             listener_id: self.listener_id,
-                            listen_addr: self
-                                .listen_multiaddress(ip, self.config.id_keys.public().to_peer_id()),
+                            listen_addr: self.listen_multiaddress(ip),
                         });
                     }
                 }
@@ -272,8 +271,7 @@ impl ListenStream {
                     {
                         return Poll::Ready(TransportEvent::AddressExpired {
                             listener_id: self.listener_id,
-                            listen_addr: self
-                                .listen_multiaddress(ip, self.config.id_keys.public().to_peer_id()),
+                            listen_addr: self.listen_multiaddress(ip),
                         });
                     }
                 }
@@ -290,11 +288,10 @@ impl ListenStream {
     }
 
     /// Constructs a [`Multiaddr`] for the given IP address that represents our listen address.
-    fn listen_multiaddress(&self, ip: IpAddr, local_peer_id: PeerId) -> Multiaddr {
+    fn listen_multiaddress(&self, ip: IpAddr) -> Multiaddr {
         let socket_addr = SocketAddr::new(ip, self.listen_addr.port());
 
         socketaddr_to_multiaddr(&socket_addr, Some(self.config.fingerprint))
-            .with(Protocol::P2p(*local_peer_id.as_ref()))
     }
 }
 
