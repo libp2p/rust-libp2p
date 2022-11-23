@@ -70,7 +70,7 @@ jobs:
       - name: Check public API for semver violations
         if: steps.check-released.outputs.code == 200 # Workaround until https://github.com/obi1kenobi/cargo-semver-check/issues/146 is shipped.
         run: |
-          cargo install cargo-semver-checks
+          cargo install cargo-semver-checks --locked
           cargo semver-checks check-release -p ${{ matrix.crate }}
 
   cross:
@@ -231,12 +231,12 @@ jobs:
         run: |
           ALL_FEATURES=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[] | select(.name == "libp2p") | .features | keys | map(select(. != "full")) | sort | join(" ")')
           FULL_FEATURE=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[] | select(.name == "libp2p") | .features["full"] | sort | join(" ")')
-          
+
           test "$ALL_FEATURES = $FULL_FEATURE"
-          
+
           echo "$ALL_FEATURES";
           echo "$FULL_FEATURE";
-          
+
           test "$ALL_FEATURES" = "$FULL_FEATURE"
 
   gather_published_crates:
