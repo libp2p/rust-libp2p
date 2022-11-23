@@ -1,5 +1,9 @@
 # 0.37.0 [unreleased]
 
+- Update `rust-version` to reflect the actual MSRV: 1.60.0. See [PR 3090].
+
+[PR 3090]: https://github.com/libp2p/rust-libp2p/pull/3090
+
 # 0.36.0
 
 - Remove default features. If you previously depended on `async-std` you need to enable this explicitly now. See [PR 2918].

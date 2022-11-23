@@ -31,7 +31,7 @@ use crate::{
 };
 use async_std::net::Ipv4Addr;
 use byteorder::{BigEndian, ByteOrder};
-use libp2p_core::Endpoint;
+use libp2p_core::{ConnectedPoint, Endpoint};
 use rand::Rng;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
@@ -181,25 +181,27 @@ where
     F: TopicSubscriptionFilter + Clone + Default + Send + 'static,
 {
     let peer = PeerId::random();
-    gs.inject_connection_established(
-        &peer,
-        &ConnectionId::new(0),
-        &if outbound {
-            ConnectedPoint::Dialer {
-                address,
-                role_override: Endpoint::Dialer,
-            }
-        } else {
-            ConnectedPoint::Listener {
-                local_addr: Multiaddr::empty(),
-                send_back_addr: address,
-            }
-        },
-        None,
-        0, // first connection
-    );
+    let endpoint = if outbound {
+        ConnectedPoint::Dialer {
+            address,
+            role_override: Endpoint::Dialer,
+        }
+    } else {
+        ConnectedPoint::Listener {
+            local_addr: Multiaddr::empty(),
+            send_back_addr: address,
+        }
+    };
+
+    gs.on_swarm_event(FromSwarm::ConnectionEstablished(ConnectionEstablished {
+        peer_id: peer,
+        connection_id: ConnectionId::new(0),
+        endpoint: &endpoint,
+        failed_addresses: &[],
+        other_established: 0, // first connection
+    }));
     if let Some(kind) = kind {
-        gs.inject_event(peer, ConnectionId::new(1), HandlerEvent::PeerKind(kind));
+        gs.on_connection_handler_event(peer, ConnectionId::new(1), HandlerEvent::PeerKind(kind));
     }
     if explicit {
         gs.add_explicit_peer(&peer);
@@ -232,16 +234,16 @@ where
         }; // this is not relevant
            // peer_connections.connections should never be empty.
         let mut active_connections = peer_connections.connections.len();
-        for conn_id in peer_connections.connections.clone() {
+        for connection_id in peer_connections.connections.clone() {
             let handler = gs.new_handler();
             active_connections = active_connections.checked_sub(1).unwrap();
-            gs.inject_connection_closed(
-                peer_id,
-                &conn_id,
-                &fake_endpoint,
+            gs.on_swarm_event(FromSwarm::ConnectionClosed(ConnectionClosed {
+                peer_id: *peer_id,
+                connection_id,
+                endpoint: &fake_endpoint,
                 handler,
-                active_connections,
-            );
+                remaining_established: active_connections,
+            }));
         }
     }
 }
@@ -545,16 +547,16 @@ fn test_join() {
     for _ in 0..3 {
         let random_peer = PeerId::random();
         // inform the behaviour of a new peer
-        gs.inject_connection_established(
-            &random_peer,
-            &ConnectionId::new(1),
-            &ConnectedPoint::Dialer {
+        gs.on_swarm_event(FromSwarm::ConnectionEstablished(ConnectionEstablished {
+            peer_id: random_peer,
+            connection_id: ConnectionId::new(1),
+            endpoint: &ConnectedPoint::Dialer {
                 address: "/ip4/127.0.0.1".parse::<Multiaddr>().unwrap(),
                 role_override: Endpoint::Dialer,
             },
-            None,
-            0,
-        );
+            failed_addresses: &[],
+            other_established: 0,
+        }));
 
         // add the new peer to the fanout
         let fanout_peers = gs.fanout.get_mut(&topic_hashes[1]).unwrap();
@@ -2349,12 +2351,6 @@ fn test_add_outbound_peers_if_min_is_not_satisfied() {
     );
 }
 
-//TODO add a test that ensures that new outbound connections are recognized as such.
-// This is at the moment done in behaviour with relying on the fact that the call to
-// `inject_connection_established` for the first connection is done before `inject_connected`
-// gets called. For all further connections `inject_connection_established` should get called
-// after `inject_connected`.
-
 #[test]
 fn test_prune_negative_scored_peers() {
     let config = GossipsubConfig::default();
@@ -2983,7 +2979,7 @@ fn test_ignore_rpc_from_peers_below_graylist_threshold() {
     gs.events.clear();
 
     //receive from p1
-    gs.inject_event(
+    gs.on_connection_handler_event(
         p1,
         ConnectionId::new(0),
         HandlerEvent::Message {
@@ -3009,7 +3005,7 @@ fn test_ignore_rpc_from_peers_below_graylist_threshold() {
     };
 
     //receive from p2
-    gs.inject_event(
+    gs.on_connection_handler_event(
         p2,
         ConnectionId::new(0),
         HandlerEvent::Message {
@@ -3621,7 +3617,7 @@ fn test_scoring_p4_invalid_signature() {
     //peer 0 delivers message with invalid signature
     let m = random_message(&mut seq, &topics);
 
-    gs.inject_event(
+    gs.on_connection_handler_event(
         peers[0],
         ConnectionId::new(0),
         HandlerEvent::Message {
@@ -4105,16 +4101,16 @@ fn test_scoring_p6() {
 
     //add additional connection for 3 others with addr
     for id in others.iter().take(3) {
-        gs.inject_connection_established(
-            id,
-            &ConnectionId::new(0),
-            &ConnectedPoint::Dialer {
+        gs.on_swarm_event(FromSwarm::ConnectionEstablished(ConnectionEstablished {
+            peer_id: *id,
+            connection_id: ConnectionId::new(0),
+            endpoint: &ConnectedPoint::Dialer {
                 address: addr.clone(),
                 role_override: Endpoint::Dialer,
             },
-            None,
-            0,
-        );
+            failed_addresses: &[],
+            other_established: 0,
+        }));
     }
 
     //penalties apply squared
@@ -4126,16 +4122,16 @@ fn test_scoring_p6() {
 
     //add additional connection for 3 of the peers to addr2
     for peer in peers.iter().take(3) {
-        gs.inject_connection_established(
-            peer,
-            &ConnectionId::new(0),
-            &ConnectedPoint::Dialer {
+        gs.on_swarm_event(FromSwarm::ConnectionEstablished(ConnectionEstablished {
+            peer_id: *peer,
+            connection_id: ConnectionId::new(0),
+            endpoint: &ConnectedPoint::Dialer {
                 address: addr2.clone(),
                 role_override: Endpoint::Dialer,
             },
-            None,
-            1,
-        );
+            failed_addresses: &[],
+            other_established: 1,
+        }));
     }
 
     //double penalties for the first three of each
@@ -4156,16 +4152,16 @@ fn test_scoring_p6() {
     );
 
     //two times same ip doesn't count twice
-    gs.inject_connection_established(
-        &peers[0],
-        &ConnectionId::new(0),
-        &ConnectedPoint::Dialer {
+    gs.on_swarm_event(FromSwarm::ConnectionEstablished(ConnectionEstablished {
+        peer_id: peers[0],
+        connection_id: ConnectionId::new(0),
+        endpoint: &ConnectedPoint::Dialer {
             address: addr,
             role_override: Endpoint::Dialer,
         },
-        None,
-        2,
-    );
+        failed_addresses: &[],
+        other_established: 2,
+    }));
 
     //nothing changed
     //double penalties for the first three of each
@@ -5203,7 +5199,7 @@ fn test_subscribe_and_graft_with_negative_score() {
             _ => None,
         });
         for message in messages_to_p1 {
-            gs1.inject_event(
+            gs1.on_connection_handler_event(
                 p2,
                 connection_id,
                 HandlerEvent::Message {
