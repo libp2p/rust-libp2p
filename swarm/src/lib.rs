@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! High level manager of the network.
+//! High-level network manager.
 //!
 //! A [`Swarm`] contains the state of the network as a whole. The entire
 //! behaviour of a libp2p network can be controlled through the `Swarm`.
