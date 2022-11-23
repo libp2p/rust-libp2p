@@ -52,6 +52,8 @@ use std::task::{Context, Poll};
 /// ```
 pub type Transport = crate::Transport<Tcp>;
 
+pub type Stream = TcpStream;
+
 #[derive(Copy, Clone)]
 #[doc(hidden)]
 pub enum Tcp {}

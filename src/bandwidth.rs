@@ -31,7 +31,9 @@ use futures::{
     prelude::*,
     ready,
 };
+use libp2p_core::muxing::StreamMuxerEvent;
 use libp2p_core::transport::ListenerId;
+use libp2p_core::{PeerId, StreamMuxer};
 use std::{
     convert::TryFrom as _,
     io,
@@ -70,11 +72,106 @@ impl<TInner> BandwidthLogging<TInner> {
     }
 }
 
+pub trait AttachBandwidthLogger {
+    type Output;
+
+    fn attach(self, sinks: Arc<BandwidthSinks>) -> Self::Output;
+}
+
+#[cfg(all(feature = "tcp", feature = "async-std"))]
+impl AttachBandwidthLogger for libp2p_tcp::async_io::Stream {
+    type Output = BandwidthConnecLogging<Self>;
+
+    fn attach(self, sinks: Arc<BandwidthSinks>) -> Self::Output {
+        BandwidthConnecLogging { inner: self, sinks }
+    }
+}
+
+#[cfg(all(feature = "tcp", feature = "tokio"))]
+impl AttachBandwidthLogger for libp2p_tcp::tokio::Stream {
+    type Output = BandwidthConnecLogging<Self>;
+
+    fn attach(self, sinks: Arc<BandwidthSinks>) -> Self::Output {
+        BandwidthConnecLogging { inner: self, sinks }
+    }
+}
+
+#[cfg(feature = "webrtc")]
+impl AttachBandwidthLogger for (PeerId, libp2p_webrtc::tokio::Connection) {
+    type Output = (PeerId, Connection<libp2p_webrtc::tokio::Connection>);
+
+    fn attach(self, sinks: Arc<BandwidthSinks>) -> Self::Output {
+        (
+            self.0,
+            Connection {
+                inner: self.1,
+                sinks,
+            },
+        )
+    }
+}
+
+#[pin_project::pin_project]
+pub struct Connection<I> {
+    #[pin]
+    inner: I,
+    sinks: Arc<BandwidthSinks>,
+}
+
+impl<I> StreamMuxer for Connection<I>
+where
+    I: StreamMuxer + UpdateBandwidthSinks,
+{
+    type Substream = I::Substream;
+    type Error = I::Error;
+
+    fn poll_inbound(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<Self::Substream, Self::Error>> {
+        self.project().inner.poll_inbound(cx)
+    }
+
+    fn poll_outbound(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<Self::Substream, Self::Error>> {
+        self.project().inner.poll_outbound(cx)
+    }
+
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        self.project().inner.poll_close(cx)
+    }
+
+    fn poll(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<StreamMuxerEvent, Self::Error>> {
+        let mut this = self.project();
+
+        this.inner.as_mut().update_bandwidth_sinks(this.sinks);
+
+        this.inner.poll(cx)
+    }
+}
+
+pub trait UpdateBandwidthSinks {
+    fn update_bandwidth_sinks(self: Pin<&mut Self>, sinks: &BandwidthSinks);
+}
+
+#[cfg(feature = "webrtc")]
+impl UpdateBandwidthSinks for libp2p_webrtc::tokio::Connection {
+    fn update_bandwidth_sinks(self: Pin<&mut Self>, _: &BandwidthSinks) {
+        // TODO: Fetch data from connection via public functions and update sinks
+    }
+}
+
 impl<TInner> Transport for BandwidthLogging<TInner>
 where
     TInner: Transport,
+    TInner::Output: AttachBandwidthLogger,
 {
-    type Output = BandwidthConnecLogging<TInner::Output>;
+    type Output = <TInner::Output as AttachBandwidthLogger>::Output;
     type Error = TInner::Error;
     type ListenerUpgrade = BandwidthFuture<TInner::ListenerUpgrade>;
     type Dial = BandwidthFuture<TInner::Dial>;
@@ -135,17 +232,20 @@ pub struct BandwidthFuture<TInner> {
     sinks: Arc<BandwidthSinks>,
 }
 
-impl<TInner: TryFuture> Future for BandwidthFuture<TInner> {
-    type Output = Result<BandwidthConnecLogging<TInner::Ok>, TInner::Error>;
+impl<TInner, TOk, TErr> Future for BandwidthFuture<TInner>
+where
+    TInner: Future<Output = Result<TOk, TErr>>,
+    TOk: AttachBandwidthLogger,
+{
+    type Output = Result<<TOk as AttachBandwidthLogger>::Output, TErr>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
-        let inner = ready!(this.inner.try_poll(cx)?);
-        let logged = BandwidthConnecLogging {
-            inner,
-            sinks: this.sinks.clone(),
-        };
-        Poll::Ready(Ok(logged))
+        let inner = ready!(this.inner.poll(cx))?;
+
+        let output = inner.attach(this.sinks.clone());
+
+        Poll::Ready(Ok(output))
     }
 }
 
