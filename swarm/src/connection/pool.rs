@@ -197,7 +197,7 @@ struct PendingConnection<THandler> {
     /// When dropped, notifies the task which then knows to terminate.
     abort_notifier: Option<oneshot::Sender<Void>>,
     /// The moment we became aware of this possible connection, useful for timing metrics.
-    creation: Instant,
+    accepted_at: Instant,
 }
 
 impl<THandler> PendingConnection<THandler> {
