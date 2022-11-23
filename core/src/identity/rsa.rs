@@ -48,7 +48,7 @@ impl Keypair {
     /// [RFC5208]: https://tools.ietf.org/html/rfc5208#section-5
     pub fn from_pkcs8(der: &mut [u8]) -> Result<Keypair, DecodingError> {
         let kp = RsaKeyPair::from_pkcs8(der)
-            .map_err(|e| DecodingError::new("RSA PKCS#8 PrivateKeyInfo").source(e))?;
+            .map_err(|e| DecodingError::failed_to_parse("RSA PKCS#8 PrivateKeyInfo", e))?;
         der.zeroize();
         Ok(Keypair(Arc::new(kp)))
     }
@@ -111,7 +111,7 @@ impl PublicKey {
     /// structure. See also `encode_x509`.
     pub fn decode_x509(pk: &[u8]) -> Result<PublicKey, DecodingError> {
         Asn1SubjectPublicKeyInfo::decode(pk)
-            .map_err(|e| DecodingError::new("RSA X.509").source(e))
+            .map_err(|e| DecodingError::failed_to_parse("RSA X.509", e))
             .map(|spki| spki.subjectPublicKey.0)
     }
 }

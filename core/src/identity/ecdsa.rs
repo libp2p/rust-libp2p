@@ -31,6 +31,7 @@ use p256::{
     },
     EncodedPoint,
 };
+use void::Void;
 
 /// An ECDSA keypair.
 #[derive(Clone)]
@@ -107,7 +108,7 @@ impl SecretKey {
     /// Decode a secret key from a byte buffer.
     pub fn from_bytes(buf: &[u8]) -> Result<Self, DecodingError> {
         SigningKey::from_bytes(buf)
-            .map_err(|err| DecodingError::new("failed to parse ecdsa p256 secret key").source(err))
+            .map_err(|err| DecodingError::failed_to_parse("ecdsa p256 secret key", err))
             .map(SecretKey)
     }
 }
@@ -134,12 +135,11 @@ impl PublicKey {
 
     /// Decode a public key from a byte buffer without compression.
     pub fn from_bytes(k: &[u8]) -> Result<PublicKey, DecodingError> {
-        let enc_pt = EncodedPoint::from_bytes(k).map_err(|_| {
-            DecodingError::new("failed to parse ecdsa p256 public key, bad point encoding")
-        })?;
+        let enc_pt = EncodedPoint::from_bytes(k)
+            .map_err(|e| DecodingError::failed_to_parse("ecdsa p256 encoded point", e))?;
 
         VerifyingKey::from_encoded_point(&enc_pt)
-            .map_err(|err| DecodingError::new("failed to parse ecdsa p256 public key").source(err))
+            .map_err(|err| DecodingError::failed_to_parse("ecdsa p256 public key", err))
             .map(PublicKey)
     }
 
@@ -157,7 +157,7 @@ impl PublicKey {
     /// Decode a public key into a DER encoded byte buffer as defined by SEC1 standard.
     pub fn decode_der(k: &[u8]) -> Result<PublicKey, DecodingError> {
         let buf = Self::del_asn1_header(k).ok_or_else(|| {
-            DecodingError::new("failed to parse asn.1 encoded ecdsa p256 public key")
+            DecodingError::failed_to_parse::<Void, _>("ASN.1-encoded ecdsa p256 public key", None)
         })?;
         Self::from_bytes(buf)
     }
