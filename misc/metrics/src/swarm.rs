@@ -169,7 +169,7 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
                 self.connections_established.get_or_create(&labels).inc();
                 self.connection_establishment_duration
                     .get_or_create(&labels)
-                    .observe(time_taken.as_millis().clamp(0, 10000) as f64 / 1e3);
+                    .observe(time_taken.as_secs_f64());
             }
             libp2p_swarm::SwarmEvent::ConnectionClosed { endpoint, .. } => {
                 self.connections_closed
