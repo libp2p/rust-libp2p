@@ -39,6 +39,7 @@ use webrtc::peer_connection::RTCPeerConnection;
 
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 
+use crate::tokio::bandwidth::Bandwidth;
 use crate::tokio::{error::Error, fingerprint::Fingerprint, sdp, substream::Substream, Connection};
 
 /// Creates a new outbound WebRTC connection.
@@ -233,7 +234,7 @@ async fn create_substream_for_noise_handshake(
         }
     };
 
-    let (substream, drop_listener) = Substream::new(channel);
+    let (substream, drop_listener) = Substream::new(channel, Arc::new(Bandwidth::new()));
     drop(drop_listener); // Don't care about cancelled substreams during initial handshake.
 
     Ok(substream)

@@ -40,6 +40,7 @@ use std::{
     task::{Context, Poll},
 };
 
+use crate::tokio::bandwidth::Bandwidth;
 use crate::tokio::{error::Error, substream, substream::Substream};
 
 /// Maximum number of unprocessed data channels.
@@ -65,6 +66,11 @@ pub struct Connection {
     /// A list of futures, which, once completed, signal that a [`Substream`] has been dropped.
     drop_listeners: FuturesUnordered<substream::DropListener>,
     no_drop_listeners_waker: Option<Waker>,
+
+    /// Contains the total number of bytes received & sent by all substreams.
+    ///
+    /// The same value is shared between all substreams.
+    bandwidth: Arc<Bandwidth>,
 }
 
 impl Unpin for Connection {}
@@ -87,6 +93,7 @@ impl Connection {
             close_fut: None,
             drop_listeners: FuturesUnordered::default(),
             no_drop_listeners_waker: None,
+            bandwidth: Arc::new(Bandwidth::new()),
         }
     }
 
@@ -144,6 +151,22 @@ impl Connection {
             })
         }));
     }
+
+    /// Returns the total number of bytes received by this connection.
+    ///
+    /// This does not include ICE or any other WebRTC-related data except one received via
+    /// [`Substream`]s.
+    pub fn total_inbound(&self) -> u64 {
+        self.bandwidth.inbound()
+    }
+
+    /// Returns the total number of bytes sent by this connection.
+    ///
+    /// This does not include ICE or any other WebRTC-related data except one sent via
+    /// [`Substream`]s.
+    pub fn total_outbound(&self) -> u64 {
+        self.bandwidth.outbound()
+    }
 }
 
 impl StreamMuxer for Connection {
@@ -158,7 +181,7 @@ impl StreamMuxer for Connection {
             Some(detached) => {
                 log::trace!("Incoming substream {}", detached.stream_identifier());
 
-                let (substream, drop_listener) = Substream::new(detached);
+                let (substream, drop_listener) = Substream::new(detached, self.bandwidth.clone());
                 self.drop_listeners.push(drop_listener);
                 if let Some(waker) = self.no_drop_listeners_waker.take() {
                     waker.wake()
@@ -228,7 +251,7 @@ impl StreamMuxer for Connection {
 
                 log::trace!("Outbound substream {}", detached.stream_identifier());
 
-                let (substream, drop_listener) = Substream::new(detached);
+                let (substream, drop_listener) = Substream::new(detached, self.bandwidth.clone());
                 self.drop_listeners.push(drop_listener);
                 if let Some(waker) = self.no_drop_listeners_waker.take() {
                     waker.wake()

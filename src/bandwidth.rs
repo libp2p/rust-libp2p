@@ -161,8 +161,11 @@ pub trait UpdateBandwidthSinks {
 
 #[cfg(feature = "webrtc")]
 impl UpdateBandwidthSinks for libp2p_webrtc::tokio::Connection {
-    fn update_bandwidth_sinks(self: Pin<&mut Self>, _: &BandwidthSinks) {
-        // TODO: Fetch data from connection via public functions and update sinks
+    fn update_bandwidth_sinks(self: Pin<&mut Self>, sinks: &BandwidthSinks) {
+        sinks.inbound.store(self.total_inbound(), Ordering::Relaxed);
+        sinks
+            .outbound
+            .store(self.total_outbound(), Ordering::Relaxed);
     }
 }
 
