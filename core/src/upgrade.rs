@@ -143,6 +143,7 @@ impl<T: AsRef<[u8]>> ProtocolName for T {
 /// assert_eq!(DisplayProtocolName("hellö/").to_string(), "hell<C3><B6>/");
 /// ```
 pub struct DisplayProtocolName<N>(pub N);
+
 impl<N: ProtocolName> fmt::Display for DisplayProtocolName<N> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use fmt::Write;
