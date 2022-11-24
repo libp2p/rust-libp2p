@@ -152,7 +152,7 @@ impl Connection {
         }));
     }
 
-    /// Returns the total number of bytes received by this connection.
+    /// Returns the total number of bytes received by all connections.
     ///
     /// This does not include ICE or any other WebRTC-related data except one received via
     /// [`Substream`]s.
@@ -160,7 +160,7 @@ impl Connection {
         self.bandwidth.inbound()
     }
 
-    /// Returns the total number of bytes sent by this connection.
+    /// Returns the total number of bytes sent by all connections.
     ///
     /// This does not include ICE or any other WebRTC-related data except one sent via
     /// [`Substream`]s.
