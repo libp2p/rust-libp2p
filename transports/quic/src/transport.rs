@@ -52,10 +52,12 @@ use std::{
 ///
 /// Per default only QUIC Version 1 (RFC 9000) is supported. In the [`Multiaddr`] this maps to
 /// [`libp2p_core::multiaddr::Protocol::QuicV1`].
-///
 /// The [`libp2p_core::multiaddr::Protocol::Quic`] codepoint is interpreted as QUIC version
 /// draft-29 and only supported if [`Config::support_draft_29`] is set to `true`.
 /// Note that in that case servers support both version an all QUIC listening addresses.
+///
+/// Version draft-29 should only be used to connect to nodes from other libp2p implementations
+/// that do not support `QuicV1` yet. Support for it will be removed long-term.
 #[derive(Debug)]
 pub struct GenTransport<P: Provider> {
     /// Config for the inner [`quinn_proto`] structs.
