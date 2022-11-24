@@ -215,8 +215,7 @@ impl UDPMuxNewAddr {
                     match self.udp_sock.poll_send_to(cx, &buf, target) {
                         Poll::Ready(result) => {
                             if let Ok(n) = result {
-                                self.bandwidth
-                                    .add_outbound(&target, u64::try_from(n).unwrap_or(0));
+                                self.bandwidth.add_outbound(u64::try_from(n).unwrap_or(0));
                             }
 
                             let _ = response.send(result.map_err(|e| Error::Io(e.into())));
@@ -398,8 +397,7 @@ impl UDPMuxNewAddr {
                                 }
                                 Some(conn) => {
                                     let n = read.filled().len();
-                                    self.bandwidth
-                                        .add_inbound(&addr, u64::try_from(n).unwrap_or(0));
+                                    self.bandwidth.add_inbound(u64::try_from(n).unwrap_or(0));
 
                                     let mut packet = vec![0u8; n];
                                     packet.copy_from_slice(read.filled());

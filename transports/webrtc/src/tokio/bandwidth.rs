@@ -18,80 +18,39 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use fnv::FnvHashMap;
-
-use std::net::SocketAddr;
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 /// Holds the counters used when logging bandwidth.
 ///
 /// Can be safely shared between threads.
 pub(crate) struct Bandwidth {
-    conns: Mutex<FnvHashMap<SocketAddr, ConnBandwidth>>,
+    inbound: AtomicU64,
+    outbound: AtomicU64,
 }
-
-pub(crate) struct ConnBandwidth {
-    pub inbound: u64,
-    pub outbound: u64,
-}
-
 impl Bandwidth {
     /// Creates a new [`Bandwidth`].
     pub(crate) fn new() -> Self {
         Self {
-            conns: Mutex::new(FnvHashMap::default()),
+            inbound: AtomicU64::new(0),
+            outbound: AtomicU64::new(0),
         }
     }
 
-    /// Increases the number of bytes received for a given address.
-    pub(crate) fn add_inbound(&self, addr: &SocketAddr, n: u64) {
-        let mut lock = self.conns.lock().unwrap();
-        let conn_bandwidth = lock.entry(*addr).or_insert(ConnBandwidth {
-            inbound: 0,
-            outbound: 0,
-        });
-        conn_bandwidth.inbound += n;
+    /// Increases the number of bytes received.
+    pub(crate) fn add_inbound(&self, n: u64) {
+        self.inbound.fetch_add(n, Ordering::Relaxed);
     }
 
     /// Increases the number of bytes sent for a given address.
-    pub(crate) fn add_outbound(&self, addr: &SocketAddr, n: u64) {
-        let mut lock = self.conns.lock().unwrap();
-        let conn_bandwidth = lock.entry(*addr).or_insert(ConnBandwidth {
-            inbound: 0,
-            outbound: 0,
-        });
-        conn_bandwidth.outbound += n;
+    pub(crate) fn add_outbound(&self, n: u64) {
+        self.outbound.fetch_add(n, Ordering::Relaxed);
     }
 
-    /// Resets measurements for a given address and returns the removed values.
-    pub(crate) fn reset(&self, addr: &SocketAddr) -> (u64, u64) {
-        if let Some(conn_bandwidth) = self.conns.lock().unwrap().remove(addr) {
-            (conn_bandwidth.inbound, conn_bandwidth.outbound)
-        } else {
-            (0, 0)
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::net::{IpAddr, Ipv4Addr};
-
-    #[test]
-    fn bandwidth() {
-        let addr1 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080);
-        let addr2 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8081);
-
-        let b = Bandwidth::new();
-
-        assert_eq!((0, 0), b.reset(&addr1));
-        assert_eq!((0, 0), b.reset(&addr2));
-
-        b.add_inbound(&addr1, 10);
-        b.add_outbound(&addr2, 5);
-
-        assert_eq!((10, 0), b.reset(&addr1));
-        assert_eq!((0, 5), b.reset(&addr2));
+    /// Gets the number of bytes received & sent. Resets both counters to zero after the call.
+    pub(crate) fn reset(&self) -> (u64, u64) {
+        (
+            self.inbound.swap(0, Ordering::Relaxed),
+            self.outbound.swap(0, Ordering::Relaxed),
+        )
     }
 }

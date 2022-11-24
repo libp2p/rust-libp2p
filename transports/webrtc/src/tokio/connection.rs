@@ -35,7 +35,6 @@ use webrtc::peer_connection::RTCPeerConnection;
 
 use std::task::Waker;
 use std::{
-    net::SocketAddr,
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
@@ -50,9 +49,6 @@ const MAX_DATA_CHANNELS_IN_FLIGHT: usize = 10;
 
 /// A WebRTC connection, wrapping [`RTCPeerConnection`] and implementing [`StreamMuxer`] trait.
 pub struct Connection {
-    /// Socket address.
-    addr: SocketAddr,
-
     /// [`RTCPeerConnection`] to the remote peer.
     ///
     /// Uses futures mutex because used in async code (see poll_outbound and poll_close).
@@ -71,7 +67,7 @@ pub struct Connection {
     drop_listeners: FuturesUnordered<substream::DropListener>,
     no_drop_listeners_waker: Option<Waker>,
 
-    /// Bandwidth logging, which is done in [`UDPMuxNewAddr`].
+    /// Bandwidth logging, which is done in `UDPMuxNewAddr`.
     ///
     /// Shared between all connections.
     bandwidth: Arc<Bandwidth>,
@@ -81,11 +77,7 @@ impl Unpin for Connection {}
 
 impl Connection {
     /// Creates a new connection.
-    pub(crate) async fn new(
-        addr: SocketAddr,
-        rtc_conn: RTCPeerConnection,
-        bandwidth: Arc<Bandwidth>,
-    ) -> Self {
+    pub(crate) async fn new(rtc_conn: RTCPeerConnection, bandwidth: Arc<Bandwidth>) -> Self {
         let (data_channel_tx, data_channel_rx) = mpsc::channel(MAX_DATA_CHANNELS_IN_FLIGHT);
 
         Connection::register_incoming_data_channels_handler(
@@ -95,7 +87,6 @@ impl Connection {
         .await;
 
         Self {
-            addr,
             peer_conn: Arc::new(FutMutex::new(rtc_conn)),
             incoming_data_channels_rx: data_channel_rx,
             outbound_fut: None,
@@ -161,10 +152,11 @@ impl Connection {
         }));
     }
 
-    /// Returns the total number of bytes received & sent by this connection up to this point. The
-    /// counters are reset after each call.
+    /// Fetches the current bandwidth (for all connections). Counters are reset after each call.
+    ///
+    /// Only use this for updating bandwidth.
     pub fn fetch_current_bandwidth(&self) -> (u64, u64) {
-        self.bandwidth.reset(&self.addr)
+        self.bandwidth.reset()
     }
 }
 
