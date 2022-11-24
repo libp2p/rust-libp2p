@@ -74,7 +74,7 @@ where
     /// A pending fatal error that results in the connection being closed.
     pending_error: Option<ConnectionHandlerUpgrErr<io::Error>>,
     /// Queue of events to emit in `poll()`.
-    pending_events: VecDeque<HandlerEvent<TCodec>>,
+    pending_events: VecDeque<Event<TCodec>>,
     /// Outbound upgrades waiting to be emitted as an `OutboundSubstreamRequest`.
     outbound: VecDeque<RequestProtocol<TCodec>>,
     /// Inbound upgrades waiting for the incoming request.
@@ -130,10 +130,10 @@ where
     ) {
         if sent {
             self.pending_events
-                .push_back(HandlerEvent::ResponseSent(request_id))
+                .push_back(Event::ResponseSent(request_id))
         } else {
             self.pending_events
-                .push_back(HandlerEvent::ResponseOmission(request_id))
+                .push_back(Event::ResponseOmission(request_id))
         }
     }
 
@@ -146,8 +146,7 @@ where
     ) {
         match error {
             ConnectionHandlerUpgrErr::Timeout => {
-                self.pending_events
-                    .push_back(HandlerEvent::OutboundTimeout(info));
+                self.pending_events.push_back(Event::OutboundTimeout(info));
             }
             ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)) => {
                 // The remote merely doesn't support the protocol(s) we requested.
@@ -156,7 +155,7 @@ where
                 // An event is reported to permit user code to react to the fact that
                 // the remote peer does not support the requested protocol(s).
                 self.pending_events
-                    .push_back(HandlerEvent::OutboundUnsupportedProtocols(info));
+                    .push_back(Event::OutboundUnsupportedProtocols(info));
             }
             _ => {
                 // Anything else is considered a fatal error or misbehaviour of
@@ -173,9 +172,9 @@ where
         >,
     ) {
         match error {
-            ConnectionHandlerUpgrErr::Timeout => self
-                .pending_events
-                .push_back(HandlerEvent::InboundTimeout(info)),
+            ConnectionHandlerUpgrErr::Timeout => {
+                self.pending_events.push_back(Event::InboundTimeout(info))
+            }
             ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)) => {
                 // The local peer merely doesn't support the protocol(s) requested.
                 // This is no reason to close the connection, which may
@@ -183,7 +182,7 @@ where
                 // An event is reported to permit user code to react to the fact that
                 // the local peer does not support the requested protocol(s).
                 self.pending_events
-                    .push_back(HandlerEvent::InboundUnsupportedProtocols(info));
+                    .push_back(Event::InboundUnsupportedProtocols(info));
             }
             _ => {
                 // Anything else is considered a fatal error or misbehaviour of
@@ -196,12 +195,12 @@ where
 
 #[deprecated(
     since = "0.23.0",
-    note = "Use re-exports that omit `RequestResponse` prefix, i.e. `libp2p::request_response::handler::HandlerEvent`"
+    note = "Use re-exports that omit `RequestResponse` prefix, i.e. `libp2p::request_response::handler::Event`"
 )]
-pub type RequestResponseHandlerEvent<TCodec> = HandlerEvent<TCodec>;
+pub type RequestResponseHandlerEvent<TCodec> = Event<TCodec>;
 
 /// The events emitted by the [`Handler`].
-pub enum HandlerEvent<TCodec>
+pub enum Event<TCodec>
 where
     TCodec: Codec,
 {
@@ -233,10 +232,10 @@ where
     InboundUnsupportedProtocols(RequestId),
 }
 
-impl<TCodec: Codec> fmt::Debug for HandlerEvent<TCodec> {
+impl<TCodec: Codec> fmt::Debug for Event<TCodec> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            HandlerEvent::Request {
+            Event::Request {
                 request_id,
                 request: _,
                 sender: _,
@@ -244,34 +243,34 @@ impl<TCodec: Codec> fmt::Debug for HandlerEvent<TCodec> {
                 .debug_struct("HandlerEvent::Request")
                 .field("request_id", request_id)
                 .finish(),
-            HandlerEvent::Response {
+            Event::Response {
                 request_id,
                 response: _,
             } => f
                 .debug_struct("HandlerEvent::Response")
                 .field("request_id", request_id)
                 .finish(),
-            HandlerEvent::ResponseSent(request_id) => f
+            Event::ResponseSent(request_id) => f
                 .debug_tuple("HandlerEvent::ResponseSent")
                 .field(request_id)
                 .finish(),
-            HandlerEvent::ResponseOmission(request_id) => f
+            Event::ResponseOmission(request_id) => f
                 .debug_tuple("HandlerEvent::ResponseOmission")
                 .field(request_id)
                 .finish(),
-            HandlerEvent::OutboundTimeout(request_id) => f
+            Event::OutboundTimeout(request_id) => f
                 .debug_tuple("HandlerEvent::OutboundTimeout")
                 .field(request_id)
                 .finish(),
-            HandlerEvent::OutboundUnsupportedProtocols(request_id) => f
+            Event::OutboundUnsupportedProtocols(request_id) => f
                 .debug_tuple("HandlerEvent::OutboundUnsupportedProtocols")
                 .field(request_id)
                 .finish(),
-            HandlerEvent::InboundTimeout(request_id) => f
+            Event::InboundTimeout(request_id) => f
                 .debug_tuple("HandlerEvent::InboundTimeout")
                 .field(request_id)
                 .finish(),
-            HandlerEvent::InboundUnsupportedProtocols(request_id) => f
+            Event::InboundUnsupportedProtocols(request_id) => f
                 .debug_tuple("HandlerEvent::InboundUnsupportedProtocols")
                 .field(request_id)
                 .finish(),
@@ -284,7 +283,7 @@ where
     TCodec: Codec + Send + Clone + 'static,
 {
     type InEvent = RequestProtocol<TCodec>;
-    type OutEvent = HandlerEvent<TCodec>;
+    type OutEvent = Event<TCodec>;
     type Error = ConnectionHandlerUpgrErr<io::Error>;
     type InboundProtocol = ResponseProtocol<TCodec>;
     type OutboundProtocol = RequestProtocol<TCodec>;
@@ -358,7 +357,7 @@ where
                 Ok(((id, rq), rs_sender)) => {
                     // We received an inbound request.
                     self.keep_alive = KeepAlive::Yes;
-                    return Poll::Ready(ConnectionHandlerEvent::Custom(HandlerEvent::Request {
+                    return Poll::Ready(ConnectionHandlerEvent::Custom(Event::Request {
                         request_id: id,
                         request: rq,
                         sender: rs_sender,
@@ -415,7 +414,7 @@ where
                 protocol: response,
                 info: request_id,
             }) => {
-                self.pending_events.push_back(HandlerEvent::Response {
+                self.pending_events.push_back(Event::Response {
                     request_id,
                     response,
                 });
