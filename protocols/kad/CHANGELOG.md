@@ -18,7 +18,7 @@
 
 - Refactor APIs to be streaming.
   - Renamed `KademliaEvent::OutboundQueryCompleted` to `KademliaEvent::OutboundQueryProgressed`
-  - Instead of a single event `OutboundQueryCompleted`, there are now multiple events emitted, allowing the user to process them as they come in (via the new `OutboundQueryProgressed`).
+  - Instead of a single event `OutboundQueryCompleted`, there are now multiple events emitted, allowing the user to process them as they come in (via the new `OutboundQueryProgressed`). See `ProgressStep` to identify the final `OutboundQueryProgressed` of a single query.
   - To finish a query early, i.e. before the final `OutboundQueryProgressed` of the query, a caller needs to call `query.finish()`.
   - There is no more automatic caching of records, the user has to manually call `put_record_to` on the `QueryInfo::GetRecord.cache_candiates`.
   See [PR 2712].
