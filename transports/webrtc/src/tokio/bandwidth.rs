@@ -44,21 +44,21 @@ impl Bandwidth {
     }
 
     /// Increases the number of bytes received for a given address.
-    pub(crate) fn add_inbound(&self, addr: SocketAddr, n: u64) {
+    pub(crate) fn add_inbound(&self, addr: &SocketAddr, n: u64) {
         let mut lock = self.conns.write().unwrap();
-        let conn_bandwidth = lock.entry(addr).or_insert(ConnBandwidth {
-            inbound: n,
+        let conn_bandwidth = lock.entry(*addr).or_insert(ConnBandwidth {
+            inbound: 0,
             outbound: 0,
         });
         conn_bandwidth.inbound += n;
     }
 
     /// Increases the number of bytes sent for a given address.
-    pub(crate) fn add_outbound(&self, addr: SocketAddr, n: u64) {
+    pub(crate) fn add_outbound(&self, addr: &SocketAddr, n: u64) {
         let mut lock = self.conns.write().unwrap();
-        let conn_bandwidth = lock.entry(addr).or_insert(ConnBandwidth {
+        let conn_bandwidth = lock.entry(*addr).or_insert(ConnBandwidth {
             inbound: 0,
-            outbound: n,
+            outbound: 0,
         });
         conn_bandwidth.outbound += n;
     }
@@ -85,5 +85,32 @@ impl Bandwidth {
         } else {
             0
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::net::{IpAddr, Ipv4Addr};
+
+    #[test]
+    fn bandwidth() {
+        let addr1 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080);
+        let addr2 = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8081);
+
+        let b = Bandwidth::new();
+
+        assert_eq!(0, b.inbound(&addr1));
+        assert_eq!(0, b.outbound(&addr1));
+        assert_eq!(0, b.inbound(&addr2));
+        assert_eq!(0, b.outbound(&addr2));
+
+        b.add_inbound(&addr1, 10);
+        b.add_outbound(&addr2, 5);
+
+        assert_eq!(10, b.inbound(&addr1));
+        assert_eq!(0, b.outbound(&addr1));
+        assert_eq!(0, b.inbound(&addr2));
+        assert_eq!(5, b.outbound(&addr2));
     }
 }
