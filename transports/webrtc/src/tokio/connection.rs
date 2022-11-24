@@ -67,9 +67,9 @@ pub struct Connection {
     drop_listeners: FuturesUnordered<substream::DropListener>,
     no_drop_listeners_waker: Option<Waker>,
 
-    /// Contains the total number of bytes received & sent by all substreams.
+    /// Contains the total number of bytes received & sent by all connections.
     ///
-    /// The same value is shared between all substreams.
+    /// Shared between all connections.
     bandwidth: Arc<Bandwidth>,
 }
 
@@ -77,7 +77,7 @@ impl Unpin for Connection {}
 
 impl Connection {
     /// Creates a new connection.
-    pub(crate) async fn new(rtc_conn: RTCPeerConnection) -> Self {
+    pub(crate) async fn new(rtc_conn: RTCPeerConnection, bandwidth: Arc<Bandwidth>) -> Self {
         let (data_channel_tx, data_channel_rx) = mpsc::channel(MAX_DATA_CHANNELS_IN_FLIGHT);
 
         Connection::register_incoming_data_channels_handler(
@@ -93,7 +93,7 @@ impl Connection {
             close_fut: None,
             drop_listeners: FuturesUnordered::default(),
             no_drop_listeners_waker: None,
-            bandwidth: Arc::new(Bandwidth::new()),
+            bandwidth,
         }
     }
 
@@ -181,7 +181,7 @@ impl StreamMuxer for Connection {
             Some(detached) => {
                 log::trace!("Incoming substream {}", detached.stream_identifier());
 
-                let (substream, drop_listener) = Substream::new(detached, self.bandwidth.clone());
+                let (substream, drop_listener) = Substream::new(detached);
                 self.drop_listeners.push(drop_listener);
                 if let Some(waker) = self.no_drop_listeners_waker.take() {
                     waker.wake()
@@ -251,7 +251,7 @@ impl StreamMuxer for Connection {
 
                 log::trace!("Outbound substream {}", detached.stream_identifier());
 
-                let (substream, drop_listener) = Substream::new(detached, self.bandwidth.clone());
+                let (substream, drop_listener) = Substream::new(detached);
                 self.drop_listeners.push(drop_listener);
                 if let Some(waker) = self.no_drop_listeners_waker.take() {
                     waker.wake()

@@ -43,6 +43,7 @@ use std::{
     task::{Context, Poll},
 };
 
+use crate::tokio::bandwidth::Bandwidth;
 use crate::tokio::req_res_chan;
 
 const RECEIVE_MTU: usize = 8192;
@@ -97,6 +98,10 @@ pub struct UDPMuxNewAddr {
 
     udp_mux_handle: Arc<UdpMuxHandle>,
     udp_mux_writer_handle: Arc<UdpMuxWriterHandle>,
+
+    /// Contains the total number of bytes received & sent by this UDP muxer (minus the control
+    /// data like ICE binding requests).
+    bandwidth: Arc<Bandwidth>,
 }
 
 impl UDPMuxNewAddr {
@@ -128,6 +133,7 @@ impl UDPMuxNewAddr {
             send_command,
             udp_mux_handle: Arc::new(udp_mux_handle),
             udp_mux_writer_handle: Arc::new(udp_mux_writer_handle),
+            bandwidth: Arc::new(Bandwidth::new()),
         })
     }
 
@@ -137,6 +143,10 @@ impl UDPMuxNewAddr {
 
     pub fn udp_mux_handle(&self) -> Arc<UdpMuxHandle> {
         self.udp_mux_handle.clone()
+    }
+
+    pub(crate) fn bandwidth(&self) -> Arc<Bandwidth> {
+        self.bandwidth.clone()
     }
 
     /// Create a muxed connection for a given ufrag.
@@ -200,6 +210,10 @@ impl UDPMuxNewAddr {
                 Some((buf, target, response)) => {
                     match self.udp_sock.poll_send_to(cx, &buf, target) {
                         Poll::Ready(result) => {
+                            if let Ok(n) = result {
+                                self.bandwidth.add_outbound(u64::try_from(n).unwrap_or(0));
+                            }
+
                             let _ = response.send(result.map_err(|e| Error::Io(e.into())));
                             continue;
                         }
@@ -378,7 +392,10 @@ impl UDPMuxNewAddr {
                                     }
                                 }
                                 Some(conn) => {
-                                    let mut packet = vec![0u8; read.filled().len()];
+                                    let n = read.filled().len();
+                                    self.bandwidth.add_inbound(u64::try_from(n).unwrap_or(0));
+
+                                    let mut packet = vec![0u8; n];
                                     packet.copy_from_slice(read.filled());
                                     self.write_future = OptionFuture::from(Some(
                                         async move {

@@ -39,17 +39,20 @@ use webrtc::peer_connection::RTCPeerConnection;
 
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 
-use crate::tokio::bandwidth::Bandwidth;
-use crate::tokio::{error::Error, fingerprint::Fingerprint, sdp, substream::Substream, Connection};
+use crate::tokio::{
+    bandwidth::Bandwidth, error::Error, fingerprint::Fingerprint, sdp, substream::Substream,
+    Connection,
+};
 
 /// Creates a new outbound WebRTC connection.
-pub async fn outbound(
+pub(crate) async fn outbound(
     addr: SocketAddr,
     config: RTCConfiguration,
     udp_mux: Arc<dyn UDPMux + Send + Sync>,
     client_fingerprint: Fingerprint,
     server_fingerprint: Fingerprint,
     id_keys: identity::Keypair,
+    bandwidth: Arc<Bandwidth>,
 ) -> Result<(PeerId, Connection), Error> {
     log::debug!("new outbound connection to {addr})");
 
@@ -75,17 +78,18 @@ pub async fn outbound(
     )
     .await?;
 
-    Ok((peer_id, Connection::new(peer_connection).await))
+    Ok((peer_id, Connection::new(peer_connection, bandwidth).await))
 }
 
 /// Creates a new inbound WebRTC connection.
-pub async fn inbound(
+pub(crate) async fn inbound(
     addr: SocketAddr,
     config: RTCConfiguration,
     udp_mux: Arc<dyn UDPMux + Send + Sync>,
     server_fingerprint: Fingerprint,
     remote_ufrag: String,
     id_keys: identity::Keypair,
+    bandwidth: Arc<Bandwidth>,
 ) -> Result<(PeerId, Connection), Error> {
     log::debug!("new inbound connection from {addr} (ufrag: {remote_ufrag})");
 
@@ -109,7 +113,7 @@ pub async fn inbound(
     )
     .await?;
 
-    Ok((peer_id, Connection::new(peer_connection).await))
+    Ok((peer_id, Connection::new(peer_connection, bandwidth).await))
 }
 
 async fn new_outbound_connection(
@@ -234,7 +238,7 @@ async fn create_substream_for_noise_handshake(
         }
     };
 
-    let (substream, drop_listener) = Substream::new(channel, Arc::new(Bandwidth::new()));
+    let (substream, drop_listener) = Substream::new(channel);
     drop(drop_listener); // Don't care about cancelled substreams during initial handshake.
 
     Ok(substream)

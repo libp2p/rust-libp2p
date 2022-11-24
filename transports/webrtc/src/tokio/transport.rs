@@ -125,22 +125,24 @@ impl libp2p_core::Transport for Transport {
 
         let config = self.config.clone();
         let client_fingerprint = self.config.fingerprint;
-        let udp_mux = self
+        let udp_mux = &self
             .listeners
             .iter()
             .next()
             .ok_or(TransportError::Other(Error::NoListeners))?
-            .udp_mux
-            .udp_mux_handle();
+            .udp_mux;
+        let udp_mux_handle = udp_mux.udp_mux_handle();
+        let bandwidth = udp_mux.bandwidth();
 
         Ok(async move {
             let (peer_id, connection) = upgrade::outbound(
                 sock_addr,
                 config.inner,
-                udp_mux,
+                udp_mux_handle,
                 client_fingerprint,
                 server_fingerprint,
                 config.id_keys,
+                bandwidth,
             )
             .await?;
 
@@ -332,6 +334,7 @@ impl Stream for ListenStream {
                         self.config.fingerprint,
                         new_addr.ufrag,
                         self.config.id_keys.clone(),
+                        self.udp_mux.bandwidth(),
                     )
                     .boxed();
 

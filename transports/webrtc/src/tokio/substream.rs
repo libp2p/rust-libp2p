@@ -32,7 +32,6 @@ use std::{
 };
 
 use crate::message_proto::{message::Flag, Message};
-use crate::tokio::bandwidth::Bandwidth;
 use crate::tokio::{
     substream::drop_listener::GracefullyClosed,
     substream::framed_dc::FramedDc,
@@ -68,19 +67,12 @@ pub struct Substream {
     read_buffer: Bytes,
     /// Dropping this will close the oneshot and notify the receiver by emitting `Canceled`.
     drop_notifier: Option<oneshot::Sender<GracefullyClosed>>,
-    /// Contains the total number of bytes received & sent by all substreams.
-    ///
-    /// The same value is shared between all substreams.
-    bandwidth: Arc<Bandwidth>,
 }
 
 impl Substream {
     /// Returns a new `Substream` and a listener, which will notify the receiver when/if the substream
     /// is dropped.
-    pub(crate) fn new(
-        data_channel: Arc<DataChannel>,
-        bandwidth: Arc<Bandwidth>,
-    ) -> (Self, DropListener) {
+    pub(crate) fn new(data_channel: Arc<DataChannel>) -> (Self, DropListener) {
         let (sender, receiver) = oneshot::channel();
 
         let substream = Self {
@@ -88,7 +80,6 @@ impl Substream {
             state: State::Open,
             read_buffer: Bytes::default(),
             drop_notifier: Some(sender),
-            bandwidth,
         };
         let listener = DropListener::new(framed_dc::new(data_channel), receiver);
 
@@ -136,8 +127,6 @@ impl AsyncRead for Substream {
                 let n = std::cmp::min(self.read_buffer.len(), buf.len());
                 let data = self.read_buffer.split_to(n);
                 buf[0..n].copy_from_slice(&data[..]);
-
-                self.bandwidth.add_inbound(u64::try_from(n).unwrap_or(0));
 
                 return Poll::Ready(Ok(n));
             }
@@ -208,8 +197,6 @@ impl AsyncWrite for Substream {
             flag: None,
             message: Some(buf[0..n].into()),
         })?;
-
-        self.bandwidth.add_outbound(u64::try_from(n).unwrap_or(0));
 
         Poll::Ready(Ok(n))
     }
