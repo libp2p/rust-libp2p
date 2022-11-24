@@ -135,7 +135,14 @@ impl<T: AsRef<[u8]>> ProtocolName for T {
     }
 }
 
-pub struct DisplayProtocolName<N>(N);
+/// Wrapper for printing a [`ProtocolName`] that is expected to be mostly ASCII
+///
+/// ```rust
+/// # use libp2p_core::upgrade::DisplayProtocolName;
+/// assert_eq!(DisplayProtocolName("hello").to_string(), "hello");
+/// assert_eq!(DisplayProtocolName("hellö/").to_string(), "hell<C3><B6>/");
+/// ```
+pub struct DisplayProtocolName<N>(pub N);
 impl<N: ProtocolName> fmt::Display for DisplayProtocolName<N> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use fmt::Write;
@@ -148,12 +155,6 @@ impl<N: ProtocolName> fmt::Display for DisplayProtocolName<N> {
         }
         Ok(())
     }
-}
-
-#[test]
-fn protocol_name_display() {
-    assert_eq!(DisplayProtocolName("hello").to_string(), "hello");
-    assert_eq!(DisplayProtocolName("hellö/").to_string(), "hell<C3><B6>/");
 }
 
 /// Common trait for upgrades that can be applied on inbound substreams, outbound substreams,
