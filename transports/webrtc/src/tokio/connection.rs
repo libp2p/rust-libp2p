@@ -162,17 +162,11 @@ impl Connection {
     }
 
     /// Returns the total number of bytes received by this connection.
-    ///
-    /// This does not include ICE or any other WebRTC-related data except one received via
-    /// [`Substream`]s.
     pub fn total_inbound(&self) -> u64 {
         self.bandwidth.inbound(&self.addr)
     }
 
     /// Returns the total number of bytes sent by this connection.
-    ///
-    /// This does not include ICE or any other WebRTC-related data except one sent via
-    /// [`Substream`]s.
     pub fn total_outbound(&self) -> u64 {
         self.bandwidth.outbound(&self.addr)
     }

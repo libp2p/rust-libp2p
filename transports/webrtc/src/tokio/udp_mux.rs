@@ -99,8 +99,10 @@ pub struct UDPMuxNewAddr {
     udp_mux_handle: Arc<UdpMuxHandle>,
     udp_mux_writer_handle: Arc<UdpMuxWriterHandle>,
 
-    /// Bandwidth logging.ICE requests / responses and other WebRTC-related control data is not
-    /// logged.
+    /// Bandwidth logging.
+    ///
+    /// ICE binding requests or any other WebRTC control data transmitted via UDP socket is not
+    /// logged. Only data flowing from / to connections are being logged.
     ///
     /// Shared between all connections.
     bandwidth: Arc<Bandwidth>,

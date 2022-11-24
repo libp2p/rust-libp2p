@@ -64,9 +64,6 @@ impl Bandwidth {
     }
 
     /// Gets the number of bytes received for a given address.
-    ///
-    /// > **Note**: This method is by design subject to race conditions. The returned value should
-    /// >           only ever be used for statistics purposes.
     pub(crate) fn inbound(&self, addr: &SocketAddr) -> u64 {
         if let Some(conn_bandwidth) = self.conns.read().unwrap().get(addr) {
             conn_bandwidth.inbound
@@ -76,9 +73,6 @@ impl Bandwidth {
     }
 
     /// Gets the number of bytes sent for a given address.
-    ///
-    /// > **Note**: This method is by design subject to race conditions. The returned value should
-    /// >           only ever be used for statistics purposes.
     pub(crate) fn outbound(&self, addr: &SocketAddr) -> u64 {
         if let Some(conn_bandwidth) = self.conns.read().unwrap().get(addr) {
             conn_bandwidth.outbound
