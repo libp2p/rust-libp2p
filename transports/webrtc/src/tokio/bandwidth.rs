@@ -18,48 +18,72 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::sync::atomic::{AtomicU64, Ordering};
+use fnv::FnvHashMap;
+
+use std::net::SocketAddr;
+use std::sync::RwLock;
 
 /// Holds the counters used when logging bandwidth.
 ///
 /// Can be safely shared between threads.
 pub(crate) struct Bandwidth {
-    inbound: AtomicU64,
-    outbound: AtomicU64,
+    conns: RwLock<FnvHashMap<SocketAddr, ConnBandwidth>>,
+}
+
+struct ConnBandwidth {
+    inbound: u64,
+    outbound: u64,
 }
 
 impl Bandwidth {
     /// Creates a new [`Bandwidth`].
     pub(crate) fn new() -> Self {
         Self {
-            inbound: AtomicU64::new(0),
-            outbound: AtomicU64::new(0),
+            conns: RwLock::new(FnvHashMap::default()),
         }
     }
 
-    /// Increases the number of bytes received.
-    pub(crate) fn add_inbound(&self, n: u64) {
-        self.inbound.fetch_add(n, Ordering::Relaxed);
+    /// Increases the number of bytes received for a given address.
+    pub(crate) fn add_inbound(&self, addr: SocketAddr, n: u64) {
+        let mut lock = self.conns.write().unwrap();
+        let conn_bandwidth = lock.entry(addr).or_insert(ConnBandwidth {
+            inbound: n,
+            outbound: 0,
+        });
+        conn_bandwidth.inbound += n;
     }
 
-    /// Increases the number of bytes sent.
-    pub(crate) fn add_outbound(&self, n: u64) {
-        self.outbound.fetch_add(n, Ordering::Relaxed);
+    /// Increases the number of bytes sent for a given address.
+    pub(crate) fn add_outbound(&self, addr: SocketAddr, n: u64) {
+        let mut lock = self.conns.write().unwrap();
+        let conn_bandwidth = lock.entry(addr).or_insert(ConnBandwidth {
+            inbound: 0,
+            outbound: n,
+        });
+        conn_bandwidth.outbound += n;
     }
 
-    /// Gets the number of bytes received.
+    /// Gets the number of bytes received for a given address.
     ///
     /// > **Note**: This method is by design subject to race conditions. The returned value should
     /// >           only ever be used for statistics purposes.
-    pub(crate) fn inbound(&self) -> u64 {
-        self.inbound.load(Ordering::Relaxed)
+    pub(crate) fn inbound(&self, addr: &SocketAddr) -> u64 {
+        if let Some(conn_bandwidth) = self.conns.read().unwrap().get(addr) {
+            conn_bandwidth.inbound
+        } else {
+            0
+        }
     }
 
-    /// Gets the number of bytes sent.
+    /// Gets the number of bytes sent for a given address.
     ///
     /// > **Note**: This method is by design subject to race conditions. The returned value should
     /// >           only ever be used for statistics purposes.
-    pub(crate) fn outbound(&self) -> u64 {
-        self.outbound.load(Ordering::Relaxed)
+    pub(crate) fn outbound(&self, addr: &SocketAddr) -> u64 {
+        if let Some(conn_bandwidth) = self.conns.read().unwrap().get(addr) {
+            conn_bandwidth.outbound
+        } else {
+            0
+        }
     }
 }

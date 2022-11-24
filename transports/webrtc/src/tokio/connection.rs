@@ -35,6 +35,7 @@ use webrtc::peer_connection::RTCPeerConnection;
 
 use std::task::Waker;
 use std::{
+    net::SocketAddr,
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
@@ -49,6 +50,9 @@ const MAX_DATA_CHANNELS_IN_FLIGHT: usize = 10;
 
 /// A WebRTC connection, wrapping [`RTCPeerConnection`] and implementing [`StreamMuxer`] trait.
 pub struct Connection {
+    /// Socket address.
+    addr: SocketAddr,
+
     /// [`RTCPeerConnection`] to the remote peer.
     ///
     /// Uses futures mutex because used in async code (see poll_outbound and poll_close).
@@ -67,7 +71,7 @@ pub struct Connection {
     drop_listeners: FuturesUnordered<substream::DropListener>,
     no_drop_listeners_waker: Option<Waker>,
 
-    /// Contains the total number of bytes received & sent by all connections.
+    /// Bandwidth logging, which is done in [`UDPMuxNewAddr`].
     ///
     /// Shared between all connections.
     bandwidth: Arc<Bandwidth>,
@@ -77,7 +81,11 @@ impl Unpin for Connection {}
 
 impl Connection {
     /// Creates a new connection.
-    pub(crate) async fn new(rtc_conn: RTCPeerConnection, bandwidth: Arc<Bandwidth>) -> Self {
+    pub(crate) async fn new(
+        addr: SocketAddr,
+        rtc_conn: RTCPeerConnection,
+        bandwidth: Arc<Bandwidth>,
+    ) -> Self {
         let (data_channel_tx, data_channel_rx) = mpsc::channel(MAX_DATA_CHANNELS_IN_FLIGHT);
 
         Connection::register_incoming_data_channels_handler(
@@ -87,6 +95,7 @@ impl Connection {
         .await;
 
         Self {
+            addr,
             peer_conn: Arc::new(FutMutex::new(rtc_conn)),
             incoming_data_channels_rx: data_channel_rx,
             outbound_fut: None,
@@ -152,20 +161,20 @@ impl Connection {
         }));
     }
 
-    /// Returns the total number of bytes received by all connections.
+    /// Returns the total number of bytes received by this connection.
     ///
     /// This does not include ICE or any other WebRTC-related data except one received via
     /// [`Substream`]s.
     pub fn total_inbound(&self) -> u64 {
-        self.bandwidth.inbound()
+        self.bandwidth.inbound(&self.addr)
     }
 
-    /// Returns the total number of bytes sent by all connections.
+    /// Returns the total number of bytes sent by this connection.
     ///
     /// This does not include ICE or any other WebRTC-related data except one sent via
     /// [`Substream`]s.
     pub fn total_outbound(&self) -> u64 {
-        self.bandwidth.outbound()
+        self.bandwidth.outbound(&self.addr)
     }
 }
 

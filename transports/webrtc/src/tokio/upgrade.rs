@@ -78,7 +78,10 @@ pub(crate) async fn outbound(
     )
     .await?;
 
-    Ok((peer_id, Connection::new(peer_connection, bandwidth).await))
+    Ok((
+        peer_id,
+        Connection::new(addr, peer_connection, bandwidth).await,
+    ))
 }
 
 /// Creates a new inbound WebRTC connection.
@@ -113,7 +116,10 @@ pub(crate) async fn inbound(
     )
     .await?;
 
-    Ok((peer_id, Connection::new(peer_connection, bandwidth).await))
+    Ok((
+        peer_id,
+        Connection::new(addr, peer_connection, bandwidth).await,
+    ))
 }
 
 async fn new_outbound_connection(
