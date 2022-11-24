@@ -24,24 +24,6 @@ pull_request_rules:
     actions:
       queue:
 
-  - name: Conventional Commit PR title
-    conditions:
-      - base=master
-    actions:
-      post_check:
-        success_conditions:
-          - "title~=^(fix|feat|docs|refactor|chore|deps)(\\(.+\\))?!?:"
-        title: |
-          {% if check_succeed %}
-          Title follows Conventional Commit
-          {% else %}
-          Title does not follow Conventional Commit
-          {% endif %}
-        summary: |
-          {% if not check_succeed %}
-          Your pull request title must follow [Conventional Commit](https://www.conventionalcommits.org/en/v1.0.0/).
-          {% endif %}
-
 queue_rules:
   - name: default
     conditions: []
