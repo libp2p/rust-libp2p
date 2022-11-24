@@ -21,31 +21,31 @@
 use fnv::FnvHashMap;
 
 use std::net::SocketAddr;
-use std::sync::RwLock;
+use std::sync::Mutex;
 
 /// Holds the counters used when logging bandwidth.
 ///
 /// Can be safely shared between threads.
 pub(crate) struct Bandwidth {
-    conns: RwLock<FnvHashMap<SocketAddr, ConnBandwidth>>,
+    conns: Mutex<FnvHashMap<SocketAddr, ConnBandwidth>>,
 }
 
-struct ConnBandwidth {
-    inbound: u64,
-    outbound: u64,
+pub(crate) struct ConnBandwidth {
+    pub inbound: u64,
+    pub outbound: u64,
 }
 
 impl Bandwidth {
     /// Creates a new [`Bandwidth`].
     pub(crate) fn new() -> Self {
         Self {
-            conns: RwLock::new(FnvHashMap::default()),
+            conns: Mutex::new(FnvHashMap::default()),
         }
     }
 
     /// Increases the number of bytes received for a given address.
     pub(crate) fn add_inbound(&self, addr: &SocketAddr, n: u64) {
-        let mut lock = self.conns.write().unwrap();
+        let mut lock = self.conns.lock().unwrap();
         let conn_bandwidth = lock.entry(*addr).or_insert(ConnBandwidth {
             inbound: 0,
             outbound: 0,
@@ -55,7 +55,7 @@ impl Bandwidth {
 
     /// Increases the number of bytes sent for a given address.
     pub(crate) fn add_outbound(&self, addr: &SocketAddr, n: u64) {
-        let mut lock = self.conns.write().unwrap();
+        let mut lock = self.conns.lock().unwrap();
         let conn_bandwidth = lock.entry(*addr).or_insert(ConnBandwidth {
             inbound: 0,
             outbound: 0,
@@ -63,21 +63,12 @@ impl Bandwidth {
         conn_bandwidth.outbound += n;
     }
 
-    /// Gets the number of bytes received for a given address.
-    pub(crate) fn inbound(&self, addr: &SocketAddr) -> u64 {
-        if let Some(conn_bandwidth) = self.conns.read().unwrap().get(addr) {
-            conn_bandwidth.inbound
+    /// Resets measurements for a given address and returns the removed values.
+    pub(crate) fn reset(&self, addr: &SocketAddr) -> (u64, u64) {
+        if let Some(conn_bandwidth) = self.conns.lock().unwrap().remove(addr) {
+            (conn_bandwidth.inbound, conn_bandwidth.outbound)
         } else {
-            0
-        }
-    }
-
-    /// Gets the number of bytes sent for a given address.
-    pub(crate) fn outbound(&self, addr: &SocketAddr) -> u64 {
-        if let Some(conn_bandwidth) = self.conns.read().unwrap().get(addr) {
-            conn_bandwidth.outbound
-        } else {
-            0
+            (0, 0)
         }
     }
 }
@@ -94,17 +85,13 @@ mod tests {
 
         let b = Bandwidth::new();
 
-        assert_eq!(0, b.inbound(&addr1));
-        assert_eq!(0, b.outbound(&addr1));
-        assert_eq!(0, b.inbound(&addr2));
-        assert_eq!(0, b.outbound(&addr2));
+        assert_eq!((0, 0), b.reset(&addr1));
+        assert_eq!((0, 0), b.reset(&addr2));
 
         b.add_inbound(&addr1, 10);
         b.add_outbound(&addr2, 5);
 
-        assert_eq!(10, b.inbound(&addr1));
-        assert_eq!(0, b.outbound(&addr1));
-        assert_eq!(0, b.inbound(&addr2));
-        assert_eq!(5, b.outbound(&addr2));
+        assert_eq!((10, 0), b.reset(&addr1));
+        assert_eq!((0, 5), b.reset(&addr2));
     }
 }

@@ -162,10 +162,9 @@ pub trait UpdateBandwidthSinks {
 #[cfg(feature = "webrtc")]
 impl UpdateBandwidthSinks for libp2p_webrtc::tokio::Connection {
     fn update_bandwidth_sinks(self: Pin<&mut Self>, sinks: &BandwidthSinks) {
-        sinks.inbound.store(self.total_inbound(), Ordering::Relaxed);
-        sinks
-            .outbound
-            .store(self.total_outbound(), Ordering::Relaxed);
+        let (inbound, outbound) = self.fetch_current_bandwidth();
+        sinks.inbound.fetch_add(inbound, Ordering::Relaxed);
+        sinks.outbound.fetch_add(outbound, Ordering::Relaxed);
     }
 }
 

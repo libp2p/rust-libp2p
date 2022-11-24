@@ -161,14 +161,10 @@ impl Connection {
         }));
     }
 
-    /// Returns the total number of bytes received by this connection.
-    pub fn total_inbound(&self) -> u64 {
-        self.bandwidth.inbound(&self.addr)
-    }
-
-    /// Returns the total number of bytes sent by this connection.
-    pub fn total_outbound(&self) -> u64 {
-        self.bandwidth.outbound(&self.addr)
+    /// Returns the total number of bytes received & sent by this connection up to this point. The
+    /// counters are reset after each call.
+    pub fn fetch_current_bandwidth(&self) -> (u64, u64) {
+        self.bandwidth.reset(&self.addr)
     }
 }
 
