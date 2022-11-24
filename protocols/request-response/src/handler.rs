@@ -54,7 +54,7 @@ use std::{
 )]
 pub type RequestResponseHandler<TCodec> = Handler<TCodec>;
 
-/// A connection handler of a [`Behaviour`](super::Behaviour) protocol.
+/// A connection handler for a request response [`Behaviour`](super::Behaviour) protocol.
 pub struct Handler<TCodec>
 where
     TCodec: Codec,
