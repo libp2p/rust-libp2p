@@ -1,3 +1,4 @@
+//! Provides executors for spawning background tasks.
 use futures::executor::ThreadPool;
 use std::{future::Future, pin::Pin};
 
@@ -30,7 +31,7 @@ impl Executor for ThreadPool {
     not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown"))
 ))]
 #[derive(Default, Debug, Clone, Copy)]
-pub(crate) struct TokioExecutor;
+pub struct TokioExecutor;
 
 #[cfg(all(
     feature = "tokio",
@@ -47,7 +48,7 @@ impl Executor for TokioExecutor {
     not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown"))
 ))]
 #[derive(Default, Debug, Clone, Copy)]
-pub(crate) struct AsyncStdExecutor;
+pub struct AsyncStdExecutor;
 
 #[cfg(all(
     feature = "async-std",

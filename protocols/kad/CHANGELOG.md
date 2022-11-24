@@ -4,17 +4,22 @@
 
 - Update to `libp2p-swarm` `v0.41.0`.
 
-- Replace `Kademlia`'s `NetworkBehaviour` implemention `inject_*` methods with the new `on_*` methods.
+- Replace `Kademlia`'s `NetworkBehaviour` implementation `inject_*` methods with the new `on_*` methods.
   See [PR 3011].
 
-- Replace `KademliaHandler`'s `ConnectionHandler` implemention `inject_*` methods with the new `on_*` methods.
+- Replace `KademliaHandler`'s `ConnectionHandler` implementation `inject_*` methods with the new `on_*` methods.
   See [PR 3085].
 
 - Update `rust-version` to reflect the actual MSRV: 1.62.0. See [PR 3090].
 
+- Fix bad state transition on incoming `AddProvider` messages.
+  This would eventually lead to warning that says: "New inbound substream to PeerId exceeds inbound substream limit. No older substream waiting to be reused."
+  See [PR 3152].
+
 [PR 3085]: https://github.com/libp2p/rust-libp2p/pull/3085
 [PR 3011]: https://github.com/libp2p/rust-libp2p/pull/3011
 [PR 3090]: https://github.com/libp2p/rust-libp2p/pull/3090
+[PR 3152]: https://github.com/libp2p/rust-libp2p/pull/3152
 
 # 0.41.0
 
