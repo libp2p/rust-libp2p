@@ -195,19 +195,16 @@ async fn backpressure() {
 
     stream_a.write_all(&data).await.unwrap();
 
-    let too_much_data = vec![0; 10];
-
-    assert!(
-        async_std::future::timeout(Duration::from_secs(1), stream_a.write_all(&too_much_data))
-            .await
-            .is_err()
-    );
+    let more_data = vec![0; 1];
+    assert!(stream_a.write(&more_data).now_or_never().is_none());
 
     let mut buf = vec![1; max_stream_data as usize - 1];
     stream_b.read_exact(&mut buf).await.unwrap();
 
     let mut buf = [0];
     assert!(stream_b.read(&mut buf).now_or_never().is_none());
+
+    assert!(stream_a.write(&more_data).now_or_never().is_some());
 }
 
 #[cfg(feature = "async-std")]
