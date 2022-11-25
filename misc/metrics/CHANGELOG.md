@@ -20,8 +20,12 @@
 
 - Update `rust-version` to reflect the actual MSRV: 1.62.0. See [PR 3090].
 
+- Changed `Metrics::query_result_get_record_ok` from `Histogram` to a `Counter`.
+  See [PR 2712].
+
 [PR 2982]: https://github.com/libp2p/rust-libp2p/pull/2982/
 [PR 3090]: https://github.com/libp2p/rust-libp2p/pull/3090
+[PR 2712]: https://github.com/libp2p/rust-libp2p/pull/2712
 
 # 0.10.0
 

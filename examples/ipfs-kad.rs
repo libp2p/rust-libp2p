@@ -81,7 +81,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     loop {
         let event = swarm.select_next_some().await;
-        if let SwarmEvent::Behaviour(KademliaEvent::OutboundQueryCompleted {
+        if let SwarmEvent::Behaviour(KademliaEvent::OutboundQueryProgressed {
             result: QueryResult::GetClosestPeers(result),
             ..
         }) = event

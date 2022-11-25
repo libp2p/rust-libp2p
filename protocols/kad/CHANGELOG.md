@@ -16,10 +16,18 @@
   This would eventually lead to warning that says: "New inbound substream to PeerId exceeds inbound substream limit. No older substream waiting to be reused."
   See [PR 3152].
 
+- Refactor APIs to be streaming.
+  - Renamed `KademliaEvent::OutboundQueryCompleted` to `KademliaEvent::OutboundQueryProgressed`
+  - Instead of a single event `OutboundQueryCompleted`, there are now multiple events emitted, allowing the user to process them as they come in (via the new `OutboundQueryProgressed`). See `ProgressStep` to identify the final `OutboundQueryProgressed` of a single query.
+  - To finish a query early, i.e. before the final `OutboundQueryProgressed` of the query, a caller needs to call `query.finish()`.
+  - There is no more automatic caching of records. The user has to manually call `put_record_to` on the `QueryInfo::GetRecord.cache_candidates` to cache a record to a close peer that did not return the record on the foregone query.
+  See [PR 2712].
+
 [PR 3085]: https://github.com/libp2p/rust-libp2p/pull/3085
 [PR 3011]: https://github.com/libp2p/rust-libp2p/pull/3011
 [PR 3090]: https://github.com/libp2p/rust-libp2p/pull/3090
 [PR 3152]: https://github.com/libp2p/rust-libp2p/pull/3152
+[PR 2712]: https://github.com/libp2p/rust-libp2p/pull/2712
 
 # 0.41.0
 
