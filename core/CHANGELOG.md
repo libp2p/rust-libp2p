@@ -1,4 +1,4 @@
-# 0.38.0 [unreleased]
+# 0.38.0
 
 - Remove deprecated functions `StreamMuxerExt::next_{inbound,outbound}`. See [PR 3031].
 

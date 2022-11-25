@@ -1,4 +1,4 @@
-# 0.30.2 - [unreleased]
+# 0.30.2
 
 - Replace `NetworkBehaviour` Derive macro deprecated `inject_*` method implementations
   with the new `on_swarm_event` and `on_connection_handler_event`.
