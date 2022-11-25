@@ -111,6 +111,140 @@ impl WithBandwidthSinks for (PeerId, libp2p_webrtc::tokio::Connection) {
     }
 }
 
+#[cfg(feature = "deflate")]
+impl<S> WithBandwidthSinks for libp2p_deflate::DeflateOutput<S> {
+    type Output = BandwidthConnecLogging<Self>;
+
+    fn with_bandwidth_sinks(self, sinks: Arc<BandwidthSinks>) -> Self::Output {
+        BandwidthConnecLogging { inner: self, sinks }
+    }
+}
+
+#[cfg(feature = "noise")]
+impl<T, C> WithBandwidthSinks
+    for (
+        libp2p_noise::RemoteIdentity<C>,
+        libp2p_noise::NoiseOutput<T>,
+    )
+{
+    type Output = (
+        libp2p_noise::RemoteIdentity<C>,
+        BandwidthConnecLogging<libp2p_noise::NoiseOutput<T>>,
+    );
+
+    fn with_bandwidth_sinks(self, sinks: Arc<BandwidthSinks>) -> Self::Output {
+        (
+            self.0,
+            BandwidthConnecLogging {
+                inner: self.1,
+                sinks,
+            },
+        )
+    }
+}
+
+#[cfg(feature = "plaintext")]
+impl<C> WithBandwidthSinks for (libp2p_core::PeerId, libp2p_plaintext::PlainTextOutput<C>)
+where
+    C: AsyncRead + AsyncWrite + Unpin,
+{
+    type Output = (
+        libp2p_core::PeerId,
+        BandwidthConnecLogging<libp2p_plaintext::PlainTextOutput<C>>,
+    );
+
+    fn with_bandwidth_sinks(self, sinks: Arc<BandwidthSinks>) -> Self::Output {
+        (
+            self.0,
+            BandwidthConnecLogging {
+                inner: self.1,
+                sinks,
+            },
+        )
+    }
+}
+
+#[cfg(feature = "pnet")]
+impl<S> WithBandwidthSinks for libp2p_pnet::PnetOutput<S> {
+    type Output = BandwidthConnecLogging<Self>;
+
+    fn with_bandwidth_sinks(self, sinks: Arc<BandwidthSinks>) -> Self::Output {
+        BandwidthConnecLogging { inner: self, sinks }
+    }
+}
+
+#[cfg(feature = "quic")]
+impl WithBandwidthSinks for (PeerId, libp2p_quic::Connection) {
+    type Output = (PeerId, Connection<libp2p_quic::Connection>);
+
+    fn with_bandwidth_sinks(self, sinks: Arc<BandwidthSinks>) -> Self::Output {
+        (
+            self.0,
+            Connection {
+                inner: self.1,
+                sinks,
+            },
+        )
+    }
+}
+
+#[cfg(feature = "tls")]
+impl<C> WithBandwidthSinks for (libp2p_core::PeerId, libp2p_tls::TlsStream<C>) {
+    type Output = (
+        libp2p_core::PeerId,
+        BandwidthConnecLogging<libp2p_tls::TlsStream<C>>,
+    );
+
+    fn with_bandwidth_sinks(self, sinks: Arc<BandwidthSinks>) -> Self::Output {
+        (
+            self.0,
+            BandwidthConnecLogging {
+                inner: self.1,
+                sinks,
+            },
+        )
+    }
+}
+
+// #[cfg(all(feature = "uds", feature = "async-std"))]
+// impl WithBandwidthSinks for async_std::os::unix::net::UnixStream {
+//     type Output = BandwidthConnecLogging<Self>;
+
+//     fn with_bandwidth_sinks(self, sinks: Arc<BandwidthSinks>) -> Self::Output {
+//         BandwidthConnecLogging { inner: self, sinks }
+//     }
+// }
+
+// #[cfg(all(feature = "uds", feature = "tokio"))]
+// impl WithBandwidthSinks for tokio::net::UnixStream {
+//     type Output = BandwidthConnecLogging<Self>;
+
+//     fn with_bandwidth_sinks(self, sinks: Arc<BandwidthSinks>) -> Self::Output {
+//         BandwidthConnecLogging { inner: self, sinks }
+//     }
+// }
+
+#[cfg(feature = "wasm-ext")]
+impl WithBandwidthSinks for libp2p_wasm_ext::Connection {
+    type Output = BandwidthConnecLogging<Self>;
+
+    fn with_bandwidth_sinks(self, sinks: Arc<BandwidthSinks>) -> Self::Output {
+        BandwidthConnecLogging { inner: self, sinks }
+    }
+}
+
+#[cfg(feature = "websocket")]
+impl<C> WithBandwidthSinks for libp2p_websocket::RwStreamSink<libp2p_websocket::BytesConnection<C>>
+where
+    C: AsyncWrite + AsyncRead + Unpin + Send + 'static,
+{
+    type Output = BandwidthConnecLogging<Self>;
+
+    fn with_bandwidth_sinks(self, sinks: Arc<BandwidthSinks>) -> Self::Output {
+        BandwidthConnecLogging { inner: self, sinks }
+    }
+}
+
 #[pin_project::pin_project]
 pub struct Connection<I> {
     #[pin]
@@ -165,6 +299,13 @@ impl UpdateBandwidthSinks for libp2p_webrtc::tokio::Connection {
         let (inbound, outbound) = self.fetch_current_bandwidth();
         sinks.inbound.fetch_add(inbound, Ordering::Relaxed);
         sinks.outbound.fetch_add(outbound, Ordering::Relaxed);
+    }
+}
+
+#[cfg(feature = "quic")]
+impl UpdateBandwidthSinks for libp2p_quic::Connection {
+    fn update_bandwidth_sinks(self: Pin<&mut Self>, _sinks: &BandwidthSinks) {
+        unimplemented!("get total bytes received / sent from QUIC connection and update sinks");
     }
 }
 

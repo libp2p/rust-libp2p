@@ -35,7 +35,7 @@ use libp2p_core::{
     transport::{map::MapFuture, ListenerId, TransportError, TransportEvent},
     Transport,
 };
-use rw_stream_sink::RwStreamSink;
+pub use rw_stream_sink::RwStreamSink;
 use std::{
     io,
     pin::Pin,
