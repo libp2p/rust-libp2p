@@ -248,8 +248,8 @@ pub enum WriteState {
     Open,
     /// The writing side of the stream is closing.
     Closing,
-    /// All data was successfully sent to the remote and the stream
-    /// closed, i.e. a [`StreamEvent::Finished`] was reported for it.
+    /// All data was successfully sent to the remote and the stream closed,
+    /// i.e. a [`quinn_proto::StreamEvent::Finished`] was reported for it.
     Closed,
     /// The stream was stopped by the remote before all data could be
     /// sent.
