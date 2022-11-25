@@ -55,8 +55,8 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            UpgradeError::Select(e) => write!(f, "select error: {}", e),
-            UpgradeError::Apply(e) => write!(f, "upgrade apply error: {}", e),
+            UpgradeError::Select(_) => write!(f, "Multistream select failed"),
+            UpgradeError::Apply(_) => write!(f, "Handshake failed"),
         }
     }
 }
