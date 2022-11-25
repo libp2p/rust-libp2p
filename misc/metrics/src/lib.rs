@@ -38,6 +38,7 @@ mod identify;
 mod kad;
 #[cfg(feature = "ping")]
 mod ping;
+mod protocol_stack;
 #[cfg(feature = "relay")]
 mod relay;
 mod swarm;

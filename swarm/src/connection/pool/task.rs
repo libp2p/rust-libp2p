@@ -193,7 +193,7 @@ pub async fn new_for_established_connection<THandler>(
         .await
         {
             Either::Left((Some(command), _)) => match command {
-                Command::NotifyHandler(event) => connection.inject_event(event),
+                Command::NotifyHandler(event) => connection.on_behaviour_event(event),
                 Command::Close => {
                     command_receiver.close();
                     let (handler, closing_muxer) = connection.close();

@@ -31,10 +31,13 @@ use instant::Instant;
 use libp2p_core::either::EitherError;
 use libp2p_core::multiaddr::Protocol;
 use libp2p_core::{upgrade, ConnectedPoint, Multiaddr, PeerId};
-use libp2p_swarm::handler::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper};
+use libp2p_swarm::handler::{
+    ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
+    ListenUpgradeError, SendWrapper,
+};
 use libp2p_swarm::{
     dummy, ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr,
-    IntoConnectionHandler, KeepAlive, NegotiatedSubstream, SubstreamProtocol,
+    IntoConnectionHandler, KeepAlive, SubstreamProtocol,
 };
 use log::debug;
 use std::collections::{HashMap, VecDeque};
@@ -152,7 +155,7 @@ impl IntoConnectionHandler for Prototype {
             };
 
             if let Some(event) = self.initial_in {
-                handler.inject_event(event)
+                handler.on_behaviour_event(event)
             }
 
             Either::Left(handler)
@@ -209,25 +212,16 @@ pub struct Handler {
     send_error_futs: FuturesUnordered<BoxFuture<'static, ()>>,
 }
 
-impl ConnectionHandler for Handler {
-    type InEvent = In;
-    type OutEvent = Event;
-    type Error = ConnectionHandlerUpgrErr<
-        EitherError<inbound_stop::FatalUpgradeError, outbound_hop::FatalUpgradeError>,
-    >;
-    type InboundProtocol = inbound_stop::Upgrade;
-    type OutboundProtocol = outbound_hop::Upgrade;
-    type OutboundOpenInfo = OutboundOpenInfo;
-    type InboundOpenInfo = ();
-
-    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
-        SubstreamProtocol::new(inbound_stop::Upgrade {}, ())
-    }
-
-    fn inject_fully_negotiated_inbound(
+impl Handler {
+    fn on_fully_negotiated_inbound(
         &mut self,
-        inbound_circuit: inbound_stop::Circuit,
-        _: Self::InboundOpenInfo,
+        FullyNegotiatedInbound {
+            protocol: inbound_circuit,
+            ..
+        }: FullyNegotiatedInbound<
+            <Self as ConnectionHandler>::InboundProtocol,
+            <Self as ConnectionHandler>::InboundOpenInfo,
+        >,
     ) {
         match &mut self.reservation {
             Reservation::Accepted { pending_msgs, .. }
@@ -280,10 +274,15 @@ impl ConnectionHandler for Handler {
         }
     }
 
-    fn inject_fully_negotiated_outbound(
+    fn on_fully_negotiated_outbound(
         &mut self,
-        output: <Self::OutboundProtocol as upgrade::OutboundUpgrade<NegotiatedSubstream>>::Output,
-        info: Self::OutboundOpenInfo,
+        FullyNegotiatedOutbound {
+            protocol: output,
+            info,
+        }: FullyNegotiatedOutbound<
+            <Self as ConnectionHandler>::OutboundProtocol,
+            <Self as ConnectionHandler>::OutboundOpenInfo,
+        >,
     ) {
         match (output, info) {
             // Outbound reservation
@@ -340,36 +339,12 @@ impl ConnectionHandler for Handler {
         }
     }
 
-    fn inject_event(&mut self, event: Self::InEvent) {
-        match event {
-            In::Reserve { to_listener } => {
-                self.queued_events
-                    .push_back(ConnectionHandlerEvent::OutboundSubstreamRequest {
-                        protocol: SubstreamProtocol::new(
-                            outbound_hop::Upgrade::Reserve,
-                            OutboundOpenInfo::Reserve { to_listener },
-                        ),
-                    });
-            }
-            In::EstablishCircuit {
-                send_back,
-                dst_peer_id,
-            } => {
-                self.queued_events
-                    .push_back(ConnectionHandlerEvent::OutboundSubstreamRequest {
-                        protocol: SubstreamProtocol::new(
-                            outbound_hop::Upgrade::Connect { dst_peer_id },
-                            OutboundOpenInfo::Connect { send_back },
-                        ),
-                    });
-            }
-        }
-    }
-
-    fn inject_listen_upgrade_error(
+    fn on_listen_upgrade_error(
         &mut self,
-        _: Self::InboundOpenInfo,
-        error: ConnectionHandlerUpgrErr<<Self::InboundProtocol as InboundUpgradeSend>::Error>,
+        ListenUpgradeError { error, .. }: ListenUpgradeError<
+            <Self as ConnectionHandler>::InboundOpenInfo,
+            <Self as ConnectionHandler>::InboundProtocol,
+        >,
     ) {
         let non_fatal_error = match error {
             ConnectionHandlerUpgrErr::Timeout => ConnectionHandlerUpgrErr::Timeout,
@@ -404,10 +379,15 @@ impl ConnectionHandler for Handler {
         ));
     }
 
-    fn inject_dial_upgrade_error(
+    fn on_dial_upgrade_error(
         &mut self,
-        open_info: Self::OutboundOpenInfo,
-        error: ConnectionHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>,
+        DialUpgradeError {
+            info: open_info,
+            error,
+        }: DialUpgradeError<
+            <Self as ConnectionHandler>::OutboundOpenInfo,
+            <Self as ConnectionHandler>::OutboundProtocol,
+        >,
     ) {
         match open_info {
             OutboundOpenInfo::Reserve { mut to_listener } => {
@@ -524,6 +504,48 @@ impl ConnectionHandler for Handler {
             }
         }
     }
+}
+
+impl ConnectionHandler for Handler {
+    type InEvent = In;
+    type OutEvent = Event;
+    type Error = ConnectionHandlerUpgrErr<
+        EitherError<inbound_stop::FatalUpgradeError, outbound_hop::FatalUpgradeError>,
+    >;
+    type InboundProtocol = inbound_stop::Upgrade;
+    type OutboundProtocol = outbound_hop::Upgrade;
+    type OutboundOpenInfo = OutboundOpenInfo;
+    type InboundOpenInfo = ();
+
+    fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
+        SubstreamProtocol::new(inbound_stop::Upgrade {}, ())
+    }
+
+    fn on_behaviour_event(&mut self, event: Self::InEvent) {
+        match event {
+            In::Reserve { to_listener } => {
+                self.queued_events
+                    .push_back(ConnectionHandlerEvent::OutboundSubstreamRequest {
+                        protocol: SubstreamProtocol::new(
+                            outbound_hop::Upgrade::Reserve,
+                            OutboundOpenInfo::Reserve { to_listener },
+                        ),
+                    });
+            }
+            In::EstablishCircuit {
+                send_back,
+                dst_peer_id,
+            } => {
+                self.queued_events
+                    .push_back(ConnectionHandlerEvent::OutboundSubstreamRequest {
+                        protocol: SubstreamProtocol::new(
+                            outbound_hop::Upgrade::Connect { dst_peer_id },
+                            OutboundOpenInfo::Connect { send_back },
+                        ),
+                    });
+            }
+        }
+    }
 
     fn connection_keep_alive(&self) -> KeepAlive {
         self.keep_alive
@@ -609,6 +631,32 @@ impl ConnectionHandler for Handler {
         }
 
         Poll::Pending
+    }
+
+    fn on_connection_event(
+        &mut self,
+        event: ConnectionEvent<
+            Self::InboundProtocol,
+            Self::OutboundProtocol,
+            Self::InboundOpenInfo,
+            Self::OutboundOpenInfo,
+        >,
+    ) {
+        match event {
+            ConnectionEvent::FullyNegotiatedInbound(fully_negotiated_inbound) => {
+                self.on_fully_negotiated_inbound(fully_negotiated_inbound)
+            }
+            ConnectionEvent::FullyNegotiatedOutbound(fully_negotiated_outbound) => {
+                self.on_fully_negotiated_outbound(fully_negotiated_outbound)
+            }
+            ConnectionEvent::ListenUpgradeError(listen_upgrade_error) => {
+                self.on_listen_upgrade_error(listen_upgrade_error)
+            }
+            ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
+                self.on_dial_upgrade_error(dial_upgrade_error)
+            }
+            ConnectionEvent::AddressChange(_) => {}
+        }
     }
 }
 

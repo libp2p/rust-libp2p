@@ -60,7 +60,6 @@ enum ExecSwitch {
 }
 
 impl ExecSwitch {
-    #[inline]
     fn advance_local(&mut self, cx: &mut Context) {
         match self {
             ExecSwitch::Executor(_) => {}
@@ -70,7 +69,6 @@ impl ExecSwitch {
         }
     }
 
-    #[inline]
     fn spawn(&mut self, task: BoxFuture<'static, ()>) {
         match self {
             Self::Executor(executor) => executor.exec(task),
@@ -1102,6 +1100,12 @@ impl PoolConfig {
             substream_upgrade_protocol_override: None,
             max_negotiating_inbound_streams: 128,
         }
+    }
+
+    /// Configures the executor to use for spawning connection background tasks.
+    pub fn with_executor(mut self, executor: Box<dyn Executor + Send>) -> Self {
+        self.executor = Some(executor);
+        self
     }
 
     /// Sets the maximum number of events sent to a connection's background task

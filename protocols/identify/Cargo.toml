@@ -1,7 +1,7 @@
 [package]
 name = "libp2p-identify"
 edition = "2021"
-rust-version = "1.56.1"
+rust-version = "1.62.0"
 description = "Nodes identifcation protocol for libp2p"
 version = "0.41.0"
 authors = ["Parity Technologies <admin@parity.io>"]

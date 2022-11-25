@@ -1,3 +1,9 @@
+# 0.12.1 [Unreleased]
+
+- Update `rust-version` to reflect the actual MSRV: 1.60.0. See [PR 3090].
+
+[PR 3090]: https://github.com/libp2p/rust-libp2p/pull/3090
+
 # 0.12.0
 
 - Remove parallel dialing optimization, to avoid requiring the use of the `ls` command. See [PR 2934].
