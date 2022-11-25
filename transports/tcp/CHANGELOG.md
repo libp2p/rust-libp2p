@@ -1,4 +1,4 @@
-# 0.38.0 [unreleased]
+# 0.38.0
 
 - Update to `if-watch`  `v3.0.0` and pass through `tokio` and `async-io` features. See [PR 3101].
 
