@@ -25,7 +25,7 @@ use prometheus_client::metrics::histogram::{exponential_buckets, Histogram};
 use prometheus_client::registry::{Registry, Unit};
 
 pub struct Metrics {
-    query_result_get_record_ok: Histogram,
+    query_result_get_record_ok: Counter,
     query_result_get_record_error: Family<GetRecordResult, Counter>,
 
     query_result_get_closest_peers_ok: Histogram,
@@ -48,7 +48,7 @@ impl Metrics {
     pub fn new(registry: &mut Registry) -> Self {
         let sub_registry = registry.sub_registry_with_prefix("kad");
 
-        let query_result_get_record_ok = Histogram::new(exponential_buckets(1.0, 2.0, 10));
+        let query_result_get_record_ok = Counter::default();
         sub_registry.register(
             "query_result_get_record_ok",
             "Number of records returned by a successful Kademlia get record query.",
@@ -162,7 +162,7 @@ impl Metrics {
 impl super::Recorder<libp2p_kad::KademliaEvent> for Metrics {
     fn record(&self, event: &libp2p_kad::KademliaEvent) {
         match event {
-            libp2p_kad::KademliaEvent::OutboundQueryCompleted { result, stats, .. } => {
+            libp2p_kad::KademliaEvent::OutboundQueryProgressed { result, stats, .. } => {
                 self.query_result_num_requests
                     .get_or_create(&result.into())
                     .observe(stats.num_requests().into());
@@ -180,9 +180,10 @@ impl super::Recorder<libp2p_kad::KademliaEvent> for Metrics {
 
                 match result {
                     libp2p_kad::QueryResult::GetRecord(result) => match result {
-                        Ok(ok) => self
-                            .query_result_get_record_ok
-                            .observe(ok.records.len() as f64),
+                        Ok(libp2p_kad::GetRecordOk::FoundRecord(_)) => {
+                            self.query_result_get_record_ok.inc();
+                        }
+                        Ok(libp2p_kad::GetRecordOk::FinishedWithNoAdditionalRecord { .. }) => {}
                         Err(error) => {
                             self.query_result_get_record_error
                                 .get_or_create(&error.into())
@@ -200,9 +201,13 @@ impl super::Recorder<libp2p_kad::KademliaEvent> for Metrics {
                         }
                     },
                     libp2p_kad::QueryResult::GetProviders(result) => match result {
-                        Ok(ok) => self
-                            .query_result_get_providers_ok
-                            .observe(ok.providers.len() as f64),
+                        Ok(libp2p_kad::GetProvidersOk::FoundProviders { providers, .. }) => {
+                            self.query_result_get_providers_ok
+                                .observe(providers.len() as f64);
+                        }
+                        Ok(libp2p_kad::GetProvidersOk::FinishedWithNoAdditionalRecord {
+                            ..
+                        }) => {}
                         Err(error) => {
                             self.query_result_get_providers_error
                                 .get_or_create(&error.into())
