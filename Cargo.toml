@@ -123,7 +123,7 @@ libp2p-mdns = { version = "0.42.0", path = "protocols/mdns", optional = true }
 libp2p-quic = { version = "0.7.0-alpha", path = "transports/quic", optional = true }
 libp2p-tcp = { version = "0.38.0", path = "transports/tcp", optional = true }
 libp2p-tls = { version = "0.1.0-alpha", path = "transports/tls", optional = true }
-libp2p-webrtc = { version = "0.1.0-alpha", path = "transports/webrtc", optional = true }
+libp2p-webrtc = { version = "0.4.0-alpha", path = "transports/webrtc", optional = true }
 libp2p-websocket = { version = "0.40.0", path = "transports/websocket", optional = true }
 
 [target.'cfg(not(target_os = "unknown"))'.dependencies]

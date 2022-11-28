@@ -1,4 +1,4 @@
-# 0.38.0 [unreleased]
+# 0.38.0
 
 - Add more specific error reporting and remove `prost::Error` from public API. See [PR 3058].
 
