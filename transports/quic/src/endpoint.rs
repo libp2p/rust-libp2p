@@ -18,7 +18,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{provider::Provider, transport::SocketFamily, ConnectError, Connection, Error};
+use crate::{
+    provider::Provider,
+    transport::{QuicVersion, SocketFamily},
+    ConnectError, Connection, Error,
+};
 
 use bytes::BytesMut;
 use futures::{
@@ -295,8 +299,8 @@ pub enum ToEndpoint {
     Dial {
         /// UDP address to connect to.
         addr: SocketAddr,
-        /// Whether to dial the remote on QUIC version draft-29.
-        is_draft_29: bool,
+        /// Version to dial the remote on.
+        version: QuicVersion,
         /// Channel to return the result of the dialing to.
         result: oneshot::Sender<Result<Connection, Error>>,
     },
@@ -423,10 +427,10 @@ impl<P: Provider> Driver<P> {
             ToEndpoint::Dial {
                 addr,
                 result,
-                is_draft_29,
+                version,
             } => {
                 let mut config = self.client_config.clone();
-                if is_draft_29 {
+                if version == QuicVersion::Draft29 {
                     config.version(0xff00_001d);
                 }
                 // This `"l"` seems necessary because an empty string is an invalid domain
