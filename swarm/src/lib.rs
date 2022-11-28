@@ -794,7 +794,7 @@ where
                 endpoint,
                 other_established_connection_ids,
                 concurrent_dial_errors,
-                time_taken,
+                established_in: time_taken,
             } => {
                 if self.banned_peers.contains(&peer_id) {
                     // Mark the connection for the banned peer as banned, thus withholding any

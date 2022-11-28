@@ -241,7 +241,7 @@ where
         /// of dial attempts that failed before the one successful dial.
         concurrent_dial_errors: Option<Vec<(Multiaddr, TransportError<TTrans::Error>)>>,
         /// How long it took to establish this connection.
-        time_taken: std::time::Duration,
+        established_in: std::time::Duration,
     },
 
     /// An established connection was closed.
@@ -498,7 +498,7 @@ where
                 handler,
                 endpoint,
                 abort_notifier: Some(abort_notifier),
-                creation: Instant::now(),
+                accepted_at: Instant::now(),
             },
         );
         Ok(connection_id)
@@ -546,7 +546,7 @@ where
                 handler,
                 endpoint: endpoint.into(),
                 abort_notifier: Some(abort_notifier),
-                creation: Instant::now(),
+                accepted_at: Instant::now(),
             },
         );
         Ok(connection_id)
@@ -641,7 +641,7 @@ where
                         handler,
                         endpoint,
                         abort_notifier: _,
-                        creation,
+                        accepted_at,
                     } = self
                         .pending
                         .remove(&id)
@@ -791,14 +791,14 @@ where
                         )
                         .boxed(),
                     );
-                    let time_taken = Instant::now() - creation;
+                    let time_taken = Instant::now() - accepted_at;
                     return Poll::Ready(PoolEvent::ConnectionEstablished {
                         peer_id: obtained_peer_id,
                         endpoint,
                         id,
                         other_established_connection_ids,
                         concurrent_dial_errors,
-                        time_taken,
+                        established_in: time_taken,
                     });
                 }
                 task::PendingConnectionEvent::PendingFailed { id, error } => {
@@ -807,7 +807,7 @@ where
                         handler,
                         endpoint,
                         abort_notifier: _,
-                        creation: _, // Ignoring the time it took for the connection to fail.
+                        accepted_at: _, // Ignoring the time it took for the connection to fail.
                     }) = self.pending.remove(&id)
                     {
                         self.counters.dec_pending(&endpoint);
