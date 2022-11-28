@@ -58,6 +58,7 @@ use std::{
 ///
 /// Version draft-29 should only be used to connect to nodes from other libp2p implementations
 /// that do not support `QuicV1` yet. Support for it will be removed long-term.
+/// See <https://github.com/multiformats/multiaddr/issues/145>.
 #[derive(Debug)]
 pub struct GenTransport<P: Provider> {
     /// Config for the inner [`quinn_proto`] structs.
