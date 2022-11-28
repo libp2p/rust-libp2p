@@ -20,12 +20,17 @@
 
 use std::{
     marker::Unpin,
-    pin::Pin,
-    task::{Context, Poll},
     time::{Duration, Instant},
 };
 
+#[cfg(any(feature = "async-io", feature = "tokio"))]
+use std::{
+    pin::Pin,
+    task::{Context, Poll},
+};
+
 /// Simple wrapper for the differents type of timers
+#[cfg(any(feature = "async-io", feature = "tokio"))]
 #[derive(Debug)]
 pub struct Timer<T> {
     inner: T,
