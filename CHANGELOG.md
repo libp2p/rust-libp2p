@@ -45,6 +45,11 @@
 
 # `libp2p` facade crate
 
+# 0.50.1 [unreleased]
+
+- Update individual crates.
+    - Update to [`libp2p-quic` `v0.7.1-alpha`](transports/quic/CHANGELOG.md).
+
 # 0.50.0
 
 This is a large release. After > 4 years, rust-libp2p ships with an [(alpha) QUIC
