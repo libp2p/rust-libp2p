@@ -1,6 +1,6 @@
 # 0.41.1
 
-- Update to `swarm-derive` `v0.31.0`.
+- Update to `libp2p-swarm-derive` `v0.31.0`.
 
 # 0.41.0
 
