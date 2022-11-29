@@ -1,3 +1,4 @@
+//! Provides executors for spawning background tasks.
 use futures::executor::ThreadPool;
 use std::{future::Future, pin::Pin};
 
@@ -30,7 +31,7 @@ impl Executor for ThreadPool {
     not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown"))
 ))]
 #[derive(Default, Debug, Clone, Copy)]
-pub(crate) struct TokioExecutor;
+pub struct TokioExecutor;
 
 #[cfg(all(
     feature = "tokio",
@@ -47,7 +48,7 @@ impl Executor for TokioExecutor {
     not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown"))
 ))]
 #[derive(Default, Debug, Clone, Copy)]
-pub(crate) struct AsyncStdExecutor;
+pub struct AsyncStdExecutor;
 
 #[cfg(all(
     feature = "async-std",
@@ -56,5 +57,16 @@ pub(crate) struct AsyncStdExecutor;
 impl Executor for AsyncStdExecutor {
     fn exec(&self, future: Pin<Box<dyn Future<Output = ()> + Send>>) {
         let _ = async_std::task::spawn(future);
+    }
+}
+
+#[cfg(feature = "wasm-bindgen")]
+#[derive(Default, Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub struct WasmBindgenExecutor;
+
+#[cfg(feature = "wasm-bindgen")]
+impl Executor for WasmBindgenExecutor {
+    fn exec(&self, future: Pin<Box<dyn Future<Output = ()> + Send>>) {
+        wasm_bindgen_futures::spawn_local(future)
     }
 }

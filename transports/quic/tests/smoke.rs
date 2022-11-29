@@ -1,14 +1,14 @@
 #![cfg(any(feature = "async-std", feature = "tokio"))]
 
-use futures::channel::mpsc;
-use futures::future::Either;
+use futures::channel::{mpsc, oneshot};
+use futures::future::{poll_fn, Either};
 use futures::stream::StreamExt;
-use futures::{future, AsyncReadExt, AsyncWriteExt, SinkExt};
+use futures::{future, AsyncReadExt, AsyncWriteExt, FutureExt, SinkExt};
 use libp2p::core::multiaddr::Protocol;
 use libp2p::core::Transport;
 use libp2p::{noise, tcp, yamux, Multiaddr};
 use libp2p_core::either::EitherOutput;
-use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerExt};
+use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerExt, SubstreamBox};
 use libp2p_core::transport::{Boxed, OrTransport, TransportEvent};
 use libp2p_core::{upgrade, PeerId};
 use libp2p_quic as quic;
@@ -17,6 +17,7 @@ use rand::RngCore;
 use std::future::Future;
 use std::io;
 use std::num::NonZeroU8;
+use std::task::Poll;
 use std::time::Duration;
 
 #[cfg(feature = "tokio")]
@@ -182,6 +183,63 @@ fn concurrent_connections_and_streams_tokio() {
         .quickcheck(prop::<quic::tokio::Provider> as fn(_, _) -> _);
 }
 
+#[cfg(feature = "async-std")]
+#[async_std::test]
+async fn backpressure() {
+    let _ = env_logger::try_init();
+    let max_stream_data = quic::Config::new(&generate_tls_keypair()).max_stream_data;
+
+    let (mut stream_a, mut stream_b) = build_streams::<quic::async_std::Provider>().await;
+
+    let data = vec![0; max_stream_data as usize - 1];
+
+    stream_a.write_all(&data).await.unwrap();
+
+    let more_data = vec![0; 1];
+    assert!(stream_a.write(&more_data).now_or_never().is_none());
+
+    let mut buf = vec![1; max_stream_data as usize - 1];
+    stream_b.read_exact(&mut buf).await.unwrap();
+
+    let mut buf = [0];
+    assert!(stream_b.read(&mut buf).now_or_never().is_none());
+
+    assert!(stream_a.write(&more_data).now_or_never().is_some());
+}
+
+#[cfg(feature = "async-std")]
+#[async_std::test]
+async fn read_after_peer_dropped_stream() {
+    let _ = env_logger::try_init();
+    let (mut stream_a, mut stream_b) = build_streams::<quic::async_std::Provider>().await;
+
+    let data = vec![0; 10];
+
+    stream_b.close().now_or_never();
+    stream_a.write_all(&data).await.unwrap();
+    stream_a.close().await.unwrap();
+    drop(stream_a);
+
+    stream_b.close().await.unwrap();
+    let mut buf = Vec::new();
+    stream_b.read_to_end(&mut buf).await.unwrap();
+    assert_eq!(data, buf)
+}
+
+#[cfg(feature = "async-std")]
+#[async_std::test]
+#[should_panic]
+async fn write_after_peer_dropped_stream() {
+    let _ = env_logger::try_init();
+    let (stream_a, mut stream_b) = build_streams::<quic::async_std::Provider>().await;
+    drop(stream_a);
+    futures_timer::Delay::new(Duration::from_millis(1)).await;
+
+    let data = vec![0; 10];
+    stream_b.write_all(&data).await.expect("Write failed.");
+    stream_b.close().await.expect("Close failed.");
+}
+
 async fn smoke<P: Provider>() {
     let _ = env_logger::try_init();
 
@@ -194,6 +252,55 @@ async fn smoke<P: Provider>() {
 
     assert_eq!(a_connected, b_peer_id);
     assert_eq!(b_connected, a_peer_id);
+}
+
+async fn build_streams<P: Provider>() -> (SubstreamBox, SubstreamBox) {
+    let (_, mut a_transport) = create_transport::<P>();
+    let (_, mut b_transport) = create_transport::<P>();
+
+    let addr = start_listening(&mut a_transport, "/ip4/127.0.0.1/udp/0/quic-v1").await;
+    let ((_, _, mut conn_a), (_, mut conn_b)) =
+        connect(&mut a_transport, &mut b_transport, addr).await;
+    let (stream_a_tx, stream_a_rx) = oneshot::channel();
+    let (stream_b_tx, stream_b_rx) = oneshot::channel();
+
+    P::spawn(async move {
+        let mut stream_a_tx = Some(stream_a_tx);
+        let mut stream_b_tx = Some(stream_b_tx);
+        poll_fn::<(), _>(move |cx| {
+            let _ = a_transport.poll_next_unpin(cx);
+            let _ = conn_a.poll_unpin(cx);
+            let _ = b_transport.poll_next_unpin(cx);
+            let _ = conn_b.poll_unpin(cx);
+            if stream_a_tx.is_some() {
+                if let Poll::Ready(stream) = conn_a.poll_outbound_unpin(cx) {
+                    let tx = stream_a_tx.take().unwrap();
+                    tx.send(stream.unwrap()).unwrap();
+                }
+            }
+            if stream_b_tx.is_some() {
+                if let Poll::Ready(stream) = conn_b.poll_inbound_unpin(cx) {
+                    let tx = stream_b_tx.take().unwrap();
+                    tx.send(stream.unwrap()).unwrap();
+                }
+            }
+            Poll::Pending
+        })
+        .await
+    });
+    let mut stream_a = stream_a_rx.map(Result::unwrap).await;
+
+    // Send dummy byte to notify the peer of the new stream.
+    let send_buf = [0];
+    stream_a.write_all(&send_buf).await.unwrap();
+
+    let mut stream_b = stream_b_rx.map(Result::unwrap).await;
+    let mut recv_buf = [1];
+
+    assert_eq!(stream_b.read(&mut recv_buf).await.unwrap(), 1);
+    assert_eq!(send_buf, recv_buf);
+
+    (stream_a, stream_b)
 }
 
 fn generate_tls_keypair() -> libp2p::identity::Keypair {

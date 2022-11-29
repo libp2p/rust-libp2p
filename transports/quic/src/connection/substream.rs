@@ -38,10 +38,9 @@ pub struct SubstreamState {
     /// Waker to wake if the substream becomes writable, closed or stopped.
     pub write_waker: Option<Waker>,
     /// Waker to wake if the substream becomes closed or stopped.
-    pub finished_waker: Option<Waker>,
+    pub close_waker: Option<Waker>,
 
-    /// `true` if the stream finished, i.e. the writing side closed.
-    pub is_write_closed: bool,
+    pub write_state: WriteState,
 }
 
 impl SubstreamState {
@@ -53,7 +52,7 @@ impl SubstreamState {
         if let Some(waker) = self.write_waker.take() {
             waker.wake();
         }
-        if let Some(waker) = self.finished_waker.take() {
+        if let Some(waker) = self.close_waker.take() {
             waker.wake();
         }
     }
@@ -177,14 +176,25 @@ impl AsyncWrite for Substream {
     fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
         let mut inner = self.state.lock();
 
-        if inner.unchecked_substream_state(self.id).is_write_closed {
-            return Poll::Ready(Ok(()));
+        let substream_state = inner.unchecked_substream_state(self.id);
+        match substream_state.write_state {
+            WriteState::Open => {}
+            WriteState::Closing => {
+                substream_state.close_waker = Some(cx.waker().clone());
+                return Poll::Pending;
+            }
+            WriteState::Closed => return Poll::Ready(Ok(())),
+            WriteState::Stopped => {
+                let err = quinn_proto::FinishError::Stopped(0u32.into());
+                return Poll::Ready(Err(io::Error::new(io::ErrorKind::ConnectionReset, err)));
+            }
         }
 
         match inner.connection.send_stream(self.id).finish() {
             Ok(()) => {
                 let substream_state = inner.unchecked_substream_state(self.id);
-                substream_state.finished_waker = Some(cx.waker().clone());
+                substream_state.close_waker = Some(cx.waker().clone());
+                substream_state.write_state = WriteState::Closing;
                 Poll::Pending
             }
             Err(err @ quinn_proto::FinishError::Stopped(_)) => {
@@ -204,7 +214,21 @@ impl Drop for Substream {
     fn drop(&mut self) {
         let mut state = self.state.lock();
         state.substreams.remove(&self.id);
-        let _ = state.connection.recv_stream(self.id).stop(0u32.into());
+        // Send `STOP_STREAM` if the remote did not finish the stream yet.
+        // We have to manually check the read stream since we might have
+        // received a `FIN` (without any other stream data) after the last
+        // time we tried to read.
+        let mut is_read_done = false;
+        if let Ok(mut chunks) = state.connection.recv_stream(self.id).read(true) {
+            if let Ok(chunk) = chunks.next(0) {
+                is_read_done = chunk.is_none();
+            }
+            let _ = chunks.finalize();
+        }
+        if !is_read_done {
+            let _ = state.connection.recv_stream(self.id).stop(0u32.into());
+        }
+        // Close the writing side.
         let mut send_stream = state.connection.send_stream(self.id);
         match send_stream.finish() {
             Ok(()) => {}
@@ -215,4 +239,19 @@ impl Drop for Substream {
             }
         }
     }
+}
+
+#[derive(Debug, Default, Clone)]
+pub enum WriteState {
+    /// The stream is open for writing.
+    #[default]
+    Open,
+    /// The writing side of the stream is closing.
+    Closing,
+    /// All data was successfully sent to the remote and the stream closed,
+    /// i.e. a [`quinn_proto::StreamEvent::Finished`] was reported for it.
+    Closed,
+    /// The stream was stopped by the remote before all data could be
+    /// sent.
+    Stopped,
 }
