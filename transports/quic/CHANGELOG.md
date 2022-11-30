@@ -1,4 +1,4 @@
-# 0.7.1-alpha [unreleased]
+# 0.7.0-alpha.2 [unreleased]
 
 - Add opt-in support for the `/quic` codepoint, interpreted as QUIC version draft-29.
   See [PR 3151].
