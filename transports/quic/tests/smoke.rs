@@ -200,29 +200,9 @@ async fn draft_29_support() {
 
     // If a server supports draft-29 all its QUIC addresses can be dialed on draft-29 or version-1
     let a_quic_addr = start_listening(&mut a_transport, "/ip4/127.0.0.1/udp/0/quic").await;
-    let a_quic_mapped_addr = a_quic_addr
-        .clone()
-        .into_iter()
-        .map(|p| {
-            if matches!(p, Protocol::Quic) {
-                Protocol::QuicV1
-            } else {
-                p
-            }
-        })
-        .collect();
+    let a_quic_mapped_addr = swap_protocol!(a_quic_addr, Quic => QuicV1);
     let a_quic_v1_addr = start_listening(&mut a_transport, "/ip4/127.0.0.1/udp/0/quic-v1").await;
-    let a_quic_v1_mapped_addr = a_quic_v1_addr
-        .clone()
-        .into_iter()
-        .map(|p| {
-            if matches!(p, Protocol::QuicV1) {
-                Protocol::Quic
-            } else {
-                p
-            }
-        })
-        .collect();
+    let a_quic_v1_mapped_addr = swap_protocol!(a_quic_v1_addr, QuicV1 => Quic);
 
     connect(&mut a_transport, &mut b_transport, a_quic_addr.clone()).await;
     connect(&mut a_transport, &mut b_transport, a_quic_mapped_addr).await;
@@ -244,16 +224,7 @@ async fn draft_29_support() {
         Err(TransportError::MultiaddrNotSupported(_))
     ));
     let d_quic_v1_addr = start_listening(&mut d_transport, "/ip4/127.0.0.1/udp/0/quic-v1").await;
-    let d_quic_addr_mapped = d_quic_v1_addr
-        .into_iter()
-        .map(|p| {
-            if matches!(p, Protocol::QuicV1) {
-                Protocol::Quic
-            } else {
-                p
-            }
-        })
-        .collect();
+    let d_quic_addr_mapped = swap_protocol!(d_quic_v1_addr, QuicV1 => Quic);
     let dial = b_transport.dial(d_quic_addr_mapped).unwrap();
     let drive_transports = poll_fn::<(), _>(|cx| {
         let _ = b_transport.poll_next_unpin(cx);
@@ -393,6 +364,19 @@ async fn build_streams<P: Provider>() -> (SubstreamBox, SubstreamBox) {
     assert_eq!(send_buf, recv_buf);
 
     (stream_a, stream_b)
+}
+
+#[macro_export]
+macro_rules! swap_protocol {
+    ($addr:expr, $From:ident => $To:ident) => {
+        $addr
+            .into_iter()
+            .map(|p| match p {
+                Protocol::$From => Protocol::$To,
+                _ => p,
+            })
+            .collect::<Multiaddr>()
+    };
 }
 
 fn generate_tls_keypair() -> libp2p::identity::Keypair {
