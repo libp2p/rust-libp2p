@@ -20,7 +20,7 @@
 
 use crate::{
     provider::Provider,
-    transport::{QuicVersion, SocketFamily},
+    transport::{ProtocolVersion, SocketFamily},
     ConnectError, Connection, Error,
 };
 
@@ -300,7 +300,7 @@ pub enum ToEndpoint {
         /// UDP address to connect to.
         addr: SocketAddr,
         /// Version to dial the remote on.
-        version: QuicVersion,
+        version: ProtocolVersion,
         /// Channel to return the result of the dialing to.
         result: oneshot::Sender<Result<Connection, Error>>,
     },
@@ -430,7 +430,7 @@ impl<P: Provider> Driver<P> {
                 version,
             } => {
                 let mut config = self.client_config.clone();
-                if version == QuicVersion::Draft29 {
+                if version == ProtocolVersion::Draft29 {
                     config.version(0xff00_001d);
                 }
                 // This `"l"` seems necessary because an empty string is an invalid domain

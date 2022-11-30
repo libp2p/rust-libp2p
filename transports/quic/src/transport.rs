@@ -265,7 +265,7 @@ impl DialerState {
         &mut self,
         address: SocketAddr,
         timeout: Duration,
-        version: QuicVersion,
+        version: ProtocolVersion,
     ) -> BoxFuture<'static, Result<(PeerId, Connection), Error>> {
         let (rx, tx) = oneshot::channel();
 
@@ -315,7 +315,7 @@ struct Listener<P: Provider> {
     /// Id of the listener.
     listener_id: ListenerId,
 
-    version: QuicVersion,
+    version: ProtocolVersion,
 
     /// Channel to the endpoint to initiate dials.
     endpoint_channel: endpoint::Channel,
@@ -345,7 +345,7 @@ impl<P: Provider> Listener<P> {
         socket_addr: SocketAddr,
         config: QuinnConfig,
         handshake_timeout: Duration,
-        version: QuicVersion,
+        version: ProtocolVersion,
     ) -> Result<Self, Error> {
         let (endpoint_channel, new_connections_rx) =
             endpoint::Channel::new_bidirectional::<P>(config, socket_addr)?;
@@ -512,7 +512,7 @@ impl<P: Provider> Drop for Listener<P> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum QuicVersion {
+pub enum ProtocolVersion {
     V1,
     Draft29,
 }
@@ -552,7 +552,7 @@ impl From<IpAddr> for SocketFamily {
 fn ip_to_listenaddr(
     endpoint_addr: &SocketAddr,
     ip: IpAddr,
-    version: QuicVersion,
+    version: ProtocolVersion,
 ) -> Option<Multiaddr> {
     // True if either both addresses are Ipv4 or both Ipv6.
     if !SocketFamily::is_same(&endpoint_addr.ip(), &ip) {
@@ -567,7 +567,7 @@ fn ip_to_listenaddr(
 fn multiaddr_to_socketaddr(
     addr: &Multiaddr,
     support_draft_29: bool,
-) -> Option<(SocketAddr, QuicVersion)> {
+) -> Option<(SocketAddr, ProtocolVersion)> {
     let mut iter = addr.iter();
     let proto1 = iter.next()?;
     let proto2 = iter.next()?;
@@ -580,8 +580,8 @@ fn multiaddr_to_socketaddr(
         }
     }
     let version = match proto3 {
-        Protocol::QuicV1 => QuicVersion::V1,
-        Protocol::Quic if support_draft_29 => QuicVersion::Draft29,
+        Protocol::QuicV1 => ProtocolVersion::V1,
+        Protocol::Quic if support_draft_29 => ProtocolVersion::Draft29,
         _ => return None,
     };
 
@@ -623,10 +623,10 @@ fn is_quic_addr(addr: &Multiaddr) -> bool {
 }
 
 /// Turns an IP address and port into the corresponding QUIC multiaddr.
-fn socketaddr_to_multiaddr(socket_addr: &SocketAddr, version: QuicVersion) -> Multiaddr {
+fn socketaddr_to_multiaddr(socket_addr: &SocketAddr, version: ProtocolVersion) -> Multiaddr {
     let quic_proto = match version {
-        QuicVersion::V1 => Protocol::QuicV1,
-        QuicVersion::Draft29 => Protocol::Quic,
+        ProtocolVersion::V1 => Protocol::QuicV1,
+        ProtocolVersion::Draft29 => Protocol::Quic,
     };
     Multiaddr::empty()
         .with(socket_addr.ip().into())
@@ -660,7 +660,7 @@ mod test {
             ),
             Some((
                 SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 12345,),
-                QuicVersion::V1
+                ProtocolVersion::V1
             ))
         );
         assert_eq!(
@@ -672,7 +672,7 @@ mod test {
             ),
             Some((
                 SocketAddr::new(IpAddr::V4(Ipv4Addr::new(255, 255, 255, 255)), 8080,),
-                QuicVersion::V1
+                ProtocolVersion::V1
             ))
         );
         assert_eq!(
@@ -684,7 +684,7 @@ mod test {
             Some((SocketAddr::new(
                 IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
                 55148,
-            ), QuicVersion::V1))
+            ), ProtocolVersion::V1))
         );
         assert_eq!(
             multiaddr_to_socketaddr(
@@ -693,7 +693,7 @@ mod test {
             ),
             Some((
                 SocketAddr::new(IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)), 12345,),
-                QuicVersion::V1
+                ProtocolVersion::V1
             ))
         );
         assert_eq!(
@@ -710,7 +710,7 @@ mod test {
                     )),
                     8080,
                 ),
-                QuicVersion::V1
+                ProtocolVersion::V1
             ))
         );
 
@@ -726,7 +726,7 @@ mod test {
             ),
             Some((
                 SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1234,),
-                QuicVersion::Draft29
+                ProtocolVersion::Draft29
             ))
         );
     }
@@ -828,7 +828,7 @@ mod test {
                     ToEndpoint::Dial {
                         addr: SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0),
                         result: tx,
-                        version: QuicVersion::V1,
+                        version: ProtocolVersion::V1,
                     },
                     cx,
                 )
