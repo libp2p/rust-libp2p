@@ -2,8 +2,8 @@
 name = "libp2p-swarm-derive"
 edition = "2021"
 rust-version = "1.60.0"
-description = "Procedural macros of libp2p-core"
-version = "0.30.2"
+description = "Procedural macros of libp2p-swarm"
+version = "0.31.0"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
