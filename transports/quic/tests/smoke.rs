@@ -204,20 +204,20 @@ async fn draft_29_support() {
         .clone()
         .into_iter()
         .map(|p| {
-            if matches!(p, Protocol::QuicV1) {
-                Protocol::Quic
+            if matches!(p, Protocol::Quic) {
+                Protocol::QuicV1
             } else {
                 p
             }
         })
         .collect();
-    let a_quicv1_addr = start_listening(&mut a_transport, "/ip4/127.0.0.1/udp/0/quic-v1").await;
-    let a_quic_v1_mapped_addr = a_quic_addr
+    let a_quic_v1_addr = start_listening(&mut a_transport, "/ip4/127.0.0.1/udp/0/quic-v1").await;
+    let a_quic_v1_mapped_addr = a_quic_v1_addr
         .clone()
         .into_iter()
         .map(|p| {
-            if matches!(p, Protocol::Quic) {
-                Protocol::QuicV1
+            if matches!(p, Protocol::QuicV1) {
+                Protocol::Quic
             } else {
                 p
             }
@@ -226,13 +226,13 @@ async fn draft_29_support() {
 
     connect(&mut a_transport, &mut b_transport, a_quic_addr.clone()).await;
     connect(&mut a_transport, &mut b_transport, a_quic_mapped_addr).await;
-    connect(&mut a_transport, &mut b_transport, a_quicv1_addr).await;
+    connect(&mut a_transport, &mut b_transport, a_quic_v1_addr).await;
     connect(&mut a_transport, &mut b_transport, a_quic_v1_mapped_addr).await;
 
     let (_, mut c_transport) =
         create_transport::<quic::tokio::Provider>(|cfg| cfg.support_draft_29 = false);
     assert!(matches!(
-        c_transport.dial(a_quic_addr.clone()),
+        c_transport.dial(a_quic_addr),
         Err(TransportError::MultiaddrNotSupported(_))
     ));
 
@@ -243,7 +243,7 @@ async fn draft_29_support() {
         d_transport.listen_on("/ip4/127.0.0.1/udp/0/quic".parse().unwrap()),
         Err(TransportError::MultiaddrNotSupported(_))
     ));
-    let d_quic_v1_addr = start_listening(&mut a_transport, "/ip4/127.0.0.1/udp/0/quic").await;
+    let d_quic_v1_addr = start_listening(&mut d_transport, "/ip4/127.0.0.1/udp/0/quic-v1").await;
     let d_quic_addr_mapped = d_quic_v1_addr
         .into_iter()
         .map(|p| {
