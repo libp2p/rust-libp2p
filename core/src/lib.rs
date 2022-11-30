@@ -58,6 +58,7 @@ pub type Negotiated<T> = multistream_select::Negotiated<T>;
 mod peer_id;
 mod translation;
 
+pub mod bandwidth;
 pub mod connection;
 pub mod either;
 pub mod identity;
