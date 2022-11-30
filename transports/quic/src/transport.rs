@@ -50,7 +50,7 @@ use std::{
 
 /// Implementation of the [`Transport`] trait for QUIC.
 ///
-/// Per default only QUIC Version 1 (RFC 9000) is supported. In the [`Multiaddr`] this maps to
+/// By default only QUIC Version 1 (RFC 9000) is supported. In the [`Multiaddr`] this maps to
 /// [`libp2p_core::multiaddr::Protocol::QuicV1`].
 /// The [`libp2p_core::multiaddr::Protocol::Quic`] codepoint is interpreted as QUIC version
 /// draft-29 and only supported if [`Config::support_draft_29`] is set to `true`.
@@ -513,7 +513,7 @@ impl<P: Provider> Drop for Listener<P> {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProtocolVersion {
-    V1,
+    V1, // i.e. RFC9000
     Draft29,
 }
 
