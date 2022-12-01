@@ -40,15 +40,15 @@ use std::{
 /// streams.
 #[derive(Clone)]
 #[pin_project::pin_project]
-pub struct BandwidthLogging<TInner> {
+pub struct BandwidthLogging<SMInner> {
     #[pin]
-    inner: TInner,
+    inner: SMInner,
     sinks: Arc<BandwidthSinks>,
 }
 
-impl<TInner> BandwidthLogging<TInner> {
+impl<SMInner> BandwidthLogging<SMInner> {
     /// Creates a new [`BandwidthLogging`] around the stream muxer.
-    pub fn new(inner: TInner) -> (Self, Arc<BandwidthSinks>) {
+    pub fn new(inner: SMInner) -> (Self, Arc<BandwidthSinks>) {
         let sinks = BandwidthSinks::new();
         (
             Self {
@@ -60,7 +60,7 @@ impl<TInner> BandwidthLogging<TInner> {
     }
 
     /// Creates a new [`BandwidthLogging`] around the stream muxer.
-    pub fn new_with_sinks(inner: TInner, sinks: Arc<BandwidthSinks>) -> Self {
+    pub fn new_with_sinks(inner: SMInner, sinks: Arc<BandwidthSinks>) -> Self {
         Self { inner, sinks }
     }
 }
@@ -148,13 +148,13 @@ impl BandwidthSinks {
 
 /// Wraps around an `AsyncRead + AsyncWrite` and logs the bandwidth that goes through it.
 #[pin_project::pin_project]
-pub struct BandwidthConnecLogging<TInner> {
+pub struct BandwidthConnecLogging<SMInner> {
     #[pin]
-    inner: TInner,
+    inner: SMInner,
     sinks: Arc<BandwidthSinks>,
 }
 
-impl<TInner: AsyncRead> AsyncRead for BandwidthConnecLogging<TInner> {
+impl<SMInner: AsyncRead> AsyncRead for BandwidthConnecLogging<SMInner> {
     fn poll_read(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -184,7 +184,7 @@ impl<TInner: AsyncRead> AsyncRead for BandwidthConnecLogging<TInner> {
     }
 }
 
-impl<TInner: AsyncWrite> AsyncWrite for BandwidthConnecLogging<TInner> {
+impl<SMInner: AsyncWrite> AsyncWrite for BandwidthConnecLogging<SMInner> {
     fn poll_write(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
