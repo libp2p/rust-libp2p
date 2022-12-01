@@ -60,7 +60,7 @@ impl<SMInner> BandwidthLogging<SMInner> {
     }
 
     /// Creates a new [`BandwidthLogging`] around the stream muxer.
-    pub fn new_with_sinks(inner: SMInner, sinks: Arc<BandwidthSinks>) -> Self {
+    pub(crate) fn new_with_sinks(inner: SMInner, sinks: Arc<BandwidthSinks>) -> Self {
         Self { inner, sinks }
     }
 }
@@ -120,7 +120,7 @@ pub struct BandwidthSinks {
 
 impl BandwidthSinks {
     /// Returns a new [`BandwidthSinks`].
-    pub fn new() -> Arc<Self> {
+    pub(crate) fn new() -> Arc<Self> {
         Arc::new(Self {
             inbound: AtomicU64::new(0),
             outbound: AtomicU64::new(0),
