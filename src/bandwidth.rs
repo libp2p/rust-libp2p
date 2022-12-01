@@ -223,3 +223,13 @@ impl<SMInner: AsyncWrite> AsyncWrite for BandwidthConnecLogging<SMInner> {
         this.inner.poll_close(cx)
     }
 }
+
+/// Wraps around a `Future` that produces a connection. Wraps the connection around a bandwidth
+/// counter.
+#[deprecated(since = "0.50.1")]
+#[pin_project::pin_project]
+pub struct BandwidthFuture<TInner> {
+    #[pin]
+    inner: TInner,
+    sinks: Arc<BandwidthSinks>,
+}
