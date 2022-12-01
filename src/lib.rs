@@ -137,9 +137,10 @@ pub use libp2p_websocket as websocket;
 #[doc(inline)]
 pub use libp2p_yamux as yamux;
 
+mod transport_ext;
+
 pub mod bandwidth;
 pub mod simple;
-pub mod transport_ext;
 
 #[cfg(doc)]
 pub mod tutorials;
@@ -153,6 +154,7 @@ pub use self::core::{
 pub use self::multiaddr::{multiaddr as build_multiaddr, Multiaddr};
 pub use self::simple::SimpleProtocol;
 pub use self::swarm::Swarm;
+pub use self::transport_ext::TransportExt;
 
 /// Builds a `Transport` based on TCP/IP that supports the most commonly-used features of libp2p:
 ///
