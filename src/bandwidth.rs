@@ -112,7 +112,7 @@ where
     }
 }
 
-/// Allows obtaining the average bandwidth of the connections created from a [`BandwidthLogging`].
+/// Allows obtaining the average bandwidth of the streams created from a [`BandwidthLogging`].
 pub struct BandwidthSinks {
     inbound: AtomicU64,
     outbound: AtomicU64,
@@ -127,7 +127,7 @@ impl BandwidthSinks {
         })
     }
 
-    /// Returns the total number of bytes that have been downloaded on all the connections spawned
+    /// Returns the total number of bytes that have been downloaded on all the streams spawned
     /// through the [`BandwidthLogging`].
     ///
     /// > **Note**: This method is by design subject to race conditions. The returned value should
@@ -136,7 +136,7 @@ impl BandwidthSinks {
         self.inbound.load(Ordering::Relaxed)
     }
 
-    /// Returns the total number of bytes that have been uploaded on all the connections spawned
+    /// Returns the total number of bytes that have been uploaded on all the streams spawned
     /// through the [`BandwidthLogging`].
     ///
     /// > **Note**: This method is by design subject to race conditions. The returned value should
