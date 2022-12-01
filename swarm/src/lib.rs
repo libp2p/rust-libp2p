@@ -126,7 +126,6 @@ use futures::{executor::ThreadPoolBuilder, prelude::*, stream::FusedStream};
 use libp2p_core::connection::ConnectionId;
 use libp2p_core::muxing::SubstreamBox;
 use libp2p_core::{
-    bandwidth::{BandwidthLogging, BandwidthSinks},
     connection::ConnectedPoint,
     multiaddr::Protocol,
     multihash::Multihash,
@@ -144,7 +143,6 @@ use std::{
     convert::TryFrom,
     error, fmt, io,
     pin::Pin,
-    sync::Arc,
     task::{Context, Poll},
 };
 use upgrade::UpgradeInfoSend as _;
@@ -457,24 +455,6 @@ where
         local_peer_id: PeerId,
     ) -> Self {
         SwarmBuilder::without_executor(transport, behaviour, local_peer_id).build()
-    }
-
-    /// Adds a layer on the `Swarm` that logs all trafic that passes through the sockets
-    /// created by it.
-    ///
-    /// This method returns an `Arc<BandwidthSinks>` that can be used to retreive the total number
-    /// of bytes transferred through the sockets.
-    pub fn with_bandwidth_logging(mut self) -> Arc<BandwidthSinks> {
-        let sinks = BandwidthSinks::new();
-        let sinks_copy = sinks.clone();
-        self.transport = Transport::map(self.transport, |(peer_id, stream_muxer_box), _| {
-            (
-                peer_id,
-                StreamMuxerBox::new(BandwidthLogging::new(stream_muxer_box, sinks_copy)),
-            )
-        })
-        .boxed();
-        sinks
     }
 
     /// Returns information about the connections underlying the [`Swarm`].

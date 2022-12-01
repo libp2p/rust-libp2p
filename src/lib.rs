@@ -137,7 +137,9 @@ pub use libp2p_websocket as websocket;
 #[doc(inline)]
 pub use libp2p_yamux as yamux;
 
+pub mod bandwidth;
 pub mod simple;
+pub mod transport_ext;
 
 #[cfg(doc)]
 pub mod tutorials;
