@@ -1,3 +1,3 @@
-# 0.7.0-alpha [unreleased]
+# 0.7.0-alpha
 
 - Initial alpha release.

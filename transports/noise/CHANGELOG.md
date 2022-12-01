@@ -1,4 +1,4 @@
-# 0.41.0 [unreleased]
+# 0.41.0
 
 - Remove `prost::Error` from public API. See [PR 3058].
 

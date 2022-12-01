@@ -1,4 +1,4 @@
-# 0.41.0 [unreleased]
+# 0.41.0
 
 - Change default `cache_size` of `Config` to 100. See [PR 2995].
 

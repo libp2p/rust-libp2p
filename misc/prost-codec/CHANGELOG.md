@@ -1,5 +1,4 @@
-
-# 0.3.0 [unreleased]
+# 0.3.0
 
 - Implement `From` trait for `std::io::Error`. See [PR 2622].
 - Don't leak `prost` dependency in `Error` type. See [PR 3058].

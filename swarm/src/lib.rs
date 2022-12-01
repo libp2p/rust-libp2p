@@ -420,6 +420,29 @@ where
         builder.build()
     }
 
+    /// Builds a new `Swarm` with a wasm executor.
+    /// Background tasks will be executed by the browser on the next micro-tick.
+    ///
+    /// Spawning a task is similar too:
+    /// ```typescript
+    /// function spawn(task: () => Promise<void>) {
+    ///     task()
+    /// }
+    /// ```
+    #[cfg(feature = "wasm-bindgen")]
+    pub fn with_wasm_executor(
+        transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
+        behaviour: TBehaviour,
+        local_peer_id: PeerId,
+    ) -> Self {
+        Self::with_executor(
+            transport,
+            behaviour,
+            local_peer_id,
+            crate::executor::WasmBindgenExecutor,
+        )
+    }
+
     /// Builds a new `Swarm` without an executor, instead using the current task.
     ///
     /// ## ⚠️  Performance warning
