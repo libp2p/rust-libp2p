@@ -48,7 +48,19 @@ pub struct BandwidthLogging<TInner> {
 
 impl<TInner> BandwidthLogging<TInner> {
     /// Creates a new [`BandwidthLogging`] around the stream muxer.
-    pub fn new(inner: TInner, sinks: Arc<BandwidthSinks>) -> Self {
+    pub fn new(inner: TInner) -> (Self, Arc<BandwidthSinks>) {
+        let sinks = BandwidthSinks::new();
+        (
+            Self {
+                inner,
+                sinks: sinks.clone(),
+            },
+            sinks,
+        )
+    }
+
+    /// Creates a new [`BandwidthLogging`] around the stream muxer.
+    pub fn new_with_sinks(inner: TInner, sinks: Arc<BandwidthSinks>) -> Self {
         Self { inner, sinks }
     }
 }

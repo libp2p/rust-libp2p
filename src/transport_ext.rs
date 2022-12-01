@@ -22,7 +22,7 @@
 
 use crate::core::{
     muxing::{StreamMuxer, StreamMuxerBox},
-    transport::{map::Map, Boxed},
+    transport::Boxed,
     PeerId,
 };
 use crate::{
@@ -56,7 +56,10 @@ pub trait TransportExt: Transport {
             let (peer_id, stream_muxer_box) = output.into();
             (
                 peer_id,
-                StreamMuxerBox::new(BandwidthLogging::new(stream_muxer_box, sinks_copy)),
+                StreamMuxerBox::new(BandwidthLogging::new_with_sinks(
+                    stream_muxer_box,
+                    sinks_copy,
+                )),
             )
         })
         .boxed();
