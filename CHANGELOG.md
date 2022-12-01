@@ -45,6 +45,10 @@
 
 # `libp2p` facade crate
 
+# Unreleased
+
+- Count bandwidth at the application level ([PR 3180](https://github.com/libp2p/rust-libp2p/pull/3180)).
+
 # 0.50.0
 
 This is a large release. After > 4 years, rust-libp2p ships with an [(alpha) QUIC
