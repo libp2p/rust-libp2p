@@ -1444,20 +1444,13 @@ where
         behaviour: TBehaviour,
         local_peer_id: PeerId,
     ) -> Self {
-        let executor: Option<Box<dyn Executor + Send>> = match ThreadPoolBuilder::new()
+        match ThreadPoolBuilder::new()
             .name_prefix("libp2p-swarm-task-")
             .create()
             .ok()
         {
-            Some(tp) => Some(Box::new(tp)),
-            None => None,
-        };
-        SwarmBuilder {
-            local_peer_id,
-            transport,
-            behaviour,
-            pool_config: PoolConfig::new(executor),
-            connection_limits: Default::default(),
+            Some(tp) => Self::with_executor(transport, behaviour, local_peer_id, tp),
+            None => Self::without_executor(transport, behaviour, local_peer_id),
         }
     }
 
