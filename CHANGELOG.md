@@ -45,6 +45,10 @@
 
 # `libp2p` facade crate
 
+# 0.51.0
+
+- Remove `SimpleProtocol` due to being unused. See `libp2p::core::upgrade` for alternatives.
+
 # 0.50.0
 
 This is a large release. After > 4 years, rust-libp2p ships with an [(alpha) QUIC
