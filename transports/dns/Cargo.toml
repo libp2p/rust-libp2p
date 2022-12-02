@@ -20,7 +20,7 @@ trust-dns-resolver = { version = "0.22", default-features = false, features = ["
 smallvec = "1.6.1"
 
 [dev-dependencies]
-env_logger = "0.9"
+env_logger = "0.10"
 tokio-crate = { package = "tokio", version = "1.0", default-features = false, features = ["rt", "time"] }
 async-std-crate = { package = "async-std", version = "1.6" }
 
