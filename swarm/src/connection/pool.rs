@@ -41,6 +41,7 @@ use futures::{
 };
 use libp2p_core::connection::{ConnectionId, Endpoint, PendingPoint};
 use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerExt};
+use std::task::Waker;
 use std::{
     collections::{hash_map, HashMap},
     convert::TryFrom as _,
@@ -131,6 +132,9 @@ where
 
     /// Receiver for events reported from pending tasks.
     pending_connection_events_rx: mpsc::Receiver<task::PendingConnectionEvent<TTrans>>,
+
+    /// Waker in case we haven't established any connections yet.
+    no_established_connections_waker: Option<Waker>,
 
     /// Receivers for events reported from established connections.
     established_connection_events:
@@ -332,6 +336,7 @@ where
             executor,
             pending_connection_events_tx,
             pending_connection_events_rx,
+            no_established_connections_waker: None,
             established_connection_events: Default::default(),
         }
     }
@@ -555,7 +560,9 @@ where
         // prioritizing established connections over pending connections.
         match self.established_connection_events.poll_next_unpin(cx) {
             Poll::Pending => {}
-            Poll::Ready(None) => unreachable!("Pool holds both sender and receiver."),
+            Poll::Ready(None) => {
+                self.no_established_connections_waker = Some(cx.waker().clone());
+            }
 
             Poll::Ready(Some(task::EstablishedConnectionEvent::Notify { id, peer_id, event })) => {
                 return Poll::Ready(PoolEvent::ConnectionEvent { peer_id, id, event });
@@ -765,6 +772,10 @@ where
                         },
                     );
                     self.established_connection_events.push(event_receiver);
+                    if let Some(waker) = self.no_established_connections_waker.take() {
+                        waker.wake();
+                    }
+
                     let connection = Connection::new(
                         muxer,
                         handler.into_handler(&obtained_peer_id, &endpoint),
