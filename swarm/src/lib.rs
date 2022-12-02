@@ -118,7 +118,7 @@ pub use handler::{
 pub use libp2p_swarm_derive::NetworkBehaviour;
 pub use registry::{AddAddressResult, AddressRecord, AddressScore};
 
-use connection::pool::{EstablishedConnection, Pool, PoolConfig, PoolEvent};
+use connection::pool::{EstablishedConnection, ExecSwitch, Pool, PoolEvent};
 use connection::IncomingInfo;
 use dial_opts::{DialOpts, PeerCondition};
 use either::Either;
@@ -1415,12 +1415,14 @@ impl<'a> PollParameters for SwarmPollParameters<'a> {
 }
 
 /// A [`SwarmBuilder`] provides an API for configuring and constructing a [`Swarm`].
-pub struct SwarmBuilder<TBehaviour> {
+pub struct SwarmBuilder<TBehaviour>
+where
+    TBehaviour: NetworkBehaviour,
+{
     local_peer_id: PeerId,
     transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
     behaviour: TBehaviour,
-    pool_config: PoolConfig,
-    connection_limits: ConnectionLimits,
+    pool: Pool<TBehaviour::ConnectionHandler, transport::Boxed<(PeerId, StreamMuxerBox)>>,
 }
 
 impl<TBehaviour> SwarmBuilder<TBehaviour>
@@ -1462,8 +1464,7 @@ where
             local_peer_id,
             transport,
             behaviour,
-            pool_config: PoolConfig::new(Some(Box::new(executor))),
-            connection_limits: Default::default(),
+            pool: Pool::new(local_peer_id, ExecSwitch::Executor(Box::new(executor))),
         }
     }
 
@@ -1516,8 +1517,7 @@ where
             local_peer_id,
             transport,
             behaviour,
-            pool_config: PoolConfig::new(None),
-            connection_limits: Default::default(),
+            pool: Pool::new(local_peer_id, ExecSwitch::LocalSpawn(Default::default())),
         }
     }
 
@@ -1528,7 +1528,8 @@ where
     /// [`ThreadPool`](futures::executor::ThreadPool).
     #[deprecated(since = "0.41.0", note = "Use `SwarmBuilder::with_executor` instead.")]
     pub fn executor(mut self, executor: Box<dyn Executor + Send>) -> Self {
-        self.pool_config = self.pool_config.with_executor(executor);
+        self.pool.executor = ExecSwitch::Executor(executor);
+
         self
     }
 
@@ -1542,7 +1543,8 @@ where
     /// be sleeping more often than necessary. Increasing this value increases
     /// the overall memory usage.
     pub fn notify_handler_buffer_size(mut self, n: NonZeroUsize) -> Self {
-        self.pool_config = self.pool_config.with_notify_handler_buffer_size(n);
+        self.pool.task_command_buffer_size = n.get() - 1;
+
         self
     }
 
@@ -1570,19 +1572,22 @@ where
     /// event is emitted and the moment when it is received by the
     /// [`NetworkBehaviour`].
     pub fn connection_event_buffer_size(mut self, n: usize) -> Self {
-        self.pool_config = self.pool_config.with_connection_event_buffer_size(n);
+        self.pool.task_event_buffer_size = n;
+
         self
     }
 
     /// Number of addresses concurrently dialed for a single outbound connection attempt.
     pub fn dial_concurrency_factor(mut self, factor: NonZeroU8) -> Self {
-        self.pool_config = self.pool_config.with_dial_concurrency_factor(factor);
+        self.pool.dial_concurrency_factor = factor;
+
         self
     }
 
     /// Configures the connection limits.
     pub fn connection_limits(mut self, limits: ConnectionLimits) -> Self {
-        self.connection_limits = limits;
+        self.pool.counters.limits = limits;
+
         self
     }
 
@@ -1597,7 +1602,8 @@ where
     /// > individual [`SubstreamProtocol`]s emitted by the `NetworkBehaviour`
     /// > are ignored.
     pub fn substream_upgrade_protocol_override(mut self, v: libp2p_core::upgrade::Version) -> Self {
-        self.pool_config = self.pool_config.with_substream_upgrade_protocol_override(v);
+        self.pool.substream_upgrade_protocol_override = Some(v);
+
         self
     }
 
@@ -1611,7 +1617,8 @@ where
     /// the total number of streams can be enforced at the
     /// [`StreamMuxerBox`](StreamMuxerBox) level.
     pub fn max_negotiating_inbound_streams(mut self, v: usize) -> Self {
-        self.pool_config = self.pool_config.with_max_negotiating_inbound_streams(v);
+        self.pool.max_negotiating_inbound_streams = v;
+
         self
     }
 
@@ -1629,7 +1636,7 @@ where
         Swarm {
             local_peer_id: self.local_peer_id,
             transport: self.transport,
-            pool: Pool::new(self.local_peer_id, self.pool_config, self.connection_limits),
+            pool: self.pool,
             behaviour: self.behaviour,
             supported_protocols,
             listened_addrs: HashMap::new(),

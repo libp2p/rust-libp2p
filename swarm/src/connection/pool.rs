@@ -45,7 +45,7 @@ use std::{
     collections::{hash_map, HashMap},
     convert::TryFrom as _,
     fmt,
-    num::{NonZeroU8, NonZeroUsize},
+    num::NonZeroU8,
     pin::Pin,
     task::Context,
     task::Poll,
@@ -64,7 +64,7 @@ where
     local_id: PeerId,
 
     /// The connection counter(s).
-    counters: ConnectionCounters,
+    pub(crate) counters: ConnectionCounters,
 
     /// The managed connections of each peer that are currently considered established.
     established: FnvHashMap<
@@ -82,25 +82,25 @@ where
     next_connection_id: ConnectionId,
 
     /// Size of the task command buffer (per task).
-    task_command_buffer_size: usize,
+    pub(crate) task_command_buffer_size: usize,
 
     /// Number of addresses concurrently dialed for a single outbound connection attempt.
-    dial_concurrency_factor: NonZeroU8,
+    pub(crate) dial_concurrency_factor: NonZeroU8,
 
     /// The configured override for substream protocol upgrades, if any.
-    substream_upgrade_protocol_override: Option<libp2p_core::upgrade::Version>,
+    pub(crate) substream_upgrade_protocol_override: Option<libp2p_core::upgrade::Version>,
 
     /// The maximum number of inbound streams concurrently negotiating on a connection.
     ///
     /// See [`Connection::max_negotiating_inbound_streams`].
-    max_negotiating_inbound_streams: usize,
+    pub(crate) max_negotiating_inbound_streams: usize,
 
     /// How many [`task::EstablishedConnectionEvent`]s can be buffered before the connection is back-pressured.
-    task_event_buffer_size: usize,
+    pub(crate) task_event_buffer_size: usize,
 
     /// The executor to use for running connection tasks. Can either be a global executor
     /// or a local queue.
-    executor: ExecSwitch,
+    pub(crate) executor: ExecSwitch,
 
     /// Sender distributed to pending tasks for reporting events back
     /// to the pool.
@@ -289,23 +289,20 @@ where
     TTrans: Transport,
 {
     /// Creates a new empty `Pool`.
-    pub fn new(local_id: PeerId, config: PoolConfig, limits: ConnectionLimits) -> Self {
+    pub fn new(local_id: PeerId, executor: ExecSwitch) -> Self {
         let (pending_connection_events_tx, pending_connection_events_rx) = mpsc::channel(0);
-        let executor = match config.executor {
-            Some(exec) => ExecSwitch::Executor(exec),
-            None => ExecSwitch::LocalSpawn(Default::default()),
-        };
+
         Pool {
             local_id,
-            counters: ConnectionCounters::new(limits),
+            counters: ConnectionCounters::new(ConnectionLimits::default()),
             established: Default::default(),
             pending: Default::default(),
             next_connection_id: ConnectionId::new(0),
-            task_command_buffer_size: config.task_command_buffer_size,
-            dial_concurrency_factor: config.dial_concurrency_factor,
-            substream_upgrade_protocol_override: config.substream_upgrade_protocol_override,
-            max_negotiating_inbound_streams: config.max_negotiating_inbound_streams,
-            task_event_buffer_size: config.task_event_buffer_size,
+            task_command_buffer_size: 32,
+            dial_concurrency_factor: NonZeroU8::new(8).expect("8 > 0"),
+            substream_upgrade_protocol_override: None,
+            max_negotiating_inbound_streams: 128,
+            task_event_buffer_size: 7,
             executor,
             pending_connection_events_tx,
             pending_connection_events_rx,
@@ -824,7 +821,7 @@ where
 #[derive(Debug, Clone)]
 pub struct ConnectionCounters {
     /// The effective connection limits.
-    limits: ConnectionLimits,
+    pub(crate) limits: ConnectionLimits,
     /// The current number of incoming connections.
     pending_incoming: u32,
     /// The current number of outgoing connections.
@@ -1039,98 +1036,6 @@ impl ConnectionLimits {
     }
 }
 
-/// Configuration options when creating a [`Pool`].
-///
-/// The default configuration specifies no dedicated task executor, a
-/// task event buffer size of 32, and a task command buffer size of 7.
-pub struct PoolConfig {
-    /// Executor to use to spawn tasks.
-    pub executor: Option<Box<dyn Executor + Send>>,
-
-    /// Size of the task command buffer (per task).
-    pub task_command_buffer_size: usize,
-
-    /// Size of the pending connection task event buffer and the established connection task event
-    /// buffer.
-    pub task_event_buffer_size: usize,
-
-    /// Number of addresses concurrently dialed for a single outbound connection attempt.
-    pub dial_concurrency_factor: NonZeroU8,
-
-    /// The configured override for substream protocol upgrades, if any.
-    substream_upgrade_protocol_override: Option<libp2p_core::upgrade::Version>,
-
-    /// The maximum number of inbound streams concurrently negotiating on a connection.
-    ///
-    /// See [`Connection::max_negotiating_inbound_streams`].
-    max_negotiating_inbound_streams: usize,
-}
-
-impl PoolConfig {
-    pub fn new(executor: Option<Box<dyn Executor + Send>>) -> Self {
-        Self {
-            executor,
-            task_command_buffer_size: 32,
-            task_event_buffer_size: 7,
-            dial_concurrency_factor: NonZeroU8::new(8).expect("8 > 0"),
-            substream_upgrade_protocol_override: None,
-            max_negotiating_inbound_streams: 128,
-        }
-    }
-
-    /// Configures the executor to use for spawning connection background tasks.
-    pub fn with_executor(mut self, executor: Box<dyn Executor + Send>) -> Self {
-        self.executor = Some(executor);
-        self
-    }
-
-    /// Sets the maximum number of events sent to a connection's background task
-    /// that may be buffered, if the task cannot keep up with their consumption and
-    /// delivery to the connection handler.
-    ///
-    /// When the buffer for a particular connection is full, `notify_handler` will no
-    /// longer be able to deliver events to the associated [`Connection`](super::Connection),
-    /// thus exerting back-pressure on the connection and peer API.
-    pub fn with_notify_handler_buffer_size(mut self, n: NonZeroUsize) -> Self {
-        self.task_command_buffer_size = n.get() - 1;
-        self
-    }
-
-    /// Sets the maximum number of buffered connection events (beyond a guaranteed
-    /// buffer of 1 event per connection).
-    ///
-    /// When the buffer is full, the background tasks of all connections will stall.
-    /// In this way, the consumers of network events exert back-pressure on
-    /// the network connection I/O.
-    pub fn with_connection_event_buffer_size(mut self, n: usize) -> Self {
-        self.task_event_buffer_size = n;
-        self
-    }
-
-    /// Number of addresses concurrently dialed for a single outbound connection attempt.
-    pub fn with_dial_concurrency_factor(mut self, factor: NonZeroU8) -> Self {
-        self.dial_concurrency_factor = factor;
-        self
-    }
-
-    /// Configures an override for the substream upgrade protocol to use.
-    pub fn with_substream_upgrade_protocol_override(
-        mut self,
-        v: libp2p_core::upgrade::Version,
-    ) -> Self {
-        self.substream_upgrade_protocol_override = Some(v);
-        self
-    }
-
-    /// The maximum number of inbound streams concurrently negotiating on a connection.
-    ///
-    /// See [`Connection::max_negotiating_inbound_streams`].
-    pub fn with_max_negotiating_inbound_streams(mut self, v: usize) -> Self {
-        self.max_negotiating_inbound_streams = v;
-        self
-    }
-}
-
 trait EntryExt<'a, K, V> {
     fn expect_occupied(self, msg: &'static str) -> hash_map::OccupiedEntry<'a, K, V>;
 }
@@ -1144,7 +1049,7 @@ impl<'a, K: 'a, V: 'a> EntryExt<'a, K, V> for hash_map::Entry<'a, K, V> {
     }
 }
 
-enum ExecSwitch {
+pub enum ExecSwitch {
     Executor(Box<dyn Executor + Send>),
     LocalSpawn(FuturesUnordered<Pin<Box<dyn Future<Output = ()> + Send>>>),
 }
