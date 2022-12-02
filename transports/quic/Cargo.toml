@@ -37,7 +37,7 @@ rustc-args = ["--cfg", "docsrs"]
 
 [dev-dependencies]
 async-std = { version = "1.12.0", features = ["attributes"] }
-env_logger = "0.9.0"
+env_logger = "0.10.0"
 libp2p = { path = "../..", features = ["tcp", "yamux", "noise", "async-std"] }
 libp2p-muxer-test-harness = { path = "../../muxers/test-harness" }
 quickcheck = "1"
