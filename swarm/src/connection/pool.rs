@@ -55,29 +55,6 @@ use void::Void;
 mod concurrent_dial;
 mod task;
 
-enum ExecSwitch {
-    Executor(Box<dyn Executor + Send>),
-    LocalSpawn(FuturesUnordered<Pin<Box<dyn Future<Output = ()> + Send>>>),
-}
-
-impl ExecSwitch {
-    fn advance_local(&mut self, cx: &mut Context) {
-        match self {
-            ExecSwitch::Executor(_) => {}
-            ExecSwitch::LocalSpawn(local) => {
-                while let Poll::Ready(Some(())) = local.poll_next_unpin(cx) {}
-            }
-        }
-    }
-
-    fn spawn(&mut self, task: BoxFuture<'static, ()>) {
-        match self {
-            Self::Executor(executor) => executor.exec(task),
-            Self::LocalSpawn(local) => local.push(task),
-        }
-    }
-}
-
 /// A connection `Pool` manages a set of connections for each peer.
 pub struct Pool<THandler, TTrans>
 where
@@ -1163,6 +1140,29 @@ impl<'a, K: 'a, V: 'a> EntryExt<'a, K, V> for hash_map::Entry<'a, K, V> {
         match self {
             hash_map::Entry::Occupied(entry) => entry,
             hash_map::Entry::Vacant(_) => panic!("{}", msg),
+        }
+    }
+}
+
+enum ExecSwitch {
+    Executor(Box<dyn Executor + Send>),
+    LocalSpawn(FuturesUnordered<Pin<Box<dyn Future<Output = ()> + Send>>>),
+}
+
+impl ExecSwitch {
+    fn advance_local(&mut self, cx: &mut Context) {
+        match self {
+            ExecSwitch::Executor(_) => {}
+            ExecSwitch::LocalSpawn(local) => {
+                while let Poll::Ready(Some(())) = local.poll_next_unpin(cx) {}
+            }
+        }
+    }
+
+    fn spawn(&mut self, task: BoxFuture<'static, ()>) {
+        match self {
+            Self::Executor(executor) => executor.exec(task),
+            Self::LocalSpawn(local) => local.push(task),
         }
     }
 }
