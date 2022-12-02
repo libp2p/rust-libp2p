@@ -45,9 +45,11 @@
 
 # `libp2p` facade crate
 
-# 0.51.0
+# 0.51.0 [unreleased]
 
-- Remove `SimpleProtocol` due to being unused. See `libp2p::core::upgrade` for alternatives.
+- Remove `SimpleProtocol` due to being unused. See `libp2p::core::upgrade` for alternatives. See [PR 3191].
+
+[PR 3191]: https://github.com/libp2p/rust-libp2p/pull/3191
 
 # 0.50.0
 
