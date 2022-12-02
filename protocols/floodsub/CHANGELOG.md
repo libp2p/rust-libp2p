@@ -1,4 +1,4 @@
-# 0.41.0 [unreleased]
+# 0.41.0
 
 - Update to `libp2p-core` `v0.38.0`.
 
@@ -7,7 +7,10 @@
 - Replace `Floodsub`'s `NetworkBehaviour` implemention `inject_*` methods with the new `on_*` methods.
   See [PR 3011].
 
+- Update `rust-version` to reflect the actual MSRV: 1.62.0. See [PR 3090].
+
 [PR 3011]: https://github.com/libp2p/rust-libp2p/pull/3011
+[PR 3090]: https://github.com/libp2p/rust-libp2p/pull/3090
 
 # 0.40.0
 

@@ -127,6 +127,7 @@ where
         (key, arg): Self::OutboundOpenInfo,
     ) {
         if let Some(h) = self.handlers.get_mut(&key) {
+            #[allow(deprecated)]
             h.inject_fully_negotiated_outbound(protocol, arg)
         } else {
             log::error!("inject_fully_negotiated_outbound: no handler for key")
@@ -140,6 +141,7 @@ where
     ) {
         if let Some(h) = self.handlers.get_mut(&key) {
             if let Some(i) = info.take(&key) {
+                #[allow(deprecated)]
                 h.inject_fully_negotiated_inbound(arg, i)
             }
         } else {
@@ -147,8 +149,9 @@ where
         }
     }
 
-    fn inject_event(&mut self, (key, event): Self::InEvent) {
+    fn on_behaviour_event(&mut self, (key, event): Self::InEvent) {
         if let Some(h) = self.handlers.get_mut(&key) {
+            #[allow(deprecated)]
             h.inject_event(event)
         } else {
             log::error!("inject_event: no handler for key")
@@ -157,6 +160,7 @@ where
 
     fn inject_address_change(&mut self, addr: &Multiaddr) {
         for h in self.handlers.values_mut() {
+            #[allow(deprecated)]
             h.inject_address_change(addr)
         }
     }
@@ -167,6 +171,7 @@ where
         error: ConnectionHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>,
     ) {
         if let Some(h) = self.handlers.get_mut(&key) {
+            #[allow(deprecated)]
             h.inject_dial_upgrade_error(arg, error)
         } else {
             log::error!("inject_dial_upgrade_error: no handler for protocol")
@@ -182,6 +187,7 @@ where
             ConnectionHandlerUpgrErr::Timer => {
                 for (k, h) in &mut self.handlers {
                     if let Some(i) = info.take(k) {
+                        #[allow(deprecated)]
                         h.inject_listen_upgrade_error(i, ConnectionHandlerUpgrErr::Timer)
                     }
                 }
@@ -189,6 +195,7 @@ where
             ConnectionHandlerUpgrErr::Timeout => {
                 for (k, h) in &mut self.handlers {
                     if let Some(i) = info.take(k) {
+                        #[allow(deprecated)]
                         h.inject_listen_upgrade_error(i, ConnectionHandlerUpgrErr::Timeout)
                     }
                 }
@@ -196,6 +203,7 @@ where
             ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)) => {
                 for (k, h) in &mut self.handlers {
                     if let Some(i) = info.take(k) {
+                        #[allow(deprecated)]
                         h.inject_listen_upgrade_error(
                             i,
                             ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(
@@ -214,6 +222,7 @@ where
                             let e = NegotiationError::ProtocolError(ProtocolError::IoError(
                                 e.kind().into(),
                             ));
+                            #[allow(deprecated)]
                             h.inject_listen_upgrade_error(
                                 i,
                                 ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(e)),
@@ -225,6 +234,7 @@ where
                     for (k, h) in &mut self.handlers {
                         if let Some(i) = info.take(k) {
                             let e = NegotiationError::ProtocolError(ProtocolError::InvalidMessage);
+                            #[allow(deprecated)]
                             h.inject_listen_upgrade_error(
                                 i,
                                 ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(e)),
@@ -236,6 +246,7 @@ where
                     for (k, h) in &mut self.handlers {
                         if let Some(i) = info.take(k) {
                             let e = NegotiationError::ProtocolError(ProtocolError::InvalidProtocol);
+                            #[allow(deprecated)]
                             h.inject_listen_upgrade_error(
                                 i,
                                 ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(e)),
@@ -248,6 +259,7 @@ where
                         if let Some(i) = info.take(k) {
                             let e =
                                 NegotiationError::ProtocolError(ProtocolError::TooManyProtocols);
+                            #[allow(deprecated)]
                             h.inject_listen_upgrade_error(
                                 i,
                                 ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(e)),
@@ -259,6 +271,7 @@ where
             ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply((k, e))) => {
                 if let Some(h) = self.handlers.get_mut(&k) {
                     if let Some(i) = info.take(&k) {
+                        #[allow(deprecated)]
                         h.inject_listen_upgrade_error(
                             i,
                             ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)),

@@ -1,4 +1,4 @@
-# 0.14.0 [unreleased]
+# 0.14.0
 
 - Update to `prost-codec` `v0.3.0`.
 
@@ -9,7 +9,14 @@
 - Replace `Client` and `Relay`'s `NetworkBehaviour` implemention `inject_*` methods with the new `on_*` methods.
   See [PR 3011].
 
+- Replace `client::Handler` and `relay::Handler`'s `ConnectionHandler` implemention `inject_*` methods
+  with the new `on_*` methods. See [PR 3085].
+
+- Update `rust-version` to reflect the actual MSRV: 1.62.0. See [PR 3090].
+
+[PR 3085]: https://github.com/libp2p/rust-libp2p/pull/3085
 [PR 3011]: https://github.com/libp2p/rust-libp2p/pull/3011
+[PR 3090]: https://github.com/libp2p/rust-libp2p/pull/3090
 
 # 0.13.0
 

@@ -1,7 +1,7 @@
 [package]
 name = "libp2p-request-response"
 edition = "2021"
-rust-version = "1.56.1"
+rust-version = "1.62.0"
 description = "Generic Request/Response Protocols"
 version = "0.23.0"
 authors = ["Parity Technologies <admin@parity.io>"]
@@ -24,7 +24,7 @@ unsigned-varint = { version = "0.7", features = ["std", "futures"] }
 
 [dev-dependencies]
 async-std = "1.6.2"
-env_logger = "0.9.0"
+env_logger = "0.10.0"
 libp2p = { path = "../..", features = ["full"] }
 rand = "0.8"
 

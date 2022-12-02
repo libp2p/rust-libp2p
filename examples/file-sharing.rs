@@ -413,7 +413,7 @@ mod network {
         ) {
             match event {
                 SwarmEvent::Behaviour(ComposedEvent::Kademlia(
-                    KademliaEvent::OutboundQueryCompleted {
+                    KademliaEvent::OutboundQueryProgressed {
                         id,
                         result: QueryResult::StartProviding(_),
                         ..
@@ -426,18 +426,37 @@ mod network {
                     let _ = sender.send(());
                 }
                 SwarmEvent::Behaviour(ComposedEvent::Kademlia(
-                    KademliaEvent::OutboundQueryCompleted {
+                    KademliaEvent::OutboundQueryProgressed {
                         id,
-                        result: QueryResult::GetProviders(Ok(GetProvidersOk { providers, .. })),
+                        result:
+                            QueryResult::GetProviders(Ok(GetProvidersOk::FoundProviders {
+                                providers,
+                                ..
+                            })),
                         ..
                     },
                 )) => {
-                    let _ = self
-                        .pending_get_providers
-                        .remove(&id)
-                        .expect("Completed query to be previously pending.")
-                        .send(providers);
+                    if let Some(sender) = self.pending_get_providers.remove(&id) {
+                        sender.send(providers).expect("Receiver not to be dropped");
+
+                        // Finish the query. We are only interested in the first result.
+                        self.swarm
+                            .behaviour_mut()
+                            .kademlia
+                            .query_mut(&id)
+                            .unwrap()
+                            .finish();
+                    }
                 }
+                SwarmEvent::Behaviour(ComposedEvent::Kademlia(
+                    KademliaEvent::OutboundQueryProgressed {
+                        result:
+                            QueryResult::GetProviders(Ok(
+                                GetProvidersOk::FinishedWithNoAdditionalRecord { .. },
+                            )),
+                        ..
+                    },
+                )) => {}
                 SwarmEvent::Behaviour(ComposedEvent::Kademlia(_)) => {}
                 SwarmEvent::Behaviour(ComposedEvent::RequestResponse(
                     RequestResponseEvent::Message { message, .. },

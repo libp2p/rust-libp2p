@@ -149,7 +149,8 @@ where
     }
 
     /// Notifies the connection handler of an event.
-    pub fn inject_event(&mut self, event: THandler::InEvent) {
+    pub fn on_behaviour_event(&mut self, event: THandler::InEvent) {
+        #[allow(deprecated)]
         self.handler.inject_event(event);
     }
 
@@ -180,6 +181,7 @@ where
             match requested_substreams.poll_next_unpin(cx) {
                 Poll::Ready(Some(Ok(()))) => continue,
                 Poll::Ready(Some(Err(user_data))) => {
+                    #[allow(deprecated)]
                     handler.inject_dial_upgrade_error(user_data, ConnectionHandlerUpgrErr::Timeout);
                     continue;
                 }
@@ -208,10 +210,12 @@ where
             match negotiating_out.poll_next_unpin(cx) {
                 Poll::Pending | Poll::Ready(None) => {}
                 Poll::Ready(Some((user_data, Ok(upgrade)))) => {
+                    #[allow(deprecated)]
                     handler.inject_fully_negotiated_outbound(upgrade, user_data);
                     continue;
                 }
                 Poll::Ready(Some((user_data, Err(err)))) => {
+                    #[allow(deprecated)]
                     handler.inject_dial_upgrade_error(user_data, err);
                     continue;
                 }
@@ -222,10 +226,12 @@ where
             match negotiating_in.poll_next_unpin(cx) {
                 Poll::Pending | Poll::Ready(None) => {}
                 Poll::Ready(Some((user_data, Ok(upgrade)))) => {
+                    #[allow(deprecated)]
                     handler.inject_fully_negotiated_inbound(upgrade, user_data);
                     continue;
                 }
                 Poll::Ready(Some((user_data, Err(err)))) => {
+                    #[allow(deprecated)]
                     handler.inject_listen_upgrade_error(user_data, err);
                     continue;
                 }
@@ -273,6 +279,7 @@ where
             match muxing.poll_unpin(cx)? {
                 Poll::Pending => {}
                 Poll::Ready(StreamMuxerEvent::AddressChange(address)) => {
+                    #[allow(deprecated)]
                     handler.inject_address_change(&address);
                     return Poll::Ready(Ok(Event::AddressChange(address)));
                 }
