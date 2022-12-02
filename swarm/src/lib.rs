@@ -362,6 +362,7 @@ where
         local_peer_id: PeerId,
         executor: impl Executor + Send + 'static,
     ) -> Self {
+        #[allow(deprecated)]
         SwarmBuilder::with_executor(transport, behaviour, local_peer_id, executor).build()
     }
 
@@ -406,9 +407,14 @@ where
             .name_prefix("libp2p-swarm-task-")
             .create()
         {
-            Ok(tp) => SwarmBuilder::with_executor(transport, behaviour, local_peer_id, tp),
+            Ok(tp) =>
+            {
+                #[allow(deprecated)]
+                SwarmBuilder::with_executor(transport, behaviour, local_peer_id, tp)
+            }
             Err(err) => {
                 log::warn!("Failed to create executor thread pool: {:?}", err);
+                #[allow(deprecated)]
                 SwarmBuilder::without_executor(transport, behaviour, local_peer_id)
             }
         };
@@ -449,7 +455,97 @@ where
         behaviour: TBehaviour,
         local_peer_id: PeerId,
     ) -> Self {
+        #[allow(deprecated)]
         SwarmBuilder::without_executor(transport, behaviour, local_peer_id).build()
+    }
+
+    /// Configures the number of events from the [`NetworkBehaviour`] in
+    /// destination to the [`ConnectionHandler`] that can be buffered before
+    /// the [`Swarm`] has to wait. An individual buffer with this number of
+    /// events exists for each individual connection.
+    ///
+    /// The ideal value depends on the executor used, the CPU speed, and the
+    /// volume of events. If this value is too low, then the [`Swarm`] will
+    /// be sleeping more often than necessary. Increasing this value increases
+    /// the overall memory usage.
+    pub fn notify_handler_buffer_size(mut self, n: NonZeroUsize) -> Self {
+        self.pool.task_command_buffer_size = n.get() - 1;
+
+        self
+    }
+
+    /// Configures the number of extra events from the [`ConnectionHandler`] in
+    /// destination to the [`NetworkBehaviour`] that can be buffered before
+    /// the [`ConnectionHandler`] has to go to sleep.
+    ///
+    /// There exists a buffer of events received from [`ConnectionHandler`]s
+    /// that the [`NetworkBehaviour`] has yet to process. This buffer is
+    /// shared between all instances of [`ConnectionHandler`]. Each instance of
+    /// [`ConnectionHandler`] is guaranteed one slot in this buffer, meaning
+    /// that delivering an event for the first time is guaranteed to be
+    /// instantaneous. Any extra event delivery, however, must wait for that
+    /// first event to be delivered or for an "extra slot" to be available.
+    ///
+    /// This option configures the number of such "extra slots" in this
+    /// shared buffer. These extra slots are assigned in a first-come,
+    /// first-served basis.
+    ///
+    /// The ideal value depends on the executor used, the CPU speed, the
+    /// average number of connections, and the volume of events. If this value
+    /// is too low, then the [`ConnectionHandler`]s will be sleeping more often
+    /// than necessary. Increasing this value increases the overall memory
+    /// usage, and more importantly the latency between the moment when an
+    /// event is emitted and the moment when it is received by the
+    /// [`NetworkBehaviour`].
+    pub fn connection_event_buffer_size(mut self, n: usize) -> Self {
+        self.pool.task_event_buffer_size = n;
+
+        self
+    }
+
+    /// Number of addresses concurrently dialed for a single outbound connection attempt.
+    pub fn dial_concurrency_factor(mut self, factor: NonZeroU8) -> Self {
+        self.pool.dial_concurrency_factor = factor;
+
+        self
+    }
+
+    /// Configures the connection limits.
+    pub fn connection_limits(mut self, limits: ConnectionLimits) -> Self {
+        self.pool.counters.limits = limits;
+
+        self
+    }
+
+    /// Configures an override for the substream upgrade protocol to use.
+    ///
+    /// The subtream upgrade protocol is the multistream-select protocol
+    /// used for protocol negotiation on substreams. Since a listener
+    /// supports all existing versions, the choice of upgrade protocol
+    /// only effects the "dialer", i.e. the peer opening a substream.
+    ///
+    /// > **Note**: If configured, specific upgrade protocols for
+    /// > individual [`SubstreamProtocol`]s emitted by the `NetworkBehaviour`
+    /// > are ignored.
+    pub fn substream_upgrade_protocol_override(mut self, v: libp2p_core::upgrade::Version) -> Self {
+        self.pool.substream_upgrade_protocol_override = Some(v);
+
+        self
+    }
+
+    /// The maximum number of inbound streams concurrently negotiating on a
+    /// connection. New inbound streams exceeding the limit are dropped and thus
+    /// reset.
+    ///
+    /// Note: This only enforces a limit on the number of concurrently
+    /// negotiating inbound streams. The total number of inbound streams on a
+    /// connection is the sum of negotiating and negotiated streams. A limit on
+    /// the total number of streams can be enforced at the
+    /// [`StreamMuxerBox`](StreamMuxerBox) level.
+    pub fn max_negotiating_inbound_streams(mut self, v: usize) -> Self {
+        self.pool.max_negotiating_inbound_streams = v;
+
+        self
     }
 
     /// Returns information about the connections underlying the [`Swarm`].
@@ -1415,6 +1511,10 @@ impl<'a> PollParameters for SwarmPollParameters<'a> {
 }
 
 /// A [`SwarmBuilder`] provides an API for configuring and constructing a [`Swarm`].
+#[deprecated(
+    since = "0.41.2",
+    note = "Use `Swarm` directly to configure various parameters."
+)]
 pub struct SwarmBuilder<TBehaviour>
 where
     TBehaviour: NetworkBehaviour,
@@ -1425,6 +1525,7 @@ where
     pool: Pool<TBehaviour::ConnectionHandler, transport::Boxed<(PeerId, StreamMuxerBox)>>,
 }
 
+#[allow(deprecated)]
 impl<TBehaviour> SwarmBuilder<TBehaviour>
 where
     TBehaviour: NetworkBehaviour,
@@ -1842,9 +1943,7 @@ mod tests {
         Disconnecting,
     }
 
-    fn new_test_swarm<T, O>(
-        handler_proto: T,
-    ) -> SwarmBuilder<CallTraceBehaviour<MockBehaviour<T, O>>>
+    fn new_test_swarm<T, O>(handler_proto: T) -> Swarm<CallTraceBehaviour<MockBehaviour<T, O>>>
     where
         T: ConnectionHandler + Clone,
         T::OutEvent: Clone,
@@ -1861,10 +1960,8 @@ mod tests {
             .boxed();
         let behaviour = CallTraceBehaviour::new(MockBehaviour::new(handler_proto));
         match ThreadPool::new().ok() {
-            Some(tp) => {
-                SwarmBuilder::with_executor(transport, behaviour, local_public_key.into(), tp)
-            }
-            None => SwarmBuilder::without_executor(transport, behaviour, local_public_key.into()),
+            Some(tp) => Swarm::with_executor(transport, behaviour, local_public_key.into(), tp),
+            None => Swarm::without_executor(transport, behaviour, local_public_key.into()),
         }
     }
 
@@ -1925,8 +2022,8 @@ mod tests {
         // use the dummy protocols handler.
         let handler_proto = keep_alive::ConnectionHandler;
 
-        let mut swarm1 = new_test_swarm::<_, ()>(handler_proto.clone()).build();
-        let mut swarm2 = new_test_swarm::<_, ()>(handler_proto).build();
+        let mut swarm1 = new_test_swarm::<_, ()>(handler_proto.clone());
+        let mut swarm2 = new_test_swarm::<_, ()>(handler_proto);
 
         let addr1: Multiaddr = Protocol::Memory(rand::random::<u64>()).into();
         let addr2: Multiaddr = Protocol::Memory(rand::random::<u64>()).into();
@@ -2043,8 +2140,8 @@ mod tests {
         // use the dummy protocols handler.
         let handler_proto = keep_alive::ConnectionHandler;
 
-        let mut swarm1 = new_test_swarm::<_, ()>(handler_proto.clone()).build();
-        let mut swarm2 = new_test_swarm::<_, ()>(handler_proto).build();
+        let mut swarm1 = new_test_swarm::<_, ()>(handler_proto.clone());
+        let mut swarm2 = new_test_swarm::<_, ()>(handler_proto);
 
         let addr1: Multiaddr = Protocol::Memory(rand::random::<u64>()).into();
         let addr2: Multiaddr = Protocol::Memory(rand::random::<u64>()).into();
@@ -2109,8 +2206,8 @@ mod tests {
         // use the dummy protocols handler.
         let handler_proto = keep_alive::ConnectionHandler;
 
-        let mut swarm1 = new_test_swarm::<_, ()>(handler_proto.clone()).build();
-        let mut swarm2 = new_test_swarm::<_, ()>(handler_proto).build();
+        let mut swarm1 = new_test_swarm::<_, ()>(handler_proto.clone());
+        let mut swarm2 = new_test_swarm::<_, ()>(handler_proto);
 
         let addr1: Multiaddr = Protocol::Memory(rand::random::<u64>()).into();
         let addr2: Multiaddr = Protocol::Memory(rand::random::<u64>()).into();
@@ -2177,8 +2274,8 @@ mod tests {
         // use the dummy protocols handler.
         let handler_proto = keep_alive::ConnectionHandler;
 
-        let mut swarm1 = new_test_swarm::<_, ()>(handler_proto.clone()).build();
-        let mut swarm2 = new_test_swarm::<_, ()>(handler_proto).build();
+        let mut swarm1 = new_test_swarm::<_, ()>(handler_proto.clone());
+        let mut swarm2 = new_test_swarm::<_, ()>(handler_proto);
 
         let addr1: Multiaddr = Protocol::Memory(rand::random::<u64>()).into();
         let addr2: Multiaddr = Protocol::Memory(rand::random::<u64>()).into();
@@ -2257,8 +2354,7 @@ mod tests {
         fn prop(concurrency_factor: DialConcurrencyFactor) {
             block_on(async {
                 let mut swarm = new_test_swarm::<_, ()>(keep_alive::ConnectionHandler)
-                    .dial_concurrency_factor(concurrency_factor.0)
-                    .build();
+                    .dial_concurrency_factor(concurrency_factor.0);
 
                 // Listen on `concurrency_factor + 1` addresses.
                 //
@@ -2324,9 +2420,8 @@ mod tests {
         let outgoing_limit = rand::thread_rng().gen_range(1..10);
 
         let limits = ConnectionLimits::default().with_max_pending_outgoing(Some(outgoing_limit));
-        let mut network = new_test_swarm::<_, ()>(keep_alive::ConnectionHandler)
-            .connection_limits(limits)
-            .build();
+        let mut network =
+            new_test_swarm::<_, ()>(keep_alive::ConnectionHandler).connection_limits(limits);
 
         let addr: Multiaddr = "/memory/1234".parse().unwrap();
 
@@ -2379,11 +2474,9 @@ mod tests {
             let limit = limit.0;
 
             let mut network1 = new_test_swarm::<_, ()>(keep_alive::ConnectionHandler)
-                .connection_limits(limits(limit))
-                .build();
+                .connection_limits(limits(limit));
             let mut network2 = new_test_swarm::<_, ()>(keep_alive::ConnectionHandler)
-                .connection_limits(limits(limit))
-                .build();
+                .connection_limits(limits(limit));
 
             let _ = network1.listen_on(multiaddr![Memory(0u64)]).unwrap();
             let listen_addr = async_std::task::block_on(poll_fn(|cx| {
@@ -2488,8 +2581,8 @@ mod tests {
         // Checks whether dialing an address containing the wrong peer id raises an error
         // for the expected peer id instead of the obtained peer id.
 
-        let mut swarm1 = new_test_swarm::<_, ()>(dummy::ConnectionHandler).build();
-        let mut swarm2 = new_test_swarm::<_, ()>(dummy::ConnectionHandler).build();
+        let mut swarm1 = new_test_swarm::<_, ()>(dummy::ConnectionHandler);
+        let mut swarm2 = new_test_swarm::<_, ()>(dummy::ConnectionHandler);
 
         swarm1.listen_on("/memory/0".parse().unwrap()).unwrap();
 
@@ -2545,7 +2638,7 @@ mod tests {
         //
         // The last two can happen in any order.
 
-        let mut swarm = new_test_swarm::<_, ()>(dummy::ConnectionHandler).build();
+        let mut swarm = new_test_swarm::<_, ()>(dummy::ConnectionHandler);
         swarm.listen_on("/memory/0".parse().unwrap()).unwrap();
 
         let local_address = block_on(future::poll_fn(|cx| match swarm.poll_next_unpin(cx) {
@@ -2600,7 +2693,7 @@ mod tests {
     fn dial_self_by_id() {
         // Trying to dial self by passing the same `PeerId` shouldn't even be possible in the first
         // place.
-        let swarm = new_test_swarm::<_, ()>(dummy::ConnectionHandler).build();
+        let swarm = new_test_swarm::<_, ()>(dummy::ConnectionHandler);
         let peer_id = *swarm.local_peer_id();
         assert!(!swarm.is_connected(&peer_id));
     }
@@ -2611,7 +2704,7 @@ mod tests {
 
         let target = PeerId::random();
 
-        let mut swarm = new_test_swarm::<_, ()>(dummy::ConnectionHandler).build();
+        let mut swarm = new_test_swarm::<_, ()>(dummy::ConnectionHandler);
 
         let addresses = HashSet::from([
             multiaddr![Ip4([0, 0, 0, 0]), Tcp(rand::random::<u16>())],
@@ -2656,8 +2749,8 @@ mod tests {
     fn aborting_pending_connection_surfaces_error() {
         let _ = env_logger::try_init();
 
-        let mut dialer = new_test_swarm::<_, ()>(dummy::ConnectionHandler).build();
-        let mut listener = new_test_swarm::<_, ()>(dummy::ConnectionHandler).build();
+        let mut dialer = new_test_swarm::<_, ()>(dummy::ConnectionHandler);
+        let mut listener = new_test_swarm::<_, ()>(dummy::ConnectionHandler);
 
         let listener_peer_id = *listener.local_peer_id();
         listener.listen_on(multiaddr![Memory(0u64)]).unwrap();

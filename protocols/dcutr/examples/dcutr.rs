@@ -29,11 +29,12 @@ use libp2p::dns::DnsConfig;
 use libp2p::identify;
 use libp2p::noise;
 use libp2p::relay::v2::client::{self, Client};
-use libp2p::swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent};
+use libp2p::swarm::{NetworkBehaviour, SwarmEvent};
 use libp2p::tcp;
 use libp2p::Transport;
 use libp2p::{dcutr, ping};
 use libp2p::{identity, PeerId};
+use libp2p_swarm::Swarm;
 use log::info;
 use std::convert::TryInto;
 use std::error::Error;
@@ -156,11 +157,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     };
 
     let mut swarm = match ThreadPool::new() {
-        Ok(tp) => SwarmBuilder::with_executor(transport, behaviour, local_peer_id, tp),
-        Err(_) => SwarmBuilder::without_executor(transport, behaviour, local_peer_id),
+        Ok(tp) => Swarm::with_executor(transport, behaviour, local_peer_id, tp),
+        Err(_) => Swarm::without_executor(transport, behaviour, local_peer_id),
     }
-    .dial_concurrency_factor(10_u8.try_into().unwrap())
-    .build();
+    .dial_concurrency_factor(10_u8.try_into().unwrap());
 
     swarm
         .listen_on(
