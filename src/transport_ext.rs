@@ -56,7 +56,7 @@ pub trait TransportExt: Transport {
             let (peer_id, stream_muxer_box) = output.into();
             (
                 peer_id,
-                StreamMuxerBox::new(BandwidthLogging::new_with_sinks(
+                StreamMuxerBox::new(BandwidthLogging::new(
                     stream_muxer_box,
                     sinks_copy,
                 )),

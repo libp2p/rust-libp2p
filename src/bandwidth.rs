@@ -48,19 +48,7 @@ pub struct BandwidthLogging<SMInner> {
 
 impl<SMInner> BandwidthLogging<SMInner> {
     /// Creates a new [`BandwidthLogging`] around the stream muxer.
-    pub fn new(inner: SMInner) -> (Self, Arc<BandwidthSinks>) {
-        let sinks = BandwidthSinks::new();
-        (
-            Self {
-                inner,
-                sinks: sinks.clone(),
-            },
-            sinks,
-        )
-    }
-
-    /// Creates a new [`BandwidthLogging`] around the stream muxer.
-    pub(crate) fn new_with_sinks(inner: SMInner, sinks: Arc<BandwidthSinks>) -> Self {
+    pub(crate) fn new(inner: SMInner, sinks: Arc<BandwidthSinks>) -> Self {
         Self { inner, sinks }
     }
 }
@@ -69,7 +57,7 @@ impl<SMInner> StreamMuxer for BandwidthLogging<SMInner>
 where
     SMInner: StreamMuxer,
 {
-    type Substream = BandwidthConnecLogging<SMInner::Substream>;
+    type Substream = InstrumentedStream<SMInner::Substream>;
     type Error = SMInner::Error;
 
     fn poll(
@@ -86,7 +74,7 @@ where
     ) -> Poll<Result<Self::Substream, Self::Error>> {
         let this = self.project();
         let inner = ready!(this.inner.poll_inbound(cx)?);
-        let logged = BandwidthConnecLogging {
+        let logged = InstrumentedStream {
             inner,
             sinks: this.sinks.clone(),
         };
@@ -99,7 +87,7 @@ where
     ) -> Poll<Result<Self::Substream, Self::Error>> {
         let this = self.project();
         let inner = ready!(this.inner.poll_outbound(cx)?);
-        let logged = BandwidthConnecLogging {
+        let logged = InstrumentedStream {
             inner,
             sinks: this.sinks.clone(),
         };
@@ -148,13 +136,13 @@ impl BandwidthSinks {
 
 /// Wraps around an [`AsyncRead`] + [`AsyncWrite`] and logs the bandwidth that goes through it.
 #[pin_project::pin_project]
-pub struct BandwidthConnecLogging<SMInner> {
+pub struct InstrumentedStream<SMInner> {
     #[pin]
     inner: SMInner,
     sinks: Arc<BandwidthSinks>,
 }
 
-impl<SMInner: AsyncRead> AsyncRead for BandwidthConnecLogging<SMInner> {
+impl<SMInner: AsyncRead> AsyncRead for InstrumentedStream<SMInner> {
     fn poll_read(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -184,7 +172,7 @@ impl<SMInner: AsyncRead> AsyncRead for BandwidthConnecLogging<SMInner> {
     }
 }
 
-impl<SMInner: AsyncWrite> AsyncWrite for BandwidthConnecLogging<SMInner> {
+impl<SMInner: AsyncWrite> AsyncWrite for InstrumentedStream<SMInner> {
     fn poll_write(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -222,14 +210,4 @@ impl<SMInner: AsyncWrite> AsyncWrite for BandwidthConnecLogging<SMInner> {
         let this = self.project();
         this.inner.poll_close(cx)
     }
-}
-
-/// Wraps around a `Future` that produces a connection. Wraps the connection around a bandwidth
-/// counter.
-#[deprecated(since = "0.50.1")]
-#[pin_project::pin_project]
-pub struct BandwidthFuture<TInner> {
-    #[pin]
-    inner: TInner,
-    sinks: Arc<BandwidthSinks>,
 }
