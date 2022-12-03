@@ -36,7 +36,7 @@ use std::{
     task::{Context, Poll},
 };
 
-/// Wraps around a `StreamMuxer` and counts the number of bytes that go through all the opened
+/// Wraps around a [`StreamMuxer`] and counts the number of bytes that go through all the opened
 /// streams.
 #[derive(Clone)]
 #[pin_project::pin_project]
@@ -146,7 +146,7 @@ impl BandwidthSinks {
     }
 }
 
-/// Wraps around an `AsyncRead + AsyncWrite` and logs the bandwidth that goes through it.
+/// Wraps around an [`AsyncRead`] + [`AsyncWrite`] and logs the bandwidth that goes through it.
 #[pin_project::pin_project]
 pub struct BandwidthConnecLogging<SMInner> {
     #[pin]
