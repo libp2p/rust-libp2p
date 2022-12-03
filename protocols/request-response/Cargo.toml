@@ -24,7 +24,7 @@ unsigned-varint = { version = "0.7", features = ["std", "futures"] }
 
 [dev-dependencies]
 async-std = "1.6.2"
-env_logger = "0.9.0"
+env_logger = "0.10.0"
 libp2p = { path = "../..", features = ["full"] }
 rand = "0.8"
 
