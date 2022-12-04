@@ -542,7 +542,7 @@ type Action = NetworkBehaviourAction<
     <Behaviour as NetworkBehaviour>::ConnectionHandler,
 >;
 
-// Trait implemented for `AsClient` as `AsServer` to handle events from the inner [`request_response::Behaviour`] Protocol.
+// Trait implemented for `AsClient` and `AsServer` to handle events from the inner [`request_response::Behaviour`] Protocol.
 trait HandleInnerEvent {
     fn handle_event(
         &mut self,

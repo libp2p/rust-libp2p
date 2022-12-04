@@ -240,38 +240,38 @@ impl<TCodec: Codec> fmt::Debug for Event<TCodec> {
                 request: _,
                 sender: _,
             } => f
-                .debug_struct("HandlerEvent::Request")
+                .debug_struct("Event::Request")
                 .field("request_id", request_id)
                 .finish(),
             Event::Response {
                 request_id,
                 response: _,
             } => f
-                .debug_struct("HandlerEvent::Response")
+                .debug_struct("Event::Response")
                 .field("request_id", request_id)
                 .finish(),
             Event::ResponseSent(request_id) => f
-                .debug_tuple("HandlerEvent::ResponseSent")
+                .debug_tuple("Event::ResponseSent")
                 .field(request_id)
                 .finish(),
             Event::ResponseOmission(request_id) => f
-                .debug_tuple("HandlerEvent::ResponseOmission")
+                .debug_tuple("Event::ResponseOmission")
                 .field(request_id)
                 .finish(),
             Event::OutboundTimeout(request_id) => f
-                .debug_tuple("HandlerEvent::OutboundTimeout")
+                .debug_tuple("Event::OutboundTimeout")
                 .field(request_id)
                 .finish(),
             Event::OutboundUnsupportedProtocols(request_id) => f
-                .debug_tuple("HandlerEvent::OutboundUnsupportedProtocols")
+                .debug_tuple("Event::OutboundUnsupportedProtocols")
                 .field(request_id)
                 .finish(),
             Event::InboundTimeout(request_id) => f
-                .debug_tuple("HandlerEvent::InboundTimeout")
+                .debug_tuple("Event::InboundTimeout")
                 .field(request_id)
                 .finish(),
             Event::InboundUnsupportedProtocols(request_id) => f
-                .debug_tuple("HandlerEvent::InboundUnsupportedProtocols")
+                .debug_tuple("Event::InboundUnsupportedProtocols")
                 .field(request_id)
                 .finish(),
         }
@@ -316,7 +316,7 @@ where
         };
 
         // The handler waits for the request to come in. It then emits
-        // `HandlerEvent::Request` together with a
+        // `Event::Request` together with a
         // `ResponseChannel`.
         self.inbound
             .push(rq_recv.map_ok(move |rq| (rq, rs_send)).boxed());
