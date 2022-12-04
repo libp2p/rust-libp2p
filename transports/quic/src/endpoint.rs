@@ -18,7 +18,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{provider::Provider, transport::SocketFamily, ConnectError, Connection, Error};
+use crate::{
+    provider::Provider,
+    transport::{ProtocolVersion, SocketFamily},
+    ConnectError, Connection, Error,
+};
 
 use bytes::BytesMut;
 use futures::{
@@ -69,6 +73,16 @@ pub struct Config {
     /// of a connection.
     pub max_connection_data: u32,
 
+    /// Support QUIC version draft-29 for dialing and listening.
+    ///
+    /// Per default only QUIC Version 1 / [`libp2p_core::multiaddr::Protocol::QuicV1`]
+    /// is supported.
+    ///
+    /// If support for draft-29 is enabled servers support draft-29 and version 1 on all
+    /// QUIC listening addresses.
+    /// As client the version is chosen based on the remote's address.
+    pub support_draft_29: bool,
+
     /// TLS client config for the inner [`quinn_proto::ClientConfig`].
     client_tls_config: Arc<rustls::ClientConfig>,
     /// TLS server config for the inner [`quinn_proto::ServerConfig`].
@@ -83,6 +97,7 @@ impl Config {
         Self {
             client_tls_config,
             server_tls_config,
+            support_draft_29: false,
             handshake_timeout: Duration::from_secs(5),
             max_idle_timeout: 30 * 1000,
             max_concurrent_stream_limit: 256,
@@ -113,6 +128,7 @@ impl From<Config> for QuinnConfig {
             keep_alive_interval,
             max_connection_data,
             max_stream_data,
+            support_draft_29,
             handshake_timeout: _,
         } = config;
         let mut transport = quinn_proto::TransportConfig::default();
@@ -138,7 +154,10 @@ impl From<Config> for QuinnConfig {
         let mut client_config = quinn_proto::ClientConfig::new(client_tls_config);
         client_config.transport_config(transport);
 
-        let endpoint_config = quinn_proto::EndpointConfig::default();
+        let mut endpoint_config = quinn_proto::EndpointConfig::default();
+        if !support_draft_29 {
+            endpoint_config.supported_versions(vec![1]);
+        }
 
         QuinnConfig {
             client_config,
@@ -280,6 +299,8 @@ pub enum ToEndpoint {
     Dial {
         /// UDP address to connect to.
         addr: SocketAddr,
+        /// Version to dial the remote on.
+        version: ProtocolVersion,
         /// Channel to return the result of the dialing to.
         result: oneshot::Sender<Result<Connection, Error>>,
     },
@@ -403,18 +424,25 @@ impl<P: Provider> Driver<P> {
         to_endpoint: ToEndpoint,
     ) -> ControlFlow<(), Option<quinn_proto::Transmit>> {
         match to_endpoint {
-            ToEndpoint::Dial { addr, result } => {
+            ToEndpoint::Dial {
+                addr,
+                result,
+                version,
+            } => {
+                let mut config = self.client_config.clone();
+                if version == ProtocolVersion::Draft29 {
+                    config.version(0xff00_001d);
+                }
                 // This `"l"` seems necessary because an empty string is an invalid domain
                 // name. While we don't use domain names, the underlying rustls library
                 // is based upon the assumption that we do.
-                let (connection_id, connection) =
-                    match self.endpoint.connect(self.client_config.clone(), addr, "l") {
-                        Ok(c) => c,
-                        Err(err) => {
-                            let _ = result.send(Err(ConnectError::from(err).into()));
-                            return ControlFlow::Continue(None);
-                        }
-                    };
+                let (connection_id, connection) = match self.endpoint.connect(config, addr, "l") {
+                    Ok(c) => c,
+                    Err(err) => {
+                        let _ = result.send(Err(ConnectError::from(err).into()));
+                        return ControlFlow::Continue(None);
+                    }
+                };
 
                 debug_assert_eq!(connection.side(), quinn_proto::Side::Client);
                 let (tx, rx) = mpsc::channel(CHANNEL_CAPACITY);

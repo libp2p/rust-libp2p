@@ -20,7 +20,7 @@ unsigned-varint = "0.7"
 
 [dev-dependencies]
 async-std = "1.6.2"
-env_logger = "0.9"
+env_logger = "0.10"
 libp2p = { path = "../..", features = ["full"] }
 quickcheck = { package = "quickcheck-ext", path = "../../misc/quickcheck-ext" }
 rand = "0.8"
