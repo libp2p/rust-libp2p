@@ -32,7 +32,7 @@ pub struct Metrics {
     connections_incoming_error: Family<IncomingConnectionErrorLabels, Counter>,
 
     connections_established: Family<ConnectionEstablishedLabels, Counter>,
-    connection_establishment_duration: Family<ConnectionEstablishedLabels, Histogram>,
+    connections_establishment_duration: Family<ConnectionEstablishmentDurationLabels, Histogram>,
     connections_closed: Family<ConnectionClosedLabels, Counter>,
 
     new_listen_addr: Family<AddressLabels, Counter>,
@@ -127,13 +127,13 @@ impl Metrics {
             Box::new(connections_closed.clone()),
         );
 
-        let connection_establishment_duration = Family::new_with_constructor(
+        let connections_establishment_duration = Family::new_with_constructor(
             create_connection_establishment_duration_histogram as fn() -> Histogram,
         );
         sub_registry.register(
             "connection_establishment_duration",
             "Time it took (locally) to establish connections",
-            Box::new(connection_establishment_duration.clone()),
+            Box::new(connections_establishment_duration.clone()),
         );
 
         Self {
@@ -148,7 +148,7 @@ impl Metrics {
             dial_attempt,
             outgoing_connection_error,
             connected_to_banned_peer,
-            connection_establishment_duration,
+            connections_establishment_duration,
         }
     }
 }
@@ -159,7 +159,7 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
             libp2p_swarm::SwarmEvent::Behaviour(_) => {}
             libp2p_swarm::SwarmEvent::ConnectionEstablished {
                 endpoint,
-                time_taken,
+                established_in: time_taken,
                 ..
             } => {
                 let labels = ConnectionEstablishedLabels {
@@ -167,7 +167,7 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
                     protocols: protocol_stack::as_string(endpoint.get_remote_address()),
                 };
                 self.connections_established.get_or_create(&labels).inc();
-                self.connection_establishment_duration
+                self.connections_establishment_duration
                     .get_or_create(&labels)
                     .observe(time_taken.as_secs_f64());
             }
@@ -298,6 +298,8 @@ struct ConnectionEstablishedLabels {
     role: Role,
     protocols: String,
 }
+
+type ConnectionEstablishmentDurationLabels = ConnectionEstablishedLabels;
 
 #[derive(Encode, Hash, Clone, Eq, PartialEq)]
 struct ConnectionClosedLabels {

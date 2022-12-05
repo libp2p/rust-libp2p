@@ -192,7 +192,7 @@ pub enum SwarmEvent<TBehaviourOutEvent, THandlerErr> {
         /// of dial attempts that failed before the one successful dial.
         concurrent_dial_errors: Option<Vec<(Multiaddr, TransportError<io::Error>)>>,
         /// How long it took to establish this connection
-        time_taken: std::time::Duration,
+        established_in: std::time::Duration,
     },
     /// A connection with the given peer has been closed,
     /// possibly as a result of an error.
@@ -864,7 +864,7 @@ where
                         num_established,
                         endpoint,
                         concurrent_dial_errors,
-                        time_taken,
+                        established_in: time_taken,
                     });
                 }
             }
