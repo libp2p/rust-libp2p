@@ -157,8 +157,6 @@ mod tests {
 
     #[test]
     fn mismatched_signature() {
-        use prost::Message;
-
         let addr: Multiaddr = HOME.parse().unwrap();
 
         let envelope = {
@@ -167,18 +165,15 @@ mod tests {
 
             let payload = {
                 let record = peer_record_proto::PeerRecord {
-                    peer_id: identity_a.public().to_peer_id().to_bytes(),
+                    peer_id: Cow::from(identity_a.public().to_peer_id().to_bytes()),
                     seq: 0,
-                    addresses: vec![peer_record_proto::peer_record::AddressInfo {
-                        multiaddr: addr.to_vec(),
+                    addresses: vec![peer_record_proto::mod_PeerRecord::AddressInfo {
+                        multiaddr: Cow::from(addr.to_vec()),
                     }],
                 };
 
-                let mut buf = Vec::with_capacity(record.encoded_len());
-                record
-                    .encode(&mut buf)
-                    .expect("Vec<u8> provides capacity as needed");
-                buf
+                quick_protobuf::serialize_into_vec(&record)
+                    .expect("Vec<u8> provides capacity as needed")
             };
 
             SignedEnvelope::new(

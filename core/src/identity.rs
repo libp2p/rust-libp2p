@@ -282,7 +282,7 @@ impl TryFrom<keys_proto::PublicKey<'_>> for PublicKey {
                 ed25519::PublicKey::decode(&pubkey.Data).map(PublicKey::Ed25519)
             }
             #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
-            keys_proto::KeyType::Rsa => {
+            keys_proto::KeyType::RSA => {
                 rsa::PublicKey::decode_x509(&pubkey.Data).map(PublicKey::Rsa)
             }
             #[cfg(any(not(feature = "rsa"), target_arch = "wasm32"))]
@@ -300,7 +300,7 @@ impl TryFrom<keys_proto::PublicKey<'_>> for PublicKey {
                 Err(DecodingError::missing_feature("secp256k1"))
             }
             #[cfg(feature = "ecdsa")]
-            keys_proto::KeyType::Ecdsa => {
+            keys_proto::KeyType::ECDSA => {
                 ecdsa::PublicKey::decode_der(&pubkey.Data).map(PublicKey::Ecdsa)
             }
             #[cfg(not(feature = "ecdsa"))]
@@ -333,9 +333,9 @@ mod tests {
     #[test]
     fn keypair_from_protobuf_encoding() {
         // E.g. retrieved from an IPFS config file.
-        let base_64_encoded = "CAESQL6vdKQuznQosTrW7FWI9At+XX7EBf0BnZLhb6w+N+XSQSdfInl6c7U4NuxXJlhKcRBlBw9d0tj2dfBIVf6mcPA=";
+        let base_64_encoded = "RAgBEkC+r3SkLs50KLE61uxViPQLfl1+xAX9AZ2S4W+sPjfl0kEnXyJ5enO1ODbsVyZYSnEQZQcPXdLY9nXwSFX+pnDw";
         let expected_peer_id =
-            PeerId::from_str("12D3KooWEChVMMMzV8acJ53mJHrw1pQ27UAGkCxWXLJutbeUMvVu").unwrap();
+            PeerId::from_str("16VfNUn8nhtbaQVrQwwBekWYnWNJ4uJRv8pD6T1n1h3CFJr1MMgZM").unwrap();
 
         let encoded = base64::decode(base_64_encoded).unwrap();
 
