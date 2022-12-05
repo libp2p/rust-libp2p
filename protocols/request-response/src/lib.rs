@@ -22,7 +22,7 @@
 //!
 //! ## General Usage
 //!
-//! The [`Behaviour`] struct is a `NetworkBehaviour` that implements a generic
+//! The [`Behaviour`] struct is a [`NetworkBehaviour`] that implements a generic
 //! request/response protocol or protocol family, whereby each request is
 //! sent over a new substream on a connection. `Behaviour` is generic
 //! over the actual messages being sent, which are defined in terms of a
@@ -880,7 +880,7 @@ where
                     ));
             }
             handler::Event::InboundTimeout(request_id) => {
-                // Note: `HandlerEvent::InboundTimeout` is emitted both for timing
+                // Note: `Event::InboundTimeout` is emitted both for timing
                 // out to receive the request and for timing out sending the response. In the former
                 // case the request is never added to `pending_outbound_responses` and thus one can
                 // not assert the request_id to be present before removing it.
@@ -913,7 +913,7 @@ where
             }
             handler::Event::InboundUnsupportedProtocols(request_id) => {
                 // Note: No need to call `self.remove_pending_outbound_response`,
-                // `HandlerEvent::Request` was never emitted for this request and
+                // `Event::Request` was never emitted for this request and
                 // thus request was never added to `pending_outbound_responses`.
                 self.pending_events
                     .push_back(NetworkBehaviourAction::GenerateEvent(
