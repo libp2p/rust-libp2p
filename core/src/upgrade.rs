@@ -139,8 +139,15 @@ impl<T: AsRef<[u8]>> ProtocolName for T {
 ///
 /// ```rust
 /// # use libp2p_core::upgrade::DisplayProtocolName;
-/// assert_eq!(DisplayProtocolName("hello").to_string(), "hello");
-/// assert_eq!(DisplayProtocolName("hellö/").to_string(), "hell<C3><B6>/");
+/// assert_eq!(DisplayProtocolName(b"/hello/1.0").to_string(), "/hello/1.0");
+/// assert_eq!(DisplayProtocolName("/hellö/").to_string(), "/hell<C3><B6>/");
+/// # assert_eq!(
+/// #     DisplayProtocolName((0u8..=255).collect::<Vec<_>>()).to_string(),
+/// #     (0..32).map(|c| format!("<{:02X}>", c))
+/// #         .chain((32..127).map(|c| format!("{}", char::from_u32(c).unwrap())))
+/// #         .chain((127..256).map(|c| format!("<{:02X}>", c)))
+/// #         .collect::<String>()
+/// # );
 /// ```
 pub struct DisplayProtocolName<N>(pub N);
 
