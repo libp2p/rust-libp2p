@@ -143,7 +143,7 @@ pub enum Message<TRequest, TResponse, TChannelResponse = TResponse> {
     },
 }
 
-/// The events emitted by a [`Behaviour`] protocol.
+/// The events emitted by a request-response [`Behaviour`].
 #[derive(Debug)]
 pub enum Event<TRequest, TResponse, TChannelResponse = TResponse> {
     /// An incoming message (request or response).
