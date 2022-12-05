@@ -139,9 +139,11 @@ pub trait Codec {
 }
 
 #[allow(deprecated)]
+#[async_trait]
 impl<U> Codec for U
 where
-    U: RequestResponseCodec,
+    U: RequestResponseCodec + Send,
+    U::Protocol: Sync,
 {
     type Protocol = U::Protocol;
 
@@ -149,85 +151,49 @@ where
 
     type Response = U::Response;
 
-    fn read_request<'life0, 'life1, 'life2, 'async_trait, T>(
-        &'life0 mut self,
-        protocol: &'life1 Self::Protocol,
-        io: &'life2 mut T,
-    ) -> core::pin::Pin<
-        Box<
-            dyn core::future::Future<Output = io::Result<Self::Request>>
-                + core::marker::Send
-                + 'async_trait,
-        >,
-    >
+    async fn read_request<T>(
+        &mut self,
+        protocol: &Self::Protocol,
+        io: &mut T,
+    ) -> io::Result<Self::Request>
     where
         T: AsyncRead + Unpin + Send,
-        T: 'async_trait,
-        'life0: 'async_trait,
-        'life1: 'async_trait,
-        'life2: 'async_trait,
-        Self: 'async_trait,
     {
-        self.read_request(protocol, io)
+        self.read_request(protocol, io).await
     }
 
-    fn read_response<'life0, 'life1, 'life2, 'async_trait, T>(
-        &'life0 mut self,
-        protocol: &'life1 Self::Protocol,
-        io: &'life2 mut T,
-    ) -> core::pin::Pin<
-        Box<
-            dyn core::future::Future<Output = io::Result<Self::Response>>
-                + core::marker::Send
-                + 'async_trait,
-        >,
-    >
+    async fn read_response<T>(
+        &mut self,
+        protocol: &Self::Protocol,
+        io: &mut T,
+    ) -> io::Result<Self::Response>
     where
         T: AsyncRead + Unpin + Send,
-        T: 'async_trait,
-        'life0: 'async_trait,
-        'life1: 'async_trait,
-        'life2: 'async_trait,
-        Self: 'async_trait,
     {
-        self.read_response(protocol, io)
+        self.read_response(protocol, io).await
     }
 
-    fn write_request<'life0, 'life1, 'life2, 'async_trait, T>(
-        &'life0 mut self,
-        protocol: &'life1 Self::Protocol,
-        io: &'life2 mut T,
+    async fn write_request<T>(
+        &mut self,
+        protocol: &Self::Protocol,
+        io: &mut T,
         req: Self::Request,
-    ) -> core::pin::Pin<
-        Box<dyn core::future::Future<Output = io::Result<()>> + core::marker::Send + 'async_trait>,
-    >
+    ) -> io::Result<()>
     where
         T: AsyncWrite + Unpin + Send,
-        T: 'async_trait,
-        'life0: 'async_trait,
-        'life1: 'async_trait,
-        'life2: 'async_trait,
-        Self: 'async_trait,
     {
-        self.write_request(protocol, io, req)
+        self.write_request(protocol, io, req).await
     }
 
-    fn write_response<'life0, 'life1, 'life2, 'async_trait, T>(
-        &'life0 mut self,
-        protocol: &'life1 Self::Protocol,
-        io: &'life2 mut T,
+    async fn write_response<T>(
+        &mut self,
+        protocol: &Self::Protocol,
+        io: &mut T,
         res: Self::Response,
-    ) -> core::pin::Pin<
-        Box<dyn core::future::Future<Output = io::Result<()>> + core::marker::Send + 'async_trait>,
-    >
+    ) -> io::Result<()>
     where
         T: AsyncWrite + Unpin + Send,
-        T: 'async_trait,
-        'life0: 'async_trait,
-        'life1: 'async_trait,
-        'life2: 'async_trait,
-        Self: 'async_trait,
     {
-        self.write_response(protocol, io, res)
+        self.write_response(protocol, io, res).await
     }
 }
