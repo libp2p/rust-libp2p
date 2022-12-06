@@ -75,7 +75,7 @@ impl SignedEnvelope {
 
     /// Encode this [`SignedEnvelope`] using the protobuf encoding specified in the RFC.
     pub fn into_protobuf_encoding(self) -> Vec<u8> {
-        let envelope = crate::envelope_proto::Envelope {
+        let envelope = envelope_proto::Envelope {
             public_key: Some((&self.key).into()),
             payload_type: Cow::Borrowed(&self.payload_type),
             payload: Cow::Borrowed(&self.payload),
