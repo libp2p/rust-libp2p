@@ -485,7 +485,7 @@ where
     /// # use libp2p_core::transport::dummy::DummyTransport;
     /// # use libp2p_swarm::dummy;
     /// #
-    /// let mut swarm = Swarm::new(
+    /// let mut swarm = Swarm::without_executor(
     ///   DummyTransport::new().boxed(),
     ///   dummy::Behaviour,
     ///   PeerId::random(),
