@@ -823,7 +823,7 @@ where
                 endpoint,
                 other_established_connection_ids,
                 concurrent_dial_errors,
-                established_in: time_taken,
+                established_in,
             } => {
                 if self.banned_peers.contains(&peer_id) {
                     // Mark the connection for the banned peer as banned, thus withholding any
@@ -864,7 +864,7 @@ where
                         num_established,
                         endpoint,
                         concurrent_dial_errors,
-                        established_in: time_taken,
+                        established_in,
                     });
                 }
             }
