@@ -29,7 +29,7 @@ void = "1"
 prost-build = "0.11"
 
 [dev-dependencies]
-env_logger = "0.9.0"
+env_logger = "0.10.0"
 libp2p = { path = "../..", features = ["full"] }
 rand = "0.8"
 clap = { version = "4.0.13", features = ["derive"] }

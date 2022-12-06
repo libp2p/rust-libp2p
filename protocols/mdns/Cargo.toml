@@ -31,7 +31,7 @@ async-io = ["dep:async-io", "if-watch/smol"]
 
 [dev-dependencies]
 async-std = { version = "1.9.0", features = ["attributes"] }
-env_logger = "0.9.0"
+env_logger = "0.10.0"
 libp2p = { path = "../..", features = ["full"] }
 tokio = { version = "1.19", default-features = false, features = ["macros", "rt", "rt-multi-thread", "time"] }
 
