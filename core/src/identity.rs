@@ -166,8 +166,8 @@ impl Keypair {
 
     /// Decode a private key from a protobuf structure and parse it as a [`Keypair`].
     pub fn from_protobuf_encoding(bytes: &[u8]) -> Result<Keypair, DecodingError> {
-        let mut private_key: zeroize::Zeroizing<keys_proto::PrivateKey> =
-            quick_protobuf::deserialize_from_slice(bytes)
+        let mut private_key =
+            quick_protobuf::deserialize_from_slice::<keys_proto::PrivateKey>(bytes)
                 .map_err(|e| DecodingError::bad_protobuf("private key bytes", e))
                 .map(zeroize::Zeroizing::new)?;
 

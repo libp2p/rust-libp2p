@@ -74,7 +74,7 @@ impl PeerRecord {
                 addresses: addresses
                     .iter()
                     .map(|m| peer_record_proto::mod_PeerRecord::AddressInfo {
-                        multiaddr: Cow::from(m.to_vec()),
+                        multiaddr: Cow::Borrowed(m.as_ref()),
                     })
                     .collect(),
             };

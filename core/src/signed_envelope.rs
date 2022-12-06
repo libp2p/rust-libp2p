@@ -77,9 +77,9 @@ impl SignedEnvelope {
     pub fn into_protobuf_encoding(self) -> Vec<u8> {
         let envelope = crate::envelope_proto::Envelope {
             public_key: Some((&self.key).into()),
-            payload_type: Cow::from(self.payload_type),
-            payload: Cow::from(self.payload),
-            signature: Cow::from(self.signature),
+            payload_type: Cow::Borrowed(&self.payload_type),
+            payload: Cow::Borrowed(&self.payload),
+            signature: Cow::Borrowed(&self.signature),
         };
 
         quick_protobuf::serialize_into_vec(&envelope).expect("Encoding to succeed.")
