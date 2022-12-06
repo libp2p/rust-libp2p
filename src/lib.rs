@@ -18,6 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+// Remove this note before publishing
+//! # ⚠️ WARNING You are viewing the master docs
+//!
 //! libp2p is a modular peer-to-peer networking framework.
 //!
 //! To learn more about the general libp2p multi-language framework visit
