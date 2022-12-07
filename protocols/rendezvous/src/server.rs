@@ -29,8 +29,8 @@ use futures::stream::FuturesUnordered;
 use futures::{FutureExt, StreamExt};
 use libp2p_core::connection::ConnectionId;
 use libp2p_core::{ConnectedPoint, PeerId};
+use libp2p_swarm::behaviour::FromSwarm;
 use libp2p_swarm::behaviour::THandlerInEvent;
-use libp2p_swarm::behaviour::{ConnectionDenied, FromSwarm};
 use libp2p_swarm::{
     CloseConnection, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
 };
@@ -116,7 +116,7 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         _: &PeerId,
         _: &ConnectedPoint,
-    ) -> Result<Self::ConnectionHandler, ConnectionDenied> {
+    ) -> Result<Self::ConnectionHandler, Box<dyn std::error::Error + Send + 'static>> {
         let initial_keep_alive = Duration::from_secs(30);
 
         Ok(SubstreamConnectionHandler::new_inbound_only(

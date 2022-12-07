@@ -48,7 +48,7 @@ mod protocol;
 use handler::Handler;
 pub use handler::{Config, Failure, Success};
 use libp2p_core::{connection::ConnectionId, ConnectedPoint, PeerId};
-use libp2p_swarm::behaviour::{ConnectionDenied, THandlerInEvent};
+use libp2p_swarm::behaviour::THandlerInEvent;
 use libp2p_swarm::{
     behaviour::FromSwarm, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
 };
@@ -124,7 +124,8 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         _: &PeerId,
         _: &ConnectedPoint,
-    ) -> std::result::Result<Self::ConnectionHandler, ConnectionDenied> {
+    ) -> std::result::Result<Self::ConnectionHandler, Box<dyn std::error::Error + Send + 'static>>
+    {
         Ok(Handler::new(self.config.clone()))
     }
 

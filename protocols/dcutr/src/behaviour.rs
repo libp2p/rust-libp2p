@@ -27,8 +27,7 @@ use libp2p_core::connection::{ConnectedPoint, ConnectionId};
 use libp2p_core::multiaddr::Protocol;
 use libp2p_core::{Multiaddr, PeerId};
 use libp2p_swarm::behaviour::{
-    ConnectionClosed, ConnectionDenied, ConnectionEstablished, DialFailure, FromSwarm,
-    THandlerInEvent,
+    ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm, THandlerInEvent,
 };
 use libp2p_swarm::dial_opts::{self, DialOpts};
 use libp2p_swarm::{
@@ -216,7 +215,7 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         peer: &PeerId,
         connected_point: &ConnectedPoint,
-    ) -> Result<Self::ConnectionHandler, ConnectionDenied> {
+    ) -> Result<Self::ConnectionHandler, Box<dyn std::error::Error + Send + 'static>> {
         match (
             self.awaiting_direct_inbound_connections.entry(*peer),
             self.awaiting_direct_outbound_connections.entry(*peer),

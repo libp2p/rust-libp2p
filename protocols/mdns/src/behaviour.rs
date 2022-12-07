@@ -28,7 +28,7 @@ use crate::Config;
 use futures::Stream;
 use if_watch::IfEvent;
 use libp2p_core::{Multiaddr, PeerId};
-use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionDenied, FromSwarm};
+use libp2p_swarm::behaviour::{ConnectionClosed, FromSwarm};
 use libp2p_swarm::{
     dummy, ConnectionHandler, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
 };
@@ -172,7 +172,7 @@ where
         &mut self,
         _: &PeerId,
         _: &libp2p_core::ConnectedPoint,
-    ) -> Result<Self::ConnectionHandler, ConnectionDenied> {
+    ) -> Result<Self::ConnectionHandler, Box<dyn std::error::Error + Send + 'static>> {
         Ok(dummy::ConnectionHandler)
     }
 

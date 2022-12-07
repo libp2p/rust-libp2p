@@ -66,7 +66,6 @@ use crate::types::{
 };
 use crate::types::{GossipsubRpc, PeerConnections, PeerKind};
 use crate::{rpc_proto, TopicScoreParams};
-use libp2p_swarm::behaviour::ConnectionDenied;
 use std::{cmp::Ordering::Equal, fmt::Debug};
 use wasm_timer::Interval;
 
@@ -3302,7 +3301,7 @@ where
         &mut self,
         _: &PeerId,
         _: &ConnectedPoint,
-    ) -> Result<Self::ConnectionHandler, ConnectionDenied> {
+    ) -> Result<Self::ConnectionHandler, Box<dyn std::error::Error + Send + 'static>> {
         let protocol_config = ProtocolConfig::new(
             self.config.protocol_id().clone(),
             self.config.custom_id_version().clone(),

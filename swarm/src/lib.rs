@@ -73,7 +73,6 @@ pub mod keep_alive;
 pub mod derive_prelude {
     pub use crate::behaviour::AddressChange;
     pub use crate::behaviour::ConnectionClosed;
-    pub use crate::behaviour::ConnectionDenied;
     pub use crate::behaviour::ConnectionEstablished;
     pub use crate::behaviour::DialFailure;
     pub use crate::behaviour::ExpiredExternalAddr;
@@ -198,6 +197,13 @@ pub enum SwarmEvent<TBehaviourOutEvent, THandlerErr> {
         /// Reason for the disconnection, if it was not a successful
         /// active close.
         cause: Option<ConnectionError<THandlerErr>>,
+    },
+    ConnectionDenied {
+        /// Identity of the peer that we have connected to.
+        peer_id: PeerId,
+        /// Endpoint of the connection that has been closed.
+        endpoint: ConnectedPoint,
+        cause: Box<dyn error::Error + Send + 'static>,
     },
     /// A new connection arrived on a listener and is in the process of protocol negotiation.
     ///
@@ -930,6 +936,18 @@ where
                     cause: error,
                     num_established,
                 });
+            }
+            PoolEvent::ConnectionDenied {
+                peer_id,
+                endpoint,
+                cause,
+                ..
+            } => {
+                return Some(SwarmEvent::ConnectionDenied {
+                    peer_id,
+                    endpoint,
+                    cause,
+                })
             }
             PoolEvent::ConnectionEvent { peer_id, id, event } => {
                 if self.banned_peer_connections.contains(&id) {

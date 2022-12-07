@@ -19,9 +19,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::behaviour::{
-    ConnectionClosed, ConnectionDenied, ConnectionEstablished, DialFailure, ExpiredExternalAddr,
-    ExpiredListenAddr, FromSwarm, ListenerClosed, ListenerError, NewExternalAddr, NewListenAddr,
-    NewListener,
+    ConnectionClosed, ConnectionEstablished, DialFailure, ExpiredExternalAddr, ExpiredListenAddr,
+    FromSwarm, ListenerClosed, ListenerError, NewExternalAddr, NewListenAddr, NewListener,
 };
 use crate::{
     behaviour::THandlerInEvent, ConnectionHandler, NetworkBehaviour, NetworkBehaviourAction,
@@ -77,7 +76,7 @@ where
         &mut self,
         _: &PeerId,
         _: &ConnectedPoint,
-    ) -> Result<Self::ConnectionHandler, ConnectionDenied> {
+    ) -> Result<Self::ConnectionHandler, Box<dyn std::error::Error + Send + 'static>> {
         Ok(self.handler_proto.clone())
     }
 
@@ -379,7 +378,7 @@ where
         &mut self,
         peer: &PeerId,
         endpoint: &ConnectedPoint,
-    ) -> Result<Self::ConnectionHandler, ConnectionDenied> {
+    ) -> Result<Self::ConnectionHandler, Box<dyn std::error::Error + Send + 'static>> {
         self.inner.new_handler(peer, endpoint)
     }
 

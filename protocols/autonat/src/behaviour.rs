@@ -35,7 +35,7 @@ use libp2p_request_response::{
     ProtocolSupport, RequestId, RequestResponse, RequestResponseConfig, RequestResponseEvent,
     RequestResponseMessage, ResponseChannel,
 };
-use libp2p_swarm::behaviour::{ConnectionDenied, THandlerInEvent};
+use libp2p_swarm::behaviour::THandlerInEvent;
 use libp2p_swarm::{
     behaviour::{
         AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, ExpiredExternalAddr,
@@ -461,7 +461,7 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         peer: &PeerId,
         connected_point: &ConnectedPoint,
-    ) -> Result<Self::ConnectionHandler, ConnectionDenied> {
+    ) -> Result<Self::ConnectionHandler, Box<dyn std::error::Error + Send + 'static>> {
         self.inner.new_handler(peer, connected_point)
     }
 

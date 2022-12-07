@@ -143,7 +143,7 @@ pub trait NetworkBehaviour: 'static {
         &mut self,
         peer: &PeerId,
         connected_point: &ConnectedPoint,
-    ) -> Result<Self::ConnectionHandler, ConnectionDenied>;
+    ) -> Result<Self::ConnectionHandler, Box<dyn std::error::Error + Send + 'static>>;
 
     /// Addresses that this behaviour is aware of for this specific peer, and that may allow
     /// reaching the peer.
@@ -369,10 +369,6 @@ pub trait NetworkBehaviour: 'static {
         params: &mut impl PollParameters,
     ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self::ConnectionHandler>>>;
 }
-
-#[derive(Debug)]
-#[non_exhaustive]
-pub enum ConnectionDenied {}
 
 /// Parameters passed to `poll()`, that the `NetworkBehaviour` has access to.
 pub trait PollParameters {

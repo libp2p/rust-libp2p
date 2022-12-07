@@ -52,7 +52,6 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         .unwrap_or_else(|| syn::parse_quote! { ::libp2p::swarm::derive_prelude });
 
     let multiaddr = quote! { #prelude_path::Multiaddr };
-    let connection_denied = quote! { #prelude_path::ConnectionDenied };
     let trait_to_impl = quote! { #prelude_path::NetworkBehaviour };
     let either_ident = quote! { #prelude_path::EitherOutput };
     let network_behaviour_action = quote! { #prelude_path::NetworkBehaviourAction };
@@ -560,7 +559,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             type OutEvent = #out_event_reference;
 
             #[allow(clippy::needless_question_mark)]
-            fn new_handler(&mut self, peer: &#peer_id, connected_point: &#connected_point) -> Result<Self::ConnectionHandler, #connection_denied> {
+            fn new_handler(&mut self, peer: &#peer_id, connected_point: &#connected_point) -> Result<Self::ConnectionHandler, Box<dyn std::error::Error + Send + 'static>> {
                 use #connection_handler;
 
                 Ok(#new_handler)

@@ -18,10 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::behaviour::THandlerInEvent;
 use crate::behaviour::{
     self, inject_from_swarm, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
 };
-use crate::behaviour::{ConnectionDenied, THandlerInEvent};
 use either::Either;
 use libp2p_core::{ConnectedPoint, Multiaddr, PeerId};
 use std::{task::Context, task::Poll};
@@ -39,7 +39,7 @@ where
         &mut self,
         peer: &PeerId,
         connected_point: &ConnectedPoint,
-    ) -> Result<Self::ConnectionHandler, ConnectionDenied> {
+    ) -> Result<Self::ConnectionHandler, Box<dyn std::error::Error + Send + 'static>> {
         Ok(match self {
             Either::Left(a) => Either::Left(a.new_handler(peer, connected_point)?),
             Either::Right(b) => Either::Right(b.new_handler(peer, connected_point)?),

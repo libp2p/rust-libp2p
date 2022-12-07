@@ -18,8 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::behaviour::THandlerInEvent;
 use crate::behaviour::{inject_from_swarm, FromSwarm};
-use crate::behaviour::{ConnectionDenied, THandlerInEvent};
 use crate::handler::{
     ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr,
     DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound, KeepAlive,
@@ -76,7 +76,7 @@ where
         &mut self,
         peer: &PeerId,
         connected_point: &ConnectedPoint,
-    ) -> Result<Self::ConnectionHandler, ConnectionDenied> {
+    ) -> Result<Self::ConnectionHandler, Box<dyn std::error::Error + Send + 'static>> {
         Ok(ToggleConnectionHandler {
             inner: match self.inner.as_mut() {
                 None => None,

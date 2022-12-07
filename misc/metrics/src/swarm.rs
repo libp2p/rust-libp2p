@@ -31,6 +31,8 @@ pub struct Metrics {
     connections_established: Family<ConnectionEstablishedLabels, Counter>,
     connections_closed: Family<ConnectionClosedLabels, Counter>,
 
+    connections_denied: Family<AddressLabels, Counter>,
+
     new_listen_addr: Family<AddressLabels, Counter>,
     expired_listen_addr: Family<AddressLabels, Counter>,
 
@@ -58,6 +60,13 @@ impl Metrics {
             "connections_incoming_error",
             "Number of incoming connection errors",
             Box::new(connections_incoming_error.clone()),
+        );
+
+        let connections_denied = Family::default();
+        sub_registry.register(
+            "connections_denied",
+            "Number of denied connections",
+            Box::new(connections_denied.clone()),
         );
 
         let new_listen_addr = Family::default();
@@ -128,6 +137,7 @@ impl Metrics {
             connections_incoming_error,
             connections_established,
             connections_closed,
+            connections_denied,
             new_listen_addr,
             expired_listen_addr,
             listener_closed,
@@ -268,6 +278,13 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
             }
             libp2p_swarm::SwarmEvent::Dialing(_) => {
                 self.dial_attempt.inc();
+            }
+            libp2p_swarm::SwarmEvent::ConnectionDenied { endpoint, .. } => {
+                self.connections_denied
+                    .get_or_create(&AddressLabels {
+                        protocols: protocol_stack::as_string(endpoint.get_remote_address()),
+                    })
+                    .inc();
             }
         }
     }

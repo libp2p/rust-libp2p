@@ -41,8 +41,8 @@ use fnv::{FnvHashMap, FnvHashSet};
 use instant::Instant;
 use libp2p_core::{connection::ConnectionId, ConnectedPoint, Multiaddr, PeerId};
 use libp2p_swarm::behaviour::{
-    AddressChange, ConnectionClosed, ConnectionDenied, ConnectionEstablished, DialFailure,
-    ExpiredListenAddr, FromSwarm, NewExternalAddr, NewListenAddr, THandlerInEvent,
+    AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, ExpiredListenAddr,
+    FromSwarm, NewExternalAddr, NewListenAddr, THandlerInEvent,
 };
 use libp2p_swarm::{
     dial_opts::{self, DialOpts},
@@ -1979,7 +1979,7 @@ where
         &mut self,
         remote_peer_id: &PeerId,
         endpoint: &ConnectedPoint,
-    ) -> Result<Self::ConnectionHandler, ConnectionDenied> {
+    ) -> Result<Self::ConnectionHandler, Box<dyn std::error::Error + Send + 'static>> {
         Ok(KademliaHandler::new(
             KademliaHandlerConfig {
                 protocol_config: self.protocol_config.clone(),

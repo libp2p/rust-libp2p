@@ -27,8 +27,8 @@ use crate::FloodsubConfig;
 use cuckoofilter::{CuckooError, CuckooFilter};
 use fnv::FnvHashSet;
 use libp2p_core::{connection::ConnectionId, ConnectedPoint, PeerId};
+use libp2p_swarm::behaviour::THandlerInEvent;
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm};
-use libp2p_swarm::behaviour::{ConnectionDenied, THandlerInEvent};
 use libp2p_swarm::ConnectionHandler;
 use libp2p_swarm::{
     dial_opts::DialOpts, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, OneShotHandler,
@@ -340,7 +340,7 @@ impl NetworkBehaviour for Floodsub {
         &mut self,
         _: &PeerId,
         _: &ConnectedPoint,
-    ) -> Result<Self::ConnectionHandler, ConnectionDenied> {
+    ) -> Result<Self::ConnectionHandler, Box<dyn std::error::Error + Send + 'static>> {
         Ok(Default::default())
     }
 

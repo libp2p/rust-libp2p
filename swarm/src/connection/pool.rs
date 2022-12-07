@@ -18,8 +18,6 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
-
-use crate::behaviour::ConnectionDenied;
 use crate::connection::Connection;
 use crate::upgrade::UpgradeInfoSend;
 use crate::{
@@ -44,6 +42,7 @@ use libp2p_core::connection::{ConnectionId, Endpoint, PendingPoint};
 use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerExt};
 use libp2p_core::ProtocolName;
 use smallvec::SmallVec;
+use std::error::Error;
 use std::{
     collections::{hash_map, HashMap},
     convert::TryFrom as _,
@@ -258,6 +257,17 @@ where
         /// The remaining established connections to the same peer.
         remaining_established_connection_ids: Vec<ConnectionId>,
         handler: THandler,
+    },
+
+    /// A [NetworkBehaviour] denied a just established connection by not producing a [`ConnectionHandler`] from [`NetworkBehaviour::new_handler`].
+    ///
+    /// [NetworkBehaviour]: crate::NetworkBehaviour
+    /// [NetworkBehaviour::new_handler]: crate::NetworkBehaviour::new_handler
+    ConnectionDenied {
+        id: ConnectionId,
+        peer_id: PeerId,
+        endpoint: ConnectedPoint,
+        cause: Box<dyn Error + Send + 'static>,
     },
 
     /// An outbound connection attempt failed.
@@ -534,7 +544,10 @@ where
     /// Polls the connection pool for events.
     pub fn poll(
         &mut self,
-        mut new_handler_fn: impl FnMut(&PeerId, &ConnectedPoint) -> Result<THandler, ConnectionDenied>,
+        mut new_handler_fn: impl FnMut(
+            &PeerId,
+            &ConnectedPoint,
+        ) -> Result<THandler, Box<dyn Error + Send + 'static>>,
         cx: &mut Context<'_>,
     ) -> Poll<PoolEvent<THandler, TTrans>>
     where
@@ -753,8 +766,17 @@ where
                         },
                     );
 
-                    let handler =
-                        new_handler_fn(&obtained_peer_id, &endpoint).expect("empty to empty");
+                    let handler = match new_handler_fn(&obtained_peer_id, &endpoint) {
+                        Ok(handler) => handler,
+                        Err(cause) => {
+                            return Poll::Ready(PoolEvent::ConnectionDenied {
+                                id,
+                                peer_id: obtained_peer_id,
+                                endpoint,
+                                cause,
+                            })
+                        }
+                    };
                     let supported_protocols = handler
                         .listen_protocol()
                         .upgrade()
