@@ -4,6 +4,7 @@
   This version contains a major refactoring which hopefully does not break anything.
   To express this uncertainty, this is released as an `alpha`.
   See [PR 3013].
+- Remove `YamuxLocalConfig`, `Incoming` and `LocalIncoming` types. Version `v0.11.0` of `yamux` no longer requires these wrappers.
 
 [PR 3013]: https://github.com/libp2p/rust-libp2p/pull/3013
 
@@ -27,8 +28,6 @@
 # 0.41.0
 
 - Update to `libp2p-core` `v0.37.0`.
-- Update to `yamux` `v.0.11.0`.
-- Remove `YamuxLocalConfig`, `Incoming` and `LocalIncoming` types. The latest version of `yamux` no longer requires these wrappers.
 
 # 0.40.0
 
