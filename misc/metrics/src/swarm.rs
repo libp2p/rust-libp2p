@@ -139,10 +139,8 @@ impl Metrics {
     }
 }
 
-impl<TBvEv, TReason, THandleErr>
-    super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, TReason, THandleErr>> for Metrics
-{
-    fn record(&self, event: &libp2p_swarm::SwarmEvent<TBvEv, TReason, THandleErr>) {
+impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleErr>> for Metrics {
+    fn record(&self, event: &libp2p_swarm::SwarmEvent<TBvEv, THandleErr>) {
         match event {
             libp2p_swarm::SwarmEvent::Behaviour(_) => {}
             libp2p_swarm::SwarmEvent::ConnectionEstablished { endpoint, .. } => {
@@ -271,7 +269,6 @@ impl<TBvEv, TReason, THandleErr>
             libp2p_swarm::SwarmEvent::Dialing(_) => {
                 self.dial_attempt.inc();
             }
-            libp2p_swarm::SwarmEvent::ConnectionDenied { .. } => {}
         }
     }
 }

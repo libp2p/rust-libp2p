@@ -25,7 +25,8 @@ use libp2p_core::{
     connection::ConnectionId, multiaddr::Protocol, ConnectedPoint, Multiaddr, PeerId, PublicKey,
 };
 use libp2p_swarm::behaviour::{
-    ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm, THandlerInEvent,
+    ConnectionClosed, ConnectionDenied, ConnectionEstablished, DialFailure, FromSwarm,
+    THandlerInEvent,
 };
 use libp2p_swarm::{
     dial_opts::DialOpts, AddressScore, ConnectionHandler, ConnectionHandlerUpgrErr, DialError,
@@ -41,7 +42,6 @@ use std::{
     task::Poll,
     time::Duration,
 };
-use void::Void;
 
 /// Network behaviour that automatically identifies nodes periodically, returns information
 /// about them, and answers identify queries from other nodes.
@@ -237,14 +237,13 @@ impl Behaviour {
 
 impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = Handler;
-    type ConnectionDenied = Void;
     type OutEvent = Event;
 
     fn new_handler(
         &mut self,
         peer: &PeerId,
         _: &ConnectedPoint,
-    ) -> Result<Self::ConnectionHandler, Self::ConnectionDenied> {
+    ) -> Result<Self::ConnectionHandler, ConnectionDenied> {
         Ok(Handler::new(
             self.config.initial_delay,
             self.config.interval,

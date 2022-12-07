@@ -41,8 +41,8 @@ use fnv::{FnvHashMap, FnvHashSet};
 use instant::Instant;
 use libp2p_core::{connection::ConnectionId, ConnectedPoint, Multiaddr, PeerId};
 use libp2p_swarm::behaviour::{
-    AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, ExpiredListenAddr,
-    FromSwarm, NewExternalAddr, NewListenAddr, THandlerInEvent,
+    AddressChange, ConnectionClosed, ConnectionDenied, ConnectionEstablished, DialFailure,
+    ExpiredListenAddr, FromSwarm, NewExternalAddr, NewListenAddr, THandlerInEvent,
 };
 use libp2p_swarm::{
     dial_opts::{self, DialOpts},
@@ -57,7 +57,6 @@ use std::task::{Context, Poll};
 use std::vec;
 use std::{borrow::Cow, time::Duration};
 use thiserror::Error;
-use void::Void;
 
 pub use crate::query::QueryStats;
 
@@ -1974,14 +1973,13 @@ where
     TStore: Send + 'static,
 {
     type ConnectionHandler = KademliaHandler<QueryId>;
-    type ConnectionDenied = Void;
     type OutEvent = KademliaEvent;
 
     fn new_handler(
         &mut self,
         remote_peer_id: &PeerId,
         endpoint: &ConnectedPoint,
-    ) -> Result<Self::ConnectionHandler, Self::ConnectionDenied> {
+    ) -> Result<Self::ConnectionHandler, ConnectionDenied> {
         Ok(KademliaHandler::new(
             KademliaHandlerConfig {
                 protocol_config: self.protocol_config.clone(),

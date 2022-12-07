@@ -19,8 +19,9 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::behaviour::{
-    ConnectionClosed, ConnectionEstablished, DialFailure, ExpiredExternalAddr, ExpiredListenAddr,
-    FromSwarm, ListenerClosed, ListenerError, NewExternalAddr, NewListenAddr, NewListener,
+    ConnectionClosed, ConnectionDenied, ConnectionEstablished, DialFailure, ExpiredExternalAddr,
+    ExpiredListenAddr, FromSwarm, ListenerClosed, ListenerError, NewExternalAddr, NewListenAddr,
+    NewListener,
 };
 use crate::{
     behaviour::THandlerInEvent, ConnectionHandler, NetworkBehaviour, NetworkBehaviourAction,
@@ -31,7 +32,6 @@ use libp2p_core::{
 };
 use std::collections::HashMap;
 use std::task::{Context, Poll};
-use void::Void;
 
 /// A `MockBehaviour` is a `NetworkBehaviour` that allows for
 /// the instrumentation of return values, without keeping
@@ -71,14 +71,13 @@ where
     TOutEvent: Send + 'static,
 {
     type ConnectionHandler = THandler;
-    type ConnectionDenied = Void;
     type OutEvent = TOutEvent;
 
     fn new_handler(
         &mut self,
         _: &PeerId,
         _: &ConnectedPoint,
-    ) -> Result<Self::ConnectionHandler, Self::ConnectionDenied> {
+    ) -> Result<Self::ConnectionHandler, ConnectionDenied> {
         Ok(self.handler_proto.clone())
     }
 
@@ -374,14 +373,13 @@ where
     <TInner::ConnectionHandler as ConnectionHandler>::OutEvent: Clone,
 {
     type ConnectionHandler = TInner::ConnectionHandler;
-    type ConnectionDenied = TInner::ConnectionDenied;
     type OutEvent = TInner::OutEvent;
 
     fn new_handler(
         &mut self,
         peer: &PeerId,
         endpoint: &ConnectedPoint,
-    ) -> Result<Self::ConnectionHandler, Self::ConnectionDenied> {
+    ) -> Result<Self::ConnectionHandler, ConnectionDenied> {
         self.inner.new_handler(peer, endpoint)
     }
 

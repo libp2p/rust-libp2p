@@ -18,8 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::behaviour::THandlerInEvent;
 use crate::behaviour::{inject_from_swarm, FromSwarm};
+use crate::behaviour::{ConnectionDenied, THandlerInEvent};
 use crate::handler::{
     ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr,
     DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound, KeepAlive,
@@ -70,14 +70,13 @@ where
     TBehaviour: NetworkBehaviour,
 {
     type ConnectionHandler = ToggleConnectionHandler<TBehaviour::ConnectionHandler>;
-    type ConnectionDenied = TBehaviour::ConnectionDenied;
     type OutEvent = TBehaviour::OutEvent;
 
     fn new_handler(
         &mut self,
         peer: &PeerId,
         connected_point: &ConnectedPoint,
-    ) -> Result<Self::ConnectionHandler, Self::ConnectionDenied> {
+    ) -> Result<Self::ConnectionHandler, ConnectionDenied> {
         Ok(ToggleConnectionHandler {
             inner: match self.inner.as_mut() {
                 None => None,

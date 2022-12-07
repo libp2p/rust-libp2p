@@ -31,8 +31,8 @@ use instant::Instant;
 use libp2p_core::connection::ConnectionId;
 use libp2p_core::multiaddr::Protocol;
 use libp2p_core::{ConnectedPoint, PeerId};
-use libp2p_swarm::behaviour::THandlerInEvent;
 use libp2p_swarm::behaviour::{ConnectionClosed, FromSwarm};
+use libp2p_swarm::behaviour::{ConnectionDenied, THandlerInEvent};
 use libp2p_swarm::{
     dummy, ConnectionHandlerUpgrErr, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
     PollParameters,
@@ -42,7 +42,6 @@ use std::num::NonZeroU32;
 use std::ops::Add;
 use std::task::{Context, Poll};
 use std::time::Duration;
-use void::Void;
 
 use super::protocol::outbound_stop;
 
@@ -253,14 +252,13 @@ impl Relay {
 
 impl NetworkBehaviour for Relay {
     type ConnectionHandler = Either<Handler, dummy::ConnectionHandler>;
-    type ConnectionDenied = Void;
     type OutEvent = Event;
 
     fn new_handler(
         &mut self,
         _: &PeerId,
         endpoint: &ConnectedPoint,
-    ) -> Result<Self::ConnectionHandler, Self::ConnectionDenied> {
+    ) -> Result<Self::ConnectionHandler, ConnectionDenied> {
         if endpoint.is_relayed() {
             // Deny all substreams on relayed connection.
             Ok(Either::Right(dummy::ConnectionHandler))

@@ -1,5 +1,6 @@
 use crate::behaviour::{
-    FromSwarm, NetworkBehaviour, NetworkBehaviourAction, PollParameters, THandlerInEvent,
+    ConnectionDenied, FromSwarm, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
+    THandlerInEvent,
 };
 use crate::handler::{
     ConnectionEvent, ConnectionHandlerEvent, FullyNegotiatedInbound, FullyNegotiatedOutbound,
@@ -22,15 +23,27 @@ pub struct Behaviour;
 
 impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = ConnectionHandler;
-    type ConnectionDenied = Void;
     type OutEvent = Void;
 
     fn new_handler(
         &mut self,
         _: &PeerId,
         _: &ConnectedPoint,
-    ) -> Result<Self::ConnectionHandler, Self::ConnectionDenied> {
+    ) -> Result<Self::ConnectionHandler, ConnectionDenied> {
         Ok(ConnectionHandler)
+    }
+
+    fn on_connection_handler_event(&mut self, _: PeerId, _: ConnectionId, event: Void) {
+        void::unreachable(event)
+    }
+
+    fn poll(
+        &mut self,
+        _: &mut Context<'_>,
+        _: &mut impl PollParameters,
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self::ConnectionHandler>>>
+    {
+        Poll::Pending
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
@@ -48,19 +61,6 @@ impl NetworkBehaviour for Behaviour {
             | FromSwarm::NewExternalAddr(_)
             | FromSwarm::ExpiredExternalAddr(_) => {}
         }
-    }
-
-    fn on_connection_handler_event(&mut self, _: PeerId, _: ConnectionId, event: Void) {
-        void::unreachable(event)
-    }
-
-    fn poll(
-        &mut self,
-        _: &mut Context<'_>,
-        _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self::ConnectionHandler>>>
-    {
-        Poll::Pending
     }
 }
 

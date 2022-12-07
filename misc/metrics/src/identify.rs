@@ -193,10 +193,8 @@ impl super::Recorder<libp2p_identify::Event> for Metrics {
     }
 }
 
-impl<TBvEv, TReason, THandleErr>
-    super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, TReason, THandleErr>> for Metrics
-{
-    fn record(&self, event: &libp2p_swarm::SwarmEvent<TBvEv, TReason, THandleErr>) {
+impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleErr>> for Metrics {
+    fn record(&self, event: &libp2p_swarm::SwarmEvent<TBvEv, THandleErr>) {
         if let libp2p_swarm::SwarmEvent::ConnectionClosed {
             peer_id,
             num_established,

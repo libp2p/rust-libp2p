@@ -408,7 +408,6 @@ mod network {
             &mut self,
             event: SwarmEvent<
                 ComposedEvent,
-                ComposedBehaviourConnectionDenied,
                 EitherError<ConnectionHandlerUpgrErr<io::Error>, io::Error>,
             >,
         ) {

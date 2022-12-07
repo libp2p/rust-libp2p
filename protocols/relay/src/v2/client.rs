@@ -35,8 +35,8 @@ use futures::ready;
 use futures::stream::StreamExt;
 use libp2p_core::connection::ConnectionId;
 use libp2p_core::{ConnectedPoint, PeerId};
-use libp2p_swarm::behaviour::THandlerInEvent;
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm};
+use libp2p_swarm::behaviour::{ConnectionDenied, THandlerInEvent};
 use libp2p_swarm::dial_opts::DialOpts;
 use libp2p_swarm::{dummy, ConnectionHandler};
 use libp2p_swarm::{
@@ -48,7 +48,6 @@ use std::io::{Error, ErrorKind, IoSlice};
 use std::ops::DerefMut;
 use std::pin::Pin;
 use std::task::{Context, Poll};
-use void::Void;
 
 /// The events produced by the [`Client`] behaviour.
 #[derive(Debug)]
@@ -154,14 +153,13 @@ impl Client {
 
 impl NetworkBehaviour for Client {
     type ConnectionHandler = Either<Handler, dummy::ConnectionHandler>;
-    type ConnectionDenied = Void;
     type OutEvent = Event;
 
     fn new_handler(
         &mut self,
         peer: &PeerId,
         connected_point: &ConnectedPoint,
-    ) -> Result<Self::ConnectionHandler, Self::ConnectionDenied> {
+    ) -> Result<Self::ConnectionHandler, ConnectionDenied> {
         if connected_point.is_relayed() {
             if let Some(event) = self.initial_events.remove(peer) {
                 log::debug!(

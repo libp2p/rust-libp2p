@@ -21,6 +21,7 @@
 use futures::StreamExt;
 use libp2p_identify as identify;
 use libp2p_ping as ping;
+use libp2p_swarm::behaviour::ConnectionDenied;
 use libp2p_swarm::{behaviour::FromSwarm, dummy, NetworkBehaviour, SwarmEvent};
 use std::fmt::Debug;
 
@@ -384,32 +385,14 @@ fn custom_out_event_no_type_parameters() {
 
     impl<T> NetworkBehaviour for TemplatedBehaviour<T> {
         type ConnectionHandler = dummy::ConnectionHandler;
-        type ConnectionDenied = void::Void;
         type OutEvent = void::Void;
 
         fn new_handler(
             &mut self,
             _: &PeerId,
             _: &ConnectedPoint,
-        ) -> Result<Self::ConnectionHandler, Self::ConnectionDenied> {
+        ) -> Result<Self::ConnectionHandler, ConnectionDenied> {
             Ok(dummy::ConnectionHandler)
-        }
-
-        fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
-            match event {
-                FromSwarm::ConnectionEstablished(_)
-                | FromSwarm::ConnectionClosed(_)
-                | FromSwarm::AddressChange(_)
-                | FromSwarm::DialFailure(_)
-                | FromSwarm::ListenFailure(_)
-                | FromSwarm::NewListener(_)
-                | FromSwarm::NewListenAddr(_)
-                | FromSwarm::ExpiredListenAddr(_)
-                | FromSwarm::ListenerError(_)
-                | FromSwarm::ListenerClosed(_)
-                | FromSwarm::NewExternalAddr(_)
-                | FromSwarm::ExpiredExternalAddr(_) => {}
-            }
         }
 
         fn on_connection_handler_event(
@@ -428,6 +411,23 @@ fn custom_out_event_no_type_parameters() {
         ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self::ConnectionHandler>>>
         {
             Poll::Pending
+        }
+
+        fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+            match event {
+                FromSwarm::ConnectionEstablished(_)
+                | FromSwarm::ConnectionClosed(_)
+                | FromSwarm::AddressChange(_)
+                | FromSwarm::DialFailure(_)
+                | FromSwarm::ListenFailure(_)
+                | FromSwarm::NewListener(_)
+                | FromSwarm::NewListenAddr(_)
+                | FromSwarm::ExpiredListenAddr(_)
+                | FromSwarm::ListenerError(_)
+                | FromSwarm::ListenerClosed(_)
+                | FromSwarm::NewExternalAddr(_)
+                | FromSwarm::ExpiredExternalAddr(_) => {}
+            }
         }
     }
 

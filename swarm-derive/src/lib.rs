@@ -52,6 +52,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         .unwrap_or_else(|| syn::parse_quote! { ::libp2p::swarm::derive_prelude });
 
     let multiaddr = quote! { #prelude_path::Multiaddr };
+    let connection_denied = quote! { #prelude_path::ConnectionDenied };
     let trait_to_impl = quote! { #prelude_path::NetworkBehaviour };
     let either_ident = quote! { #prelude_path::EitherOutput };
     let network_behaviour_action = quote! { #prelude_path::NetworkBehaviourAction };
@@ -142,56 +143,6 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 (name, definition, from_clauses)
             }
         }
-    };
-
-    let (connection_denied_ty, connection_denied_ty_definition) = {
-        let name: syn::Type =
-            syn::parse_str(&(ast.ident.to_string() + "ConnectionDenied")).unwrap();
-        let definition = {
-            let fields = data_struct
-                .fields
-                .iter()
-                .map(|field| {
-                    let variant: syn::Variant = syn::parse_str(
-                        &field
-                            .ident
-                            .clone()
-                            .expect("Fields of NetworkBehaviour implementation to be named.")
-                            .to_string()
-                            .to_upper_camel_case(),
-                    )
-                    .unwrap();
-                    let ty = &field.ty;
-                    quote! {#variant(<#ty as #trait_to_impl>::ConnectionDenied)}
-                })
-                .collect::<Vec<_>>();
-            let visibility = &ast.vis;
-
-            Some(quote! {
-                #visibility enum #name #impl_generics
-                    #where_clause
-                {
-                    #(#fields),*
-                }
-
-                impl #impl_generics ::std::fmt::Debug for #name #ty_generics #where_clause {
-                    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-                        f.debug_struct("#name").finish()
-                    }
-                }
-
-                impl #impl_generics ::std::fmt::Display for #name #ty_generics #where_clause {
-                    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-                        Ok(())
-                    }
-                }
-
-                impl #impl_generics ::std::error::Error for #name #ty_generics #where_clause {
-                    // TODO: Implement `source`
-                }
-            })
-        };
-        (name, definition)
     };
 
     // Build the `where ...` clause of the trait implementation.
@@ -512,18 +463,8 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 None => quote! { self.#field_n },
             };
 
-            let variant_name: syn::Variant = syn::parse_str(
-                &field
-                    .ident
-                    .clone()
-                    .expect("Fields of NetworkBehaviour implementation to be named.")
-                    .to_string()
-                    .to_upper_camel_case(),
-            )
-            .unwrap();
-
             let builder = quote! {
-                #field_name.new_handler(peer, connected_point).map_err(#connection_denied_ty::#variant_name)?
+                #field_name.new_handler(peer, connected_point)?
             };
 
             match out_handler {
@@ -611,17 +552,15 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     // Now the magic happens.
     let final_quote = quote! {
         #out_event_definition
-        #connection_denied_ty_definition
 
         impl #impl_generics #trait_to_impl for #name #ty_generics
         #where_clause
         {
             type ConnectionHandler = #connection_handler_ty;
-            type ConnectionDenied = #connection_denied_ty #ty_generics;
             type OutEvent = #out_event_reference;
 
             #[allow(clippy::needless_question_mark)]
-            fn new_handler(&mut self, peer: &#peer_id, connected_point: &#connected_point) -> Result<Self::ConnectionHandler, Self::ConnectionDenied> {
+            fn new_handler(&mut self, peer: &#peer_id, connected_point: &#connected_point) -> Result<Self::ConnectionHandler, #connection_denied> {
                 use #connection_handler;
 
                 Ok(#new_handler)
