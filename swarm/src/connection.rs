@@ -165,7 +165,7 @@ where
     pub fn poll(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> Poll<Result<Event<THandler::OutEvent>, ConnectionError<THandler::Error>>> {
+    ) -> Poll<Result<Event<THandler::OutEvent>, ConnectionError>> {
         let Self {
             requested_substreams,
             muxing,
@@ -202,7 +202,7 @@ where
                     return Poll::Ready(Ok(Event::Handler(event)));
                 }
                 Poll::Ready(ConnectionHandlerEvent::Close(err)) => {
-                    return Poll::Ready(Err(ConnectionError::Handler(err)));
+                    return Poll::Ready(Err(ConnectionError::Handler(Box::new(err))));
                 }
             }
 

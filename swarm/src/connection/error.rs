@@ -25,7 +25,7 @@ use std::{fmt, io};
 
 /// Errors that can occur in the context of an established `Connection`.
 #[derive(Debug)]
-pub enum ConnectionError<THandlerErr> {
+pub enum ConnectionError {
     /// An I/O error occurred on the connection.
     // TODO: Eventually this should also be a custom error?
     IO(io::Error),
@@ -34,13 +34,10 @@ pub enum ConnectionError<THandlerErr> {
     KeepAliveTimeout,
 
     /// The connection handler produced an error.
-    Handler(THandlerErr),
+    Handler(Box<dyn std::error::Error + Send + 'static>),
 }
 
-impl<THandlerErr> fmt::Display for ConnectionError<THandlerErr>
-where
-    THandlerErr: fmt::Display,
-{
+impl fmt::Display for ConnectionError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ConnectionError::IO(err) => write!(f, "Connection error: I/O error: {}", err),
@@ -52,20 +49,17 @@ where
     }
 }
 
-impl<THandlerErr> std::error::Error for ConnectionError<THandlerErr>
-where
-    THandlerErr: std::error::Error + 'static,
-{
+impl std::error::Error for ConnectionError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             ConnectionError::IO(err) => Some(err),
             ConnectionError::KeepAliveTimeout => None,
-            ConnectionError::Handler(err) => Some(err),
+            ConnectionError::Handler(err) => Some(err.as_ref()),
         }
     }
 }
 
-impl<THandlerErr> From<io::Error> for ConnectionError<THandlerErr> {
+impl From<io::Error> for ConnectionError {
     fn from(error: io::Error) -> Self {
         ConnectionError::IO(error)
     }

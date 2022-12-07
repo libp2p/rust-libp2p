@@ -64,11 +64,11 @@ fn get_rand_memory_address() -> Multiaddr {
         .unwrap()
 }
 
-pub async fn await_event_or_timeout<Event, Error>(
-    swarm: &mut (impl Stream<Item = SwarmEvent<Event, Error>> + FusedStream + Unpin),
-) -> SwarmEvent<Event, Error>
+pub async fn await_event_or_timeout<Event>(
+    swarm: &mut (impl Stream<Item = SwarmEvent<Event>> + FusedStream + Unpin),
+) -> SwarmEvent<Event>
 where
-    SwarmEvent<Event, Error>: Debug,
+    SwarmEvent<Event>: Debug,
 {
     tokio::time::timeout(
         Duration::from_secs(30),
@@ -80,13 +80,13 @@ where
     .expect("network behaviour to emit an event within 30 seconds")
 }
 
-pub async fn await_events_or_timeout<Event1, Event2, Error1, Error2>(
-    swarm_1: &mut (impl Stream<Item = SwarmEvent<Event1, Error1>> + FusedStream + Unpin),
-    swarm_2: &mut (impl Stream<Item = SwarmEvent<Event2, Error2>> + FusedStream + Unpin),
-) -> (SwarmEvent<Event1, Error1>, SwarmEvent<Event2, Error2>)
+pub async fn await_events_or_timeout<Event1, Event2>(
+    swarm_1: &mut (impl Stream<Item = SwarmEvent<Event1>> + FusedStream + Unpin),
+    swarm_2: &mut (impl Stream<Item = SwarmEvent<Event2>> + FusedStream + Unpin),
+) -> (SwarmEvent<Event1>, SwarmEvent<Event2>)
 where
-    SwarmEvent<Event1, Error1>: Debug,
-    SwarmEvent<Event2, Error2>: Debug,
+    SwarmEvent<Event1>: Debug,
+    SwarmEvent<Event2>: Debug,
 {
     tokio::time::timeout(
         Duration::from_secs(30),

@@ -208,7 +208,6 @@ mod network {
     use super::*;
     use async_trait::async_trait;
     use futures::channel::{mpsc, oneshot};
-    use libp2p::core::either::EitherError;
     use libp2p::core::upgrade::{read_length_prefixed, write_length_prefixed, ProtocolName};
     use libp2p::identity;
     use libp2p::identity::ed25519;
@@ -219,7 +218,7 @@ mod network {
         ProtocolSupport, RequestId, RequestResponse, RequestResponseCodec, RequestResponseEvent,
         RequestResponseMessage, ResponseChannel,
     };
-    use libp2p::swarm::{ConnectionHandlerUpgrErr, NetworkBehaviour, Swarm, SwarmEvent};
+    use libp2p::swarm::{NetworkBehaviour, Swarm, SwarmEvent};
     use std::collections::{hash_map, HashMap, HashSet};
     use std::iter;
 
@@ -404,13 +403,7 @@ mod network {
             }
         }
 
-        async fn handle_event(
-            &mut self,
-            event: SwarmEvent<
-                ComposedEvent,
-                EitherError<ConnectionHandlerUpgrErr<io::Error>, io::Error>,
-            >,
-        ) {
+        async fn handle_event(&mut self, event: SwarmEvent<ComposedEvent>) {
             match event {
                 SwarmEvent::Behaviour(ComposedEvent::Kademlia(
                     KademliaEvent::OutboundQueryProgressed {

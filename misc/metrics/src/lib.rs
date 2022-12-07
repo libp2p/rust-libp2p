@@ -142,8 +142,8 @@ impl Recorder<libp2p_relay::v2::relay::Event> for Metrics {
     }
 }
 
-impl<TBvEv, THandleErr> Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleErr>> for Metrics {
-    fn record(&self, event: &libp2p_swarm::SwarmEvent<TBvEv, THandleErr>) {
+impl<TBvEv> Recorder<libp2p_swarm::SwarmEvent<TBvEv>> for Metrics {
+    fn record(&self, event: &libp2p_swarm::SwarmEvent<TBvEv>) {
         self.swarm.record(event);
 
         #[cfg(feature = "identify")]
