@@ -248,7 +248,6 @@ impl GossipsubHandler {
 impl ConnectionHandler for GossipsubHandler {
     type InEvent = GossipsubHandlerIn;
     type OutEvent = HandlerEvent;
-    type Error = GossipsubHandlerError;
     type InboundOpenInfo = ();
     type InboundProtocol = ProtocolConfig;
     type OutboundOpenInfo = crate::rpc_proto::Rpc;
@@ -283,14 +282,8 @@ impl ConnectionHandler for GossipsubHandler {
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<
-        ConnectionHandlerEvent<
-            Self::OutboundProtocol,
-            Self::OutboundOpenInfo,
-            Self::OutEvent,
-            Self::Error,
-        >,
-    > {
+    ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>>
+    {
         // Handle any upgrade errors
         if let Some(error) = self.upgrade_errors.pop_front() {
             let reported_error = match error {
@@ -327,7 +320,7 @@ impl ConnectionHandler for GossipsubHandler {
 
             // If there was a fatal error, close the connection.
             if let Some(error) = reported_error {
-                return Poll::Ready(ConnectionHandlerEvent::Close(error));
+                return Poll::Ready(ConnectionHandlerEvent::close(error));
             }
         }
 
@@ -342,7 +335,7 @@ impl ConnectionHandler for GossipsubHandler {
 
         if self.inbound_substreams_created > MAX_SUBSTREAM_CREATION {
             // Too many inbound substreams have been created, end the connection.
-            return Poll::Ready(ConnectionHandlerEvent::Close(
+            return Poll::Ready(ConnectionHandlerEvent::close(
                 GossipsubHandlerError::MaxInboundSubstreams,
             ));
         }
@@ -353,7 +346,7 @@ impl ConnectionHandler for GossipsubHandler {
             && !self.outbound_substream_establishing
         {
             if self.outbound_substreams_created >= MAX_SUBSTREAM_CREATION {
-                return Poll::Ready(ConnectionHandlerEvent::Close(
+                return Poll::Ready(ConnectionHandlerEvent::close(
                     GossipsubHandlerError::MaxOutboundSubstreams,
                 ));
             }
@@ -478,13 +471,13 @@ impl ConnectionHandler for GossipsubHandler {
                                 }
                                 Err(e) => {
                                     error!("Error sending message: {}", e);
-                                    return Poll::Ready(ConnectionHandlerEvent::Close(e));
+                                    return Poll::Ready(ConnectionHandlerEvent::close(e));
                                 }
                             }
                         }
                         Poll::Ready(Err(e)) => {
                             error!("Outbound substream error while sending output: {:?}", e);
-                            return Poll::Ready(ConnectionHandlerEvent::Close(e));
+                            return Poll::Ready(ConnectionHandlerEvent::close(e));
                         }
                         Poll::Pending => {
                             self.keep_alive = KeepAlive::Yes;
@@ -506,7 +499,7 @@ impl ConnectionHandler for GossipsubHandler {
                                 Some(OutboundSubstreamState::WaitingOutput(substream))
                         }
                         Poll::Ready(Err(e)) => {
-                            return Poll::Ready(ConnectionHandlerEvent::Close(e))
+                            return Poll::Ready(ConnectionHandlerEvent::close(e))
                         }
                         Poll::Pending => {
                             self.keep_alive = KeepAlive::Yes;
@@ -528,13 +521,10 @@ impl ConnectionHandler for GossipsubHandler {
                         }
                         Poll::Ready(Err(e)) => {
                             warn!("Outbound substream error while closing: {:?}", e);
-                            return Poll::Ready(ConnectionHandlerEvent::Close(
-                                io::Error::new(
-                                    io::ErrorKind::BrokenPipe,
-                                    "Failed to close outbound substream",
-                                )
-                                .into(),
-                            ));
+                            return Poll::Ready(ConnectionHandlerEvent::close(io::Error::new(
+                                io::ErrorKind::BrokenPipe,
+                                "Failed to close outbound substream",
+                            )));
                         }
                         Poll::Pending => {
                             self.keep_alive = KeepAlive::No;

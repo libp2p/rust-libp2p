@@ -93,7 +93,6 @@ where
 {
     type InEvent = (K, <H as ConnectionHandler>::InEvent);
     type OutEvent = (K, <H as ConnectionHandler>::OutEvent);
-    type Error = <H as ConnectionHandler>::Error;
     type InboundProtocol = Upgrade<K, <H as ConnectionHandler>::InboundProtocol>;
     type OutboundProtocol = <H as ConnectionHandler>::OutboundProtocol;
     type InboundOpenInfo = Info<K, <H as ConnectionHandler>::InboundOpenInfo>;
@@ -293,14 +292,8 @@ where
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<
-        ConnectionHandlerEvent<
-            Self::OutboundProtocol,
-            Self::OutboundOpenInfo,
-            Self::OutEvent,
-            Self::Error,
-        >,
-    > {
+    ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>>
+    {
         // Calling `gen_range(0, 0)` (see below) would panic, so we have return early to avoid
         // that situation.
         if self.handlers.is_empty() {

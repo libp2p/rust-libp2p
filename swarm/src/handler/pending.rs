@@ -42,7 +42,6 @@ impl PendingConnectionHandler {
 impl ConnectionHandler for PendingConnectionHandler {
     type InEvent = Void;
     type OutEvent = Void;
-    type Error = Void;
     type InboundProtocol = PendingUpgrade<String>;
     type OutboundProtocol = PendingUpgrade<String>;
     type OutboundOpenInfo = Void;
@@ -63,14 +62,8 @@ impl ConnectionHandler for PendingConnectionHandler {
     fn poll(
         &mut self,
         _: &mut Context<'_>,
-    ) -> Poll<
-        ConnectionHandlerEvent<
-            Self::OutboundProtocol,
-            Self::OutboundOpenInfo,
-            Self::OutEvent,
-            Self::Error,
-        >,
-    > {
+    ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>>
+    {
         Poll::Pending
     }
 

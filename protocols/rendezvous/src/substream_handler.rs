@@ -357,7 +357,6 @@ where
 {
     type InEvent = InEvent<TOutboundOpenInfo, TInboundInEvent, TOutboundInEvent>;
     type OutEvent = OutEvent<TInboundOutEvent, TOutboundOutEvent, TInboundError, TOutboundError>;
-    type Error = Void;
     type InboundProtocol = PassthroughProtocol;
     type OutboundProtocol = PassthroughProtocol;
     type InboundOpenInfo = ();
@@ -447,14 +446,8 @@ where
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<
-        ConnectionHandlerEvent<
-            Self::OutboundProtocol,
-            Self::OutboundOpenInfo,
-            Self::OutEvent,
-            Self::Error,
-        >,
-    > {
+    ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>>
+    {
         if let Some(open_info) = self.new_substreams.pop_front() {
             return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
                 protocol: TOutboundSubstreamHandler::upgrade(open_info),

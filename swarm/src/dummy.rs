@@ -58,7 +58,6 @@ pub struct ConnectionHandler;
 impl crate::handler::ConnectionHandler for ConnectionHandler {
     type InEvent = Void;
     type OutEvent = Void;
-    type Error = Void;
     type InboundProtocol = DeniedUpgrade;
     type OutboundProtocol = DeniedUpgrade;
     type InboundOpenInfo = ();
@@ -79,14 +78,8 @@ impl crate::handler::ConnectionHandler for ConnectionHandler {
     fn poll(
         &mut self,
         _: &mut Context<'_>,
-    ) -> Poll<
-        ConnectionHandlerEvent<
-            Self::OutboundProtocol,
-            Self::OutboundOpenInfo,
-            Self::OutEvent,
-            Self::Error,
-        >,
-    > {
+    ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>>
+    {
         Poll::Pending
     }
 

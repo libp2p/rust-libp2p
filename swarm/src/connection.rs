@@ -202,7 +202,7 @@ where
                     return Poll::Ready(Ok(Event::Handler(event)));
                 }
                 Poll::Ready(ConnectionHandlerEvent::Close(err)) => {
-                    return Poll::Ready(Err(ConnectionError::Handler(Box::new(err))));
+                    return Poll::Ready(Err(ConnectionError::Handler(err)));
                 }
             }
 
@@ -745,7 +745,6 @@ mod tests {
     impl ConnectionHandler for MockConnectionHandler {
         type InEvent = Void;
         type OutEvent = Void;
-        type Error = Void;
         type InboundProtocol = DeniedUpgrade;
         type OutboundProtocol = DeniedUpgrade;
         type InboundOpenInfo = ();
@@ -793,12 +792,7 @@ mod tests {
             &mut self,
             _: &mut Context<'_>,
         ) -> Poll<
-            ConnectionHandlerEvent<
-                Self::OutboundProtocol,
-                Self::OutboundOpenInfo,
-                Self::OutEvent,
-                Self::Error,
-            >,
+            ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>,
         > {
             if self.outbound_requested {
                 self.outbound_requested = false;

@@ -123,7 +123,6 @@ where
 {
     type InEvent = TOutbound;
     type OutEvent = TEvent;
-    type Error = ConnectionHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>;
     type InboundProtocol = TInbound;
     type OutboundProtocol = TOutbound;
     type OutboundOpenInfo = ();
@@ -144,16 +143,10 @@ where
     fn poll(
         &mut self,
         _: &mut Context<'_>,
-    ) -> Poll<
-        ConnectionHandlerEvent<
-            Self::OutboundProtocol,
-            Self::OutboundOpenInfo,
-            Self::OutEvent,
-            Self::Error,
-        >,
-    > {
+    ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>>
+    {
         if let Some(err) = self.pending_error.take() {
-            return Poll::Ready(ConnectionHandlerEvent::Close(err));
+            return Poll::Ready(ConnectionHandlerEvent::close(err));
         }
 
         if !self.events_out.is_empty() {

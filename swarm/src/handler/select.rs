@@ -333,7 +333,6 @@ where
 {
     type InEvent = EitherOutput<TProto1::InEvent, TProto2::InEvent>;
     type OutEvent = EitherOutput<TProto1::OutEvent, TProto2::OutEvent>;
-    type Error = EitherError<TProto1::Error, TProto2::Error>;
     type InboundProtocol = SelectUpgrade<
         SendWrapper<<TProto1 as ConnectionHandler>::InboundProtocol>,
         SendWrapper<<TProto2 as ConnectionHandler>::InboundProtocol>,
@@ -374,20 +373,14 @@ where
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<
-        ConnectionHandlerEvent<
-            Self::OutboundProtocol,
-            Self::OutboundOpenInfo,
-            Self::OutEvent,
-            Self::Error,
-        >,
-    > {
+    ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>>
+    {
         match self.proto1.poll(cx) {
             Poll::Ready(ConnectionHandlerEvent::Custom(event)) => {
                 return Poll::Ready(ConnectionHandlerEvent::Custom(EitherOutput::First(event)));
             }
             Poll::Ready(ConnectionHandlerEvent::Close(event)) => {
-                return Poll::Ready(ConnectionHandlerEvent::Close(EitherError::A(event)));
+                return Poll::Ready(ConnectionHandlerEvent::Close(event));
             }
             Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest { protocol }) => {
                 return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
@@ -404,7 +397,7 @@ where
                 return Poll::Ready(ConnectionHandlerEvent::Custom(EitherOutput::Second(event)));
             }
             Poll::Ready(ConnectionHandlerEvent::Close(event)) => {
-                return Poll::Ready(ConnectionHandlerEvent::Close(EitherError::B(event)));
+                return Poll::Ready(ConnectionHandlerEvent::Close(event));
             }
             Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest { protocol }) => {
                 return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {

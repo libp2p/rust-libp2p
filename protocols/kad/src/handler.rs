@@ -632,7 +632,6 @@ where
 {
     type InEvent = KademliaHandlerIn<TUserData>;
     type OutEvent = KademliaHandlerEvent<TUserData>;
-    type Error = io::Error; // TODO: better error type?
     type InboundProtocol = upgrade::EitherUpgrade<KademliaProtocolConfig, upgrade::DeniedUpgrade>;
     type OutboundProtocol = KademliaProtocolConfig;
     // Message of the request to send to the remote, and user data if we expect an answer.
@@ -749,14 +748,8 @@ where
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<
-        ConnectionHandlerEvent<
-            Self::OutboundProtocol,
-            Self::OutboundOpenInfo,
-            Self::OutEvent,
-            Self::Error,
-        >,
-    > {
+    ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>>
+    {
         if let ProtocolStatus::Confirmed = self.protocol_status {
             self.protocol_status = ProtocolStatus::Reported;
             return Poll::Ready(ConnectionHandlerEvent::Custom(
@@ -844,7 +837,6 @@ where
         KademliaProtocolConfig,
         (KadRequestMsg, Option<TUserData>),
         KademliaHandlerEvent<TUserData>,
-        io::Error,
     >;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
@@ -986,7 +978,6 @@ where
         KademliaProtocolConfig,
         (KadRequestMsg, Option<TUserData>),
         KademliaHandlerEvent<TUserData>,
-        io::Error,
     >;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {

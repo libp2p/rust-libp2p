@@ -53,7 +53,6 @@ where
 {
     type InEvent = TNewIn;
     type OutEvent = TConnectionHandler::OutEvent;
-    type Error = TConnectionHandler::Error;
     type InboundProtocol = TConnectionHandler::InboundProtocol;
     type OutboundProtocol = TConnectionHandler::OutboundProtocol;
     type InboundOpenInfo = TConnectionHandler::InboundOpenInfo;
@@ -77,14 +76,8 @@ where
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<
-        ConnectionHandlerEvent<
-            Self::OutboundProtocol,
-            Self::OutboundOpenInfo,
-            Self::OutEvent,
-            Self::Error,
-        >,
-    > {
+    ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>>
+    {
         self.inner.poll(cx)
     }
 

@@ -36,7 +36,7 @@ use libp2p_swarm::{
 };
 use log::warn;
 use smallvec::SmallVec;
-use std::{io, pin::Pin, task::Context, task::Poll, time::Duration};
+use std::{pin::Pin, task::Context, task::Poll, time::Duration};
 
 pub struct Proto {
     initial_delay: Duration,
@@ -74,12 +74,7 @@ pub struct Handler {
     inbound_identify_push: Option<BoxFuture<'static, Result<Info, UpgradeError>>>,
     /// Pending events to yield.
     events: SmallVec<
-        [ConnectionHandlerEvent<
-            EitherUpgrade<Protocol, PushProtocol<OutboundPush>>,
-            (),
-            Event,
-            io::Error,
-        >; 4],
+        [ConnectionHandlerEvent<EitherUpgrade<Protocol, PushProtocol<OutboundPush>>, (), Event>; 4],
     >,
 
     /// Future that fires when we need to identify the node again.
@@ -197,7 +192,6 @@ impl Handler {
 impl ConnectionHandler for Handler {
     type InEvent = Push;
     type OutEvent = Event;
-    type Error = io::Error;
     type InboundProtocol = SelectUpgrade<Protocol, PushProtocol<InboundPush>>;
     type OutboundProtocol = EitherUpgrade<Protocol, PushProtocol<OutboundPush>>;
     type OutboundOpenInfo = ();
@@ -224,9 +218,7 @@ impl ConnectionHandler for Handler {
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<
-        ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Event, Self::Error>,
-    > {
+    ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Event>> {
         if !self.events.is_empty() {
             return Poll::Ready(self.events.remove(0));
         }

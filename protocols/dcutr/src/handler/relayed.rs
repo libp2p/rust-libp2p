@@ -143,7 +143,6 @@ pub struct Handler {
             <Self as ConnectionHandler>::OutboundProtocol,
             <Self as ConnectionHandler>::OutboundOpenInfo,
             <Self as ConnectionHandler>::OutEvent,
-            <Self as ConnectionHandler>::Error,
         >,
     >,
     /// Inbound connect, accepted by the behaviour, pending completion.
@@ -247,15 +246,18 @@ impl Handler {
                     },
                 ));
             }
-            _ => {
-                // Anything else is considered a fatal error or misbehaviour of
-                // the remote peer and results in closing the connection.
-                self.pending_error = Some(error.map_upgrade_err(|e| {
-                    e.map_err(|e| match e {
-                        EitherError::A(e) => EitherError::A(e),
-                        EitherError::B(v) => void::unreachable(v),
-                    })
-                }));
+            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(
+                NegotiationError::ProtocolError(p),
+            )) => {
+                self.queued_events
+                    .push_back(ConnectionHandlerEvent::close(p));
+            }
+            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::A(e))) => {
+                self.queued_events
+                    .push_back(ConnectionHandlerEvent::close(e));
+            }
+            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::B(never))) => {
+                void::unreachable(never)
             }
         }
     }
@@ -289,10 +291,22 @@ impl Handler {
                     },
                 ));
             }
-            _ => {
-                // Anything else is considered a fatal error or misbehaviour of
-                // the remote peer and results in closing the connection.
-                self.pending_error = Some(error.map_upgrade_err(|e| e.map_err(EitherError::B)));
+
+            // Anything else is considered a fatal error or misbehaviour of
+            // the remote peer and results in closing the connection.
+            e @ ConnectionHandlerUpgrErr::Timer => {
+                self.queued_events
+                    .push_back(ConnectionHandlerEvent::close(e));
+            }
+            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(
+                NegotiationError::ProtocolError(p),
+            )) => {
+                self.queued_events
+                    .push_back(ConnectionHandlerEvent::close(p));
+            }
+            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)) => {
+                self.queued_events
+                    .push_back(ConnectionHandlerEvent::close(e));
             }
         }
     }
@@ -301,9 +315,6 @@ impl Handler {
 impl ConnectionHandler for Handler {
     type InEvent = Command;
     type OutEvent = Event;
-    type Error = ConnectionHandlerUpgrErr<
-        EitherError<protocol::inbound::UpgradeError, protocol::outbound::UpgradeError>,
-    >;
     type InboundProtocol = upgrade::EitherUpgrade<protocol::inbound::Upgrade, DeniedUpgrade>;
     type OutboundProtocol = protocol::outbound::Upgrade;
     type OutboundOpenInfo = u8; // Number of upgrade attempts.
@@ -364,18 +375,12 @@ impl ConnectionHandler for Handler {
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<
-        ConnectionHandlerEvent<
-            Self::OutboundProtocol,
-            Self::OutboundOpenInfo,
-            Self::OutEvent,
-            Self::Error,
-        >,
-    > {
+    ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>>
+    {
         // Check for a pending (fatal) error.
         if let Some(err) = self.pending_error.take() {
             // The handler will not be polled again by the `Swarm`.
-            return Poll::Ready(ConnectionHandlerEvent::Close(err));
+            return Poll::Ready(ConnectionHandlerEvent::close(err));
         }
 
         // Return queued events.
@@ -391,11 +396,7 @@ impl ConnectionHandler for Handler {
                         Event::InboundConnectNegotiated(addresses),
                     ));
                 }
-                Err(e) => {
-                    return Poll::Ready(ConnectionHandlerEvent::Close(
-                        ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::A(e))),
-                    ))
-                }
+                Err(e) => return Poll::Ready(ConnectionHandlerEvent::close(e)),
             }
         }
 

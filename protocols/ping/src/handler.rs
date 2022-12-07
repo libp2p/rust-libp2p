@@ -256,7 +256,6 @@ impl Handler {
 impl ConnectionHandler for Handler {
     type InEvent = Void;
     type OutEvent = crate::Result;
-    type Error = Failure;
     type InboundProtocol = ReadyUpgrade<&'static [u8]>;
     type OutboundProtocol = ReadyUpgrade<&'static [u8]>;
     type OutboundOpenInfo = ();
@@ -279,8 +278,7 @@ impl ConnectionHandler for Handler {
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<ConnectionHandlerEvent<ReadyUpgrade<&'static [u8]>, (), crate::Result, Self::Error>>
-    {
+    ) -> Poll<ConnectionHandlerEvent<ReadyUpgrade<&'static [u8]>, (), crate::Result>> {
         match self.state {
             State::Inactive { reported: true } => {
                 return Poll::Pending; // nothing to do on this connection
@@ -325,7 +323,7 @@ impl ConnectionHandler for Handler {
                 if self.failures > 1 || self.config.max_failures.get() > 1 {
                     if self.failures >= self.config.max_failures.get() {
                         log::debug!("Too many failures ({}). Closing connection.", self.failures);
-                        return Poll::Ready(ConnectionHandlerEvent::Close(error));
+                        return Poll::Ready(ConnectionHandlerEvent::close(error));
                     }
 
                     return Poll::Ready(ConnectionHandlerEvent::Custom(Err(error)));

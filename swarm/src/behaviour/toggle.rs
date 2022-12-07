@@ -229,7 +229,6 @@ where
 {
     type InEvent = TInner::InEvent;
     type OutEvent = TInner::OutEvent;
-    type Error = TInner::Error;
     type InboundProtocol =
         EitherUpgrade<SendWrapper<TInner::InboundProtocol>, SendWrapper<DeniedUpgrade>>;
     type OutboundProtocol = TInner::OutboundProtocol;
@@ -268,14 +267,8 @@ where
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<
-        ConnectionHandlerEvent<
-            Self::OutboundProtocol,
-            Self::OutboundOpenInfo,
-            Self::OutEvent,
-            Self::Error,
-        >,
-    > {
+    ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>>
+    {
         if let Some(inner) = self.inner.as_mut() {
             inner.poll(cx)
         } else {

@@ -186,7 +186,6 @@ pub struct Handler {
             <Self as ConnectionHandler>::OutboundProtocol,
             <Self as ConnectionHandler>::OutboundOpenInfo,
             <Self as ConnectionHandler>::OutEvent,
-            <Self as ConnectionHandler>::Error,
         >,
     >,
 
@@ -509,9 +508,6 @@ impl Handler {
 impl ConnectionHandler for Handler {
     type InEvent = In;
     type OutEvent = Event;
-    type Error = ConnectionHandlerUpgrErr<
-        EitherError<inbound_stop::FatalUpgradeError, outbound_hop::FatalUpgradeError>,
-    >;
     type InboundProtocol = inbound_stop::Upgrade;
     type OutboundProtocol = outbound_hop::Upgrade;
     type OutboundOpenInfo = OutboundOpenInfo;
@@ -554,18 +550,12 @@ impl ConnectionHandler for Handler {
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<
-        ConnectionHandlerEvent<
-            Self::OutboundProtocol,
-            Self::OutboundOpenInfo,
-            Self::OutEvent,
-            Self::Error,
-        >,
-    > {
+    ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>>
+    {
         // Check for a pending (fatal) error.
         if let Some(err) = self.pending_error.take() {
             // The handler will not be polled again by the `Swarm`.
-            return Poll::Ready(ConnectionHandlerEvent::Close(err));
+            return Poll::Ready(ConnectionHandlerEvent::close(err));
         }
 
         // Return queued events.

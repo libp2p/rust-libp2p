@@ -99,7 +99,6 @@ where
 {
     type InEvent = Either<L::InEvent, R::InEvent>;
     type OutEvent = Either<L::OutEvent, R::OutEvent>;
-    type Error = Either<L::Error, R::Error>;
     type InboundProtocol =
         EitherUpgrade<SendWrapper<L::InboundProtocol>, SendWrapper<R::InboundProtocol>>;
     type OutboundProtocol =
@@ -140,23 +139,15 @@ where
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-    ) -> Poll<
-        ConnectionHandlerEvent<
-            Self::OutboundProtocol,
-            Self::OutboundOpenInfo,
-            Self::OutEvent,
-            Self::Error,
-        >,
-    > {
+    ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>>
+    {
         let event = match self {
             Either::Left(handler) => futures::ready!(handler.poll(cx))
                 .map_custom(Either::Left)
-                .map_close(Either::Left)
                 .map_protocol(|p| EitherUpgrade::A(SendWrapper(p)))
                 .map_outbound_open_info(Either::Left),
             Either::Right(handler) => futures::ready!(handler.poll(cx))
                 .map_custom(Either::Right)
-                .map_close(Either::Right)
                 .map_protocol(|p| EitherUpgrade::B(SendWrapper(p)))
                 .map_outbound_open_info(Either::Right),
         };

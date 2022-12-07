@@ -52,7 +52,6 @@ impl Handler {
 impl ConnectionHandler for Handler {
     type InEvent = void::Void;
     type OutEvent = Event;
-    type Error = ConnectionHandlerUpgrErr<std::io::Error>;
     type InboundProtocol = DeniedUpgrade;
     type OutboundProtocol = DeniedUpgrade;
     type OutboundOpenInfo = Void;
@@ -94,14 +93,8 @@ impl ConnectionHandler for Handler {
     fn poll(
         &mut self,
         _: &mut Context<'_>,
-    ) -> Poll<
-        ConnectionHandlerEvent<
-            Self::OutboundProtocol,
-            Self::OutboundOpenInfo,
-            Self::OutEvent,
-            Self::Error,
-        >,
-    > {
+    ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>>
+    {
         if !self.reported {
             self.reported = true;
             return Poll::Ready(ConnectionHandlerEvent::Custom(
