@@ -1,3 +1,12 @@
+# 0.43.0-alpha
+
+- Update to `yamux` `v0.11.0`.
+  This version contains a major refactoring which hopefully does not break anything.
+  To express this uncertainty, this is released as an `alpha`.
+  See [PR 3013].
+
+[PR 3013]: https://github.com/libp2p/rust-libp2p/pull/3013
+
 # 0.42.0
 
 - Update to `libp2p-core` `v0.38.0`.
