@@ -27,7 +27,7 @@ use crate::{
 };
 pub use connecting::Connecting;
 pub use substream::Substream;
-use substream::SubstreamState;
+use substream::{SubstreamState, WriteState};
 
 use futures::{channel::mpsc, ready, FutureExt, StreamExt};
 use futures_timer::Delay;
@@ -277,11 +277,16 @@ impl StreamMuxer for Connection {
                 }
                 quinn_proto::Event::Stream(quinn_proto::StreamEvent::Finished { id }) => {
                     if let Some(substream) = inner.substreams.get_mut(&id) {
-                        substream.is_write_closed = true;
+                        if matches!(
+                            substream.write_state,
+                            WriteState::Open | WriteState::Closing
+                        ) {
+                            substream.write_state = WriteState::Closed;
+                        }
                         if let Some(waker) = substream.write_waker.take() {
                             waker.wake();
                         }
-                        if let Some(waker) = substream.finished_waker.take() {
+                        if let Some(waker) = substream.close_waker.take() {
                             waker.wake();
                         }
                     }
@@ -291,10 +296,11 @@ impl StreamMuxer for Connection {
                     error_code: _,
                 }) => {
                     if let Some(substream) = inner.substreams.get_mut(&id) {
+                        substream.write_state = WriteState::Stopped;
                         if let Some(waker) = substream.write_waker.take() {
                             waker.wake();
                         }
-                        if let Some(waker) = substream.finished_waker.take() {
+                        if let Some(waker) = substream.close_waker.take() {
                             waker.wake();
                         }
                     }

@@ -34,7 +34,7 @@ prost-build = "0.11"
 
 [dev-dependencies]
 clap = { version = "4.0.13", features = ["derive"] }
-env_logger = "0.9.0"
+env_logger = "0.10.0"
 libp2p-identify = { path = "../../protocols/identify" }
 libp2p-noise = { path = "../../transports/noise" }
 libp2p-ping = { path = "../../protocols/ping" }

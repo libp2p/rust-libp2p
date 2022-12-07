@@ -1,4 +1,4 @@
-# 0.37.0 [unreleased]
+# 0.37.0
 
 - Update `rust-version` to reflect the actual MSRV: 1.60.0. See [PR 3090].
 

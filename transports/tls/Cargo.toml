@@ -3,6 +3,8 @@ name = "libp2p-tls"
 version = "0.1.0-alpha"
 edition = "2021"
 rust-version = "1.60.0"
+description = "TLS configuration based on libp2p TLS specs."
+repository = "https://github.com/libp2p/rust-libp2p"
 license = "MIT"
 exclude = ["src/test_assets"]
 

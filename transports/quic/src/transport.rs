@@ -49,12 +49,24 @@ use std::{
 };
 
 /// Implementation of the [`Transport`] trait for QUIC.
+///
+/// By default only QUIC Version 1 (RFC 9000) is supported. In the [`Multiaddr`] this maps to
+/// [`libp2p_core::multiaddr::Protocol::QuicV1`].
+/// The [`libp2p_core::multiaddr::Protocol::Quic`] codepoint is interpreted as QUIC version
+/// draft-29 and only supported if [`Config::support_draft_29`] is set to `true`.
+/// Note that in that case servers support both version an all QUIC listening addresses.
+///
+/// Version draft-29 should only be used to connect to nodes from other libp2p implementations
+/// that do not support `QuicV1` yet. Support for it will be removed long-term.
+/// See <https://github.com/multiformats/multiaddr/issues/145>.
 #[derive(Debug)]
 pub struct GenTransport<P: Provider> {
     /// Config for the inner [`quinn_proto`] structs.
     quinn_config: QuinnConfig,
     /// Timeout for the [`Connecting`] future.
     handshake_timeout: Duration,
+    /// Whether draft-29 is supported for dialing and listening.
+    support_draft_29: bool,
     /// Streams of active [`Listener`]s.
     listeners: SelectAll<Listener<P>>,
     /// Dialer for each socket family if no matching listener exists.
@@ -65,12 +77,14 @@ impl<P: Provider> GenTransport<P> {
     /// Create a new [`GenTransport`] with the given [`Config`].
     pub fn new(config: Config) -> Self {
         let handshake_timeout = config.handshake_timeout;
+        let support_draft_29 = config.support_draft_29;
         let quinn_config = config.into();
         Self {
             listeners: SelectAll::new(),
             quinn_config,
             handshake_timeout,
             dialer: HashMap::new(),
+            support_draft_29,
         }
     }
 }
@@ -82,14 +96,15 @@ impl<P: Provider> Transport for GenTransport<P> {
     type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
     fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
-        let socket_addr =
-            multiaddr_to_socketaddr(&addr).ok_or(TransportError::MultiaddrNotSupported(addr))?;
+        let (socket_addr, version) = multiaddr_to_socketaddr(&addr, self.support_draft_29)
+            .ok_or(TransportError::MultiaddrNotSupported(addr))?;
         let listener_id = ListenerId::new();
         let listener = Listener::new(
             listener_id,
             socket_addr,
             self.quinn_config.clone(),
             self.handshake_timeout,
+            version,
         )?;
         self.listeners.push(listener);
 
@@ -120,7 +135,7 @@ impl<P: Provider> Transport for GenTransport<P> {
     }
 
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let socket_addr = multiaddr_to_socketaddr(&addr)
+        let (socket_addr, version) = multiaddr_to_socketaddr(&addr, self.support_draft_29)
             .ok_or_else(|| TransportError::MultiaddrNotSupported(addr.clone()))?;
         if socket_addr.port() == 0 || socket_addr.ip().is_unspecified() {
             return Err(TransportError::MultiaddrNotSupported(addr));
@@ -161,8 +176,7 @@ impl<P: Provider> Transport for GenTransport<P> {
                 &mut listeners[index].dialer_state
             }
         };
-
-        Ok(dialer_state.new_dial(socket_addr, self.handshake_timeout))
+        Ok(dialer_state.new_dial(socket_addr, self.handshake_timeout, version))
     }
 
     fn dial_as_listener(
@@ -251,12 +265,14 @@ impl DialerState {
         &mut self,
         address: SocketAddr,
         timeout: Duration,
+        version: ProtocolVersion,
     ) -> BoxFuture<'static, Result<(PeerId, Connection), Error>> {
         let (rx, tx) = oneshot::channel();
 
         let message = ToEndpoint::Dial {
             addr: address,
             result: rx,
+            version,
         };
 
         self.pending_dials.push_back(message);
@@ -299,6 +315,8 @@ struct Listener<P: Provider> {
     /// Id of the listener.
     listener_id: ListenerId,
 
+    version: ProtocolVersion,
+
     /// Channel to the endpoint to initiate dials.
     endpoint_channel: endpoint::Channel,
     /// Queued dials.
@@ -327,6 +345,7 @@ impl<P: Provider> Listener<P> {
         socket_addr: SocketAddr,
         config: QuinnConfig,
         handshake_timeout: Duration,
+        version: ProtocolVersion,
     ) -> Result<Self, Error> {
         let (endpoint_channel, new_connections_rx) =
             endpoint::Channel::new_bidirectional::<P>(config, socket_addr)?;
@@ -338,7 +357,7 @@ impl<P: Provider> Listener<P> {
             pending_event = None;
         } else {
             if_watcher = None;
-            let ma = socketaddr_to_multiaddr(endpoint_channel.socket_addr());
+            let ma = socketaddr_to_multiaddr(endpoint_channel.socket_addr(), version);
             pending_event = Some(TransportEvent::NewAddress {
                 listener_id,
                 listen_addr: ma,
@@ -348,6 +367,7 @@ impl<P: Provider> Listener<P> {
         Ok(Listener {
             endpoint_channel,
             listener_id,
+            version,
             new_connections_rx,
             handshake_timeout,
             if_watcher,
@@ -379,9 +399,11 @@ impl<P: Provider> Listener<P> {
         loop {
             match ready!(P::poll_if_event(if_watcher, cx)) {
                 Ok(IfEvent::Up(inet)) => {
-                    if let Some(listen_addr) =
-                        ip_to_listenaddr(self.endpoint_channel.socket_addr(), inet.addr())
-                    {
+                    if let Some(listen_addr) = ip_to_listenaddr(
+                        self.endpoint_channel.socket_addr(),
+                        inet.addr(),
+                        self.version,
+                    ) {
                         log::debug!("New listen address: {}", listen_addr);
                         return Poll::Ready(TransportEvent::NewAddress {
                             listener_id: self.listener_id,
@@ -390,9 +412,11 @@ impl<P: Provider> Listener<P> {
                     }
                 }
                 Ok(IfEvent::Down(inet)) => {
-                    if let Some(listen_addr) =
-                        ip_to_listenaddr(self.endpoint_channel.socket_addr(), inet.addr())
-                    {
+                    if let Some(listen_addr) = ip_to_listenaddr(
+                        self.endpoint_channel.socket_addr(),
+                        inet.addr(),
+                        self.version,
+                    ) {
                         log::debug!("Expired listen address: {}", listen_addr);
                         return Poll::Ready(TransportEvent::AddressExpired {
                             listener_id: self.listener_id,
@@ -445,8 +469,9 @@ impl<P: Provider> Stream for Listener<P> {
             }
             match self.new_connections_rx.poll_next_unpin(cx) {
                 Poll::Ready(Some(connection)) => {
-                    let local_addr = socketaddr_to_multiaddr(connection.local_addr());
-                    let send_back_addr = socketaddr_to_multiaddr(&connection.remote_addr());
+                    let local_addr = socketaddr_to_multiaddr(connection.local_addr(), self.version);
+                    let send_back_addr =
+                        socketaddr_to_multiaddr(&connection.remote_addr(), self.version);
                     let event = TransportEvent::Incoming {
                         upgrade: Connecting::new(connection, self.handshake_timeout),
                         local_addr,
@@ -486,6 +511,12 @@ impl<P: Provider> Drop for Listener<P> {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProtocolVersion {
+    V1, // i.e. RFC9000
+    Draft29,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SocketFamily {
     Ipv4,
@@ -518,18 +549,25 @@ impl From<IpAddr> for SocketFamily {
 ///
 /// Returns `None` if the `ip` is not the same socket family as the
 /// address that the endpoint is bound to.
-fn ip_to_listenaddr(endpoint_addr: &SocketAddr, ip: IpAddr) -> Option<Multiaddr> {
+fn ip_to_listenaddr(
+    endpoint_addr: &SocketAddr,
+    ip: IpAddr,
+    version: ProtocolVersion,
+) -> Option<Multiaddr> {
     // True if either both addresses are Ipv4 or both Ipv6.
     if !SocketFamily::is_same(&endpoint_addr.ip(), &ip) {
         return None;
     }
     let socket_addr = SocketAddr::new(ip, endpoint_addr.port());
-    Some(socketaddr_to_multiaddr(&socket_addr))
+    Some(socketaddr_to_multiaddr(&socket_addr, version))
 }
 
 /// Tries to turn a QUIC multiaddress into a UDP [`SocketAddr`]. Returns None if the format
 /// of the multiaddr is wrong.
-fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Option<SocketAddr> {
+fn multiaddr_to_socketaddr(
+    addr: &Multiaddr,
+    support_draft_29: bool,
+) -> Option<(SocketAddr, ProtocolVersion)> {
     let mut iter = addr.iter();
     let proto1 = iter.next()?;
     let proto2 = iter.next()?;
@@ -541,13 +579,18 @@ fn multiaddr_to_socketaddr(addr: &Multiaddr) -> Option<SocketAddr> {
             _ => return None,
         }
     }
+    let version = match proto3 {
+        Protocol::QuicV1 => ProtocolVersion::V1,
+        Protocol::Quic if support_draft_29 => ProtocolVersion::Draft29,
+        _ => return None,
+    };
 
-    match (proto1, proto2, proto3) {
-        (Protocol::Ip4(ip), Protocol::Udp(port), Protocol::QuicV1) => {
-            Some(SocketAddr::new(ip.into(), port))
+    match (proto1, proto2) {
+        (Protocol::Ip4(ip), Protocol::Udp(port)) => {
+            Some((SocketAddr::new(ip.into(), port), version))
         }
-        (Protocol::Ip6(ip), Protocol::Udp(port), Protocol::QuicV1) => {
-            Some(SocketAddr::new(ip.into(), port))
+        (Protocol::Ip6(ip), Protocol::Udp(port)) => {
+            Some((SocketAddr::new(ip.into(), port), version))
         }
         _ => None,
     }
@@ -580,11 +623,15 @@ fn is_quic_addr(addr: &Multiaddr) -> bool {
 }
 
 /// Turns an IP address and port into the corresponding QUIC multiaddr.
-fn socketaddr_to_multiaddr(socket_addr: &SocketAddr) -> Multiaddr {
+fn socketaddr_to_multiaddr(socket_addr: &SocketAddr, version: ProtocolVersion) -> Multiaddr {
+    let quic_proto = match version {
+        ProtocolVersion::V1 => Protocol::QuicV1,
+        ProtocolVersion::Draft29 => Protocol::Quic,
+    };
     Multiaddr::empty()
         .with(socket_addr.ip().into())
         .with(Protocol::Udp(socket_addr.port()))
-        .with(Protocol::QuicV1)
+        .with(quic_proto)
 }
 
 #[cfg(test)]
@@ -598,62 +645,88 @@ mod test {
 
     #[test]
     fn multiaddr_to_udp_conversion() {
-        assert!(
-            multiaddr_to_socketaddr(&"/ip4/127.0.0.1/udp/1234".parse::<Multiaddr>().unwrap())
-                .is_none()
-        );
+        assert!(multiaddr_to_socketaddr(
+            &"/ip4/127.0.0.1/udp/1234".parse::<Multiaddr>().unwrap(),
+            true
+        )
+        .is_none());
 
         assert_eq!(
             multiaddr_to_socketaddr(
                 &"/ip4/127.0.0.1/udp/12345/quic-v1"
                     .parse::<Multiaddr>()
-                    .unwrap()
+                    .unwrap(),
+                false
             ),
-            Some(SocketAddr::new(
-                IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
-                12345,
+            Some((
+                SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 12345,),
+                ProtocolVersion::V1
             ))
         );
         assert_eq!(
             multiaddr_to_socketaddr(
                 &"/ip4/255.255.255.255/udp/8080/quic-v1"
                     .parse::<Multiaddr>()
-                    .unwrap()
+                    .unwrap(),
+                false
             ),
-            Some(SocketAddr::new(
-                IpAddr::V4(Ipv4Addr::new(255, 255, 255, 255)),
-                8080,
+            Some((
+                SocketAddr::new(IpAddr::V4(Ipv4Addr::new(255, 255, 255, 255)), 8080,),
+                ProtocolVersion::V1
             ))
         );
         assert_eq!(
             multiaddr_to_socketaddr(
                 &"/ip4/127.0.0.1/udp/55148/quic-v1/p2p/12D3KooW9xk7Zp1gejwfwNpfm6L9zH5NL4Bx5rm94LRYJJHJuARZ"
                     .parse::<Multiaddr>()
-                    .unwrap()
+                    .unwrap(), false
             ),
-            Some(SocketAddr::new(
+            Some((SocketAddr::new(
                 IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
                 55148,
-            ))
+            ), ProtocolVersion::V1))
         );
         assert_eq!(
-            multiaddr_to_socketaddr(&"/ip6/::1/udp/12345/quic-v1".parse::<Multiaddr>().unwrap()),
-            Some(SocketAddr::new(
-                IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)),
-                12345,
+            multiaddr_to_socketaddr(
+                &"/ip6/::1/udp/12345/quic-v1".parse::<Multiaddr>().unwrap(),
+                false
+            ),
+            Some((
+                SocketAddr::new(IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1)), 12345,),
+                ProtocolVersion::V1
             ))
         );
         assert_eq!(
             multiaddr_to_socketaddr(
                 &"/ip6/ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff/udp/8080/quic-v1"
                     .parse::<Multiaddr>()
-                    .unwrap()
+                    .unwrap(),
+                false
             ),
-            Some(SocketAddr::new(
-                IpAddr::V6(Ipv6Addr::new(
-                    65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535,
-                )),
-                8080,
+            Some((
+                SocketAddr::new(
+                    IpAddr::V6(Ipv6Addr::new(
+                        65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535,
+                    )),
+                    8080,
+                ),
+                ProtocolVersion::V1
+            ))
+        );
+
+        assert!(multiaddr_to_socketaddr(
+            &"/ip4/127.0.0.1/udp/1234/quic".parse::<Multiaddr>().unwrap(),
+            false
+        )
+        .is_none());
+        assert_eq!(
+            multiaddr_to_socketaddr(
+                &"/ip4/127.0.0.1/udp/1234/quic".parse::<Multiaddr>().unwrap(),
+                true
+            ),
+            Some((
+                SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1234,),
+                ProtocolVersion::Draft29
             ))
         );
     }
@@ -755,6 +828,7 @@ mod test {
                     ToEndpoint::Dial {
                         addr: SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0),
                         result: tx,
+                        version: ProtocolVersion::V1,
                     },
                     cx,
                 )

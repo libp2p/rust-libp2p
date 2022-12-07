@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! High level manager of the network.
+//! High-level network manager.
 //!
 //! A [`Swarm`] contains the state of the network as a whole. The entire
 //! behaviour of a libp2p network can be controlled through the `Swarm`.
@@ -418,6 +418,29 @@ where
             }
         };
         builder.build()
+    }
+
+    /// Builds a new `Swarm` with a wasm executor.
+    /// Background tasks will be executed by the browser on the next micro-tick.
+    ///
+    /// Spawning a task is similar too:
+    /// ```typescript
+    /// function spawn(task: () => Promise<void>) {
+    ///     task()
+    /// }
+    /// ```
+    #[cfg(feature = "wasm-bindgen")]
+    pub fn with_wasm_executor(
+        transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
+        behaviour: TBehaviour,
+        local_peer_id: PeerId,
+    ) -> Self {
+        Self::with_executor(
+            transport,
+            behaviour,
+            local_peer_id,
+            crate::executor::WasmBindgenExecutor,
+        )
     }
 
     /// Builds a new `Swarm` without an executor, instead using the current task.
@@ -1454,6 +1477,44 @@ where
             pool_config: PoolConfig::new(Some(Box::new(executor))),
             connection_limits: Default::default(),
         }
+    }
+
+    /// Builds a new [`SwarmBuilder`] from the given transport, behaviour, local peer ID and a
+    /// `tokio` executor.
+    #[cfg(all(
+        feature = "tokio",
+        not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown"))
+    ))]
+    pub fn with_tokio_executor(
+        transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
+        behaviour: TBehaviour,
+        local_peer_id: PeerId,
+    ) -> Self {
+        Self::with_executor(
+            transport,
+            behaviour,
+            local_peer_id,
+            crate::executor::TokioExecutor,
+        )
+    }
+
+    /// Builds a new [`SwarmBuilder`] from the given transport, behaviour, local peer ID and a
+    /// `async-std` executor.
+    #[cfg(all(
+        feature = "async-std",
+        not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown"))
+    ))]
+    pub fn with_async_std_executor(
+        transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
+        behaviour: TBehaviour,
+        local_peer_id: PeerId,
+    ) -> Self {
+        Self::with_executor(
+            transport,
+            behaviour,
+            local_peer_id,
+            crate::executor::AsyncStdExecutor,
+        )
     }
 
     /// Creates a new [`SwarmBuilder`] from the given transport, behaviour and local peer ID. The
