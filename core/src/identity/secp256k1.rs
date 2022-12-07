@@ -100,7 +100,7 @@ impl SecretKey {
     pub fn from_bytes(mut sk: impl AsMut<[u8]>) -> Result<SecretKey, DecodingError> {
         let sk_bytes = sk.as_mut();
         let secret = libsecp256k1::SecretKey::parse_slice(&*sk_bytes)
-            .map_err(|_| DecodingError::new("failed to parse secp256k1 secret key"))?;
+            .map_err(|e| DecodingError::failed_to_parse("parse secp256k1 secret key", e))?;
         sk_bytes.zeroize();
         Ok(SecretKey(secret))
     }
@@ -112,13 +112,12 @@ impl SecretKey {
     pub fn from_der(mut der: impl AsMut<[u8]>) -> Result<SecretKey, DecodingError> {
         // TODO: Stricter parsing.
         let der_obj = der.as_mut();
-        let obj: Sequence = DerDecodable::decode(der_obj)
-            .map_err(|e| DecodingError::new("Secp256k1 DER ECPrivateKey").source(e))?;
-        let sk_obj = obj
-            .get(1)
-            .map_err(|e| DecodingError::new("Not enough elements in DER").source(e))?;
-        let mut sk_bytes: Vec<u8> =
-            asn1_der::typed::DerDecodable::load(sk_obj).map_err(DecodingError::new)?;
+
+        let mut sk_bytes = Sequence::decode(der_obj)
+            .and_then(|seq| seq.get(1))
+            .and_then(Vec::load)
+            .map_err(|e| DecodingError::failed_to_parse("secp256k1 SecretKey bytes", e))?;
+
         let sk = SecretKey::from_bytes(&mut sk_bytes)?;
         sk_bytes.zeroize();
         der_obj.zeroize();
@@ -217,7 +216,7 @@ impl PublicKey {
     /// by `encode`.
     pub fn decode(k: &[u8]) -> Result<PublicKey, DecodingError> {
         libsecp256k1::PublicKey::parse_slice(k, Some(libsecp256k1::PublicKeyFormat::Compressed))
-            .map_err(|_| DecodingError::new("failed to parse secp256k1 public key"))
+            .map_err(|e| DecodingError::failed_to_parse("secp256k1 public key", e))
             .map(PublicKey)
     }
 }

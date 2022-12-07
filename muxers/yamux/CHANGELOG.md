@@ -1,6 +1,19 @@
-# 0.42.0 [unreleased]
+# 0.42.0
 
 - Update to `libp2p-core` `v0.38.0`.
+
+- Update `rust-version` to reflect the actual MSRV: 1.60.0. See [PR 3090].
+
+[PR 3090]: https://github.com/libp2p/rust-libp2p/pull/3090
+
+# 0.41.1
+
+- Yield from `StreamMuxer::poll` as soon as we receive a single substream.
+  This fixes [issue 3041].
+  See [PR 3071].
+
+[PR 3071]: https://github.com/libp2p/rust-libp2p/pull/3071/
+[issue 3041]: https://github.com/libp2p/rust-libp2p/issues/3041/
 
 # 0.41.0
 

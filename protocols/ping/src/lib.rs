@@ -48,7 +48,9 @@ mod protocol;
 use handler::Handler;
 pub use handler::{Config, Failure, Success};
 use libp2p_core::{connection::ConnectionId, PeerId};
-use libp2p_swarm::{NetworkBehaviour, NetworkBehaviourAction, PollParameters};
+use libp2p_swarm::{
+    behaviour::FromSwarm, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
+};
 use std::{
     collections::VecDeque,
     task::{Context, Poll},
@@ -121,7 +123,7 @@ impl NetworkBehaviour for Behaviour {
         Handler::new(self.config.clone())
     }
 
-    fn inject_event(&mut self, peer: PeerId, _: ConnectionId, result: Result) {
+    fn on_connection_handler_event(&mut self, peer: PeerId, _: ConnectionId, result: Result) {
         self.events.push_front(Event { peer, result })
     }
 
@@ -142,6 +144,26 @@ impl NetworkBehaviour for Behaviour {
             Poll::Ready(NetworkBehaviourAction::GenerateEvent(e))
         } else {
             Poll::Pending
+        }
+    }
+
+    fn on_swarm_event(
+        &mut self,
+        event: libp2p_swarm::behaviour::FromSwarm<Self::ConnectionHandler>,
+    ) {
+        match event {
+            FromSwarm::ConnectionEstablished(_)
+            | FromSwarm::ConnectionClosed(_)
+            | FromSwarm::AddressChange(_)
+            | FromSwarm::DialFailure(_)
+            | FromSwarm::ListenFailure(_)
+            | FromSwarm::NewListener(_)
+            | FromSwarm::NewListenAddr(_)
+            | FromSwarm::ExpiredListenAddr(_)
+            | FromSwarm::ListenerError(_)
+            | FromSwarm::ListenerClosed(_)
+            | FromSwarm::NewExternalAddr(_)
+            | FromSwarm::ExpiredExternalAddr(_) => {}
         }
     }
 }

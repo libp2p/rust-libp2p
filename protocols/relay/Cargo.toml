@@ -1,7 +1,7 @@
 [package]
 name = "libp2p-relay"
 edition = "2021"
-rust-version = "1.56.1"
+rust-version = "1.62.0"
 description = "Communications relaying for libp2p"
 version = "0.14.0"
 authors = ["Parity Technologies <admin@parity.io>", "Max Inden <mail@max-inden.de>"]
@@ -33,7 +33,7 @@ void = "1"
 prost-build = "0.11"
 
 [dev-dependencies]
-env_logger = "0.9.0"
+env_logger = "0.10.0"
 libp2p = { path = "../..", features = ["full"] }
 quickcheck = { package = "quickcheck-ext", path = "../../misc/quickcheck-ext" }
 clap = { version = "4.0.13", features = ["derive"] }

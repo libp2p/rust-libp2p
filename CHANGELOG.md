@@ -25,6 +25,7 @@
 - [`libp2p-noise` CHANGELOG](transports/noise/CHANGELOG.md)
 - [`libp2p-plaintext` CHANGELOG](transports/plaintext/CHANGELOG.md)
 - [`libp2p-pnet` CHANGELOG](transports/pnet/CHANGELOG.md)
+- [`libp2p-quic` CHANGELOG](transports/quic/CHANGELOG.md)
 - [`libp2p-tcp` CHANGELOG](transports/tcp/CHANGELOG.md)
 - [`libp2p-uds` CHANGELOG](transports/uds/CHANGELOG.md)
 - [`libp2p-wasm-ext` CHANGELOG](transports/wasm-ext/CHANGELOG.md)
@@ -44,12 +45,20 @@
 
 # `libp2p` facade crate
 
-# 0.50.0 - [unreleased]
+# 0.50.0
+
+This is a large release. After > 4 years, rust-libp2p ships with an [(alpha) QUIC
+implementation](transports/quic/CHANGELOG.md#070-alpha). The [necessary TLS logic is extracted into
+its own crate](transports/tls/CHANGELOG.md#010-alpha), and can thus be used detached from QUIC, e.g.
+on top of TCP as an alternative to Noise. In addition to these two transports, this release adds
+a third, namely [WebRTC (browser-to-server)](transports/webrtc/CHANGELOG.md#040-alpha). But that is
+definitely not it. See below for the many other changes packed into this release.
 
 - Introduce [`libp2p-tls` `v0.1.0-alpha`](transports/tls/CHANGELOG.md#010-alpha). See [PR 2945].
+- Introduce [`libp2p-quic` `v0.7.0-alpha`](transports/quic/CHANGELOG.md#070-alpha). See [PR 2289].
+- Introduce [`libp2p-webrtc` `v0.4.0-alpha`](transports/webrtc/CHANGELOG.md#040-alpha). See [PR 2289].
 - Remove deprecated features: `tcp-tokio`, `mdns-tokio`, `dns-tokio`, `tcp-async-io`, `mdns-async-io`, `dns-async-std`.
   See [PR 3001].
-- Introduce [`libp2p-tls` `v0.1.0`](transports/tls/CHANGELOG.md#010). See [PR 2945].
 - Remove `NetworkBehaviour` macro export from root crate in favor of re-exported macro from `libp2p::swarm`.
   Change your import from `libp2p::NetworkBehaviour` to `libp2p::swarm::NetworkBehaviour`. See [PR 3055].
 - Feature-gate `NetworkBehaviour` macro behind `macros` feature flag. See [PR 3055].
@@ -69,6 +78,7 @@
   - Update to [`libp2p-noise` `v0.41.0`](transports/noise/CHANGELOG.md#0410).
   - Update to [`libp2p-ping` `v0.41.0`](protocols/ping/CHANGELOG.md#0410).
   - Update to [`libp2p-plaintext` `v0.38.0`](transports/plaintext/CHANGELOG.md#0380).
+  - Update to [`libp2p-pnet` `v0.22.2`](transports/pnet/CHANGELOG.md#0222).
   - Update to [`libp2p-relay` `v0.14.0`](protocols/relay/CHANGELOG.md#0140).
   - Update to [`libp2p-rendezvous` `v0.11.0`](protocols/rendezovus/CHANGELOG.md#0110).
   - Update to [`libp2p-request-response` `v0.23.0`](protocols/request-response/CHANGELOG.md#0230).
@@ -82,6 +92,7 @@
 [PR 2945]: https://github.com/libp2p/rust-libp2p/pull/2945
 [PR 3001]: https://github.com/libp2p/rust-libp2p/pull/3001
 [PR 2945]: https://github.com/libp2p/rust-libp2p/pull/2945
+[PR 2289]: https://github.com/libp2p/rust-libp2p/pull/2289
 [PR 3055]: https://github.com/libp2p/rust-libp2p/pull/3055
 
 # 0.49.0
@@ -96,7 +107,7 @@
   - `tcp-async-io` in favor of `tcp` + `async-std`
   - `mdns-async-io` in favor of `mdns` + `async-std`
   - `dns-async-std` in favor of `dns` + `async-std`
-  
+
   See [PR 2962].
 
 - Update individual crates.
