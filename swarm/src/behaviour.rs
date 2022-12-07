@@ -557,7 +557,6 @@ pub enum NetworkBehaviourAction<
     /// # impl ConnectionHandler for MyHandler {
     /// #     type InEvent = Void;
     /// #     type OutEvent = Void;
-    /// #     type Error = Void;
     /// #     type InboundProtocol = DeniedUpgrade;
     /// #     type OutboundProtocol = DeniedUpgrade;
     /// #     type InboundOpenInfo = ();
@@ -603,8 +602,7 @@ pub enum NetworkBehaviourAction<
     /// #         ConnectionHandlerEvent<
     /// #             Self::OutboundProtocol,
     /// #             Self::OutboundOpenInfo,
-    /// #             Self::OutEvent,
-    /// #             Self::Error,
+    /// #             Self::OutEvent
     /// #         >,
     /// #     > {
     /// #         todo!("If `Self::message.is_some()` send the message to the remote.")
