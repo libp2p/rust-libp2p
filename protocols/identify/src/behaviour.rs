@@ -261,6 +261,12 @@ impl NetworkBehaviour for Behaviour {
                         score: AddressScore::Finite(1),
                     });
             }
+            handler::Event::Identification(peer) => {
+                self.events
+                    .push_back(NetworkBehaviourAction::GenerateEvent(Event::Sent {
+                        peer_id: peer,
+                    }));
+            }
             handler::Event::IdentificationPushed => {
                 self.events
                     .push_back(NetworkBehaviourAction::GenerateEvent(Event::Pushed {
