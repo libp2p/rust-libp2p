@@ -64,6 +64,14 @@ impl IntoConnectionHandler for Proto {
     }
 }
 
+/// A reply to an inbound identification request.
+#[derive(Debug)]
+pub struct Reply {
+    pub peer: PeerId,
+    pub io: ReplySubstream<NegotiatedSubstream>,
+    pub info: Info,
+}
+
 /// Protocol handler for sending and receiving identification requests.
 ///
 /// Outbound requests are sent periodically. The handler performs expects
@@ -106,9 +114,14 @@ pub enum Event {
     IdentificationError(ConnectionHandlerUpgrErr<UpgradeError>),
 }
 
-/// Identifying information of the local node that is pushed to a remote.
 #[derive(Debug)]
-pub struct Push(pub Info);
+#[allow(clippy::large_enum_variant)]
+pub enum InEvent {
+    /// Identifying information of the local node that is pushed to a remote.
+    Push(Info),
+    /// Identifying information requested from this node.
+    Identify(Reply),
+}
 
 impl Handler {
     /// Creates a new `Handler`.
@@ -195,7 +208,7 @@ impl Handler {
 }
 
 impl ConnectionHandler for Handler {
-    type InEvent = Push;
+    type InEvent = InEvent;
     type OutEvent = Event;
     type Error = io::Error;
     type InboundProtocol = SelectUpgrade<Protocol, PushProtocol<InboundPush>>;
@@ -207,14 +220,21 @@ impl ConnectionHandler for Handler {
         SubstreamProtocol::new(SelectUpgrade::new(Protocol, PushProtocol::inbound()), ())
     }
 
-    fn on_behaviour_event(&mut self, Push(push): Self::InEvent) {
-        self.events
-            .push(ConnectionHandlerEvent::OutboundSubstreamRequest {
-                protocol: SubstreamProtocol::new(
-                    EitherUpgrade::B(PushProtocol::outbound(push)),
-                    (),
-                ),
-            });
+    fn on_behaviour_event(&mut self, event: Self::InEvent) {
+        match event {
+            InEvent::Push(push) => {
+                self.events
+                    .push(ConnectionHandlerEvent::OutboundSubstreamRequest {
+                        protocol: SubstreamProtocol::new(
+                            EitherUpgrade::B(PushProtocol::outbound(push)),
+                            (),
+                        ),
+                    });
+            }
+            InEvent::Identify(_) => {
+                todo!()
+            }
+        }
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {

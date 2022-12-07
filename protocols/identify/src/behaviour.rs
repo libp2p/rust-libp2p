@@ -18,9 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::handler::{self, Proto, Push};
+use crate::handler::{self, InEvent, Proto, Reply};
 use crate::protocol::{Info, ReplySubstream, UpgradeError};
-use futures::prelude::*;
 use libp2p_core::{
     connection::ConnectionId, multiaddr::Protocol, ConnectedPoint, Multiaddr, PeerId, PublicKey,
 };
@@ -35,7 +34,6 @@ use std::num::NonZeroUsize;
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     iter::FromIterator,
-    pin::Pin,
     task::Context,
     task::Poll,
     time::Duration,
@@ -51,8 +49,8 @@ pub struct Behaviour {
     config: Config,
     /// For each peer we're connected to, the observed address to send back to it.
     connected: HashMap<PeerId, HashMap<ConnectionId, Multiaddr>>,
-    /// Pending replies to send.
-    pending_replies: VecDeque<Reply>,
+    /// Pending requests to respond.
+    requests: VecDeque<Request>,
     /// Pending events to be emitted when polled.
     events: VecDeque<NetworkBehaviourAction<Event, Proto>>,
     /// Peers to which an active push with current information about
@@ -63,18 +61,10 @@ pub struct Behaviour {
 }
 
 /// A pending reply to an inbound identification request.
-enum Reply {
-    /// The reply is queued for sending.
-    Queued {
-        peer: PeerId,
-        io: ReplySubstream<NegotiatedSubstream>,
-        observed: Multiaddr,
-    },
-    /// The reply is being sent.
-    Sending {
-        peer: PeerId,
-        io: Pin<Box<dyn Future<Output = Result<(), UpgradeError>> + Send>>,
-    },
+struct Request {
+    peer: PeerId,
+    io: ReplySubstream<NegotiatedSubstream>,
+    observed: Multiaddr,
 }
 
 /// Configuration for the [`identify::Behaviour`](Behaviour).
@@ -184,7 +174,7 @@ impl Behaviour {
         Self {
             config,
             connected: HashMap::new(),
-            pending_replies: VecDeque::new(),
+            requests: VecDeque::new(),
             events: VecDeque::new(),
             pending_push: HashSet::new(),
             discovered_peers,
@@ -287,7 +277,7 @@ impl NetworkBehaviour for Behaviour {
                         with an established connection and calling `NetworkBehaviour::on_event` \
                         with `FromSwarm::ConnectionEstablished ensures there is an entry; qed",
                     );
-                self.pending_replies.push_back(Reply::Queued {
+                self.requests.push_back(Request {
                     peer: peer_id,
                     io: sender,
                     observed: observed.clone(),
@@ -305,7 +295,7 @@ impl NetworkBehaviour for Behaviour {
 
     fn poll(
         &mut self,
-        cx: &mut Context<'_>,
+        _cx: &mut Context<'_>,
         params: &mut impl PollParameters,
     ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
         if let Some(event) = self.events.pop_front() {
@@ -333,7 +323,7 @@ impl NetworkBehaviour for Behaviour {
                     observed_addr,
                 };
 
-                (*peer, Push(info))
+                (*peer, InEvent::Push(info))
             })
         });
 
@@ -346,55 +336,21 @@ impl NetworkBehaviour for Behaviour {
             });
         }
 
-        // Check for pending replies to send.
-        if let Some(r) = self.pending_replies.pop_front() {
-            let mut sending = 0;
-            let to_send = self.pending_replies.len() + 1;
-            let mut reply = Some(r);
-            loop {
-                match reply {
-                    Some(Reply::Queued { peer, io, observed }) => {
-                        let info = Info {
-                            listen_addrs: listen_addrs(params),
-                            protocols: supported_protocols(params),
-                            public_key: self.config.local_public_key.clone(),
-                            protocol_version: self.config.protocol_version.clone(),
-                            agent_version: self.config.agent_version.clone(),
-                            observed_addr: observed,
-                        };
-                        let io = Box::pin(io.send(info));
-                        reply = Some(Reply::Sending { peer, io });
-                    }
-                    Some(Reply::Sending { peer, mut io }) => {
-                        sending += 1;
-                        match Future::poll(Pin::new(&mut io), cx) {
-                            Poll::Ready(Ok(())) => {
-                                let event = Event::Sent { peer_id: peer };
-                                return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event));
-                            }
-                            Poll::Pending => {
-                                self.pending_replies.push_back(Reply::Sending { peer, io });
-                                if sending == to_send {
-                                    // All remaining futures are NotReady
-                                    break;
-                                } else {
-                                    reply = self.pending_replies.pop_front();
-                                }
-                            }
-                            Poll::Ready(Err(err)) => {
-                                let event = Event::Error {
-                                    peer_id: peer,
-                                    error: ConnectionHandlerUpgrErr::Upgrade(
-                                        libp2p_core::upgrade::UpgradeError::Apply(err),
-                                    ),
-                                };
-                                return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event));
-                            }
-                        }
-                    }
-                    None => unreachable!(),
-                }
-            }
+        // Check for pending requests to send back to the handler for reply.
+        if let Some(Request { peer, io, observed }) = self.requests.pop_front() {
+            let info = Info {
+                listen_addrs: listen_addrs(params),
+                protocols: supported_protocols(params),
+                public_key: self.config.local_public_key.clone(),
+                protocol_version: self.config.protocol_version.clone(),
+                agent_version: self.config.agent_version.clone(),
+                observed_addr: observed,
+            };
+            return Poll::Ready(NetworkBehaviourAction::NotifyHandler {
+                peer_id: peer,
+                handler: NotifyHandler::Any,
+                event: InEvent::Identify(Reply { peer, info, io }),
+            });
         }
 
         Poll::Pending
@@ -557,6 +513,7 @@ impl PeerCache {
 mod tests {
     use super::*;
     use futures::pin_mut;
+    use futures::prelude::*;
     use libp2p::mplex::MplexConfig;
     use libp2p::noise;
     use libp2p::tcp;
