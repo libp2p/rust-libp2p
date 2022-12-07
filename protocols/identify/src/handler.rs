@@ -92,7 +92,7 @@ pub struct Handler {
     interval: Duration,
 }
 
-/// Event produced by the `IdentifyHandler`.
+/// Event produced by the `Handler`.
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
 pub enum Event {
@@ -111,7 +111,7 @@ pub enum Event {
 pub struct Push(pub Info);
 
 impl Handler {
-    /// Creates a new `IdentifyHandler`.
+    /// Creates a new `Handler`.
     pub fn new(initial_delay: Duration, interval: Duration, remote_peer_id: PeerId) -> Self {
         Self {
             remote_peer_id,

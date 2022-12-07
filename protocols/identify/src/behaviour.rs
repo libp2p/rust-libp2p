@@ -618,7 +618,7 @@ mod tests {
 
         // nb. Either swarm may receive the `Identified` event first, upon which
         // it will permit the connection to be closed, as defined by
-        // `IdentifyHandler::connection_keep_alive`. Hence the test succeeds if
+        // `Handler::connection_keep_alive`. Hence the test succeeds if
         // either `Identified` event arrives correctly.
         async_std::task::block_on(async move {
             loop {
