@@ -40,7 +40,7 @@ wasm-bindgen = ["dep:wasm-bindgen-futures", "dep:getrandom"]
 [dev-dependencies]
 async-std = { version = "1.6.2", features = ["attributes"] }
 either = "1.6.0"
-env_logger = "0.9"
+env_logger = "0.10"
 futures = "0.3.1"
 libp2p-identify = { path = "../protocols/identify" }
 libp2p-kad = { path = "../protocols/kad" }

@@ -26,7 +26,7 @@ jobs:
   run-ping-interop-cross-implementation:
     uses: "libp2p/test-plans/.github/workflows/run-composition.yml@master"
     with:
-      composition_file: "ping/_compositions/go-rust-interop-latest.toml"
+      composition_file: "ping/_compositions/all-interop-latest.toml"
       custom_git_target: github.com/${{ github.event.pull_request.head.repo.full_name || github.event.repository.full_name }}
       custom_git_reference: ${{ github.event.pull_request.head.sha || github.sha }}
       custom_interop_target: rust
