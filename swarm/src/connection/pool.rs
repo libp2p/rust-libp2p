@@ -791,7 +791,7 @@ where
                         )
                         .boxed(),
                     );
-                    let established_in = Instant::now() - accepted_at;
+                    let established_in = accepted_at.elapsed();
                     return Poll::Ready(PoolEvent::ConnectionEstablished {
                         peer_id: obtained_peer_id,
                         endpoint,

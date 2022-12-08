@@ -131,7 +131,7 @@ impl Metrics {
             create_connection_establishment_duration_histogram as fn() -> Histogram,
         );
         sub_registry.register(
-            "connection_establishment_duration",
+            "connections_establishment_duration",
             "Time it took (locally) to establish connections",
             Box::new(connections_establishment_duration.clone()),
         );
