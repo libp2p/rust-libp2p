@@ -68,20 +68,12 @@ impl IntoConnectionHandler for Proto {
 /// A pending reply to an inbound identification request.
 enum Pending {
     /// The reply is queued for sending.
-    Queued(Reply),
+    Queued(ReplySubstream<NegotiatedSubstream>),
     /// The reply is being sent.
     Sending {
         peer: PeerId,
         io: Pin<Box<dyn Future<Output = Result<(), UpgradeError>> + Send>>,
     },
-}
-
-/// A reply to an inbound identification request.
-#[derive(Debug)]
-pub struct Reply {
-    pub peer: PeerId,
-    pub io: ReplySubstream<NegotiatedSubstream>,
-    pub info: Info,
 }
 
 /// Protocol handler for sending and receiving identification requests.
@@ -101,6 +93,9 @@ pub struct Handler {
             io::Error,
         >; 4],
     >,
+
+    /// Identify request information.
+    info: Option<Info>,
 
     /// Pending replies to send.
     pending_replies: VecDeque<Pending>,
@@ -126,7 +121,7 @@ pub enum Event {
     /// We actively pushed our identification information to the remote.
     IdentificationPushed,
     /// We received a request for identification.
-    Identify(ReplySubstream<NegotiatedSubstream>),
+    Identify,
     /// Failed to identify the remote, or to reply to an identification request.
     IdentificationError(ConnectionHandlerUpgrErr<UpgradeError>),
 }
@@ -137,7 +132,7 @@ pub enum InEvent {
     /// Identifying information of the local node that is pushed to a remote.
     Push(Info),
     /// Identifying information requested from this node.
-    Identify(Reply),
+    Identify(Info),
 }
 
 impl Handler {
@@ -147,6 +142,7 @@ impl Handler {
             remote_peer_id,
             inbound_identify_push: Default::default(),
             events: SmallVec::new(),
+            info: None,
             pending_replies: VecDeque::new(),
             trigger_next_identify: Delay::new(initial_delay),
             keep_alive: KeepAlive::Yes,
@@ -164,9 +160,22 @@ impl Handler {
         >,
     ) {
         match output {
-            EitherOutput::First(substream) => self
-                .events
-                .push(ConnectionHandlerEvent::Custom(Event::Identify(substream))),
+            EitherOutput::First(substream) => {
+                // If we already have `Info` we can proceed responding to the Identify request,
+                // if not, we request `Info` from the behaviour.
+                if self.info.is_none() {
+                    self.events
+                        .push(ConnectionHandlerEvent::Custom(Event::Identify));
+                }
+                if !self.pending_replies.is_empty() {
+                    warn!(
+                        "New inbound identify request from {} while a previous one \
+                         is still pending. Queueing the new one.",
+                        self.remote_peer_id,
+                    );
+                }
+                self.pending_replies.push_back(Pending::Queued(substream));
+            }
             EitherOutput::Second(fut) => {
                 if self.inbound_identify_push.replace(fut).is_some() {
                     warn!(
@@ -249,15 +258,8 @@ impl ConnectionHandler for Handler {
                         ),
                     });
             }
-            InEvent::Identify(reply) => {
-                if !self.pending_replies.is_empty() {
-                    warn!(
-                        "New inbound identify request from {} while a previous one \
-                         is still pending. Queueing the new one.",
-                        reply.peer,
-                    );
-                }
-                self.pending_replies.push_back(Pending::Queued(reply));
+            InEvent::Identify(info) => {
+                self.info = Some(info);
             }
         }
     }
@@ -301,31 +303,38 @@ impl ConnectionHandler for Handler {
         }
 
         // Check for pending replies to send.
-        if let Some(mut pending) = self.pending_replies.pop_front() {
-            loop {
-                match pending {
-                    Pending::Queued(Reply { peer, io, info }) => {
-                        let io = Box::pin(io.send(info));
-                        pending = Pending::Sending { peer, io };
-                    }
-                    Pending::Sending { peer, mut io } => {
-                        match Future::poll(Pin::new(&mut io), cx) {
-                            Poll::Pending => {
-                                self.pending_replies
-                                    .push_front(Pending::Sending { peer, io });
-                                return Poll::Pending;
-                            }
-                            Poll::Ready(Ok(())) => {
-                                return Poll::Ready(ConnectionHandlerEvent::Custom(
-                                    Event::Identification(peer),
-                                ));
-                            }
-                            Poll::Ready(Err(err)) => {
-                                return Poll::Ready(ConnectionHandlerEvent::Custom(
-                                    Event::IdentificationError(ConnectionHandlerUpgrErr::Upgrade(
-                                        libp2p_core::upgrade::UpgradeError::Apply(err),
-                                    )),
-                                ))
+        if let Some(ref info) = self.info {
+            if let Some(mut pending) = self.pending_replies.pop_front() {
+                loop {
+                    match pending {
+                        Pending::Queued(io) => {
+                            let io = Box::pin(io.send(info.clone()));
+                            pending = Pending::Sending {
+                                peer: self.remote_peer_id,
+                                io,
+                            };
+                        }
+                        Pending::Sending { peer, mut io } => {
+                            match Future::poll(Pin::new(&mut io), cx) {
+                                Poll::Pending => {
+                                    self.pending_replies
+                                        .push_front(Pending::Sending { peer, io });
+                                    return Poll::Pending;
+                                }
+                                Poll::Ready(Ok(())) => {
+                                    return Poll::Ready(ConnectionHandlerEvent::Custom(
+                                        Event::Identification(peer),
+                                    ));
+                                }
+                                Poll::Ready(Err(err)) => {
+                                    return Poll::Ready(ConnectionHandlerEvent::Custom(
+                                        Event::IdentificationError(
+                                            ConnectionHandlerUpgrErr::Upgrade(
+                                                libp2p_core::upgrade::UpgradeError::Apply(err),
+                                            ),
+                                        ),
+                                    ))
+                                }
                             }
                         }
                     }

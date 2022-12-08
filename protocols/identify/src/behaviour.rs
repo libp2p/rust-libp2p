@@ -18,16 +18,15 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::handler::{self, InEvent, Proto, Reply};
-use crate::protocol::{Info, ReplySubstream, UpgradeError};
+use crate::handler::{self, InEvent, Proto};
+use crate::protocol::{Info, UpgradeError};
 use libp2p_core::{
     connection::ConnectionId, multiaddr::Protocol, ConnectedPoint, Multiaddr, PeerId, PublicKey,
 };
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm};
 use libp2p_swarm::{
     dial_opts::DialOpts, AddressScore, ConnectionHandler, ConnectionHandlerUpgrErr, DialError,
-    IntoConnectionHandler, NegotiatedSubstream, NetworkBehaviour, NetworkBehaviourAction,
-    NotifyHandler, PollParameters,
+    IntoConnectionHandler, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
 };
 use lru::LruCache;
 use std::num::NonZeroUsize;
@@ -63,7 +62,6 @@ pub struct Behaviour {
 /// A pending reply to an inbound identification request.
 struct Request {
     peer: PeerId,
-    io: ReplySubstream<NegotiatedSubstream>,
     observed: Multiaddr,
 }
 
@@ -273,7 +271,7 @@ impl NetworkBehaviour for Behaviour {
                         peer_id,
                     }));
             }
-            handler::Event::Identify(sender) => {
+            handler::Event::Identify => {
                 let observed = self
                     .connected
                     .get(&peer_id)
@@ -285,7 +283,6 @@ impl NetworkBehaviour for Behaviour {
                     );
                 self.requests.push_back(Request {
                     peer: peer_id,
-                    io: sender,
                     observed: observed.clone(),
                 });
             }
@@ -343,7 +340,7 @@ impl NetworkBehaviour for Behaviour {
         }
 
         // Check for pending requests to send back to the handler for reply.
-        if let Some(Request { peer, io, observed }) = self.requests.pop_front() {
+        if let Some(Request { peer, observed }) = self.requests.pop_front() {
             let info = Info {
                 listen_addrs: listen_addrs(params),
                 protocols: supported_protocols(params),
@@ -355,7 +352,7 @@ impl NetworkBehaviour for Behaviour {
             return Poll::Ready(NetworkBehaviourAction::NotifyHandler {
                 peer_id: peer,
                 handler: NotifyHandler::Any,
-                event: InEvent::Identify(Reply { peer, info, io }),
+                event: InEvent::Identify(info),
             });
         }
 
