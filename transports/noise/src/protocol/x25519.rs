@@ -284,8 +284,6 @@ impl snow::types::Dh for Keypair<X25519> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    // Use the ed25519_compact for testing
-    use ed25519_compact;
     use libp2p_core::identity::ed25519;
     // Use the droyc crypto_sign imports for testing
     use dryoc::classic::crypto_sign_ed25519::crypto_sign_ed25519_pk_to_curve25519;
@@ -301,11 +299,8 @@ mod tests {
             let ed25519 = ed25519::Keypair::generate();
             let x25519 = Keypair::from(SecretKey::from_ed25519(&ed25519.secret()));
 
-            let dryoc_sec =
-                ed25519_sk_to_curve25519(&ed25519_compact::SecretKey::new(ed25519.encode()));
-            let dryoc_pub = ed25519_pk_to_curve25519(&ed25519_compact::PublicKey::new(
-                ed25519.public().encode(),
-            ));
+            let dryoc_sec = ed25519_sk_to_curve25519(&ed25519.encode());
+            let dryoc_pub = ed25519_pk_to_curve25519(&ed25519.public().encode());
 
             let our_pub = x25519.public.0;
             // libsodium does the [clamping] of the scalar upon key construction,
@@ -338,7 +333,9 @@ mod tests {
         quickcheck(prop as fn() -> _);
     }
 
-    pub fn ed25519_pk_to_curve25519(k: &ed25519_compact::PublicKey) -> Option<[u8; 32]> {
+    pub fn ed25519_pk_to_curve25519(
+        k: &dryoc::classic::crypto_sign_ed25519::PublicKey,
+    ) -> Option<[u8; 32]> {
         let mut out = [0u8; 32];
 
         crypto_sign_ed25519_pk_to_curve25519(&mut out, k).ok()?;
@@ -346,7 +343,9 @@ mod tests {
         Some(out)
     }
 
-    pub fn ed25519_sk_to_curve25519(k: &ed25519_compact::SecretKey) -> [u8; 32] {
+    pub fn ed25519_sk_to_curve25519(
+        k: &dryoc::classic::crypto_sign_ed25519::SecretKey,
+    ) -> [u8; 32] {
         let mut out = [0u8; 32];
 
         crypto_sign_ed25519_sk_to_curve25519(&mut out, k);
