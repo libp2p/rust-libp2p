@@ -123,7 +123,7 @@ impl Protocol<X25519Spec> for X25519Spec {
 
     fn public_from_bytes(bytes: &[u8]) -> Result<PublicKey<X25519Spec>, NoiseError> {
         if bytes.len() != 32 {
-            return Err(NoiseError::InvalidKey);
+            return Err(NoiseError::InvalidLength);
         }
         let mut pk = [0u8; 32];
         pk.copy_from_slice(bytes);

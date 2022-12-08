@@ -52,6 +52,7 @@ use libp2p::{
     swarm::{NetworkBehaviour, SwarmEvent},
     PeerId, Swarm,
 };
+use libp2p_kad::{GetProvidersOk, GetRecordOk};
 use std::error::Error;
 
 #[async_std::main]
@@ -120,33 +121,32 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     swarm.behaviour_mut().kademlia.add_address(&peer_id, multiaddr);
                 }
             }
-            SwarmEvent::Behaviour(MyBehaviourEvent::Kademlia(KademliaEvent::OutboundQueryCompleted { result, ..})) => {
+            SwarmEvent::Behaviour(MyBehaviourEvent::Kademlia(KademliaEvent::OutboundQueryProgressed { result, ..})) => {
                 match result {
-                    QueryResult::GetProviders(Ok(ok)) => {
-                        for peer in ok.providers {
+                    QueryResult::GetProviders(Ok(GetProvidersOk::FoundProviders { key, providers, .. })) => {
+                        for peer in providers {
                             println!(
-                                "Peer {:?} provides key {:?}",
-                                peer,
-                                std::str::from_utf8(ok.key.as_ref()).unwrap()
+                                "Peer {peer:?} provides key {:?}",
+                                std::str::from_utf8(key.as_ref()).unwrap()
                             );
                         }
                     }
                     QueryResult::GetProviders(Err(err)) => {
                         eprintln!("Failed to get providers: {err:?}");
                     }
-                    QueryResult::GetRecord(Ok(ok)) => {
-                        for PeerRecord {
+                    QueryResult::GetRecord(Ok(
+                        GetRecordOk::FoundRecord(PeerRecord {
                             record: Record { key, value, .. },
                             ..
-                        } in ok.records
-                        {
-                            println!(
-                                "Got record {:?} {:?}",
-                                std::str::from_utf8(key.as_ref()).unwrap(),
-                                std::str::from_utf8(&value).unwrap(),
-                            );
-                        }
+                        })
+                    )) => {
+                        println!(
+                            "Got record {:?} {:?}",
+                            std::str::from_utf8(key.as_ref()).unwrap(),
+                            std::str::from_utf8(&value).unwrap(),
+                        );
                     }
+                    QueryResult::GetRecord(Ok(_)) => {}
                     QueryResult::GetRecord(Err(err)) => {
                         eprintln!("Failed to get record: {err:?}");
                     }
@@ -191,7 +191,7 @@ fn handle_input_line(kademlia: &mut Kademlia<MemoryStore>, line: String) {
                     }
                 }
             };
-            kademlia.get_record(key, Quorum::One);
+            kademlia.get_record(key);
         }
         Some("GET_PROVIDERS") => {
             let key = {

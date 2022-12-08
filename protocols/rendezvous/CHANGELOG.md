@@ -1,4 +1,4 @@
-# 0.11.0 [unreleased]
+# 0.11.0
 
 - De- and encode protobuf messages using `prost-codec`. See [PR 3058].
 

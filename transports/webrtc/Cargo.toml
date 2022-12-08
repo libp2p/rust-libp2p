@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-webrtc"
-version = "0.1.0-alpha"
+version = "0.4.0-alpha"
 authors = ["Parity Technologies <admin@parity.io>"]
 description = "WebRTC transport for libp2p"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -43,7 +43,7 @@ prost-build = "0.11"
 
 [dev-dependencies]
 anyhow = "1.0"
-env_logger = "0.9"
+env_logger = "0.10"
 hex-literal = "0.3"
 libp2p = { path = "../..", features = ["full"] }
 tokio = { version = "1.19", features = ["full"] }

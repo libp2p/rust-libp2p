@@ -1,4 +1,4 @@
-# 0.14.0 [unreleased]
+# 0.14.0
 
 - Update to `prost-codec` `v0.3.0`.
 
