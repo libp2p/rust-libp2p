@@ -35,7 +35,6 @@ env_logger = "0.10.0"
 libp2p = { path = "../..", features = ["full"] }
 quickcheck = { package = "quickcheck-ext", path = "../../misc/quickcheck-ext" }
 dryoc = "0.4.2"
-ed25519-compact = "2.0.2"
 
 [build-dependencies]
 prost-build = "0.11"
