@@ -196,7 +196,7 @@ where
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
-        self.listen_addresses.on_event(&event);
+        self.listen_addresses.on_swarm_event(&event);
 
         match event {
             FromSwarm::ConnectionClosed(ConnectionClosed {

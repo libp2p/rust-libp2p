@@ -266,7 +266,7 @@ impl NetworkBehaviour for Relay {
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
-        self.external_addresses.on_event(&event);
+        self.external_addresses.on_swarn_event(&event);
 
         match event {
             FromSwarm::ConnectionClosed(connection_closed) => {

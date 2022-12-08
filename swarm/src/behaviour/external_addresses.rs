@@ -24,7 +24,7 @@ impl ExternalAddresses {
     }
 
     /// Feed a [`SwarmEvent`] to this struct.
-    pub fn on_event<THandler>(&mut self, event: &FromSwarm<THandler>)
+    pub fn on_swarn_event<THandler>(&mut self, event: &FromSwarm<THandler>)
     where
         THandler: IntoConnectionHandler,
     {
