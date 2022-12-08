@@ -287,23 +287,23 @@ mod tests {
     // Use the ed25519_compact for testing
     use ed25519_compact;
     use libp2p_core::identity::ed25519;
-    // Use the libsodium-sys-stable crypto_sign imports for testing
+    // Use the droyc crypto_sign imports for testing
     use dryoc::classic::crypto_sign_ed25519::crypto_sign_ed25519_pk_to_curve25519;
     use dryoc::classic::crypto_sign_ed25519::crypto_sign_ed25519_sk_to_curve25519;
     use quickcheck::*;
     use x25519_dalek::StaticSecret;
 
     // ed25519 to x25519 keypair conversion must yield the same results as
-    // obtained through libsodium.
+    // obtained through dryoc.
     #[test]
-    fn prop_ed25519_to_x25519_matches_libsodium() {
+    fn prop_ed25519_to_x25519_matches_dryoc() {
         fn prop() -> bool {
             let ed25519 = ed25519::Keypair::generate();
             let x25519 = Keypair::from(SecretKey::from_ed25519(&ed25519.secret()));
 
-            let sodium_sec =
+            let dryoc_sec =
                 ed25519_sk_to_curve25519(&ed25519_compact::SecretKey::new(ed25519.encode()));
-            let sodium_pub = ed25519_pk_to_curve25519(&ed25519_compact::PublicKey::new(
+            let dryoc_pub = ed25519_pk_to_curve25519(&ed25519_compact::PublicKey::new(
                 ed25519.public().encode(),
             ));
 
@@ -317,7 +317,7 @@ mod tests {
             // [clamping]: http://www.lix.polytechnique.fr/~smith/ECC/#scalar-clamping
             let our_sec = StaticSecret::from((x25519.secret.0).0).to_bytes();
 
-            sodium_sec.as_ref() == Some(&our_sec) && sodium_pub.as_ref() == Some(&our_pub.0)
+            dryoc_sec == our_sec && dryoc_pub.as_ref() == Some(&our_pub.0)
         }
 
         quickcheck(prop as fn() -> _);
@@ -346,11 +346,11 @@ mod tests {
         Some(out)
     }
 
-    pub fn ed25519_sk_to_curve25519(k: &ed25519_compact::SecretKey) -> Option<[u8; 32]> {
+    pub fn ed25519_sk_to_curve25519(k: &ed25519_compact::SecretKey) -> [u8; 32] {
         let mut out = [0u8; 32];
 
         crypto_sign_ed25519_sk_to_curve25519(&mut out, k);
 
-        Some(out)
+        out
     }
 }
