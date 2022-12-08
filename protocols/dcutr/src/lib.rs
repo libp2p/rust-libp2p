@@ -33,11 +33,13 @@ mod message_proto {
 
 pub use protocol::PROTOCOL_NAME;
 pub mod inbound {
-    pub use crate::protocol::inbound::InboundUpgradeError as UpgradeError; // TODO: Rename the inner error once `cargo-semver-checks` supports it: https://github.com/obi1kenobi/cargo-semver-checks/issues/152
+    pub use crate::protocol::inbound::InboundUpgradeError; // TODO: Rename the inner error once `cargo-semver-checks` supports it: https://github.com/obi1kenobi/cargo-semver-checks/issues/152
+    pub type UpgradeError = InboundUpgradeError;
 }
 
 pub mod outbound {
-    pub use crate::protocol::outbound::OutboundUpgradeError as UpgradeError; // TODO: Rename the inner error once `cargo-semver-checks` supports it: https://github.com/obi1kenobi/cargo-semver-checks/issues/152
+    pub use crate::protocol::outbound::OutboundUpgradeError; // TODO: Rename the inner error once `cargo-semver-checks` supports it: https://github.com/obi1kenobi/cargo-semver-checks/issues/152
+    pub type UpgradeError = OutboundUpgradeError;
 }
 
 #[deprecated(
