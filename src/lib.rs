@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 //! libp2p is a modular peer-to-peer networking framework.
+//!
 //! To learn more about the general libp2p multi-language framework visit
 //! [libp2p.io](https://libp2p.io/).
 //!
