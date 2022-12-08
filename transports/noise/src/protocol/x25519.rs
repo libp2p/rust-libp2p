@@ -285,9 +285,6 @@ impl snow::types::Dh for Keypair<X25519> {
 mod tests {
     use super::*;
     use libp2p_core::identity::ed25519;
-    // Use the droyc crypto_sign imports for testing
-    use dryoc::classic::crypto_sign_ed25519::crypto_sign_ed25519_pk_to_curve25519;
-    use dryoc::classic::crypto_sign_ed25519::crypto_sign_ed25519_sk_to_curve25519;
     use quickcheck::*;
     use x25519_dalek::StaticSecret;
 
@@ -338,7 +335,8 @@ mod tests {
     ) -> Option<[u8; 32]> {
         let mut out = [0u8; 32];
 
-        crypto_sign_ed25519_pk_to_curve25519(&mut out, k).ok()?;
+        dryoc::classic::crypto_sign_ed25519::crypto_sign_ed25519_pk_to_curve25519(&mut out, k)
+            .ok()?;
 
         Some(out)
     }
@@ -348,7 +346,7 @@ mod tests {
     ) -> [u8; 32] {
         let mut out = [0u8; 32];
 
-        crypto_sign_ed25519_sk_to_curve25519(&mut out, k);
+        dryoc::classic::crypto_sign_ed25519::crypto_sign_ed25519_sk_to_curve25519(&mut out, k);
 
         out
     }
