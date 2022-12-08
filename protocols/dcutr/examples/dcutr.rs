@@ -109,7 +109,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         relay_client: Client,
         ping: ping::Behaviour,
         identify: identify::Behaviour,
-        dcutr: dcutr::behaviour::Behaviour,
+        dcutr: dcutr::Behaviour,
     }
 
     #[derive(Debug)]
@@ -118,7 +118,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         Ping(ping::Event),
         Identify(identify::Event),
         Relay(client::Event),
-        Dcutr(dcutr::behaviour::Event),
+        Dcutr(dcutr::Event),
     }
 
     impl From<ping::Event> for Event {
@@ -139,8 +139,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    impl From<dcutr::behaviour::Event> for Event {
-        fn from(e: dcutr::behaviour::Event) -> Self {
+    impl From<dcutr::Event> for Event {
+        fn from(e: dcutr::Event) -> Self {
             Event::Dcutr(e)
         }
     }
@@ -152,7 +152,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             "/TODO/0.0.1".to_string(),
             local_key.public(),
         )),
-        dcutr: dcutr::behaviour::Behaviour::new(),
+        dcutr: dcutr::Behaviour::new(),
     };
 
     let mut swarm = match ThreadPool::new() {

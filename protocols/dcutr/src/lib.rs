@@ -23,7 +23,7 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
-pub mod behaviour;
+mod behaviour_impl;
 mod handler;
 mod protocol;
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -31,6 +31,9 @@ mod message_proto {
     include!(concat!(env!("OUT_DIR"), "/holepunch.pb.rs"));
 }
 
+pub use behaviour_impl::Behaviour;
+pub use behaviour_impl::Error;
+pub use behaviour_impl::Event;
 pub use protocol::PROTOCOL_NAME;
 pub mod inbound {
     pub use crate::protocol::inbound::InboundUpgradeError as UpgradeError; // TODO: Rename the inner error once `cargo-semver-checks` supports it: https://github.com/obi1kenobi/cargo-semver-checks/issues/152
@@ -51,3 +54,14 @@ pub type InboundUpgradeError = inbound::UpgradeError;
     note = "Use `libp2p_dcutr::outbound::UpgradeError` instead.`"
 )]
 pub type OutboundUpgradeError = outbound::UpgradeError;
+
+pub mod behaviour {
+    #[deprecated(since = "0.8.1", note = "Use `libp2p_dcutr::Behaviour` instead.`")]
+    pub type Behaviour = crate::Behaviour;
+
+    #[deprecated(since = "0.8.1", note = "Use `libp2p_dcutr::Event` instead.`")]
+    pub type Event = crate::Event;
+
+    #[deprecated(since = "0.8.1", note = "Use `libp2p_dcutr::Error` instead.`")]
+    pub type UpgradeError = crate::Error;
+}
