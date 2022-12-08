@@ -40,7 +40,7 @@ impl upgrade::UpgradeInfo for Upgrade {
 
 impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
     type Output = PendingConnect;
-    type Error = UpgradeError;
+    type Error = InboundUpgradeError;
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
     fn upgrade_inbound(self, substream: NegotiatedSubstream, _: Self::Info) -> Self::Future {
@@ -50,11 +50,13 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
         );
 
         async move {
-            let HolePunch { r#type, obs_addrs } =
-                substream.next().await.ok_or(UpgradeError::StreamClosed)??;
+            let HolePunch { r#type, obs_addrs } = substream
+                .next()
+                .await
+                .ok_or(InboundUpgradeError::StreamClosed)??;
 
             let obs_addrs = if obs_addrs.is_empty() {
-                return Err(UpgradeError::NoAddresses);
+                return Err(InboundUpgradeError::NoAddresses);
             } else {
                 obs_addrs
                     .into_iter()
@@ -65,14 +67,15 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
                         Err(_) => true,
                     })
                     .collect::<Result<Vec<Multiaddr>, _>>()
-                    .map_err(|_| UpgradeError::InvalidAddrs)?
+                    .map_err(|_| InboundUpgradeError::InvalidAddrs)?
             };
 
-            let r#type = hole_punch::Type::from_i32(r#type).ok_or(UpgradeError::ParseTypeField)?;
+            let r#type =
+                hole_punch::Type::from_i32(r#type).ok_or(InboundUpgradeError::ParseTypeField)?;
 
             match r#type {
                 hole_punch::Type::Connect => {}
-                hole_punch::Type::Sync => return Err(UpgradeError::UnexpectedTypeSync),
+                hole_punch::Type::Sync => return Err(InboundUpgradeError::UnexpectedTypeSync),
             }
 
             Ok(PendingConnect {
@@ -93,7 +96,7 @@ impl PendingConnect {
     pub async fn accept(
         mut self,
         local_obs_addrs: Vec<Multiaddr>,
-    ) -> Result<Vec<Multiaddr>, UpgradeError> {
+    ) -> Result<Vec<Multiaddr>, InboundUpgradeError> {
         let msg = HolePunch {
             r#type: hole_punch::Type::Connect.into(),
             obs_addrs: local_obs_addrs.into_iter().map(|a| a.to_vec()).collect(),
@@ -104,11 +107,12 @@ impl PendingConnect {
             .substream
             .next()
             .await
-            .ok_or(UpgradeError::StreamClosed)??;
+            .ok_or(InboundUpgradeError::StreamClosed)??;
 
-        let r#type = hole_punch::Type::from_i32(r#type).ok_or(UpgradeError::ParseTypeField)?;
+        let r#type =
+            hole_punch::Type::from_i32(r#type).ok_or(InboundUpgradeError::ParseTypeField)?;
         match r#type {
-            hole_punch::Type::Connect => return Err(UpgradeError::UnexpectedTypeConnect),
+            hole_punch::Type::Connect => return Err(InboundUpgradeError::UnexpectedTypeConnect),
             hole_punch::Type::Sync => {}
         }
 
@@ -117,7 +121,7 @@ impl PendingConnect {
 }
 
 #[derive(Debug, Error)]
-pub enum UpgradeError {
+pub enum InboundUpgradeError {
     #[error(transparent)]
     Codec(#[from] prost_codec::Error),
     #[error("Stream closed")]

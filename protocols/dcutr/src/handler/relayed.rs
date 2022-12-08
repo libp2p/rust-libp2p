@@ -134,7 +134,10 @@ pub struct Handler {
     /// A pending fatal error that results in the connection being closed.
     pending_error: Option<
         ConnectionHandlerUpgrErr<
-            EitherError<protocol::inbound::UpgradeError, protocol::outbound::UpgradeError>,
+            EitherError<
+                protocol::inbound::InboundUpgradeError,
+                protocol::outbound::OutboundUpgradeError,
+            >,
         >,
     >,
     /// Queue of events to return when polled.
@@ -148,7 +151,7 @@ pub struct Handler {
     >,
     /// Inbound connect, accepted by the behaviour, pending completion.
     inbound_connect:
-        Option<BoxFuture<'static, Result<Vec<Multiaddr>, protocol::inbound::UpgradeError>>>,
+        Option<BoxFuture<'static, Result<Vec<Multiaddr>, protocol::inbound::InboundUpgradeError>>>,
     keep_alive: KeepAlive,
 }
 
@@ -302,7 +305,10 @@ impl ConnectionHandler for Handler {
     type InEvent = Command;
     type OutEvent = Event;
     type Error = ConnectionHandlerUpgrErr<
-        EitherError<protocol::inbound::UpgradeError, protocol::outbound::UpgradeError>,
+        EitherError<
+            protocol::inbound::InboundUpgradeError,
+            protocol::outbound::OutboundUpgradeError,
+        >,
     >;
     type InboundProtocol = upgrade::EitherUpgrade<protocol::inbound::Upgrade, DeniedUpgrade>;
     type OutboundProtocol = protocol::outbound::Upgrade;

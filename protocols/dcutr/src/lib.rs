@@ -26,13 +26,28 @@
 pub mod behaviour;
 mod handler;
 mod protocol;
-
-pub use protocol::{
-    inbound::UpgradeError as InboundUpgradeError, outbound::UpgradeError as OutboundUpgradeError,
-    PROTOCOL_NAME,
-};
-
 #[allow(clippy::derive_partial_eq_without_eq)]
 mod message_proto {
     include!(concat!(env!("OUT_DIR"), "/holepunch.pb.rs"));
 }
+
+pub use protocol::PROTOCOL_NAME;
+pub mod inbound {
+    pub use crate::protocol::inbound::InboundUpgradeError as UpgradeError; // TODO: Rename the inner error once `cargo-semver-checks` supports it: https://github.com/obi1kenobi/cargo-semver-checks/issues/152
+}
+
+pub mod outbound {
+    pub use crate::protocol::outbound::OutboundUpgradeError as UpgradeError; // TODO: Rename the inner error once `cargo-semver-checks` supports it: https://github.com/obi1kenobi/cargo-semver-checks/issues/152
+}
+
+#[deprecated(
+    since = "0.8.1",
+    note = "Use `libp2p_dcutr::inbound::UpgradeError` instead.`"
+)]
+pub type InboundUpgradeError = inbound::UpgradeError;
+
+#[deprecated(
+    since = "0.8.1",
+    note = "Use `libp2p_dcutr::outbound::UpgradeError` instead.`"
+)]
+pub type OutboundUpgradeError = outbound::UpgradeError;

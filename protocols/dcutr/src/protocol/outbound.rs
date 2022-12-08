@@ -50,7 +50,7 @@ impl Upgrade {
 
 impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
     type Output = Connect;
-    type Error = UpgradeError;
+    type Error = OutboundUpgradeError;
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
     fn upgrade_outbound(self, substream: NegotiatedSubstream, _: Self::Info) -> Self::Future {
@@ -69,19 +69,22 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
 
             let sent_time = Instant::now();
 
-            let HolePunch { r#type, obs_addrs } =
-                substream.next().await.ok_or(UpgradeError::StreamClosed)??;
+            let HolePunch { r#type, obs_addrs } = substream
+                .next()
+                .await
+                .ok_or(OutboundUpgradeError::StreamClosed)??;
 
             let rtt = sent_time.elapsed();
 
-            let r#type = hole_punch::Type::from_i32(r#type).ok_or(UpgradeError::ParseTypeField)?;
+            let r#type =
+                hole_punch::Type::from_i32(r#type).ok_or(OutboundUpgradeError::ParseTypeField)?;
             match r#type {
                 hole_punch::Type::Connect => {}
-                hole_punch::Type::Sync => return Err(UpgradeError::UnexpectedTypeSync),
+                hole_punch::Type::Sync => return Err(OutboundUpgradeError::UnexpectedTypeSync),
             }
 
             let obs_addrs = if obs_addrs.is_empty() {
-                return Err(UpgradeError::NoAddresses);
+                return Err(OutboundUpgradeError::NoAddresses);
             } else {
                 obs_addrs
                     .into_iter()
@@ -92,7 +95,7 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
                         Err(_) => true,
                     })
                     .collect::<Result<Vec<Multiaddr>, _>>()
-                    .map_err(|_| UpgradeError::InvalidAddrs)?
+                    .map_err(|_| OutboundUpgradeError::InvalidAddrs)?
             };
 
             let msg = HolePunch {
@@ -115,7 +118,7 @@ pub struct Connect {
 }
 
 #[derive(Debug, Error)]
-pub enum UpgradeError {
+pub enum OutboundUpgradeError {
     #[error(transparent)]
     Codec(#[from] prost_codec::Error),
     #[error("Stream closed")]
