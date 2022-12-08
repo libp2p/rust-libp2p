@@ -450,7 +450,7 @@ where
             record_ttl: config.record_ttl,
             provider_record_ttl: config.provider_record_ttl,
             connection_idle_timeout: config.connection_idle_timeout,
-            external_addresses: ExternalAddresses::with_limit(MAX_LOCAL_EXTERNAL_ADDRS),
+            external_addresses: Default::default(),
             local_peer_id: id,
         }
     }
@@ -3183,8 +3183,3 @@ pub enum RoutingUpdate {
     /// peer ID).
     Failed,
 }
-
-/// The maximum number of local external addresses. When reached any
-/// further externally reported addresses are ignored. The behaviour always
-/// tracks all its listen addresses.
-const MAX_LOCAL_EXTERNAL_ADDRS: usize = 20;

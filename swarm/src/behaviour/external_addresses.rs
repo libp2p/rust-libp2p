@@ -3,21 +3,28 @@ use crate::IntoConnectionHandler;
 use libp2p_core::Multiaddr;
 use std::collections::HashSet;
 
+/// The maximum number of local external addresses. When reached any
+/// further externally reported addresses are ignored. The behaviour always
+/// tracks all its listen addresses.
+const MAX_LOCAL_EXTERNAL_ADDRS: usize = 20;
+
 /// Utility struct for tracking the external addresses of a [`Swarm`](crate::Swarm).
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Clone)]
 pub struct ExternalAddresses {
     addresses: HashSet<Multiaddr>,
-    limit: Option<usize>,
+    limit: usize,
+}
+
+impl Default for ExternalAddresses {
+    fn default() -> Self {
+        Self {
+            addresses: Default::default(),
+            limit: MAX_LOCAL_EXTERNAL_ADDRS,
+        }
+    }
 }
 
 impl ExternalAddresses {
-    pub fn with_limit(max: usize) -> Self {
-        Self {
-            addresses: Default::default(),
-            limit: Some(max),
-        }
-    }
-
     /// Returns an [`Iterator`] over all external addresses.
     pub fn iter(&self) -> impl ExactSizeIterator<Item = &Multiaddr> {
         self.addresses.iter()
@@ -30,7 +37,7 @@ impl ExternalAddresses {
     {
         match event {
             FromSwarm::NewExternalAddr(NewExternalAddr { addr, .. }) => {
-                if self.addresses.len() < self.limit.unwrap_or(usize::MAX) {
+                if self.addresses.len() < self.limit {
                     self.addresses.insert((*addr).clone());
                 }
             }
