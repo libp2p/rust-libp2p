@@ -45,6 +45,11 @@
 
 # `libp2p` facade crate
 
+# 0.50.1
+
+- Update individual crates.
+  - Update to [`libp2p-dcutr` `v0.8.1`](protocols/dcutr/CHANGELOG.md#081).
+
 # 0.50.0
 
 This is a large release. After > 4 years, rust-libp2p ships with an [(alpha) QUIC

@@ -1,3 +1,10 @@
+# 0.8.1 [unreleased]
+
+- Deprecate `InboundUpgradeError` and `OutboundUpgradeError` to follow the conventions discussed in [issue 2217]. See [PR XXXX].
+
+[issue 2217]: https://github.com/libp2p/rust-libp2p/issues/2217
+[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+
 # 0.8.0
 
 - Update to `prost-codec` `v0.3.0`.
