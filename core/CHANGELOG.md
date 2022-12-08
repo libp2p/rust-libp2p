@@ -1,3 +1,9 @@
+# 0.39.0 [unreleased]
+
+- Migrate from `prost` to `quick-protobuf`. This removes `protoc` dependency. See [PR 3024].
+
+[PR 3024]: https://github.com/libp2p/rust-libp2p/issues/3024
+
 # 0.38.0
 
 - Remove deprecated functions `StreamMuxerExt::next_{inbound,outbound}`. See [PR 3031].
