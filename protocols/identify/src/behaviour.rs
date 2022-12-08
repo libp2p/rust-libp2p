@@ -59,7 +59,7 @@ pub struct Behaviour {
     discovered_peers: PeerCache,
 }
 
-/// A pending reply to an inbound identification request.
+/// An inbound identification request.
 struct Request {
     peer: PeerId,
     observed: Multiaddr,
