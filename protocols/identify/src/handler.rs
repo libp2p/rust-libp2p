@@ -26,7 +26,7 @@ use futures::prelude::*;
 use futures_timer::Delay;
 use libp2p_core::either::{EitherError, EitherOutput};
 use libp2p_core::upgrade::{EitherUpgrade, SelectUpgrade};
-use libp2p_core::{ConnectedPoint, PeerId};
+use libp2p_core::{ConnectedPoint, Multiaddr, PeerId, PublicKey};
 use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
@@ -42,13 +42,25 @@ use std::{io, pin::Pin, task::Context, task::Poll, time::Duration};
 pub struct Proto {
     initial_delay: Duration,
     interval: Duration,
+    public_key: PublicKey,
+    protocol_version: String,
+    agent_version: String,
 }
 
 impl Proto {
-    pub fn new(initial_delay: Duration, interval: Duration) -> Self {
+    pub fn new(
+        initial_delay: Duration,
+        interval: Duration,
+        public_key: PublicKey,
+        protocol_version: String,
+        agent_version: String,
+    ) -> Self {
         Proto {
             initial_delay,
             interval,
+            public_key,
+            protocol_version,
+            agent_version,
         }
     }
 }
@@ -56,8 +68,21 @@ impl Proto {
 impl IntoConnectionHandler for Proto {
     type Handler = Handler;
 
-    fn into_handler(self, remote_peer_id: &PeerId, _endpoint: &ConnectedPoint) -> Self::Handler {
-        Handler::new(self.initial_delay, self.interval, *remote_peer_id)
+    fn into_handler(self, remote_peer_id: &PeerId, endpoint: &ConnectedPoint) -> Self::Handler {
+        let observed_addr = match endpoint {
+            ConnectedPoint::Dialer { address, .. } => address,
+            ConnectedPoint::Listener { send_back_addr, .. } => send_back_addr,
+        };
+
+        Handler::new(
+            self.initial_delay,
+            self.interval,
+            *remote_peer_id,
+            self.public_key,
+            self.protocol_version,
+            self.agent_version,
+            observed_addr.clone(),
+        )
     }
 
     fn inbound_protocol(&self) -> <Self::Handler as ConnectionHandler>::InboundProtocol {
@@ -94,9 +119,6 @@ pub struct Handler {
         >; 4],
     >,
 
-    /// Identify request information.
-    info: Option<Info>,
-
     /// Pending replies to send.
     pending_replies: VecDeque<Pending>,
 
@@ -108,6 +130,33 @@ pub struct Handler {
 
     /// The interval of `trigger_next_identify`, i.e. the recurrent delay.
     interval: Duration,
+
+    /// The public key of the local peer.
+    public_key: PublicKey,
+
+    /// Application-specific version of the protocol family used by the peer,
+    /// e.g. `ipfs/1.0.0` or `polkadot/1.0.0`.
+    protocol_version: String,
+
+    /// Name and version of the peer, similar to the `User-Agent` header in
+    /// the HTTP protocol.
+    agent_version: String,
+
+    /// Address observed by or for the remote.
+    observed_addr: Multiaddr,
+
+    /// Information provided by the `Behaviour` upon requesting.
+    behaviour_info: Option<BehaviourInfo>,
+}
+
+/// Information provided by the `Behaviour` upon requesting.
+#[derive(Debug)]
+pub struct BehaviourInfo {
+    /// The addresses that the peer is listening on.
+    pub listen_addrs: Vec<Multiaddr>,
+
+    /// The list of protocols supported by the peer, e.g. `/ipfs/ping/1.0.0`.
+    pub protocols: Vec<String>,
 }
 
 /// Event produced by the `Handler`.
@@ -132,21 +181,33 @@ pub enum InEvent {
     /// Identifying information of the local node that is pushed to a remote.
     Push(Info),
     /// Identifying information requested from this node.
-    Identify(Info),
+    Identify(BehaviourInfo),
 }
 
 impl Handler {
     /// Creates a new `Handler`.
-    pub fn new(initial_delay: Duration, interval: Duration, remote_peer_id: PeerId) -> Self {
+    pub fn new(
+        initial_delay: Duration,
+        interval: Duration,
+        remote_peer_id: PeerId,
+        public_key: PublicKey,
+        protocol_version: String,
+        agent_version: String,
+        observed_addr: Multiaddr,
+    ) -> Self {
         Self {
             remote_peer_id,
             inbound_identify_push: Default::default(),
             events: SmallVec::new(),
-            info: None,
             pending_replies: VecDeque::new(),
             trigger_next_identify: Delay::new(initial_delay),
             keep_alive: KeepAlive::Yes,
             interval,
+            public_key,
+            protocol_version,
+            agent_version,
+            observed_addr,
+            behaviour_info: None,
         }
     }
 
@@ -161,9 +222,9 @@ impl Handler {
     ) {
         match output {
             EitherOutput::First(substream) => {
-                // If we already have `Info` we can proceed responding to the Identify request,
-                // if not, we request `Info` from the behaviour.
-                if self.info.is_none() {
+                // If we already have `BehaviourInfo` we can proceed responding to the Identify request,
+                // if not, we request it .
+                if self.behaviour_info.is_none() {
                     self.events
                         .push(ConnectionHandlerEvent::Custom(Event::Identify));
                 }
@@ -259,7 +320,7 @@ impl ConnectionHandler for Handler {
                     });
             }
             InEvent::Identify(info) => {
-                self.info = Some(info);
+                self.behaviour_info = Some(info);
             }
         }
     }
@@ -303,11 +364,19 @@ impl ConnectionHandler for Handler {
         }
 
         // Check for pending replies to send.
-        if let Some(ref info) = self.info {
+        if let Some(ref info) = self.behaviour_info {
             if let Some(mut pending) = self.pending_replies.pop_front() {
                 loop {
                     match pending {
                         Pending::Queued(io) => {
+                            let info = Info {
+                                public_key: self.public_key.clone(),
+                                protocol_version: self.protocol_version.clone(),
+                                agent_version: self.agent_version.clone(),
+                                listen_addrs: info.listen_addrs.clone(),
+                                protocols: info.protocols.clone(),
+                                observed_addr: self.observed_addr.clone(),
+                            };
                             let io = Box::pin(io.send(info.clone()));
                             pending = Pending::Sending {
                                 peer: self.remote_peer_id,

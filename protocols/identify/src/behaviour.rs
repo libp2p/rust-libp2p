@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::handler::{self, InEvent, Proto};
+use crate::handler::{self, BehaviourInfo, InEvent, Proto};
 use crate::protocol::{Info, UpgradeError};
 use libp2p_core::{
     connection::ConnectionId, multiaddr::Protocol, ConnectedPoint, Multiaddr, PeerId, PublicKey,
@@ -48,8 +48,8 @@ pub struct Behaviour {
     config: Config,
     /// For each peer we're connected to, the observed address to send back to it.
     connected: HashMap<PeerId, HashMap<ConnectionId, Multiaddr>>,
-    /// Pending requests to respond.
-    requests: VecDeque<Request>,
+    /// Information requests from the handlers to be fullfiled.
+    requests: VecDeque<PeerId>,
     /// Pending events to be emitted when polled.
     events: VecDeque<NetworkBehaviourAction<Event, Proto>>,
     /// Peers to which an active push with current information about
@@ -57,12 +57,6 @@ pub struct Behaviour {
     pending_push: HashSet<PeerId>,
     /// The addresses of all peers that we have discovered.
     discovered_peers: PeerCache,
-}
-
-/// An inbound identification request.
-struct Request {
-    peer: PeerId,
-    observed: Multiaddr,
 }
 
 /// Configuration for the [`identify::Behaviour`](Behaviour).
@@ -228,13 +222,19 @@ impl NetworkBehaviour for Behaviour {
     type OutEvent = Event;
 
     fn new_handler(&mut self) -> Self::ConnectionHandler {
-        Proto::new(self.config.initial_delay, self.config.interval)
+        Proto::new(
+            self.config.initial_delay,
+            self.config.interval,
+            self.config.local_public_key.clone(),
+            self.config.protocol_version.clone(),
+            self.config.agent_version.clone(),
+        )
     }
 
     fn on_connection_handler_event(
         &mut self,
         peer_id: PeerId,
-        connection: ConnectionId,
+        _connection: ConnectionId,
         event: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent,
     ) {
         match event {
@@ -272,19 +272,7 @@ impl NetworkBehaviour for Behaviour {
                     }));
             }
             handler::Event::Identify => {
-                let observed = self
-                    .connected
-                    .get(&peer_id)
-                    .and_then(|addrs| addrs.get(&connection))
-                    .expect(
-                        "`on_connection_handler_event` is only called \
-                        with an established connection and calling `NetworkBehaviour::on_event` \
-                        with `FromSwarm::ConnectionEstablished ensures there is an entry; qed",
-                    );
-                self.requests.push_back(Request {
-                    peer: peer_id,
-                    observed: observed.clone(),
-                });
+                self.requests.push_back(peer_id);
             }
             handler::Event::IdentificationError(error) => {
                 self.events
@@ -339,15 +327,11 @@ impl NetworkBehaviour for Behaviour {
             });
         }
 
-        // Check for pending requests to send back to the handler for reply.
-        if let Some(Request { peer, observed }) = self.requests.pop_front() {
-            let info = Info {
+        // Check for information requests from the handlers.
+        if let Some(peer) = self.requests.pop_front() {
+            let info = BehaviourInfo {
                 listen_addrs: listen_addrs(params),
                 protocols: supported_protocols(params),
-                public_key: self.config.local_public_key.clone(),
-                protocol_version: self.config.protocol_version.clone(),
-                agent_version: self.config.agent_version.clone(),
-                observed_addr: observed,
             };
             return Poll::Ready(NetworkBehaviourAction::NotifyHandler {
                 peer_id: peer,
