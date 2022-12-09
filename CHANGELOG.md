@@ -47,8 +47,12 @@
 
 # 0.51.0 [unreleased]
 
+- Remove `SimpleProtocol` due to being unused. See [`libp2p::core::upgrade`](https://docs.rs/libp2p/0.50.0/libp2p/core/upgrade/index.html) for alternatives. See [PR 3191].
+
 - Update individual crates.
   - Update to [`libp2p-swarm` `v0.42.0`](swarm/CHANGELOG.md#0420).
+
+[PR 3191]: https://github.com/libp2p/rust-libp2p/pull/3191
 
 # 0.50.0
 
