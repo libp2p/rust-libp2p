@@ -1,4 +1,4 @@
-# 0.24.0 [unreleased]
+# 0.23.1 [unreleased]
 
 - Rename types as per [discussion 2174].
   `RequestResponse` has been renamed to `Behaviour`.
