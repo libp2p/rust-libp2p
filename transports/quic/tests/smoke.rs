@@ -189,7 +189,7 @@ async fn draft_29_support() {
     use std::task::Poll;
 
     use futures::{future::poll_fn, select};
-    use libp2p::TransportError;
+    use libp2p_core::transport::TransportError;
 
     let _ = env_logger::try_init();
 
