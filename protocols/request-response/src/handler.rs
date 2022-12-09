@@ -49,7 +49,7 @@ use std::{
 };
 
 #[deprecated(
-    since = "0.24.0",
+    since = "0.23.1",
     note = "Use re-exports that omit `RequestResponse` prefix, i.e. `libp2p::request_response::handler::Handler`"
 )]
 pub type RequestResponseHandler<TCodec> = Handler<TCodec>;
@@ -194,7 +194,7 @@ where
 }
 
 #[deprecated(
-    since = "0.24.0",
+    since = "0.23.1",
     note = "Use re-exports that omit `RequestResponse` prefix, i.e. `libp2p::request_response::handler::Event`"
 )]
 pub type RequestResponseHandlerEvent<TCodec> = Event<TCodec>;
