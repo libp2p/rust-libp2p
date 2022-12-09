@@ -45,7 +45,7 @@ fn one_field() {
         ping: ping::Behaviour,
     }
 
-    #[allow(dead_code, unreachable_code, clippy::diverging_sub_expression, clippy::let_underscore_future)]
+    #[allow(dead_code, unreachable_code, clippy::diverging_sub_expression)]
     fn foo() {
         let _out_event: <Foo as NetworkBehaviour>::OutEvent = unimplemented!();
         match _out_event {
@@ -255,7 +255,7 @@ fn custom_event_emit_event_through_poll() {
         identify: identify::Behaviour,
     }
 
-    #[allow(dead_code, unreachable_code, clippy::diverging_sub_expression, clippy::let_underscore_future)]
+    #[allow(dead_code, unreachable_code, clippy::diverging_sub_expression)]
     fn bar() {
         require_net_behaviour::<Foo>();
 
