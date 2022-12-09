@@ -20,15 +20,15 @@
 
 //! Noise protocol handshake I/O.
 
-use std::borrow::Cow;
-use crate::payload_proto;
 use crate::io::{framed::NoiseFramed, NoiseOutput};
+use crate::payload_proto;
 use crate::protocol::{KeypairIdentity, Protocol, PublicKey};
 use crate::LegacyConfig;
 use crate::NoiseError;
 use bytes::Bytes;
 use futures::prelude::*;
 use libp2p_core::identity;
+use std::borrow::Cow;
 use std::io;
 
 /// The identity of the remote established during a handshake.
@@ -171,7 +171,8 @@ where
 {
     let msg = recv(state).await?;
 
-    let mut pb_result = quick_protobuf::deserialize_from_slice::<payload_proto::NoiseHandshakePayload>(&msg[..]);
+    let mut pb_result =
+        quick_protobuf::deserialize_from_slice::<payload_proto::NoiseHandshakePayload>(&msg[..]);
 
     if pb_result.is_err() && state.legacy.recv_legacy_handshake {
         // NOTE: This is support for legacy handshake payloads. As long as
@@ -192,7 +193,9 @@ where
                 // frame length, because each length is encoded as a `u16`.
                 if usize::from(u16::from_be_bytes(buf)) + 2 == msg.len() {
                     log::debug!("Attempting fallback legacy protobuf decoding.");
-                    quick_protobuf::deserialize_from_slice::<payload_proto::NoiseHandshakePayload>(&msg[2..])
+                    quick_protobuf::deserialize_from_slice::<payload_proto::NoiseHandshakePayload>(
+                        &msg[2..],
+                    )
                 } else {
                     Err(e)
                 }

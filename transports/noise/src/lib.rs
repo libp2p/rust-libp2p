@@ -60,12 +60,12 @@ mod protocol;
 #[allow(clippy::derive_partial_eq_without_eq)]
 mod protos;
 
-use protos::payload as payload_proto;
 pub use io::handshake::RemoteIdentity;
 pub use io::NoiseOutput;
 pub use protocol::{x25519::X25519, x25519_spec::X25519Spec};
 pub use protocol::{AuthenticKeypair, Keypair, KeypairIdentity, PublicKey, SecretKey};
 pub use protocol::{Protocol, ProtocolParams, IK, IX, XX};
+use protos::payload as payload_proto;
 
 use crate::handshake::State;
 use crate::io::handshake;
