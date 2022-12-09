@@ -1102,12 +1102,6 @@ impl PoolConfig {
         }
     }
 
-    /// Configures the executor to use for spawning connection background tasks.
-    pub fn with_executor(mut self, executor: Box<dyn Executor + Send>) -> Self {
-        self.executor = Some(executor);
-        self
-    }
-
     /// Sets the maximum number of events sent to a connection's background task
     /// that may be buffered, if the task cannot keep up with their consumption and
     /// delivery to the connection handler.

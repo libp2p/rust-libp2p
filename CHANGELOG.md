@@ -45,6 +45,11 @@
 
 # `libp2p` facade crate
 
+# 0.51.0 [unreleased]
+
+- Update individual crates.
+  - Update to [`libp2p-swarm` `v0.42.0`](swarm/CHANGELOG.md#0420).
+
 # 0.50.0
 
 This is a large release. After > 4 years, rust-libp2p ships with an [(alpha) QUIC
