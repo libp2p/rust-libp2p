@@ -1,3 +1,7 @@
+# 0.12.0 [unreleased]
+
+- Add `connections_establishment_duration` metric. See [PR 3134]
+
 # 0.11.0
 
 - Update to `libp2p-dcutr` `v0.8.0`.
