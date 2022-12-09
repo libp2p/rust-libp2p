@@ -57,7 +57,10 @@
 
 mod io;
 mod protocol;
+#[allow(clippy::derive_partial_eq_without_eq)]
+mod protos;
 
+use protos::payload as payload_proto;
 pub use io::handshake::RemoteIdentity;
 pub use io::NoiseOutput;
 pub use protocol::{x25519::X25519, x25519_spec::X25519Spec};
@@ -265,10 +268,10 @@ pub enum NoiseError {
 
 #[derive(Debug, thiserror::Error)]
 #[error(transparent)]
-pub struct DecodeError(prost::DecodeError);
+pub struct DecodeError(quick_protobuf::Error);
 
-impl From<prost::DecodeError> for NoiseError {
-    fn from(e: prost::DecodeError) -> Self {
+impl From<quick_protobuf::Error> for NoiseError {
+    fn from(e: quick_protobuf::Error) -> Self {
         NoiseError::InvalidPayload(DecodeError(e))
     }
 }

@@ -20,11 +20,8 @@
 
 //! Noise protocol handshake I/O.
 
-#[allow(clippy::derive_partial_eq_without_eq)]
-mod payload_proto {
-    include!(concat!(env!("OUT_DIR"), "/payload.proto.rs"));
-}
-
+use std::borrow::Cow;
+use crate::payload_proto;
 use crate::io::{framed::NoiseFramed, NoiseOutput};
 use crate::protocol::{KeypairIdentity, Protocol, PublicKey};
 use crate::LegacyConfig;
@@ -32,7 +29,6 @@ use crate::NoiseError;
 use bytes::Bytes;
 use futures::prelude::*;
 use libp2p_core::identity;
-use prost::Message;
 use std::io;
 
 /// The identity of the remote established during a handshake.
@@ -175,7 +171,7 @@ where
 {
     let msg = recv(state).await?;
 
-    let mut pb_result = payload_proto::NoiseHandshakePayload::decode(&msg[..]);
+    let mut pb_result = quick_protobuf::deserialize_from_slice::<payload_proto::NoiseHandshakePayload>(&msg[..]);
 
     if pb_result.is_err() && state.legacy.recv_legacy_handshake {
         // NOTE: This is support for legacy handshake payloads. As long as
@@ -196,7 +192,7 @@ where
                 // frame length, because each length is encoded as a `u16`.
                 if usize::from(u16::from_be_bytes(buf)) + 2 == msg.len() {
                     log::debug!("Attempting fallback legacy protobuf decoding.");
-                    payload_proto::NoiseHandshakePayload::decode(&msg[2..])
+                    quick_protobuf::deserialize_from_slice::<payload_proto::NoiseHandshakePayload>(&msg[2..])
                 } else {
                     Err(e)
                 }
@@ -218,7 +214,7 @@ where
     }
 
     if !pb.identity_sig.is_empty() {
-        state.dh_remote_pubkey_sig = Some(pb.identity_sig);
+        state.dh_remote_pubkey_sig = Some(pb.identity_sig.to_vec());
     }
 
     Ok(())
@@ -230,24 +226,24 @@ where
     T: AsyncWrite + Unpin,
 {
     let mut pb = payload_proto::NoiseHandshakePayload {
-        identity_key: state.identity.public.to_protobuf_encoding(),
+        identity_key: Cow::from(state.identity.public.to_protobuf_encoding()),
         ..Default::default()
     };
 
     if let Some(ref sig) = state.identity.signature {
-        pb.identity_sig = sig.clone()
+        pb.identity_sig = Cow::Borrowed(sig)
     }
 
-    let mut msg = if state.legacy.send_legacy_handshake {
-        let mut msg = Vec::with_capacity(2 + pb.encoded_len());
-        msg.extend_from_slice(&(pb.encoded_len() as u16).to_be_bytes());
+    let serialized_pb = quick_protobuf::serialize_into_vec(&pb).expect("Encoding to succeed.");
+
+    let msg = if state.legacy.send_legacy_handshake {
+        let mut msg = Vec::with_capacity(2 + serialized_pb.len());
+        msg.extend_from_slice(&(serialized_pb.len() as u16).to_be_bytes());
         msg
     } else {
-        Vec::with_capacity(pb.encoded_len())
+        serialized_pb
     };
 
-    pb.encode(&mut msg)
-        .expect("Vec<u8> provides capacity as needed");
     state.io.send(&msg).await?;
 
     Ok(())
@@ -261,19 +257,19 @@ where
     let mut pb = payload_proto::NoiseHandshakePayload::default();
 
     if let Some(ref sig) = state.identity.signature {
-        pb.identity_sig = sig.clone()
+        pb.identity_sig = Cow::Borrowed(sig)
     }
 
-    let mut msg = if state.legacy.send_legacy_handshake {
-        let mut msg = Vec::with_capacity(2 + pb.encoded_len());
-        msg.extend_from_slice(&(pb.encoded_len() as u16).to_be_bytes());
+    let serialized_pb = quick_protobuf::serialize_into_vec(&pb).expect("Encoding to succeed.");
+
+    let msg = if state.legacy.send_legacy_handshake {
+        let mut msg = Vec::with_capacity(2 + serialized_pb.len());
+        msg.extend_from_slice(&(serialized_pb.len() as u16).to_be_bytes());
         msg
     } else {
-        Vec::with_capacity(pb.encoded_len())
+        serialized_pb
     };
 
-    pb.encode(&mut msg)
-        .expect("Vec<u8> provides capacity as needed");
     state.io.send(&msg).await?;
 
     Ok(())
