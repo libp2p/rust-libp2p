@@ -56,19 +56,19 @@ mod structs_proto {
 /// # use libp2p_plaintext::PlainText1Config;
 /// #
 /// MemoryTransport::default()
-///   .and_then(move |io, endpoint| {
-///     libp2p_core::upgrade::apply(
-///       io,
-///       PlainText1Config{},
-///       endpoint,
-///       libp2p_core::transport::upgrade::Version::V1,
-///     )
-///   })
-///   .map(|plaintext, _endpoint| {
-///     unimplemented!();
-///     // let peer_id = somehow_derive_peer_id();
-///     // return (peer_id, plaintext);
-///   });
+///     .and_then(move |io, endpoint| {
+///         libp2p_core::upgrade::apply(
+///             io,
+///             PlainText1Config {},
+///             endpoint,
+///             libp2p_core::transport::upgrade::Version::V1,
+///         )
+///     })
+///     .map(|plaintext, _endpoint| {
+///         unimplemented!();
+///         // let peer_id = somehow_derive_peer_id();
+///         // return (peer_id, plaintext);
+///     });
 /// ```
 #[derive(Debug, Copy, Clone)]
 pub struct PlainText1Config;

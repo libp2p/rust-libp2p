@@ -51,7 +51,6 @@
 //! The [`ConnectionHandler`] trait defines how each active connection to a
 //! remote should behave: how to handle incoming substreams, which protocols
 //! are supported, when to open a new outbound substream, etc.
-//!
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
@@ -499,9 +498,9 @@ where
     /// # use libp2p_swarm::dummy;
     /// #
     /// let mut swarm = Swarm::new(
-    ///   DummyTransport::new().boxed(),
-    ///   dummy::Behaviour,
-    ///   PeerId::random(),
+    ///     DummyTransport::new().boxed(),
+    ///     dummy::Behaviour,
+    ///     PeerId::random(),
     /// );
     ///
     /// // Dial a known peer.

@@ -242,32 +242,35 @@ impl Config {
     /// #[cfg(feature = "async-io")]
     /// #[async_std::main]
     /// async fn main() -> std::io::Result<()> {
+    ///     let listen_addr1: Multiaddr = "/ip4/127.0.0.1/tcp/9001".parse().unwrap();
+    ///     let listen_addr2: Multiaddr = "/ip4/127.0.0.1/tcp/9002".parse().unwrap();
     ///
-    /// let listen_addr1: Multiaddr = "/ip4/127.0.0.1/tcp/9001".parse().unwrap();
-    /// let listen_addr2: Multiaddr = "/ip4/127.0.0.1/tcp/9002".parse().unwrap();
-    ///
-    /// let mut tcp1 = libp2p_tcp::async_io::Transport::new(libp2p_tcp::Config::new().port_reuse(true)).boxed();
-    /// tcp1.listen_on( listen_addr1.clone()).expect("listener");
-    /// match tcp1.select_next_some().await {
-    ///     TransportEvent::NewAddress { listen_addr, .. } => {
-    ///         println!("Listening on {:?}", listen_addr);
-    ///         let mut stream = tcp1.dial(listen_addr2.clone()).unwrap().await?;
-    ///         // `stream` has `listen_addr1` as its local socket address.
+    ///     let mut tcp1 =
+    ///         libp2p_tcp::async_io::Transport::new(libp2p_tcp::Config::new().port_reuse(true))
+    ///             .boxed();
+    ///     tcp1.listen_on(listen_addr1.clone()).expect("listener");
+    ///     match tcp1.select_next_some().await {
+    ///         TransportEvent::NewAddress { listen_addr, .. } => {
+    ///             println!("Listening on {:?}", listen_addr);
+    ///             let mut stream = tcp1.dial(listen_addr2.clone()).unwrap().await?;
+    ///             // `stream` has `listen_addr1` as its local socket address.
+    ///         }
+    ///         _ => {}
     ///     }
-    ///     _ => {}
-    /// }
     ///
-    /// let mut tcp2 = libp2p_tcp::async_io::Transport::new(libp2p_tcp::Config::new().port_reuse(true)).boxed();
-    /// tcp2.listen_on( listen_addr2).expect("listener");
-    /// match tcp2.select_next_some().await {
-    ///     TransportEvent::NewAddress { listen_addr, .. } => {
-    ///         println!("Listening on {:?}", listen_addr);
-    ///         let mut socket = tcp2.dial(listen_addr1).unwrap().await?;
-    ///         // `stream` has `listen_addr2` as its local socket address.
+    ///     let mut tcp2 =
+    ///         libp2p_tcp::async_io::Transport::new(libp2p_tcp::Config::new().port_reuse(true))
+    ///             .boxed();
+    ///     tcp2.listen_on(listen_addr2).expect("listener");
+    ///     match tcp2.select_next_some().await {
+    ///         TransportEvent::NewAddress { listen_addr, .. } => {
+    ///             println!("Listening on {:?}", listen_addr);
+    ///             let mut socket = tcp2.dial(listen_addr1).unwrap().await?;
+    ///             // `stream` has `listen_addr2` as its local socket address.
+    ///         }
+    ///         _ => {}
     ///     }
-    ///     _ => {}
-    /// }
-    /// Ok(())
+    ///     Ok(())
     /// }
     /// ```
     ///

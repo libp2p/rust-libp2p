@@ -31,7 +31,6 @@
 //! This crate provides a `Mdns` and `TokioMdns`, depending on the enabled features, which
 //! implements the `NetworkBehaviour` trait. This struct will automatically discover other
 //! libp2p nodes on the local network.
-//!
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 

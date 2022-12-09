@@ -105,9 +105,8 @@ impl ClientTransport {
     /// # use libp2p_core::transport::choice::OrTransport;
     /// # use libp2p_relay::v2::client;
     /// let actual_transport = MemoryTransport::default();
-    /// let (relay_transport, behaviour) = client::Client::new_transport_and_behaviour(
-    ///     PeerId::random(),
-    /// );
+    /// let (relay_transport, behaviour) =
+    ///     client::Client::new_transport_and_behaviour(PeerId::random());
     ///
     /// // To reduce unnecessary connection attempts, put `relay_transport` first.
     /// let mut transport = OrTransport::new(relay_transport, actual_transport);

@@ -142,7 +142,7 @@
 //! With the above in mind, let's extend our example, creating a [`ping::Behaviour`](crate::ping::Behaviour) at the end:
 //!
 //! ```rust
-//! use libp2p::{identity, PeerId, ping};
+//! use libp2p::{identity, ping, PeerId};
 //! use std::error::Error;
 //!
 //! #[async_std::main]
@@ -174,8 +174,8 @@
 //! [`Transport`] to the [`NetworkBehaviour`].
 //!
 //! ```rust
-//! use libp2p::{identity, PeerId, ping};
 //! use libp2p::swarm::Swarm;
+//! use libp2p::{identity, ping, PeerId};
 //! use std::error::Error;
 //!
 //! #[async_std::main]
@@ -226,8 +226,8 @@
 //! remote peer.
 //!
 //! ```rust
-//! use libp2p::{identity, Multiaddr, PeerId, ping};
-//! use libp2p::swarm::{Swarm, dial_opts::DialOpts};
+//! use libp2p::swarm::{dial_opts::DialOpts, Swarm};
+//! use libp2p::{identity, ping, Multiaddr, PeerId};
 //! use std::error::Error;
 //!
 //! #[async_std::main]
@@ -271,8 +271,8 @@
 //!
 //! ```no_run
 //! use futures::prelude::*;
-//! use libp2p::swarm::{Swarm, SwarmEvent, dial_opts::DialOpts};
-//! use libp2p::{identity, Multiaddr, PeerId, ping};
+//! use libp2p::swarm::{dial_opts::DialOpts, Swarm, SwarmEvent};
+//! use libp2p::{identity, ping, Multiaddr, PeerId};
 //! use std::error::Error;
 //!
 //! #[async_std::main]
@@ -311,7 +311,6 @@
 //!             _ => {}
 //!         }
 //!     }
-//!
 //! }
 //! ```
 //!

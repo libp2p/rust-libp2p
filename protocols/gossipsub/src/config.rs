@@ -445,7 +445,7 @@ impl Default for GossipsubConfigBuilder {
                 fast_message_id_fn: None,
                 allow_self_origin: false,
                 do_px: false,
-                prune_peers: 0, // NOTE: Increasing this currently has little effect until Signed records are implemented.
+                prune_peers: 0, /* NOTE: Increasing this currently has little effect until Signed records are implemented. */
                 prune_backoff: Duration::from_secs(60),
                 unsubscribe_backoff: Duration::from_secs(10),
                 backoff_slack: 1,

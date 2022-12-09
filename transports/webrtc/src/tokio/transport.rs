@@ -60,8 +60,8 @@ impl Transport {
     ///
     /// ```
     /// use libp2p_core::identity;
+    /// use libp2p_webrtc::tokio::{Certificate, Transport};
     /// use rand::thread_rng;
-    /// use libp2p_webrtc::tokio::{Transport, Certificate};
     ///
     /// let id_keys = identity::Keypair::generate_ed25519();
     /// let transport = Transport::new(id_keys, Certificate::generate(&mut thread_rng()).unwrap());

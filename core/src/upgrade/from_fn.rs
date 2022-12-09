@@ -35,23 +35,29 @@ use std::iter;
 /// # use libp2p_core::{upgrade, Negotiated};
 /// # use std::io;
 /// # use futures::AsyncWriteExt;
-/// let _transport = MemoryTransport::default()
-///     .and_then(move |out, cp| {
-///         upgrade::apply(out, upgrade::from_fn("/foo/1", move |mut sock: Negotiated<Channel<Vec<u8>>>, endpoint| async move {
-///             if endpoint.is_dialer() {
-///                 upgrade::write_length_prefixed(&mut sock, "some handshake data").await?;
-///                 sock.close().await?;
-///             } else {
-///                 let handshake_data = upgrade::read_length_prefixed(&mut sock, 1024).await?;
-///                 if handshake_data != b"some handshake data" {
-///                     return Err(io::Error::new(io::ErrorKind::Other, "bad handshake"));
+/// let _transport = MemoryTransport::default().and_then(move |out, cp| {
+///     upgrade::apply(
+///         out,
+///         upgrade::from_fn(
+///             "/foo/1",
+///             move |mut sock: Negotiated<Channel<Vec<u8>>>, endpoint| async move {
+///                 if endpoint.is_dialer() {
+///                     upgrade::write_length_prefixed(&mut sock, "some handshake data").await?;
+///                     sock.close().await?;
+///                 } else {
+///                     let handshake_data = upgrade::read_length_prefixed(&mut sock, 1024).await?;
+///                     if handshake_data != b"some handshake data" {
+///                         return Err(io::Error::new(io::ErrorKind::Other, "bad handshake"));
+///                     }
 ///                 }
-///             }
-///             Ok(sock)
-///         }), cp, upgrade::Version::V1)
-///     });
+///                 Ok(sock)
+///             },
+///         ),
+///         cp,
+///         upgrade::Version::V1,
+///     )
+/// });
 /// ```
-///
 pub fn from_fn<P, F, C, Fut, Out, Err>(protocol_name: P, fun: F) -> FromFnUpgrade<P, F>
 where
     // Note: these bounds are there in order to help the compiler infer types

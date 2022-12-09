@@ -40,7 +40,6 @@ use std::{cmp::Ordering, collections::VecDeque, num::NonZeroUsize};
 ///     limited history) for this address in the context of [`Addresses::add`].
 ///   * If an address's score reaches 0 in the context of [`Addresses::add`],
 ///     it is removed from the collection.
-///
 #[derive(Debug, Clone)]
 pub struct Addresses {
     /// The ranked sequence of addresses, from highest to lowest score.

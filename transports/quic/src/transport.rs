@@ -575,7 +575,7 @@ fn multiaddr_to_socketaddr(
 
     for proto in iter {
         match proto {
-            Protocol::P2p(_) => {} // Ignore a `/p2p/...` prefix of possibly outer protocols, if present.
+            Protocol::P2p(_) => {} /* Ignore a `/p2p/...` prefix of possibly outer protocols, if present. */
             _ => return None,
         }
     }

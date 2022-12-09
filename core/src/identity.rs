@@ -62,7 +62,6 @@ use std::convert::{TryFrom, TryInto};
 /// let mut bytes = std::fs::read("private.pk8").unwrap();
 /// let keypair = Keypair::rsa_from_pkcs8(&mut bytes);
 /// ```
-///
 #[derive(Debug, Clone)]
 #[allow(clippy::large_enum_variant)]
 pub enum Keypair {

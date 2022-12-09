@@ -97,25 +97,25 @@ pub(crate) type THandlerOutEvent<THandler> =
 /// #[behaviour(out_event = "Event")]
 /// # #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
 /// struct MyBehaviour {
-///   identify: identify::Behaviour,
-///   ping: ping::Behaviour,
+///     identify: identify::Behaviour,
+///     ping: ping::Behaviour,
 /// }
 ///
 /// enum Event {
-///   Identify(identify::Event),
-///   Ping(ping::Event),
+///     Identify(identify::Event),
+///     Ping(ping::Event),
 /// }
 ///
 /// impl From<identify::Event> for Event {
-///   fn from(event: identify::Event) -> Self {
-///     Self::Identify(event)
-///   }
+///     fn from(event: identify::Event) -> Self {
+///         Self::Identify(event)
+///     }
 /// }
 ///
 /// impl From<ping::Event> for Event {
-///   fn from(event: ping::Event) -> Self {
-///     Self::Ping(event)
-///   }
+///     fn from(event: ping::Event) -> Self {
+///         Self::Ping(event)
+///     }
 /// }
 /// ```
 pub trait NetworkBehaviour: 'static {

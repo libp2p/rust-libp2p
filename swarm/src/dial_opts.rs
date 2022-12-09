@@ -252,8 +252,8 @@ impl WithoutPeerIdWithAddress {
 /// # use libp2p_core::PeerId;
 /// #
 /// DialOpts::peer_id(PeerId::random())
-///    .condition(PeerCondition::Disconnected)
-///    .build();
+///     .condition(PeerCondition::Disconnected)
+///     .build();
 /// ```
 #[derive(Debug, Copy, Clone)]
 pub enum PeerCondition {

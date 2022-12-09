@@ -293,7 +293,6 @@ fn generate_peer_name() -> Vec<u8> {
 /// Panics if `name` has a zero-length component or a component that is too long.
 /// This is fine considering that this function is not public and is only called in a controlled
 /// environment.
-///
 fn append_qname(out: &mut Vec<u8>, name: &[u8]) {
     debug_assert!(name.is_ascii());
 

@@ -318,7 +318,6 @@ where
     ///     is inserted at the position preceding the first connected node,
     ///     i.e. as the most-recently disconnected node. If there are no connected nodes,
     ///     the new node is added as the last element of the bucket.
-    ///
     pub fn insert(&mut self, node: Node<TKey, TVal>, status: NodeStatus) -> InsertResult<TKey> {
         match status {
             NodeStatus::Connected => {

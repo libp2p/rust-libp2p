@@ -30,7 +30,6 @@
 //!
 //! Call `new()` with a JavaScript object that implements the interface described in the `ffi`
 //! module.
-//!
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 

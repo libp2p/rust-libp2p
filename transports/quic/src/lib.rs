@@ -31,15 +31,17 @@
 //! # #[cfg(feature = "async-std")]
 //! # fn main() -> std::io::Result<()> {
 //! #
-//! use libp2p_quic as quic;
 //! use libp2p_core::{Multiaddr, Transport};
+//! use libp2p_quic as quic;
 //!
 //! let keypair = libp2p_core::identity::Keypair::generate_ed25519();
 //! let quic_config = quic::Config::new(&keypair);
 //!
 //! let mut quic_transport = quic::async_std::Transport::new(quic_config);
 //!
-//! let addr = "/ip4/127.0.0.1/udp/12345/quic-v1".parse().expect("address should be valid");
+//! let addr = "/ip4/127.0.0.1/udp/12345/quic-v1"
+//!     .parse()
+//!     .expect("address should be valid");
 //! quic_transport.listen_on(addr).expect("listen error.");
 //! #
 //! # Ok(())
@@ -53,7 +55,6 @@
 //! Note that QUIC provides transport, security, and multiplexing in a single protocol.  Therefore,
 //! QUIC connections do not need to be upgraded. You will get a compile-time error if you try.
 //! Instead, you must pass all needed configuration into the constructor.
-//!
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 

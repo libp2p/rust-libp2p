@@ -39,14 +39,16 @@
 //! Example:
 //!
 //! ```
-//! use libp2p_core::{identity, Transport, upgrade};
+//! use libp2p::noise::{Keypair, NoiseAuthenticated, X25519Spec};
 //! use libp2p::tcp::TcpTransport;
-//! use libp2p::noise::{Keypair, X25519Spec, NoiseAuthenticated};
+//! use libp2p_core::{identity, upgrade, Transport};
 //!
 //! # fn main() {
 //! let id_keys = identity::Keypair::generate_ed25519();
 //! let noise = NoiseAuthenticated::xx(&id_keys).unwrap();
-//! let builder = TcpTransport::default().upgrade(upgrade::Version::V1).authenticate(noise);
+//! let builder = TcpTransport::default()
+//!     .upgrade(upgrade::Version::V1)
+//!     .authenticate(noise);
 //! // let transport = builder.multiplex(...);
 //! # }
 //! ```

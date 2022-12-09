@@ -91,8 +91,12 @@
 //! An example of initialising a gossipsub compatible swarm:
 //!
 //! ```
+//! use libp2p_core::{
+//!     identity::Keypair,
+//!     transport::{MemoryTransport, Transport},
+//!     Multiaddr,
+//! };
 //! use libp2p_gossipsub::GossipsubEvent;
-//! use libp2p_core::{identity::Keypair,transport::{Transport, MemoryTransport}, Multiaddr};
 //! use libp2p_gossipsub::MessageAuthenticity;
 //! let local_key = Keypair::generate_ed25519();
 //! let local_peer_id = libp2p_core::PeerId::from(local_key.public());
@@ -100,10 +104,10 @@
 //! // Set up an encrypted TCP Transport over the Mplex
 //! // This is test transport (memory).
 //! let transport = MemoryTransport::default()
-//!            .upgrade(libp2p_core::upgrade::Version::V1)
-//!            .authenticate(libp2p::noise::NoiseAuthenticated::xx(&local_key).unwrap())
-//!            .multiplex(libp2p::mplex::MplexConfig::new())
-//!            .boxed();
+//!     .upgrade(libp2p_core::upgrade::Version::V1)
+//!     .authenticate(libp2p::noise::NoiseAuthenticated::xx(&local_key).unwrap())
+//!     .multiplex(libp2p::mplex::MplexConfig::new())
+//!     .boxed();
 //!
 //! // Create a Gossipsub topic
 //! let topic = libp2p_gossipsub::IdentTopic::new("example");
@@ -122,11 +126,7 @@
 //!     // subscribe to the topic
 //!     gossipsub.subscribe(&topic);
 //!     // create the swarm
-//!     libp2p_swarm::Swarm::new(
-//!         transport,
-//!         gossipsub,
-//!         local_peer_id,
-//!     )
+//!     libp2p_swarm::Swarm::new(transport, gossipsub, local_peer_id)
 //! };
 //!
 //! // Listen on a memory transport.

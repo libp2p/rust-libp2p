@@ -180,7 +180,7 @@ impl SubstreamHandler for Stream {
             },
             Stream::PendingClose(mut substream) => match substream.poll_close_unpin(cx) {
                 Poll::Ready(Ok(())) => Next::Done,
-                Poll::Ready(Err(_)) => Next::Done, // there is nothing we can do about an error during close
+                Poll::Ready(Err(_)) => Next::Done, /* there is nothing we can do about an error during close */
                 Poll::Pending => Next::Pending {
                     next_state: Stream::PendingClose(substream),
                 },

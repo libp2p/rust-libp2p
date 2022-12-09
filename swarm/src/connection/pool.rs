@@ -249,7 +249,6 @@ where
     ///     i.e. a successful, orderly close.
     ///   * it was actively closed by [`Pool::disconnect`], i.e.
     ///     dropped without an orderly close.
-    ///
     ConnectionClosed {
         id: ConnectionId,
         /// Information about the connection that errored.

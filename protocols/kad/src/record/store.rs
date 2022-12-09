@@ -63,7 +63,6 @@ pub enum Error {
 ///      libp2p Kademlia specification and realise a "pull-model" for distributed
 ///      content. Just like a regular record, a provider record is distributed
 ///      to the closest nodes to the key.
-///
 pub trait RecordStore<'a> {
     type RecordsIter: Iterator<Item = Cow<'a, Record>>;
     type ProvidedIter: Iterator<Item = Cow<'a, ProviderRecord>>;
