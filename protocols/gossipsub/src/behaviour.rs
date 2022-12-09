@@ -1424,7 +1424,9 @@ where
 
                                 // check the flood cutoff
                                 let flood_cutoff = (backoff_time
-                                    + self.config.graft_flood_threshold()).checked_sub(self.config.prune_backoff()).unwrap();
+                                    + self.config.graft_flood_threshold())
+                                .checked_sub(self.config.prune_backoff())
+                                .unwrap();
                                 if flood_cutoff > now {
                                     //extra penalty
                                     peer_score.add_penalty(peer_id, 1);

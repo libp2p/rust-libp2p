@@ -113,9 +113,7 @@ pub async fn read_length_prefixed(
     if len > max_size {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
-            format!(
-                "Received data size ({len} bytes) exceeds maximum ({max_size} bytes)"
-            ),
+            format!("Received data size ({len} bytes) exceeds maximum ({max_size} bytes)"),
         ));
     }
 

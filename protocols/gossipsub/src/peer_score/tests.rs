@@ -206,10 +206,7 @@ fn test_score_first_message_deliveries() {
     let score = peer_score.score(&peer_id);
     let expected =
         topic_params.topic_weight * topic_params.first_message_deliveries_weight * messages as f64;
-    assert!(
-        score == expected,
-        "The score: {score} should be {expected}"
-    );
+    assert!(score == expected, "The score: {score} should be {expected}");
 }
 
 #[test]
@@ -250,10 +247,7 @@ fn test_score_first_message_deliveries_cap() {
     let expected = topic_params.topic_weight
         * topic_params.first_message_deliveries_weight
         * topic_params.first_message_deliveries_cap;
-    assert!(
-        score == expected,
-        "The score: {score} should be {expected}"
-    );
+    assert!(score == expected, "The score: {score} should be {expected}");
 }
 
 #[test]
@@ -292,10 +286,7 @@ fn test_score_first_message_deliveries_decay() {
         * topic_params.first_message_deliveries_weight
         * topic_params.first_message_deliveries_decay
         * messages as f64;
-    assert!(
-        score == expected,
-        "The score: {score} should be {expected}"
-    );
+    assert!(score == expected, "The score: {score} should be {expected}");
 
     // refreshing the scores applies the decay param
     let decay_intervals = 10;
@@ -304,10 +295,7 @@ fn test_score_first_message_deliveries_decay() {
         expected *= topic_params.first_message_deliveries_decay;
     }
     let score = peer_score.score(&peer_id);
-    assert!(
-        score == expected,
-        "The score: {score} should be {expected}"
-    );
+    assert!(score == expected, "The score: {score} should be {expected}");
 }
 
 #[test]
@@ -403,10 +391,7 @@ fn test_score_mesh_message_deliveries() {
     let expected =
         topic_params.topic_weight * topic_params.mesh_message_deliveries_weight * penalty;
 
-    assert!(
-        score_c == expected,
-        "Score: {score_c}. Expected {expected}"
-    );
+    assert!(score_c == expected, "Score: {score_c}. Expected {expected}");
 }
 
 #[test]

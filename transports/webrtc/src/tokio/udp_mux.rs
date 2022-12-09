@@ -537,9 +537,7 @@ fn ufrag_from_stun_message(buffer: &[u8], local_ufrag: bool) -> Result<String, E
     };
 
     if let Err(err) = result {
-        Err(Error::Other(format!(
-            "failed to handle decode ICE: {err}"
-        )))
+        Err(Error::Other(format!("failed to handle decode ICE: {err}")))
     } else {
         let (attr, found) = message.attributes.get(ATTR_USERNAME);
         if !found {
