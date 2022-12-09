@@ -126,11 +126,7 @@
 //!     // subscribe to the topic
 //!     gossipsub.subscribe(&topic);
 //!     // create the swarm (use an executor in a real example)
-//!     libp2p_swarm::Swarm::without_executor(
-//!         transport,
-//!         gossipsub,
-//!         local_peer_id,
-//!     )
+//!     libp2p_swarm::Swarm::without_executor(transport, gossipsub, local_peer_id)
 //! };
 //!
 //! // Listen on a memory transport.
