@@ -175,8 +175,7 @@ impl PeerScoreParams {
         for (topic, params) in self.topics.iter() {
             if let Err(e) = params.validate() {
                 return Err(format!(
-                    "Invalid score parameters for topic {}: {}",
-                    topic, e
+                    "Invalid score parameters for topic {topic}: {e}"
                 ));
             }
         }

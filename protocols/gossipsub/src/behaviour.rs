@@ -1424,8 +1424,7 @@ where
 
                                 // check the flood cutoff
                                 let flood_cutoff = (backoff_time
-                                    + self.config.graft_flood_threshold())
-                                    - self.config.prune_backoff();
+                                    + self.config.graft_flood_threshold()).checked_sub(self.config.prune_backoff()).unwrap();
                                 if flood_cutoff > now {
                                     //extra penalty
                                     peer_score.add_penalty(peer_id, 1);
@@ -3678,10 +3677,10 @@ impl fmt::Debug for PublishConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             PublishConfig::Signing { author, .. } => {
-                f.write_fmt(format_args!("PublishConfig::Signing({})", author))
+                f.write_fmt(format_args!("PublishConfig::Signing({author})"))
             }
             PublishConfig::Author(author) => {
-                f.write_fmt(format_args!("PublishConfig::Author({})", author))
+                f.write_fmt(format_args!("PublishConfig::Author({author})"))
             }
             PublishConfig::RandomAuthor => f.write_fmt(format_args!("PublishConfig::RandomAuthor")),
             PublishConfig::Anonymous => f.write_fmt(format_args!("PublishConfig::Anonymous")),

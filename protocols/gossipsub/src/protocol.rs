@@ -107,11 +107,11 @@ impl ProtocolId {
         let protocol_id = match kind {
             PeerKind::Gossipsubv1_1 => match prefix {
                 true => format!("/{}/{}", id, "1.1.0"),
-                false => format!("{}", id),
+                false => format!("{id}"),
             },
             PeerKind::Gossipsub => match prefix {
                 true => format!("/{}/{}", id, "1.0.0"),
-                false => format!("{}", id),
+                false => format!("{id}"),
             },
             PeerKind::Floodsub => format!("/{}/{}", "floodsub", "1.0.0"),
             // NOTE: This is used for informing the behaviour of unsupported peers. We do not

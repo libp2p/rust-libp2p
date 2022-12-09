@@ -104,8 +104,7 @@ fn strip_peer_id(addr: &mut Multiaddr) {
             let mut addr = Multiaddr::empty();
             addr.push(Protocol::P2p(peer_id));
             println!(
-                "removing peer id {} so this address can be dialed by rust-libp2p",
-                addr
+                "removing peer id {addr} so this address can be dialed by rust-libp2p"
             );
         }
         Some(other) => addr.push(other),

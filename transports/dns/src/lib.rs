@@ -410,9 +410,9 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            DnsErr::Transport(err) => write!(f, "{}", err),
-            DnsErr::ResolveError(err) => write!(f, "{}", err),
-            DnsErr::MultiaddrNotSupported(a) => write!(f, "Unsupported resolved address: {}", a),
+            DnsErr::Transport(err) => write!(f, "{err}"),
+            DnsErr::ResolveError(err) => write!(f, "{err}"),
+            DnsErr::MultiaddrNotSupported(a) => write!(f, "Unsupported resolved address: {a}"),
             DnsErr::TooManyLookups => write!(f, "Too many DNS lookups"),
         }
     }
@@ -692,7 +692,7 @@ mod tests {
                 .await
             {
                 Err(DnsErr::ResolveError(_)) => {}
-                Err(e) => panic!("Unexpected error: {:?}", e),
+                Err(e) => panic!("Unexpected error: {e:?}"),
                 Ok(_) => panic!("Unexpected success."),
             }
 
@@ -704,9 +704,9 @@ mod tests {
             {
                 Err(DnsErr::ResolveError(e)) => match e.kind() {
                     ResolveErrorKind::NoRecordsFound { .. } => {}
-                    _ => panic!("Unexpected DNS error: {:?}", e),
+                    _ => panic!("Unexpected DNS error: {e:?}"),
                 },
-                Err(e) => panic!("Unexpected error: {:?}", e),
+                Err(e) => panic!("Unexpected error: {e:?}"),
                 Ok(_) => panic!("Unexpected success."),
             }
         }

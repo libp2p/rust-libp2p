@@ -100,8 +100,7 @@ fn test_score_time_in_mesh() {
     let score = peer_score.score(&peer_id);
     assert!(
         score == 0.0,
-        "expected score to start at zero. Score found: {}",
-        score
+        "expected score to start at zero. Score found: {score}"
     );
 
     // The time in mesh depends on how long the peer has been grafted
@@ -116,9 +115,7 @@ fn test_score_time_in_mesh() {
         * (elapsed.as_millis() / topic_params.time_in_mesh_quantum.as_millis()) as f64;
     assert!(
         score >= expected,
-        "The score: {} should be greater than or equal to: {}",
-        score,
-        expected
+        "The score: {score} should be greater than or equal to: {expected}"
     );
 }
 
@@ -148,8 +145,7 @@ fn test_score_time_in_mesh_cap() {
     let score = peer_score.score(&peer_id);
     assert!(
         score == 0.0,
-        "expected score to start at zero. Score found: {}",
-        score
+        "expected score to start at zero. Score found: {score}"
     );
 
     // The time in mesh depends on how long the peer has been grafted
@@ -212,9 +208,7 @@ fn test_score_first_message_deliveries() {
         topic_params.topic_weight * topic_params.first_message_deliveries_weight * messages as f64;
     assert!(
         score == expected,
-        "The score: {} should be {}",
-        score,
-        expected
+        "The score: {score} should be {expected}"
     );
 }
 
@@ -258,9 +252,7 @@ fn test_score_first_message_deliveries_cap() {
         * topic_params.first_message_deliveries_cap;
     assert!(
         score == expected,
-        "The score: {} should be {}",
-        score,
-        expected
+        "The score: {score} should be {expected}"
     );
 }
 
@@ -302,9 +294,7 @@ fn test_score_first_message_deliveries_decay() {
         * messages as f64;
     assert!(
         score == expected,
-        "The score: {} should be {}",
-        score,
-        expected
+        "The score: {score} should be {expected}"
     );
 
     // refreshing the scores applies the decay param
@@ -316,9 +306,7 @@ fn test_score_first_message_deliveries_decay() {
     let score = peer_score.score(&peer_id);
     assert!(
         score == expected,
-        "The score: {} should be {}",
-        score,
-        expected
+        "The score: {score} should be {expected}"
     );
 }
 
@@ -368,8 +356,7 @@ fn test_score_mesh_message_deliveries() {
         let score = peer_score.score(peer_id);
         assert!(
             score >= 0.0,
-            "expected no mesh delivery penalty before activation time, got score {}",
-            score
+            "expected no mesh delivery penalty before activation time, got score {score}"
         );
     }
 
@@ -402,13 +389,11 @@ fn test_score_mesh_message_deliveries() {
 
     assert!(
         score_a >= 0.0,
-        "expected non-negative score for Peer A, got score {}",
-        score_a
+        "expected non-negative score for Peer A, got score {score_a}"
     );
     assert!(
         score_b >= 0.0,
-        "expected non-negative score for Peer B, got score {}",
-        score_b
+        "expected non-negative score for Peer B, got score {score_b}"
     );
 
     // the penalty is the difference between the threshold and the actual mesh deliveries, squared.
@@ -420,9 +405,7 @@ fn test_score_mesh_message_deliveries() {
 
     assert!(
         score_c == expected,
-        "Score: {}. Expected {}",
-        score_c,
-        expected
+        "Score: {score_c}. Expected {expected}"
     );
 }
 
@@ -469,8 +452,7 @@ fn test_score_mesh_message_deliveries_decay() {
     let score_a = peer_score.score(&peer_id_a);
     assert!(
         score_a >= 0.0,
-        "expected non-negative score for Peer A, got score {}",
-        score_a
+        "expected non-negative score for Peer A, got score {score_a}"
     );
 
     let mut decayed_delivery_count = (messages as f64) * topic_params.mesh_message_deliveries_decay;
@@ -545,13 +527,11 @@ fn test_score_mesh_failure_penalty() {
     let score_b = peer_score.score(&peer_id_b);
     assert!(
         score_a >= 0.0,
-        "expected non-negative score for Peer A, got score {}",
-        score_a
+        "expected non-negative score for Peer A, got score {score_a}"
     );
     assert!(
         score_b >= 0.0,
-        "expected non-negative score for Peer B, got score {}",
-        score_b
+        "expected non-negative score for Peer B, got score {score_b}"
     );
 
     // prune peer B to apply the penalty

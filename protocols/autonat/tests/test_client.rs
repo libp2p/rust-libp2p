@@ -119,7 +119,7 @@ async fn test_auto_probe() {
                 assert!(peer.is_none());
                 assert_eq!(error, OutboundProbeError::NoAddresses);
             }
-            other => panic!("Unexpected behaviour event: {:?}.", other),
+            other => panic!("Unexpected behaviour event: {other:?}."),
         }
 
         assert_eq!(client.behaviour().nat_status(), NatStatus::Unknown);
@@ -137,7 +137,7 @@ async fn test_auto_probe() {
                 assert_eq!(peer, server_id);
                 probe_id
             }
-            other => panic!("Unexpected behaviour event: {:?}.", other),
+            other => panic!("Unexpected behaviour event: {other:?}."),
         };
 
         match next_event(&mut client).await {
@@ -153,7 +153,7 @@ async fn test_auto_probe() {
                     OutboundProbeError::Response(ResponseError::DialError)
                 );
             }
-            other => panic!("Unexpected behaviour event: {:?}.", other),
+            other => panic!("Unexpected behaviour event: {other:?}."),
         }
 
         match next_event(&mut client).await {
@@ -161,7 +161,7 @@ async fn test_auto_probe() {
                 assert_eq!(old, NatStatus::Unknown);
                 assert_eq!(new, NatStatus::Private);
             }
-            other => panic!("Unexpected behaviour event: {:?}.", other),
+            other => panic!("Unexpected behaviour event: {other:?}."),
         }
 
         assert_eq!(client.behaviour().confidence(), 0);
@@ -183,7 +183,7 @@ async fn test_auto_probe() {
                 assert_eq!(peer, server_id);
                 probe_id
             }
-            other => panic!("Unexpected behaviour event: {:?}.", other),
+            other => panic!("Unexpected behaviour event: {other:?}."),
         };
 
         let mut had_connection_event = false;
@@ -213,7 +213,7 @@ async fn test_auto_probe() {
                 SwarmEvent::IncomingConnection { .. }
                 | SwarmEvent::NewListenAddr { .. }
                 | SwarmEvent::ExpiredListenAddr { .. } => {}
-                other => panic!("Unexpected swarm event: {:?}.", other),
+                other => panic!("Unexpected swarm event: {other:?}."),
             }
         }
 
@@ -227,7 +227,7 @@ async fn test_auto_probe() {
                 } if endpoint.is_listener() => {
                     assert_eq!(peer_id, server_id);
                 }
-                other => panic!("Unexpected swarm event: {:?}.", other),
+                other => panic!("Unexpected swarm event: {other:?}."),
             }
         }
 
@@ -279,7 +279,7 @@ async fn test_confidence() {
                     assert_eq!(peer, server_id);
                     probe_id
                 }
-                other => panic!("Unexpected behaviour event: {:?}.", other),
+                other => panic!("Unexpected behaviour event: {other:?}."),
             };
 
             match next_event(&mut client).await {
@@ -299,12 +299,12 @@ async fn test_confidence() {
                             );
                             (peer.unwrap(), probe_id)
                         }
-                        other => panic!("Unexpected Outbound Event: {:?}", other),
+                        other => panic!("Unexpected Outbound Event: {other:?}"),
                     };
                     assert_eq!(peer, server_id);
                     assert_eq!(probe_id, id);
                 }
-                other => panic!("Unexpected behaviour event: {:?}.", other),
+                other => panic!("Unexpected behaviour event: {other:?}."),
             }
 
             // Confidence should increase each iteration up to MAX_CONFIDENCE
@@ -323,7 +323,7 @@ async fn test_confidence() {
                         assert_eq!(old, NatStatus::Unknown);
                         assert_eq!(new.is_public(), test_public);
                     }
-                    other => panic!("Unexpected behaviour event: {:?}.", other),
+                    other => panic!("Unexpected behaviour event: {other:?}."),
                 }
             }
         }
@@ -370,7 +370,7 @@ async fn test_throttle_server_period() {
                 }
                 Event::OutboundProbe(OutboundProbeEvent::Request { .. }) => {}
                 Event::OutboundProbe(OutboundProbeEvent::Response { .. }) => {}
-                other => panic!("Unexpected behaviour event: {:?}.", other),
+                other => panic!("Unexpected behaviour event: {other:?}."),
             }
         }
 
@@ -383,7 +383,7 @@ async fn test_throttle_server_period() {
                 assert!(peer.is_none());
                 assert_eq!(error, OutboundProbeError::NoServer);
             }
-            other => panic!("Unexpected behaviour event: {:?}.", other),
+            other => panic!("Unexpected behaviour event: {other:?}."),
         }
         assert_eq!(client.behaviour().confidence(), 0);
     };
@@ -428,14 +428,14 @@ async fn test_use_connected_as_server() {
             Event::OutboundProbe(OutboundProbeEvent::Request { peer, .. }) => {
                 assert_eq!(peer, server_id);
             }
-            other => panic!("Unexpected behaviour event: {:?}.", other),
+            other => panic!("Unexpected behaviour event: {other:?}."),
         }
 
         match next_event(&mut client).await {
             Event::OutboundProbe(OutboundProbeEvent::Response { peer, .. }) => {
                 assert_eq!(peer, server_id);
             }
-            other => panic!("Unexpected behaviour event: {:?}.", other),
+            other => panic!("Unexpected behaviour event: {other:?}."),
         }
     };
 
@@ -484,7 +484,7 @@ async fn test_outbound_failure() {
                 }
                 Event::OutboundProbe(OutboundProbeEvent::Request { .. }) => {}
                 Event::OutboundProbe(OutboundProbeEvent::Response { .. }) => {}
-                other => panic!("Unexpected behaviour event: {:?}.", other),
+                other => panic!("Unexpected behaviour event: {other:?}."),
             }
         }
 
@@ -508,7 +508,7 @@ async fn test_outbound_failure() {
                 }) => {
                     assert!(inactive_ids.contains(&peer));
                 }
-                other => panic!("Unexpected behaviour event: {:?}.", other),
+                other => panic!("Unexpected behaviour event: {other:?}."),
             }
         }
     };
@@ -560,7 +560,7 @@ async fn test_global_ips_config() {
             Event::OutboundProbe(OutboundProbeEvent::Error { error, .. }) => {
                 assert!(matches!(error, OutboundProbeError::NoServer))
             }
-            other => panic!("Unexpected behaviour event: {:?}.", other),
+            other => panic!("Unexpected behaviour event: {other:?}."),
         }
     };
 

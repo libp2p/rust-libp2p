@@ -50,7 +50,7 @@ async fn smoke() -> Result<()> {
 
     let addr = match a.next().await {
         Some(SwarmEvent::NewListenAddr { address, .. }) => address,
-        e => panic!("{:?}", e),
+        e => panic!("{e:?}"),
     };
 
     // skip other interface addresses
@@ -58,7 +58,7 @@ async fn smoke() -> Result<()> {
 
     let _ = match b.next().await {
         Some(SwarmEvent::NewListenAddr { address, .. }) => address,
-        e => panic!("{:?}", e),
+        e => panic!("{e:?}"),
     };
 
     // skip other interface addresses
@@ -74,30 +74,30 @@ async fn smoke() -> Result<()> {
 
     match b.next().await {
         Some(SwarmEvent::Dialing(_)) => {}
-        e => panic!("{:?}", e),
+        e => panic!("{e:?}"),
     }
 
     let pair = select(a.next(), b.next());
     match pair.await {
         Either::Left((Some(SwarmEvent::IncomingConnection { .. }), _)) => {}
-        Either::Left((e, _)) => panic!("{:?}", e),
+        Either::Left((e, _)) => panic!("{e:?}"),
         Either::Right(_) => panic!("b completed first"),
     }
 
     let pair = select(a.next(), b.next());
     match pair.await {
         Either::Left((Some(SwarmEvent::ConnectionEstablished { .. }), _)) => {}
-        Either::Left((e, _)) => panic!("{:?}", e),
+        Either::Left((e, _)) => panic!("{e:?}"),
         Either::Right((Some(SwarmEvent::ConnectionEstablished { .. }), _)) => {}
-        Either::Right((e, _)) => panic!("{:?}", e),
+        Either::Right((e, _)) => panic!("{e:?}"),
     }
 
     let pair = select(a.next(), b.next());
     match pair.await {
         Either::Left((Some(SwarmEvent::ConnectionEstablished { .. }), _)) => {}
-        Either::Left((e, _)) => panic!("{:?}", e),
+        Either::Left((e, _)) => panic!("{e:?}"),
         Either::Right((Some(SwarmEvent::ConnectionEstablished { .. }), _)) => {}
-        Either::Right((e, _)) => panic!("{:?}", e),
+        Either::Right((e, _)) => panic!("{e:?}"),
     }
 
     assert!(b.next().now_or_never().is_none());
@@ -120,13 +120,13 @@ async fn smoke() -> Result<()> {
                 .send_response(channel, Pong(ping))
                 .unwrap();
         }
-        Either::Left((e, _)) => panic!("{:?}", e),
+        Either::Left((e, _)) => panic!("{e:?}"),
         Either::Right(_) => panic!("b completed first"),
     }
 
     match a.next().await {
         Some(SwarmEvent::Behaviour(RequestResponseEvent::ResponseSent { .. })) => {}
-        e => panic!("{:?}", e),
+        e => panic!("{e:?}"),
     }
 
     let pair = select(a.next(), b.next());
@@ -142,7 +142,7 @@ async fn smoke() -> Result<()> {
             })),
             _,
         )) => assert_eq!(data, pong),
-        Either::Right((e, _)) => panic!("{:?}", e),
+        Either::Right((e, _)) => panic!("{e:?}"),
         Either::Left(_) => panic!("a completed first"),
     }
 
@@ -171,13 +171,13 @@ async fn smoke() -> Result<()> {
                 .send_response(channel, Pong(data))
                 .unwrap();
         }
-        Either::Right((e, _)) => panic!("{:?}", e),
+        Either::Right((e, _)) => panic!("{e:?}"),
         Either::Left(_) => panic!("a completed first"),
     }
 
     match b.next().await {
         Some(SwarmEvent::Behaviour(RequestResponseEvent::ResponseSent { .. })) => {}
-        e => panic!("{:?}", e),
+        e => panic!("{e:?}"),
     }
 
     let pair = select(a.next(), b.next());
@@ -193,7 +193,7 @@ async fn smoke() -> Result<()> {
             })),
             _,
         )) => assert_eq!(data, b"another substream".to_vec()),
-        Either::Left((e, _)) => panic!("{:?}", e),
+        Either::Left((e, _)) => panic!("{e:?}"),
         Either::Right(_) => panic!("b completed first"),
     }
 
@@ -212,7 +212,7 @@ async fn dial_failure() -> Result<()> {
 
     let addr = match a.next().await {
         Some(SwarmEvent::NewListenAddr { address, .. }) => address,
-        e => panic!("{:?}", e),
+        e => panic!("{e:?}"),
     };
 
     // skip other interface addresses
@@ -220,7 +220,7 @@ async fn dial_failure() -> Result<()> {
 
     let _ = match b.next().await {
         Some(SwarmEvent::NewListenAddr { address, .. }) => address,
-        e => panic!("{:?}", e),
+        e => panic!("{e:?}"),
     };
 
     // skip other interface addresses
@@ -235,17 +235,17 @@ async fn dial_failure() -> Result<()> {
 
     match b.next().await {
         Some(SwarmEvent::Dialing(_)) => {}
-        e => panic!("{:?}", e),
+        e => panic!("{e:?}"),
     }
 
     match b.next().await {
         Some(SwarmEvent::OutgoingConnectionError { .. }) => {}
-        e => panic!("{:?}", e),
+        e => panic!("{e:?}"),
     };
 
     match b.next().await {
         Some(SwarmEvent::Behaviour(RequestResponseEvent::OutboundFailure { .. })) => {}
-        e => panic!("{:?}", e),
+        e => panic!("{e:?}"),
     };
 
     Ok(())
@@ -274,7 +274,7 @@ async fn concurrent_connections_and_streams() {
         // Wait to listen on address.
         let addr = match listener.next().await {
             Some(SwarmEvent::NewListenAddr { address, .. }) => address,
-            e => panic!("{:?}", e),
+            e => panic!("{e:?}"),
         };
 
         listeners.push((*listener.local_peer_id(), addr));
@@ -311,7 +311,7 @@ async fn concurrent_connections_and_streams() {
                         log::debug!("listener NewListenAddr");
                     }
                     Some(e) => {
-                        panic!("unexpected event {:?}", e);
+                        panic!("unexpected event {e:?}");
                     }
                     None => {
                         panic!("listener stopped");
@@ -327,7 +327,7 @@ async fn concurrent_connections_and_streams() {
     // Wait to listen on address.
     match dialer.next().await {
         Some(SwarmEvent::NewListenAddr { address, .. }) => address,
-        e => panic!("{:?}", e),
+        e => panic!("{e:?}"),
     };
 
     // For each listener node start `number_streams` requests.
@@ -382,7 +382,7 @@ async fn concurrent_connections_and_streams() {
                 log::debug!("dialer NewListenAddr");
             }
             e => {
-                panic!("unexpected event {:?}", e);
+                panic!("unexpected event {e:?}");
             }
         }
     }
