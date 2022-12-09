@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::behaviour::{inject_from_swarm, FromSwarm};
+use crate::connection::ConnectionId;
 use crate::handler::{
     ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr,
     DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound, IntoConnectionHandler,
@@ -95,7 +96,7 @@ where
     fn on_connection_handler_event(
         &mut self,
         peer_id: PeerId,
-        connection_id: libp2p_core::connection::ConnectionId,
+        connection_id: ConnectionId,
         event: crate::THandlerOutEvent<Self>,
     ) {
         if let Some(behaviour) = &mut self.inner {

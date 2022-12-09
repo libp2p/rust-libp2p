@@ -20,11 +20,10 @@
 
 //! [`ConnectionHandler`] handling direct connection upgraded through a relayed connection.
 
-use libp2p_core::connection::ConnectionId;
 use libp2p_core::upgrade::{DeniedUpgrade, InboundUpgrade, OutboundUpgrade};
 use libp2p_swarm::handler::ConnectionEvent;
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
+    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, ConnectionId, KeepAlive,
     NegotiatedSubstream, SubstreamProtocol,
 };
 use std::task::{Context, Poll};

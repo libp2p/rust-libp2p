@@ -21,12 +21,11 @@
 mod either;
 pub mod toggle;
 
+use crate::connection::ConnectionId;
 use crate::dial_opts::DialOpts;
 use crate::handler::{ConnectionHandler, IntoConnectionHandler};
 use crate::{AddressRecord, AddressScore, DialError};
-use libp2p_core::{
-    connection::ConnectionId, transport::ListenerId, ConnectedPoint, Multiaddr, PeerId,
-};
+use libp2p_core::{transport::ListenerId, ConnectedPoint, Multiaddr, PeerId};
 use std::{task::Context, task::Poll};
 
 /// Custom event that can be received by the [`ConnectionHandler`].
@@ -444,14 +443,13 @@ pub enum NetworkBehaviourAction<
     /// ```rust
     /// # use futures::executor::block_on;
     /// # use futures::stream::StreamExt;
-    /// # use libp2p_core::connection::ConnectionId;
     /// # use libp2p_core::identity;
     /// # use libp2p_core::transport::{MemoryTransport, Transport};
     /// # use libp2p_core::upgrade::{self, DeniedUpgrade, InboundUpgrade, OutboundUpgrade};
     /// # use libp2p_core::PeerId;
     /// # use libp2p_plaintext::PlainText2Config;
     /// # use libp2p_swarm::{
-    /// #     DialError, IntoConnectionHandler, KeepAlive, NegotiatedSubstream,
+    /// #     ConnectionId, DialError, IntoConnectionHandler, KeepAlive, NegotiatedSubstream,
     /// #     NetworkBehaviour, NetworkBehaviourAction, PollParameters, ConnectionHandler,
     /// #     ConnectionHandlerEvent, ConnectionHandlerUpgrErr, SubstreamProtocol, Swarm, SwarmEvent,
     /// # };

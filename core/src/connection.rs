@@ -20,29 +20,6 @@
 
 use crate::multiaddr::{Multiaddr, Protocol};
 
-/// Connection identifier.
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub struct ConnectionId(usize);
-
-impl ConnectionId {
-    /// Creates a `ConnectionId` from a non-negative integer.
-    ///
-    /// This is primarily useful for creating connection IDs
-    /// in test environments. There is in general no guarantee
-    /// that all connection IDs are based on non-negative integers.
-    pub fn new(id: usize) -> Self {
-        Self(id)
-    }
-}
-
-impl std::ops::Add<usize> for ConnectionId {
-    type Output = Self;
-
-    fn add(self, other: usize) -> Self {
-        Self(self.0 + other)
-    }
-}
-
 /// The endpoint roles associated with a peer-to-peer communication channel.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Endpoint {

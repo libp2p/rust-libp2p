@@ -27,13 +27,12 @@ use crate::v2::message_proto;
 use crate::v2::protocol::inbound_hop;
 use either::Either;
 use instant::Instant;
-use libp2p_core::connection::ConnectionId;
 use libp2p_core::multiaddr::Protocol;
 use libp2p_core::PeerId;
 use libp2p_swarm::behaviour::{ConnectionClosed, FromSwarm};
 use libp2p_swarm::{
-    ConnectionHandlerUpgrErr, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
-    PollParameters,
+    ConnectionHandlerUpgrErr, ConnectionId, NetworkBehaviour, NetworkBehaviourAction,
+    NotifyHandler, PollParameters,
 };
 use std::collections::{hash_map, HashMap, HashSet, VecDeque};
 use std::num::NonZeroU32;

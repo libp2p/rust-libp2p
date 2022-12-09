@@ -19,7 +19,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::connection::Connection;
+use crate::connection::{Connection, ConnectionId};
 use crate::{
     behaviour::{THandlerInEvent, THandlerOutEvent},
     connection::{
@@ -38,7 +38,7 @@ use futures::{
     ready,
     stream::FuturesUnordered,
 };
-use libp2p_core::connection::{ConnectionId, Endpoint, PendingPoint};
+use libp2p_core::connection::{Endpoint, PendingPoint};
 use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerExt};
 use std::{
     collections::{hash_map, HashMap},

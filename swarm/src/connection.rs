@@ -46,6 +46,29 @@ use std::task::Waker;
 use std::time::Duration;
 use std::{fmt, io, mem, pin::Pin, task::Context, task::Poll};
 
+/// Connection identifier.
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ConnectionId(usize);
+
+impl ConnectionId {
+    /// Creates a `ConnectionId` from a non-negative integer.
+    ///
+    /// This is primarily useful for creating connection IDs
+    /// in test environments. There is in general no guarantee
+    /// that all connection IDs are based on non-negative integers.
+    pub fn new(id: usize) -> Self {
+        Self(id)
+    }
+}
+
+impl std::ops::Add<usize> for ConnectionId {
+    type Output = Self;
+
+    fn add(self, other: usize) -> Self {
+        Self(self.0 + other)
+    }
+}
+
 /// Information about a successfully established connection.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Connected {

@@ -24,7 +24,8 @@
 use super::concurrent_dial::ConcurrentDial;
 use crate::{
     connection::{
-        self, ConnectionError, PendingInboundConnectionError, PendingOutboundConnectionError,
+        self, ConnectionError, ConnectionId, PendingInboundConnectionError,
+        PendingOutboundConnectionError,
     },
     transport::{Transport, TransportError},
     ConnectionHandler, Multiaddr, PeerId,
@@ -34,7 +35,6 @@ use futures::{
     future::{poll_fn, Either, Future},
     SinkExt, StreamExt,
 };
-use libp2p_core::connection::ConnectionId;
 use std::pin::Pin;
 use void::Void;
 

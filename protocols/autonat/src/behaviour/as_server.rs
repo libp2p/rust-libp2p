@@ -23,14 +23,14 @@ use super::{
     ResponseError,
 };
 use instant::Instant;
-use libp2p_core::{connection::ConnectionId, multiaddr::Protocol, Multiaddr, PeerId};
+use libp2p_core::{multiaddr::Protocol, Multiaddr, PeerId};
 use libp2p_request_response::{
     InboundFailure, RequestId, RequestResponse, RequestResponseEvent, RequestResponseMessage,
     ResponseChannel,
 };
 use libp2p_swarm::{
     dial_opts::{DialOpts, PeerCondition},
-    DialError, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
+    ConnectionId, DialError, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
 };
 use std::{
     collections::{HashMap, HashSet, VecDeque},

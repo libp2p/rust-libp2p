@@ -39,14 +39,15 @@ use crate::record::{
 use crate::K_VALUE;
 use fnv::{FnvHashMap, FnvHashSet};
 use instant::Instant;
-use libp2p_core::{connection::ConnectionId, ConnectedPoint, Multiaddr, PeerId};
+use libp2p_core::{ConnectedPoint, Multiaddr, PeerId};
 use libp2p_swarm::behaviour::{
     AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, ExpiredListenAddr,
     FromSwarm, NewExternalAddr, NewListenAddr,
 };
 use libp2p_swarm::{
     dial_opts::{self, DialOpts},
-    DialError, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
+    ConnectionId, DialError, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
+    PollParameters,
 };
 use log::{debug, info, warn};
 use smallvec::SmallVec;

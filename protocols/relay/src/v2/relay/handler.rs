@@ -30,7 +30,6 @@ use futures::io::AsyncWriteExt;
 use futures::stream::{FuturesUnordered, StreamExt};
 use futures_timer::Delay;
 use instant::Instant;
-use libp2p_core::connection::ConnectionId;
 use libp2p_core::either::EitherError;
 use libp2p_core::{upgrade, ConnectedPoint, Multiaddr, PeerId};
 use libp2p_swarm::handler::{
@@ -38,7 +37,7 @@ use libp2p_swarm::handler::{
     ListenUpgradeError, SendWrapper,
 };
 use libp2p_swarm::{
-    dummy, ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr,
+    dummy, ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, ConnectionId,
     IntoConnectionHandler, KeepAlive, NegotiatedSubstream, SubstreamProtocol,
 };
 use std::collections::VecDeque;

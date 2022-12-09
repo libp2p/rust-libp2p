@@ -23,11 +23,12 @@
 use crate::handler;
 use crate::protocol;
 use either::Either;
-use libp2p_core::connection::{ConnectedPoint, ConnectionId};
+use libp2p_core::connection::ConnectedPoint;
 use libp2p_core::multiaddr::Protocol;
 use libp2p_core::{Multiaddr, PeerId};
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm};
 use libp2p_swarm::dial_opts::{self, DialOpts};
+use libp2p_swarm::ConnectionId;
 use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerUpgrErr, IntoConnectionHandler, NetworkBehaviour,
     NetworkBehaviourAction, NotifyHandler, PollParameters,

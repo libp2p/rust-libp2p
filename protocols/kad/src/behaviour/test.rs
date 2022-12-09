@@ -28,10 +28,10 @@ use crate::K_VALUE;
 use futures::{executor::block_on, future::poll_fn, prelude::*};
 use futures_timer::Delay;
 use libp2p::noise;
-use libp2p::swarm::{Swarm, SwarmEvent};
+use libp2p::swarm::{Swarm, SwarmEvent, ConnectionId};
 use libp2p::yamux;
 use libp2p_core::{
-    connection::{ConnectedPoint, ConnectionId},
+    connection::ConnectedPoint,
     identity,
     multiaddr::{multiaddr, Multiaddr, Protocol},
     multihash::{Code, Multihash, MultihashDigest},
