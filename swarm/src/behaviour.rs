@@ -471,7 +471,7 @@ pub enum NetworkBehaviourAction<
     /// #     .multiplex(yamux::YamuxConfig::default())
     /// #     .boxed();
     /// #
-    /// # let mut swarm = Swarm::new(transport, MyBehaviour::default(), local_peer_id);
+    /// # let mut swarm = Swarm::with_threadpool_executor(transport, MyBehaviour::default(), local_peer_id);
     /// #
     /// // Super precious message that we should better not lose.
     /// let message = PreciousMessage("My precious message".to_string());

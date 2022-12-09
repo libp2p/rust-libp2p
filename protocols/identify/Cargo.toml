@@ -15,7 +15,7 @@ asynchronous-codec = "0.6"
 futures = "0.3.1"
 futures-timer = "3.0.2"
 libp2p-core = { version = "0.38.0", path = "../../core" }
-libp2p-swarm = { version = "0.41.0", path = "../../swarm" }
+libp2p-swarm = { version = "0.42.0", path = "../../swarm" }
 log = "0.4.1"
 lru = "0.8.0"
 prost-codec = { version = "0.3", path = "../../misc/prost-codec" }
@@ -32,7 +32,7 @@ libp2p = { path = "../..", features = ["full"] }
 [build-dependencies]
 prost-build = "0.11"
 
-# Passing arguments to the docsrs builder in order to properly document cfg's. 
+# Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
 [package.metadata.docs.rs]
 all-features = true
