@@ -132,7 +132,7 @@ libp2p-gossipsub = { version = "0.43.0", path = "protocols/gossipsub", optional 
 [dev-dependencies]
 async-std = { version = "1.6.2", features = ["attributes"] }
 async-trait = "0.1"
-env_logger = "0.9.0"
+env_logger = "0.10.0"
 clap = { version = "4.0.13", features = ["derive"] }
 tokio = { version = "1.15", features = ["io-util", "io-std", "macros", "rt", "rt-multi-thread"] }
 
