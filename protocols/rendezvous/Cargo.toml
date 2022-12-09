@@ -17,7 +17,7 @@ futures = { version = "0.3", default-features = false, features = ["std"] }
 futures-timer = "3.0.2"
 instant = "0.1.11"
 libp2p-core = { version = "0.38.0", path = "../../core" }
-libp2p-swarm = { version = "0.41.0", path = "../../swarm" }
+libp2p-swarm = { version = "0.42.0", path = "../../swarm" }
 log = "0.4"
 prost = "0.11"
 prost-codec = { version = "0.3.0", path = "../../misc/prost-codec" }
@@ -37,7 +37,7 @@ tokio = { version = "1.15", features = [ "rt-multi-thread", "time", "macros", "s
 [build-dependencies]
 prost-build = "0.11"
 
-# Passing arguments to the docsrs builder in order to properly document cfg's. 
+# Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
 [package.metadata.docs.rs]
 all-features = true
