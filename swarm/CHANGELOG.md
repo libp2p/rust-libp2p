@@ -1,3 +1,9 @@
+# 0.41.2
+
+- `SwarmBuilder::connection_event_buffer_size` now represents the size of a buffer _per connection_. See [PR 3188].
+
+[PR 3188]: https://github.com/libp2p/rust-libp2p/pull/3188
+
 # 0.41.1
 
 - Update to `libp2p-swarm-derive` `v0.31.0`.
