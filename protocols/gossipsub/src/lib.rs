@@ -121,8 +121,8 @@
 //!         libp2p_gossipsub::Gossipsub::new(message_authenticity, gossipsub_config).unwrap();
 //!     // subscribe to the topic
 //!     gossipsub.subscribe(&topic);
-//!     // create the swarm
-//!     libp2p_swarm::Swarm::new(
+//!     // create the swarm (use an executor in a real example)
+//!     libp2p_swarm::Swarm::without_executor(
 //!         transport,
 //!         gossipsub,
 //!         local_peer_id,
