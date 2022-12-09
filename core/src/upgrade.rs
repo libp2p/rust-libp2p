@@ -86,7 +86,6 @@ pub use self::{
 };
 pub use crate::Negotiated;
 pub use multistream_select::{NegotiatedComplete, NegotiationError, ProtocolError, Version};
-use std::fmt;
 
 /// Types serving as protocol names.
 ///
@@ -132,36 +131,6 @@ pub trait ProtocolName {
 impl<T: AsRef<[u8]>> ProtocolName for T {
     fn protocol_name(&self) -> &[u8] {
         self.as_ref()
-    }
-}
-
-/// Wrapper for printing a [`ProtocolName`] that is expected to be mostly ASCII
-///
-/// ```rust
-/// # use libp2p_core::upgrade::DisplayProtocolName;
-/// assert_eq!(DisplayProtocolName(b"/hello/1.0").to_string(), "/hello/1.0");
-/// assert_eq!(DisplayProtocolName("/hellö/").to_string(), "/hell<C3><B6>/");
-/// # assert_eq!(
-/// #     DisplayProtocolName((0u8..=255).collect::<Vec<_>>()).to_string(),
-/// #     (0..32).map(|c| format!("<{:02X}>", c))
-/// #         .chain((32..127).map(|c| format!("{}", char::from_u32(c).unwrap())))
-/// #         .chain((127..256).map(|c| format!("<{:02X}>", c)))
-/// #         .collect::<String>()
-/// # );
-/// ```
-pub struct DisplayProtocolName<N>(pub N);
-
-impl<N: ProtocolName> fmt::Display for DisplayProtocolName<N> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        use fmt::Write;
-        for byte in self.0.protocol_name() {
-            if (b' '..=b'~').contains(byte) {
-                f.write_char(char::from(*byte))?;
-            } else {
-                write!(f, "<{:02X}>", byte)?;
-            }
-        }
-        Ok(())
     }
 }
 
