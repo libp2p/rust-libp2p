@@ -22,6 +22,8 @@ jobs:
     steps:
       - name: Install Protoc
         uses: arduino/setup-protoc@64c0c85d18e984422218383b81c52f8b077404d3 # v1.1.2
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: actions/checkout@v3
 
@@ -97,6 +99,8 @@ jobs:
     steps:
       - name: Install Protoc
         uses: arduino/setup-protoc@64c0c85d18e984422218383b81c52f8b077404d3 # v1.1.2
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: actions/checkout@v3
 
@@ -122,6 +126,8 @@ jobs:
     steps:
       - name: Install Protoc
         uses: arduino/setup-protoc@64c0c85d18e984422218383b81c52f8b077404d3 # v1.1.2
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: actions/checkout@v3
 
@@ -143,6 +149,8 @@ jobs:
     steps:
       - name: Install Protoc
         uses: arduino/setup-protoc@64c0c85d18e984422218383b81c52f8b077404d3 # v1.1.2
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: actions/checkout@v3
 
@@ -169,6 +177,8 @@ jobs:
     steps:
       - name: Install Protoc
         uses: arduino/setup-protoc@64c0c85d18e984422218383b81c52f8b077404d3 # v1.1.2
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: actions/checkout@v3
 
@@ -192,6 +202,8 @@ jobs:
     steps:
       - name: Install Protoc
         uses: arduino/setup-protoc@64c0c85d18e984422218383b81c52f8b077404d3 # v1.1.2
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: actions/checkout@v3
 
