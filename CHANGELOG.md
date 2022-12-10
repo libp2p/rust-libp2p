@@ -71,6 +71,9 @@
     - Update to [`libp2p-metrics` `v0.12.0`](misc/metrics/CHANGELOG.md#0120).
 
     - Update to [`libp2p-swarm` `v0.42.0`](swarm/CHANGELOG.md#0420).
+    
+    - Update to [`libp2p-mdns` `v0.43.0`](protocols/mdns/CHANGELOG.md#0430).
+    
 
 [PR 3191]: https://github.com/libp2p/rust-libp2p/pull/3191
 
