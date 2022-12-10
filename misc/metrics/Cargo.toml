@@ -29,7 +29,7 @@ libp2p-swarm = { version = "0.42.0", path = "../../swarm" }
 prometheus-client = "0.18.0"
 
 [target.'cfg(not(target_os = "unknown"))'.dependencies]
-libp2p-gossipsub =  { version = "0.43.0", path = "../../protocols/gossipsub", optional = true }
+libp2p-gossipsub =  { version = "0.44.0", path = "../../protocols/gossipsub", optional = true }
 
 [dev-dependencies]
 log = "0.4.0"
