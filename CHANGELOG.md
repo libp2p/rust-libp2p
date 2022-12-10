@@ -74,6 +74,8 @@
     
     - Update to [`libp2p-mdns` `v0.43.0`](protocols/mdns/CHANGELOG.md#0430).
     
+    - Update to [`libp2p-gossipsub` `v0.44.0`](protocols/gossipsub/CHANGELOG.md#0440).
+    
 
 [PR 3191]: https://github.com/libp2p/rust-libp2p/pull/3191
 
