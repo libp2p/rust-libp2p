@@ -1,9 +1,9 @@
 # 0.8.1 [unreleased]
 
-- Deprecate `InboundUpgradeError` and `OutboundUpgradeError` to follow the conventions discussed in [issue 2217]. See [PR XXXX].
+- Declare `InboundUpgradeError` and `OutboundUpgradeError` as type aliases instead of renames.
+  This is a workaround for a missing feature in `cargo semver-checks`. See [PR 3213].
 
-[issue 2217]: https://github.com/libp2p/rust-libp2p/issues/2217
-[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+[PR 3213]: https://github.com/libp2p/rust-libp2p/pull/3213
 
 # 0.8.0
 

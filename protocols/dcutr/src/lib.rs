@@ -32,22 +32,5 @@ mod message_proto {
 }
 
 pub use protocol::PROTOCOL_NAME;
-pub mod inbound {
-    pub use crate::protocol::inbound::UpgradeError;
-}
-
-pub mod outbound {
-    pub use crate::protocol::outbound::UpgradeError;
-}
-
-#[deprecated(
-    since = "0.8.1",
-    note = "Use `libp2p_dcutr::inbound::UpgradeError` instead.`"
-)]
-pub type InboundUpgradeError = inbound::UpgradeError;
-
-#[deprecated(
-    since = "0.8.1",
-    note = "Use `libp2p_dcutr::outbound::UpgradeError` instead.`"
-)]
-pub type OutboundUpgradeError = outbound::UpgradeError;
+pub type InboundUpgradeError = protocol::inbound::UpgradeError;
+pub type OutboundUpgradeError = protocol::outbound::UpgradeError;
