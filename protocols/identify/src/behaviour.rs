@@ -49,7 +49,7 @@ pub struct Behaviour {
     /// For each peer we're connected to, the observed address to send back to it.
     connected: HashMap<PeerId, HashMap<ConnectionId, Multiaddr>>,
     /// Information requests from the handlers to be fullfiled.
-    requests: VecDeque<PeerId>,
+    requests: VecDeque<Request>,
     /// Pending events to be emitted when polled.
     events: VecDeque<NetworkBehaviourAction<Event, Proto>>,
     /// Peers to which an active push with current information about
@@ -57,6 +57,12 @@ pub struct Behaviour {
     pending_push: HashSet<PeerId>,
     /// The addresses of all peers that we have discovered.
     discovered_peers: PeerCache,
+}
+
+/// A `Handler` request for `BehaviourInfo`.
+struct Request {
+    peer_id: PeerId,
+    connection_id: ConnectionId,
 }
 
 /// Configuration for the [`identify::Behaviour`](Behaviour).
@@ -234,7 +240,7 @@ impl NetworkBehaviour for Behaviour {
     fn on_connection_handler_event(
         &mut self,
         peer_id: PeerId,
-        _connection: ConnectionId,
+        connection_id: ConnectionId,
         event: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent,
     ) {
         match event {
@@ -272,7 +278,10 @@ impl NetworkBehaviour for Behaviour {
                     }));
             }
             handler::Event::Identify => {
-                self.requests.push_back(peer_id);
+                self.requests.push_back(Request {
+                    peer_id,
+                    connection_id,
+                });
             }
             handler::Event::IdentificationError(error) => {
                 self.events
@@ -328,14 +337,18 @@ impl NetworkBehaviour for Behaviour {
         }
 
         // Check for information requests from the handlers.
-        if let Some(peer) = self.requests.pop_front() {
+        if let Some(Request {
+            peer_id,
+            connection_id,
+        }) = self.requests.pop_front()
+        {
             let info = BehaviourInfo {
                 listen_addrs: listen_addrs(params),
                 protocols: supported_protocols(params),
             };
             return Poll::Ready(NetworkBehaviourAction::NotifyHandler {
-                peer_id: peer,
-                handler: NotifyHandler::Any,
+                peer_id,
+                handler: NotifyHandler::One(connection_id),
                 event: InEvent::Identify(info),
             });
         }
