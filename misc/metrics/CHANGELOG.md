@@ -1,7 +1,3 @@
-# 0.11.1 [unreleased]
-
-- Update to `libp2p-dcutr` `v0.8.1`.
-
 # 0.11.0
 
 - Update to `libp2p-dcutr` `v0.8.0`.
