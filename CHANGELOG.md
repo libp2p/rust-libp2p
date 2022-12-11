@@ -51,7 +51,6 @@
 
 - Update individual crates.
   - Update to [`libp2p-swarm` `v0.42.0`](swarm/CHANGELOG.md#0420).
-  - Update to [`libp2p-dcutr` `v0.8.1`](protocols/dcutr/CHANGELOG.md#081).
 
 [PR 3191]: https://github.com/libp2p/rust-libp2p/pull/3191
 
