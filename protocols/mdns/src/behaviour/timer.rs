@@ -29,14 +29,14 @@ use std::{
     task::{Context, Poll},
 };
 
-/// Simple wrapper for the differents type of timers
-#[cfg(any(feature = "async-io", feature = "tokio"))]
+/// Simple wrapper for the different type of timers
 #[derive(Debug)]
+#[cfg(any(feature = "async-io", feature = "tokio"))]
 pub struct Timer<T> {
     inner: T,
 }
 
-/// Builder interface to homogenize the differents implementations
+/// Builder interface to homogenize the different implementations
 pub trait Builder: Send + Unpin + 'static {
     /// Creates a timer that emits an event once at the given time instant.
     fn at(instant: Instant) -> Self;
@@ -53,6 +53,10 @@ pub mod asio {
     use super::*;
     use async_io::Timer as AsioTimer;
     use futures::Stream;
+    use std::{
+        pin::Pin,
+        task::{Context, Poll},
+    };
 
     /// Async Timer
     pub type AsyncTimer = Timer<AsioTimer>;
@@ -91,6 +95,10 @@ pub mod tokio {
     use super::*;
     use ::tokio::time::{self, Instant as TokioInstant, Interval, MissedTickBehavior};
     use futures::Stream;
+    use std::{
+        pin::Pin,
+        task::{Context, Poll},
+    };
 
     /// Tokio wrapper
     pub type TokioTimer = Timer<Interval>;

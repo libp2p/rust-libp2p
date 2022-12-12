@@ -573,7 +573,7 @@ fn invalid_data(e: impl Into<Box<dyn std::error::Error + Send + Sync>>) -> io::E
     io::Error::new(io::ErrorKind::InvalidData, e)
 }
 
-#[cfg(test)]
+#[cfg(all(test, any(feature = "tokio", feature = "async-std")))]
 mod tests {
     use super::*;
     use futures::future::BoxFuture;
