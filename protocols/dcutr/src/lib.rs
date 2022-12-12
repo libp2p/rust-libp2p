@@ -23,7 +23,7 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
-mod behaviour_impl;
+mod behaviour_impl; // TODO: Rename back `behaviour` once deprecation symbols are removed.
 mod handler;
 mod protocol;
 #[allow(clippy::derive_partial_eq_without_eq)]
