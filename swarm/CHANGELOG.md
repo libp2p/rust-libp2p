@@ -4,8 +4,11 @@
 
 - Add `estblished_in` to `SwarmEvent::ConnectionEstablished`. See [PR 3134].
 
+- Moved `ConnectionId` from `libp2p-core` to `libp2p-swarm`. See [PR 3221].
+
 [PR 3170]: https://github.com/libp2p/rust-libp2p/pull/3170
 [PR 3134]: https://github.com/libp2p/rust-libp2p/pull/3134
+[PR 3221]: https://github.com/libp2p/rust-libp2p/pull/3221
 
 # 0.41.1
 
