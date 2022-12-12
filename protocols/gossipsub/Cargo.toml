@@ -41,7 +41,7 @@ env_logger = "0.10.0"
 libp2p = { path = "../..", features = ["full"] }
 quickcheck = { package = "quickcheck-ext", path = "../../misc/quickcheck-ext" }
 hex = "0.4.2"
-derive_builder = "0.11.1"
+derive_builder = "0.12.0"
 
 [build-dependencies]
 prost-build = "0.11"
