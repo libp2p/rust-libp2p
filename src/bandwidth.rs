@@ -40,7 +40,7 @@ use std::{
 /// streams.
 #[derive(Clone)]
 #[pin_project::pin_project]
-pub struct BandwidthLogging<SMInner> {
+pub(crate) struct BandwidthLogging<SMInner> {
     #[pin]
     inner: SMInner,
     sinks: Arc<BandwidthSinks>,
@@ -136,7 +136,7 @@ impl BandwidthSinks {
 
 /// Wraps around an [`AsyncRead`] + [`AsyncWrite`] and logs the bandwidth that goes through it.
 #[pin_project::pin_project]
-pub struct InstrumentedStream<SMInner> {
+pub(crate) struct InstrumentedStream<SMInner> {
     #[pin]
     inner: SMInner,
     sinks: Arc<BandwidthSinks>,

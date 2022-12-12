@@ -34,11 +34,37 @@ use std::sync::Arc;
 /// Trait automatically implemented on all objects that implement `Transport`. Provides some
 /// additional utilities.
 pub trait TransportExt: Transport {
-    /// Adds a layer on the `Transport` that logs all trafic that passes through the sockets
+    /// Adds a layer on the `Transport` that logs all trafic that passes through the streams
     /// created by it.
     ///
-    /// This method returns an `Arc<BandwidthSinks>` that can be used to retreive the total number
-    /// of bytes transferred through the sockets.
+    /// This method returns an `Arc<BandwidthSinks>` that can be used to retrieve the total number
+    /// of bytes transferred through the streams.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// use libp2p::{
+    ///     core::upgrade,
+    ///     identity, mplex, noise,
+    ///     tcp,
+    ///     TransportExt,
+    ///     Transport,
+    /// };
+    /// use std::error::Error;
+    ///
+    /// let id_keys = identity::Keypair::generate_ed25519();
+    ///
+    /// let transport = tcp::tokio::Transport::new(tcp::Config::default().nodelay(true))
+    ///     .upgrade(upgrade::Version::V1)
+    ///     .authenticate(
+    ///         noise::NoiseAuthenticated::xx(&id_keys)
+    ///             .expect("Signing libp2p-noise static DH keypair failed."),
+    ///     )
+    ///     .multiplex(mplex::MplexConfig::new())
+    ///     .boxed();
+    ///
+    /// let (transport, sinks) = transport.with_bandwidth_logging();
+    /// ```
     fn with_bandwidth_logging<S>(self) -> (Boxed<(PeerId, StreamMuxerBox)>, Arc<BandwidthSinks>)
     where
         Self: Sized + Send + Unpin + 'static,
@@ -56,10 +82,7 @@ pub trait TransportExt: Transport {
             let (peer_id, stream_muxer_box) = output.into();
             (
                 peer_id,
-                StreamMuxerBox::new(BandwidthLogging::new(
-                    stream_muxer_box,
-                    sinks_copy,
-                )),
+                StreamMuxerBox::new(BandwidthLogging::new(stream_muxer_box, sinks_copy)),
             )
         })
         .boxed();
