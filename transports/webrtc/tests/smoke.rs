@@ -249,16 +249,16 @@ async fn open_outbound_streams<const BUFFER_SIZE: usize>(
 }
 
 async fn connect(
-    mut a_transport: &mut Boxed<(PeerId, StreamMuxerBox)>,
-    mut b_transport: &mut Boxed<(PeerId, StreamMuxerBox)>,
+    a_transport: &mut Boxed<(PeerId, StreamMuxerBox)>,
+    b_transport: &mut Boxed<(PeerId, StreamMuxerBox)>,
     addr: Multiaddr,
 ) -> (
     (PeerId, Multiaddr, StreamMuxerBox),
     (PeerId, StreamMuxerBox),
 ) {
     match futures::future::select(
-        ListenUpgrade::new(&mut a_transport),
-        Dial::new(&mut b_transport, addr),
+        ListenUpgrade::new(a_transport),
+        Dial::new(b_transport, addr),
     )
     .await
     {
