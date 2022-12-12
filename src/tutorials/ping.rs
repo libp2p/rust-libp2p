@@ -192,7 +192,7 @@
 //!     // can be observed.
 //!     let behaviour = ping::Behaviour::new(ping::Config::new().with_keep_alive(true));
 //!
-//!     let mut swarm = Swarm::new(transport, behaviour, local_peer_id);
+//!     let mut swarm = Swarm::with_async_std_executor(transport, behaviour, local_peer_id);
 //!
 //!     Ok(())
 //! }
@@ -243,7 +243,7 @@
 //!     // can be observed.
 //!     let behaviour = ping::Behaviour::new(ping::Config::new().with_keep_alive(true));
 //!
-//!     let mut swarm = Swarm::new(transport, behaviour, local_peer_id);
+//!     let mut swarm = Swarm::with_async_std_executor(transport, behaviour, local_peer_id);
 //!
 //!     // Tell the swarm to listen on all interfaces and a random, OS-assigned
 //!     // port.
@@ -287,7 +287,7 @@
 //!     // can be observed.
 //!     let behaviour = ping::Behaviour::new(ping::Config::new().with_keep_alive(true));
 //!
-//!     let mut swarm = Swarm::new(transport, behaviour, local_peer_id);
+//!     let mut swarm = Swarm::with_async_std_executor(transport, behaviour, local_peer_id);
 //!
 //!     // Tell the swarm to listen on all interfaces and a random, OS-assigned
 //!     // port.
