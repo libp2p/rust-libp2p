@@ -1,3 +1,7 @@
+# 0.12.0 [unreleased]
+
+- Update to `libp2p-swarm` `v0.42.0`.
+
 # 0.11.0
 
 - De- and encode protobuf messages using `prost-codec`. See [PR 3058].
