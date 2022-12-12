@@ -22,21 +22,17 @@
 
 use async_trait::async_trait;
 use futures::{channel::mpsc, prelude::*, AsyncWriteExt};
-use libp2p::core::{
+use libp2p_core::{
     identity,
     muxing::StreamMuxerBox,
     transport,
     upgrade::{self, read_length_prefixed, write_length_prefixed},
-    Multiaddr, PeerId,
+    Multiaddr, PeerId, Transport,
 };
-use libp2p::noise::NoiseAuthenticated;
-use libp2p::request_response::{
-    self, Behaviour, Config, Event, InboundFailure, Message, OutboundFailure, ProtocolName,
-    ProtocolSupport,
-};
-use libp2p::swarm::{Swarm, SwarmEvent};
-use libp2p::tcp;
-use libp2p_core::Transport;
+use libp2p_noise::NoiseAuthenticated;
+use libp2p_request_response::*;
+use libp2p_swarm::{Swarm, SwarmEvent};
+use libp2p_tcp as tcp;
 use rand::{self, Rng};
 use std::{io, iter};
 
@@ -305,7 +301,7 @@ fn mk_transport() -> (PeerId, transport::Boxed<(PeerId, StreamMuxerBox)>) {
         tcp::async_io::Transport::new(tcp::Config::default().nodelay(true))
             .upgrade(upgrade::Version::V1)
             .authenticate(NoiseAuthenticated::xx(&id_keys).unwrap())
-            .multiplex(libp2p::yamux::YamuxConfig::default())
+            .multiplex(libp2p_yamux::YamuxConfig::default())
             .boxed(),
     )
 }
@@ -328,7 +324,7 @@ impl ProtocolName for PingProtocol {
 }
 
 #[async_trait]
-impl request_response::Codec for PingCodec {
+impl libp2p_request_response::Codec for PingCodec {
     type Protocol = PingProtocol;
     type Request = Ping;
     type Response = Pong;
