@@ -1,3 +1,7 @@
+# 0.9.0 [unreleased]
+
+- Update to `libp2p-swarm` `v0.42.0`.
+
 # 0.8.0
 
 - Update to `prost-codec` `v0.3.0`.
