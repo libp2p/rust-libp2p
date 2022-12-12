@@ -23,6 +23,7 @@ use crate::protocol::{
 };
 use futures::future::BoxFuture;
 use futures::prelude::*;
+use futures::stream::FuturesUnordered;
 use futures_timer::Delay;
 use libp2p_core::either::{EitherError, EitherOutput};
 use libp2p_core::upgrade::{EitherUpgrade, SelectUpgrade};
@@ -90,12 +91,6 @@ impl IntoConnectionHandler for Proto {
     }
 }
 
-/// A reply to an inbound identification request.
-struct Sending {
-    peer: PeerId,
-    io: Pin<Box<dyn Future<Output = Result<(), UpgradeError>> + Send>>,
-}
-
 /// Protocol handler for sending and receiving identification requests.
 ///
 /// Outbound requests are sent periodically. The handler performs expects
@@ -118,7 +113,7 @@ pub struct Handler {
     reply_streams: VecDeque<ReplySubstream<NegotiatedSubstream>>,
 
     /// Pending identification replies, awaiting being sent.
-    pending_replies: VecDeque<Sending>,
+    pending_replies: FuturesUnordered<BoxFuture<'static, Result<PeerId, UpgradeError>>>,
 
     /// Future that fires when we need to identify the node again.
     trigger_next_identify: Delay,
@@ -195,7 +190,7 @@ impl Handler {
             inbound_identify_push: Default::default(),
             events: SmallVec::new(),
             reply_streams: VecDeque::new(),
-            pending_replies: VecDeque::new(),
+            pending_replies: FuturesUnordered::new(),
             trigger_next_identify: Delay::new(initial_delay),
             keep_alive: KeepAlive::Yes,
             interval,
@@ -323,11 +318,12 @@ impl ConnectionHandler for Handler {
                     .reply_streams
                     .pop_front()
                     .expect("A BehaviourInfo reply should have a matching substream.");
-                let io = Box::pin(substream.send(info));
-                self.pending_replies.push_back(Sending {
-                    peer: self.remote_peer_id,
-                    io,
+                let peer = self.remote_peer_id;
+                let fut = Box::pin(async move {
+                    substream.send(info).await?;
+                    Ok(peer)
                 });
+                self.pending_replies.push(fut);
             }
         }
     }
@@ -371,28 +367,17 @@ impl ConnectionHandler for Handler {
         }
 
         // Check for pending replies to send.
-        if let Some(mut sending) = self.pending_replies.pop_front() {
-            match Future::poll(Pin::new(&mut sending.io), cx) {
-                Poll::Pending => {
-                    self.pending_replies.push_front(sending);
-                    return Poll::Pending;
-                }
-                Poll::Ready(Ok(())) => {
-                    return Poll::Ready(ConnectionHandlerEvent::Custom(Event::Identification(
-                        sending.peer,
-                    )));
-                }
-                Poll::Ready(Err(err)) => {
-                    return Poll::Ready(ConnectionHandlerEvent::Custom(Event::IdentificationError(
-                        ConnectionHandlerUpgrErr::Upgrade(
-                            libp2p_core::upgrade::UpgradeError::Apply(err),
-                        ),
-                    )))
-                }
-            }
+        match self.pending_replies.poll_next_unpin(cx) {
+            Poll::Ready(Some(Ok(peer_id))) => Poll::Ready(ConnectionHandlerEvent::Custom(
+                Event::Identification(peer_id),
+            )),
+            Poll::Ready(Some(Err(err))) => Poll::Ready(ConnectionHandlerEvent::Custom(
+                Event::IdentificationError(ConnectionHandlerUpgrErr::Upgrade(
+                    libp2p_core::upgrade::UpgradeError::Apply(err),
+                )),
+            )),
+            Poll::Ready(None) | Poll::Pending => Poll::Pending,
         }
-
-        Poll::Pending
     }
 
     fn on_connection_event(
