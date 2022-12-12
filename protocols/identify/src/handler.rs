@@ -18,7 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::protocol::{self, Identify, InboundPush, Info, OutboundPush, Push, UpgradeError};
+use crate::protocol::{
+    self, Identify, InboundPush, Info, OutboundPush, Protocol, Push, UpgradeError,
+};
 use futures::future::BoxFuture;
 use futures::prelude::*;
 use futures::stream::FuturesUnordered;
@@ -133,14 +135,17 @@ pub struct Handler {
     observed_addr: Multiaddr,
 }
 
-/// Information provided by the `Behaviour` upon requesting.
+/// An event from `Behaviour` with the information requested by the `Handler`.
 #[derive(Debug)]
-pub struct BehaviourInfo {
+pub struct InEvent {
     /// The addresses that the peer is listening on.
     pub listen_addrs: Vec<Multiaddr>,
 
     /// The list of protocols supported by the peer, e.g. `/ipfs/ping/1.0.0`.
-    pub protocols: Vec<String>,
+    pub supported_protocols: Vec<String>,
+
+    /// The protocol w.r.t. the information requested.
+    pub protocol: Protocol,
 }
 
 /// Event produced by the `Handler`.
@@ -157,15 +162,6 @@ pub enum Event {
     Identify,
     /// Failed to identify the remote, or to reply to an identification request.
     IdentificationError(ConnectionHandlerUpgrErr<UpgradeError>),
-}
-
-#[derive(Debug)]
-#[allow(clippy::large_enum_variant)]
-pub enum InEvent {
-    /// Identifying information of the local node that is pushed to a remote.
-    Push(Info),
-    /// Identifying information requested from this node.
-    Identify(BehaviourInfo),
 }
 
 impl Handler {
@@ -288,26 +284,34 @@ impl ConnectionHandler for Handler {
         SubstreamProtocol::new(SelectUpgrade::new(Identify, Push::inbound()), ())
     }
 
-    fn on_behaviour_event(&mut self, event: Self::InEvent) {
-        match event {
-            InEvent::Push(push) => {
+    fn on_behaviour_event(
+        &mut self,
+        InEvent {
+            listen_addrs,
+            supported_protocols,
+            protocol,
+        }: Self::InEvent,
+    ) {
+        let info = Info {
+            public_key: self.public_key.clone(),
+            protocol_version: self.protocol_version.clone(),
+            agent_version: self.agent_version.clone(),
+            listen_addrs,
+            protocols: supported_protocols,
+            observed_addr: self.observed_addr.clone(),
+        };
+
+        match protocol {
+            Protocol::Push => {
                 self.events
                     .push(ConnectionHandlerEvent::OutboundSubstreamRequest {
                         protocol: SubstreamProtocol::new(
-                            EitherUpgrade::B(Push::outbound(push)),
+                            EitherUpgrade::B(Push::outbound(info)),
                             (),
                         ),
                     });
             }
-            InEvent::Identify(behaviour_info) => {
-                let info = Info {
-                    public_key: self.public_key.clone(),
-                    protocol_version: self.protocol_version.clone(),
-                    agent_version: self.agent_version.clone(),
-                    listen_addrs: behaviour_info.listen_addrs,
-                    protocols: behaviour_info.protocols,
-                    observed_addr: self.observed_addr.clone(),
-                };
+            Protocol::Identify => {
                 let substream = self
                     .reply_streams
                     .pop_front()

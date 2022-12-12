@@ -18,10 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::handler::{self, BehaviourInfo, InEvent, Proto};
-use crate::protocol::{Info, UpgradeError};
+use crate::handler::{self, InEvent, Proto};
+use crate::protocol::{Info, Protocol, UpgradeError};
 use libp2p_core::{
-    connection::ConnectionId, multiaddr::Protocol, ConnectedPoint, Multiaddr, PeerId, PublicKey,
+    connection::ConnectionId, multiaddr, ConnectedPoint, Multiaddr, PeerId, PublicKey,
 };
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm};
 use libp2p_swarm::{
@@ -304,26 +304,15 @@ impl NetworkBehaviour for Behaviour {
 
         // Check for a pending active push to perform.
         let peer_push = self.pending_push.iter().find_map(|peer| {
-            self.connected.get(peer).map(|conns| {
-                let observed_addr = conns
-                    .values()
-                    .next()
-                    .expect("connected peer has a connection")
-                    .clone();
-
-                let listen_addrs = listen_addrs(params);
-                let protocols = supported_protocols(params);
-
-                let info = Info {
-                    public_key: self.config.local_public_key.clone(),
-                    protocol_version: self.config.protocol_version.clone(),
-                    agent_version: self.config.agent_version.clone(),
-                    listen_addrs,
-                    protocols,
-                    observed_addr,
-                };
-
-                (*peer, InEvent::Push(info))
+            self.connected.get(peer).map(|_| {
+                (
+                    *peer,
+                    InEvent {
+                        listen_addrs: listen_addrs(params),
+                        supported_protocols: supported_protocols(params),
+                        protocol: Protocol::Push,
+                    },
+                )
             })
         });
 
@@ -342,14 +331,14 @@ impl NetworkBehaviour for Behaviour {
             connection_id,
         }) = self.requests.pop_front()
         {
-            let info = BehaviourInfo {
-                listen_addrs: listen_addrs(params),
-                protocols: supported_protocols(params),
-            };
             return Poll::Ready(NetworkBehaviourAction::NotifyHandler {
                 peer_id,
                 handler: NotifyHandler::One(connection_id),
-                event: InEvent::Identify(info),
+                event: InEvent {
+                    listen_addrs: listen_addrs(params),
+                    supported_protocols: supported_protocols(params),
+                    protocol: Protocol::Identify,
+                },
             });
         }
 
@@ -465,7 +454,7 @@ fn listen_addrs(params: &impl PollParameters) -> Vec<Multiaddr> {
 /// the given peer_id. If there is no peer_id for the peer in the mutiaddr, this returns true.
 fn multiaddr_matches_peer_id(addr: &Multiaddr, peer_id: &PeerId) -> bool {
     let last_component = addr.iter().last();
-    if let Some(Protocol::P2p(multi_addr_peer_id)) = last_component {
+    if let Some(multiaddr::Protocol::P2p(multi_addr_peer_id)) = last_component {
         return multi_addr_peer_id == *peer_id.as_ref();
     }
     true
@@ -792,8 +781,8 @@ mod tests {
         let addr_without_peer_id: Multiaddr = addr.clone();
         let mut addr_with_other_peer_id = addr.clone();
 
-        addr.push(Protocol::P2p(peer_id.into()));
-        addr_with_other_peer_id.push(Protocol::P2p(other_peer_id.into()));
+        addr.push(multiaddr::Protocol::P2p(peer_id.into()));
+        addr_with_other_peer_id.push(multiaddr::Protocol::P2p(other_peer_id.into()));
 
         assert!(multiaddr_matches_peer_id(&addr, &peer_id));
         assert!(!multiaddr_matches_peer_id(

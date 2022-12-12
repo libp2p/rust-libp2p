@@ -38,6 +38,13 @@ pub const PROTOCOL_NAME: &[u8; 14] = b"/ipfs/id/1.0.0";
 
 pub const PUSH_PROTOCOL_NAME: &[u8; 19] = b"/ipfs/id/push/1.0.0";
 
+/// The type of the Substream protocol.
+#[derive(Debug)]
+pub enum Protocol {
+    Identify,
+    Push,
+}
+
 /// Substream upgrade protocol for `/ipfs/id/1.0.0`.
 #[derive(Debug, Clone)]
 pub struct Identify;
