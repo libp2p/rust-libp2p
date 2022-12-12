@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::channel::mpsc;
-use futures::future::BoxFuture;
+use futures::future::{BoxFuture, Either};
 use futures::stream::StreamExt;
 use futures::{future, ready, AsyncReadExt, AsyncWriteExt, FutureExt, SinkExt};
 use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerExt};
@@ -42,11 +42,8 @@ async fn smoke() {
 
     let addr = start_listening(&mut a_transport, "/ip4/127.0.0.1/udp/0/webrtc").await;
     start_listening(&mut b_transport, "/ip4/127.0.0.1/udp/0/webrtc").await;
-    let ((a_connected, _, _), (b_connected, _)) = futures::future::join(
-        ListenUpgrade::new(&mut a_transport),
-        Dial::new(&mut b_transport, addr),
-    )
-    .await;
+    let ((a_connected, _, _), (b_connected, _)) =
+        connect(&mut a_transport, &mut b_transport, addr).await;
 
     assert_eq!(a_connected, b_peer_id);
     assert_eq!(b_connected, a_peer_id);
@@ -251,6 +248,47 @@ async fn open_outbound_streams<const BUFFER_SIZE: usize>(
     {}
 }
 
+async fn connect(
+    mut a_transport: &mut Boxed<(PeerId, StreamMuxerBox)>,
+    mut b_transport: &mut Boxed<(PeerId, StreamMuxerBox)>,
+    addr: Multiaddr,
+) -> (
+    (PeerId, Multiaddr, StreamMuxerBox),
+    (PeerId, StreamMuxerBox),
+) {
+    match futures::future::select(
+        ListenUpgrade::new(&mut a_transport),
+        Dial::new(&mut b_transport, addr),
+    )
+    .await
+    {
+        Either::Left((listen_done, dial)) => {
+            let mut pending_dial = dial;
+
+            loop {
+                match future::select(pending_dial, a_transport.next()).await {
+                    Either::Left((dial_done, _)) => return (listen_done, dial_done),
+                    Either::Right((_, dial)) => {
+                        pending_dial = dial;
+                    }
+                }
+            }
+        }
+        Either::Right((dial_done, listen)) => {
+            let mut pending_listen = listen;
+
+            loop {
+                match future::select(pending_listen, b_transport.next()).await {
+                    Either::Left((listen_done, _)) => return (listen_done, dial_done),
+                    Either::Right((_, listen)) => {
+                        pending_listen = listen;
+                    }
+                }
+            }
+        }
+    }
+}
+
 struct ListenUpgrade<'a> {
     listener: &'a mut Boxed<(PeerId, StreamMuxerBox)>,
     listener_upgrade_task: Option<BoxFuture<'static, (PeerId, Multiaddr, StreamMuxerBox)>>,
@@ -283,10 +321,17 @@ impl Future for Dial<'_> {
     type Output = (PeerId, StreamMuxerBox);
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let _ = dbg!(self.dialer.poll_next_unpin(cx));
-        let conn = ready!(self.dial_task.poll_unpin(cx));
+        loop {
+            match self.dialer.poll_next_unpin(cx) {
+                Poll::Ready(_) => {
+                    continue;
+                }
+                Poll::Pending => {}
+            }
 
-        Poll::Ready(conn)
+            let conn = ready!(self.dial_task.poll_unpin(cx));
+            return Poll::Ready(conn);
+        }
     }
 }
 
