@@ -28,7 +28,7 @@ use std::io;
 /// for a request-response `Behaviour` protocol or
 /// protocol family and how they are encoded / decoded on an I/O stream.
 #[deprecated(
-    since = "0.23.1",
+    since = "0.24",
     note = "Use re-exports that omit `RequestResponse` prefix, i.e. `libp2p::request_response::Codec`"
 )]
 #[async_trait]

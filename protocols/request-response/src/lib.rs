@@ -86,32 +86,32 @@ use std::{
 };
 
 #[deprecated(
-    since = "0.23.1",
+    since = "0.24",
     note = "Use libp2p::request_response::Behaviour instead."
 )]
 pub type RequestResponse<TCodec> = Behaviour<TCodec>;
 
 #[deprecated(
-    since = "0.23.1",
+    since = "0.24",
     note = "Use re-exports that omit `RequestResponse` prefix, i.e. `libp2p::request_response::Config`"
 )]
 pub type RequestResponseConfig = Config;
 
 #[deprecated(
-    since = "0.23.1",
+    since = "0.24",
     note = "Use re-exports that omit `RequestResponse` prefix, i.e. `libp2p::request_response::Event`"
 )]
 pub type RequestResponseEvent<TRequest, TResponse> = Event<TRequest, TResponse>;
 
 #[deprecated(
-    since = "0.23.1",
+    since = "0.24",
     note = "Use re-exports that omit `RequestResponse` prefix, i.e. `libp2p::request_response::Message`"
 )]
 pub type RequestResponseMessage<TRequest, TResponse, TChannelResponse> =
     Message<TRequest, TResponse, TChannelResponse>;
 
 #[deprecated(
-    since = "0.23.1",
+    since = "0.24",
     note = "Use re-exports that omit `RequestResponse` prefix, i.e. `libp2p::request_response::handler::Event`"
 )]
 pub type HandlerEvent<TCodec> = handler::Event<TCodec>;
