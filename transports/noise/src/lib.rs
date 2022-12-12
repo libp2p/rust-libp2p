@@ -60,7 +60,9 @@ mod protocol;
 
 pub use io::handshake::RemoteIdentity;
 pub use io::NoiseOutput;
-pub use protocol::{x25519::X25519, x25519_spec::X25519Spec};
+#[allow(deprecated)]
+pub use protocol::x25519::X25519;
+pub use protocol::x25519_spec::X25519Spec;
 pub use protocol::{AuthenticKeypair, Keypair, KeypairIdentity, PublicKey, SecretKey};
 pub use protocol::{Protocol, ProtocolParams, IK, IX, XX};
 
