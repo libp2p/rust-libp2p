@@ -1,3 +1,17 @@
+# 0.12.0 [unreleased]
+
+- Update to `libp2p-dcutr` `v0.9.0`.
+
+- Update to `libp2p-ping` `v0.42.0`.
+
+- Update to `libp2p-kad` `v0.43.0`.
+
+- Update to `libp2p-relay` `v0.15.0`.
+
+- Update to `libp2p-identify` `v0.42.0`.
+
+- Update to `libp2p-swarm` `v0.42.0`.
+
 # 0.11.0
 
 - Update to `libp2p-dcutr` `v0.8.0`.

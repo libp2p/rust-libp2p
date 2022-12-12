@@ -3,7 +3,7 @@ name = "libp2p-autonat"
 edition = "2021"
 rust-version = "1.62.0"
 description = "NAT and firewall detection for libp2p"
-version = "0.9.0"
+version = "0.10.0"
 authors = ["David Craven <david@craven.ch>", "Elena Frank <elena.frank@protonmail.com>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -20,7 +20,7 @@ futures-timer = "3.0"
 instant = "0.1"
 libp2p-core = { version = "0.38.0", path = "../../core" }
 libp2p-swarm = { version = "0.42.0", path = "../../swarm" }
-libp2p-request-response = { version = "0.23.0", path = "../request-response" }
+libp2p-request-response = { version = "0.24.0", path = "../request-response" }
 log = "0.4"
 rand = "0.8"
 prost = "0.11"

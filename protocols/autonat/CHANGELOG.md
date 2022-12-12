@@ -1,3 +1,9 @@
+# 0.10.0 [unreleased]
+
+- Update to `libp2p-request-response` `v0.24.0`.
+
+- Update to `libp2p-swarm` `v0.42.0`.
+
 # 0.9.0
 
 - Update to `libp2p-core` `v0.38.0`.
