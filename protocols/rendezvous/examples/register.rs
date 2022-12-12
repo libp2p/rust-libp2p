@@ -19,13 +19,11 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::StreamExt;
-use libp2p::core::identity;
-use libp2p::core::PeerId;
-use libp2p::ping;
-use libp2p::swarm::{NetworkBehaviour, Swarm, SwarmEvent};
-use libp2p::Multiaddr;
-use libp2p::{rendezvous, tokio_development_transport};
+use libp2p_core::{identity, upgrade::Version, Multiaddr, PeerId, Transport};
+use libp2p_ping as ping;
+use libp2p_rendezvous as rendezvous;
 use libp2p_swarm::AddressScore;
+use libp2p_swarm::{NetworkBehaviour, Swarm, SwarmEvent};
 use std::time::Duration;
 
 #[tokio::main]
@@ -40,7 +38,11 @@ async fn main() {
     let identity = identity::Keypair::generate_ed25519();
 
     let mut swarm = Swarm::with_tokio_executor(
-        tokio_development_transport(identity.clone()).unwrap(),
+        libp2p_tcp::tokio::Transport::default()
+            .upgrade(Version::V1)
+            .authenticate(libp2p_noise::NoiseAuthenticated::xx(&identity).unwrap())
+            .multiplex(libp2p_yamux::YamuxConfig::default())
+            .boxed(),
         MyBehaviour {
             rendezvous: rendezvous::client::Behaviour::new(identity.clone()),
             ping: ping::Behaviour::new(ping::Config::new().with_interval(Duration::from_secs(1))),
@@ -130,8 +132,11 @@ impl From<ping::Event> for MyEvent {
 }
 
 #[derive(NetworkBehaviour)]
-#[behaviour(event_process = false)]
-#[behaviour(out_event = "MyEvent")]
+#[behaviour(
+    out_event = "MyEvent",
+    event_process = false,
+    prelude = "libp2p_swarm::derive_prelude"
+)]
 struct MyBehaviour {
     rendezvous: rendezvous::client::Behaviour,
     ping: ping::Behaviour,
