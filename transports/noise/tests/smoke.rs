@@ -46,55 +46,6 @@ fn core_upgrade_compat() {
 }
 
 #[test]
-fn xx_spec() {
-    let _ = env_logger::try_init();
-    fn prop(mut messages: Vec<Message>) -> bool {
-        messages.truncate(5);
-        let server_id = identity::Keypair::generate_ed25519();
-        let client_id = identity::Keypair::generate_ed25519();
-
-        let server_id_public = server_id.public();
-        let client_id_public = client_id.public();
-
-        let server_dh = Keypair::<X25519Spec>::new()
-            .into_authentic(&server_id)
-            .unwrap();
-        let server_transport = tcp::async_io::Transport::default()
-            .and_then(move |output, endpoint| {
-                upgrade::apply(
-                    output,
-                    NoiseConfig::xx(server_dh),
-                    endpoint,
-                    upgrade::Version::V1,
-                )
-            })
-            .and_then(move |out, _| expect_identity(out, &client_id_public))
-            .boxed();
-
-        let client_dh = Keypair::<X25519Spec>::new()
-            .into_authentic(&client_id)
-            .unwrap();
-        let client_transport = tcp::async_io::Transport::default()
-            .and_then(move |output, endpoint| {
-                upgrade::apply(
-                    output,
-                    NoiseConfig::xx(client_dh),
-                    endpoint,
-                    upgrade::Version::V1,
-                )
-            })
-            .and_then(move |out, _| expect_identity(out, &server_id_public))
-            .boxed();
-
-        run(server_transport, client_transport, messages);
-        true
-    }
-    QuickCheck::new()
-        .max_tests(30)
-        .quickcheck(prop as fn(Vec<Message>) -> bool)
-}
-
-#[test]
 fn xx() {
     let _ = env_logger::try_init();
     fn prop(mut messages: Vec<Message>) -> bool {
