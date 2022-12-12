@@ -65,6 +65,40 @@ fn generate_tls_keypair() -> libp2p_core::identity::Keypair {
     libp2p_core::identity::Keypair::generate_ed25519()
 }
 
+fn create_transport() -> (PeerId, Boxed<(PeerId, StreamMuxerBox)>) {
+    let keypair = generate_tls_keypair();
+    let peer_id = keypair.public().to_peer_id();
+
+    let transport = webrtc::tokio::Transport::new(
+        keypair,
+        webrtc::tokio::Certificate::generate(&mut thread_rng()).unwrap(),
+    )
+    .map(|(p, c), _| (p, StreamMuxerBox::new(c)))
+    .boxed();
+
+    (peer_id, transport)
+}
+
+async fn start_listening(transport: &mut Boxed<(PeerId, StreamMuxerBox)>, addr: &str) -> Multiaddr {
+    transport.listen_on(addr.parse().unwrap()).unwrap();
+    match transport.next().await {
+        Some(TransportEvent::NewAddress { listen_addr, .. }) => listen_addr,
+        e => panic!("{:?}", e),
+    }
+}
+
+fn prop(number_listeners: NonZeroU8, number_streams: NonZeroU8) -> quickcheck::TestResult {
+    const BUFFER_SIZE: usize = 4096 * 10;
+
+    let number_listeners = u8::from(number_listeners) as usize;
+    let number_streams = u8::from(number_streams) as usize;
+
+    if number_listeners > 10 || number_streams > 10 {
+        return quickcheck::TestResult::discard();
+    }
+
+    let (listeners_tx, mut listeners_rx) = mpsc::channel(number_listeners);
+
     log::info!("Creating {number_streams} streams on {number_listeners} connections");
 
     // Spawn the listener nodes.
