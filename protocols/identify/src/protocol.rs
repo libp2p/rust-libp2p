@@ -40,23 +40,23 @@ pub const PUSH_PROTOCOL_NAME: &[u8; 19] = b"/ipfs/id/push/1.0.0";
 
 /// Substream upgrade protocol for `/ipfs/id/1.0.0`.
 #[derive(Debug, Clone)]
-pub struct Protocol;
+pub struct Identify;
 
 /// Substream upgrade protocol for `/ipfs/id/push/1.0.0`.
 #[derive(Debug, Clone)]
-pub struct PushProtocol<T>(T);
+pub struct Push<T>(T);
 pub struct InboundPush();
 pub struct OutboundPush(Info);
 
-impl PushProtocol<InboundPush> {
+impl Push<InboundPush> {
     pub fn inbound() -> Self {
-        PushProtocol(InboundPush())
+        Push(InboundPush())
     }
 }
 
-impl PushProtocol<OutboundPush> {
+impl Push<OutboundPush> {
     pub fn outbound(info: Info) -> Self {
-        PushProtocol(OutboundPush(info))
+        Push(OutboundPush(info))
     }
 }
 
@@ -79,7 +79,7 @@ pub struct Info {
     pub observed_addr: Multiaddr,
 }
 
-impl UpgradeInfo for Protocol {
+impl UpgradeInfo for Identify {
     type Info = &'static [u8];
     type InfoIter = iter::Once<Self::Info>;
 
@@ -88,7 +88,7 @@ impl UpgradeInfo for Protocol {
     }
 }
 
-impl<C> InboundUpgrade<C> for Protocol {
+impl<C> InboundUpgrade<C> for Identify {
     type Output = C;
     type Error = UpgradeError;
     type Future = future::Ready<Result<Self::Output, UpgradeError>>;
@@ -98,7 +98,7 @@ impl<C> InboundUpgrade<C> for Protocol {
     }
 }
 
-impl<C> OutboundUpgrade<C> for Protocol
+impl<C> OutboundUpgrade<C> for Identify
 where
     C: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
@@ -111,7 +111,7 @@ where
     }
 }
 
-impl<T> UpgradeInfo for PushProtocol<T> {
+impl<T> UpgradeInfo for Push<T> {
     type Info = &'static [u8];
     type InfoIter = iter::Once<Self::Info>;
 
@@ -120,7 +120,7 @@ impl<T> UpgradeInfo for PushProtocol<T> {
     }
 }
 
-impl<C> InboundUpgrade<C> for PushProtocol<InboundPush>
+impl<C> InboundUpgrade<C> for Push<InboundPush>
 where
     C: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
@@ -134,7 +134,7 @@ where
     }
 }
 
-impl<C> OutboundUpgrade<C> for PushProtocol<OutboundPush>
+impl<C> OutboundUpgrade<C> for Push<OutboundPush>
 where
     C: AsyncWrite + Unpin + Send + 'static,
 {
@@ -292,7 +292,7 @@ mod tests {
                 .await
                 .unwrap();
 
-            let sender = apply_inbound(socket, Protocol).await.unwrap();
+            let sender = apply_inbound(socket, Identify).await.unwrap();
 
             send(
                 sender,
@@ -316,7 +316,7 @@ mod tests {
             let mut transport = tcp::async_io::Transport::default();
 
             let socket = transport.dial(rx.await.unwrap()).unwrap().await.unwrap();
-            let info = apply_outbound(socket, Protocol, upgrade::Version::V1)
+            let info = apply_outbound(socket, Identify, upgrade::Version::V1)
                 .await
                 .unwrap();
             assert_eq!(

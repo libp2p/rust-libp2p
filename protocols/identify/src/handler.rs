@@ -18,9 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::protocol::{
-    self, InboundPush, Info, OutboundPush, Protocol, PushProtocol, UpgradeError,
-};
+use crate::protocol::{self, Identify, InboundPush, Info, OutboundPush, Push, UpgradeError};
 use futures::future::BoxFuture;
 use futures::prelude::*;
 use futures::stream::FuturesUnordered;
@@ -87,7 +85,7 @@ impl IntoConnectionHandler for Proto {
     }
 
     fn inbound_protocol(&self) -> <Self::Handler as ConnectionHandler>::InboundProtocol {
-        SelectUpgrade::new(Protocol, PushProtocol::inbound())
+        SelectUpgrade::new(Identify, Push::inbound())
     }
 }
 
@@ -101,12 +99,8 @@ pub struct Handler {
     inbound_identify_push: Option<BoxFuture<'static, Result<Info, UpgradeError>>>,
     /// Pending events to yield.
     events: SmallVec<
-        [ConnectionHandlerEvent<
-            EitherUpgrade<Protocol, PushProtocol<OutboundPush>>,
-            (),
-            Event,
-            io::Error,
-        >; 4],
+        [ConnectionHandlerEvent<EitherUpgrade<Identify, Push<OutboundPush>>, (), Event, io::Error>;
+            4],
     >,
 
     /// Streams awaiting `BehaviourInfo` to then send identify requests.
@@ -285,13 +279,13 @@ impl ConnectionHandler for Handler {
     type InEvent = InEvent;
     type OutEvent = Event;
     type Error = io::Error;
-    type InboundProtocol = SelectUpgrade<Protocol, PushProtocol<InboundPush>>;
-    type OutboundProtocol = EitherUpgrade<Protocol, PushProtocol<OutboundPush>>;
+    type InboundProtocol = SelectUpgrade<Identify, Push<InboundPush>>;
+    type OutboundProtocol = EitherUpgrade<Identify, Push<OutboundPush>>;
     type OutboundOpenInfo = ();
     type InboundOpenInfo = ();
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
-        SubstreamProtocol::new(SelectUpgrade::new(Protocol, PushProtocol::inbound()), ())
+        SubstreamProtocol::new(SelectUpgrade::new(Identify, Push::inbound()), ())
     }
 
     fn on_behaviour_event(&mut self, event: Self::InEvent) {
@@ -300,7 +294,7 @@ impl ConnectionHandler for Handler {
                 self.events
                     .push(ConnectionHandlerEvent::OutboundSubstreamRequest {
                         protocol: SubstreamProtocol::new(
-                            EitherUpgrade::B(PushProtocol::outbound(push)),
+                            EitherUpgrade::B(Push::outbound(push)),
                             (),
                         ),
                     });
@@ -348,7 +342,7 @@ impl ConnectionHandler for Handler {
             Poll::Ready(()) => {
                 self.trigger_next_identify.reset(self.interval);
                 let ev = ConnectionHandlerEvent::OutboundSubstreamRequest {
-                    protocol: SubstreamProtocol::new(EitherUpgrade::A(Protocol), ()),
+                    protocol: SubstreamProtocol::new(EitherUpgrade::A(Identify), ()),
                 };
                 return Poll::Ready(ev);
             }
