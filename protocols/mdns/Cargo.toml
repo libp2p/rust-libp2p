@@ -32,9 +32,11 @@ async-io = ["dep:async-io", "if-watch/smol"]
 [dev-dependencies]
 async-std = { version = "1.9.0", features = ["attributes"] }
 env_logger = "0.10.0"
-libp2p = { path = "../..", features = ["full"] }
+libp2p-noise = { path = "../../transports/noise" }
+libp2p-swarm = { path = "../../swarm", features = ["tokio", "async-std"] }
+libp2p-tcp = { path = "../../transports/tcp", features = ["tokio", "async-io"] }
+libp2p-yamux = { path = "../../muxers/yamux" }
 tokio = { version = "1.19", default-features = false, features = ["macros", "rt", "rt-multi-thread", "time"] }
-
 
 [[test]]
 name = "use-async-std"
