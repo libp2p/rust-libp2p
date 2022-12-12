@@ -1,3 +1,10 @@
+# 0.8.2 [unreleased]
+
+Rename types in public API to follow naming conventions defined in [issue 2217]. See [PR 3214].
+
+[issue 2217]: https://github.com/libp2p/rust-libp2p/issues/2217
+[PR 3214]: https://github.com/libp2p/rust-libp2p/pull/3214
+
 # 0.8.1 [unreleased]
 
 - Declare `InboundUpgradeError` and `OutboundUpgradeError` as type aliases instead of renames.
