@@ -60,7 +60,7 @@ static PARAMS_XX: Lazy<ProtocolParams> = Lazy::new(|| {
 #[derive(Clone)]
 #[deprecated(
     since = "0.41.1",
-    note = "Will be removed because it is not compliant with the official libp2p specification."
+    note = "Will be removed because it is not compliant with the official libp2p specification. Use `X25519Spec` instead."
 )]
 pub struct X25519([u8; 32]);
 
