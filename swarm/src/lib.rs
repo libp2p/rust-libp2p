@@ -191,6 +191,8 @@ pub enum SwarmEvent<TBehaviourOutEvent, THandlerErr> {
         /// Addresses are dialed concurrently. Contains the addresses and errors
         /// of dial attempts that failed before the one successful dial.
         concurrent_dial_errors: Option<Vec<(Multiaddr, TransportError<io::Error>)>>,
+        /// How long it took to establish this connection
+        established_in: std::time::Duration,
     },
     /// A connection with the given peer has been closed,
     /// possibly as a result of an error.
@@ -808,6 +810,7 @@ where
                 endpoint,
                 other_established_connection_ids,
                 concurrent_dial_errors,
+                established_in,
             } => {
                 if self.banned_peers.contains(&peer_id) {
                     // Mark the connection for the banned peer as banned, thus withholding any
@@ -848,6 +851,7 @@ where
                         num_established,
                         endpoint,
                         concurrent_dial_errors,
+                        established_in,
                     });
                 }
             }

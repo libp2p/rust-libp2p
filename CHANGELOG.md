@@ -50,7 +50,32 @@
 - Remove `SimpleProtocol` due to being unused. See [`libp2p::core::upgrade`](https://docs.rs/libp2p/0.50.0/libp2p/core/upgrade/index.html) for alternatives. See [PR 3191].
 
 - Update individual crates.
-  - Update to [`libp2p-swarm` `v0.42.0`](swarm/CHANGELOG.md#0420).
+    - Update to [`libp2p-dcutr` `v0.9.0`](protocols/dcutr/CHANGELOG.md#090).
+
+    - Update to [`libp2p-ping` `v0.42.0`](protocols/ping/CHANGELOG.md#0420).
+
+    - Update to [`libp2p-request-response` `v0.24.0`](protocols/request-response/CHANGELOG.md#0240).
+
+    - Update to [`libp2p-kad` `v0.43.0`](protocols/kad/CHANGELOG.md#0430).
+
+    - Update to [`libp2p-floodsub` `v0.42.0`](protocols/floodsub/CHANGELOG.md#0420).
+
+    - Update to [`libp2p-autonat` `v0.10.0`](protocols/autonat/CHANGELOG.md#0100).
+
+    - Update to [`libp2p-relay` `v0.15.0`](protocols/relay/CHANGELOG.md#0150).
+
+    - Update to [`libp2p-identify` `v0.42.0`](protocols/identify/CHANGELOG.md#0420).
+
+    - Update to [`libp2p-rendezvous` `v0.12.0`](protocols/rendezvous/CHANGELOG.md#0120).
+
+    - Update to [`libp2p-metrics` `v0.12.0`](misc/metrics/CHANGELOG.md#0120).
+
+    - Update to [`libp2p-swarm` `v0.42.0`](swarm/CHANGELOG.md#0420).
+    
+    - Update to [`libp2p-mdns` `v0.43.0`](protocols/mdns/CHANGELOG.md#0430).
+    
+    - Update to [`libp2p-gossipsub` `v0.44.0`](protocols/gossipsub/CHANGELOG.md#0440).
+    
 
 [PR 3191]: https://github.com/libp2p/rust-libp2p/pull/3191
 
