@@ -19,16 +19,18 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::channel::mpsc;
-use futures::future::Either;
+use futures::future::BoxFuture;
 use futures::stream::StreamExt;
-use futures::{future, AsyncReadExt, AsyncWriteExt, SinkExt};
+use futures::{future, ready, AsyncReadExt, AsyncWriteExt, FutureExt, SinkExt};
 use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerExt};
 use libp2p_core::transport::{Boxed, TransportEvent};
 use libp2p_core::{Multiaddr, PeerId, Transport};
 use libp2p_webrtc as webrtc;
 use rand::{thread_rng, RngCore};
-use std::io;
+use std::future::Future;
 use std::num::NonZeroU8;
+use std::pin::Pin;
+use std::task::{Context, Poll};
 use std::time::Duration;
 
 #[tokio::test]
@@ -40,8 +42,11 @@ async fn smoke() {
 
     let addr = start_listening(&mut a_transport, "/ip4/127.0.0.1/udp/0/webrtc").await;
     start_listening(&mut b_transport, "/ip4/127.0.0.1/udp/0/webrtc").await;
-    let ((a_connected, _, _), (b_connected, _)) =
-        connect(&mut a_transport, &mut b_transport, addr).await;
+    let ((a_connected, _, _), (b_connected, _)) = futures::future::join(
+        ListenUpgrade::new(&mut a_transport),
+        Dial::new(&mut b_transport, addr),
+    )
+    .await;
 
     assert_eq!(a_connected, b_peer_id);
     assert_eq!(b_connected, a_peer_id);
@@ -131,7 +136,7 @@ fn prop(number_listeners: NonZeroU8, number_streams: NonZeroU8) -> quickcheck::T
         let (_, mut dialer) = create_transport();
 
         while let Some((_, listener_addr)) = listeners_rx.next().await {
-            let (_, connection) = dial(&mut dialer, listener_addr.clone()).await.unwrap();
+            let (_, connection) = Dial::new(&mut dialer, listener_addr.clone()).await;
 
             tokio::spawn(open_outbound_streams::<BUFFER_SIZE>(
                 connection,
@@ -246,41 +251,77 @@ async fn open_outbound_streams<const BUFFER_SIZE: usize>(
     {}
 }
 
-/// Helper function for driving two transports until they established a connection.
-async fn connect(
-    listener: &mut Boxed<(PeerId, StreamMuxerBox)>,
-    dialer: &mut Boxed<(PeerId, StreamMuxerBox)>,
-    addr: Multiaddr,
-) -> (
-    (PeerId, Multiaddr, StreamMuxerBox),
-    (PeerId, StreamMuxerBox),
-) {
-    future::join(
-        async {
-            loop {
-                if let Some((upgrade, send_back_addr)) =
-                    listener.select_next_some().await.into_incoming()
-                {
-                    let (peer_id, connection) = upgrade.await.unwrap();
-
-                    return (peer_id, send_back_addr, connection);
-                }
-            }
-        },
-        async { dial(dialer, addr).await.unwrap() },
-    )
-    .await
+struct ListenUpgrade<'a> {
+    listener: &'a mut Boxed<(PeerId, StreamMuxerBox)>,
+    listener_upgrade_task: Option<BoxFuture<'static, (PeerId, Multiaddr, StreamMuxerBox)>>,
 }
 
-/// Helper function for dialling that also polls the `Transport`.
-async fn dial(
-    transport: &mut Boxed<(PeerId, StreamMuxerBox)>,
-    addr: Multiaddr,
-) -> io::Result<(PeerId, StreamMuxerBox)> {
-    match future::select(transport.dial(addr).unwrap(), transport.next()).await {
-        Either::Left((conn, _)) => conn,
-        Either::Right((event, _)) => {
-            panic!("Unexpected event: {event:?}")
+impl<'a> ListenUpgrade<'a> {
+    pub fn new(listener: &'a mut Boxed<(PeerId, StreamMuxerBox)>) -> Self {
+        Self {
+            listener,
+            listener_upgrade_task: None,
+        }
+    }
+}
+
+struct Dial<'a> {
+    dialer: &'a mut Boxed<(PeerId, StreamMuxerBox)>,
+    dial_task: BoxFuture<'static, (PeerId, StreamMuxerBox)>,
+}
+
+impl<'a> Dial<'a> {
+    fn new(dialer: &'a mut Boxed<(PeerId, StreamMuxerBox)>, addr: Multiaddr) -> Self {
+        Self {
+            dial_task: dialer.dial(addr).unwrap().map(|r| r.unwrap()).boxed(),
+            dialer,
+        }
+    }
+}
+
+impl Future for Dial<'_> {
+    type Output = (PeerId, StreamMuxerBox);
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let _ = dbg!(self.dialer.poll_next_unpin(cx));
+        let conn = ready!(self.dial_task.poll_unpin(cx));
+
+        Poll::Ready(conn)
+    }
+}
+
+impl Future for ListenUpgrade<'_> {
+    type Output = (PeerId, Multiaddr, StreamMuxerBox);
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        loop {
+            match dbg!(self.listener.poll_next_unpin(cx)) {
+                Poll::Ready(Some(TransportEvent::Incoming {
+                    upgrade,
+                    send_back_addr,
+                    ..
+                })) => {
+                    self.listener_upgrade_task = Some(
+                        async move {
+                            let (peer, conn) = upgrade.await.unwrap();
+
+                            (peer, send_back_addr, conn)
+                        }
+                        .boxed(),
+                    );
+                    continue;
+                }
+                Poll::Ready(None) => unreachable!("stream never ends"),
+                Poll::Ready(Some(_)) => continue,
+                Poll::Pending => {}
+            }
+
+            let conn = match self.listener_upgrade_task.as_mut() {
+                None => return Poll::Pending,
+                Some(inner) => ready!(inner.poll_unpin(cx)),
+            };
+
+            return Poll::Ready(conn);
         }
     }
 }
