@@ -22,6 +22,7 @@ use crate::structs_proto;
 use asynchronous_codec::{FramedRead, FramedWrite};
 use futures::{future::BoxFuture, prelude::*};
 use libp2p_core::{
+    connection::ConnectionId,
     identity, multiaddr,
     upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo},
     Multiaddr, PublicKey,
@@ -39,9 +40,9 @@ pub const PROTOCOL_NAME: &[u8; 14] = b"/ipfs/id/1.0.0";
 pub const PUSH_PROTOCOL_NAME: &[u8; 19] = b"/ipfs/id/push/1.0.0";
 
 /// The type of the Substream protocol.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Protocol {
-    Identify,
+    Identify(ConnectionId),
     Push,
 }
 

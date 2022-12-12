@@ -311,7 +311,7 @@ impl ConnectionHandler for Handler {
                         ),
                     });
             }
-            Protocol::Identify => {
+            Protocol::Identify(_) => {
                 let substream = self
                     .reply_streams
                     .pop_front()

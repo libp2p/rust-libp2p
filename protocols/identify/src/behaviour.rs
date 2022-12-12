@@ -48,21 +48,23 @@ pub struct Behaviour {
     config: Config,
     /// For each peer we're connected to, the observed address to send back to it.
     connected: HashMap<PeerId, HashMap<ConnectionId, Multiaddr>>,
-    /// Information requests from the handlers to be fullfiled.
-    requests: VecDeque<Request>,
+    /// Pending requests to be fullfiled, either `Handler` requests for `Behaviour` info
+    /// to address identification requests, or push requests to peers
+    /// with current information about the local peer.
+    requests: Vec<Request>,
     /// Pending events to be emitted when polled.
     events: VecDeque<NetworkBehaviourAction<Event, Proto>>,
-    /// Peers to which an active push with current information about
-    /// the local peer should be sent.
-    pending_push: HashSet<PeerId>,
     /// The addresses of all peers that we have discovered.
     discovered_peers: PeerCache,
 }
 
-/// A `Handler` request for `BehaviourInfo`.
+/// A `Behaviour` request to be fullfiled, either `Handler` requests for `Behaviour` info
+/// to address identification requests, or push requests to peers
+/// with current information about the local peer.
+#[derive(Debug, PartialEq, Eq)]
 struct Request {
     peer_id: PeerId,
-    connection_id: ConnectionId,
+    protocol: Protocol,
 }
 
 /// Configuration for the [`identify::Behaviour`](Behaviour).
@@ -172,9 +174,8 @@ impl Behaviour {
         Self {
             config,
             connected: HashMap::new(),
-            requests: VecDeque::new(),
+            requests: Vec::new(),
             events: VecDeque::new(),
-            pending_push: HashSet::new(),
             discovered_peers,
         }
     }
@@ -185,7 +186,13 @@ impl Behaviour {
         I: IntoIterator<Item = PeerId>,
     {
         for p in peers {
-            if self.pending_push.insert(p) && !self.connected.contains_key(&p) {
+            let request = Request {
+                peer_id: p,
+                protocol: Protocol::Push,
+            };
+            if !self.requests.contains(&request) {
+                self.requests.push(request);
+
                 let handler = self.new_handler();
                 self.events.push_back(NetworkBehaviourAction::Dial {
                     opts: DialOpts::peer_id(p).build(),
@@ -278,9 +285,9 @@ impl NetworkBehaviour for Behaviour {
                     }));
             }
             handler::Event::Identify => {
-                self.requests.push_back(Request {
+                self.requests.push(Request {
                     peer_id,
-                    connection_id,
+                    protocol: Protocol::Identify(connection_id),
                 });
             }
             handler::Event::IdentificationError(error) => {
@@ -302,47 +309,34 @@ impl NetworkBehaviour for Behaviour {
             return Poll::Ready(event);
         }
 
-        // Check for a pending active push to perform.
-        let peer_push = self.pending_push.iter().find_map(|peer| {
-            self.connected.get(peer).map(|_| {
-                (
-                    *peer,
-                    InEvent {
-                        listen_addrs: listen_addrs(params),
-                        supported_protocols: supported_protocols(params),
-                        protocol: Protocol::Push,
-                    },
-                )
-            })
-        });
-
-        if let Some((peer_id, push)) = peer_push {
-            self.pending_push.remove(&peer_id);
-            return Poll::Ready(NetworkBehaviourAction::NotifyHandler {
+        // Check for pending requests.
+        match self.requests.pop() {
+            Some(Request {
                 peer_id,
-                event: push,
+                protocol: Protocol::Push,
+            }) => Poll::Ready(NetworkBehaviourAction::NotifyHandler {
+                peer_id,
                 handler: NotifyHandler::Any,
-            });
-        }
-
-        // Check for information requests from the handlers.
-        if let Some(Request {
-            peer_id,
-            connection_id,
-        }) = self.requests.pop_front()
-        {
-            return Poll::Ready(NetworkBehaviourAction::NotifyHandler {
+                event: InEvent {
+                    listen_addrs: listen_addrs(params),
+                    supported_protocols: supported_protocols(params),
+                    protocol: Protocol::Push,
+                },
+            }),
+            Some(Request {
+                peer_id,
+                protocol: Protocol::Identify(connection_id),
+            }) => Poll::Ready(NetworkBehaviourAction::NotifyHandler {
                 peer_id,
                 handler: NotifyHandler::One(connection_id),
                 event: InEvent {
                     listen_addrs: listen_addrs(params),
                     supported_protocols: supported_protocols(params),
-                    protocol: Protocol::Identify,
+                    protocol: Protocol::Identify(connection_id),
                 },
-            });
+            }),
+            None => Poll::Pending,
         }
-
-        Poll::Pending
     }
 
     fn addresses_of_peer(&mut self, peer: &PeerId) -> Vec<Multiaddr> {
@@ -362,7 +356,13 @@ impl NetworkBehaviour for Behaviour {
             }) => {
                 if remaining_established == 0 {
                     self.connected.remove(&peer_id);
-                    self.pending_push.remove(&peer_id);
+                    self.requests.retain(|request| {
+                        request
+                            != &Request {
+                                peer_id,
+                                protocol: Protocol::Push,
+                            }
+                    });
                 } else if let Some(addrs) = self.connected.get_mut(&peer_id) {
                     addrs.remove(&connection_id);
                 }
@@ -370,7 +370,13 @@ impl NetworkBehaviour for Behaviour {
             FromSwarm::DialFailure(DialFailure { peer_id, error, .. }) => {
                 if let Some(peer_id) = peer_id {
                     if !self.connected.contains_key(&peer_id) {
-                        self.pending_push.remove(&peer_id);
+                        self.requests.retain(|request| {
+                            request
+                                != &Request {
+                                    peer_id,
+                                    protocol: Protocol::Push,
+                                }
+                        });
                     }
                 }
 
@@ -382,14 +388,17 @@ impl NetworkBehaviour for Behaviour {
                     }
                 }
             }
-            FromSwarm::NewListenAddr(_) => {
+            FromSwarm::NewListenAddr(_) | FromSwarm::ExpiredListenAddr(_) => {
                 if self.config.push_listen_addr_updates {
-                    self.pending_push.extend(self.connected.keys());
-                }
-            }
-            FromSwarm::ExpiredListenAddr(_) => {
-                if self.config.push_listen_addr_updates {
-                    self.pending_push.extend(self.connected.keys());
+                    for p in self.connected.keys() {
+                        let request = Request {
+                            peer_id: *p,
+                            protocol: Protocol::Push,
+                        };
+                        if !self.requests.contains(&request) {
+                            self.requests.push(request);
+                        }
+                    }
                 }
             }
             FromSwarm::AddressChange(_)
