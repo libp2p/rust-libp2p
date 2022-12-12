@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::protocol::{
-    InboundPush, Info, OutboundPush, Protocol, PushProtocol, ReplySubstream, UpgradeError,
+    self, InboundPush, Info, OutboundPush, Protocol, PushProtocol, UpgradeError,
 };
 use futures::future::BoxFuture;
 use futures::prelude::*;
@@ -110,7 +110,7 @@ pub struct Handler {
     >,
 
     /// Streams awaiting `BehaviourInfo` to then send identify requests.
-    reply_streams: VecDeque<ReplySubstream<NegotiatedSubstream>>,
+    reply_streams: VecDeque<NegotiatedSubstream>,
 
     /// Pending identification replies, awaiting being sent.
     pending_replies: FuturesUnordered<BoxFuture<'static, Result<PeerId, UpgradeError>>>,
@@ -320,7 +320,7 @@ impl ConnectionHandler for Handler {
                     .expect("A BehaviourInfo reply should have a matching substream.");
                 let peer = self.remote_peer_id;
                 let fut = Box::pin(async move {
-                    substream.send(info).await?;
+                    protocol::send(substream, info).await?;
                     Ok(peer)
                 });
                 self.pending_replies.push(fut);
