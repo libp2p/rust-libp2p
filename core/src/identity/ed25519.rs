@@ -209,10 +209,6 @@ impl SecretKey {
         )
     }
 
-    pub fn to_public_key(&self) -> PublicKey {
-        todo!()
-    }
-
     /// Create an Ed25519 secret key from a byte slice, zeroing the input on success.
     /// If the bytes do not constitute a valid Ed25519 secret key, an error is
     /// returned.
