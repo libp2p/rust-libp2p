@@ -1,6 +1,20 @@
 # 0.12.0 [unreleased]
 
-- Add `connections_establishment_duration` metric. See [PR 3134]
+- Add `connections_establishment_duration` metric. See [PR 3134].
+
+- Update to `libp2p-dcutr` `v0.9.0`.
+
+- Update to `libp2p-ping` `v0.42.0`.
+
+- Update to `libp2p-kad` `v0.43.0`.
+
+- Update to `libp2p-relay` `v0.15.0`.
+
+- Update to `libp2p-identify` `v0.42.0`.
+
+- Update to `libp2p-swarm` `v0.42.0`.
+
+[PR 3134]: https://github.com/libp2p/rust-libp2p/pull/3134/
 
 # 0.11.0
 
