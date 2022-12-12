@@ -195,6 +195,7 @@ async fn test_dial_back() {
                         },
                     num_established,
                     concurrent_dial_errors,
+                    established_in: _,
                 } => {
                     assert_eq!(peer_id, client_id);
                     assert_eq!(num_established, NonZeroU32::new(2).unwrap());
