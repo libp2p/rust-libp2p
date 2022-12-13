@@ -7,6 +7,9 @@
   and refer to its types via `relay::`. For example: `relay::v2::relay::Behaviour` or `relay::v2::client::Behaviour`.
   See [PR 3235].
 
+[PR 3235]: https://github.com/libp2p/rust-libp2p/pull/3235
+[discussion 2174]: https://github.com/libp2p/rust-libp2p/issues/2174
+
 - Update to `libp2p-swarm` `v0.42.0`.
 
 # 0.14.0
