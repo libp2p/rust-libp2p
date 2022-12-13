@@ -557,11 +557,11 @@ impl PeerCache {
 mod tests {
     use super::*;
     use futures::pin_mut;
-    use libp2p::mplex::MplexConfig;
-    use libp2p::noise;
-    use libp2p::tcp;
     use libp2p_core::{identity, muxing::StreamMuxerBox, transport, upgrade, PeerId, Transport};
+    use libp2p_mplex::MplexConfig;
+    use libp2p_noise as noise;
     use libp2p_swarm::{Swarm, SwarmEvent};
+    use libp2p_tcp as tcp;
     use std::time::Duration;
 
     fn transport() -> (

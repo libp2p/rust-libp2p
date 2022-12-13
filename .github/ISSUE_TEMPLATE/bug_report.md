@@ -5,7 +5,7 @@ about: Create a bug report for rust-libp2p.
 
 <!-- Thank you for filing a bug report! -->
 
-<!-- For security related issues please reach out to security@libp2p.io. Please do not file a public issue on GitHub. -->
+<!-- For security related issues please file a private security vulnerability report at https://github.com/libp2p/rust-libp2p/security/advisories/new or reach out to security@libp2p.io. Please do not file a public issue on GitHub. -->
 
 ## Summary
 

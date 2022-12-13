@@ -140,7 +140,6 @@ pub use libp2p_yamux as yamux;
 mod transport_ext;
 
 pub mod bandwidth;
-pub mod simple;
 
 #[cfg(doc)]
 pub mod tutorials;
@@ -152,7 +151,6 @@ pub use self::core::{
     PeerId, Transport,
 };
 pub use self::multiaddr::{multiaddr as build_multiaddr, Multiaddr};
-pub use self::simple::SimpleProtocol;
 pub use self::swarm::Swarm;
 pub use self::transport_ext::TransportExt;
 
