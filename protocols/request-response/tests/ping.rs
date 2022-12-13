@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Integration tests for the `RequestResponse` network behaviour.
+//! Integration tests for the `Behaviour`.
 
 use async_trait::async_trait;
 use futures::{channel::mpsc, prelude::*, AsyncWriteExt};
@@ -43,10 +43,10 @@ fn is_response_outbound() {
     let offline_peer = PeerId::random();
 
     let protocols = iter::once((PingProtocol(), ProtocolSupport::Full));
-    let cfg = RequestResponseConfig::default();
+    let cfg = Config::default();
 
     let (peer1_id, trans) = mk_transport();
-    let ping_proto1 = RequestResponse::new(PingCodec(), protocols, cfg);
+    let ping_proto1 = Behaviour::new(PingCodec(), protocols, cfg);
     let mut swarm1 = Swarm::without_executor(trans, ping_proto1, peer1_id);
 
     let request_id1 = swarm1
@@ -54,7 +54,7 @@ fn is_response_outbound() {
         .send_request(&offline_peer, ping.clone());
 
     match futures::executor::block_on(swarm1.select_next_some()) {
-        SwarmEvent::Behaviour(RequestResponseEvent::OutboundFailure {
+        SwarmEvent::Behaviour(Event::OutboundFailure {
             peer,
             request_id: req_id,
             error: _error,
@@ -82,14 +82,14 @@ fn ping_protocol() {
     let pong = Pong("pong".to_string().into_bytes());
 
     let protocols = iter::once((PingProtocol(), ProtocolSupport::Full));
-    let cfg = RequestResponseConfig::default();
+    let cfg = Config::default();
 
     let (peer1_id, trans) = mk_transport();
-    let ping_proto1 = RequestResponse::new(PingCodec(), protocols.clone(), cfg.clone());
+    let ping_proto1 = Behaviour::new(PingCodec(), protocols.clone(), cfg.clone());
     let mut swarm1 = Swarm::without_executor(trans, ping_proto1, peer1_id);
 
     let (peer2_id, trans) = mk_transport();
-    let ping_proto2 = RequestResponse::new(PingCodec(), protocols, cfg);
+    let ping_proto2 = Behaviour::new(PingCodec(), protocols, cfg);
     let mut swarm2 = Swarm::without_executor(trans, ping_proto2, peer2_id);
 
     let (mut tx, mut rx) = mpsc::channel::<Multiaddr>(1);
@@ -104,10 +104,10 @@ fn ping_protocol() {
         loop {
             match swarm1.select_next_some().await {
                 SwarmEvent::NewListenAddr { address, .. } => tx.send(address).await.unwrap(),
-                SwarmEvent::Behaviour(RequestResponseEvent::Message {
+                SwarmEvent::Behaviour(Event::Message {
                     peer,
                     message:
-                        RequestResponseMessage::Request {
+                        Message::Request {
                             request, channel, ..
                         },
                 }) => {
@@ -118,7 +118,7 @@ fn ping_protocol() {
                         .send_response(channel, pong.clone())
                         .unwrap();
                 }
-                SwarmEvent::Behaviour(RequestResponseEvent::ResponseSent { peer, .. }) => {
+                SwarmEvent::Behaviour(Event::ResponseSent { peer, .. }) => {
                     assert_eq!(&peer, &peer2_id);
                 }
                 SwarmEvent::Behaviour(e) => panic!("Peer1: Unexpected event: {:?}", e),
@@ -138,10 +138,10 @@ fn ping_protocol() {
 
         loop {
             match swarm2.select_next_some().await {
-                SwarmEvent::Behaviour(RequestResponseEvent::Message {
+                SwarmEvent::Behaviour(Event::Message {
                     peer,
                     message:
-                        RequestResponseMessage::Response {
+                        Message::Response {
                             request_id,
                             response,
                         },
@@ -171,14 +171,14 @@ fn emits_inbound_connection_closed_failure() {
     let ping = Ping("ping".to_string().into_bytes());
 
     let protocols = iter::once((PingProtocol(), ProtocolSupport::Full));
-    let cfg = RequestResponseConfig::default();
+    let cfg = Config::default();
 
     let (peer1_id, trans) = mk_transport();
-    let ping_proto1 = RequestResponse::new(PingCodec(), protocols.clone(), cfg.clone());
+    let ping_proto1 = Behaviour::new(PingCodec(), protocols.clone(), cfg.clone());
     let mut swarm1 = Swarm::without_executor(trans, ping_proto1, peer1_id);
 
     let (peer2_id, trans) = mk_transport();
-    let ping_proto2 = RequestResponse::new(PingCodec(), protocols, cfg);
+    let ping_proto2 = Behaviour::new(PingCodec(), protocols, cfg);
     let mut swarm2 = Swarm::without_executor(trans, ping_proto2, peer2_id);
 
     let addr = "/ip4/127.0.0.1/tcp/0".parse().unwrap();
@@ -195,9 +195,9 @@ fn emits_inbound_connection_closed_failure() {
         let _channel = loop {
             futures::select!(
                 event = swarm1.select_next_some() => match event {
-                    SwarmEvent::Behaviour(RequestResponseEvent::Message {
+                    SwarmEvent::Behaviour(Event::Message {
                         peer,
-                        message: RequestResponseMessage::Request { request, channel, .. }
+                        message: Message::Request { request, channel, .. }
                     }) => {
                         assert_eq!(&request, &ping);
                         assert_eq!(&peer, &peer2_id);
@@ -219,7 +219,7 @@ fn emits_inbound_connection_closed_failure() {
 
         loop {
             match swarm1.select_next_some().await {
-                SwarmEvent::Behaviour(RequestResponseEvent::InboundFailure {
+                SwarmEvent::Behaviour(Event::InboundFailure {
                     error: InboundFailure::ConnectionClosed,
                     ..
                 }) => break,
@@ -240,14 +240,14 @@ fn emits_inbound_connection_closed_if_channel_is_dropped() {
     let ping = Ping("ping".to_string().into_bytes());
 
     let protocols = iter::once((PingProtocol(), ProtocolSupport::Full));
-    let cfg = RequestResponseConfig::default();
+    let cfg = Config::default();
 
     let (peer1_id, trans) = mk_transport();
-    let ping_proto1 = RequestResponse::new(PingCodec(), protocols.clone(), cfg.clone());
+    let ping_proto1 = Behaviour::new(PingCodec(), protocols.clone(), cfg.clone());
     let mut swarm1 = Swarm::without_executor(trans, ping_proto1, peer1_id);
 
     let (peer2_id, trans) = mk_transport();
-    let ping_proto2 = RequestResponse::new(PingCodec(), protocols, cfg);
+    let ping_proto2 = Behaviour::new(PingCodec(), protocols, cfg);
     let mut swarm2 = Swarm::without_executor(trans, ping_proto2, peer2_id);
 
     let addr = "/ip4/127.0.0.1/tcp/0".parse().unwrap();
@@ -264,9 +264,9 @@ fn emits_inbound_connection_closed_if_channel_is_dropped() {
         let event = loop {
             futures::select!(
                 event = swarm1.select_next_some() => {
-                    if let SwarmEvent::Behaviour(RequestResponseEvent::Message {
+                    if let SwarmEvent::Behaviour(Event::Message {
                         peer,
-                        message: RequestResponseMessage::Request { request, channel, .. }
+                        message: Message::Request { request, channel, .. }
                     }) = event {
                         assert_eq!(&request, &ping);
                         assert_eq!(&peer, &peer2_id);
@@ -284,7 +284,7 @@ fn emits_inbound_connection_closed_if_channel_is_dropped() {
         };
 
         let error = match event {
-            RequestResponseEvent::OutboundFailure { error, .. } => error,
+            Event::OutboundFailure { error, .. } => error,
             e => panic!("unexpected event from peer 2: {:?}", e),
         };
 
@@ -324,7 +324,7 @@ impl ProtocolName for PingProtocol {
 }
 
 #[async_trait]
-impl RequestResponseCodec for PingCodec {
+impl libp2p_request_response::Codec for PingCodec {
     type Protocol = PingProtocol;
     type Request = Ping;
     type Response = Pong;
