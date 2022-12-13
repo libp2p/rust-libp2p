@@ -75,6 +75,11 @@ jobs:
           cargo install cargo-semver-checks --locked
           cargo semver-checks check-release -p ${{ matrix.crate }}
 
+      - name: Enforce no dependency on meta crate
+        run: |
+          cargo metadata --format-version=1 --no-deps | \
+          jq -e -r '.packages[] | select(.name == "${{ matrix.crate }}") | .dependencies | all(.name != "libp2p")'
+
   cross:
     name: Compile on ${{ matrix.target }}
     strategy:

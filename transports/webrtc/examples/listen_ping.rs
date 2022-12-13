@@ -1,10 +1,10 @@
 use anyhow::Result;
 use futures::StreamExt;
-use libp2p::swarm::{keep_alive, NetworkBehaviour};
-use libp2p::Transport;
-use libp2p::{ping, Swarm};
 use libp2p_core::identity;
 use libp2p_core::muxing::StreamMuxerBox;
+use libp2p_core::Transport;
+use libp2p_ping as ping;
+use libp2p_swarm::{keep_alive, NetworkBehaviour, Swarm};
 use rand::thread_rng;
 use void::Void;
 
@@ -41,7 +41,11 @@ fn create_swarm() -> Result<Swarm<Behaviour>> {
 }
 
 #[derive(NetworkBehaviour, Default)]
-#[behaviour(out_event = "Event", event_process = false)]
+#[behaviour(
+    out_event = "Event",
+    event_process = false,
+    prelude = "libp2p_swarm::derive_prelude"
+)]
 struct Behaviour {
     ping: ping::Behaviour,
     keep_alive: keep_alive::Behaviour,
