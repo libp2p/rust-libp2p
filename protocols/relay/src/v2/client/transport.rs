@@ -95,7 +95,7 @@ pub type ClientTransport = Transport;
 pub struct Transport {
     to_behaviour: mpsc::Sender<TransportToBehaviourMsg>,
     pending_to_behaviour: VecDeque<TransportToBehaviourMsg>,
-    listeners: SelectAll<RelayListener>,
+    listeners: SelectAll<Listener>,
 }
 
 impl Transport {
@@ -163,7 +163,7 @@ impl libp2p_core::Transport for Transport {
             });
 
         let listener_id = ListenerId::new();
-        let listener = RelayListener {
+        let listener = Listener {
             listener_id,
             queued_events: Default::default(),
             from_behaviour,
@@ -322,7 +322,13 @@ fn parse_relayed_multiaddr(addr: Multiaddr) -> Result<RelayedMultiaddr, Transpor
     Ok(relayed_multiaddr)
 }
 
-pub struct RelayListener {
+#[deprecated(
+    since = "0.15.0",
+    note = "Use libp2p_relay::v2::client::Listener instead."
+)]
+pub type RelayListener = Listener;
+
+pub struct Listener {
     listener_id: ListenerId,
     /// Queue of events to report when polled.
     queued_events: VecDeque<<Self as Stream>::Item>,
@@ -333,7 +339,7 @@ pub struct RelayListener {
     is_closed: bool,
 }
 
-impl RelayListener {
+impl Listener {
     /// Close the listener.
     ///
     /// This will create a [`TransportEvent::ListenerClosed`] event
@@ -349,7 +355,7 @@ impl RelayListener {
     }
 }
 
-impl Stream for RelayListener {
+impl Stream for Listener {
     type Item = TransportEvent<<Transport as libp2p_core::Transport>::ListenerUpgrade, Error>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
