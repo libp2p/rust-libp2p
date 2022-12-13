@@ -2,6 +2,11 @@
 
 - Update to `libp2p-swarm` `v0.42.0`.
 
+- Declare `InboundUpgradeError` and `OutboundUpgradeError` as type aliases instead of renames.
+  This is a workaround for a missing feature in `cargo semver-checks`. See [PR 3213].
+
+[PR 3213]: https://github.com/libp2p/rust-libp2p/pull/3213
+
 # 0.8.0
 
 - Update to `prost-codec` `v0.3.0`.
