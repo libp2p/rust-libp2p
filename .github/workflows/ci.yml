@@ -36,6 +36,7 @@ jobs:
       - name: Install Rust ${{ steps.parse-msrv.outputs.version }} for MSRV check
         uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
         with:
+          profile: minimal
           toolchain: ${{ steps.parse-msrv.outputs.version }}
 
       - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
@@ -48,6 +49,7 @@ jobs:
 
       - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
         with:
+          profile: minimal
           toolchain: stable
 
       - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
