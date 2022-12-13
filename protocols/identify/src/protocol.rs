@@ -22,13 +22,14 @@ use crate::structs_proto;
 use asynchronous_codec::{FramedRead, FramedWrite};
 use futures::{future::BoxFuture, prelude::*};
 use libp2p_core::{
+    connection::ConnectionId,
     identity, multiaddr,
     upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo},
     Multiaddr, PublicKey,
 };
 use log::trace;
 use std::convert::TryFrom;
-use std::{fmt, io, iter, pin::Pin};
+use std::{io, iter, pin::Pin};
 use thiserror::Error;
 use void::Void;
 
@@ -38,25 +39,32 @@ pub const PROTOCOL_NAME: &[u8; 14] = b"/ipfs/id/1.0.0";
 
 pub const PUSH_PROTOCOL_NAME: &[u8; 19] = b"/ipfs/id/push/1.0.0";
 
+/// The type of the Substream protocol.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Protocol {
+    Identify(ConnectionId),
+    Push,
+}
+
 /// Substream upgrade protocol for `/ipfs/id/1.0.0`.
 #[derive(Debug, Clone)]
-pub struct Protocol;
+pub struct Identify;
 
 /// Substream upgrade protocol for `/ipfs/id/push/1.0.0`.
 #[derive(Debug, Clone)]
-pub struct PushProtocol<T>(T);
+pub struct Push<T>(T);
 pub struct InboundPush();
 pub struct OutboundPush(Info);
 
-impl PushProtocol<InboundPush> {
+impl Push<InboundPush> {
     pub fn inbound() -> Self {
-        PushProtocol(InboundPush())
+        Push(InboundPush())
     }
 }
 
-impl PushProtocol<OutboundPush> {
+impl Push<OutboundPush> {
     pub fn outbound(info: Info) -> Self {
-        PushProtocol(OutboundPush(info))
+        Push(OutboundPush(info))
     }
 }
 
@@ -79,31 +87,7 @@ pub struct Info {
     pub observed_addr: Multiaddr,
 }
 
-/// The substream on which a reply is expected to be sent.
-pub struct ReplySubstream<T> {
-    inner: T,
-}
-
-impl<T> fmt::Debug for ReplySubstream<T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple("ReplySubstream").finish()
-    }
-}
-
-impl<T> ReplySubstream<T>
-where
-    T: AsyncWrite + Unpin,
-{
-    /// Sends back the requested information on the substream.
-    ///
-    /// Consumes the substream, returning a future that resolves
-    /// when the reply has been sent on the underlying connection.
-    pub async fn send(self, info: Info) -> Result<(), UpgradeError> {
-        send(self.inner, info).await.map_err(Into::into)
-    }
-}
-
-impl UpgradeInfo for Protocol {
+impl UpgradeInfo for Identify {
     type Info = &'static [u8];
     type InfoIter = iter::Once<Self::Info>;
 
@@ -112,17 +96,17 @@ impl UpgradeInfo for Protocol {
     }
 }
 
-impl<C> InboundUpgrade<C> for Protocol {
-    type Output = ReplySubstream<C>;
+impl<C> InboundUpgrade<C> for Identify {
+    type Output = C;
     type Error = UpgradeError;
     type Future = future::Ready<Result<Self::Output, UpgradeError>>;
 
     fn upgrade_inbound(self, socket: C, _: Self::Info) -> Self::Future {
-        future::ok(ReplySubstream { inner: socket })
+        future::ok(socket)
     }
 }
 
-impl<C> OutboundUpgrade<C> for Protocol
+impl<C> OutboundUpgrade<C> for Identify
 where
     C: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
@@ -135,7 +119,7 @@ where
     }
 }
 
-impl<T> UpgradeInfo for PushProtocol<T> {
+impl<T> UpgradeInfo for Push<T> {
     type Info = &'static [u8];
     type InfoIter = iter::Once<Self::Info>;
 
@@ -144,7 +128,7 @@ impl<T> UpgradeInfo for PushProtocol<T> {
     }
 }
 
-impl<C> InboundUpgrade<C> for PushProtocol<InboundPush>
+impl<C> InboundUpgrade<C> for Push<InboundPush>
 where
     C: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
@@ -158,7 +142,7 @@ where
     }
 }
 
-impl<C> OutboundUpgrade<C> for PushProtocol<OutboundPush>
+impl<C> OutboundUpgrade<C> for Push<OutboundPush>
 where
     C: AsyncWrite + Unpin + Send + 'static,
 {
@@ -171,7 +155,7 @@ where
     }
 }
 
-async fn send<T>(io: T, info: Info) -> Result<(), UpgradeError>
+pub(crate) async fn send<T>(io: T, info: Info) -> Result<(), UpgradeError>
 where
     T: AsyncWrite + Unpin,
 {
@@ -316,10 +300,11 @@ mod tests {
                 .await
                 .unwrap();
 
-            let sender = apply_inbound(socket, Protocol).await.unwrap();
+            let sender = apply_inbound(socket, Identify).await.unwrap();
 
-            sender
-                .send(Info {
+            send(
+                sender,
+                Info {
                     public_key: send_pubkey,
                     protocol_version: "proto_version".to_owned(),
                     agent_version: "agent_version".to_owned(),
@@ -329,16 +314,17 @@ mod tests {
                     ],
                     protocols: vec!["proto1".to_string(), "proto2".to_string()],
                     observed_addr: "/ip4/100.101.102.103/tcp/5000".parse().unwrap(),
-                })
-                .await
-                .unwrap();
+                },
+            )
+            .await
+            .unwrap();
         });
 
         async_std::task::block_on(async move {
             let mut transport = tcp::async_io::Transport::default();
 
             let socket = transport.dial(rx.await.unwrap()).unwrap().await.unwrap();
-            let info = apply_outbound(socket, Protocol, upgrade::Version::V1)
+            let info = apply_outbound(socket, Identify, upgrade::Version::V1)
                 .await
                 .unwrap();
             assert_eq!(

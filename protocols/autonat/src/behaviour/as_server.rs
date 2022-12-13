@@ -25,8 +25,7 @@ use super::{
 use instant::Instant;
 use libp2p_core::{connection::ConnectionId, multiaddr::Protocol, Multiaddr, PeerId};
 use libp2p_request_response::{
-    InboundFailure, RequestId, RequestResponse, RequestResponseEvent, RequestResponseMessage,
-    ResponseChannel,
+    self as request_response, InboundFailure, RequestId, ResponseChannel,
 };
 use libp2p_swarm::{
     dial_opts::{DialOpts, PeerCondition},
@@ -75,7 +74,7 @@ pub enum InboundProbeEvent {
 
 /// View over [`super::Behaviour`] in a server role.
 pub struct AsServer<'a> {
-    pub inner: &'a mut RequestResponse<AutoNatCodec>,
+    pub inner: &'a mut request_response::Behaviour<AutoNatCodec>,
     pub config: &'a Config,
     pub connected: &'a HashMap<PeerId, HashMap<ConnectionId, Option<Multiaddr>>>,
     pub probe_id: &'a mut ProbeId,
@@ -98,15 +97,15 @@ impl<'a> HandleInnerEvent for AsServer<'a> {
     fn handle_event(
         &mut self,
         _params: &mut impl PollParameters,
-        event: RequestResponseEvent<DialRequest, DialResponse>,
+        event: request_response::Event<DialRequest, DialResponse>,
     ) -> (VecDeque<Event>, Option<Action>) {
         let mut events = VecDeque::new();
         let mut action = None;
         match event {
-            RequestResponseEvent::Message {
+            request_response::Event::Message {
                 peer,
                 message:
-                    RequestResponseMessage::Request {
+                    request_response::Message::Request {
                         request_id,
                         request,
                         channel,
@@ -161,7 +160,7 @@ impl<'a> HandleInnerEvent for AsServer<'a> {
                     }
                 }
             }
-            RequestResponseEvent::InboundFailure {
+            request_response::Event::InboundFailure {
                 peer,
                 error,
                 request_id,
