@@ -1,3 +1,12 @@
+# 0.42.0 [unreleased]
+
+- Removed deprecated Swarm constructors. For transition notes see [0.41.0](#0.41.0). See [PR 3170].
+
+- Add `estblished_in` to `SwarmEvent::ConnectionEstablished`. See [PR 3134].
+
+[PR 3170]: https://github.com/libp2p/rust-libp2p/pull/3170
+[PR 3134]: https://github.com/libp2p/rust-libp2p/pull/3134
+
 # 0.41.1
 
 - Update to `libp2p-swarm-derive` `v0.31.0`.

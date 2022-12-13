@@ -19,16 +19,16 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::{channel::oneshot, prelude::*, ready};
-use libp2p::core::{
+use libp2p_core::{
     identity,
     multiaddr::Protocol,
     muxing::StreamMuxerBox,
     transport::{self, MemoryTransport},
     upgrade, Multiaddr, PeerId, Transport,
 };
-use libp2p::mplex::MplexConfig;
-use libp2p::plaintext::PlainText2Config;
-use libp2p::swarm::{dummy, Swarm, SwarmEvent};
+use libp2p_mplex::MplexConfig;
+use libp2p_plaintext::PlainText2Config;
+use libp2p_swarm::{dummy, Swarm, SwarmEvent};
 use rand::random;
 use std::task::Poll;
 

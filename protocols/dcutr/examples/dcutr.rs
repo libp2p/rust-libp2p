@@ -22,18 +22,19 @@ use clap::Parser;
 use futures::executor::{block_on, ThreadPool};
 use futures::future::FutureExt;
 use futures::stream::StreamExt;
-use libp2p::core::multiaddr::{Multiaddr, Protocol};
-use libp2p::core::transport::OrTransport;
-use libp2p::core::upgrade;
-use libp2p::dns::DnsConfig;
-use libp2p::identify;
-use libp2p::noise;
-use libp2p::relay::v2::client::{self, Client};
-use libp2p::swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent};
-use libp2p::tcp;
-use libp2p::Transport;
-use libp2p::{dcutr, ping};
-use libp2p::{identity, PeerId};
+use libp2p_core::multiaddr::{Multiaddr, Protocol};
+use libp2p_core::transport::OrTransport;
+use libp2p_core::upgrade;
+use libp2p_core::Transport;
+use libp2p_core::{identity, PeerId};
+use libp2p_dcutr as dcutr;
+use libp2p_dns::DnsConfig;
+use libp2p_identify as identify;
+use libp2p_noise as noise;
+use libp2p_ping as ping;
+use libp2p_relay::v2::client::{self, Client};
+use libp2p_swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent};
+use libp2p_tcp as tcp;
 use log::info;
 use std::convert::TryInto;
 use std::error::Error;
@@ -100,11 +101,15 @@ fn main() -> Result<(), Box<dyn Error>> {
         noise::NoiseAuthenticated::xx(&local_key)
             .expect("Signing libp2p-noise static DH keypair failed."),
     )
-    .multiplex(libp2p::yamux::YamuxConfig::default())
+    .multiplex(libp2p_yamux::YamuxConfig::default())
     .boxed();
 
     #[derive(NetworkBehaviour)]
-    #[behaviour(out_event = "Event", event_process = false)]
+    #[behaviour(
+        out_event = "Event",
+        event_process = false,
+        prelude = "libp2p_swarm::derive_prelude"
+    )]
     struct Behaviour {
         relay_client: Client,
         ping: ping::Behaviour,
