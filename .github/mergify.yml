@@ -24,6 +24,16 @@ pull_request_rules:
     actions:
       queue:
 
+  - name: Remove reviews on updates after PR is queued for merging
+    conditions:
+      - base=master
+      - label=send-it
+      - author!=@libp2p/rust-libp2p-maintainers
+    actions:
+      dismiss_reviews:
+        message: Approvals have been dismissed because the PR was updated after the `send-it` label was applied.
+        changes_requested: false
+
 queue_rules:
   - name: default
     conditions: []
