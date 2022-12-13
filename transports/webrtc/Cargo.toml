@@ -45,10 +45,12 @@ prost-build = "0.11"
 anyhow = "1.0"
 env_logger = "0.10"
 hex-literal = "0.3"
-libp2p = { path = "../..", features = ["full"] }
+libp2p-swarm = { path = "../../swarm", features = ["macros", "tokio"] }
+libp2p-ping = { path = "../../protocols/ping" }
 tokio = { version = "1.19", features = ["full"] }
 unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
 void = "1"
+quickcheck = "1.0.3"
 
 [[test]]
 name = "smoke"

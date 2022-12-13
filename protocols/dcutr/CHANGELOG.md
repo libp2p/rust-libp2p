@@ -1,4 +1,6 @@
-# 0.8.1 [unreleased]
+# 0.9.0 [unreleased]
+
+- Update to `libp2p-swarm` `v0.42.0`.
 
 - Declare `InboundUpgradeError` and `OutboundUpgradeError` as type aliases instead of renames.
   This is a workaround for a missing feature in `cargo semver-checks`. See [PR 3213].
