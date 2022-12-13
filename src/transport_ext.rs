@@ -42,15 +42,16 @@ pub trait TransportExt: Transport {
     ///
     /// # Example
     ///
-    /// ```ignore
+    /// ```
+    /// use libp2p_mplex as mplex;
+    /// use libp2p_noise as noise;
+    /// use libp2p_tcp as tcp;
     /// use libp2p::{
     ///     core::upgrade,
-    ///     identity, mplex, noise,
-    ///     tcp,
+    ///     identity,
     ///     TransportExt,
     ///     Transport,
     /// };
-    /// use std::error::Error;
     ///
     /// let id_keys = identity::Keypair::generate_ed25519();
     ///
