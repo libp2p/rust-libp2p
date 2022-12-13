@@ -1,5 +1,12 @@
 # 0.15.0 [unreleased]
 
+- Rename types as per [discussion 2174].
+  `Relay` has been renamed to `Behaviour`.
+  The `Relay`, and `Client` prefixes have been removed from various types like `ClientTransport`.
+  Users should prefer importing the relay protocol as a module (`use libp2p::relay::v2::relay;`),
+  and refer to its types via `relay::`. For example: `relay::v2::relay::Behaviour` or `relay::v2::client::Behaviour`.
+  See [PR 3235].
+
 - Update to `libp2p-swarm` `v0.42.0`.
 
 # 0.14.0
