@@ -22,7 +22,7 @@ use crate::structs_proto;
 use async_trait::async_trait;
 use futures::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use libp2p_core::{upgrade, Multiaddr, PeerId};
-use libp2p_request_response::{ProtocolName, RequestResponseCodec};
+use libp2p_request_response::{self as request_response, ProtocolName};
 use prost::Message;
 use std::{convert::TryFrom, io};
 
@@ -42,7 +42,7 @@ impl ProtocolName for AutoNatProtocol {
 pub struct AutoNatCodec;
 
 #[async_trait]
-impl RequestResponseCodec for AutoNatCodec {
+impl request_response::Codec for AutoNatCodec {
     type Protocol = AutoNatProtocol;
     type Request = DialRequest;
     type Response = DialResponse;
