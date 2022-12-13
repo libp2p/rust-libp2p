@@ -28,9 +28,7 @@ use futures::FutureExt;
 use futures_timer::Delay;
 use instant::Instant;
 use libp2p_core::{connection::ConnectionId, Multiaddr, PeerId};
-use libp2p_request_response::{
-    OutboundFailure, RequestId, RequestResponse, RequestResponseEvent, RequestResponseMessage,
-};
+use libp2p_request_response::{self as request_response, OutboundFailure, RequestId};
 use libp2p_swarm::{
     AddressScore, ExternalAddresses, ListenAddresses, NetworkBehaviourAction, PollParameters,
 };
@@ -85,7 +83,7 @@ pub enum OutboundProbeEvent {
 
 /// View over [`super::Behaviour`] in a client role.
 pub struct AsClient<'a> {
-    pub inner: &'a mut RequestResponse<AutoNatCodec>,
+    pub inner: &'a mut request_response::Behaviour<AutoNatCodec>,
     pub local_peer_id: PeerId,
     pub config: &'a Config,
     pub connected: &'a HashMap<PeerId, HashMap<ConnectionId, Option<Multiaddr>>>,
@@ -110,15 +108,15 @@ impl<'a> HandleInnerEvent for AsClient<'a> {
     fn handle_event(
         &mut self,
         params: &mut impl PollParameters,
-        event: RequestResponseEvent<DialRequest, DialResponse>,
+        event: request_response::Event<DialRequest, DialResponse>,
     ) -> (VecDeque<Event>, Option<Action>) {
         let mut events = VecDeque::new();
         let mut action = None;
         match event {
-            RequestResponseEvent::Message {
+            request_response::Event::Message {
                 peer,
                 message:
-                    RequestResponseMessage::Response {
+                    request_response::Message::Response {
                         request_id,
                         response,
                     },
@@ -167,7 +165,7 @@ impl<'a> HandleInnerEvent for AsClient<'a> {
                     }
                 }
             }
-            RequestResponseEvent::OutboundFailure {
+            request_response::Event::OutboundFailure {
                 peer,
                 error,
                 request_id,
