@@ -34,7 +34,7 @@ jobs:
           echo "version=${RUST_VERSION}" >> $GITHUB_OUTPUT
 
       - name: Install Rust ${{ steps.parse-msrv.outputs.version }} for MSRV check
-        uses: dtolnay/rust-toolchain@e645b0cf01249a964ec099494d38d2da0f0b349f # master
+        uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
         with:
           toolchain: ${{ steps.parse-msrv.outputs.version }}
 
@@ -46,7 +46,7 @@ jobs:
       - name: Check if ${{ matrix.crate }} compiles on MSRV (Rust ${{ steps.parse-msrv.outputs.version }})
         run: cargo +${{ steps.parse-msrv.outputs.version }} build --package ${{ matrix.crate }} --all-features
 
-      - uses: dtolnay/rust-toolchain@e645b0cf01249a964ec099494d38d2da0f0b349f # master
+      - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
         with:
           toolchain: stable
 
