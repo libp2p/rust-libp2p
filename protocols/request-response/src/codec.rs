@@ -84,7 +84,7 @@ pub trait RequestResponseCodec {
 }
 
 /// A `Codec` defines the request and response types
-/// for a request-response [`Behaviour`] protocol or
+/// for a request-response [`Behaviour`](crate::Behaviour) protocol or
 /// protocol family and how they are encoded / decoded on an I/O stream.
 #[async_trait]
 pub trait Codec {
