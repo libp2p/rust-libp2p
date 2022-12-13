@@ -312,7 +312,8 @@ fn build_client() -> Swarm<Client> {
     let local_public_key = local_key.public();
     let local_peer_id = local_public_key.to_peer_id();
 
-    let (relay_transport, behaviour) = client::Client::new_transport_and_behaviour(local_peer_id);
+    let (relay_transport, behaviour) =
+        client::Behaviour::new_transport_and_behaviour(local_peer_id);
     let transport = upgrade_transport(
         OrTransport::new(relay_transport, MemoryTransport::default()).boxed(),
         local_public_key,
@@ -378,7 +379,7 @@ impl From<ping::Event> for RelayEvent {
     prelude = "libp2p_swarm::derive_prelude"
 )]
 struct Client {
-    relay: client::Client,
+    relay: client::Behaviour,
     ping: ping::Behaviour,
 }
 

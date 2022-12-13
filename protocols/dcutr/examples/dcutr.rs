@@ -32,7 +32,7 @@ use libp2p_dns::DnsConfig;
 use libp2p_identify as identify;
 use libp2p_noise as noise;
 use libp2p_ping as ping;
-use libp2p_relay::v2::client::{self, Client};
+use libp2p_relay::v2::client;
 use libp2p_swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent};
 use libp2p_tcp as tcp;
 use log::info;
@@ -87,7 +87,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let local_peer_id = PeerId::from(local_key.public());
     info!("Local peer id: {:?}", local_peer_id);
 
-    let (relay_transport, client) = Client::new_transport_and_behaviour(local_peer_id);
+    let (relay_transport, client) = client::Behaviour::new_transport_and_behaviour(local_peer_id);
 
     let transport = OrTransport::new(
         relay_transport,
@@ -111,7 +111,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         prelude = "libp2p_swarm::derive_prelude"
     )]
     struct Behaviour {
-        relay_client: Client,
+        relay_client: client::Behaviour,
         ping: ping::Behaviour,
         identify: identify::Behaviour,
         dcutr: dcutr::behaviour::Behaviour,

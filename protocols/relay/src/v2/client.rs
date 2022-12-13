@@ -46,7 +46,7 @@ use std::ops::DerefMut;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-/// The events produced by the [`Client`] behaviour.
+/// The events produced by the client `Behaviour`.
 #[derive(Debug)]
 pub enum Event {
     /// An outbound reservation has been accepted.
@@ -88,7 +88,17 @@ pub enum Event {
     },
 }
 
-pub struct Client {
+#[deprecated(
+    since = "0.15.0",
+    note = "Use libp2p_relay::v2::client::Behaviour instead."
+)]
+/// [`NetworkBehaviour`] implementation of the relay client
+/// functionality of the circuit relay v2 protocol.
+pub type Client = Behaviour;
+
+/// [`NetworkBehaviour`] implementation of the relay client
+/// functionality of the circuit relay v2 protocol.
+pub struct Behaviour {
     local_peer_id: PeerId,
 
     from_transport: Receiver<transport::TransportToBehaviourMsg>,
@@ -100,12 +110,12 @@ pub struct Client {
     queued_actions: VecDeque<Event>,
 }
 
-impl Client {
+impl Behaviour {
     pub fn new_transport_and_behaviour(
         local_peer_id: PeerId,
     ) -> (transport::ClientTransport, Self) {
         let (transport, from_transport) = transport::ClientTransport::new();
-        let behaviour = Client {
+        let behaviour = Behaviour {
             local_peer_id,
             from_transport,
             directly_connected_peers: Default::default(),
@@ -145,7 +155,7 @@ impl Client {
     }
 }
 
-impl NetworkBehaviour for Client {
+impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = handler::Prototype;
     type OutEvent = Event;
 
@@ -324,7 +334,7 @@ impl NetworkBehaviour for Client {
             None => unreachable!(
                 "`relay::Behaviour` polled after channel from \
                      `RelayTransport` has been closed. Unreachable under \
-                     the assumption that the `Client` is never polled after \
+                     the assumption that the `client::Behaviour` is never polled after \
                      `ClientTransport` is dropped.",
             ),
         };

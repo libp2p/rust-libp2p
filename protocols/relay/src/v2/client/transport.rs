@@ -52,7 +52,7 @@ use thiserror::Error;
 ///    # use libp2p_core::transport::choice::OrTransport;
 ///    # use libp2p_relay::v2::client;
 ///    let actual_transport = MemoryTransport::default();
-///    let (relay_transport, behaviour) = client::Client::new_transport_and_behaviour(
+///    let (relay_transport, behaviour) = client::Behaviour::new_transport_and_behaviour(
 ///        PeerId::random(),
 ///    );
 ///    let mut transport = OrTransport::new(relay_transport, actual_transport);
@@ -76,7 +76,7 @@ use thiserror::Error;
 ///    # let relay_id = PeerId::random();
 ///    # let local_peer_id = PeerId::random();
 ///    let actual_transport = MemoryTransport::default();
-///    let (relay_transport, behaviour) = client::Client::new_transport_and_behaviour(
+///    let (relay_transport, behaviour) = client::Behaviour::new_transport_and_behaviour(
 ///       local_peer_id,
 ///    );
 ///    let mut transport = OrTransport::new(relay_transport, actual_transport);
@@ -105,7 +105,7 @@ impl ClientTransport {
     /// # use libp2p_core::transport::choice::OrTransport;
     /// # use libp2p_relay::v2::client;
     /// let actual_transport = MemoryTransport::default();
-    /// let (relay_transport, behaviour) = client::Client::new_transport_and_behaviour(
+    /// let (relay_transport, behaviour) = client::Behaviour::new_transport_and_behaviour(
     ///     PeerId::random(),
     /// );
     ///

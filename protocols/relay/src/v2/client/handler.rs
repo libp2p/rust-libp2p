@@ -112,7 +112,7 @@ pub enum Event {
 
 pub struct Prototype {
     local_peer_id: PeerId,
-    /// Initial [`In`] event from [`super::Client`] provided at creation time.
+    /// Initial [`In`] event from [`super::Behaviour`] provided at creation time.
     initial_in: Option<In>,
 }
 
