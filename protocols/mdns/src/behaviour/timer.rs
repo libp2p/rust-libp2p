@@ -23,12 +23,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-#[cfg(any(feature = "async-io", feature = "tokio"))]
-use std::{
-    pin::Pin,
-    task::{Context, Poll},
-};
-
 /// Simple wrapper for the different type of timers
 #[derive(Debug)]
 #[cfg(any(feature = "async-io", feature = "tokio"))]
