@@ -267,3 +267,24 @@ jobs:
         run: |
           WORKSPACE_MEMBERS=$(cargo metadata --format-version=1 --no-deps | jq -c '.packages | .[] | select(.publish == null) | .name' | jq -s '.' | jq -c '.')
           echo "members=${WORKSPACE_MEMBERS}" >> $GITHUB_OUTPUT
+
+  validate_pr_title:
+    name: Validate PR title
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'pull_request' }}
+    steps:
+      - uses: amannn/action-semantic-pull-request@01d5fd8a8ebb9aafe902c40c53f0f4744f7381eb # v5.0.2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          # Configure which types are allowed (newline delimited).
+          types: |
+            feat
+            fix
+            chore
+            docs
+            deps
+            test
+            ci
+            refactor
+          require_scope: false
