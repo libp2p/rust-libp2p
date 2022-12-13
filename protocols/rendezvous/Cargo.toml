@@ -3,7 +3,7 @@ name = "libp2p-rendezvous"
 edition = "2021"
 rust-version = "1.62.0"
 description = "Rendezvous protocol for libp2p"
-version = "0.11.0"
+version = "0.12.0"
 authors = ["The COMIT guys <hello@comit.network>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -30,7 +30,13 @@ void = "1"
 [dev-dependencies]
 async-trait = "0.1"
 env_logger = "0.10.0"
-libp2p = { path = "../..", features = ["full"] }
+libp2p-swarm = { path = "../../swarm", features = ["macros", "tokio"] }
+libp2p-mplex = { path = "../../muxers/mplex" }
+libp2p-noise = { path = "../../transports/noise" }
+libp2p-ping = { path = "../ping" }
+libp2p-identify = { path = "../identify" }
+libp2p-yamux = { path = "../../muxers/yamux" }
+libp2p-tcp = { path = "../../transports/tcp", features = ["tokio"] }
 rand = "0.8"
 tokio = { version = "1.15", features = [ "rt-multi-thread", "time", "macros", "sync", "process", "fs", "net" ] }
 

@@ -23,13 +23,13 @@ use futures::{
     future::{self, Either},
     prelude::*,
 };
-use libp2p::core::identity;
-use libp2p::core::transport::{self, Transport};
-use libp2p::core::upgrade::{self, apply_inbound, apply_outbound, Negotiated};
-use libp2p::noise::{
+use libp2p_core::transport::Transport;
+use libp2p_core::upgrade::{apply_inbound, apply_outbound, Negotiated};
+use libp2p_core::{identity, transport, upgrade};
+use libp2p_noise::{
     Keypair, NoiseAuthenticated, NoiseConfig, NoiseError, NoiseOutput, RemoteIdentity, X25519Spec,
 };
-use libp2p::tcp;
+use libp2p_tcp as tcp;
 use log::info;
 use quickcheck::*;
 use std::{convert::TryInto, io, net::TcpStream};
