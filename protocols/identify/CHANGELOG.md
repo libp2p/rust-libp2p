@@ -1,6 +1,11 @@
 # 0.42.0 [unreleased]
 
+- Move I/O from `Behaviour` to `Handler`. Handle `Behaviour`'s Identify and Push requests independently by incoming order,
+  previously Push requests were prioritized. see [PR 3208].
+
 - Update to `libp2p-swarm` `v0.42.0`.
+
+[PR 3208]: https://github.com/libp2p/rust-libp2p/pull/3208
 
 # 0.41.0
 
