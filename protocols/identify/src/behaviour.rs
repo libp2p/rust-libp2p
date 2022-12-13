@@ -48,7 +48,7 @@ pub struct Behaviour {
     config: Config,
     /// For each peer we're connected to, the observed address to send back to it.
     connected: HashMap<PeerId, HashMap<ConnectionId, Multiaddr>>,
-    /// Pending requests to be fullfiled, either `Handler` requests for `Behaviour` info
+    /// Pending requests to be fulfilled, either `Handler` requests for `Behaviour` info
     /// to address identification requests, or push requests to peers
     /// with current information about the local peer.
     requests: Vec<Request>,
@@ -58,7 +58,7 @@ pub struct Behaviour {
     discovered_peers: PeerCache,
 }
 
-/// A `Behaviour` request to be fullfiled, either `Handler` requests for `Behaviour` info
+/// A `Behaviour` request to be fulfilled, either `Handler` requests for `Behaviour` info
 /// to address identification requests, or push requests to peers
 /// with current information about the local peer.
 #[derive(Debug, PartialEq, Eq)]
