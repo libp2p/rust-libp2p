@@ -131,7 +131,7 @@ impl Transport {
 
 impl libp2p_core::Transport for Transport {
     type Output = RelayedConnection;
-    type Error = RelayError;
+    type Error = Error;
     type ListenerUpgrade = Ready<Result<Self::Output, Self::Error>>;
     type Dial = RelayedDial;
 
@@ -141,12 +141,12 @@ impl libp2p_core::Transport for Transport {
                 relay_peer_id: None,
                 relay_addr: _,
                 ..
-            } => return Err(RelayError::MissingDstPeerId.into()),
+            } => return Err(Error::MissingDstPeerId.into()),
             RelayedMultiaddr {
                 relay_peer_id: _,
                 relay_addr: None,
                 ..
-            } => return Err(RelayError::MissingRelayAddr.into()),
+            } => return Err(Error::MissingRelayAddr.into()),
             RelayedMultiaddr {
                 relay_peer_id: Some(peer_id),
                 relay_addr: Some(addr),
@@ -191,9 +191,9 @@ impl libp2p_core::Transport for Transport {
         } = parse_relayed_multiaddr(addr)?;
 
         // TODO: In the future we might want to support dialing a relay by its address only.
-        let relay_peer_id = relay_peer_id.ok_or(RelayError::MissingRelayPeerId)?;
-        let relay_addr = relay_addr.ok_or(RelayError::MissingRelayAddr)?;
-        let dst_peer_id = dst_peer_id.ok_or(RelayError::MissingDstPeerId)?;
+        let relay_peer_id = relay_peer_id.ok_or(Error::MissingRelayPeerId)?;
+        let relay_addr = relay_addr.ok_or(Error::MissingRelayAddr)?;
+        let dst_peer_id = dst_peer_id.ok_or(Error::MissingDstPeerId)?;
 
         let mut to_behaviour = self.to_behaviour.clone();
         Ok(async move {
@@ -208,7 +208,7 @@ impl libp2p_core::Transport for Transport {
                     send_back: tx,
                 })
                 .await?;
-            let stream = rx.await?.map_err(|()| RelayError::Connect)?;
+            let stream = rx.await?.map_err(|()| Error::Connect)?;
             Ok(stream)
         }
         .boxed())
@@ -271,9 +271,7 @@ struct RelayedMultiaddr {
 }
 
 /// Parse a [`Multiaddr`] containing a [`Protocol::P2pCircuit`].
-fn parse_relayed_multiaddr(
-    addr: Multiaddr,
-) -> Result<RelayedMultiaddr, TransportError<RelayError>> {
+fn parse_relayed_multiaddr(addr: Multiaddr) -> Result<RelayedMultiaddr, TransportError<Error>> {
     if !addr.iter().any(|p| matches!(p, Protocol::P2pCircuit)) {
         return Err(TransportError::MultiaddrNotSupported(addr));
     }
@@ -287,20 +285,20 @@ fn parse_relayed_multiaddr(
                 if before_circuit {
                     before_circuit = false;
                 } else {
-                    return Err(RelayError::MultipleCircuitRelayProtocolsUnsupported.into());
+                    return Err(Error::MultipleCircuitRelayProtocolsUnsupported.into());
                 }
             }
             Protocol::P2p(hash) => {
-                let peer_id = PeerId::from_multihash(hash).map_err(|_| RelayError::InvalidHash)?;
+                let peer_id = PeerId::from_multihash(hash).map_err(|_| Error::InvalidHash)?;
 
                 if before_circuit {
                     if relayed_multiaddr.relay_peer_id.is_some() {
-                        return Err(RelayError::MalformedMultiaddr.into());
+                        return Err(Error::MalformedMultiaddr.into());
                     }
                     relayed_multiaddr.relay_peer_id = Some(peer_id)
                 } else {
                     if relayed_multiaddr.dst_peer_id.is_some() {
-                        return Err(RelayError::MalformedMultiaddr.into());
+                        return Err(Error::MalformedMultiaddr.into());
                     }
                     relayed_multiaddr.dst_peer_id = Some(peer_id)
                 }
@@ -341,7 +339,7 @@ impl RelayListener {
     /// This will create a [`TransportEvent::ListenerClosed`] event
     /// and terminate the stream once all remaining events in queue have
     /// been reported.
-    fn close(&mut self, reason: Result<(), RelayError>) {
+    fn close(&mut self, reason: Result<(), Error>) {
         self.queued_events
             .push_back(TransportEvent::ListenerClosed {
                 listener_id: self.listener_id,
@@ -352,7 +350,7 @@ impl RelayListener {
 }
 
 impl Stream for RelayListener {
-    type Item = TransportEvent<<Transport as libp2p_core::Transport>::ListenerUpgrade, RelayError>;
+    type Item = TransportEvent<<Transport as libp2p_core::Transport>::ListenerUpgrade, Error>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         loop {
@@ -404,17 +402,23 @@ impl Stream for RelayListener {
                         send_back_addr: Protocol::P2p(src_peer_id.into()).into(),
                     })
                 }
-                ToListenerMsg::Reservation(Err(())) => self.close(Err(RelayError::Reservation)),
+                ToListenerMsg::Reservation(Err(())) => self.close(Err(Error::Reservation)),
             };
         }
     }
 }
 
-pub type RelayedDial = BoxFuture<'static, Result<RelayedConnection, RelayError>>;
+pub type RelayedDial = BoxFuture<'static, Result<RelayedConnection, Error>>;
+
+#[deprecated(
+    since = "0.15.0",
+    note = "Use libp2p_relay::v2::client::Error instead."
+)]
+pub type RelayError = Error;
 
 /// Error that occurred during relay connection setup.
 #[derive(Debug, Error)]
-pub enum RelayError {
+pub enum Error {
     #[error("Missing relay peer id.")]
     MissingRelayPeerId,
     #[error("Missing relay address.")]
@@ -439,8 +443,8 @@ pub enum RelayError {
     Connect,
 }
 
-impl From<RelayError> for TransportError<RelayError> {
-    fn from(error: RelayError) -> Self {
+impl From<Error> for TransportError<Error> {
+    fn from(error: Error) -> Self {
         TransportError::Other(error)
     }
 }
