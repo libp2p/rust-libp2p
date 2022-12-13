@@ -30,11 +30,17 @@ use futures::stream::SelectAll;
 use futures::stream::{Stream, StreamExt};
 use libp2p_core::multiaddr::{Multiaddr, Protocol};
 use libp2p_core::transport::{ListenerId, TransportError, TransportEvent};
-use libp2p_core::{PeerId, Transport};
+use libp2p_core::PeerId;
 use std::collections::VecDeque;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use thiserror::Error;
+
+#[deprecated(
+    since = "0.15.0",
+    note = "Use libp2p_relay::v2::client::Transport instead."
+)]
+pub type ClientTransport = Transport;
 
 /// A [`Transport`] enabling client relay capabilities.
 ///
@@ -86,14 +92,14 @@ use thiserror::Error;
 ///        .with(Protocol::P2pCircuit); // Signal to listen via remote relay node.
 ///    transport.listen_on(relay_addr).unwrap();
 ///    ```
-pub struct ClientTransport {
+pub struct Transport {
     to_behaviour: mpsc::Sender<TransportToBehaviourMsg>,
     pending_to_behaviour: VecDeque<TransportToBehaviourMsg>,
     listeners: SelectAll<RelayListener>,
 }
 
-impl ClientTransport {
-    /// Create a new [`ClientTransport`].
+impl Transport {
+    /// Create a new [`Transport`].
     ///
     /// Note: The transport only handles listening and dialing on relayed [`Multiaddr`], and depends on
     /// an other transport to do the actual transmission of data. They should be combined through the
@@ -114,7 +120,7 @@ impl ClientTransport {
     /// ```
     pub(crate) fn new() -> (Self, mpsc::Receiver<TransportToBehaviourMsg>) {
         let (to_behaviour, from_transport) = mpsc::channel(0);
-        let transport = ClientTransport {
+        let transport = Transport {
             to_behaviour,
             pending_to_behaviour: VecDeque::new(),
             listeners: SelectAll::new(),
@@ -123,7 +129,7 @@ impl ClientTransport {
     }
 }
 
-impl Transport for ClientTransport {
+impl libp2p_core::Transport for Transport {
     type Output = RelayedConnection;
     type Error = RelayError;
     type ListenerUpgrade = Ready<Result<Self::Output, Self::Error>>;
@@ -346,7 +352,7 @@ impl RelayListener {
 }
 
 impl Stream for RelayListener {
-    type Item = TransportEvent<<ClientTransport as Transport>::ListenerUpgrade, RelayError>;
+    type Item = TransportEvent<<Transport as libp2p_core::Transport>::ListenerUpgrade, RelayError>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         loop {
@@ -439,7 +445,7 @@ impl From<RelayError> for TransportError<RelayError> {
     }
 }
 
-/// Message from the [`ClientTransport`] to the [`Relay`](crate::v2::relay::Relay)
+/// Message from the [`Transport`] to the [`Behaviour`](crate::v2::relay::Behaviour)
 /// [`NetworkBehaviour`](libp2p_swarm::NetworkBehaviour).
 pub enum TransportToBehaviourMsg {
     /// Dial destination node via relay node.

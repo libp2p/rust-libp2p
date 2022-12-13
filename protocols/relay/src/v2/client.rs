@@ -111,10 +111,8 @@ pub struct Behaviour {
 }
 
 impl Behaviour {
-    pub fn new_transport_and_behaviour(
-        local_peer_id: PeerId,
-    ) -> (transport::ClientTransport, Self) {
-        let (transport, from_transport) = transport::ClientTransport::new();
+    pub fn new_transport_and_behaviour(local_peer_id: PeerId) -> (transport::Transport, Self) {
+        let (transport, from_transport) = transport::Transport::new();
         let behaviour = Behaviour {
             local_peer_id,
             from_transport,
@@ -335,7 +333,7 @@ impl NetworkBehaviour for Behaviour {
                 "`relay::Behaviour` polled after channel from \
                      `RelayTransport` has been closed. Unreachable under \
                      the assumption that the `client::Behaviour` is never polled after \
-                     `ClientTransport` is dropped.",
+                     `client::Transport` is dropped.",
             ),
         };
 
