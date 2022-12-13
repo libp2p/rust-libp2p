@@ -82,6 +82,11 @@ impl DecodingError {
         }
     }
 
+    #[cfg(any(
+        all(feature = "rsa", not(target_arch = "wasm32")),
+        feature = "secp256k1",
+        feature = "ecdsa"
+    ))]
     pub(crate) fn encoding_unsupported(key_type: &'static str) -> Self {
         Self {
             msg: format!("encoding {key_type} key to Protobuf is unsupported"),
