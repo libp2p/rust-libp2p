@@ -28,7 +28,7 @@ use libp2p_core::{identity, Multiaddr, PeerId, Transport};
 use libp2p_identify as identify;
 use libp2p_noise as noise;
 use libp2p_ping as ping;
-use libp2p_relay::v2::relay::{self, Relay};
+use libp2p_relay::v2::relay;
 use libp2p_swarm::{NetworkBehaviour, Swarm, SwarmEvent};
 use libp2p_tcp as tcp;
 use std::error::Error;
@@ -57,7 +57,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .boxed();
 
     let behaviour = Behaviour {
-        relay: Relay::new(local_peer_id, Default::default()),
+        relay: relay::Behaviour::new(local_peer_id, Default::default()),
         ping: ping::Behaviour::new(ping::Config::new()),
         identify: identify::Behaviour::new(identify::Config::new(
             "/TODO/0.0.1".to_string(),
@@ -98,7 +98,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     prelude = "libp2p_swarm::derive_prelude"
 )]
 struct Behaviour {
-    relay: Relay,
+    relay: relay::Behaviour,
     ping: ping::Behaviour,
     identify: identify::Behaviour,
 }

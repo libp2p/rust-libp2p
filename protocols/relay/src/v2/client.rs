@@ -322,7 +322,7 @@ impl NetworkBehaviour for Client {
                 }
             }
             None => unreachable!(
-                "`Relay` `NetworkBehaviour` polled after channel from \
+                "`relay::Behaviour` polled after channel from \
                      `RelayTransport` has been closed. Unreachable under \
                      the assumption that the `Client` is never polled after \
                      `ClientTransport` is dropped.",

@@ -43,7 +43,7 @@ use std::time::Duration;
 
 use super::protocol::outbound_stop;
 
-/// Configuration for the [`Relay`] [`NetworkBehaviour`].
+/// Configuration for the relay [`Behaviour`].
 ///
 /// # Panics
 ///
@@ -126,7 +126,7 @@ impl Default for Config {
     }
 }
 
-/// The events produced by the [`Relay`] behaviour.
+/// The events produced by the relay `Behaviour`.
 #[derive(Debug)]
 pub enum Event {
     /// An inbound reservation request has been accepted.
@@ -189,9 +189,16 @@ pub enum Event {
     },
 }
 
-/// [`Relay`] is a [`NetworkBehaviour`] that implements the relay server
+#[deprecated(
+    since = "0.15.0",
+    note = "Use libp2p_relay::v2::relay::Behaviour instead."
+)]
+/// [`Relay`] is a [`NetworkBehaviour`] that implements the relay server.
+pub type Relay = Behaviour;
+
+/// [`NetworkBehaviour`] implementation of the relay server
 /// functionality of the circuit relay v2 protocol.
-pub struct Relay {
+pub struct Behaviour {
     config: Config,
 
     local_peer_id: PeerId,
@@ -203,7 +210,7 @@ pub struct Relay {
     queued_actions: VecDeque<Action>,
 }
 
-impl Relay {
+impl Behaviour {
     pub fn new(local_peer_id: PeerId, config: Config) -> Self {
         Self {
             config,
@@ -248,7 +255,7 @@ impl Relay {
     }
 }
 
-impl NetworkBehaviour for Relay {
+impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = handler::Prototype;
     type OutEvent = Event;
 
@@ -740,7 +747,7 @@ impl Add<u64> for CircuitId {
 }
 
 /// A [`NetworkBehaviourAction`], either complete, or still requiring data from [`PollParameters`]
-/// before being returned in [`Relay::poll`].
+/// before being returned in [`Behaviour::poll`].
 #[allow(clippy::large_enum_variant)]
 enum Action {
     Done(NetworkBehaviourAction<Event, handler::Prototype>),

@@ -91,7 +91,7 @@ fn connect() {
     ));
 }
 
-fn build_relay() -> Swarm<relay::Relay> {
+fn build_relay() -> Swarm<relay::Behaviour> {
     let local_key = identity::Keypair::generate_ed25519();
     let local_public_key = local_key.public();
     let local_peer_id = local_public_key.to_peer_id();
@@ -100,7 +100,7 @@ fn build_relay() -> Swarm<relay::Relay> {
 
     Swarm::with_threadpool_executor(
         transport,
-        relay::Relay::new(
+        relay::Behaviour::new(
             local_peer_id,
             relay::Config {
                 reservation_duration: Duration::from_secs(2),

@@ -295,7 +295,7 @@ fn build_relay() -> Swarm<Relay> {
         transport,
         Relay {
             ping: ping::Behaviour::new(ping::Config::new()),
-            relay: relay::Relay::new(
+            relay: relay::Behaviour::new(
                 local_peer_id,
                 relay::Config {
                     reservation_duration: Duration::from_secs(2),
@@ -349,7 +349,7 @@ where
     prelude = "libp2p_swarm::derive_prelude"
 )]
 struct Relay {
-    relay: relay::Relay,
+    relay: relay::Behaviour,
     ping: ping::Behaviour,
 }
 
