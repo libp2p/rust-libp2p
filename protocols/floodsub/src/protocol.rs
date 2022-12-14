@@ -27,7 +27,6 @@ use futures::{
 };
 use futures::{SinkExt, StreamExt};
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, PeerId, UpgradeInfo};
-use prost::Message;
 use std::{io, iter, pin::Pin};
 
 const MAX_MESSAGE_LEN_BYTES: usize = 2048;
@@ -123,6 +122,10 @@ pub enum FloodsubDecodeError {
 #[error(transparent)]
 pub struct DecodeError(prost_codec::Error);
 
+#[derive(thiserror::Error, Debug)]
+#[error(transparent)]
+pub struct EncodeError(prost_codec::Error);
+
 /// An RPC received by the floodsub system.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct FloodsubRpc {
@@ -146,25 +149,14 @@ where
     TSocket: AsyncWrite + AsyncRead + Send + Unpin + 'static,
 {
     type Output = ();
-    type Error = io::Error;
+    type Error = EncodeError;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
     fn upgrade_outbound(self, socket: TSocket, _: Self::Info) -> Self::Future {
         Box::pin(async move {
-            let bytes = self.into_bytes();
-
-            let mut framed = Framed::new(
-                socket,
-                prost_codec::Codec::<std::vec::Vec<u8>>::new(MAX_MESSAGE_LEN_BYTES),
-            );
-            framed
-                .send(bytes)
-                .await
-                .map_err(|e| io::Error::new(std::io::ErrorKind::ConnectionRefused, e))?;
-            framed
-                .close()
-                .await
-                .map_err(|e| io::Error::new(std::io::ErrorKind::ConnectionReset, e))?;
+            let mut framed = Framed::new(socket, prost_codec::Codec::new(MAX_MESSAGE_LEN_BYTES));
+            framed.send(self.into_rpc()).await;
+            framed.close().await;
             Ok(())
         })
     }
@@ -172,8 +164,8 @@ where
 
 impl FloodsubRpc {
     /// Turns this `FloodsubRpc` into a message that can be sent to a substream.
-    fn into_bytes(self) -> Vec<u8> {
-        let rpc = rpc_proto::Rpc {
+    fn into_rpc(self) -> rpc_proto::Rpc {
+        rpc_proto::Rpc {
             publish: self
                 .messages
                 .into_iter()
@@ -193,12 +185,7 @@ impl FloodsubRpc {
                     topic_id: Some(topic.topic.into()),
                 })
                 .collect(),
-        };
-
-        let mut buf = Vec::with_capacity(rpc.encoded_len());
-        rpc.encode(&mut buf)
-            .expect("Vec<u8> provides capacity as needed");
-        buf
+        }
     }
 }
 
