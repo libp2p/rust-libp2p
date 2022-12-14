@@ -83,7 +83,7 @@ impl Fingerprint {
     ///
     /// This is the format described in <https://www.rfc-editor.org/rfc/rfc4572#section-5>.
     pub fn to_sdp_format(self) -> String {
-        self.0.map(|byte| format!("{:02X}", byte)).join(":")
+        self.0.map(|byte| format!("{byte:02X}")).join(":")
     }
 
     /// Returns the algorithm used (e.g. "sha-256").

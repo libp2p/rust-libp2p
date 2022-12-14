@@ -294,7 +294,7 @@ fn run<I, C>(
                     match server_session.read_exact(&mut n).await {
                         Ok(()) => u64::from_be_bytes(n),
                         Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => 0,
-                        Err(e) => panic!("error reading len: {}", e),
+                        Err(e) => panic!("error reading len: {e}"),
                     }
                 };
                 info!("server: reading message ({} bytes)", len);

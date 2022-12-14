@@ -38,12 +38,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
     let opt = Opt::parse();
-    println!("opt: {:?}", opt);
+    println!("opt: {opt:?}");
 
     // Create a static known PeerId based on given secret
     let local_key: identity::Keypair = generate_ed25519(opt.secret_key_seed);
     let local_peer_id = PeerId::from(local_key.public());
-    println!("Local peer id: {:?}", local_peer_id);
+    println!("Local peer id: {local_peer_id:?}");
 
     let tcp_transport = tcp::async_io::Transport::default();
 
@@ -80,10 +80,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         loop {
             match swarm.next().await.expect("Infinite Stream.") {
                 SwarmEvent::Behaviour(Event::Relay(event)) => {
-                    println!("{:?}", event)
+                    println!("{event:?}")
                 }
                 SwarmEvent::NewListenAddr { address, .. } => {
-                    println!("Listening on {:?}", address);
+                    println!("Listening on {address:?}");
                 }
                 _ => {}
             }
