@@ -19,7 +19,12 @@
 // DEALINGS IN THE SOFTWARE.
 
 mod either;
+mod external_addresses;
+mod listen_addresses;
 pub mod toggle;
+
+pub use external_addresses::ExternalAddresses;
+pub use listen_addresses::ListenAddresses;
 
 use crate::dial_opts::DialOpts;
 use crate::handler::{ConnectionHandler, IntoConnectionHandler};
@@ -402,12 +407,24 @@ pub trait PollParameters {
     fn supported_protocols(&self) -> Self::SupportedProtocolsIter;
 
     /// Returns the list of the addresses we're listening on.
+    #[deprecated(
+        since = "0.42.0",
+        note = "Use `libp2p_swarm::ListenAddresses` instead."
+    )]
     fn listened_addresses(&self) -> Self::ListenedAddressesIter;
 
     /// Returns the list of the addresses nodes can use to reach us.
+    #[deprecated(
+        since = "0.42.0",
+        note = "Use `libp2p_swarm::ExternalAddresses` instead."
+    )]
     fn external_addresses(&self) -> Self::ExternalAddressesIter;
 
     /// Returns the peer id of the local node.
+    #[deprecated(
+        since = "0.42.0",
+        note = "Pass the node's `PeerId` into the behaviour instead."
+    )]
     fn local_peer_id(&self) -> &PeerId;
 }
 

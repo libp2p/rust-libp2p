@@ -97,7 +97,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         // Create a Kademlia behaviour.
         let store = MemoryStore::new(local_peer_id);
         let kademlia = Kademlia::new(local_peer_id, store);
-        let mdns = mdns::async_io::Behaviour::new(mdns::Config::default())?;
+        let mdns = mdns::async_io::Behaviour::new(mdns::Config::default(), local_peer_id)?;
         let behaviour = MyBehaviour { kademlia, mdns };
         Swarm::with_async_std_executor(transport, behaviour, local_peer_id)
     };

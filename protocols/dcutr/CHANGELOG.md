@@ -5,7 +5,10 @@
 - Declare `InboundUpgradeError` and `OutboundUpgradeError` as type aliases instead of renames.
   This is a workaround for a missing feature in `cargo semver-checks`. See [PR 3213].
 
+- Require the node's local `PeerId` to be passed into the constructor of `libp2p_dcutr::Behaviour`. See [PR 3153].
+
 [PR 3213]: https://github.com/libp2p/rust-libp2p/pull/3213
+[PR 3153]: https://github.com/libp2p/rust-libp2p/pull/3153
 
 # 0.8.0
 

@@ -39,7 +39,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let transport = libp2p::development_transport(id_keys).await?;
 
     // Create an MDNS network behaviour.
-    let behaviour = mdns::async_io::Behaviour::new(mdns::Config::default())?;
+    let behaviour = mdns::async_io::Behaviour::new(mdns::Config::default(), peer_id)?;
 
     // Create a Swarm that establishes connections through the given transport.
     // Note that the MDNS behaviour itself will not actually inititiate any connections,
