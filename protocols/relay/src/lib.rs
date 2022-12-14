@@ -24,6 +24,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
 pub mod client;
+mod copy_future;
 mod protocol;
 pub mod v2;
 

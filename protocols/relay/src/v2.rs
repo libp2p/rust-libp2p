@@ -21,7 +21,6 @@
 //! Implementation of the [libp2p circuit relay v2
 //! specification](https://github.com/libp2p/specs/blob/master/relay/circuit-v2.md).
 
-mod copy_future;
 pub mod relay;
 
 pub mod client {
