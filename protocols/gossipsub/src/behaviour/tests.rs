@@ -375,17 +375,17 @@ fn test_subscribe() {
         .events
         .iter()
         .fold(vec![], |mut collected_subscriptions, e| match e {
-            NetworkBehaviourAction::NotifyHandler { event, .. } => match event {
-                GossipsubHandlerIn::Message(ref message) => {
-                    for s in &message.subscriptions {
-                        if let Some(true) = s.subscribe {
-                            collected_subscriptions.push(s.clone())
-                        };
-                    }
-                    collected_subscriptions
+            NetworkBehaviourAction::NotifyHandler {
+                event: GossipsubHandlerIn::Message(ref message),
+                ..
+            } => {
+                for s in &message.subscriptions {
+                    if let Some(true) = s.subscribe {
+                        collected_subscriptions.push(s.clone())
+                    };
                 }
-                _ => collected_subscriptions,
-            },
+                collected_subscriptions
+            }
             _ => collected_subscriptions,
         });
 
@@ -443,17 +443,17 @@ fn test_unsubscribe() {
         .events
         .iter()
         .fold(vec![], |mut collected_subscriptions, e| match e {
-            NetworkBehaviourAction::NotifyHandler { event, .. } => match event {
-                GossipsubHandlerIn::Message(ref message) => {
-                    for s in &message.subscriptions {
-                        if let Some(true) = s.subscribe {
-                            collected_subscriptions.push(s.clone())
-                        };
-                    }
-                    collected_subscriptions
+            NetworkBehaviourAction::NotifyHandler {
+                event: GossipsubHandlerIn::Message(ref message),
+                ..
+            } => {
+                for s in &message.subscriptions {
+                    if let Some(true) = s.subscribe {
+                        collected_subscriptions.push(s.clone())
+                    };
                 }
-                _ => collected_subscriptions,
-            },
+                collected_subscriptions
+            }
             _ => collected_subscriptions,
         });
 
@@ -630,16 +630,16 @@ fn test_publish_without_flood_publishing() {
         .events
         .iter()
         .fold(vec![], |mut collected_publish, e| match e {
-            NetworkBehaviourAction::NotifyHandler { event, .. } => match event {
-                GossipsubHandlerIn::Message(ref message) => {
-                    let event = proto_to_message(message);
-                    for s in &event.messages {
-                        collected_publish.push(s.clone());
-                    }
-                    collected_publish
+            NetworkBehaviourAction::NotifyHandler {
+                event: GossipsubHandlerIn::Message(ref message),
+                ..
+            } => {
+                let event = proto_to_message(message);
+                for s in &event.messages {
+                    collected_publish.push(s.clone());
                 }
-                _ => collected_publish,
-            },
+                collected_publish
+            }
             _ => collected_publish,
         });
 
@@ -720,16 +720,16 @@ fn test_fanout() {
         .events
         .iter()
         .fold(vec![], |mut collected_publish, e| match e {
-            NetworkBehaviourAction::NotifyHandler { event, .. } => match event {
-                GossipsubHandlerIn::Message(ref message) => {
-                    let event = proto_to_message(message);
-                    for s in &event.messages {
-                        collected_publish.push(s.clone());
-                    }
-                    collected_publish
+            NetworkBehaviourAction::NotifyHandler {
+                event: GossipsubHandlerIn::Message(ref message),
+                ..
+            } => {
+                let event = proto_to_message(message);
+                for s in &event.messages {
+                    collected_publish.push(s.clone());
                 }
-                _ => collected_publish,
-            },
+                collected_publish
+            }
             _ => collected_publish,
         });
 
@@ -773,26 +773,25 @@ fn test_inject_connected() {
         .events
         .iter()
         .filter(|e| match e {
-            NetworkBehaviourAction::NotifyHandler { event, .. } => {
-                if let GossipsubHandlerIn::Message(ref m) = event {
-                    !m.subscriptions.is_empty()
-                } else {
-                    false
-                }
-            }
+            NetworkBehaviourAction::NotifyHandler {
+                event: GossipsubHandlerIn::Message(ref m),
+                ..
+            } => !m.subscriptions.is_empty(),
             _ => false,
         })
         .collect();
 
     // check that there are two subscriptions sent to each peer
     for sevent in send_events.clone() {
-        if let NetworkBehaviourAction::NotifyHandler { event, .. } = sevent {
-            if let GossipsubHandlerIn::Message(ref m) = event {
-                assert!(
-                    m.subscriptions.len() == 2,
-                    "There should be two subscriptions sent to each peer (1 for each topic)."
-                );
-            }
+        if let NetworkBehaviourAction::NotifyHandler {
+            event: GossipsubHandlerIn::Message(ref m),
+            ..
+        } = sevent
+        {
+            assert!(
+                m.subscriptions.len() == 2,
+                "There should be two subscriptions sent to each peer (1 for each topic)."
+            );
         };
     }
 
@@ -1075,17 +1074,16 @@ fn test_handle_iwant_msg_cached_shifted() {
 
         // is the message is being sent?
         let message_exists = gs.events.iter().any(|e| match e {
-            NetworkBehaviourAction::NotifyHandler { event, .. } => {
-                if let GossipsubHandlerIn::Message(ref m) = event {
-                    let event = proto_to_message(m);
-                    event
-                        .messages
-                        .iter()
-                        .map(|msg| gs.data_transform.inbound_transform(msg.clone()).unwrap())
-                        .any(|msg| gs.config.message_id(&msg) == msg_id)
-                } else {
-                    false
-                }
+            NetworkBehaviourAction::NotifyHandler {
+                event: GossipsubHandlerIn::Message(ref m),
+                ..
+            } => {
+                let event = proto_to_message(m);
+                event
+                    .messages
+                    .iter()
+                    .map(|msg| gs.data_transform.inbound_transform(msg.clone()).unwrap())
+                    .any(|msg| gs.config.message_id(&msg) == msg_id)
             }
             _ => false,
         });
@@ -1317,17 +1315,17 @@ fn count_control_msgs<D: DataTransform, F: TopicSubscriptionFilter>(
         + gs.events
             .iter()
             .map(|e| match e {
-                NetworkBehaviourAction::NotifyHandler { peer_id, event, .. } => {
-                    if let GossipsubHandlerIn::Message(ref m) = event {
-                        let event = proto_to_message(m);
-                        event
-                            .control_msgs
-                            .iter()
-                            .filter(|m| filter(peer_id, m))
-                            .count()
-                    } else {
-                        0
-                    }
+                NetworkBehaviourAction::NotifyHandler {
+                    peer_id,
+                    event: GossipsubHandlerIn::Message(ref m),
+                    ..
+                } => {
+                    let event = proto_to_message(m);
+                    event
+                        .control_msgs
+                        .iter()
+                        .filter(|m| filter(peer_id, m))
+                        .count()
                 }
                 _ => 0,
             })
@@ -1540,19 +1538,19 @@ fn do_forward_messages_to_explicit_peers() {
         gs.events
             .iter()
             .filter(|e| match e {
-                NetworkBehaviourAction::NotifyHandler { peer_id, event, .. } => {
-                    if let GossipsubHandlerIn::Message(ref m) = event {
-                        let event = proto_to_message(m);
-                        peer_id == &peers[0]
-                            && event
-                                .messages
-                                .iter()
-                                .filter(|m| m.data == message.data)
-                                .count()
-                                > 0
-                    } else {
-                        false
-                    }
+                NetworkBehaviourAction::NotifyHandler {
+                    peer_id,
+                    event: GossipsubHandlerIn::Message(ref m),
+                    ..
+                } => {
+                    let event = proto_to_message(m);
+                    peer_id == &peers[0]
+                        && event
+                            .messages
+                            .iter()
+                            .filter(|m| m.data == message.data)
+                            .count()
+                            > 0
                 }
                 _ => false,
             })
@@ -4407,13 +4405,12 @@ fn test_ignore_too_many_iwants_from_same_peer_for_same_message() {
         gs.events
             .iter()
             .map(|e| match e {
-                NetworkBehaviourAction::NotifyHandler { event, .. } => {
-                    if let GossipsubHandlerIn::Message(ref m) = event {
-                        let event = proto_to_message(m);
-                        event.messages.len()
-                    } else {
-                        0
-                    }
+                NetworkBehaviourAction::NotifyHandler {
+                    event: GossipsubHandlerIn::Message(ref m),
+                    ..
+                } => {
+                    let event = proto_to_message(m);
+                    event.messages.len()
                 }
                 _ => 0,
             })
