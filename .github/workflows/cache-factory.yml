@@ -1,0 +1,78 @@
+# This workflow _produces_ caches which are used to speed up pull request builds.
+# The caches are split by Rust version (stable vs MSRV per crate) because those caches cannot share any artifacts.
+
+name: Cache factory
+
+on:
+  push:
+    branches:
+      - master # Caches are only created on master branch.
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gather_msrv_versions:
+    runs-on: ubuntu-latest
+    outputs:
+      versions: ${{ steps.find-rust-versions.outputs.versions }}
+    steps:
+      - uses: actions/checkout@v3
+
+      - id: find-rust-versions
+        run: |
+          RUST_VERSIONS=$(cargo metadata --format-version=1 --no-deps | jq -c '.packages | map(.rust_version) | unique | del(..|nulls)')
+          echo "versions=${RUST_VERSIONS}" >> $GITHUB_OUTPUT
+
+  make_msrv_cache:
+    runs-on: ubuntu-latest
+    needs: gather_msrv_versions
+    strategy:
+      fail-fast: false
+      matrix:
+        rust: ${{ fromJSON(needs.gather_msrv_versions.outputs.versions) }}
+    steps:
+      - name: Install Protoc
+        uses: arduino/setup-protoc@64c0c85d18e984422218383b81c52f8b077404d3 # v1.1.2
+
+      - uses: actions/checkout@v3
+
+      - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
+        with:
+          toolchain: ${{ matrix.rust }}
+
+      - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
+        with:
+          shared-key: msrv-cache
+
+      - name: Compile all crates which have MSRV ${{ matrix.rust }}
+        run: |
+          cargo metadata --format-version=1 --no-deps | \
+          jq -r '.packages[] | select(.rust_version == "${{ matrix.rust }}") | "+\(.rust_version) build --all-features --package \(.name)"' |
+          xargs --verbose -L 1 cargo
+
+  make_stable_rust_cache:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install Protoc
+        uses: arduino/setup-protoc@64c0c85d18e984422218383b81c52f8b077404d3 # v1.1.2
+
+      - uses: actions/checkout@v3
+
+      - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
+        with:
+          toolchain: stable
+
+      - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
+        with:
+          shared-key: stable-cache
+
+      - name: Compile workspace with stable Rust
+        run: cargo test --all-features --all-targets --workspace --no-run
+
+      - name: Render docs
+        run: cargo doc --all-features --workspace
+
+      - name: Install tools
+        run: cargo install cargo-semver-checks --locked

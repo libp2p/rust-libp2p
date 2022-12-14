@@ -41,12 +41,12 @@ use fnv::{FnvHashMap, FnvHashSet};
 use instant::Instant;
 use libp2p_core::{connection::ConnectionId, ConnectedPoint, Multiaddr, PeerId};
 use libp2p_swarm::behaviour::{
-    AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, ExpiredListenAddr,
-    FromSwarm, NewExternalAddr, NewListenAddr,
+    AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm,
 };
 use libp2p_swarm::{
     dial_opts::{self, DialOpts},
-    DialError, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
+    DialError, ExternalAddresses, ListenAddresses, NetworkBehaviour, NetworkBehaviourAction,
+    NotifyHandler, PollParameters,
 };
 use log::{debug, info, warn};
 use smallvec::SmallVec;
@@ -103,11 +103,14 @@ pub struct Kademlia<TStore> {
     /// Queued events to return when the behaviour is being polled.
     queued_events: VecDeque<NetworkBehaviourAction<KademliaEvent, KademliaHandlerProto<QueryId>>>,
 
-    /// The currently known addresses of the local node.
-    local_addrs: HashSet<Multiaddr>,
+    listen_addresses: ListenAddresses,
+
+    external_addresses: ExternalAddresses,
 
     /// See [`KademliaConfig::caching`].
     caching: KademliaCaching,
+
+    local_peer_id: PeerId,
 
     /// The record storage.
     store: TStore,
@@ -439,6 +442,7 @@ where
             protocol_config: config.protocol_config,
             record_filtering: config.record_filtering,
             queued_events: VecDeque::with_capacity(config.query_config.replication_factor.get()),
+            listen_addresses: Default::default(),
             queries: QueryPool::new(config.query_config),
             connected_peers: Default::default(),
             add_provider_job,
@@ -446,7 +450,8 @@ where
             record_ttl: config.record_ttl,
             provider_record_ttl: config.provider_record_ttl,
             connection_idle_timeout: config.connection_idle_timeout,
-            local_addrs: HashSet::new(),
+            external_addresses: Default::default(),
+            local_peer_id: id,
         }
     }
 
@@ -1034,7 +1039,9 @@ where
     fn provider_peers(&mut self, key: &record::Key, source: &PeerId) -> Vec<KadPeer> {
         let kbuckets = &mut self.kbuckets;
         let connected = &mut self.connected_peers;
-        let local_addrs = &self.local_addrs;
+        let listen_addresses = &self.listen_addresses;
+        let external_addresses = &self.external_addresses;
+
         self.store
             .providers(key)
             .into_iter()
@@ -1055,7 +1062,13 @@ where
                         // done before provider records were stored along with
                         // their addresses.
                         if &node_id == kbuckets.local_key().preimage() {
-                            Some(local_addrs.iter().cloned().collect::<Vec<_>>())
+                            Some(
+                                listen_addresses
+                                    .iter()
+                                    .chain(external_addresses.iter())
+                                    .cloned()
+                                    .collect::<Vec<_>>(),
+                            )
                         } else {
                             let key = kbucket::Key::from(node_id);
                             kbuckets
@@ -1226,11 +1239,7 @@ where
     }
 
     /// Handles a finished (i.e. successful) query.
-    fn query_finished(
-        &mut self,
-        q: Query<QueryInner>,
-        params: &mut impl PollParameters,
-    ) -> Option<KademliaEvent> {
+    fn query_finished(&mut self, q: Query<QueryInner>) -> Option<KademliaEvent> {
         let query_id = q.id();
         log::trace!("Query {:?} finished.", query_id);
         let result = q.into_result();
@@ -1340,8 +1349,8 @@ where
                 key,
                 phase: AddProviderPhase::GetClosestPeers,
             } => {
-                let provider_id = *params.local_peer_id();
-                let external_addresses = params.external_addresses().map(|r| r.addr).collect();
+                let provider_id = self.local_peer_id;
+                let external_addresses = self.external_addresses.iter().cloned().collect();
                 let inner = QueryInner::new(QueryInfo::AddProvider {
                     context,
                     key,
@@ -2285,7 +2294,7 @@ where
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-        parameters: &mut impl PollParameters,
+        _: &mut impl PollParameters,
     ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
         let now = Instant::now();
 
@@ -2352,7 +2361,7 @@ where
             loop {
                 match self.queries.poll(now) {
                     QueryPoolState::Finished(q) => {
-                        if let Some(event) = self.query_finished(q, parameters) {
+                        if let Some(event) = self.query_finished(q) {
                             return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event));
                         }
                     }
@@ -2406,6 +2415,9 @@ where
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+        self.listen_addresses.on_swarm_event(&event);
+        self.external_addresses.on_swarn_event(&event);
+
         match event {
             FromSwarm::ConnectionEstablished(connection_established) => {
                 self.on_connection_established(connection_established)
@@ -2415,18 +2427,10 @@ where
             }
             FromSwarm::DialFailure(dial_failure) => self.on_dial_failure(dial_failure),
             FromSwarm::AddressChange(address_change) => self.on_address_change(address_change),
-            FromSwarm::ExpiredListenAddr(ExpiredListenAddr { addr, .. }) => {
-                self.local_addrs.remove(addr);
-            }
-            FromSwarm::NewExternalAddr(NewExternalAddr { addr }) => {
-                if self.local_addrs.len() < MAX_LOCAL_EXTERNAL_ADDRS {
-                    self.local_addrs.insert(addr.clone());
-                }
-            }
-            FromSwarm::NewListenAddr(NewListenAddr { addr, .. }) => {
-                self.local_addrs.insert(addr.clone());
-            }
-            FromSwarm::ListenFailure(_)
+            FromSwarm::ExpiredListenAddr(_)
+            | FromSwarm::NewExternalAddr(_)
+            | FromSwarm::NewListenAddr(_)
+            | FromSwarm::ListenFailure(_)
             | FromSwarm::NewListener(_)
             | FromSwarm::ListenerClosed(_)
             | FromSwarm::ListenerError(_)
@@ -3179,8 +3183,3 @@ pub enum RoutingUpdate {
     /// peer ID).
     Failed,
 }
-
-/// The maximum number of local external addresses. When reached any
-/// further externally reported addresses are ignored. The behaviour always
-/// tracks all its listen addresses.
-const MAX_LOCAL_EXTERNAL_ADDRS: usize = 20;
