@@ -32,16 +32,15 @@ use libp2p_core::{
     connection::ConnectionId, multiaddr::Protocol, ConnectedPoint, Endpoint, Multiaddr, PeerId,
 };
 use libp2p_request_response::{
-    ProtocolSupport, RequestId, RequestResponse, RequestResponseConfig, RequestResponseEvent,
-    RequestResponseMessage, ResponseChannel,
+    self as request_response, ProtocolSupport, RequestId, ResponseChannel,
 };
 use libp2p_swarm::{
     behaviour::{
         AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, ExpiredExternalAddr,
         ExpiredListenAddr, FromSwarm,
     },
-    ConnectionHandler, IntoConnectionHandler, NetworkBehaviour, NetworkBehaviourAction,
-    PollParameters,
+    ConnectionHandler, ExternalAddresses, IntoConnectionHandler, ListenAddresses, NetworkBehaviour,
+    NetworkBehaviourAction, PollParameters,
 };
 use std::{
     collections::{HashMap, VecDeque},
@@ -167,7 +166,7 @@ pub struct Behaviour {
     local_peer_id: PeerId,
 
     // Inner behaviour for sending requests and receiving the response.
-    inner: RequestResponse<AutoNatCodec>,
+    inner: request_response::Behaviour<AutoNatCodec>,
 
     config: Config,
 
@@ -213,14 +212,17 @@ pub struct Behaviour {
     pending_out_events: VecDeque<<Self as NetworkBehaviour>::OutEvent>,
 
     probe_id: ProbeId,
+
+    listen_addresses: ListenAddresses,
+    external_addresses: ExternalAddresses,
 }
 
 impl Behaviour {
     pub fn new(local_peer_id: PeerId, config: Config) -> Self {
         let protocols = iter::once((AutoNatProtocol, ProtocolSupport::Full));
-        let mut cfg = RequestResponseConfig::default();
+        let mut cfg = request_response::Config::default();
         cfg.set_request_timeout(config.timeout);
-        let inner = RequestResponse::new(AutoNatCodec, protocols, cfg);
+        let inner = request_response::Behaviour::new(AutoNatCodec, protocols, cfg);
         Self {
             local_peer_id,
             inner,
@@ -237,6 +239,8 @@ impl Behaviour {
             last_probe: None,
             pending_out_events: VecDeque::new(),
             probe_id: ProbeId(0),
+            listen_addresses: Default::default(),
+            external_addresses: Default::default(),
         }
     }
 
@@ -289,6 +293,8 @@ impl Behaviour {
             ongoing_outbound: &mut self.ongoing_outbound,
             last_probe: &mut self.last_probe,
             schedule_probe: &mut self.schedule_probe,
+            listen_addresses: &self.listen_addresses,
+            external_addresses: &self.external_addresses,
         }
     }
 
@@ -419,7 +425,8 @@ impl Behaviour {
 }
 
 impl NetworkBehaviour for Behaviour {
-    type ConnectionHandler = <RequestResponse<AutoNatCodec> as NetworkBehaviour>::ConnectionHandler;
+    type ConnectionHandler =
+        <request_response::Behaviour<AutoNatCodec> as NetworkBehaviour>::ConnectionHandler;
     type OutEvent = Event;
 
     fn poll(&mut self, cx: &mut Context<'_>, params: &mut impl PollParameters) -> Poll<Action> {
@@ -432,21 +439,21 @@ impl NetworkBehaviour for Behaviour {
             match self.inner.poll(cx, params) {
                 Poll::Ready(NetworkBehaviourAction::GenerateEvent(event)) => {
                     let (mut events, action) = match event {
-                        RequestResponseEvent::Message {
-                            message: RequestResponseMessage::Response { .. },
+                        request_response::Event::Message {
+                            message: request_response::Message::Response { .. },
                             ..
                         }
-                        | RequestResponseEvent::OutboundFailure { .. } => {
+                        | request_response::Event::OutboundFailure { .. } => {
                             self.as_client().handle_event(params, event)
                         }
-                        RequestResponseEvent::Message {
-                            message: RequestResponseMessage::Request { .. },
+                        request_response::Event::Message {
+                            message: request_response::Message::Request { .. },
                             ..
                         }
-                        | RequestResponseEvent::InboundFailure { .. } => {
+                        | request_response::Event::InboundFailure { .. } => {
                             self.as_server().handle_event(params, event)
                         }
-                        RequestResponseEvent::ResponseSent { .. } => (VecDeque::new(), None),
+                        request_response::Event::ResponseSent { .. } => (VecDeque::new(), None),
                     };
                     self.pending_out_events.append(&mut events);
                     if let Some(action) = action {
@@ -457,7 +464,7 @@ impl NetworkBehaviour for Behaviour {
                 Poll::Pending => is_inner_pending = true,
             }
 
-            match self.as_client().poll_auto_probe(params, cx) {
+            match self.as_client().poll_auto_probe(cx) {
                 Poll::Ready(event) => self
                     .pending_out_events
                     .push_back(Event::OutboundProbe(event)),
@@ -476,6 +483,9 @@ impl NetworkBehaviour for Behaviour {
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+        self.listen_addresses.on_swarm_event(&event);
+        self.external_addresses.on_swarn_event(&event);
+
         match event {
             FromSwarm::ConnectionEstablished(connection_established) => {
                 self.inner
@@ -542,12 +552,12 @@ type Action = NetworkBehaviourAction<
     <Behaviour as NetworkBehaviour>::ConnectionHandler,
 >;
 
-// Trait implemented for `AsClient` as `AsServer` to handle events from the inner [`RequestResponse`] Protocol.
+// Trait implemented for `AsClient` and `AsServer` to handle events from the inner [`request_response::Behaviour`] Protocol.
 trait HandleInnerEvent {
     fn handle_event(
         &mut self,
         params: &mut impl PollParameters,
-        event: RequestResponseEvent<DialRequest, DialResponse>,
+        event: request_response::Event<DialRequest, DialResponse>,
     ) -> (VecDeque<Event>, Option<Action>);
 }
 

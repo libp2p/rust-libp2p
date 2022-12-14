@@ -104,7 +104,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Create a Swarm to manage peers and events
     let mut swarm = {
-        let mdns = mdns::async_io::Behaviour::new(mdns::Config::default())?;
+        let mdns = mdns::async_io::Behaviour::new(mdns::Config::default(), local_peer_id)?;
         let behaviour = MyBehaviour { gossipsub, mdns };
         Swarm::with_async_std_executor(transport, behaviour, local_peer_id)
     };

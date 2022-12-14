@@ -335,7 +335,7 @@ mod tests {
         let packets = build_query_response(
             0xf8f8,
             peer_id,
-            vec![addr1, addr2].into_iter(),
+            vec![&addr1, &addr2].into_iter(),
             Duration::from_secs(60),
         );
 
