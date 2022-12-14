@@ -20,7 +20,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::v2::client::RelayedConnection;
-use crate::v2::RequestId;
+use crate::RequestId;
 use futures::channel::mpsc;
 use futures::channel::oneshot;
 use futures::future::{ready, BoxFuture, FutureExt, Ready};

@@ -21,30 +21,47 @@
 //! Implementation of the [libp2p circuit relay v2
 //! specification](https://github.com/libp2p/specs/blob/master/relay/circuit-v2.md).
 
-#[allow(clippy::derive_partial_eq_without_eq)]
-mod message_proto {
-    include!(concat!(env!("OUT_DIR"), "/message_v2.pb.rs"));
-}
-
 pub mod client;
 mod copy_future;
-mod protocol;
 pub mod relay;
 
-pub use protocol::{
-    inbound_hop::FatalUpgradeError as InboundHopFatalUpgradeError,
-    inbound_stop::FatalUpgradeError as InboundStopFatalUpgradeError,
-    outbound_hop::FatalUpgradeError as OutboundHopFatalUpgradeError,
-    outbound_stop::FatalUpgradeError as OutboundStopFatalUpgradeError, HOP_PROTOCOL_NAME,
-    STOP_PROTOCOL_NAME,
-};
+pub mod protocol {
+    #[deprecated(
+        since = "0.15.0",
+        note = "Use libp2p_relay::InboundHopFatalUpgradeError instead."
+    )]
+    pub type InboundHopFatalUpgradeError = crate::protocol::inbound_hop::FatalUpgradeError;
 
-/// The ID of an outgoing / incoming, relay / destination request.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub struct RequestId(u64);
+    #[deprecated(
+        since = "0.15.0",
+        note = "Use libp2p_relay::InboundStopFatalUpgradeError instead."
+    )]
+    pub type InboundStopFatalUpgradeError = crate::protocol::inbound_stop::FatalUpgradeError;
 
-impl RequestId {
-    fn new() -> RequestId {
-        RequestId(rand::random())
-    }
+    #[deprecated(
+        since = "0.15.0",
+        note = "Use libp2p_relay::OutboundHopFatalUpgradeError instead."
+    )]
+    pub type OutboundHopFatalUpgradeError = crate::protocol::outbound_hop::FatalUpgradeError;
+
+    #[deprecated(
+        since = "0.15.0",
+        note = "Use libp2p_relay::OutboundStopFatalUpgradeError instead."
+    )]
+    pub type OutboundStopFatalUpgradeError = crate::protocol::outbound_stop::FatalUpgradeError;
+
+    #[deprecated(
+        since = "0.15.0",
+        note = "Use libp2p_relay::HOP_PROTOCOL_NAME instead."
+    )]
+    pub const HOP_PROTOCOL_NAME: &[u8; 31] = crate::HOP_PROTOCOL_NAME;
+
+    #[deprecated(
+        since = "0.15.0",
+        note = "Use libp2p_relay::STOP_PROTOCOL_NAME instead."
+    )]
+    pub const STOP_PROTOCOL_NAME: &[u8; 32] = crate::STOP_PROTOCOL_NAME;
 }
+
+#[deprecated(since = "0.15.0", note = "Use libp2p_relay::RequestId instead.")]
+pub type RequestId = super::RequestId;

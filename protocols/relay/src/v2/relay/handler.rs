@@ -18,9 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::message_proto::Status;
+use crate::protocol::{inbound_hop, outbound_stop};
 use crate::v2::copy_future::CopyFuture;
-use crate::v2::message_proto::Status;
-use crate::v2::protocol::{inbound_hop, outbound_stop};
 use crate::v2::relay::CircuitId;
 use bytes::Bytes;
 use either::Either;

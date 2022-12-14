@@ -23,8 +23,8 @@
 mod handler;
 pub mod rate_limiter;
 
-use crate::v2::message_proto;
-use crate::v2::protocol::inbound_hop;
+use crate::message_proto;
+use crate::protocol::{inbound_hop, outbound_stop};
 use either::Either;
 use instant::Instant;
 use libp2p_core::connection::ConnectionId;
@@ -40,8 +40,6 @@ use std::num::NonZeroU32;
 use std::ops::Add;
 use std::task::{Context, Poll};
 use std::time::Duration;
-
-use super::protocol::outbound_stop;
 
 /// Configuration for the relay [`Behaviour`].
 ///

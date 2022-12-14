@@ -23,7 +23,7 @@
 mod handler;
 pub mod transport;
 
-use crate::v2::protocol::{self, inbound_stop, outbound_hop};
+use crate::protocol::{self, inbound_stop, outbound_hop};
 use bytes::Bytes;
 use either::Either;
 use futures::channel::mpsc::Receiver;

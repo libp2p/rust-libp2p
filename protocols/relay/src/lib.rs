@@ -23,9 +23,33 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
+mod protocol;
 pub mod v2;
+
+#[allow(clippy::derive_partial_eq_without_eq)]
+mod message_proto {
+    include!(concat!(env!("OUT_DIR"), "/message_v2.pb.rs"));
+}
+
+pub use protocol::{
+    inbound_hop::FatalUpgradeError as InboundHopFatalUpgradeError,
+    inbound_stop::FatalUpgradeError as InboundStopFatalUpgradeError,
+    outbound_hop::FatalUpgradeError as OutboundHopFatalUpgradeError,
+    outbound_stop::FatalUpgradeError as OutboundStopFatalUpgradeError, HOP_PROTOCOL_NAME,
+    STOP_PROTOCOL_NAME,
+};
 
 // Check that we can safely cast a `usize` to a `u64`.
 static_assertions::const_assert! {
     std::mem::size_of::<usize>() <= std::mem::size_of::<u64>()
+}
+
+/// The ID of an outgoing / incoming, relay / destination request.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub struct RequestId(u64);
+
+impl RequestId {
+    fn new() -> RequestId {
+        RequestId(rand::random())
+    }
 }
