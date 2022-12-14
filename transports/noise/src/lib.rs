@@ -57,7 +57,6 @@
 
 mod io;
 mod protocol;
-#[allow(clippy::derive_partial_eq_without_eq)]
 mod protos;
 
 pub use io::handshake::RemoteIdentity;
