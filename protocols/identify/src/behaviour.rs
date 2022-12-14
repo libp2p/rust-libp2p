@@ -26,7 +26,8 @@ use libp2p_core::{
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm};
 use libp2p_swarm::{
     dial_opts::DialOpts, AddressScore, ConnectionHandler, ConnectionHandlerUpgrErr, DialError,
-    IntoConnectionHandler, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
+    ExternalAddresses, IntoConnectionHandler, ListenAddresses, NetworkBehaviour,
+    NetworkBehaviourAction, NotifyHandler, PollParameters,
 };
 use lru::LruCache;
 use std::num::NonZeroUsize;
@@ -56,6 +57,9 @@ pub struct Behaviour {
     events: VecDeque<NetworkBehaviourAction<Event, Proto>>,
     /// The addresses of all peers that we have discovered.
     discovered_peers: PeerCache,
+
+    listen_addresses: ListenAddresses,
+    external_addresses: ExternalAddresses,
 }
 
 /// A `Behaviour` request to be fulfilled, either `Handler` requests for `Behaviour` info
@@ -177,6 +181,8 @@ impl Behaviour {
             requests: Vec::new(),
             events: VecDeque::new(),
             discovered_peers,
+            listen_addresses: Default::default(),
+            external_addresses: Default::default(),
         }
     }
 
@@ -318,7 +324,12 @@ impl NetworkBehaviour for Behaviour {
                 peer_id,
                 handler: NotifyHandler::Any,
                 event: InEvent {
-                    listen_addrs: listen_addrs(params),
+                    listen_addrs: self
+                        .listen_addresses
+                        .iter()
+                        .chain(self.external_addresses.iter())
+                        .cloned()
+                        .collect(),
                     supported_protocols: supported_protocols(params),
                     protocol: Protocol::Push,
                 },
@@ -330,7 +341,12 @@ impl NetworkBehaviour for Behaviour {
                 peer_id,
                 handler: NotifyHandler::One(connection_id),
                 event: InEvent {
-                    listen_addrs: listen_addrs(params),
+                    listen_addrs: self
+                        .listen_addresses
+                        .iter()
+                        .chain(self.external_addresses.iter())
+                        .cloned()
+                        .collect(),
                     supported_protocols: supported_protocols(params),
                     protocol: Protocol::Identify(connection_id),
                 },
@@ -344,6 +360,9 @@ impl NetworkBehaviour for Behaviour {
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+        self.listen_addresses.on_swarm_event(&event);
+        self.external_addresses.on_swarn_event(&event);
+
         match event {
             FromSwarm::ConnectionEstablished(connection_established) => {
                 self.on_connection_established(connection_established)
@@ -451,12 +470,6 @@ fn supported_protocols(params: &impl PollParameters) -> Vec<String> {
         .supported_protocols()
         .map(|p| String::from_utf8_lossy(&p).to_string())
         .collect()
-}
-
-fn listen_addrs(params: &impl PollParameters) -> Vec<Multiaddr> {
-    let mut listen_addrs: Vec<_> = params.external_addresses().map(|r| r.addr).collect();
-    listen_addrs.extend(params.listened_addresses());
-    listen_addrs
 }
 
 /// If there is a given peer_id in the multiaddr, make sure it is the same as

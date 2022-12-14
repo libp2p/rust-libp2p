@@ -157,7 +157,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             "/TODO/0.0.1".to_string(),
             local_key.public(),
         )),
-        dcutr: dcutr::behaviour::Behaviour::new(),
+        dcutr: dcutr::behaviour::Behaviour::new(local_peer_id),
     };
 
     let mut swarm = match ThreadPool::new() {

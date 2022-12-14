@@ -32,8 +32,8 @@ use libp2p_core::multiaddr::Protocol;
 use libp2p_core::PeerId;
 use libp2p_swarm::behaviour::{ConnectionClosed, FromSwarm};
 use libp2p_swarm::{
-    ConnectionHandlerUpgrErr, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
-    PollParameters,
+    ConnectionHandlerUpgrErr, ExternalAddresses, NetworkBehaviour, NetworkBehaviourAction,
+    NotifyHandler, PollParameters,
 };
 use std::collections::{hash_map, HashMap, HashSet, VecDeque};
 use std::num::NonZeroU32;
@@ -199,6 +199,8 @@ pub struct Behaviour {
 
     /// Queue of actions to return when polled.
     queued_actions: VecDeque<Action>,
+
+    external_addresses: ExternalAddresses,
 }
 
 impl Behaviour {
@@ -209,6 +211,7 @@ impl Behaviour {
             reservations: Default::default(),
             circuits: Default::default(),
             queued_actions: Default::default(),
+            external_addresses: Default::default(),
         }
     }
 
@@ -261,6 +264,8 @@ impl NetworkBehaviour for Behaviour {
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+        self.external_addresses.on_swarn_event(&event);
+
         match event {
             FromSwarm::ConnectionClosed(connection_closed) => {
                 self.on_connection_closed(connection_closed)
@@ -637,10 +642,10 @@ impl NetworkBehaviour for Behaviour {
     fn poll(
         &mut self,
         _cx: &mut Context<'_>,
-        poll_parameters: &mut impl PollParameters,
+        _: &mut impl PollParameters,
     ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
         if let Some(action) = self.queued_actions.pop_front() {
-            return Poll::Ready(action.build(poll_parameters));
+            return Poll::Ready(action.build(self.local_peer_id, &self.external_addresses));
         }
 
         Poll::Pending
@@ -758,7 +763,8 @@ impl From<NetworkBehaviourAction<Event, handler::Prototype>> for Action {
 impl Action {
     fn build(
         self,
-        poll_parameters: &mut impl PollParameters,
+        local_peer_id: PeerId,
+        external_addresses: &ExternalAddresses,
     ) -> NetworkBehaviourAction<Event, handler::Prototype> {
         match self {
             Action::Done(action) => action,
@@ -771,15 +777,13 @@ impl Action {
                 peer_id,
                 event: Either::Left(handler::In::AcceptReservationReq {
                     inbound_reservation_req,
-                    addrs: poll_parameters
-                        .external_addresses()
-                        .map(|a| a.addr)
+                    addrs: external_addresses
+                        .iter()
+                        .cloned()
                         // Add local peer ID in case it isn't present yet.
                         .filter_map(|a| match a.iter().last()? {
                             Protocol::P2p(_) => Some(a),
-                            _ => Some(
-                                a.with(Protocol::P2p(*poll_parameters.local_peer_id().as_ref())),
-                            ),
+                            _ => Some(a.with(Protocol::P2p(local_peer_id.into()))),
                         })
                         .collect(),
                 }),

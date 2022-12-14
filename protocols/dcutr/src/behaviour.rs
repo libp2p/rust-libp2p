@@ -29,8 +29,8 @@ use libp2p_core::{Multiaddr, PeerId};
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm};
 use libp2p_swarm::dial_opts::{self, DialOpts};
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerUpgrErr, IntoConnectionHandler, NetworkBehaviour,
-    NetworkBehaviourAction, NotifyHandler, PollParameters,
+    ConnectionHandler, ConnectionHandlerUpgrErr, ExternalAddresses, IntoConnectionHandler,
+    NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
 };
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::task::{Context, Poll};
@@ -66,20 +66,25 @@ pub enum UpgradeError {
     Handler(ConnectionHandlerUpgrErr<void::Void>),
 }
 
-#[derive(Default)]
 pub struct Behaviour {
     /// Queue of actions to return when polled.
     queued_actions: VecDeque<ActionBuilder>,
 
     /// All direct (non-relayed) connections.
     direct_connections: HashMap<PeerId, HashSet<ConnectionId>>,
+
+    external_addresses: ExternalAddresses,
+
+    local_peer_id: PeerId,
 }
 
 impl Behaviour {
-    pub fn new() -> Self {
+    pub fn new(local_peer_id: PeerId) -> Self {
         Behaviour {
             queued_actions: Default::default(),
             direct_connections: Default::default(),
+            external_addresses: Default::default(),
+            local_peer_id,
         }
     }
 
@@ -308,16 +313,18 @@ impl NetworkBehaviour for Behaviour {
     fn poll(
         &mut self,
         _cx: &mut Context<'_>,
-        poll_parameters: &mut impl PollParameters,
+        _: &mut impl PollParameters,
     ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
         if let Some(action) = self.queued_actions.pop_front() {
-            return Poll::Ready(action.build(poll_parameters));
+            return Poll::Ready(action.build(self.local_peer_id, &self.external_addresses));
         }
 
         Poll::Pending
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+        self.external_addresses.on_swarn_event(&event);
+
         match event {
             FromSwarm::ConnectionEstablished(connection_established) => {
                 self.on_connection_established(connection_established)
@@ -364,16 +371,15 @@ impl From<NetworkBehaviourAction<Event, handler::Prototype>> for ActionBuilder {
 impl ActionBuilder {
     fn build(
         self,
-        poll_parameters: &mut impl PollParameters,
+        local_peer_id: PeerId,
+        external_addresses: &ExternalAddresses,
     ) -> NetworkBehaviourAction<Event, handler::Prototype> {
         let obs_addrs = || {
-            poll_parameters
-                .external_addresses()
-                .filter(|a| !a.addr.iter().any(|p| p == Protocol::P2pCircuit))
-                .map(|a| {
-                    a.addr
-                        .with(Protocol::P2p((*poll_parameters.local_peer_id()).into()))
-                })
+            external_addresses
+                .iter()
+                .cloned()
+                .filter(|a| !a.iter().any(|p| p == Protocol::P2pCircuit))
+                .map(|a| a.with(Protocol::P2p(local_peer_id.into())))
                 .collect()
         };
 

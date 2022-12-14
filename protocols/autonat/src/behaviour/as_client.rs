@@ -29,7 +29,9 @@ use futures_timer::Delay;
 use instant::Instant;
 use libp2p_core::{connection::ConnectionId, Multiaddr, PeerId};
 use libp2p_request_response::{self as request_response, OutboundFailure, RequestId};
-use libp2p_swarm::{AddressScore, NetworkBehaviourAction, PollParameters};
+use libp2p_swarm::{
+    AddressScore, ExternalAddresses, ListenAddresses, NetworkBehaviourAction, PollParameters,
+};
 use rand::{seq::SliceRandom, thread_rng};
 use std::{
     collections::{HashMap, VecDeque},
@@ -97,6 +99,9 @@ pub struct AsClient<'a> {
 
     pub last_probe: &'a mut Option<Instant>,
     pub schedule_probe: &'a mut Delay,
+
+    pub listen_addresses: &'a ListenAddresses,
+    pub external_addresses: &'a ExternalAddresses,
 }
 
 impl<'a> HandleInnerEvent for AsClient<'a> {
@@ -146,6 +151,8 @@ impl<'a> HandleInnerEvent for AsClient<'a> {
 
                 if let Ok(address) = response.result {
                     // Update observed address score if it is finite.
+                    #[allow(deprecated)]
+                    // TODO: Fix once we report `AddressScore` through `FromSwarm` event.
                     let score = params
                         .external_addresses()
                         .find_map(|r| (r.addr == address).then_some(r.score))
@@ -188,17 +195,17 @@ impl<'a> HandleInnerEvent for AsClient<'a> {
 }
 
 impl<'a> AsClient<'a> {
-    pub fn poll_auto_probe(
-        &mut self,
-        params: &mut impl PollParameters,
-        cx: &mut Context<'_>,
-    ) -> Poll<OutboundProbeEvent> {
+    pub fn poll_auto_probe(&mut self, cx: &mut Context<'_>) -> Poll<OutboundProbeEvent> {
         match self.schedule_probe.poll_unpin(cx) {
             Poll::Ready(()) => {
                 self.schedule_probe.reset(self.config.retry_interval);
 
-                let mut addresses: Vec<_> = params.external_addresses().map(|r| r.addr).collect();
-                addresses.extend(params.listened_addresses());
+                let addresses = self
+                    .external_addresses
+                    .iter()
+                    .chain(self.listen_addresses.iter())
+                    .cloned()
+                    .collect();
 
                 let probe_id = self.probe_id.next();
                 let event = match self.do_probe(probe_id, addresses) {

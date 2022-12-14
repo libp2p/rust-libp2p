@@ -39,8 +39,8 @@ use libp2p_swarm::{
         AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, ExpiredExternalAddr,
         ExpiredListenAddr, FromSwarm,
     },
-    ConnectionHandler, IntoConnectionHandler, NetworkBehaviour, NetworkBehaviourAction,
-    PollParameters,
+    ConnectionHandler, ExternalAddresses, IntoConnectionHandler, ListenAddresses, NetworkBehaviour,
+    NetworkBehaviourAction, PollParameters,
 };
 use std::{
     collections::{HashMap, VecDeque},
@@ -212,6 +212,9 @@ pub struct Behaviour {
     pending_out_events: VecDeque<<Self as NetworkBehaviour>::OutEvent>,
 
     probe_id: ProbeId,
+
+    listen_addresses: ListenAddresses,
+    external_addresses: ExternalAddresses,
 }
 
 impl Behaviour {
@@ -236,6 +239,8 @@ impl Behaviour {
             last_probe: None,
             pending_out_events: VecDeque::new(),
             probe_id: ProbeId(0),
+            listen_addresses: Default::default(),
+            external_addresses: Default::default(),
         }
     }
 
@@ -288,6 +293,8 @@ impl Behaviour {
             ongoing_outbound: &mut self.ongoing_outbound,
             last_probe: &mut self.last_probe,
             schedule_probe: &mut self.schedule_probe,
+            listen_addresses: &self.listen_addresses,
+            external_addresses: &self.external_addresses,
         }
     }
 
@@ -457,7 +464,7 @@ impl NetworkBehaviour for Behaviour {
                 Poll::Pending => is_inner_pending = true,
             }
 
-            match self.as_client().poll_auto_probe(params, cx) {
+            match self.as_client().poll_auto_probe(cx) {
                 Poll::Ready(event) => self
                     .pending_out_events
                     .push_back(Event::OutboundProbe(event)),
@@ -476,6 +483,9 @@ impl NetworkBehaviour for Behaviour {
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+        self.listen_addresses.on_swarm_event(&event);
+        self.external_addresses.on_swarn_event(&event);
+
         match event {
             FromSwarm::ConnectionEstablished(connection_established) => {
                 self.inner
