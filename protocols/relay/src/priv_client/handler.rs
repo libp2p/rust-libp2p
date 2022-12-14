@@ -18,8 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::client::transport;
 use crate::message_proto::Status;
+use crate::priv_client::transport;
 use crate::protocol::{self, inbound_stop, outbound_hop};
 use either::Either;
 use futures::channel::{mpsc, oneshot};

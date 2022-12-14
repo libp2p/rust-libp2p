@@ -97,11 +97,8 @@ pub mod relay {
     #[deprecated(since = "0.15.0", note = "Use libp2p_relay::Behaviour instead.")]
     pub type Relay = crate::Behaviour;
 
-    #[deprecated(
-        since = "0.15.0",
-        note = "Use libp2p_relay::behaviour::CircuitId instead."
-    )]
-    pub type CircuitId = crate::behaviour::CircuitId;
+    #[deprecated(since = "0.15.0", note = "Use libp2p_relay::CircuitId instead.")]
+    pub type CircuitId = crate::CircuitId;
 
     pub mod rate_limiter {
         use instant::Instant;

@@ -23,9 +23,9 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
-pub mod behaviour;
-pub mod client;
+mod behaviour;
 mod copy_future;
+mod priv_client;
 mod protocol;
 pub mod v2;
 
@@ -34,7 +34,7 @@ mod message_proto {
     include!(concat!(env!("OUT_DIR"), "/message_v2.pb.rs"));
 }
 
-pub use behaviour::{Behaviour, Config, Event};
+pub use behaviour::{Behaviour, CircuitId, Config, Event};
 pub use protocol::{
     inbound_hop::FatalUpgradeError as InboundHopFatalUpgradeError,
     inbound_stop::FatalUpgradeError as InboundStopFatalUpgradeError,
@@ -42,6 +42,17 @@ pub use protocol::{
     outbound_stop::FatalUpgradeError as OutboundStopFatalUpgradeError, HOP_PROTOCOL_NAME,
     STOP_PROTOCOL_NAME,
 };
+
+// explicitly pub'ed client types.
+pub mod client {
+    pub use crate::priv_client::{Behaviour, Event, RelayedConnection, Transport};
+
+    pub mod transport {
+        pub use crate::priv_client::transport::{
+            Error, Listener, Reservation, ToListenerMsg, TransportToBehaviourMsg,
+        };
+    }
+}
 
 // Check that we can safely cast a `usize` to a `u64`.
 static_assertions::const_assert! {

@@ -19,7 +19,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::client::RelayedConnection;
+use crate::priv_client::RelayedConnection;
 use crate::RequestId;
 use futures::channel::mpsc;
 use futures::channel::oneshot;
