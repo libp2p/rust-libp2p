@@ -123,7 +123,7 @@ First draft is in https://github.com/libp2p/rust-libp2p/pull/2828
 
 | Category     | Status      | Target Completion | Tracking                                        | Dependencies | Dependents |
 |--------------|-------------|-------------------|-------------------------------------------------|--------------|------------|
-| Optimization | in progress | Q1/2023           | https://github.com/libp2p/rust-libp2p/pull/2712 |              |            |
+| Optimization | done        | Q1/2023           | https://github.com/libp2p/rust-libp2p/pull/2712 |              |            |
 
 Users of rust-libp2p like [iroh](https://github.com/n0-computer/iroh) need this for low latency
 usage of `libp2p-kad`. The rust-libp2p maintainers can pick this up unless iroh folks finish the

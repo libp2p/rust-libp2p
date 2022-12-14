@@ -443,7 +443,7 @@ impl Error for ProtocolError {
 impl fmt::Display for ProtocolError {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match self {
-            ProtocolError::IoError(e) => write!(fmt, "I/O error: {}", e),
+            ProtocolError::IoError(e) => write!(fmt, "I/O error: {e}"),
             ProtocolError::InvalidMessage => write!(fmt, "Received an invalid message."),
             ProtocolError::InvalidProtocol => write!(fmt, "A protocol (name) is invalid."),
             ProtocolError::TooManyProtocols => write!(fmt, "Too many protocols received."),
@@ -465,7 +465,7 @@ mod tests {
                 .filter(|&c| c.is_ascii_alphanumeric())
                 .take(n)
                 .collect();
-            Protocol(Bytes::from(format!("/{}", p)))
+            Protocol(Bytes::from(format!("/{p}")))
         }
     }
 
@@ -487,10 +487,10 @@ mod tests {
         fn prop(msg: Message) {
             let mut buf = BytesMut::new();
             msg.encode(&mut buf)
-                .unwrap_or_else(|_| panic!("Encoding message failed: {:?}", msg));
+                .unwrap_or_else(|_| panic!("Encoding message failed: {msg:?}"));
             match Message::decode(buf.freeze()) {
                 Ok(m) => assert_eq!(m, msg),
-                Err(e) => panic!("Decoding failed: {:?}", e),
+                Err(e) => panic!("Decoding failed: {e:?}"),
             }
         }
         quickcheck(prop as fn(_))

@@ -537,10 +537,7 @@ fn ufrag_from_stun_message(buffer: &[u8], local_ufrag: bool) -> Result<String, E
     };
 
     if let Err(err) = result {
-        Err(Error::Other(format!(
-            "failed to handle decode ICE: {}",
-            err
-        )))
+        Err(Error::Other(format!("failed to handle decode ICE: {err}")))
     } else {
         let (attr, found) = message.attributes.get(ATTR_USERNAME);
         if !found {
@@ -551,8 +548,7 @@ fn ufrag_from_stun_message(buffer: &[u8], local_ufrag: bool) -> Result<String, E
             // Per the RFC this shouldn't happen
             // https://datatracker.ietf.org/doc/html/rfc5389#section-15.3
             Err(err) => Err(Error::Other(format!(
-                "failed to decode USERNAME from STUN message as UTF-8: {}",
-                err
+                "failed to decode USERNAME from STUN message as UTF-8: {err}"
             ))),
             Ok(s) => {
                 // s is a combination of the local_ufrag and the remote ufrag separated by `:`.

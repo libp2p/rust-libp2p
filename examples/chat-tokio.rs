@@ -91,7 +91,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     // Create a Swarm to manage peers and events.
-    let mdns_behaviour = mdns::Behaviour::new(Default::default())?;
+    let mdns_behaviour = mdns::Behaviour::new(Default::default(), peer_id)?;
     let behaviour = MyBehaviour {
         floodsub: Floodsub::new(peer_id),
         mdns: mdns_behaviour,

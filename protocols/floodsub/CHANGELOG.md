@@ -1,5 +1,7 @@
 # 0.42.0 [unreleased]
 
+- Update to `libp2p-swarm` `v0.42.0`
+
 - Update to `prost-codec` `v0.3.0`
 
 - Refactoring GossipsubCodec to use common protobuf Codec. See [PR 3224].

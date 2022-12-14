@@ -725,7 +725,7 @@ fn get_meta_items(attr: &syn::Attribute) -> Option<Vec<syn::NestedMeta>> {
             Ok(syn::Meta::List(ref meta)) => Some(meta.nested.iter().cloned().collect()),
             Ok(_) => None,
             Err(e) => {
-                eprintln!("error parsing attribute metadata: {}", e);
+                eprintln!("error parsing attribute metadata: {e}");
                 None
             }
         }
