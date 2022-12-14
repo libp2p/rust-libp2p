@@ -1,10 +1,10 @@
 # 0.42.0 [unreleased]
 
-- Update to `libp2p-swarm` `v0.42.0`
+- Update to `libp2p-swarm` `v0.42.0`.
 
-- Update to `prost-codec` `v0.3.0`
+- Update to `prost-codec` `v0.3.0`.
 
-- Refactoring GossipsubCodec to use common protobuf Codec. See [PR 3224].
+- Refactoring Floodsub to use common protobuf Codec. See [PR 3224].
 
 [pr 3224]: https://github.com/libp2p/rust-libp2p/pull/3224
 
