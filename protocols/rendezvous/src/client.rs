@@ -32,22 +32,16 @@ use libp2p_core::connection::ConnectionId;
 use libp2p_core::identity::error::SigningError;
 use libp2p_core::identity::Keypair;
 use libp2p_core::{Multiaddr, PeerId, PeerRecord};
-use libp2p_swarm::behaviour::FromSwarm;
+use libp2p_swarm::behaviour::{FromSwarm, ToSwarm};
 use libp2p_swarm::{
-    CloseConnection, ExternalAddresses, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
-    PollParameters,
+    CloseConnection, ExternalAddresses, NetworkBehaviour, NotifyHandler, PollParameters,
 };
 use std::collections::{HashMap, VecDeque};
 use std::iter::FromIterator;
 use std::task::{Context, Poll};
 
 pub struct Behaviour {
-    events: VecDeque<
-        NetworkBehaviourAction<
-            Event,
-            SubstreamConnectionHandler<void::Void, outbound::Stream, outbound::OpenInfo>,
-        >,
-    >,
+    events: VecDeque<ToSwarm<Self>>,
     keypair: Keypair,
     pending_register_requests: Vec<(Namespace, PeerId, Option<Ttl>)>,
 
@@ -80,7 +74,7 @@ impl Behaviour {
     /// Register our external addresses in the given namespace with the given rendezvous peer.
     ///
     /// External addresses are either manually added via [`libp2p_swarm::Swarm::add_external_address`] or reported
-    /// by other [`NetworkBehaviour`]s via [`NetworkBehaviourAction::ReportObservedAddr`].
+    /// by other [`NetworkBehaviour`]s via [`ToSwarm::ReportObservedAddr`].
     pub fn register(&mut self, namespace: Namespace, rendezvous_node: PeerId, ttl: Option<Ttl>) {
         self.pending_register_requests
             .push((namespace, rendezvous_node, ttl));
@@ -88,14 +82,13 @@ impl Behaviour {
 
     /// Unregister ourselves from the given namespace with the given rendezvous peer.
     pub fn unregister(&mut self, namespace: Namespace, rendezvous_node: PeerId) {
-        self.events
-            .push_back(NetworkBehaviourAction::NotifyHandler {
-                peer_id: rendezvous_node,
-                event: handler::OutboundInEvent::NewSubstream {
-                    open_info: OpenInfo::UnregisterRequest(namespace),
-                },
-                handler: NotifyHandler::Any,
-            });
+        self.events.push_back(ToSwarm::<Self>::NotifyHandler {
+            peer_id: rendezvous_node,
+            event: handler::OutboundInEvent::NewSubstream {
+                open_info: OpenInfo::UnregisterRequest(namespace),
+            },
+            handler: NotifyHandler::Any,
+        });
     }
 
     /// Discover other peers at a given rendezvous peer.
@@ -112,18 +105,17 @@ impl Behaviour {
         limit: Option<u64>,
         rendezvous_node: PeerId,
     ) {
-        self.events
-            .push_back(NetworkBehaviourAction::NotifyHandler {
-                peer_id: rendezvous_node,
-                event: handler::OutboundInEvent::NewSubstream {
-                    open_info: OpenInfo::DiscoverRequest {
-                        namespace: ns,
-                        cookie,
-                        limit,
-                    },
+        self.events.push_back(ToSwarm::<Self>::NotifyHandler {
+            peer_id: rendezvous_node,
+            event: handler::OutboundInEvent::NewSubstream {
+                open_info: OpenInfo::DiscoverRequest {
+                    namespace: ns,
+                    cookie,
+                    limit,
                 },
-                handler: NotifyHandler::Any,
-            });
+            },
+            handler: NotifyHandler::Any,
+        });
     }
 }
 
@@ -206,7 +198,7 @@ impl NetworkBehaviour for Behaviour {
             handler::OutboundOutEvent::OutboundError { error, .. } => {
                 log::warn!("Connection with peer {} failed: {}", peer_id, error);
 
-                vec![NetworkBehaviourAction::CloseConnection {
+                vec![ToSwarm::<Self>::CloseConnection {
                     peer_id,
                     connection: CloseConnection::One(connection_id),
                 }]
@@ -216,11 +208,7 @@ impl NetworkBehaviour for Behaviour {
         self.events.extend(new_events);
     }
 
-    fn poll(
-        &mut self,
-        cx: &mut Context<'_>,
-        _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+    fn poll(&mut self, cx: &mut Context<'_>, _: &mut impl PollParameters) -> Poll<ToSwarm<Self>> {
         if let Some(event) = self.events.pop_front() {
             return Poll::Ready(event);
         }
@@ -232,13 +220,13 @@ impl NetworkBehaviour for Behaviour {
             let external_addresses = self.external_addresses.iter().cloned().collect::<Vec<_>>();
 
             if external_addresses.is_empty() {
-                return Poll::Ready(NetworkBehaviourAction::GenerateEvent(
-                    Event::RegisterFailed(RegisterError::NoExternalAddresses),
-                ));
+                return Poll::Ready(ToSwarm::<Self>::GenerateEvent(Event::RegisterFailed(
+                    RegisterError::NoExternalAddresses,
+                )));
             }
 
             let action = match PeerRecord::new(&self.keypair, external_addresses) {
-                Ok(peer_record) => NetworkBehaviourAction::NotifyHandler {
+                Ok(peer_record) => ToSwarm::<Self>::NotifyHandler {
                     peer_id: rendezvous_node,
                     event: handler::OutboundInEvent::NewSubstream {
                         open_info: OpenInfo::RegisterRequest(NewRegistration {
@@ -249,7 +237,7 @@ impl NetworkBehaviour for Behaviour {
                     },
                     handler: NotifyHandler::Any,
                 },
-                Err(signing_error) => NetworkBehaviourAction::GenerateEvent(Event::RegisterFailed(
+                Err(signing_error) => ToSwarm::<Self>::GenerateEvent(Event::RegisterFailed(
                     RegisterError::FailedToMakeRecord(signing_error),
                 )),
             };
@@ -261,7 +249,7 @@ impl NetworkBehaviour for Behaviour {
             futures::ready!(self.expiring_registrations.poll_next_unpin(cx))
         {
             self.discovered_peers.remove(&expired_registration);
-            return Poll::Ready(NetworkBehaviourAction::GenerateEvent(Event::Expired {
+            return Poll::Ready(ToSwarm::<Self>::GenerateEvent(Event::Expired {
                 peer: expired_registration.0,
             }));
         }
@@ -294,28 +282,23 @@ fn handle_outbound_event(
     peer_id: PeerId,
     discovered_peers: &mut HashMap<(PeerId, Namespace), Vec<Multiaddr>>,
     expiring_registrations: &mut FuturesUnordered<BoxFuture<'static, (PeerId, Namespace)>>,
-) -> Vec<
-    NetworkBehaviourAction<
-        Event,
-        SubstreamConnectionHandler<void::Void, outbound::Stream, outbound::OpenInfo>,
-    >,
-> {
+) -> Vec<ToSwarm<Behaviour>> {
     match event {
         outbound::OutEvent::Registered { namespace, ttl } => {
-            vec![NetworkBehaviourAction::GenerateEvent(Event::Registered {
+            vec![ToSwarm::<Behaviour>::GenerateEvent(Event::Registered {
                 rendezvous_node: peer_id,
                 ttl,
                 namespace,
             })]
         }
         outbound::OutEvent::RegisterFailed(namespace, error) => {
-            vec![NetworkBehaviourAction::GenerateEvent(
-                Event::RegisterFailed(RegisterError::Remote {
+            vec![ToSwarm::<Behaviour>::GenerateEvent(Event::RegisterFailed(
+                RegisterError::Remote {
                     rendezvous_node: peer_id,
                     namespace,
                     error,
-                }),
-            )]
+                },
+            ))]
         }
         outbound::OutEvent::Discovered {
             registrations,
@@ -339,20 +322,18 @@ fn handle_outbound_event(
                 .boxed()
             }));
 
-            vec![NetworkBehaviourAction::GenerateEvent(Event::Discovered {
+            vec![ToSwarm::<Behaviour>::GenerateEvent(Event::Discovered {
                 rendezvous_node: peer_id,
                 registrations,
                 cookie,
             })]
         }
         outbound::OutEvent::DiscoverFailed { namespace, error } => {
-            vec![NetworkBehaviourAction::GenerateEvent(
-                Event::DiscoverFailed {
-                    rendezvous_node: peer_id,
-                    namespace,
-                    error,
-                },
-            )]
+            vec![ToSwarm::<Behaviour>::GenerateEvent(Event::DiscoverFailed {
+                rendezvous_node: peer_id,
+                namespace,
+                error,
+            })]
         }
     }
 }

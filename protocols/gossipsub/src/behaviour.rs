@@ -67,6 +67,7 @@ use crate::types::{
 };
 use crate::types::{GossipsubRpc, PeerConnections, PeerKind};
 use crate::{rpc_proto, TopicScoreParams};
+use libp2p_swarm::behaviour::ToSwarm;
 use std::{cmp::Ordering::Equal, fmt::Debug};
 use wasm_timer::Interval;
 
@@ -3443,11 +3444,7 @@ where
         }
     }
 
-    fn poll(
-        &mut self,
-        cx: &mut Context<'_>,
-        _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+    fn poll(&mut self, cx: &mut Context<'_>, _: &mut impl PollParameters) -> Poll<ToSwarm<Self>> {
         if let Some(event) = self.events.pop_front() {
             return Poll::Ready(event.map_in(|e: Arc<GossipsubHandlerIn>| {
                 // clone send event reference if others references are present

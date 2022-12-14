@@ -704,7 +704,7 @@ where
     /// order in which addresses are used to connect to) as well as
     /// how long the address is retained in the list, depending on
     /// how frequently it is reported by the `NetworkBehaviour` via
-    /// [`NetworkBehaviourAction::ReportObservedAddr`] or explicitly
+    /// [`ToSwarm::ReportObservedAddr`] or explicitly
     /// through this method.
     pub fn add_external_address(&mut self, a: Multiaddr, s: AddressScore) -> AddAddressResult {
         let result = self.external_addrs.add(a.clone(), s);
@@ -2061,7 +2061,7 @@ mod tests {
 
     /// Establishes multiple connections between two peers,
     /// after which one peer disconnects the other
-    /// using [`NetworkBehaviourAction::CloseConnection`] returned by a [`NetworkBehaviour`].
+    /// using [`ToSwarm::CloseConnection`] returned by a [`NetworkBehaviour`].
     ///
     /// The test expects both behaviours to be notified via pairs of
     /// [`NetworkBehaviour::inject_connection_established`] / [`NetworkBehaviour::inject_connection_closed`] calls.
@@ -2129,7 +2129,7 @@ mod tests {
 
     /// Establishes multiple connections between two peers,
     /// after which one peer closes a single connection
-    /// using [`NetworkBehaviourAction::CloseConnection`] returned by a [`NetworkBehaviour`].
+    /// using [`ToSwarm::CloseConnection`] returned by a [`NetworkBehaviour`].
     ///
     /// The test expects both behaviours to be notified via pairs of
     /// [`NetworkBehaviour::inject_connection_established`] / [`NetworkBehaviour::inject_connection_closed`] calls.

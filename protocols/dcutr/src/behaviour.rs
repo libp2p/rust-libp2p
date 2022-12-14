@@ -26,11 +26,13 @@ use either::Either;
 use libp2p_core::connection::{ConnectedPoint, ConnectionId};
 use libp2p_core::multiaddr::Protocol;
 use libp2p_core::{Multiaddr, PeerId};
-use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm};
+use libp2p_swarm::behaviour::{
+    ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm, ToSwarm,
+};
 use libp2p_swarm::dial_opts::{self, DialOpts};
 use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerUpgrErr, ExternalAddresses, IntoConnectionHandler,
-    NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
+    NetworkBehaviour, NotifyHandler, PollParameters,
 };
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::task::{Context, Poll};
@@ -68,7 +70,7 @@ pub enum UpgradeError {
 
 pub struct Behaviour {
     /// Queue of actions to return when polled.
-    queued_actions: VecDeque<ActionBuilder>,
+    queued_events: VecDeque<ToSwarmBuilder>,
 
     /// All direct (non-relayed) connections.
     direct_connections: HashMap<PeerId, HashSet<ConnectionId>>,
@@ -81,7 +83,7 @@ pub struct Behaviour {
 impl Behaviour {
     pub fn new(local_peer_id: PeerId) -> Self {
         Behaviour {
-            queued_actions: Default::default(),
+            queued_events: Default::default(),
             direct_connections: Default::default(),
             external_addresses: Default::default(),
             local_peer_id,
@@ -108,22 +110,19 @@ impl Behaviour {
                 // connection upgrade by initiating a direct connection to A.
                 //
                 // https://github.com/libp2p/specs/blob/master/relay/DCUtR.md#the-protocol
-                self.queued_actions.extend([
-                    ActionBuilder::Connect {
+                self.queued_events.extend([
+                    ToSwarmBuilder::Connect {
                         peer_id,
                         attempt: 1,
                         handler: NotifyHandler::One(connection_id),
                     },
-                    NetworkBehaviourAction::GenerateEvent(
-                        Event::InitiatedDirectConnectionUpgrade {
-                            remote_peer_id: peer_id,
-                            local_relayed_addr: match connected_point {
-                                ConnectedPoint::Listener { local_addr, .. } => local_addr.clone(),
-                                ConnectedPoint::Dialer { .. } => unreachable!("Due to outer if."),
-                            },
+                    ToSwarmBuilder::from(Event::InitiatedDirectConnectionUpgrade {
+                        remote_peer_id: peer_id,
+                        local_relayed_addr: match connected_point {
+                            ConnectedPoint::Listener { local_addr, .. } => local_addr.clone(),
+                            ConnectedPoint::Dialer { .. } => unreachable!("Due to outer if."),
                         },
-                    )
-                    .into(),
+                    }),
                 ]);
             }
         } else {
@@ -147,14 +146,14 @@ impl Behaviour {
         {
             let peer_id = peer_id.expect("Peer of `Prototype::DirectConnection` is always known.");
             if attempt < MAX_NUMBER_OF_UPGRADE_ATTEMPTS {
-                self.queued_actions.push_back(ActionBuilder::Connect {
+                self.queued_events.push_back(ToSwarmBuilder::Connect {
                     peer_id,
                     handler: NotifyHandler::One(relayed_connection_id),
                     attempt: attempt + 1,
                 });
             } else {
-                self.queued_actions.extend([
-                    NetworkBehaviourAction::NotifyHandler {
+                self.queued_events.extend([
+                    ToSwarm::<Self>::NotifyHandler {
                         peer_id,
                         handler: NotifyHandler::One(relayed_connection_id),
                         event: Either::Left(
@@ -162,7 +161,7 @@ impl Behaviour {
                         ),
                     }
                     .into(),
-                    NetworkBehaviourAction::GenerateEvent(Event::DirectConnectionUpgradeFailed {
+                    ToSwarm::<Self>::GenerateEvent(Event::DirectConnectionUpgradeFailed {
                         remote_peer_id: peer_id,
                         error: UpgradeError::Dial,
                     })
@@ -217,24 +216,22 @@ impl NetworkBehaviour for Behaviour {
                 inbound_connect,
                 remote_addr,
             }) => {
-                self.queued_actions.extend([
-                    ActionBuilder::AcceptInboundConnect {
+                self.queued_events.extend([
+                    ToSwarmBuilder::AcceptInboundConnect {
                         peer_id: event_source,
                         handler: NotifyHandler::One(connection),
                         inbound_connect,
                     },
-                    NetworkBehaviourAction::GenerateEvent(
-                        Event::RemoteInitiatedDirectConnectionUpgrade {
-                            remote_peer_id: event_source,
-                            remote_relayed_addr: remote_addr,
-                        },
-                    )
+                    ToSwarm::<Self>::GenerateEvent(Event::RemoteInitiatedDirectConnectionUpgrade {
+                        remote_peer_id: event_source,
+                        remote_relayed_addr: remote_addr,
+                    })
                     .into(),
                 ]);
             }
             Either::Left(handler::relayed::Event::InboundNegotiationFailed { error }) => {
-                self.queued_actions.push_back(
-                    NetworkBehaviourAction::GenerateEvent(Event::DirectConnectionUpgradeFailed {
+                self.queued_events.push_back(
+                    ToSwarm::<Self>::GenerateEvent(Event::DirectConnectionUpgradeFailed {
                         remote_peer_id: event_source,
                         error: UpgradeError::Handler(error),
                     })
@@ -242,8 +239,8 @@ impl NetworkBehaviour for Behaviour {
                 );
             }
             Either::Left(handler::relayed::Event::InboundConnectNegotiated(remote_addrs)) => {
-                self.queued_actions.push_back(
-                    NetworkBehaviourAction::Dial {
+                self.queued_events.push_back(
+                    ToSwarm::<Self>::Dial {
                         opts: DialOpts::peer_id(event_source)
                             .addresses(remote_addrs)
                             .condition(dial_opts::PeerCondition::Always)
@@ -257,8 +254,8 @@ impl NetworkBehaviour for Behaviour {
                 );
             }
             Either::Left(handler::relayed::Event::OutboundNegotiationFailed { error }) => {
-                self.queued_actions.push_back(
-                    NetworkBehaviourAction::GenerateEvent(Event::DirectConnectionUpgradeFailed {
+                self.queued_events.push_back(
+                    ToSwarm::<Self>::GenerateEvent(Event::DirectConnectionUpgradeFailed {
                         remote_peer_id: event_source,
                         error: UpgradeError::Handler(error),
                     })
@@ -269,8 +266,8 @@ impl NetworkBehaviour for Behaviour {
                 remote_addrs,
                 attempt,
             }) => {
-                self.queued_actions.push_back(
-                    NetworkBehaviourAction::Dial {
+                self.queued_events.push_back(
+                    ToSwarm::<Self>::Dial {
                         opts: DialOpts::peer_id(event_source)
                             .condition(dial_opts::PeerCondition::Always)
                             .addresses(remote_addrs)
@@ -289,8 +286,8 @@ impl NetworkBehaviour for Behaviour {
                     relayed_connection_id,
                 },
             )) => {
-                self.queued_actions.extend([
-                    NetworkBehaviourAction::NotifyHandler {
+                self.queued_events.extend([
+                    ToSwarm::<Self>::NotifyHandler {
                         peer_id: event_source,
                         handler: NotifyHandler::One(relayed_connection_id),
                         event: Either::Left(
@@ -298,11 +295,9 @@ impl NetworkBehaviour for Behaviour {
                         ),
                     }
                     .into(),
-                    NetworkBehaviourAction::GenerateEvent(
-                        Event::DirectConnectionUpgradeSucceeded {
-                            remote_peer_id: event_source,
-                        },
-                    )
+                    ToSwarm::<Self>::GenerateEvent(Event::DirectConnectionUpgradeSucceeded {
+                        remote_peer_id: event_source,
+                    })
                     .into(),
                 ]);
             }
@@ -310,12 +305,8 @@ impl NetworkBehaviour for Behaviour {
         };
     }
 
-    fn poll(
-        &mut self,
-        _cx: &mut Context<'_>,
-        _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
-        if let Some(action) = self.queued_actions.pop_front() {
+    fn poll(&mut self, _cx: &mut Context<'_>, _: &mut impl PollParameters) -> Poll<ToSwarm<Self>> {
+        if let Some(action) = self.queued_events.pop_front() {
             return Poll::Ready(action.build(self.local_peer_id, &self.external_addresses));
         }
 
@@ -346,10 +337,10 @@ impl NetworkBehaviour for Behaviour {
     }
 }
 
-/// A [`NetworkBehaviourAction`], either complete, or still requiring data from [`PollParameters`]
+/// A [`ToSwarm`], either complete, or still requiring data from [`PollParameters`]
 /// before being returned in [`Behaviour::poll`].
-enum ActionBuilder {
-    Done(NetworkBehaviourAction<Event, handler::Prototype>),
+enum ToSwarmBuilder {
+    Done(ToSwarm<Behaviour>),
     Connect {
         attempt: u8,
         handler: NotifyHandler,
@@ -362,18 +353,24 @@ enum ActionBuilder {
     },
 }
 
-impl From<NetworkBehaviourAction<Event, handler::Prototype>> for ActionBuilder {
-    fn from(action: NetworkBehaviourAction<Event, handler::Prototype>) -> Self {
+impl From<Event> for ToSwarmBuilder {
+    fn from(e: Event) -> Self {
+        ToSwarmBuilder::Done(ToSwarm::<Behaviour>::GenerateEvent(e))
+    }
+}
+
+impl From<ToSwarm<Behaviour>> for ToSwarmBuilder {
+    fn from(action: ToSwarm<Behaviour>) -> Self {
         Self::Done(action)
     }
 }
 
-impl ActionBuilder {
+impl ToSwarmBuilder {
     fn build(
         self,
         local_peer_id: PeerId,
         external_addresses: &ExternalAddresses,
-    ) -> NetworkBehaviourAction<Event, handler::Prototype> {
+    ) -> ToSwarm<Behaviour> {
         let obs_addrs = || {
             external_addresses
                 .iter()
@@ -384,12 +381,12 @@ impl ActionBuilder {
         };
 
         match self {
-            ActionBuilder::Done(action) => action,
-            ActionBuilder::AcceptInboundConnect {
+            ToSwarmBuilder::Done(action) => action,
+            ToSwarmBuilder::AcceptInboundConnect {
                 inbound_connect,
                 handler,
                 peer_id,
-            } => NetworkBehaviourAction::NotifyHandler {
+            } => ToSwarm::<Behaviour>::NotifyHandler {
                 handler,
                 peer_id,
                 event: Either::Left(handler::relayed::Command::AcceptInboundConnect {
@@ -397,11 +394,11 @@ impl ActionBuilder {
                     obs_addrs: obs_addrs(),
                 }),
             },
-            ActionBuilder::Connect {
+            ToSwarmBuilder::Connect {
                 attempt,
                 handler,
                 peer_id,
-            } => NetworkBehaviourAction::NotifyHandler {
+            } => ToSwarm::<Behaviour>::NotifyHandler {
                 handler,
                 peer_id,
                 event: Either::Left(handler::relayed::Command::Connect {

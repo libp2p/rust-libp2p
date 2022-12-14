@@ -18,20 +18,18 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::ResponseError;
+use crate::{Behaviour, ResponseError};
 
 use super::{
-    Action, AutoNatCodec, Config, DialRequest, DialResponse, Event, HandleInnerEvent, NatStatus,
-    ProbeId,
+    AutoNatCodec, Config, DialRequest, DialResponse, Event, HandleInnerEvent, NatStatus, ProbeId,
 };
 use futures::FutureExt;
 use futures_timer::Delay;
 use instant::Instant;
 use libp2p_core::{connection::ConnectionId, Multiaddr, PeerId};
 use libp2p_request_response::{self as request_response, OutboundFailure, RequestId};
-use libp2p_swarm::{
-    AddressScore, ExternalAddresses, ListenAddresses, NetworkBehaviourAction, PollParameters,
-};
+use libp2p_swarm::behaviour::ToSwarm;
+use libp2p_swarm::{AddressScore, ExternalAddresses, ListenAddresses, PollParameters};
 use rand::{seq::SliceRandom, thread_rng};
 use std::{
     collections::{HashMap, VecDeque},
@@ -109,7 +107,7 @@ impl<'a> HandleInnerEvent for AsClient<'a> {
         &mut self,
         params: &mut impl PollParameters,
         event: request_response::Event<DialRequest, DialResponse>,
-    ) -> (VecDeque<Event>, Option<Action>) {
+    ) -> (VecDeque<Event>, Option<ToSwarm<Behaviour>>) {
         let mut events = VecDeque::new();
         let mut action = None;
         match event {
@@ -158,7 +156,7 @@ impl<'a> HandleInnerEvent for AsClient<'a> {
                         .find_map(|r| (r.addr == address).then_some(r.score))
                         .unwrap_or(AddressScore::Finite(0));
                     if let AddressScore::Finite(finite_score) = score {
-                        action = Some(NetworkBehaviourAction::ReportObservedAddr {
+                        action = Some(ToSwarm::<Behaviour>::ReportObservedAddr {
                             address,
                             score: AddressScore::Finite(finite_score + 1),
                         });

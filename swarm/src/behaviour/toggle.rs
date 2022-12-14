@@ -18,14 +18,14 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::behaviour::{inject_from_swarm, FromSwarm};
+use crate::behaviour::{inject_from_swarm, FromSwarm, ToSwarm};
 use crate::handler::{
     ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr,
     DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound, IntoConnectionHandler,
     KeepAlive, ListenUpgradeError, SubstreamProtocol,
 };
 use crate::upgrade::SendWrapper;
-use crate::{NetworkBehaviour, NetworkBehaviourAction, PollParameters};
+use crate::{NetworkBehaviour, PollParameters};
 use either::Either;
 use libp2p_core::{
     either::{EitherError, EitherOutput},
@@ -108,7 +108,7 @@ where
         &mut self,
         cx: &mut Context<'_>,
         params: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+    ) -> Poll<ToSwarm<Self>> {
         if let Some(inner) = self.inner.as_mut() {
             inner.poll(cx, params).map(|action| {
                 action.map_handler(|h| ToggleIntoConnectionHandler { inner: Some(h) })

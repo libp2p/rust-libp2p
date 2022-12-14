@@ -20,7 +20,7 @@
 
 use crate::behaviour::{
     ConnectionClosed, ConnectionEstablished, DialFailure, ExpiredExternalAddr, ExpiredListenAddr,
-    FromSwarm, ListenerClosed, ListenerError, NewExternalAddr, NewListenAddr, NewListener,
+    FromSwarm, ListenerClosed, ListenerError, NewExternalAddr, NewListenAddr, NewListener, ToSwarm,
 };
 use crate::{
     ConnectionHandler, IntoConnectionHandler, NetworkBehaviour, NetworkBehaviourAction,
@@ -80,11 +80,7 @@ where
         self.addresses.get(p).map_or(Vec::new(), |v| v.clone())
     }
 
-    fn poll(
-        &mut self,
-        _: &mut Context,
-        _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+    fn poll(&mut self, _: &mut Context, _: &mut impl PollParameters) -> Poll<ToSwarm<Self>> {
         self.next_action.take().map_or(Poll::Pending, Poll::Ready)
     }
 
@@ -466,11 +462,7 @@ where
         self.inner.inject_event(p, c, e);
     }
 
-    fn poll(
-        &mut self,
-        cx: &mut Context,
-        args: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+    fn poll(&mut self, cx: &mut Context, args: &mut impl PollParameters) -> Poll<ToSwarm<Self>> {
         self.poll += 1;
         self.inner.poll(cx, args)
     }

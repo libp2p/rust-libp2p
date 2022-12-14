@@ -19,17 +19,19 @@
 // DEALINGS IN THE SOFTWARE.
 
 use super::{
-    Action, AutoNatCodec, Config, DialRequest, DialResponse, Event, HandleInnerEvent, ProbeId,
+    AutoNatCodec, Config, DialRequest, DialResponse, Event, HandleInnerEvent, ProbeId,
     ResponseError,
 };
+use crate::Behaviour;
 use instant::Instant;
 use libp2p_core::{connection::ConnectionId, multiaddr::Protocol, Multiaddr, PeerId};
 use libp2p_request_response::{
     self as request_response, InboundFailure, RequestId, ResponseChannel,
 };
+use libp2p_swarm::behaviour::ToSwarm;
 use libp2p_swarm::{
     dial_opts::{DialOpts, PeerCondition},
-    DialError, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
+    DialError, NetworkBehaviour, PollParameters,
 };
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -98,7 +100,7 @@ impl<'a> HandleInnerEvent for AsServer<'a> {
         &mut self,
         _params: &mut impl PollParameters,
         event: request_response::Event<DialRequest, DialResponse>,
-    ) -> (VecDeque<Event>, Option<Action>) {
+    ) -> (VecDeque<Event>, Option<ToSwarm<Behaviour>>) {
         let mut events = VecDeque::new();
         let mut action = None;
         match event {
@@ -130,7 +132,7 @@ impl<'a> HandleInnerEvent for AsServer<'a> {
                             addresses: addrs.clone(),
                         }));
 
-                        action = Some(NetworkBehaviourAction::Dial {
+                        action = Some(ToSwarm::<Behaviour>::Dial {
                             opts: DialOpts::peer_id(peer)
                                 .condition(PeerCondition::Always)
                                 .override_dial_concurrency_factor(NonZeroU8::new(1).expect("1 > 0"))

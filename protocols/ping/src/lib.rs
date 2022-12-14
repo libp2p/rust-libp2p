@@ -48,9 +48,8 @@ mod protocol;
 use handler::Handler;
 pub use handler::{Config, Failure, Success};
 use libp2p_core::{connection::ConnectionId, PeerId};
-use libp2p_swarm::{
-    behaviour::FromSwarm, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
-};
+use libp2p_swarm::behaviour::ToSwarm;
+use libp2p_swarm::{behaviour, behaviour::FromSwarm, NetworkBehaviour, PollParameters};
 use std::{
     collections::VecDeque,
     task::{Context, Poll},
@@ -127,11 +126,7 @@ impl NetworkBehaviour for Behaviour {
         self.events.push_front(Event { peer, result })
     }
 
-    fn poll(
-        &mut self,
-        _: &mut Context<'_>,
-        _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+    fn poll(&mut self, _: &mut Context<'_>, _: &mut impl PollParameters) -> Poll<ToSwarm<Self>> {
         if let Some(e) = self.events.pop_back() {
             let Event { result, peer } = &e;
 
@@ -141,16 +136,13 @@ impl NetworkBehaviour for Behaviour {
                 _ => {}
             }
 
-            Poll::Ready(NetworkBehaviourAction::GenerateEvent(e))
+            Poll::Ready(ToSwarm::<Self>::GenerateEvent(e))
         } else {
             Poll::Pending
         }
     }
 
-    fn on_swarm_event(
-        &mut self,
-        event: libp2p_swarm::behaviour::FromSwarm<Self::ConnectionHandler>,
-    ) {
+    fn on_swarm_event(&mut self, event: behaviour::FromSwarm<Self::ConnectionHandler>) {
         match event {
             FromSwarm::ConnectionEstablished(_)
             | FromSwarm::ConnectionClosed(_)

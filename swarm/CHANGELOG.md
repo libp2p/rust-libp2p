@@ -5,9 +5,14 @@
 
 - Add `estblished_in` to `SwarmEvent::ConnectionEstablished`. See [PR 3134].
 
+- Introduce `ToSwarm` type alias as an alternative to `NetworkBehaviourAction`.
+  `ToSwarm` should generally be preferred because it only requires the corresponding `NetworkBehaviour` as a type parameter.
+  See [PR XXXX].
+
 [PR 3170]: https://github.com/libp2p/rust-libp2p/pull/3170
 [PR 3134]: https://github.com/libp2p/rust-libp2p/pull/3134
 [PR 3153]: https://github.com/libp2p/rust-libp2p/pull/3153
+[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
 
 # 0.41.1
 

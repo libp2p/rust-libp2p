@@ -34,11 +34,10 @@ use futures::ready;
 use futures::stream::StreamExt;
 use libp2p_core::connection::ConnectionId;
 use libp2p_core::PeerId;
-use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm};
+use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm, ToSwarm};
 use libp2p_swarm::dial_opts::DialOpts;
 use libp2p_swarm::{
-    ConnectionHandlerUpgrErr, NegotiatedSubstream, NetworkBehaviour, NetworkBehaviourAction,
-    NotifyHandler, PollParameters,
+    ConnectionHandlerUpgrErr, NegotiatedSubstream, NetworkBehaviour, NotifyHandler, PollParameters,
 };
 use std::collections::{hash_map, HashMap, VecDeque};
 use std::io::{Error, ErrorKind, IoSlice};
@@ -247,9 +246,9 @@ impl NetworkBehaviour for Client {
         &mut self,
         cx: &mut Context<'_>,
         _poll_parameters: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+    ) -> Poll<ToSwarm<Self>> {
         if let Some(event) = self.queued_actions.pop_front() {
-            return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event));
+            return Poll::Ready(ToSwarm::<Self>::GenerateEvent(event));
         }
 
         let action = match ready!(self.from_transport.poll_next_unpin(cx)) {
@@ -263,7 +262,7 @@ impl NetworkBehaviour for Client {
                     .get(&relay_peer_id)
                     .and_then(|cs| cs.get(0))
                 {
-                    Some(connection_id) => NetworkBehaviourAction::NotifyHandler {
+                    Some(connection_id) => ToSwarm::<Self>::NotifyHandler {
                         peer_id: relay_peer_id,
                         handler: NotifyHandler::One(*connection_id),
                         event: Either::Left(handler::In::Reserve { to_listener }),
@@ -273,7 +272,7 @@ impl NetworkBehaviour for Client {
                             self.local_peer_id,
                             Some(handler::In::Reserve { to_listener }),
                         );
-                        NetworkBehaviourAction::Dial {
+                        ToSwarm::<Self>::Dial {
                             opts: DialOpts::peer_id(relay_peer_id)
                                 .addresses(vec![relay_addr])
                                 .extend_addresses_through_behaviour()
@@ -295,7 +294,7 @@ impl NetworkBehaviour for Client {
                     .get(&relay_peer_id)
                     .and_then(|cs| cs.get(0))
                 {
-                    Some(connection_id) => NetworkBehaviourAction::NotifyHandler {
+                    Some(connection_id) => ToSwarm::<Self>::NotifyHandler {
                         peer_id: relay_peer_id,
                         handler: NotifyHandler::One(*connection_id),
                         event: Either::Left(handler::In::EstablishCircuit {
@@ -311,7 +310,7 @@ impl NetworkBehaviour for Client {
                                 dst_peer_id,
                             }),
                         );
-                        NetworkBehaviourAction::Dial {
+                        ToSwarm::<Self>::Dial {
                             opts: DialOpts::peer_id(relay_peer_id)
                                 .addresses(vec![relay_addr])
                                 .extend_addresses_through_behaviour()

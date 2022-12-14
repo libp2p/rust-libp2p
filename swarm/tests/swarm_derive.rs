@@ -21,6 +21,7 @@
 use futures::StreamExt;
 use libp2p_identify as identify;
 use libp2p_ping as ping;
+use libp2p_swarm::behaviour::ToSwarm;
 use libp2p_swarm::{behaviour::FromSwarm, dummy, NetworkBehaviour, SwarmEvent};
 use std::fmt::Debug;
 
@@ -372,9 +373,7 @@ fn generated_out_event_derive_debug() {
 fn custom_out_event_no_type_parameters() {
     use libp2p_core::connection::ConnectionId;
     use libp2p_core::PeerId;
-    use libp2p_swarm::{
-        ConnectionHandler, IntoConnectionHandler, NetworkBehaviourAction, PollParameters,
-    };
+    use libp2p_swarm::{ConnectionHandler, IntoConnectionHandler, PollParameters};
     use std::task::Context;
     use std::task::Poll;
 
@@ -399,11 +398,7 @@ fn custom_out_event_no_type_parameters() {
             void::unreachable(message);
         }
 
-        fn poll(
-            &mut self,
-            _ctx: &mut Context,
-            _: &mut impl PollParameters,
-        ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+        fn poll(&mut self, _ctx: &mut Context, _: &mut impl PollParameters) -> Poll<ToSwarm<Self>> {
             Poll::Pending
         }
 

@@ -35,12 +35,13 @@ use libp2p_request_response::{
     self as request_response, ProtocolSupport, RequestId, ResponseChannel,
 };
 use libp2p_swarm::{
+    behaviour::ToSwarm,
     behaviour::{
         AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, ExpiredExternalAddr,
         ExpiredListenAddr, FromSwarm,
     },
     ConnectionHandler, ExternalAddresses, IntoConnectionHandler, ListenAddresses, NetworkBehaviour,
-    NetworkBehaviourAction, PollParameters,
+    PollParameters,
 };
 use std::{
     collections::{HashMap, VecDeque},
@@ -209,12 +210,7 @@ pub struct Behaviour {
 
     last_probe: Option<Instant>,
 
-    pending_actions: VecDeque<
-        NetworkBehaviourAction<
-            <Self as NetworkBehaviour>::OutEvent,
-            <Self as NetworkBehaviour>::ConnectionHandler,
-        >,
-    >,
+    pending_to_swarm: VecDeque<ToSwarm<Behaviour>>,
 
     probe_id: ProbeId,
 
@@ -242,7 +238,7 @@ impl Behaviour {
             throttled_servers: Vec::new(),
             throttled_clients: Vec::new(),
             last_probe: None,
-            pending_actions: VecDeque::new(),
+            pending_to_swarm: VecDeque::new(),
             probe_id: ProbeId(0),
             listen_addresses: Default::default(),
             external_addresses: Default::default(),
@@ -339,10 +335,8 @@ impl Behaviour {
                 role_override: Endpoint::Dialer,
             } => {
                 if let Some(event) = self.as_server().on_outbound_connection(&peer, address) {
-                    self.pending_actions
-                        .push_back(NetworkBehaviourAction::GenerateEvent(Event::InboundProbe(
-                            event,
-                        )));
+                    self.pending_to_swarm
+                        .push_back(ToSwarm::<Self>::GenerateEvent(Event::InboundProbe(event)));
                 }
             }
             ConnectedPoint::Dialer {
@@ -402,10 +396,8 @@ impl Behaviour {
                 error,
             }));
         if let Some(event) = self.as_server().on_outbound_dial_error(peer_id, error) {
-            self.pending_actions
-                .push_back(NetworkBehaviourAction::GenerateEvent(Event::InboundProbe(
-                    event,
-                )));
+            self.pending_to_swarm
+                .push_back(ToSwarm::<Self>::GenerateEvent(Event::InboundProbe(event)));
         }
     }
 
@@ -438,14 +430,20 @@ impl NetworkBehaviour for Behaviour {
         <request_response::Behaviour<AutoNatCodec> as NetworkBehaviour>::ConnectionHandler;
     type OutEvent = Event;
 
-    fn poll(&mut self, cx: &mut Context<'_>, params: &mut impl PollParameters) -> Poll<Action> {
+    fn poll(
+        &mut self,
+        cx: &mut Context<'_>,
+        params: &mut impl PollParameters,
+    ) -> Poll<ToSwarm<Behaviour>> {
         loop {
-            if let Some(event) = self.pending_actions.pop_front() {
+            if let Some(event) = self.pending_to_swarm.pop_front() {
                 return Poll::Ready(event);
             }
 
             match self.inner.poll(cx, params) {
-                Poll::Ready(NetworkBehaviourAction::GenerateEvent(event)) => {
+                Poll::Ready(
+                    ToSwarm::<request_response::Behaviour<AutoNatCodec>>::GenerateEvent(event),
+                ) => {
                     let (events, action) = match event {
                         request_response::Event::Message {
                             message: request_response::Message::Response { .. },
@@ -464,16 +462,16 @@ impl NetworkBehaviour for Behaviour {
                         request_response::Event::ResponseSent { .. } => (VecDeque::new(), None),
                     };
 
-                    self.pending_actions.extend(
+                    self.pending_to_swarm.extend(
                         events
                             .into_iter()
-                            .map(NetworkBehaviourAction::GenerateEvent)
+                            .map(ToSwarm::<Self>::GenerateEvent)
                             .chain(action),
                     );
                     continue;
                 }
                 Poll::Ready(action) => {
-                    self.pending_actions
+                    self.pending_to_swarm
                         .push_back(action.map_out(|_| unreachable!()));
                     continue;
                 }
@@ -482,10 +480,8 @@ impl NetworkBehaviour for Behaviour {
 
             match self.as_client().poll_auto_probe(cx) {
                 Poll::Ready(event) => {
-                    self.pending_actions
-                        .push_back(NetworkBehaviourAction::GenerateEvent(Event::OutboundProbe(
-                            event,
-                        )));
+                    self.pending_to_swarm
+                        .push_back(ToSwarm::<Self>::GenerateEvent(Event::OutboundProbe(event)));
                     continue;
                 }
                 Poll::Pending => {}
@@ -568,18 +564,13 @@ impl NetworkBehaviour for Behaviour {
     }
 }
 
-type Action = NetworkBehaviourAction<
-    <Behaviour as NetworkBehaviour>::OutEvent,
-    <Behaviour as NetworkBehaviour>::ConnectionHandler,
->;
-
 // Trait implemented for `AsClient` and `AsServer` to handle events from the inner [`request_response::Behaviour`] Protocol.
 trait HandleInnerEvent {
     fn handle_event(
         &mut self,
         params: &mut impl PollParameters,
         event: request_response::Event<DialRequest, DialResponse>,
-    ) -> (VecDeque<Event>, Option<Action>);
+    ) -> (VecDeque<Event>, Option<ToSwarm<Behaviour>>);
 }
 
 trait GlobalIp {

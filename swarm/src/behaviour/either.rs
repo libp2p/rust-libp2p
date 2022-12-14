@@ -18,9 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::behaviour::{
-    self, inject_from_swarm, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
-};
+use crate::behaviour::{self, inject_from_swarm, NetworkBehaviour, PollParameters, ToSwarm};
 use crate::handler::either::IntoEitherHandler;
 use either::Either;
 use libp2p_core::{Multiaddr, PeerId};
@@ -97,7 +95,7 @@ where
         &mut self,
         cx: &mut Context<'_>,
         params: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+    ) -> Poll<ToSwarm<Self>> {
         let event = match self {
             Either::Left(behaviour) => futures::ready!(behaviour.poll(cx, params))
                 .map_out(Either::Left)

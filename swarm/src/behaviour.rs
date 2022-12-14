@@ -28,7 +28,7 @@ pub use listen_addresses::ListenAddresses;
 
 use crate::dial_opts::DialOpts;
 use crate::handler::{ConnectionHandler, IntoConnectionHandler};
-use crate::{AddressRecord, AddressScore, DialError};
+use crate::{AddressRecord, AddressScore, DialError, TBehaviourOutEvent, THandler};
 use libp2p_core::{
     connection::ConnectionId, transport::ListenerId, ConnectedPoint, Multiaddr, PeerId,
 };
@@ -142,7 +142,7 @@ pub trait NetworkBehaviour: 'static {
     /// (ie. the objects returned by `new_handler`) can communicate by passing messages. Messages
     /// sent from the handler to the behaviour are injected with [`NetworkBehaviour::inject_event`],
     /// and the behaviour can send a message to the handler by making [`NetworkBehaviour::poll`]
-    /// return [`NetworkBehaviourAction::NotifyHandler`].
+    /// return [`ToSwarm::NotifyHandler`].
     ///
     /// Note that the handler is returned to the [`NetworkBehaviour`] on connection failure and
     /// connection closing.
@@ -386,7 +386,7 @@ pub trait NetworkBehaviour: 'static {
         &mut self,
         cx: &mut Context<'_>,
         params: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>>;
+    ) -> Poll<ToSwarm<Self>>;
 }
 
 /// Parameters passed to `poll()`, that the `NetworkBehaviour` has access to.
@@ -427,6 +427,12 @@ pub trait PollParameters {
     )]
     fn local_peer_id(&self) -> &PeerId;
 }
+
+pub type ToSwarm<TBehaviour> = NetworkBehaviourAction<
+    TBehaviourOutEvent<TBehaviour>,
+    THandler<TBehaviour>,
+    THandlerInEvent<THandler<TBehaviour>>,
+>;
 
 /// An action that a [`NetworkBehaviour`] can trigger in the [`Swarm`]
 /// in whose context it is executing.
@@ -470,7 +476,7 @@ pub enum NetworkBehaviourAction<
     /// # use libp2p_swarm::{
     /// #     DialError, IntoConnectionHandler, KeepAlive, NegotiatedSubstream,
     /// #     NetworkBehaviour, NetworkBehaviourAction, PollParameters, ConnectionHandler,
-    /// #     ConnectionHandlerEvent, ConnectionHandlerUpgrErr, SubstreamProtocol, Swarm, SwarmEvent,
+    /// #     ConnectionHandlerEvent, ConnectionHandlerUpgrErr, SubstreamProtocol, Swarm, SwarmEvent, behaviour::ToSwarm
     /// # };
     /// # use libp2p_swarm::dial_opts::{DialOpts, PeerCondition};
     /// # use libp2p_yamux as yamux;
@@ -552,14 +558,14 @@ pub enum NetworkBehaviourAction<
     ///         // the precious message is not lost and we can return it back to the user.
     ///         let msg = handler.message.unwrap();
     ///         self.outbox_to_swarm
-    ///             .push_back(NetworkBehaviourAction::GenerateEvent(msg))
+    ///             .push_back(ToSwarm::GenerateEvent(msg))
     ///     }
     ///     #
     ///     # fn poll(
     ///     #     &mut self,
     ///     #     _: &mut Context<'_>,
     ///     #     _: &mut impl PollParameters,
-    ///     # ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+    ///     # ) -> Poll<ToSwarm<Self>> {
     ///     #     if let Some(action) = self.outbox_to_swarm.pop_front() {
     ///     #         return Poll::Ready(action);
     ///     #     }
@@ -676,7 +682,7 @@ pub enum NetworkBehaviourAction<
     /// with the given peer.
     ///
     /// Note: Closing a connection via
-    /// [`NetworkBehaviourAction::CloseConnection`] does not inform the
+    /// [`ToSwarm::CloseConnection`] does not inform the
     /// corresponding [`ConnectionHandler`].
     /// Closing a connection via a [`ConnectionHandler`] can be done
     /// either in a collaborative manner across [`ConnectionHandler`]s
