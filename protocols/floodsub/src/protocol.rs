@@ -154,9 +154,12 @@ where
 
     fn upgrade_outbound(self, socket: TSocket, _: Self::Info) -> Self::Future {
         Box::pin(async move {
-            let mut framed = Framed::new(socket, prost_codec::Codec::new(MAX_MESSAGE_LEN_BYTES));
-            framed.send(self.into_rpc()).await;
-            framed.close().await;
+            let mut framed = Framed::new(
+                socket,
+                prost_codec::Codec::<rpc_proto::Rpc>::new(MAX_MESSAGE_LEN_BYTES),
+            );
+            let _ = framed.send(self.into_rpc()).await;
+            let _ = framed.close().await;
             Ok(())
         })
     }

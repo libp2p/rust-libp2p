@@ -1,3 +1,11 @@
+# 0.42.0 [unreleased]
+
+- Update to `prost-codec` `v0.3.0`
+
+- Refactoring GossipsubCodec to use common protobuf Codec. See [PR 3224].
+
+[pr 3224]: https://github.com/libp2p/rust-libp2p/pull/3224
+
 # 0.41.0
 
 - Update to `libp2p-core` `v0.38.0`.

@@ -12,7 +12,6 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 asynchronous-codec = "0.6"
-bytes = "1.0"
 cuckoofilter = "0.5.0"
 fnv = "1.0"
 futures = "0.3.1"
