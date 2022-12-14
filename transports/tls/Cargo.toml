@@ -28,7 +28,9 @@ features = ["dangerous_configuration"] # Must enable this to allow for custom ve
 [dev-dependencies]
 hex = "0.4.3"
 hex-literal = "0.3.4"
-libp2p = { path = "../..", features = ["yamux", "rsa", "ecdsa", "secp256k1"], default-features = false }
+libp2p-core = { path = "../../core", features = ["rsa", "ecdsa", "secp256k1"] }
+libp2p-swarm = { path = "../../swarm" }
+libp2p-yamux = { path = "../../muxers/yamux" }
 tokio = { version = "1.21.1", features = ["full"] }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
