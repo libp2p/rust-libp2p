@@ -26,7 +26,7 @@ use self::query::MdnsPacket;
 use crate::behaviour::{socket::AsyncSocket, timer::Builder};
 use crate::Config;
 use libp2p_core::{Multiaddr, PeerId};
-use libp2p_swarm::PollParameters;
+use libp2p_swarm::ListenAddresses;
 use socket2::{Domain, Socket, Type};
 use std::{
     collections::VecDeque,
@@ -66,6 +66,8 @@ pub struct InterfaceState<U, T> {
     discovered: VecDeque<(PeerId, Multiaddr, Instant)>,
     /// TTL
     ttl: Duration,
+
+    local_peer_id: PeerId,
 }
 
 impl<U, T> InterfaceState<U, T>
@@ -74,7 +76,7 @@ where
     T: Builder + futures::Stream,
 {
     /// Builds a new [`InterfaceState`].
-    pub fn new(addr: IpAddr, config: Config) -> io::Result<Self> {
+    pub fn new(addr: IpAddr, config: Config, local_peer_id: PeerId) -> io::Result<Self> {
         log::info!("creating instance on iface {}", addr);
         let recv_socket = match addr {
             IpAddr::V4(addr) => {
@@ -134,6 +136,7 @@ where
             timeout: T::interval_at(Instant::now(), query_interval),
             multicast_addr,
             ttl: config.ttl,
+            local_peer_id,
         })
     }
 
@@ -148,7 +151,7 @@ where
     pub fn poll(
         &mut self,
         cx: &mut Context,
-        params: &impl PollParameters,
+        listen_addresses: &ListenAddresses,
     ) -> Poll<(PeerId, Multiaddr, Instant)> {
         loop {
             // 1st priority: Low latency: Create packet ASAP after timeout.
@@ -198,8 +201,8 @@ where
 
                     self.send_buffer.extend(build_query_response(
                         query.query_id(),
-                        *params.local_peer_id(),
-                        params.listened_addresses(),
+                        self.local_peer_id,
+                        listen_addresses.iter(),
                         self.ttl,
                     ));
                     continue;
@@ -211,9 +214,8 @@ where
                         self.addr
                     );
 
-                    self.discovered.extend(
-                        response.extract_discovered(Instant::now(), *params.local_peer_id()),
-                    );
+                    self.discovered
+                        .extend(response.extract_discovered(Instant::now(), self.local_peer_id));
                     continue;
                 }
                 Poll::Ready(Ok(Ok(Some(MdnsPacket::ServiceDiscovery(disc))))) => {
