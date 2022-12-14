@@ -60,7 +60,7 @@ fn prepare(c: &mut Criterion) {
         tcp.throughput(Throughput::Bytes(payload.len() as u64));
         let mut receiver_transport = tcp_transport(size);
         let mut sender_transport = tcp_transport(size);
-        tcp.bench_function(format!("{}", size), |b| {
+        tcp.bench_function(format!("{size}"), |b| {
             b.iter(|| {
                 run(
                     black_box(&mut receiver_transport),
@@ -79,7 +79,7 @@ fn prepare(c: &mut Criterion) {
         mem.throughput(Throughput::Bytes(payload.len() as u64));
         let mut receiver_transport = mem_transport(size);
         let mut sender_transport = mem_transport(size);
-        mem.bench_function(format!("{}", size), |b| {
+        mem.bench_function(format!("{size}"), |b| {
             b.iter(|| {
                 run(
                     black_box(&mut receiver_transport),

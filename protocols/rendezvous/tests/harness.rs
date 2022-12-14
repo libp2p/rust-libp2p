@@ -59,7 +59,7 @@ where
 fn get_rand_memory_address() -> Multiaddr {
     let address_port = rand::random::<u64>();
 
-    format!("/memory/{}", address_port)
+    format!("/memory/{address_port}")
         .parse::<Multiaddr>()
         .unwrap()
 }
@@ -176,7 +176,7 @@ where
                             listener_done = true;
                         }
                         SwarmEvent::IncomingConnectionError { error, .. } => {
-                            panic!("Failure in incoming connection {}", error);
+                            panic!("Failure in incoming connection {error}");
                         }
                         other => {
                             log::debug!("Ignoring {:?}", other);

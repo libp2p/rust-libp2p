@@ -122,7 +122,7 @@ impl fmt::Debug for PublicKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("PublicKey(compressed): ")?;
         for byte in self.0.as_bytes() {
-            write!(f, "{:x}", byte)?;
+            write!(f, "{byte:x}")?;
         }
         Ok(())
     }

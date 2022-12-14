@@ -51,7 +51,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
-    println!("Local peer id: {:?}", local_peer_id);
+    println!("Local peer id: {local_peer_id:?}");
 
     let transport = libp2p::development_transport(local_key.clone()).await?;
 
@@ -66,9 +66,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     loop {
         match swarm.select_next_some().await {
-            SwarmEvent::NewListenAddr { address, .. } => println!("Listening on {:?}", address),
-            SwarmEvent::Behaviour(event) => println!("{:?}", event),
-            e => println!("{:?}", e),
+            SwarmEvent::NewListenAddr { address, .. } => println!("Listening on {address:?}"),
+            SwarmEvent::Behaviour(event) => println!("{event:?}"),
+            e => println!("{e:?}"),
         }
     }
 }

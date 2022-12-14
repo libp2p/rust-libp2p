@@ -217,7 +217,7 @@ impl Decoder for Codec {
                 CodecDecodeState::HasHeader(header) => match self.varint_decoder.decode(src)? {
                     Some(len) => {
                         if len as usize > MAX_FRAME_SIZE {
-                            let msg = format!("Mplex frame length {} exceeds maximum", len);
+                            let msg = format!("Mplex frame length {len} exceeds maximum");
                             return Err(io::Error::new(io::ErrorKind::InvalidData, msg));
                         }
 
@@ -264,7 +264,7 @@ impl Decoder for Codec {
                             stream_id: RemoteStreamId::dialer(num),
                         },
                         _ => {
-                            let msg = format!("Invalid mplex header value 0x{:x}", header);
+                            let msg = format!("Invalid mplex header value 0x{header:x}");
                             return Err(io::Error::new(io::ErrorKind::InvalidData, msg));
                         }
                     };

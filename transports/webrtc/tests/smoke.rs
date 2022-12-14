@@ -72,9 +72,17 @@ async fn smoke() -> Result<()> {
     b.behaviour_mut()
         .send_request(Swarm::local_peer_id(&a), Ping(data.clone()));
 
+<<<<<<< HEAD
     match b.next().await {
         Some(SwarmEvent::Dialing(_)) => {}
         e => panic!("{:?}", e),
+=======
+async fn start_listening(transport: &mut Boxed<(PeerId, StreamMuxerBox)>, addr: &str) -> Multiaddr {
+    transport.listen_on(addr.parse().unwrap()).unwrap();
+    match transport.next().await {
+        Some(TransportEvent::NewAddress { listen_addr, .. }) => listen_addr,
+        e => panic!("{e:?}"),
+>>>>>>> d79c93ab (chore: Implement latest clippy warnings (#3220))
     }
 
     let pair = select(a.next(), b.next());

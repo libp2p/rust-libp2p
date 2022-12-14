@@ -219,7 +219,7 @@ fn bootstrap() {
                         }
                         // Ignore any other event.
                         Poll::Ready(Some(_)) => (),
-                        e @ Poll::Ready(_) => panic!("Unexpected return value: {:?}", e),
+                        e @ Poll::Ready(_) => panic!("Unexpected return value: {e:?}"),
                         Poll::Pending => break,
                     }
                 }
@@ -261,9 +261,9 @@ fn query_iter() {
                     assert_eq!(&key[..], search_target.to_bytes().as_slice());
                     assert_eq!(usize::from(step.count), 1);
                 }
-                i => panic!("Unexpected query info: {:?}", i),
+                i => panic!("Unexpected query info: {i:?}"),
             },
-            None => panic!("Query not found: {:?}", qid),
+            None => panic!("Query not found: {qid:?}"),
         }
 
         // Set up expectations.
@@ -295,7 +295,7 @@ fn query_iter() {
                         }
                         // Ignore any other event.
                         Poll::Ready(Some(_)) => (),
-                        e @ Poll::Ready(_) => panic!("Unexpected return value: {:?}", e),
+                        e @ Poll::Ready(_) => panic!("Unexpected return value: {e:?}"),
                         Poll::Pending => break,
                     }
                 }
@@ -348,7 +348,7 @@ fn unresponsive_not_returned_direct() {
                     }
                     // Ignore any other event.
                     Poll::Ready(Some(_)) => (),
-                    e @ Poll::Ready(_) => panic!("Unexpected return value: {:?}", e),
+                    e @ Poll::Ready(_) => panic!("Unexpected return value: {e:?}"),
                     Poll::Pending => break,
                 }
             }
@@ -409,7 +409,7 @@ fn unresponsive_not_returned_indirect() {
                     }
                     // Ignore any other event.
                     Poll::Ready(Some(_)) => (),
-                    e @ Poll::Ready(_) => panic!("Unexpected return value: {:?}", e),
+                    e @ Poll::Ready(_) => panic!("Unexpected return value: {e:?}"),
                     Poll::Pending => break,
                 }
             }
@@ -466,12 +466,12 @@ fn get_record_not_found() {
                             assert!(closest_peers.contains(&swarm_ids[2]));
                             return Poll::Ready(());
                         } else {
-                            panic!("Unexpected error result: {:?}", e);
+                            panic!("Unexpected error result: {e:?}");
                         }
                     }
                     // Ignore any other event.
                     Poll::Ready(Some(_)) => (),
-                    e @ Poll::Ready(_) => panic!("Unexpected return value: {:?}", e),
+                    e @ Poll::Ready(_) => panic!("Unexpected return value: {e:?}"),
                     Poll::Pending => break,
                 }
             }
@@ -555,9 +555,9 @@ fn put_record() {
                         assert!(record.expires.is_some());
                         qids.insert(qid);
                     }
-                    i => panic!("Unexpected query info: {:?}", i),
+                    i => panic!("Unexpected query info: {i:?}"),
                 },
-                None => panic!("Query not found: {:?}", qid),
+                None => panic!("Query not found: {qid:?}"),
             }
         }
 
@@ -595,7 +595,7 @@ fn put_record() {
                             assert_eq!(usize::from(index.count), 1);
                             assert!(index.last);
                             match res {
-                                Err(e) => panic!("{:?}", e),
+                                Err(e) => panic!("{e:?}"),
                                 Ok(ok) => {
                                     assert!(records.contains_key(&ok.key));
                                     let record = swarm.behaviour_mut().store.get(&ok.key).unwrap();
@@ -630,7 +630,7 @@ fn put_record() {
                         }
                         // Ignore any other event.
                         Poll::Ready(Some(_)) => (),
-                        e @ Poll::Ready(_) => panic!("Unexpected return value: {:?}", e),
+                        e @ Poll::Ready(_) => panic!("Unexpected return value: {e:?}"),
                         Poll::Pending => break,
                     }
                 }
@@ -693,16 +693,14 @@ fn put_record() {
                         actual.difference(&expected).collect::<Vec<&PeerId>>();
                     assert!(
                         actual_not_expected.is_empty(),
-                        "Did not expect records to be stored on nodes {:?}.",
-                        actual_not_expected,
+                        "Did not expect records to be stored on nodes {actual_not_expected:?}.",
                     );
 
                     let expected_not_actual =
                         expected.difference(&actual).collect::<Vec<&PeerId>>();
                     assert!(
                         expected_not_actual.is_empty(),
-                        "Expected record to be stored on nodes {:?}.",
-                        expected_not_actual,
+                        "Expected record to be stored on nodes {expected_not_actual:?}.",
                     );
                 }
             }
@@ -791,7 +789,7 @@ fn get_record() {
                     }
                     // Ignore any other event.
                     Poll::Ready(Some(_)) => (),
-                    e @ Poll::Ready(_) => panic!("Unexpected return value: {:?}", e),
+                    e @ Poll::Ready(_) => panic!("Unexpected return value: {e:?}"),
                     Poll::Pending => break,
                 }
             }
@@ -849,7 +847,7 @@ fn get_record_many() {
                     }
                     // Ignore any other event.
                     Poll::Ready(Some(_)) => (),
-                    e @ Poll::Ready(_) => panic!("Unexpected return value: {:?}", e),
+                    e @ Poll::Ready(_) => panic!("Unexpected return value: {e:?}"),
                     Poll::Pending => break,
                 }
             }
@@ -939,7 +937,7 @@ fn add_provider() {
                         ))) => {
                             assert!(qids.is_empty() || qids.remove(&id));
                             match res {
-                                Err(e) => panic!("{:?}", e),
+                                Err(e) => panic!("{e:?}"),
                                 Ok(ok) => {
                                     assert!(keys.contains(&ok.key));
                                     results.push(ok.key);
@@ -948,7 +946,7 @@ fn add_provider() {
                         }
                         // Ignore any other event.
                         Poll::Ready(Some(_)) => (),
-                        e @ Poll::Ready(_) => panic!("Unexpected return value: {:?}", e),
+                        e @ Poll::Ready(_) => panic!("Unexpected return value: {e:?}"),
                         Poll::Pending => break,
                     }
                 }
@@ -1066,7 +1064,7 @@ fn exceed_jobs_max_queries() {
                             result: QueryResult::GetClosestPeers(Ok(r)),
                             ..
                         }) => break assert!(r.peers.is_empty()),
-                        SwarmEvent::Behaviour(e) => panic!("Unexpected event: {:?}", e),
+                        SwarmEvent::Behaviour(e) => panic!("Unexpected event: {e:?}"),
                         _ => {}
                     }
                 } else {
@@ -1158,7 +1156,7 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
                                 assert_eq!(r.peer, Some(addr_trudy));
                             }
                             Ok(_) => {}
-                            Err(e) => panic!("{:?}", e),
+                            Err(e) => panic!("{e:?}"),
                         }
                     }
                     // Ignore any other event.
@@ -1184,7 +1182,7 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
             QueryInfo::GetRecord { step, .. } => {
                 assert_eq!(usize::from(step.count), 2);
             }
-            i => panic!("Unexpected query info: {:?}", i),
+            i => panic!("Unexpected query info: {i:?}"),
         });
 
     // Poll `alice` and `bob` expecting `alice` to return a successful query
@@ -1368,7 +1366,7 @@ fn get_providers_single() {
                     result: QueryResult::StartProviding(Ok(_)),
                     ..
                 }) => {}
-                SwarmEvent::Behaviour(e) => panic!("Unexpected event: {:?}", e),
+                SwarmEvent::Behaviour(e) => panic!("Unexpected event: {e:?}"),
                 _ => {}
             }
         });
@@ -1398,7 +1396,7 @@ fn get_providers_single() {
                             }
                         }
                     }
-                    SwarmEvent::Behaviour(e) => panic!("Unexpected event: {:?}", e),
+                    SwarmEvent::Behaviour(e) => panic!("Unexpected event: {e:?}"),
                     _ => {}
                 }
             }

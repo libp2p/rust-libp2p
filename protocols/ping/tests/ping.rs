@@ -75,7 +75,7 @@ fn ping_pong() {
                         result: Err(e),
                         ..
                     })) => {
-                        panic!("Ping failure: {:?}", e)
+                        panic!("Ping failure: {e:?}")
                     }
                     _ => {}
                 }
@@ -101,7 +101,7 @@ fn ping_pong() {
                         result: Err(e),
                         ..
                     })) => {
-                        panic!("Ping failure: {:?}", e)
+                        panic!("Ping failure: {e:?}")
                     }
                     _ => {}
                 }
