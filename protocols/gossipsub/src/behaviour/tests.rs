@@ -4767,8 +4767,8 @@ fn test_iwant_penalties() {
             assert!(i > 9);
             double_penalized += 1
         } else {
-            println!("{}", peer);
-            println!("{}", score);
+            println!("{peer}");
+            println!("{score}");
             panic!("Invalid score of peer");
         }
     }

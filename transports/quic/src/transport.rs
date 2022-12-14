@@ -771,7 +771,7 @@ mod test {
                     );
                     assert!(matches!(listen_addr.iter().nth(2), Some(Protocol::QuicV1)));
                 }
-                e => panic!("Unexpected event: {:?}", e),
+                e => panic!("Unexpected event: {e:?}"),
             }
             assert!(transport.remove_listener(id), "Expect listener to exist.");
             match poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx)).await {
@@ -781,7 +781,7 @@ mod test {
                 } => {
                     assert_eq!(listener_id, id);
                 }
-                e => panic!("Unexpected event: {:?}", e),
+                e => panic!("Unexpected event: {e:?}"),
             }
             // Poll once again so that the listener has the chance to return `Poll::Ready(None)` and
             // be removed from the list of listeners.

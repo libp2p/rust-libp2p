@@ -83,7 +83,7 @@ fn connect() {
             remote_peer_id,
             remote_relayed_addr,
         } if remote_peer_id == dst_peer_id && remote_relayed_addr == dst_relayed_addr => {}
-        e => panic!("Unexpected event: {:?}.", e),
+        e => panic!("Unexpected event: {e:?}."),
     }
     pool.run_until(wait_for_connection_established(
         &mut src,
@@ -210,7 +210,7 @@ async fn wait_for_reservation(
             }
             SwarmEvent::Dialing(peer_id) if peer_id == relay_peer_id => {}
             SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == relay_peer_id => {}
-            e => panic!("{:?}", e),
+            e => panic!("{e:?}"),
         }
     }
 }
@@ -229,7 +229,7 @@ async fn wait_for_connection_established(client: &mut Swarm<Client>, addr: &Mult
                 client::Event::OutboundCircuitEstablished { .. },
             )) => {}
             SwarmEvent::ConnectionEstablished { .. } => {}
-            e => panic!("{:?}", e),
+            e => panic!("{e:?}"),
         }
     }
 }
@@ -237,7 +237,7 @@ async fn wait_for_connection_established(client: &mut Swarm<Client>, addr: &Mult
 async fn wait_for_new_listen_addr(client: &mut Swarm<Client>, new_addr: &Multiaddr) {
     match client.select_next_some().await {
         SwarmEvent::NewListenAddr { address, .. } if address == *new_addr => {}
-        e => panic!("{:?}", e),
+        e => panic!("{e:?}"),
     }
 }
 
@@ -245,7 +245,7 @@ async fn wait_for_dcutr_event(client: &mut Swarm<Client>) -> dcutr::behaviour::E
     loop {
         match client.select_next_some().await {
             SwarmEvent::Behaviour(ClientEvent::Dcutr(e)) => return e,
-            e => panic!("{:?}", e),
+            e => panic!("{e:?}"),
         }
     }
 }

@@ -520,7 +520,7 @@ impl<P: Provider> Driver<P> {
                 // `event` has type `quinn_proto::ConnectionEvent`, which has multiple
                 // variants. `quinn_proto::Endpoint::handle` however only ever returns
                 // `ConnectionEvent::Datagram`.
-                debug_assert!(format!("{:?}", event).contains("Datagram"));
+                debug_assert!(format!("{event:?}").contains("Datagram"));
 
                 // Redirect the datagram to its connection.
                 if let Some(sender) = self.alive_connections.get_mut(&connec_id) {
