@@ -35,7 +35,8 @@ thiserror = "1"
 [dev-dependencies]
 env_logger = "0.10.0"
 futures-timer = "3.0"
-libp2p = { path = "../..", features = ["full"] }
+libp2p-noise = { path = "../../transports/noise" }
+libp2p-yamux = { path = "../../muxers/yamux" }
 quickcheck = { package = "quickcheck-ext", path = "../../misc/quickcheck-ext" }
 
 [build-dependencies]

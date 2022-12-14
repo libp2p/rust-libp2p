@@ -22,16 +22,15 @@
 use clap::Parser;
 use futures::executor::block_on;
 use futures::stream::StreamExt;
-use libp2p::core::upgrade;
-use libp2p::identify;
-use libp2p::multiaddr::Protocol;
-use libp2p::ping;
-use libp2p::relay::v2::relay::{self, Relay};
-use libp2p::swarm::{NetworkBehaviour, Swarm, SwarmEvent};
-use libp2p::tcp;
-use libp2p::Transport;
-use libp2p::{identity, PeerId};
-use libp2p::{noise, Multiaddr};
+use libp2p_core::multiaddr::Protocol;
+use libp2p_core::upgrade;
+use libp2p_core::{identity, Multiaddr, PeerId, Transport};
+use libp2p_identify as identify;
+use libp2p_noise as noise;
+use libp2p_ping as ping;
+use libp2p_relay::v2::relay::{self, Relay};
+use libp2p_swarm::{NetworkBehaviour, Swarm, SwarmEvent};
+use libp2p_tcp as tcp;
 use std::error::Error;
 use std::net::{Ipv4Addr, Ipv6Addr};
 
@@ -54,7 +53,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             noise::NoiseAuthenticated::xx(&local_key)
                 .expect("Signing libp2p-noise static DH keypair failed."),
         )
-        .multiplex(libp2p::yamux::YamuxConfig::default())
+        .multiplex(libp2p_yamux::YamuxConfig::default())
         .boxed();
 
     let behaviour = Behaviour {
@@ -93,7 +92,11 @@ fn main() -> Result<(), Box<dyn Error>> {
 }
 
 #[derive(NetworkBehaviour)]
-#[behaviour(out_event = "Event", event_process = false)]
+#[behaviour(
+    out_event = "Event",
+    event_process = false,
+    prelude = "libp2p_swarm::derive_prelude"
+)]
 struct Behaviour {
     relay: Relay,
     ping: ping::Behaviour,

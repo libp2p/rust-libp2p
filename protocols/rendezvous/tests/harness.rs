@@ -22,14 +22,14 @@ use async_trait::async_trait;
 use futures::stream::FusedStream;
 use futures::StreamExt;
 use futures::{future, Stream};
-use libp2p::core::transport::upgrade::Version;
-use libp2p::core::transport::MemoryTransport;
-use libp2p::core::upgrade::SelectUpgrade;
-use libp2p::core::{identity, Multiaddr, PeerId, Transport};
-use libp2p::mplex::MplexConfig;
-use libp2p::noise::NoiseAuthenticated;
-use libp2p::swarm::{AddressScore, NetworkBehaviour, Swarm, SwarmEvent};
-use libp2p::yamux::YamuxConfig;
+use libp2p_core::transport::upgrade::Version;
+use libp2p_core::transport::MemoryTransport;
+use libp2p_core::upgrade::SelectUpgrade;
+use libp2p_core::{identity, Multiaddr, PeerId, Transport};
+use libp2p_mplex::MplexConfig;
+use libp2p_noise::NoiseAuthenticated;
+use libp2p_swarm::{AddressScore, NetworkBehaviour, Swarm, SwarmEvent};
+use libp2p_yamux::YamuxConfig;
 use std::fmt::Debug;
 use std::time::Duration;
 
@@ -107,15 +107,15 @@ where
 macro_rules! assert_behaviour_events {
     ($swarm: ident: $pat: pat, || $body: block) => {
         match await_event_or_timeout(&mut $swarm).await {
-            libp2p::swarm::SwarmEvent::Behaviour($pat) => $body,
+            libp2p_swarm::SwarmEvent::Behaviour($pat) => $body,
             _ => panic!("Unexpected combination of events emitted, check logs for details"),
         }
     };
     ($swarm1: ident: $pat1: pat, $swarm2: ident: $pat2: pat, || $body: block) => {
         match await_events_or_timeout(&mut $swarm1, &mut $swarm2).await {
             (
-                libp2p::swarm::SwarmEvent::Behaviour($pat1),
-                libp2p::swarm::SwarmEvent::Behaviour($pat2),
+                libp2p_swarm::SwarmEvent::Behaviour($pat1),
+                libp2p_swarm::SwarmEvent::Behaviour($pat2),
             ) => $body,
             _ => panic!("Unexpected combination of events emitted, check logs for details"),
         }

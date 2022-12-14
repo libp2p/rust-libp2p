@@ -1,10 +1,9 @@
 use futures::{future, StreamExt};
-use libp2p::multiaddr::Protocol;
-use libp2p::swarm::{keep_alive, SwarmEvent};
-use libp2p::Swarm;
+use libp2p_core::multiaddr::Protocol;
 use libp2p_core::transport::MemoryTransport;
 use libp2p_core::upgrade::Version;
 use libp2p_core::Transport;
+use libp2p_swarm::{keep_alive, Swarm, SwarmEvent};
 
 #[tokio::test]
 async fn can_establish_connection() {
@@ -57,12 +56,12 @@ async fn can_establish_connection() {
 }
 
 fn make_swarm() -> Swarm<keep_alive::Behaviour> {
-    let identity = libp2p::identity::Keypair::generate_ed25519();
+    let identity = libp2p_core::identity::Keypair::generate_ed25519();
 
     let transport = MemoryTransport::default()
         .upgrade(Version::V1)
         .authenticate(libp2p_tls::Config::new(&identity).unwrap())
-        .multiplex(libp2p::yamux::YamuxConfig::default())
+        .multiplex(libp2p_yamux::YamuxConfig::default())
         .boxed();
 
     Swarm::without_executor(

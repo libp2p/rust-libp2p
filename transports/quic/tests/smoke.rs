@@ -4,14 +4,14 @@ use futures::channel::{mpsc, oneshot};
 use futures::future::{poll_fn, Either};
 use futures::stream::StreamExt;
 use futures::{future, AsyncReadExt, AsyncWriteExt, FutureExt, SinkExt};
-use libp2p::core::multiaddr::Protocol;
-use libp2p::core::Transport;
-use libp2p::{noise, tcp, yamux, Multiaddr};
 use libp2p_core::either::EitherOutput;
 use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerExt, SubstreamBox};
 use libp2p_core::transport::{Boxed, OrTransport, TransportEvent};
-use libp2p_core::{upgrade, PeerId};
+use libp2p_core::{multiaddr::Protocol, upgrade, Multiaddr, PeerId, Transport};
+use libp2p_noise as noise;
 use libp2p_quic as quic;
+use libp2p_tcp as tcp;
+use libp2p_yamux as yamux;
 use quic::Provider;
 use rand::RngCore;
 use std::future::Future;
@@ -94,7 +94,7 @@ async fn ipv4_dial_ipv6() {
 #[async_std::test]
 #[ignore] // Transport currently does not validate PeerId. Enable once we make use of PeerId validation in rustls.
 async fn wrong_peerid() {
-    use libp2p::PeerId;
+    use libp2p_core::PeerId;
 
     let (a_peer_id, mut a_transport) = create_default_transport::<quic::async_std::Provider>();
     let (b_peer_id, mut b_transport) = create_default_transport::<quic::async_std::Provider>();
@@ -189,7 +189,7 @@ async fn draft_29_support() {
     use std::task::Poll;
 
     use futures::{future::poll_fn, select};
-    use libp2p::TransportError;
+    use libp2p_core::transport::TransportError;
 
     let _ = env_logger::try_init();
 
@@ -379,8 +379,8 @@ macro_rules! swap_protocol {
     };
 }
 
-fn generate_tls_keypair() -> libp2p::identity::Keypair {
-    libp2p::identity::Keypair::generate_ed25519()
+fn generate_tls_keypair() -> libp2p_core::identity::Keypair {
+    libp2p_core::identity::Keypair::generate_ed25519()
 }
 
 fn create_default_transport<P: Provider>() -> (PeerId, Boxed<(PeerId, StreamMuxerBox)>) {
