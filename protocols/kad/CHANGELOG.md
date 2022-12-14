@@ -2,6 +2,8 @@
 
 - Update to `libp2p-swarm` `v0.42.0`.
 
+- Bump MSRV to 1.65.0.
+
 # 0.42.0
 
 - Update to `libp2p-core` `v0.38.0`.
