@@ -46,7 +46,10 @@ pub mod client {
         )]
         pub type ClientTransport = crate::client::Transport;
 
-        #[deprecated(since = "0.15.0", note = "Use libp2p_relay::Listener instead.")]
+        #[deprecated(
+            since = "0.15.0",
+            note = "Use libp2p_relay::client::transport::Listener instead."
+        )]
         pub type RelayListener = crate::client::transport::Listener;
 
         #[deprecated(
