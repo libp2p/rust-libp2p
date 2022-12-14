@@ -29,15 +29,18 @@ pub use as_server::{InboundProbeError, InboundProbeEvent};
 use futures_timer::Delay;
 use instant::Instant;
 use libp2p_core::{
-    connection::ConnectionId, multiaddr::Protocol, transport::ListenerId, ConnectedPoint, Endpoint,
-    Multiaddr, PeerId,
+    connection::ConnectionId, multiaddr::Protocol, ConnectedPoint, Endpoint, Multiaddr, PeerId,
 };
 use libp2p_request_response::{
-    handler::RequestResponseHandlerEvent, ProtocolSupport, RequestId, RequestResponse,
-    RequestResponseConfig, RequestResponseEvent, RequestResponseMessage, ResponseChannel,
+    self as request_response, ProtocolSupport, RequestId, ResponseChannel,
 };
 use libp2p_swarm::{
-    DialError, IntoConnectionHandler, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
+    behaviour::{
+        AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, ExpiredExternalAddr,
+        ExpiredListenAddr, FromSwarm,
+    },
+    ConnectionHandler, ExternalAddresses, IntoConnectionHandler, ListenAddresses, NetworkBehaviour,
+    NetworkBehaviourAction, PollParameters,
 };
 use std::{
     collections::{HashMap, VecDeque},
@@ -163,7 +166,7 @@ pub struct Behaviour {
     local_peer_id: PeerId,
 
     // Inner behaviour for sending requests and receiving the response.
-    inner: RequestResponse<AutoNatCodec>,
+    inner: request_response::Behaviour<AutoNatCodec>,
 
     config: Config,
 
@@ -209,14 +212,17 @@ pub struct Behaviour {
     pending_out_events: VecDeque<<Self as NetworkBehaviour>::OutEvent>,
 
     probe_id: ProbeId,
+
+    listen_addresses: ListenAddresses,
+    external_addresses: ExternalAddresses,
 }
 
 impl Behaviour {
     pub fn new(local_peer_id: PeerId, config: Config) -> Self {
         let protocols = iter::once((AutoNatProtocol, ProtocolSupport::Full));
-        let mut cfg = RequestResponseConfig::default();
+        let mut cfg = request_response::Config::default();
         cfg.set_request_timeout(config.timeout);
-        let inner = RequestResponse::new(AutoNatCodec, protocols, cfg);
+        let inner = request_response::Behaviour::new(AutoNatCodec, protocols, cfg);
         Self {
             local_peer_id,
             inner,
@@ -233,6 +239,8 @@ impl Behaviour {
             last_probe: None,
             pending_out_events: VecDeque::new(),
             probe_id: ProbeId(0),
+            listen_addresses: Default::default(),
+            external_addresses: Default::default(),
         }
     }
 
@@ -285,6 +293,8 @@ impl Behaviour {
             ongoing_outbound: &mut self.ongoing_outbound,
             last_probe: &mut self.last_probe,
             schedule_probe: &mut self.schedule_probe,
+            listen_addresses: &self.listen_addresses,
+            external_addresses: &self.external_addresses,
         }
     }
 
@@ -298,28 +308,17 @@ impl Behaviour {
             ongoing_inbound: &mut self.ongoing_inbound,
         }
     }
-}
 
-impl NetworkBehaviour for Behaviour {
-    type ConnectionHandler = <RequestResponse<AutoNatCodec> as NetworkBehaviour>::ConnectionHandler;
-    type OutEvent = Event;
-
-    fn inject_connection_established(
+    fn on_connection_established(
         &mut self,
-        peer: &PeerId,
-        conn: &ConnectionId,
-        endpoint: &ConnectedPoint,
-        failed_addresses: Option<&Vec<Multiaddr>>,
-        other_established: usize,
-    ) {
-        self.inner.inject_connection_established(
-            peer,
-            conn,
+        ConnectionEstablished {
+            peer_id: peer,
+            connection_id: conn,
             endpoint,
-            failed_addresses,
-            other_established,
-        );
-        let connections = self.connected.entry(*peer).or_default();
+            ..
+        }: ConnectionEstablished,
+    ) {
+        let connections = self.connected.entry(peer).or_default();
         let addr = endpoint.get_remote_address();
         let observed_addr =
             if !endpoint.is_relayed() && (!self.config.only_global_ips || addr.is_global_ip()) {
@@ -327,14 +326,14 @@ impl NetworkBehaviour for Behaviour {
             } else {
                 None
             };
-        connections.insert(*conn, observed_addr);
+        connections.insert(conn, observed_addr);
 
         match endpoint {
             ConnectedPoint::Dialer {
                 address,
                 role_override: Endpoint::Dialer,
             } => {
-                if let Some(event) = self.as_server().on_outbound_connection(peer, address) {
+                if let Some(event) = self.as_server().on_outbound_connection(&peer, address) {
                     self.pending_out_events
                         .push_back(Event::InboundProbe(event));
                 }
@@ -351,50 +350,69 @@ impl NetworkBehaviour for Behaviour {
         }
     }
 
-    fn inject_connection_closed(
+    fn on_connection_closed(
         &mut self,
-        peer: &PeerId,
-        conn: &ConnectionId,
-        endpoint: &ConnectedPoint,
-        handler: <Self::ConnectionHandler as IntoConnectionHandler>::Handler,
-        remaining_established: usize,
+        ConnectionClosed {
+            peer_id,
+            connection_id,
+            endpoint,
+            handler,
+            remaining_established,
+        }: ConnectionClosed<<Self as NetworkBehaviour>::ConnectionHandler>,
     ) {
         self.inner
-            .inject_connection_closed(peer, conn, endpoint, handler, remaining_established);
+            .on_swarm_event(FromSwarm::ConnectionClosed(ConnectionClosed {
+                peer_id,
+                connection_id,
+                endpoint,
+                handler,
+                remaining_established,
+            }));
+
         if remaining_established == 0 {
-            self.connected.remove(peer);
+            self.connected.remove(&peer_id);
         } else {
-            let connections = self.connected.get_mut(peer).expect("Peer is connected.");
-            connections.remove(conn);
+            let connections = self
+                .connected
+                .get_mut(&peer_id)
+                .expect("Peer is connected.");
+            connections.remove(&connection_id);
         }
     }
 
-    fn inject_dial_failure(
+    fn on_dial_failure(
         &mut self,
-        peer: Option<PeerId>,
-        handler: Self::ConnectionHandler,
-        error: &DialError,
+        DialFailure {
+            peer_id,
+            handler,
+            error,
+        }: DialFailure<<Self as NetworkBehaviour>::ConnectionHandler>,
     ) {
-        self.inner.inject_dial_failure(peer, handler, error);
-        if let Some(event) = self.as_server().on_outbound_dial_error(peer, error) {
+        self.inner
+            .on_swarm_event(FromSwarm::DialFailure(DialFailure {
+                peer_id,
+                handler,
+                error,
+            }));
+        if let Some(event) = self.as_server().on_outbound_dial_error(peer_id, error) {
             self.pending_out_events
                 .push_back(Event::InboundProbe(event));
         }
     }
 
-    fn inject_address_change(
+    fn on_address_change(
         &mut self,
-        peer: &PeerId,
-        conn: &ConnectionId,
-        old: &ConnectedPoint,
-        new: &ConnectedPoint,
+        AddressChange {
+            peer_id: peer,
+            connection_id: conn,
+            old,
+            new,
+        }: AddressChange,
     ) {
-        self.inner.inject_address_change(peer, conn, old, new);
-
         if old.is_relayed() && new.is_relayed() {
             return;
         }
-        let connections = self.connected.get_mut(peer).expect("Peer is connected.");
+        let connections = self.connected.get_mut(&peer).expect("Peer is connected.");
         let addr = new.get_remote_address();
         let observed_addr =
             if !new.is_relayed() && (!self.config.only_global_ips || addr.is_global_ip()) {
@@ -402,28 +420,14 @@ impl NetworkBehaviour for Behaviour {
             } else {
                 None
             };
-        connections.insert(*conn, observed_addr);
+        connections.insert(conn, observed_addr);
     }
+}
 
-    fn inject_new_listen_addr(&mut self, id: ListenerId, addr: &Multiaddr) {
-        self.inner.inject_new_listen_addr(id, addr);
-        self.as_client().on_new_address();
-    }
-
-    fn inject_expired_listen_addr(&mut self, id: ListenerId, addr: &Multiaddr) {
-        self.inner.inject_expired_listen_addr(id, addr);
-        self.as_client().on_expired_address(addr);
-    }
-
-    fn inject_new_external_addr(&mut self, addr: &Multiaddr) {
-        self.inner.inject_new_external_addr(addr);
-        self.as_client().on_new_address();
-    }
-
-    fn inject_expired_external_addr(&mut self, addr: &Multiaddr) {
-        self.inner.inject_expired_external_addr(addr);
-        self.as_client().on_expired_address(addr);
-    }
+impl NetworkBehaviour for Behaviour {
+    type ConnectionHandler =
+        <request_response::Behaviour<AutoNatCodec> as NetworkBehaviour>::ConnectionHandler;
+    type OutEvent = Event;
 
     fn poll(&mut self, cx: &mut Context<'_>, params: &mut impl PollParameters) -> Poll<Action> {
         loop {
@@ -435,21 +439,21 @@ impl NetworkBehaviour for Behaviour {
             match self.inner.poll(cx, params) {
                 Poll::Ready(NetworkBehaviourAction::GenerateEvent(event)) => {
                     let (mut events, action) = match event {
-                        RequestResponseEvent::Message {
-                            message: RequestResponseMessage::Response { .. },
+                        request_response::Event::Message {
+                            message: request_response::Message::Response { .. },
                             ..
                         }
-                        | RequestResponseEvent::OutboundFailure { .. } => {
+                        | request_response::Event::OutboundFailure { .. } => {
                             self.as_client().handle_event(params, event)
                         }
-                        RequestResponseEvent::Message {
-                            message: RequestResponseMessage::Request { .. },
+                        request_response::Event::Message {
+                            message: request_response::Message::Request { .. },
                             ..
                         }
-                        | RequestResponseEvent::InboundFailure { .. } => {
+                        | request_response::Event::InboundFailure { .. } => {
                             self.as_server().handle_event(params, event)
                         }
-                        RequestResponseEvent::ResponseSent { .. } => (VecDeque::new(), None),
+                        request_response::Event::ResponseSent { .. } => (VecDeque::new(), None),
                     };
                     self.pending_out_events.append(&mut events);
                     if let Some(action) = action {
@@ -460,7 +464,7 @@ impl NetworkBehaviour for Behaviour {
                 Poll::Pending => is_inner_pending = true,
             }
 
-            match self.as_client().poll_auto_probe(params, cx) {
+            match self.as_client().poll_auto_probe(cx) {
                 Poll::Ready(event) => self
                     .pending_out_events
                     .push_back(Event::OutboundProbe(event)),
@@ -478,35 +482,68 @@ impl NetworkBehaviour for Behaviour {
         self.inner.addresses_of_peer(peer)
     }
 
-    fn inject_event(
+    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+        self.listen_addresses.on_swarm_event(&event);
+        self.external_addresses.on_swarn_event(&event);
+
+        match event {
+            FromSwarm::ConnectionEstablished(connection_established) => {
+                self.inner
+                    .on_swarm_event(FromSwarm::ConnectionEstablished(connection_established));
+                self.on_connection_established(connection_established)
+            }
+            FromSwarm::ConnectionClosed(connection_closed) => {
+                self.on_connection_closed(connection_closed)
+            }
+            FromSwarm::DialFailure(dial_failure) => self.on_dial_failure(dial_failure),
+            FromSwarm::AddressChange(address_change) => {
+                self.inner
+                    .on_swarm_event(FromSwarm::AddressChange(address_change));
+                self.on_address_change(address_change)
+            }
+            listen_addr @ FromSwarm::NewListenAddr(_) => {
+                self.inner.on_swarm_event(listen_addr);
+                self.as_client().on_new_address();
+            }
+            FromSwarm::ExpiredListenAddr(ExpiredListenAddr { listener_id, addr }) => {
+                self.inner
+                    .on_swarm_event(FromSwarm::ExpiredListenAddr(ExpiredListenAddr {
+                        listener_id,
+                        addr,
+                    }));
+                self.as_client().on_expired_address(addr);
+            }
+            FromSwarm::ExpiredExternalAddr(ExpiredExternalAddr { addr }) => {
+                self.inner
+                    .on_swarm_event(FromSwarm::ExpiredExternalAddr(ExpiredExternalAddr { addr }));
+                self.as_client().on_expired_address(addr);
+            }
+            external_addr @ FromSwarm::NewExternalAddr(_) => {
+                self.inner.on_swarm_event(external_addr);
+                self.as_client().on_new_address();
+            }
+            listen_failure @ FromSwarm::ListenFailure(_) => {
+                self.inner.on_swarm_event(listen_failure)
+            }
+            new_listener @ FromSwarm::NewListener(_) => self.inner.on_swarm_event(new_listener),
+            listener_error @ FromSwarm::ListenerError(_) => {
+                self.inner.on_swarm_event(listener_error)
+            }
+            listener_closed @ FromSwarm::ListenerClosed(_) => {
+                self.inner.on_swarm_event(listener_closed)
+            }
+        }
+    }
+
+    fn on_connection_handler_event(
         &mut self,
         peer_id: PeerId,
-        conn: ConnectionId,
-        event: RequestResponseHandlerEvent<AutoNatCodec>,
-    ) {
-        self.inner.inject_event(peer_id, conn, event)
-    }
-
-    fn inject_listen_failure(
-        &mut self,
-        local_addr: &Multiaddr,
-        send_back_addr: &Multiaddr,
-        handler: Self::ConnectionHandler,
+        connection_id: ConnectionId,
+        event:  <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as
+    ConnectionHandler>::OutEvent,
     ) {
         self.inner
-            .inject_listen_failure(local_addr, send_back_addr, handler)
-    }
-
-    fn inject_new_listener(&mut self, id: ListenerId) {
-        self.inner.inject_new_listener(id)
-    }
-
-    fn inject_listener_error(&mut self, id: ListenerId, err: &(dyn std::error::Error + 'static)) {
-        self.inner.inject_listener_error(id, err)
-    }
-
-    fn inject_listener_closed(&mut self, id: ListenerId, reason: Result<(), &std::io::Error>) {
-        self.inner.inject_listener_closed(id, reason)
+            .on_connection_handler_event(peer_id, connection_id, event)
     }
 }
 
@@ -515,12 +552,12 @@ type Action = NetworkBehaviourAction<
     <Behaviour as NetworkBehaviour>::ConnectionHandler,
 >;
 
-// Trait implemented for `AsClient` as `AsServer` to handle events from the inner [`RequestResponse`] Protocol.
+// Trait implemented for `AsClient` and `AsServer` to handle events from the inner [`request_response::Behaviour`] Protocol.
 trait HandleInnerEvent {
     fn handle_event(
         &mut self,
         params: &mut impl PollParameters,
-        event: RequestResponseEvent<DialRequest, DialResponse>,
+        event: request_response::Event<DialRequest, DialResponse>,
     ) -> (VecDeque<Event>, Option<Action>);
 }
 

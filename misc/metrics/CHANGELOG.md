@@ -1,4 +1,22 @@
-# 0.11.0 [unreleased]
+# 0.12.0 [unreleased]
+
+- Add `connections_establishment_duration` metric. See [PR 3134].
+
+- Update to `libp2p-dcutr` `v0.9.0`.
+
+- Update to `libp2p-ping` `v0.42.0`.
+
+- Update to `libp2p-kad` `v0.43.0`.
+
+- Update to `libp2p-relay` `v0.15.0`.
+
+- Update to `libp2p-identify` `v0.42.0`.
+
+- Update to `libp2p-swarm` `v0.42.0`.
+
+[PR 3134]: https://github.com/libp2p/rust-libp2p/pull/3134/
+
+# 0.11.0
 
 - Update to `libp2p-dcutr` `v0.8.0`.
 
@@ -18,7 +36,14 @@
 
 - Add `protocol_stack` metrics. See [PR 2982].
 
+- Update `rust-version` to reflect the actual MSRV: 1.62.0. See [PR 3090].
+
+- Changed `Metrics::query_result_get_record_ok` from `Histogram` to a `Counter`.
+  See [PR 2712].
+
 [PR 2982]: https://github.com/libp2p/rust-libp2p/pull/2982/
+[PR 3090]: https://github.com/libp2p/rust-libp2p/pull/3090
+[PR 2712]: https://github.com/libp2p/rust-libp2p/pull/2712
 
 # 0.10.0
 

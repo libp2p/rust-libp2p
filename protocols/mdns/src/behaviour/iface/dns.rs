@@ -103,10 +103,10 @@ pub fn build_query() -> MdnsPacket {
 /// Builds the response to an address discovery DNS query.
 ///
 /// If there are more than 2^16-1 addresses, ignores the rest.
-pub fn build_query_response(
+pub fn build_query_response<'a>(
     id: u16,
     peer_id: PeerId,
-    addresses: impl ExactSizeIterator<Item = Multiaddr>,
+    addresses: impl ExactSizeIterator<Item = &'a Multiaddr>,
     ttl: Duration,
 ) -> Vec<MdnsPacket> {
     // Convert the TTL into seconds.
@@ -413,7 +413,7 @@ mod tests {
         let packets = build_query_response(
             0xf8f8,
             my_peer_id,
-            vec![addr1, addr2].into_iter(),
+            vec![&addr1, &addr2].into_iter(),
             Duration::from_secs(60),
         );
         for packet in packets {

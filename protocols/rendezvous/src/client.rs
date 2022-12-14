@@ -32,8 +32,10 @@ use libp2p_core::connection::ConnectionId;
 use libp2p_core::identity::error::SigningError;
 use libp2p_core::identity::Keypair;
 use libp2p_core::{Multiaddr, PeerId, PeerRecord};
+use libp2p_swarm::behaviour::FromSwarm;
 use libp2p_swarm::{
-    CloseConnection, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
+    CloseConnection, ExternalAddresses, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
+    PollParameters,
 };
 use std::collections::{HashMap, VecDeque};
 use std::iter::FromIterator;
@@ -56,6 +58,8 @@ pub struct Behaviour {
 
     /// Tracks the expiry of registrations that we have discovered and stored in `discovered_peers` otherwise we have a memory leak.
     expiring_registrations: FuturesUnordered<BoxFuture<'static, (PeerId, Namespace)>>,
+
+    external_addresses: ExternalAddresses,
 }
 
 impl Behaviour {
@@ -69,6 +73,7 @@ impl Behaviour {
             expiring_registrations: FuturesUnordered::from_iter(vec![
                 futures::future::pending().boxed()
             ]),
+            external_addresses: Default::default(),
         }
     }
 
@@ -177,13 +182,13 @@ impl NetworkBehaviour for Behaviour {
     fn addresses_of_peer(&mut self, peer: &PeerId) -> Vec<Multiaddr> {
         self.discovered_peers
             .iter()
-            .filter_map(|((candidate, _), addresses)| (candidate == peer).then(|| addresses))
+            .filter_map(|((candidate, _), addresses)| (candidate == peer).then_some(addresses))
             .flatten()
             .cloned()
             .collect()
     }
 
-    fn inject_event(
+    fn on_connection_handler_event(
         &mut self,
         peer_id: PeerId,
         connection_id: ConnectionId,
@@ -214,7 +219,7 @@ impl NetworkBehaviour for Behaviour {
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-        poll_params: &mut impl PollParameters,
+        _: &mut impl PollParameters,
     ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
         if let Some(event) = self.events.pop_front() {
             return Poll::Ready(event);
@@ -223,10 +228,8 @@ impl NetworkBehaviour for Behaviour {
         if let Some((namespace, rendezvous_node, ttl)) = self.pending_register_requests.pop() {
             // Update our external addresses based on the Swarm's current knowledge.
             // It doesn't make sense to register addresses on which we are not reachable, hence this should not be configurable from the outside.
-            let external_addresses = poll_params
-                .external_addresses()
-                .map(|r| r.addr)
-                .collect::<Vec<Multiaddr>>();
+
+            let external_addresses = self.external_addresses.iter().cloned().collect::<Vec<_>>();
 
             if external_addresses.is_empty() {
                 return Poll::Ready(NetworkBehaviourAction::GenerateEvent(
@@ -264,6 +267,25 @@ impl NetworkBehaviour for Behaviour {
         }
 
         Poll::Pending
+    }
+
+    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+        self.external_addresses.on_swarn_event(&event);
+
+        match event {
+            FromSwarm::ConnectionEstablished(_)
+            | FromSwarm::ConnectionClosed(_)
+            | FromSwarm::AddressChange(_)
+            | FromSwarm::DialFailure(_)
+            | FromSwarm::ListenFailure(_)
+            | FromSwarm::NewListener(_)
+            | FromSwarm::NewListenAddr(_)
+            | FromSwarm::ExpiredListenAddr(_)
+            | FromSwarm::ListenerError(_)
+            | FromSwarm::ListenerClosed(_)
+            | FromSwarm::NewExternalAddr(_)
+            | FromSwarm::ExpiredExternalAddr(_) => {}
+        }
     }
 }
 

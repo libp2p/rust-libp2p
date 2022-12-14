@@ -20,8 +20,11 @@
 
 use crate::protocol_stack;
 use prometheus_client::encoding::text::Encode;
-use prometheus_client::metrics::counter::Counter;
-use prometheus_client::metrics::family::Family;
+use prometheus_client::metrics::{
+    counter::Counter,
+    family::Family,
+    histogram::{exponential_buckets, Histogram},
+};
 use prometheus_client::registry::Registry;
 
 pub struct Metrics {
@@ -29,6 +32,7 @@ pub struct Metrics {
     connections_incoming_error: Family<IncomingConnectionErrorLabels, Counter>,
 
     connections_established: Family<ConnectionEstablishedLabels, Counter>,
+    connections_establishment_duration: Family<ConnectionEstablishmentDurationLabels, Histogram>,
     connections_closed: Family<ConnectionClosedLabels, Counter>,
 
     new_listen_addr: Family<AddressLabels, Counter>,
@@ -123,6 +127,15 @@ impl Metrics {
             Box::new(connections_closed.clone()),
         );
 
+        let connections_establishment_duration = Family::new_with_constructor(
+            create_connection_establishment_duration_histogram as fn() -> Histogram,
+        );
+        sub_registry.register(
+            "connections_establishment_duration",
+            "Time it took (locally) to establish connections",
+            Box::new(connections_establishment_duration.clone()),
+        );
+
         Self {
             connections_incoming,
             connections_incoming_error,
@@ -135,6 +148,7 @@ impl Metrics {
             dial_attempt,
             outgoing_connection_error,
             connected_to_banned_peer,
+            connections_establishment_duration,
         }
     }
 }
@@ -143,13 +157,19 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
     fn record(&self, event: &libp2p_swarm::SwarmEvent<TBvEv, THandleErr>) {
         match event {
             libp2p_swarm::SwarmEvent::Behaviour(_) => {}
-            libp2p_swarm::SwarmEvent::ConnectionEstablished { endpoint, .. } => {
-                self.connections_established
-                    .get_or_create(&ConnectionEstablishedLabels {
-                        role: endpoint.into(),
-                        protocols: protocol_stack::as_string(endpoint.get_remote_address()),
-                    })
-                    .inc();
+            libp2p_swarm::SwarmEvent::ConnectionEstablished {
+                endpoint,
+                established_in: time_taken,
+                ..
+            } => {
+                let labels = ConnectionEstablishedLabels {
+                    role: endpoint.into(),
+                    protocols: protocol_stack::as_string(endpoint.get_remote_address()),
+                };
+                self.connections_established.get_or_create(&labels).inc();
+                self.connections_establishment_duration
+                    .get_or_create(&labels)
+                    .observe(time_taken.as_secs_f64());
             }
             libp2p_swarm::SwarmEvent::ConnectionClosed { endpoint, .. } => {
                 self.connections_closed
@@ -279,6 +299,8 @@ struct ConnectionEstablishedLabels {
     protocols: String,
 }
 
+type ConnectionEstablishmentDurationLabels = ConnectionEstablishedLabels;
+
 #[derive(Encode, Hash, Clone, Eq, PartialEq)]
 struct ConnectionClosedLabels {
     role: Role,
@@ -371,4 +393,8 @@ impl<TTransErr> From<&libp2p_swarm::PendingInboundConnectionError<TTransErr>>
             libp2p_swarm::PendingInboundConnectionError::IO(_) => PendingInboundConnectionError::Io,
         }
     }
+}
+
+fn create_connection_establishment_duration_histogram() -> Histogram {
+    Histogram::new(exponential_buckets(1e-3, 2., 10))
 }

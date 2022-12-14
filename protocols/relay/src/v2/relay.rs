@@ -27,12 +27,13 @@ use crate::v2::message_proto;
 use crate::v2::protocol::inbound_hop;
 use either::Either;
 use instant::Instant;
-use libp2p_core::connection::{ConnectedPoint, ConnectionId};
+use libp2p_core::connection::ConnectionId;
 use libp2p_core::multiaddr::Protocol;
 use libp2p_core::PeerId;
+use libp2p_swarm::behaviour::{ConnectionClosed, FromSwarm};
 use libp2p_swarm::{
-    dummy, ConnectionHandlerUpgrErr, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
-    PollParameters,
+    ConnectionHandlerUpgrErr, ExternalAddresses, NetworkBehaviour, NetworkBehaviourAction,
+    NotifyHandler, PollParameters,
 };
 use std::collections::{hash_map, HashMap, HashSet, VecDeque};
 use std::num::NonZeroU32;
@@ -200,6 +201,8 @@ pub struct Relay {
 
     /// Queue of actions to return when polled.
     queued_actions: VecDeque<Action>,
+
+    external_addresses: ExternalAddresses,
 }
 
 impl Relay {
@@ -210,6 +213,40 @@ impl Relay {
             reservations: Default::default(),
             circuits: Default::default(),
             queued_actions: Default::default(),
+            external_addresses: Default::default(),
+        }
+    }
+
+    fn on_connection_closed(
+        &mut self,
+        ConnectionClosed {
+            peer_id,
+            connection_id,
+            ..
+        }: ConnectionClosed<<Self as NetworkBehaviour>::ConnectionHandler>,
+    ) {
+        if let hash_map::Entry::Occupied(mut peer) = self.reservations.entry(peer_id) {
+            peer.get_mut().remove(&connection_id);
+            if peer.get().is_empty() {
+                peer.remove();
+            }
+        }
+
+        for circuit in self
+            .circuits
+            .remove_by_connection(peer_id, connection_id)
+            .iter()
+            // Only emit [`CircuitClosed`] for accepted requests.
+            .filter(|c| matches!(c.status, CircuitStatus::Accepted))
+        {
+            self.queued_actions.push_back(
+                NetworkBehaviourAction::GenerateEvent(Event::CircuitClosed {
+                    src_peer_id: circuit.src_peer_id,
+                    dst_peer_id: circuit.dst_peer_id,
+                    error: Some(std::io::ErrorKind::ConnectionAborted.into()),
+                })
+                .into(),
+            );
         }
     }
 }
@@ -228,40 +265,28 @@ impl NetworkBehaviour for Relay {
         }
     }
 
-    fn inject_connection_closed(
-        &mut self,
-        peer: &PeerId,
-        connection: &ConnectionId,
-        _: &ConnectedPoint,
-        _handler: Either<handler::Handler, dummy::ConnectionHandler>,
-        _remaining_established: usize,
-    ) {
-        if let hash_map::Entry::Occupied(mut peer) = self.reservations.entry(*peer) {
-            peer.get_mut().remove(connection);
-            if peer.get().is_empty() {
-                peer.remove();
-            }
-        }
+    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+        self.external_addresses.on_swarn_event(&event);
 
-        for circuit in self
-            .circuits
-            .remove_by_connection(*peer, *connection)
-            .iter()
-            // Only emit [`CircuitClosed`] for accepted requests.
-            .filter(|c| matches!(c.status, CircuitStatus::Accepted))
-        {
-            self.queued_actions.push_back(
-                NetworkBehaviourAction::GenerateEvent(Event::CircuitClosed {
-                    src_peer_id: circuit.src_peer_id,
-                    dst_peer_id: circuit.dst_peer_id,
-                    error: Some(std::io::ErrorKind::ConnectionAborted.into()),
-                })
-                .into(),
-            );
+        match event {
+            FromSwarm::ConnectionClosed(connection_closed) => {
+                self.on_connection_closed(connection_closed)
+            }
+            FromSwarm::ConnectionEstablished(_)
+            | FromSwarm::DialFailure(_)
+            | FromSwarm::AddressChange(_)
+            | FromSwarm::ListenFailure(_)
+            | FromSwarm::NewListener(_)
+            | FromSwarm::NewListenAddr(_)
+            | FromSwarm::ExpiredListenAddr(_)
+            | FromSwarm::ListenerError(_)
+            | FromSwarm::ListenerClosed(_)
+            | FromSwarm::NewExternalAddr(_)
+            | FromSwarm::ExpiredExternalAddr(_) => {}
         }
     }
 
-    fn inject_event(
+    fn on_connection_handler_event(
         &mut self,
         event_source: PeerId,
         connection: ConnectionId,
@@ -619,10 +644,10 @@ impl NetworkBehaviour for Relay {
     fn poll(
         &mut self,
         _cx: &mut Context<'_>,
-        poll_parameters: &mut impl PollParameters,
+        _: &mut impl PollParameters,
     ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
         if let Some(action) = self.queued_actions.pop_front() {
-            return Poll::Ready(action.build(poll_parameters));
+            return Poll::Ready(action.build(self.local_peer_id, &self.external_addresses));
         }
 
         Poll::Pending
@@ -740,7 +765,8 @@ impl From<NetworkBehaviourAction<Event, handler::Prototype>> for Action {
 impl Action {
     fn build(
         self,
-        poll_parameters: &mut impl PollParameters,
+        local_peer_id: PeerId,
+        external_addresses: &ExternalAddresses,
     ) -> NetworkBehaviourAction<Event, handler::Prototype> {
         match self {
             Action::Done(action) => action,
@@ -753,15 +779,13 @@ impl Action {
                 peer_id,
                 event: Either::Left(handler::In::AcceptReservationReq {
                     inbound_reservation_req,
-                    addrs: poll_parameters
-                        .external_addresses()
-                        .map(|a| a.addr)
+                    addrs: external_addresses
+                        .iter()
+                        .cloned()
                         // Add local peer ID in case it isn't present yet.
                         .filter_map(|a| match a.iter().last()? {
                             Protocol::P2p(_) => Some(a),
-                            _ => Some(
-                                a.with(Protocol::P2p(*poll_parameters.local_peer_id().as_ref())),
-                            ),
+                            _ => Some(a.with(Protocol::P2p(local_peer_id.into()))),
                         })
                         .collect(),
                 }),

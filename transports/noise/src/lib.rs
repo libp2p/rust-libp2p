@@ -40,8 +40,8 @@
 //!
 //! ```
 //! use libp2p_core::{identity, Transport, upgrade};
-//! use libp2p::tcp::TcpTransport;
-//! use libp2p::noise::{Keypair, X25519Spec, NoiseAuthenticated};
+//! use libp2p_tcp::TcpTransport;
+//! use libp2p_noise::{Keypair, X25519Spec, NoiseAuthenticated};
 //!
 //! # fn main() {
 //! let id_keys = identity::Keypair::generate_ed25519();
@@ -55,11 +55,9 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
-mod error;
 mod io;
 mod protocol;
 
-pub use error::NoiseError;
 pub use io::handshake::RemoteIdentity;
 pub use io::NoiseOutput;
 pub use protocol::{x25519::X25519, x25519_spec::X25519Spec};
@@ -240,6 +238,42 @@ where
         Ok(state)
     }
 }
+
+/// libp2p_noise error type.
+#[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
+pub enum NoiseError {
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+    #[error(transparent)]
+    Noise(#[from] snow::Error),
+    #[error("Invalid public key")]
+    InvalidKey(#[from] identity::error::DecodingError),
+    #[error("Only keys of length 32 bytes are supported")]
+    InvalidLength,
+    #[error("Remote authenticated with an unexpected public key")]
+    UnexpectedKey,
+    #[error("The signature of the remote identity's public key does not verify")]
+    BadSignature,
+    #[error("Authentication failed")]
+    AuthenticationFailed,
+    #[error(transparent)]
+    InvalidPayload(DecodeError),
+    #[error(transparent)]
+    SigningError(#[from] identity::error::SigningError),
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error(transparent)]
+pub struct DecodeError(prost::DecodeError);
+
+impl From<prost::DecodeError> for NoiseError {
+    fn from(e: prost::DecodeError) -> Self {
+        NoiseError::InvalidPayload(DecodeError(e))
+    }
+}
+
+// Handshake pattern IX /////////////////////////////////////////////////////
 
 /// Implements the responder part of the `IX` noise handshake pattern.
 ///

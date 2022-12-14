@@ -1,4 +1,13 @@
-# 0.41.0 [unreleased]
+# 0.42.0 [unreleased]
+
+- Move I/O from `Behaviour` to `Handler`. Handle `Behaviour`'s Identify and Push requests independently by incoming order,
+  previously Push requests were prioritized. see [PR 3208].
+
+- Update to `libp2p-swarm` `v0.42.0`.
+
+[PR 3208]: https://github.com/libp2p/rust-libp2p/pull/3208
+
+# 0.41.0
 
 - Change default `cache_size` of `Config` to 100. See [PR 2995].
 
@@ -8,7 +17,18 @@
 
 - Update to `libp2p-swarm` `v0.41.0`.
 
+- Replace `Behaviour`'s `NetworkBehaviour` implemention `inject_*` methods with the new `on_*` methods.
+  See [PR 3011].
+
+- Replace `Handler`'s `ConnectionHandler` implemention `inject_*` methods with the new `on_*` methods.
+  See [PR 3085].
+
+- Update `rust-version` to reflect the actual MSRV: 1.62.0. See [PR 3090].
+
+[PR 3085]: https://github.com/libp2p/rust-libp2p/pull/3085
+[PR 3011]: https://github.com/libp2p/rust-libp2p/pull/3011
 [PR 2995]: https://github.com/libp2p/rust-libp2p/pull/2995
+[PR 3090]: https://github.com/libp2p/rust-libp2p/pull/3090
 
 # 0.40.0
 

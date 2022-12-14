@@ -1,9 +1,9 @@
 [package]
 name = "multistream-select"
 edition = "2021"
-rust-version = "1.56.1"
+rust-version = "1.60.0"
 description = "Multistream-select negotiation protocol for libp2p"
-version = "0.12.0"
+version = "0.12.1"
 authors = ["Parity Technologies <admin@parity.io>"]
 license = "MIT"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -20,8 +20,11 @@ unsigned-varint = "0.7"
 
 [dev-dependencies]
 async-std = "1.6.2"
-env_logger = "0.9"
-libp2p = { path = "../..", features = ["full"] }
+env_logger = "0.10"
+libp2p-core = { path = "../../core" }
+libp2p-mplex = { path = "../../muxers/mplex" }
+libp2p-plaintext = { path = "../../transports/plaintext" }
+libp2p-swarm = { path = "../../swarm", features = ["async-std"] }
 quickcheck = { package = "quickcheck-ext", path = "../../misc/quickcheck-ext" }
 rand = "0.8"
 rw-stream-sink = { version = "0.3.0", path = "../../misc/rw-stream-sink" }

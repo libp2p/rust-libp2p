@@ -1,14 +1,15 @@
 [package]
 name = "libp2p-quic"
-version = "0.7.0-alpha"
+version = "0.7.0-alpha.2"
 authors = ["Parity Technologies <admin@parity.io>"]
 edition = "2021"
+rust-version = "1.62.0"
 description = "TLS based QUIC transport implementation for libp2p"
 repository = "https://github.com/libp2p/rust-libp2p"
 license = "MIT"
 
 [dependencies]
-async-std = { version = "1.12.0", default-features = false, optional = true }
+async-std = { version = "1.12.0", optional = true }
 bytes = "1.2.1"
 futures = "0.3.15"
 futures-timer = "3.0.2"
@@ -36,9 +37,11 @@ rustc-args = ["--cfg", "docsrs"]
 
 [dev-dependencies]
 async-std = { version = "1.12.0", features = ["attributes"] }
-env_logger = "0.9.0"
-libp2p = { path = "../..", features = ["tcp", "yamux", "noise", "async-std"] }
+env_logger = "0.10.0"
 libp2p-muxer-test-harness = { path = "../../muxers/test-harness" }
+libp2p-noise = { path = "../noise" }
+libp2p-tcp = { path = "../tcp", features = ["async-io"] }
+libp2p-yamux = { path = "../../muxers/yamux" }
 quickcheck = "1"
 tokio = { version = "1.21.1", features = ["macros", "rt-multi-thread", "time"] }
 
