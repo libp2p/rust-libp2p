@@ -167,9 +167,9 @@ pub enum Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Error::Io(e) => write!(f, "i/o error: {}", e),
-            Error::Tls(e) => write!(f, "tls error: {}", e),
-            Error::InvalidDnsName(n) => write!(f, "invalid DNS name: {}", n),
+            Error::Io(e) => write!(f, "i/o error: {e}"),
+            Error::Tls(e) => write!(f, "tls error: {e}"),
+            Error::InvalidDnsName(n) => write!(f, "invalid DNS name: {n}"),
         }
     }
 }

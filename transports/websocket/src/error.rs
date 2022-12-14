@@ -44,13 +44,13 @@ pub enum Error<E> {
 impl<E: fmt::Display> fmt::Display for Error<E> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Error::Transport(err) => write!(f, "{}", err),
-            Error::Tls(err) => write!(f, "{}", err),
-            Error::Handshake(err) => write!(f, "{}", err),
-            Error::InvalidMultiaddr(ma) => write!(f, "invalid multi-address: {}", ma),
+            Error::Transport(err) => write!(f, "{err}"),
+            Error::Tls(err) => write!(f, "{err}"),
+            Error::Handshake(err) => write!(f, "{err}"),
+            Error::InvalidMultiaddr(ma) => write!(f, "invalid multi-address: {ma}"),
             Error::TooManyRedirects => f.write_str("too many redirects"),
             Error::InvalidRedirectLocation => f.write_str("invalid redirect location"),
-            Error::Base(err) => write!(f, "{}", err),
+            Error::Base(err) => write!(f, "{err}"),
         }
     }
 }

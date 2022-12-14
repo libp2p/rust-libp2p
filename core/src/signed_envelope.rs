@@ -168,8 +168,7 @@ impl fmt::Display for ReadPayloadError {
             Self::InvalidSignature => write!(f, "Invalid signature"),
             Self::UnexpectedPayloadType { expected, got } => write!(
                 f,
-                "Unexpected payload type, expected {:?} but got {:?}",
-                expected, got
+                "Unexpected payload type, expected {expected:?} but got {got:?}"
             ),
         }
     }
