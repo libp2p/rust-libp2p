@@ -598,7 +598,7 @@ mod tests {
                     );
                     assert!(matches!(listen_addr.iter().nth(2), Some(Protocol::WebRTC)));
                 }
-                e => panic!("Unexpected event: {:?}", e),
+                e => panic!("Unexpected event: {e:?}"),
             }
             assert!(
                 transport.remove_listener(listener),
@@ -611,7 +611,7 @@ mod tests {
                 } => {
                     assert_eq!(listener_id, listener);
                 }
-                e => panic!("Unexpected event: {:?}", e),
+                e => panic!("Unexpected event: {e:?}"),
             }
             // Poll once again so that the listener has the chance to return `Poll::Ready(None)` and
             // be removed from the list of listeners.

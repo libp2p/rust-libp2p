@@ -185,7 +185,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                         SwarmEvent::NewListenAddr { address, .. } => {
                             info!("Listening on {:?}", address);
                         }
-                        event => panic!("{:?}", event),
+                        event => panic!("{event:?}"),
                     }
                 }
                 _ = delay => {
@@ -220,7 +220,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     info!("Relay told us our public address: {:?}", observed_addr);
                     learned_observed_addr = true;
                 }
-                event => panic!("{:?}", event),
+                event => panic!("{event:?}"),
             }
 
             if learned_observed_addr && told_relay_observed_addr {

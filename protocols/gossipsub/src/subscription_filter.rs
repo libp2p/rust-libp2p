@@ -354,7 +354,7 @@ mod test {
     #[test]
     fn test_filter_incoming_too_many_subscriptions() {
         let t: Vec<_> = (0..4)
-            .map(|i| TopicHash::from_raw(format!("t{}", i)))
+            .map(|i| TopicHash::from_raw(format!("t{i}")))
             .collect();
 
         let mut filter = MaxCountSubscriptionFilter {
@@ -383,7 +383,7 @@ mod test {
     #[test]
     fn test_filter_incoming_max_subscribed_valid() {
         let t: Vec<_> = (0..5)
-            .map(|i| TopicHash::from_raw(format!("t{}", i)))
+            .map(|i| TopicHash::from_raw(format!("t{i}")))
             .collect();
 
         let mut filter = MaxCountSubscriptionFilter {
