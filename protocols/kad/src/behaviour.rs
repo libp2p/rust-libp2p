@@ -401,8 +401,7 @@ impl KademliaConfig {
 
 impl<TStore> Kademlia<TStore>
 where
-    for<'a> TStore: RecordStore<'a>,
-    TStore: Send + 'static,
+    TStore: RecordStore + Send + 'static,
 {
     /// Creates a new `Kademlia` network behaviour with a default configuration.
     pub fn new(id: PeerId, store: TStore) -> Self {
@@ -1987,8 +1986,7 @@ fn exp_decrease(ttl: Duration, exp: u32) -> Duration {
 
 impl<TStore> NetworkBehaviour for Kademlia<TStore>
 where
-    for<'a> TStore: RecordStore<'a>,
-    TStore: Send + 'static,
+    TStore: RecordStore + Send + 'static,
 {
     type ConnectionHandler = KademliaHandlerProto<QueryId>;
     type OutEvent = KademliaEvent;

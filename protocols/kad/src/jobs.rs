@@ -193,7 +193,7 @@ impl PutRecordJob {
     /// to be run.
     pub fn poll<T>(&mut self, cx: &mut Context<'_>, store: &mut T, now: Instant) -> Poll<Record>
     where
-        for<'a> T: RecordStore<'a>,
+        T: RecordStore,
     {
         if self.inner.check_ready(cx, now) {
             let publish = self.next_publish.map_or(false, |t_pub| now >= t_pub);
@@ -294,7 +294,7 @@ impl AddProviderJob {
         now: Instant,
     ) -> Poll<ProviderRecord>
     where
-        for<'a> T: RecordStore<'a>,
+        T: RecordStore,
     {
         if self.inner.check_ready(cx, now) {
             let records = store
