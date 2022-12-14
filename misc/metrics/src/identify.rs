@@ -255,7 +255,7 @@ impl EncodeMetric for Protocols {
         for (protocol, count) in count_by_protocol {
             encoder
                 .encode_family(&[("protocol", protocol)])?
-                .encode_gauge(count)?;
+                .encode_gauge(&count)?;
         }
 
         Ok(())
