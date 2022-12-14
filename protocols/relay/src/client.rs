@@ -46,6 +46,8 @@ use std::ops::DerefMut;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
+pub use transport::Transport;
+
 /// The events produced by the client `Behaviour`.
 #[derive(Debug)]
 pub enum Event {
@@ -87,14 +89,6 @@ pub enum Event {
         error: inbound_stop::UpgradeError,
     },
 }
-
-#[deprecated(
-    since = "0.15.0",
-    note = "Use libp2p_relay::v2::client::Behaviour instead."
-)]
-/// [`NetworkBehaviour`] implementation of the relay client
-/// functionality of the circuit relay v2 protocol.
-pub type Client = Behaviour;
 
 /// [`NetworkBehaviour`] implementation of the relay client
 /// functionality of the circuit relay v2 protocol.

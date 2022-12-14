@@ -21,10 +21,71 @@
 //! Implementation of the [libp2p circuit relay v2
 //! specification](https://github.com/libp2p/specs/blob/master/relay/circuit-v2.md).
 
-pub mod client;
 mod copy_future;
 pub mod relay;
 
+pub mod client {
+    #[deprecated(since = "0.15.0", note = "Use libp2p_relay::client::Event instead.")]
+    pub type Event = crate::client::Event;
+
+    #[deprecated(
+        since = "0.15.0",
+        note = "Use libp2p_relay::client::Behaviour instead."
+    )]
+    pub type Client = crate::client::Behaviour;
+
+    #[deprecated(
+        since = "0.15.0",
+        note = "Use libp2p_relay::client::RelayedConnection instead."
+    )]
+    pub type RelayedConnection = crate::client::RelayedConnection;
+
+    pub mod transport {
+        use futures::future::BoxFuture;
+
+        #[deprecated(
+            since = "0.15.0",
+            note = "Use libp2p_relay::client::Transport instead."
+        )]
+        pub type ClientTransport = crate::client::Transport;
+
+        #[deprecated(since = "0.15.0", note = "Use libp2p_relay::Listener instead.")]
+        pub type RelayListener = crate::client::transport::Listener;
+
+        #[deprecated(
+            since = "0.15.0",
+            note = "Use libp2p_relay::transport::RelayedDial instead."
+        )]
+        pub type RelayedDial = BoxFuture<
+            'static,
+            Result<crate::client::RelayedConnection, crate::client::transport::Error>,
+        >;
+
+        #[deprecated(
+            since = "0.15.0",
+            note = "Use libp2p_relay::client::transport::Error instead."
+        )]
+        pub type RelayError = crate::client::transport::Error;
+
+        #[deprecated(
+            since = "0.15.0",
+            note = "Use libp2p_relay::client::transport::TransportToBehaviourMsg instead."
+        )]
+        pub type TransportToBehaviourMsg = crate::client::transport::TransportToBehaviourMsg;
+
+        #[deprecated(
+            since = "0.15.0",
+            note = "Use libp2p_relay::client::transport::ToListenerMsg instead."
+        )]
+        pub type ToListenerMsg = crate::client::transport::ToListenerMsg;
+
+        #[deprecated(
+            since = "0.15.0",
+            note = "Use libp2p_relay::client::transport::Reservation instead."
+        )]
+        pub type Reservation = crate::client::transport::Reservation;
+    }
+}
 pub mod protocol {
     #[deprecated(
         since = "0.15.0",

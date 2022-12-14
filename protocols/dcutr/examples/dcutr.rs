@@ -32,7 +32,7 @@ use libp2p_dns::DnsConfig;
 use libp2p_identify as identify;
 use libp2p_noise as noise;
 use libp2p_ping as ping;
-use libp2p_relay::v2::client;
+use libp2p_relay::client;
 use libp2p_swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent};
 use libp2p_tcp as tcp;
 use log::info;

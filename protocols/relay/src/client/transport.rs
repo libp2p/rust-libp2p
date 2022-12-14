@@ -19,7 +19,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::v2::client::RelayedConnection;
+use crate::client::RelayedConnection;
 use crate::RequestId;
 use futures::channel::mpsc;
 use futures::channel::oneshot;
@@ -36,12 +36,6 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use thiserror::Error;
 
-#[deprecated(
-    since = "0.15.0",
-    note = "Use libp2p_relay::v2::client::Transport instead."
-)]
-pub type ClientTransport = Transport;
-
 /// A [`Transport`] enabling client relay capabilities.
 ///
 /// Note: The transport only handles listening and dialing on relayed [`Multiaddr`], and depends on
@@ -56,7 +50,7 @@ pub type ClientTransport = Transport;
 ///    # use libp2p_core::{Multiaddr, multiaddr::{Protocol}, Transport, PeerId};
 ///    # use libp2p_core::transport::memory::MemoryTransport;
 ///    # use libp2p_core::transport::choice::OrTransport;
-///    # use libp2p_relay::v2::client;
+///    # use libp2p_relay::client;
 ///    let actual_transport = MemoryTransport::default();
 ///    let (relay_transport, behaviour) = client::Behaviour::new_transport_and_behaviour(
 ///        PeerId::random(),
@@ -78,7 +72,7 @@ pub type ClientTransport = Transport;
 ///    # use libp2p_core::{Multiaddr, multiaddr::{Protocol}, Transport, PeerId};
 ///    # use libp2p_core::transport::memory::MemoryTransport;
 ///    # use libp2p_core::transport::choice::OrTransport;
-///    # use libp2p_relay::v2::client;
+///    # use libp2p_relay::client;
 ///    # let relay_id = PeerId::random();
 ///    # let local_peer_id = PeerId::random();
 ///    let actual_transport = MemoryTransport::default();
@@ -109,7 +103,7 @@ impl Transport {
     /// # use libp2p_core::{Multiaddr, multiaddr::{Protocol}, Transport, PeerId};
     /// # use libp2p_core::transport::memory::MemoryTransport;
     /// # use libp2p_core::transport::choice::OrTransport;
-    /// # use libp2p_relay::v2::client;
+    /// # use libp2p_relay::client;
     /// let actual_transport = MemoryTransport::default();
     /// let (relay_transport, behaviour) = client::Behaviour::new_transport_and_behaviour(
     ///     PeerId::random(),
@@ -322,19 +316,13 @@ fn parse_relayed_multiaddr(addr: Multiaddr) -> Result<RelayedMultiaddr, Transpor
     Ok(relayed_multiaddr)
 }
 
-#[deprecated(
-    since = "0.15.0",
-    note = "Use libp2p_relay::v2::client::Listener instead."
-)]
-pub type RelayListener = Listener;
-
 pub struct Listener {
     listener_id: ListenerId,
     /// Queue of events to report when polled.
     queued_events: VecDeque<<Self as Stream>::Item>,
     /// Channel for messages from the behaviour [`Handler`][super::handler::Handler].
     from_behaviour: mpsc::Receiver<ToListenerMsg>,
-    /// The listener can be closed either manually with [`Transport::remove_listener`] or if
+    /// The listener can be closed either manually with [`Transport::remove_listener`](libp2p_core::Transport) or if
     /// the sender side of the `from_behaviour` channel is dropped.
     is_closed: bool,
 }
@@ -416,12 +404,6 @@ impl Stream for Listener {
 
 pub type RelayedDial = BoxFuture<'static, Result<RelayedConnection, Error>>;
 
-#[deprecated(
-    since = "0.15.0",
-    note = "Use libp2p_relay::v2::client::Error instead."
-)]
-pub type RelayError = Error;
-
 /// Error that occurred during relay connection setup.
 #[derive(Debug, Error)]
 pub enum Error {
@@ -455,7 +437,7 @@ impl From<Error> for TransportError<Error> {
     }
 }
 
-/// Message from the [`Transport`] to the [`Behaviour`](crate::v2::relay::Behaviour)
+/// Message from the [`Transport`] to the [`Behaviour`](crate::Behaviour)
 /// [`NetworkBehaviour`](libp2p_swarm::NetworkBehaviour).
 pub enum TransportToBehaviourMsg {
     /// Dial destination node via relay node.

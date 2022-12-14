@@ -31,8 +31,8 @@ use libp2p_core::PublicKey;
 use libp2p_core::{identity, PeerId};
 use libp2p_dcutr as dcutr;
 use libp2p_plaintext::PlainText2Config;
-use libp2p_relay::v2::client;
 use libp2p_relay::v2::relay;
+use libp2p_relay::client;
 use libp2p_swarm::{AddressScore, NetworkBehaviour, Swarm, SwarmEvent};
 use std::time::Duration;
 
