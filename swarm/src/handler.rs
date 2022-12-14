@@ -564,7 +564,7 @@ where
             ConnectionHandlerUpgrErr::Timer => {
                 write!(f, "Timer error while opening a substream")
             }
-            ConnectionHandlerUpgrErr::Upgrade(err) => write!(f, "{}", err),
+            ConnectionHandlerUpgrErr::Upgrade(err) => write!(f, "{err}"),
         }
     }
 }
