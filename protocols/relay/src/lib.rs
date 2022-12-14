@@ -23,6 +23,7 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
+pub mod behaviour;
 pub mod client;
 mod copy_future;
 mod protocol;
@@ -33,6 +34,7 @@ mod message_proto {
     include!(concat!(env!("OUT_DIR"), "/message_v2.pb.rs"));
 }
 
+pub use behaviour::{Behaviour, Config, Event};
 pub use protocol::{
     inbound_hop::FatalUpgradeError as InboundHopFatalUpgradeError,
     inbound_stop::FatalUpgradeError as InboundStopFatalUpgradeError,

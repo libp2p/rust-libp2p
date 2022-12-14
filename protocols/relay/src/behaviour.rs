@@ -187,13 +187,6 @@ pub enum Event {
     },
 }
 
-#[deprecated(
-    since = "0.15.0",
-    note = "Use libp2p_relay::v2::relay::Behaviour instead."
-)]
-/// [`Relay`] is a [`NetworkBehaviour`] that implements the relay server.
-pub type Relay = Behaviour;
-
 /// [`NetworkBehaviour`] implementation of the relay server
 /// functionality of the circuit relay v2 protocol.
 pub struct Behaviour {

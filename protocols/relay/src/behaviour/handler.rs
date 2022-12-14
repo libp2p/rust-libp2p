@@ -18,10 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::behaviour::CircuitId;
 use crate::copy_future::CopyFuture;
 use crate::message_proto::Status;
 use crate::protocol::{inbound_hop, outbound_stop};
-use crate::v2::relay::CircuitId;
 use bytes::Bytes;
 use either::Either;
 use futures::channel::oneshot::{self, Canceled};

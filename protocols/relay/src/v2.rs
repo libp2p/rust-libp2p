@@ -21,8 +21,6 @@
 //! Implementation of the [libp2p circuit relay v2
 //! specification](https://github.com/libp2p/specs/blob/master/relay/circuit-v2.md).
 
-pub mod relay;
-
 pub mod client {
     #[deprecated(since = "0.15.0", note = "Use libp2p_relay::client::Event instead.")]
     pub type Event = crate::client::Event;
@@ -85,6 +83,47 @@ pub mod client {
         pub type Reservation = crate::client::transport::Reservation;
     }
 }
+
+pub mod relay {
+    #[deprecated(since = "0.15.0", note = "Use libp2p_relay::Config instead.")]
+    pub type Config = crate::Config;
+
+    #[deprecated(since = "0.15.0", note = "Use libp2p_relay::Event instead.")]
+    pub type Event = crate::Event;
+
+    #[deprecated(since = "0.15.0", note = "Use libp2p_relay::Behaviour instead.")]
+    pub type Relay = crate::Behaviour;
+
+    #[deprecated(
+        since = "0.15.0",
+        note = "Use libp2p_relay::behaviour::CircuitId instead."
+    )]
+    pub type CircuitId = crate::behaviour::CircuitId;
+
+    pub mod rate_limiter {
+        use instant::Instant;
+        use libp2p_core::{Multiaddr, PeerId};
+
+        #[deprecated(
+            since = "0.15.0",
+            note = "Use libp2p_relay::behaviour::rate_limiter::RateLimiter instead."
+        )]
+        pub trait RateLimiter: Send {
+            fn try_next(&mut self, peer: PeerId, addr: &Multiaddr, now: Instant) -> bool;
+        }
+
+        #[allow(deprecated)]
+        impl<T> RateLimiter for T
+        where
+            T: crate::behaviour::rate_limiter::RateLimiter,
+        {
+            fn try_next(&mut self, peer: PeerId, addr: &Multiaddr, now: Instant) -> bool {
+                self.try_next(peer, addr, now)
+            }
+        }
+    }
+}
+
 pub mod protocol {
     #[deprecated(
         since = "0.15.0",
