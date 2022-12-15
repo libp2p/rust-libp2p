@@ -107,9 +107,6 @@ where
 /// Reach attempt interrupt errors.
 #[derive(thiserror::Error, Debug)]
 pub enum FloodsubError {
-    /// Error from prost_codec::Codec
-    #[error(transparent)]
-    Codec(#[from] prost_codec::Error),
     /// Error when parsing the `PeerId` in the message.
     #[error("Failed to decode PeerId from message")]
     InvalidPeerId,
@@ -123,7 +120,7 @@ pub enum FloodsubError {
 
 #[derive(thiserror::Error, Debug)]
 #[error(transparent)]
-pub struct CodecError(prost_codec::Error);
+pub struct CodecError(#[from] prost_codec::Error);
 
 /// An RPC received by the floodsub system.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -148,7 +145,7 @@ where
     TSocket: AsyncWrite + AsyncRead + Send + Unpin + 'static,
 {
     type Output = ();
-    type Error = FloodsubError;
+    type Error = CodecError;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
     fn upgrade_outbound(self, socket: TSocket, _: Self::Info) -> Self::Future {
