@@ -23,7 +23,7 @@ use std::{
     collections::HashSet,
     collections::VecDeque,
     collections::{BTreeSet, HashMap},
-    fmt, iter,
+    fmt,
     net::IpAddr,
     task::{Context, Poll},
     time::Duration,
@@ -66,7 +66,6 @@ use crate::types::{
 };
 use crate::types::{GossipsubRpc, PeerConnections, PeerKind};
 use crate::{rpc_proto, TopicScoreParams};
-use std::sync::Arc;
 use std::{cmp::Ordering::Equal, fmt::Debug};
 use wasm_timer::Interval;
 
@@ -221,9 +220,6 @@ pub struct Gossipsub<
 
     /// Events that need to be yielded to the outside when polling.
     events: VecDeque<NetworkBehaviourAction<GossipsubEvent, GossipsubHandler>>,
-
-    /// Events that need to be yielded to the outside when polling.
-    pending_messages: VecDeque<(PeerId, Arc<rpc_proto::Rpc>)>,
 
     /// Pools non-urgent control messages between heartbeats.
     control_pool: HashMap<PeerId, Vec<GossipsubControlAction>>,
@@ -426,7 +422,6 @@ where
         Ok(Gossipsub {
             metrics: metrics.map(|(registry, cfg)| Metrics::new(registry, cfg)),
             events: VecDeque::new(),
-            pending_messages: Default::default(),
             control_pool: HashMap::new(),
             publish_config: privacy.into(),
             duplicate_cache: DuplicateCache::new(config.duplicate_cache_time()),
@@ -535,10 +530,11 @@ where
             }
             .into_protobuf();
 
-            debug!("Sending SUBSCRIBE to peers: {:?}", &peer_list);
-
-            self.send_message(peer_list.iter(), event)
-                .map_err(SubscriptionError::PublishError)?;
+            for peer in peer_list {
+                debug!("Sending SUBSCRIBE to peer: {:?}", peer);
+                self.send_message(peer, event.clone())
+                    .map_err(SubscriptionError::PublishError)?;
+            }
         }
 
         // call JOIN(topic)
@@ -574,8 +570,10 @@ where
             }
             .into_protobuf();
 
-            debug!("Sending UNSUBSCRIBE to peers: {:?}", peer_list);
-            self.send_message(peer_list.iter(), event)?;
+            for peer in peer_list {
+                debug!("Sending UNSUBSCRIBE to peer: {}", peer.to_string());
+                self.send_message(peer, event.clone())?;
+            }
         }
 
         // call LEAVE(topic)
@@ -730,12 +728,13 @@ where
 
         // Send to peers we know are subscribed to the topic.
         let msg_bytes = event.encoded_len();
+        for peer_id in recipient_peers.iter() {
+            trace!("Sending message to peer: {:?}", peer_id);
+            self.send_message(*peer_id, event.clone())?;
 
-        trace!("Sending message to peers: {:?}", recipient_peers);
-        self.send_message(recipient_peers.iter(), event)?;
-
-        if let Some(m) = self.metrics.as_mut() {
-            m.msg_sent(&topic_hash, msg_bytes * recipient_peers.len());
+            if let Some(m) = self.metrics.as_mut() {
+                m.msg_sent(&topic_hash, msg_bytes);
+            }
         }
 
         debug!("Published message: {:?}", &msg_id);
@@ -1349,7 +1348,7 @@ where
 
             let msg_bytes = message.encoded_len();
 
-            if self.send_message(iter::once(peer_id), message).is_err() {
+            if self.send_message(*peer_id, message).is_err() {
                 error!("Failed to send cached messages. Messages too large");
             } else if let Some(m) = self.metrics.as_mut() {
                 // Sending of messages succeeded, register them on the internal metrics.
@@ -1512,7 +1511,7 @@ where
             );
 
             if let Err(e) = self.send_message(
-                iter::once(peer_id),
+                *peer_id,
                 GossipsubRpc {
                     subscriptions: Vec::new(),
                     messages: Vec::new(),
@@ -2059,7 +2058,7 @@ where
         if !topics_to_graft.is_empty()
             && self
                 .send_message(
-                    iter::once(propagation_source),
+                    *propagation_source,
                     GossipsubRpc {
                         subscriptions: Vec::new(),
                         messages: Vec::new(),
@@ -2628,7 +2627,7 @@ where
             // send the control messages
             if self
                 .send_message(
-                    iter::once(&peer),
+                    peer,
                     GossipsubRpc {
                         subscriptions: Vec::new(),
                         messages: Vec::new(),
@@ -2668,7 +2667,7 @@ where
 
             if self
                 .send_message(
-                    iter::once(peer),
+                    *peer,
                     GossipsubRpc {
                         subscriptions: Vec::new(),
                         messages: Vec::new(),
@@ -2744,17 +2743,13 @@ where
             .into_protobuf();
 
             let msg_bytes = event.encoded_len();
-
-            debug!(
-                "Sending message: {:?} to peers {:?}",
-                msg_id, recipient_peers
-            );
-            self.send_message(recipient_peers.iter(), event)?;
-
-            if let Some(m) = self.metrics.as_mut() {
-                m.msg_sent(&message.topic, msg_bytes * recipient_peers.len());
+            for peer in recipient_peers.iter() {
+                debug!("Sending message: {:?} to peer {:?}", msg_id, peer);
+                self.send_message(*peer, event.clone())?;
+                if let Some(m) = self.metrics.as_mut() {
+                    m.msg_sent(&message.topic, msg_bytes);
+                }
             }
-
             debug!("Completed forwarding message");
             Ok(true)
         } else {
@@ -2869,7 +2864,7 @@ where
         for (peer, controls) in self.control_pool.drain().collect::<Vec<_>>() {
             if self
                 .send_message(
-                    iter::once(&peer),
+                    peer,
                     GossipsubRpc {
                         subscriptions: Vec::new(),
                         messages: Vec::new(),
@@ -2887,22 +2882,26 @@ where
         self.pending_iwant_msgs.clear();
     }
 
-    /// Send a GossipsubRpc message to a list of peers.
-    fn send_message<'p>(
+    /// Send a GossipsubRpc message to a peer. This will wrap the message in an arc if it
+    /// is not already an arc.
+    fn send_message(
         &mut self,
-        peers: impl Iterator<Item = &'p PeerId> + Clone,
+        peer_id: PeerId,
         message: rpc_proto::Rpc,
     ) -> Result<(), PublishError> {
         // If the message is oversized, try and fragment it. If it cannot be fragmented, log an
         // error and drop the message (all individual messages should be small enough to fit in the
         // max_transmit_size)
 
-        let messages = self.fragment_message(message)?.into_iter().map(Arc::new);
+        let messages = self.fragment_message(message)?;
 
         for message in messages {
-            for peer in peers.clone() {
-                self.pending_messages.push_back((*peer, message.clone()));
-            }
+            self.events
+                .push_back(NetworkBehaviourAction::NotifyHandler {
+                    peer_id,
+                    event: GossipsubHandlerIn::Message(message),
+                    handler: NotifyHandler::Any,
+                })
         }
         Ok(())
     }
@@ -3093,7 +3092,7 @@ where
                     // send our subscriptions to the peer
                     if self
                         .send_message(
-                            iter::once(&peer_id),
+                            peer_id,
                             GossipsubRpc {
                                 messages: Vec::new(),
                                 subscriptions,
@@ -3447,16 +3446,6 @@ where
     ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
         if let Some(event) = self.events.pop_front() {
             return Poll::Ready(event);
-        }
-
-        if let Some((peer, message)) = self.pending_messages.pop_front() {
-            return Poll::Ready(NetworkBehaviourAction::NotifyHandler {
-                peer_id: peer,
-                handler: NotifyHandler::Any,
-                event: GossipsubHandlerIn::Message(
-                    Arc::try_unwrap(message).unwrap_or_else(|m| (*m).clone()),
-                ),
-            });
         }
 
         // update scores
