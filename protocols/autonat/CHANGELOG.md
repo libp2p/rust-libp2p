@@ -6,7 +6,10 @@
 
 - Update to `libp2p-swarm` `v0.42.0`.
 
+- Migrate from `prost` to `quick-protobuf`. This removes `protoc` dependency. See [PR 3024].
+
 [PR 3153]: https://github.com/libp2p/rust-libp2p/pull/3153
+[PR 3024]: https://github.com/libp2p/rust-libp2p/issues/3024
 
 # 0.9.0
 
