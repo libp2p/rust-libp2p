@@ -2,9 +2,7 @@
 
 - Update to `libp2p-swarm` `v0.42.0`.
 
-- Update to `prost-codec` `v0.3.0`.
-
-- Refactoring Floodsub to use common protobuf Codec. See [PR 3224].
+- Read and write protocols messages via `prost-codec`. See [PR 3224].
 
 [pr 3224]: https://github.com/libp2p/rust-libp2p/pull/3224
 
