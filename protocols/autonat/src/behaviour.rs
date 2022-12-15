@@ -209,7 +209,12 @@ pub struct Behaviour {
 
     last_probe: Option<Instant>,
 
-    pending_out_events: VecDeque<<Self as NetworkBehaviour>::OutEvent>,
+    pending_actions: VecDeque<
+        NetworkBehaviourAction<
+            <Self as NetworkBehaviour>::OutEvent,
+            <Self as NetworkBehaviour>::ConnectionHandler,
+        >,
+    >,
 
     probe_id: ProbeId,
 
@@ -237,7 +242,7 @@ impl Behaviour {
             throttled_servers: Vec::new(),
             throttled_clients: Vec::new(),
             last_probe: None,
-            pending_out_events: VecDeque::new(),
+            pending_actions: VecDeque::new(),
             probe_id: ProbeId(0),
             listen_addresses: Default::default(),
             external_addresses: Default::default(),
@@ -334,8 +339,10 @@ impl Behaviour {
                 role_override: Endpoint::Dialer,
             } => {
                 if let Some(event) = self.as_server().on_outbound_connection(&peer, address) {
-                    self.pending_out_events
-                        .push_back(Event::InboundProbe(event));
+                    self.pending_actions
+                        .push_back(NetworkBehaviourAction::GenerateEvent(Event::InboundProbe(
+                            event,
+                        )));
                 }
             }
             ConnectedPoint::Dialer {
@@ -395,8 +402,10 @@ impl Behaviour {
                 error,
             }));
         if let Some(event) = self.as_server().on_outbound_dial_error(peer_id, error) {
-            self.pending_out_events
-                .push_back(Event::InboundProbe(event));
+            self.pending_actions
+                .push_back(NetworkBehaviourAction::GenerateEvent(Event::InboundProbe(
+                    event,
+                )));
         }
     }
 
@@ -431,14 +440,13 @@ impl NetworkBehaviour for Behaviour {
 
     fn poll(&mut self, cx: &mut Context<'_>, params: &mut impl PollParameters) -> Poll<Action> {
         loop {
-            if let Some(event) = self.pending_out_events.pop_front() {
-                return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event));
+            if let Some(event) = self.pending_actions.pop_front() {
+                return Poll::Ready(event);
             }
 
-            let mut is_inner_pending = false;
             match self.inner.poll(cx, params) {
                 Poll::Ready(NetworkBehaviourAction::GenerateEvent(event)) => {
-                    let (mut events, action) = match event {
+                    let actions = match event {
                         request_response::Event::Message {
                             message: request_response::Message::Response { .. },
                             ..
@@ -453,24 +461,32 @@ impl NetworkBehaviour for Behaviour {
                         | request_response::Event::InboundFailure { .. } => {
                             self.as_server().handle_event(params, event)
                         }
-                        request_response::Event::ResponseSent { .. } => (VecDeque::new(), None),
+                        request_response::Event::ResponseSent { .. } => VecDeque::new(),
                     };
-                    self.pending_out_events.append(&mut events);
-                    if let Some(action) = action {
-                        return Poll::Ready(action);
-                    }
+
+                    self.pending_actions.extend(actions);
+                    continue;
                 }
-                Poll::Ready(action) => return Poll::Ready(action.map_out(|_| unreachable!())),
-                Poll::Pending => is_inner_pending = true,
+                Poll::Ready(action) => {
+                    self.pending_actions
+                        .push_back(action.map_out(|_| unreachable!()));
+                    continue;
+                }
+                Poll::Pending => {}
             }
 
             match self.as_client().poll_auto_probe(cx) {
-                Poll::Ready(event) => self
-                    .pending_out_events
-                    .push_back(Event::OutboundProbe(event)),
-                Poll::Pending if is_inner_pending => return Poll::Pending,
+                Poll::Ready(event) => {
+                    self.pending_actions
+                        .push_back(NetworkBehaviourAction::GenerateEvent(Event::OutboundProbe(
+                            event,
+                        )));
+                    continue;
+                }
                 Poll::Pending => {}
             }
+
+            return Poll::Pending;
         }
     }
 
@@ -558,7 +574,7 @@ trait HandleInnerEvent {
         &mut self,
         params: &mut impl PollParameters,
         event: request_response::Event<DialRequest, DialResponse>,
-    ) -> (VecDeque<Event>, Option<Action>);
+    ) -> VecDeque<Action>;
 }
 
 trait GlobalIp {
