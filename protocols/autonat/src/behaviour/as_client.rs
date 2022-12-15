@@ -110,8 +110,6 @@ impl<'a> HandleInnerEvent for AsClient<'a> {
         params: &mut impl PollParameters,
         event: request_response::Event<DialRequest, DialResponse>,
     ) -> VecDeque<Action> {
-        let mut actions = VecDeque::new();
-
         match event {
             request_response::Event::Message {
                 peer,
@@ -140,6 +138,9 @@ impl<'a> HandleInnerEvent for AsClient<'a> {
                         error: OutboundProbeError::Response(e),
                     },
                 };
+
+                let mut actions = VecDeque::with_capacity(3);
+
                 actions.push_back(NetworkBehaviourAction::GenerateEvent(Event::OutboundProbe(
                     event,
                 )));
@@ -168,6 +169,8 @@ impl<'a> HandleInnerEvent for AsClient<'a> {
                         });
                     }
                 }
+
+                actions
             }
             request_response::Event::OutboundFailure {
                 peer,
@@ -184,20 +187,18 @@ impl<'a> HandleInnerEvent for AsClient<'a> {
                     .remove(&request_id)
                     .unwrap_or_else(|| self.probe_id.next());
 
-                actions.push_back(NetworkBehaviourAction::GenerateEvent(Event::OutboundProbe(
+                self.schedule_probe.reset(Duration::ZERO);
+
+                VecDeque::from([NetworkBehaviourAction::GenerateEvent(Event::OutboundProbe(
                     OutboundProbeEvent::Error {
                         probe_id,
                         peer: Some(peer),
                         error: OutboundProbeError::OutboundRequest(error),
                     },
-                )));
-
-                self.schedule_probe.reset(Duration::ZERO);
+                ))])
             }
-            _ => {}
+            _ => VecDeque::default(),
         }
-
-        actions
     }
 }
 

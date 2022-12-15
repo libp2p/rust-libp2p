@@ -99,8 +99,6 @@ impl<'a> HandleInnerEvent for AsServer<'a> {
         _params: &mut impl PollParameters,
         event: request_response::Event<DialRequest, DialResponse>,
     ) -> VecDeque<Action> {
-        let mut actions = VecDeque::new();
-
         match event {
             request_response::Event::Message {
                 peer,
@@ -124,21 +122,25 @@ impl<'a> HandleInnerEvent for AsServer<'a> {
                             .insert(peer, (probe_id, request_id, addrs.clone(), channel));
                         self.throttled_clients.push((peer, Instant::now()));
 
-                        actions.push_back(NetworkBehaviourAction::GenerateEvent(
-                            Event::InboundProbe(InboundProbeEvent::Request {
-                                probe_id,
-                                peer,
-                                addresses: addrs.clone(),
-                            }),
-                        ));
-                        actions.push_back(NetworkBehaviourAction::Dial {
-                            opts: DialOpts::peer_id(peer)
-                                .condition(PeerCondition::Always)
-                                .override_dial_concurrency_factor(NonZeroU8::new(1).expect("1 > 0"))
-                                .addresses(addrs)
-                                .build(),
-                            handler: self.inner.new_handler(),
-                        })
+                        VecDeque::from([
+                            NetworkBehaviourAction::GenerateEvent(Event::InboundProbe(
+                                InboundProbeEvent::Request {
+                                    probe_id,
+                                    peer,
+                                    addresses: addrs.clone(),
+                                },
+                            )),
+                            NetworkBehaviourAction::Dial {
+                                opts: DialOpts::peer_id(peer)
+                                    .condition(PeerCondition::Always)
+                                    .override_dial_concurrency_factor(
+                                        NonZeroU8::new(1).expect("1 > 0"),
+                                    )
+                                    .addresses(addrs)
+                                    .build(),
+                                handler: self.inner.new_handler(),
+                            },
+                        ])
                     }
                     Err((status_text, error)) => {
                         log::debug!(
@@ -153,13 +155,13 @@ impl<'a> HandleInnerEvent for AsServer<'a> {
                         };
                         let _ = self.inner.send_response(channel, response);
 
-                        actions.push_back(NetworkBehaviourAction::GenerateEvent(
+                        VecDeque::from([NetworkBehaviourAction::GenerateEvent(
                             Event::InboundProbe(InboundProbeEvent::Error {
                                 probe_id,
                                 peer,
                                 error: InboundProbeError::Response(error),
                             }),
-                        ));
+                        )])
                     }
                 }
             }
@@ -181,18 +183,16 @@ impl<'a> HandleInnerEvent for AsServer<'a> {
                     _ => self.probe_id.next(),
                 };
 
-                actions.push_back(NetworkBehaviourAction::GenerateEvent(Event::InboundProbe(
+                VecDeque::from([NetworkBehaviourAction::GenerateEvent(Event::InboundProbe(
                     InboundProbeEvent::Error {
                         probe_id,
                         peer,
                         error: InboundProbeError::InboundRequest(error),
                     },
-                )));
+                ))])
             }
-            _ => {}
+            _ => VecDeque::new(),
         }
-
-        actions
     }
 }
 
