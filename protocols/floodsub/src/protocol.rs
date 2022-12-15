@@ -72,7 +72,7 @@ where
                 .next()
                 .await
                 .ok_or_else(|| FloodsubError::ReadError(io::ErrorKind::UnexpectedEof.into()))?
-                .map_err(EncodeDecodeError)?;
+                .map_err(CodecError)?;
 
             let mut messages = Vec::with_capacity(rpc.publish.len());
             for publish in rpc.publish.into_iter() {
@@ -115,7 +115,7 @@ pub enum FloodsubError {
     InvalidPeerId,
     /// Error when decoding the raw buffer into a protobuf.
     #[error("Failed to decode protobuf")]
-    ProtobufError(#[from] EncodeDecodeError),
+    ProtobufError(#[from] CodecError),
     /// Error when reading the packet from the socket.
     #[error("Failed to read from socket")]
     ReadError(#[from] io::Error),
@@ -123,7 +123,7 @@ pub enum FloodsubError {
 
 #[derive(thiserror::Error, Debug)]
 #[error(transparent)]
-pub struct EncodeDecodeError(prost_codec::Error);
+pub struct CodecError(prost_codec::Error);
 
 /// An RPC received by the floodsub system.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
