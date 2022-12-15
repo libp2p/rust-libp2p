@@ -222,7 +222,10 @@ pub struct Gossipsub<
     /// Events that need to be yielded to the outside when polling.
     events: VecDeque<NetworkBehaviourAction<GossipsubEvent, GossipsubHandler>>,
 
-    /// Events that need to be yielded to the outside when polling.
+    /// Pending messages to be sent to peers.
+    ///
+    /// This buffer stores the message in an `Arc` because the same message is often sent to several
+    /// peers. This should optimize the memory footprint.
     pending_messages: VecDeque<(PeerId, Arc<rpc_proto::Rpc>)>,
 
     /// Pools non-urgent control messages between heartbeats.
