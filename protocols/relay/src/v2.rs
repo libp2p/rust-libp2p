@@ -42,48 +42,53 @@ pub mod client {
 
         #[deprecated(
             since = "0.15.0",
-            note = "Use libp2p_relay::client::Transport instead."
+            note = "ClientTransport has been renamed to Transport
+            and is now private as it shouldn't be required by end users."
         )]
-        pub type ClientTransport = crate::client::Transport;
+        pub type ClientTransport = crate::priv_client::transport::Transport;
 
         #[deprecated(
             since = "0.15.0",
-            note = "Use libp2p_relay::client::transport::Listener instead."
+            note = "RelayListener has been renamed to Listener
+            and is now private as it shouldn't be required by end users."
         )]
-        pub type RelayListener = crate::client::transport::Listener;
+        pub type RelayListener = crate::priv_client::transport::Listener;
 
         #[deprecated(
             since = "0.15.0",
-            note = "Use libp2p_relay::transport::RelayedDial instead."
+            note = "RelayedDial is now private as it shouldn't be required by end users."
         )]
         pub type RelayedDial = BoxFuture<
             'static,
-            Result<crate::client::RelayedConnection, crate::client::transport::Error>,
+            Result<crate::client::RelayedConnection, crate::priv_client::transport::Error>,
         >;
 
         #[deprecated(
             since = "0.15.0",
-            note = "Use libp2p_relay::client::transport::Error instead."
+            note = "RelayError has been renamed to Error
+            and is now private as it shouldn't be required by end users."
         )]
-        pub type RelayError = crate::client::transport::Error;
+        pub type RelayError = crate::priv_client::transport::Error;
 
         #[deprecated(
             since = "0.15.0",
-            note = "Use libp2p_relay::client::transport::TransportToBehaviourMsg instead."
+            note = "TransportToBehaviourMsg is now private
+            as it shouldn't be required by end users."
         )]
-        pub type TransportToBehaviourMsg = crate::client::transport::TransportToBehaviourMsg;
+        pub type TransportToBehaviourMsg = crate::priv_client::transport::TransportToBehaviourMsg;
 
         #[deprecated(
             since = "0.15.0",
-            note = "Use libp2p_relay::client::transport::ToListenerMsg instead."
+            note = "ToListenerMsg is now private
+            as it shouldn't be required by end users."
         )]
-        pub type ToListenerMsg = crate::client::transport::ToListenerMsg;
+        pub type ToListenerMsg = crate::priv_client::transport::ToListenerMsg;
 
         #[deprecated(
             since = "0.15.0",
-            note = "Use libp2p_relay::client::transport::Reservation instead."
+            note = "Reservation is now private as it shouldn't be required by end users."
         )]
-        pub type Reservation = crate::client::transport::Reservation;
+        pub type Reservation = crate::priv_client::transport::Reservation;
     }
 }
 
