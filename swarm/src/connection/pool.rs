@@ -319,8 +319,7 @@ where
 {
     /// Creates a new empty `Pool`.
     pub fn new(local_id: PeerId, config: PoolConfig, limits: ConnectionLimits) -> Self {
-        let (pending_connection_events_tx, pending_connection_events_rx) =
-            mpsc::channel(config.task_event_buffer_size);
+        let (pending_connection_events_tx, pending_connection_events_rx) = mpsc::channel(0);
         let (established_connection_events_tx, established_connection_events_rx) =
             mpsc::channel(config.task_event_buffer_size);
         let executor = match config.executor {

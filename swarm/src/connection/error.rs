@@ -43,11 +43,11 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ConnectionError::IO(err) => write!(f, "Connection error: I/O error: {}", err),
+            ConnectionError::IO(err) => write!(f, "Connection error: I/O error: {err}"),
             ConnectionError::KeepAliveTimeout => {
                 write!(f, "Connection closed due to expired keep-alive timeout.")
             }
-            ConnectionError::Handler(err) => write!(f, "Connection error: Handler error: {}", err),
+            ConnectionError::Handler(err) => write!(f, "Connection error: Handler error: {err}"),
         }
     }
 }
@@ -130,23 +130,21 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            PendingConnectionError::IO(err) => write!(f, "Pending connection: I/O error: {}", err),
+            PendingConnectionError::IO(err) => write!(f, "Pending connection: I/O error: {err}"),
             PendingConnectionError::Aborted => write!(f, "Pending connection: Aborted."),
             PendingConnectionError::Transport(err) => {
                 write!(
                     f,
-                    "Pending connection: Transport error on connection: {}",
-                    err
+                    "Pending connection: Transport error on connection: {err}"
                 )
             }
             PendingConnectionError::ConnectionLimit(l) => {
-                write!(f, "Connection error: Connection limit: {}.", l)
+                write!(f, "Connection error: Connection limit: {l}.")
             }
             PendingConnectionError::WrongPeerId { obtained, endpoint } => {
                 write!(
                     f,
-                    "Pending connection: Unexpected peer ID {} at {:?}.",
-                    obtained, endpoint
+                    "Pending connection: Unexpected peer ID {obtained} at {endpoint:?}."
                 )
             }
         }

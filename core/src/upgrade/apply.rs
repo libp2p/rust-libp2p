@@ -26,6 +26,8 @@ use multistream_select::{self, DialerSelectFuture, ListenerSelectFuture};
 use std::{iter, mem, pin::Pin, task::Context, task::Poll};
 
 pub use multistream_select::Version;
+use smallvec::SmallVec;
+use std::fmt;
 
 // TODO: Still needed?
 /// Applies an upgrade to the inbound and outbound direction of a connection or substream.
@@ -105,6 +107,7 @@ where
     },
     Upgrade {
         future: Pin<Box<U::Future>>,
+        name: SmallVec<[u8; 32]>,
     },
     Undefined,
 }
@@ -137,22 +140,27 @@ where
                             return Poll::Pending;
                         }
                     };
+                    let name = SmallVec::from_slice(info.protocol_name());
                     self.inner = InboundUpgradeApplyState::Upgrade {
                         future: Box::pin(upgrade.upgrade_inbound(io, info.0)),
+                        name,
                     };
                 }
-                InboundUpgradeApplyState::Upgrade { mut future } => {
+                InboundUpgradeApplyState::Upgrade { mut future, name } => {
                     match Future::poll(Pin::new(&mut future), cx) {
                         Poll::Pending => {
-                            self.inner = InboundUpgradeApplyState::Upgrade { future };
+                            self.inner = InboundUpgradeApplyState::Upgrade { future, name };
                             return Poll::Pending;
                         }
                         Poll::Ready(Ok(x)) => {
-                            debug!("Successfully applied negotiated protocol");
+                            log::trace!("Upgraded inbound stream to {}", DisplayProtocolName(name));
                             return Poll::Ready(Ok(x));
                         }
                         Poll::Ready(Err(e)) => {
-                            debug!("Failed to apply negotiated protocol");
+                            debug!(
+                                "Failed to upgrade inbound stream to {}",
+                                DisplayProtocolName(name)
+                            );
                             return Poll::Ready(Err(UpgradeError::Apply(e)));
                         }
                     }
@@ -185,6 +193,7 @@ where
     },
     Upgrade {
         future: Pin<Box<U::Future>>,
+        name: SmallVec<[u8; 32]>,
     },
     Undefined,
 }
@@ -217,22 +226,30 @@ where
                             return Poll::Pending;
                         }
                     };
+                    let name = SmallVec::from_slice(info.protocol_name());
                     self.inner = OutboundUpgradeApplyState::Upgrade {
                         future: Box::pin(upgrade.upgrade_outbound(connection, info.0)),
+                        name,
                     };
                 }
-                OutboundUpgradeApplyState::Upgrade { mut future } => {
+                OutboundUpgradeApplyState::Upgrade { mut future, name } => {
                     match Future::poll(Pin::new(&mut future), cx) {
                         Poll::Pending => {
-                            self.inner = OutboundUpgradeApplyState::Upgrade { future };
+                            self.inner = OutboundUpgradeApplyState::Upgrade { future, name };
                             return Poll::Pending;
                         }
                         Poll::Ready(Ok(x)) => {
-                            debug!("Successfully applied negotiated protocol");
+                            log::trace!(
+                                "Upgraded outbound stream to {}",
+                                DisplayProtocolName(name)
+                            );
                             return Poll::Ready(Ok(x));
                         }
                         Poll::Ready(Err(e)) => {
-                            debug!("Failed to apply negotiated protocol");
+                            debug!(
+                                "Failed to upgrade outbound stream to {}",
+                                DisplayProtocolName(name)
+                            );
                             return Poll::Ready(Err(UpgradeError::Apply(e)));
                         }
                     }
@@ -254,5 +271,41 @@ struct NameWrap<N>(N);
 impl<N: ProtocolName> AsRef<[u8]> for NameWrap<N> {
     fn as_ref(&self) -> &[u8] {
         self.0.protocol_name()
+    }
+}
+
+/// Wrapper for printing a [`ProtocolName`] that is expected to be mostly ASCII
+pub(crate) struct DisplayProtocolName<N>(pub N);
+
+impl<N: ProtocolName> fmt::Display for DisplayProtocolName<N> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use fmt::Write;
+        for byte in self.0.protocol_name() {
+            if (b' '..=b'~').contains(byte) {
+                f.write_char(char::from(*byte))?;
+            } else {
+                write!(f, "<{:02X}>", byte)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn display_protocol_name() {
+        assert_eq!(DisplayProtocolName(b"/hello/1.0").to_string(), "/hello/1.0");
+        assert_eq!(DisplayProtocolName("/hellö/").to_string(), "/hell<C3><B6>/");
+        assert_eq!(
+            DisplayProtocolName((0u8..=255).collect::<Vec<_>>()).to_string(),
+            (0..32)
+                .map(|c| format!("<{:02X}>", c))
+                .chain((32..127).map(|c| format!("{}", char::from_u32(c).unwrap())))
+                .chain((127..256).map(|c| format!("<{:02X}>", c)))
+                .collect::<String>()
+        );
     }
 }

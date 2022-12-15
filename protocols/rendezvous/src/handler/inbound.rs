@@ -116,7 +116,7 @@ impl SubstreamHandler for Stream {
                 Stream::PendingSend(substream, Message::DiscoverResponse(Err(error)))
             }
             (event, inbound) => {
-                debug_assert!(false, "{:?} cannot handle event {:?}", inbound, event);
+                debug_assert!(false, "{inbound:?} cannot handle event {event:?}");
 
                 inbound
             }
