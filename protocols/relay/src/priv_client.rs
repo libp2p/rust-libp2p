@@ -104,16 +104,22 @@ pub struct Behaviour {
     queued_actions: VecDeque<Event>,
 }
 
+/// Create a new client relay [`Behaviour`] with it's corresponding [`Transport`].
+pub fn new(local_peer_id: PeerId) -> (transport::Transport, Behaviour) {
+    let (transport, from_transport) = transport::Transport::new();
+    let behaviour = Behaviour {
+        local_peer_id,
+        from_transport,
+        directly_connected_peers: Default::default(),
+        queued_actions: Default::default(),
+    };
+    (transport, behaviour)
+}
+
 impl Behaviour {
+    #[deprecated(since = "0.15.0", note = "Use libp2p_relay::client::new instead.")]
     pub fn new_transport_and_behaviour(local_peer_id: PeerId) -> (transport::Transport, Self) {
-        let (transport, from_transport) = transport::Transport::new();
-        let behaviour = Behaviour {
-            local_peer_id,
-            from_transport,
-            directly_connected_peers: Default::default(),
-            queued_actions: Default::default(),
-        };
-        (transport, behaviour)
+        new(local_peer_id)
     }
 
     fn on_connection_closed(

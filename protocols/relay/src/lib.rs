@@ -43,9 +43,9 @@ pub use protocol::{
     STOP_PROTOCOL_NAME,
 };
 
-// explicitly pub'ed client types.
+/// Everything related to the relay protocol from a client's perspective.
 pub mod client {
-    pub use crate::priv_client::{Behaviour, Event, RelayedConnection, Transport};
+    pub use crate::priv_client::{new, Behaviour, Event, RelayedConnection, Transport};
 
     pub mod transport {
         pub use crate::priv_client::transport::{
