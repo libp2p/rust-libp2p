@@ -127,27 +127,27 @@ pub mod relay {
 pub mod protocol {
     #[deprecated(
         since = "0.15.0",
-        note = "Use libp2p_relay::InboundHopFatalUpgradeError instead."
+        note = "Use libp2p_relay::inbound::hop::FatalUpgradeError instead."
     )]
-    pub type InboundHopFatalUpgradeError = crate::protocol::inbound_hop::FatalUpgradeError;
+    pub type InboundHopFatalUpgradeError = crate::inbound::hop::FatalUpgradeError;
 
     #[deprecated(
         since = "0.15.0",
-        note = "Use libp2p_relay::InboundStopFatalUpgradeError instead."
+        note = "Use libp2p_relay::inbound::stop::FatalUpgradeError instead."
     )]
-    pub type InboundStopFatalUpgradeError = crate::protocol::inbound_stop::FatalUpgradeError;
+    pub type InboundStopFatalUpgradeError = crate::inbound::stop::FatalUpgradeError;
 
     #[deprecated(
         since = "0.15.0",
-        note = "Use libp2p_relay::OutboundHopFatalUpgradeError instead."
+        note = "Use libp2p_relay::outbound::hop::FatalUpgradeError instead."
     )]
-    pub type OutboundHopFatalUpgradeError = crate::protocol::outbound_hop::FatalUpgradeError;
+    pub type OutboundHopFatalUpgradeError = crate::outbound::hop::FatalUpgradeError;
 
     #[deprecated(
         since = "0.15.0",
-        note = "Use libp2p_relay::OutboundStopFatalUpgradeError instead."
+        note = "Use libp2p_relay::outbound::stop::FatalUpgradeError instead."
     )]
-    pub type OutboundStopFatalUpgradeError = crate::protocol::outbound_stop::FatalUpgradeError;
+    pub type OutboundStopFatalUpgradeError = crate::outbound::stop::FatalUpgradeError;
 
     #[deprecated(
         since = "0.15.0",

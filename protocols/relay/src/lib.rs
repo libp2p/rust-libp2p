@@ -35,13 +35,27 @@ mod message_proto {
 }
 
 pub use behaviour::{Behaviour, CircuitId, Config, Event};
-pub use protocol::{
-    inbound_hop::FatalUpgradeError as InboundHopFatalUpgradeError,
-    inbound_stop::FatalUpgradeError as InboundStopFatalUpgradeError,
-    outbound_hop::FatalUpgradeError as OutboundHopFatalUpgradeError,
-    outbound_stop::FatalUpgradeError as OutboundStopFatalUpgradeError, HOP_PROTOCOL_NAME,
-    STOP_PROTOCOL_NAME,
-};
+pub use protocol::{HOP_PROTOCOL_NAME, STOP_PROTOCOL_NAME};
+
+/// Types related to the relay protocol inbound.
+pub mod inbound {
+    pub mod hop {
+        pub use crate::protocol::inbound_hop::FatalUpgradeError;
+    }
+    pub mod stop {
+        pub use crate::protocol::inbound_stop::FatalUpgradeError;
+    }
+}
+
+/// Types related to the relay protocol outbound.
+pub mod outbound {
+    pub mod hop {
+        pub use crate::protocol::outbound_hop::FatalUpgradeError;
+    }
+    pub mod stop {
+        pub use crate::protocol::outbound_stop::FatalUpgradeError;
+    }
+}
 
 /// Everything related to the relay protocol from a client's perspective.
 pub mod client {
