@@ -109,9 +109,9 @@ impl<'a> HandleInnerEvent for AsClient<'a> {
         &mut self,
         params: &mut impl PollParameters,
         event: request_response::Event<DialRequest, DialResponse>,
-    ) -> (VecDeque<Event>, Option<Action>) {
-        let mut events = VecDeque::new();
-        let mut action = None;
+    ) -> VecDeque<Action> {
+        let mut actions = VecDeque::new();
+
         match event {
             request_response::Event::Message {
                 peer,
@@ -140,13 +140,17 @@ impl<'a> HandleInnerEvent for AsClient<'a> {
                         error: OutboundProbeError::Response(e),
                     },
                 };
-                events.push_back(Event::OutboundProbe(event));
+                actions.push_back(NetworkBehaviourAction::GenerateEvent(Event::OutboundProbe(
+                    event,
+                )));
 
                 if let Some(old) = self.handle_reported_status(response.result.clone().into()) {
-                    events.push_back(Event::StatusChanged {
-                        old,
-                        new: self.nat_status.clone(),
-                    });
+                    actions.push_back(NetworkBehaviourAction::GenerateEvent(
+                        Event::StatusChanged {
+                            old,
+                            new: self.nat_status.clone(),
+                        },
+                    ));
                 }
 
                 if let Ok(address) = response.result {
@@ -158,7 +162,7 @@ impl<'a> HandleInnerEvent for AsClient<'a> {
                         .find_map(|r| (r.addr == address).then_some(r.score))
                         .unwrap_or(AddressScore::Finite(0));
                     if let AddressScore::Finite(finite_score) = score {
-                        action = Some(NetworkBehaviourAction::ReportObservedAddr {
+                        actions.push_back(NetworkBehaviourAction::ReportObservedAddr {
                             address,
                             score: AddressScore::Finite(finite_score + 1),
                         });
@@ -180,17 +184,20 @@ impl<'a> HandleInnerEvent for AsClient<'a> {
                     .remove(&request_id)
                     .unwrap_or_else(|| self.probe_id.next());
 
-                events.push_back(Event::OutboundProbe(OutboundProbeEvent::Error {
-                    probe_id,
-                    peer: Some(peer),
-                    error: OutboundProbeError::OutboundRequest(error),
-                }));
+                actions.push_back(NetworkBehaviourAction::GenerateEvent(Event::OutboundProbe(
+                    OutboundProbeEvent::Error {
+                        probe_id,
+                        peer: Some(peer),
+                        error: OutboundProbeError::OutboundRequest(error),
+                    },
+                )));
 
                 self.schedule_probe.reset(Duration::ZERO);
             }
             _ => {}
         }
-        (events, action)
+
+        actions
     }
 }
 

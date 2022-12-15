@@ -446,7 +446,7 @@ impl NetworkBehaviour for Behaviour {
 
             match self.inner.poll(cx, params) {
                 Poll::Ready(NetworkBehaviourAction::GenerateEvent(event)) => {
-                    let (events, action) = match event {
+                    let actions = match event {
                         request_response::Event::Message {
                             message: request_response::Message::Response { .. },
                             ..
@@ -461,15 +461,10 @@ impl NetworkBehaviour for Behaviour {
                         | request_response::Event::InboundFailure { .. } => {
                             self.as_server().handle_event(params, event)
                         }
-                        request_response::Event::ResponseSent { .. } => (VecDeque::new(), None),
+                        request_response::Event::ResponseSent { .. } => VecDeque::new(),
                     };
 
-                    self.pending_actions.extend(
-                        events
-                            .into_iter()
-                            .map(NetworkBehaviourAction::GenerateEvent)
-                            .chain(action),
-                    );
+                    self.pending_actions.extend(actions);
                     continue;
                 }
                 Poll::Ready(action) => {
@@ -579,7 +574,7 @@ trait HandleInnerEvent {
         &mut self,
         params: &mut impl PollParameters,
         event: request_response::Event<DialRequest, DialResponse>,
-    ) -> (VecDeque<Event>, Option<Action>);
+    ) -> VecDeque<Action>;
 }
 
 trait GlobalIp {
