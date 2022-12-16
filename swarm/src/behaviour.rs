@@ -139,7 +139,9 @@ pub trait NetworkBehaviour: Sized + 'static {
     // ///
     // /// Note that the handler is returned to the [`NetworkBehaviour`] on connection failure and
     // /// connection closing.
-    #[deprecated(note = "Override the ")]
+    #[deprecated(
+        note = "Use one or more of `NetworkBehaviour::{handle_pending_inbound_connection,handle_established_inbound_connection,handle_pending_outbound_connection,handle_established_outbound_connection}` instead."
+    )]
     fn new_handler(&mut self) -> Self::ConnectionHandler;
 
     /// Callback that is invoked for every new inbound connection.
