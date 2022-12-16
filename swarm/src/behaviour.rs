@@ -198,12 +198,16 @@ pub trait NetworkBehaviour: Sized + 'static {
     /// Any error returned from this function will immediately abort the dial attempt.
     fn handle_pending_outbound_connection(
         &mut self,
-        _maybe_peer: Option<PeerId>,
+        maybe_peer: Option<PeerId>,
         _addresses: &[&Multiaddr],
         _effective_role: Endpoint,
         _connection_id: ConnectionId,
     ) -> Result<Vec<Multiaddr>, Box<dyn std::error::Error + Send + 'static>> {
-        Ok(vec![])
+        if let Some(peer_id) = maybe_peer {
+            Ok(self.addresses_of_peer(&peer_id))
+        } else {
+            vec![]
+        }
     }
 
     /// Callback that is invoked for every established outbound connection.
