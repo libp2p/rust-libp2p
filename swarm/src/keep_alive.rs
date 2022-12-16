@@ -8,6 +8,7 @@ use libp2p_core::upgrade::DeniedUpgrade;
 use libp2p_core::PeerId;
 use std::task::{Context, Poll};
 use void::Void;
+use crate::THandlerInEvent;
 
 /// Implementation of [`NetworkBehaviour`] that doesn't do anything other than keep all connections alive.
 ///
@@ -34,7 +35,7 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         _: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>> {
         Poll::Pending
     }
 

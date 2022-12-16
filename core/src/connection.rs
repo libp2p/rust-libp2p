@@ -21,7 +21,7 @@
 use crate::multiaddr::{Multiaddr, Protocol};
 
 /// Connection identifier.
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub struct ConnectionId(usize);
 
 impl ConnectionId {
@@ -30,16 +30,15 @@ impl ConnectionId {
     /// This is primarily useful for creating connection IDs
     /// in test environments. There is in general no guarantee
     /// that all connection IDs are based on non-negative integers.
+    #[deprecated(note = "IDs must be unique and should not be constructed directly.")]
     pub fn new(id: usize) -> Self {
         Self(id)
     }
 }
 
-impl std::ops::Add<usize> for ConnectionId {
-    type Output = Self;
-
-    fn add(self, other: usize) -> Self {
-        Self(self.0 + other)
+impl Default for ConnectionId {
+    fn default() -> Self {
+        Self(rand::random())
     }
 }
 

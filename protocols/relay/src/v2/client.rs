@@ -247,7 +247,7 @@ impl NetworkBehaviour for Client {
         &mut self,
         cx: &mut Context<'_>,
         _poll_parameters: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>> {
         if let Some(event) = self.queued_actions.pop_front() {
             return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event));
         }

@@ -25,6 +25,7 @@ use crate::handler::either::IntoEitherHandler;
 use either::Either;
 use libp2p_core::{Multiaddr, PeerId};
 use std::{task::Context, task::Poll};
+use crate::THandlerInEvent;
 
 /// Implementation of [`NetworkBehaviour`] that can be either of two implementations.
 impl<L, R> NetworkBehaviour for Either<L, R>
@@ -97,14 +98,14 @@ where
         &mut self,
         cx: &mut Context<'_>,
         params: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>> {
         let event = match self {
             Either::Left(behaviour) => futures::ready!(behaviour.poll(cx, params))
                 .map_out(Either::Left)
-                .map_handler_and_in(IntoEitherHandler::Left, Either::Left),
+                .map_in(Either::Left),
             Either::Right(behaviour) => futures::ready!(behaviour.poll(cx, params))
                 .map_out(Either::Right)
-                .map_handler_and_in(IntoEitherHandler::Right, Either::Right),
+                .map_in(Either::Right),
         };
 
         Poll::Ready(event)

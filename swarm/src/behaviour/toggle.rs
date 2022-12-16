@@ -25,7 +25,7 @@ use crate::handler::{
     KeepAlive, ListenUpgradeError, SubstreamProtocol,
 };
 use crate::upgrade::SendWrapper;
-use crate::{NetworkBehaviour, NetworkBehaviourAction, PollParameters};
+use crate::{NetworkBehaviour, NetworkBehaviourAction, PollParameters, THandlerInEvent};
 use either::Either;
 use libp2p_core::{
     either::{EitherError, EitherOutput},
@@ -108,7 +108,7 @@ where
         &mut self,
         cx: &mut Context<'_>,
         params: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>> {
         if let Some(inner) = self.inner.as_mut() {
             inner.poll(cx, params).map(|action| {
                 action.map_handler(|h| ToggleIntoConnectionHandler { inner: Some(h) })
