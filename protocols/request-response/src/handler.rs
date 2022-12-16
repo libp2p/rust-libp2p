@@ -24,8 +24,8 @@ use crate::codec::RequestResponseCodec;
 use crate::{RequestId, EMPTY_QUEUE_SHRINK_THRESHOLD};
 
 use libp2p_swarm::handler::{
-    ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
-    ListenUpgradeError,
+    CloseReason, ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound,
+    FullyNegotiatedOutbound, ListenUpgradeError,
 };
 pub use protocol::{ProtocolSupport, RequestProtocol, ResponseProtocol};
 
@@ -332,7 +332,10 @@ where
         // Check for a pending (fatal) error.
         if let Some(err) = self.pending_error.take() {
             // The handler will not be polled again by the `Swarm`.
-            return Poll::Ready(ConnectionHandlerEvent::close(err));
+            return Poll::Ready(ConnectionHandlerEvent::Close(CloseReason::new(
+                "request-response",
+                err,
+            )));
         }
 
         // Drain pending events.

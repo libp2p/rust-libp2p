@@ -18,6 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::handler::CloseReason;
 use crate::transport::TransportError;
 use crate::Multiaddr;
 use crate::{connection::ConnectionLimit, ConnectedPoint, PeerId};
@@ -33,8 +34,8 @@ pub enum ConnectionError {
     /// The connection keep-alive timeout expired.
     KeepAliveTimeout,
 
-    /// The connection handler produced an error.
-    Handler(Box<dyn std::error::Error + Send + 'static>),
+    /// The connection handler actively closed the connection.
+    Handler(CloseReason),
 }
 
 impl fmt::Display for ConnectionError {
@@ -44,7 +45,7 @@ impl fmt::Display for ConnectionError {
             ConnectionError::KeepAliveTimeout => {
                 write!(f, "Connection closed due to expired keep-alive timeout.")
             }
-            ConnectionError::Handler(err) => write!(f, "Connection error: Handler error: {}", err),
+            ConnectionError::Handler(_) => Ok(()), // `CloseReason` prints enough context.
         }
     }
 }
@@ -54,7 +55,7 @@ impl std::error::Error for ConnectionError {
         match self {
             ConnectionError::IO(err) => Some(err),
             ConnectionError::KeepAliveTimeout => None,
-            ConnectionError::Handler(err) => Some(err.as_ref()),
+            ConnectionError::Handler(err) => Some(err),
         }
     }
 }

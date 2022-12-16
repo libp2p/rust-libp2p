@@ -32,8 +32,8 @@ use libp2p_core::either::EitherError;
 use libp2p_core::multiaddr::Protocol;
 use libp2p_core::{upgrade, ConnectedPoint, Multiaddr, PeerId};
 use libp2p_swarm::handler::{
-    ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
-    ListenUpgradeError, SendWrapper,
+    CloseReason, ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound,
+    FullyNegotiatedOutbound, ListenUpgradeError, SendWrapper,
 };
 use libp2p_swarm::{
     dummy, ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr,
@@ -555,7 +555,10 @@ impl ConnectionHandler for Handler {
         // Check for a pending (fatal) error.
         if let Some(err) = self.pending_error.take() {
             // The handler will not be polled again by the `Swarm`.
-            return Poll::Ready(ConnectionHandlerEvent::close(err));
+            return Poll::Ready(ConnectionHandlerEvent::Close(CloseReason::new(
+                "relay-client",
+                err,
+            )));
         }
 
         // Return queued events.

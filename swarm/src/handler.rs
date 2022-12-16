@@ -433,7 +433,7 @@ pub enum ConnectionHandlerEvent<TConnectionUpgrade, TOutboundOpenInfo, TCustom> 
     /// connection, while allowing other [`ConnectionHandler`]s to continue using
     /// the connection, return [`KeepAlive::No`] in
     /// [`ConnectionHandler::connection_keep_alive`].
-    Close(Box<dyn error::Error + Send + 'static>),
+    Close(CloseReason),
 
     /// Other event.
     Custom(TCustom),
@@ -443,17 +443,6 @@ pub enum ConnectionHandlerEvent<TConnectionUpgrade, TOutboundOpenInfo, TCustom> 
 impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom>
     ConnectionHandlerEvent<TConnectionUpgrade, TOutboundOpenInfo, TCustom>
 {
-    /// Close the connection for the specified reason.
-    ///
-    /// You are encouraged to supply a downcast-friendly type here IF you later want to inspect,
-    /// why a connection was closed. This works best if you define a custom error type for your
-    /// handler and directly supply instances of this error to this function. This will allow
-    /// you and other users to directly downcast to a type from your module, thus giving them a
-    /// similar experience as if we were to track this with a type parameter.
-    pub fn close(error: impl error::Error + Send + 'static) -> Self {
-        Self::Close(Box::new(error))
-    }
-
     /// If this is an `OutboundSubstreamRequest`, maps the `info` member from a
     /// `TOutboundOpenInfo` to something else.
     pub fn map_outbound_open_info<F, I>(
@@ -506,6 +495,51 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom>
             ConnectionHandlerEvent::Custom(val) => ConnectionHandlerEvent::Custom(map(val)),
             ConnectionHandlerEvent::Close(val) => ConnectionHandlerEvent::Close(val),
         }
+    }
+}
+
+#[derive(Debug)]
+pub struct CloseReason {
+    component_name: &'static str,
+    source: Box<dyn error::Error + Send + 'static>,
+}
+
+impl CloseReason {
+    /// Construct a new [`CloseReason`].
+    ///
+    /// The first parameter should be a meaningful identifier for the component / protocol that is closing the connection.
+    /// The given `source` is returned from [`Error::source`](error::Error::source) and can be printed by iterating the source of this error.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use libp2p_swarm::handler::CloseReason;
+    ///
+    /// # fn main() {
+    /// let source = std::io::Error::from(std::io::ErrorKind::UnexpectedEof); // Imagine this being the result of reading from a stream.
+    /// let reason = CloseReason::new("ping", source);
+    ///
+    /// assert_eq!(reason.to_string(), "connection closed by 'ping' protocol")
+    /// # }
+    ///
+    /// ```
+    pub fn new(component_name: &'static str, source: impl error::Error + Send + 'static) -> Self {
+        Self {
+            component_name,
+            source: Box::new(source),
+        }
+    }
+}
+
+impl fmt::Display for CloseReason {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "connection closed by '{}' protocol", self.component_name)
+    }
+}
+
+impl error::Error for CloseReason {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        Some(self.source.as_ref())
     }
 }
 

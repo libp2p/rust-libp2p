@@ -27,9 +27,9 @@ use futures::StreamExt;
 use instant::Instant;
 use libp2p_core::upgrade::{NegotiationError, UpgradeError};
 use libp2p_swarm::handler::{
-    ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr,
-    DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound, KeepAlive,
-    SubstreamProtocol,
+    CloseReason, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent,
+    ConnectionHandlerUpgrErr, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
+    KeepAlive, SubstreamProtocol,
 };
 use libp2p_swarm::NegotiatedSubstream;
 use log::{error, trace, warn};
@@ -320,7 +320,10 @@ impl ConnectionHandler for GossipsubHandler {
 
             // If there was a fatal error, close the connection.
             if let Some(error) = reported_error {
-                return Poll::Ready(ConnectionHandlerEvent::close(error));
+                return Poll::Ready(ConnectionHandlerEvent::Close(CloseReason::new(
+                    "gossipsub",
+                    error,
+                )));
             }
         }
 
@@ -335,9 +338,10 @@ impl ConnectionHandler for GossipsubHandler {
 
         if self.inbound_substreams_created > MAX_SUBSTREAM_CREATION {
             // Too many inbound substreams have been created, end the connection.
-            return Poll::Ready(ConnectionHandlerEvent::close(
+            return Poll::Ready(ConnectionHandlerEvent::Close(CloseReason::new(
+                "gossipsub",
                 GossipsubHandlerError::MaxInboundSubstreams,
-            ));
+            )));
         }
 
         // determine if we need to create the stream
@@ -346,9 +350,10 @@ impl ConnectionHandler for GossipsubHandler {
             && !self.outbound_substream_establishing
         {
             if self.outbound_substreams_created >= MAX_SUBSTREAM_CREATION {
-                return Poll::Ready(ConnectionHandlerEvent::close(
+                return Poll::Ready(ConnectionHandlerEvent::Close(CloseReason::new(
+                    "gossipsub",
                     GossipsubHandlerError::MaxOutboundSubstreams,
-                ));
+                )));
             }
             let message = self.send_queue.remove(0);
             self.send_queue.shrink_to_fit();
@@ -471,13 +476,18 @@ impl ConnectionHandler for GossipsubHandler {
                                 }
                                 Err(e) => {
                                     error!("Error sending message: {}", e);
-                                    return Poll::Ready(ConnectionHandlerEvent::close(e));
+                                    return Poll::Ready(ConnectionHandlerEvent::Close(
+                                        CloseReason::new("gossipsub", e),
+                                    ));
                                 }
                             }
                         }
                         Poll::Ready(Err(e)) => {
                             error!("Outbound substream error while sending output: {:?}", e);
-                            return Poll::Ready(ConnectionHandlerEvent::close(e));
+                            return Poll::Ready(ConnectionHandlerEvent::Close(CloseReason::new(
+                                "gossipsub",
+                                e,
+                            )));
                         }
                         Poll::Pending => {
                             self.keep_alive = KeepAlive::Yes;
@@ -499,7 +509,10 @@ impl ConnectionHandler for GossipsubHandler {
                                 Some(OutboundSubstreamState::WaitingOutput(substream))
                         }
                         Poll::Ready(Err(e)) => {
-                            return Poll::Ready(ConnectionHandlerEvent::close(e))
+                            return Poll::Ready(ConnectionHandlerEvent::Close(CloseReason::new(
+                                "gossipsub",
+                                e,
+                            )))
                         }
                         Poll::Pending => {
                             self.keep_alive = KeepAlive::Yes;
@@ -521,9 +534,12 @@ impl ConnectionHandler for GossipsubHandler {
                         }
                         Poll::Ready(Err(e)) => {
                             warn!("Outbound substream error while closing: {:?}", e);
-                            return Poll::Ready(ConnectionHandlerEvent::close(io::Error::new(
-                                io::ErrorKind::BrokenPipe,
-                                "Failed to close outbound substream",
+                            return Poll::Ready(ConnectionHandlerEvent::Close(CloseReason::new(
+                                "gossipsub",
+                                io::Error::new(
+                                    io::ErrorKind::BrokenPipe,
+                                    "Failed to close outbound substream",
+                                ),
                             )));
                         }
                         Poll::Pending => {

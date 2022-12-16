@@ -19,9 +19,9 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::handler::{
-    ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr,
-    DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound, KeepAlive,
-    SubstreamProtocol,
+    CloseReason, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent,
+    ConnectionHandlerUpgrErr, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
+    KeepAlive, SubstreamProtocol,
 };
 use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend};
 use instant::Instant;
@@ -146,7 +146,9 @@ where
     ) -> Poll<ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Self::OutEvent>>
     {
         if let Some(err) = self.pending_error.take() {
-            return Poll::Ready(ConnectionHandlerEvent::close(err));
+            return Poll::Ready(ConnectionHandlerEvent::Close(CloseReason::new(
+                "oneshot", err,
+            )));
         }
 
         if !self.events_out.is_empty() {

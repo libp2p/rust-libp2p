@@ -25,7 +25,7 @@ use futures_timer::Delay;
 use libp2p_core::upgrade::ReadyUpgrade;
 use libp2p_core::{upgrade::NegotiationError, UpgradeError};
 use libp2p_swarm::handler::{
-    ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
+    CloseReason, ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
 use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
@@ -323,7 +323,9 @@ impl ConnectionHandler for Handler {
                 if self.failures > 1 || self.config.max_failures.get() > 1 {
                     if self.failures >= self.config.max_failures.get() {
                         log::debug!("Too many failures ({}). Closing connection.", self.failures);
-                        return Poll::Ready(ConnectionHandlerEvent::close(error));
+                        return Poll::Ready(ConnectionHandlerEvent::Close(CloseReason::new(
+                            "ping", error,
+                        )));
                     }
 
                     return Poll::Ready(ConnectionHandlerEvent::Custom(Err(error)));

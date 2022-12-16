@@ -28,8 +28,8 @@ use libp2p_core::multiaddr::Multiaddr;
 use libp2p_core::upgrade::{self, DeniedUpgrade, NegotiationError, UpgradeError};
 use libp2p_core::ConnectedPoint;
 use libp2p_swarm::handler::{
-    ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
-    ListenUpgradeError,
+    CloseReason, ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound,
+    FullyNegotiatedOutbound, ListenUpgradeError,
 };
 use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
@@ -250,11 +250,17 @@ impl Handler {
                 NegotiationError::ProtocolError(p),
             )) => {
                 self.queued_events
-                    .push_back(ConnectionHandlerEvent::close(p));
+                    .push_back(ConnectionHandlerEvent::Close(CloseReason::new(
+                        "dcutr-relay",
+                        p,
+                    )));
             }
             ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::A(e))) => {
                 self.queued_events
-                    .push_back(ConnectionHandlerEvent::close(e));
+                    .push_back(ConnectionHandlerEvent::Close(CloseReason::new(
+                        "dcutr-relay",
+                        e,
+                    )));
             }
             ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::B(never))) => {
                 void::unreachable(never)
@@ -296,17 +302,26 @@ impl Handler {
             // the remote peer and results in closing the connection.
             e @ ConnectionHandlerUpgrErr::Timer => {
                 self.queued_events
-                    .push_back(ConnectionHandlerEvent::close(e));
+                    .push_back(ConnectionHandlerEvent::Close(CloseReason::new(
+                        "dcutr-relay",
+                        e,
+                    )));
             }
             ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(
                 NegotiationError::ProtocolError(p),
             )) => {
                 self.queued_events
-                    .push_back(ConnectionHandlerEvent::close(p));
+                    .push_back(ConnectionHandlerEvent::Close(CloseReason::new(
+                        "dcutr-relay",
+                        p,
+                    )));
             }
             ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)) => {
                 self.queued_events
-                    .push_back(ConnectionHandlerEvent::close(e));
+                    .push_back(ConnectionHandlerEvent::Close(CloseReason::new(
+                        "dcutr-relay",
+                        e,
+                    )));
             }
         }
     }
@@ -380,7 +395,10 @@ impl ConnectionHandler for Handler {
         // Check for a pending (fatal) error.
         if let Some(err) = self.pending_error.take() {
             // The handler will not be polled again by the `Swarm`.
-            return Poll::Ready(ConnectionHandlerEvent::close(err));
+            return Poll::Ready(ConnectionHandlerEvent::Close(CloseReason::new(
+                "dcutr-relay",
+                err,
+            )));
         }
 
         // Return queued events.
@@ -396,7 +414,12 @@ impl ConnectionHandler for Handler {
                         Event::InboundConnectNegotiated(addresses),
                     ));
                 }
-                Err(e) => return Poll::Ready(ConnectionHandlerEvent::close(e)),
+                Err(e) => {
+                    return Poll::Ready(ConnectionHandlerEvent::Close(CloseReason::new(
+                        "dcutr-relay",
+                        e,
+                    )))
+                }
             }
         }
 
