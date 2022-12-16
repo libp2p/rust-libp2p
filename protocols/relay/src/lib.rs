@@ -59,7 +59,11 @@ pub mod outbound {
 
 /// Everything related to the relay protocol from a client's perspective.
 pub mod client {
-    pub use crate::priv_client::{new, Behaviour, Event, RelayedConnection, Transport};
+    pub use crate::priv_client::{new, Behaviour, Connection, Event, Transport};
+
+    pub mod transport {
+        pub use crate::priv_client::transport::Error;
+    }
 }
 
 // Check that we can safely cast a `usize` to a `u64`.

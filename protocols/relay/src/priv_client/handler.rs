@@ -56,7 +56,7 @@ pub enum In {
     },
     EstablishCircuit {
         dst_peer_id: PeerId,
-        send_back: oneshot::Sender<Result<super::RelayedConnection, ()>>,
+        send_back: oneshot::Sender<Result<super::Connection, ()>>,
     },
 }
 
@@ -231,7 +231,7 @@ impl Handler {
 
                 let (tx, rx) = oneshot::channel();
                 self.alive_lend_out_substreams.push(rx);
-                let connection = super::RelayedConnection::new_inbound(inbound_circuit, tx);
+                let connection = super::Connection::new_inbound(inbound_circuit, tx);
 
                 pending_msgs.push_back(transport::ToListenerMsg::IncomingRelayedConnection {
                     stream: connection,
@@ -316,7 +316,7 @@ impl Handler {
                 OutboundOpenInfo::Connect { send_back },
             ) => {
                 let (tx, rx) = oneshot::channel();
-                match send_back.send(Ok(super::RelayedConnection::new_outbound(
+                match send_back.send(Ok(super::Connection::new_outbound(
                     substream,
                     read_buffer,
                     tx,
@@ -795,6 +795,6 @@ pub enum OutboundOpenInfo {
         to_listener: mpsc::Sender<transport::ToListenerMsg>,
     },
     Connect {
-        send_back: oneshot::Sender<Result<super::RelayedConnection, ()>>,
+        send_back: oneshot::Sender<Result<super::Connection, ()>>,
     },
 }

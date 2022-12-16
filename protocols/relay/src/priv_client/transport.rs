@@ -19,7 +19,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::priv_client::RelayedConnection;
+use crate::priv_client::Connection;
 use crate::RequestId;
 use futures::channel::mpsc;
 use futures::channel::oneshot;
@@ -124,7 +124,7 @@ impl Transport {
 }
 
 impl libp2p_core::Transport for Transport {
-    type Output = RelayedConnection;
+    type Output = Connection;
     type Error = Error;
     type ListenerUpgrade = Ready<Result<Self::Output, Self::Error>>;
     type Dial = RelayedDial;
@@ -402,7 +402,7 @@ impl Stream for Listener {
     }
 }
 
-pub type RelayedDial = BoxFuture<'static, Result<RelayedConnection, Error>>;
+pub type RelayedDial = BoxFuture<'static, Result<Connection, Error>>;
 
 /// Error that occurred during relay connection setup.
 #[derive(Debug, Error)]
@@ -447,7 +447,7 @@ pub enum TransportToBehaviourMsg {
         relay_peer_id: PeerId,
         dst_addr: Option<Multiaddr>,
         dst_peer_id: PeerId,
-        send_back: oneshot::Sender<Result<RelayedConnection, ()>>,
+        send_back: oneshot::Sender<Result<Connection, ()>>,
     },
     /// Listen for incoming relayed connections via relay node.
     ListenReq {
@@ -461,7 +461,7 @@ pub enum TransportToBehaviourMsg {
 pub enum ToListenerMsg {
     Reservation(Result<Reservation, ()>),
     IncomingRelayedConnection {
-        stream: RelayedConnection,
+        stream: Connection,
         src_peer_id: PeerId,
         relay_peer_id: PeerId,
         relay_addr: Multiaddr,
