@@ -102,7 +102,7 @@ fn to_hex(bytes: &[u8]) -> String {
     let mut hex = String::with_capacity(bytes.len() * 2);
 
     for byte in bytes {
-        write!(hex, "{:02x}", byte).expect("Can't fail on writing to string");
+        write!(hex, "{byte:02x}").expect("Can't fail on writing to string");
     }
 
     hex
@@ -174,7 +174,7 @@ pub enum KeyParseError {
 
 impl fmt::Display for KeyParseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{self:?}")
     }
 }
 
@@ -310,8 +310,8 @@ impl fmt::Display for PnetError {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match self {
-            PnetError::HandshakeError(e) => write!(f, "Handshake error: {}", e),
-            PnetError::IoError(e) => write!(f, "I/O error: {}", e),
+            PnetError::HandshakeError(e) => write!(f, "Handshake error: {e}"),
+            PnetError::IoError(e) => write!(f, "I/O error: {e}"),
         }
     }
 }

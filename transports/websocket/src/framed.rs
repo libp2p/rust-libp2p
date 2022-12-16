@@ -381,7 +381,7 @@ where
                 Ok(Either::Left(location))
             }
             handshake::ServerResponse::Rejected { status_code } => {
-                let msg = format!("server rejected handshake; status code = {}", status_code);
+                let msg = format!("server rejected handshake; status code = {status_code}");
                 Err(Error::Handshake(msg.into()))
             }
             handshake::ServerResponse::Accepted { .. } => {
@@ -501,10 +501,10 @@ fn parse_ws_dial_addr<T>(addr: Multiaddr) -> Result<WsAddress, Error<T>> {
     let (host_port, dns_name) = loop {
         match (ip, tcp) {
             (Some(Protocol::Ip4(ip)), Some(Protocol::Tcp(port))) => {
-                break (format!("{}:{}", ip, port), None)
+                break (format!("{ip}:{port}"), None)
             }
             (Some(Protocol::Ip6(ip)), Some(Protocol::Tcp(port))) => {
-                break (format!("{}:{}", ip, port), None)
+                break (format!("{ip}:{port}"), None)
             }
             (Some(Protocol::Dns(h)), Some(Protocol::Tcp(port)))
             | (Some(Protocol::Dns4(h)), Some(Protocol::Tcp(port)))

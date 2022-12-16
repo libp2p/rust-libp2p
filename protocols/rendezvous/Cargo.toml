@@ -30,7 +30,13 @@ void = "1"
 [dev-dependencies]
 async-trait = "0.1"
 env_logger = "0.10.0"
-libp2p = { path = "../..", features = ["full"] }
+libp2p-swarm = { path = "../../swarm", features = ["macros", "tokio"] }
+libp2p-mplex = { path = "../../muxers/mplex" }
+libp2p-noise = { path = "../../transports/noise" }
+libp2p-ping = { path = "../ping" }
+libp2p-identify = { path = "../identify" }
+libp2p-yamux = { path = "../../muxers/yamux" }
+libp2p-tcp = { path = "../../transports/tcp", features = ["tokio"] }
 rand = "0.8"
 tokio = { version = "1.15", features = [ "rt-multi-thread", "time", "macros", "sync", "process", "fs", "net" ] }
 

@@ -100,7 +100,7 @@ impl<T> PeriodicJob<T> {
     /// for the delay to expire.
     fn asap(&mut self) {
         if let PeriodicJobState::Waiting(delay, deadline) = &mut self.state {
-            let new_deadline = Instant::now() - Duration::from_secs(1);
+            let new_deadline = Instant::now().checked_sub(Duration::from_secs(1)).unwrap();
             *deadline = new_deadline;
             delay.reset(Duration::from_secs(1));
         }
@@ -181,7 +181,7 @@ impl PutRecordJob {
     /// The job is guaranteed to run on the next invocation of `poll`.
     pub fn asap(&mut self, publish: bool) {
         if publish {
-            self.next_publish = Some(Instant::now() - Duration::from_secs(1))
+            self.next_publish = Some(Instant::now().checked_sub(Duration::from_secs(1)).unwrap())
         }
         self.inner.asap()
     }

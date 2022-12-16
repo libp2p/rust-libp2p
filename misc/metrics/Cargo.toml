@@ -32,11 +32,15 @@ prometheus-client = "0.18.0"
 libp2p-gossipsub =  { version = "0.44.0", path = "../../protocols/gossipsub", optional = true }
 
 [dev-dependencies]
-log = "0.4.0"
 env_logger = "0.10.0"
 futures = "0.3.1"
-libp2p = { path = "../..", features = ["full"] }
 hyper = { version="0.14", features = ["server", "tcp", "http1"] }
+libp2p-noise = { path = "../../transports/noise" }
+libp2p-ping = { path = "../../protocols/ping" }
+libp2p-swarm = { path = "../../swarm", features = ["macros"] }
+libp2p-tcp = { path = "../../transports/tcp", features = ["async-io"] }
+libp2p-yamux = { path = "../../muxers/yamux" }
+log = "0.4.0"
 tokio = { version = "1", features = ["rt-multi-thread"] }
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
@@ -45,3 +49,7 @@ tokio = { version = "1", features = ["rt-multi-thread"] }
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 rustc-args = ["--cfg", "docsrs"]
+
+[[example]]
+name = "metrics"
+required-features = ["ping"]

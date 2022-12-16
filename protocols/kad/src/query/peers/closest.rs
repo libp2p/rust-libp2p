@@ -750,7 +750,7 @@ mod tests {
                 } => {
                     assert_eq!(key.preimage(), &peer);
                 }
-                Peer { state, .. } => panic!("Unexpected peer state: {:?}", state),
+                Peer { state, .. } => panic!("Unexpected peer state: {state:?}"),
             }
 
             let finished = iter.is_finished();

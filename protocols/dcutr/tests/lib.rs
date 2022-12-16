@@ -23,17 +23,17 @@ use futures::future::FutureExt;
 use futures::io::{AsyncRead, AsyncWrite};
 use futures::stream::StreamExt;
 use futures::task::Spawn;
-use libp2p::core::multiaddr::{Multiaddr, Protocol};
-use libp2p::core::muxing::StreamMuxerBox;
-use libp2p::core::transport::upgrade::Version;
-use libp2p::core::transport::{Boxed, MemoryTransport, OrTransport, Transport};
-use libp2p::core::PublicKey;
-use libp2p::core::{identity, PeerId};
-use libp2p::dcutr;
-use libp2p::plaintext::PlainText2Config;
-use libp2p::relay::v2::client;
-use libp2p::relay::v2::relay;
-use libp2p::swarm::{AddressScore, NetworkBehaviour, Swarm, SwarmEvent};
+use libp2p_core::multiaddr::{Multiaddr, Protocol};
+use libp2p_core::muxing::StreamMuxerBox;
+use libp2p_core::transport::upgrade::Version;
+use libp2p_core::transport::{Boxed, MemoryTransport, OrTransport, Transport};
+use libp2p_core::PublicKey;
+use libp2p_core::{identity, PeerId};
+use libp2p_dcutr as dcutr;
+use libp2p_plaintext::PlainText2Config;
+use libp2p_relay::v2::client;
+use libp2p_relay::v2::relay;
+use libp2p_swarm::{AddressScore, NetworkBehaviour, Swarm, SwarmEvent};
 use std::time::Duration;
 
 #[test]
@@ -83,7 +83,7 @@ fn connect() {
             remote_peer_id,
             remote_relayed_addr,
         } if remote_peer_id == dst_peer_id && remote_relayed_addr == dst_relayed_addr => {}
-        e => panic!("Unexpected event: {:?}.", e),
+        e => panic!("Unexpected event: {e:?}."),
     }
     pool.run_until(wait_for_connection_established(
         &mut src,
@@ -126,7 +126,7 @@ fn build_client() -> Swarm<Client> {
         transport,
         Client {
             relay: behaviour,
-            dcutr: dcutr::behaviour::Behaviour::new(),
+            dcutr: dcutr::behaviour::Behaviour::new(local_peer_id),
         },
         local_peer_id,
     )
@@ -142,12 +142,16 @@ where
     transport
         .upgrade(Version::V1)
         .authenticate(PlainText2Config { local_public_key })
-        .multiplex(libp2p::yamux::YamuxConfig::default())
+        .multiplex(libp2p_yamux::YamuxConfig::default())
         .boxed()
 }
 
 #[derive(NetworkBehaviour)]
-#[behaviour(out_event = "ClientEvent", event_process = false)]
+#[behaviour(
+    out_event = "ClientEvent",
+    event_process = false,
+    prelude = "libp2p_swarm::derive_prelude"
+)]
 struct Client {
     relay: client::Client,
     dcutr: dcutr::behaviour::Behaviour,
@@ -206,7 +210,7 @@ async fn wait_for_reservation(
             }
             SwarmEvent::Dialing(peer_id) if peer_id == relay_peer_id => {}
             SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == relay_peer_id => {}
-            e => panic!("{:?}", e),
+            e => panic!("{e:?}"),
         }
     }
 }
@@ -225,7 +229,7 @@ async fn wait_for_connection_established(client: &mut Swarm<Client>, addr: &Mult
                 client::Event::OutboundCircuitEstablished { .. },
             )) => {}
             SwarmEvent::ConnectionEstablished { .. } => {}
-            e => panic!("{:?}", e),
+            e => panic!("{e:?}"),
         }
     }
 }
@@ -233,7 +237,7 @@ async fn wait_for_connection_established(client: &mut Swarm<Client>, addr: &Mult
 async fn wait_for_new_listen_addr(client: &mut Swarm<Client>, new_addr: &Multiaddr) {
     match client.select_next_some().await {
         SwarmEvent::NewListenAddr { address, .. } if address == *new_addr => {}
-        e => panic!("{:?}", e),
+        e => panic!("{e:?}"),
     }
 }
 
@@ -241,7 +245,7 @@ async fn wait_for_dcutr_event(client: &mut Swarm<Client>) -> dcutr::behaviour::E
     loop {
         match client.select_next_some().await {
             SwarmEvent::Behaviour(ClientEvent::Dcutr(e)) => return e,
-            e => panic!("{:?}", e),
+            e => panic!("{e:?}"),
         }
     }
 }
