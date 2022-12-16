@@ -86,7 +86,7 @@ where
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
         if let Some(behaviour) = &mut self.inner {
-            if let Some(event) = event.maybe_map_handler(|h| h.inner, |h| h.inner) {
+            if let Some(event) = event.maybe_map_handler(|h| h.inner) {
                 inject_from_swarm(behaviour, event);
             }
         }
@@ -110,9 +110,7 @@ where
         params: &mut impl PollParameters,
     ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>> {
         if let Some(inner) = self.inner.as_mut() {
-            inner.poll(cx, params).map(|action| {
-                action.map_handler(|h| ToggleIntoConnectionHandler { inner: Some(h) })
-            })
+            inner.poll(cx, params)
         } else {
             Poll::Pending
         }

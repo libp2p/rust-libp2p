@@ -583,6 +583,7 @@ where
 }
 
 /// Prototype for a [`ConnectionHandler`].
+#[deprecated(note = "Override one of the `handle_` callbacks on `NetworkBehaviour` instead.")]
 pub trait IntoConnectionHandler: Send + 'static {
     /// The protocols handler.
     type Handler: ConnectionHandler;

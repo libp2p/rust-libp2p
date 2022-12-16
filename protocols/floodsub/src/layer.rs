@@ -30,7 +30,7 @@ use libp2p_core::{connection::ConnectionId, PeerId};
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm};
 use libp2p_swarm::{
     dial_opts::DialOpts, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, OneShotHandler,
-    PollParameters,
+    PollParameters, THandlerInEvent,
 };
 use libp2p_swarm::{ConnectionHandler, IntoConnectionHandler};
 use log::warn;
@@ -42,12 +42,7 @@ use std::{collections::VecDeque, iter};
 /// Network behaviour that handles the floodsub protocol.
 pub struct Floodsub {
     /// Events that need to be yielded to the outside when polling.
-    events: VecDeque<
-        NetworkBehaviourAction<
-            FloodsubEvent,
-            OneShotHandler<FloodsubProtocol, FloodsubRpc, InnerMessage>,
-        >,
-    >,
+    events: VecDeque<NetworkBehaviourAction<FloodsubEvent, THandlerInEvent<Self>>>,
 
     config: FloodsubConfig,
 
@@ -108,10 +103,9 @@ impl Floodsub {
         }
 
         if self.target_peers.insert(peer_id) {
-            let handler = self.new_handler();
             self.events.push_back(NetworkBehaviourAction::Dial {
                 opts: DialOpts::peer_id(peer_id).build(),
-                handler,
+                id: Default::default(),
             });
         }
     }
@@ -331,10 +325,9 @@ impl Floodsub {
         // We can be disconnected by the remote in case of inactivity for example, so we always
         // try to reconnect.
         if self.target_peers.contains(&peer_id) {
-            let handler = self.new_handler();
             self.events.push_back(NetworkBehaviourAction::Dial {
                 opts: DialOpts::peer_id(peer_id).build(),
-                handler,
+                id: Default::default(),
             });
         }
     }

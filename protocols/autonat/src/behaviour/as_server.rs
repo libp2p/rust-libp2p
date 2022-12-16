@@ -138,7 +138,7 @@ impl<'a> HandleInnerEvent for AsServer<'a> {
                                     )
                                     .addresses(addrs)
                                     .build(),
-                                handler: self.inner.new_handler(),
+                                id: Default::default(),
                             },
                         ])
                     }

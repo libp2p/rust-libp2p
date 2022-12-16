@@ -32,6 +32,7 @@ use libp2p_core::PeerId;
 use libp2p_swarm::behaviour::FromSwarm;
 use libp2p_swarm::{
     CloseConnection, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
+    THandlerInEvent,
 };
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::iter::FromIterator;
@@ -40,9 +41,7 @@ use std::time::Duration;
 use void::Void;
 
 pub struct Behaviour {
-    events: VecDeque<
-        NetworkBehaviourAction<Event, SubstreamConnectionHandler<inbound::Stream, Void, ()>>,
-    >,
+    events: VecDeque<NetworkBehaviourAction<Event, THandlerInEvent<Self>>>,
     registrations: Registrations,
 }
 
@@ -186,7 +185,7 @@ fn handle_inbound_event(
     connection: ConnectionId,
     id: InboundSubstreamId,
     registrations: &mut Registrations,
-) -> Vec<NetworkBehaviourAction<Event, SubstreamConnectionHandler<inbound::Stream, Void, ()>>> {
+) -> Vec<NetworkBehaviourAction<Event, THandlerInEvent<Behaviour>>> {
     match event {
         // bad registration
         inbound::OutEvent::RegistrationRequested(registration)

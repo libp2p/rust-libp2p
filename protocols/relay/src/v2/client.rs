@@ -38,7 +38,7 @@ use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm
 use libp2p_swarm::dial_opts::DialOpts;
 use libp2p_swarm::{
     ConnectionHandlerUpgrErr, NegotiatedSubstream, NetworkBehaviour, NetworkBehaviourAction,
-    NotifyHandler, PollParameters,
+    NotifyHandler, PollParameters, THandlerInEvent,
 };
 use std::collections::{hash_map, HashMap, VecDeque};
 use std::io::{Error, ErrorKind, IoSlice};
@@ -269,16 +269,18 @@ impl NetworkBehaviour for Client {
                         event: Either::Left(handler::In::Reserve { to_listener }),
                     },
                     None => {
-                        let handler = handler::Prototype::new(
-                            self.local_peer_id,
-                            Some(handler::In::Reserve { to_listener }),
-                        );
+                        // let handler = handler::Prototype::new(
+                        //     self.local_peer_id,
+                        //     Some(handler::In::Reserve { to_listener }),
+                        // );
+                        // TODO
                         NetworkBehaviourAction::Dial {
                             opts: DialOpts::peer_id(relay_peer_id)
                                 .addresses(vec![relay_addr])
                                 .extend_addresses_through_behaviour()
                                 .build(),
-                            handler,
+
+                            id: Default::default(),
                         }
                     }
                 }
@@ -304,19 +306,20 @@ impl NetworkBehaviour for Client {
                         }),
                     },
                     None => {
-                        let handler = handler::Prototype::new(
-                            self.local_peer_id,
-                            Some(handler::In::EstablishCircuit {
-                                send_back,
-                                dst_peer_id,
-                            }),
-                        );
+                        // let handler = handler::Prototype::new(
+                        //     self.local_peer_id,
+                        //     Some(handler::In::EstablishCircuit {
+                        //         send_back,
+                        //         dst_peer_id,
+                        //     }),
+                        // );
+                        // TODO
                         NetworkBehaviourAction::Dial {
                             opts: DialOpts::peer_id(relay_peer_id)
                                 .addresses(vec![relay_addr])
                                 .extend_addresses_through_behaviour()
                                 .build(),
-                            handler,
+                            id: Default::default(),
                         }
                     }
                 }

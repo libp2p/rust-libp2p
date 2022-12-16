@@ -30,7 +30,7 @@ use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailu
 use libp2p_swarm::dial_opts::{self, DialOpts};
 use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerUpgrErr, ExternalAddresses, IntoConnectionHandler,
-    NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
+    NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters, THandlerInEvent,
 };
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::task::{Context, Poll};
@@ -134,42 +134,41 @@ impl Behaviour {
         }
     }
 
-    fn on_dial_failure(
-        &mut self,
-        DialFailure {
-            peer_id, handler, ..
-        }: DialFailure<<Self as NetworkBehaviour>::ConnectionHandler>,
-    ) {
-        if let handler::Prototype::DirectConnection {
-            relayed_connection_id,
-            role: handler::Role::Initiator { attempt },
-        } = handler
-        {
-            let peer_id = peer_id.expect("Peer of `Prototype::DirectConnection` is always known.");
-            if attempt < MAX_NUMBER_OF_UPGRADE_ATTEMPTS {
-                self.queued_actions.push_back(ActionBuilder::Connect {
-                    peer_id,
-                    handler: NotifyHandler::One(relayed_connection_id),
-                    attempt: attempt + 1,
-                });
-            } else {
-                self.queued_actions.extend([
-                    NetworkBehaviourAction::NotifyHandler {
-                        peer_id,
-                        handler: NotifyHandler::One(relayed_connection_id),
-                        event: Either::Left(
-                            handler::relayed::Command::UpgradeFinishedDontKeepAlive,
-                        ),
-                    }
-                    .into(),
-                    NetworkBehaviourAction::GenerateEvent(Event::DirectConnectionUpgradeFailed {
-                        remote_peer_id: peer_id,
-                        error: UpgradeError::Dial,
-                    })
-                    .into(),
-                ]);
-            }
-        }
+    fn on_dial_failure(&mut self, DialFailure { peer_id, id, .. }: DialFailure) {
+        // TODO: To properly count connection attempts, we need count number of unique connection IDs we get here.
+        // That is not pretty in case we ever get a collision. How do we prevent a collision?
+        // We could also reuse that connection ID and count the number of attempts through that.
+
+        // if let handler::Prototype::DirectConnection {
+        //     relayed_connection_id,
+        //     role: handler::Role::Initiator { attempt },
+        // } = handler
+        // {
+        //     let peer_id = peer_id.expect("Peer of `Prototype::DirectConnection` is always known.");
+        //     if attempt < MAX_NUMBER_OF_UPGRADE_ATTEMPTS {
+        //         self.queued_actions.push_back(ActionBuilder::Connect {
+        //             peer_id,
+        //             handler: NotifyHandler::One(relayed_connection_id),
+        //             attempt: attempt + 1,
+        //         });
+        //     } else {
+        //         self.queued_actions.extend([
+        //             NetworkBehaviourAction::NotifyHandler {
+        //                 peer_id,
+        //                 handler: NotifyHandler::One(relayed_connection_id),
+        //                 event: Either::Left(
+        //                     handler::relayed::Command::UpgradeFinishedDontKeepAlive,
+        //                 ),
+        //             }
+        //             .into(),
+        //             NetworkBehaviourAction::GenerateEvent(Event::DirectConnectionUpgradeFailed {
+        //                 remote_peer_id: peer_id,
+        //                 error: UpgradeError::Dial,
+        //             })
+        //             .into(),
+        //         ]);
+        //     }
+        // }
     }
 
     fn on_connection_closed(
@@ -242,19 +241,20 @@ impl NetworkBehaviour for Behaviour {
                 );
             }
             Either::Left(handler::relayed::Event::InboundConnectNegotiated(remote_addrs)) => {
-                self.queued_actions.push_back(
-                    NetworkBehaviourAction::Dial {
-                        opts: DialOpts::peer_id(event_source)
-                            .addresses(remote_addrs)
-                            .condition(dial_opts::PeerCondition::Always)
-                            .build(),
-                        handler: handler::Prototype::DirectConnection {
-                            relayed_connection_id: connection,
-                            role: handler::Role::Listener,
-                        },
-                    }
-                    .into(),
-                );
+                // self.queued_actions.push_back(
+                //     NetworkBehaviourAction::Dial {
+                //         opts: DialOpts::peer_id(event_source)
+                //             .addresses(remote_addrs)
+                //             .condition(dial_opts::PeerCondition::Always)
+                //             .build(),
+                //         handler: handler::Prototype::DirectConnection {
+                //             relayed_connection_id: connection,
+                //             role: handler::Role::Listener,
+                //         },
+                //     }
+                //     .into(),
+                // );
+                todo!()
             }
             Either::Left(handler::relayed::Event::OutboundNegotiationFailed { error }) => {
                 self.queued_actions.push_back(
@@ -269,20 +269,21 @@ impl NetworkBehaviour for Behaviour {
                 remote_addrs,
                 attempt,
             }) => {
-                self.queued_actions.push_back(
-                    NetworkBehaviourAction::Dial {
-                        opts: DialOpts::peer_id(event_source)
-                            .condition(dial_opts::PeerCondition::Always)
-                            .addresses(remote_addrs)
-                            .override_role()
-                            .build(),
-                        handler: handler::Prototype::DirectConnection {
-                            relayed_connection_id: connection,
-                            role: handler::Role::Initiator { attempt },
-                        },
-                    }
-                    .into(),
-                );
+                // self.queued_actions.push_back(
+                //     NetworkBehaviourAction::Dial {
+                //         opts: DialOpts::peer_id(event_source)
+                //             .condition(dial_opts::PeerCondition::Always)
+                //             .addresses(remote_addrs)
+                //             .override_role()
+                //             .build(),
+                //         handler: handler::Prototype::DirectConnection {
+                //             relayed_connection_id: connection,
+                //             role: handler::Role::Initiator { attempt },
+                //         },
+                //     }
+                //     .into(),
+                // );
+                todo!()
             }
             Either::Right(Either::Left(
                 handler::direct::Event::DirectConnectionUpgradeSucceeded {
@@ -349,7 +350,7 @@ impl NetworkBehaviour for Behaviour {
 /// A [`NetworkBehaviourAction`], either complete, or still requiring data from [`PollParameters`]
 /// before being returned in [`Behaviour::poll`].
 enum ActionBuilder {
-    Done(NetworkBehaviourAction<Event, handler::Prototype>),
+    Done(NetworkBehaviourAction<Event, THandlerInEvent<Behaviour>>),
     Connect {
         attempt: u8,
         handler: NotifyHandler,
@@ -362,8 +363,8 @@ enum ActionBuilder {
     },
 }
 
-impl From<NetworkBehaviourAction<Event, handler::Prototype>> for ActionBuilder {
-    fn from(action: NetworkBehaviourAction<Event, handler::Prototype>) -> Self {
+impl From<NetworkBehaviourAction<Event, THandlerInEvent<Behaviour>>> for ActionBuilder {
+    fn from(action: NetworkBehaviourAction<Event, THandlerInEvent<Behaviour>>) -> Self {
         Self::Done(action)
     }
 }
@@ -373,7 +374,7 @@ impl ActionBuilder {
         self,
         local_peer_id: PeerId,
         external_addresses: &ExternalAddresses,
-    ) -> NetworkBehaviourAction<Event, handler::Prototype> {
+    ) -> NetworkBehaviourAction<Event, THandlerInEvent<Behaviour>> {
         let obs_addrs = || {
             external_addresses
                 .iter()

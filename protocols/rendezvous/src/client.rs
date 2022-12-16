@@ -22,7 +22,7 @@ use crate::codec::{Cookie, ErrorCode, Namespace, NewRegistration, Registration, 
 use crate::handler;
 use crate::handler::outbound;
 use crate::handler::outbound::OpenInfo;
-use crate::substream_handler::SubstreamConnectionHandler;
+use crate::substream_handler::{InEvent, SubstreamConnectionHandler};
 use futures::future::BoxFuture;
 use futures::future::FutureExt;
 use futures::stream::FuturesUnordered;
@@ -35,19 +35,15 @@ use libp2p_core::{Multiaddr, PeerId, PeerRecord};
 use libp2p_swarm::behaviour::FromSwarm;
 use libp2p_swarm::{
     CloseConnection, ExternalAddresses, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
-    PollParameters,
+    PollParameters, THandlerInEvent,
 };
 use std::collections::{HashMap, VecDeque};
 use std::iter::FromIterator;
 use std::task::{Context, Poll};
+use void::Void;
 
 pub struct Behaviour {
-    events: VecDeque<
-        NetworkBehaviourAction<
-            Event,
-            SubstreamConnectionHandler<void::Void, outbound::Stream, outbound::OpenInfo>,
-        >,
-    >,
+    events: VecDeque<NetworkBehaviourAction<Event, THandlerInEvent<Self>>>,
     keypair: Keypair,
     pending_register_requests: Vec<(Namespace, PeerId, Option<Ttl>)>,
 
@@ -294,12 +290,7 @@ fn handle_outbound_event(
     peer_id: PeerId,
     discovered_peers: &mut HashMap<(PeerId, Namespace), Vec<Multiaddr>>,
     expiring_registrations: &mut FuturesUnordered<BoxFuture<'static, (PeerId, Namespace)>>,
-) -> Vec<
-    NetworkBehaviourAction<
-        Event,
-        SubstreamConnectionHandler<void::Void, outbound::Stream, outbound::OpenInfo>,
-    >,
-> {
+) -> Vec<NetworkBehaviourAction<Event, THandlerInEvent<Behaviour>>> {
     match event {
         outbound::OutEvent::Registered { namespace, ttl } => {
             vec![NetworkBehaviourAction::GenerateEvent(Event::Registered {

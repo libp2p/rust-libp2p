@@ -2,7 +2,9 @@ use crate::behaviour::{FromSwarm, NetworkBehaviour, NetworkBehaviourAction, Poll
 use crate::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
-use crate::{ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive, SubstreamProtocol, THandlerInEvent};
+use crate::{
+    ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive, SubstreamProtocol, THandlerInEvent,
+};
 use libp2p_core::connection::ConnectionId;
 use libp2p_core::upgrade::DeniedUpgrade;
 use libp2p_core::PeerId;

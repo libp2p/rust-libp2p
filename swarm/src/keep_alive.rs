@@ -3,12 +3,12 @@ use crate::handler::{
     ConnectionEvent, ConnectionHandlerEvent, FullyNegotiatedInbound, FullyNegotiatedOutbound,
     KeepAlive, SubstreamProtocol,
 };
+use crate::THandlerInEvent;
 use libp2p_core::connection::ConnectionId;
 use libp2p_core::upgrade::DeniedUpgrade;
 use libp2p_core::PeerId;
 use std::task::{Context, Poll};
 use void::Void;
-use crate::THandlerInEvent;
 
 /// Implementation of [`NetworkBehaviour`] that doesn't do anything other than keep all connections alive.
 ///

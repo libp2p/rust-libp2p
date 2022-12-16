@@ -19,11 +19,16 @@
 // DEALINGS IN THE SOFTWARE.
 
 mod either;
+mod external_addresses;
+mod listen_addresses;
 pub mod toggle;
+
+pub use external_addresses::ExternalAddresses;
+pub use listen_addresses::ListenAddresses;
 
 use crate::dial_opts::DialOpts;
 use crate::handler::{ConnectionHandler, IntoConnectionHandler};
-use crate::{AddressRecord, AddressScore, DialError};
+use crate::{AddressRecord, AddressScore, DialError, THandlerInEvent};
 use libp2p_core::{
     connection::ConnectionId, transport::ListenerId, ConnectedPoint, Endpoint, Multiaddr, PeerId,
 };
@@ -345,7 +350,11 @@ pub trait NetworkBehaviour: Sized + 'static {
         note = "Handle `InEvent::DialFailure` in `NetworkBehaviour::on_swarm_event` instead. The default implementation of this `inject_*` method delegates to it."
     )]
     fn inject_dial_failure(&mut self, peer_id: Option<PeerId>, error: &DialError) {
-        self.on_swarm_event(FromSwarm::DialFailure(DialFailure { peer_id, error }));
+        self.on_swarm_event(FromSwarm::DialFailure(DialFailure {
+            peer_id,
+            error,
+            id: todo!("remove deprecated APIs first"),
+        }));
     }
 
     /// Indicates to the behaviour that an error happened on an incoming connection during its
@@ -361,6 +370,7 @@ pub trait NetworkBehaviour: Sized + 'static {
         self.on_swarm_event(FromSwarm::ListenFailure(ListenFailure {
             local_addr,
             send_back_addr,
+            id: todo!("remove deprecated APIs first"),
         }));
     }
 
@@ -572,9 +582,7 @@ impl<TOutEvent, TInEventOld> NetworkBehaviourAction<TOutEvent, TInEventOld> {
     ) -> NetworkBehaviourAction<TOutEvent, TInEventNew> {
         match self {
             NetworkBehaviourAction::GenerateEvent(e) => NetworkBehaviourAction::GenerateEvent(e),
-            NetworkBehaviourAction::Dial { opts, id } => {
-                NetworkBehaviourAction::Dial { opts, id }
-            }
+            NetworkBehaviourAction::Dial { opts, id } => NetworkBehaviourAction::Dial { opts, id },
             NetworkBehaviourAction::NotifyHandler {
                 peer_id,
                 handler,
@@ -598,14 +606,12 @@ impl<TOutEvent, TInEventOld> NetworkBehaviourAction<TOutEvent, TInEventOld> {
     }
 }
 
-impl<TOutEvent, THandler: IntoConnectionHandler> NetworkBehaviourAction<TOutEvent, THandler> {
+impl<TOutEvent, TInEvent> NetworkBehaviourAction<TOutEvent, TInEvent> {
     /// Map the event the swarm will return.
-    pub fn map_out<E>(self, f: impl FnOnce(TOutEvent) -> E) -> NetworkBehaviourAction<E, THandler> {
+    pub fn map_out<E>(self, f: impl FnOnce(TOutEvent) -> E) -> NetworkBehaviourAction<E, TInEvent> {
         match self {
             NetworkBehaviourAction::GenerateEvent(e) => NetworkBehaviourAction::GenerateEvent(f(e)),
-            NetworkBehaviourAction::Dial { opts, id } => {
-                NetworkBehaviourAction::Dial { opts, id }
-            }
+            NetworkBehaviourAction::Dial { opts, id } => NetworkBehaviourAction::Dial { opts, id },
             NetworkBehaviourAction::NotifyHandler {
                 peer_id,
                 handler,
@@ -733,6 +739,7 @@ pub struct AddressChange<'a> {
 pub struct DialFailure<'a> {
     pub peer_id: Option<PeerId>,
     pub error: &'a DialError,
+    pub id: ConnectionId,
 }
 
 /// [`FromSwarm`] variant that informs the behaviour that an error
@@ -744,6 +751,7 @@ pub struct DialFailure<'a> {
 pub struct ListenFailure<'a> {
     pub local_addr: &'a Multiaddr,
     pub send_back_addr: &'a Multiaddr,
+    pub id: ConnectionId,
 }
 
 /// [`FromSwarm`] variant that informs the behaviour that a new listener was created.
@@ -799,7 +807,6 @@ pub struct ExpiredExternalAddr<'a> {
 impl<'a, Handler: IntoConnectionHandler> FromSwarm<'a, Handler> {
     fn map_handler<NewHandler>(
         self,
-        map_into_handler: impl FnOnce(Handler) -> NewHandler,
         map_handler: impl FnOnce(
             <Handler as IntoConnectionHandler>::Handler,
         ) -> <NewHandler as IntoConnectionHandler>::Handler,
@@ -807,13 +814,12 @@ impl<'a, Handler: IntoConnectionHandler> FromSwarm<'a, Handler> {
     where
         NewHandler: IntoConnectionHandler,
     {
-        self.maybe_map_handler(|h| Some(map_into_handler(h)), |h| Some(map_handler(h)))
+        self.maybe_map_handler(|h| Some(map_handler(h)))
             .expect("To return Some as all closures return Some.")
     }
 
     fn maybe_map_handler<NewHandler>(
         self,
-        map_into_handler: impl FnOnce(Handler) -> Option<NewHandler>,
         map_handler: impl FnOnce(
             <Handler as IntoConnectionHandler>::Handler,
         ) -> Option<<NewHandler as IntoConnectionHandler>::Handler>,
@@ -859,15 +865,17 @@ impl<'a, Handler: IntoConnectionHandler> FromSwarm<'a, Handler> {
                 old,
                 new,
             })),
-            FromSwarm::DialFailure(DialFailure { peer_id, error }) => {
-                Some(FromSwarm::DialFailure(DialFailure { peer_id, error }))
+            FromSwarm::DialFailure(DialFailure { peer_id, error, id }) => {
+                Some(FromSwarm::DialFailure(DialFailure { peer_id, error, id }))
             }
             FromSwarm::ListenFailure(ListenFailure {
                 local_addr,
                 send_back_addr,
+                id,
             }) => Some(FromSwarm::ListenFailure(ListenFailure {
                 local_addr,
                 send_back_addr,
+                id,
             })),
             FromSwarm::NewListener(NewListener { listener_id }) => {
                 Some(FromSwarm::NewListener(NewListener { listener_id }))
@@ -953,13 +961,14 @@ pub(crate) fn inject_from_swarm<T: NetworkBehaviour>(
             #[allow(deprecated)]
             behaviour.inject_address_change(&peer_id, &connection_id, old, new);
         }
-        FromSwarm::DialFailure(DialFailure { peer_id, error }) => {
+        FromSwarm::DialFailure(DialFailure { peer_id, error, id }) => {
             #[allow(deprecated)]
             behaviour.inject_dial_failure(peer_id, error);
         }
         FromSwarm::ListenFailure(ListenFailure {
             local_addr,
             send_back_addr,
+            id,
         }) => {
             #[allow(deprecated)]
             behaviour.inject_listen_failure(local_addr, send_back_addr);

@@ -44,7 +44,7 @@ use libp2p_swarm::{
     behaviour::{AddressChange, ConnectionClosed, ConnectionEstablished, FromSwarm},
     dial_opts::DialOpts,
     ConnectionHandler, IntoConnectionHandler, NetworkBehaviour, NetworkBehaviourAction,
-    NotifyHandler, PollParameters,
+    NotifyHandler, PollParameters, THandlerInEvent,
 };
 use wasm_timer::Instant;
 
@@ -201,8 +201,7 @@ impl From<MessageAuthenticity> for PublishConfig {
     }
 }
 
-type GossipsubNetworkBehaviourAction =
-    NetworkBehaviourAction<GossipsubEvent, GossipsubHandler, Arc<GossipsubHandlerIn>>;
+type GossipsubNetworkBehaviourAction = NetworkBehaviourAction<GossipsubEvent, GossipsubHandlerIn>;
 
 /// Network behaviour that handles the gossipsub protocol.
 ///
@@ -1640,10 +1639,9 @@ where
                 self.px_peers.insert(peer_id);
 
                 // dial peer
-                let handler = self.new_handler();
                 self.events.push_back(NetworkBehaviourAction::Dial {
                     opts: DialOpts::peer_id(peer_id).build(),
-                    handler,
+                    id: Default::default(),
                 });
             }
         }
@@ -3449,10 +3447,10 @@ where
         _: &mut impl PollParameters,
     ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>> {
         if let Some(event) = self.events.pop_front() {
-            return Poll::Ready(event.map_in(|e: Arc<GossipsubHandlerIn>| {
-                // clone send event reference if others references are present
-                Arc::try_unwrap(e).unwrap_or_else(|e| (*e).clone())
-            }));
+            // return Poll::Ready(event.map_in(|e: Arc<GossipsubHandlerIn>| {
+            //     // clone send event reference if others references are present
+            //     Arc::try_unwrap(e).unwrap_or_else(|e| (*e).clone())
+            // }));
         }
 
         // update scores

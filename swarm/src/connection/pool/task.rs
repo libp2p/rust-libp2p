@@ -72,7 +72,10 @@ where
 }
 
 #[derive(Debug)]
-pub enum EstablishedConnectionEvent<THandler: ConnectionHandler> {
+pub enum EstablishedConnectionEvent<THandler>
+where
+    THandler: ConnectionHandler,
+{
     /// A node we are connected to has changed its address.
     AddressChange {
         id: ConnectionId,

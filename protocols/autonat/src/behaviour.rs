@@ -40,7 +40,7 @@ use libp2p_swarm::{
         ExpiredListenAddr, FromSwarm,
     },
     ConnectionHandler, ExternalAddresses, IntoConnectionHandler, ListenAddresses, NetworkBehaviour,
-    NetworkBehaviourAction, PollParameters,
+    NetworkBehaviourAction, PollParameters, THandlerInEvent,
 };
 use std::{
     collections::{HashMap, VecDeque},
@@ -210,10 +210,7 @@ pub struct Behaviour {
     last_probe: Option<Instant>,
 
     pending_actions: VecDeque<
-        NetworkBehaviourAction<
-            <Self as NetworkBehaviour>::OutEvent,
-            <Self as NetworkBehaviour>::ConnectionHandler,
-        >,
+        NetworkBehaviourAction<<Self as NetworkBehaviour>::OutEvent, THandlerInEvent<Self>>,
     >,
 
     probe_id: ProbeId,
@@ -387,20 +384,9 @@ impl Behaviour {
         }
     }
 
-    fn on_dial_failure(
-        &mut self,
-        DialFailure {
-            peer_id,
-            handler,
-            error,
-        }: DialFailure<<Self as NetworkBehaviour>::ConnectionHandler>,
-    ) {
+    fn on_dial_failure(&mut self, DialFailure { peer_id, error, id }: DialFailure) {
         self.inner
-            .on_swarm_event(FromSwarm::DialFailure(DialFailure {
-                peer_id,
-                handler,
-                error,
-            }));
+            .on_swarm_event(FromSwarm::DialFailure(DialFailure { peer_id, error, id }));
         if let Some(event) = self.as_server().on_outbound_dial_error(peer_id, error) {
             self.pending_actions
                 .push_back(NetworkBehaviourAction::GenerateEvent(Event::InboundProbe(
@@ -563,10 +549,8 @@ impl NetworkBehaviour for Behaviour {
     }
 }
 
-type Action = NetworkBehaviourAction<
-    <Behaviour as NetworkBehaviour>::OutEvent,
-    <Behaviour as NetworkBehaviour>::ConnectionHandler,
->;
+type Action =
+    NetworkBehaviourAction<<Behaviour as NetworkBehaviour>::OutEvent, THandlerInEvent<Behaviour>>;
 
 // Trait implemented for `AsClient` and `AsServer` to handle events from the inner [`request_response::Behaviour`] Protocol.
 trait HandleInnerEvent {

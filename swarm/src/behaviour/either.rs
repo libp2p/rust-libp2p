@@ -22,10 +22,10 @@ use crate::behaviour::{
     self, inject_from_swarm, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
 };
 use crate::handler::either::IntoEitherHandler;
+use crate::THandlerInEvent;
 use either::Either;
 use libp2p_core::{Multiaddr, PeerId};
 use std::{task::Context, task::Poll};
-use crate::THandlerInEvent;
 
 /// Implementation of [`NetworkBehaviour`] that can be either of two implementations.
 impl<L, R> NetworkBehaviour for Either<L, R>
@@ -54,23 +54,17 @@ where
         match self {
             Either::Left(b) => inject_from_swarm(
                 b,
-                event.map_handler(
-                    |h| h.unwrap_left(),
-                    |h| match h {
-                        Either::Left(h) => h,
-                        Either::Right(_) => unreachable!(),
-                    },
-                ),
+                event.map_handler(|h| match h {
+                    Either::Left(h) => h,
+                    Either::Right(_) => unreachable!(),
+                }),
             ),
             Either::Right(b) => inject_from_swarm(
                 b,
-                event.map_handler(
-                    |h| h.unwrap_right(),
-                    |h| match h {
-                        Either::Right(h) => h,
-                        Either::Left(_) => unreachable!(),
-                    },
-                ),
+                event.map_handler(|h| match h {
+                    Either::Right(h) => h,
+                    Either::Left(_) => unreachable!(),
+                }),
             ),
         }
     }

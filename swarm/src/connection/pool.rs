@@ -211,9 +211,10 @@ impl<THandler: ConnectionHandler, TTrans: Transport> fmt::Debug for Pool<THandle
 /// Event that can happen on the `Pool`.
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
-pub enum PoolEvent<THandler: ConnectionHandler, TTrans>
+pub enum PoolEvent<THandler, TTrans>
 where
     TTrans: Transport,
+    THandler: ConnectionHandler,
 {
     /// A new connection has been established.
     ConnectionEstablished {
@@ -294,7 +295,7 @@ where
         id: ConnectionId,
         peer_id: PeerId,
         /// The produced event.
-        event: THandlerOutEvent<THandler>,
+        event: THandler::OutEvent,
     },
 
     /// The connection to a node has changed its address.
@@ -349,7 +350,7 @@ where
     pub fn get_established(
         &mut self,
         id: ConnectionId,
-    ) -> Option<&mut EstablishedConnection<THandlerInEvent<THandler>>> {
+    ) -> Option<&mut EstablishedConnection<THandler::InEvent>> {
         self.established
             .values_mut()
             .find_map(|connections| connections.get_mut(&id))
@@ -447,7 +448,7 @@ where
         peer: Option<PeerId>,
         role_override: Endpoint,
         dial_concurrency_factor_override: Option<NonZeroU8>,
-        connection_id: ConnectionId
+        connection_id: ConnectionId,
     ) -> Result<(), ConnectionLimit>
     where
         TTrans: Send,
@@ -496,7 +497,7 @@ where
         &mut self,
         future: TFut,
         info: IncomingInfo<'_>,
-        connection_id: ConnectionId
+        connection_id: ConnectionId,
     ) -> Result<(), ConnectionLimit>
     where
         TFut: Future<Output = Result<TTrans::Output, TTrans::Error>> + Send + 'static,
@@ -536,7 +537,7 @@ where
         mut new_handler_fn: impl FnMut(
             PeerId,
             &ConnectedPoint,
-            ConnectionId
+            ConnectionId,
         ) -> Result<THandler, Box<dyn Error + Send + 'static>>,
         cx: &mut Context<'_>,
     ) -> Poll<PoolEvent<THandler, TTrans>>
