@@ -1140,10 +1140,9 @@ where
         if !self.peer_topics.contains_key(peer_id) {
             // Connect to peer
             debug!("Connecting to explicit peer {:?}", peer_id);
-            let handler = self.new_handler();
             self.events.push_back(NetworkBehaviourAction::Dial {
                 opts: DialOpts::peer_id(*peer_id).build(),
-                handler,
+                id: Default::default(),
             });
         }
     }

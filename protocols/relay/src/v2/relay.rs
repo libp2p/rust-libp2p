@@ -748,7 +748,7 @@ impl Add<u64> for CircuitId {
 /// before being returned in [`Relay::poll`].
 #[allow(clippy::large_enum_variant)]
 enum Action {
-    Done(NetworkBehaviourAction<Event, handler::Prototype>),
+    Done(NetworkBehaviourAction<Event, THandlerInEvent<Relay>>),
     AcceptReservationPrototype {
         inbound_reservation_req: inbound_hop::ReservationReq,
         handler: NotifyHandler,
@@ -756,8 +756,8 @@ enum Action {
     },
 }
 
-impl From<NetworkBehaviourAction<Event, handler::Prototype>> for Action {
-    fn from(action: NetworkBehaviourAction<Event, handler::Prototype>) -> Self {
+impl From<NetworkBehaviourAction<Event, THandlerInEvent<Relay>>> for Action {
+    fn from(action: NetworkBehaviourAction<Event, THandlerInEvent<Relay>>) -> Self {
         Self::Done(action)
     }
 }
@@ -767,7 +767,7 @@ impl Action {
         self,
         local_peer_id: PeerId,
         external_addresses: &ExternalAddresses,
-    ) -> NetworkBehaviourAction<Event, handler::Prototype> {
+    ) -> NetworkBehaviourAction<Event, THandlerInEvent<Relay>> {
         match self {
             Action::Done(action) => action,
             Action::AcceptReservationPrototype {
