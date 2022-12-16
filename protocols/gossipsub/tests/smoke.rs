@@ -216,8 +216,7 @@ fn multi_hop_propagation() {
         });
         if !all_subscribed {
             return TestResult::error(format!(
-                "Timed out waiting for all nodes to subscribe but only have {:?}/{:?}.",
-                subscribed, num_nodes,
+                "Timed out waiting for all nodes to subscribe but only have {subscribed:?}/{num_nodes:?}.",
             ));
         }
 
@@ -246,8 +245,7 @@ fn multi_hop_propagation() {
         });
         if !all_received {
             return TestResult::error(format!(
-                "Timed out waiting for all nodes to receive the msg but only have {:?}/{:?}.",
-                received_msgs, num_nodes,
+                "Timed out waiting for all nodes to receive the msg but only have {received_msgs:?}/{num_nodes:?}.",
             ));
         }
 

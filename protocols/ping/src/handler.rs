@@ -159,7 +159,7 @@ impl fmt::Display for Failure {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Failure::Timeout => f.write_str("Ping timeout"),
-            Failure::Other { error } => write!(f, "Ping error: {}", error),
+            Failure::Other { error } => write!(f, "Ping error: {error}"),
             Failure::Unsupported => write!(f, "Ping protocol not supported"),
         }
     }

@@ -32,7 +32,7 @@ pub mod async_std;
 pub mod tokio;
 
 /// Size of the buffer for reading data 0x10000.
-#[cfg(any(feature = "async-io", feature = "tokio"))]
+#[cfg(any(feature = "async-std", feature = "tokio"))]
 const RECEIVE_BUFFER_SIZE: usize = 65536;
 
 /// Provider for non-blocking receiving and sending on a [`std::net::UdpSocket`]

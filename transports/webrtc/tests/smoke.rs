@@ -83,7 +83,7 @@ async fn start_listening(transport: &mut Boxed<(PeerId, StreamMuxerBox)>, addr: 
     transport.listen_on(addr.parse().unwrap()).unwrap();
     match transport.next().await {
         Some(TransportEvent::NewAddress { listen_addr, .. }) => listen_addr,
-        e => panic!("{:?}", e),
+        e => panic!("{e:?}"),
     }
 }
 
