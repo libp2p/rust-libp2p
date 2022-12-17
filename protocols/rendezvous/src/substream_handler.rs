@@ -52,7 +52,7 @@ pub trait SubstreamHandler: Sized {
     fn upgrade(open_info: Self::OpenInfo)
         -> SubstreamProtocol<PassthroughProtocol, Self::OpenInfo>;
     fn new(substream: NegotiatedSubstream, info: Self::OpenInfo) -> Self;
-    fn inject_event(self, event: Self::InEvent) -> Self;
+    fn on_event(self, event: Self::InEvent) -> Self;
     fn advance(self, cx: &mut Context<'_>) -> Result<Next<Self, Self::OutEvent>, Self::Error>;
 }
 
@@ -395,7 +395,7 @@ where
             InEvent::NotifyInboundSubstream { id, message } => {
                 match self.inbound_substreams.remove(&id) {
                     Some(handler) => {
-                        let new_handler = handler.inject_event(message);
+                        let new_handler = handler.on_event(message);
 
                         self.inbound_substreams.insert(id, new_handler);
                     }
@@ -407,7 +407,7 @@ where
             InEvent::NotifyOutboundSubstream { id, message } => {
                 match self.outbound_substreams.remove(&id) {
                     Some(handler) => {
-                        let new_handler = handler.inject_event(message);
+                        let new_handler = handler.on_event(message);
 
                         self.outbound_substreams.insert(id, new_handler);
                     }
@@ -537,7 +537,7 @@ impl SubstreamHandler for void::Void {
         unreachable!("we should never yield a substream")
     }
 
-    fn inject_event(self, event: Self::InEvent) -> Self {
+    fn on_event(self, event: Self::InEvent) -> Self {
         void::unreachable(event)
     }
 
