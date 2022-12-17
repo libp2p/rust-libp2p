@@ -284,7 +284,7 @@ impl<N: ProtocolName> fmt::Display for DisplayProtocolName<N> {
             if (b' '..=b'~').contains(byte) {
                 f.write_char(char::from(*byte))?;
             } else {
-                write!(f, "<{:02X}>", byte)?;
+                write!(f, "<{byte:02X}>")?;
             }
         }
         Ok(())
@@ -302,9 +302,9 @@ mod tests {
         assert_eq!(
             DisplayProtocolName((0u8..=255).collect::<Vec<_>>()).to_string(),
             (0..32)
-                .map(|c| format!("<{:02X}>", c))
+                .map(|c| format!("<{c:02X}>"))
                 .chain((32..127).map(|c| format!("{}", char::from_u32(c).unwrap())))
-                .chain((127..256).map(|c| format!("<{:02X}>", c)))
+                .chain((127..256).map(|c| format!("<{c:02X}>")))
                 .collect::<String>()
         );
     }
