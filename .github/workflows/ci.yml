@@ -115,6 +115,8 @@ jobs:
           target: ${{ matrix.target }}
 
       - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
+        with:
+          save-if: ${{ github.ref == 'refs/heads/master' }}
 
       - run: cargo check --package libp2p --all-features --target=${{ matrix.target }}
 
@@ -141,6 +143,8 @@ jobs:
           override: true
 
       - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
+        with:
+          save-if: ${{ github.ref == 'refs/heads/master' }}
 
       - run: cargo check --package libp2p --features="${{ matrix.features }}"
 
@@ -162,6 +166,8 @@ jobs:
           override: true
 
       - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
+        with:
+          save-if: ${{ github.ref == 'refs/heads/master' }}
 
       - name: Check rustdoc links
         run: RUSTDOCFLAGS="--deny rustdoc::broken_intra_doc_links --deny warnings" cargo doc --verbose --workspace --no-deps --all-features --document-private-items
@@ -191,6 +197,8 @@ jobs:
           components: clippy
 
       - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
+        with:
+          save-if: ${{ github.ref == 'refs/heads/master' }}
 
       - name: Run cargo clippy
         uses: actions-rs/cargo@844f36862e911db73fe0815f00a4a2602c279505 # v1.0.3
@@ -215,6 +223,8 @@ jobs:
           override: true
 
       - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
+        with:
+          save-if: ${{ github.ref == 'refs/heads/master' }}
 
       - name: Run ipfs-kad example
         run: RUST_LOG=libp2p_swarm=debug,libp2p_kad=trace,libp2p_tcp=debug cargo run --example ipfs-kad --features full
