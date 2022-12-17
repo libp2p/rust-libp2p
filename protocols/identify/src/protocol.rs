@@ -378,7 +378,7 @@ mod tests {
     #[test]
     fn skip_invalid_multiaddr() {
         let valid_multiaddr: Multiaddr = "/ip6/2001:db8::/tcp/1234".parse().unwrap();
-        let valid_multiaddr_bytes = valid_multiaddr.clone().to_vec();
+        let valid_multiaddr_bytes = valid_multiaddr.to_vec();
 
         let invalid_multiaddr = {
             let a = vec![255; 8];
