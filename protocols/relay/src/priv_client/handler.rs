@@ -328,7 +328,7 @@ impl Handler {
                         ));
                     }
                     Err(_) => debug!(
-                        "Oneshot to `RelayedDial` future dropped. \
+                        "Oneshot to `client::transport::Dial` future dropped. \
                          Dropping established relayed connection to {:?}.",
                         self.remote_peer_id,
                     ),

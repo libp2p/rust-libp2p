@@ -127,7 +127,7 @@ impl libp2p_core::Transport for Transport {
     type Output = Connection;
     type Error = Error;
     type ListenerUpgrade = Ready<Result<Self::Output, Self::Error>>;
-    type Dial = RelayedDial;
+    type Dial = Dial;
 
     fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
         let (relay_peer_id, relay_addr) = match parse_relayed_multiaddr(addr)? {
@@ -402,7 +402,7 @@ impl Stream for Listener {
     }
 }
 
-pub type RelayedDial = BoxFuture<'static, Result<Connection, Error>>;
+pub type Dial = BoxFuture<'static, Result<Connection, Error>>;
 
 /// Error that occurred during relay connection setup.
 #[derive(Debug, Error)]

@@ -341,7 +341,7 @@ impl NetworkBehaviour for Behaviour {
     }
 }
 
-/// A [`NegotiatedSubstream`] acting as a [`RelayedConnection`].
+/// A [`NegotiatedSubstream`] acting as a [`Connection`].
 pub enum Connection {
     InboundAccepting {
         accept: BoxFuture<'static, Result<Connection, Error>>,
