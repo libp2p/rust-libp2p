@@ -500,7 +500,7 @@ mod tests {
     #[test]
     fn stop_listening() {
         let rand_port = rand::random::<u64>().saturating_add(1);
-        let addr: Multiaddr = format!("/memory/{}", rand_port).parse().unwrap();
+        let addr: Multiaddr = format!("/memory/{rand_port}").parse().unwrap();
 
         let mut transport = MemoryTransport::default().boxed();
         futures::executor::block_on(async {
@@ -520,7 +520,7 @@ mod tests {
                     assert_eq!(id, listener_id);
                     assert!(reason.is_ok())
                 }
-                other => panic!("Unexpected transport event: {:?}", other),
+                other => panic!("Unexpected transport event: {other:?}"),
             }
             assert!(!transport.remove_listener(listener_id));
         })
@@ -533,7 +533,7 @@ mod tests {
         // Setup listener.
 
         let rand_port = rand::random::<u64>().saturating_add(1);
-        let t1_addr: Multiaddr = format!("/memory/{}", rand_port).parse().unwrap();
+        let t1_addr: Multiaddr = format!("/memory/{rand_port}").parse().unwrap();
         let cloned_t1_addr = t1_addr.clone();
 
         let mut t1 = MemoryTransport::default().boxed();

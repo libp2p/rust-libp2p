@@ -933,8 +933,7 @@ mod tests {
 
                 panic!(
                     "Expected `ClosestDisjointPeersIter` to find all peers \
-                     found by `ClosestPeersIter`, but it did not find {:?}.",
-                    closest_only,
+                     found by `ClosestPeersIter`, but it did not find {closest_only:?}.",
                 );
             };
 
