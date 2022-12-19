@@ -1,4 +1,4 @@
-# 0.5.0 [unreleased]
+# 0.4.0-alpha.2 [unreleased]
 
 - Update to `libp2p-noise` `v0.42.0`.
 
