@@ -101,7 +101,8 @@ pub mod derive_prelude {
 }
 
 pub use behaviour::{
-    CloseConnection, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
+    CloseConnection, ExternalAddresses, ListenAddresses, NetworkBehaviour, NetworkBehaviourAction,
+    NotifyHandler, PollParameters,
 };
 pub use connection::pool::{ConnectionCounters, ConnectionLimits};
 pub use connection::{
@@ -191,6 +192,8 @@ pub enum SwarmEvent<TBehaviourOutEvent, THandlerErr> {
         /// Addresses are dialed concurrently. Contains the addresses and errors
         /// of dial attempts that failed before the one successful dial.
         concurrent_dial_errors: Option<Vec<(Multiaddr, TransportError<io::Error>)>>,
+        /// How long it took to establish this connection
+        established_in: std::time::Duration,
     },
     /// A connection with the given peer has been closed,
     /// possibly as a result of an error.
@@ -342,19 +345,6 @@ impl<TBehaviour> Swarm<TBehaviour>
 where
     TBehaviour: NetworkBehaviour,
 {
-    /// Builds a new `Swarm`.
-    #[deprecated(
-        since = "0.41.0",
-        note = "This constructor is considered ambiguous regarding the executor. Use one of the new, executor-specific constructors or `Swarm::with_threadpool_executor` for the same behaviour."
-    )]
-    pub fn new(
-        transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
-        behaviour: TBehaviour,
-        local_peer_id: PeerId,
-    ) -> Self {
-        Self::with_threadpool_executor(transport, behaviour, local_peer_id)
-    }
-
     /// Builds a new `Swarm` with a provided executor.
     pub fn with_executor(
         transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
@@ -498,7 +488,7 @@ where
     /// # use libp2p_core::transport::dummy::DummyTransport;
     /// # use libp2p_swarm::dummy;
     /// #
-    /// let mut swarm = Swarm::new(
+    /// let mut swarm = Swarm::without_executor(
     ///   DummyTransport::new().boxed(),
     ///   dummy::Behaviour,
     ///   PeerId::random(),
@@ -821,6 +811,7 @@ where
                 endpoint,
                 other_established_connection_ids,
                 concurrent_dial_errors,
+                established_in,
             } => {
                 if self.banned_peers.contains(&peer_id) {
                     // Mark the connection for the banned peer as banned, thus withholding any
@@ -861,6 +852,7 @@ where
                         num_established,
                         endpoint,
                         concurrent_dial_errors,
+                        established_in,
                     });
                 }
             }
@@ -1432,35 +1424,6 @@ impl<TBehaviour> SwarmBuilder<TBehaviour>
 where
     TBehaviour: NetworkBehaviour,
 {
-    /// Creates a new `SwarmBuilder` from the given transport, behaviour and
-    /// local peer ID. The `Swarm` with its underlying `Network` is obtained
-    /// via [`SwarmBuilder::build`].
-    #[deprecated(
-        since = "0.41.0",
-        note = "Use `SwarmBuilder::with_executor` or `SwarmBuilder::without_executor` instead."
-    )]
-    pub fn new(
-        transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
-        behaviour: TBehaviour,
-        local_peer_id: PeerId,
-    ) -> Self {
-        let executor: Option<Box<dyn Executor + Send>> = match ThreadPoolBuilder::new()
-            .name_prefix("libp2p-swarm-task-")
-            .create()
-            .ok()
-        {
-            Some(tp) => Some(Box::new(tp)),
-            None => None,
-        };
-        SwarmBuilder {
-            local_peer_id,
-            transport,
-            behaviour,
-            pool_config: PoolConfig::new(executor),
-            connection_limits: Default::default(),
-        }
-    }
-
     /// Creates a new [`SwarmBuilder`] from the given transport, behaviour, local peer ID and
     /// executor. The `Swarm` with its underlying `Network` is obtained via
     /// [`SwarmBuilder::build`].
@@ -1536,17 +1499,6 @@ where
             pool_config: PoolConfig::new(None),
             connection_limits: Default::default(),
         }
-    }
-
-    /// Configures the `Executor` to use for spawning background tasks.
-    ///
-    /// By default, unless another executor has been configured,
-    /// [`SwarmBuilder::build`] will try to set up a
-    /// [`ThreadPool`](futures::executor::ThreadPool).
-    #[deprecated(since = "0.41.0", note = "Use `SwarmBuilder::with_executor` instead.")]
-    pub fn executor(mut self, executor: Box<dyn Executor + Send>) -> Self {
-        self.pool_config = self.pool_config.with_executor(executor);
-        self
     }
 
     /// Configures the number of events from the [`NetworkBehaviour`] in
@@ -1706,33 +1658,27 @@ impl From<PendingOutboundConnectionError<io::Error>> for DialError {
 impl fmt::Display for DialError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            DialError::ConnectionLimit(err) => write!(f, "Dial error: {}", err),
+            DialError::ConnectionLimit(err) => write!(f, "Dial error: {err}"),
             DialError::NoAddresses => write!(f, "Dial error: no addresses for peer."),
             DialError::LocalPeerId => write!(f, "Dial error: tried to dial local peer id."),
             DialError::Banned => write!(f, "Dial error: peer is banned."),
             DialError::DialPeerConditionFalse(c) => {
-                write!(
-                    f,
-                    "Dial error: condition {:?} for dialing peer was false.",
-                    c
-                )
+                write!(f, "Dial error: condition {c:?} for dialing peer was false.")
             }
             DialError::Aborted => write!(
                 f,
                 "Dial error: Pending connection attempt has been aborted."
             ),
             DialError::InvalidPeerId(multihash) => {
-                write!(f, "Dial error: multihash {:?} is not a PeerId", multihash)
+                write!(f, "Dial error: multihash {multihash:?} is not a PeerId")
             }
             DialError::WrongPeerId { obtained, endpoint } => write!(
                 f,
-                "Dial error: Unexpected peer ID {} at {:?}.",
-                obtained, endpoint
+                "Dial error: Unexpected peer ID {obtained} at {endpoint:?}."
             ),
             DialError::ConnectionIo(e) => write!(
                 f,
-                "Dial error: An I/O error occurred on the connection: {:?}.",
-                e
+                "Dial error: An I/O error occurred on the connection: {e:?}."
             ),
             DialError::Transport(errors) => {
                 write!(f, "Failed to negotiate transport protocol(s): [")?;
@@ -2311,7 +2257,7 @@ mod tests {
                                 panic!("Unexpected transport event.")
                             }
                             Either::Right((e, _)) => {
-                                panic!("Expect swarm to not emit any event {:?}", e)
+                                panic!("Expect swarm to not emit any event {e:?}")
                             }
                         }
                     }
@@ -2319,7 +2265,7 @@ mod tests {
 
                 match swarm.next().await.unwrap() {
                     SwarmEvent::OutgoingConnectionError { .. } => {}
-                    e => panic!("Unexpected swarm event {:?}", e),
+                    e => panic!("Unexpected swarm event {e:?}"),
                 }
             })
         }
@@ -2359,7 +2305,7 @@ mod tests {
                 assert_eq!(limit.current, outgoing_limit);
                 assert_eq!(limit.limit, outgoing_limit);
             }
-            e => panic!("Unexpected error: {:?}", e),
+            e => panic!("Unexpected error: {e:?}"),
         }
 
         let info = network.network_info();
@@ -2399,7 +2345,7 @@ mod tests {
             let listen_addr = async_std::task::block_on(poll_fn(|cx| {
                 match ready!(network1.poll_next_unpin(cx)).unwrap() {
                     SwarmEvent::NewListenAddr { address, .. } => Poll::Ready(address),
-                    e => panic!("Unexpected network event: {:?}", e),
+                    e => panic!("Unexpected network event: {e:?}"),
                 }
             }));
 
@@ -2438,7 +2384,7 @@ mod tests {
                             Poll::Pending => {
                                 network_1_pending = true;
                             }
-                            e => panic!("Unexpected network event: {:?}", e),
+                            e => panic!("Unexpected network event: {e:?}"),
                         }
 
                         match network2.poll_next_unpin(cx) {
@@ -2456,7 +2402,7 @@ mod tests {
                             Poll::Pending => {
                                 network_2_pending = true;
                             }
-                            e => panic!("Unexpected network event: {:?}", e),
+                            e => panic!("Unexpected network event: {e:?}"),
                         }
 
                         if network_1_pending && network_2_pending {
@@ -2526,7 +2472,7 @@ mod tests {
                 Poll::Ready(Some(SwarmEvent::OutgoingConnectionError {
                     peer_id, error, ..
                 })) => Poll::Ready((peer_id, error)),
-                Poll::Ready(x) => panic!("unexpected {:?}", x),
+                Poll::Ready(x) => panic!("unexpected {x:?}"),
                 Poll::Pending => Poll::Pending,
             }
         }));
@@ -2542,7 +2488,7 @@ mod tests {
                     }
                 );
             }
-            x => panic!("wrong error {:?}", x),
+            x => panic!("wrong error {x:?}"),
         }
     }
 
@@ -2603,7 +2549,7 @@ mod tests {
                         assert_eq!(local_addr, local_address);
                     }
                     Poll::Ready(ev) => {
-                        panic!("Unexpected event: {:?}", ev)
+                        panic!("Unexpected event: {ev:?}")
                     }
                     Poll::Pending => break Poll::Pending,
                 }
@@ -2679,7 +2625,7 @@ mod tests {
         listener.listen_on(multiaddr![Memory(0u64)]).unwrap();
         let listener_address = match block_on(listener.next()).unwrap() {
             SwarmEvent::NewListenAddr { address, .. } => address,
-            e => panic!("Unexpected network event: {:?}", e),
+            e => panic!("Unexpected network event: {e:?}"),
         };
 
         dialer
@@ -2699,7 +2645,7 @@ mod tests {
                 error: DialError::Aborted,
                 ..
             } => {}
-            e => panic!("Unexpected swarm event {:?}.", e),
+            e => panic!("Unexpected swarm event {e:?}."),
         }
     }
 

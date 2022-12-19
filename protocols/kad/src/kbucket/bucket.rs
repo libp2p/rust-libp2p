@@ -548,7 +548,7 @@ mod tests {
         let node = Node { key, value: () };
         match bucket.insert(node, NodeStatus::Disconnected) {
             InsertResult::Full => {}
-            x => panic!("{:?}", x),
+            x => panic!("{x:?}"),
         }
 
         // One-by-one fill the bucket with connected nodes, replacing the disconnected ones.
@@ -568,20 +568,20 @@ mod tests {
                 InsertResult::Pending { disconnected } => {
                     assert_eq!(disconnected, first_disconnected.key)
                 }
-                x => panic!("{:?}", x),
+                x => panic!("{x:?}"),
             }
 
             // Trying to insert another connected node fails.
             match bucket.insert(node.clone(), NodeStatus::Connected) {
                 InsertResult::Full => {}
-                x => panic!("{:?}", x),
+                x => panic!("{x:?}"),
             }
 
             assert!(bucket.pending().is_some());
 
             // Apply the pending node.
             let pending = bucket.pending_mut().expect("No pending node.");
-            pending.set_ready_at(Instant::now() - Duration::from_secs(1));
+            pending.set_ready_at(Instant::now().checked_sub(Duration::from_secs(1)).unwrap());
             let result = bucket.apply_pending();
             assert_eq!(
                 result,
@@ -603,7 +603,7 @@ mod tests {
         let node = Node { key, value: () };
         match bucket.insert(node, NodeStatus::Connected) {
             InsertResult::Full => {}
-            x => panic!("{:?}", x),
+            x => panic!("{x:?}"),
         }
     }
 

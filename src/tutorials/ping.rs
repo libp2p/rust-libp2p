@@ -174,8 +174,7 @@
 //! [`Transport`] to the [`NetworkBehaviour`].
 //!
 //! ```rust
-//! use libp2p::{identity, PeerId, ping};
-//! use libp2p::swarm::Swarm;
+//! use libp2p::{identity, PeerId, ping, Swarm};
 //! use std::error::Error;
 //!
 //! #[async_std::main]
@@ -193,7 +192,7 @@
 //!     // can be observed.
 //!     let behaviour = ping::Behaviour::new(ping::Config::new().with_keep_alive(true));
 //!
-//!     let mut swarm = Swarm::new(transport, behaviour, local_peer_id);
+//!     let mut swarm = Swarm::with_async_std_executor(transport, behaviour, local_peer_id);
 //!
 //!     Ok(())
 //! }
@@ -226,8 +225,7 @@
 //! remote peer.
 //!
 //! ```rust
-//! use libp2p::{identity, Multiaddr, PeerId, ping};
-//! use libp2p::swarm::{Swarm, dial_opts::DialOpts};
+//! use libp2p::{identity, Multiaddr, PeerId, ping, Swarm, swarm::dial_opts::DialOpts};
 //! use std::error::Error;
 //!
 //! #[async_std::main]
@@ -245,7 +243,7 @@
 //!     // can be observed.
 //!     let behaviour = ping::Behaviour::new(ping::Config::new().with_keep_alive(true));
 //!
-//!     let mut swarm = Swarm::new(transport, behaviour, local_peer_id);
+//!     let mut swarm = Swarm::with_async_std_executor(transport, behaviour, local_peer_id);
 //!
 //!     // Tell the swarm to listen on all interfaces and a random, OS-assigned
 //!     // port.
@@ -271,8 +269,7 @@
 //!
 //! ```no_run
 //! use futures::prelude::*;
-//! use libp2p::swarm::{Swarm, SwarmEvent, dial_opts::DialOpts};
-//! use libp2p::{identity, Multiaddr, PeerId, ping};
+//! use libp2p::{identity, Multiaddr, PeerId, ping, swarm::{Swarm, SwarmEvent, dial_opts::DialOpts}};
 //! use std::error::Error;
 //!
 //! #[async_std::main]
@@ -290,7 +287,7 @@
 //!     // can be observed.
 //!     let behaviour = ping::Behaviour::new(ping::Config::new().with_keep_alive(true));
 //!
-//!     let mut swarm = Swarm::new(transport, behaviour, local_peer_id);
+//!     let mut swarm = Swarm::with_async_std_executor(transport, behaviour, local_peer_id);
 //!
 //!     // Tell the swarm to listen on all interfaces and a random, OS-assigned
 //!     // port.

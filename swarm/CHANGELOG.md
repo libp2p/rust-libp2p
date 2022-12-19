@@ -1,7 +1,16 @@
-# 0.41.2
+# 0.42.0 [unreleased]
+
+- Removed deprecated Swarm constructors. For transition notes see [0.41.0](#0.41.0). See [PR 3170].
+- 
+- Deprecate functions on `PollParameters` in preparation for `PollParameters` to be removed entirely eventually. See [PR 3153].
+
+- Add `estblished_in` to `SwarmEvent::ConnectionEstablished`. See [PR 3134].
 
 - `SwarmBuilder::connection_event_buffer_size` now represents the size of a buffer _per connection_. See [PR 3188].
 
+[PR 3170]: https://github.com/libp2p/rust-libp2p/pull/3170
+[PR 3134]: https://github.com/libp2p/rust-libp2p/pull/3134
+[PR 3153]: https://github.com/libp2p/rust-libp2p/pull/3153
 [PR 3188]: https://github.com/libp2p/rust-libp2p/pull/3188
 
 # 0.41.1
