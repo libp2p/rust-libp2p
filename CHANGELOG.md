@@ -47,8 +47,11 @@
 
 # 0.51.0 [unreleased]
 
+- Count bandwidth at the application level. Previously `BandwidthLogging` would implement `Transport` and now implements `StreamMuxer` ([PR 3180](https://github.com/libp2p/rust-libp2p/pull/3180)).
+    - `BandwidthLogging::new` now requires a 2nd argument: `Arc<BandwidthSinks>`
+    - Remove `BandwidthFuture`
+    - Rename `BandwidthConnecLogging` to `InstrumentedStream`
 - Remove `SimpleProtocol` due to being unused. See [`libp2p::core::upgrade`](https://docs.rs/libp2p/0.50.0/libp2p/core/upgrade/index.html) for alternatives. See [PR 3191].
-
 - Update individual crates.
     - Update to [`libp2p-dcutr` `v0.9.0`](protocols/dcutr/CHANGELOG.md#090).
 
