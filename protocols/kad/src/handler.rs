@@ -362,7 +362,7 @@ impl fmt::Display for KademliaHandlerQueryErr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             KademliaHandlerQueryErr::Upgrade(err) => {
-                write!(f, "Error while performing Kademlia query: {}", err)
+                write!(f, "Error while performing Kademlia query: {err}")
             }
             KademliaHandlerQueryErr::UnexpectedMessage => {
                 write!(
@@ -371,7 +371,7 @@ impl fmt::Display for KademliaHandlerQueryErr {
                 )
             }
             KademliaHandlerQueryErr::Io(err) => {
-                write!(f, "I/O error during a Kademlia RPC query: {}", err)
+                write!(f, "I/O error during a Kademlia RPC query: {err}")
             }
         }
     }

@@ -214,10 +214,7 @@ mod network {
     use libp2p::kad::record::store::MemoryStore;
     use libp2p::kad::{GetProvidersOk, Kademlia, KademliaEvent, QueryId, QueryResult};
     use libp2p::multiaddr::Protocol;
-    use libp2p::request_response::{
-        ProtocolSupport, RequestId, RequestResponse, RequestResponseCodec, RequestResponseEvent,
-        RequestResponseMessage, ResponseChannel,
-    };
+    use libp2p::request_response::{self, ProtocolSupport, RequestId, ResponseChannel};
     use libp2p::swarm::{NetworkBehaviour, Swarm, SwarmEvent};
     use std::collections::{hash_map, HashMap, HashSet};
     use std::iter;
@@ -253,7 +250,7 @@ mod network {
             libp2p::development_transport(id_keys).await?,
             ComposedBehaviour {
                 kademlia: Kademlia::new(peer_id, MemoryStore::new(peer_id)),
-                request_response: RequestResponse::new(
+                request_response: request_response::Behaviour::new(
                     FileExchangeCodec(),
                     iter::once((FileExchangeProtocol(), ProtocolSupport::Full)),
                     Default::default(),
@@ -452,9 +449,9 @@ mod network {
                 )) => {}
                 SwarmEvent::Behaviour(ComposedEvent::Kademlia(_)) => {}
                 SwarmEvent::Behaviour(ComposedEvent::RequestResponse(
-                    RequestResponseEvent::Message { message, .. },
+                    request_response::Event::Message { message, .. },
                 )) => match message {
-                    RequestResponseMessage::Request {
+                    request_response::Message::Request {
                         request, channel, ..
                     } => {
                         self.event_sender
@@ -465,7 +462,7 @@ mod network {
                             .await
                             .expect("Event receiver not to be dropped.");
                     }
-                    RequestResponseMessage::Response {
+                    request_response::Message::Response {
                         request_id,
                         response,
                     } => {
@@ -477,7 +474,7 @@ mod network {
                     }
                 },
                 SwarmEvent::Behaviour(ComposedEvent::RequestResponse(
-                    RequestResponseEvent::OutboundFailure {
+                    request_response::Event::OutboundFailure {
                         request_id, error, ..
                     },
                 )) => {
@@ -488,7 +485,7 @@ mod network {
                         .send(Err(Box::new(error)));
                 }
                 SwarmEvent::Behaviour(ComposedEvent::RequestResponse(
-                    RequestResponseEvent::ResponseSent { .. },
+                    request_response::Event::ResponseSent { .. },
                 )) => {}
                 SwarmEvent::NewListenAddr { address, .. } => {
                     let local_peer_id = *self.swarm.local_peer_id();
@@ -597,18 +594,18 @@ mod network {
     #[derive(NetworkBehaviour)]
     #[behaviour(out_event = "ComposedEvent")]
     struct ComposedBehaviour {
-        request_response: RequestResponse<FileExchangeCodec>,
+        request_response: request_response::Behaviour<FileExchangeCodec>,
         kademlia: Kademlia<MemoryStore>,
     }
 
     #[derive(Debug)]
     enum ComposedEvent {
-        RequestResponse(RequestResponseEvent<FileRequest, FileResponse>),
+        RequestResponse(request_response::Event<FileRequest, FileResponse>),
         Kademlia(KademliaEvent),
     }
 
-    impl From<RequestResponseEvent<FileRequest, FileResponse>> for ComposedEvent {
-        fn from(event: RequestResponseEvent<FileRequest, FileResponse>) -> Self {
+    impl From<request_response::Event<FileRequest, FileResponse>> for ComposedEvent {
+        fn from(event: request_response::Event<FileRequest, FileResponse>) -> Self {
             ComposedEvent::RequestResponse(event)
         }
     }
@@ -675,7 +672,7 @@ mod network {
     }
 
     #[async_trait]
-    impl RequestResponseCodec for FileExchangeCodec {
+    impl request_response::Codec for FileExchangeCodec {
         type Protocol = FileExchangeProtocol;
         type Request = FileRequest;
         type Response = FileResponse;

@@ -541,7 +541,7 @@ where
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             TransportError::MultiaddrNotSupported(addr) => {
-                write!(f, "Multiaddr is not supported: {}", addr)
+                write!(f, "Multiaddr is not supported: {addr}")
             }
             TransportError::Other(_) => Ok(()),
         }
