@@ -2447,6 +2447,8 @@ mod tests {
                 _ => panic!("Was expecting the listen address to be reported"),
             }));
 
+        swarm.listened_addrs.clear(); // This is a hack to actually execute the dial to ourselves which would otherwise be filtered.
+
         swarm.dial(local_address.clone()).unwrap();
 
         let mut got_dial_err = false;
