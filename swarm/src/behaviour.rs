@@ -586,28 +586,17 @@ pub enum NetworkBehaviourAction<
     /// #         SubstreamProtocol::new(DeniedUpgrade, ())
     /// #     }
     /// #
-    /// #     fn inject_fully_negotiated_inbound(
-    /// #         &mut self,
-    /// #         _: <Self::InboundProtocol as InboundUpgrade<NegotiatedSubstream>>::Output,
-    /// #         _: Self::InboundOpenInfo,
-    /// #     ) {
-    /// #     }
+    /// #     fn on_behaviour_event(&mut self, _event: Self::InEvent) {}
     /// #
-    /// #     fn inject_fully_negotiated_outbound(
-    /// #         &mut self,
-    /// #         _: <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Output,
-    /// #         _: Self::OutboundOpenInfo,
-    /// #     ) {
-    /// #     }
-    /// #
-    /// #     fn inject_event(&mut self, _event: Self::InEvent) {}
-    /// #
-    /// #     fn inject_dial_upgrade_error(
-    /// #         &mut self,
-    /// #         _: Self::OutboundOpenInfo,
-    /// #         _: ConnectionHandlerUpgrErr<Void>,
-    /// #     ) {
-    /// #     }
+    /// #     fn on_connection_event(
+    /// #        &mut self,
+    /// #        event: ConnectionEvent<
+    /// #            Self::InboundProtocol,
+    /// #            Self::OutboundProtocol,
+    /// #            Self::InboundOpenInfo,
+    /// #            Self::OutboundOpenInfo,
+    /// #        >,
+    /// #     ) {}
     /// #
     /// #     fn connection_keep_alive(&self) -> KeepAlive {
     /// #         KeepAlive::Yes
