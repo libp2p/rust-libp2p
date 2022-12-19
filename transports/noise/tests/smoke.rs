@@ -28,7 +28,6 @@ use libp2p_core::upgrade::{apply_inbound, apply_outbound, Negotiated};
 use libp2p_core::{identity, transport, upgrade};
 use libp2p_noise::{
     Keypair, NoiseAuthenticated, NoiseConfig, NoiseError, NoiseOutput, RemoteIdentity, X25519Spec,
-    X25519,
 };
 use libp2p_tcp as tcp;
 use log::info;
@@ -47,7 +46,7 @@ fn core_upgrade_compat() {
 }
 
 #[test]
-fn xx_spec() {
+fn xx() {
     let _ = env_logger::try_init();
     fn prop(mut messages: Vec<Message>) -> bool {
         messages.truncate(5);
@@ -96,51 +95,6 @@ fn xx_spec() {
 }
 
 #[test]
-fn xx() {
-    let _ = env_logger::try_init();
-    fn prop(mut messages: Vec<Message>) -> bool {
-        messages.truncate(5);
-        let server_id = identity::Keypair::generate_ed25519();
-        let client_id = identity::Keypair::generate_ed25519();
-
-        let server_id_public = server_id.public();
-        let client_id_public = client_id.public();
-
-        let server_dh = Keypair::<X25519>::new().into_authentic(&server_id).unwrap();
-        let server_transport = tcp::async_io::Transport::default()
-            .and_then(move |output, endpoint| {
-                upgrade::apply(
-                    output,
-                    NoiseConfig::xx(server_dh),
-                    endpoint,
-                    upgrade::Version::V1,
-                )
-            })
-            .and_then(move |out, _| expect_identity(out, &client_id_public))
-            .boxed();
-
-        let client_dh = Keypair::<X25519>::new().into_authentic(&client_id).unwrap();
-        let client_transport = tcp::async_io::Transport::default()
-            .and_then(move |output, endpoint| {
-                upgrade::apply(
-                    output,
-                    NoiseConfig::xx(client_dh),
-                    endpoint,
-                    upgrade::Version::V1,
-                )
-            })
-            .and_then(move |out, _| expect_identity(out, &server_id_public))
-            .boxed();
-
-        run(server_transport, client_transport, messages);
-        true
-    }
-    QuickCheck::new()
-        .max_tests(30)
-        .quickcheck(prop as fn(Vec<Message>) -> bool)
-}
-
-#[test]
 fn ix() {
     let _ = env_logger::try_init();
     fn prop(mut messages: Vec<Message>) -> bool {
@@ -151,7 +105,9 @@ fn ix() {
         let server_id_public = server_id.public();
         let client_id_public = client_id.public();
 
-        let server_dh = Keypair::<X25519>::new().into_authentic(&server_id).unwrap();
+        let server_dh = Keypair::<X25519Spec>::new()
+            .into_authentic(&server_id)
+            .unwrap();
         let server_transport = tcp::async_io::Transport::default()
             .and_then(move |output, endpoint| {
                 upgrade::apply(
@@ -164,7 +120,9 @@ fn ix() {
             .and_then(move |out, _| expect_identity(out, &client_id_public))
             .boxed();
 
-        let client_dh = Keypair::<X25519>::new().into_authentic(&client_id).unwrap();
+        let client_dh = Keypair::<X25519Spec>::new()
+            .into_authentic(&client_id)
+            .unwrap();
         let client_transport = tcp::async_io::Transport::default()
             .and_then(move |output, endpoint| {
                 upgrade::apply(
@@ -196,7 +154,9 @@ fn ik_xx() {
         let client_id = identity::Keypair::generate_ed25519();
         let client_id_public = client_id.public();
 
-        let server_dh = Keypair::<X25519>::new().into_authentic(&server_id).unwrap();
+        let server_dh = Keypair::<X25519Spec>::new()
+            .into_authentic(&server_id)
+            .unwrap();
         let server_dh_public = server_dh.public_dh_key().clone();
         let server_transport = tcp::async_io::Transport::default()
             .and_then(move |output, endpoint| {
@@ -213,7 +173,9 @@ fn ik_xx() {
             .and_then(move |out, _| expect_identity(out, &client_id_public))
             .boxed();
 
-        let client_dh = Keypair::<X25519>::new().into_authentic(&client_id).unwrap();
+        let client_dh = Keypair::<X25519Spec>::new()
+            .into_authentic(&client_id)
+            .unwrap();
         let server_id_public2 = server_id_public.clone();
         let client_transport = tcp::async_io::Transport::default()
             .and_then(move |output, endpoint| {
