@@ -3678,10 +3678,10 @@ impl fmt::Debug for PublishConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             PublishConfig::Signing { author, .. } => {
-                f.write_fmt(format_args!("PublishConfig::Signing({})", author))
+                f.write_fmt(format_args!("PublishConfig::Signing({author})"))
             }
             PublishConfig::Author(author) => {
-                f.write_fmt(format_args!("PublishConfig::Author({})", author))
+                f.write_fmt(format_args!("PublishConfig::Author({author})"))
             }
             PublishConfig::RandomAuthor => f.write_fmt(format_args!("PublishConfig::RandomAuthor")),
             PublishConfig::Anonymous => f.write_fmt(format_args!("PublishConfig::Anonymous")),
