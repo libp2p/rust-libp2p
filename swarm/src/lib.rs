@@ -101,7 +101,8 @@ pub mod derive_prelude {
 }
 
 pub use behaviour::{
-    CloseConnection, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
+    CloseConnection, ExternalAddresses, ListenAddresses, NetworkBehaviour, NetworkBehaviourAction,
+    NotifyHandler, PollParameters,
 };
 pub use connection::pool::{ConnectionCounters, ConnectionLimits};
 pub use connection::{
@@ -1657,33 +1658,27 @@ impl From<PendingOutboundConnectionError<io::Error>> for DialError {
 impl fmt::Display for DialError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            DialError::ConnectionLimit(err) => write!(f, "Dial error: {}", err),
+            DialError::ConnectionLimit(err) => write!(f, "Dial error: {err}"),
             DialError::NoAddresses => write!(f, "Dial error: no addresses for peer."),
             DialError::LocalPeerId => write!(f, "Dial error: tried to dial local peer id."),
             DialError::Banned => write!(f, "Dial error: peer is banned."),
             DialError::DialPeerConditionFalse(c) => {
-                write!(
-                    f,
-                    "Dial error: condition {:?} for dialing peer was false.",
-                    c
-                )
+                write!(f, "Dial error: condition {c:?} for dialing peer was false.")
             }
             DialError::Aborted => write!(
                 f,
                 "Dial error: Pending connection attempt has been aborted."
             ),
             DialError::InvalidPeerId(multihash) => {
-                write!(f, "Dial error: multihash {:?} is not a PeerId", multihash)
+                write!(f, "Dial error: multihash {multihash:?} is not a PeerId")
             }
             DialError::WrongPeerId { obtained, endpoint } => write!(
                 f,
-                "Dial error: Unexpected peer ID {} at {:?}.",
-                obtained, endpoint
+                "Dial error: Unexpected peer ID {obtained} at {endpoint:?}."
             ),
             DialError::ConnectionIo(e) => write!(
                 f,
-                "Dial error: An I/O error occurred on the connection: {:?}.",
-                e
+                "Dial error: An I/O error occurred on the connection: {e:?}."
             ),
             DialError::Transport(errors) => {
                 write!(f, "Failed to negotiate transport protocol(s): [")?;
@@ -2262,7 +2257,7 @@ mod tests {
                                 panic!("Unexpected transport event.")
                             }
                             Either::Right((e, _)) => {
-                                panic!("Expect swarm to not emit any event {:?}", e)
+                                panic!("Expect swarm to not emit any event {e:?}")
                             }
                         }
                     }
@@ -2270,7 +2265,7 @@ mod tests {
 
                 match swarm.next().await.unwrap() {
                     SwarmEvent::OutgoingConnectionError { .. } => {}
-                    e => panic!("Unexpected swarm event {:?}", e),
+                    e => panic!("Unexpected swarm event {e:?}"),
                 }
             })
         }
@@ -2310,7 +2305,7 @@ mod tests {
                 assert_eq!(limit.current, outgoing_limit);
                 assert_eq!(limit.limit, outgoing_limit);
             }
-            e => panic!("Unexpected error: {:?}", e),
+            e => panic!("Unexpected error: {e:?}"),
         }
 
         let info = network.network_info();
@@ -2350,7 +2345,7 @@ mod tests {
             let listen_addr = async_std::task::block_on(poll_fn(|cx| {
                 match ready!(network1.poll_next_unpin(cx)).unwrap() {
                     SwarmEvent::NewListenAddr { address, .. } => Poll::Ready(address),
-                    e => panic!("Unexpected network event: {:?}", e),
+                    e => panic!("Unexpected network event: {e:?}"),
                 }
             }));
 
@@ -2389,7 +2384,7 @@ mod tests {
                             Poll::Pending => {
                                 network_1_pending = true;
                             }
-                            e => panic!("Unexpected network event: {:?}", e),
+                            e => panic!("Unexpected network event: {e:?}"),
                         }
 
                         match network2.poll_next_unpin(cx) {
@@ -2407,7 +2402,7 @@ mod tests {
                             Poll::Pending => {
                                 network_2_pending = true;
                             }
-                            e => panic!("Unexpected network event: {:?}", e),
+                            e => panic!("Unexpected network event: {e:?}"),
                         }
 
                         if network_1_pending && network_2_pending {
@@ -2477,7 +2472,7 @@ mod tests {
                 Poll::Ready(Some(SwarmEvent::OutgoingConnectionError {
                     peer_id, error, ..
                 })) => Poll::Ready((peer_id, error)),
-                Poll::Ready(x) => panic!("unexpected {:?}", x),
+                Poll::Ready(x) => panic!("unexpected {x:?}"),
                 Poll::Pending => Poll::Pending,
             }
         }));
@@ -2493,7 +2488,7 @@ mod tests {
                     }
                 );
             }
-            x => panic!("wrong error {:?}", x),
+            x => panic!("wrong error {x:?}"),
         }
     }
 
@@ -2554,7 +2549,7 @@ mod tests {
                         assert_eq!(local_addr, local_address);
                     }
                     Poll::Ready(ev) => {
-                        panic!("Unexpected event: {:?}", ev)
+                        panic!("Unexpected event: {ev:?}")
                     }
                     Poll::Pending => break Poll::Pending,
                 }
@@ -2630,7 +2625,7 @@ mod tests {
         listener.listen_on(multiaddr![Memory(0u64)]).unwrap();
         let listener_address = match block_on(listener.next()).unwrap() {
             SwarmEvent::NewListenAddr { address, .. } => address,
-            e => panic!("Unexpected network event: {:?}", e),
+            e => panic!("Unexpected network event: {e:?}"),
         };
 
         dialer
@@ -2650,7 +2645,7 @@ mod tests {
                 error: DialError::Aborted,
                 ..
             } => {}
-            e => panic!("Unexpected swarm event {:?}.", e),
+            e => panic!("Unexpected swarm event {e:?}."),
         }
     }
 

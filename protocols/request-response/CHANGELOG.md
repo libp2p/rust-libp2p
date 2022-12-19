@@ -1,6 +1,16 @@
 # 0.24.0 [unreleased]
 
+- Rename types as per [discussion 2174].
+  `RequestResponse` has been renamed to `Behaviour`.
+  The `RequestResponse` prefix has been removed from various types like `RequestResponseEvent`.
+  Users should prefer importing the request_response protocol as a module (`use libp2p::request_response;`),
+  and refer to its types via `request_response::`. For example: `request_response::Behaviour` or `request_response::Event`.
+  See [PR 3159].
+
 - Update to `libp2p-swarm` `v0.42.0`.
+
+[discussion 2174]: https://github.com/libp2p/rust-libp2p/discussions/2174
+[PR 3159]: https://github.com/libp2p/rust-libp2p/pull/3159
 
 # 0.23.0
 

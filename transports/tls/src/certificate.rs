@@ -519,7 +519,7 @@ mod tests {
 
         let error = parse(&certificate).unwrap_err();
 
-        assert_eq!(format!("{}", error), "UnknownIssuer");
+        assert_eq!(format!("{error}"), "UnknownIssuer");
     }
 
     #[test]
