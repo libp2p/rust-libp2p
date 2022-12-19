@@ -560,7 +560,7 @@ impl DuplicateProtonameError {
 impl fmt::Display for DuplicateProtonameError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Ok(s) = std::str::from_utf8(&self.0) {
-            write!(f, "duplicate protocol name: {}", s)
+            write!(f, "duplicate protocol name: {s}")
         } else {
             write!(f, "duplicate protocol name: {:?}", self.0)
         }

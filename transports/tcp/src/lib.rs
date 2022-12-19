@@ -952,7 +952,7 @@ mod tests {
                         upgrade.write_all(&[4, 5, 6]).await.unwrap();
                         return;
                     }
-                    e => panic!("Unexpected transport event: {:?}", e),
+                    e => panic!("Unexpected transport event: {e:?}"),
                 }
             }
         }
@@ -1016,12 +1016,12 @@ mod tests {
                         match iter.next().expect("ip address") {
                             Protocol::Ip4(ip) => assert!(!ip.is_unspecified()),
                             Protocol::Ip6(ip) => assert!(!ip.is_unspecified()),
-                            other => panic!("Unexpected protocol: {}", other),
+                            other => panic!("Unexpected protocol: {other}"),
                         }
                         if let Protocol::Tcp(port) = iter.next().expect("port") {
                             assert_ne!(0, port)
                         } else {
-                            panic!("No TCP port in address: {}", listen_addr)
+                            panic!("No TCP port in address: {listen_addr}")
                         }
                         ready_tx.send(listen_addr).await.ok();
                     }
@@ -1103,7 +1103,7 @@ mod tests {
                         upgrade.write_all(&[4, 5, 6]).await.unwrap();
                         return;
                     }
-                    e => panic!("Unexpected event: {:?}", e),
+                    e => panic!("Unexpected event: {e:?}"),
                 }
             }
         }
@@ -1140,7 +1140,7 @@ mod tests {
                     socket.read_exact(&mut buf).await.unwrap();
                     assert_eq!(buf, [4, 5, 6]);
                 }
-                e => panic!("Unexpected transport event: {:?}", e),
+                e => panic!("Unexpected transport event: {e:?}"),
             }
         }
 
@@ -1203,10 +1203,10 @@ mod tests {
                         TransportEvent::NewAddress {
                             listen_addr: addr2, ..
                         } => assert_eq!(addr1, addr2),
-                        e => panic!("Unexpected transport event: {:?}", e),
+                        e => panic!("Unexpected transport event: {e:?}"),
                     }
                 }
-                e => panic!("Unexpected transport event: {:?}", e),
+                e => panic!("Unexpected transport event: {e:?}"),
             }
         }
 
