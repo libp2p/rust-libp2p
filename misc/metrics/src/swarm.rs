@@ -396,5 +396,5 @@ impl<TTransErr> From<&libp2p_swarm::PendingInboundConnectionError<TTransErr>>
 }
 
 fn create_connection_establishment_duration_histogram() -> Histogram {
-    Histogram::new(exponential_buckets(1e-3, 2., 10))
+    Histogram::new(exponential_buckets(0.01, 1.5, 20))
 }

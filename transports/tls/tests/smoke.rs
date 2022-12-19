@@ -30,7 +30,7 @@ async fn can_establish_connection() {
             match swarm1.next().await.unwrap() {
                 SwarmEvent::ConnectionEstablished { peer_id, .. } => break peer_id,
                 SwarmEvent::IncomingConnectionError { error, .. } => {
-                    panic!("Incoming connection failed: {}", error)
+                    panic!("Incoming connection failed: {error}")
                 }
                 _ => continue,
             };
@@ -41,7 +41,7 @@ async fn can_establish_connection() {
             match swarm2.next().await.unwrap() {
                 SwarmEvent::ConnectionEstablished { peer_id, .. } => break peer_id,
                 SwarmEvent::OutgoingConnectionError { error, .. } => {
-                    panic!("Failed to dial: {}", error)
+                    panic!("Failed to dial: {error}")
                 }
                 _ => continue,
             };
