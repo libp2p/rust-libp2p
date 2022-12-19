@@ -1,8 +1,8 @@
 # 0.41.1 [unreleased]
 
-- Deprecate non-compliant noise implementation. We intend to remove it in a future release without replacement. See [PR XXXX].
+- Deprecate non-compliant noise implementation. We intend to remove it in a future release without replacement. See [PR 3227].
 
-[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+[PR 3227]: https://github.com/libp2p/rust-libp2p/pull/3227
 
 # 0.41.0
 
