@@ -302,7 +302,8 @@ jobs:
 
       - name: Check PR title length
         run: |
-          title_length=${#github.event.pull_request.title}
+          title="${{ github.event.pull_request.title }}"
+          title_length=${#title}
           if [ $title_length -gt 72 ]
           then
             echo "PR title is too long (greater than 72 characters)"
