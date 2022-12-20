@@ -501,7 +501,7 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom>
 /// Encapsulates the reason for why a specific [`ConnectionHandler`] closed a connection.
 #[derive(Debug)]
 pub struct CloseReason {
-    component_name: &'static str,
+    protocol: &'static str,
     source: Box<dyn error::Error + Send + 'static>,
 }
 
@@ -526,9 +526,9 @@ impl CloseReason {
     /// # }
     ///
     /// ```
-    pub fn new(component_name: &'static str, source: impl error::Error + Send + 'static) -> Self {
+    pub fn new(protocol: &'static str, source: impl error::Error + Send + 'static) -> Self {
         Self {
-            component_name,
+            protocol,
             source: Box::new(source),
         }
     }
@@ -536,7 +536,7 @@ impl CloseReason {
 
 impl fmt::Display for CloseReason {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "connection closed by '{}' protocol", self.component_name)
+        write!(f, "connection closed by '{}' protocol", self.protocol)
     }
 }
 
