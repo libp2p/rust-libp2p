@@ -2,7 +2,11 @@
 
 - Update to `libp2p-swarm` `v0.42.0`.
 
+- Remove lifetime from `RecordStore` and use GATs instead. See [PR 3239].
+
 - Bump MSRV to 1.65.0.
+
+[PR 3239]: https://github.com/libp2p/rust-libp2p/pull/3239
 
 # 0.42.0
 
