@@ -38,13 +38,12 @@ use std::hash::{Hash, Hasher};
 use std::thread::sleep;
 use std::time::Duration;
 
-#[derive(Default, Builder, Debug)]
-#[builder(default)]
+#[derive(Default, Debug)]
 struct InjectNodes<D, F>
 // TODO: remove trait bound Default when this issue is fixed:
 //  https://github.com/colin-kiegel/rust-derive-builder/issues/93
 where
-    D: DataTransform + Default + Clone + Send + 'static,
+    D: DataTransform + Clone + Default + Send + 'static,
     F: TopicSubscriptionFilter + Clone + Default + Send + 'static,
 {
     peer_no: usize,
@@ -60,22 +59,22 @@ where
 
 impl<D, F> InjectNodes<D, F>
 where
-    D: DataTransform + Default + Clone + Send + 'static,
+    D: DataTransform + Clone + Default + Send + 'static,
     F: TopicSubscriptionFilter + Clone + Default + Send + 'static,
 {
-    pub fn create_network(self) -> (Gossipsub<D, F>, Vec<PeerId>, Vec<TopicHash>) {
+    pub fn create_network(&self) -> (Gossipsub<D, F>, Vec<PeerId>, Vec<TopicHash>) {
         let keypair = libp2p_core::identity::Keypair::generate_ed25519();
         // create a gossipsub struct
         let mut gs: Gossipsub<D, F> = Gossipsub::new_with_subscription_filter_and_transform(
             MessageAuthenticity::Signed(keypair),
-            self.gs_config,
+            self.gs_config.clone(),
             None,
-            self.subscription_filter,
-            self.data_transform,
+            self.subscription_filter.clone(),
+            self.data_transform.clone(),
         )
         .unwrap();
 
-        if let Some((scoring_params, scoring_thresholds)) = self.scoring {
+        if let Some((scoring_params, scoring_thresholds)) = self.scoring.clone() {
             gs.with_peer_score(scoring_params, scoring_thresholds)
                 .unwrap();
         }
@@ -83,7 +82,7 @@ where
         let mut topic_hashes = vec![];
 
         // subscribe to the topics
-        for t in self.topics {
+        for t in &self.topics {
             let topic = Topic::new(t);
             gs.subscribe(&topic).unwrap();
             topic_hashes.push(topic.hash().clone());
@@ -108,31 +107,61 @@ where
 
         (gs, peers, topic_hashes)
     }
-}
 
-impl<D, F> InjectNodesBuilder<D, F>
-where
-    D: DataTransform + Default + Clone + Send + 'static,
-    F: TopicSubscriptionFilter + Clone + Default + Send + 'static,
-{
-    pub fn create_network(&self) -> (Gossipsub<D, F>, Vec<PeerId>, Vec<TopicHash>) {
-        self.build().unwrap().create_network()
+    fn peer_no(&mut self, peer_no: usize) -> &mut Self {
+        self.peer_no = peer_no;
+        self
+    }
+
+    fn topics(&mut self, topics: Vec<String>) -> &mut Self {
+        self.topics = topics;
+        self
+    }
+
+    fn to_subscribe(&mut self, to_subscribe: bool) -> &mut Self {
+        self.to_subscribe = to_subscribe;
+        self
+    }
+
+    fn gs_config(&mut self, gs_config: GossipsubConfig) -> &mut Self {
+        self.gs_config = gs_config;
+        self
+    }
+
+    fn explicit(&mut self, explicit: usize) -> &mut Self {
+        self.explicit = explicit;
+        self
+    }
+
+    fn outbound(&mut self, outbound: usize) -> &mut Self {
+        self.outbound = outbound;
+        self
+    }
+
+    fn scoring(&mut self, scoring: Option<(PeerScoreParams, PeerScoreThresholds)>) -> &mut Self {
+        self.scoring = scoring;
+        self
+    }
+
+    fn subscription_filter(&mut self, subscription_filter: F) -> &mut Self {
+        self.subscription_filter = subscription_filter;
+        self
     }
 }
 
-fn inject_nodes<D, F>() -> InjectNodesBuilder<D, F>
+// helper functions for testing
+
+fn inject_nodes<D, F>() -> InjectNodes<D, F>
 where
-    D: DataTransform + Default + Clone + Send + 'static,
+    D: DataTransform + Clone + Default + Send + 'static,
     F: TopicSubscriptionFilter + Clone + Default + Send + 'static,
 {
-    InjectNodesBuilder::default()
+    InjectNodes::default()
 }
 
-fn inject_nodes1() -> InjectNodesBuilder<IdentityTransform, AllowAllSubscriptionFilter> {
-    inject_nodes()
+fn inject_nodes1() -> InjectNodes<IdentityTransform, AllowAllSubscriptionFilter> {
+    InjectNodes::<IdentityTransform, AllowAllSubscriptionFilter>::default()
 }
-
-// helper functions for testing
 
 fn add_peer<D, F>(
     gs: &mut Gossipsub<D, F>,
