@@ -1,5 +1,7 @@
 # 0.42.0 [unreleased]
 
+- Update to `libp2p-core` `v0.39.0`.
+
 - Removed deprecated Swarm constructors. For transition notes see [0.41.0](#0.41.0). See [PR 3170].
 - Deprecate functions on `PollParameters` in preparation for `PollParameters` to be removed entirely eventually. See [PR 3153].
 

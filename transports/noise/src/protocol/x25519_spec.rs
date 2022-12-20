@@ -29,7 +29,7 @@ use rand::Rng;
 use x25519_dalek::{x25519, X25519_BASEPOINT_BYTES};
 use zeroize::Zeroize;
 
-use super::{x25519::X25519, *};
+use super::*;
 
 /// Prefix of static key signatures for domain separation.
 const STATIC_KEY_DOMAIN: &str = "noise-libp2p-static-key:";
@@ -51,6 +51,15 @@ impl Zeroize for X25519Spec {
 }
 
 impl Keypair<X25519Spec> {
+    /// An "empty" keypair as a starting state for DH computations in `snow`,
+    /// which get manipulated through the `snow::types::Dh` interface.
+    pub(super) fn default() -> Self {
+        Keypair {
+            secret: SecretKey(X25519Spec([0u8; 32])),
+            public: PublicKey(X25519Spec([0u8; 32])),
+        }
+    }
+
     /// Create a new X25519 keypair.
     pub fn new() -> Keypair<X25519Spec> {
         let mut sk_bytes = [0u8; 32];
@@ -110,15 +119,18 @@ impl<R> UpgradeInfo for NoiseConfig<IK, X25519Spec, R> {
 /// interoperable with other libp2p implementations.
 impl Protocol<X25519Spec> for X25519Spec {
     fn params_ik() -> ProtocolParams {
-        X25519::params_ik()
+        #[allow(deprecated)]
+        x25519::X25519::params_ik()
     }
 
     fn params_ix() -> ProtocolParams {
-        X25519::params_ix()
+        #[allow(deprecated)]
+        x25519::X25519::params_ix()
     }
 
     fn params_xx() -> ProtocolParams {
-        X25519::params_xx()
+        #[allow(deprecated)]
+        x25519::X25519::params_xx()
     }
 
     fn public_from_bytes(bytes: &[u8]) -> Result<PublicKey<X25519Spec>, NoiseError> {
