@@ -70,7 +70,7 @@ impl error::Error for PlainTextError {
 impl fmt::Display for PlainTextError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match self {
-            PlainTextError::IoError(e) => write!(f, "I/O error: {}", e),
+            PlainTextError::IoError(e) => write!(f, "I/O error: {e}"),
             PlainTextError::InvalidPayload(_) => f.write_str("Failed to decode protobuf"),
             PlainTextError::PeerIdMismatch => f.write_str(
                 "The peer id of the exchange isn't consistent with the remote public key",

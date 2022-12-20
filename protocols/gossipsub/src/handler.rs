@@ -64,7 +64,7 @@ pub enum HandlerEvent {
 }
 
 /// A message sent from the behaviour to the handler.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum GossipsubHandlerIn {
     /// A gossipsub message to send.
     Message(crate::rpc_proto::Rpc),

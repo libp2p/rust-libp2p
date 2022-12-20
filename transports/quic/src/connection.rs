@@ -236,8 +236,7 @@ impl StreamMuxer for Connection {
                 quinn_proto::Event::Connected | quinn_proto::Event::HandshakeDataReady => {
                     debug_assert!(
                         false,
-                        "Unexpected event {:?} on established QUIC connection",
-                        event
+                        "Unexpected event {event:?} on established QUIC connection"
                     );
                 }
                 quinn_proto::Event::ConnectionLost { reason } => {

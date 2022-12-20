@@ -1,3 +1,9 @@
+# 0.41.1 [unreleased]
+
+- Deprecate non-compliant noise implementation. We intend to remove it in a future release without replacement. See [PR 3227].
+
+[PR 3227]: https://github.com/libp2p/rust-libp2p/pull/3227
+
 # 0.41.0
 
 - Remove `prost::Error` from public API. See [PR 3058].
