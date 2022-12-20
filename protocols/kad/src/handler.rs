@@ -580,7 +580,7 @@ where
                 )
             }) {
                 *s = InboundSubstreamState::Cancelled;
-                log::warn!(
+                log::debug!(
                     "New inbound substream to {:?} exceeds inbound substream limit. \
                     Removed older substream waiting to be reused.",
                     self.remote_peer_id,
