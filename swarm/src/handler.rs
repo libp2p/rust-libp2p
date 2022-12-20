@@ -498,6 +498,11 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom>
     }
 }
 
+/// Encapsulates the reason for why a specific [`ConnectionHandler`] closed a connection.
+///
+/// This type implements [`Error`](error::Error) and exposes the underlying reason through its [`Error::source`](error::Error::source) function.
+/// When printing this error, you will need to iterate the entire chain of causes.
+/// Error handling libraries like `anyhow` do this in case you don't want to do it yourself.
 #[derive(Debug)]
 pub struct CloseReason {
     component_name: &'static str,
