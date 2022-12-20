@@ -54,12 +54,12 @@ pub enum Event {
     },
     DirectConnectionUpgradeFailed {
         remote_peer_id: PeerId,
-        error: UpgradeError,
+        error: Error,
     },
 }
 
 #[derive(Debug, Error)]
-pub enum UpgradeError {
+pub enum Error {
     #[error("Failed to dial peer.")]
     Dial,
     #[error("Failed to establish substream: {0}.")]
@@ -164,7 +164,7 @@ impl Behaviour {
                     .into(),
                     NetworkBehaviourAction::GenerateEvent(Event::DirectConnectionUpgradeFailed {
                         remote_peer_id: peer_id,
-                        error: UpgradeError::Dial,
+                        error: Error::Dial,
                     })
                     .into(),
                 ]);
@@ -236,7 +236,7 @@ impl NetworkBehaviour for Behaviour {
                 self.queued_actions.push_back(
                     NetworkBehaviourAction::GenerateEvent(Event::DirectConnectionUpgradeFailed {
                         remote_peer_id: event_source,
-                        error: UpgradeError::Handler(error),
+                        error: Error::Handler(error),
                     })
                     .into(),
                 );
@@ -260,7 +260,7 @@ impl NetworkBehaviour for Behaviour {
                 self.queued_actions.push_back(
                     NetworkBehaviourAction::GenerateEvent(Event::DirectConnectionUpgradeFailed {
                         remote_peer_id: event_source,
-                        error: UpgradeError::Handler(error),
+                        error: Error::Handler(error),
                     })
                     .into(),
                 );

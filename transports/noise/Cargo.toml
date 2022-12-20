@@ -31,7 +31,7 @@ snow = { version = "0.9.0", features = ["default-resolver"], default-features = 
 
 [dev-dependencies]
 async-io = "1.2.0"
-ed25519-compact = "1.0.11"
+ed25519-compact = "2.0.4"
 env_logger = "0.10.0"
 libp2p-tcp = { path = "../tcp", features = ["async-io"] }
 libsodium-sys-stable = { version = "1.19.22", features = ["fetch-latest"] }
