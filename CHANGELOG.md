@@ -74,11 +74,22 @@
     - Update to [`libp2p-metrics` `v0.12.0`](misc/metrics/CHANGELOG.md#0120).
 
     - Update to [`libp2p-swarm` `v0.42.0`](swarm/CHANGELOG.md#0420).
-    
+
     - Update to [`libp2p-mdns` `v0.43.0`](protocols/mdns/CHANGELOG.md#0430).
-    
+
     - Update to [`libp2p-gossipsub` `v0.44.0`](protocols/gossipsub/CHANGELOG.md#0440).
-    
+
+    - Update to [`libp2p-yamux` `v0.43.0`](muxers/yamux/CHANGELOG.md#0430).
+
+    - Update to [`libp2p-mplex` `v0.39.0`](muxers/mplex/CHANGELOG.md#0390).
+
+    - Update to [`libp2p-wasm-ext` `v0.39.0`](transports/wasm-ext/CHANGELOG.md#0390).
+
+    - Update to [`libp2p-plaintext` `v0.39.0`](transports/plaintext/CHANGELOG.md#0390).
+
+    - Update to [`libp2p-noise` `v0.42.0`](transports/noise/CHANGELOG.md#0420).
+
+    - Update to [`libp2p-core` `v0.39.0`](core/CHANGELOG.md#0390).
 
 [PR 3191]: https://github.com/libp2p/rust-libp2p/pull/3191
 
