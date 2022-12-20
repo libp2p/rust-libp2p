@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::behaviour::{inject_from_swarm, FromSwarm};
+use crate::behaviour::FromSwarm;
 use crate::handler::{
     AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent,
     ConnectionHandlerUpgrErr, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
@@ -87,7 +87,7 @@ where
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
         if let Some(behaviour) = &mut self.inner {
             if let Some(event) = event.maybe_map_handler(|h| h.inner, |h| h.inner) {
-                inject_from_swarm(behaviour, event);
+                behaviour.on_swarm_event(event);
             }
         }
     }

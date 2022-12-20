@@ -127,7 +127,7 @@ where
     pub addresses_of_peer: Vec<PeerId>,
     pub on_connection_established: Vec<(PeerId, ConnectionId, ConnectedPoint, usize)>,
     pub on_connection_closed: Vec<(PeerId, ConnectionId, ConnectedPoint, usize)>,
-    pub on_event: Vec<(
+    pub on_connection_handler_event: Vec<(
         PeerId,
         ConnectionId,
         <<TInner::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent,
@@ -155,7 +155,7 @@ where
             addresses_of_peer: Vec::new(),
             on_connection_established: Vec::new(),
             on_connection_closed: Vec::new(),
-            on_event: Vec::new(),
+            on_connection_handler_event: Vec::new(),
             on_dial_failure: Vec::new(),
             on_new_listener: Vec::new(),
             on_new_listen_addr: Vec::new(),
@@ -173,7 +173,7 @@ where
         self.addresses_of_peer = Vec::new();
         self.on_connection_established = Vec::new();
         self.on_connection_closed = Vec::new();
-        self.on_event = Vec::new();
+        self.on_connection_handler_event = Vec::new();
         self.on_dial_failure = Vec::new();
         self.on_new_listen_addr = Vec::new();
         self.on_new_external_addr = Vec::new();
@@ -290,15 +290,14 @@ where
             endpoint.clone(),
             other_established,
         ));
-        let errors = Some(failed_addresses.to_vec());
-        #[allow(deprecated)]
-        self.inner.inject_connection_established(
-            &peer_id,
-            &connection_id,
-            endpoint,
-            errors.as_ref(),
-            other_established,
-        );
+        self.inner
+            .on_swarm_event(FromSwarm::ConnectionEstablished(ConnectionEstablished {
+                peer_id,
+                connection_id,
+                endpoint,
+                failed_addresses,
+                other_established,
+            }));
     }
 
     fn on_connection_closed(
@@ -343,8 +342,8 @@ where
                 .iter()
                 .any(|(peer, conn_id, endpoint, _)| (peer, conn_id, endpoint)
                     == (&peer_id, &connection_id, endpoint)),
-            "`inject_connection_closed` is called only for connections for \
-            which `inject_connection_established` was called first."
+            "`on_swarm_event` with `FromSwarm::ConnectionClosed is called only for connections for\
+             which `on_swarm_event` with `FromSwarm::ConnectionEstablished` was called first."
         );
         self.on_connection_closed.push((
             peer_id,
@@ -352,14 +351,14 @@ where
             endpoint.clone(),
             remaining_established,
         ));
-        #[allow(deprecated)]
-        self.inner.inject_connection_closed(
-            &peer_id,
-            &connection_id,
-            endpoint,
-            handler,
-            remaining_established,
-        );
+        self.inner
+            .on_swarm_event(FromSwarm::ConnectionClosed(ConnectionClosed {
+                peer_id,
+                connection_id,
+                endpoint,
+                handler,
+                remaining_established,
+            }));
     }
 }
 
@@ -395,47 +394,60 @@ where
                 error,
             }) => {
                 self.on_dial_failure.push(peer_id);
-                #[allow(deprecated)]
-                self.inner.inject_dial_failure(peer_id, handler, error);
+                self.inner
+                    .on_swarm_event(FromSwarm::DialFailure(DialFailure {
+                        peer_id,
+                        handler,
+                        error,
+                    }));
             }
             FromSwarm::NewListener(NewListener { listener_id }) => {
                 self.on_new_listener.push(listener_id);
-                #[allow(deprecated)]
-                self.inner.inject_new_listener(listener_id);
+                self.inner
+                    .on_swarm_event(FromSwarm::NewListener(NewListener { listener_id }));
             }
             FromSwarm::NewListenAddr(NewListenAddr { listener_id, addr }) => {
                 self.on_new_listen_addr.push((listener_id, addr.clone()));
-                #[allow(deprecated)]
-                self.inner.inject_new_listen_addr(listener_id, addr);
+                self.inner
+                    .on_swarm_event(FromSwarm::NewListenAddr(NewListenAddr {
+                        listener_id,
+                        addr,
+                    }));
             }
             FromSwarm::ExpiredListenAddr(ExpiredListenAddr { listener_id, addr }) => {
                 self.on_expired_listen_addr
                     .push((listener_id, addr.clone()));
-                #[allow(deprecated)]
-                self.inner.inject_expired_listen_addr(listener_id, addr);
+                self.inner
+                    .on_swarm_event(FromSwarm::ExpiredListenAddr(ExpiredListenAddr {
+                        listener_id,
+                        addr,
+                    }));
             }
             FromSwarm::NewExternalAddr(NewExternalAddr { addr }) => {
                 self.on_new_external_addr.push(addr.clone());
-                #[allow(deprecated)]
-                self.inner.inject_new_external_addr(addr);
+                self.inner
+                    .on_swarm_event(FromSwarm::NewExternalAddr(NewExternalAddr { addr }));
             }
             FromSwarm::ExpiredExternalAddr(ExpiredExternalAddr { addr }) => {
                 self.on_expired_external_addr.push(addr.clone());
-                #[allow(deprecated)]
-                self.inner.inject_expired_external_addr(addr);
+                self.inner
+                    .on_swarm_event(FromSwarm::ExpiredExternalAddr(ExpiredExternalAddr { addr }));
             }
             FromSwarm::ListenerError(ListenerError { listener_id, err }) => {
                 self.on_listener_error.push(listener_id);
-                #[allow(deprecated)]
-                self.inner.inject_listener_error(listener_id, err);
+                self.inner
+                    .on_swarm_event(FromSwarm::ListenerError(ListenerError { listener_id, err }));
             }
             FromSwarm::ListenerClosed(ListenerClosed {
                 listener_id,
                 reason,
             }) => {
                 self.on_listener_closed.push((listener_id, reason.is_ok()));
-                #[allow(deprecated)]
-                self.inner.inject_listener_closed(listener_id, reason);
+                self.inner
+                    .on_swarm_event(FromSwarm::ListenerClosed(ListenerClosed {
+                        listener_id,
+                        reason,
+                    }));
             }
             _ => {}
         }
@@ -461,9 +473,8 @@ where
             "`on_connection_handler_event` is never called for closed connections."
         );
 
-        self.on_event.push((p, c, e.clone()));
-        #[allow(deprecated)]
-        self.inner.inject_event(p, c, e);
+        self.on_connection_handler_event.push((p, c, e.clone()));
+        self.inner.on_connection_handler_event(p, c, e);
     }
 
     fn poll(
