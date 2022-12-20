@@ -1,3 +1,7 @@
+# 0.39.0 [unreleased]
+
+- Update to `libp2p-core` `v0.39.0`.
+
 # 0.38.0
 
 - Add more specific error reporting and remove `prost::Error` from public API. See [PR 3058].
