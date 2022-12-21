@@ -87,9 +87,12 @@ pub mod derive_prelude {
     pub use crate::ConnectionHandler;
     pub use crate::ConnectionHandlerSelect;
     pub use crate::DialError;
+    pub use crate::IntoConnectionHandler;
+    pub use crate::IntoConnectionHandlerSelect;
     pub use crate::NetworkBehaviour;
     pub use crate::NetworkBehaviourAction;
     pub use crate::PollParameters;
+    pub use crate::THandlerInEvent;
     pub use futures::prelude as futures;
     pub use libp2p_core::connection::ConnectionId;
     pub use libp2p_core::either::EitherOutput;

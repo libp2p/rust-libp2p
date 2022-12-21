@@ -74,6 +74,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     let expired_external_addr = quote! { #prelude_path::ExpiredExternalAddr };
     let listener_error = quote! { #prelude_path::ListenerError };
     let listener_closed = quote! { #prelude_path::ListenerClosed };
+    let t_handler_in_event = quote! { #prelude_path::THandlerInEvent };
 
     // Build the generics.
     let impl_generics = {
@@ -642,7 +643,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 }
             }
 
-            fn poll(&mut self, cx: &mut std::task::Context, poll_params: &mut impl #poll_parameters) -> std::task::Poll<#network_behaviour_action<Self::OutEvent, Self::ConnectionHandler>> {
+            fn poll(&mut self, cx: &mut std::task::Context, poll_params: &mut impl #poll_parameters) -> std::task::Poll<#network_behaviour_action<Self::OutEvent, #t_handler_in_event<Self::ConnectionHandler>>> {
                 use #prelude_path::futures::*;
                 #(#poll_stmts)*
                 std::task::Poll::Pending

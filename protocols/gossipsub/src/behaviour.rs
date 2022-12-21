@@ -219,7 +219,7 @@ pub struct Gossipsub<
     config: GossipsubConfig,
 
     /// Events that need to be yielded to the outside when polling.
-    events: VecDeque<NetworkBehaviourAction<GossipsubEvent, GossipsubHandler>>,
+    events: VecDeque<NetworkBehaviourAction<GossipsubEvent, THandlerInEvent<Self>>>,
 
     /// Pools non-urgent control messages between heartbeats.
     control_pool: HashMap<PeerId, Vec<GossipsubControlAction>>,
@@ -3490,7 +3490,7 @@ fn peer_added_to_mesh(
     new_topics: Vec<&TopicHash>,
     mesh: &HashMap<TopicHash, BTreeSet<PeerId>>,
     known_topics: Option<&BTreeSet<TopicHash>>,
-    events: &mut VecDeque<NetworkBehaviourAction<GossipsubEvent, GossipsubHandler>>,
+    events: &mut VecDeque<NetworkBehaviourAction<GossipsubEvent, THandlerInEvent<Gossipsub>>>,
     connections: &HashMap<PeerId, PeerConnections>,
 ) {
     // Ensure there is an active connection
@@ -3531,7 +3531,7 @@ fn peer_removed_from_mesh(
     old_topic: &TopicHash,
     mesh: &HashMap<TopicHash, BTreeSet<PeerId>>,
     known_topics: Option<&BTreeSet<TopicHash>>,
-    events: &mut VecDeque<NetworkBehaviourAction<GossipsubEvent, GossipsubHandler>>,
+    events: &mut VecDeque<NetworkBehaviourAction<GossipsubEvent, THandlerInEvent<Gossipsub>>>,
     connections: &HashMap<PeerId, PeerConnections>,
 ) {
     // Ensure there is an active connection

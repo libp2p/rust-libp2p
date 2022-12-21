@@ -35,7 +35,7 @@ use crate::{GossipsubMessage, RawGossipsubMessage, TopicHash};
 /// outbound transform MUST leave the underlying data un-modified.
 ///
 /// By default, this is the identity transform for all fields in [`GossipsubMessage`].
-pub trait DataTransform {
+pub trait DataTransform: Send + 'static {
     /// Takes a [`RawGossipsubMessage`] received and converts it to a [`GossipsubMessage`].
     fn inbound_transform(
         &self,
