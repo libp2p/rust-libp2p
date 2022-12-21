@@ -116,6 +116,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
         with:
+          key: ${{ matrix.target }}
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
       - run: cargo check --package libp2p --all-features --target=${{ matrix.target }}
@@ -144,6 +145,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
         with:
+          key: ${{ matrix.features }}
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
       - run: cargo check --package libp2p --features="${{ matrix.features }}"
