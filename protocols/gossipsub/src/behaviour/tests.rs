@@ -43,7 +43,7 @@ struct InjectNodes<D, F>
 // TODO: remove trait bound Default when this issue is fixed:
 //  https://github.com/colin-kiegel/rust-derive-builder/issues/93
 where
-    D: DataTransform + Clone + Default + Send + 'static,
+    D: DataTransform + Default + Clone + Send + 'static,
     F: TopicSubscriptionFilter + Clone + Default + Send + 'static,
 {
     peer_no: usize,
@@ -59,10 +59,10 @@ where
 
 impl<D, F> InjectNodes<D, F>
 where
-    D: DataTransform + Clone + Default + Send + 'static,
+    D: DataTransform + Default + Clone + Send + 'static,
     F: TopicSubscriptionFilter + Clone + Default + Send + 'static,
 {
-    pub fn create_network(&self) -> (Gossipsub<D, F>, Vec<PeerId>, Vec<TopicHash>) {
+    pub fn create_network(self) -> (Gossipsub<D, F>, Vec<PeerId>, Vec<TopicHash>) {
         let keypair = libp2p_core::identity::Keypair::generate_ed25519();
         // create a gossipsub struct
         let mut gs: Gossipsub<D, F> = Gossipsub::new_with_subscription_filter_and_transform(
@@ -108,42 +108,42 @@ where
         (gs, peers, topic_hashes)
     }
 
-    fn peer_no(&mut self, peer_no: usize) -> &mut Self {
+    fn peer_no(mut self, peer_no: usize) -> Self {
         self.peer_no = peer_no;
         self
     }
 
-    fn topics(&mut self, topics: Vec<String>) -> &mut Self {
+    fn topics(mut self, topics: Vec<String>) -> Self {
         self.topics = topics;
         self
     }
 
-    fn to_subscribe(&mut self, to_subscribe: bool) -> &mut Self {
+    fn to_subscribe(mut self, to_subscribe: bool) -> Self {
         self.to_subscribe = to_subscribe;
         self
     }
 
-    fn gs_config(&mut self, gs_config: GossipsubConfig) -> &mut Self {
+    fn gs_config(mut self, gs_config: GossipsubConfig) -> Self {
         self.gs_config = gs_config;
         self
     }
 
-    fn explicit(&mut self, explicit: usize) -> &mut Self {
+    fn explicit(mut self, explicit: usize) -> Self {
         self.explicit = explicit;
         self
     }
 
-    fn outbound(&mut self, outbound: usize) -> &mut Self {
+    fn outbound(mut self, outbound: usize) -> Self {
         self.outbound = outbound;
         self
     }
 
-    fn scoring(&mut self, scoring: Option<(PeerScoreParams, PeerScoreThresholds)>) -> &mut Self {
+    fn scoring(mut self, scoring: Option<(PeerScoreParams, PeerScoreThresholds)>) -> Self {
         self.scoring = scoring;
         self
     }
 
-    fn subscription_filter(&mut self, subscription_filter: F) -> &mut Self {
+    fn subscription_filter(mut self, subscription_filter: F) -> Self {
         self.subscription_filter = subscription_filter;
         self
     }
@@ -153,7 +153,7 @@ where
 
 fn inject_nodes<D, F>() -> InjectNodes<D, F>
 where
-    D: DataTransform + Clone + Default + Send + 'static,
+    D: DataTransform + Default + Clone + Send + 'static,
     F: TopicSubscriptionFilter + Clone + Default + Send + 'static,
 {
     InjectNodes::default()
