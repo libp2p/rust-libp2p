@@ -256,18 +256,6 @@ where
         handler: THandler,
     },
 
-    /// A [NetworkBehaviour] denied a pending connection through either [NetworkBehaviour::handle_pending_inbound_connection] or [NetworkBehaviour::handle_pending_outbound_connection].
-    ///
-    /// [NetworkBehaviour]: crate::NetworkBehaviour
-    /// [NetworkBehaviour::handle_pending_inbound_connection]: crate::NetworkBehaviour::handle_pending_inbound_connection
-    /// [NetworkBehaviour::handle_pending_outbound_connection]: crate::NetworkBehaviour::handle_pending_outbound_connection
-    PendingConnectionDenied {
-        id: ConnectionId,
-        peer_id: Option<PeerId>,
-        endpoint: PendingPoint,
-        cause: Box<dyn Error + Send + 'static>,
-    },
-
     /// A [NetworkBehaviour] denied a just established connection by not producing a [`ConnectionHandler`] from [NetworkBehaviour::handle_established_outbound_connection] or [NetworkBehaviour::handle_established_inbound_connection].
     ///
     /// [NetworkBehaviour]: crate::NetworkBehaviour
