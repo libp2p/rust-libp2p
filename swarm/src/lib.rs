@@ -118,12 +118,14 @@ pub use handler::{
 pub use libp2p_swarm_derive::NetworkBehaviour;
 pub use registry::{AddAddressResult, AddressRecord, AddressScore};
 
+use crate::behaviour::FromSwarm;
+use crate::derive_prelude::DialFailure;
 use connection::pool::{EstablishedConnection, Pool, PoolConfig, PoolEvent};
 use connection::IncomingInfo;
 use dial_opts::{DialOpts, PeerCondition};
 use either::Either;
 use futures::{executor::ThreadPoolBuilder, prelude::*, stream::FusedStream};
-use libp2p_core::connection::ConnectionId;
+use libp2p_core::connection::{ConnectionId, PendingPoint};
 use libp2p_core::muxing::SubstreamBox;
 use libp2p_core::{
     connection::ConnectedPoint,
@@ -190,6 +192,19 @@ pub enum SwarmEvent<TBehaviourOutEvent, THandlerErr> {
         /// How long it took to establish this connection
         established_in: std::time::Duration,
     },
+    PendingConnectionDenied {
+        peer_id: Option<PeerId>,
+        endpoint: PendingPoint,
+        cause: Box<dyn error::Error + Send + 'static>,
+    },
+    EstablishedConnectionDenied {
+        /// Identity of the peer that we have connected to.
+        peer_id: PeerId,
+        /// Endpoint of the connection that has been closed.
+        endpoint: ConnectedPoint,
+        cause: Box<dyn error::Error + Send + 'static>,
+    },
+
     /// A connection with the given peer has been closed,
     /// possibly as a result of an error.
     ConnectionClosed {
@@ -202,13 +217,6 @@ pub enum SwarmEvent<TBehaviourOutEvent, THandlerErr> {
         /// Reason for the disconnection, if it was not a successful
         /// active close.
         cause: Option<ConnectionError<THandlerErr>>,
-    },
-    ConnectionDenied {
-        /// Identity of the peer that we have connected to.
-        peer_id: PeerId,
-        /// Endpoint of the connection that has been closed.
-        endpoint: ConnectedPoint,
-        cause: Box<dyn error::Error + Send + 'static>,
     },
     /// A new connection arrived on a listener and is in the process of protocol negotiation.
     ///
@@ -515,11 +523,13 @@ where
     /// // Dial an unknown peer.
     /// swarm.dial("/ip6/::1/tcp/12345".parse::<Multiaddr>().unwrap());
     /// ```
-    pub fn dial(&mut self, opts: impl Into<DialOpts>) -> Result<(), DialError> {
+    pub fn dial(&mut self, opts: impl Into<DialOpts>) -> Result<ConnectionId, DialError> {
         let swarm_dial_opts = opts.into();
         let id = ConnectionId::default();
 
-        self.dial_with_id(swarm_dial_opts, id)
+        self.dial_with_id(swarm_dial_opts, id)?;
+
+        Ok(id)
     }
 
     fn dial_with_id(
@@ -657,8 +667,17 @@ where
             connection_id,
         ) {
             Ok(more_addresses) => more_addresses,
-            Err(_) => {
-                todo!("return dial error")
+            Err(cause) => {
+                let error = DialError::Denied { cause };
+
+                self.behaviour
+                    .on_swarm_event(FromSwarm::DialFailure(DialFailure {
+                        peer_id,
+                        id: connection_id,
+                        error: &error,
+                    }));
+
+                return Err(error);
             }
         };
 
@@ -972,7 +991,7 @@ where
                 cause,
                 ..
             } => {
-                return Some(SwarmEvent::ConnectionDenied {
+                return Some(SwarmEvent::EstablishedConnectionDenied {
                     peer_id,
                     endpoint,
                     cause,
@@ -1029,8 +1048,17 @@ where
                     &send_back_addr,
                 ) {
                     Ok(()) => {}
-                    Err(_) => {
-                        todo!("return error")
+                    Err(error) => {
+                        // TODO: self.behaviour.on_swarm_event(FromSwarm::ListenFailure())
+
+                        return Some(SwarmEvent::PendingConnectionDenied {
+                            peer_id: None,
+                            endpoint: PendingPoint::Listener {
+                                local_addr,
+                                send_back_addr,
+                            },
+                            cause: error,
+                        });
                     }
                 }
 
@@ -1736,6 +1764,10 @@ pub enum DialError {
     WrongPeerId {
         obtained: PeerId,
         endpoint: ConnectedPoint,
+    },
+    // TODO: Should this include the role_override?
+    Denied {
+        cause: Box<dyn error::Error + Send + 'static>,
     },
     /// An I/O error occurred on the connection.
     ConnectionIo(io::Error),
