@@ -206,7 +206,7 @@ pub trait NetworkBehaviour: Sized + 'static {
         if let Some(peer_id) = maybe_peer {
             Ok(self.addresses_of_peer(&peer_id))
         } else {
-            vec![]
+            Ok(vec![])
         }
     }
 
