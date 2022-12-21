@@ -1755,6 +1755,9 @@ impl fmt::Display for DialError {
 
                 Ok(())
             }
+            DialError::Denied { .. } => {
+                write!(f, "Dial was denied")
+            }
         }
     }
 }
@@ -1782,6 +1785,7 @@ impl error::Error for DialError {
             DialError::WrongPeerId { .. } => None,
             DialError::ConnectionIo(_) => None,
             DialError::Transport(_) => None,
+            DialError::Denied { cause } => Some(cause.as_ref()),
         }
     }
 }
