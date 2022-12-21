@@ -22,7 +22,7 @@ asynchronous-codec = "0.6"
 unsigned-varint = { version = "0.7.0", features = ["asynchronous_codec"] }
 log = "0.4.11"
 sha2 = "0.10.0"
-base64 = "0.13.0"
+base64 = "0.20.0"
 smallvec = "1.6.1"
 prost = "0.11"
 prost-codec = { version = "0.3", path = "../../misc/prost-codec" }
