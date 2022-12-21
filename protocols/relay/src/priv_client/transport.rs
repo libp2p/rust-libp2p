@@ -50,9 +50,9 @@ use thiserror::Error;
 ///    # use libp2p_core::{Multiaddr, multiaddr::{Protocol}, Transport, PeerId};
 ///    # use libp2p_core::transport::memory::MemoryTransport;
 ///    # use libp2p_core::transport::choice::OrTransport;
-///    # use libp2p_relay::client;
+///    # use libp2p_relay as relay;
 ///    let actual_transport = MemoryTransport::default();
-///    let (relay_transport, behaviour) = client::Behaviour::new_transport_and_behaviour(
+///    let (relay_transport, behaviour) = relay::client::new(
 ///        PeerId::random(),
 ///    );
 ///    let mut transport = OrTransport::new(relay_transport, actual_transport);
@@ -93,25 +93,6 @@ pub struct Transport {
 }
 
 impl Transport {
-    /// Create a new [`Transport`].
-    ///
-    /// Note: The transport only handles listening and dialing on relayed [`Multiaddr`], and depends on
-    /// an other transport to do the actual transmission of data. They should be combined through the
-    /// [`OrTransport`](libp2p_core::transport::choice::OrTransport).
-    ///
-    /// ```
-    /// # use libp2p_core::{Multiaddr, multiaddr::{Protocol}, Transport, PeerId};
-    /// # use libp2p_core::transport::memory::MemoryTransport;
-    /// # use libp2p_core::transport::choice::OrTransport;
-    /// # use libp2p_relay::client;
-    /// let actual_transport = MemoryTransport::default();
-    /// let (relay_transport, behaviour) = client::Behaviour::new_transport_and_behaviour(
-    ///     PeerId::random(),
-    /// );
-    ///
-    /// // To reduce unnecessary connection attempts, put `relay_transport` first.
-    /// let mut transport = OrTransport::new(relay_transport, actual_transport);
-    /// ```
     pub(crate) fn new() -> (Self, mpsc::Receiver<TransportToBehaviourMsg>) {
         let (to_behaviour, from_transport) = mpsc::channel(0);
         let transport = Transport {
@@ -127,7 +108,7 @@ impl libp2p_core::Transport for Transport {
     type Output = Connection;
     type Error = Error;
     type ListenerUpgrade = Ready<Result<Self::Output, Self::Error>>;
-    type Dial = Dial;
+    type Dial = BoxFuture<'static, Result<Connection, Error>>;
 
     fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
         let (relay_peer_id, relay_addr) = match parse_relayed_multiaddr(addr)? {
@@ -401,8 +382,6 @@ impl Stream for Listener {
         }
     }
 }
-
-pub type Dial = BoxFuture<'static, Result<Connection, Error>>;
 
 /// Error that occurred during relay connection setup.
 #[derive(Debug, Error)]

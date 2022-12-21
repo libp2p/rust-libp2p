@@ -21,7 +21,7 @@
 //! [`NetworkBehaviour`] to act as a circuit relay v2 **client**.
 
 mod handler;
-pub mod transport;
+pub(crate) mod transport;
 
 use crate::protocol::{self, inbound_stop, outbound_hop};
 use bytes::Bytes;
@@ -45,8 +45,7 @@ use std::io::{Error, ErrorKind, IoSlice};
 use std::ops::DerefMut;
 use std::pin::Pin;
 use std::task::{Context, Poll};
-
-pub use transport::Transport;
+use transport::Transport;
 
 /// The events produced by the client `Behaviour`.
 #[derive(Debug)]
@@ -105,8 +104,8 @@ pub struct Behaviour {
 }
 
 /// Create a new client relay [`Behaviour`] with it's corresponding [`Transport`].
-pub fn new(local_peer_id: PeerId) -> (transport::Transport, Behaviour) {
-    let (transport, from_transport) = transport::Transport::new();
+pub fn new(local_peer_id: PeerId) -> (Transport, Behaviour) {
+    let (transport, from_transport) = Transport::new();
     let behaviour = Behaviour {
         local_peer_id,
         from_transport,
