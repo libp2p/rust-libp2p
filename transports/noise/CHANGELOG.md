@@ -1,5 +1,6 @@
-# 0.41.1 [unreleased]
+# 0.42.0 [unreleased]
 
+- Update to `libp2p-core` `v0.39.0`.
 - Migrate from `prost` to `quick-protobuf`. This removes `protoc` dependency. See [PR 3024].
 
 [PR 3024]: https://github.com/libp2p/rust-libp2p/issues/3024

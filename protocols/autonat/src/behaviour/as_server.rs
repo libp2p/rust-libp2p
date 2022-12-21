@@ -98,9 +98,7 @@ impl<'a> HandleInnerEvent for AsServer<'a> {
         &mut self,
         _params: &mut impl PollParameters,
         event: request_response::Event<DialRequest, DialResponse>,
-    ) -> (VecDeque<Event>, Option<Action>) {
-        let mut events = VecDeque::new();
-        let mut action = None;
+    ) -> VecDeque<Action> {
         match event {
             request_response::Event::Message {
                 peer,
@@ -124,20 +122,25 @@ impl<'a> HandleInnerEvent for AsServer<'a> {
                             .insert(peer, (probe_id, request_id, addrs.clone(), channel));
                         self.throttled_clients.push((peer, Instant::now()));
 
-                        events.push_back(Event::InboundProbe(InboundProbeEvent::Request {
-                            probe_id,
-                            peer,
-                            addresses: addrs.clone(),
-                        }));
-
-                        action = Some(NetworkBehaviourAction::Dial {
-                            opts: DialOpts::peer_id(peer)
-                                .condition(PeerCondition::Always)
-                                .override_dial_concurrency_factor(NonZeroU8::new(1).expect("1 > 0"))
-                                .addresses(addrs)
-                                .build(),
-                            handler: self.inner.new_handler(),
-                        });
+                        VecDeque::from([
+                            NetworkBehaviourAction::GenerateEvent(Event::InboundProbe(
+                                InboundProbeEvent::Request {
+                                    probe_id,
+                                    peer,
+                                    addresses: addrs.clone(),
+                                },
+                            )),
+                            NetworkBehaviourAction::Dial {
+                                opts: DialOpts::peer_id(peer)
+                                    .condition(PeerCondition::Always)
+                                    .override_dial_concurrency_factor(
+                                        NonZeroU8::new(1).expect("1 > 0"),
+                                    )
+                                    .addresses(addrs)
+                                    .build(),
+                                handler: self.inner.new_handler(),
+                            },
+                        ])
                     }
                     Err((status_text, error)) => {
                         log::debug!(
@@ -152,11 +155,13 @@ impl<'a> HandleInnerEvent for AsServer<'a> {
                         };
                         let _ = self.inner.send_response(channel, response);
 
-                        events.push_back(Event::InboundProbe(InboundProbeEvent::Error {
-                            probe_id,
-                            peer,
-                            error: InboundProbeError::Response(error),
-                        }));
+                        VecDeque::from([NetworkBehaviourAction::GenerateEvent(
+                            Event::InboundProbe(InboundProbeEvent::Error {
+                                probe_id,
+                                peer,
+                                error: InboundProbeError::Response(error),
+                            }),
+                        )])
                     }
                 }
             }
@@ -178,15 +183,16 @@ impl<'a> HandleInnerEvent for AsServer<'a> {
                     _ => self.probe_id.next(),
                 };
 
-                events.push_back(Event::InboundProbe(InboundProbeEvent::Error {
-                    probe_id,
-                    peer,
-                    error: InboundProbeError::InboundRequest(error),
-                }));
+                VecDeque::from([NetworkBehaviourAction::GenerateEvent(Event::InboundProbe(
+                    InboundProbeEvent::Error {
+                        probe_id,
+                        peer,
+                        error: InboundProbeError::InboundRequest(error),
+                    },
+                ))])
             }
-            _ => {}
+            _ => VecDeque::new(),
         }
-        (events, action)
     }
 }
 

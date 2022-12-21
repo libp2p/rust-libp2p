@@ -1,5 +1,7 @@
 # 0.42.0 [unreleased]
 
+- Update to `libp2p-core` `v0.39.0`.
+
 - Move I/O from `Behaviour` to `Handler`. Handle `Behaviour`'s Identify and Push requests independently by incoming order,
   previously Push requests were prioritized. see [PR 3208].
 

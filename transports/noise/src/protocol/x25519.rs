@@ -23,6 +23,8 @@
 //! **Note**: This set of protocols is not interoperable with other
 //! libp2p implementations.
 
+#![allow(deprecated)]
+
 use crate::{NoiseConfig, NoiseError, Protocol, ProtocolParams};
 use curve25519_dalek::edwards::CompressedEdwardsY;
 use libp2p_core::UpgradeInfo;
@@ -56,6 +58,10 @@ static PARAMS_XX: Lazy<ProtocolParams> = Lazy::new(|| {
 
 /// A X25519 key.
 #[derive(Clone)]
+#[deprecated(
+    since = "0.41.1",
+    note = "Will be removed because it is not compliant with the official libp2p specification. Use `X25519Spec` instead."
+)]
 pub struct X25519([u8; 32]);
 
 impl AsRef<[u8]> for X25519 {
@@ -135,15 +141,6 @@ impl Protocol<X25519> for X25519 {
 }
 
 impl Keypair<X25519> {
-    /// An "empty" keypair as a starting state for DH computations in `snow`,
-    /// which get manipulated through the `snow::types::Dh` interface.
-    pub(super) fn default() -> Self {
-        Keypair {
-            secret: SecretKey(X25519([0u8; 32])),
-            public: PublicKey(X25519([0u8; 32])),
-        }
-    }
-
     /// Create a new X25519 keypair.
     pub fn new() -> Keypair<X25519> {
         let mut sk_bytes = [0u8; 32];
