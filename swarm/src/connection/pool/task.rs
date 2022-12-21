@@ -36,7 +36,6 @@ use futures::{
 };
 use libp2p_core::connection::ConnectionId;
 use libp2p_core::muxing::StreamMuxerBox;
-use libp2p_core::transport::Boxed;
 use std::pin::Pin;
 use void::Void;
 
@@ -94,7 +93,7 @@ pub enum EstablishedConnectionEvent<THandler: ConnectionHandler> {
 
 pub async fn new_for_pending_outgoing_connection(
     connection_id: ConnectionId,
-    dial: ConcurrentDial<Boxed<(PeerId, StreamMuxerBox)>>,
+    dial: ConcurrentDial,
     abort_receiver: oneshot::Receiver<Void>,
     mut events: mpsc::Sender<PendingConnectionEvent>,
 ) {
