@@ -661,7 +661,7 @@ where
                         ),
                     };
 
-                    let error: Result<(), PendingInboundConnectionError> = self
+                    let error = self
                         .counters
                         // Check general established connection limit.
                         .check_max_established(&endpoint)
