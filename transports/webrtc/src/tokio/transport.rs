@@ -83,8 +83,8 @@ impl libp2p_core::Transport for Transport {
     fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
         let id = ListenerId::new();
 
-        let socket_addr =
-            parse_webrtc_listen_addr(&addr).ok_or(TransportError::MultiaddrNotSupported(addr))?;
+        let socket_addr = parse_webrtc_listen_addr(&addr)
+            .ok_or_else(|| TransportError::MultiaddrNotSupported(addr))?;
         let udp_mux = UDPMuxNewAddr::listen_on(socket_addr)
             .map_err(|io| TransportError::Other(Error::Io(io)))?;
 
@@ -129,7 +129,7 @@ impl libp2p_core::Transport for Transport {
             .listeners
             .iter()
             .next()
-            .ok_or(TransportError::Other(Error::NoListeners))?
+            .ok_or_else(|| TransportError::Other(Error::NoListeners))?
             .udp_mux
             .udp_mux_handle();
 

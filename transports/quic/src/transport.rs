@@ -97,7 +97,7 @@ impl<P: Provider> Transport for GenTransport<P> {
 
     fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
         let (socket_addr, version) = multiaddr_to_socketaddr(&addr, self.support_draft_29)
-            .ok_or(TransportError::MultiaddrNotSupported(addr))?;
+            .ok_or_else(|| TransportError::MultiaddrNotSupported(addr))?;
         let listener_id = ListenerId::new();
         let listener = Listener::new(
             listener_id,
