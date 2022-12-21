@@ -199,7 +199,7 @@ pub trait NetworkBehaviour: Sized + 'static {
     fn handle_pending_outbound_connection(
         &mut self,
         maybe_peer: Option<PeerId>,
-        _addresses: &[&Multiaddr],
+        _addresses: &[Multiaddr],
         _effective_role: Endpoint,
         _connection_id: ConnectionId,
     ) -> Result<Vec<Multiaddr>, Box<dyn std::error::Error + Send + 'static>> {
