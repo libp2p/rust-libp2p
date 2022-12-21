@@ -166,7 +166,7 @@ fn new_reservation_to_same_relay_replaces_old() {
                     }
                 }
                 SwarmEvent::Behaviour(ClientEvent::Ping(_)) => {}
-                e => panic!("{:?}", e),
+                e => panic!("{e:?}"),
             }
         }
     });
@@ -226,7 +226,7 @@ fn connect() {
                 SwarmEvent::ConnectionEstablished { peer_id, .. } if peer_id == dst_peer_id => {
                     break
                 }
-                e => panic!("{:?}", e),
+                e => panic!("{e:?}"),
             }
         }
     })
@@ -434,7 +434,7 @@ async fn wait_for_reservation(
                 }
             }
             SwarmEvent::Behaviour(ClientEvent::Ping(_)) => {}
-            e => panic!("{:?}", e),
+            e => panic!("{e:?}"),
         }
     }
 }
@@ -448,7 +448,7 @@ async fn wait_for_dial(client: &mut Swarm<Client>, remote: PeerId) -> bool {
                 return false
             }
             SwarmEvent::Behaviour(ClientEvent::Ping(_)) => {}
-            e => panic!("{:?}", e),
+            e => panic!("{e:?}"),
         }
     }
 }

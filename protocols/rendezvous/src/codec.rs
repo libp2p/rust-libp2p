@@ -50,7 +50,7 @@ impl Namespace {
     /// This will panic if the namespace is too long. We accepting panicking in this case because we are enforcing a `static lifetime which means this value can only be a constant in the program and hence we hope the developer checked that it is of an acceptable length.
     pub fn from_static(value: &'static str) -> Self {
         if value.len() > 255 {
-            panic!("Namespace '{}' is too long!", value)
+            panic!("Namespace '{value}' is too long!")
         }
 
         Namespace(value.to_owned())

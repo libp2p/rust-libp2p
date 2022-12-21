@@ -238,7 +238,7 @@ impl From<certificate::ParseError> for rustls::Error {
         use webpki::Error::*;
         match e {
             BadDer => rustls::Error::InvalidCertificateEncoding,
-            e => rustls::Error::InvalidCertificateData(format!("invalid peer certificate: {}", e)),
+            e => rustls::Error::InvalidCertificateData(format!("invalid peer certificate: {e}")),
         }
     }
 }
@@ -250,7 +250,7 @@ impl From<certificate::VerificationError> for rustls::Error {
             UnsupportedSignatureAlgorithm | UnsupportedSignatureAlgorithmForPublicKey => {
                 rustls::Error::InvalidCertificateSignatureType
             }
-            e => rustls::Error::InvalidCertificateData(format!("invalid peer certificate: {}", e)),
+            e => rustls::Error::InvalidCertificateData(format!("invalid peer certificate: {e}")),
         }
     }
 }

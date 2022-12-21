@@ -114,7 +114,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         relay_client: Client,
         ping: ping::Behaviour,
         identify: identify::Behaviour,
-        dcutr: dcutr::behaviour::Behaviour,
+        dcutr: dcutr::Behaviour,
     }
 
     #[derive(Debug)]
@@ -123,7 +123,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         Ping(ping::Event),
         Identify(identify::Event),
         Relay(client::Event),
-        Dcutr(dcutr::behaviour::Event),
+        Dcutr(dcutr::Event),
     }
 
     impl From<ping::Event> for Event {
@@ -144,8 +144,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    impl From<dcutr::behaviour::Event> for Event {
-        fn from(e: dcutr::behaviour::Event) -> Self {
+    impl From<dcutr::Event> for Event {
+        fn from(e: dcutr::Event) -> Self {
             Event::Dcutr(e)
         }
     }
@@ -157,7 +157,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             "/TODO/0.0.1".to_string(),
             local_key.public(),
         )),
-        dcutr: dcutr::behaviour::Behaviour::new(local_peer_id),
+        dcutr: dcutr::Behaviour::new(local_peer_id),
     };
 
     let mut swarm = match ThreadPool::new() {
@@ -185,7 +185,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                         SwarmEvent::NewListenAddr { address, .. } => {
                             info!("Listening on {:?}", address);
                         }
-                        event => panic!("{:?}", event),
+                        event => panic!("{event:?}"),
                     }
                 }
                 _ = delay => {
@@ -220,7 +220,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     info!("Relay told us our public address: {:?}", observed_addr);
                     learned_observed_addr = true;
                 }
-                event => panic!("{:?}", event),
+                event => panic!("{event:?}"),
             }
 
             if learned_observed_addr && told_relay_observed_addr {
