@@ -234,7 +234,7 @@ pub enum SwarmEvent<TBehaviourOutEvent, THandlerErr> {
         /// Address used to send back data to the remote.
         send_back_addr: Multiaddr,
         /// The error that happened.
-        error: PendingInboundConnectionError<io::Error>,
+        error: PendingInboundConnectionError,
     },
     /// Outgoing connection attempt failed.
     OutgoingConnectionError {
@@ -1639,8 +1639,8 @@ pub enum DialError {
     Transport(Vec<(Multiaddr, TransportError<io::Error>)>),
 }
 
-impl From<PendingOutboundConnectionError<io::Error>> for DialError {
-    fn from(error: PendingOutboundConnectionError<io::Error>) -> Self {
+impl From<PendingOutboundConnectionError> for DialError {
+    fn from(error: PendingOutboundConnectionError) -> Self {
         match error {
             PendingConnectionError::ConnectionLimit(limit) => DialError::ConnectionLimit(limit),
             PendingConnectionError::Aborted => DialError::Aborted,

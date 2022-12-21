@@ -26,7 +26,7 @@ use crate::{
     connection::{
         self, ConnectionError, PendingInboundConnectionError, PendingOutboundConnectionError,
     },
-    transport::{TransportError},
+    transport::TransportError,
     ConnectionHandler, Multiaddr, PeerId,
 };
 use futures::{
@@ -62,10 +62,7 @@ pub enum PendingConnectionEvent {
     /// A pending connection failed.
     PendingFailed {
         id: ConnectionId,
-        error: Either<
-            PendingOutboundConnectionError<std::io::Error>,
-            PendingInboundConnectionError<std::io::Error>,
-        >,
+        error: Either<PendingOutboundConnectionError, PendingInboundConnectionError>,
     },
 }
 

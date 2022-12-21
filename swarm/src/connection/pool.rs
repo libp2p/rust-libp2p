@@ -268,7 +268,7 @@ pub enum PoolEvent<THandler: IntoConnectionHandler> {
         /// The ID of the failed connection.
         id: ConnectionId,
         /// The error that occurred.
-        error: PendingOutboundConnectionError<std::io::Error>,
+        error: PendingOutboundConnectionError,
         /// The handler that was supposed to handle the connection.
         handler: THandler,
         /// The (expected) peer of the failed connection.
@@ -284,7 +284,7 @@ pub enum PoolEvent<THandler: IntoConnectionHandler> {
         /// Local connection address.
         local_addr: Multiaddr,
         /// The error that occurred.
-        error: PendingInboundConnectionError<std::io::Error>,
+        error: PendingInboundConnectionError,
         /// The handler that was supposed to handle the connection.
         handler: THandler,
     },
@@ -661,7 +661,7 @@ where
                         ),
                     };
 
-                    let error: Result<(), PendingInboundConnectionError<_>> = self
+                    let error: Result<(), PendingInboundConnectionError> = self
                         .counters
                         // Check general established connection limit.
                         .check_max_established(&endpoint)

@@ -76,12 +76,11 @@ impl<THandlerErr> From<io::Error> for ConnectionError<THandlerErr> {
 /// Note: Addresses for an outbound connection are dialed in parallel. Thus, compared to
 /// [`PendingInboundConnectionError`], one or more [`TransportError`]s can occur for a single
 /// connection.
-pub type PendingOutboundConnectionError<TTransErr> =
-    PendingConnectionError<Vec<(Multiaddr, TransportError<TTransErr>)>>;
+pub type PendingOutboundConnectionError =
+    PendingConnectionError<Vec<(Multiaddr, TransportError<io::Error>)>>;
 
 /// Errors that can occur in the context of a pending incoming `Connection`.
-pub type PendingInboundConnectionError<TTransErr> =
-    PendingConnectionError<TransportError<TTransErr>>;
+pub type PendingInboundConnectionError = PendingConnectionError<TransportError<io::Error>>;
 
 /// Errors that can occur in the context of a pending `Connection`.
 #[derive(Debug)]
