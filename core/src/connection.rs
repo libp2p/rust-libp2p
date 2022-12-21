@@ -19,10 +19,13 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::multiaddr::{Multiaddr, Protocol};
+use std::sync::atomic::{AtomicU64, Ordering};
+
+static NEXT_CONNECTION_ID: AtomicU64 = AtomicU64::new(0);
 
 /// Connection identifier.
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
-pub struct ConnectionId(usize);
+pub struct ConnectionId(u64);
 
 impl ConnectionId {
     /// Creates a `ConnectionId` from a non-negative integer.
@@ -32,13 +35,13 @@ impl ConnectionId {
     /// that all connection IDs are based on non-negative integers.
     #[deprecated(note = "IDs must be unique and should not be constructed directly.")]
     pub fn new(id: usize) -> Self {
-        Self(id)
+        Self(id as u64)
     }
 }
 
 impl Default for ConnectionId {
     fn default() -> Self {
-        Self(rand::random())
+        Self(NEXT_CONNECTION_ID.fetch_add(1, Ordering::SeqCst))
     }
 }
 
