@@ -25,7 +25,7 @@ use crate::{
         Connected, ConnectionError, ConnectionLimit, IncomingInfo, PendingConnectionError,
         PendingInboundConnectionError, PendingOutboundConnectionError,
     },
-    transport::{Transport, TransportError},
+    transport::TransportError,
     ConnectedPoint, ConnectionHandler, Executor, Multiaddr, PeerId,
 };
 use concurrent_dial::ConcurrentDial;
@@ -80,9 +80,8 @@ impl ExecSwitch {
 }
 
 /// A connection `Pool` manages a set of connections for each peer.
-pub struct Pool<THandler, TTrans>
+pub struct Pool<THandler>
 where
-    TTrans: Transport,
     THandler: ConnectionHandler,
 {
     local_id: PeerId,
@@ -117,10 +116,10 @@ where
 
     /// Sender distributed to pending tasks for reporting events back
     /// to the pool.
-    pending_connection_events_tx: mpsc::Sender<task::PendingConnectionEvent<TTrans>>,
+    pending_connection_events_tx: mpsc::Sender<task::PendingConnectionEvent>,
 
     /// Receiver for events reported from pending tasks.
-    pending_connection_events_rx: mpsc::Receiver<task::PendingConnectionEvent<TTrans>>,
+    pending_connection_events_rx: mpsc::Receiver<task::PendingConnectionEvent>,
 
     /// Sender distributed to established tasks for reporting events back
     /// to the pool.
@@ -200,7 +199,10 @@ impl PendingConnection {
     }
 }
 
-impl<THandler: ConnectionHandler, TTrans: Transport> fmt::Debug for Pool<THandler, TTrans> {
+impl<THandler> fmt::Debug for Pool<THandler>
+where
+    THandler: ConnectionHandler,
+{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         f.debug_struct("Pool")
             .field("counters", &self.counters)
@@ -210,10 +212,8 @@ impl<THandler: ConnectionHandler, TTrans: Transport> fmt::Debug for Pool<THandle
 
 /// Event that can happen on the `Pool`.
 #[derive(Debug)]
-#[allow(clippy::large_enum_variant)]
-pub enum PoolEvent<THandler, TTrans>
+pub enum PoolEvent<THandler>
 where
-    TTrans: Transport,
     THandler: ConnectionHandler,
 {
     /// A new connection has been established.
@@ -228,7 +228,7 @@ where
         /// [`Some`] when the new connection is an outgoing connection.
         /// Addresses are dialed in parallel. Contains the addresses and errors
         /// of dial attempts that failed before the one successful dial.
-        concurrent_dial_errors: Option<Vec<(Multiaddr, TransportError<TTrans::Error>)>>,
+        concurrent_dial_errors: Option<Vec<(Multiaddr, TransportError<std::io::Error>)>>,
 
         supported_protocols: SmallVec<[Vec<u8>; 16]>,
     },
@@ -285,7 +285,7 @@ where
         /// The ID of the failed connection.
         id: ConnectionId,
         /// The error that occurred.
-        error: PendingOutboundConnectionError<TTrans::Error>,
+        error: PendingOutboundConnectionError,
         /// The (expected) peer of the failed connection.
         peer: Option<PeerId>,
     },
@@ -299,7 +299,7 @@ where
         /// Local connection address.
         local_addr: Multiaddr,
         /// The error that occurred.
-        error: PendingInboundConnectionError<TTrans::Error>,
+        error: PendingInboundConnectionError,
     },
 
     /// A node has produced an event.
@@ -321,10 +321,9 @@ where
     },
 }
 
-impl<THandler, TTrans> Pool<THandler, TTrans>
+impl<THandler> Pool<THandler>
 where
     THandler: ConnectionHandler,
-    TTrans: Transport,
 {
     /// Creates a new empty `Pool`.
     pub fn new(local_id: PeerId, config: PoolConfig, limits: ConnectionLimits) -> Self {
@@ -431,12 +430,9 @@ where
     }
 }
 
-impl<THandler, TTrans> Pool<THandler, TTrans>
+impl<THandler> Pool<THandler>
 where
     THandler: ConnectionHandler,
-    TTrans: Transport + 'static,
-    TTrans::Output: Send + 'static,
-    TTrans::Error: Send + 'static,
 {
     /// Adds a pending outgoing connection to the pool in the form of a `Future`
     /// that establishes and negotiates the connection.
@@ -450,10 +446,7 @@ where
                 'static,
                 (
                     Multiaddr,
-                    Result<
-                        <TTrans as Transport>::Output,
-                        TransportError<<TTrans as Transport>::Error>,
-                    >,
+                    Result<(PeerId, StreamMuxerBox), TransportError<std::io::Error>>,
                 ),
             >,
         >,
@@ -461,11 +454,7 @@ where
         role_override: Endpoint,
         dial_concurrency_factor_override: Option<NonZeroU8>,
         connection_id: ConnectionId,
-    ) -> Result<(), ConnectionLimit>
-    where
-        TTrans: Send,
-        TTrans::Dial: Send + 'static,
-    {
+    ) -> Result<(), ConnectionLimit> {
         self.counters.check_max_pending_outgoing()?;
 
         let dial = ConcurrentDial::new(
@@ -512,7 +501,7 @@ where
         connection_id: ConnectionId,
     ) -> Result<(), ConnectionLimit>
     where
-        TFut: Future<Output = Result<TTrans::Output, TTrans::Error>> + Send + 'static,
+        TFut: Future<Output = Result<(PeerId, StreamMuxerBox), std::io::Error>> + Send + 'static,
     {
         let endpoint = info.create_connected_point();
 
@@ -552,9 +541,8 @@ where
             ConnectionId,
         ) -> Result<THandler, Box<dyn Error + Send + 'static>>,
         cx: &mut Context<'_>,
-    ) -> Poll<PoolEvent<THandler, TTrans>>
+    ) -> Poll<PoolEvent<THandler>>
     where
-        TTrans: Transport<Output = (PeerId, StreamMuxerBox)>,
         THandler: ConnectionHandler + 'static,
         <THandler as ConnectionHandler>::OutboundOpenInfo: Send,
     {
@@ -674,7 +662,7 @@ where
                         ),
                     };
 
-                    let error: Result<(), PendingInboundConnectionError<_>> = self
+                    let error = self
                         .counters
                         // Check general established connection limit.
                         .check_max_established(&endpoint)
