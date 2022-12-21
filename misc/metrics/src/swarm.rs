@@ -251,6 +251,9 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
                     libp2p_swarm::DialError::ConnectionIo(_) => {
                         record(OutgoingConnectionErrorError::ConnectionIo)
                     }
+                    libp2p_swarm::DialError::Denied { .. } => {
+                        todo!()
+                    }
                 };
             }
             libp2p_swarm::SwarmEvent::BannedPeer { endpoint, .. } => {

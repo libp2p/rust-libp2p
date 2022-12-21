@@ -1954,6 +1954,7 @@ where
             DialError::DialPeerConditionFalse(dial_opts::PeerCondition::Always) => {
                 unreachable!("DialPeerCondition::Always can not trigger DialPeerConditionFalse.");
             }
+            DialError::Denied { .. } => todo!(),
         }
     }
 
@@ -2388,10 +2389,9 @@ where
                                 });
                         } else if &peer_id != self.kbuckets.local_key().preimage() {
                             query.inner.pending_rpcs.push((peer_id, event));
-                            let handler = self.new_handler();
                             self.queued_events.push_back(NetworkBehaviourAction::Dial {
                                 opts: DialOpts::peer_id(peer_id).build(),
-                                handler,
+                                id: Default::default(),
                             });
                         }
                     }

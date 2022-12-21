@@ -24,7 +24,7 @@ use crate::behaviour::{
 };
 use crate::{
     ConnectionHandler, IntoConnectionHandler, NetworkBehaviour, NetworkBehaviourAction,
-    PollParameters,
+    PollParameters, THandlerInEvent,
 };
 use libp2p_core::{
     connection::ConnectionId, multiaddr::Multiaddr, transport::ListenerId, ConnectedPoint, PeerId,
@@ -37,7 +37,9 @@ use std::task::{Context, Poll};
 /// any further state.
 pub struct MockBehaviour<THandler, TOutEvent>
 where
-    THandler: ConnectionHandler,
+    THandler: ConnectionHandler + Clone,
+    THandler::OutEvent: Clone,
+    TOutEvent: Send + 'static,
 {
     /// The prototype protocols handler that is cloned for every
     /// invocation of `new_handler`.
@@ -47,12 +49,14 @@ where
     /// The next action to return from `poll`.
     ///
     /// An action is only returned once.
-    pub next_action: Option<NetworkBehaviourAction<TOutEvent, THandler>>,
+    pub next_action: Option<NetworkBehaviourAction<TOutEvent, THandlerInEvent<Self>>>,
 }
 
 impl<THandler, TOutEvent> MockBehaviour<THandler, TOutEvent>
 where
-    THandler: ConnectionHandler,
+    THandler: ConnectionHandler + Clone,
+    THandler::OutEvent: Clone,
+    TOutEvent: Send + 'static,
 {
     pub fn new(handler_proto: THandler) -> Self {
         MockBehaviour {
@@ -389,14 +393,10 @@ where
             FromSwarm::ConnectionClosed(connection_closed) => {
                 self.on_connection_closed(connection_closed)
             }
-            FromSwarm::DialFailure(DialFailure {
-                peer_id,
-                handler,
-                error,
-            }) => {
+            FromSwarm::DialFailure(DialFailure { peer_id, error, id }) => {
                 self.on_dial_failure.push(peer_id);
                 #[allow(deprecated)]
-                self.inner.inject_dial_failure(peer_id, handler, error);
+                self.inner.inject_dial_failure(peer_id, error, id);
             }
             FromSwarm::NewListener(NewListener { listener_id }) => {
                 self.on_new_listener.push(listener_id);

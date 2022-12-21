@@ -21,7 +21,7 @@
 use futures::StreamExt;
 use libp2p_identify as identify;
 use libp2p_ping as ping;
-use libp2p_swarm::{behaviour::FromSwarm, dummy, NetworkBehaviour, SwarmEvent};
+use libp2p_swarm::{behaviour::FromSwarm, dummy, NetworkBehaviour, SwarmEvent, THandlerInEvent};
 use std::fmt::Debug;
 
 /// Small utility to check that a type implements `NetworkBehaviour`.

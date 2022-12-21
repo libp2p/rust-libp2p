@@ -193,19 +193,6 @@ pub enum SwarmEvent<TBehaviourOutEvent, THandlerErr> {
         /// How long it took to establish this connection
         established_in: std::time::Duration,
     },
-    PendingConnectionDenied {
-        peer_id: Option<PeerId>,
-        endpoint: PendingPoint,
-        cause: Box<dyn error::Error + Send + 'static>,
-    },
-    EstablishedConnectionDenied {
-        /// Identity of the peer that we have connected to.
-        peer_id: PeerId,
-        /// Endpoint of the connection that has been closed.
-        endpoint: ConnectedPoint,
-        cause: Box<dyn error::Error + Send + 'static>,
-    },
-
     /// A connection with the given peer has been closed,
     /// possibly as a result of an error.
     ConnectionClosed {
@@ -555,7 +542,8 @@ where
             let e = DialError::DialPeerConditionFalse(condition);
 
             #[allow(deprecated)]
-            self.behaviour.inject_dial_failure(peer_id, &e);
+            self.behaviour
+                .inject_dial_failure(peer_id, &e, connection_id);
 
             return Err(e);
         }
@@ -565,7 +553,8 @@ where
             if self.banned_peers.contains(&peer_id) {
                 let error = DialError::Banned;
                 #[allow(deprecated)]
-                self.behaviour.inject_dial_failure(Some(peer_id), &error);
+                self.behaviour
+                    .inject_dial_failure(Some(peer_id), &error, connection_id);
                 return Err(error);
             }
         }
@@ -587,7 +576,8 @@ where
                 Err(cause) => {
                     let error = DialError::Denied { cause };
 
-                    self.behaviour.inject_dial_failure(peer_id, &error);
+                    self.behaviour
+                        .inject_dial_failure(peer_id, &error, connection_id);
 
                     return Err(error);
                 }
@@ -602,7 +592,8 @@ where
             if addresses_from_opts.is_empty() {
                 let error = DialError::NoAddresses;
                 #[allow(deprecated)]
-                self.behaviour.inject_dial_failure(peer_id, &error);
+                self.behaviour
+                    .inject_dial_failure(peer_id, &error, connection_id);
                 return Err(error);
             };
 
@@ -643,7 +634,8 @@ where
             Err(connection_limit) => {
                 let error = DialError::ConnectionLimit(connection_limit); // TODO: Remove `ConnectionLimit`.
                 #[allow(deprecated)]
-                self.behaviour.inject_dial_failure(peer_id, &error);
+                self.behaviour
+                    .inject_dial_failure(peer_id, &error, connection_id);
                 Err(error)
             }
         }
@@ -832,11 +824,11 @@ where
                     });
                 }
             }
-            PoolEvent::PendingOutboundConnectionError { id: _, error, peer } => {
+            PoolEvent::PendingOutboundConnectionError { id, error, peer } => {
                 let error = error.into();
 
                 #[allow(deprecated)]
-                self.behaviour.inject_dial_failure(peer, &error);
+                self.behaviour.inject_dial_failure(peer, &error, id);
 
                 if let Some(peer) = peer {
                     log::debug!("Connection attempt to {:?} failed with {:?}.", peer, error,);
@@ -850,7 +842,7 @@ where
                 });
             }
             PoolEvent::PendingInboundConnectionError {
-                id: _,
+                id,
                 send_back_addr,
                 local_addr,
                 error,
@@ -858,7 +850,7 @@ where
                 log::debug!("Incoming connection failed: {:?}", error);
                 #[allow(deprecated)]
                 self.behaviour
-                    .inject_listen_failure(&local_addr, &send_back_addr);
+                    .inject_listen_failure(&local_addr, &send_back_addr, id);
                 return Some(SwarmEvent::IncomingConnectionError {
                     local_addr,
                     send_back_addr,
@@ -919,11 +911,7 @@ where
                 cause,
                 ..
             } => {
-                return Some(SwarmEvent::EstablishedConnectionDenied {
-                    peer_id,
-                    endpoint,
-                    cause,
-                })
+                return Some(todo!("Report connection error event, these are currently modeled in a weird way where we split them by incoming/outgoing on the `SwarmEvent` level but everywhere else by established/pending"))
             }
             PoolEvent::ConnectionEvent { peer_id, id, event } => {
                 if self.banned_peer_connections.contains(&id) {
@@ -979,14 +967,7 @@ where
                     Err(error) => {
                         // TODO: self.behaviour.on_swarm_event(FromSwarm::ListenFailure())
 
-                        return Some(SwarmEvent::PendingConnectionDenied {
-                            peer_id: None,
-                            endpoint: PendingPoint::Listener {
-                                local_addr,
-                                send_back_addr,
-                            },
-                            cause: error,
-                        });
+                        return Some(todo!("Report connection error event, these are currently modeled in a weird way where we split them by incoming/outgoing on the `SwarmEvent` level but everywhere else by established/pending"));
                     }
                 }
 
@@ -998,7 +979,7 @@ where
                     },
                     connection_id,
                 ) {
-                    Ok(_connection_id) => {
+                    Ok(()) => {
                         return Some(SwarmEvent::IncomingConnection {
                             local_addr,
                             send_back_addr,
@@ -1006,8 +987,11 @@ where
                     }
                     Err(connection_limit) => {
                         #[allow(deprecated)]
-                        self.behaviour
-                            .inject_listen_failure(&local_addr, &send_back_addr);
+                        self.behaviour.inject_listen_failure(
+                            &local_addr,
+                            &send_back_addr,
+                            connection_id,
+                        );
                         log::warn!("Incoming connection rejected: {:?}", connection_limit);
                     }
                 };
@@ -1901,7 +1885,7 @@ mod tests {
     ) -> bool
     where
         TBehaviour: NetworkBehaviour,
-        <TBehaviour::ConnectionHandler as ConnectionHandler>::OutEvent: Clone,
+        THandlerOutEvent<TBehaviour>: Clone,
     {
         swarm1
             .behaviour()
@@ -1921,7 +1905,7 @@ mod tests {
     ) -> bool
     where
         TBehaviour: NetworkBehaviour,
-        <TBehaviour::ConnectionHandler as ConnectionHandler>::OutEvent: Clone,
+        THandlerOutEvent<TBehaviour>: Clone,
     {
         swarm1
             .behaviour()

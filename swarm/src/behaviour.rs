@@ -355,12 +355,13 @@ pub trait NetworkBehaviour: Sized + 'static {
         since = "0.40.2",
         note = "Handle `InEvent::DialFailure` in `NetworkBehaviour::on_swarm_event` instead. The default implementation of this `inject_*` method delegates to it."
     )]
-    fn inject_dial_failure(&mut self, peer_id: Option<PeerId>, error: &DialError) {
-        self.on_swarm_event(FromSwarm::DialFailure(DialFailure {
-            peer_id,
-            error,
-            id: todo!("remove deprecated APIs first"),
-        }));
+    fn inject_dial_failure(
+        &mut self,
+        peer_id: Option<PeerId>,
+        error: &DialError,
+        id: ConnectionId,
+    ) {
+        self.on_swarm_event(FromSwarm::DialFailure(DialFailure { peer_id, error, id }));
     }
 
     /// Indicates to the behaviour that an error happened on an incoming connection during its
@@ -372,11 +373,16 @@ pub trait NetworkBehaviour: Sized + 'static {
         since = "0.40.2",
         note = "Handle `FromSwarm::ListenFailure` in `NetworkBehaviour::on_swarm_event` instead. The default implementation of this `inject_*` method delegates to it."
     )]
-    fn inject_listen_failure(&mut self, local_addr: &Multiaddr, send_back_addr: &Multiaddr) {
+    fn inject_listen_failure(
+        &mut self,
+        local_addr: &Multiaddr,
+        send_back_addr: &Multiaddr,
+        id: ConnectionId,
+    ) {
         self.on_swarm_event(FromSwarm::ListenFailure(ListenFailure {
             local_addr,
             send_back_addr,
-            id: todo!("remove deprecated APIs first"),
+            id,
         }));
     }
 
@@ -969,7 +975,7 @@ pub(crate) fn inject_from_swarm<T: NetworkBehaviour>(
         }
         FromSwarm::DialFailure(DialFailure { peer_id, error, id }) => {
             #[allow(deprecated)]
-            behaviour.inject_dial_failure(peer_id, error);
+            behaviour.inject_dial_failure(peer_id, error, id);
         }
         FromSwarm::ListenFailure(ListenFailure {
             local_addr,
@@ -977,7 +983,7 @@ pub(crate) fn inject_from_swarm<T: NetworkBehaviour>(
             id,
         }) => {
             #[allow(deprecated)]
-            behaviour.inject_listen_failure(local_addr, send_back_addr);
+            behaviour.inject_listen_failure(local_addr, send_back_addr, id);
         }
         FromSwarm::NewListener(NewListener { listener_id }) => {
             #[allow(deprecated)]
