@@ -18,10 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{
-    transport::{TransportError},
-    Multiaddr,
-};
+use crate::{transport::TransportError, Multiaddr};
 use futures::{
     future::{BoxFuture, Future},
     ready,
