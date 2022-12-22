@@ -122,7 +122,6 @@ pub use registry::{AddAddressResult, AddressRecord, AddressScore};
 use connection::pool::{EstablishedConnection, Pool, PoolConfig, PoolEvent};
 use connection::IncomingInfo;
 use dial_opts::{DialOpts, PeerCondition};
-use either::Either;
 use futures::{executor::ThreadPoolBuilder, prelude::*, stream::FusedStream};
 use libp2p_core::connection::ConnectionId;
 use libp2p_core::muxing::SubstreamBox;
@@ -138,7 +137,6 @@ use libp2p_core::{
 use registry::{AddressIntoIter, Addresses};
 use smallvec::SmallVec;
 use std::collections::{HashMap, HashSet};
-use std::iter;
 use std::num::{NonZeroU32, NonZeroU8, NonZeroUsize};
 use std::{
     convert::TryFrom,
@@ -507,139 +505,72 @@ where
 
     fn dial_with_handler(
         &mut self,
-        swarm_dial_opts: DialOpts,
+        dial_opts: DialOpts,
         handler: <TBehaviour as NetworkBehaviour>::ConnectionHandler,
     ) -> Result<(), DialError> {
-        let (peer_id, addresses, dial_concurrency_factor_override, role_override) =
-            match swarm_dial_opts.0 {
-                // Dial a known peer.
-                dial_opts::Opts::WithPeerId(dial_opts::WithPeerId {
-                    peer_id,
-                    condition,
-                    role_override,
-                    dial_concurrency_factor_override,
-                })
-                | dial_opts::Opts::WithPeerIdWithAddresses(dial_opts::WithPeerIdWithAddresses {
-                    peer_id,
-                    condition,
-                    role_override,
-                    dial_concurrency_factor_override,
-                    ..
-                }) => {
-                    // Check [`PeerCondition`] if provided.
-                    let condition_matched = match condition {
-                        PeerCondition::Disconnected => !self.is_connected(&peer_id),
-                        PeerCondition::NotDialing => !self.pool.is_dialing(peer_id),
-                        PeerCondition::Always => true,
-                    };
-                    if !condition_matched {
-                        #[allow(deprecated)]
-                        self.behaviour.inject_dial_failure(
-                            Some(peer_id),
-                            handler,
-                            &DialError::DialPeerConditionFalse(condition),
-                        );
+        let peer_id = dial_opts
+            .get_or_parse_peer_id()
+            .map_err(DialError::InvalidPeerId)?;
+        let condition = dial_opts.peer_condition();
 
-                        return Err(DialError::DialPeerConditionFalse(condition));
-                    }
+        let should_dial = match (condition, peer_id) {
+            (PeerCondition::Always, _) => true,
+            (PeerCondition::Disconnected, None) => true,
+            (PeerCondition::NotDialing, None) => true,
+            (PeerCondition::Disconnected, Some(peer_id)) => !self.pool.is_connected(peer_id),
+            (PeerCondition::NotDialing, Some(peer_id)) => !self.pool.is_dialing(peer_id),
+        };
 
-                    // Check if peer is banned.
-                    if self.banned_peers.contains(&peer_id) {
-                        let error = DialError::Banned;
-                        #[allow(deprecated)]
-                        self.behaviour
-                            .inject_dial_failure(Some(peer_id), handler, &error);
-                        return Err(error);
-                    }
+        if !should_dial {
+            let e = DialError::DialPeerConditionFalse(condition);
 
-                    // Retrieve the addresses to dial.
-                    let addresses = {
-                        let mut addresses = match swarm_dial_opts.0 {
-                            dial_opts::Opts::WithPeerId(dial_opts::WithPeerId { .. }) => {
-                                self.behaviour.addresses_of_peer(&peer_id)
-                            }
-                            dial_opts::Opts::WithPeerIdWithAddresses(
-                                dial_opts::WithPeerIdWithAddresses {
-                                    peer_id,
-                                    mut addresses,
-                                    extend_addresses_through_behaviour,
-                                    ..
-                                },
-                            ) => {
-                                if extend_addresses_through_behaviour {
-                                    addresses.extend(self.behaviour.addresses_of_peer(&peer_id))
-                                }
-                                addresses
-                            }
-                            dial_opts::Opts::WithoutPeerIdWithAddress { .. } => {
-                                unreachable!("Due to outer match.")
-                            }
-                        };
+            #[allow(deprecated)]
+            self.behaviour.inject_dial_failure(peer_id, handler, &e);
 
-                        let mut unique_addresses = HashSet::new();
-                        addresses.retain(|addr| {
-                            !self.listened_addrs.values().flatten().any(|a| a == addr)
-                                && unique_addresses.insert(addr.clone())
-                        });
+            return Err(e);
+        }
 
-                        if addresses.is_empty() {
-                            let error = DialError::NoAddresses;
-                            #[allow(deprecated)]
-                            self.behaviour
-                                .inject_dial_failure(Some(peer_id), handler, &error);
-                            return Err(error);
-                        };
+        if let Some(peer_id) = peer_id {
+            // Check if peer is banned.
+            if self.banned_peers.contains(&peer_id) {
+                let error = DialError::Banned;
+                #[allow(deprecated)]
+                self.behaviour
+                    .inject_dial_failure(Some(peer_id), handler, &error);
+                return Err(error);
+            }
+        }
 
-                        addresses
-                    };
+        let addresses = {
+            let mut addresses = dial_opts.get_addresses();
 
-                    (
-                        Some(peer_id),
-                        Either::Left(addresses.into_iter()),
-                        dial_concurrency_factor_override,
-                        role_override,
-                    )
+            if let Some(peer_id) = peer_id {
+                if dial_opts.extend_addresses_through_behaviour() {
+                    addresses.extend(self.behaviour.addresses_of_peer(&peer_id));
                 }
-                // Dial an unknown peer.
-                dial_opts::Opts::WithoutPeerIdWithAddress(
-                    dial_opts::WithoutPeerIdWithAddress {
-                        address,
-                        role_override,
-                    },
-                ) => {
-                    // If the address ultimately encapsulates an expected peer ID, dial that peer
-                    // such that any mismatch is detected. We do not "pop off" the `P2p` protocol
-                    // from the address, because it may be used by the `Transport`, i.e. `P2p`
-                    // is a protocol component that can influence any transport, like `libp2p-dns`.
-                    let peer_id = match address
-                        .iter()
-                        .last()
-                        .and_then(|p| {
-                            if let Protocol::P2p(ma) = p {
-                                Some(PeerId::try_from(ma))
-                            } else {
-                                None
-                            }
-                        })
-                        .transpose()
-                    {
-                        Ok(peer_id) => peer_id,
-                        Err(multihash) => return Err(DialError::InvalidPeerId(multihash)),
-                    };
+            }
 
-                    (
-                        peer_id,
-                        Either::Right(iter::once(address)),
-                        None,
-                        role_override,
-                    )
-                }
+            let mut unique_addresses = HashSet::new();
+            addresses.retain(|addr| {
+                !self.listened_addrs.values().flatten().any(|a| a == addr)
+                    && unique_addresses.insert(addr.clone())
+            });
+
+            if addresses.is_empty() {
+                let error = DialError::NoAddresses;
+                #[allow(deprecated)]
+                self.behaviour.inject_dial_failure(peer_id, handler, &error);
+                return Err(error);
             };
 
+            addresses
+        };
+
         let dials = addresses
+            .into_iter()
             .map(|a| match p2p_addr(peer_id, a) {
                 Ok(address) => {
-                    let dial = match role_override {
+                    let dial = match dial_opts.role_override() {
                         Endpoint::Dialer => self.transport.dial(address.clone()),
                         Endpoint::Listener => self.transport.dial_as_listener(address.clone()),
                     };
@@ -662,8 +593,8 @@ where
             dials,
             peer_id,
             handler,
-            role_override,
-            dial_concurrency_factor_override,
+            dial_opts.role_override(),
+            dial_opts.dial_concurrency_override(),
         ) {
             Ok(_connection_id) => Ok(()),
             Err((connection_limit, handler)) => {
@@ -1088,9 +1019,9 @@ where
                 return Some(SwarmEvent::Behaviour(event))
             }
             NetworkBehaviourAction::Dial { opts, handler } => {
-                let peer_id = opts.get_peer_id();
+                let peer_id = opts.get_or_parse_peer_id();
                 if let Ok(()) = self.dial_with_handler(opts, handler) {
-                    if let Some(peer_id) = peer_id {
+                    if let Ok(Some(peer_id)) = peer_id {
                         return Some(SwarmEvent::Dialing(peer_id));
                     }
                 }
@@ -2515,6 +2446,8 @@ mod tests {
                 Poll::Pending => Poll::Pending,
                 _ => panic!("Was expecting the listen address to be reported"),
             }));
+
+        swarm.listened_addrs.clear(); // This is a hack to actually execute the dial to ourselves which would otherwise be filtered.
 
         swarm.dial(local_address.clone()).unwrap();
 
