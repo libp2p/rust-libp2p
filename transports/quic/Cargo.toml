@@ -14,8 +14,8 @@ bytes = "1.2.1"
 futures = "0.3.15"
 futures-timer = "3.0.2"
 if-watch = "3.0.0"
-libp2p-core = { version = "0.38.0", path = "../../core" }
-libp2p-tls = { version = "0.1.0-alpha", path = "../tls" }
+libp2p-core = { version = "0.39.0", path = "../../core" }
+libp2p-tls = { version = "0.1.0-alpha.1", path = "../tls" }
 log = "0.4"
 parking_lot = "0.12.0"
 quinn-proto = { version = "0.9.0", default-features = false, features = ["tls-rustls"] }
@@ -28,7 +28,7 @@ tokio = { version = "1.21.1", default-features = false, features = ["net", "rt"]
 tokio = ["dep:tokio", "if-watch/tokio"]
 async-std = ["dep:async-std", "if-watch/smol"]
 
-# Passing arguments to the docsrs builder in order to properly document cfg's. 
+# Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
 [package.metadata.docs.rs]
 all-features = true

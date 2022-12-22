@@ -17,7 +17,7 @@ either = "1.6.0"
 futures = "0.3.1"
 futures-timer = "3"
 instant = "0.1.11"
-libp2p-core = { version = "0.38.0", path = "../../core" }
+libp2p-core = { version = "0.39.0", path = "../../core" }
 libp2p-swarm = { version = "0.42.0", path = "../../swarm" }
 log = "0.4"
 pin-project = "1"
