@@ -154,10 +154,6 @@ mod topic;
 mod transform;
 mod types;
 
-#[cfg(test)]
-#[macro_use]
-extern crate derive_builder;
-
 mod rpc_proto;
 
 pub use self::behaviour::{Gossipsub, GossipsubEvent, MessageAuthenticity};
