@@ -79,7 +79,7 @@ fn connect() {
 
     pool.run_until(wait_for_connection_established(&mut src, &dst_relayed_addr));
     match pool.run_until(wait_for_dcutr_event(&mut src)) {
-        dcutr::behaviour::Event::RemoteInitiatedDirectConnectionUpgrade {
+        dcutr::Event::RemoteInitiatedDirectConnectionUpgrade {
             remote_peer_id,
             remote_relayed_addr,
         } if remote_peer_id == dst_peer_id && remote_relayed_addr == dst_relayed_addr => {}
@@ -126,7 +126,7 @@ fn build_client() -> Swarm<Client> {
         transport,
         Client {
             relay: behaviour,
-            dcutr: dcutr::behaviour::Behaviour::new(local_peer_id),
+            dcutr: dcutr::Behaviour::new(local_peer_id),
         },
         local_peer_id,
     )
@@ -154,13 +154,13 @@ where
 )]
 struct Client {
     relay: client::Client,
-    dcutr: dcutr::behaviour::Behaviour,
+    dcutr: dcutr::Behaviour,
 }
 
 #[derive(Debug)]
 enum ClientEvent {
     Relay(client::Event),
-    Dcutr(dcutr::behaviour::Event),
+    Dcutr(dcutr::Event),
 }
 
 impl From<client::Event> for ClientEvent {
@@ -169,8 +169,8 @@ impl From<client::Event> for ClientEvent {
     }
 }
 
-impl From<dcutr::behaviour::Event> for ClientEvent {
-    fn from(event: dcutr::behaviour::Event) -> Self {
+impl From<dcutr::Event> for ClientEvent {
+    fn from(event: dcutr::Event) -> Self {
         ClientEvent::Dcutr(event)
     }
 }
@@ -241,7 +241,7 @@ async fn wait_for_new_listen_addr(client: &mut Swarm<Client>, new_addr: &Multiad
     }
 }
 
-async fn wait_for_dcutr_event(client: &mut Swarm<Client>) -> dcutr::behaviour::Event {
+async fn wait_for_dcutr_event(client: &mut Swarm<Client>) -> dcutr::Event {
     loop {
         match client.select_next_some().await {
             SwarmEvent::Behaviour(ClientEvent::Dcutr(e)) => return e,

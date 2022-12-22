@@ -1,5 +1,7 @@
 # 0.24.0 [unreleased]
 
+- Update to `libp2p-core` `v0.39.0`.
+
 - Rename types as per [discussion 2174].
   `RequestResponse` has been renamed to `Behaviour`.
   The `RequestResponse` prefix has been removed from various types like `RequestResponseEvent`.
