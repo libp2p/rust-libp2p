@@ -227,8 +227,7 @@ impl Transport for MemoryTransport {
             return Err(TransportError::MultiaddrNotSupported(addr));
         };
 
-        DialFuture::new(port)
-            .ok_or_else(|| TransportError::Other(MemoryTransportError::Unreachable))
+        DialFuture::new(port).ok_or(TransportError::Other(MemoryTransportError::Unreachable))
     }
 
     fn dial_as_listener(
