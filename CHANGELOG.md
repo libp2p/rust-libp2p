@@ -52,6 +52,9 @@
     - Remove `BandwidthFuture`
     - Rename `BandwidthConnecLogging` to `InstrumentedStream`
 - Remove `SimpleProtocol` due to being unused. See [`libp2p::core::upgrade`](https://docs.rs/libp2p/0.50.0/libp2p/core/upgrade/index.html) for alternatives. See [PR 3191].
+
+- Bump MSRV to 1.65.0.
+
 - Update individual crates.
     - Update to [`libp2p-dcutr` `v0.9.0`](protocols/dcutr/CHANGELOG.md#090).
 

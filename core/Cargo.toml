@@ -45,7 +45,7 @@ ring = { version = "0.16.9", features = ["alloc", "std"], default-features = fal
 
 [dev-dependencies]
 async-std = { version = "1.6.2", features = ["attributes"] }
-base64 = "0.13.0"
+base64 = "0.20.0"
 criterion = "0.4"
 libp2p-mplex = { path = "../muxers/mplex" }
 libp2p-noise = { path = "../transports/noise" }
