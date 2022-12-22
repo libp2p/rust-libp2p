@@ -21,10 +21,11 @@
 use crate::handler::{
     AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent,
     ConnectionHandlerUpgrErr, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
-    IntoConnectionHandler, KeepAlive, ListenUpgradeError, SubstreamProtocol,
+    IntoConnectionHandler, KeepAlive, ListenUpgradeError, OutboundUpgradeSend, SubstreamProtocol,
 };
 use crate::upgrade::SendWrapper;
 
+use either::Either;
 use libp2p_core::{
     either::{EitherError, EitherOutput},
     upgrade::{EitherUpgrade, NegotiationError, ProtocolError, SelectUpgrade, UpgradeError},
@@ -98,6 +99,80 @@ impl<TProto1, TProto2> ConnectionHandlerSelect<TProto1, TProto2> {
     }
 }
 
+impl<S1OOI, S2OOI, S1OP, S2OP>
+    DialUpgradeError<
+        EitherOutput<S1OOI, S2OOI>,
+        EitherUpgrade<SendWrapper<S1OP>, SendWrapper<S2OP>>,
+    >
+where
+    S1OP: OutboundUpgradeSend,
+    S2OP: OutboundUpgradeSend,
+    S1OOI: Send + 'static,
+    S2OOI: Send + 'static,
+{
+    fn transpose(self) -> Either<DialUpgradeError<S1OOI, S1OP>, DialUpgradeError<S2OOI, S2OP>> {
+        match self {
+            DialUpgradeError {
+                info: EitherOutput::First(info),
+                error: ConnectionHandlerUpgrErr::Timer,
+            } => Either::Left(DialUpgradeError {
+                info,
+                error: ConnectionHandlerUpgrErr::Timer,
+            }),
+            DialUpgradeError {
+                info: EitherOutput::First(info),
+                error: ConnectionHandlerUpgrErr::Timeout,
+            } => Either::Left(DialUpgradeError {
+                info,
+                error: ConnectionHandlerUpgrErr::Timeout,
+            }),
+            DialUpgradeError {
+                info: EitherOutput::First(info),
+                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(err)),
+            } => Either::Left(DialUpgradeError {
+                info,
+                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(err)),
+            }),
+            DialUpgradeError {
+                info: EitherOutput::First(info),
+                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::A(err))),
+            } => Either::Left(DialUpgradeError {
+                info,
+                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(err)),
+            }),
+            DialUpgradeError {
+                info: EitherOutput::Second(info),
+                error: ConnectionHandlerUpgrErr::Timer,
+            } => Either::Right(DialUpgradeError {
+                info,
+                error: ConnectionHandlerUpgrErr::Timer,
+            }),
+            DialUpgradeError {
+                info: EitherOutput::Second(info),
+                error: ConnectionHandlerUpgrErr::Timeout,
+            } => Either::Right(DialUpgradeError {
+                info,
+                error: ConnectionHandlerUpgrErr::Timeout,
+            }),
+            DialUpgradeError {
+                info: EitherOutput::Second(info),
+                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(err)),
+            } => Either::Right(DialUpgradeError {
+                info,
+                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(err)),
+            }),
+            DialUpgradeError {
+                info: EitherOutput::Second(info),
+                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::B(err))),
+            } => Either::Right(DialUpgradeError {
+                info,
+                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(err)),
+            }),
+            _ => panic!("Wrong API usage; the upgrade error doesn't match the outbound open info"),
+        }
+    }
+}
+
 impl<TProto1, TProto2> ConnectionHandlerSelect<TProto1, TProto2>
 where
     TProto1: ConnectionHandler,
@@ -163,84 +238,18 @@ where
 
     fn on_dial_upgrade_error(
         &mut self,
-        DialUpgradeError { info, error }: DialUpgradeError<
+        err: DialUpgradeError<
             <Self as ConnectionHandler>::OutboundOpenInfo,
             <Self as ConnectionHandler>::OutboundProtocol,
         >,
     ) {
-        match (info, error) {
-            (EitherOutput::First(info), ConnectionHandlerUpgrErr::Timer) => self
+        match err.transpose() {
+            Either::Left(err) => self
                 .proto1
-                .on_connection_event(ConnectionEvent::DialUpgradeError(DialUpgradeError {
-                    info,
-                    error: ConnectionHandlerUpgrErr::Timer,
-                })),
-            (EitherOutput::First(info), ConnectionHandlerUpgrErr::Timeout) => self
-                .proto1
-                .on_connection_event(ConnectionEvent::DialUpgradeError(DialUpgradeError {
-                    info,
-                    error: ConnectionHandlerUpgrErr::Timeout,
-                })),
-            (
-                EitherOutput::First(info),
-                ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(err)),
-            ) => self
-                .proto1
-                .on_connection_event(ConnectionEvent::DialUpgradeError(DialUpgradeError {
-                    info,
-                    error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(err)),
-                })),
-            (
-                EitherOutput::First(info),
-                ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::A(err))),
-            ) => self
-                .proto1
-                .on_connection_event(ConnectionEvent::DialUpgradeError(DialUpgradeError {
-                    info,
-                    error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(err)),
-                })),
-            (
-                EitherOutput::First(_),
-                ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::B(_))),
-            ) => {
-                panic!("Wrong API usage; the upgrade error doesn't match the outbound open info");
-            }
-            (EitherOutput::Second(info), ConnectionHandlerUpgrErr::Timeout) => self
+                .on_connection_event(ConnectionEvent::DialUpgradeError(err)),
+            Either::Right(err) => self
                 .proto2
-                .on_connection_event(ConnectionEvent::DialUpgradeError(DialUpgradeError {
-                    info,
-                    error: ConnectionHandlerUpgrErr::Timeout,
-                })),
-            (EitherOutput::Second(info), ConnectionHandlerUpgrErr::Timer) => self
-                .proto2
-                .on_connection_event(ConnectionEvent::DialUpgradeError(DialUpgradeError {
-                    info,
-                    error: ConnectionHandlerUpgrErr::Timer,
-                })),
-            (
-                EitherOutput::Second(info),
-                ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(err)),
-            ) => self
-                .proto2
-                .on_connection_event(ConnectionEvent::DialUpgradeError(DialUpgradeError {
-                    info,
-                    error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(err)),
-                })),
-            (
-                EitherOutput::Second(info),
-                ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::B(err))),
-            ) => self
-                .proto2
-                .on_connection_event(ConnectionEvent::DialUpgradeError(DialUpgradeError {
-                    info,
-                    error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(err)),
-                })),
-            (
-                EitherOutput::Second(_),
-                ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::A(_))),
-            ) => {
-                panic!("Wrong API usage; the upgrade error doesn't match the outbound open info");
-            }
+                .on_connection_event(ConnectionEvent::DialUpgradeError(err)),
         }
     }
 
