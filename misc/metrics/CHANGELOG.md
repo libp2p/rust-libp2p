@@ -4,6 +4,8 @@
 
 - Add `connections_establishment_duration` metric. See [PR 3134].
 
+- Bump MSRV to 1.65.0.
+
 - Update to `libp2p-dcutr` `v0.9.0`.
 
 - Update to `libp2p-ping` `v0.42.0`.
