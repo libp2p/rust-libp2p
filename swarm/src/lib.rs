@@ -113,13 +113,13 @@ pub use connection::{
     PendingOutboundConnectionError,
 };
 pub use executor::Executor;
-pub use handler::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerSelect, ConnectionHandlerUpgrErr,
-    IntoConnectionHandlerSelect, KeepAlive, OneShotHandler,
-    OneShotHandlerConfig, SubstreamProtocol,
-};
 #[allow(deprecated)]
 pub use handler::IntoConnectionHandler;
+pub use handler::{
+    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerSelect, ConnectionHandlerUpgrErr,
+    IntoConnectionHandlerSelect, KeepAlive, OneShotHandler, OneShotHandlerConfig,
+    SubstreamProtocol,
+};
 #[cfg(feature = "macros")]
 pub use libp2p_swarm_derive::NetworkBehaviour;
 pub use registry::{AddAddressResult, AddressRecord, AddressScore};

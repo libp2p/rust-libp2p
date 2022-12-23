@@ -82,8 +82,9 @@ where
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
     ) -> Result<(), Box<dyn Error + Send + 'static>> {
-        let Some(inner) = self.inner.as_mut() else {
-            return Ok(())
+        let inner = match self.inner.as_mut() {
+            None => return Ok(()),
+            Some(inner) => inner,
         };
 
         inner.handle_pending_inbound_connection(connection_id, local_addr, remote_addr)?;
@@ -98,8 +99,9 @@ where
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
     ) -> Result<THandler<Self>, Box<dyn Error + Send + 'static>> {
-        let Some(inner) = self.inner.as_mut() else {
-            return Ok(ToggleConnectionHandler { inner: None })
+        let inner = match self.inner.as_mut() {
+            None => return Ok(ToggleConnectionHandler { inner: None }),
+            Some(inner) => inner,
         };
 
         let handler = inner.handle_established_inbound_connection(
@@ -121,8 +123,9 @@ where
         effective_role: Endpoint,
         connection_id: ConnectionId,
     ) -> Result<Vec<Multiaddr>, Box<dyn Error + Send + 'static>> {
-        let Some(inner) = self.inner.as_mut() else {
-            return Ok(vec![])
+        let inner = match self.inner.as_mut() {
+            None => return Ok(vec![]),
+            Some(inner) => inner,
         };
 
         let addresses = inner.handle_pending_outbound_connection(
@@ -142,8 +145,9 @@ where
         role_override: Endpoint,
         connection_id: ConnectionId,
     ) -> Result<THandler<Self>, Box<dyn Error + Send + 'static>> {
-        let Some(inner) = self.inner.as_mut() else {
-            return Ok(ToggleConnectionHandler { inner: None })
+        let inner = match self.inner.as_mut() {
+            None => return Ok(ToggleConnectionHandler { inner: None }),
+            Some(inner) => inner,
         };
 
         let handler = inner.handle_established_outbound_connection(
