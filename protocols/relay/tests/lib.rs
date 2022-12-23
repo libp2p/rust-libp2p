@@ -342,61 +342,17 @@ where
 }
 
 #[derive(NetworkBehaviour)]
-#[behaviour(
-    out_event = "RelayEvent",
-    event_process = false,
-    prelude = "libp2p_swarm::derive_prelude"
-)]
+#[behaviour(prelude = "libp2p_swarm::derive_prelude")]
 struct Relay {
     relay: relay::Behaviour,
     ping: ping::Behaviour,
 }
 
-#[derive(Debug)]
-enum RelayEvent {
-    Relay(relay::Event),
-    Ping(ping::Event),
-}
-
-impl From<relay::Event> for RelayEvent {
-    fn from(event: relay::Event) -> Self {
-        RelayEvent::Relay(event)
-    }
-}
-
-impl From<ping::Event> for RelayEvent {
-    fn from(event: ping::Event) -> Self {
-        RelayEvent::Ping(event)
-    }
-}
-
 #[derive(NetworkBehaviour)]
-#[behaviour(
-    out_event = "ClientEvent",
-    event_process = false,
-    prelude = "libp2p_swarm::derive_prelude"
-)]
+#[behaviour(prelude = "libp2p_swarm::derive_prelude")]
 struct Client {
     relay: relay::client::Behaviour,
     ping: ping::Behaviour,
-}
-
-#[derive(Debug)]
-enum ClientEvent {
-    Relay(relay::client::Event),
-    Ping(ping::Event),
-}
-
-impl From<relay::client::Event> for ClientEvent {
-    fn from(event: relay::client::Event) -> Self {
-        ClientEvent::Relay(event)
-    }
-}
-
-impl From<ping::Event> for ClientEvent {
-    fn from(event: ping::Event) -> Self {
-        ClientEvent::Ping(event)
-    }
 }
 
 fn spawn_swarm_on_pool<B: NetworkBehaviour + Send>(pool: &LocalPool, swarm: Swarm<B>) {

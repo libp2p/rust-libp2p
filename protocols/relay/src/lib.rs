@@ -72,6 +72,8 @@ static_assertions::const_assert! {
 }
 
 /// The ID of an outgoing / incoming, relay / destination request.
+// TODO remove this type and it's usage on `TransportToBehaviourMsg::DialReq`
+// when removed from `v2`.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct RequestId(u64);
 

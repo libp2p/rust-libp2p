@@ -72,11 +72,11 @@ use thiserror::Error;
 ///    # use libp2p_core::{Multiaddr, multiaddr::{Protocol}, Transport, PeerId};
 ///    # use libp2p_core::transport::memory::MemoryTransport;
 ///    # use libp2p_core::transport::choice::OrTransport;
-///    # use libp2p_relay::client;
+///    # use libp2p_relay as relay;
 ///    # let relay_id = PeerId::random();
 ///    # let local_peer_id = PeerId::random();
 ///    let actual_transport = MemoryTransport::default();
-///    let (relay_transport, behaviour) = client::Behaviour::new_transport_and_behaviour(
+///    let (relay_transport, behaviour) = relay::client::new(
 ///       local_peer_id,
 ///    );
 ///    let mut transport = OrTransport::new(relay_transport, actual_transport);

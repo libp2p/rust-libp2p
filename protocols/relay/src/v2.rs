@@ -167,5 +167,8 @@ pub mod protocol {
     pub const STOP_PROTOCOL_NAME: &[u8; 32] = crate::STOP_PROTOCOL_NAME;
 }
 
-#[deprecated(since = "0.15.0", note = "Use libp2p_relay::RequestId instead.")]
+#[deprecated(
+    since = "0.15.0",
+    note = "RequestId will be deprecated as it isn't used"
+)]
 pub type RequestId = super::RequestId;
