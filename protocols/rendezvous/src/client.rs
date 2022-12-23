@@ -193,13 +193,15 @@ impl NetworkBehaviour for Behaviour {
             Some(peer) => peer,
         };
 
-        Ok(self
+        let addresses = self
             .discovered_peers
             .iter()
             .filter_map(|((candidate, _), addresses)| (candidate == &peer).then_some(addresses))
             .flatten()
             .cloned()
-            .collect())
+            .collect();
+
+        Ok(addresses)
     }
 
     fn handle_established_outbound_connection(
