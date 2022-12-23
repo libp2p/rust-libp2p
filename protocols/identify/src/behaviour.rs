@@ -18,18 +18,19 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::handler::{self, InEvent, Proto};
+use crate::handler::{self, Handler, InEvent};
 use crate::protocol::{Info, Protocol, UpgradeError};
 use libp2p_core::{
-    connection::ConnectionId, multiaddr, ConnectedPoint, Multiaddr, PeerId, PublicKey,
+    connection::ConnectionId, multiaddr, ConnectedPoint, Endpoint, Multiaddr, PeerId, PublicKey,
 };
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm};
 use libp2p_swarm::{
     dial_opts::DialOpts, AddressScore, ConnectionHandlerUpgrErr, DialError, ExternalAddresses,
     ListenAddresses, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
-    THandlerInEvent, THandlerOutEvent,
+    THandler, THandlerInEvent, THandlerOutEvent,
 };
 use lru::LruCache;
+use std::error::Error;
 use std::num::NonZeroUsize;
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -236,17 +237,11 @@ impl Behaviour {
 }
 
 impl NetworkBehaviour for Behaviour {
-    type ConnectionHandler = Proto;
+    type ConnectionHandler = Handler;
     type OutEvent = Event;
 
     fn new_handler(&mut self) -> Self::ConnectionHandler {
-        Proto::new(
-            self.config.initial_delay,
-            self.config.interval,
-            self.config.local_public_key.clone(),
-            self.config.protocol_version.clone(),
-            self.config.agent_version.clone(),
-        )
+        unreachable!("We override the new callbacks")
     }
 
     fn on_connection_handler_event(
@@ -427,6 +422,42 @@ impl NetworkBehaviour for Behaviour {
             | FromSwarm::NewExternalAddr(_)
             | FromSwarm::ExpiredExternalAddr(_) => {}
         }
+    }
+
+    fn handle_established_inbound_connection(
+        &mut self,
+        peer: PeerId,
+        _: ConnectionId,
+        _: &Multiaddr,
+        remote_addr: &Multiaddr,
+    ) -> Result<THandler<Self>, Box<dyn Error + Send + 'static>> {
+        Ok(Handler::new(
+            self.config.initial_delay,
+            self.config.interval,
+            peer,
+            self.config.local_public_key.clone(),
+            self.config.protocol_version.clone(),
+            self.config.agent_version.clone(),
+            remote_addr.clone(),
+        ))
+    }
+
+    fn handle_established_outbound_connection(
+        &mut self,
+        peer: PeerId,
+        addr: &Multiaddr,
+        _: Endpoint,
+        _: ConnectionId,
+    ) -> Result<THandler<Self>, Box<dyn Error + Send + 'static>> {
+        Ok(Handler::new(
+            self.config.initial_delay,
+            self.config.interval,
+            peer,
+            self.config.local_public_key.clone(),
+            self.config.protocol_version.clone(),
+            self.config.agent_version.clone(),
+            addr.clone(), // TODO: This is weird? That is the public address we dialed, shouldn't need to tell the other party?
+        ))
     }
 }
 
