@@ -234,9 +234,9 @@ impl NetworkBehaviour for Client {
         &mut self,
         event_source: PeerId,
         _connection: ConnectionId,
-        _event: THandlerOutEvent<Self>,
+        handler_event: THandlerOutEvent<Self>,
     ) {
-        let handler_event = match _event {
+        let handler_event = match handler_event {
             Either::Left(e) => e,
             Either::Right(v) => void::unreachable(v),
         };
