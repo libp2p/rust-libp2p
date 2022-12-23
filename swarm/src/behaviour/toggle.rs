@@ -29,7 +29,6 @@ use crate::{
     NetworkBehaviour, NetworkBehaviourAction, PollParameters, THandlerInEvent, THandlerOutEvent,
 };
 use either::Either;
-use libp2p_core::connection::ConnectionId;
 use libp2p_core::{
     either::{EitherError, EitherOutput},
     upgrade::{DeniedUpgrade, EitherUpgrade},

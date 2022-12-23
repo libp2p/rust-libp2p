@@ -39,8 +39,8 @@ use libp2p_swarm::{
         AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, ExpiredExternalAddr,
         ExpiredListenAddr, FromSwarm,
     },
-    ConnectionHandler, ExternalAddresses, IntoConnectionHandler, ListenAddresses, NetworkBehaviour,
-    NetworkBehaviourAction, PollParameters, THandlerInEvent, THandlerOutEvent,
+    ExternalAddresses, ListenAddresses, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
+    THandlerInEvent, THandlerOutEvent,
 };
 use std::{
     collections::{HashMap, VecDeque},

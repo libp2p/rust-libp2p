@@ -24,7 +24,6 @@ use crate::behaviour::{
 use crate::handler::either::IntoEitherHandler;
 use crate::{THandlerInEvent, THandlerOutEvent};
 use either::Either;
-use libp2p_core::connection::ConnectionId;
 use libp2p_core::{Multiaddr, PeerId};
 use std::{task::Context, task::Poll};
 

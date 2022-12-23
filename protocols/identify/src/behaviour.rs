@@ -25,9 +25,9 @@ use libp2p_core::{
 };
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm};
 use libp2p_swarm::{
-    dial_opts::DialOpts, AddressScore, ConnectionHandler, ConnectionHandlerUpgrErr, DialError,
-    ExternalAddresses, IntoConnectionHandler, ListenAddresses, NetworkBehaviour,
-    NetworkBehaviourAction, NotifyHandler, PollParameters, THandlerInEvent, THandlerOutEvent,
+    dial_opts::DialOpts, AddressScore, ConnectionHandlerUpgrErr, DialError, ExternalAddresses,
+    ListenAddresses, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
+    THandlerInEvent, THandlerOutEvent,
 };
 use lru::LruCache;
 use std::num::NonZeroUsize;
