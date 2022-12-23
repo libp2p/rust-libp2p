@@ -442,7 +442,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         let mut ph_ty = None;
         for field in data_struct.fields.iter() {
             let ty = &field.ty;
-            let field_info = quote! { <#ty as #trait_to_impl>::ConnectionHandler };
+            let field_info = quote! { #t_handler<#ty> };
             match ph_ty {
                 Some(ev) => ph_ty = Some(quote! { #proto_select_ident<#ev, #field_info> }),
                 ref mut ev @ None => *ev = Some(field_info),
