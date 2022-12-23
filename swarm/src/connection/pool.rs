@@ -212,6 +212,7 @@ where
 
 /// Event that can happen on the `Pool`.
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum PoolEvent<THandler>
 where
     THandler: ConnectionHandler,
