@@ -139,11 +139,14 @@ impl Behaviour {
     }
 
     fn on_dial_failure(&mut self, DialFailure { peer_id, id, .. }: DialFailure) {
-        let Some((relayed_connection_id, role)) = self.direct_outgoing_connection_attempts.remove(&id) else {
-            return;
-        };
-        let Role::Initiator { attempt } = role else {
-            return;
+        let (relayed_connection_id, role) =
+            match self.direct_outgoing_connection_attempts.remove(&id) {
+                None => return,
+                Some((relayed_connection_id, role)) => (relayed_connection_id, role),
+            };
+        let attempt = match role {
+            Role::Listener => return,
+            Role::Initiator { attempt } => attempt,
         };
 
         let peer_id = peer_id.expect("Peer of `Prototype::DirectConnection` is always known.");
