@@ -342,7 +342,7 @@ impl NetworkBehaviour for Floodsub {
         _: ConnectionId,
         _: &Multiaddr,
         _: &Multiaddr,
-    ) -> std::result::Result<THandler<Self>, Box<dyn std::error::Error + Send + 'static>> {
+    ) -> Result<THandler<Self>, Box<dyn std::error::Error + Send + 'static>> {
         Ok(Default::default())
     }
 
@@ -352,7 +352,7 @@ impl NetworkBehaviour for Floodsub {
         _: &Multiaddr,
         _: Endpoint,
         _: ConnectionId,
-    ) -> std::result::Result<THandler<Self>, Box<dyn std::error::Error + Send + 'static>> {
+    ) -> Result<THandler<Self>, Box<dyn std::error::Error + Send + 'static>> {
         Ok(Default::default())
     }
 
