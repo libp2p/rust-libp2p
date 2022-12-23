@@ -1,15 +1,17 @@
 use crate::behaviour::{FromSwarm, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
+use crate::derive_prelude::Multiaddr;
 use crate::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
 use crate::{
-    ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive, SubstreamProtocol,
+    ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive, SubstreamProtocol, THandler,
     THandlerInEvent, THandlerOutEvent,
 };
 use libp2p_core::connection::ConnectionId;
 use libp2p_core::upgrade::DeniedUpgrade;
-use libp2p_core::PeerId;
 use libp2p_core::UpgradeError;
+use libp2p_core::{Endpoint, PeerId};
+use std::error::Error;
 use std::task::{Context, Poll};
 use void::Void;
 
@@ -20,25 +22,24 @@ impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = ConnectionHandler;
     type OutEvent = Void;
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
-        ConnectionHandler
-    }
-
-    fn on_connection_handler_event(
+    fn handle_established_inbound_connection(
         &mut self,
         _: PeerId,
         _: ConnectionId,
-        event: THandlerOutEvent<Self>,
-    ) {
-        void::unreachable(event)
+        _: &Multiaddr,
+        _: &Multiaddr,
+    ) -> Result<THandler<Self>, Box<dyn Error + Send + 'static>> {
+        Ok(ConnectionHandler)
     }
 
-    fn poll(
+    fn handle_established_outbound_connection(
         &mut self,
-        _: &mut Context<'_>,
-        _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>> {
-        Poll::Pending
+        _: PeerId,
+        _: &Multiaddr,
+        _: Endpoint,
+        _: ConnectionId,
+    ) -> Result<THandler<Self>, Box<dyn Error + Send + 'static>> {
+        Ok(ConnectionHandler)
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
@@ -56,6 +57,23 @@ impl NetworkBehaviour for Behaviour {
             | FromSwarm::NewExternalAddr(_)
             | FromSwarm::ExpiredExternalAddr(_) => {}
         }
+    }
+
+    fn on_connection_handler_event(
+        &mut self,
+        _: PeerId,
+        _: ConnectionId,
+        event: THandlerOutEvent<Self>,
+    ) {
+        void::unreachable(event)
+    }
+
+    fn poll(
+        &mut self,
+        _: &mut Context<'_>,
+        _: &mut impl PollParameters,
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>> {
+        Poll::Pending
     }
 }
 

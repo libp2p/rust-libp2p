@@ -21,10 +21,11 @@
 use crate::behaviour::{
     self, inject_from_swarm, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
 };
-use crate::handler::either::IntoEitherHandler;
-use crate::{THandlerInEvent, THandlerOutEvent};
+use crate::{THandler, THandlerInEvent, THandlerOutEvent};
 use either::Either;
-use libp2p_core::{Multiaddr, PeerId};
+use libp2p_core::connection::ConnectionId;
+use libp2p_core::{Endpoint, Multiaddr, PeerId};
+use std::error::Error;
 use std::{task::Context, task::Poll};
 
 /// Implementation of [`NetworkBehaviour`] that can be either of two implementations.
@@ -33,20 +34,99 @@ where
     L: NetworkBehaviour,
     R: NetworkBehaviour,
 {
-    type ConnectionHandler = IntoEitherHandler<L::ConnectionHandler, R::ConnectionHandler>;
+    type ConnectionHandler = Either<THandler<L>, THandler<R>>;
     type OutEvent = Either<L::OutEvent, R::OutEvent>;
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
+    fn handle_pending_inbound_connection(
+        &mut self,
+        connection_id: ConnectionId,
+        local_addr: &Multiaddr,
+        remote_addr: &Multiaddr,
+    ) -> Result<(), Box<dyn Error + Send + 'static>> {
         match self {
-            Either::Left(a) => IntoEitherHandler::Left(a.new_handler()),
-            Either::Right(b) => IntoEitherHandler::Right(b.new_handler()),
+            Either::Left(inner) => {
+                inner.handle_pending_inbound_connection(connection_id, local_addr, remote_addr)?
+            }
+            Either::Right(inner) => {
+                inner.handle_pending_inbound_connection(connection_id, local_addr, remote_addr)?
+            }
+        };
+
+        Ok(())
+    }
+
+    fn handle_established_inbound_connection(
+        &mut self,
+        peer: PeerId,
+        connection_id: ConnectionId,
+        local_addr: &Multiaddr,
+        remote_addr: &Multiaddr,
+    ) -> Result<THandler<Self>, Box<dyn Error + Send + 'static>> {
+        match self {
+            Either::Left(inner) => Ok(Either::Left(inner.handle_established_inbound_connection(
+                peer,
+                connection_id,
+                local_addr,
+                remote_addr,
+            )?)),
+            Either::Right(inner) => {
+                Ok(Either::Right(inner.handle_established_inbound_connection(
+                    peer,
+                    connection_id,
+                    local_addr,
+                    remote_addr,
+                )?))
+            }
         }
     }
 
-    fn addresses_of_peer(&mut self, peer_id: &PeerId) -> Vec<Multiaddr> {
+    fn handle_pending_outbound_connection(
+        &mut self,
+        maybe_peer: Option<PeerId>,
+        addresses: &[Multiaddr],
+        effective_role: Endpoint,
+        connection_id: ConnectionId,
+    ) -> Result<Vec<Multiaddr>, Box<dyn Error + Send + 'static>> {
+        let addresses = match self {
+            Either::Left(inner) => inner.handle_pending_outbound_connection(
+                maybe_peer,
+                addresses,
+                effective_role,
+                connection_id,
+            )?,
+            Either::Right(inner) => inner.handle_pending_outbound_connection(
+                maybe_peer,
+                addresses,
+                effective_role,
+                connection_id,
+            )?,
+        };
+
+        Ok(addresses)
+    }
+
+    fn handle_established_outbound_connection(
+        &mut self,
+        peer: PeerId,
+        addr: &Multiaddr,
+        role_override: Endpoint,
+        connection_id: ConnectionId,
+    ) -> Result<THandler<Self>, Box<dyn Error + Send + 'static>> {
         match self {
-            Either::Left(a) => a.addresses_of_peer(peer_id),
-            Either::Right(b) => b.addresses_of_peer(peer_id),
+            Either::Left(inner) => Ok(Either::Left(inner.handle_established_outbound_connection(
+                peer,
+                addr,
+                role_override,
+                connection_id,
+            )?)),
+            Either::Right(inner) => Ok(Either::Right(
+                inner.handle_established_outbound_connection(
+                    peer,
+                    addr,
+                    role_override,
+                    connection_id,
+                )?,
+            )),
         }
     }
 

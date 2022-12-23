@@ -140,9 +140,12 @@ pub trait NetworkBehaviour: 'static {
     // /// Note that the handler is returned to the [`NetworkBehaviour`] on connection failure and
     // /// connection closing.
     #[deprecated(
+        since = "0.42.0",
         note = "Use one or more of `NetworkBehaviour::{handle_pending_inbound_connection,handle_established_inbound_connection,handle_pending_outbound_connection,handle_established_outbound_connection}` instead."
     )]
-    fn new_handler(&mut self) -> Self::ConnectionHandler;
+    fn new_handler(&mut self) -> Self::ConnectionHandler {
+        panic!("You must implement `handle_established_inbound_connection` and `handle_established_outbound_connection`.")
+    }
 
     /// Callback that is invoked for every new inbound connection.
     ///

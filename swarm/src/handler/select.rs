@@ -20,8 +20,8 @@
 
 use crate::handler::{
     ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr,
-    DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound, IntoConnectionHandler,
-    KeepAlive, ListenUpgradeError, SubstreamProtocol,
+    DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound, KeepAlive,
+    ListenUpgradeError, SubstreamProtocol,
 };
 use crate::upgrade::SendWrapper;
 
@@ -52,10 +52,12 @@ impl<TProto1, TProto2> IntoConnectionHandlerSelect<TProto1, TProto2> {
     }
 }
 
-impl<TProto1, TProto2> IntoConnectionHandler for IntoConnectionHandlerSelect<TProto1, TProto2>
+#[allow(deprecated)]
+impl<TProto1, TProto2> crate::handler::IntoConnectionHandler
+    for IntoConnectionHandlerSelect<TProto1, TProto2>
 where
-    TProto1: IntoConnectionHandler,
-    TProto2: IntoConnectionHandler,
+    TProto1: crate::handler::IntoConnectionHandler,
+    TProto2: crate::handler::IntoConnectionHandler,
 {
     type Handler = ConnectionHandlerSelect<TProto1::Handler, TProto2::Handler>;
 

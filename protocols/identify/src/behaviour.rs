@@ -240,10 +240,6 @@ impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = Handler;
     type OutEvent = Event;
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
-        unreachable!("We override the new callbacks")
-    }
-
     fn on_connection_handler_event(
         &mut self,
         peer_id: PeerId,

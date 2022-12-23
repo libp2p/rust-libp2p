@@ -26,11 +26,11 @@ use crate::topic::Topic;
 use crate::FloodsubConfig;
 use cuckoofilter::{CuckooError, CuckooFilter};
 use fnv::FnvHashSet;
-use libp2p_core::{connection::ConnectionId, PeerId};
+use libp2p_core::{connection::ConnectionId, Endpoint, Multiaddr, PeerId};
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm};
 use libp2p_swarm::{
     dial_opts::DialOpts, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, OneShotHandler,
-    PollParameters, THandlerInEvent, THandlerOutEvent,
+    PollParameters, THandler, THandlerInEvent, THandlerOutEvent,
 };
 use log::warn;
 use smallvec::SmallVec;
@@ -336,8 +336,24 @@ impl NetworkBehaviour for Floodsub {
     type ConnectionHandler = OneShotHandler<FloodsubProtocol, FloodsubRpc, InnerMessage>;
     type OutEvent = FloodsubEvent;
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
-        Default::default()
+    fn handle_established_inbound_connection(
+        &mut self,
+        _: PeerId,
+        _: ConnectionId,
+        _: &Multiaddr,
+        _: &Multiaddr,
+    ) -> std::result::Result<THandler<Self>, Box<dyn std::error::Error + Send + 'static>> {
+        Ok(Default::default())
+    }
+
+    fn handle_established_outbound_connection(
+        &mut self,
+        _: PeerId,
+        _: &Multiaddr,
+        _: Endpoint,
+        _: ConnectionId,
+    ) -> std::result::Result<THandler<Self>, Box<dyn std::error::Error + Send + 'static>> {
+        Ok(Default::default())
     }
 
     fn on_connection_handler_event(

@@ -37,13 +37,13 @@ use rand::{seq::SliceRandom, thread_rng};
 
 use libp2p_core::{
     connection::ConnectionId, identity::Keypair, multiaddr::Protocol::Ip4,
-    multiaddr::Protocol::Ip6, Multiaddr, PeerId,
+    multiaddr::Protocol::Ip6, Endpoint, Multiaddr, PeerId,
 };
 use libp2p_swarm::{
     behaviour::{AddressChange, ConnectionClosed, ConnectionEstablished, FromSwarm},
     dial_opts::DialOpts,
-    NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters, THandlerInEvent,
-    THandlerOutEvent,
+    NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters, THandler,
+    THandlerInEvent, THandlerOutEvent,
 };
 use wasm_timer::Instant;
 
@@ -2226,7 +2226,7 @@ where
                     let score_p1 = *scores.get(p1).unwrap_or(&0.0);
                     let score_p2 = *scores.get(p2).unwrap_or(&0.0);
 
-                    score_p1.partial_cmp(&score_p2).unwrap_or(Ordering::Equal)
+                    score_p1.partial_cmp(&score_p2).unwrap_or(Equal)
                 });
                 // shuffle everything except the last retain_scores many peers (the best ones)
                 shuffled[..peers.len() - self.config.retain_scores()].shuffle(&mut rng);
@@ -3297,7 +3297,13 @@ where
     type ConnectionHandler = GossipsubHandler;
     type OutEvent = GossipsubEvent;
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
+    fn handle_established_inbound_connection(
+        &mut self,
+        _: PeerId,
+        _: ConnectionId,
+        _: &Multiaddr,
+        _: &Multiaddr,
+    ) -> Result<THandler<Self>, Box<dyn std::error::Error + Send + 'static>> {
         let protocol_config = ProtocolConfig::new(
             self.config.protocol_id().clone(),
             self.config.custom_id_version().clone(),
@@ -3306,7 +3312,31 @@ where
             self.config.support_floodsub(),
         );
 
-        GossipsubHandler::new(protocol_config, self.config.idle_timeout())
+        Ok(GossipsubHandler::new(
+            protocol_config,
+            self.config.idle_timeout(),
+        ))
+    }
+
+    fn handle_established_outbound_connection(
+        &mut self,
+        _: PeerId,
+        _: &Multiaddr,
+        _: Endpoint,
+        _: ConnectionId,
+    ) -> Result<THandler<Self>, Box<dyn std::error::Error + Send + 'static>> {
+        let protocol_config = ProtocolConfig::new(
+            self.config.protocol_id().clone(),
+            self.config.custom_id_version().clone(),
+            self.config.max_transmit_size(),
+            self.config.validation_mode().clone(),
+            self.config.support_floodsub(),
+        );
+
+        Ok(GossipsubHandler::new(
+            protocol_config,
+            self.config.idle_timeout(),
+        ))
     }
 
     fn on_connection_handler_event(
@@ -3646,7 +3676,7 @@ fn validate_config(
     Ok(())
 }
 
-impl<C: DataTransform, F: TopicSubscriptionFilter> fmt::Debug for Gossipsub<C, F> {
+impl<C: DataTransform, F: TopicSubscriptionFilter> Debug for Gossipsub<C, F> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Gossipsub")
             .field("config", &self.config)
@@ -3664,7 +3694,7 @@ impl<C: DataTransform, F: TopicSubscriptionFilter> fmt::Debug for Gossipsub<C, F
     }
 }
 
-impl fmt::Debug for PublishConfig {
+impl Debug for PublishConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             PublishConfig::Signing { author, .. } => {

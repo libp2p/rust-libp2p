@@ -3,10 +3,11 @@ use crate::handler::{
     ConnectionEvent, ConnectionHandlerEvent, FullyNegotiatedInbound, FullyNegotiatedOutbound,
     KeepAlive, SubstreamProtocol,
 };
-use crate::{THandlerInEvent, THandlerOutEvent};
+use crate::{THandler, THandlerInEvent, THandlerOutEvent};
 use libp2p_core::connection::ConnectionId;
 use libp2p_core::upgrade::DeniedUpgrade;
-use libp2p_core::PeerId;
+use libp2p_core::{Endpoint, Multiaddr, PeerId};
+use std::error::Error;
 use std::task::{Context, Poll};
 use void::Void;
 
@@ -23,8 +24,24 @@ impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = ConnectionHandler;
     type OutEvent = Void;
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
-        ConnectionHandler
+    fn handle_established_inbound_connection(
+        &mut self,
+        _: PeerId,
+        _: ConnectionId,
+        _: &Multiaddr,
+        _: &Multiaddr,
+    ) -> Result<THandler<Self>, Box<dyn Error + Send + 'static>> {
+        Ok(ConnectionHandler)
+    }
+
+    fn handle_established_outbound_connection(
+        &mut self,
+        _: PeerId,
+        _: &Multiaddr,
+        _: Endpoint,
+        _: ConnectionId,
+    ) -> Result<THandler<Self>, Box<dyn Error + Send + 'static>> {
+        Ok(ConnectionHandler)
     }
 
     fn on_connection_handler_event(

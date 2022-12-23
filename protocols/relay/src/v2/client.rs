@@ -155,10 +155,6 @@ impl NetworkBehaviour for Client {
     type ConnectionHandler = Either<Handler, dummy::ConnectionHandler>;
     type OutEvent = Event;
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
-        unreachable!("We override the new callbacks.")
-    }
-
     fn handle_established_inbound_connection(
         &mut self,
         peer: PeerId,

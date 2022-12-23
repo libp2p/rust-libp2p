@@ -200,11 +200,6 @@ impl NetworkBehaviour for Behaviour {
         Either<relayed::Handler, Either<direct::Handler, dummy::ConnectionHandler>>;
     type OutEvent = Event;
 
-    #[allow(deprecated)]
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
-        unreachable!("We override the new callbacks.")
-    }
-
     fn handle_established_inbound_connection(
         &mut self,
         _peer: PeerId,

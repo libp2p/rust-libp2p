@@ -47,11 +47,12 @@ mod protocol;
 
 use handler::Handler;
 pub use handler::{Config, Failure, Success};
-use libp2p_core::{connection::ConnectionId, PeerId};
+use libp2p_core::{connection::ConnectionId, Endpoint, Multiaddr, PeerId};
 use libp2p_swarm::{
-    behaviour::FromSwarm, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
+    behaviour::FromSwarm, NetworkBehaviour, NetworkBehaviourAction, PollParameters, THandler,
     THandlerInEvent, THandlerOutEvent,
 };
+use std::error::Error;
 use std::{
     collections::VecDeque,
     task::{Context, Poll},
@@ -120,8 +121,44 @@ impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = Handler;
     type OutEvent = Event;
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
-        Handler::new(self.config.clone())
+    fn handle_established_inbound_connection(
+        &mut self,
+        _: PeerId,
+        _: ConnectionId,
+        _: &Multiaddr,
+        _: &Multiaddr,
+    ) -> std::result::Result<THandler<Self>, Box<dyn Error + Send + 'static>> {
+        Ok(Handler::new(self.config.clone()))
+    }
+
+    fn handle_established_outbound_connection(
+        &mut self,
+        _: PeerId,
+        _: &Multiaddr,
+        _: Endpoint,
+        _: ConnectionId,
+    ) -> std::result::Result<THandler<Self>, Box<dyn Error + Send + 'static>> {
+        Ok(Handler::new(self.config.clone()))
+    }
+
+    fn on_swarm_event(
+        &mut self,
+        event: libp2p_swarm::behaviour::FromSwarm<Self::ConnectionHandler>,
+    ) {
+        match event {
+            FromSwarm::ConnectionEstablished(_)
+            | FromSwarm::ConnectionClosed(_)
+            | FromSwarm::AddressChange(_)
+            | FromSwarm::DialFailure(_)
+            | FromSwarm::ListenFailure(_)
+            | FromSwarm::NewListener(_)
+            | FromSwarm::NewListenAddr(_)
+            | FromSwarm::ExpiredListenAddr(_)
+            | FromSwarm::ListenerError(_)
+            | FromSwarm::ListenerClosed(_)
+            | FromSwarm::NewExternalAddr(_)
+            | FromSwarm::ExpiredExternalAddr(_) => {}
+        }
     }
 
     fn on_connection_handler_event(
@@ -150,26 +187,6 @@ impl NetworkBehaviour for Behaviour {
             Poll::Ready(NetworkBehaviourAction::GenerateEvent(e))
         } else {
             Poll::Pending
-        }
-    }
-
-    fn on_swarm_event(
-        &mut self,
-        event: libp2p_swarm::behaviour::FromSwarm<Self::ConnectionHandler>,
-    ) {
-        match event {
-            FromSwarm::ConnectionEstablished(_)
-            | FromSwarm::ConnectionClosed(_)
-            | FromSwarm::AddressChange(_)
-            | FromSwarm::DialFailure(_)
-            | FromSwarm::ListenFailure(_)
-            | FromSwarm::NewListener(_)
-            | FromSwarm::NewListenAddr(_)
-            | FromSwarm::ExpiredListenAddr(_)
-            | FromSwarm::ListenerError(_)
-            | FromSwarm::ListenerClosed(_)
-            | FromSwarm::NewExternalAddr(_)
-            | FromSwarm::ExpiredExternalAddr(_) => {}
         }
     }
 }

@@ -612,6 +612,7 @@ pub trait IntoConnectionHandler: Send + 'static {
     }
 }
 
+#[allow(deprecated)]
 impl<T> IntoConnectionHandler for T
 where
     T: ConnectionHandler,

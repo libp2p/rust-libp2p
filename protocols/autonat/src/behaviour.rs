@@ -528,10 +528,6 @@ impl NetworkBehaviour for Behaviour {
             .handle_established_outbound_connection(peer, addr, role_override, connection_id)
     }
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
-        unreachable!("We override the new callbacks.")
-    }
-
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
         self.listen_addresses.on_swarm_event(&event);
         self.external_addresses.on_swarn_event(&event);

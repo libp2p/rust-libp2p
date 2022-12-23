@@ -27,14 +27,16 @@ use crate::behaviour::{socket::AsyncSocket, timer::Builder};
 use crate::Config;
 use futures::Stream;
 use if_watch::IfEvent;
-use libp2p_core::{Multiaddr, PeerId};
+use libp2p_core::connection::ConnectionId;
+use libp2p_core::{Endpoint, Multiaddr, PeerId};
 use libp2p_swarm::behaviour::{ConnectionClosed, FromSwarm};
 use libp2p_swarm::{
-    dummy, ListenAddresses, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
+    dummy, ListenAddresses, NetworkBehaviour, NetworkBehaviourAction, PollParameters, THandler,
     THandlerInEvent, THandlerOutEvent,
 };
 use smallvec::SmallVec;
 use std::collections::hash_map::{Entry, HashMap};
+use std::error::Error;
 use std::{cmp, fmt, io, net::IpAddr, pin::Pin, task::Context, task::Poll, time::Instant};
 
 /// An abstraction to allow for compatibility with various async runtimes.
@@ -174,25 +176,43 @@ where
     type ConnectionHandler = dummy::ConnectionHandler;
     type OutEvent = Event;
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
-        dummy::ConnectionHandler
-    }
-
-    fn addresses_of_peer(&mut self, peer_id: &PeerId) -> Vec<Multiaddr> {
-        self.discovered_nodes
-            .iter()
-            .filter(|(peer, _, _)| peer == peer_id)
-            .map(|(_, addr, _)| addr.clone())
-            .collect()
-    }
-
-    fn on_connection_handler_event(
+    fn handle_established_inbound_connection(
         &mut self,
         _: PeerId,
-        _: libp2p_core::connection::ConnectionId,
-        ev: THandlerOutEvent<Self>,
-    ) {
-        void::unreachable(ev)
+        _: ConnectionId,
+        _: &Multiaddr,
+        _: &Multiaddr,
+    ) -> Result<THandler<Self>, Box<dyn std::error::Error + Send + 'static>> {
+        Ok(dummy::ConnectionHandler)
+    }
+
+    fn handle_pending_outbound_connection(
+        &mut self,
+        maybe_peer: Option<PeerId>,
+        _addresses: &[Multiaddr],
+        _effective_role: Endpoint,
+        _connection_id: ConnectionId,
+    ) -> Result<Vec<Multiaddr>, Box<dyn Error + Send + 'static>> {
+        let Some(peer_id) = maybe_peer else {
+            return Ok(vec![])
+        };
+
+        Ok(self
+            .discovered_nodes
+            .iter()
+            .filter(|(peer, _, _)| peer == &peer_id)
+            .map(|(_, addr, _)| addr.clone())
+            .collect())
+    }
+
+    fn handle_established_outbound_connection(
+        &mut self,
+        _: PeerId,
+        _: &Multiaddr,
+        _: Endpoint,
+        _: ConnectionId,
+    ) -> Result<THandler<Self>, Box<dyn std::error::Error + Send + 'static>> {
+        Ok(dummy::ConnectionHandler)
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
@@ -225,6 +245,15 @@ where
             | FromSwarm::NewExternalAddr(_)
             | FromSwarm::ExpiredExternalAddr(_) => {}
         }
+    }
+
+    fn on_connection_handler_event(
+        &mut self,
+        _: PeerId,
+        _: libp2p_core::connection::ConnectionId,
+        ev: THandlerOutEvent<Self>,
+    ) {
+        void::unreachable(ev)
     }
 
     fn poll(

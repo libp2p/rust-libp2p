@@ -70,12 +70,12 @@ pub use handler::ProtocolSupport;
 
 use futures::channel::oneshot;
 use handler::{Handler, RequestProtocol};
-use libp2p_core::{connection::ConnectionId, ConnectedPoint, Multiaddr, PeerId};
+use libp2p_core::{connection::ConnectionId, ConnectedPoint, Endpoint, Multiaddr, PeerId};
 use libp2p_swarm::{
     behaviour::{AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm},
     dial_opts::DialOpts,
-    NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters, THandlerInEvent,
-    THandlerOutEvent,
+    NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters, THandler,
+    THandlerInEvent, THandlerOutEvent,
 };
 use smallvec::SmallVec;
 use std::{
@@ -727,25 +727,58 @@ where
     type ConnectionHandler = Handler<TCodec>;
     type OutEvent = Event<TCodec::Request, TCodec::Response>;
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
-        Handler::new(
+    fn handle_established_inbound_connection(
+        &mut self,
+        _: PeerId,
+        _: ConnectionId,
+        _: &Multiaddr,
+        _: &Multiaddr,
+    ) -> Result<THandler<Self>, Box<dyn std::error::Error + Send + 'static>> {
+        Ok(Handler::new(
             self.inbound_protocols.clone(),
             self.codec.clone(),
             self.config.connection_keep_alive,
             self.config.request_timeout,
             self.next_inbound_id.clone(),
-        )
+        ))
     }
 
-    fn addresses_of_peer(&mut self, peer: &PeerId) -> Vec<Multiaddr> {
+    fn handle_pending_outbound_connection(
+        &mut self,
+        maybe_peer: Option<PeerId>,
+        _addresses: &[Multiaddr],
+        _effective_role: Endpoint,
+        _connection_id: ConnectionId,
+    ) -> Result<Vec<Multiaddr>, Box<dyn std::error::Error + Send + 'static>> {
+        let Some(peer) = maybe_peer else {
+            return Ok(vec![])
+        };
+
         let mut addresses = Vec::new();
-        if let Some(connections) = self.connected.get(peer) {
+        if let Some(connections) = self.connected.get(&peer) {
             addresses.extend(connections.iter().filter_map(|c| c.address.clone()))
         }
-        if let Some(more) = self.addresses.get(peer) {
+        if let Some(more) = self.addresses.get(&peer) {
             addresses.extend(more.into_iter().cloned());
         }
-        addresses
+
+        Ok(addresses)
+    }
+
+    fn handle_established_outbound_connection(
+        &mut self,
+        _: PeerId,
+        _: &Multiaddr,
+        _: Endpoint,
+        _: ConnectionId,
+    ) -> Result<THandler<Self>, Box<dyn std::error::Error + Send + 'static>> {
+        Ok(Handler::new(
+            self.inbound_protocols.clone(),
+            self.codec.clone(),
+            self.config.connection_keep_alive,
+            self.config.request_timeout,
+            self.next_inbound_id.clone(),
+        ))
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
