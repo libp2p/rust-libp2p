@@ -206,22 +206,30 @@ impl NetworkBehaviour for Behaviour {
     fn handle_established_inbound_connection(
         &mut self,
         _peer: PeerId,
-        _connection_id: ConnectionId,
+        connection_id: ConnectionId,
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
     ) -> Result<THandler<Self>, Box<dyn std::error::Error + Send + 'static>> {
         let is_relayed = local_addr.iter().any(|p| p == Protocol::P2pCircuit); // TODO: Make this an extension on `Multiaddr`.
 
-        // TODO: Why are we ignoring `Role`?
-        let Some((relayed_connection_id, _role)) = self.direct_outgoing_connection_attempts.remove(&_connection_id) else {
+        let relayed_connection_id = match self
+            .direct_outgoing_connection_attempts
+            .remove(&connection_id)
+        {
+            None => {
+                let handler = if is_relayed {
+                    Either::Left(relayed::Handler::new(ConnectedPoint::Listener {
+                        local_addr: local_addr.clone(),
+                        send_back_addr: remote_addr.clone(),
+                    })) // TODO: We could make two `relayed::Handler` here, one inbound one outbound.
+                } else {
+                    Either::Right(Either::Right(dummy::ConnectionHandler))
+                };
 
-            let handler = if is_relayed {
-                Either::Left(relayed::Handler::new(ConnectedPoint::Listener { local_addr: local_addr.clone(), send_back_addr: remote_addr.clone() })) // TODO: We could make two `relayed::Handler` here, one inbound one outbound.
-            } else {
-                Either::Right(Either::Right(dummy::ConnectionHandler))
-            };
-
-            return Ok(handler)
+                return Ok(handler);
+            }
+            // TODO: Why are we ignoring `Role`?
+            Some((relayed_connection_id, _)) => relayed_connection_id,
         };
 
         assert!(
@@ -239,20 +247,28 @@ impl NetworkBehaviour for Behaviour {
         _peer: PeerId,
         addr: &Multiaddr,
         role_override: Endpoint,
-        _connection_id: ConnectionId,
+        connection_id: ConnectionId,
     ) -> Result<THandler<Self>, Box<dyn std::error::Error + Send + 'static>> {
         let is_relayed = addr.iter().any(|p| p == Protocol::P2pCircuit); // TODO: Make this an extension on `Multiaddr`.
 
-        // TODO: Why are we ignoring `Role`?
-        let Some((relayed_connection_id, _role)) = self.direct_outgoing_connection_attempts.remove(&_connection_id) else {
+        let relayed_connection_id = match self
+            .direct_outgoing_connection_attempts
+            .remove(&connection_id)
+        {
+            None => {
+                let handler = if is_relayed {
+                    Either::Left(relayed::Handler::new(ConnectedPoint::Dialer {
+                        address: addr.clone(),
+                        role_override,
+                    })) // TODO: We could make two `relayed::Handler` here, one inbound one outbound.
+                } else {
+                    Either::Right(Either::Right(dummy::ConnectionHandler))
+                };
 
-            let handler = if is_relayed {
-                Either::Left(relayed::Handler::new(ConnectedPoint::Dialer { address: addr.clone(), role_override })) // TODO: We could make two `relayed::Handler` here, one inbound one outbound.
-            } else {
-                Either::Right(Either::Right(dummy::ConnectionHandler))
-            };
-
-            return Ok(handler)
+                return Ok(handler);
+            }
+            // TODO: Why are we ignoring `Role`?
+            Some((relayed_connection_id, _)) => relayed_connection_id,
         };
 
         assert!(
