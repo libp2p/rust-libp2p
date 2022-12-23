@@ -750,8 +750,9 @@ where
         _effective_role: Endpoint,
         _connection_id: ConnectionId,
     ) -> Result<Vec<Multiaddr>, Box<dyn std::error::Error + Send + 'static>> {
-        let Some(peer) = maybe_peer else {
-            return Ok(vec![])
+        let peer = match maybe_peer {
+            None => return Ok(vec![]),
+            Some(peer) => peer
         };
 
         let mut addresses = Vec::new();
