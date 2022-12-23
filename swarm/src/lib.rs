@@ -571,6 +571,12 @@ where
                 Ok(addresses) => {
                     if dial_opts.extend_addresses_through_behaviour() {
                         addresses_from_opts.extend(addresses)
+                    } else {
+                        let num_addresses = addresses.len();
+
+                        if num_addresses > 0 {
+                            log::debug!("discarding {num_addresses} addresses from `NetworkBehaviour` because `DialOpts::extend_addresses_through_behaviour is `false` for connection {connection_id}")
+                        }
                     }
                 }
                 Err(cause) => {

@@ -19,6 +19,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::multiaddr::{Multiaddr, Protocol};
+use std::fmt;
+use std::fmt::Debug;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 static NEXT_CONNECTION_ID: AtomicU64 = AtomicU64::new(0);
@@ -42,6 +44,12 @@ impl ConnectionId {
 impl Default for ConnectionId {
     fn default() -> Self {
         Self(NEXT_CONNECTION_ID.fetch_add(1, Ordering::SeqCst))
+    }
+}
+
+impl fmt::Display for ConnectionId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 
