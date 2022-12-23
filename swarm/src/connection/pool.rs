@@ -320,8 +320,7 @@ where
 {
     /// Creates a new empty `Pool`.
     pub fn new(local_id: PeerId, config: PoolConfig, limits: ConnectionLimits) -> Self {
-        let (pending_connection_events_tx, pending_connection_events_rx) =
-            mpsc::channel(config.task_event_buffer_size);
+        let (pending_connection_events_tx, pending_connection_events_rx) = mpsc::channel(0);
         let (established_connection_events_tx, established_connection_events_rx) =
             mpsc::channel(config.task_event_buffer_size);
         let executor = match config.executor {
@@ -787,14 +786,14 @@ where
                         )
                         .boxed(),
                     );
-
+                    let established_in = accepted_at.elapsed();
                     return Poll::Ready(PoolEvent::ConnectionEstablished {
                         peer_id: obtained_peer_id,
                         endpoint,
                         id,
                         other_established_connection_ids,
                         concurrent_dial_errors,
-                        established_in: accepted_at.elapsed(),
+                        established_in,
                         supported_protocols,
                     });
                 }
@@ -803,7 +802,7 @@ where
                         peer_id,
                         endpoint,
                         abort_notifier: _,
-                        accepted_at: _,
+                        accepted_at: _, // Ignoring the time it took for the connection to fail.
                     }) = self.pending.remove(&id)
                     {
                         self.counters.dec_pending(&endpoint);
