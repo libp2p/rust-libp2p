@@ -921,34 +921,34 @@ where
                 endpoint,
                 cause,
                 id,
-            } => {
-                match endpoint {
-                    ConnectedPoint::Dialer { .. } => {
-                        let dial_error = DialError::Denied { cause };
-                        self.behaviour
-                            .on_swarm_event(FromSwarm::DialFailure(DialFailure {
-                                id,
-                                error: &dial_error,
-                                peer_id: Some(peer_id),
-                            }));
-
-                        return Some(SwarmEvent::OutgoingConnectionError {
+            } => match endpoint {
+                ConnectedPoint::Dialer { .. } => {
+                    let dial_error = DialError::Denied { cause };
+                    self.behaviour
+                        .on_swarm_event(FromSwarm::DialFailure(DialFailure {
+                            id,
+                            error: &dial_error,
                             peer_id: Some(peer_id),
-                            error: dial_error,
-                        });
-                    }
-                    ConnectedPoint::Listener {
-                        local_addr,
-                        send_back_addr,
-                    } => return Some(SwarmEvent::IncomingConnectionError {
+                        }));
+
+                    return Some(SwarmEvent::OutgoingConnectionError {
+                        peer_id: Some(peer_id),
+                        error: dial_error,
+                    });
+                }
+                ConnectedPoint::Listener {
+                    local_addr,
+                    send_back_addr,
+                } => {
+                    return Some(SwarmEvent::IncomingConnectionError {
                         send_back_addr,
                         local_addr,
                         error: todo!(
                             "Got a 'pending' error here but we have an established connection ..."
                         ),
-                    }),
+                    })
                 }
-            }
+            },
             PoolEvent::ConnectionEvent { peer_id, id, event } => {
                 if self.banned_peer_connections.contains(&id) {
                     log::debug!("Ignoring event from banned peer: {} {:?}.", peer_id, id);
