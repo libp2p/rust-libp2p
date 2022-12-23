@@ -188,8 +188,9 @@ impl NetworkBehaviour for Behaviour {
         _effective_role: Endpoint,
         _connection_id: ConnectionId,
     ) -> Result<Vec<Multiaddr>, Box<dyn Error + Send + 'static>> {
-        let Some(peer) = maybe_peer else {
-            return Ok(vec![])
+        let peer = match maybe_peer {
+            None => return Ok(vec![]),
+            Some(peer) => peer,
         };
 
         Ok(self
