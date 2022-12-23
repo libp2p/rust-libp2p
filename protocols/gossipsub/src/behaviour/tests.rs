@@ -38,8 +38,7 @@ use std::hash::{Hash, Hasher};
 use std::thread::sleep;
 use std::time::Duration;
 
-#[derive(Default, Builder, Debug)]
-#[builder(default)]
+#[derive(Default, Debug)]
 struct InjectNodes<D, F>
 // TODO: remove trait bound Default when this issue is fixed:
 //  https://github.com/colin-kiegel/rust-derive-builder/issues/93
@@ -108,28 +107,59 @@ where
 
         (gs, peers, topic_hashes)
     }
-}
 
-impl<D, F> InjectNodesBuilder<D, F>
-where
-    D: DataTransform + Default + Clone + Send + 'static,
-    F: TopicSubscriptionFilter + Clone + Default + Send + 'static,
-{
-    pub fn create_network(&self) -> (Gossipsub<D, F>, Vec<PeerId>, Vec<TopicHash>) {
-        self.build().unwrap().create_network()
+    fn peer_no(mut self, peer_no: usize) -> Self {
+        self.peer_no = peer_no;
+        self
+    }
+
+    fn topics(mut self, topics: Vec<String>) -> Self {
+        self.topics = topics;
+        self
+    }
+
+    #[allow(clippy::wrong_self_convention)]
+    fn to_subscribe(mut self, to_subscribe: bool) -> Self {
+        self.to_subscribe = to_subscribe;
+        self
+    }
+
+    fn gs_config(mut self, gs_config: GossipsubConfig) -> Self {
+        self.gs_config = gs_config;
+        self
+    }
+
+    fn explicit(mut self, explicit: usize) -> Self {
+        self.explicit = explicit;
+        self
+    }
+
+    fn outbound(mut self, outbound: usize) -> Self {
+        self.outbound = outbound;
+        self
+    }
+
+    fn scoring(mut self, scoring: Option<(PeerScoreParams, PeerScoreThresholds)>) -> Self {
+        self.scoring = scoring;
+        self
+    }
+
+    fn subscription_filter(mut self, subscription_filter: F) -> Self {
+        self.subscription_filter = subscription_filter;
+        self
     }
 }
 
-fn inject_nodes<D, F>() -> InjectNodesBuilder<D, F>
+fn inject_nodes<D, F>() -> InjectNodes<D, F>
 where
     D: DataTransform + Default + Clone + Send + 'static,
     F: TopicSubscriptionFilter + Clone + Default + Send + 'static,
 {
-    InjectNodesBuilder::default()
+    InjectNodes::default()
 }
 
-fn inject_nodes1() -> InjectNodesBuilder<IdentityTransform, AllowAllSubscriptionFilter> {
-    inject_nodes()
+fn inject_nodes1() -> InjectNodes<IdentityTransform, AllowAllSubscriptionFilter> {
+    InjectNodes::<IdentityTransform, AllowAllSubscriptionFilter>::default()
 }
 
 // helper functions for testing
