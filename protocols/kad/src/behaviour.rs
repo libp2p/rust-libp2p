@@ -24,7 +24,7 @@ mod test;
 
 use crate::addresses::Addresses;
 use crate::handler::{
-    KademliaHandlerConfig, KademliaHandlerEvent, KademliaHandlerIn, KademliaHandlerProto,
+    KademliaHandler, KademliaHandlerConfig, KademliaHandlerEvent, KademliaHandlerIn,
     KademliaRequestId,
 };
 use crate::jobs::*;
@@ -39,18 +39,19 @@ use crate::record::{
 use crate::K_VALUE;
 use fnv::{FnvHashMap, FnvHashSet};
 use instant::Instant;
-use libp2p_core::{connection::ConnectionId, ConnectedPoint, Multiaddr, PeerId};
+use libp2p_core::{connection::ConnectionId, ConnectedPoint, Endpoint, Multiaddr, PeerId};
 use libp2p_swarm::behaviour::{
     AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm,
 };
 use libp2p_swarm::{
     dial_opts::{self, DialOpts},
     DialError, ExternalAddresses, ListenAddresses, NetworkBehaviour, NetworkBehaviourAction,
-    NotifyHandler, PollParameters, THandlerInEvent, THandlerOutEvent,
+    NotifyHandler, PollParameters, THandler, THandlerInEvent, THandlerOutEvent,
 };
 use log::{debug, info, warn};
 use smallvec::SmallVec;
 use std::collections::{BTreeMap, HashSet, VecDeque};
+use std::error::Error;
 use std::fmt;
 use std::num::NonZeroUsize;
 use std::task::{Context, Poll};
@@ -1985,15 +1986,53 @@ impl<TStore> NetworkBehaviour for Kademlia<TStore>
 where
     TStore: RecordStore + Send + 'static,
 {
-    type ConnectionHandler = KademliaHandlerProto<QueryId>;
+    type ConnectionHandler = KademliaHandler<QueryId>;
     type OutEvent = KademliaEvent;
 
     fn new_handler(&mut self) -> Self::ConnectionHandler {
-        KademliaHandlerProto::new(KademliaHandlerConfig {
-            protocol_config: self.protocol_config.clone(),
-            allow_listening: true,
-            idle_timeout: self.connection_idle_timeout,
-        })
+        unreachable!("We override the new callbacks!")
+    }
+
+    fn handle_established_inbound_connection(
+        &mut self,
+        peer: PeerId,
+        _: ConnectionId,
+        local_addr: &Multiaddr,
+        remote_addr: &Multiaddr,
+    ) -> Result<THandler<Self>, Box<dyn Error + Send + 'static>> {
+        Ok(KademliaHandler::new(
+            KademliaHandlerConfig {
+                protocol_config: self.protocol_config.clone(),
+                allow_listening: true,
+                idle_timeout: self.connection_idle_timeout,
+            },
+            ConnectedPoint::Listener {
+                local_addr: local_addr.clone(),
+                send_back_addr: remote_addr.clone(),
+            },
+            peer,
+        ))
+    }
+
+    fn handle_established_outbound_connection(
+        &mut self,
+        peer: PeerId,
+        addr: &Multiaddr,
+        role_override: Endpoint,
+        _: ConnectionId,
+    ) -> Result<THandler<Self>, Box<dyn Error + Send + 'static>> {
+        Ok(KademliaHandler::new(
+            KademliaHandlerConfig {
+                protocol_config: self.protocol_config.clone(),
+                allow_listening: true,
+                idle_timeout: self.connection_idle_timeout,
+            },
+            ConnectedPoint::Dialer {
+                address: addr.clone(),
+                role_override,
+            },
+            peer,
+        ))
     }
 
     fn addresses_of_peer(&mut self, peer_id: &PeerId) -> Vec<Multiaddr> {
