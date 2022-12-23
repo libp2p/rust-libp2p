@@ -7,9 +7,13 @@
 
 - Add `estblished_in` to `SwarmEvent::ConnectionEstablished`. See [PR 3134].
 
+- Remove type parameter from `PendingOutboundConnectionError` and `PendingInboundConnectionError`.
+  These two types are always used with `std::io::Error`. See [PR 3272].
+
 [PR 3170]: https://github.com/libp2p/rust-libp2p/pull/3170
 [PR 3134]: https://github.com/libp2p/rust-libp2p/pull/3134
 [PR 3153]: https://github.com/libp2p/rust-libp2p/pull/3153
+[PR 3272]: https://github.com/libp2p/rust-libp2p/pull/3272
 
 # 0.41.1
 

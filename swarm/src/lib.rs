@@ -232,7 +232,7 @@ pub enum SwarmEvent<TBehaviourOutEvent, THandlerErr> {
         /// Address used to send back data to the remote.
         send_back_addr: Multiaddr,
         /// The error that happened.
-        error: PendingInboundConnectionError<io::Error>,
+        error: PendingInboundConnectionError,
     },
     /// Outgoing connection attempt failed.
     OutgoingConnectionError {
@@ -303,7 +303,7 @@ where
     transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
 
     /// The nodes currently active.
-    pool: Pool<THandler<TBehaviour>, transport::Boxed<(PeerId, StreamMuxerBox)>>,
+    pool: Pool<THandler<TBehaviour>>,
 
     /// The local peer ID.
     local_peer_id: PeerId,
@@ -733,7 +733,7 @@ where
 
     fn handle_pool_event(
         &mut self,
-        event: PoolEvent<THandler<TBehaviour>, transport::Boxed<(PeerId, StreamMuxerBox)>>,
+        event: PoolEvent<THandler<TBehaviour>>,
     ) -> Option<SwarmEvent<TBehaviour::OutEvent, THandlerErr<TBehaviour>>> {
         match event {
             PoolEvent::ConnectionEstablished {
@@ -1130,7 +1130,7 @@ where
                         }
                     }
                     PendingNotifyHandler::Any(ids) => {
-                        match notify_any::<_, _, TBehaviour>(ids, &mut this.pool, event, cx) {
+                        match notify_any::<_, TBehaviour>(ids, &mut this.pool, event, cx) {
                             None => continue,
                             Some((event, ids)) => {
                                 let handler = PendingNotifyHandler::Any(ids);
@@ -1239,15 +1239,13 @@ fn notify_one<THandlerInEvent>(
 ///
 /// Returns `None` if either all connections are closing or the event
 /// was successfully sent to a handler, in either case the event is consumed.
-fn notify_any<TTrans, THandler, TBehaviour>(
+fn notify_any<THandler, TBehaviour>(
     ids: SmallVec<[ConnectionId; 10]>,
-    pool: &mut Pool<THandler, TTrans>,
+    pool: &mut Pool<THandler>,
     event: THandlerInEvent<TBehaviour>,
     cx: &mut Context<'_>,
 ) -> Option<(THandlerInEvent<TBehaviour>, SmallVec<[ConnectionId; 10]>)>
 where
-    TTrans: Transport,
-    TTrans::Error: Send + 'static,
     TBehaviour: NetworkBehaviour,
     THandler: IntoConnectionHandler,
     THandler::Handler: ConnectionHandler<
@@ -1572,8 +1570,8 @@ pub enum DialError {
     Transport(Vec<(Multiaddr, TransportError<io::Error>)>),
 }
 
-impl From<PendingOutboundConnectionError<io::Error>> for DialError {
-    fn from(error: PendingOutboundConnectionError<io::Error>) -> Self {
+impl From<PendingOutboundConnectionError> for DialError {
+    fn from(error: PendingOutboundConnectionError) -> Self {
         match error {
             PendingConnectionError::ConnectionLimit(limit) => DialError::ConnectionLimit(limit),
             PendingConnectionError::Aborted => DialError::Aborted,
