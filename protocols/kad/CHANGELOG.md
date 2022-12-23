@@ -1,3 +1,9 @@
+# 0.42.1
+
+- Skip invalid multiaddr in `Peer` `addrs`. See [PR XXX].
+
+[PR XXX]: https://github.com/libp2p/rust-libp2p/pull/XXX
+
 # 0.42.0
 
 - Update to `libp2p-core` `v0.38.0`.

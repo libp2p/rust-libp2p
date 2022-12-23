@@ -35,6 +35,7 @@ use futures::prelude::*;
 use instant::Instant;
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_core::{Multiaddr, PeerId};
+use log::debug;
 use prost::Message;
 use std::{borrow::Cow, convert::TryFrom, time::Duration};
 use std::{io, iter};
@@ -105,10 +106,13 @@ impl TryFrom<proto::message::Peer> for KadPeer {
 
         let mut addrs = Vec::with_capacity(peer.addrs.len());
         for addr in peer.addrs.into_iter() {
-            let as_ma = Multiaddr::try_from(addr).map_err(invalid_data)?;
-            addrs.push(as_ma);
+            match Multiaddr::try_from(addr) {
+                Ok(a) => addrs.push(a),
+                Err(e) => {
+                    debug!("Unable to parse multiaddr: {e:?}");
+                }
+            };
         }
-        debug_assert_eq!(addrs.len(), addrs.capacity());
 
         let connection_ty = proto::message::ConnectionType::from_i32(peer.connection)
             .ok_or_else(|| invalid_data("unknown connection type"))?
@@ -601,6 +605,29 @@ where
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
+    #[test]
+    fn skip_invalid_multiaddr() {
+        let valid_multiaddr: Multiaddr = "/ip6/2001:db8::/tcp/1234".parse().unwrap();
+        let valid_multiaddr_bytes = valid_multiaddr.to_vec();
+
+        let invalid_multiaddr = {
+            let a = vec![255; 8];
+            assert!(Multiaddr::try_from(a.clone()).is_err());
+            a
+        };
+
+        let payload = proto::message::Peer {
+            id: PeerId::random().to_bytes(),
+            addrs: vec![valid_multiaddr_bytes, invalid_multiaddr],
+            connection: proto::message::ConnectionType::CanConnect.into(),
+        };
+
+        let peer = KadPeer::try_from(payload).expect("not to fail");
+
+        assert_eq!(peer.multiaddrs, vec![valid_multiaddr])
+    }
 
     /*// TODO: restore
     use self::libp2p_tcp::TcpTransport;
