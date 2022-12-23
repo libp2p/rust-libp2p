@@ -40,8 +40,9 @@ use libp2p_swarm::{
         ExpiredListenAddr, FromSwarm,
     },
     ExternalAddresses, ListenAddresses, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
-    THandlerInEvent, THandlerOutEvent,
+    THandler, THandlerInEvent, THandlerOutEvent,
 };
+use std::error::Error;
 use std::{
     collections::{HashMap, VecDeque},
     iter,
@@ -476,12 +477,59 @@ impl NetworkBehaviour for Behaviour {
         }
     }
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
-        self.inner.new_handler()
+    fn handle_pending_inbound_connection(
+        &mut self,
+        connection_id: ConnectionId,
+        local_addr: &Multiaddr,
+        remote_addr: &Multiaddr,
+    ) -> Result<(), Box<dyn Error + Send + 'static>> {
+        self.inner
+            .handle_pending_inbound_connection(connection_id, local_addr, remote_addr)
     }
 
-    fn addresses_of_peer(&mut self, peer: &PeerId) -> Vec<Multiaddr> {
-        self.inner.addresses_of_peer(peer)
+    fn handle_established_inbound_connection(
+        &mut self,
+        peer: PeerId,
+        connection_id: ConnectionId,
+        local_addr: &Multiaddr,
+        remote_addr: &Multiaddr,
+    ) -> Result<THandler<Self>, Box<dyn Error + Send + 'static>> {
+        self.inner.handle_established_inbound_connection(
+            peer,
+            connection_id,
+            local_addr,
+            remote_addr,
+        )
+    }
+
+    fn handle_pending_outbound_connection(
+        &mut self,
+        maybe_peer: Option<PeerId>,
+        addresses: &[Multiaddr],
+        effective_role: Endpoint,
+        connection_id: ConnectionId,
+    ) -> Result<Vec<Multiaddr>, Box<dyn Error + Send + 'static>> {
+        self.inner.handle_pending_outbound_connection(
+            maybe_peer,
+            addresses,
+            effective_role,
+            connection_id,
+        )
+    }
+
+    fn handle_established_outbound_connection(
+        &mut self,
+        peer: PeerId,
+        addr: &Multiaddr,
+        role_override: Endpoint,
+        connection_id: ConnectionId,
+    ) -> Result<THandler<Self>, Box<dyn Error + Send + 'static>> {
+        self.inner
+            .handle_established_outbound_connection(peer, addr, role_override, connection_id)
+    }
+
+    fn new_handler(&mut self) -> Self::ConnectionHandler {
+        unreachable!("We override the new callbacks.")
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
