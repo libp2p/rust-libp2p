@@ -193,8 +193,9 @@ where
         _effective_role: Endpoint,
         _connection_id: ConnectionId,
     ) -> Result<Vec<Multiaddr>, Box<dyn Error + Send + 'static>> {
-        let Some(peer_id) = maybe_peer else {
-            return Ok(vec![])
+        let peer_id = match maybe_peer {
+            None => return Ok(vec![]),
+            Some(peer) => peer,
         };
 
         Ok(self

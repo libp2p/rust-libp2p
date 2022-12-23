@@ -752,7 +752,7 @@ where
     ) -> Result<Vec<Multiaddr>, Box<dyn std::error::Error + Send + 'static>> {
         let peer = match maybe_peer {
             None => return Ok(vec![]),
-            Some(peer) => peer
+            Some(peer) => peer,
         };
 
         let mut addresses = Vec::new();
