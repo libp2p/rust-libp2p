@@ -28,7 +28,7 @@ pub use listen_addresses::ListenAddresses;
 
 use crate::dial_opts::DialOpts;
 use crate::handler::{ConnectionHandler, IntoConnectionHandler};
-use crate::{AddressRecord, AddressScore, DialError, THandlerInEvent};
+use crate::{AddressRecord, AddressScore, DialError, THandler, THandlerInEvent};
 use libp2p_core::{
     connection::ConnectionId, transport::ListenerId, ConnectedPoint, Endpoint, Multiaddr, PeerId,
 };
@@ -172,10 +172,7 @@ pub trait NetworkBehaviour: 'static {
         _connection_id: ConnectionId,
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
-    ) -> Result<
-        <Self::ConnectionHandler as IntoConnectionHandler>::Handler,
-        Box<dyn std::error::Error + Send + 'static>,
-    > {
+    ) -> Result<THandler<Self>, Box<dyn std::error::Error + Send + 'static>> {
         #[allow(deprecated)]
         Ok(self.new_handler().into_handler(
             &peer,
@@ -222,10 +219,7 @@ pub trait NetworkBehaviour: 'static {
         addr: &Multiaddr,
         role_override: Endpoint,
         _connection_id: ConnectionId,
-    ) -> Result<
-        <Self::ConnectionHandler as IntoConnectionHandler>::Handler,
-        Box<dyn std::error::Error + Send + 'static>,
-    > {
+    ) -> Result<THandler<Self>, Box<dyn std::error::Error + Send + 'static>> {
         #[allow(deprecated)]
         Ok(self.new_handler().into_handler(
             &peer,
@@ -584,6 +578,20 @@ pub enum NetworkBehaviourAction<TOutEvent, TInEvent> {
         /// Whether to close a specific or all connections to the given peer.
         connection: CloseConnection,
     },
+}
+
+impl<TOutEvent, TInEvent> NetworkBehaviourAction<TOutEvent, TInEvent> {
+    /// TODO: Docs
+    pub fn dial(opts: impl Into<DialOpts>) -> (Self, ConnectionId) {
+        let id = ConnectionId::default();
+
+        let action = Self::Dial {
+            opts: opts.into(),
+            id,
+        };
+
+        (action, id)
+    }
 }
 
 impl<TOutEvent, TInEventOld> NetworkBehaviourAction<TOutEvent, TInEventOld> {
