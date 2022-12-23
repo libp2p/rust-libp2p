@@ -625,6 +625,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             type ConnectionHandler = #connection_handler_ty;
             type OutEvent = #out_event_reference;
 
+            #[allow(clippy::needless_question_mark)]
             fn handle_pending_inbound_connection(
                 &mut self,
                 connection_id: #connection_id,
@@ -636,6 +637,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 Ok(())
             }
 
+            #[allow(clippy::needless_question_mark)]
             fn handle_established_inbound_connection(
                 &mut self,
                 peer: #peer_id,
@@ -646,6 +648,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 Ok(#handle_established_inbound_connection)
             }
 
+            #[allow(clippy::needless_question_mark)]
             fn handle_pending_outbound_connection(
                 &mut self,
                 maybe_peer: Option<#peer_id>,
@@ -656,6 +659,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 #handle_pending_outbound_connection
             }
 
+            #[allow(clippy::needless_question_mark)]
             fn handle_established_outbound_connection(
                 &mut self,
                 peer: #peer_id,
