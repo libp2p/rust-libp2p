@@ -29,7 +29,7 @@ use libp2p_request_response::{
 };
 use libp2p_swarm::{
     dial_opts::{DialOpts, PeerCondition},
-    DialError, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
+    DialError, NetworkBehaviourAction, PollParameters,
 };
 use std::{
     collections::{HashMap, HashSet, VecDeque},

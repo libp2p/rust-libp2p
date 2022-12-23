@@ -22,7 +22,7 @@ use crate::codec::{Cookie, ErrorCode, Namespace, NewRegistration, Registration, 
 use crate::handler;
 use crate::handler::outbound;
 use crate::handler::outbound::OpenInfo;
-use crate::substream_handler::{InEvent, SubstreamConnectionHandler};
+use crate::substream_handler::SubstreamConnectionHandler;
 use futures::future::BoxFuture;
 use futures::future::FutureExt;
 use futures::stream::FuturesUnordered;
@@ -40,7 +40,6 @@ use libp2p_swarm::{
 use std::collections::{HashMap, VecDeque};
 use std::iter::FromIterator;
 use std::task::{Context, Poll};
-use void::Void;
 
 pub struct Behaviour {
     events: VecDeque<NetworkBehaviourAction<Event, THandlerInEvent<Self>>>,

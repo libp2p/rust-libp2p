@@ -121,13 +121,11 @@ pub use handler::{
 pub use libp2p_swarm_derive::NetworkBehaviour;
 pub use registry::{AddAddressResult, AddressRecord, AddressScore};
 
-use crate::behaviour::FromSwarm;
-use crate::derive_prelude::DialFailure;
 use connection::pool::{EstablishedConnection, Pool, PoolConfig, PoolEvent};
 use connection::IncomingInfo;
 use dial_opts::{DialOpts, PeerCondition};
 use futures::{executor::ThreadPoolBuilder, prelude::*, stream::FusedStream};
-use libp2p_core::connection::{ConnectionId, PendingPoint};
+use libp2p_core::connection::ConnectionId;
 use libp2p_core::muxing::SubstreamBox;
 use libp2p_core::{
     connection::ConnectedPoint,
