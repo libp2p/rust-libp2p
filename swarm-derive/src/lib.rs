@@ -254,11 +254,10 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         data_struct
             .fields
             .iter()
-            .enumerate()
             // The outmost handler belongs to the last behaviour.
             .rev()
             .enumerate()
-            .map(|(enum_n, (field_n, field))| {
+            .map(|(enum_n, field)| {
                 let inject = match field.ident {
                     Some(ref i) => quote! {
                     #[allow(deprecated)]
@@ -276,25 +275,27 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
     // Build the list of statements to put in the body of `on_swarm_event()`
     // for the `FromSwarm::ListenFailure` variant.
-    let on_listen_failure_stmts =
-        {
-            data_struct.fields.iter().enumerate().rev().enumerate().map(
-                |(enum_n, (field_n, field))| {
-                    let inject = match field.ident {
-                        Some(ref i) => quote! {
-                        #[allow(deprecated)]
-                        self.#i.inject_listen_failure(local_addr, send_back_addr, id);},
-                        None => quote! {
-                        #[allow(deprecated)]
-                        self.#enum_n.inject_listen_failure(local_addr, send_back_addr, id);},
-                    };
+    let on_listen_failure_stmts = {
+        data_struct
+            .fields
+            .iter()
+            .rev()
+            .enumerate()
+            .map(|(enum_n, field)| {
+                let inject = match field.ident {
+                    Some(ref i) => quote! {
+                    #[allow(deprecated)]
+                    self.#i.inject_listen_failure(local_addr, send_back_addr, id);},
+                    None => quote! {
+                    #[allow(deprecated)]
+                    self.#enum_n.inject_listen_failure(local_addr, send_back_addr, id);},
+                };
 
-                    quote! {
-                        #inject;
-                    }
-                },
-            )
-        };
+                quote! {
+                    #inject;
+                }
+            })
+    };
 
     // Build the list of statements to put in the body of `on_swarm_event()`
     // for the `FromSwarm::NewListener` variant.
