@@ -21,7 +21,6 @@
 use crate::v2::client::transport;
 use crate::v2::message_proto::Status;
 use crate::v2::protocol::{self, inbound_stop, outbound_hop};
-use either::Either;
 use futures::channel::{mpsc, oneshot};
 use futures::future::{BoxFuture, FutureExt};
 use futures::sink::SinkExt;
@@ -30,14 +29,14 @@ use futures_timer::Delay;
 use instant::Instant;
 use libp2p_core::either::EitherError;
 use libp2p_core::multiaddr::Protocol;
-use libp2p_core::{upgrade, ConnectedPoint, Multiaddr, PeerId};
+use libp2p_core::{upgrade, Multiaddr, PeerId};
 use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
-    ListenUpgradeError, SendWrapper,
+    ListenUpgradeError,
 };
 use libp2p_swarm::{
-    dummy, ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr,
-    IntoConnectionHandler, KeepAlive, SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
+    SubstreamProtocol,
 };
 use log::debug;
 use std::collections::{HashMap, VecDeque};
@@ -110,63 +109,6 @@ pub enum Event {
     },
 }
 
-pub struct Prototype {
-    local_peer_id: PeerId,
-    /// Initial [`In`] event from [`super::Client`] provided at creation time.
-    initial_in: Option<In>,
-}
-
-impl Prototype {
-    pub(crate) fn new(local_peer_id: PeerId, initial_in: Option<In>) -> Self {
-        Self {
-            local_peer_id,
-            initial_in,
-        }
-    }
-}
-
-impl IntoConnectionHandler for Prototype {
-    type Handler = Either<Handler, dummy::ConnectionHandler>;
-
-    fn into_handler(self, remote_peer_id: &PeerId, endpoint: &ConnectedPoint) -> Self::Handler {
-        if endpoint.is_relayed() {
-            if let Some(event) = self.initial_in {
-                debug!(
-                    "Established relayed instead of direct connection to {:?}, \
-                     dropping initial in event {:?}.",
-                    remote_peer_id, event
-                );
-            }
-
-            // Deny all substreams on relayed connection.
-            Either::Right(dummy::ConnectionHandler)
-        } else {
-            let mut handler = Handler {
-                remote_peer_id: *remote_peer_id,
-                remote_addr: endpoint.get_remote_address().clone(),
-                local_peer_id: self.local_peer_id,
-                queued_events: Default::default(),
-                pending_error: Default::default(),
-                reservation: Reservation::None,
-                alive_lend_out_substreams: Default::default(),
-                circuit_deny_futs: Default::default(),
-                send_error_futs: Default::default(),
-                keep_alive: KeepAlive::Yes,
-            };
-
-            if let Some(event) = self.initial_in {
-                handler.on_behaviour_event(event)
-            }
-
-            Either::Left(handler)
-        }
-    }
-
-    fn inbound_protocol(&self) -> <Self::Handler as ConnectionHandler>::InboundProtocol {
-        upgrade::EitherUpgrade::A(SendWrapper(inbound_stop::Upgrade {}))
-    }
-}
-
 pub struct Handler {
     local_peer_id: PeerId,
     remote_peer_id: PeerId,
@@ -213,6 +155,21 @@ pub struct Handler {
 }
 
 impl Handler {
+    pub fn new(local_peer_id: PeerId, remote_peer_id: PeerId, remote_addr: Multiaddr) -> Self {
+        Self {
+            local_peer_id,
+            remote_peer_id,
+            remote_addr,
+            pending_error: Default::default(),
+            keep_alive: KeepAlive::Yes,
+            queued_events: Default::default(),
+            reservation: Reservation::None,
+            alive_lend_out_substreams: Default::default(),
+            circuit_deny_futs: Default::default(),
+            send_error_futs: Default::default(),
+        }
+    }
+
     fn on_fully_negotiated_inbound(
         &mut self,
         FullyNegotiatedInbound {

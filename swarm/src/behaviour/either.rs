@@ -22,8 +22,9 @@ use crate::behaviour::{
     self, inject_from_swarm, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
 };
 use crate::handler::either::IntoEitherHandler;
-use crate::THandlerInEvent;
+use crate::{THandlerInEvent, THandlerOutEvent};
 use either::Either;
+use libp2p_core::connection::ConnectionId;
 use libp2p_core::{Multiaddr, PeerId};
 use std::{task::Context, task::Poll};
 
@@ -73,7 +74,7 @@ where
         &mut self,
         peer_id: PeerId,
         connection_id: libp2p_core::connection::ConnectionId,
-        event: crate::THandlerOutEvent<Self>,
+        event: THandlerOutEvent<Self>,
     ) {
         match (self, event) {
             (Either::Left(left), Either::Left(event)) => {

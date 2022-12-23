@@ -25,8 +25,11 @@ use crate::handler::{
     KeepAlive, ListenUpgradeError, SubstreamProtocol,
 };
 use crate::upgrade::SendWrapper;
-use crate::{NetworkBehaviour, NetworkBehaviourAction, PollParameters, THandlerInEvent};
+use crate::{
+    NetworkBehaviour, NetworkBehaviourAction, PollParameters, THandlerInEvent, THandlerOutEvent,
+};
 use either::Either;
+use libp2p_core::connection::ConnectionId;
 use libp2p_core::{
     either::{EitherError, EitherOutput},
     upgrade::{DeniedUpgrade, EitherUpgrade},
@@ -96,7 +99,7 @@ where
         &mut self,
         peer_id: PeerId,
         connection_id: libp2p_core::connection::ConnectionId,
-        event: crate::THandlerOutEvent<Self>,
+        event: THandlerOutEvent<Self>,
     ) {
         if let Some(behaviour) = &mut self.inner {
             #[allow(deprecated)]

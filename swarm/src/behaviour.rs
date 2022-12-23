@@ -28,7 +28,7 @@ pub use listen_addresses::ListenAddresses;
 
 use crate::dial_opts::DialOpts;
 use crate::handler::{ConnectionHandler, IntoConnectionHandler};
-use crate::{AddressRecord, AddressScore, DialError, THandler, THandlerInEvent};
+use crate::{AddressRecord, AddressScore, DialError, THandler, THandlerInEvent, THandlerOutEvent};
 use libp2p_core::{
     connection::ConnectionId, transport::ListenerId, ConnectedPoint, Endpoint, Multiaddr, PeerId,
 };
@@ -253,7 +253,7 @@ pub trait NetworkBehaviour: 'static {
         &mut self,
         _peer_id: PeerId,
         _connection_id: ConnectionId,
-        _event: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent,
+        _event: THandlerOutEvent<Self>,
     ) {
     }
 

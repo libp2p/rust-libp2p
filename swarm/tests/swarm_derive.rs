@@ -21,7 +21,9 @@
 use futures::StreamExt;
 use libp2p_identify as identify;
 use libp2p_ping as ping;
-use libp2p_swarm::{behaviour::FromSwarm, dummy, NetworkBehaviour, SwarmEvent, THandlerInEvent};
+use libp2p_swarm::{
+    behaviour::FromSwarm, dummy, NetworkBehaviour, SwarmEvent, THandlerInEvent, THandlerOutEvent,
+};
 use std::fmt::Debug;
 
 /// Small utility to check that a type implements `NetworkBehaviour`.
@@ -392,7 +394,7 @@ fn custom_out_event_no_type_parameters() {
             &mut self,
             _peer: PeerId,
             _connection: ConnectionId,
-            message: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent,
+            message: THandlerOutEvent<Self>,
         ) {
             void::unreachable(message);
         }

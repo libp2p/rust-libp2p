@@ -75,7 +75,7 @@ use libp2p_swarm::{
     behaviour::{AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm},
     dial_opts::DialOpts,
     IntoConnectionHandler, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
-    THandlerInEvent,
+    THandlerInEvent, THandlerOutEvent,
 };
 use smallvec::SmallVec;
 use std::{
@@ -773,8 +773,7 @@ where
         &mut self,
         peer: PeerId,
         connection: ConnectionId,
-        event: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as
-            libp2p_swarm::ConnectionHandler>::OutEvent,
+        event: THandlerOutEvent<Self>,
     ) {
         match event {
             handler::Event::Response {

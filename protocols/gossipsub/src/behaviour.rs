@@ -43,7 +43,7 @@ use libp2p_swarm::{
     behaviour::{AddressChange, ConnectionClosed, ConnectionEstablished, FromSwarm},
     dial_opts::DialOpts,
     ConnectionHandler, IntoConnectionHandler, NetworkBehaviour, NetworkBehaviourAction,
-    NotifyHandler, PollParameters, THandlerInEvent,
+    NotifyHandler, PollParameters, THandlerInEvent, THandlerOutEvent,
 };
 use wasm_timer::Instant;
 
@@ -3313,8 +3313,7 @@ where
         &mut self,
         propagation_source: PeerId,
         _connection_id: ConnectionId,
-        handler_event: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as
-            ConnectionHandler>::OutEvent,
+        handler_event: THandlerOutEvent<Self>,
     ) {
         match handler_event {
             HandlerEvent::PeerKind(kind) => {

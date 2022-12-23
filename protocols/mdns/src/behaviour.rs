@@ -27,11 +27,12 @@ use crate::behaviour::{socket::AsyncSocket, timer::Builder};
 use crate::Config;
 use futures::Stream;
 use if_watch::IfEvent;
+use libp2p_core::connection::ConnectionId;
 use libp2p_core::{Multiaddr, PeerId};
 use libp2p_swarm::behaviour::{ConnectionClosed, FromSwarm};
 use libp2p_swarm::{
     dummy, ConnectionHandler, ListenAddresses, NetworkBehaviour, NetworkBehaviourAction,
-    PollParameters, THandlerInEvent,
+    PollParameters, THandlerInEvent, THandlerOutEvent,
 };
 use smallvec::SmallVec;
 use std::collections::hash_map::{Entry, HashMap};
@@ -190,7 +191,7 @@ where
         &mut self,
         _: PeerId,
         _: libp2p_core::connection::ConnectionId,
-        ev: <Self::ConnectionHandler as ConnectionHandler>::OutEvent,
+        ev: THandlerOutEvent<Self>,
     ) {
         void::unreachable(ev)
     }

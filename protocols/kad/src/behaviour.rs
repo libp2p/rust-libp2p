@@ -46,7 +46,7 @@ use libp2p_swarm::behaviour::{
 use libp2p_swarm::{
     dial_opts::{self, DialOpts},
     DialError, ExternalAddresses, ListenAddresses, NetworkBehaviour, NetworkBehaviourAction,
-    NotifyHandler, PollParameters, THandlerInEvent,
+    NotifyHandler, PollParameters, THandlerInEvent, THandlerOutEvent,
 };
 use log::{debug, info, warn};
 use smallvec::SmallVec;
@@ -2023,7 +2023,7 @@ where
         &mut self,
         source: PeerId,
         connection: ConnectionId,
-        event: KademliaHandlerEvent<QueryId>,
+        event: THandlerOutEvent<Self>,
     ) {
         match event {
             KademliaHandlerEvent::ProtocolConfirmed { endpoint } => {

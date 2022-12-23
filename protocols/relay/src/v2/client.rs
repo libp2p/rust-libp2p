@@ -32,13 +32,16 @@ use futures::future::{BoxFuture, FutureExt};
 use futures::io::{AsyncRead, AsyncWrite};
 use futures::ready;
 use futures::stream::StreamExt;
+use handler::Handler;
 use libp2p_core::connection::ConnectionId;
-use libp2p_core::PeerId;
+use libp2p_core::multiaddr::Protocol;
+use libp2p_core::{Endpoint, Multiaddr, PeerId};
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm};
 use libp2p_swarm::dial_opts::DialOpts;
 use libp2p_swarm::{
-    ConnectionHandlerUpgrErr, NegotiatedSubstream, NetworkBehaviour, NetworkBehaviourAction,
-    NotifyHandler, PollParameters, THandlerInEvent,
+    dummy, ConnectionHandler, ConnectionHandlerUpgrErr, NegotiatedSubstream, NetworkBehaviour,
+    NetworkBehaviourAction, NotifyHandler, PollParameters, THandler, THandlerInEvent,
+    THandlerOutEvent,
 };
 use std::collections::{hash_map, HashMap, VecDeque};
 use std::io::{Error, ErrorKind, IoSlice};
@@ -98,6 +101,8 @@ pub struct Client {
 
     /// Queue of actions to return when polled.
     queued_actions: VecDeque<Event>,
+
+    pending_events: HashMap<ConnectionId, handler::In>,
 }
 
 impl Client {
@@ -110,6 +115,7 @@ impl Client {
             from_transport,
             directly_connected_peers: Default::default(),
             queued_actions: Default::default(),
+            pending_events: Default::default(),
         };
         (transport, behaviour)
     }
@@ -146,11 +152,55 @@ impl Client {
 }
 
 impl NetworkBehaviour for Client {
-    type ConnectionHandler = handler::Prototype;
+    type ConnectionHandler = Either<Handler, dummy::ConnectionHandler>;
     type OutEvent = Event;
 
     fn new_handler(&mut self) -> Self::ConnectionHandler {
-        handler::Prototype::new(self.local_peer_id, None)
+        unreachable!("We override the new callbacks.")
+    }
+
+    fn handle_established_inbound_connection(
+        &mut self,
+        peer: PeerId,
+        connection_id: ConnectionId,
+        local_addr: &Multiaddr,
+        remote_addr: &Multiaddr,
+    ) -> Result<THandler<Self>, Box<dyn std::error::Error + Send + 'static>> {
+        let is_relayed = local_addr.iter().any(|p| p == Protocol::P2pCircuit); // TODO: Make this an extension on `Multiaddr`.
+
+        if is_relayed {
+            return Ok(Either::Right(dummy::ConnectionHandler));
+        }
+
+        let mut handler = Handler::new(self.local_peer_id, peer, remote_addr.clone());
+
+        if let Some(event) = self.pending_events.remove(&connection_id) {
+            handler.on_behaviour_event(event)
+        }
+
+        Ok(Either::Left(handler))
+    }
+
+    fn handle_established_outbound_connection(
+        &mut self,
+        peer: PeerId,
+        addr: &Multiaddr,
+        _role_override: Endpoint,
+        connection_id: ConnectionId,
+    ) -> Result<THandler<Self>, Box<dyn std::error::Error + Send + 'static>> {
+        let is_relayed = addr.iter().any(|p| p == Protocol::P2pCircuit); // TODO: Make this an extension on `Multiaddr`.
+
+        if is_relayed {
+            return Ok(Either::Right(dummy::ConnectionHandler));
+        }
+
+        let mut handler = Handler::new(self.local_peer_id, peer, addr.clone());
+
+        if let Some(event) = self.pending_events.remove(&connection_id) {
+            handler.on_behaviour_event(event)
+        }
+
+        Ok(Either::Left(handler))
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
@@ -188,9 +238,9 @@ impl NetworkBehaviour for Client {
         &mut self,
         event_source: PeerId,
         _connection: ConnectionId,
-        handler_event: Either<handler::Event, void::Void>,
+        _event: THandlerOutEvent<Self>,
     ) {
-        let handler_event = match handler_event {
+        let handler_event = match _event {
             Either::Left(e) => e,
             Either::Right(v) => void::unreachable(v),
         };
@@ -269,19 +319,16 @@ impl NetworkBehaviour for Client {
                         event: Either::Left(handler::In::Reserve { to_listener }),
                     },
                     None => {
-                        // let handler = handler::Prototype::new(
-                        //     self.local_peer_id,
-                        //     Some(handler::In::Reserve { to_listener }),
-                        // );
-                        // TODO
-                        NetworkBehaviourAction::Dial {
-                            opts: DialOpts::peer_id(relay_peer_id)
+                        let (action, connection_id) = NetworkBehaviourAction::dial(
+                            DialOpts::peer_id(relay_peer_id)
                                 .addresses(vec![relay_addr])
-                                .extend_addresses_through_behaviour()
+                                .extend_addresses_through_behaviour() // TODO: Why?
                                 .build(),
+                        );
+                        self.pending_events
+                            .insert(connection_id, handler::In::Reserve { to_listener });
 
-                            id: Default::default(),
-                        }
+                        action
                     }
                 }
             }
@@ -306,21 +353,21 @@ impl NetworkBehaviour for Client {
                         }),
                     },
                     None => {
-                        // let handler = handler::Prototype::new(
-                        //     self.local_peer_id,
-                        //     Some(handler::In::EstablishCircuit {
-                        //         send_back,
-                        //         dst_peer_id,
-                        //     }),
-                        // );
-                        // TODO
-                        NetworkBehaviourAction::Dial {
-                            opts: DialOpts::peer_id(relay_peer_id)
+                        let (action, connection_id) = NetworkBehaviourAction::dial(
+                            DialOpts::peer_id(relay_peer_id)
                                 .addresses(vec![relay_addr])
-                                .extend_addresses_through_behaviour()
+                                .extend_addresses_through_behaviour() // TODO: Why?
                                 .build(),
-                            id: Default::default(),
-                        }
+                        );
+                        self.pending_events.insert(
+                            connection_id,
+                            handler::In::EstablishCircuit {
+                                send_back,
+                                dst_peer_id,
+                            },
+                        );
+
+                        action
                     }
                 }
             }

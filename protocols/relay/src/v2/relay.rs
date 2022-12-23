@@ -25,17 +25,19 @@ pub mod rate_limiter;
 
 use crate::v2::message_proto;
 use crate::v2::protocol::inbound_hop;
+use crate::v2::relay::handler::Handler;
 use either::Either;
 use instant::Instant;
 use libp2p_core::connection::ConnectionId;
 use libp2p_core::multiaddr::Protocol;
-use libp2p_core::PeerId;
+use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr, PeerId};
 use libp2p_swarm::behaviour::{ConnectionClosed, FromSwarm};
 use libp2p_swarm::{
-    ConnectionHandlerUpgrErr, ExternalAddresses, NetworkBehaviour, NetworkBehaviourAction,
-    NotifyHandler, PollParameters, THandlerInEvent,
+    dummy, ConnectionHandlerUpgrErr, ExternalAddresses, NetworkBehaviour, NetworkBehaviourAction,
+    NotifyHandler, PollParameters, THandler, THandlerInEvent, THandlerOutEvent,
 };
 use std::collections::{hash_map, HashMap, HashSet, VecDeque};
+use std::error::Error;
 use std::num::NonZeroU32;
 use std::ops::Add;
 use std::task::{Context, Poll};
@@ -252,17 +254,65 @@ impl Relay {
 }
 
 impl NetworkBehaviour for Relay {
-    type ConnectionHandler = handler::Prototype;
+    type ConnectionHandler = Either<Handler, dummy::ConnectionHandler>;
     type OutEvent = Event;
 
     fn new_handler(&mut self) -> Self::ConnectionHandler {
-        handler::Prototype {
-            config: handler::Config {
+        unreachable!("We override the new callbacks.")
+    }
+
+    fn handle_established_inbound_connection(
+        &mut self,
+        _peer: PeerId,
+        _connection_id: ConnectionId,
+        local_addr: &Multiaddr,
+        remote_addr: &Multiaddr,
+    ) -> Result<THandler<Self>, Box<dyn Error + Send + 'static>> {
+        let is_relayed = local_addr.iter().any(|p| p == Protocol::P2pCircuit); // TODO: Make this an extension on `Multiaddr`.
+
+        if is_relayed {
+            // Deny all substreams on relayed connection.
+            return Ok(Either::Right(dummy::ConnectionHandler));
+        }
+
+        Ok(Either::Left(Handler::new(
+            ConnectedPoint::Listener {
+                local_addr: local_addr.clone(),
+                send_back_addr: remote_addr.clone(),
+            },
+            handler::Config {
                 reservation_duration: self.config.reservation_duration,
                 max_circuit_duration: self.config.max_circuit_duration,
                 max_circuit_bytes: self.config.max_circuit_bytes,
             },
+        )))
+    }
+
+    fn handle_established_outbound_connection(
+        &mut self,
+        _peer: PeerId,
+        addr: &Multiaddr,
+        role_override: Endpoint,
+        _connection_id: ConnectionId,
+    ) -> Result<THandler<Self>, Box<dyn Error + Send + 'static>> {
+        let is_relayed = addr.iter().any(|p| p == Protocol::P2pCircuit); // TODO: Make this an extension on `Multiaddr`.
+
+        if is_relayed {
+            // Deny all substreams on relayed connection.
+            return Ok(Either::Right(dummy::ConnectionHandler));
         }
+
+        Ok(Either::Left(Handler::new(
+            ConnectedPoint::Dialer {
+                address: addr.clone(),
+                role_override,
+            },
+            handler::Config {
+                reservation_duration: self.config.reservation_duration,
+                max_circuit_duration: self.config.max_circuit_duration,
+                max_circuit_bytes: self.config.max_circuit_bytes,
+            },
+        )))
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
@@ -290,7 +340,7 @@ impl NetworkBehaviour for Relay {
         &mut self,
         event_source: PeerId,
         connection: ConnectionId,
-        event: Either<handler::Event, void::Void>,
+        event: THandlerOutEvent<Self>,
     ) {
         let event = match event {
             Either::Left(e) => e,
