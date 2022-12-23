@@ -592,7 +592,7 @@ pub enum NetworkBehaviourAction<TOutEvent, TInEvent> {
 impl<TOutEvent, TInEvent> NetworkBehaviourAction<TOutEvent, TInEvent> {
     /// TODO: Docs
     pub fn dial(opts: impl Into<DialOpts>) -> (Self, ConnectionId) {
-        let id = ConnectionId::default();
+        let id = ConnectionId::next();
 
         let action = Self::Dial {
             opts: opts.into(),

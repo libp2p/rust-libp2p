@@ -1139,7 +1139,7 @@ where
             debug!("Connecting to explicit peer {:?}", peer_id);
             self.events.push_back(NetworkBehaviourAction::Dial {
                 opts: DialOpts::peer_id(*peer_id).build(),
-                id: Default::default(),
+                id: ConnectionId::next(),
             });
         }
     }
@@ -1637,7 +1637,7 @@ where
                 // dial peer
                 self.events.push_back(NetworkBehaviourAction::Dial {
                     opts: DialOpts::peer_id(peer_id).build(),
-                    id: Default::default(),
+                    id: ConnectionId::next(),
                 });
             }
         }

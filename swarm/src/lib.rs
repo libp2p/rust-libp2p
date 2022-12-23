@@ -515,7 +515,7 @@ where
     /// ```
     pub fn dial(&mut self, opts: impl Into<DialOpts>) -> Result<ConnectionId, DialError> {
         let swarm_dial_opts = opts.into();
-        let id = ConnectionId::default();
+        let id = ConnectionId::next();
 
         self.dial_with_id(swarm_dial_opts, id)?;
 
@@ -966,7 +966,7 @@ where
                 local_addr,
                 send_back_addr,
             } => {
-                let connection_id = ConnectionId::default();
+                let connection_id = ConnectionId::next();
 
                 match self.behaviour.handle_pending_inbound_connection(
                     connection_id,

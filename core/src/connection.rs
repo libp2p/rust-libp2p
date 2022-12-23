@@ -39,10 +39,9 @@ impl ConnectionId {
     pub fn new(id: usize) -> Self {
         Self(id as u64)
     }
-}
 
-impl Default for ConnectionId {
-    fn default() -> Self {
+    /// Allocates a new [`ConnectionId`].
+    pub fn next() -> Self {
         Self(NEXT_CONNECTION_ID.fetch_add(1, Ordering::SeqCst))
     }
 }

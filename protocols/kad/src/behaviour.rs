@@ -577,7 +577,7 @@ where
                     kbucket::InsertResult::Pending { disconnected } => {
                         self.queued_events.push_back(NetworkBehaviourAction::Dial {
                             opts: DialOpts::peer_id(disconnected.into_preimage()).build(),
-                            id: Default::default(),
+                            id: ConnectionId::next(),
                         });
                         RoutingUpdate::Pending
                     }
@@ -1227,7 +1227,7 @@ where
                                     self.queued_events.push_back(NetworkBehaviourAction::Dial {
                                         opts: DialOpts::peer_id(disconnected.into_preimage())
                                             .build(),
-                                        id: Default::default(),
+                                        id: ConnectionId::next(),
                                     })
                                 }
                             }
@@ -2426,7 +2426,7 @@ where
                             query.inner.pending_rpcs.push((peer_id, event));
                             self.queued_events.push_back(NetworkBehaviourAction::Dial {
                                 opts: DialOpts::peer_id(peer_id).build(),
-                                id: Default::default(),
+                                id: ConnectionId::next(),
                             });
                         }
                     }

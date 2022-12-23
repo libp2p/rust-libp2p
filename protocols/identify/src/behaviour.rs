@@ -202,7 +202,7 @@ impl Behaviour {
 
                 self.events.push_back(NetworkBehaviourAction::Dial {
                     opts: DialOpts::peer_id(p).build(),
-                    id: Default::default(),
+                    id: ConnectionId::next(),
                 });
             }
         }

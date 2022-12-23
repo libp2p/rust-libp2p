@@ -1294,7 +1294,7 @@ fn network_behaviour_on_address_change() {
     let local_peer_id = PeerId::random();
 
     let remote_peer_id = PeerId::random();
-    let connection_id = ConnectionId::default();
+    let connection_id = ConnectionId::next();
     let old_address: Multiaddr = Protocol::Memory(1).into();
     let new_address: Multiaddr = Protocol::Memory(2).into();
 

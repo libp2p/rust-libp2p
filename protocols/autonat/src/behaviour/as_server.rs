@@ -138,7 +138,7 @@ impl<'a> HandleInnerEvent for AsServer<'a> {
                                     )
                                     .addresses(addrs)
                                     .build(),
-                                id: Default::default(),
+                                id: ConnectionId::next(),
                             },
                         ])
                     }
