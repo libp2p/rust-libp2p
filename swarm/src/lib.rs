@@ -124,6 +124,7 @@ pub use handler::{
 pub use libp2p_swarm_derive::NetworkBehaviour;
 pub use registry::{AddAddressResult, AddressRecord, AddressScore};
 
+use crate::behaviour::{DialFailure, FromSwarm};
 use connection::pool::{EstablishedConnection, Pool, PoolConfig, PoolEvent};
 use connection::IncomingInfo;
 use dial_opts::{DialOpts, PeerCondition};
@@ -787,7 +788,7 @@ where
                 other_established_connection_ids,
                 concurrent_dial_errors,
                 supported_protocols,
-                established_in
+                established_in,
             } => {
                 if self.banned_peers.contains(&peer_id) {
                     // Mark the connection for the banned peer as banned, thus withholding any
@@ -919,9 +920,34 @@ where
                 peer_id,
                 endpoint,
                 cause,
-                ..
+                id,
             } => {
-                return Some(todo!("Report connection error event, these are currently modeled in a weird way where we split them by incoming/outgoing on the `SwarmEvent` level but everywhere else by established/pending"))
+                match endpoint {
+                    ConnectedPoint::Dialer { .. } => {
+                        let dial_error = DialError::Denied { cause };
+                        self.behaviour
+                            .on_swarm_event(FromSwarm::DialFailure(DialFailure {
+                                id,
+                                error: &dial_error,
+                                peer_id: Some(peer_id),
+                            }));
+
+                        return Some(SwarmEvent::OutgoingConnectionError {
+                            peer_id: Some(peer_id),
+                            error: dial_error,
+                        });
+                    }
+                    ConnectedPoint::Listener {
+                        local_addr,
+                        send_back_addr,
+                    } => return Some(SwarmEvent::IncomingConnectionError {
+                        send_back_addr,
+                        local_addr,
+                        error: todo!(
+                            "Got a 'pending' error here but we have an established connection ..."
+                        ),
+                    }),
+                }
             }
             PoolEvent::ConnectionEvent { peer_id, id, event } => {
                 if self.banned_peer_connections.contains(&id) {
