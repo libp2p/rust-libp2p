@@ -55,7 +55,6 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     let trait_to_impl = quote! { #prelude_path::NetworkBehaviour };
     let either_ident = quote! { #prelude_path::EitherOutput };
     let network_behaviour_action = quote! { #prelude_path::NetworkBehaviourAction };
-    let into_connection_handler = quote! { #prelude_path::IntoConnectionHandler };
     let connection_handler = quote! { #prelude_path::ConnectionHandler };
     let proto_select_ident = quote! { #prelude_path::ConnectionHandlerSelect };
     let peer_id = quote! { #prelude_path::PeerId };
@@ -75,6 +74,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     let listener_error = quote! { #prelude_path::ListenerError };
     let listener_closed = quote! { #prelude_path::ListenerClosed };
     let t_handler_in_event = quote! { #prelude_path::THandlerInEvent };
+    let t_handler_out_event = quote! { #prelude_path::THandlerOutEvent };
     let t_handler = quote! { #prelude_path::THandler };
     let endpoint = quote! { #prelude_path::Endpoint };
 
@@ -674,7 +674,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 &mut self,
                 peer_id: #peer_id,
                 connection_id: #connection_id,
-                event: <<Self::ConnectionHandler as #into_connection_handler>::Handler as #connection_handler>::OutEvent
+                event: #t_handler_out_event<Self>
             ) {
                 match event {
                     #(#on_node_event_stmts),*

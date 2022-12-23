@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use std::{
-    cmp::{max, Ordering},
+    cmp::max,
     collections::HashSet,
     collections::VecDeque,
     collections::{BTreeSet, HashMap},

@@ -87,13 +87,12 @@ pub mod derive_prelude {
     pub use crate::ConnectionHandler;
     pub use crate::ConnectionHandlerSelect;
     pub use crate::DialError;
-    pub use crate::IntoConnectionHandler;
-    pub use crate::IntoConnectionHandlerSelect;
     pub use crate::NetworkBehaviour;
     pub use crate::NetworkBehaviourAction;
     pub use crate::PollParameters;
     pub use crate::THandler;
     pub use crate::THandlerInEvent;
+    pub use crate::THandlerOutEvent;
     pub use futures::prelude as futures;
     pub use libp2p_core::connection::ConnectionId;
     pub use libp2p_core::either::EitherOutput;
@@ -116,9 +115,11 @@ pub use connection::{
 pub use executor::Executor;
 pub use handler::{
     ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerSelect, ConnectionHandlerUpgrErr,
-    IntoConnectionHandler, IntoConnectionHandlerSelect, KeepAlive, OneShotHandler,
+    IntoConnectionHandlerSelect, KeepAlive, OneShotHandler,
     OneShotHandlerConfig, SubstreamProtocol,
 };
+#[allow(deprecated)]
+pub use handler::IntoConnectionHandler;
 #[cfg(feature = "macros")]
 pub use libp2p_swarm_derive::NetworkBehaviour;
 pub use registry::{AddAddressResult, AddressRecord, AddressScore};
@@ -159,6 +160,7 @@ type TBehaviourOutEvent<TBehaviour> = <TBehaviour as NetworkBehaviour>::OutEvent
 
 /// [`ConnectionHandler`] of the [`NetworkBehaviour`] for all the protocols the [`NetworkBehaviour`]
 /// supports.
+#[allow(deprecated)]
 pub type THandler<TBehaviour> =
     <<TBehaviour as NetworkBehaviour>::ConnectionHandler as IntoConnectionHandler>::Handler;
 
@@ -582,6 +584,7 @@ where
                 Err(cause) => {
                     let error = DialError::Denied { cause };
 
+                    #[allow(deprecated)]
                     self.behaviour
                         .inject_dial_failure(peer_id, &error, connection_id);
 

@@ -23,8 +23,8 @@ use crate::behaviour::{
     FromSwarm, ListenerClosed, ListenerError, NewExternalAddr, NewListenAddr, NewListener,
 };
 use crate::{
-    ConnectionHandler, IntoConnectionHandler, NetworkBehaviour, NetworkBehaviourAction,
-    PollParameters, THandlerInEvent, THandlerOutEvent,
+    ConnectionHandler, NetworkBehaviour, NetworkBehaviourAction, PollParameters, THandlerInEvent,
+    THandlerOutEvent,
 };
 use libp2p_core::{
     connection::ConnectionId, multiaddr::Multiaddr, transport::ListenerId, ConnectedPoint, PeerId,
@@ -130,11 +130,7 @@ where
     pub addresses_of_peer: Vec<PeerId>,
     pub on_connection_established: Vec<(PeerId, ConnectionId, ConnectedPoint, usize)>,
     pub on_connection_closed: Vec<(PeerId, ConnectionId, ConnectedPoint, usize)>,
-    pub on_event: Vec<(
-        PeerId,
-        ConnectionId,
-        <<TInner::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent,
-    )>,
+    pub on_event: Vec<(PeerId, ConnectionId, THandlerOutEvent<TInner>)>,
     pub on_dial_failure: Vec<Option<PeerId>>,
     pub on_new_listener: Vec<ListenerId>,
     pub on_new_listen_addr: Vec<(ListenerId, Multiaddr)>,
@@ -149,8 +145,7 @@ where
 impl<TInner> CallTraceBehaviour<TInner>
 where
     TInner: NetworkBehaviour,
-    <<TInner::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent:
-        Clone,
+    THandlerOutEvent<TInner>: Clone,
 {
     pub fn new(inner: TInner) -> Self {
         Self {
@@ -369,8 +364,7 @@ where
 impl<TInner> NetworkBehaviour for CallTraceBehaviour<TInner>
 where
     TInner: NetworkBehaviour,
-    <<TInner::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent:
-        Clone,
+    THandlerOutEvent<TInner>: Clone,
 {
     type ConnectionHandler = TInner::ConnectionHandler;
     type OutEvent = TInner::OutEvent;

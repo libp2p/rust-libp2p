@@ -803,7 +803,7 @@ where
                         peer_id,
                         endpoint,
                         abort_notifier: _,
-                        accepted_at,
+                        accepted_at: _,
                     }) = self.pending.remove(&id)
                     {
                         self.counters.dec_pending(&endpoint);

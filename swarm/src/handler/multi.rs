@@ -22,9 +22,11 @@
 //! indexed by some key.
 
 use crate::handler::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, IntoConnectionHandler,
+    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr,
     KeepAlive, SubstreamProtocol,
 };
+#[allow(deprecated)]
+use crate::handler::IntoConnectionHandler;
 use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, UpgradeInfoSend};
 use crate::NegotiatedSubstream;
 use futures::{future::BoxFuture, prelude::*};
