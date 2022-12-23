@@ -92,12 +92,14 @@ pub mod derive_prelude {
     pub use crate::NetworkBehaviour;
     pub use crate::NetworkBehaviourAction;
     pub use crate::PollParameters;
+    pub use crate::THandler;
     pub use crate::THandlerInEvent;
     pub use futures::prelude as futures;
     pub use libp2p_core::connection::ConnectionId;
     pub use libp2p_core::either::EitherOutput;
     pub use libp2p_core::transport::ListenerId;
     pub use libp2p_core::ConnectedPoint;
+    pub use libp2p_core::Endpoint;
     pub use libp2p_core::Multiaddr;
     pub use libp2p_core::PeerId;
 }
@@ -782,6 +784,7 @@ where
                 other_established_connection_ids,
                 concurrent_dial_errors,
                 supported_protocols,
+                established_in
             } => {
                 if self.banned_peers.contains(&peer_id) {
                     // Mark the connection for the banned peer as banned, thus withholding any
@@ -824,7 +827,7 @@ where
                         num_established,
                         endpoint,
                         concurrent_dial_errors,
-                        established_in: todo!(),
+                        established_in,
                     });
                 }
             }

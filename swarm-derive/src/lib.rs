@@ -57,7 +57,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     let network_behaviour_action = quote! { #prelude_path::NetworkBehaviourAction };
     let into_connection_handler = quote! { #prelude_path::IntoConnectionHandler };
     let connection_handler = quote! { #prelude_path::ConnectionHandler };
-    let into_proto_select_ident = quote! { #prelude_path::IntoConnectionHandlerSelect };
+    let proto_select_ident = quote! { #prelude_path::ConnectionHandlerSelect };
     let peer_id = quote! { #prelude_path::PeerId };
     let connection_id = quote! { #prelude_path::ConnectionId };
     let poll_parameters = quote! { #prelude_path::PollParameters };
@@ -75,6 +75,8 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     let listener_error = quote! { #prelude_path::ListenerError };
     let listener_closed = quote! { #prelude_path::ListenerClosed };
     let t_handler_in_event = quote! { #prelude_path::THandlerInEvent };
+    let t_handler = quote! { #prelude_path::THandler };
+    let endpoint = quote! { #prelude_path::Endpoint };
 
     // Build the generics.
     let impl_generics = {
@@ -166,18 +168,6 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         } else {
             Some(quote! {where #(#additional),*})
         }
-    };
-
-    // Build the list of statements to put in the body of `addresses_of_peer()`.
-    let addresses_of_peer_stmts = {
-        data_struct
-            .fields
-            .iter()
-            .enumerate()
-            .map(move |(field_n, field)| match field.ident {
-                Some(ref i) => quote! { out.extend(self.#i.addresses_of_peer(peer_id)); },
-                None => quote! { out.extend(self.#field_n.addresses_of_peer(peer_id)); },
-            })
     };
 
     // Build the list of statements to put in the body of `on_swarm_event()`
@@ -454,7 +444,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             let ty = &field.ty;
             let field_info = quote! { <#ty as #trait_to_impl>::ConnectionHandler };
             match ph_ty {
-                Some(ev) => ph_ty = Some(quote! { #into_proto_select_ident<#ev, #field_info> }),
+                Some(ev) => ph_ty = Some(quote! { #proto_select_ident<#ev, #field_info> }),
                 ref mut ev @ None => *ev = Some(field_info),
             }
         }
@@ -462,9 +452,25 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         ph_ty.unwrap_or(quote! {()}) // TODO: `!` instead
     };
 
-    // The content of `new_handler()`.
-    // Example output: `self.field1.select(self.field2.select(self.field3))`.
-    let new_handler = {
+    // The content of `handle_pending_inbound_connection`.
+    let handle_pending_inbound_connection_stmts =
+        data_struct
+            .fields
+            .iter()
+            .enumerate()
+            .map(|(field_n, field)| {
+                match field.ident {
+                    Some(ref i) => quote! {
+                        #trait_to_impl::handle_pending_inbound_connection(&mut self.#i, connection_id, local_addr, remote_addr)?;
+                    },
+                    None => quote! {
+                        #trait_to_impl::handle_pending_inbound_connection(&mut self.#field_n, connection_id, local_addr, remote_addr)?;
+                    }
+                }
+            });
+
+    // The content of `handle_established_inbound_connection`.
+    let handle_established_inbound_connection = {
         let mut out_handler = None;
 
         for (field_n, field) in data_struct.fields.iter().enumerate() {
@@ -474,13 +480,61 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             };
 
             let builder = quote! {
-                #field_name.new_handler()
+                #field_name.handle_established_inbound_connection(peer, connection_id, local_addr, remote_addr)?
             };
 
             match out_handler {
-                Some(h) => {
-                    out_handler = Some(quote! { #into_connection_handler::select(#h, #builder) })
-                }
+                Some(h) => out_handler = Some(quote! { #connection_handler::select(#h, #builder) }),
+                ref mut h @ None => *h = Some(builder),
+            }
+        }
+
+        out_handler.unwrap_or(quote! {()}) // TODO: See test `empty`.
+    };
+
+    // The content of `handle_pending_outbound_connection`.
+    let handle_pending_outbound_connection = {
+        let extend_stmts =
+            data_struct
+                .fields
+                .iter()
+                .enumerate()
+                .map(|(field_n, field)| {
+                    match field.ident {
+                        Some(ref i) => quote! {
+                            combined_addresses.extend(#trait_to_impl::handle_pending_outbound_connection(&mut self.#i, maybe_peer, addresses, effective_role, connection_id)?);
+                        },
+                        None => quote! {
+                            combined_addresses.extend(#trait_to_impl::handle_pending_outbound_connection(&mut self.#field_n, maybe_peer, addresses, effective_role, connection_id)?);
+                        }
+                    }
+                });
+
+        quote! {
+            let mut combined_addresses = vec![];
+
+            #(#extend_stmts)*
+
+            Ok(combined_addresses)
+        }
+    };
+
+    // The content of `handle_established_outbound_connection`.
+    let handle_established_outbound_connection = {
+        let mut out_handler = None;
+
+        for (field_n, field) in data_struct.fields.iter().enumerate() {
+            let field_name = match field.ident {
+                Some(ref i) => quote! { self.#i },
+                None => quote! { self.#field_n },
+            };
+
+            let builder = quote! {
+                #field_name.handle_established_outbound_connection(peer, addr, role_override, connection_id)?
+            };
+
+            match out_handler {
+                Some(h) => out_handler = Some(quote! { #connection_handler::select(#h, #builder) }),
                 ref mut h @ None => *h = Some(builder),
             }
         }
@@ -571,15 +625,45 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             type ConnectionHandler = #connection_handler_ty;
             type OutEvent = #out_event_reference;
 
-            fn new_handler(&mut self) -> Self::ConnectionHandler {
-                use #into_connection_handler;
-                #new_handler
+            fn handle_pending_inbound_connection(
+                &mut self,
+                connection_id: #connection_id,
+                local_addr: &#multiaddr,
+                remote_addr: &#multiaddr,
+            ) -> Result<(), Box<dyn ::std::error::Error + Send + 'static>> {
+                #(#handle_pending_inbound_connection_stmts)*
+
+                Ok(())
             }
 
-            fn addresses_of_peer(&mut self, peer_id: &#peer_id) -> Vec<#multiaddr> {
-                let mut out = Vec::new();
-                #(#addresses_of_peer_stmts);*
-                out
+            fn handle_established_inbound_connection(
+                &mut self,
+                peer: #peer_id,
+                connection_id: #connection_id,
+                local_addr: &#multiaddr,
+                remote_addr: &#multiaddr,
+            ) -> Result<#t_handler<Self>, Box<dyn ::std::error::Error + Send + 'static>> {
+                Ok(#handle_established_inbound_connection)
+            }
+
+            fn handle_pending_outbound_connection(
+                &mut self,
+                maybe_peer: Option<#peer_id>,
+                addresses: &[#multiaddr],
+                effective_role: #endpoint,
+                connection_id: #connection_id,
+            ) -> Result<::std::vec::Vec<#multiaddr>, Box<dyn ::std::error::Error + Send + 'static>> {
+                #handle_pending_outbound_connection
+            }
+
+            fn handle_established_outbound_connection(
+                &mut self,
+                peer: #peer_id,
+                addr: &#multiaddr,
+                role_override: #endpoint,
+                connection_id: #connection_id,
+            ) -> Result<#t_handler<Self>, Box<dyn ::std::error::Error + Send + 'static>> {
+                Ok(#handle_established_outbound_connection)
             }
 
             fn on_connection_handler_event(

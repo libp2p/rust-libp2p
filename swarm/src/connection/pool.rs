@@ -37,6 +37,7 @@ use futures::{
     ready,
     stream::FuturesUnordered,
 };
+use instant::Instant;
 use libp2p_core::connection::{ConnectionId, Endpoint, PendingPoint};
 use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerExt};
 use libp2p_core::ProtocolName;
@@ -184,6 +185,8 @@ struct PendingConnection {
     endpoint: PendingPoint,
     /// When dropped, notifies the task which then knows to terminate.
     abort_notifier: Option<oneshot::Sender<Void>>,
+    /// The moment we became aware of this possible connection, useful for timing metrics.
+    accepted_at: Instant,
 }
 
 impl PendingConnection {
@@ -230,7 +233,8 @@ where
         /// Addresses are dialed in parallel. Contains the addresses and errors
         /// of dial attempts that failed before the one successful dial.
         concurrent_dial_errors: Option<Vec<(Multiaddr, TransportError<std::io::Error>)>>,
-
+        /// How long it took to establish this connection.
+        established_in: std::time::Duration,
         supported_protocols: SmallVec<[Vec<u8>; 16]>,
     },
 
@@ -472,6 +476,7 @@ where
                 peer_id: peer,
                 endpoint,
                 abort_notifier: Some(abort_notifier),
+                accepted_at: Instant::now(),
             },
         );
 
@@ -515,6 +520,7 @@ where
                 peer_id: None,
                 endpoint: endpoint.into(),
                 abort_notifier: Some(abort_notifier),
+                accepted_at: Instant::now(),
             },
         );
 
@@ -615,6 +621,7 @@ where
                         peer_id: expected_peer_id,
                         endpoint,
                         abort_notifier: _,
+                        accepted_at,
                     } = self
                         .pending
                         .remove(&id)
@@ -787,6 +794,7 @@ where
                         id,
                         other_established_connection_ids,
                         concurrent_dial_errors,
+                        established_in: accepted_at.elapsed(),
                         supported_protocols,
                     });
                 }
@@ -795,6 +803,7 @@ where
                         peer_id,
                         endpoint,
                         abort_notifier: _,
+                        accepted_at,
                     }) = self.pending.remove(&id)
                     {
                         self.counters.dec_pending(&endpoint);
