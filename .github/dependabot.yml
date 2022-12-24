@@ -7,9 +7,11 @@ updates:
     open-pull-requests-limit: 9999
     commit-message:
       prefix: "deps"
+    rebase-strategy: "disabled"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "daily"
     commit-message:
       prefix: "deps"
+    rebase-strategy: "disabled"
