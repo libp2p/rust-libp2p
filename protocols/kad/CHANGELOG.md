@@ -1,6 +1,6 @@
 # 0.42.1
 
-- Skip invalid multiaddr in `Peer` `addrs`. See [PR XXX].
+- Skip unparsable multiaddr in `Peer::addrs`. See [PR XXX].
 
 [PR XXX]: https://github.com/libp2p/rust-libp2p/pull/XXX
 
