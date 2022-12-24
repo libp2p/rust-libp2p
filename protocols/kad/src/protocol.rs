@@ -35,7 +35,6 @@ use futures::prelude::*;
 use instant::Instant;
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_core::{Multiaddr, PeerId};
-use log::debug;
 use prost::Message;
 use std::{borrow::Cow, convert::TryFrom, time::Duration};
 use std::{io, iter};
