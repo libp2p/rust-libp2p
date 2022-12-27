@@ -6,9 +6,12 @@
 
 - Remove lifetime from `RecordStore` and use GATs instead. See [PR 3239].
 
+- Limit in-flight Kademlia queries. See [PR 3285].
+
 - Bump MSRV to 1.65.0.
 
 [PR 3239]: https://github.com/libp2p/rust-libp2p/pull/3239
+[PR 3285]: https://github.com/libp2p/rust-libp2p/pull/3285
 
 # 0.42.1
 
