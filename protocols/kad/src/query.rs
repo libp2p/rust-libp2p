@@ -19,12 +19,14 @@
 // DEALINGS IN THE SOFTWARE.
 
 mod peers;
+mod pending_queries;
 
 use peers::closest::{
     disjoint::ClosestDisjointPeersIter, ClosestPeersIter, ClosestPeersIterConfig,
 };
 use peers::fixed::FixedPeersIter;
 use peers::PeersIterState;
+use pending_queries::PendingQueries;
 
 use crate::kbucket::{Key, KeyBytes};
 use crate::{ALPHA_VALUE, K_VALUE, MAX_NUM_SUBSTREAMS};
@@ -43,7 +45,7 @@ pub struct QueryPool<TInner> {
     next_id: usize,
     config: QueryConfig,
     active_queries: FnvHashMap<QueryId, Query<TInner>>,
-    pending_queries: FnvHashMap<QueryId, Query<TInner>>,
+    pending_queries: PendingQueries<TInner>,
 }
 
 /// The observable states emitted by [`QueryPool::poll`].
@@ -180,18 +182,12 @@ impl<TInner> QueryPool<TInner> {
         let mut timeout = None;
         let mut waiting = None;
 
-        let pending_queries_to_start = self
-            .pending_queries
-            .keys()
-            .take(MAX_NUM_SUBSTREAMS - self.active_queries.len())
-            .copied()
-            .collect::<Vec<_>>();
-        for query_id in pending_queries_to_start {
-            let query = self
-                .pending_queries
-                .remove(&query_id)
-                .expect("Id comes from the same map above; QED");
-            self.active_queries.insert(query_id, query);
+        for _ in 0..MAX_NUM_SUBSTREAMS - self.active_queries.len() {
+            if let Some(query) = self.pending_queries.next() {
+                self.active_queries.insert(query.id, query);
+            } else {
+                break;
+            }
         }
 
         for (&query_id, query) in self.active_queries.iter_mut() {
