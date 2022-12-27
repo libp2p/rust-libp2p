@@ -23,6 +23,7 @@ use crate::protocol::{
     KademliaProtocolConfig,
 };
 use crate::record::{self, Record};
+use crate::MAX_NUM_SUBSTREAMS;
 use futures::prelude::*;
 use futures::stream::SelectAll;
 use instant::Instant;
@@ -39,8 +40,6 @@ use std::task::Waker;
 use std::{
     error, fmt, io, marker::PhantomData, pin::Pin, task::Context, task::Poll, time::Duration,
 };
-
-const MAX_NUM_INBOUND_SUBSTREAMS: usize = 32;
 
 /// A prototype from which [`KademliaHandler`]s can be constructed.
 pub struct KademliaHandlerProto<T> {
@@ -571,7 +570,7 @@ where
             self.protocol_status = ProtocolStatus::Confirmed;
         }
 
-        if self.inbound_substreams.len() == MAX_NUM_INBOUND_SUBSTREAMS {
+        if self.inbound_substreams.len() == MAX_NUM_SUBSTREAMS {
             if let Some(s) = self.inbound_substreams.iter_mut().find(|s| {
                 matches!(
                     s,

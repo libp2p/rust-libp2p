@@ -27,7 +27,7 @@ use peers::fixed::FixedPeersIter;
 use peers::PeersIterState;
 
 use crate::kbucket::{Key, KeyBytes};
-use crate::{ALPHA_VALUE, K_VALUE};
+use crate::{ALPHA_VALUE, K_VALUE, MAX_NUM_SUBSTREAMS};
 use either::Either;
 use fnv::FnvHashMap;
 use instant::Instant;
@@ -42,7 +42,8 @@ use std::{num::NonZeroUsize, time::Duration};
 pub struct QueryPool<TInner> {
     next_id: usize,
     config: QueryConfig,
-    queries: FnvHashMap<QueryId, Query<TInner>>,
+    active_queries: FnvHashMap<QueryId, Query<TInner>>,
+    pending_queries: FnvHashMap<QueryId, Query<TInner>>,
 }
 
 /// The observable states emitted by [`QueryPool::poll`].
@@ -64,7 +65,8 @@ impl<TInner> QueryPool<TInner> {
         QueryPool {
             next_id: 0,
             config,
-            queries: Default::default(),
+            active_queries: Default::default(),
+            pending_queries: Default::default(),
         }
     }
 
@@ -75,17 +77,21 @@ impl<TInner> QueryPool<TInner> {
 
     /// Returns an iterator over the queries in the pool.
     pub fn iter(&self) -> impl Iterator<Item = &Query<TInner>> {
-        self.queries.values()
+        self.active_queries
+            .values()
+            .chain(self.pending_queries.values())
     }
 
     /// Gets the current size of the pool, i.e. the number of running queries.
     pub fn size(&self) -> usize {
-        self.queries.len()
+        self.active_queries.len() + self.pending_queries.len()
     }
 
     /// Returns an iterator that allows modifying each query in the pool.
     pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut Query<TInner>> {
-        self.queries.values_mut()
+        self.active_queries
+            .values_mut()
+            .chain(self.pending_queries.values_mut())
     }
 
     /// Adds a query to the pool that contacts a fixed set of peers.
@@ -105,11 +111,12 @@ impl<TInner> QueryPool<TInner> {
     where
         I: IntoIterator<Item = PeerId>,
     {
-        assert!(!self.queries.contains_key(&id));
+        assert!(!self.active_queries.contains_key(&id));
+        assert!(!self.pending_queries.contains_key(&id));
         let parallelism = self.config.replication_factor;
         let peer_iter = QueryPeerIter::Fixed(FixedPeersIter::new(peers, parallelism));
         let query = Query::new(id, peer_iter, inner);
-        self.queries.insert(id, query);
+        self.pending_queries.insert(id, query);
     }
 
     /// Adds a query to the pool that iterates towards the closest peers to the target.
@@ -144,7 +151,7 @@ impl<TInner> QueryPool<TInner> {
         };
 
         let query = Query::new(id, peer_iter, inner);
-        self.queries.insert(id, query);
+        self.pending_queries.insert(id, query);
     }
 
     fn next_query_id(&mut self) -> QueryId {
@@ -155,12 +162,16 @@ impl<TInner> QueryPool<TInner> {
 
     /// Returns a reference to a query with the given ID, if it is in the pool.
     pub fn get(&self, id: &QueryId) -> Option<&Query<TInner>> {
-        self.queries.get(id)
+        self.active_queries
+            .get(id)
+            .or_else(|| self.pending_queries.get(id))
     }
 
-    /// Returns a mutablereference to a query with the given ID, if it is in the pool.
+    /// Returns a mutable reference to a query with the given ID, if it is in the pool.
     pub fn get_mut(&mut self, id: &QueryId) -> Option<&mut Query<TInner>> {
-        self.queries.get_mut(id)
+        self.active_queries
+            .get_mut(id)
+            .or_else(|| self.pending_queries.get_mut(id))
     }
 
     /// Polls the pool to advance the queries.
@@ -169,7 +180,21 @@ impl<TInner> QueryPool<TInner> {
         let mut timeout = None;
         let mut waiting = None;
 
-        for (&query_id, query) in self.queries.iter_mut() {
+        let pending_queries_to_start = self
+            .pending_queries
+            .keys()
+            .take(MAX_NUM_SUBSTREAMS - self.active_queries.len())
+            .copied()
+            .collect::<Vec<_>>();
+        for query_id in pending_queries_to_start {
+            let query = self
+                .pending_queries
+                .remove(&query_id)
+                .expect("Id comes from the same map above; QED");
+            self.active_queries.insert(query_id, query);
+        }
+
+        for (&query_id, query) in self.active_queries.iter_mut() {
             query.stats.start = query.stats.start.or(Some(now));
             match query.next(now) {
                 PeersIterState::Finished => {
@@ -192,23 +217,23 @@ impl<TInner> QueryPool<TInner> {
         }
 
         if let Some((query_id, peer_id)) = waiting {
-            let query = self.queries.get_mut(&query_id).expect("s.a.");
+            let query = self.active_queries.get_mut(&query_id).expect("s.a.");
             return QueryPoolState::Waiting(Some((query, peer_id)));
         }
 
         if let Some(query_id) = finished {
-            let mut query = self.queries.remove(&query_id).expect("s.a.");
+            let mut query = self.active_queries.remove(&query_id).expect("s.a.");
             query.stats.end = Some(now);
             return QueryPoolState::Finished(query);
         }
 
         if let Some(query_id) = timeout {
-            let mut query = self.queries.remove(&query_id).expect("s.a.");
+            let mut query = self.active_queries.remove(&query_id).expect("s.a.");
             query.stats.end = Some(now);
             return QueryPoolState::Timeout(query);
         }
 
-        if self.queries.is_empty() {
+        if self.active_queries.is_empty() {
             QueryPoolState::Idle
         } else {
             QueryPoolState::Waiting(None)

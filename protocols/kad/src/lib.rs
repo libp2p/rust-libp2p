@@ -97,3 +97,5 @@ pub const K_VALUE: NonZeroUsize = unsafe { NonZeroUsize::new_unchecked(20) };
 ///
 /// The current value is `3`.
 pub const ALPHA_VALUE: NonZeroUsize = unsafe { NonZeroUsize::new_unchecked(3) };
+
+const MAX_NUM_SUBSTREAMS: usize = 32;
