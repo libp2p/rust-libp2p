@@ -630,7 +630,20 @@ pub enum NetworkBehaviourAction<
     /// # #[derive(Debug, PartialEq, Eq)]
     /// # struct PreciousMessage(String);
     /// ```
-    Dial { opts: DialOpts, handler: THandler },
+    Dial {
+        opts: DialOpts,
+        handler: THandler,
+    },
+
+    /// Instructs the `Swarm` to listen on the provided address
+    ListenOn {
+        address: Multiaddr,
+    },
+
+    /// Instructs the `Swarm` to remove the listener
+    RemoveListener {
+        id: ListenerId,
+    },
 
     /// Instructs the `Swarm` to send an event to the handler dedicated to a
     /// connection with a peer.
@@ -703,6 +716,12 @@ impl<TOutEvent, THandler: IntoConnectionHandler, TInEventOld>
             NetworkBehaviourAction::Dial { opts, handler } => {
                 NetworkBehaviourAction::Dial { opts, handler }
             }
+            NetworkBehaviourAction::ListenOn { address } => {
+                NetworkBehaviourAction::ListenOn { address }
+            }
+            NetworkBehaviourAction::RemoveListener { id } => {
+                NetworkBehaviourAction::RemoveListener { id }
+            }
             NetworkBehaviourAction::NotifyHandler {
                 peer_id,
                 handler,
@@ -733,6 +752,12 @@ impl<TOutEvent, THandler: IntoConnectionHandler> NetworkBehaviourAction<TOutEven
             NetworkBehaviourAction::GenerateEvent(e) => NetworkBehaviourAction::GenerateEvent(f(e)),
             NetworkBehaviourAction::Dial { opts, handler } => {
                 NetworkBehaviourAction::Dial { opts, handler }
+            }
+            NetworkBehaviourAction::ListenOn { address } => {
+                NetworkBehaviourAction::ListenOn { address }
+            }
+            NetworkBehaviourAction::RemoveListener { id } => {
+                NetworkBehaviourAction::RemoveListener { id }
             }
             NetworkBehaviourAction::NotifyHandler {
                 peer_id,
@@ -777,6 +802,12 @@ where
                 opts,
                 handler: f(handler),
             },
+            NetworkBehaviourAction::ListenOn { address } => {
+                NetworkBehaviourAction::ListenOn { address }
+            }
+            NetworkBehaviourAction::RemoveListener { id } => {
+                NetworkBehaviourAction::RemoveListener { id }
+            }
             NetworkBehaviourAction::NotifyHandler {
                 peer_id,
                 handler,
@@ -821,6 +852,12 @@ where
                 opts,
                 handler: f_handler(handler),
             },
+            NetworkBehaviourAction::ListenOn { address } => {
+                NetworkBehaviourAction::ListenOn { address }
+            }
+            NetworkBehaviourAction::RemoveListener { id } => {
+                NetworkBehaviourAction::RemoveListener { id }
+            }
             NetworkBehaviourAction::NotifyHandler {
                 peer_id,
                 handler,

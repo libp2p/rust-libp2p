@@ -1026,6 +1026,12 @@ where
                     }
                 }
             }
+            NetworkBehaviourAction::ListenOn { address } => {
+                self.listen_on(address).ok()?;
+            }
+            NetworkBehaviourAction::RemoveListener { id } => {
+                self.remove_listener(id);
+            }
             NetworkBehaviourAction::NotifyHandler {
                 peer_id,
                 handler,
