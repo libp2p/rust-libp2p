@@ -19,6 +19,7 @@
         - [Further Reading](#further-reading)
     - [Use iteration not recursion](#use-iteration-not-recursion)
         - [Further Reading](#further-reading-1)
+    - [Allow Correlating Asynchronous Responses to Their Requests](#allow-correlating-asynchronous-responses-to-their-requests)
 
 <!-- markdown-toc end -->
 
@@ -299,3 +300,55 @@ stack potentially unboundedly. Instead use iteration e.g. via `loop` or `for`.
 - https://en.wikipedia.org/wiki/Tail_call
 - https://stackoverflow.com/questions/65948553/why-is-recursion-not-suggested-in-rust
 - https://stackoverflow.com/questions/59257543/when-is-tail-recursion-guaranteed-in-rust
+
+## Allow Correlating Asynchronous Responses to Their Requests
+
+In an asynchronous context, it is important to enable users to determine the correlation between a
+response and a previous request. For example, if a user requests two new connections to the same
+peer, they should be able to match each new connection to the corresponding previous connection
+request without having to guess.
+
+When providing a **method** where the response to that method is delivered asynchronously through an
+event, either synchronously return a request ID which is later on contained in the asynchronous
+response event, or synchronously return a `Future` that eventually resolves into the response.
+
+``` rust
+fn my_method() -> Id {
+  // ...
+}
+```
+
+``` rust
+fn my_method() -> impl Future<Output = Response> {
+  // ...
+}
+```
+
+When accepting a **command** that eventually results in a response through an event, either require
+that command to contain a unique ID, which is later on contained in the asynchronous response event,
+or allow the user to provide an instance of a custom type which again is later on returned in the
+response event.
+
+``` rust
+struct Command {
+  id: Id,
+  // ...
+}
+
+struct Response {
+  command_id: Id,
+  // ...
+}
+```
+
+``` rust
+struct Command<UserData> {
+  user_data: UserData,
+  // ...
+}
+
+struct Response<UserData> {
+  command_user_data: UserData,
+  // ...
+}
+```
