@@ -15,7 +15,7 @@ asynchronous-codec = "0.6"
 cuckoofilter = "0.5.0"
 fnv = "1.0"
 futures = "0.3.1"
-libp2p-core = { version = "0.38.0", path = "../../core" }
+libp2p-core = { version = "0.39.0", path = "../../core" }
 libp2p-swarm = { version = "0.42.0", path = "../../swarm" }
 log = "0.4"
 prost = "0.11"

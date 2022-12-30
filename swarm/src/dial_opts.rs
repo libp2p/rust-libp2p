@@ -20,6 +20,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 use libp2p_core::connection::Endpoint;
+use libp2p_core::multiaddr::Protocol;
+use libp2p_core::multihash::Multihash;
 use libp2p_core::{Multiaddr, PeerId};
 use std::num::NonZeroU8;
 
@@ -77,6 +79,104 @@ impl DialOpts {
                 peer_id, ..
             })) => Some(*peer_id),
             DialOpts(Opts::WithoutPeerIdWithAddress(_)) => None,
+        }
+    }
+
+    /// Retrieves the [`PeerId`] from the [`DialOpts`] if specified or otherwise tries to parse it
+    /// from the multihash in the `/p2p` part of the address, if present.
+    ///
+    /// Note: A [`Multiaddr`] with something else other than a [`PeerId`] within the `/p2p` protocol is invalid as per specification.
+    /// Unfortunately, we are not making good use of the type system here.
+    /// Really, this function should be merged with [`DialOpts::get_peer_id`] above.
+    /// If it weren't for the parsing error, the function signatures would be the same.
+    ///
+    /// See <https://github.com/multiformats/rust-multiaddr/issues/73>.
+    pub(crate) fn get_or_parse_peer_id(&self) -> Result<Option<PeerId>, Multihash> {
+        match self {
+            DialOpts(Opts::WithPeerId(WithPeerId { peer_id, .. })) => Ok(Some(*peer_id)),
+            DialOpts(Opts::WithPeerIdWithAddresses(WithPeerIdWithAddresses {
+                peer_id, ..
+            })) => Ok(Some(*peer_id)),
+            DialOpts(Opts::WithoutPeerIdWithAddress(WithoutPeerIdWithAddress {
+                address, ..
+            })) => {
+                let peer_id = address
+                    .iter()
+                    .last()
+                    .and_then(|p| {
+                        if let Protocol::P2p(ma) = p {
+                            Some(PeerId::try_from(ma))
+                        } else {
+                            None
+                        }
+                    })
+                    .transpose()?;
+
+                Ok(peer_id)
+            }
+        }
+    }
+
+    pub(crate) fn get_addresses(&self) -> Vec<Multiaddr> {
+        match self {
+            DialOpts(Opts::WithPeerId(WithPeerId { .. })) => vec![],
+            DialOpts(Opts::WithPeerIdWithAddresses(WithPeerIdWithAddresses {
+                addresses, ..
+            })) => addresses.clone(),
+            DialOpts(Opts::WithoutPeerIdWithAddress(WithoutPeerIdWithAddress {
+                address, ..
+            })) => vec![address.clone()],
+        }
+    }
+
+    pub(crate) fn extend_addresses_through_behaviour(&self) -> bool {
+        match self {
+            DialOpts(Opts::WithPeerId(WithPeerId { .. })) => true,
+            DialOpts(Opts::WithPeerIdWithAddresses(WithPeerIdWithAddresses {
+                extend_addresses_through_behaviour,
+                ..
+            })) => *extend_addresses_through_behaviour,
+            DialOpts(Opts::WithoutPeerIdWithAddress(WithoutPeerIdWithAddress { .. })) => true,
+        }
+    }
+
+    pub(crate) fn peer_condition(&self) -> PeerCondition {
+        match self {
+            DialOpts(
+                Opts::WithPeerId(WithPeerId { condition, .. })
+                | Opts::WithPeerIdWithAddresses(WithPeerIdWithAddresses { condition, .. }),
+            ) => *condition,
+            DialOpts(Opts::WithoutPeerIdWithAddress(WithoutPeerIdWithAddress { .. })) => {
+                PeerCondition::Always
+            }
+        }
+    }
+
+    pub(crate) fn dial_concurrency_override(&self) -> Option<NonZeroU8> {
+        match self {
+            DialOpts(Opts::WithPeerId(WithPeerId {
+                dial_concurrency_factor_override,
+                ..
+            })) => *dial_concurrency_factor_override,
+            DialOpts(Opts::WithPeerIdWithAddresses(WithPeerIdWithAddresses {
+                dial_concurrency_factor_override,
+                ..
+            })) => *dial_concurrency_factor_override,
+            DialOpts(Opts::WithoutPeerIdWithAddress(WithoutPeerIdWithAddress { .. })) => None,
+        }
+    }
+
+    pub(crate) fn role_override(&self) -> Endpoint {
+        match self {
+            DialOpts(Opts::WithPeerId(WithPeerId { role_override, .. })) => *role_override,
+            DialOpts(Opts::WithPeerIdWithAddresses(WithPeerIdWithAddresses {
+                role_override,
+                ..
+            })) => *role_override,
+            DialOpts(Opts::WithoutPeerIdWithAddress(WithoutPeerIdWithAddress {
+                role_override,
+                ..
+            })) => *role_override,
         }
     }
 }

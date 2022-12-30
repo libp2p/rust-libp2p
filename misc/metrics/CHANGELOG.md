@@ -1,6 +1,10 @@
 # 0.12.0 [unreleased]
 
+- Update to `libp2p-core` `v0.39.0`.
+
 - Add `connections_establishment_duration` metric. See [PR 3134].
+
+- Bump MSRV to 1.65.0.
 
 - Update to `libp2p-dcutr` `v0.9.0`.
 
