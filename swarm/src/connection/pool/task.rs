@@ -26,7 +26,7 @@ use crate::{
     connection::{
         self, ConnectionError, PendingInboundConnectionError, PendingOutboundConnectionError,
     },
-    transport::{Transport, TransportError},
+    transport::TransportError,
     ConnectionHandler, Multiaddr, PeerId,
 };
 use futures::{
@@ -35,6 +35,7 @@ use futures::{
     SinkExt, StreamExt,
 };
 use libp2p_core::connection::ConnectionId;
+use libp2p_core::muxing::StreamMuxerBox;
 use std::pin::Pin;
 use void::Void;
 
@@ -48,26 +49,19 @@ pub enum Command<T> {
     Close,
 }
 
-#[derive(Debug)]
-pub enum PendingConnectionEvent<TTrans>
-where
-    TTrans: Transport,
-{
+pub enum PendingConnectionEvent {
     ConnectionEstablished {
         id: ConnectionId,
-        output: TTrans::Output,
+        output: (PeerId, StreamMuxerBox),
         /// [`Some`] when the new connection is an outgoing connection.
         /// Addresses are dialed in parallel. Contains the addresses and errors
         /// of dial attempts that failed before the one successful dial.
-        outgoing: Option<(Multiaddr, Vec<(Multiaddr, TransportError<TTrans::Error>)>)>,
+        outgoing: Option<(Multiaddr, Vec<(Multiaddr, TransportError<std::io::Error>)>)>,
     },
     /// A pending connection failed.
     PendingFailed {
         id: ConnectionId,
-        error: Either<
-            PendingOutboundConnectionError<TTrans::Error>,
-            PendingInboundConnectionError<TTrans::Error>,
-        >,
+        error: Either<PendingOutboundConnectionError, PendingInboundConnectionError>,
     },
 }
 
@@ -97,14 +91,12 @@ pub enum EstablishedConnectionEvent<THandler: ConnectionHandler> {
     },
 }
 
-pub async fn new_for_pending_outgoing_connection<TTrans>(
+pub async fn new_for_pending_outgoing_connection(
     connection_id: ConnectionId,
-    dial: ConcurrentDial<TTrans>,
+    dial: ConcurrentDial,
     abort_receiver: oneshot::Receiver<Void>,
-    mut events: mpsc::Sender<PendingConnectionEvent<TTrans>>,
-) where
-    TTrans: Transport,
-{
+    mut events: mpsc::Sender<PendingConnectionEvent>,
+) {
     match futures::future::select(abort_receiver, Box::pin(dial)).await {
         Either::Left((Err(oneshot::Canceled), _)) => {
             let _ = events
@@ -135,14 +127,13 @@ pub async fn new_for_pending_outgoing_connection<TTrans>(
     }
 }
 
-pub async fn new_for_pending_incoming_connection<TFut, TTrans>(
+pub async fn new_for_pending_incoming_connection<TFut>(
     connection_id: ConnectionId,
     future: TFut,
     abort_receiver: oneshot::Receiver<Void>,
-    mut events: mpsc::Sender<PendingConnectionEvent<TTrans>>,
+    mut events: mpsc::Sender<PendingConnectionEvent>,
 ) where
-    TTrans: Transport,
-    TFut: Future<Output = Result<TTrans::Output, TTrans::Error>> + Send + 'static,
+    TFut: Future<Output = Result<(PeerId, StreamMuxerBox), std::io::Error>> + Send + 'static,
 {
     match futures::future::select(abort_receiver, Box::pin(future)).await {
         Either::Left((Err(oneshot::Canceled), _)) => {
