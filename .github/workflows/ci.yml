@@ -21,9 +21,7 @@ jobs:
         crate: ${{ fromJSON(needs.gather_published_crates.outputs.members) }}
     steps:
       - name: Install Protoc
-        uses: arduino/setup-protoc@64c0c85d18e984422218383b81c52f8b077404d3 # v1.1.2
-        with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+        run: sudo apt-get install protobuf-compiler
 
       - uses: actions/checkout@v3
 
@@ -101,9 +99,14 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: Install Protoc
+        if: ${{ matrix.os != 'ubuntu-latest' }}
         uses: arduino/setup-protoc@64c0c85d18e984422218383b81c52f8b077404d3 # v1.1.2
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Protoc
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: sudo apt-get install protobuf-compiler
 
       - uses: actions/checkout@v3
 
@@ -131,9 +134,7 @@ jobs:
           - features: "mdns tcp dns async-std"
     steps:
       - name: Install Protoc
-        uses: arduino/setup-protoc@64c0c85d18e984422218383b81c52f8b077404d3 # v1.1.2
-        with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+        run: sudo apt-get install protobuf-compiler
 
       - uses: actions/checkout@v3
 
@@ -155,9 +156,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Install Protoc
-        uses: arduino/setup-protoc@64c0c85d18e984422218383b81c52f8b077404d3 # v1.1.2
-        with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+        run: sudo apt-get install protobuf-compiler
 
       - uses: actions/checkout@v3
 
@@ -185,9 +184,7 @@ jobs:
         ]
     steps:
       - name: Install Protoc
-        uses: arduino/setup-protoc@64c0c85d18e984422218383b81c52f8b077404d3 # v1.1.2
-        with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+        run: sudo apt-get install protobuf-compiler
 
       - uses: actions/checkout@v3
 
@@ -212,9 +209,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Install Protoc
-        uses: arduino/setup-protoc@64c0c85d18e984422218383b81c52f8b077404d3 # v1.1.2
-        with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+        run: sudo apt-get install protobuf-compiler
 
       - uses: actions/checkout@v3
 
