@@ -300,4 +300,14 @@ jobs:
             test
             ci
             refactor
-          requireScope: false
+          require_scope: false
+
+      - name: Check PR title length
+        run: |
+          title="${{ github.event.pull_request.title }}"
+          title_length=${#title}
+          if [ $title_length -gt 72 ]
+          then
+            echo "PR title is too long (greater than 72 characters)"
+            exit 1
+          fi
