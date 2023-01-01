@@ -25,7 +25,7 @@ use futures::stream::StreamExt;
 use futures::task::Spawn;
 use libp2p_core::multiaddr::{Multiaddr, Protocol};
 use libp2p_core::muxing::StreamMuxerBox;
-use libp2p_core::transport::choice::OrTransport;
+use libp2p_core::transport::or::OrTransport;
 use libp2p_core::transport::{Boxed, MemoryTransport, Transport};
 use libp2p_core::PublicKey;
 use libp2p_core::{identity, upgrade, PeerId};

@@ -35,7 +35,7 @@ use std::{
 };
 
 pub mod and_then;
-pub mod choice;
+pub mod or;
 pub mod dummy;
 pub mod map;
 pub mod map_err;
@@ -49,7 +49,7 @@ mod optional;
 use crate::ConnectedPoint;
 
 pub use self::boxed::Boxed;
-pub use self::choice::OrTransport;
+pub use self::or::OrTransport;
 pub use self::memory::MemoryTransport;
 pub use self::optional::OptionalTransport;
 pub use self::upgrade::Upgrade;
@@ -168,7 +168,7 @@ pub trait Transport {
     fn address_translation(&self, listen: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr>;
 
     /// Boxes the transport, including custom transport errors.
-    fn boxed(self) -> boxed::Boxed<Self::Output>
+    fn boxed(self) -> Boxed<Self::Output>
     where
         Self: Sized + Send + Unpin + 'static,
         Self::Dial: Send + 'static,
