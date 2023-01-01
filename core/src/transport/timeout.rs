@@ -120,10 +120,6 @@ where
         })
     }
 
-    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        self.inner.address_translation(server, observed)
-    }
-
     fn poll(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -138,6 +134,10 @@ where
                 })
                 .map_err(TransportTimeoutError::Other)
         })
+    }
+
+    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
+        self.inner.address_translation(server, observed)
     }
 }
 

@@ -95,14 +95,6 @@ where
         }
     }
 
-    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        if let Some(inner) = &self.0 {
-            inner.address_translation(server, observed)
-        } else {
-            None
-        }
-    }
-
     fn poll(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -111,6 +103,14 @@ where
             inner.poll(cx)
         } else {
             Poll::Pending
+        }
+    }
+
+    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
+        if let Some(inner) = &self.0 {
+            inner.address_translation(server, observed)
+        } else {
+            None
         }
     }
 }

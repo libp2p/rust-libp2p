@@ -78,15 +78,15 @@ impl<TOut> Transport for DummyTransport<TOut> {
         Err(TransportError::MultiaddrNotSupported(addr))
     }
 
-    fn address_translation(&self, _server: &Multiaddr, _observed: &Multiaddr) -> Option<Multiaddr> {
-        None
-    }
-
     fn poll(
         self: Pin<&mut Self>,
         _: &mut Context<'_>,
     ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
         Poll::Pending
+    }
+
+    fn address_translation(&self, _server: &Multiaddr, _observed: &Multiaddr) -> Option<Multiaddr> {
+        None
     }
 }
 

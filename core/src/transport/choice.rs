@@ -105,14 +105,6 @@ where
         Err(TransportError::MultiaddrNotSupported(addr))
     }
 
-    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        if let Some(addr) = self.0.address_translation(server, observed) {
-            Some(addr)
-        } else {
-            self.1.address_translation(server, observed)
-        }
-    }
-
     fn poll(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -131,5 +123,13 @@ where
             Poll::Pending => {}
         }
         Poll::Pending
+    }
+
+    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
+        if let Some(addr) = self.0.address_translation(server, observed) {
+            Some(addr)
+        } else {
+            self.1.address_translation(server, observed)
+        }
     }
 }

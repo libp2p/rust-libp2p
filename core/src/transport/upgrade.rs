@@ -334,12 +334,16 @@ where
     type ListenerUpgrade = T::ListenerUpgrade;
     type Dial = T::Dial;
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        self.0.dial(addr)
+    fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
+        self.0.listen_on(addr)
     }
 
     fn remove_listener(&mut self, id: ListenerId) -> bool {
         self.0.remove_listener(id)
+    }
+
+    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        self.0.dial(addr)
     }
 
     fn dial_as_listener(
@@ -349,19 +353,15 @@ where
         self.0.dial_as_listener(addr)
     }
 
-    fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
-        self.0.listen_on(addr)
-    }
-
-    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        self.0.address_translation(server, observed)
-    }
-
     fn poll(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
         self.project().0.poll(cx)
+    }
+
+    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
+        self.0.address_translation(server, observed)
     }
 }
 
@@ -399,6 +399,16 @@ where
     type ListenerUpgrade = ListenerUpgradeFuture<T::ListenerUpgrade, U, C>;
     type Dial = DialUpgradeFuture<T::Dial, U, C>;
 
+    fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
+        self.inner
+            .listen_on(addr)
+            .map_err(|err| err.map(TransportUpgradeError::Transport))
+    }
+
+    fn remove_listener(&mut self, id: ListenerId) -> bool {
+        self.inner.remove_listener(id)
+    }
+
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         let future = self
             .inner
@@ -408,10 +418,6 @@ where
             future: Box::pin(future),
             upgrade: future::Either::Left(Some(self.upgrade.clone())),
         })
-    }
-
-    fn remove_listener(&mut self, id: ListenerId) -> bool {
-        self.inner.remove_listener(id)
     }
 
     fn dial_as_listener(
@@ -428,16 +434,6 @@ where
         })
     }
 
-    fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
-        self.inner
-            .listen_on(addr)
-            .map_err(|err| err.map(TransportUpgradeError::Transport))
-    }
-
-    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        self.inner.address_translation(server, observed)
-    }
-
     fn poll(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -452,6 +448,10 @@ where
                 })
                 .map_err(TransportUpgradeError::Transport)
         })
+    }
+
+    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
+        self.inner.address_translation(server, observed)
     }
 }
 

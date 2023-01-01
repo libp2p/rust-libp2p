@@ -142,15 +142,15 @@ impl<O> Transport for Boxed<O> {
         self.inner.dial_as_listener(addr)
     }
 
-    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        self.inner.address_translation(server, observed)
-    }
-
     fn poll(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
         Pin::new(self.inner.as_mut()).poll(cx)
+    }
+
+    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
+        self.inner.address_translation(server, observed)
     }
 }
 

@@ -199,11 +199,11 @@ impl zeroize::Zeroize for keys_proto::PrivateKey {
 pub enum PublicKey {
     /// A public Ed25519 key.
     Ed25519(ed25519::PublicKey),
-    #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
     /// A public RSA key.
+    #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
     Rsa(rsa::PublicKey),
-    #[cfg(feature = "secp256k1")]
     /// A public Secp256k1 key.
+    #[cfg(feature = "secp256k1")]
     Secp256k1(secp256k1::PublicKey),
     /// A public ECDSA key.
     #[cfg(feature = "ecdsa")]

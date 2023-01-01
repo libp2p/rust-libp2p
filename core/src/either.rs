@@ -342,37 +342,6 @@ where
     type ListenerUpgrade = EitherFuture<A::ListenerUpgrade, B::ListenerUpgrade>;
     type Dial = EitherFuture<A::Dial, B::Dial>;
 
-    fn poll(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
-        match self.project() {
-            EitherTransportProj::Left(a) => match a.poll(cx) {
-                Poll::Pending => Poll::Pending,
-                Poll::Ready(event) => Poll::Ready(
-                    event
-                        .map_upgrade(EitherFuture::First)
-                        .map_err(EitherError::A),
-                ),
-            },
-            EitherTransportProj::Right(b) => match b.poll(cx) {
-                Poll::Pending => Poll::Pending,
-                Poll::Ready(event) => Poll::Ready(
-                    event
-                        .map_upgrade(EitherFuture::Second)
-                        .map_err(EitherError::B),
-                ),
-            },
-        }
-    }
-
-    fn remove_listener(&mut self, id: ListenerId) -> bool {
-        match self {
-            EitherTransport::Left(t) => t.remove_listener(id),
-            EitherTransport::Right(t) => t.remove_listener(id),
-        }
-    }
-
     fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
         use TransportError::*;
         match self {
@@ -384,6 +353,13 @@ where
                 MultiaddrNotSupported(addr) => MultiaddrNotSupported(addr),
                 Other(err) => Other(EitherError::B(err)),
             }),
+        }
+    }
+
+    fn remove_listener(&mut self, id: ListenerId) -> bool {
+        match self {
+            EitherTransport::Left(t) => t.remove_listener(id),
+            EitherTransport::Right(t) => t.remove_listener(id),
         }
     }
 
@@ -421,6 +397,30 @@ where
                 Ok(connec) => Ok(EitherFuture::Second(connec)),
                 Err(MultiaddrNotSupported(addr)) => Err(MultiaddrNotSupported(addr)),
                 Err(Other(err)) => Err(Other(EitherError::B(err))),
+            },
+        }
+    }
+
+    fn poll(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
+        match self.project() {
+            EitherTransportProj::Left(a) => match a.poll(cx) {
+                Poll::Pending => Poll::Pending,
+                Poll::Ready(event) => Poll::Ready(
+                    event
+                        .map_upgrade(EitherFuture::First)
+                        .map_err(EitherError::A),
+                ),
+            },
+            EitherTransportProj::Right(b) => match b.poll(cx) {
+                Poll::Pending => Poll::Pending,
+                Poll::Ready(event) => Poll::Ready(
+                    event
+                        .map_upgrade(EitherFuture::Second)
+                        .map_err(EitherError::B),
+                ),
             },
         }
     }
