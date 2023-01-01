@@ -56,8 +56,8 @@ impl<TOut> Clone for DummyTransport<TOut> {
 impl<TOut> Transport for DummyTransport<TOut> {
     type Output = TOut;
     type Error = io::Error;
-    type ListenerUpgrade = futures::future::Pending<Result<Self::Output, io::Error>>;
-    type Dial = futures::future::Pending<Result<Self::Output, io::Error>>;
+    type ListenerUpgrade = future::Pending<Result<Self::Output, io::Error>>;
+    type Dial = future::Pending<Result<Self::Output, io::Error>>;
 
     fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
         Err(TransportError::MultiaddrNotSupported(addr))

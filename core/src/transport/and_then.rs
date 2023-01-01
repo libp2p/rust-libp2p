@@ -25,7 +25,7 @@ use crate::{
 };
 use futures::{future::Either, prelude::*};
 use multiaddr::Multiaddr;
-use std::{error, marker::PhantomPinned, pin::Pin, task::Context, task::Poll};
+use std::{error, pin::Pin, task::Context, task::Poll};
 
 /// See the [`Transport::and_then`] method.
 #[pin_project::pin_project]
@@ -78,7 +78,6 @@ where
                     role_override: Endpoint::Dialer,
                 },
             )),
-            _marker: PhantomPinned,
         };
         Ok(future)
     }
@@ -100,7 +99,6 @@ where
                     role_override: Endpoint::Listener,
                 },
             )),
-            _marker: PhantomPinned,
         };
         Ok(future)
     }
@@ -126,7 +124,6 @@ where
                     upgrade: AndThenFuture {
                         inner: Either::Left(Box::pin(upgrade)),
                         args: Some((this.fun.clone(), point)),
-                        _marker: PhantomPinned,
                     },
                     local_addr,
                     send_back_addr,
@@ -154,7 +151,6 @@ where
 pub struct AndThenFuture<TFut, TMap, TMapOut> {
     inner: Either<Pin<Box<TFut>>, Pin<Box<TMapOut>>>,
     args: Option<(TMap, ConnectedPoint)>,
-    _marker: PhantomPinned,
 }
 
 impl<TFut, TMap, TMapOut> Future for AndThenFuture<TFut, TMap, TMapOut>

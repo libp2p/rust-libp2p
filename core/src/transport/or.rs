@@ -23,7 +23,7 @@ use crate::transport::{ListenerId, Transport, TransportError, TransportEvent};
 use multiaddr::Multiaddr;
 use std::{pin::Pin, task::Context, task::Poll};
 
-/// Struct returned by `or_transport()`.
+/// Struct returned by [`Transport::or_transport()`].
 #[derive(Debug, Copy, Clone)]
 #[pin_project::pin_project]
 pub struct OrTransport<A, B>(#[pin] A, #[pin] B);
@@ -64,7 +64,7 @@ where
 
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         let addr = match self.0.dial(addr) {
-            Ok(connec) => return Ok(EitherFuture::First(connec)),
+            Ok(conn) => return Ok(EitherFuture::First(conn)),
             Err(TransportError::MultiaddrNotSupported(addr)) => addr,
             Err(TransportError::Other(err)) => {
                 return Err(TransportError::Other(EitherError::A(err)))
@@ -72,7 +72,7 @@ where
         };
 
         let addr = match self.1.dial(addr) {
-            Ok(connec) => return Ok(EitherFuture::Second(connec)),
+            Ok(conn) => return Ok(EitherFuture::Second(conn)),
             Err(TransportError::MultiaddrNotSupported(addr)) => addr,
             Err(TransportError::Other(err)) => {
                 return Err(TransportError::Other(EitherError::B(err)))
@@ -87,7 +87,7 @@ where
         addr: Multiaddr,
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
         let addr = match self.0.dial_as_listener(addr) {
-            Ok(connec) => return Ok(EitherFuture::First(connec)),
+            Ok(conn) => return Ok(EitherFuture::First(conn)),
             Err(TransportError::MultiaddrNotSupported(addr)) => addr,
             Err(TransportError::Other(err)) => {
                 return Err(TransportError::Other(EitherError::A(err)))
@@ -95,7 +95,7 @@ where
         };
 
         let addr = match self.1.dial_as_listener(addr) {
-            Ok(connec) => return Ok(EitherFuture::Second(connec)),
+            Ok(conn) => return Ok(EitherFuture::Second(conn)),
             Err(TransportError::MultiaddrNotSupported(addr)) => addr,
             Err(TransportError::Other(err)) => {
                 return Err(TransportError::Other(EitherError::B(err)))

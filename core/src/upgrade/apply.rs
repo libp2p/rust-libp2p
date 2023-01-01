@@ -147,21 +147,21 @@ where
                     };
                 }
                 InboundUpgradeApplyState::Upgrade { mut future, name } => {
-                    match Future::poll(Pin::new(&mut future), cx) {
+                    return match Future::poll(Pin::new(&mut future), cx) {
                         Poll::Pending => {
                             self.inner = InboundUpgradeApplyState::Upgrade { future, name };
-                            return Poll::Pending;
+                            Poll::Pending
                         }
                         Poll::Ready(Ok(x)) => {
                             log::trace!("Upgraded inbound stream to {}", DisplayProtocolName(name));
-                            return Poll::Ready(Ok(x));
+                            Poll::Ready(Ok(x))
                         }
                         Poll::Ready(Err(e)) => {
                             debug!(
                                 "Failed to upgrade inbound stream to {}",
                                 DisplayProtocolName(name)
                             );
-                            return Poll::Ready(Err(UpgradeError::Apply(e)));
+                            Poll::Ready(Err(UpgradeError::Apply(e)))
                         }
                     }
                 }
@@ -233,24 +233,24 @@ where
                     };
                 }
                 OutboundUpgradeApplyState::Upgrade { mut future, name } => {
-                    match Future::poll(Pin::new(&mut future), cx) {
+                    return match Future::poll(Pin::new(&mut future), cx) {
                         Poll::Pending => {
                             self.inner = OutboundUpgradeApplyState::Upgrade { future, name };
-                            return Poll::Pending;
+                            Poll::Pending
                         }
                         Poll::Ready(Ok(x)) => {
                             log::trace!(
                                 "Upgraded outbound stream to {}",
                                 DisplayProtocolName(name)
                             );
-                            return Poll::Ready(Ok(x));
+                            Poll::Ready(Ok(x))
                         }
                         Poll::Ready(Err(e)) => {
                             debug!(
                                 "Failed to upgrade outbound stream to {}",
                                 DisplayProtocolName(name)
                             );
-                            return Poll::Ready(Err(UpgradeError::Apply(e)));
+                            Poll::Ready(Err(UpgradeError::Apply(e)))
                         }
                     }
                 }

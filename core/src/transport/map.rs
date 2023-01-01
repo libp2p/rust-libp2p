@@ -28,7 +28,7 @@ use std::{pin::Pin, task::Context, task::Poll};
 
 use super::ListenerId;
 
-/// See `Transport::map`.
+/// See [`Transport::map`].
 #[derive(Debug, Copy, Clone)]
 #[pin_project::pin_project]
 pub struct Map<T, F> {
