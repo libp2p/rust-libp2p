@@ -560,8 +560,8 @@ impl Decoder for GossipsubCodec {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::GossipsubConfig;
-    use crate::Gossipsub;
+    use crate::config::Config;
+    use crate::Behaviour;
     use crate::IdentTopic as Topic;
     use libp2p_core::identity::Keypair;
     use quickcheck::*;
@@ -574,9 +574,9 @@ mod tests {
             let keypair = TestKeypair::arbitrary(g);
 
             // generate an arbitrary GossipsubMessage using the behaviour signing functionality
-            let config = GossipsubConfig::default();
-            let gs: Gossipsub =
-                Gossipsub::new(crate::MessageAuthenticity::Signed(keypair.0), config).unwrap();
+            let config = Config::default();
+            let gs: Behaviour =
+                Behaviour::new(crate::MessageAuthenticity::Signed(keypair.0), config).unwrap();
             let data = (0..g.gen_range(10..10024u32))
                 .map(|_| u8::arbitrary(g))
                 .collect::<Vec<_>>();

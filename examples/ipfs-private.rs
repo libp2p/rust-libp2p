@@ -36,7 +36,7 @@ use either::Either;
 use futures::{prelude::*, select};
 use libp2p::{
     core::{muxing::StreamMuxerBox, transport, transport::upgrade::Version},
-    gossipsub::{self, Event, Gossipsub, GossipsubConfigBuilder, MessageAuthenticity},
+    gossipsub::{self, Behaviour as Gossipsub, ConfigBuilder, Event, MessageAuthenticity},
     identify, identity,
     multiaddr::Protocol,
     noise, ping,
@@ -181,7 +181,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Create a Swarm to manage peers and events
     let mut swarm = {
-        let gossipsub_config = GossipsubConfigBuilder::default()
+        let gossipsub_config = ConfigBuilder::default()
             .max_transmit_size(262144)
             .build()
             .expect("valid config");

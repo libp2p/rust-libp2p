@@ -47,7 +47,7 @@ use libp2p_swarm::{
 use wasm_timer::Instant;
 
 use crate::backoff::BackoffStorage;
-use crate::config::{GossipsubConfig, ValidationMode};
+use crate::config::{Config, ValidationMode};
 use crate::error::{PublishError, SubscriptionError, ValidationError};
 use crate::gossip_promises::GossipPromises;
 use crate::handler::{GossipsubHandler, GossipsubHandlerIn, HandlerEvent};
@@ -210,9 +210,9 @@ impl From<MessageAuthenticity> for PublishConfig {
 ///
 /// The TopicSubscriptionFilter allows applications to implement specific filters on topics to
 /// prevent unwanted messages being propagated and evaluated.
-pub struct Gossipsub<D = IdentityTransform, F = AllowAllSubscriptionFilter> {
+pub struct Behaviour<D = IdentityTransform, F = AllowAllSubscriptionFilter> {
     /// Configuration providing gossipsub performance parameters.
-    config: GossipsubConfig,
+    config: Config,
 
     /// Events that need to be yielded to the outside when polling.
     events: VecDeque<NetworkBehaviourAction<Event, GossipsubHandler>>,
@@ -310,17 +310,14 @@ pub struct Gossipsub<D = IdentityTransform, F = AllowAllSubscriptionFilter> {
     metrics: Option<Metrics>,
 }
 
-impl<D, F> Gossipsub<D, F>
+impl<D, F> Behaviour<D, F>
 where
     D: DataTransform + Default,
     F: TopicSubscriptionFilter + Default,
 {
-    /// Creates a [`Gossipsub`] struct given a set of parameters specified via a
-    /// [`GossipsubConfig`]. This has no subscription filter and uses no compression.
-    pub fn new(
-        privacy: MessageAuthenticity,
-        config: GossipsubConfig,
-    ) -> Result<Self, &'static str> {
+    /// Creates a [`Behaviour`] struct given a set of parameters specified via a
+    /// [`Config`]. This has no subscription filter and uses no compression.
+    pub fn new(privacy: MessageAuthenticity, config: Config) -> Result<Self, &'static str> {
         Self::new_with_subscription_filter_and_transform(
             privacy,
             config,
@@ -330,12 +327,12 @@ where
         )
     }
 
-    /// Creates a [`Gossipsub`] struct given a set of parameters specified via a
-    /// [`GossipsubConfig`]. This has no subscription filter and uses no compression.
+    /// Creates a [`Behaviour`] struct given a set of parameters specified via a
+    /// [`BehaviourConfig`]. This has no subscription filter and uses no compression.
     /// Metrics can be evaluated by passing a reference to a [`Registry`].
     pub fn new_with_metrics(
         privacy: MessageAuthenticity,
-        config: GossipsubConfig,
+        config: Config,
         metrics_registry: &mut Registry,
         metrics_config: MetricsConfig,
     ) -> Result<Self, &'static str> {
@@ -349,16 +346,16 @@ where
     }
 }
 
-impl<D, F> Gossipsub<D, F>
+impl<D, F> Behaviour<D, F>
 where
     D: DataTransform + Default,
     F: TopicSubscriptionFilter,
 {
-    /// Creates a [`Gossipsub`] struct given a set of parameters specified via a
-    /// [`GossipsubConfig`] and a custom subscription filter.
+    /// Creates a [`Behaviour`] struct given a set of parameters specified via a
+    /// [`BehaviourConfig`] and a custom subscription filter.
     pub fn new_with_subscription_filter(
         privacy: MessageAuthenticity,
-        config: GossipsubConfig,
+        config: Config,
         metrics: Option<(&mut Registry, MetricsConfig)>,
         subscription_filter: F,
     ) -> Result<Self, &'static str> {
@@ -372,16 +369,16 @@ where
     }
 }
 
-impl<D, F> Gossipsub<D, F>
+impl<D, F> Behaviour<D, F>
 where
     D: DataTransform,
     F: TopicSubscriptionFilter + Default,
 {
-    /// Creates a [`Gossipsub`] struct given a set of parameters specified via a
-    /// [`GossipsubConfig`] and a custom data transform.
+    /// Creates a [`Behaviour`] struct given a set of parameters specified via a
+    /// [`Config`] and a custom data transform.
     pub fn new_with_transform(
         privacy: MessageAuthenticity,
-        config: GossipsubConfig,
+        config: Config,
         metrics: Option<(&mut Registry, MetricsConfig)>,
         data_transform: D,
     ) -> Result<Self, &'static str> {
@@ -395,16 +392,16 @@ where
     }
 }
 
-impl<D, F> Gossipsub<D, F>
+impl<D, F> Behaviour<D, F>
 where
     D: DataTransform,
     F: TopicSubscriptionFilter,
 {
-    /// Creates a [`Gossipsub`] struct given a set of parameters specified via a
-    /// [`GossipsubConfig`] and a custom subscription filter and data transform.
+    /// Creates a [`Behaviour`] struct given a set of parameters specified via a
+    /// [`Config`] and a custom subscription filter and data transform.
     pub fn new_with_subscription_filter_and_transform(
         privacy: MessageAuthenticity,
-        config: GossipsubConfig,
+        config: Config,
         metrics: Option<(&mut Registry, MetricsConfig)>,
         subscription_filter: F,
         data_transform: D,
@@ -415,7 +412,7 @@ where
         // were received locally.
         validate_config(&privacy, config.validation_mode())?;
 
-        Ok(Gossipsub {
+        Ok(Behaviour {
             metrics: metrics.map(|(registry, cfg)| Metrics::new(registry, cfg)),
             events: VecDeque::new(),
             control_pool: HashMap::new(),
@@ -455,7 +452,7 @@ where
     }
 }
 
-impl<D, F> Gossipsub<D, F>
+impl<D, F> Behaviour<D, F>
 where
     D: DataTransform + Send + 'static,
     F: TopicSubscriptionFilter + Send + 'static,
@@ -666,7 +663,7 @@ where
                     }
                 }
 
-                // Gossipsub peers
+                // Behaviour peers
                 if self.mesh.get(&topic_hash).is_none() {
                     debug!("Topic: {:?} not in the mesh", topic_hash);
                     // If we have fanout peers add them to the map.
@@ -742,7 +739,7 @@ where
         Ok(msg_id)
     }
 
-    /// This function should be called when [`GossipsubConfig::validate_messages()`] is `true` after
+    /// This function should be called when [`BehaviourConfig::validate_messages()`] is `true` after
     /// the message got validated by the caller. Messages are stored in the ['Memcache'] and
     /// validation is expected to be fast enough that the messages should still exist in the cache.
     /// There are three possible validation outcomes and the outcome is given in acceptance.
@@ -915,7 +912,7 @@ where
         }
     }
 
-    /// Gossipsub JOIN(topic) - adds topic peers to mesh and sends them GRAFT messages.
+    /// Behaviour JOIN(topic) - adds topic peers to mesh and sends them GRAFT messages.
     fn join(&mut self, topic_hash: &TopicHash) {
         debug!("Running JOIN for topic: {:?}", topic_hash);
 
@@ -1062,7 +1059,7 @@ where
             None => {
                 error!("Attempted to Prune an unknown peer");
             }
-            _ => {} // Gossipsub 1.1 peer perform the `Prune`
+            _ => {} // Behaviour 1.1 peer perform the `Prune`
         }
 
         // Select peers for peer exchange
@@ -1097,7 +1094,7 @@ where
         }
     }
 
-    /// Gossipsub LEAVE(topic) - Notifies mesh\[topic\] peers with PRUNE messages.
+    /// Behaviour LEAVE(topic) - Notifies mesh\[topic\] peers with PRUNE messages.
     fn leave(&mut self, topic_hash: &TopicHash) {
         debug!("Running LEAVE for topic {:?}", topic_hash);
 
@@ -1719,7 +1716,7 @@ where
         true
     }
 
-    /// Handles a newly received [`RawGossipsubMessage`].
+    /// Handles a newly received [`RawBehaviourMessage`].
     ///
     /// Forwards the message to all peers in the mesh.
     fn handle_received_message(
@@ -2880,7 +2877,7 @@ where
         self.pending_iwant_msgs.clear();
     }
 
-    /// Send a GossipsubRpc message to a peer. This will wrap the message in an arc if it
+    /// Send a BehaviourRpc message to a peer. This will wrap the message in an arc if it
     /// is not already an arc.
     fn send_message(
         &mut self,
@@ -3289,7 +3286,7 @@ fn get_ip_addr(addr: &Multiaddr) -> Option<IpAddr> {
     })
 }
 
-impl<C, F> NetworkBehaviour for Gossipsub<C, F>
+impl<C, F> NetworkBehaviour for Behaviour<C, F>
 where
     C: Send + 'static + DataTransform,
     F: Send + 'static + TopicSubscriptionFilter,
@@ -3641,9 +3638,9 @@ fn validate_config(
     Ok(())
 }
 
-impl<C: DataTransform, F: TopicSubscriptionFilter> fmt::Debug for Gossipsub<C, F> {
+impl<C: DataTransform, F: TopicSubscriptionFilter> fmt::Debug for Behaviour<C, F> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Gossipsub")
+        f.debug_struct("Behaviour")
             .field("config", &self.config)
             .field("events", &self.events.len())
             .field("control_pool", &self.control_pool)
@@ -3736,12 +3733,12 @@ mod local_test {
     /// Tests RPC message fragmentation
     fn test_message_fragmentation_deterministic() {
         let max_transmit_size = 500;
-        let config = crate::GossipsubConfigBuilder::default()
+        let config = crate::ConfigBuilder::default()
             .max_transmit_size(max_transmit_size)
             .validation_mode(ValidationMode::Permissive)
             .build()
             .unwrap();
-        let gs: Gossipsub = Gossipsub::new(MessageAuthenticity::RandomAuthor, config).unwrap();
+        let gs: Behaviour = Behaviour::new(MessageAuthenticity::RandomAuthor, config).unwrap();
 
         // Message under the limit should be fine.
         let mut rpc = empty_rpc();
@@ -3784,12 +3781,12 @@ mod local_test {
     fn test_message_fragmentation() {
         fn prop(rpc: Rpc) {
             let max_transmit_size = 500;
-            let config = crate::GossipsubConfigBuilder::default()
+            let config = crate::ConfigBuilder::default()
                 .max_transmit_size(max_transmit_size)
                 .validation_mode(ValidationMode::Permissive)
                 .build()
                 .unwrap();
-            let gs: Gossipsub = Gossipsub::new(MessageAuthenticity::RandomAuthor, config).unwrap();
+            let gs: Behaviour = Behaviour::new(MessageAuthenticity::RandomAuthor, config).unwrap();
 
             let mut length_codec = unsigned_varint::codec::UviBytes::default();
             length_codec.set_max_len(max_transmit_size);

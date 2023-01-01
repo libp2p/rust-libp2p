@@ -58,7 +58,7 @@ pub enum GossipsubVersion {
 
 /// Configuration parameters that define the performance of the gossipsub network.
 #[derive(Clone)]
-pub struct GossipsubConfig {
+pub struct Config {
     protocol_id: Cow<'static, str>,
     custom_id_version: Option<GossipsubVersion>,
     history_length: usize,
@@ -100,15 +100,15 @@ pub struct GossipsubConfig {
     published_message_ids_cache_time: Duration,
 }
 
-impl GossipsubConfig {
+impl Config {
     // All the getters
 
     /// The protocol id to negotiate this protocol. By default, the resulting protocol id has the form
     /// `/<prefix>/<supported-versions>`, but can optionally be changed to a literal form by providing some GossipsubVersion as custom_id_version.
     /// As gossipsub supports version 1.0 and 1.1, there are two suffixes supported for the resulting protocol id.
     ///
-    /// Calling `GossipsubConfigBuilder::protocol_id_prefix` will set a new prefix and retain the prefix logic.
-    /// Calling `GossipsubConfigBuilder::protocol_id` will set a custom `protocol_id` and disable the prefix logic.
+    /// Calling `ConfigBuilder::protocol_id_prefix` will set a new prefix and retain the prefix logic.
+    /// Calling `ConfigBuilder::protocol_id` will set a custom `protocol_id` and disable the prefix logic.
     ///
     /// The default prefix is `meshsub`, giving the supported protocol ids: `/meshsub/1.1.0` and `/meshsub/1.0.0`, negotiated in that order.
     pub fn protocol_id(&self) -> &Cow<'static, str> {
@@ -216,7 +216,7 @@ impl GossipsubConfig {
 
     /// When set to `true`, prevents automatic forwarding of all received messages. This setting
     /// allows a user to validate the messages before propagating them to their peers. If set to
-    /// true, the user must manually call [`crate::Gossipsub::report_message_validation_result()`]
+    /// true, the user must manually call [`crate::Behaviour::report_message_validation_result()`]
     /// on the behaviour to forward message once validated (default is `false`).
     /// The default is `false`.
     pub fn validate_messages(&self) -> bool {
@@ -390,24 +390,24 @@ impl GossipsubConfig {
     }
 }
 
-impl Default for GossipsubConfig {
+impl Default for Config {
     fn default() -> Self {
         // use ConfigBuilder to also validate defaults
-        GossipsubConfigBuilder::default()
+        ConfigBuilder::default()
             .build()
             .expect("Default config parameters should be valid parameters")
     }
 }
 
 /// The builder struct for constructing a gossipsub configuration.
-pub struct GossipsubConfigBuilder {
-    config: GossipsubConfig,
+pub struct ConfigBuilder {
+    config: Config,
 }
 
-impl Default for GossipsubConfigBuilder {
+impl Default for ConfigBuilder {
     fn default() -> Self {
-        GossipsubConfigBuilder {
-            config: GossipsubConfig {
+        ConfigBuilder {
+            config: Config {
                 protocol_id: Cow::Borrowed("meshsub"),
                 custom_id_version: None,
                 history_length: 5,
@@ -465,13 +465,13 @@ impl Default for GossipsubConfigBuilder {
     }
 }
 
-impl From<GossipsubConfig> for GossipsubConfigBuilder {
-    fn from(config: GossipsubConfig) -> Self {
-        GossipsubConfigBuilder { config }
+impl From<Config> for ConfigBuilder {
+    fn from(config: Config) -> Self {
+        ConfigBuilder { config }
     }
 }
 
-impl GossipsubConfigBuilder {
+impl ConfigBuilder {
     /// The protocol id prefix to negotiate this protocol (default is `/meshsub/1.0.0`).
     pub fn protocol_id_prefix(
         &mut self,
@@ -800,8 +800,8 @@ impl GossipsubConfigBuilder {
         self
     }
 
-    /// Constructs a [`GossipsubConfig`] from the given configuration and validates the settings.
-    pub fn build(&self) -> Result<GossipsubConfig, &'static str> {
+    /// Constructs a [`Config`] from the given configuration and validates the settings.
+    pub fn build(&self) -> Result<Config, &'static str> {
         // check all constraints on config
 
         if self.config.max_transmit_size < 100 {
@@ -837,7 +837,7 @@ impl GossipsubConfigBuilder {
     }
 }
 
-impl std::fmt::Debug for GossipsubConfig {
+impl std::fmt::Debug for Config {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut builder = f.debug_struct("GossipsubConfig");
         let _ = builder.field("protocol_id", &self.protocol_id);
@@ -894,7 +894,7 @@ mod test {
 
     #[test]
     fn create_thing() {
-        let builder: GossipsubConfig = GossipsubConfigBuilder::default()
+        let builder: Config = ConfigBuilder::default()
             .protocol_id_prefix("purple")
             .build()
             .unwrap();
@@ -927,7 +927,7 @@ mod test {
 
     #[test]
     fn create_config_with_message_id_as_plain_function() {
-        let builder: GossipsubConfig = GossipsubConfigBuilder::default()
+        let builder: Config = ConfigBuilder::default()
             .protocol_id_prefix("purple")
             .message_id_fn(message_id_plain_function)
             .build()
@@ -947,7 +947,7 @@ mod test {
             MessageId::from(v)
         };
 
-        let builder: GossipsubConfig = GossipsubConfigBuilder::default()
+        let builder: Config = ConfigBuilder::default()
             .protocol_id_prefix("purple")
             .message_id_fn(closure)
             .build()
@@ -968,7 +968,7 @@ mod test {
             MessageId::from(v)
         };
 
-        let builder: GossipsubConfig = GossipsubConfigBuilder::default()
+        let builder: Config = ConfigBuilder::default()
             .protocol_id_prefix("purple")
             .message_id_fn(closure)
             .build()
@@ -980,7 +980,7 @@ mod test {
 
     #[test]
     fn create_config_with_protocol_id_prefix() {
-        let builder: GossipsubConfig = GossipsubConfigBuilder::default()
+        let builder: Config = ConfigBuilder::default()
             .protocol_id_prefix("purple")
             .validation_mode(ValidationMode::Anonymous)
             .message_id_fn(message_id_plain_function)
@@ -1004,7 +1004,7 @@ mod test {
 
     #[test]
     fn create_config_with_custom_protocol_id() {
-        let builder: GossipsubConfig = GossipsubConfigBuilder::default()
+        let builder: Config = ConfigBuilder::default()
             .protocol_id("purple", GossipsubVersion::V1_0)
             .validation_mode(ValidationMode::Anonymous)
             .message_id_fn(message_id_plain_function)

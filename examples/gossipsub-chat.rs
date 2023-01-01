@@ -49,7 +49,8 @@ use async_std::io;
 use futures::{prelude::*, select};
 use libp2p::gossipsub::MessageId;
 use libp2p::gossipsub::{
-    Event, Gossipsub, IdentTopic as Topic, Message, MessageAuthenticity, ValidationMode,
+    Behaviour as Gossipsub, Event, IdentTopic as Topic, Message, MessageAuthenticity,
+    ValidationMode,
 };
 use libp2p::{
     gossipsub, identity, mdns, swarm::NetworkBehaviour, swarm::SwarmEvent, PeerId, Swarm,
@@ -84,7 +85,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     };
 
     // Set a custom gossipsub configuration
-    let gossipsub_config = gossipsub::GossipsubConfigBuilder::default()
+    let gossipsub_config = gossipsub::ConfigBuilder::default()
         .heartbeat_interval(Duration::from_secs(10)) // This is set to aid debugging by not cluttering the log space
         .validation_mode(ValidationMode::Strict) // This sets the kind of message validation. The default is Strict (enforce message signing)
         .message_id_fn(message_id_fn) // content-address messages. No two messages of the same content will be propagated.

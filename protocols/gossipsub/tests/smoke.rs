@@ -33,15 +33,14 @@ use libp2p_core::{
     identity, multiaddr::Protocol, transport::MemoryTransport, upgrade, Multiaddr, Transport,
 };
 use libp2p_gossipsub::{
-    Event, Gossipsub, GossipsubConfigBuilder, IdentTopic as Topic, MessageAuthenticity,
-    ValidationMode,
+    Behaviour, ConfigBuilder, Event, IdentTopic as Topic, MessageAuthenticity, ValidationMode,
 };
 use libp2p_plaintext::PlainText2Config;
 use libp2p_swarm::{Swarm, SwarmEvent};
 use libp2p_yamux as yamux;
 
 struct Graph {
-    pub nodes: Vec<(Multiaddr, Swarm<Gossipsub>)>,
+    pub nodes: Vec<(Multiaddr, Swarm<Behaviour>)>,
 }
 
 impl Future for Graph {
@@ -77,7 +76,7 @@ impl Graph {
             .cycle()
             .take(num_nodes)
             .map(|_| build_node())
-            .collect::<Vec<(Multiaddr, Swarm<Gossipsub>)>>();
+            .collect::<Vec<(Multiaddr, Swarm<Behaviour>)>>();
 
         let mut connected_nodes = vec![not_connected_nodes.pop().unwrap()];
 
@@ -143,7 +142,7 @@ impl Graph {
     }
 }
 
-fn build_node() -> (Multiaddr, Swarm<Gossipsub>) {
+fn build_node() -> (Multiaddr, Swarm<Behaviour>) {
     let key = identity::Keypair::generate_ed25519();
     let public_key = key.public();
 
@@ -162,7 +161,7 @@ fn build_node() -> (Multiaddr, Swarm<Gossipsub>) {
     // reduce the default values of the heartbeat, so that all nodes will receive gossip in a
     // timely fashion.
 
-    let config = GossipsubConfigBuilder::default()
+    let config = ConfigBuilder::default()
         .heartbeat_initial_delay(Duration::from_millis(100))
         .heartbeat_interval(Duration::from_millis(200))
         .history_length(10)
@@ -170,7 +169,7 @@ fn build_node() -> (Multiaddr, Swarm<Gossipsub>) {
         .validation_mode(ValidationMode::Permissive)
         .build()
         .unwrap();
-    let behaviour = Gossipsub::new(MessageAuthenticity::Author(peer_id), config).unwrap();
+    let behaviour = Behaviour::new(MessageAuthenticity::Author(peer_id), config).unwrap();
     let mut swarm = Swarm::without_executor(transport, behaviour, peer_id);
 
     let port = 1 + random::<u64>();
