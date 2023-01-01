@@ -3018,7 +3018,7 @@ fn test_ignore_rpc_from_peers_below_graylist_threshold() {
     assert_eq!(gs.events.len(), 1);
     assert!(matches!(
         gs.events[0],
-        NetworkBehaviourAction::GenerateEvent(GossipsubEvent::Subscribed { .. })
+        NetworkBehaviourAction::GenerateEvent(Event::Subscribed { .. })
     ));
 
     let control_action = ControlAction::IHave {

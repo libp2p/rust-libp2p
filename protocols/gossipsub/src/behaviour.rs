@@ -117,7 +117,7 @@ impl MessageAuthenticity {
 
 /// Event that can be emitted by the gossipsub behaviour.
 #[derive(Debug)]
-pub enum GossipsubEvent {
+pub enum Event {
     /// A message has been received.
     ProtobufMessage {
         /// The peer that forwarded us this message.
@@ -215,7 +215,7 @@ pub struct Gossipsub<D = IdentityTransform, F = AllowAllSubscriptionFilter> {
     config: GossipsubConfig,
 
     /// Events that need to be yielded to the outside when polling.
-    events: VecDeque<NetworkBehaviourAction<GossipsubEvent, GossipsubHandler>>,
+    events: VecDeque<NetworkBehaviourAction<Event, GossipsubHandler>>,
 
     /// Pools non-urgent control messages between heartbeats.
     control_pool: HashMap<PeerId, Vec<ControlAction>>,
@@ -1822,7 +1822,7 @@ where
         if self.mesh.contains_key(&message.topic) {
             debug!("Sending received message to user");
             self.events.push_back(NetworkBehaviourAction::GenerateEvent(
-                GossipsubEvent::ProtobufMessage {
+                Event::ProtobufMessage {
                     propagation_source: *propagation_source,
                     message_id: msg_id.clone(),
                     message,
@@ -2000,7 +2000,7 @@ where
                     }
                     // generates a subscription event to be polled
                     application_event.push(NetworkBehaviourAction::GenerateEvent(
-                        GossipsubEvent::Subscribed {
+                        Event::Subscribed {
                             peer_id: *propagation_source,
                             topic: topic_hash.clone(),
                         },
@@ -2020,7 +2020,7 @@ where
                     unsubscribed_peers.push((*propagation_source, topic_hash.clone()));
                     // generate an unsubscribe event to be polled
                     application_event.push(NetworkBehaviourAction::GenerateEvent(
-                        GossipsubEvent::Unsubscribed {
+                        Event::Unsubscribed {
                             peer_id: *propagation_source,
                             topic: topic_hash.clone(),
                         },
@@ -3295,7 +3295,7 @@ where
     F: Send + 'static + TopicSubscriptionFilter,
 {
     type ConnectionHandler = GossipsubHandler;
-    type OutEvent = GossipsubEvent;
+    type OutEvent = Event;
 
     fn new_handler(&mut self) -> Self::ConnectionHandler {
         GossipsubHandler::new(
@@ -3324,7 +3324,7 @@ where
                         propagation_source
                     );
                     self.events.push_back(NetworkBehaviourAction::GenerateEvent(
-                        GossipsubEvent::GossipsubNotSupported {
+                        Event::GossipsubNotSupported {
                             peer_id: propagation_source,
                         },
                     ));
@@ -3484,7 +3484,7 @@ fn peer_added_to_mesh(
     new_topics: Vec<&TopicHash>,
     mesh: &HashMap<TopicHash, BTreeSet<PeerId>>,
     known_topics: Option<&BTreeSet<TopicHash>>,
-    events: &mut VecDeque<NetworkBehaviourAction<GossipsubEvent, GossipsubHandler>>,
+    events: &mut VecDeque<NetworkBehaviourAction<Event, GossipsubHandler>>,
     connections: &HashMap<PeerId, PeerConnections>,
 ) {
     // Ensure there is an active connection
@@ -3525,7 +3525,7 @@ fn peer_removed_from_mesh(
     old_topic: &TopicHash,
     mesh: &HashMap<TopicHash, BTreeSet<PeerId>>,
     known_topics: Option<&BTreeSet<TopicHash>>,
-    events: &mut VecDeque<NetworkBehaviourAction<GossipsubEvent, GossipsubHandler>>,
+    events: &mut VecDeque<NetworkBehaviourAction<Event, GossipsubHandler>>,
     connections: &HashMap<PeerId, PeerConnections>,
 ) {
     // Ensure there is an active connection

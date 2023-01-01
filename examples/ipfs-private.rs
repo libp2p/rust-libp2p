@@ -36,7 +36,7 @@ use either::Either;
 use futures::{prelude::*, select};
 use libp2p::{
     core::{muxing::StreamMuxerBox, transport, transport::upgrade::Version},
-    gossipsub::{self, Gossipsub, GossipsubConfigBuilder, GossipsubEvent, MessageAuthenticity},
+    gossipsub::{self, Event, Gossipsub, GossipsubConfigBuilder, MessageAuthenticity},
     identify, identity,
     multiaddr::Protocol,
     noise, ping,
@@ -156,13 +156,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     enum MyBehaviourEvent {
-        Gossipsub(GossipsubEvent),
+        Gossipsub(Event),
         Identify(identify::Event),
         Ping(ping::Event),
     }
 
-    impl From<GossipsubEvent> for MyBehaviourEvent {
-        fn from(event: GossipsubEvent) -> Self {
+    impl From<Event> for MyBehaviourEvent {
+        fn from(event: Event) -> Self {
             MyBehaviourEvent::Gossipsub(event)
         }
     }
@@ -236,7 +236,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     SwarmEvent::Behaviour(MyBehaviourEvent::Identify(event)) => {
                         println!("identify: {event:?}");
                     }
-                    SwarmEvent::Behaviour(MyBehaviourEvent::Gossipsub(GossipsubEvent::ProtobufMessage {
+                    SwarmEvent::Behaviour(MyBehaviourEvent::Gossipsub(Event::ProtobufMessage {
                         propagation_source: peer_id,
                         message_id: id,
                         message,

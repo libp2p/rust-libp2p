@@ -49,7 +49,7 @@ use async_std::io;
 use futures::{prelude::*, select};
 use libp2p::gossipsub::MessageId;
 use libp2p::gossipsub::{
-    Gossipsub, GossipsubEvent, IdentTopic as Topic, Message, MessageAuthenticity, ValidationMode,
+    Event, Gossipsub, IdentTopic as Topic, Message, MessageAuthenticity, ValidationMode,
 };
 use libp2p::{
     gossipsub, identity, mdns, swarm::NetworkBehaviour, swarm::SwarmEvent, PeerId, Swarm,
@@ -139,7 +139,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         swarm.behaviour_mut().gossipsub.remove_explicit_peer(&peer_id);
                     }
                 },
-                SwarmEvent::Behaviour(MyBehaviourEvent::Gossipsub(GossipsubEvent::ProtobufMessage {
+                SwarmEvent::Behaviour(MyBehaviourEvent::Gossipsub(Event::ProtobufMessage {
                     propagation_source: peer_id,
                     message_id: id,
                     message,

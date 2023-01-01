@@ -33,7 +33,7 @@ use libp2p_core::{
     identity, multiaddr::Protocol, transport::MemoryTransport, upgrade, Multiaddr, Transport,
 };
 use libp2p_gossipsub::{
-    Gossipsub, GossipsubConfigBuilder, GossipsubEvent, IdentTopic as Topic, MessageAuthenticity,
+    Event, Gossipsub, GossipsubConfigBuilder, IdentTopic as Topic, MessageAuthenticity,
     ValidationMode,
 };
 use libp2p_plaintext::PlainText2Config;
@@ -45,7 +45,7 @@ struct Graph {
 }
 
 impl Future for Graph {
-    type Output = (Multiaddr, GossipsubEvent);
+    type Output = (Multiaddr, Event);
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         for (addr, node) in &mut self.nodes {
@@ -112,7 +112,7 @@ impl Graph {
     /// `true`.
     ///
     /// Returns [`true`] on success and [`false`] on timeout.
-    fn wait_for<F: FnMut(&GossipsubEvent) -> bool>(&mut self, mut f: F) -> bool {
+    fn wait_for<F: FnMut(&Event) -> bool>(&mut self, mut f: F) -> bool {
         let fut = futures::future::poll_fn(move |cx| match self.poll_unpin(cx) {
             Poll::Ready((_addr, ev)) if f(&ev) => Poll::Ready(()),
             _ => Poll::Pending,
@@ -205,7 +205,7 @@ fn multi_hop_propagation() {
         // Wait for all nodes to be subscribed.
         let mut subscribed = 0;
         let all_subscribed = graph.wait_for(move |ev| {
-            if let GossipsubEvent::Subscribed { .. } = ev {
+            if let Event::Subscribed { .. } = ev {
                 subscribed += 1;
                 if subscribed == (number_nodes - 1) * 2 {
                     return true;
@@ -234,7 +234,7 @@ fn multi_hop_propagation() {
         // Wait for all nodes to receive the published message.
         let mut received_msgs = 0;
         let all_received = graph.wait_for(move |ev| {
-            if let GossipsubEvent::ProtobufMessage { .. } = ev {
+            if let Event::ProtobufMessage { .. } = ev {
                 received_msgs += 1;
                 if received_msgs == number_nodes - 1 {
                     return true;

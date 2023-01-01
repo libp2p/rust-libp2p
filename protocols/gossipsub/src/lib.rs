@@ -91,7 +91,7 @@
 //! An example of initialising a gossipsub compatible swarm:
 //!
 //! ```
-//! use libp2p_gossipsub::GossipsubEvent;
+//! use libp2p_gossipsub::Event;
 //! use libp2p_core::{identity::Keypair,transport::{Transport, MemoryTransport}, Multiaddr};
 //! use libp2p_gossipsub::MessageAuthenticity;
 //! let local_key = Keypair::generate_ed25519();
@@ -156,7 +156,7 @@ mod types;
 
 mod rpc_proto;
 
-pub use self::behaviour::{Gossipsub, GossipsubEvent, MessageAuthenticity};
+pub use self::behaviour::{Event, Gossipsub, MessageAuthenticity};
 pub use self::transform::{DataTransform, IdentityTransform};
 
 pub use self::config::{GossipsubConfig, GossipsubConfigBuilder, GossipsubVersion, ValidationMode};
