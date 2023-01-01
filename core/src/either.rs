@@ -367,12 +367,12 @@ where
         use TransportError::*;
         match self {
             EitherTransport::Left(a) => match a.dial(addr) {
-                Ok(connec) => Ok(EitherFuture::First(connec)),
+                Ok(conn) => Ok(EitherFuture::First(conn)),
                 Err(MultiaddrNotSupported(addr)) => Err(MultiaddrNotSupported(addr)),
                 Err(Other(err)) => Err(Other(EitherError::A(err))),
             },
             EitherTransport::Right(b) => match b.dial(addr) {
-                Ok(connec) => Ok(EitherFuture::Second(connec)),
+                Ok(conn) => Ok(EitherFuture::Second(conn)),
                 Err(MultiaddrNotSupported(addr)) => Err(MultiaddrNotSupported(addr)),
                 Err(Other(err)) => Err(Other(EitherError::B(err))),
             },
@@ -389,12 +389,12 @@ where
         use TransportError::*;
         match self {
             EitherTransport::Left(a) => match a.dial_as_listener(addr) {
-                Ok(connec) => Ok(EitherFuture::First(connec)),
+                Ok(conn) => Ok(EitherFuture::First(conn)),
                 Err(MultiaddrNotSupported(addr)) => Err(MultiaddrNotSupported(addr)),
                 Err(Other(err)) => Err(Other(EitherError::A(err))),
             },
             EitherTransport::Right(b) => match b.dial_as_listener(addr) {
-                Ok(connec) => Ok(EitherFuture::Second(connec)),
+                Ok(conn) => Ok(EitherFuture::Second(conn)),
                 Err(MultiaddrNotSupported(addr)) => Err(MultiaddrNotSupported(addr)),
                 Err(Other(err)) => Err(Other(EitherError::B(err))),
             },
