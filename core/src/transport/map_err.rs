@@ -21,7 +21,7 @@
 use crate::transport::{ListenerId, Transport, TransportError, TransportEvent};
 use futures::prelude::*;
 use multiaddr::Multiaddr;
-use std::{error, pin::Pin, task::Context, task::Poll};
+use std::{error, marker::PhantomData, pin::Pin, task::Context, task::Poll};
 
 /// See `Transport::map_err`.
 #[derive(Debug, Copy, Clone)]
@@ -47,8 +47,8 @@ where
 {
     type Output = T::Output;
     type Error = TErr;
-    type ListenerUpgrade = MapErrListenerUpgrade<T, F>;
-    type Dial = MapErrDial<T, F>;
+    type ListenerUpgrade = MapErrFuture<T, T::ListenerUpgrade, F>;
+    type Dial = MapErrFuture<T, T::Dial, F>;
 
     fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
         let map = self.map.clone();
@@ -62,9 +62,10 @@ where
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         let map = self.map.clone();
         match self.transport.dial(addr) {
-            Ok(future) => Ok(MapErrDial {
+            Ok(future) => Ok(MapErrFuture {
                 inner: future,
                 map: Some(map),
+                _marker: PhantomData,
             }),
             Err(err) => Err(err.map(map)),
         }
@@ -76,16 +77,13 @@ where
     ) -> Result<Self::Dial, TransportError<Self::Error>> {
         let map = self.map.clone();
         match self.transport.dial_as_listener(addr) {
-            Ok(future) => Ok(MapErrDial {
+            Ok(future) => Ok(MapErrFuture {
                 inner: future,
                 map: Some(map),
+                _marker: PhantomData,
             }),
             Err(err) => Err(err.map(map)),
         }
-    }
-
-    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        self.transport.address_translation(server, observed)
     }
 
     fn poll(
@@ -95,54 +93,33 @@ where
         let this = self.project();
         let map = &*this.map;
         this.transport.poll(cx).map(|ev| {
-            ev.map_upgrade(move |value| MapErrListenerUpgrade {
+            ev.map_upgrade(move |value| MapErrFuture {
                 inner: value,
                 map: Some(map.clone()),
+                _marker: PhantomData,
             })
             .map_err(map.clone())
         })
     }
-}
 
-/// Listening upgrade future for `MapErr`.
-#[pin_project::pin_project]
-pub struct MapErrListenerUpgrade<T: Transport, F> {
-    #[pin]
-    inner: T::ListenerUpgrade,
-    map: Option<F>,
-}
-
-impl<T, F, TErr> Future for MapErrListenerUpgrade<T, F>
-where
-    T: Transport,
-    F: FnOnce(T::Error) -> TErr,
-{
-    type Output = Result<T::Output, TErr>;
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let this = self.project();
-        match Future::poll(this.inner, cx) {
-            Poll::Ready(Ok(value)) => Poll::Ready(Ok(value)),
-            Poll::Pending => Poll::Pending,
-            Poll::Ready(Err(err)) => {
-                let map = this.map.take().expect("poll() called again after error");
-                Poll::Ready(Err(map(err)))
-            }
-        }
+    fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
+        self.transport.address_translation(server, observed)
     }
 }
 
-/// Dialing future for `MapErr`.
+/// Future for `MapErr`.
 #[pin_project::pin_project]
-pub struct MapErrDial<T: Transport, F> {
+pub struct MapErrFuture<T, Fut, F> {
     #[pin]
-    inner: T::Dial,
+    inner: Fut,
     map: Option<F>,
+    _marker: PhantomData<T>,
 }
 
-impl<T, F, TErr> Future for MapErrDial<T, F>
+impl<T, Fut, F, TErr> Future for MapErrFuture<T, Fut, F>
 where
     T: Transport,
+    Fut: Future<Output = Result<T::Output, T::Error>>,
     F: FnOnce(T::Error) -> TErr,
 {
     type Output = Result<T::Output, TErr>;
