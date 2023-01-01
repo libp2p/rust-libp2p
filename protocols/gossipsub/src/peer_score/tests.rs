@@ -21,8 +21,8 @@
 /// A collection of unit tests mostly ported from the go implementation.
 use super::*;
 
-use crate::types::RawGossipsubMessage;
-use crate::{GossipsubMessage, IdentTopic as Topic};
+use crate::types::RawMessage;
+use crate::{IdentTopic as Topic, Message};
 
 // estimates a value within variance
 fn within_variance(value: f64, expected: f64, variance: f64) -> bool {
@@ -33,8 +33,8 @@ fn within_variance(value: f64, expected: f64, variance: f64) -> bool {
 }
 
 // generates a random gossipsub message with sequence number i
-fn make_test_message(seq: u64) -> (MessageId, RawGossipsubMessage) {
-    let raw_message = RawGossipsubMessage {
+fn make_test_message(seq: u64) -> (MessageId, RawMessage) {
+    let raw_message = RawMessage {
         source: Some(PeerId::random()),
         data: vec![12, 34, 56],
         sequence_number: Some(seq),
@@ -44,7 +44,7 @@ fn make_test_message(seq: u64) -> (MessageId, RawGossipsubMessage) {
         validated: true,
     };
 
-    let message = GossipsubMessage {
+    let message = Message {
         source: raw_message.source,
         data: raw_message.data.clone(),
         sequence_number: raw_message.sequence_number,
@@ -55,7 +55,7 @@ fn make_test_message(seq: u64) -> (MessageId, RawGossipsubMessage) {
     (id, raw_message)
 }
 
-fn default_message_id() -> fn(&GossipsubMessage) -> MessageId {
+fn default_message_id() -> fn(&Message) -> MessageId {
     |message| {
         // default message id is: source + sequence number
         // NOTE: If either the peer_id or source is not provided, we set to 0;

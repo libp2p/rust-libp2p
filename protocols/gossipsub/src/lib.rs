@@ -165,9 +165,6 @@ pub use self::peer_score::{
     TopicScoreParams,
 };
 pub use self::topic::{Hasher, Topic, TopicHash};
-pub use self::types::{
-    FastMessageId, GossipsubMessage, GossipsubRpc, MessageAcceptance, MessageId,
-    RawGossipsubMessage,
-};
+pub use self::types::{FastMessageId, Message, MessageAcceptance, MessageId, RawMessage, Rpc};
 pub type IdentTopic = Topic<self::topic::IdentityHash>;
 pub type Sha256Topic = Topic<self::topic::Sha256Hash>;

@@ -23,8 +23,7 @@ use crate::error::{GossipsubHandlerError, ValidationError};
 use crate::handler::HandlerEvent;
 use crate::topic::TopicHash;
 use crate::types::{
-    GossipsubControlAction, GossipsubRpc, GossipsubSubscription, GossipsubSubscriptionAction,
-    MessageId, PeerInfo, PeerKind, RawGossipsubMessage,
+    ControlAction, MessageId, PeerInfo, PeerKind, RawMessage, Rpc, Subscription, SubscriptionAction,
 };
 use crate::{rpc_proto, GossipsubConfig};
 use asynchronous_codec::{Decoder, Encoder, Framed};
@@ -341,7 +340,7 @@ impl Decoder for GossipsubCodec {
             // If the initial validation logic failed, add the message to invalid messages and
             // continue processing the others.
             if let Some(validation_error) = invalid_kind.take() {
-                let message = RawGossipsubMessage {
+                let message = RawMessage {
                     source: None, // don't bother inform the application
                     data: message.data.unwrap_or_default(),
                     sequence_number: None, // don't inform the application
@@ -361,7 +360,7 @@ impl Decoder for GossipsubCodec {
 
                 // Build the invalid message (ignoring further validation of sequence number
                 // and source)
-                let message = RawGossipsubMessage {
+                let message = RawMessage {
                     source: None, // don't bother inform the application
                     data: message.data.unwrap_or_default(),
                     sequence_number: None, // don't inform the application
@@ -386,7 +385,7 @@ impl Decoder for GossipsubCodec {
                             seq_no,
                             seq_no.len()
                         );
-                        let message = RawGossipsubMessage {
+                        let message = RawMessage {
                             source: None, // don't bother inform the application
                             data: message.data.unwrap_or_default(),
                             sequence_number: None, // don't inform the application
@@ -405,7 +404,7 @@ impl Decoder for GossipsubCodec {
                 } else {
                     // sequence number was not present
                     debug!("Sequence number not present but expected");
-                    let message = RawGossipsubMessage {
+                    let message = RawMessage {
                         source: None, // don't bother inform the application
                         data: message.data.unwrap_or_default(),
                         sequence_number: None, // don't inform the application
@@ -431,7 +430,7 @@ impl Decoder for GossipsubCodec {
                             Err(_) => {
                                 // invalid peer id, add to invalid messages
                                 debug!("Message source has an invalid PeerId");
-                                let message = RawGossipsubMessage {
+                                let message = RawMessage {
                                     source: None, // don't bother inform the application
                                     data: message.data.unwrap_or_default(),
                                     sequence_number,
@@ -455,7 +454,7 @@ impl Decoder for GossipsubCodec {
             };
 
             // This message has passed all validation, add it to the validated messages.
-            messages.push(RawGossipsubMessage {
+            messages.push(RawMessage {
                 source,
                 data: message.data.unwrap_or_default(),
                 sequence_number,
@@ -470,10 +469,10 @@ impl Decoder for GossipsubCodec {
 
         if let Some(rpc_control) = rpc.control {
             // Collect the gossipsub control messages
-            let ihave_msgs: Vec<GossipsubControlAction> = rpc_control
+            let ihave_msgs: Vec<ControlAction> = rpc_control
                 .ihave
                 .into_iter()
-                .map(|ihave| GossipsubControlAction::IHave {
+                .map(|ihave| ControlAction::IHave {
                     topic_hash: TopicHash::from_raw(ihave.topic_id.unwrap_or_default()),
                     message_ids: ihave
                         .message_ids
@@ -483,10 +482,10 @@ impl Decoder for GossipsubCodec {
                 })
                 .collect();
 
-            let iwant_msgs: Vec<GossipsubControlAction> = rpc_control
+            let iwant_msgs: Vec<ControlAction> = rpc_control
                 .iwant
                 .into_iter()
-                .map(|iwant| GossipsubControlAction::IWant {
+                .map(|iwant| ControlAction::IWant {
                     message_ids: iwant
                         .message_ids
                         .into_iter()
@@ -495,10 +494,10 @@ impl Decoder for GossipsubCodec {
                 })
                 .collect();
 
-            let graft_msgs: Vec<GossipsubControlAction> = rpc_control
+            let graft_msgs: Vec<ControlAction> = rpc_control
                 .graft
                 .into_iter()
-                .map(|graft| GossipsubControlAction::Graft {
+                .map(|graft| ControlAction::Graft {
                     topic_hash: TopicHash::from_raw(graft.topic_id.unwrap_or_default()),
                 })
                 .collect();
@@ -523,7 +522,7 @@ impl Decoder for GossipsubCodec {
                     .collect::<Vec<PeerInfo>>();
 
                 let topic_hash = TopicHash::from_raw(prune.topic_id.unwrap_or_default());
-                prune_msgs.push(GossipsubControlAction::Prune {
+                prune_msgs.push(ControlAction::Prune {
                     topic_hash,
                     peers,
                     backoff: prune.backoff,
@@ -537,16 +536,16 @@ impl Decoder for GossipsubCodec {
         }
 
         Ok(Some(HandlerEvent::Message {
-            rpc: GossipsubRpc {
+            rpc: Rpc {
                 messages,
                 subscriptions: rpc
                     .subscriptions
                     .into_iter()
-                    .map(|sub| GossipsubSubscription {
+                    .map(|sub| Subscription {
                         action: if Some(true) == sub.subscribe {
-                            GossipsubSubscriptionAction::Subscribe
+                            SubscriptionAction::Subscribe
                         } else {
-                            GossipsubSubscriptionAction::Unsubscribe
+                            SubscriptionAction::Unsubscribe
                         },
                         topic_hash: TopicHash::from_raw(sub.topic_id.unwrap_or_default()),
                     })
@@ -568,7 +567,7 @@ mod tests {
     use quickcheck::*;
 
     #[derive(Clone, Debug)]
-    struct Message(RawGossipsubMessage);
+    struct Message(RawMessage);
 
     impl Arbitrary for Message {
         fn arbitrary(g: &mut Gen) -> Self {
@@ -636,7 +635,7 @@ mod tests {
         fn prop(message: Message) {
             let message = message.0;
 
-            let rpc = GossipsubRpc {
+            let rpc = Rpc {
                 messages: vec![message],
                 subscriptions: vec![],
                 control_msgs: vec![],

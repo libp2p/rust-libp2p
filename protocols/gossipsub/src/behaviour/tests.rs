@@ -26,8 +26,7 @@ use crate::subscription_filter::WhitelistSubscriptionFilter;
 use crate::transform::{DataTransform, IdentityTransform};
 use crate::types::FastMessageId;
 use crate::{
-    GossipsubConfig, GossipsubConfigBuilder, GossipsubMessage, IdentTopic as Topic,
-    TopicScoreParams,
+    GossipsubConfig, GossipsubConfigBuilder, IdentTopic as Topic, Message, TopicScoreParams,
 };
 use async_std::net::Ipv4Addr;
 use byteorder::{BigEndian, ByteOrder};
@@ -243,8 +242,8 @@ where
             &topic_hashes
                 .iter()
                 .cloned()
-                .map(|t| GossipsubSubscription {
-                    action: GossipsubSubscriptionAction::Subscribe,
+                .map(|t| Subscription {
+                    action: SubscriptionAction::Subscribe,
                     topic_hash: t,
                 })
                 .collect::<Vec<_>>(),
@@ -287,12 +286,12 @@ where
 }
 
 // Converts a protobuf message into a gossipsub message for reading the Gossipsub event queue.
-fn proto_to_message(rpc: &crate::rpc_proto::Rpc) -> GossipsubRpc {
+fn proto_to_message(rpc: &crate::rpc_proto::Rpc) -> Rpc {
     // Store valid messages.
     let mut messages = Vec::with_capacity(rpc.publish.len());
     let rpc = rpc.clone();
     for message in rpc.publish.into_iter() {
-        messages.push(RawGossipsubMessage {
+        messages.push(RawMessage {
             source: message.from.map(|x| PeerId::from_bytes(&x).unwrap()),
             data: message.data.unwrap_or_default(),
             sequence_number: message.seqno.map(|x| BigEndian::read_u64(&x)), // don't inform the application
@@ -305,10 +304,10 @@ fn proto_to_message(rpc: &crate::rpc_proto::Rpc) -> GossipsubRpc {
     let mut control_msgs = Vec::new();
     if let Some(rpc_control) = rpc.control {
         // Collect the gossipsub control messages
-        let ihave_msgs: Vec<GossipsubControlAction> = rpc_control
+        let ihave_msgs: Vec<ControlAction> = rpc_control
             .ihave
             .into_iter()
-            .map(|ihave| GossipsubControlAction::IHave {
+            .map(|ihave| ControlAction::IHave {
                 topic_hash: TopicHash::from_raw(ihave.topic_id.unwrap_or_default()),
                 message_ids: ihave
                     .message_ids
@@ -318,10 +317,10 @@ fn proto_to_message(rpc: &crate::rpc_proto::Rpc) -> GossipsubRpc {
             })
             .collect();
 
-        let iwant_msgs: Vec<GossipsubControlAction> = rpc_control
+        let iwant_msgs: Vec<ControlAction> = rpc_control
             .iwant
             .into_iter()
-            .map(|iwant| GossipsubControlAction::IWant {
+            .map(|iwant| ControlAction::IWant {
                 message_ids: iwant
                     .message_ids
                     .into_iter()
@@ -330,10 +329,10 @@ fn proto_to_message(rpc: &crate::rpc_proto::Rpc) -> GossipsubRpc {
             })
             .collect();
 
-        let graft_msgs: Vec<GossipsubControlAction> = rpc_control
+        let graft_msgs: Vec<ControlAction> = rpc_control
             .graft
             .into_iter()
-            .map(|graft| GossipsubControlAction::Graft {
+            .map(|graft| ControlAction::Graft {
                 topic_hash: TopicHash::from_raw(graft.topic_id.unwrap_or_default()),
             })
             .collect();
@@ -357,7 +356,7 @@ fn proto_to_message(rpc: &crate::rpc_proto::Rpc) -> GossipsubRpc {
                 .collect::<Vec<PeerInfo>>();
 
             let topic_hash = TopicHash::from_raw(prune.topic_id.unwrap_or_default());
-            prune_msgs.push(GossipsubControlAction::Prune {
+            prune_msgs.push(ControlAction::Prune {
                 topic_hash,
                 peers,
                 backoff: prune.backoff,
@@ -370,16 +369,16 @@ fn proto_to_message(rpc: &crate::rpc_proto::Rpc) -> GossipsubRpc {
         control_msgs.extend(prune_msgs);
     }
 
-    GossipsubRpc {
+    Rpc {
         messages,
         subscriptions: rpc
             .subscriptions
             .into_iter()
-            .map(|sub| GossipsubSubscription {
+            .map(|sub| Subscription {
                 action: if Some(true) == sub.subscribe {
-                    GossipsubSubscriptionAction::Subscribe
+                    SubscriptionAction::Subscribe
                 } else {
-                    GossipsubSubscriptionAction::Unsubscribe
+                    SubscriptionAction::Unsubscribe
                 },
                 topic_hash: TopicHash::from_raw(sub.topic_id.unwrap_or_default()),
             })
@@ -557,11 +556,11 @@ fn test_join() {
     );
 
     fn collect_grafts(
-        mut collected_grafts: Vec<GossipsubControlAction>,
-        (_, controls): (&PeerId, &Vec<GossipsubControlAction>),
-    ) -> Vec<GossipsubControlAction> {
+        mut collected_grafts: Vec<ControlAction>,
+        (_, controls): (&PeerId, &Vec<ControlAction>),
+    ) -> Vec<ControlAction> {
         for c in controls.iter() {
-            if let GossipsubControlAction::Graft { topic_hash: _ } = c {
+            if let ControlAction::Graft { topic_hash: _ } = c {
                 collected_grafts.push(c.clone())
             }
         }
@@ -872,14 +871,14 @@ fn test_handle_received_subscriptions() {
     // The first peer sends 3 subscriptions and 1 unsubscription
     let mut subscriptions = topic_hashes[..3]
         .iter()
-        .map(|topic_hash| GossipsubSubscription {
-            action: GossipsubSubscriptionAction::Subscribe,
+        .map(|topic_hash| Subscription {
+            action: SubscriptionAction::Subscribe,
             topic_hash: topic_hash.clone(),
         })
-        .collect::<Vec<GossipsubSubscription>>();
+        .collect::<Vec<Subscription>>();
 
-    subscriptions.push(GossipsubSubscription {
-        action: GossipsubSubscriptionAction::Unsubscribe,
+    subscriptions.push(Subscription {
+        action: SubscriptionAction::Unsubscribe,
         topic_hash: topic_hashes[topic_hashes.len() - 1].clone(),
     });
 
@@ -920,8 +919,8 @@ fn test_handle_received_subscriptions() {
     // Peer 0 unsubscribes from the first topic
 
     gs.handle_received_subscriptions(
-        &[GossipsubSubscription {
-            action: GossipsubSubscriptionAction::Unsubscribe,
+        &[Subscription {
+            action: SubscriptionAction::Unsubscribe,
             topic_hash: topic_hashes[0].clone(),
         }],
         &peers[0],
@@ -1032,7 +1031,7 @@ fn test_handle_iwant_msg_cached() {
         .to_subscribe(true)
         .create_network();
 
-    let raw_message = RawGossipsubMessage {
+    let raw_message = RawMessage {
         source: Some(peers[11]),
         data: vec![1, 2, 3, 4],
         sequence_number: Some(1u64),
@@ -1090,7 +1089,7 @@ fn test_handle_iwant_msg_cached_shifted() {
 
     // perform 10 memshifts and check that it leaves the cache
     for shift in 1..10 {
-        let raw_message = RawGossipsubMessage {
+        let raw_message = RawMessage {
             source: Some(peers[11]),
             data: vec![1, 2, 3, 4],
             sequence_number: Some(shift),
@@ -1180,7 +1179,7 @@ fn test_handle_ihave_subscribed_and_msg_not_cached() {
     // check that we sent an IWANT request for `unknown id`
     let iwant_exists = match gs.control_pool.get(&peers[7]) {
         Some(controls) => controls.iter().any(|c| match c {
-            GossipsubControlAction::IWant { message_ids } => message_ids
+            ControlAction::IWant { message_ids } => message_ids
                 .iter()
                 .any(|m| *m == MessageId::new(b"unknown id")),
             _ => false,
@@ -1348,7 +1347,7 @@ fn test_handle_prune_peer_in_mesh() {
 
 fn count_control_msgs<D: DataTransform, F: TopicSubscriptionFilter>(
     gs: &Gossipsub<D, F>,
-    mut filter: impl FnMut(&PeerId, &GossipsubControlAction) -> bool,
+    mut filter: impl FnMut(&PeerId, &ControlAction) -> bool,
 ) -> usize {
     gs.control_pool
         .iter()
@@ -1487,7 +1486,7 @@ fn test_handle_graft_explicit_peer() {
     assert!(
         count_control_msgs(&gs, |peer_id, m| peer_id == peer
             && match m {
-                GossipsubControlAction::Prune { topic_hash, .. } =>
+                ControlAction::Prune { topic_hash, .. } =>
                     topic_hash == &topic_hashes[0] || topic_hash == &topic_hashes[1],
                 _ => false,
             })
@@ -1515,7 +1514,7 @@ fn explicit_peers_not_added_to_mesh_on_receiving_subscription() {
     //assert that graft gets created to non-explicit peer
     assert!(
         count_control_msgs(&gs, |peer_id, m| peer_id == &peers[1]
-            && matches!(m, GossipsubControlAction::Graft { .. }))
+            && matches!(m, ControlAction::Graft { .. }))
             >= 1,
         "No graft message got created to non-explicit peer"
     );
@@ -1523,7 +1522,7 @@ fn explicit_peers_not_added_to_mesh_on_receiving_subscription() {
     //assert that no graft gets created to explicit peer
     assert_eq!(
         count_control_msgs(&gs, |peer_id, m| peer_id == &peers[0]
-            && matches!(m, GossipsubControlAction::Graft { .. })),
+            && matches!(m, ControlAction::Graft { .. })),
         0,
         "A graft message got created to an explicit peer"
     );
@@ -1547,7 +1546,7 @@ fn do_not_graft_explicit_peer() {
     //assert that no graft gets created to explicit peer
     assert_eq!(
         count_control_msgs(&gs, |peer_id, m| peer_id == &others[0]
-            && matches!(m, GossipsubControlAction::Graft { .. })),
+            && matches!(m, ControlAction::Graft { .. })),
         0,
         "A graft message got created to an explicit peer"
     );
@@ -1565,7 +1564,7 @@ fn do_forward_messages_to_explicit_peers() {
 
     let local_id = PeerId::random();
 
-    let message = RawGossipsubMessage {
+    let message = RawMessage {
         source: Some(peers[1]),
         data: vec![12],
         sequence_number: Some(0),
@@ -1617,8 +1616,8 @@ fn explicit_peers_not_added_to_mesh_on_subscribe() {
     let topic_hash = topic.hash();
     for peer in peers.iter().take(2) {
         gs.handle_received_subscriptions(
-            &[GossipsubSubscription {
-                action: GossipsubSubscriptionAction::Subscribe,
+            &[Subscription {
+                action: SubscriptionAction::Subscribe,
                 topic_hash: topic_hash.clone(),
             }],
             peer,
@@ -1634,7 +1633,7 @@ fn explicit_peers_not_added_to_mesh_on_subscribe() {
     //assert that graft gets created to non-explicit peer
     assert!(
         count_control_msgs(&gs, |peer_id, m| peer_id == &peers[1]
-            && matches!(m, GossipsubControlAction::Graft { .. }))
+            && matches!(m, ControlAction::Graft { .. }))
             > 0,
         "No graft message got created to non-explicit peer"
     );
@@ -1642,7 +1641,7 @@ fn explicit_peers_not_added_to_mesh_on_subscribe() {
     //assert that no graft gets created to explicit peer
     assert_eq!(
         count_control_msgs(&gs, |peer_id, m| peer_id == &peers[0]
-            && matches!(m, GossipsubControlAction::Graft { .. })),
+            && matches!(m, ControlAction::Graft { .. })),
         0,
         "A graft message got created to an explicit peer"
     );
@@ -1663,8 +1662,8 @@ fn explicit_peers_not_added_to_mesh_from_fanout_on_subscribe() {
     let topic_hash = topic.hash();
     for peer in peers.iter().take(2) {
         gs.handle_received_subscriptions(
-            &[GossipsubSubscription {
-                action: GossipsubSubscriptionAction::Subscribe,
+            &[Subscription {
+                action: SubscriptionAction::Subscribe,
                 topic_hash: topic_hash.clone(),
             }],
             peer,
@@ -1683,7 +1682,7 @@ fn explicit_peers_not_added_to_mesh_from_fanout_on_subscribe() {
     //assert that graft gets created to non-explicit peer
     assert!(
         count_control_msgs(&gs, |peer_id, m| peer_id == &peers[1]
-            && matches!(m, GossipsubControlAction::Graft { .. }))
+            && matches!(m, ControlAction::Graft { .. }))
             >= 1,
         "No graft message got created to non-explicit peer"
     );
@@ -1691,7 +1690,7 @@ fn explicit_peers_not_added_to_mesh_from_fanout_on_subscribe() {
     //assert that no graft gets created to explicit peer
     assert_eq!(
         count_control_msgs(&gs, |peer_id, m| peer_id == &peers[0]
-            && matches!(m, GossipsubControlAction::Graft { .. })),
+            && matches!(m, ControlAction::Graft { .. })),
         0,
         "A graft message got created to an explicit peer"
     );
@@ -1709,7 +1708,7 @@ fn no_gossip_gets_sent_to_explicit_peers() {
 
     let local_id = PeerId::random();
 
-    let message = RawGossipsubMessage {
+    let message = RawMessage {
         source: Some(peers[1]),
         data: vec![],
         sequence_number: Some(0),
@@ -1733,7 +1732,7 @@ fn no_gossip_gets_sent_to_explicit_peers() {
             .get(&peers[0])
             .unwrap_or(&Vec::new())
             .iter()
-            .filter(|m| matches!(m, GossipsubControlAction::IHave { .. }))
+            .filter(|m| matches!(m, ControlAction::IHave { .. }))
             .count(),
         0,
         "Gossip got emitted to explicit peer"
@@ -1881,7 +1880,7 @@ fn test_send_px_and_backoff_in_prune() {
     assert_eq!(
         count_control_msgs(&gs, |peer_id, m| peer_id == &peers[0]
             && match m {
-                GossipsubControlAction::Prune {
+                ControlAction::Prune {
                     topic_hash,
                     peers,
                     backoff,
@@ -1929,7 +1928,7 @@ fn test_prune_backoffed_peer_on_graft() {
     assert_eq!(
         count_control_msgs(&gs, |peer_id, m| peer_id == &peers[0]
             && match m {
-                GossipsubControlAction::Prune {
+                ControlAction::Prune {
                     topic_hash,
                     peers,
                     backoff,
@@ -1977,10 +1976,7 @@ fn test_do_not_graft_within_backoff_period() {
     //Check that no graft got created (we have backoff_slack = 1 therefore one more heartbeat
     // is needed).
     assert_eq!(
-        count_control_msgs(&gs, |_, m| matches!(
-            m,
-            GossipsubControlAction::Graft { .. }
-        )),
+        count_control_msgs(&gs, |_, m| matches!(m, ControlAction::Graft { .. })),
         0,
         "Graft message created too early within backoff period"
     );
@@ -1991,10 +1987,7 @@ fn test_do_not_graft_within_backoff_period() {
 
     //check that graft got created
     assert!(
-        count_control_msgs(&gs, |_, m| matches!(
-            m,
-            GossipsubControlAction::Graft { .. }
-        )) > 0,
+        count_control_msgs(&gs, |_, m| matches!(m, ControlAction::Graft { .. })) > 0,
         "No graft message was created after backoff period"
     );
 }
@@ -2032,10 +2025,7 @@ fn test_do_not_graft_within_default_backoff_period_after_receiving_prune_without
     //Check that no graft got created (we have backoff_slack = 1 therefore one more heartbeat
     // is needed).
     assert_eq!(
-        count_control_msgs(&gs, |_, m| matches!(
-            m,
-            GossipsubControlAction::Graft { .. }
-        )),
+        count_control_msgs(&gs, |_, m| matches!(m, ControlAction::Graft { .. })),
         0,
         "Graft message created too early within backoff period"
     );
@@ -2046,10 +2036,7 @@ fn test_do_not_graft_within_default_backoff_period_after_receiving_prune_without
 
     //check that graft got created
     assert!(
-        count_control_msgs(&gs, |_, m| matches!(
-            m,
-            GossipsubControlAction::Graft { .. }
-        )) > 0,
+        count_control_msgs(&gs, |_, m| matches!(m, ControlAction::Graft { .. })) > 0,
         "No graft message was created after backoff period"
     );
 }
@@ -2079,7 +2066,7 @@ fn test_unsubscribe_backoff() {
 
     assert_eq!(
         count_control_msgs(&gs, |_, m| match m {
-            GossipsubControlAction::Prune { backoff, .. } => backoff == &Some(1),
+            ControlAction::Prune { backoff, .. } => backoff == &Some(1),
             _ => false,
         }),
         1,
@@ -2103,10 +2090,7 @@ fn test_unsubscribe_backoff() {
     // Check that no graft got created (we have backoff_slack = 1 therefore one more heartbeat
     // is needed).
     assert_eq!(
-        count_control_msgs(&gs, |_, m| matches!(
-            m,
-            GossipsubControlAction::Graft { .. }
-        )),
+        count_control_msgs(&gs, |_, m| matches!(m, ControlAction::Graft { .. })),
         0,
         "Graft message created too early within backoff period"
     );
@@ -2117,10 +2101,7 @@ fn test_unsubscribe_backoff() {
 
     // check that graft got created
     assert!(
-        count_control_msgs(&gs, |_, m| matches!(
-            m,
-            GossipsubControlAction::Graft { .. }
-        )) > 0,
+        count_control_msgs(&gs, |_, m| matches!(m, ControlAction::Graft { .. })) > 0,
         "No graft message was created after backoff period"
     );
 }
@@ -2197,7 +2178,7 @@ fn test_gossip_to_at_least_gossip_lazy_peers() {
         .create_network();
 
     //receive message
-    let raw_message = RawGossipsubMessage {
+    let raw_message = RawMessage {
         source: Some(PeerId::random()),
         data: vec![],
         sequence_number: Some(0),
@@ -2219,7 +2200,7 @@ fn test_gossip_to_at_least_gossip_lazy_peers() {
     //check that exactly config.gossip_lazy() many gossip messages were sent.
     assert_eq!(
         count_control_msgs(&gs, |_, action| match action {
-            GossipsubControlAction::IHave {
+            ControlAction::IHave {
                 topic_hash,
                 message_ids,
             } => topic_hash == &topic_hashes[0] && message_ids.iter().any(|id| id == &msg_id),
@@ -2242,7 +2223,7 @@ fn test_gossip_to_at_most_gossip_factor_peers() {
         .create_network();
 
     //receive message
-    let raw_message = RawGossipsubMessage {
+    let raw_message = RawMessage {
         source: Some(PeerId::random()),
         data: vec![],
         sequence_number: Some(0),
@@ -2263,7 +2244,7 @@ fn test_gossip_to_at_most_gossip_factor_peers() {
     //check that exactly config.gossip_lazy() many gossip messages were sent.
     assert_eq!(
         count_control_msgs(&gs, |_, action| match action {
-            GossipsubControlAction::IHave {
+            ControlAction::IHave {
                 topic_hash,
                 message_ids,
             } => topic_hash == &topic_hashes[0] && message_ids.iter().any(|id| id == &msg_id),
@@ -2422,7 +2403,7 @@ fn test_prune_negative_scored_peers() {
     assert_eq!(
         count_control_msgs(&gs, |peer_id, m| peer_id == &peers[0]
             && match m {
-                GossipsubControlAction::Prune {
+                ControlAction::Prune {
                     topic_hash,
                     peers,
                     backoff,
@@ -2556,7 +2537,7 @@ fn test_only_send_nonnegative_scoring_peers_in_px() {
     assert_eq!(
         count_control_msgs(&gs, |peer_id, m| peer_id == &peers[1]
             && match m {
-                GossipsubControlAction::Prune {
+                ControlAction::Prune {
                     topic_hash,
                     peers: px,
                     ..
@@ -2606,7 +2587,7 @@ fn test_do_not_gossip_to_peers_below_gossip_threshold() {
     gs.peer_score.as_mut().unwrap().0.add_penalty(&p2, 1);
 
     // Receive message
-    let raw_message = RawGossipsubMessage {
+    let raw_message = RawMessage {
         source: Some(PeerId::random()),
         data: vec![],
         sequence_number: Some(0),
@@ -2628,7 +2609,7 @@ fn test_do_not_gossip_to_peers_below_gossip_threshold() {
     // Check that exactly one gossip messages got sent and it got sent to p2
     assert_eq!(
         count_control_msgs(&gs, |peer, action| match action {
-            GossipsubControlAction::IHave {
+            ControlAction::IHave {
                 topic_hash,
                 message_ids,
             } => {
@@ -2683,7 +2664,7 @@ fn test_iwant_msg_from_peer_below_gossip_threshold_gets_ignored() {
     gs.peer_score.as_mut().unwrap().0.add_penalty(&p2, 1);
 
     // Receive message
-    let raw_message = RawGossipsubMessage {
+    let raw_message = RawMessage {
         source: Some(PeerId::random()),
         data: vec![],
         sequence_number: Some(0),
@@ -2774,7 +2755,7 @@ fn test_ihave_msg_from_peer_below_gossip_threshold_gets_ignored() {
     gs.peer_score.as_mut().unwrap().0.add_penalty(&p2, 1);
 
     //message that other peers have
-    let raw_message = RawGossipsubMessage {
+    let raw_message = RawMessage {
         source: Some(PeerId::random()),
         data: vec![],
         sequence_number: Some(0),
@@ -2795,7 +2776,7 @@ fn test_ihave_msg_from_peer_below_gossip_threshold_gets_ignored() {
     // check that we sent exactly one IWANT request to p2
     assert_eq!(
         count_control_msgs(&gs, |peer, c| match c {
-            GossipsubControlAction::IWant { message_ids } =>
+            ControlAction::IWant { message_ids } =>
                 if message_ids.iter().any(|m| m == &msg_id) {
                     assert_eq!(peer, &p2);
                     true
@@ -2959,7 +2940,7 @@ fn test_ignore_rpc_from_peers_below_graylist_threshold() {
     //reduce score of p2 below publish_threshold but not below graylist_threshold
     gs.peer_score.as_mut().unwrap().0.add_penalty(&p2, 1);
 
-    let raw_message1 = RawGossipsubMessage {
+    let raw_message1 = RawMessage {
         source: Some(PeerId::random()),
         data: vec![1, 2, 3, 4],
         sequence_number: Some(1u64),
@@ -2969,7 +2950,7 @@ fn test_ignore_rpc_from_peers_below_graylist_threshold() {
         validated: true,
     };
 
-    let raw_message2 = RawGossipsubMessage {
+    let raw_message2 = RawMessage {
         source: Some(PeerId::random()),
         data: vec![1, 2, 3, 4, 5],
         sequence_number: Some(2u64),
@@ -2979,7 +2960,7 @@ fn test_ignore_rpc_from_peers_below_graylist_threshold() {
         validated: true,
     };
 
-    let raw_message3 = RawGossipsubMessage {
+    let raw_message3 = RawMessage {
         source: Some(PeerId::random()),
         data: vec![1, 2, 3, 4, 5, 6],
         sequence_number: Some(3u64),
@@ -2989,7 +2970,7 @@ fn test_ignore_rpc_from_peers_below_graylist_threshold() {
         validated: true,
     };
 
-    let raw_message4 = RawGossipsubMessage {
+    let raw_message4 = RawMessage {
         source: Some(PeerId::random()),
         data: vec![1, 2, 3, 4, 5, 6, 7],
         sequence_number: Some(4u64),
@@ -3005,12 +2986,12 @@ fn test_ignore_rpc_from_peers_below_graylist_threshold() {
     // Transform the inbound message
     let message4 = &gs.data_transform.inbound_transform(raw_message4).unwrap();
 
-    let subscription = GossipsubSubscription {
-        action: GossipsubSubscriptionAction::Subscribe,
+    let subscription = Subscription {
+        action: SubscriptionAction::Subscribe,
         topic_hash: topics[0].clone(),
     };
 
-    let control_action = GossipsubControlAction::IHave {
+    let control_action = ControlAction::IHave {
         topic_hash: topics[0].clone(),
         message_ids: vec![config.message_id(message2)],
     };
@@ -3024,7 +3005,7 @@ fn test_ignore_rpc_from_peers_below_graylist_threshold() {
         #[allow(deprecated)]
         ConnectionId::DUMMY,
         HandlerEvent::Message {
-            rpc: GossipsubRpc {
+            rpc: Rpc {
                 messages: vec![raw_message1],
                 subscriptions: vec![subscription.clone()],
                 control_msgs: vec![control_action],
@@ -3040,7 +3021,7 @@ fn test_ignore_rpc_from_peers_below_graylist_threshold() {
         NetworkBehaviourAction::GenerateEvent(GossipsubEvent::Subscribed { .. })
     ));
 
-    let control_action = GossipsubControlAction::IHave {
+    let control_action = ControlAction::IHave {
         topic_hash: topics[0].clone(),
         message_ids: vec![config.message_id(message4)],
     };
@@ -3051,7 +3032,7 @@ fn test_ignore_rpc_from_peers_below_graylist_threshold() {
         #[allow(deprecated)]
         ConnectionId::DUMMY,
         HandlerEvent::Message {
-            rpc: GossipsubRpc {
+            rpc: Rpc {
                 messages: vec![raw_message3],
                 subscriptions: vec![subscription],
                 control_msgs: vec![control_action],
@@ -3255,10 +3236,10 @@ fn test_scoring_p1() {
     );
 }
 
-fn random_message(seq: &mut u64, topics: &Vec<TopicHash>) -> RawGossipsubMessage {
+fn random_message(seq: &mut u64, topics: &Vec<TopicHash>) -> RawMessage {
     let mut rng = rand::thread_rng();
     *seq += 1;
-    RawGossipsubMessage {
+    RawMessage {
         source: Some(PeerId::random()),
         data: (0..rng.gen_range(10..30))
             .into_iter()
@@ -3303,7 +3284,7 @@ fn test_scoring_p2() {
         .create_network();
 
     let mut seq = 0;
-    let deliver_message = |gs: &mut Gossipsub, index: usize, msg: RawGossipsubMessage| {
+    let deliver_message = |gs: &mut Gossipsub, index: usize, msg: RawMessage| {
         gs.handle_received_message(msg, &peers[index]);
     };
 
@@ -3403,7 +3384,7 @@ fn test_scoring_p3() {
         .create_network();
 
     let mut seq = 0;
-    let deliver_message = |gs: &mut Gossipsub, index: usize, msg: RawGossipsubMessage| {
+    let deliver_message = |gs: &mut Gossipsub, index: usize, msg: RawMessage| {
         gs.handle_received_message(msg, &peers[index]);
     };
 
@@ -3504,7 +3485,7 @@ fn test_scoring_p3b() {
         .create_network();
 
     let mut seq = 0;
-    let deliver_message = |gs: &mut Gossipsub, index: usize, msg: RawGossipsubMessage| {
+    let deliver_message = |gs: &mut Gossipsub, index: usize, msg: RawMessage| {
         gs.handle_received_message(msg, &peers[index]);
     };
 
@@ -3596,7 +3577,7 @@ fn test_scoring_p4_valid_message() {
         .create_network();
 
     let mut seq = 0;
-    let deliver_message = |gs: &mut Gossipsub, index: usize, msg: RawGossipsubMessage| {
+    let deliver_message = |gs: &mut Gossipsub, index: usize, msg: RawMessage| {
         gs.handle_received_message(msg, &peers[index]);
     };
 
@@ -3664,7 +3645,7 @@ fn test_scoring_p4_invalid_signature() {
         #[allow(deprecated)]
         ConnectionId::DUMMY,
         HandlerEvent::Message {
-            rpc: GossipsubRpc {
+            rpc: Rpc {
                 messages: vec![],
                 subscriptions: vec![],
                 control_msgs: vec![],
@@ -3714,7 +3695,7 @@ fn test_scoring_p4_message_from_self() {
         .create_network();
 
     let mut seq = 0;
-    let deliver_message = |gs: &mut Gossipsub, index: usize, msg: RawGossipsubMessage| {
+    let deliver_message = |gs: &mut Gossipsub, index: usize, msg: RawMessage| {
         gs.handle_received_message(msg, &peers[index]);
     };
 
@@ -3764,7 +3745,7 @@ fn test_scoring_p4_ignored_message() {
         .create_network();
 
     let mut seq = 0;
-    let deliver_message = |gs: &mut Gossipsub, index: usize, msg: RawGossipsubMessage| {
+    let deliver_message = |gs: &mut Gossipsub, index: usize, msg: RawMessage| {
         gs.handle_received_message(msg, &peers[index]);
     };
 
@@ -3823,7 +3804,7 @@ fn test_scoring_p4_application_invalidated_message() {
         .create_network();
 
     let mut seq = 0;
-    let deliver_message = |gs: &mut Gossipsub, index: usize, msg: RawGossipsubMessage| {
+    let deliver_message = |gs: &mut Gossipsub, index: usize, msg: RawMessage| {
         gs.handle_received_message(msg, &peers[index]);
     };
 
@@ -3885,7 +3866,7 @@ fn test_scoring_p4_application_invalid_message_from_two_peers() {
         .create_network();
 
     let mut seq = 0;
-    let deliver_message = |gs: &mut Gossipsub, index: usize, msg: RawGossipsubMessage| {
+    let deliver_message = |gs: &mut Gossipsub, index: usize, msg: RawMessage| {
         gs.handle_received_message(msg, &peers[index]);
     };
 
@@ -3955,7 +3936,7 @@ fn test_scoring_p4_three_application_invalid_messages() {
         .create_network();
 
     let mut seq = 0;
-    let deliver_message = |gs: &mut Gossipsub, index: usize, msg: RawGossipsubMessage| {
+    let deliver_message = |gs: &mut Gossipsub, index: usize, msg: RawMessage| {
         gs.handle_received_message(msg, &peers[index]);
     };
 
@@ -4039,7 +4020,7 @@ fn test_scoring_p4_decay() {
         .create_network();
 
     let mut seq = 0;
-    let deliver_message = |gs: &mut Gossipsub, index: usize, msg: RawGossipsubMessage| {
+    let deliver_message = |gs: &mut Gossipsub, index: usize, msg: RawMessage| {
         gs.handle_received_message(msg, &peers[index]);
     };
 
@@ -4407,10 +4388,7 @@ fn test_ignore_graft_from_unknown_topic() {
 
     //assert that no prune got created
     assert_eq!(
-        count_control_msgs(&gs, |_, a| matches!(
-            a,
-            GossipsubControlAction::Prune { .. }
-        )),
+        count_control_msgs(&gs, |_, a| matches!(a, ControlAction::Prune { .. })),
         0,
         "we should not prune after graft in unknown topic"
     );
@@ -4513,7 +4491,7 @@ fn test_ignore_too_many_ihaves() {
     //we send iwant only for the first 10 messages
     assert_eq!(
         count_control_msgs(&gs, |p, action| p == &peer
-            && matches!(action, GossipsubControlAction::IWant { message_ids } if message_ids.len() == 1 && first_ten.contains(&message_ids[0]))),
+            && matches!(action, ControlAction::IWant { message_ids } if message_ids.len() == 1 && first_ten.contains(&message_ids[0]))),
         10,
         "exactly the first ten ihaves should be processed and one iwant for each created"
     );
@@ -4536,7 +4514,7 @@ fn test_ignore_too_many_ihaves() {
     //we sent iwant for all 20 messages
     assert_eq!(
         count_control_msgs(&gs, |p, action| p == &peer
-            && matches!(action, GossipsubControlAction::IWant { message_ids } if message_ids.len() == 1)),
+            && matches!(action, ControlAction::IWant { message_ids } if message_ids.len() == 1)),
         20,
         "all 20 should get sent"
     );
@@ -4585,7 +4563,7 @@ fn test_ignore_too_many_messages_in_ihave() {
     let mut sum = 0;
     assert_eq!(
         count_control_msgs(&gs, |p, action| match action {
-            GossipsubControlAction::IWant { message_ids } =>
+            ControlAction::IWant { message_ids } =>
                 p == &peer && {
                     assert!(first_twelve.is_superset(&message_ids.iter().collect()));
                     sum += message_ids.len();
@@ -4610,7 +4588,7 @@ fn test_ignore_too_many_messages_in_ihave() {
     let mut sum = 0;
     assert_eq!(
         count_control_msgs(&gs, |p, action| match action {
-            GossipsubControlAction::IWant { message_ids } =>
+            ControlAction::IWant { message_ids } =>
                 p == &peer && {
                     sum += message_ids.len();
                     true
@@ -4664,7 +4642,7 @@ fn test_limit_number_of_message_ids_inside_ihave() {
 
     assert_eq!(
         count_control_msgs(&gs, |p, action| match action {
-            GossipsubControlAction::IHave { message_ids, .. } => {
+            ControlAction::IHave { message_ids, .. } => {
                 if p == &p1 {
                     ihaves1 = message_ids.iter().cloned().collect();
                     true
@@ -5000,7 +4978,7 @@ fn test_dont_send_px_to_old_gossipsub_peers() {
     //check that prune does not contain px
     assert_eq!(
         count_control_msgs(&gs, |_, m| match m {
-            GossipsubControlAction::Prune { peers: px, .. } => !px.is_empty(),
+            ControlAction::Prune { peers: px, .. } => !px.is_empty(),
             _ => false,
         }),
         0,
@@ -5038,7 +5016,7 @@ fn test_dont_send_floodsub_peers_in_px() {
     //check that px in prune message is empty
     assert_eq!(
         count_control_msgs(&gs, |_, m| match m {
-            GossipsubControlAction::Prune { peers: px, .. } => !px.is_empty(),
+            ControlAction::Prune { peers: px, .. } => !px.is_empty(),
             _ => false,
         }),
         0,
@@ -5138,7 +5116,7 @@ fn test_msg_id_fn_only_called_once_with_fast_message_ids() {
         }};
     }
 
-    let message_id_fn = |m: &GossipsubMessage| -> MessageId {
+    let message_id_fn = |m: &Message| -> MessageId {
         let (mut id, mut counters_pointer): (MessageId, *mut Pointers) =
             get_counters_and_hash!(&m.data);
         unsafe {
@@ -5147,7 +5125,7 @@ fn test_msg_id_fn_only_called_once_with_fast_message_ids() {
         id.0.reverse();
         id
     };
-    let fast_message_id_fn = |m: &RawGossipsubMessage| -> FastMessageId {
+    let fast_message_id_fn = |m: &RawMessage| -> FastMessageId {
         let (id, mut counters_pointer) = get_counters_and_hash!(&m.data);
         unsafe {
             (*counters_pointer).fast_counter += 1;
@@ -5166,7 +5144,7 @@ fn test_msg_id_fn_only_called_once_with_fast_message_ids() {
         .gs_config(config)
         .create_network();
 
-    let message = RawGossipsubMessage {
+    let message = RawMessage {
         source: None,
         data: counters_address.to_be_bytes().to_vec(),
         sequence_number: None,

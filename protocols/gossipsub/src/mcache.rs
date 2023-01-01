@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::topic::TopicHash;
-use crate::types::{MessageId, RawGossipsubMessage};
+use crate::types::{MessageId, RawMessage};
 use libp2p_core::PeerId;
 use log::{debug, trace};
 use std::collections::hash_map::Entry;
@@ -39,7 +39,7 @@ pub struct CacheEntry {
 /// MessageCache struct holding history of messages.
 #[derive(Clone)]
 pub struct MessageCache {
-    msgs: HashMap<MessageId, (RawGossipsubMessage, HashSet<PeerId>)>,
+    msgs: HashMap<MessageId, (RawMessage, HashSet<PeerId>)>,
     /// For every message and peer the number of times this peer asked for the message
     iwant_counts: HashMap<MessageId, HashMap<PeerId, u32>>,
     history: Vec<Vec<CacheEntry>>,
@@ -73,7 +73,7 @@ impl MessageCache {
     /// Put a message into the memory cache.
     ///
     /// Returns true if the message didn't already exist in the cache.
-    pub fn put(&mut self, message_id: &MessageId, msg: RawGossipsubMessage) -> bool {
+    pub fn put(&mut self, message_id: &MessageId, msg: RawMessage) -> bool {
         match self.msgs.entry(message_id.clone()) {
             Entry::Occupied(_) => {
                 // Don't add duplicate entries to the cache.
@@ -108,7 +108,7 @@ impl MessageCache {
 
     /// Get a message with `message_id`
     #[cfg(test)]
-    pub fn get(&self, message_id: &MessageId) -> Option<&RawGossipsubMessage> {
+    pub fn get(&self, message_id: &MessageId) -> Option<&RawMessage> {
         self.msgs.get(message_id).map(|(message, _)| message)
     }
 
@@ -118,7 +118,7 @@ impl MessageCache {
         &mut self,
         message_id: &MessageId,
         peer: &PeerId,
-    ) -> Option<(&RawGossipsubMessage, u32)> {
+    ) -> Option<(&RawMessage, u32)> {
         let iwant_counts = &mut self.iwant_counts;
         self.msgs.get(message_id).and_then(|(message, _)| {
             if !message.validated {
@@ -140,10 +140,7 @@ impl MessageCache {
     /// Gets a message with [`MessageId`] and tags it as validated.
     /// This function also returns the known peers that have sent us this message. This is used to
     /// prevent us sending redundant messages to peers who have already propagated it.
-    pub fn validate(
-        &mut self,
-        message_id: &MessageId,
-    ) -> Option<(&RawGossipsubMessage, HashSet<PeerId>)> {
+    pub fn validate(&mut self, message_id: &MessageId) -> Option<(&RawMessage, HashSet<PeerId>)> {
         self.msgs.get_mut(message_id).map(|(message, known_peers)| {
             message.validated = true;
             // Clear the known peers list (after a message is validated, it is forwarded and we no
@@ -207,10 +204,7 @@ impl MessageCache {
     }
 
     /// Removes a message from the cache and returns it if existent
-    pub fn remove(
-        &mut self,
-        message_id: &MessageId,
-    ) -> Option<(RawGossipsubMessage, HashSet<PeerId>)> {
+    pub fn remove(&mut self, message_id: &MessageId) -> Option<(RawMessage, HashSet<PeerId>)> {
         //We only remove the message from msgs and iwant_count and keep the message_id in the
         // history vector. Zhe id in the history vector will simply be ignored on popping.
 
@@ -222,12 +216,12 @@ impl MessageCache {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::RawGossipsubMessage;
+    use crate::types::RawMessage;
     use crate::{IdentTopic as Topic, TopicHash};
     use libp2p_core::PeerId;
 
-    fn gen_testm(x: u64, topic: TopicHash) -> (MessageId, RawGossipsubMessage) {
-        let default_id = |message: &RawGossipsubMessage| {
+    fn gen_testm(x: u64, topic: TopicHash) -> (MessageId, RawMessage) {
+        let default_id = |message: &RawMessage| {
             // default message id is: source + sequence number
             let mut source_string = message.source.as_ref().unwrap().to_base58();
             source_string.push_str(&message.sequence_number.unwrap().to_string());
@@ -238,7 +232,7 @@ mod tests {
         let data: Vec<u8> = vec![u8x];
         let sequence_number = Some(x);
 
-        let m = RawGossipsubMessage {
+        let m = RawMessage {
             source,
             data,
             sequence_number,

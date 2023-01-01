@@ -32,7 +32,7 @@ use std::{
 use futures::StreamExt;
 use log::{debug, error, trace, warn};
 use prometheus_client::registry::Registry;
-use prost::Message;
+use prost::Message as ProtobufMessage;
 use rand::{seq::SliceRandom, thread_rng};
 
 use libp2p_core::{
@@ -60,10 +60,10 @@ use crate::time_cache::{DuplicateCache, TimeCache};
 use crate::topic::{Hasher, Topic, TopicHash};
 use crate::transform::{DataTransform, IdentityTransform};
 use crate::types::{
-    FastMessageId, GossipsubControlAction, GossipsubMessage, GossipsubSubscription,
-    GossipsubSubscriptionAction, MessageAcceptance, MessageId, PeerInfo, RawGossipsubMessage,
+    ControlAction, FastMessageId, Message, MessageAcceptance, MessageId, PeerInfo, RawMessage,
+    Subscription, SubscriptionAction,
 };
-use crate::types::{GossipsubRpc, PeerConnections, PeerKind};
+use crate::types::{PeerConnections, PeerKind, Rpc};
 use crate::{rpc_proto, TopicScoreParams};
 use std::{cmp::Ordering::Equal, fmt::Debug};
 use wasm_timer::Interval;
@@ -119,14 +119,14 @@ impl MessageAuthenticity {
 #[derive(Debug)]
 pub enum GossipsubEvent {
     /// A message has been received.
-    Message {
+    ProtobufMessage {
         /// The peer that forwarded us this message.
         propagation_source: PeerId,
         /// The [`MessageId`] of the message. This should be referenced by the application when
         /// validating a message (if required).
         message_id: MessageId,
         /// The decompressed message itself.
-        message: GossipsubMessage,
+        message: Message,
     },
     /// A remote subscribed to a topic.
     Subscribed {
@@ -218,7 +218,7 @@ pub struct Gossipsub<D = IdentityTransform, F = AllowAllSubscriptionFilter> {
     events: VecDeque<NetworkBehaviourAction<GossipsubEvent, GossipsubHandler>>,
 
     /// Pools non-urgent control messages between heartbeats.
-    control_pool: HashMap<PeerId, Vec<GossipsubControlAction>>,
+    control_pool: HashMap<PeerId, Vec<ControlAction>>,
 
     /// Information used for publishing messages.
     publish_config: PublishConfig,
@@ -516,11 +516,11 @@ where
         // send subscription request to all peers
         let peer_list = self.peer_topics.keys().cloned().collect::<Vec<_>>();
         if !peer_list.is_empty() {
-            let event = GossipsubRpc {
+            let event = Rpc {
                 messages: Vec::new(),
-                subscriptions: vec![GossipsubSubscription {
+                subscriptions: vec![Subscription {
                     topic_hash: topic_hash.clone(),
-                    action: GossipsubSubscriptionAction::Subscribe,
+                    action: SubscriptionAction::Subscribe,
                 }],
                 control_msgs: Vec::new(),
             }
@@ -556,11 +556,11 @@ where
         // announce to all peers
         let peer_list = self.peer_topics.keys().cloned().collect::<Vec<_>>();
         if !peer_list.is_empty() {
-            let event = GossipsubRpc {
+            let event = Rpc {
                 messages: Vec::new(),
-                subscriptions: vec![GossipsubSubscription {
+                subscriptions: vec![Subscription {
                     topic_hash: topic_hash.clone(),
-                    action: GossipsubSubscriptionAction::Unsubscribe,
+                    action: SubscriptionAction::Unsubscribe,
                 }],
                 control_msgs: Vec::new(),
             }
@@ -597,14 +597,14 @@ where
         let raw_message = self.build_raw_message(topic, transformed_data)?;
 
         // calculate the message id from the un-transformed data
-        let msg_id = self.config.message_id(&GossipsubMessage {
+        let msg_id = self.config.message_id(&Message {
             source: raw_message.source,
             data, // the uncompressed form
             sequence_number: raw_message.sequence_number,
             topic: raw_message.topic.clone(),
         });
 
-        let event = GossipsubRpc {
+        let event = Rpc {
             subscriptions: Vec::new(),
             messages: vec![raw_message.clone()],
             control_msgs: Vec::new(),
@@ -1011,7 +1011,7 @@ where
             Self::control_pool_add(
                 &mut self.control_pool,
                 peer_id,
-                GossipsubControlAction::Graft {
+                ControlAction::Graft {
                     topic_hash: topic_hash.clone(),
                 },
             );
@@ -1042,7 +1042,7 @@ where
         peer: &PeerId,
         do_px: bool,
         on_unsubscribe: bool,
-    ) -> GossipsubControlAction {
+    ) -> ControlAction {
         if let Some((peer_score, ..)) = &mut self.peer_score {
             peer_score.prune(peer, topic_hash.clone());
         }
@@ -1053,7 +1053,7 @@ where
             }
             Some(PeerKind::Gossipsub) => {
                 // GossipSub v1.0 -- no peer exchange, the peer won't be able to parse it anyway
-                return GossipsubControlAction::Prune {
+                return ControlAction::Prune {
                     topic_hash: topic_hash.clone(),
                     peers: Vec::new(),
                     backoff: None,
@@ -1090,7 +1090,7 @@ where
         // update backoff
         self.backoffs.update_backoff(topic_hash, peer, backoff);
 
-        GossipsubControlAction::Prune {
+        ControlAction::Prune {
             topic_hash: topic_hash.clone(),
             peers,
             backoff: Some(backoff.as_secs()),
@@ -1285,7 +1285,7 @@ where
             Self::control_pool_add(
                 &mut self.control_pool,
                 *peer_id,
-                GossipsubControlAction::IWant {
+                ControlAction::IWant {
                     message_ids: iwant_ids_vec,
                 },
             );
@@ -1335,7 +1335,7 @@ where
                 .map(|message| message.topic.clone())
                 .collect::<HashSet<TopicHash>>();
 
-            let message = GossipsubRpc {
+            let message = Rpc {
                 subscriptions: Vec::new(),
                 messages: message_list,
                 control_msgs: Vec::new(),
@@ -1510,7 +1510,7 @@ where
 
             if let Err(e) = self.send_message(
                 *peer_id,
-                GossipsubRpc {
+                Rpc {
                     subscriptions: Vec::new(),
                     messages: Vec::new(),
                     control_msgs: prune_messages,
@@ -1648,7 +1648,7 @@ where
     fn message_is_valid(
         &mut self,
         msg_id: &MessageId,
-        raw_message: &mut RawGossipsubMessage,
+        raw_message: &mut RawMessage,
         propagation_source: &PeerId,
     ) -> bool {
         debug!(
@@ -1724,7 +1724,7 @@ where
     /// Forwards the message to all peers in the mesh.
     fn handle_received_message(
         &mut self,
-        mut raw_message: RawGossipsubMessage,
+        mut raw_message: RawMessage,
         propagation_source: &PeerId,
     ) {
         // Record the received metric
@@ -1822,7 +1822,7 @@ where
         if self.mesh.contains_key(&message.topic) {
             debug!("Sending received message to user");
             self.events.push_back(NetworkBehaviourAction::GenerateEvent(
-                GossipsubEvent::Message {
+                GossipsubEvent::ProtobufMessage {
                     propagation_source: *propagation_source,
                     message_id: msg_id.clone(),
                     message,
@@ -1857,7 +1857,7 @@ where
     fn handle_invalid_message(
         &mut self,
         propagation_source: &PeerId,
-        raw_message: &RawGossipsubMessage,
+        raw_message: &RawMessage,
         reject_reason: RejectReason,
     ) {
         if let Some((peer_score, .., gossip_promises)) = &mut self.peer_score {
@@ -1891,7 +1891,7 @@ where
     /// Handles received subscriptions.
     fn handle_received_subscriptions(
         &mut self,
-        subscriptions: &[GossipsubSubscription],
+        subscriptions: &[Subscription],
         propagation_source: &PeerId,
     ) {
         debug!(
@@ -1943,7 +1943,7 @@ where
                 .or_insert_with(Default::default);
 
             match subscription.action {
-                GossipsubSubscriptionAction::Subscribe => {
+                SubscriptionAction::Subscribe => {
                     if peer_list.insert(*propagation_source) {
                         debug!(
                             "SUBSCRIPTION: Adding gossip peer: {} to topic: {:?}",
@@ -2006,7 +2006,7 @@ where
                         },
                     ));
                 }
-                GossipsubSubscriptionAction::Unsubscribe => {
+                SubscriptionAction::Unsubscribe => {
                     if peer_list.remove(propagation_source) {
                         debug!(
                             "SUBSCRIPTION: Removing gossip peer: {} from topic: {:?}",
@@ -2057,12 +2057,12 @@ where
             && self
                 .send_message(
                     *propagation_source,
-                    GossipsubRpc {
+                    Rpc {
                         subscriptions: Vec::new(),
                         messages: Vec::new(),
                         control_msgs: topics_to_graft
                             .into_iter()
-                            .map(|topic_hash| GossipsubControlAction::Graft { topic_hash })
+                            .map(|topic_hash| ControlAction::Graft { topic_hash })
                             .collect(),
                     }
                     .into_protobuf(),
@@ -2557,7 +2557,7 @@ where
                 Self::control_pool_add(
                     &mut self.control_pool,
                     peer,
-                    GossipsubControlAction::IHave {
+                    ControlAction::IHave {
                         topic_hash: topic_hash.clone(),
                         message_ids: peer_message_ids,
                     },
@@ -2593,9 +2593,9 @@ where
                     &self.connected_peers,
                 );
             }
-            let mut control_msgs: Vec<GossipsubControlAction> = topics
+            let mut control_msgs: Vec<ControlAction> = topics
                 .iter()
-                .map(|topic_hash| GossipsubControlAction::Graft {
+                .map(|topic_hash| ControlAction::Graft {
                     topic_hash: topic_hash.clone(),
                 })
                 .collect();
@@ -2626,7 +2626,7 @@ where
             if self
                 .send_message(
                     peer,
-                    GossipsubRpc {
+                    Rpc {
                         subscriptions: Vec::new(),
                         messages: Vec::new(),
                         control_msgs,
@@ -2666,7 +2666,7 @@ where
             if self
                 .send_message(
                     *peer,
-                    GossipsubRpc {
+                    Rpc {
                         subscriptions: Vec::new(),
                         messages: Vec::new(),
                         control_msgs: remaining_prunes,
@@ -2686,7 +2686,7 @@ where
     fn forward_msg(
         &mut self,
         msg_id: &MessageId,
-        message: RawGossipsubMessage,
+        message: RawMessage,
         propagation_source: Option<&PeerId>,
         originating_peers: HashSet<PeerId>,
     ) -> Result<bool, PublishError> {
@@ -2733,7 +2733,7 @@ where
 
         // forward the message to peers
         if !recipient_peers.is_empty() {
-            let event = GossipsubRpc {
+            let event = Rpc {
                 subscriptions: Vec::new(),
                 messages: vec![message.clone()],
                 control_msgs: Vec::new(),
@@ -2755,12 +2755,12 @@ where
         }
     }
 
-    /// Constructs a [`RawGossipsubMessage`] performing message signing if required.
+    /// Constructs a [`RawMessage`] performing message signing if required.
     pub(crate) fn build_raw_message(
         &self,
         topic: TopicHash,
         data: Vec<u8>,
-    ) -> Result<RawGossipsubMessage, PublishError> {
+    ) -> Result<RawMessage, PublishError> {
         match &self.publish_config {
             PublishConfig::Signing {
                 ref keypair,
@@ -2791,7 +2791,7 @@ where
                     Some(keypair.sign(&signature_bytes)?)
                 };
 
-                Ok(RawGossipsubMessage {
+                Ok(RawMessage {
                     source: Some(*author),
                     data,
                     // To be interoperable with the go-implementation this is treated as a 64-bit
@@ -2804,7 +2804,7 @@ where
                 })
             }
             PublishConfig::Author(peer_id) => {
-                Ok(RawGossipsubMessage {
+                Ok(RawMessage {
                     source: Some(*peer_id),
                     data,
                     // To be interoperable with the go-implementation this is treated as a 64-bit
@@ -2817,7 +2817,7 @@ where
                 })
             }
             PublishConfig::RandomAuthor => {
-                Ok(RawGossipsubMessage {
+                Ok(RawMessage {
                     source: Some(PeerId::random()),
                     data,
                     // To be interoperable with the go-implementation this is treated as a 64-bit
@@ -2830,7 +2830,7 @@ where
                 })
             }
             PublishConfig::Anonymous => {
-                Ok(RawGossipsubMessage {
+                Ok(RawMessage {
                     source: None,
                     data,
                     // To be interoperable with the go-implementation this is treated as a 64-bit
@@ -2847,9 +2847,9 @@ where
 
     // adds a control action to control_pool
     fn control_pool_add(
-        control_pool: &mut HashMap<PeerId, Vec<GossipsubControlAction>>,
+        control_pool: &mut HashMap<PeerId, Vec<ControlAction>>,
         peer: PeerId,
-        control: GossipsubControlAction,
+        control: ControlAction,
     ) {
         control_pool
             .entry(peer)
@@ -2863,7 +2863,7 @@ where
             if self
                 .send_message(
                     peer,
-                    GossipsubRpc {
+                    Rpc {
                         subscriptions: Vec::new(),
                         messages: Vec::new(),
                         control_msgs: controls,
@@ -3080,9 +3080,9 @@ where
                 // We need to send our subscriptions to the newly-connected node.
                 let mut subscriptions = vec![];
                 for topic_hash in self.mesh.keys() {
-                    subscriptions.push(GossipsubSubscription {
+                    subscriptions.push(Subscription {
                         topic_hash: topic_hash.clone(),
-                        action: GossipsubSubscriptionAction::Subscribe,
+                        action: SubscriptionAction::Subscribe,
                     });
                 }
 
@@ -3091,7 +3091,7 @@ where
                     if self
                         .send_message(
                             peer_id,
-                            GossipsubRpc {
+                            Rpc {
                                 messages: Vec::new(),
                                 subscriptions,
                                 control_msgs: Vec::new(),
@@ -3401,17 +3401,17 @@ where
                 let mut prune_msgs = vec![];
                 for control_msg in rpc.control_msgs {
                     match control_msg {
-                        GossipsubControlAction::IHave {
+                        ControlAction::IHave {
                             topic_hash,
                             message_ids,
                         } => {
                             ihave_msgs.push((topic_hash, message_ids));
                         }
-                        GossipsubControlAction::IWant { message_ids } => {
+                        ControlAction::IWant { message_ids } => {
                             self.handle_iwant(&propagation_source, message_ids)
                         }
-                        GossipsubControlAction::Graft { topic_hash } => graft_msgs.push(topic_hash),
-                        GossipsubControlAction::Prune {
+                        ControlAction::Graft { topic_hash } => graft_msgs.push(topic_hash),
+                        ControlAction::Prune {
                             topic_hash,
                             peers,
                             backoff,
@@ -3681,16 +3681,16 @@ mod local_test {
     use asynchronous_codec::Encoder;
     use quickcheck::*;
 
-    fn empty_rpc() -> GossipsubRpc {
-        GossipsubRpc {
+    fn empty_rpc() -> Rpc {
+        Rpc {
             subscriptions: Vec::new(),
             messages: Vec::new(),
             control_msgs: Vec::new(),
         }
     }
 
-    fn test_message() -> RawGossipsubMessage {
-        RawGossipsubMessage {
+    fn test_message() -> RawMessage {
+        RawMessage {
             source: Some(PeerId::random()),
             data: vec![0; 100],
             sequence_number: None,
@@ -3701,21 +3701,21 @@ mod local_test {
         }
     }
 
-    fn test_subscription() -> GossipsubSubscription {
-        GossipsubSubscription {
-            action: GossipsubSubscriptionAction::Subscribe,
+    fn test_subscription() -> Subscription {
+        Subscription {
+            action: SubscriptionAction::Subscribe,
             topic_hash: IdentTopic::new("TestTopic").hash(),
         }
     }
 
-    fn test_control() -> GossipsubControlAction {
-        GossipsubControlAction::IHave {
+    fn test_control() -> ControlAction {
+        ControlAction::IHave {
             topic_hash: IdentTopic::new("TestTopic").hash(),
             message_ids: vec![MessageId(vec![12u8]); 5],
         }
     }
 
-    impl Arbitrary for GossipsubRpc {
+    impl Arbitrary for Rpc {
         fn arbitrary(g: &mut Gen) -> Self {
             let mut rpc = empty_rpc();
 
@@ -3782,7 +3782,7 @@ mod local_test {
 
     #[test]
     fn test_message_fragmentation() {
-        fn prop(rpc: GossipsubRpc) {
+        fn prop(rpc: Rpc) {
             let max_transmit_size = 500;
             let config = crate::GossipsubConfigBuilder::default()
                 .max_transmit_size(max_transmit_size)

@@ -24,7 +24,7 @@ use std::time::Duration;
 
 use libp2p_core::PeerId;
 
-use crate::types::{FastMessageId, GossipsubMessage, MessageId, RawGossipsubMessage};
+use crate::types::{FastMessageId, Message, MessageId, RawMessage};
 
 /// The types of message validation that can be employed by gossipsub.
 #[derive(Debug, Clone)]
@@ -78,9 +78,8 @@ pub struct GossipsubConfig {
     duplicate_cache_time: Duration,
     validate_messages: bool,
     validation_mode: ValidationMode,
-    message_id_fn: Arc<dyn Fn(&GossipsubMessage) -> MessageId + Send + Sync + 'static>,
-    fast_message_id_fn:
-        Option<Arc<dyn Fn(&RawGossipsubMessage) -> FastMessageId + Send + Sync + 'static>>,
+    message_id_fn: Arc<dyn Fn(&Message) -> MessageId + Send + Sync + 'static>,
+    fast_message_id_fn: Option<Arc<dyn Fn(&RawMessage) -> FastMessageId + Send + Sync + 'static>>,
     allow_self_origin: bool,
     do_px: bool,
     prune_peers: usize,
@@ -236,21 +235,21 @@ impl GossipsubConfig {
     /// addressing, where this function may be set to `hash(message)`. This would prevent messages
     /// of the same content from being duplicated.
     ///
-    /// The function takes a [`GossipsubMessage`] as input and outputs a String to be interpreted as
+    /// The function takes a [`Message`] as input and outputs a String to be interpreted as
     /// the message id.
-    pub fn message_id(&self, message: &GossipsubMessage) -> MessageId {
+    pub fn message_id(&self, message: &Message) -> MessageId {
         (self.message_id_fn)(message)
     }
 
     /// A user-defined optional function that computes fast ids from raw messages. This can be used
-    /// to avoid possibly expensive transformations from [`RawGossipsubMessage`] to
-    /// [`GossipsubMessage`] for duplicates. Two semantically different messages must always
+    /// to avoid possibly expensive transformations from [`RawMessage`] to
+    /// [`Message`] for duplicates. Two semantically different messages must always
     /// have different fast message ids, but it is allowed that two semantically identical messages
     /// have different fast message ids as long as the message_id_fn produces the same id for them.
     ///
-    /// The function takes a [`RawGossipsubMessage`] as input and outputs a String to be
+    /// The function takes a [`RawMessage`] as input and outputs a String to be
     /// interpreted as the fast message id. Default is None.
-    pub fn fast_message_id(&self, message: &RawGossipsubMessage) -> Option<FastMessageId> {
+    pub fn fast_message_id(&self, message: &RawMessage) -> Option<FastMessageId> {
         self.fast_message_id_fn
             .as_ref()
             .map(|fast_message_id_fn| fast_message_id_fn(message))
@@ -620,27 +619,27 @@ impl GossipsubConfigBuilder {
     /// addressing, where this function may be set to `hash(message)`. This would prevent messages
     /// of the same content from being duplicated.
     ///
-    /// The function takes a [`GossipsubMessage`] as input and outputs a String to be
+    /// The function takes a [`Message`] as input and outputs a String to be
     /// interpreted as the message id.
     pub fn message_id_fn<F>(&mut self, id_fn: F) -> &mut Self
     where
-        F: Fn(&GossipsubMessage) -> MessageId + Send + Sync + 'static,
+        F: Fn(&Message) -> MessageId + Send + Sync + 'static,
     {
         self.config.message_id_fn = Arc::new(id_fn);
         self
     }
 
     /// A user-defined optional function that computes fast ids from raw messages. This can be used
-    /// to avoid possibly expensive transformations from [`RawGossipsubMessage`] to
-    /// [`GossipsubMessage`] for duplicates. Two semantically different messages must always
+    /// to avoid possibly expensive transformations from [`RawMessage`] to
+    /// [`Message`] for duplicates. Two semantically different messages must always
     /// have different fast message ids, but it is allowed that two semantically identical messages
     /// have different fast message ids as long as the message_id_fn produces the same id for them.
     ///
-    /// The function takes a [`RawGossipsubMessage`] as input and outputs a String to be interpreted
+    /// The function takes a [`Message`] as input and outputs a String to be interpreted
     /// as the fast message id. Default is None.
     pub fn fast_message_id_fn<F>(&mut self, fast_id_fn: F) -> &mut Self
     where
-        F: Fn(&RawGossipsubMessage) -> FastMessageId + Send + Sync + 'static,
+        F: Fn(&RawMessage) -> FastMessageId + Send + Sync + 'static,
     {
         self.config.fast_message_id_fn = Some(Arc::new(fast_id_fn));
         self
@@ -903,8 +902,8 @@ mod test {
         dbg!(builder);
     }
 
-    fn get_gossipsub_message() -> GossipsubMessage {
-        GossipsubMessage {
+    fn get_gossipsub_message() -> Message {
+        Message {
             source: None,
             data: vec![12, 34, 56],
             sequence_number: None,
@@ -918,7 +917,7 @@ mod test {
         ])
     }
 
-    fn message_id_plain_function(message: &GossipsubMessage) -> MessageId {
+    fn message_id_plain_function(message: &Message) -> MessageId {
         let mut s = DefaultHasher::new();
         message.data.hash(&mut s);
         let mut v = s.finish().to_string();
@@ -940,7 +939,7 @@ mod test {
 
     #[test]
     fn create_config_with_message_id_as_closure() {
-        let closure = |message: &GossipsubMessage| {
+        let closure = |message: &Message| {
             let mut s = DefaultHasher::new();
             message.data.hash(&mut s);
             let mut v = s.finish().to_string();
@@ -961,7 +960,7 @@ mod test {
     #[test]
     fn create_config_with_message_id_as_closure_with_variable_capture() {
         let captured: char = 'e';
-        let closure = move |message: &GossipsubMessage| {
+        let closure = move |message: &Message| {
             let mut s = DefaultHasher::new();
             message.data.hash(&mut s);
             let mut v = s.finish().to_string();
