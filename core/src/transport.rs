@@ -35,11 +35,11 @@ use std::{
 };
 
 pub mod and_then;
-pub mod or;
 pub mod dummy;
 pub mod map;
 pub mod map_err;
 pub mod memory;
+pub mod or;
 pub mod timeout;
 pub mod upgrade;
 
@@ -49,9 +49,9 @@ mod optional;
 use crate::ConnectedPoint;
 
 pub use self::boxed::Boxed;
-pub use self::or::OrTransport;
 pub use self::memory::MemoryTransport;
 pub use self::optional::OptionalTransport;
+pub use self::or::OrTransport;
 pub use self::upgrade::Upgrade;
 
 /// A transport provides connection-oriented communication between two peers
