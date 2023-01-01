@@ -236,7 +236,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     SwarmEvent::Behaviour(MyBehaviourEvent::Identify(event)) => {
                         println!("identify: {event:?}");
                     }
-                    SwarmEvent::Behaviour(MyBehaviourEvent::Gossipsub(GossipsubEvent::Message {
+                    SwarmEvent::Behaviour(MyBehaviourEvent::Gossipsub(GossipsubEvent::ProtobufMessage {
                         propagation_source: peer_id,
                         message_id: id,
                         message,

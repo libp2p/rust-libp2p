@@ -49,8 +49,7 @@ use async_std::io;
 use futures::{prelude::*, select};
 use libp2p::gossipsub::MessageId;
 use libp2p::gossipsub::{
-    Gossipsub, GossipsubEvent, GossipsubMessage, IdentTopic as Topic, MessageAuthenticity,
-    ValidationMode,
+    Gossipsub, GossipsubEvent, IdentTopic as Topic, Message, MessageAuthenticity, ValidationMode,
 };
 use libp2p::{
     gossipsub, identity, mdns, swarm::NetworkBehaviour, swarm::SwarmEvent, PeerId, Swarm,
@@ -78,7 +77,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     // To content-address message, we can take the hash of message and use it as an ID.
-    let message_id_fn = |message: &GossipsubMessage| {
+    let message_id_fn = |message: &Message| {
         let mut s = DefaultHasher::new();
         message.data.hash(&mut s);
         MessageId::from(s.finish().to_string())
@@ -140,7 +139,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                         swarm.behaviour_mut().gossipsub.remove_explicit_peer(&peer_id);
                     }
                 },
-                SwarmEvent::Behaviour(MyBehaviourEvent::Gossipsub(GossipsubEvent::Message {
+                SwarmEvent::Behaviour(MyBehaviourEvent::Gossipsub(GossipsubEvent::ProtobufMessage {
                     propagation_source: peer_id,
                     message_id: id,
                     message,
