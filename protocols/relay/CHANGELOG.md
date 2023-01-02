@@ -1,8 +1,18 @@
 # 0.15.0 [unreleased]
 
+- Rename types as per [discussion 2174].
+  `Relay` has been renamed to `Behaviour`.
+  The `Relay`, and `Client` prefixes have been removed from various types like `ClientTransport`.
+  the `v2` namespace has also been removed, users should prefer importing the relay protocol as a module (`use libp2p::relay;`),
+  and refer to its types via `relay::`. For example: `relay::Behaviour` or `relay::client::Behaviour`.
+  See [PR 3238].
+
 - Update to `libp2p-core` `v0.39.0`.
 
 - Update to `libp2p-swarm` `v0.42.0`.
+
+[PR 3238]: https://github.com/libp2p/rust-libp2p/pull/3238
+[discussion 2174]: https://github.com/libp2p/rust-libp2p/issues/2174
 
 # 0.14.0
 
