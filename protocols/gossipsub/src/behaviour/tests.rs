@@ -411,7 +411,7 @@ fn test_subscribe() {
         .iter()
         .fold(vec![], |mut collected_subscriptions, e| match e {
             NetworkBehaviourAction::NotifyHandler {
-                event: GossipsubHandlerIn::Message(ref message),
+                event: HandlerIn::Message(ref message),
                 ..
             } => {
                 for s in &message.subscriptions {
@@ -479,7 +479,7 @@ fn test_unsubscribe() {
         .iter()
         .fold(vec![], |mut collected_subscriptions, e| match e {
             NetworkBehaviourAction::NotifyHandler {
-                event: GossipsubHandlerIn::Message(ref message),
+                event: HandlerIn::Message(ref message),
                 ..
             } => {
                 for s in &message.subscriptions {
@@ -667,7 +667,7 @@ fn test_publish_without_flood_publishing() {
         .iter()
         .fold(vec![], |mut collected_publish, e| match e {
             NetworkBehaviourAction::NotifyHandler {
-                event: GossipsubHandlerIn::Message(ref message),
+                event: HandlerIn::Message(ref message),
                 ..
             } => {
                 let event = proto_to_message(message);
@@ -757,7 +757,7 @@ fn test_fanout() {
         .iter()
         .fold(vec![], |mut collected_publish, e| match e {
             NetworkBehaviourAction::NotifyHandler {
-                event: GossipsubHandlerIn::Message(ref message),
+                event: HandlerIn::Message(ref message),
                 ..
             } => {
                 let event = proto_to_message(message);
@@ -810,7 +810,7 @@ fn test_inject_connected() {
         .iter()
         .filter(|e| match e {
             NetworkBehaviourAction::NotifyHandler {
-                event: GossipsubHandlerIn::Message(ref m),
+                event: HandlerIn::Message(ref m),
                 ..
             } => !m.subscriptions.is_empty(),
             _ => false,
@@ -820,7 +820,7 @@ fn test_inject_connected() {
     // check that there are two subscriptions sent to each peer
     for sevent in send_events.clone() {
         if let NetworkBehaviourAction::NotifyHandler {
-            event: GossipsubHandlerIn::Message(ref m),
+            event: HandlerIn::Message(ref m),
             ..
         } = sevent
         {
@@ -1056,7 +1056,7 @@ fn test_handle_iwant_msg_cached() {
         .iter()
         .fold(vec![], |mut collected_messages, e| match e {
             NetworkBehaviourAction::NotifyHandler { event, .. } => {
-                if let GossipsubHandlerIn::Message(ref m) = event {
+                if let HandlerIn::Message(ref m) = event {
                     let event = proto_to_message(m);
                     for c in &event.messages {
                         collected_messages.push(c.clone())
@@ -1114,7 +1114,7 @@ fn test_handle_iwant_msg_cached_shifted() {
         // is the message is being sent?
         let message_exists = gs.events.iter().any(|e| match e {
             NetworkBehaviourAction::NotifyHandler {
-                event: GossipsubHandlerIn::Message(ref m),
+                event: HandlerIn::Message(ref m),
                 ..
             } => {
                 let event = proto_to_message(m);
@@ -1356,7 +1356,7 @@ fn count_control_msgs<D: DataTransform, F: TopicSubscriptionFilter>(
             .map(|e| match e {
                 NetworkBehaviourAction::NotifyHandler {
                     peer_id,
-                    event: GossipsubHandlerIn::Message(ref m),
+                    event: HandlerIn::Message(ref m),
                     ..
                 } => {
                     let event = proto_to_message(m);
@@ -1579,7 +1579,7 @@ fn do_forward_messages_to_explicit_peers() {
             .filter(|e| match e {
                 NetworkBehaviourAction::NotifyHandler {
                     peer_id,
-                    event: GossipsubHandlerIn::Message(ref m),
+                    event: HandlerIn::Message(ref m),
                     ..
                 } => {
                     let event = proto_to_message(m);
@@ -2126,7 +2126,7 @@ fn test_flood_publish() {
         .iter()
         .fold(vec![], |mut collected_publish, e| match e {
             NetworkBehaviourAction::NotifyHandler { event, .. } => {
-                if let GossipsubHandlerIn::Message(ref m) = event {
+                if let HandlerIn::Message(ref m) = event {
                     let event = proto_to_message(m);
                     for s in &event.messages {
                         collected_publish.push(s.clone());
@@ -2687,7 +2687,7 @@ fn test_iwant_msg_from_peer_below_gossip_threshold_gets_ignored() {
         .iter()
         .fold(vec![], |mut collected_messages, e| match e {
             NetworkBehaviourAction::NotifyHandler { event, peer_id, .. } => {
-                if let GossipsubHandlerIn::Message(ref m) = event {
+                if let HandlerIn::Message(ref m) = event {
                     let event = proto_to_message(m);
                     for c in &event.messages {
                         collected_messages.push((*peer_id, c.clone()))
@@ -2835,7 +2835,7 @@ fn test_do_not_publish_to_peer_below_publish_threshold() {
         .iter()
         .fold(vec![], |mut collected_publish, e| match e {
             NetworkBehaviourAction::NotifyHandler { event, peer_id, .. } => {
-                if let GossipsubHandlerIn::Message(ref m) = event {
+                if let HandlerIn::Message(ref m) = event {
                     let event = proto_to_message(m);
                     for s in &event.messages {
                         collected_publish.push((*peer_id, s.clone()));
@@ -2892,7 +2892,7 @@ fn test_do_not_flood_publish_to_peer_below_publish_threshold() {
         .iter()
         .fold(vec![], |mut collected_publish, e| match e {
             NetworkBehaviourAction::NotifyHandler { event, peer_id, .. } => {
-                if let GossipsubHandlerIn::Message(ref m) = event {
+                if let HandlerIn::Message(ref m) = event {
                     let event = proto_to_message(m);
                     for s in &event.messages {
                         collected_publish.push((*peer_id, s.clone()));
@@ -4427,7 +4427,7 @@ fn test_ignore_too_many_iwants_from_same_peer_for_same_message() {
             .iter()
             .map(|e| match e {
                 NetworkBehaviourAction::NotifyHandler {
-                    event: GossipsubHandlerIn::Message(ref m),
+                    event: HandlerIn::Message(ref m),
                     ..
                 } => {
                     let event = proto_to_message(m);
@@ -4834,7 +4834,7 @@ fn test_publish_to_floodsub_peers_without_flood_publish() {
         .fold(vec![], |mut collected_publish, e| match e {
             NetworkBehaviourAction::NotifyHandler { peer_id, event, .. } => {
                 if peer_id == &p1 || peer_id == &p2 {
-                    if let GossipsubHandlerIn::Message(ref m) = event {
+                    if let HandlerIn::Message(ref m) = event {
                         let event = proto_to_message(m);
                         for s in &event.messages {
                             collected_publish.push(s.clone());
@@ -4891,7 +4891,7 @@ fn test_do_not_use_floodsub_in_fanout() {
         .fold(vec![], |mut collected_publish, e| match e {
             NetworkBehaviourAction::NotifyHandler { peer_id, event, .. } => {
                 if peer_id == &p1 || peer_id == &p2 {
-                    if let GossipsubHandlerIn::Message(ref m) = event {
+                    if let HandlerIn::Message(ref m) = event {
                         let event = proto_to_message(m);
                         for s in &event.messages {
                             collected_publish.push(s.clone());
@@ -5206,7 +5206,7 @@ fn test_subscribe_and_graft_with_negative_score() {
         let messages_to_p1 = gs2.events.drain(..).filter_map(|e| match e {
             NetworkBehaviourAction::NotifyHandler { peer_id, event, .. } => {
                 if peer_id == p1 {
-                    if let GossipsubHandlerIn::Message(m) = event {
+                    if let HandlerIn::Message(m) = event {
                         Some(m)
                     } else {
                         None
