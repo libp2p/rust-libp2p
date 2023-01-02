@@ -9,6 +9,12 @@
 
 [PR 3208]: https://github.com/libp2p/rust-libp2p/pull/3208
 
+# 0.41.1
+
+- Skip invalid multiaddr in `listen_addrs`. See [PR 3246].
+
+[PR 3246]: https://github.com/libp2p/rust-libp2p/pull/3246
+
 # 0.41.0
 
 - Change default `cache_size` of `Config` to 100. See [PR 2995].

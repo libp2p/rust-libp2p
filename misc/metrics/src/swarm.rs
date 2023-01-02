@@ -370,10 +370,8 @@ enum PendingInboundConnectionError {
     ConnectionLimit,
 }
 
-impl<TTransErr> From<&libp2p_swarm::PendingInboundConnectionError<TTransErr>>
-    for PendingInboundConnectionError
-{
-    fn from(error: &libp2p_swarm::PendingInboundConnectionError<TTransErr>) -> Self {
+impl From<&libp2p_swarm::PendingInboundConnectionError> for PendingInboundConnectionError {
+    fn from(error: &libp2p_swarm::PendingInboundConnectionError) -> Self {
         match error {
             libp2p_swarm::PendingInboundConnectionError::WrongPeerId { .. } => {
                 PendingInboundConnectionError::WrongPeerId
