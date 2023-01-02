@@ -50,7 +50,7 @@ use crate::backoff::BackoffStorage;
 use crate::config::{Config, ValidationMode};
 use crate::error::{PublishError, SubscriptionError, ValidationError};
 use crate::gossip_promises::GossipPromises;
-use crate::handler::{GossipsubHandler, GossipsubHandlerIn, HandlerEvent};
+use crate::handler::{Handler, HandlerEvent, HandlerIn};
 use crate::mcache::MessageCache;
 use crate::metrics::{Churn, Config as MetricsConfig, Inclusion, Metrics, Penalty};
 use crate::peer_score::{PeerScore, PeerScoreParams, PeerScoreThresholds, RejectReason};
@@ -76,7 +76,7 @@ mod tests;
 /// Without signing, a number of privacy preserving modes can be selected.
 ///
 /// NOTE: The default validation settings are to require signatures. The [`ValidationMode`]
-/// should be updated in the [`GossipsubConfig`] to allow for unsigned messages.
+/// should be updated in the [`Config`] to allow for unsigned messages.
 #[derive(Clone)]
 pub enum MessageAuthenticity {
     /// Message signing is enabled. The author will be the owner of the key and the sequence number
@@ -97,7 +97,7 @@ pub enum MessageAuthenticity {
     /// The author of the message and the sequence numbers are excluded from the message.
     ///
     /// NOTE: Excluding these fields may make these messages invalid by other nodes who
-    /// enforce validation of these fields. See [`ValidationMode`] in the [`GossipsubConfig`]
+    /// enforce validation of these fields. See [`ValidationMode`] in the [`Config`]
     /// for how to customise this for rust-libp2p gossipsub.  A custom `message_id`
     /// function will need to be set to prevent all messages from a peer being filtered
     /// as duplicates.
@@ -201,7 +201,7 @@ impl From<MessageAuthenticity> for PublishConfig {
 
 /// Network behaviour that handles the gossipsub protocol.
 ///
-/// NOTE: Initialisation requires a [`MessageAuthenticity`] and [`GossipsubConfig`] instance. If
+/// NOTE: Initialisation requires a [`MessageAuthenticity`] and [`Config`] instance. If
 /// message signing is disabled, the [`ValidationMode`] in the config should be adjusted to an
 /// appropriate level to accept unsigned messages.
 ///
@@ -215,7 +215,7 @@ pub struct Behaviour<D = IdentityTransform, F = AllowAllSubscriptionFilter> {
     config: Config,
 
     /// Events that need to be yielded to the outside when polling.
-    events: VecDeque<NetworkBehaviourAction<Event, GossipsubHandler>>,
+    events: VecDeque<NetworkBehaviourAction<Event, Handler>>,
 
     /// Pools non-urgent control messages between heartbeats.
     control_pool: HashMap<PeerId, Vec<ControlAction>>,
@@ -2894,7 +2894,7 @@ where
             self.events
                 .push_back(NetworkBehaviourAction::NotifyHandler {
                     peer_id,
-                    event: GossipsubHandlerIn::Message(message),
+                    event: HandlerIn::Message(message),
                     handler: NotifyHandler::Any,
                 })
         }
@@ -3154,7 +3154,7 @@ where
                                     self.events
                                         .push_back(NetworkBehaviourAction::NotifyHandler {
                                             peer_id,
-                                            event: GossipsubHandlerIn::JoinedMesh,
+                                            event: HandlerIn::JoinedMesh,
                                             handler: NotifyHandler::One(connections.connections[0]),
                                         });
                                     break;
@@ -3291,7 +3291,7 @@ where
     C: Send + 'static + DataTransform,
     F: Send + 'static + TopicSubscriptionFilter,
 {
-    type ConnectionHandler = GossipsubHandler;
+    type ConnectionHandler = Handler;
     type OutEvent = Event;
 
     fn new_handler(&mut self) -> Self::ConnectionHandler {
@@ -3481,7 +3481,7 @@ fn peer_added_to_mesh(
     new_topics: Vec<&TopicHash>,
     mesh: &HashMap<TopicHash, BTreeSet<PeerId>>,
     known_topics: Option<&BTreeSet<TopicHash>>,
-    events: &mut VecDeque<NetworkBehaviourAction<Event, GossipsubHandler>>,
+    events: &mut VecDeque<NetworkBehaviourAction<Event, Handler>>,
     connections: &HashMap<PeerId, PeerConnections>,
 ) {
     // Ensure there is an active connection
@@ -3509,7 +3509,7 @@ fn peer_added_to_mesh(
     // This is the first mesh the peer has joined, inform the handler
     events.push_back(NetworkBehaviourAction::NotifyHandler {
         peer_id,
-        event: GossipsubHandlerIn::JoinedMesh,
+        event: HandlerIn::JoinedMesh,
         handler: NotifyHandler::One(connection_id),
     });
 }
@@ -3522,7 +3522,7 @@ fn peer_removed_from_mesh(
     old_topic: &TopicHash,
     mesh: &HashMap<TopicHash, BTreeSet<PeerId>>,
     known_topics: Option<&BTreeSet<TopicHash>>,
-    events: &mut VecDeque<NetworkBehaviourAction<Event, GossipsubHandler>>,
+    events: &mut VecDeque<NetworkBehaviourAction<Event, Handler>>,
     connections: &HashMap<PeerId, PeerConnections>,
 ) {
     // Ensure there is an active connection
@@ -3548,7 +3548,7 @@ fn peer_removed_from_mesh(
     // The peer is not in any other mesh, inform the handler
     events.push_back(NetworkBehaviourAction::NotifyHandler {
         peer_id,
-        event: GossipsubHandlerIn::LeftMesh,
+        event: HandlerIn::LeftMesh,
         handler: NotifyHandler::One(*connection_id),
     });
 }

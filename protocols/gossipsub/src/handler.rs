@@ -65,7 +65,7 @@ pub enum HandlerEvent {
 
 /// A message sent from the behaviour to the handler.
 #[derive(Debug)]
-pub enum GossipsubHandlerIn {
+pub enum HandlerIn {
     /// A gossipsub message to send.
     Message(crate::rpc_proto::Rpc),
     /// The peer has joined the mesh.
@@ -82,7 +82,7 @@ pub enum GossipsubHandlerIn {
 const MAX_SUBSTREAM_CREATION: usize = 5;
 
 /// Protocol Handler that manages a single long-lived substream with a peer.
-pub struct GossipsubHandler {
+pub struct Handler {
     /// Upgrade configuration for the gossipsub protocol.
     listen_protocol: SubstreamProtocol<ProtocolConfig, ()>,
 
@@ -161,10 +161,10 @@ enum OutboundSubstreamState {
     Poisoned,
 }
 
-impl GossipsubHandler {
-    /// Builds a new [`GossipsubHandler`].
+impl Handler {
+    /// Builds a new [`Handler`].
     pub fn new(protocol_config: ProtocolConfig, idle_timeout: Duration) -> Self {
-        GossipsubHandler {
+        Handler {
             listen_protocol: SubstreamProtocol::new(protocol_config, ()),
             inbound_substream: None,
             outbound_substream: None,
@@ -245,8 +245,8 @@ impl GossipsubHandler {
     }
 }
 
-impl ConnectionHandler for GossipsubHandler {
-    type InEvent = GossipsubHandlerIn;
+impl ConnectionHandler for Handler {
+    type InEvent = HandlerIn;
     type OutEvent = HandlerEvent;
     type Error = GossipsubHandlerError;
     type InboundOpenInfo = ();
@@ -258,17 +258,17 @@ impl ConnectionHandler for GossipsubHandler {
         self.listen_protocol.clone()
     }
 
-    fn on_behaviour_event(&mut self, message: GossipsubHandlerIn) {
+    fn on_behaviour_event(&mut self, message: HandlerIn) {
         if !self.protocol_unsupported {
             match message {
-                GossipsubHandlerIn::Message(m) => self.send_queue.push(m),
+                HandlerIn::Message(m) => self.send_queue.push(m),
                 // If we have joined the mesh, keep the connection alive.
-                GossipsubHandlerIn::JoinedMesh => {
+                HandlerIn::JoinedMesh => {
                     self.in_mesh = true;
                     self.keep_alive = KeepAlive::Yes;
                 }
                 // If we have left the mesh, start the idle timer.
-                GossipsubHandlerIn::LeftMesh => {
+                HandlerIn::LeftMesh => {
                     self.in_mesh = false;
                     self.keep_alive = KeepAlive::Until(Instant::now() + self.idle_timeout);
                 }
