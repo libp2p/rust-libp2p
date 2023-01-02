@@ -1,5 +1,7 @@
 # 0.9.0 [unreleased]
 
+- Remove no longer required `ActionBuilder` from `Behaviour` implementation. See [PR 3304].
+
 - Update to `libp2p-core` `v0.39.0`.
 
 - Update to `libp2p-swarm` `v0.42.0`.
@@ -15,6 +17,7 @@
 [PR 3153]: https://github.com/libp2p/rust-libp2p/pull/3153
 [issue 2217]: https://github.com/libp2p/rust-libp2p/issues/2217
 [PR 3214]: https://github.com/libp2p/rust-libp2p/pull/3214
+[PR 3304]: https://github.com/libp2p/rust-libp2p/pull/3304
 
 # 0.8.0
 
