@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::error::{GossipsubHandlerError, ValidationError};
+use crate::error::{HandlerError, ValidationError};
 use crate::protocol::{GossipsubCodec, ProtocolConfig};
 use crate::types::{PeerKind, RawMessage, Rpc};
 use asynchronous_codec::Framed;
@@ -124,7 +124,7 @@ pub struct Handler {
     idle_timeout: Duration,
 
     /// Collection of errors from attempting an upgrade.
-    upgrade_errors: VecDeque<ConnectionHandlerUpgrErr<GossipsubHandlerError>>,
+    upgrade_errors: VecDeque<ConnectionHandlerUpgrErr<HandlerError>>,
 
     /// Flag determining whether to maintain the connection to the peer.
     keep_alive: KeepAlive,
@@ -248,7 +248,7 @@ impl Handler {
 impl ConnectionHandler for Handler {
     type InEvent = HandlerIn;
     type OutEvent = HandlerEvent;
-    type Error = GossipsubHandlerError;
+    type Error = HandlerError;
     type InboundOpenInfo = ();
     type InboundProtocol = ProtocolConfig;
     type OutboundOpenInfo = crate::rpc_proto::Rpc;
@@ -296,7 +296,7 @@ impl ConnectionHandler for Handler {
             let reported_error = match error {
                 // Timeout errors get mapped to NegotiationTimeout and we close the connection.
                 ConnectionHandlerUpgrErr::Timeout | ConnectionHandlerUpgrErr::Timer => {
-                    Some(GossipsubHandlerError::NegotiationTimeout)
+                    Some(HandlerError::NegotiationTimeout)
                 }
                 // There was an error post negotiation, close the connection.
                 ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)) => Some(e),
@@ -319,7 +319,7 @@ impl ConnectionHandler for Handler {
                             }
                         }
                         NegotiationError::ProtocolError(e) => {
-                            Some(GossipsubHandlerError::NegotiationProtocolError(e))
+                            Some(HandlerError::NegotiationProtocolError(e))
                         }
                     }
                 }
@@ -343,7 +343,7 @@ impl ConnectionHandler for Handler {
         if self.inbound_substreams_created > MAX_SUBSTREAM_CREATION {
             // Too many inbound substreams have been created, end the connection.
             return Poll::Ready(ConnectionHandlerEvent::Close(
-                GossipsubHandlerError::MaxInboundSubstreams,
+                HandlerError::MaxInboundSubstreams,
             ));
         }
 
@@ -354,7 +354,7 @@ impl ConnectionHandler for Handler {
         {
             if self.outbound_substreams_created >= MAX_SUBSTREAM_CREATION {
                 return Poll::Ready(ConnectionHandlerEvent::Close(
-                    GossipsubHandlerError::MaxOutboundSubstreams,
+                    HandlerError::MaxOutboundSubstreams,
                 ));
             }
             let message = self.send_queue.remove(0);
@@ -384,7 +384,7 @@ impl ConnectionHandler for Handler {
                         }
                         Poll::Ready(Some(Err(error))) => {
                             match error {
-                                GossipsubHandlerError::MaxTransmissionSize => {
+                                HandlerError::MaxTransmissionSize => {
                                     warn!("Message exceeded the maximum transmission size");
                                     self.inbound_substream =
                                         Some(InboundSubstreamState::WaitingInput(substream));
@@ -471,7 +471,7 @@ impl ConnectionHandler for Handler {
                                     self.outbound_substream =
                                         Some(OutboundSubstreamState::PendingFlush(substream))
                                 }
-                                Err(GossipsubHandlerError::MaxTransmissionSize) => {
+                                Err(HandlerError::MaxTransmissionSize) => {
                                     error!("Message exceeded the maximum transmission size and was not sent.");
                                     self.outbound_substream =
                                         Some(OutboundSubstreamState::WaitingOutput(substream));

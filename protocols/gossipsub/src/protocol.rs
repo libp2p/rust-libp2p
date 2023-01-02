@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::config::{GossipsubVersion, ValidationMode};
-use crate::error::{GossipsubHandlerError, ValidationError};
+use crate::error::{HandlerError, ValidationError};
 use crate::handler::HandlerEvent;
 use crate::topic::TopicHash;
 use crate::types::{
@@ -148,7 +148,7 @@ where
     TSocket: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     type Output = (Framed<TSocket, GossipsubCodec>, PeerKind);
-    type Error = GossipsubHandlerError;
+    type Error = HandlerError;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
     fn upgrade_inbound(self, socket: TSocket, protocol_id: Self::Info) -> Self::Future {
@@ -169,7 +169,7 @@ where
     TSocket: AsyncWrite + AsyncRead + Unpin + Send + 'static,
 {
     type Output = (Framed<TSocket, GossipsubCodec>, PeerKind);
-    type Error = GossipsubHandlerError;
+    type Error = HandlerError;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
     fn upgrade_outbound(self, socket: TSocket, protocol_id: Self::Info) -> Self::Future {
@@ -270,22 +270,18 @@ impl GossipsubCodec {
 
 impl Encoder for GossipsubCodec {
     type Item = rpc_proto::Rpc;
-    type Error = GossipsubHandlerError;
+    type Error = HandlerError;
 
-    fn encode(
-        &mut self,
-        item: Self::Item,
-        dst: &mut BytesMut,
-    ) -> Result<(), GossipsubHandlerError> {
+    fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), HandlerError> {
         Ok(self.codec.encode(item, dst)?)
     }
 }
 
 impl Decoder for GossipsubCodec {
     type Item = HandlerEvent;
-    type Error = GossipsubHandlerError;
+    type Error = HandlerError;
 
-    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, GossipsubHandlerError> {
+    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, HandlerError> {
         let rpc = match self.codec.decode(src)? {
             Some(p) => p,
             None => return Ok(None),
