@@ -21,9 +21,9 @@
 //! [`NetworkBehaviour`] to act as a circuit relay v2 **client**.
 
 mod handler;
-pub mod transport;
+pub(crate) mod transport;
 
-use crate::v2::protocol::{self, inbound_stop, outbound_hop};
+use crate::protocol::{self, inbound_stop, outbound_hop};
 use bytes::Bytes;
 use either::Either;
 use futures::channel::mpsc::Receiver;
@@ -45,8 +45,9 @@ use std::io::{Error, ErrorKind, IoSlice};
 use std::ops::DerefMut;
 use std::pin::Pin;
 use std::task::{Context, Poll};
+use transport::Transport;
 
-/// The events produced by the [`Client`] behaviour.
+/// The events produced by the client `Behaviour`.
 #[derive(Debug)]
 pub enum Event {
     /// An outbound reservation has been accepted.
@@ -88,7 +89,9 @@ pub enum Event {
     },
 }
 
-pub struct Client {
+/// [`NetworkBehaviour`] implementation of the relay client
+/// functionality of the circuit relay v2 protocol.
+pub struct Behaviour {
     local_peer_id: PeerId,
 
     from_transport: Receiver<transport::TransportToBehaviourMsg>,
@@ -100,18 +103,22 @@ pub struct Client {
     queued_actions: VecDeque<Event>,
 }
 
-impl Client {
-    pub fn new_transport_and_behaviour(
-        local_peer_id: PeerId,
-    ) -> (transport::ClientTransport, Self) {
-        let (transport, from_transport) = transport::ClientTransport::new();
-        let behaviour = Client {
-            local_peer_id,
-            from_transport,
-            directly_connected_peers: Default::default(),
-            queued_actions: Default::default(),
-        };
-        (transport, behaviour)
+/// Create a new client relay [`Behaviour`] with it's corresponding [`Transport`].
+pub fn new(local_peer_id: PeerId) -> (Transport, Behaviour) {
+    let (transport, from_transport) = Transport::new();
+    let behaviour = Behaviour {
+        local_peer_id,
+        from_transport,
+        directly_connected_peers: Default::default(),
+        queued_actions: Default::default(),
+    };
+    (transport, behaviour)
+}
+
+impl Behaviour {
+    #[deprecated(since = "0.15.0", note = "Use libp2p_relay::client::new instead.")]
+    pub fn new_transport_and_behaviour(local_peer_id: PeerId) -> (transport::Transport, Self) {
+        new(local_peer_id)
     }
 
     fn on_connection_closed(
@@ -145,7 +152,7 @@ impl Client {
     }
 }
 
-impl NetworkBehaviour for Client {
+impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = handler::Prototype;
     type OutEvent = Event;
 
@@ -322,10 +329,10 @@ impl NetworkBehaviour for Client {
                 }
             }
             None => unreachable!(
-                "`Relay` `NetworkBehaviour` polled after channel from \
-                     `RelayTransport` has been closed. Unreachable under \
-                     the assumption that the `Client` is never polled after \
-                     `ClientTransport` is dropped.",
+                "`relay::Behaviour` polled after channel from \
+                     `Transport` has been closed. Unreachable under \
+                     the assumption that the `client::Behaviour` is never polled after \
+                     `client::Transport` is dropped.",
             ),
         };
 
@@ -333,10 +340,10 @@ impl NetworkBehaviour for Client {
     }
 }
 
-/// A [`NegotiatedSubstream`] acting as a [`RelayedConnection`].
-pub enum RelayedConnection {
+/// A [`NegotiatedSubstream`] acting as a [`Connection`].
+pub enum Connection {
     InboundAccepting {
-        accept: BoxFuture<'static, Result<RelayedConnection, Error>>,
+        accept: BoxFuture<'static, Result<Connection, Error>>,
     },
     Operational {
         read_buffer: Bytes,
@@ -345,20 +352,20 @@ pub enum RelayedConnection {
     },
 }
 
-impl Unpin for RelayedConnection {}
+impl Unpin for Connection {}
 
-impl RelayedConnection {
+impl Connection {
     pub(crate) fn new_inbound(
         circuit: inbound_stop::Circuit,
         drop_notifier: oneshot::Sender<void::Void>,
     ) -> Self {
-        RelayedConnection::InboundAccepting {
+        Connection::InboundAccepting {
             accept: async {
                 let (substream, read_buffer) = circuit
                     .accept()
                     .await
                     .map_err(|e| Error::new(ErrorKind::Other, e))?;
-                Ok(RelayedConnection::Operational {
+                Ok(Connection::Operational {
                     read_buffer,
                     substream,
                     drop_notifier,
@@ -373,7 +380,7 @@ impl RelayedConnection {
         read_buffer: Bytes,
         drop_notifier: oneshot::Sender<void::Void>,
     ) -> Self {
-        RelayedConnection::Operational {
+        Connection::Operational {
             substream,
             read_buffer,
             drop_notifier,
@@ -381,7 +388,7 @@ impl RelayedConnection {
     }
 }
 
-impl AsyncWrite for RelayedConnection {
+impl AsyncWrite for Connection {
     fn poll_write(
         mut self: Pin<&mut Self>,
         cx: &mut Context,
@@ -389,10 +396,10 @@ impl AsyncWrite for RelayedConnection {
     ) -> Poll<Result<usize, Error>> {
         loop {
             match self.deref_mut() {
-                RelayedConnection::InboundAccepting { accept } => {
+                Connection::InboundAccepting { accept } => {
                     *self = ready!(accept.poll_unpin(cx))?;
                 }
-                RelayedConnection::Operational { substream, .. } => {
+                Connection::Operational { substream, .. } => {
                     return Pin::new(substream).poll_write(cx, buf);
                 }
             }
@@ -401,10 +408,10 @@ impl AsyncWrite for RelayedConnection {
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Error>> {
         loop {
             match self.deref_mut() {
-                RelayedConnection::InboundAccepting { accept } => {
+                Connection::InboundAccepting { accept } => {
                     *self = ready!(accept.poll_unpin(cx))?;
                 }
-                RelayedConnection::Operational { substream, .. } => {
+                Connection::Operational { substream, .. } => {
                     return Pin::new(substream).poll_flush(cx);
                 }
             }
@@ -413,10 +420,10 @@ impl AsyncWrite for RelayedConnection {
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Result<(), Error>> {
         loop {
             match self.deref_mut() {
-                RelayedConnection::InboundAccepting { accept } => {
+                Connection::InboundAccepting { accept } => {
                     *self = ready!(accept.poll_unpin(cx))?;
                 }
-                RelayedConnection::Operational { substream, .. } => {
+                Connection::Operational { substream, .. } => {
                     return Pin::new(substream).poll_close(cx);
                 }
             }
@@ -430,10 +437,10 @@ impl AsyncWrite for RelayedConnection {
     ) -> Poll<Result<usize, Error>> {
         loop {
             match self.deref_mut() {
-                RelayedConnection::InboundAccepting { accept } => {
+                Connection::InboundAccepting { accept } => {
                     *self = ready!(accept.poll_unpin(cx))?;
                 }
-                RelayedConnection::Operational { substream, .. } => {
+                Connection::Operational { substream, .. } => {
                     return Pin::new(substream).poll_write_vectored(cx, bufs);
                 }
             }
@@ -441,7 +448,7 @@ impl AsyncWrite for RelayedConnection {
     }
 }
 
-impl AsyncRead for RelayedConnection {
+impl AsyncRead for Connection {
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -449,10 +456,10 @@ impl AsyncRead for RelayedConnection {
     ) -> Poll<Result<usize, Error>> {
         loop {
             match self.deref_mut() {
-                RelayedConnection::InboundAccepting { accept } => {
+                Connection::InboundAccepting { accept } => {
                     *self = ready!(accept.poll_unpin(cx))?;
                 }
-                RelayedConnection::Operational {
+                Connection::Operational {
                     read_buffer,
                     substream,
                     ..
