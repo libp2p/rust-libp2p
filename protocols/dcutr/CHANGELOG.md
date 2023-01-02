@@ -1,3 +1,9 @@
+# 0.8.1
+
+- Skip unparsable multiaddr in `InboundUpgrade::upgrade_inbound`. See [PR XXX].
+
+[PR XXX]: https://github.com/libp2p/rust-libp2p/pull/XXX
+
 # 0.8.0
 
 - Update to `prost-codec` `v0.3.0`.
