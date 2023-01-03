@@ -23,7 +23,7 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
-pub mod behaviour;
+mod behaviour_impl; // TODO: Rename back `behaviour` once deprecation symbols are removed.
 mod handler;
 mod protocol;
 #[allow(clippy::derive_partial_eq_without_eq)]
@@ -31,6 +31,35 @@ mod message_proto {
     include!(concat!(env!("OUT_DIR"), "/holepunch.pb.rs"));
 }
 
+pub use behaviour_impl::Behaviour;
+pub use behaviour_impl::Error;
+pub use behaviour_impl::Event;
 pub use protocol::PROTOCOL_NAME;
-pub type InboundUpgradeError = protocol::inbound::UpgradeError;
-pub type OutboundUpgradeError = protocol::outbound::UpgradeError;
+pub mod inbound {
+    pub use crate::protocol::inbound::UpgradeError;
+}
+pub mod outbound {
+    pub use crate::protocol::outbound::UpgradeError;
+}
+
+#[deprecated(
+    since = "0.9.0",
+    note = "Use `libp2p_dcutr::inbound::UpgradeError` instead.`"
+)]
+pub type InboundUpgradeError = inbound::UpgradeError;
+
+#[deprecated(
+    since = "0.9.0",
+    note = "Use `libp2p_dcutr::outbound::UpgradeError` instead.`"
+)]
+pub type OutboundUpgradeError = outbound::UpgradeError;
+pub mod behaviour {
+    #[deprecated(since = "0.9.0", note = "Use `libp2p_dcutr::Behaviour` instead.`")]
+    pub type Behaviour = crate::Behaviour;
+
+    #[deprecated(since = "0.9.0", note = "Use `libp2p_dcutr::Event` instead.`")]
+    pub type Event = crate::Event;
+
+    #[deprecated(since = "0.9.0", note = "Use `libp2p_dcutr::Error` instead.`")]
+    pub type UpgradeError = crate::Error;
+}

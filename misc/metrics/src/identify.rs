@@ -151,9 +151,9 @@ impl super::Recorder<libp2p_identify::Event> for Metrics {
                                 #[cfg(feature = "ping")]
                                 libp2p_ping::PROTOCOL_NAME,
                                 #[cfg(feature = "relay")]
-                                libp2p_relay::v2::STOP_PROTOCOL_NAME,
+                                libp2p_relay::STOP_PROTOCOL_NAME,
                                 #[cfg(feature = "relay")]
-                                libp2p_relay::v2::HOP_PROTOCOL_NAME,
+                                libp2p_relay::HOP_PROTOCOL_NAME,
                             ];
 
                             allowed_protocols.contains(&p.as_bytes())

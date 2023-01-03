@@ -1,5 +1,7 @@
 # 0.10.0 [unreleased]
 
+- Update to `libp2p-core` `v0.39.0`.
+
 - Require the node's local `PeerId` to be passed into the constructor of `libp2p_autonat::Behaviour`. See [PR 3153].
 
 - Update to `libp2p-request-response` `v0.24.0`.
