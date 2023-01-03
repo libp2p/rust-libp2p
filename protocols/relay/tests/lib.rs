@@ -31,8 +31,7 @@ use libp2p_core::PublicKey;
 use libp2p_core::{identity, upgrade, PeerId};
 use libp2p_ping as ping;
 use libp2p_plaintext::PlainText2Config;
-use libp2p_relay::v2::client;
-use libp2p_relay::v2::relay;
+use libp2p_relay as relay;
 use libp2p_swarm::{AddressScore, NetworkBehaviour, Swarm, SwarmEvent};
 use std::time::Duration;
 
@@ -141,7 +140,7 @@ fn new_reservation_to_same_relay_replaces_old() {
                     }
                 }
                 SwarmEvent::Behaviour(ClientEvent::Relay(
-                    client::Event::ReservationReqAccepted {
+                    relay::client::Event::ReservationReqAccepted {
                         relay_peer_id: peer_id,
                         ..
                     },
@@ -219,7 +218,7 @@ fn connect() {
                     break
                 }
                 SwarmEvent::Behaviour(ClientEvent::Relay(
-                    client::Event::OutboundCircuitEstablished { .. },
+                    relay::client::Event::OutboundCircuitEstablished { .. },
                 )) => {}
                 SwarmEvent::Behaviour(ClientEvent::Ping(ping::Event { peer, .. }))
                     if peer == relay_peer_id => {}
@@ -295,7 +294,7 @@ fn build_relay() -> Swarm<Relay> {
         transport,
         Relay {
             ping: ping::Behaviour::new(ping::Config::new()),
-            relay: relay::Relay::new(
+            relay: relay::Behaviour::new(
                 local_peer_id,
                 relay::Config {
                     reservation_duration: Duration::from_secs(2),
@@ -312,7 +311,7 @@ fn build_client() -> Swarm<Client> {
     let local_public_key = local_key.public();
     let local_peer_id = local_public_key.to_peer_id();
 
-    let (relay_transport, behaviour) = client::Client::new_transport_and_behaviour(local_peer_id);
+    let (relay_transport, behaviour) = relay::client::new(local_peer_id);
     let transport = upgrade_transport(
         OrTransport::new(relay_transport, MemoryTransport::default()).boxed(),
         local_public_key,
@@ -343,61 +342,17 @@ where
 }
 
 #[derive(NetworkBehaviour)]
-#[behaviour(
-    out_event = "RelayEvent",
-    event_process = false,
-    prelude = "libp2p_swarm::derive_prelude"
-)]
+#[behaviour(prelude = "libp2p_swarm::derive_prelude")]
 struct Relay {
-    relay: relay::Relay,
+    relay: relay::Behaviour,
     ping: ping::Behaviour,
-}
-
-#[derive(Debug)]
-enum RelayEvent {
-    Relay(relay::Event),
-    Ping(ping::Event),
-}
-
-impl From<relay::Event> for RelayEvent {
-    fn from(event: relay::Event) -> Self {
-        RelayEvent::Relay(event)
-    }
-}
-
-impl From<ping::Event> for RelayEvent {
-    fn from(event: ping::Event) -> Self {
-        RelayEvent::Ping(event)
-    }
 }
 
 #[derive(NetworkBehaviour)]
-#[behaviour(
-    out_event = "ClientEvent",
-    event_process = false,
-    prelude = "libp2p_swarm::derive_prelude"
-)]
+#[behaviour(prelude = "libp2p_swarm::derive_prelude")]
 struct Client {
-    relay: client::Client,
+    relay: relay::client::Behaviour,
     ping: ping::Behaviour,
-}
-
-#[derive(Debug)]
-enum ClientEvent {
-    Relay(client::Event),
-    Ping(ping::Event),
-}
-
-impl From<client::Event> for ClientEvent {
-    fn from(event: client::Event) -> Self {
-        ClientEvent::Relay(event)
-    }
-}
-
-impl From<ping::Event> for ClientEvent {
-    fn from(event: ping::Event) -> Self {
-        ClientEvent::Ping(event)
-    }
 }
 
 fn spawn_swarm_on_pool<B: NetworkBehaviour + Send>(pool: &LocalPool, swarm: Swarm<B>) {
@@ -417,11 +372,13 @@ async fn wait_for_reservation(
 
     loop {
         match client.select_next_some().await {
-            SwarmEvent::Behaviour(ClientEvent::Relay(client::Event::ReservationReqAccepted {
-                relay_peer_id: peer_id,
-                renewal,
-                ..
-            })) if relay_peer_id == peer_id && renewal == is_renewal => {
+            SwarmEvent::Behaviour(ClientEvent::Relay(
+                relay::client::Event::ReservationReqAccepted {
+                    relay_peer_id: peer_id,
+                    renewal,
+                    ..
+                },
+            )) if relay_peer_id == peer_id && renewal == is_renewal => {
                 reservation_req_accepted = true;
                 if new_listen_addr {
                     break;
