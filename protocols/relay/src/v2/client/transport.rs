@@ -97,12 +97,12 @@ impl ClientTransport {
     ///
     /// Note: The transport only handles listening and dialing on relayed [`Multiaddr`], and depends on
     /// an other transport to do the actual transmission of data. They should be combined through the
-    /// [`OrTransport`](libp2p_core::transport::choice::OrTransport).
+    /// [`OrTransport`](libp2p_core::transport::or::OrTransport).
     ///
     /// ```
     /// # use libp2p_core::{Multiaddr, multiaddr::{Protocol}, Transport, PeerId};
     /// # use libp2p_core::transport::memory::MemoryTransport;
-    /// # use libp2p_core::transport::choice::OrTransport;
+    /// # use libp2p_core::transport::or::OrTransport;
     /// # use libp2p_relay::v2::client;
     /// let actual_transport = MemoryTransport::default();
     /// let (relay_transport, behaviour) = client::Client::new_transport_and_behaviour(
