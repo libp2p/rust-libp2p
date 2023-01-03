@@ -52,4 +52,4 @@ rustc-args = ["--cfg", "docsrs"]
 
 [[example]]
 name = "metrics"
-required-features = ["ping"]
+required-features = ["ping", "identify"]
