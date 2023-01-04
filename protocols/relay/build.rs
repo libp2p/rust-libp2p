@@ -19,5 +19,5 @@
 // DEALINGS IN THE SOFTWARE.
 
 fn main() {
-    prost_build::compile_protos(&["src/v2/message.proto"], &["src/v2"]).unwrap();
+    prost_build::compile_protos(&["src/message.proto"], &["src/"]).unwrap();
 }
