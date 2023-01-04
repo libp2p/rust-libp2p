@@ -42,7 +42,7 @@ impl ExternalAddresses {
                 }
             }
             FromSwarm::ExpiredExternalAddr(ExpiredExternalAddr { addr, .. }) => {
-                self.addresses.insert((*addr).clone());
+                self.addresses.remove(addr);
             }
             _ => {}
         }
