@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::config::{GossipsubVersion, ValidationMode};
+use crate::config::{ValidationMode, Version};
 use crate::error::{HandlerError, ValidationError};
 use crate::handler::HandlerEvent;
 use crate::topic::TopicHash;

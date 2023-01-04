@@ -51,7 +51,7 @@ pub enum ValidationMode {
 
 /// Selector for custom Protocol Id
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum GossipsubVersion {
+pub enum Version {
     V1_0,
     V1_1,
 }
@@ -60,7 +60,7 @@ pub enum GossipsubVersion {
 #[derive(Clone)]
 pub struct Config {
     protocol_id: Cow<'static, str>,
-    custom_id_version: Option<GossipsubVersion>,
+    custom_id_version: Option<Version>,
     history_length: usize,
     history_gossip: usize,
     mesh_n: usize,
@@ -104,7 +104,7 @@ impl Config {
     // All the getters
 
     /// The protocol id to negotiate this protocol. By default, the resulting protocol id has the form
-    /// `/<prefix>/<supported-versions>`, but can optionally be changed to a literal form by providing some GossipsubVersion as custom_id_version.
+    /// `/<prefix>/<supported-versions>`, but can optionally be changed to a literal form by providing some Version as custom_id_version.
     /// As gossipsub supports version 1.0 and 1.1, there are two suffixes supported for the resulting protocol id.
     ///
     /// Calling `ConfigBuilder::protocol_id_prefix` will set a new prefix and retain the prefix logic.
@@ -115,7 +115,7 @@ impl Config {
         &self.protocol_id
     }
 
-    pub fn custom_id_version(&self) -> &Option<GossipsubVersion> {
+    pub fn custom_id_version(&self) -> &Option<Version> {
         &self.custom_id_version
     }
 
@@ -486,7 +486,7 @@ impl ConfigBuilder {
     pub fn protocol_id(
         &mut self,
         protocol_id: impl Into<Cow<'static, str>>,
-        custom_id_version: GossipsubVersion,
+        custom_id_version: Version,
     ) -> &mut Self {
         self.config.custom_id_version = Some(custom_id_version);
         self.config.protocol_id = protocol_id.into();
@@ -1005,14 +1005,14 @@ mod test {
     #[test]
     fn create_config_with_custom_protocol_id() {
         let builder: Config = ConfigBuilder::default()
-            .protocol_id("purple", GossipsubVersion::V1_0)
+            .protocol_id("purple", Version::V1_0)
             .validation_mode(ValidationMode::Anonymous)
             .message_id_fn(message_id_plain_function)
             .build()
             .unwrap();
 
         assert_eq!(builder.protocol_id(), "purple");
-        assert_eq!(builder.custom_id_version(), &Some(GossipsubVersion::V1_0));
+        assert_eq!(builder.custom_id_version(), &Some(Version::V1_0));
 
         let protocol_config = ProtocolConfig::new(&builder);
         let protocol_ids = protocol_config.protocol_info();
