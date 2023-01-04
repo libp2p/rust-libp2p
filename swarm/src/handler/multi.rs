@@ -92,18 +92,6 @@ where
         >,
     ) {
         match error {
-            ConnectionHandlerUpgrErr::Timer => {
-                for (k, h) in &mut self.handlers {
-                    if let Some(i) = info.take(k) {
-                        h.on_connection_event(ConnectionEvent::ListenUpgradeError(
-                            ListenUpgradeError {
-                                info: i,
-                                error: ConnectionHandlerUpgrErr::Timer,
-                            },
-                        ));
-                    }
-                }
-            }
             ConnectionHandlerUpgrErr::Timeout => {
                 for (k, h) in &mut self.handlers {
                     if let Some(i) = info.take(k) {

@@ -179,24 +179,6 @@ where
                 },
             ))),
             ConnectionEvent::DialUpgradeError(DialUpgradeError {
-                error: ConnectionHandlerUpgrErr::Timer,
-                info: Either::Left(info),
-            }) => Ok(Either::Left(ConnectionEvent::DialUpgradeError(
-                DialUpgradeError {
-                    error: ConnectionHandlerUpgrErr::Timer,
-                    info,
-                },
-            ))),
-            ConnectionEvent::DialUpgradeError(DialUpgradeError {
-                error: ConnectionHandlerUpgrErr::Timer,
-                info: Either::Right(info),
-            }) => Ok(Either::Right(ConnectionEvent::DialUpgradeError(
-                DialUpgradeError {
-                    error: ConnectionHandlerUpgrErr::Timer,
-                    info,
-                },
-            ))),
-            ConnectionEvent::DialUpgradeError(DialUpgradeError {
                 error: ConnectionHandlerUpgrErr::Timeout,
                 info: Either::Left(info),
             }) => Ok(Either::Left(ConnectionEvent::DialUpgradeError(
@@ -247,24 +229,6 @@ where
             }) => Ok(Either::Right(ConnectionEvent::ListenUpgradeError(
                 ListenUpgradeError {
                     error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(error)),
-                    info,
-                },
-            ))),
-            ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
-                error: ConnectionHandlerUpgrErr::Timer,
-                info: Either::Left(info),
-            }) => Ok(Either::Left(ConnectionEvent::ListenUpgradeError(
-                ListenUpgradeError {
-                    error: ConnectionHandlerUpgrErr::Timer,
-                    info,
-                },
-            ))),
-            ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
-                error: ConnectionHandlerUpgrErr::Timer,
-                info: Either::Right(info),
-            }) => Ok(Either::Right(ConnectionEvent::ListenUpgradeError(
-                ListenUpgradeError {
-                    error: ConnectionHandlerUpgrErr::Timer,
                     info,
                 },
             ))),

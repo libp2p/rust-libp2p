@@ -435,8 +435,6 @@ impl<TConnectionUpgrade, TOutboundOpenInfo, TCustom, TErr>
 pub enum ConnectionHandlerUpgrErr<TUpgrErr> {
     /// The opening attempt timed out before the negotiation was fully completed.
     Timeout,
-    /// There was an error in the timer used.
-    Timer,
     /// Error while upgrading the substream to the protocol we want.
     Upgrade(UpgradeError<TUpgrErr>),
 }
@@ -449,7 +447,6 @@ impl<TUpgrErr> ConnectionHandlerUpgrErr<TUpgrErr> {
     {
         match self {
             ConnectionHandlerUpgrErr::Timeout => ConnectionHandlerUpgrErr::Timeout,
-            ConnectionHandlerUpgrErr::Timer => ConnectionHandlerUpgrErr::Timer,
             ConnectionHandlerUpgrErr::Upgrade(e) => ConnectionHandlerUpgrErr::Upgrade(f(e)),
         }
     }
@@ -464,9 +461,6 @@ where
             ConnectionHandlerUpgrErr::Timeout => {
                 write!(f, "Timeout error while opening a substream")
             }
-            ConnectionHandlerUpgrErr::Timer => {
-                write!(f, "Timer error while opening a substream")
-            }
             ConnectionHandlerUpgrErr::Upgrade(err) => write!(f, "{err}"),
         }
     }
@@ -479,7 +473,6 @@ where
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
             ConnectionHandlerUpgrErr::Timeout => None,
-            ConnectionHandlerUpgrErr::Timer => None,
             ConnectionHandlerUpgrErr::Upgrade(err) => Some(err),
         }
     }

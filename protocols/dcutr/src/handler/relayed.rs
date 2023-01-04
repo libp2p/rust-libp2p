@@ -227,13 +227,6 @@ impl Handler {
                     },
                 ));
             }
-            ConnectionHandlerUpgrErr::Timer => {
-                self.queued_events.push_back(ConnectionHandlerEvent::Custom(
-                    Event::InboundNegotiationFailed {
-                        error: ConnectionHandlerUpgrErr::Timer,
-                    },
-                ));
-            }
             ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)) => {
                 // The remote merely doesn't support the DCUtR protocol.
                 // This is no reason to close the connection, which may

@@ -212,7 +212,6 @@ where
 
         let err = match err {
             ConnectionHandlerUpgrErr::Timeout => ConnectionHandlerUpgrErr::Timeout,
-            ConnectionHandlerUpgrErr::Timer => ConnectionHandlerUpgrErr::Timer,
             ConnectionHandlerUpgrErr::Upgrade(err) => {
                 ConnectionHandlerUpgrErr::Upgrade(err.map_err(|err| match err {
                     EitherError::A(e) => e,

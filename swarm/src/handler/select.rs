@@ -165,13 +165,6 @@ where
         match self {
             DialUpgradeError {
                 info: EitherOutput::First(info),
-                error: ConnectionHandlerUpgrErr::Timer,
-            } => Either::Left(DialUpgradeError {
-                info,
-                error: ConnectionHandlerUpgrErr::Timer,
-            }),
-            DialUpgradeError {
-                info: EitherOutput::First(info),
                 error: ConnectionHandlerUpgrErr::Timeout,
             } => Either::Left(DialUpgradeError {
                 info,
@@ -190,13 +183,6 @@ where
             } => Either::Left(DialUpgradeError {
                 info,
                 error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(err)),
-            }),
-            DialUpgradeError {
-                info: EitherOutput::Second(info),
-                error: ConnectionHandlerUpgrErr::Timer,
-            } => Either::Right(DialUpgradeError {
-                info,
-                error: ConnectionHandlerUpgrErr::Timer,
             }),
             DialUpgradeError {
                 info: EitherOutput::Second(info),
@@ -240,19 +226,6 @@ where
         >,
     ) {
         match error {
-            ConnectionHandlerUpgrErr::Timer => {
-                self.proto1
-                    .on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
-                        info: i1,
-                        error: ConnectionHandlerUpgrErr::Timer,
-                    }));
-
-                self.proto2
-                    .on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
-                        info: i2,
-                        error: ConnectionHandlerUpgrErr::Timer,
-                    }));
-            }
             ConnectionHandlerUpgrErr::Timeout => {
                 self.proto1
                     .on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {

@@ -503,7 +503,6 @@ impl Handler {
     ) {
         let non_fatal_error = match error {
             ConnectionHandlerUpgrErr::Timeout => ConnectionHandlerUpgrErr::Timeout,
-            ConnectionHandlerUpgrErr::Timer => ConnectionHandlerUpgrErr::Timer,
             ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
                 upgrade::NegotiationError::Failed,
             )) => ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
@@ -547,9 +546,6 @@ impl Handler {
         let (non_fatal_error, status) = match error {
             ConnectionHandlerUpgrErr::Timeout => {
                 (ConnectionHandlerUpgrErr::Timeout, Status::ConnectionFailed)
-            }
-            ConnectionHandlerUpgrErr::Timer => {
-                (ConnectionHandlerUpgrErr::Timer, Status::ConnectionFailed)
             }
             ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
                 upgrade::NegotiationError::Failed,

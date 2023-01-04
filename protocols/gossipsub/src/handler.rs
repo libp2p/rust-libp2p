@@ -295,7 +295,7 @@ impl ConnectionHandler for GossipsubHandler {
         if let Some(error) = self.upgrade_errors.pop_front() {
             let reported_error = match error {
                 // Timeout errors get mapped to NegotiationTimeout and we close the connection.
-                ConnectionHandlerUpgrErr::Timeout | ConnectionHandlerUpgrErr::Timer => {
+                ConnectionHandlerUpgrErr::Timeout => {
                     Some(GossipsubHandlerError::NegotiationTimeout)
                 }
                 // There was an error post negotiation, close the connection.
