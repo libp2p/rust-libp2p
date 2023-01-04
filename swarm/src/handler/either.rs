@@ -197,56 +197,38 @@ where
                 },
             ))),
             ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::A(error))),
+                error: UpgradeError::Apply(EitherError::A(error)),
                 info: Either::Left(info),
             }) => Ok(Either::Left(ConnectionEvent::ListenUpgradeError(
                 ListenUpgradeError {
-                    error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(error)),
+                    error: UpgradeError::Apply(error),
                     info,
                 },
             ))),
             ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::B(error))),
+                error: UpgradeError::Apply(EitherError::B(error)),
                 info: Either::Right(info),
             }) => Ok(Either::Right(ConnectionEvent::ListenUpgradeError(
                 ListenUpgradeError {
-                    error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(error)),
+                    error: UpgradeError::Apply(error),
                     info,
                 },
             ))),
             ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(error)),
+                error: UpgradeError::Select(error),
                 info: Either::Left(info),
             }) => Ok(Either::Left(ConnectionEvent::ListenUpgradeError(
                 ListenUpgradeError {
-                    error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(error)),
+                    error: UpgradeError::Select(error),
                     info,
                 },
             ))),
             ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(error)),
+                error: UpgradeError::Select(error),
                 info: Either::Right(info),
             }) => Ok(Either::Right(ConnectionEvent::ListenUpgradeError(
                 ListenUpgradeError {
-                    error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(error)),
-                    info,
-                },
-            ))),
-            ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
-                error: ConnectionHandlerUpgrErr::Timeout,
-                info: Either::Left(info),
-            }) => Ok(Either::Left(ConnectionEvent::ListenUpgradeError(
-                ListenUpgradeError {
-                    error: ConnectionHandlerUpgrErr::Timeout,
-                    info,
-                },
-            ))),
-            ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
-                error: ConnectionHandlerUpgrErr::Timeout,
-                info: Either::Right(info),
-            }) => Ok(Either::Right(ConnectionEvent::ListenUpgradeError(
-                ListenUpgradeError {
-                    error: ConnectionHandlerUpgrErr::Timeout,
+                    error: UpgradeError::Select(error),
                     info,
                 },
             ))),

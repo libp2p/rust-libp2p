@@ -1,6 +1,8 @@
 # 0.42.0 [unreleased]
 
 - Remove uncontructed variant `Timer` from `ConnectionHandlerUpgrErr`.
+  Make `ListenUpgradeError::error` an `UpgradeError` instead of `ConnectionHandlerUpgrErr`, in case of timeout expiration we
+  just log the error as we don't know which ConnectionHandler should handle the error.
 
 - Update to `libp2p-core` `v0.39.0`.
 

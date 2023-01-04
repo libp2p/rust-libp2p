@@ -239,12 +239,17 @@ where
                     ));
                     continue;
                 }
-                Poll::Ready(Some((info, Err(error)))) => {
-                    handler.on_connection_event(ConnectionEvent::ListenUpgradeError(
-                        ListenUpgradeError { info, error },
-                    ));
-                    continue;
-                }
+                Poll::Ready(Some((info, Err(error)))) => match error {
+                    ConnectionHandlerUpgrErr::Upgrade(error) => {
+                        handler.on_connection_event(ConnectionEvent::ListenUpgradeError(
+                            ListenUpgradeError { info, error },
+                        ));
+                        continue;
+                    }
+                    ConnectionHandlerUpgrErr::Timeout => {
+                        log::debug!("Timeout expired during an inbound substream negotiation")
+                    }
+                },
             }
 
             // Ask the handler whether it wants the connection (and the handler itself)

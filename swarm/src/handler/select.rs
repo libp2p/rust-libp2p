@@ -226,39 +226,20 @@ where
         >,
     ) {
         match error {
-            ConnectionHandlerUpgrErr::Timeout => {
+            UpgradeError::Select(NegotiationError::Failed) => {
                 self.proto1
                     .on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
                         info: i1,
-                        error: ConnectionHandlerUpgrErr::Timeout,
+                        error: UpgradeError::Select(NegotiationError::Failed),
                     }));
 
                 self.proto2
                     .on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
                         info: i2,
-                        error: ConnectionHandlerUpgrErr::Timeout,
+                        error: UpgradeError::Select(NegotiationError::Failed),
                     }));
             }
-            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)) => {
-                self.proto1
-                    .on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
-                        info: i1,
-                        error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(
-                            NegotiationError::Failed,
-                        )),
-                    }));
-
-                self.proto2
-                    .on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
-                        info: i2,
-                        error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(
-                            NegotiationError::Failed,
-                        )),
-                    }));
-            }
-            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(
-                NegotiationError::ProtocolError(e),
-            )) => {
+            UpgradeError::Select(NegotiationError::ProtocolError(e)) => {
                 let (e1, e2);
                 match e {
                     ProtocolError::IoError(e) => {
@@ -283,26 +264,26 @@ where
                 self.proto1
                     .on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
                         info: i1,
-                        error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(e1)),
+                        error: UpgradeError::Select(e1),
                     }));
                 self.proto2
                     .on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
                         info: i2,
-                        error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(e2)),
+                        error: UpgradeError::Select(e2),
                     }));
             }
-            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::A(e))) => {
+            UpgradeError::Apply(EitherError::A(e)) => {
                 self.proto1
                     .on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
                         info: i1,
-                        error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)),
+                        error: UpgradeError::Apply(e),
                     }));
             }
-            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::B(e))) => {
+            UpgradeError::Apply(EitherError::B(e)) => {
                 self.proto2
                     .on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
                         info: i2,
-                        error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)),
+                        error: UpgradeError::Apply(e),
                     }));
             }
         }

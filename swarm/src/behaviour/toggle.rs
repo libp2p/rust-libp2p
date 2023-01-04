@@ -20,9 +20,9 @@
 
 use crate::behaviour::FromSwarm;
 use crate::handler::{
-    AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent,
-    ConnectionHandlerUpgrErr, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
-    IntoConnectionHandler, KeepAlive, ListenUpgradeError, SubstreamProtocol,
+    AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
+    FullyNegotiatedInbound, FullyNegotiatedOutbound, IntoConnectionHandler, KeepAlive,
+    ListenUpgradeError, SubstreamProtocol,
 };
 use crate::upgrade::SendWrapper;
 use crate::{NetworkBehaviour, NetworkBehaviourAction, PollParameters};
@@ -210,19 +210,12 @@ where
             ),
         };
 
-        let err = match err {
-            ConnectionHandlerUpgrErr::Timeout => ConnectionHandlerUpgrErr::Timeout,
-            ConnectionHandlerUpgrErr::Upgrade(err) => {
-                ConnectionHandlerUpgrErr::Upgrade(err.map_err(|err| match err {
-                    EitherError::A(e) => e,
-                    EitherError::B(v) => void::unreachable(v),
-                }))
-            }
-        };
-
         inner.on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
             info,
-            error: err,
+            error: err.map_err(|err| match err {
+                EitherError::A(e) => e,
+                EitherError::B(v) => void::unreachable(v),
+            }),
         }));
     }
 }

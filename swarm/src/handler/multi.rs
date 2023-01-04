@@ -22,9 +22,9 @@
 //! indexed by some key.
 
 use crate::handler::{
-    AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent,
-    ConnectionHandlerUpgrErr, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
-    IntoConnectionHandler, KeepAlive, ListenUpgradeError, SubstreamProtocol,
+    AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
+    FullyNegotiatedInbound, FullyNegotiatedOutbound, IntoConnectionHandler, KeepAlive,
+    ListenUpgradeError, SubstreamProtocol,
 };
 use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, UpgradeInfoSend};
 use crate::NegotiatedSubstream;
@@ -92,35 +92,19 @@ where
         >,
     ) {
         match error {
-            ConnectionHandlerUpgrErr::Timeout => {
+            UpgradeError::Select(NegotiationError::Failed) => {
                 for (k, h) in &mut self.handlers {
                     if let Some(i) = info.take(k) {
                         h.on_connection_event(ConnectionEvent::ListenUpgradeError(
                             ListenUpgradeError {
                                 info: i,
-                                error: ConnectionHandlerUpgrErr::Timeout,
+                                error: UpgradeError::Select(NegotiationError::Failed),
                             },
                         ));
                     }
                 }
             }
-            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)) => {
-                for (k, h) in &mut self.handlers {
-                    if let Some(i) = info.take(k) {
-                        h.on_connection_event(ConnectionEvent::ListenUpgradeError(
-                            ListenUpgradeError {
-                                info: i,
-                                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(
-                                    NegotiationError::Failed,
-                                )),
-                            },
-                        ));
-                    }
-                }
-            }
-            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(
-                NegotiationError::ProtocolError(e),
-            )) => match e {
+            UpgradeError::Select(NegotiationError::ProtocolError(e)) => match e {
                 ProtocolError::IoError(e) => {
                     for (k, h) in &mut self.handlers {
                         if let Some(i) = info.take(k) {
@@ -130,9 +114,7 @@ where
                             h.on_connection_event(ConnectionEvent::ListenUpgradeError(
                                 ListenUpgradeError {
                                     info: i,
-                                    error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(
-                                        e,
-                                    )),
+                                    error: UpgradeError::Select(e),
                                 },
                             ));
                         }
@@ -145,9 +127,7 @@ where
                             h.on_connection_event(ConnectionEvent::ListenUpgradeError(
                                 ListenUpgradeError {
                                     info: i,
-                                    error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(
-                                        e,
-                                    )),
+                                    error: UpgradeError::Select(e),
                                 },
                             ));
                         }
@@ -160,9 +140,7 @@ where
                             h.on_connection_event(ConnectionEvent::ListenUpgradeError(
                                 ListenUpgradeError {
                                     info: i,
-                                    error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(
-                                        e,
-                                    )),
+                                    error: UpgradeError::Select(e),
                                 },
                             ));
                         }
@@ -176,22 +154,20 @@ where
                             h.on_connection_event(ConnectionEvent::ListenUpgradeError(
                                 ListenUpgradeError {
                                     info: i,
-                                    error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(
-                                        e,
-                                    )),
+                                    error: UpgradeError::Select(e),
                                 },
                             ));
                         }
                     }
                 }
             },
-            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply((k, e))) => {
+            UpgradeError::Apply((k, e)) => {
                 if let Some(h) = self.handlers.get_mut(&k) {
                     if let Some(i) = info.take(&k) {
                         h.on_connection_event(ConnectionEvent::ListenUpgradeError(
                             ListenUpgradeError {
                                 info: i,
-                                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)),
+                                error: UpgradeError::Apply(e),
                             },
                         ));
                     }
