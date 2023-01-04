@@ -1,6 +1,7 @@
 # 0.8.1
 
-- Skip unparsable multiaddr in `InboundUpgrade::upgrade_inbound`. See [PR 3300].
+- Skip unparsable multiaddr in `InboundUpgrade::upgrade_inbound` and
+  `OutboundUpgrade::upgrade_outbound`. See [PR 3300].
 
 [PR 3300]: https://github.com/libp2p/rust-libp2p/pull/3300
 
