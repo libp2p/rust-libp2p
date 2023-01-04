@@ -113,10 +113,13 @@ pub use connection::{
 };
 pub use executor::Executor;
 pub use handler::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerSelect, ConnectionHandlerUpgrErr,
-    IntoConnectionHandler, IntoConnectionHandlerSelect, KeepAlive, OneShotHandler,
-    OneShotHandlerConfig, SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerSelect, IntoConnectionHandler,
+    IntoConnectionHandlerSelect, KeepAlive, OneShotHandler, OneShotHandlerConfig,
+    SubstreamProtocol,
 };
+
+#[deprecated(since = "0.42.0", note = "Shouldn't be required by end users")]
+pub type ConnectionHandlerUpgrErr<TUpgrErr> = handler::ConnectionHandlerUpgrErr<TUpgrErr>;
 #[cfg(feature = "macros")]
 pub use libp2p_swarm_derive::NetworkBehaviour;
 pub use registry::{AddAddressResult, AddressRecord, AddressScore};

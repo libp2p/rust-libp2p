@@ -2,7 +2,7 @@ use crate::behaviour::{FromSwarm, NetworkBehaviour, NetworkBehaviourAction, Poll
 use crate::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
-use crate::{ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive, SubstreamProtocol};
+use crate::{ConnectionHandlerEvent, KeepAlive, SubstreamProtocol};
 use libp2p_core::connection::ConnectionId;
 use libp2p_core::upgrade::DeniedUpgrade;
 use libp2p_core::PeerId;
@@ -106,10 +106,10 @@ impl crate::handler::ConnectionHandler for ConnectionHandler {
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
                 protocol, ..
             }) => void::unreachable(protocol),
+            ConnectionEvent::DialTimeout(_) => unreachable!(),
             ConnectionEvent::DialUpgradeError(DialUpgradeError { info: _, error }) => match error {
-                ConnectionHandlerUpgrErr::Timeout => unreachable!(),
-                ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)) => void::unreachable(e),
-                ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(_)) => {
+                UpgradeError::Apply(e) => void::unreachable(e),
+                UpgradeError::Select(_) => {
                     unreachable!("Denied upgrade does not support any protocols")
                 }
             },

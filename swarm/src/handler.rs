@@ -207,6 +207,8 @@ pub enum ConnectionEvent<'a, IP: InboundUpgradeSend, OP: OutboundUpgradeSend, IO
     AddressChange(AddressChange<'a>),
     /// Informs the handler that upgrading an outbound substream to the given protocol has failed.
     DialUpgradeError(DialUpgradeError<OOI, OP>),
+    /// Informs the handler that upgrading an outbound substream to the given protocol has expired its timeout.
+    DialTimeout(DialTimeout<OOI>),
     /// Informs the handler that upgrading an inbound substream to the given protocol has failed.
     ListenUpgradeError(ListenUpgradeError<IOI, IP>),
 }
@@ -242,7 +244,13 @@ pub struct AddressChange<'a> {
 /// that upgrading an outbound substream to the given protocol has failed.
 pub struct DialUpgradeError<OOI, OP: OutboundUpgradeSend> {
     pub info: OOI,
-    pub error: ConnectionHandlerUpgrErr<OP::Error>,
+    pub error: UpgradeError<OP::Error>,
+}
+
+/// [`ConnectionEvent`] variant that informs the handler
+/// that upgrading an outbound substream has expired its timeout.
+pub struct DialTimeout<OOI> {
+    pub info: OOI,
 }
 
 /// [`ConnectionEvent`] variant that informs the handler

@@ -28,11 +28,11 @@ pub use error::{
 };
 
 use crate::handler::{
-    AddressChange, ConnectionEvent, ConnectionHandler, DialUpgradeError, FullyNegotiatedInbound,
-    FullyNegotiatedOutbound, ListenUpgradeError,
+    AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerUpgrErr, DialTimeout,
+    DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound, ListenUpgradeError,
 };
 use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper};
-use crate::{ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive, SubstreamProtocol};
+use crate::{ConnectionHandlerEvent, KeepAlive, SubstreamProtocol};
 use futures::stream::FuturesUnordered;
 use futures::FutureExt;
 use futures::StreamExt;
@@ -183,12 +183,7 @@ where
             match requested_substreams.poll_next_unpin(cx) {
                 Poll::Ready(Some(Ok(()))) => continue,
                 Poll::Ready(Some(Err(info))) => {
-                    handler.on_connection_event(ConnectionEvent::DialUpgradeError(
-                        DialUpgradeError {
-                            info,
-                            error: ConnectionHandlerUpgrErr::Timeout,
-                        },
-                    ));
+                    handler.on_connection_event(ConnectionEvent::DialTimeout(DialTimeout { info }));
                     continue;
                 }
                 Poll::Ready(None) | Poll::Pending => {}
@@ -221,12 +216,20 @@ where
                     ));
                     continue;
                 }
-                Poll::Ready(Some((info, Err(error)))) => {
-                    handler.on_connection_event(ConnectionEvent::DialUpgradeError(
-                        DialUpgradeError { info, error },
-                    ));
-                    continue;
-                }
+                Poll::Ready(Some((info, Err(error)))) => match error {
+                    ConnectionHandlerUpgrErr::Upgrade(error) => {
+                        handler.on_connection_event(ConnectionEvent::DialUpgradeError(
+                            DialUpgradeError { info, error },
+                        ));
+                        continue;
+                    }
+                    ConnectionHandlerUpgrErr::Timeout => {
+                        handler.on_connection_event(ConnectionEvent::DialTimeout(DialTimeout {
+                            info,
+                        }));
+                        continue;
+                    }
+                },
             }
 
             // In case both the [`ConnectionHandler`] and the negotiating outbound streams can not
@@ -792,7 +795,10 @@ mod tests {
                     ..
                 }) => void::unreachable(protocol),
                 ConnectionEvent::DialUpgradeError(DialUpgradeError { error, .. }) => {
-                    self.error = Some(error)
+                    self.error = Some(ConnectionHandlerUpgrErr::Upgrade(error))
+                }
+                ConnectionEvent::DialTimeout(_) => {
+                    self.error = Some(ConnectionHandlerUpgrErr::Timeout)
                 }
                 ConnectionEvent::AddressChange(_) | ConnectionEvent::ListenUpgradeError(_) => {}
             }

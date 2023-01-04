@@ -20,9 +20,9 @@
 
 use crate::behaviour::FromSwarm;
 use crate::handler::{
-    AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
-    FullyNegotiatedInbound, FullyNegotiatedOutbound, IntoConnectionHandler, KeepAlive,
-    ListenUpgradeError, SubstreamProtocol,
+    AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialTimeout,
+    DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound, IntoConnectionHandler,
+    KeepAlive, ListenUpgradeError, SubstreamProtocol,
 };
 use crate::upgrade::SendWrapper;
 use crate::{NetworkBehaviour, NetworkBehaviourAction, PollParameters};
@@ -320,6 +320,11 @@ where
                     info,
                     error: err,
                 })),
+            ConnectionEvent::DialTimeout(DialTimeout { info }) => self
+                .inner
+                .as_mut()
+                .expect("Can't receive an outbound substream if disabled; QED")
+                .on_connection_event(ConnectionEvent::DialTimeout(DialTimeout { info })),
             ConnectionEvent::ListenUpgradeError(listen_upgrade_error) => {
                 self.on_listen_upgrade_error(listen_upgrade_error)
             }
@@ -331,6 +336,7 @@ where
 mod tests {
     use super::*;
     use crate::dummy;
+    use libp2p_core::{upgrade::NegotiationError, UpgradeError};
 
     /// A disabled [`ToggleConnectionHandler`] can receive listen upgrade errors in
     /// the following two cases:
@@ -352,7 +358,7 @@ mod tests {
 
         handler.on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
             info: Either::Right(()),
-            error: ConnectionHandlerUpgrErr::Timeout,
+            error: UpgradeError::Select(NegotiationError::Failed),
         }));
     }
 }

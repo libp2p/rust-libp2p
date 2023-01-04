@@ -3,6 +3,9 @@
 - Remove uncontructed variant `Timer` from `ConnectionHandlerUpgrErr`.
   Make `ListenUpgradeError::error` an `UpgradeError` instead of `ConnectionHandlerUpgrErr`, in case of timeout expiration we
   just log the error as we don't know which ConnectionHandler should handle the error.
+  Make `DialUpgradeError::error` an `UpgradeError` instead of `ConnectionHandlerUpgrErr`, and introduce `ConnectionEvent::DialTimeout`
+  for the situations where that upgrading an outbound substream to the given protocol has expired its timeout.
+  See [PR 3307]
 
 - Update to `libp2p-core` `v0.39.0`.
 
@@ -24,6 +27,7 @@
 [PR 3153]: https://github.com/libp2p/rust-libp2p/pull/3153
 [PR 3260]: https://github.com/libp2p/rust-libp2p/pull/3260
 [PR 3272]: https://github.com/libp2p/rust-libp2p/pull/3272
+[PR 3307]: https://github.com/libp2p/rust-libp2p/pull/3307
 
 # 0.41.1
 

@@ -19,14 +19,13 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::handler::{
-    AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent,
-    ConnectionHandlerUpgrErr, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
-    InboundUpgradeSend, IntoConnectionHandler, KeepAlive, ListenUpgradeError, OutboundUpgradeSend,
-    SubstreamProtocol,
+    AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialTimeout,
+    DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound, InboundUpgradeSend,
+    IntoConnectionHandler, KeepAlive, ListenUpgradeError, OutboundUpgradeSend, SubstreamProtocol,
 };
 use crate::upgrade::SendWrapper;
 
-use either::Either;
+use either::Either::{self, Right};
 use libp2p_core::{
     either::{EitherError, EitherOutput},
     upgrade::{EitherUpgrade, NegotiationError, ProtocolError, SelectUpgrade, UpgradeError},
@@ -165,47 +164,50 @@ where
         match self {
             DialUpgradeError {
                 info: EitherOutput::First(info),
-                error: ConnectionHandlerUpgrErr::Timeout,
+                error: UpgradeError::Select(err),
             } => Either::Left(DialUpgradeError {
                 info,
-                error: ConnectionHandlerUpgrErr::Timeout,
+                error: UpgradeError::Select(err),
             }),
             DialUpgradeError {
                 info: EitherOutput::First(info),
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(err)),
+                error: UpgradeError::Apply(EitherError::A(err)),
             } => Either::Left(DialUpgradeError {
                 info,
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(err)),
-            }),
-            DialUpgradeError {
-                info: EitherOutput::First(info),
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::A(err))),
-            } => Either::Left(DialUpgradeError {
-                info,
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(err)),
+                error: UpgradeError::Apply(err),
             }),
             DialUpgradeError {
                 info: EitherOutput::Second(info),
-                error: ConnectionHandlerUpgrErr::Timeout,
+                error: UpgradeError::Select(err),
             } => Either::Right(DialUpgradeError {
                 info,
-                error: ConnectionHandlerUpgrErr::Timeout,
+                error: UpgradeError::Select(err),
             }),
             DialUpgradeError {
                 info: EitherOutput::Second(info),
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(err)),
+                error: UpgradeError::Apply(EitherError::B(err)),
             } => Either::Right(DialUpgradeError {
                 info,
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(err)),
-            }),
-            DialUpgradeError {
-                info: EitherOutput::Second(info),
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::B(err))),
-            } => Either::Right(DialUpgradeError {
-                info,
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(err)),
+                error: UpgradeError::Apply(err),
             }),
             _ => panic!("Wrong API usage; the upgrade error doesn't match the outbound open info"),
+        }
+    }
+}
+
+impl<S1OOI, S2OOI> DialTimeout<EitherOutput<S1OOI, S2OOI>>
+where
+    S1OOI: Send + 'static,
+    S2OOI: Send + 'static,
+{
+    fn transpose(self) -> Either<DialTimeout<S1OOI>, DialTimeout<S2OOI>> {
+        match self {
+            DialTimeout {
+                info: EitherOutput::First(info),
+            } => Either::Left(DialTimeout { info }),
+            DialTimeout {
+                info: EitherOutput::Second(info),
+            } => Either::Right(DialTimeout { info }),
         }
     }
 }
@@ -432,6 +434,14 @@ where
                         .on_connection_event(ConnectionEvent::DialUpgradeError(err)),
                 }
             }
+            ConnectionEvent::DialTimeout(dial_timeout) => match dial_timeout.transpose() {
+                Either::Left(dial_timeout) => self
+                    .proto1
+                    .on_connection_event(ConnectionEvent::DialTimeout(dial_timeout)),
+                Right(dial_timeout) => self
+                    .proto2
+                    .on_connection_event(ConnectionEvent::DialTimeout(dial_timeout)),
+            },
             ConnectionEvent::ListenUpgradeError(listen_upgrade_error) => {
                 self.on_listen_upgrade_error(listen_upgrade_error)
             }

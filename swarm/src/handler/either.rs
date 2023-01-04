@@ -19,9 +19,9 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::handler::{
-    ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr,
-    DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound, InboundUpgradeSend,
-    IntoConnectionHandler, KeepAlive, ListenUpgradeError, OutboundUpgradeSend, SubstreamProtocol,
+    ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialTimeout, DialUpgradeError,
+    FullyNegotiatedInbound, FullyNegotiatedOutbound, InboundUpgradeSend, IntoConnectionHandler,
+    KeepAlive, ListenUpgradeError, OutboundUpgradeSend, SubstreamProtocol,
 };
 use crate::upgrade::SendWrapper;
 use either::Either;
@@ -143,59 +143,51 @@ where
                 FullyNegotiatedOutbound { protocol, info },
             ))),
             ConnectionEvent::DialUpgradeError(DialUpgradeError {
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::A(error))),
+                error: UpgradeError::Apply(EitherError::A(error)),
                 info: Either::Left(info),
             }) => Ok(Either::Left(ConnectionEvent::DialUpgradeError(
                 DialUpgradeError {
-                    error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(error)),
+                    error: UpgradeError::Apply(error),
                     info,
                 },
             ))),
             ConnectionEvent::DialUpgradeError(DialUpgradeError {
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::B(error))),
+                error: UpgradeError::Apply(EitherError::B(error)),
                 info: Either::Right(info),
             }) => Ok(Either::Right(ConnectionEvent::DialUpgradeError(
                 DialUpgradeError {
-                    error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(error)),
+                    error: UpgradeError::Apply(error),
                     info,
                 },
             ))),
             ConnectionEvent::DialUpgradeError(DialUpgradeError {
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(error)),
+                error: UpgradeError::Select(error),
                 info: Either::Left(info),
             }) => Ok(Either::Left(ConnectionEvent::DialUpgradeError(
                 DialUpgradeError {
-                    error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(error)),
+                    error: UpgradeError::Select(error),
                     info,
                 },
             ))),
             ConnectionEvent::DialUpgradeError(DialUpgradeError {
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(error)),
+                error: UpgradeError::Select(error),
                 info: Either::Right(info),
             }) => Ok(Either::Right(ConnectionEvent::DialUpgradeError(
                 DialUpgradeError {
-                    error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(error)),
+                    error: UpgradeError::Select(error),
                     info,
                 },
             ))),
-            ConnectionEvent::DialUpgradeError(DialUpgradeError {
-                error: ConnectionHandlerUpgrErr::Timeout,
+            ConnectionEvent::DialTimeout(DialTimeout {
                 info: Either::Left(info),
-            }) => Ok(Either::Left(ConnectionEvent::DialUpgradeError(
-                DialUpgradeError {
-                    error: ConnectionHandlerUpgrErr::Timeout,
-                    info,
-                },
-            ))),
-            ConnectionEvent::DialUpgradeError(DialUpgradeError {
-                error: ConnectionHandlerUpgrErr::Timeout,
+            }) => Ok(Either::Left(ConnectionEvent::DialTimeout(DialTimeout {
+                info,
+            }))),
+            ConnectionEvent::DialTimeout(DialTimeout {
                 info: Either::Right(info),
-            }) => Ok(Either::Right(ConnectionEvent::DialUpgradeError(
-                DialUpgradeError {
-                    error: ConnectionHandlerUpgrErr::Timeout,
-                    info,
-                },
-            ))),
+            }) => Ok(Either::Right(ConnectionEvent::DialTimeout(DialTimeout {
+                info,
+            }))),
             ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
                 error: UpgradeError::Apply(EitherError::A(error)),
                 info: Either::Left(info),

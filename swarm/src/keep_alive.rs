@@ -112,6 +112,7 @@ impl crate::handler::ConnectionHandler for ConnectionHandler {
                 protocol, ..
             }) => void::unreachable(protocol),
             ConnectionEvent::DialUpgradeError(_)
+            | ConnectionEvent::DialTimeout(_)
             | ConnectionEvent::ListenUpgradeError(_)
             | ConnectionEvent::AddressChange(_) => {}
         }

@@ -22,9 +22,9 @@
 //! indexed by some key.
 
 use crate::handler::{
-    AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialUpgradeError,
-    FullyNegotiatedInbound, FullyNegotiatedOutbound, IntoConnectionHandler, KeepAlive,
-    ListenUpgradeError, SubstreamProtocol,
+    AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, DialTimeout,
+    DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound, IntoConnectionHandler,
+    KeepAlive, ListenUpgradeError, SubstreamProtocol,
 };
 use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, UpgradeInfoSend};
 use crate::NegotiatedSubstream;
@@ -274,6 +274,13 @@ where
                     }));
                 } else {
                     log::error!("DialUpgradeError: no handler for protocol")
+                }
+            }
+            ConnectionEvent::DialTimeout(DialTimeout { info: (key, arg) }) => {
+                if let Some(h) = self.handlers.get_mut(&key) {
+                    h.on_connection_event(ConnectionEvent::DialTimeout(DialTimeout { info: arg }));
+                } else {
+                    log::error!("DialTimeout: no handler for protocol")
                 }
             }
             ConnectionEvent::ListenUpgradeError(listen_upgrade_error) => {
