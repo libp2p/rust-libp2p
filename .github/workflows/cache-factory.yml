@@ -34,7 +34,7 @@ jobs:
         rust: ${{ fromJSON(needs.gather_msrv_versions.outputs.versions) }}
     steps:
       - name: Install Protoc
-        uses: arduino/setup-protoc@64c0c85d18e984422218383b81c52f8b077404d3 # v1.1.2
+        run: sudo apt-get install protobuf-compiler
 
       - uses: actions/checkout@v3
 
@@ -57,7 +57,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Install Protoc
-        uses: arduino/setup-protoc@64c0c85d18e984422218383b81c52f8b077404d3 # v1.1.2
+        run: sudo apt-get install protobuf-compiler
 
       - uses: actions/checkout@v3
 
