@@ -97,7 +97,9 @@ pub struct KademliaHandler<TUserData> {
     num_upgrading_outbound_streams: usize,
 
     /// List of outbound substreams that are waiting to become active next.
-    next_outbound_streams: VecDeque<OutboundSubstreamState<TUserData>>,
+    /// Contains the request we want to send, and the user data if we expect an answer.
+    next_outbound_streams:
+        VecDeque<SubstreamProtocol<KademliaProtocolConfig, (KadRequestMsg, Option<TUserData>)>>,
 
     /// List of active inbound substreams with the state they are in.
     inbound_substreams: SelectAll<InboundSubstreamState<TUserData>>,
@@ -145,9 +147,6 @@ pub struct KademliaHandlerConfig {
 
 /// State of an active outbound substream.
 enum OutboundSubstreamState<TUserData> {
-    /// We haven't started opening the outgoing substream yet.
-    /// Contains the request we want to send, and the user data if we expect an answer.
-    PendingOpen(SubstreamProtocol<KademliaProtocolConfig, (KadRequestMsg, Option<TUserData>)>),
     /// Waiting to send a message to the remote.
     PendingSend(
         KadOutStreamSink<NegotiatedSubstream>,
@@ -677,11 +676,10 @@ where
             }
             KademliaHandlerIn::FindNodeReq { key, user_data } => {
                 let msg = KadRequestMsg::FindNode { key };
-                self.next_outbound_streams
-                    .push_back(OutboundSubstreamState::PendingOpen(SubstreamProtocol::new(
-                        self.config.protocol_config.clone(),
-                        (msg, Some(user_data)),
-                    )));
+                self.next_outbound_streams.push_back(SubstreamProtocol::new(
+                    self.config.protocol_config.clone(),
+                    (msg, Some(user_data)),
+                ));
             }
             KademliaHandlerIn::FindNodeRes {
                 closer_peers,
@@ -689,11 +687,10 @@ where
             } => self.answer_pending_request(request_id, KadResponseMsg::FindNode { closer_peers }),
             KademliaHandlerIn::GetProvidersReq { key, user_data } => {
                 let msg = KadRequestMsg::GetProviders { key };
-                self.next_outbound_streams
-                    .push_back(OutboundSubstreamState::PendingOpen(SubstreamProtocol::new(
-                        self.config.protocol_config.clone(),
-                        (msg, Some(user_data)),
-                    )));
+                self.next_outbound_streams.push_back(SubstreamProtocol::new(
+                    self.config.protocol_config.clone(),
+                    (msg, Some(user_data)),
+                ));
             }
             KademliaHandlerIn::GetProvidersRes {
                 closer_peers,
@@ -708,27 +705,24 @@ where
             ),
             KademliaHandlerIn::AddProvider { key, provider } => {
                 let msg = KadRequestMsg::AddProvider { key, provider };
-                self.next_outbound_streams
-                    .push_back(OutboundSubstreamState::PendingOpen(SubstreamProtocol::new(
-                        self.config.protocol_config.clone(),
-                        (msg, None),
-                    )));
+                self.next_outbound_streams.push_back(SubstreamProtocol::new(
+                    self.config.protocol_config.clone(),
+                    (msg, None),
+                ));
             }
             KademliaHandlerIn::GetRecord { key, user_data } => {
                 let msg = KadRequestMsg::GetValue { key };
-                self.next_outbound_streams
-                    .push_back(OutboundSubstreamState::PendingOpen(SubstreamProtocol::new(
-                        self.config.protocol_config.clone(),
-                        (msg, Some(user_data)),
-                    )));
+                self.next_outbound_streams.push_back(SubstreamProtocol::new(
+                    self.config.protocol_config.clone(),
+                    (msg, Some(user_data)),
+                ));
             }
             KademliaHandlerIn::PutRecord { record, user_data } => {
                 let msg = KadRequestMsg::PutValue { record };
-                self.next_outbound_streams
-                    .push_back(OutboundSubstreamState::PendingOpen(SubstreamProtocol::new(
-                        self.config.protocol_config.clone(),
-                        (msg, Some(user_data)),
-                    )));
+                self.next_outbound_streams.push_back(SubstreamProtocol::new(
+                    self.config.protocol_config.clone(),
+                    (msg, Some(user_data)),
+                ));
             }
             KademliaHandlerIn::GetRecordRes {
                 record,
@@ -779,21 +773,14 @@ where
 
         let num_in_progress_outbound_substreams =
             self.active_outbound_substreams.len() + self.num_upgrading_outbound_streams;
-        for _ in 0..MAX_NUM_SUBSTREAMS.saturating_sub(num_in_progress_outbound_substreams) {
-            if let Some(outbound_substream) = self.next_outbound_streams.pop_front() {
-                self.active_outbound_substreams.push(outbound_substream);
-            } else {
-                break;
+        if MAX_NUM_SUBSTREAMS.saturating_sub(num_in_progress_outbound_substreams) > 0 {
+            if let Some(protocol) = self.next_outbound_streams.pop_front() {
+                self.num_upgrading_outbound_streams += 1;
+                return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest { protocol });
             }
         }
 
         if let Poll::Ready(Some(event)) = self.active_outbound_substreams.poll_next_unpin(cx) {
-            if matches!(
-                event,
-                ConnectionHandlerEvent::OutboundSubstreamRequest { .. }
-            ) {
-                self.num_upgrading_outbound_streams += 1;
-            }
             return Poll::Ready(event);
         }
 
@@ -879,12 +866,6 @@ where
 
         loop {
             match std::mem::replace(this, OutboundSubstreamState::Poisoned) {
-                OutboundSubstreamState::PendingOpen(protocol) => {
-                    *this = OutboundSubstreamState::Done;
-                    return Poll::Ready(Some(ConnectionHandlerEvent::OutboundSubstreamRequest {
-                        protocol,
-                    }));
-                }
                 OutboundSubstreamState::PendingSend(mut substream, msg, user_data) => {
                     match substream.poll_ready_unpin(cx) {
                         Poll::Ready(Ok(())) => match substream.start_send_unpin(msg) {
