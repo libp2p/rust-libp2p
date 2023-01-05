@@ -6,13 +6,13 @@
 
 - Bump MSRV to 1.65.0.
 
-- Update to `libp2p-dcutr` `v0.9.0`.
+- Update to `libp2p-dcutr` `v0.9.0` and introduce `dcutr::EventType::DirectConnectionUpgradeTimedOut`.
 
 - Update to `libp2p-ping` `v0.42.0`.
 
 - Update to `libp2p-kad` `v0.43.0`.
 
-- Update to `libp2p-relay` `v0.15.0`.
+- Update to `libp2p-relay` `v0.15.0` and introduce `relay::EventType::CircuitReqOutboundConectTimedOut`.
 
 - Update to `libp2p-identify` `v0.42.0`.
 

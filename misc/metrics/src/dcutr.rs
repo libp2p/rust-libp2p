@@ -53,6 +53,7 @@ enum EventType {
     RemoteInitiatedDirectConnectionUpgrade,
     DirectConnectionUpgradeSucceeded,
     DirectConnectionUpgradeFailed,
+    DirectConnectionUpgradeTimedOut,
 }
 
 impl From<&libp2p_dcutr::Event> for EventType {
@@ -73,6 +74,9 @@ impl From<&libp2p_dcutr::Event> for EventType {
                 remote_peer_id: _,
                 error: _,
             } => EventType::DirectConnectionUpgradeFailed,
+            libp2p_dcutr::Event::DirectConnectionUpgradeTimedout { .. } => {
+                EventType::DirectConnectionUpgradeTimedOut
+            }
         }
     }
 }
