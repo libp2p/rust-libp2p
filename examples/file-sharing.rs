@@ -216,7 +216,8 @@ mod network {
     use libp2p::kad::{GetProvidersOk, Kademlia, KademliaEvent, QueryId, QueryResult};
     use libp2p::multiaddr::Protocol;
     use libp2p::request_response::{self, ProtocolSupport, RequestId, ResponseChannel};
-    use libp2p::swarm::{ConnectionHandlerUpgrErr, NetworkBehaviour, Swarm, SwarmEvent};
+    use libp2p::swarm::{NetworkBehaviour, Swarm, SwarmEvent};
+    use libp2p_core::UpgradeError;
     use std::collections::{hash_map, HashMap, HashSet};
     use std::iter;
 
@@ -403,10 +404,7 @@ mod network {
 
         async fn handle_event(
             &mut self,
-            event: SwarmEvent<
-                ComposedEvent,
-                EitherError<ConnectionHandlerUpgrErr<io::Error>, io::Error>,
-            >,
+            event: SwarmEvent<ComposedEvent, EitherError<UpgradeError<io::Error>, io::Error>>,
         ) {
             match event {
                 SwarmEvent::Behaviour(ComposedEvent::Kademlia(
