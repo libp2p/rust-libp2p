@@ -2,13 +2,15 @@
 
 - Update to `libp2p-core` `v0.39.0`.
 
-- Update to `libp2p-swarm` `v0.42.0`.
+- Update to `libp2p-swarm` `v0.42.0`. Update to the `libp2p_swarm::handler::ConnectionEvent` `DialTimeout`
+  introduction and consequential changes. With that introduce `KademliaHandlerQueryErr::Timeout`. See [PR 3307].
 
 - Remove lifetime from `RecordStore` and use GATs instead. See [PR 3239].
 
 - Bump MSRV to 1.65.0.
 
 [PR 3239]: https://github.com/libp2p/rust-libp2p/pull/3239
+[PR 3307]: https://github.com/libp2p/rust-libp2p/pull/3307
 
 # 0.42.1
 

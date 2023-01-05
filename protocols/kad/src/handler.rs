@@ -26,13 +26,14 @@ use crate::record::{self, Record};
 use futures::prelude::*;
 use futures::stream::SelectAll;
 use instant::Instant;
+use libp2p_core::UpgradeError;
 use libp2p_core::{either::EitherOutput, upgrade, ConnectedPoint, PeerId};
 use libp2p_swarm::handler::{
-    ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
+    ConnectionEvent, DialTimeout, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, IntoConnectionHandler,
-    KeepAlive, NegotiatedSubstream, SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, IntoConnectionHandler, KeepAlive,
+    NegotiatedSubstream, SubstreamProtocol,
 };
 use log::trace;
 use std::task::Waker;
@@ -351,7 +352,9 @@ pub enum KademliaHandlerEvent<TUserData> {
 #[derive(Debug)]
 pub enum KademliaHandlerQueryErr {
     /// Error while trying to perform the query.
-    Upgrade(ConnectionHandlerUpgrErr<io::Error>),
+    Upgrade(UpgradeError<io::Error>),
+    /// Timeout while trying to perform the query.
+    Timeout,
     /// Received an answer that doesn't correspond to the request.
     UnexpectedMessage,
     /// I/O error in the substream.
@@ -373,6 +376,9 @@ impl fmt::Display for KademliaHandlerQueryErr {
             KademliaHandlerQueryErr::Io(err) => {
                 write!(f, "I/O error during a Kademlia RPC query: {err}")
             }
+            KademliaHandlerQueryErr::Timeout => {
+                write!(f, "Timeout expired during a Kademlia RPC query")
+            }
         }
     }
 }
@@ -381,15 +387,10 @@ impl error::Error for KademliaHandlerQueryErr {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
             KademliaHandlerQueryErr::Upgrade(err) => Some(err),
+            KademliaHandlerQueryErr::Timeout => None,
             KademliaHandlerQueryErr::UnexpectedMessage => None,
             KademliaHandlerQueryErr::Io(err) => Some(err),
         }
-    }
-}
-
-impl From<ConnectionHandlerUpgrErr<io::Error>> for KademliaHandlerQueryErr {
-    fn from(err: ConnectionHandlerUpgrErr<io::Error>) -> Self {
-        KademliaHandlerQueryErr::Upgrade(err)
     }
 }
 
@@ -605,25 +606,6 @@ where
                 substream: protocol,
             });
     }
-
-    fn on_dial_upgrade_error(
-        &mut self,
-        DialUpgradeError {
-            info: (_, user_data),
-            error,
-            ..
-        }: DialUpgradeError<
-            <Self as ConnectionHandler>::OutboundOpenInfo,
-            <Self as ConnectionHandler>::OutboundProtocol,
-        >,
-    ) {
-        // TODO: cache the fact that the remote doesn't support kademlia at all, so that we don't
-        //       continue trying
-        if let Some(user_data) = user_data {
-            self.outbound_substreams
-                .push(OutboundSubstreamState::ReportError(error.into(), user_data));
-        }
-    }
 }
 
 impl<TUserData> ConnectionHandler for KademliaHandler<TUserData>
@@ -800,8 +782,30 @@ where
             ConnectionEvent::FullyNegotiatedInbound(fully_negotiated_inbound) => {
                 self.on_fully_negotiated_inbound(fully_negotiated_inbound)
             }
-            ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
-                self.on_dial_upgrade_error(dial_upgrade_error)
+            // TODO: cache the fact that the remote doesn't support kademlia at all, so that we don't
+            //       continue trying
+            ConnectionEvent::DialUpgradeError(DialUpgradeError {
+                info: (_, user_data),
+                error,
+            }) => {
+                if let Some(user_data) = user_data {
+                    self.outbound_substreams
+                        .push(OutboundSubstreamState::ReportError(
+                            KademliaHandlerQueryErr::Upgrade(error),
+                            user_data,
+                        ));
+                }
+            }
+            ConnectionEvent::DialTimeout(DialTimeout {
+                info: (_, user_data),
+            }) => {
+                if let Some(user_data) = user_data {
+                    self.outbound_substreams
+                        .push(OutboundSubstreamState::ReportError(
+                            KademliaHandlerQueryErr::Timeout,
+                            user_data,
+                        ));
+                }
             }
             ConnectionEvent::AddressChange(_) | ConnectionEvent::ListenUpgradeError(_) => {}
         }
