@@ -599,7 +599,7 @@ impl Builder {
 
     /// When set, prevents automatic forwarding of all received messages. This setting
     /// allows a user to validate the messages before propagating them to their peers. If set,
-    /// the user must manually call [`crate::Gossipsub::report_message_validation_result()`] on the
+    /// the user must manually call [`crate::Behaviour::report_message_validation_result()`] on the
     /// behaviour to forward a message once validated.
     pub fn validate_messages(&mut self) -> &mut Self {
         self.config.validate_messages = true;

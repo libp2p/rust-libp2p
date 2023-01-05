@@ -328,7 +328,7 @@ where
     }
 
     /// Creates a [`Behaviour`] struct given a set of parameters specified via a
-    /// [`BehaviourConfig`]. This has no subscription filter and uses no compression.
+    /// [`Config`]. This has no subscription filter and uses no compression.
     /// Metrics can be evaluated by passing a reference to a [`Registry`].
     pub fn new_with_metrics(
         privacy: MessageAuthenticity,
@@ -352,7 +352,7 @@ where
     F: TopicSubscriptionFilter,
 {
     /// Creates a [`Behaviour`] struct given a set of parameters specified via a
-    /// [`BehaviourConfig`] and a custom subscription filter.
+    /// [`Config`] and a custom subscription filter.
     pub fn new_with_subscription_filter(
         privacy: MessageAuthenticity,
         config: Config,
@@ -739,7 +739,7 @@ where
         Ok(msg_id)
     }
 
-    /// This function should be called when [`BehaviourConfig::validate_messages()`] is `true` after
+    /// This function should be called when [`Config::validate_messages()`] is `true` after
     /// the message got validated by the caller. Messages are stored in the ['Memcache'] and
     /// validation is expected to be fast enough that the messages should still exist in the cache.
     /// There are three possible validation outcomes and the outcome is given in acceptance.
@@ -1716,7 +1716,7 @@ where
         true
     }
 
-    /// Handles a newly received [`RawBehaviourMessage`].
+    /// Handles a newly received [`RawMessage`].
     ///
     /// Forwards the message to all peers in the mesh.
     fn handle_received_message(
