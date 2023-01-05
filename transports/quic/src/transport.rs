@@ -71,6 +71,7 @@ pub struct GenTransport<P: Provider> {
     listeners: SelectAll<Listener<P>>,
     /// Dialer for each socket family if no matching listener exists.
     dialer: HashMap<SocketFamily, Dialer>,
+    dialer_waker: Option<Waker>,
 }
 
 impl<P: Provider> GenTransport<P> {
@@ -84,6 +85,7 @@ impl<P: Provider> GenTransport<P> {
             quinn_config,
             handshake_timeout,
             dialer: HashMap::new(),
+            dialer_waker: None,
             support_draft_29,
         }
     }
@@ -163,6 +165,9 @@ impl<P: Provider> Transport for GenTransport<P> {
                 let dialer = match self.dialer.entry(socket_family) {
                     Entry::Occupied(occupied) => occupied.into_mut(),
                     Entry::Vacant(vacant) => {
+                        if let Some(waker) = self.dialer_waker.take() {
+                            waker.wake();
+                        }
                         vacant.insert(Dialer::new::<P>(self.quinn_config.clone(), socket_family)?)
                     }
                 };
@@ -202,6 +207,8 @@ impl<P: Provider> Transport for GenTransport<P> {
                 errored.push(*key);
             }
         }
+        self.dialer_waker = Some(cx.waker().clone());
+
         for key in errored {
             // Endpoint driver of dialer crashed.
             // Drop dialer and all pending dials so that the connection receiver is notified.
