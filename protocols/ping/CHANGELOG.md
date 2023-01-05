@@ -2,7 +2,10 @@
 
 - Update to `libp2p-core` `v0.39.0`.
 
-- Update to `libp2p-swarm` `v0.42.0`.
+- Update to `libp2p-swarm` `v0.42.0`. Update to the `libp2p_swarm::handler::ConnectionEvent` `DialTimeout`
+  introduction and consequential changes. See [PR 3307].
+
+[PR 3307]: https://github.com/libp2p/rust-libp2p/pull/3307
 
 # 0.41.0
 

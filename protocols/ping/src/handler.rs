@@ -28,8 +28,7 @@ use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
-    NegotiatedSubstream, SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, NegotiatedSubstream, SubstreamProtocol,
 };
 use std::collections::VecDeque;
 use std::{
@@ -238,14 +237,12 @@ impl Handler {
         self.outbound = None; // Request a new substream on the next `poll`.
 
         let error = match error {
-            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)) => {
+            UpgradeError::Select(NegotiationError::Failed) => {
                 debug_assert_eq!(self.state, State::Active);
 
                 self.state = State::Inactive { reported: false };
                 return;
             }
-            // Note: This timeout only covers protocol negotiation.
-            ConnectionHandlerUpgrErr::Timeout => Failure::Timeout,
             e => Failure::Other { error: Box::new(e) },
         };
 
@@ -410,6 +407,10 @@ impl ConnectionHandler for Handler {
             }
             ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
                 self.on_dial_upgrade_error(dial_upgrade_error)
+            }
+            ConnectionEvent::DialTimeout(_) => {
+                self.outbound = None; // Request a new substream on the next `poll`.
+                self.pending_errors.push_front(Failure::Timeout);
             }
             ConnectionEvent::AddressChange(_) | ConnectionEvent::ListenUpgradeError(_) => {}
         }
