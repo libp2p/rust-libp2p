@@ -142,7 +142,7 @@ pub mod protocol;
 
 mod backoff;
 mod behaviour;
-mod config;
+pub mod config;
 mod gossip_promises;
 mod handler;
 mod mcache;
@@ -159,12 +159,48 @@ mod rpc_proto;
 pub use self::behaviour::{Behaviour, Event, MessageAuthenticity};
 pub use self::transform::{DataTransform, IdentityTransform};
 
-pub use self::config::{Config, ConfigBuilder, ValidationMode, Version};
 pub use self::peer_score::{
     score_parameter_decay, score_parameter_decay_with_base, PeerScoreParams, PeerScoreThresholds,
     TopicScoreParams,
 };
 pub use self::topic::{Hasher, Topic, TopicHash};
 pub use self::types::{FastMessageId, Message, MessageAcceptance, MessageId, RawMessage, Rpc};
+
+#[deprecated(
+    since = "0.44.0",
+    note = "Use re-exports that omit `Gossipsub` prefix, i.e. `libp2p::gossipsub::config::Config"
+)]
+pub type GossipsubConfig = config::Config;
+
+#[deprecated(
+    since = "0.44.0",
+    note = "Use re-exports that omit `Gossipsub` prefix, i.e. `libp2p::gossipsub::Message"
+)]
+pub type GossipsubMessage = Message;
+
+#[deprecated(
+    since = "0.44.0",
+    note = "Use re-exports that omit `Gossipsub` prefix, i.e. `libp2p::gossipsub::Rpc"
+)]
+pub type GossipsubRpc = Rpc;
+
+#[deprecated(
+    since = "0.44.0",
+    note = "Use re-exports that omit `Gossipsub` infix, i.e. `libp2p::gossipsub::RawMessage"
+)]
+pub type RawGossipsubMessage = RawMessage;
+
+#[deprecated(
+    since = "0.44.0",
+    note = "Use re-exports that omit `Gossipsub` prefix, i.e. `libp2p::gossipsub::config::Builder"
+)]
+pub type GossipsubBuilder = config::Builder;
+
+#[deprecated(
+    since = "0.44.0",
+    note = "Use re-exports that omit `Gossipsub` prefix, i.e. `libp2p::gossipsub::config::Version"
+)]
+pub type GossipsubVersion = config::Version;
+
 pub type IdentTopic = Topic<self::topic::IdentityHash>;
 pub type Sha256Topic = Topic<self::topic::Sha256Hash>;

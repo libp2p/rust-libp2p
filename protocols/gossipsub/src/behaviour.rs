@@ -3733,7 +3733,7 @@ mod local_test {
     /// Tests RPC message fragmentation
     fn test_message_fragmentation_deterministic() {
         let max_transmit_size = 500;
-        let config = crate::ConfigBuilder::default()
+        let config = crate::config::Builder::default()
             .max_transmit_size(max_transmit_size)
             .validation_mode(ValidationMode::Permissive)
             .build()
@@ -3781,7 +3781,7 @@ mod local_test {
     fn test_message_fragmentation() {
         fn prop(rpc: Rpc) {
             let max_transmit_size = 500;
-            let config = crate::ConfigBuilder::default()
+            let config = crate::config::Builder::default()
                 .max_transmit_size(max_transmit_size)
                 .validation_mode(ValidationMode::Permissive)
                 .build()
