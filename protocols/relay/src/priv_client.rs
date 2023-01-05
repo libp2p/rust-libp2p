@@ -33,12 +33,11 @@ use futures::io::{AsyncRead, AsyncWrite};
 use futures::ready;
 use futures::stream::StreamExt;
 use libp2p_core::connection::ConnectionId;
-use libp2p_core::PeerId;
+use libp2p_core::{PeerId, UpgradeError};
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm};
 use libp2p_swarm::dial_opts::DialOpts;
 use libp2p_swarm::{
-    ConnectionHandlerUpgrErr, NegotiatedSubstream, NetworkBehaviour, NetworkBehaviourAction,
-    NotifyHandler, PollParameters,
+    NegotiatedSubstream, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
 };
 use std::collections::{hash_map, HashMap, VecDeque};
 use std::io::{Error, ErrorKind, IoSlice};
@@ -61,7 +60,13 @@ pub enum Event {
         relay_peer_id: PeerId,
         /// Indicates whether the request replaces an existing reservation.
         renewal: bool,
-        error: ConnectionHandlerUpgrErr<outbound_hop::ReservationFailedReason>,
+        error: UpgradeError<outbound_hop::ReservationFailedReason>,
+    },
+    // A reservation request timeout expired.
+    ReservationReqTimedOut {
+        relay_peer_id: PeerId,
+        /// Indicates whether the request replaces an existing reservation.
+        renewal: bool,
     },
     OutboundCircuitEstablished {
         relay_peer_id: PeerId,
@@ -69,8 +74,11 @@ pub enum Event {
     },
     OutboundCircuitReqFailed {
         relay_peer_id: PeerId,
-        error: ConnectionHandlerUpgrErr<outbound_hop::CircuitFailedReason>,
+        error: UpgradeError<outbound_hop::CircuitFailedReason>,
     },
+    /// An inbound circuit timeout expired.
+    OutboundCircuitReqTimedOut { relay_peer_id: PeerId },
+
     /// An inbound circuit has been established.
     InboundCircuitEstablished {
         src_peer_id: PeerId,
@@ -78,7 +86,7 @@ pub enum Event {
     },
     InboundCircuitReqFailed {
         relay_peer_id: PeerId,
-        error: ConnectionHandlerUpgrErr<void::Void>,
+        error: UpgradeError<void::Void>,
     },
     /// An inbound circuit request has been denied.
     InboundCircuitReqDenied { src_peer_id: PeerId },
@@ -217,6 +225,13 @@ impl NetworkBehaviour for Behaviour {
                     error,
                 })
             }
+            handler::Event::ReservationReqTimeout { renewal } => {
+                self.queued_actions
+                    .push_back(Event::ReservationReqTimedOut {
+                        relay_peer_id: event_source,
+                        renewal,
+                    })
+            }
             handler::Event::OutboundCircuitEstablished { limit } => {
                 self.queued_actions
                     .push_back(Event::OutboundCircuitEstablished {
@@ -229,6 +244,12 @@ impl NetworkBehaviour for Behaviour {
                     .push_back(Event::OutboundCircuitReqFailed {
                         relay_peer_id: event_source,
                         error,
+                    })
+            }
+            handler::Event::OutboundCircuitReqTimedOut => {
+                self.queued_actions
+                    .push_back(Event::OutboundCircuitReqTimedOut {
+                        relay_peer_id: event_source,
                     })
             }
             handler::Event::InboundCircuitEstablished { src_peer_id, limit } => self

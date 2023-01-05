@@ -30,14 +30,14 @@ use futures_timer::Delay;
 use instant::Instant;
 use libp2p_core::either::EitherError;
 use libp2p_core::multiaddr::Protocol;
-use libp2p_core::{upgrade, ConnectedPoint, Multiaddr, PeerId};
+use libp2p_core::{upgrade, ConnectedPoint, Multiaddr, PeerId, UpgradeError};
 use libp2p_swarm::handler::{
-    ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
-    ListenUpgradeError, SendWrapper,
+    ConnectionEvent, DialTimeout, DialUpgradeError, FullyNegotiatedInbound,
+    FullyNegotiatedOutbound, ListenUpgradeError, SendWrapper,
 };
 use libp2p_swarm::{
-    dummy, ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr,
-    IntoConnectionHandler, KeepAlive, SubstreamProtocol,
+    dummy, ConnectionHandler, ConnectionHandlerEvent, IntoConnectionHandler, KeepAlive,
+    SubstreamProtocol,
 };
 use log::debug;
 use std::collections::{HashMap, VecDeque};
@@ -85,12 +85,16 @@ pub enum Event {
     ReservationReqFailed {
         /// Indicates whether the request replaces an existing reservation.
         renewal: bool,
-        error: ConnectionHandlerUpgrErr<outbound_hop::ReservationFailedReason>,
+        error: UpgradeError<outbound_hop::ReservationFailedReason>,
     },
+    /// A reservation request timeout expired.
+    ReservationReqTimeout { renewal: bool },
     /// An outbound circuit has been established.
     OutboundCircuitEstablished { limit: Option<protocol::Limit> },
+    /// An outbound circuit request timeout expired.
+    OutboundCircuitReqTimedOut,
     OutboundCircuitReqFailed {
-        error: ConnectionHandlerUpgrErr<outbound_hop::CircuitFailedReason>,
+        error: UpgradeError<outbound_hop::CircuitFailedReason>,
     },
     /// An inbound circuit has been established.
     InboundCircuitEstablished {
@@ -98,9 +102,7 @@ pub enum Event {
         limit: Option<protocol::Limit>,
     },
     /// An inbound circuit request has failed.
-    InboundCircuitReqFailed {
-        error: ConnectionHandlerUpgrErr<void::Void>,
-    },
+    InboundCircuitReqFailed { error: UpgradeError<void::Void> },
     /// An inbound circuit request has been denied.
     InboundCircuitReqDenied { src_peer_id: PeerId },
     /// Denying an inbound circuit request failed.
@@ -173,9 +175,7 @@ pub struct Handler {
     remote_addr: Multiaddr,
     /// A pending fatal error that results in the connection being closed.
     pending_error: Option<
-        ConnectionHandlerUpgrErr<
-            EitherError<inbound_stop::FatalUpgradeError, outbound_hop::FatalUpgradeError>,
-        >,
+        UpgradeError<EitherError<inbound_stop::FatalUpgradeError, outbound_hop::FatalUpgradeError>>,
     >,
     /// Until when to keep the connection alive.
     keep_alive: KeepAlive,
@@ -347,26 +347,17 @@ impl Handler {
         >,
     ) {
         let non_fatal_error = match error {
-            ConnectionHandlerUpgrErr::Timeout => ConnectionHandlerUpgrErr::Timeout,
-            ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
-                upgrade::NegotiationError::Failed,
-            )) => ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
-                upgrade::NegotiationError::Failed,
-            )),
-            ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
-                upgrade::NegotiationError::ProtocolError(e),
-            )) => {
-                self.pending_error = Some(ConnectionHandlerUpgrErr::Upgrade(
-                    upgrade::UpgradeError::Select(upgrade::NegotiationError::ProtocolError(e)),
+            UpgradeError::Select(upgrade::NegotiationError::Failed) => {
+                UpgradeError::Select(upgrade::NegotiationError::Failed)
+            }
+            upgrade::UpgradeError::Select(upgrade::NegotiationError::ProtocolError(e)) => {
+                self.pending_error = Some(upgrade::UpgradeError::Select(
+                    upgrade::NegotiationError::ProtocolError(e),
                 ));
                 return;
             }
-            ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(
-                inbound_stop::UpgradeError::Fatal(error),
-            )) => {
-                self.pending_error = Some(ConnectionHandlerUpgrErr::Upgrade(
-                    upgrade::UpgradeError::Apply(EitherError::A(error)),
-                ));
+            upgrade::UpgradeError::Apply(inbound_stop::UpgradeError::Fatal(error)) => {
+                self.pending_error = Some(upgrade::UpgradeError::Apply(EitherError::A(error)));
                 return;
             }
         };
@@ -391,42 +382,27 @@ impl Handler {
         match open_info {
             OutboundOpenInfo::Reserve { mut to_listener } => {
                 let non_fatal_error = match error {
-                    ConnectionHandlerUpgrErr::Timeout => ConnectionHandlerUpgrErr::Timeout,
-                    ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
-                        upgrade::NegotiationError::Failed,
-                    )) => ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
-                        upgrade::NegotiationError::Failed,
-                    )),
-                    ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
-                        upgrade::NegotiationError::ProtocolError(e),
-                    )) => {
-                        self.pending_error = Some(ConnectionHandlerUpgrErr::Upgrade(
-                            upgrade::UpgradeError::Select(
-                                upgrade::NegotiationError::ProtocolError(e),
-                            ),
+                    upgrade::UpgradeError::Select(upgrade::NegotiationError::Failed) => {
+                        UpgradeError::Select(upgrade::NegotiationError::Failed)
+                    }
+                    upgrade::UpgradeError::Select(upgrade::NegotiationError::ProtocolError(e)) => {
+                        self.pending_error = Some(UpgradeError::Select(
+                            upgrade::NegotiationError::ProtocolError(e),
                         ));
                         return;
                     }
-                    ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(error)) => {
-                        match error {
-                            outbound_hop::UpgradeError::Fatal(error) => {
-                                self.pending_error = Some(ConnectionHandlerUpgrErr::Upgrade(
-                                    upgrade::UpgradeError::Apply(EitherError::B(error)),
-                                ));
-                                return;
-                            }
-                            outbound_hop::UpgradeError::ReservationFailed(error) => {
-                                ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(
-                                    error,
-                                ))
-                            }
-                            outbound_hop::UpgradeError::CircuitFailed(_) => {
-                                unreachable!(
-                                    "Do not emitt `CircuitFailed` for outgoing reservation."
-                                )
-                            }
+                    upgrade::UpgradeError::Apply(error) => match error {
+                        outbound_hop::UpgradeError::Fatal(error) => {
+                            self.pending_error = Some(UpgradeError::Apply(EitherError::B(error)));
+                            return;
                         }
-                    }
+                        outbound_hop::UpgradeError::ReservationFailed(error) => {
+                            UpgradeError::Apply(error)
+                        }
+                        outbound_hop::UpgradeError::CircuitFailed(_) => {
+                            unreachable!("Do not emitt `CircuitFailed` for outgoing reservation.")
+                        }
+                    },
                 };
 
                 if self.pending_error.is_none() {
@@ -453,42 +429,27 @@ impl Handler {
             }
             OutboundOpenInfo::Connect { send_back } => {
                 let non_fatal_error = match error {
-                    ConnectionHandlerUpgrErr::Timeout => ConnectionHandlerUpgrErr::Timeout,
-                    ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
-                        upgrade::NegotiationError::Failed,
-                    )) => ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
-                        upgrade::NegotiationError::Failed,
-                    )),
-                    ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Select(
-                        upgrade::NegotiationError::ProtocolError(e),
-                    )) => {
-                        self.pending_error = Some(ConnectionHandlerUpgrErr::Upgrade(
-                            upgrade::UpgradeError::Select(
-                                upgrade::NegotiationError::ProtocolError(e),
-                            ),
+                    upgrade::UpgradeError::Select(upgrade::NegotiationError::Failed) => {
+                        UpgradeError::Select(upgrade::NegotiationError::Failed)
+                    }
+                    upgrade::UpgradeError::Select(upgrade::NegotiationError::ProtocolError(e)) => {
+                        self.pending_error = Some(UpgradeError::Select(
+                            upgrade::NegotiationError::ProtocolError(e),
                         ));
                         return;
                     }
-                    ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(error)) => {
-                        match error {
-                            outbound_hop::UpgradeError::Fatal(error) => {
-                                self.pending_error = Some(ConnectionHandlerUpgrErr::Upgrade(
-                                    upgrade::UpgradeError::Apply(EitherError::B(error)),
-                                ));
-                                return;
-                            }
-                            outbound_hop::UpgradeError::CircuitFailed(error) => {
-                                ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(
-                                    error,
-                                ))
-                            }
-                            outbound_hop::UpgradeError::ReservationFailed(_) => {
-                                unreachable!(
-                                    "Do not emitt `ReservationFailed` for outgoing circuit."
-                                )
-                            }
+                    upgrade::UpgradeError::Apply(error) => match error {
+                        outbound_hop::UpgradeError::Fatal(error) => {
+                            self.pending_error = Some(UpgradeError::Apply(EitherError::B(error)));
+                            return;
                         }
-                    }
+                        outbound_hop::UpgradeError::CircuitFailed(error) => {
+                            UpgradeError::Apply(error)
+                        }
+                        outbound_hop::UpgradeError::ReservationFailed(_) => {
+                            unreachable!("Do not emitt `ReservationFailed` for outgoing circuit.")
+                        }
+                    },
                 };
 
                 let _ = send_back.send(Err(()));
@@ -501,14 +462,47 @@ impl Handler {
             }
         }
     }
+
+    fn on_dial_timeout(
+        &mut self,
+        DialTimeout { info }: DialTimeout<<Self as ConnectionHandler>::OutboundOpenInfo>,
+    ) {
+        match info {
+            OutboundOpenInfo::Reserve { mut to_listener } => {
+                if self.pending_error.is_none() {
+                    self.send_error_futs.push(
+                        async move {
+                            let _ = to_listener
+                                .send(transport::ToListenerMsg::Reservation(Err(())))
+                                .await;
+                        }
+                        .boxed(),
+                    );
+                } else {
+                    // Fatal error occured, thus handler is closing as quickly as possible.
+                    // Transport is notified through dropping `to_listener`.
+                }
+                let renewal = self.reservation.failed();
+                self.queued_events.push_back(ConnectionHandlerEvent::Custom(
+                    Event::ReservationReqTimeout { renewal },
+                ));
+            }
+            OutboundOpenInfo::Connect { send_back } => {
+                let _ = send_back.send(Err(()));
+
+                self.queued_events.push_back(ConnectionHandlerEvent::Custom(
+                    Event::OutboundCircuitReqTimedOut,
+                ));
+            }
+        }
+    }
 }
 
 impl ConnectionHandler for Handler {
     type InEvent = In;
     type OutEvent = Event;
-    type Error = ConnectionHandlerUpgrErr<
-        EitherError<inbound_stop::FatalUpgradeError, outbound_hop::FatalUpgradeError>,
-    >;
+    type Error =
+        UpgradeError<EitherError<inbound_stop::FatalUpgradeError, outbound_hop::FatalUpgradeError>>;
     type InboundProtocol = inbound_stop::Upgrade;
     type OutboundProtocol = outbound_hop::Upgrade;
     type OutboundOpenInfo = OutboundOpenInfo;
@@ -651,6 +645,9 @@ impl ConnectionHandler for Handler {
             }
             ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
                 self.on_dial_upgrade_error(dial_upgrade_error)
+            }
+            ConnectionEvent::DialTimeout(dial_timeout) => {
+                self.on_dial_timeout(dial_timeout);
             }
             ConnectionEvent::AddressChange(_) => {}
         }

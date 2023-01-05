@@ -9,9 +9,13 @@
 
 - Update to `libp2p-core` `v0.39.0`.
 
-- Update to `libp2p-swarm` `v0.42.0`.
+- Update to `libp2p-swarm` `v0.42.0`. Update to the `libp2p_swarm::handler::ConnectionEvent` `DialTimeout` introduction and consequential changes.
+  With that introduce `Event::CircuitReqOutboundConnectTimedOut` and `client::Event::ReservationReqTimedOut`
+  and `client::Event::OutboundCircuitReqTimedOut`. See [PR XXXX].
+
 
 [PR 3238]: https://github.com/libp2p/rust-libp2p/pull/3238
+[PR 3307]: https://github.com/libp2p/rust-libp2p/pull/3307
 [discussion 2174]: https://github.com/libp2p/rust-libp2p/issues/2174
 
 # 0.14.0

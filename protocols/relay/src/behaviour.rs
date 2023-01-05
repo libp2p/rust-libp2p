@@ -29,11 +29,10 @@ use either::Either;
 use instant::Instant;
 use libp2p_core::connection::ConnectionId;
 use libp2p_core::multiaddr::Protocol;
-use libp2p_core::PeerId;
+use libp2p_core::{PeerId, UpgradeError};
 use libp2p_swarm::behaviour::{ConnectionClosed, FromSwarm};
 use libp2p_swarm::{
-    ConnectionHandlerUpgrErr, ExternalAddresses, NetworkBehaviour, NetworkBehaviourAction,
-    NotifyHandler, PollParameters,
+    ExternalAddresses, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
 };
 use std::collections::{hash_map, HashMap, HashSet, VecDeque};
 use std::num::NonZeroU32;
@@ -149,7 +148,7 @@ pub enum Event {
     ReservationTimedOut { src_peer_id: PeerId },
     CircuitReqReceiveFailed {
         src_peer_id: PeerId,
-        error: ConnectionHandlerUpgrErr<void::Void>,
+        error: UpgradeError<void::Void>,
     },
     /// An inbound circuit request has been denied.
     CircuitReqDenied {
@@ -171,7 +170,12 @@ pub enum Event {
     CircuitReqOutboundConnectFailed {
         src_peer_id: PeerId,
         dst_peer_id: PeerId,
-        error: ConnectionHandlerUpgrErr<outbound_stop::CircuitFailedReason>,
+        error: UpgradeError<outbound_stop::CircuitFailedReason>,
+    },
+    /// An outbound connect for an inbound circuit timeout expired.
+    CircuitReqOutboundConectTimedOut {
+        src_peer_id: PeerId,
+        dst_peer_id: PeerId,
     },
     /// Accepting an inbound circuit request failed.
     CircuitReqAcceptFailed {
@@ -589,6 +593,35 @@ impl NetworkBehaviour for Behaviour {
                         dst_peer_id: event_source,
                         error,
                     })
+                    .into(),
+                );
+            }
+            handler::Event::OutboundConnectTimedOut {
+                circuit_id,
+                src_peer_id,
+                src_connection_id,
+                inbound_circuit_req,
+                status,
+            } => {
+                self.queued_actions.push_back(
+                    NetworkBehaviourAction::NotifyHandler {
+                        handler: NotifyHandler::One(src_connection_id),
+                        peer_id: src_peer_id,
+                        event: Either::Left(handler::In::DenyCircuitReq {
+                            circuit_id: Some(circuit_id),
+                            inbound_circuit_req,
+                            status,
+                        }),
+                    }
+                    .into(),
+                );
+                self.queued_actions.push_back(
+                    NetworkBehaviourAction::GenerateEvent(
+                        Event::CircuitReqOutboundConectTimedOut {
+                            src_peer_id,
+                            dst_peer_id: event_source,
+                        },
+                    )
                     .into(),
                 );
             }
