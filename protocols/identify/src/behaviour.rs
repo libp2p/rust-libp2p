@@ -25,9 +25,9 @@ use libp2p_core::{
 };
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm};
 use libp2p_swarm::{
-    dial_opts::DialOpts, AddressScore, ConnectionHandler, ConnectionHandlerUpgrErr, DialError,
-    ExternalAddresses, IntoConnectionHandler, ListenAddresses, NetworkBehaviour,
-    NetworkBehaviourAction, NotifyHandler, PollParameters,
+    dial_opts::DialOpts, AddressScore, ConnectionHandler, DialError, ExternalAddresses,
+    IntoConnectionHandler, ListenAddresses, NetworkBehaviour, NetworkBehaviourAction,
+    NotifyHandler, PollParameters,
 };
 use lru::LruCache;
 use std::num::NonZeroUsize;
@@ -303,6 +303,9 @@ impl NetworkBehaviour for Behaviour {
                         error,
                     }));
             }
+            handler::Event::IdentificationTimedout => self
+                .events
+                .push_back(NetworkBehaviourAction::GenerateEvent(Event::Timeout)),
         }
     }
 
@@ -459,8 +462,11 @@ pub enum Event {
         /// The peer with whom the error originated.
         peer_id: PeerId,
         /// The error that occurred.
-        error: ConnectionHandlerUpgrErr<UpgradeError>,
+        error: libp2p_core::UpgradeError<UpgradeError>,
     },
+
+    /// Timeout expired while attempting to identify the remote.
+    Timeout,
 }
 
 fn supported_protocols(params: &impl PollParameters) -> Vec<String> {

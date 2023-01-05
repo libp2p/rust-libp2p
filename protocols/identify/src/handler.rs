@@ -32,8 +32,8 @@ use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, IntoConnectionHandler,
-    KeepAlive, NegotiatedSubstream, SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, IntoConnectionHandler, KeepAlive,
+    NegotiatedSubstream, SubstreamProtocol,
 };
 use log::warn;
 use smallvec::SmallVec;
@@ -161,7 +161,9 @@ pub enum Event {
     /// We received a request for identification.
     Identify,
     /// Failed to identify the remote, or to reply to an identification request.
-    IdentificationError(ConnectionHandlerUpgrErr<UpgradeError>),
+    IdentificationError(libp2p_core::UpgradeError<UpgradeError>),
+    /// Identification Dial timedout.
+    IdentificationTimedout,
 }
 
 impl Handler {
@@ -257,11 +259,11 @@ impl Handler {
     ) {
         use libp2p_core::upgrade::UpgradeError;
 
-        let err = err.map_upgrade_err(|e| match e {
+        let err = match err {
             UpgradeError::Select(e) => UpgradeError::Select(e),
             UpgradeError::Apply(EitherError::A(ioe)) => UpgradeError::Apply(ioe),
             UpgradeError::Apply(EitherError::B(ioe)) => UpgradeError::Apply(ioe),
-        });
+        };
         self.events
             .push(ConnectionHandlerEvent::Custom(Event::IdentificationError(
                 err,
@@ -370,9 +372,7 @@ impl ConnectionHandler for Handler {
                 Event::Identification(peer_id),
             )),
             Poll::Ready(Some(Err(err))) => Poll::Ready(ConnectionHandlerEvent::Custom(
-                Event::IdentificationError(ConnectionHandlerUpgrErr::Upgrade(
-                    libp2p_core::upgrade::UpgradeError::Apply(err),
-                )),
+                Event::IdentificationError(libp2p_core::upgrade::UpgradeError::Apply(err)),
             )),
             Poll::Ready(None) | Poll::Pending => Poll::Pending,
         }
@@ -396,6 +396,13 @@ impl ConnectionHandler for Handler {
             }
             ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
                 self.on_dial_upgrade_error(dial_upgrade_error)
+            }
+            ConnectionEvent::DialTimeout(_) => {
+                self.events.push(ConnectionHandlerEvent::Custom(
+                    Event::IdentificationTimedout,
+                ));
+                self.keep_alive = KeepAlive::No;
+                self.trigger_next_identify.reset(self.interval);
             }
             ConnectionEvent::AddressChange(_) | ConnectionEvent::ListenUpgradeError(_) => {}
         }
