@@ -2,7 +2,8 @@
 
 - Update to `libp2p-core` `v0.39.0`.
 
-- Update to `libp2p-swarm` `v0.42.0`.
+- Update to `libp2p-swarm` `v0.42.0`. Update to the `libp2p_swarm::handler::ConnectionEvent` `DialTimeout` introduction and consequential changes.
+  With that introduce `Event::DirectConnectionUpgradeTimedout`. See [PR 3307].
 
 - Declare `InboundUpgradeError` and `OutboundUpgradeError` as type aliases instead of renames.
   This is a workaround for a missing feature in `cargo semver-checks`. See [PR 3213].
@@ -15,6 +16,7 @@
 [PR 3153]: https://github.com/libp2p/rust-libp2p/pull/3153
 [issue 2217]: https://github.com/libp2p/rust-libp2p/issues/2217
 [PR 3214]: https://github.com/libp2p/rust-libp2p/pull/3214
+[PR 3307]: https://github.com/libp2p/rust-libp2p/pull/3307
 
 # 0.8.0
 

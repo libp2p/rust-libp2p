@@ -22,11 +22,9 @@
 
 use libp2p_core::connection::ConnectionId;
 use libp2p_core::upgrade::DeniedUpgrade;
+use libp2p_core::UpgradeError;
 use libp2p_swarm::handler::ConnectionEvent;
-use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
-    SubstreamProtocol,
-};
+use libp2p_swarm::{ConnectionHandler, ConnectionHandlerEvent, KeepAlive, SubstreamProtocol};
 use std::task::{Context, Poll};
 use void::Void;
 
@@ -52,7 +50,7 @@ impl Handler {
 impl ConnectionHandler for Handler {
     type InEvent = void::Void;
     type OutEvent = Event;
-    type Error = ConnectionHandlerUpgrErr<std::io::Error>;
+    type Error = UpgradeError<std::io::Error>;
     type InboundProtocol = DeniedUpgrade;
     type OutboundProtocol = DeniedUpgrade;
     type OutboundOpenInfo = Void;
@@ -103,6 +101,7 @@ impl ConnectionHandler for Handler {
             ConnectionEvent::FullyNegotiatedInbound(_)
             | ConnectionEvent::FullyNegotiatedOutbound(_)
             | ConnectionEvent::DialUpgradeError(_)
+            | ConnectionEvent::DialTimeout(_)
             | ConnectionEvent::ListenUpgradeError(_)
             | ConnectionEvent::AddressChange(_) => {}
         }

@@ -31,10 +31,7 @@ use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
     ListenUpgradeError,
 };
-use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
-    SubstreamProtocol,
-};
+use libp2p_swarm::{ConnectionHandler, ConnectionHandlerEvent, KeepAlive, SubstreamProtocol};
 use std::collections::VecDeque;
 use std::fmt;
 use std::task::{Context, Poll};
@@ -83,11 +80,12 @@ pub enum Event {
         remote_addr: Multiaddr,
     },
     InboundNegotiationFailed {
-        error: ConnectionHandlerUpgrErr<void::Void>,
+        error: UpgradeError<void::Void>,
     },
+    InboundNegotiationTimedout,
     InboundConnectNegotiated(Vec<Multiaddr>),
     OutboundNegotiationFailed {
-        error: ConnectionHandlerUpgrErr<void::Void>,
+        error: UpgradeError<void::Void>,
     },
     OutboundConnectNegotiated {
         remote_addrs: Vec<Multiaddr>,
@@ -109,6 +107,9 @@ impl fmt::Debug for Event {
                 .debug_struct("Event::InboundNegotiationFailed")
                 .field("error", error)
                 .finish(),
+            Event::InboundNegotiationTimedout => {
+                f.debug_struct("Event::InboundNegotiationTimedout").finish()
+            }
             Event::InboundConnectNegotiated(addrs) => f
                 .debug_tuple("Event::InboundConnectNegotiated")
                 .field(addrs)
@@ -133,7 +134,7 @@ pub struct Handler {
     endpoint: ConnectedPoint,
     /// A pending fatal error that results in the connection being closed.
     pending_error: Option<
-        ConnectionHandlerUpgrErr<
+        UpgradeError<
             EitherError<protocol::inbound::UpgradeError, protocol::outbound::UpgradeError>,
         >,
     >,
@@ -220,34 +221,23 @@ impl Handler {
         >,
     ) {
         match error {
-            ConnectionHandlerUpgrErr::Timeout => {
-                self.queued_events.push_back(ConnectionHandlerEvent::Custom(
-                    Event::InboundNegotiationFailed {
-                        error: ConnectionHandlerUpgrErr::Timeout,
-                    },
-                ));
-            }
-            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)) => {
+            UpgradeError::Select(NegotiationError::Failed) => {
                 // The remote merely doesn't support the DCUtR protocol.
                 // This is no reason to close the connection, which may
                 // successfully communicate with other protocols already.
                 self.keep_alive = KeepAlive::No;
                 self.queued_events.push_back(ConnectionHandlerEvent::Custom(
                     Event::InboundNegotiationFailed {
-                        error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(
-                            NegotiationError::Failed,
-                        )),
+                        error: UpgradeError::Select(NegotiationError::Failed),
                     },
                 ));
             }
             _ => {
                 // Anything else is considered a fatal error or misbehaviour of
                 // the remote peer and results in closing the connection.
-                self.pending_error = Some(error.map_upgrade_err(|e| {
-                    e.map_err(|e| match e {
-                        EitherError::A(e) => EitherError::A(e),
-                        EitherError::B(v) => void::unreachable(v),
-                    })
+                self.pending_error = Some(error.map_err(|e| match e {
+                    EitherError::A(e) => EitherError::A(e),
+                    EitherError::B(v) => void::unreachable(v),
                 }));
             }
         }
@@ -263,29 +253,20 @@ impl Handler {
         self.keep_alive = KeepAlive::No;
 
         match error {
-            ConnectionHandlerUpgrErr::Timeout => {
-                self.queued_events.push_back(ConnectionHandlerEvent::Custom(
-                    Event::OutboundNegotiationFailed {
-                        error: ConnectionHandlerUpgrErr::Timeout,
-                    },
-                ));
-            }
-            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)) => {
+            UpgradeError::Select(NegotiationError::Failed) => {
                 // The remote merely doesn't support the DCUtR protocol.
                 // This is no reason to close the connection, which may
                 // successfully communicate with other protocols already.
                 self.queued_events.push_back(ConnectionHandlerEvent::Custom(
                     Event::OutboundNegotiationFailed {
-                        error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(
-                            NegotiationError::Failed,
-                        )),
+                        error: UpgradeError::Select(NegotiationError::Failed),
                     },
                 ));
             }
             _ => {
                 // Anything else is considered a fatal error or misbehaviour of
                 // the remote peer and results in closing the connection.
-                self.pending_error = Some(error.map_upgrade_err(|e| e.map_err(EitherError::B)));
+                self.pending_error = Some(error.map_err(EitherError::B));
             }
         }
     }
@@ -294,7 +275,7 @@ impl Handler {
 impl ConnectionHandler for Handler {
     type InEvent = Command;
     type OutEvent = Event;
-    type Error = ConnectionHandlerUpgrErr<
+    type Error = UpgradeError<
         EitherError<protocol::inbound::UpgradeError, protocol::outbound::UpgradeError>,
     >;
     type InboundProtocol = upgrade::EitherUpgrade<protocol::inbound::Upgrade, DeniedUpgrade>;
@@ -385,9 +366,9 @@ impl ConnectionHandler for Handler {
                     ));
                 }
                 Err(e) => {
-                    return Poll::Ready(ConnectionHandlerEvent::Close(
-                        ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::A(e))),
-                    ))
+                    return Poll::Ready(ConnectionHandlerEvent::Close(UpgradeError::Apply(
+                        EitherError::A(e),
+                    )))
                 }
             }
         }
@@ -416,6 +397,11 @@ impl ConnectionHandler for Handler {
             }
             ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
                 self.on_dial_upgrade_error(dial_upgrade_error)
+            }
+            ConnectionEvent::DialTimeout(_) => {
+                self.queued_events.push_back(ConnectionHandlerEvent::Custom(
+                    Event::InboundNegotiationTimedout,
+                ));
             }
             ConnectionEvent::AddressChange(_) => {}
         }

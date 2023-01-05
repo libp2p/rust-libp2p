@@ -25,12 +25,13 @@ use crate::protocol;
 use either::Either;
 use libp2p_core::connection::{ConnectedPoint, ConnectionId};
 use libp2p_core::multiaddr::Protocol;
+use libp2p_core::UpgradeError;
 use libp2p_core::{Multiaddr, PeerId};
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm};
 use libp2p_swarm::dial_opts::{self, DialOpts};
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerUpgrErr, ExternalAddresses, IntoConnectionHandler,
-    NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
+    ConnectionHandler, ExternalAddresses, IntoConnectionHandler, NetworkBehaviour,
+    NetworkBehaviourAction, NotifyHandler, PollParameters,
 };
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::task::{Context, Poll};
@@ -56,6 +57,9 @@ pub enum Event {
         remote_peer_id: PeerId,
         error: Error,
     },
+    DirectConnectionUpgradeTimedout {
+        remote_peer_id: PeerId,
+    },
 }
 
 #[derive(Debug, Error)]
@@ -63,7 +67,7 @@ pub enum Error {
     #[error("Failed to dial peer.")]
     Dial,
     #[error("Failed to establish substream: {0}.")]
-    Handler(ConnectionHandlerUpgrErr<void::Void>),
+    Handler(UpgradeError<void::Void>),
 }
 
 pub struct Behaviour {
@@ -237,6 +241,14 @@ impl NetworkBehaviour for Behaviour {
                     NetworkBehaviourAction::GenerateEvent(Event::DirectConnectionUpgradeFailed {
                         remote_peer_id: event_source,
                         error: Error::Handler(error),
+                    })
+                    .into(),
+                );
+            }
+            Either::Left(handler::relayed::Event::InboundNegotiationTimedout) => {
+                self.queued_actions.push_back(
+                    NetworkBehaviourAction::GenerateEvent(Event::DirectConnectionUpgradeTimedout {
+                        remote_peer_id: event_source,
                     })
                     .into(),
                 );
