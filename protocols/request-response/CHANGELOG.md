@@ -9,10 +9,12 @@
   and refer to its types via `request_response::`. For example: `request_response::Behaviour` or `request_response::Event`.
   See [PR 3159].
 
-- Update to `libp2p-swarm` `v0.42.0`.
+- Update to `libp2p-swarm` `v0.42.0`. Update to the `libp2p_swarm::handler::ConnectionEvent` `DialTimeout`
+  introduction and consequential changes. See [PR 3307].
 
 [discussion 2174]: https://github.com/libp2p/rust-libp2p/discussions/2174
 [PR 3159]: https://github.com/libp2p/rust-libp2p/pull/3159
+[PR 3307]: https://github.com/libp2p/rust-libp2p/pull/3307
 
 # 0.23.0
 

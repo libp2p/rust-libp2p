@@ -24,8 +24,8 @@ use crate::codec::Codec;
 use crate::{RequestId, EMPTY_QUEUE_SHRINK_THRESHOLD};
 
 use libp2p_swarm::handler::{
-    ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
-    ListenUpgradeError,
+    ConnectionEvent, DialTimeout, DialUpgradeError, FullyNegotiatedInbound,
+    FullyNegotiatedOutbound, ListenUpgradeError,
 };
 pub use protocol::{ProtocolSupport, RequestProtocol, ResponseProtocol};
 
@@ -33,7 +33,7 @@ use futures::{channel::oneshot, future::BoxFuture, prelude::*, stream::FuturesUn
 use instant::Instant;
 use libp2p_core::upgrade::{NegotiationError, UpgradeError};
 use libp2p_swarm::{
-    handler::{ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive},
+    handler::{ConnectionHandler, ConnectionHandlerEvent, KeepAlive},
     SubstreamProtocol,
 };
 use smallvec::SmallVec;
@@ -72,7 +72,7 @@ where
     /// The current connection keep-alive.
     keep_alive: KeepAlive,
     /// A pending fatal error that results in the connection being closed.
-    pending_error: Option<ConnectionHandlerUpgrErr<io::Error>>,
+    pending_error: Option<UpgradeError<io::Error>>,
     /// Queue of events to emit in `poll()`.
     pending_events: VecDeque<Event<TCodec>>,
     /// Outbound upgrades waiting to be emitted as an `OutboundSubstreamRequest`.
@@ -145,10 +145,7 @@ where
         >,
     ) {
         match error {
-            ConnectionHandlerUpgrErr::Timeout => {
-                self.pending_events.push_back(Event::OutboundTimeout(info));
-            }
-            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)) => {
+            UpgradeError::Select(NegotiationError::Failed) => {
                 // The remote merely doesn't support the protocol(s) we requested.
                 // This is no reason to close the connection, which may
                 // successfully communicate with other protocols already.
@@ -172,10 +169,7 @@ where
         >,
     ) {
         match error {
-            ConnectionHandlerUpgrErr::Timeout => {
-                self.pending_events.push_back(Event::InboundTimeout(info))
-            }
-            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)) => {
+            UpgradeError::Select(NegotiationError::Failed) => {
                 // The local peer merely doesn't support the protocol(s) requested.
                 // This is no reason to close the connection, which may
                 // successfully communicate with other protocols already.
@@ -284,7 +278,7 @@ where
 {
     type InEvent = RequestProtocol<TCodec>;
     type OutEvent = Event<TCodec>;
-    type Error = ConnectionHandlerUpgrErr<io::Error>;
+    type Error = UpgradeError<io::Error>;
     type InboundProtocol = ResponseProtocol<TCodec>;
     type OutboundProtocol = RequestProtocol<TCodec>;
     type OutboundOpenInfo = RequestId;
@@ -418,6 +412,9 @@ where
                     request_id,
                     response,
                 });
+            }
+            ConnectionEvent::DialTimeout(DialTimeout { info }) => {
+                self.pending_events.push_back(Event::OutboundTimeout(info))
             }
             ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
                 self.on_dial_upgrade_error(dial_upgrade_error)
