@@ -24,7 +24,7 @@ use crate::TopicHash;
 use libp2p_core::PeerId;
 use libp2p_swarm::ConnectionId;
 use prometheus_client::encoding::EncodeLabelValue;
-use prost::Message as ProstMessage;
+use prost::Message as ProtobufMessage;
 use std::fmt;
 use std::fmt::Debug;
 
