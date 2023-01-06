@@ -163,9 +163,6 @@ impl<P: Provider> Transport for GenTransport<P> {
                 let dialer = match self.dialer.entry(socket_family) {
                     Entry::Occupied(occupied) => occupied.into_mut(),
                     Entry::Vacant(vacant) => {
-                        if let Some(waker) = self.dialer_waker.take() {
-                            waker.wake();
-                        }
                         vacant.insert(Dialer::new::<P>(self.quinn_config.clone(), socket_family)?)
                     }
                 };
@@ -181,6 +178,12 @@ impl<P: Provider> Transport for GenTransport<P> {
                 &mut listeners[index].dialer_state
             }
         };
+
+        // Wakeup the task polling [`Transport::poll`] to drive the new dial.
+        if let Some(waker) = self.dialer_waker.take() {
+            waker.wake();
+        }
+
         Ok(dialer_state.new_dial(socket_addr, self.handshake_timeout, version))
     }
 
@@ -205,17 +208,20 @@ impl<P: Provider> Transport for GenTransport<P> {
                 errored.push(*key);
             }
         }
-        self.dialer_waker = Some(cx.waker().clone());
-
         for key in errored {
             // Endpoint driver of dialer crashed.
             // Drop dialer and all pending dials so that the connection receiver is notified.
             self.dialer.remove(&key);
         }
+
         match self.listeners.poll_next_unpin(cx) {
-            Poll::Ready(Some(ev)) => Poll::Ready(ev),
-            _ => Poll::Pending,
+            Poll::Ready(Some(ev)) => return Poll::Ready(ev),
+            _ => {}
         }
+
+        self.dialer_waker = Some(cx.waker().clone());
+
+        return Poll::Pending;
     }
 }
 
@@ -259,12 +265,11 @@ impl Drop for Dialer {
     }
 }
 
-/// Pending dials to be sent to the endpoint was the [`endpoint::Channel`]
-/// has capacity
+/// Pending dials to be sent to the endpoint once the [`endpoint::Channel`]
+/// has capacity.
 #[derive(Default, Debug)]
 struct DialerState {
     pending_dials: VecDeque<ToEndpoint>,
-    waker: Option<Waker>,
 }
 
 impl DialerState {
@@ -283,10 +288,6 @@ impl DialerState {
         };
 
         self.pending_dials.push_back(message);
-
-        if let Some(waker) = self.waker.take() {
-            waker.wake();
-        }
 
         async move {
             // Our oneshot getting dropped means the message didn't make it to the endpoint driver.
@@ -312,7 +313,6 @@ impl DialerState {
                 Err(endpoint::Disconnected {}) => return Poll::Ready(Error::EndpointDriverCrashed),
             }
         }
-        self.waker = Some(cx.waker().clone());
         Poll::Pending
     }
 }
