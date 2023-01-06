@@ -1,3 +1,9 @@
+# 0.39.0
+
+- Remove usage of identity multihash, as it's being deprecated upstream. See [PR 3311]
+
+[PR 3311]: https://github.com/libp2p/rust-libp2p/pull/3311
+
 # 0.38.0
 
 - Remove deprecated functions `StreamMuxerExt::next_{inbound,outbound}`. See [PR 3031].

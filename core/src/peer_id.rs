@@ -28,10 +28,6 @@ use thiserror::Error;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-/// Public keys with byte-lengths smaller than `MAX_INLINE_KEY_LENGTH` will be
-/// automatically used as the peer id using an identity multihash.
-const MAX_INLINE_KEY_LENGTH: usize = 42;
-
 /// Identifier of a peer of the network.
 ///
 /// The data is a CIDv0 compatible multihash of the protobuf encoded public key of the peer
@@ -56,17 +52,9 @@ impl fmt::Display for PeerId {
 impl PeerId {
     /// Builds a `PeerId` from a public key.
     pub fn from_public_key(key: &PublicKey) -> PeerId {
-        let key_enc = key.to_protobuf_encoding();
-
-        let hash_algorithm = if key_enc.len() <= MAX_INLINE_KEY_LENGTH {
-            Code::Identity
-        } else {
-            Code::Sha2_256
-        };
-
-        let multihash = hash_algorithm.digest(&key_enc);
-
-        PeerId { multihash }
+        PeerId {
+            multihash: Code::Sha2_256.digest(&key.to_protobuf_encoding()),
+        }
     }
 
     /// Parses a `PeerId` from bytes.
@@ -83,9 +71,6 @@ impl PeerId {
     pub fn from_multihash(multihash: Multihash) -> Result<PeerId, Multihash> {
         match Code::try_from(multihash.code()) {
             Ok(Code::Sha2_256) => Ok(PeerId { multihash }),
-            Ok(Code::Identity) if multihash.digest().len() <= MAX_INLINE_KEY_LENGTH => {
-                Ok(PeerId { multihash })
-            }
             _ => Err(multihash),
         }
     }
@@ -107,7 +92,7 @@ impl PeerId {
     pub fn random() -> PeerId {
         let peer_id = rand::thread_rng().gen::<[u8; 32]>();
         PeerId {
-            multihash: Multihash::wrap(Code::Identity.into(), &peer_id)
+            multihash: Multihash::wrap(Code::Sha2_256.into(), &peer_id)
                 .expect("The digest size is never too large"),
         }
     }
