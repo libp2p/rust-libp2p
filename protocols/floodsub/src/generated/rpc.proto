@@ -1,0 +1,20 @@
+syntax = "proto2";
+
+package floodsub.pb;
+
+message RPC {
+	repeated SubOpts subscriptions = 1;
+	repeated Message publish = 2;
+
+	message SubOpts {
+		optional bool subscribe = 1; // subscribe or unsubcribe
+		optional string topic_id = 2;
+	}
+}
+
+message Message {
+	optional bytes from = 1;
+	optional bytes data = 2;
+	optional bytes seqno = 3;
+	repeated string topic_ids = 4;
+}
