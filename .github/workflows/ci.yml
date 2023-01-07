@@ -306,3 +306,21 @@ jobs:
             echo "PR title is too long (greater than 72 characters)"
             exit 1
           fi
+
+  check-proto-files:
+    name: Check for changes in proto files
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+
+      - name: Generated proto files and diff
+        run: |
+          cargo install pb-rs 
+          pb-rs **/generated/**.proto
+          git diff --exit-code ${{ github.ref }}
