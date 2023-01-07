@@ -4,7 +4,6 @@ use futures::channel::{mpsc, oneshot};
 use futures::future::{poll_fn, Either};
 use futures::stream::StreamExt;
 use futures::{future, AsyncReadExt, AsyncWriteExt, FutureExt, SinkExt};
-use libp2p_core::either::EitherOutput;
 use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerExt, SubstreamBox};
 use libp2p_core::transport::{Boxed, OrTransport, TransportEvent};
 use libp2p_core::{multiaddr::Protocol, upgrade, Multiaddr, PeerId, Transport};
@@ -129,12 +128,7 @@ fn new_tcp_quic_transport() -> (PeerId, Boxed<(PeerId, StreamMuxerBox)>) {
         )
         .multiplex(yamux::YamuxConfig::default());
 
-    let transport = OrTransport::new(quic_transport, tcp_transport)
-        .map(|either_output, _| match either_output {
-            EitherOutput::First((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
-            EitherOutput::Second((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
-        })
-        .boxed();
+    let transport = OrTransport::new(quic_transport, tcp_transport).box_multiplexed();
 
     (peer_id, transport)
 }
@@ -394,9 +388,7 @@ fn create_transport<P: Provider>(
     let peer_id = keypair.public().to_peer_id();
     let mut config = quic::Config::new(&keypair);
     with_config(&mut config);
-    let transport = quic::GenTransport::<P>::new(config)
-        .map(|(p, c), _| (p, StreamMuxerBox::new(c)))
-        .boxed();
+    let transport = quic::GenTransport::<P>::new(config).box_multiplexed();
 
     (peer_id, transport)
 }
