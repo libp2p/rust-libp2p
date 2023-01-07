@@ -46,8 +46,9 @@ pub mod upgrade;
 mod boxed;
 mod optional;
 
-use crate::ConnectedPoint;
+use crate::{muxing::StreamMuxerBox, ConnectedPoint, PeerId, StreamMuxer};
 
+use self::boxed::boxed;
 pub use self::boxed::Boxed;
 pub use self::choice::OrTransport;
 pub use self::memory::MemoryTransport;
@@ -235,6 +236,25 @@ pub trait Transport {
         Self::Error: 'static,
     {
         upgrade::Builder::new(self, version)
+    }
+
+    /// Box a multiplexed transport, including the inner muxer
+    /// and all errors.
+    fn box_multiplexed<M>(self) -> Boxed<(PeerId, StreamMuxerBox)>
+    where
+        Self: Sized + Send + Unpin + 'static,
+        Self::Dial: Send + 'static,
+        Self::ListenerUpgrade: Send + 'static,
+        Self::Error: Send + Sync,
+        Self::Output: Into<(PeerId, M)>,
+        M: StreamMuxer + Send + 'static,
+        M::Substream: Send + 'static,
+        M::Error: Send + Sync + 'static,
+    {
+        boxed(self.map(|o, _| {
+            let (i, m) = o.into();
+            (i, StreamMuxerBox::new(m))
+        }))
     }
 }
 

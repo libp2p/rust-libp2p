@@ -26,8 +26,8 @@ use crate::{
     connection::ConnectedPoint,
     muxing::{StreamMuxer, StreamMuxerBox},
     transport::{
-        and_then::AndThen, boxed::boxed, timeout::TransportTimeout, ListenerId, Transport,
-        TransportError, TransportEvent,
+        and_then::AndThen, timeout::TransportTimeout, ListenerId, Transport, TransportError,
+        TransportEvent,
     },
     upgrade::{
         self, apply_inbound, apply_outbound, InboundUpgrade, InboundUpgradeApply, OutboundUpgrade,
@@ -303,7 +303,7 @@ impl<T> Multiplexed<T> {
         M::Substream: Send + 'static,
         M::Error: Send + Sync + 'static,
     {
-        boxed(self.map(|(i, m), _| (i, StreamMuxerBox::new(m))))
+        self.box_multiplexed()
     }
 
     /// Adds a timeout to the setup and protocol upgrade process for all
