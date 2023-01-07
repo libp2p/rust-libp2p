@@ -73,8 +73,7 @@ fn create_transport() -> (PeerId, Boxed<(PeerId, StreamMuxerBox)>) {
         keypair,
         webrtc::tokio::Certificate::generate(&mut thread_rng()).unwrap(),
     )
-    .map(|(p, c), _| (p, StreamMuxerBox::new(c)))
-    .boxed();
+    .box_multiplexed();
 
     (peer_id, transport)
 }

@@ -1,7 +1,6 @@
 use anyhow::Result;
 use futures::StreamExt;
 use libp2p_core::identity;
-use libp2p_core::muxing::StreamMuxerBox;
 use libp2p_core::Transport;
 use libp2p_ping as ping;
 use libp2p_swarm::{keep_alive, NetworkBehaviour, Swarm};
@@ -29,12 +28,8 @@ fn create_swarm() -> Result<Swarm<Behaviour>> {
         libp2p_webrtc::tokio::Certificate::generate(&mut thread_rng())?,
     );
 
-    let transport = transport
-        .map(|(peer_id, conn), _| (peer_id, StreamMuxerBox::new(conn)))
-        .boxed();
-
     Ok(Swarm::with_tokio_executor(
-        transport,
+        transport.box_multiplexed(),
         Behaviour::default(),
         peer_id,
     ))
