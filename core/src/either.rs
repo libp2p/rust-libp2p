@@ -255,6 +255,24 @@ where
     }
 }
 
+impl<T, A, B> From<EitherOutput<(T, A), (T, B)>> for (T, EitherOutput<A, B>) {
+    fn from(either_output: EitherOutput<(T, A), (T, B)>) -> Self {
+        match either_output {
+            EitherOutput::First((t, a)) => (t, EitherOutput::First(a)),
+            EitherOutput::Second((t, b)) => (t, EitherOutput::Second(b)),
+        }
+    }
+}
+
+impl<T, A, B> From<EitherOutput<(A, T), (B, T)>> for (EitherOutput<A, B>, T) {
+    fn from(either_output: EitherOutput<(A, T), (B, T)>) -> Self {
+        match either_output {
+            EitherOutput::First((a, t)) => (EitherOutput::First(a), t),
+            EitherOutput::Second((b, t)) => (EitherOutput::Second(b), t),
+        }
+    }
+}
+
 /// Implements `Future` and dispatches all method calls to either `First` or `Second`.
 #[pin_project(project = EitherFutureProj)]
 #[derive(Debug, Copy, Clone)]
