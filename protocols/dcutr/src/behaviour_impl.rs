@@ -57,9 +57,6 @@ pub enum Event {
         remote_peer_id: PeerId,
         error: Error,
     },
-    DirectConnectionUpgradeTimedout {
-        remote_peer_id: PeerId,
-    },
 }
 
 #[derive(Debug, Error)]
@@ -68,6 +65,8 @@ pub enum Error {
     Dial,
     #[error("Failed to establish substream: {0}.")]
     Handler(UpgradeError<void::Void>),
+    #[error("Timeout expired upgrading the direct connection.")]
+    Timeout,
 }
 
 pub struct Behaviour {
@@ -247,8 +246,9 @@ impl NetworkBehaviour for Behaviour {
             }
             Either::Left(handler::relayed::Event::InboundNegotiationTimedout) => {
                 self.queued_actions.push_back(
-                    NetworkBehaviourAction::GenerateEvent(Event::DirectConnectionUpgradeTimedout {
+                    NetworkBehaviourAction::GenerateEvent(Event::DirectConnectionUpgradeFailed {
                         remote_peer_id: event_source,
+                        error: Error::Timeout,
                     })
                     .into(),
                 );
