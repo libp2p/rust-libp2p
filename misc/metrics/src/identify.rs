@@ -129,9 +129,6 @@ impl super::Recorder<libp2p_identify::Event> for Metrics {
             libp2p_identify::Event::Error { .. } => {
                 self.error.inc();
             }
-            libp2p_identify::Event::Timeout => {
-                self.error.inc();
-            }
             libp2p_identify::Event::Pushed { .. } => {
                 self.pushed.inc();
             }
