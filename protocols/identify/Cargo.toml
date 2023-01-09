@@ -17,7 +17,7 @@ futures-timer = "3.0.2"
 libp2p-core = { version = "0.39.0", path = "../../core" }
 libp2p-swarm = { version = "0.42.0", path = "../../swarm" }
 log = "0.4.1"
-lru = "0.8.0"
+lru = "0.9.0"
 prost-codec = { version = "0.3", path = "../../misc/prost-codec" }
 prost = "0.11"
 smallvec = "1.6.1"
