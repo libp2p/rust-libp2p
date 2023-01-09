@@ -38,6 +38,7 @@ use std::{
     task::Poll,
     time::Duration,
 };
+use thiserror::Error;
 
 /// Network behaviour that automatically identifies nodes periodically, returns information
 /// about them, and answers identify queries from other nodes.
@@ -300,12 +301,16 @@ impl NetworkBehaviour for Behaviour {
                 self.events
                     .push_back(NetworkBehaviourAction::GenerateEvent(Event::Error {
                         peer_id,
-                        error,
+                        error: Error::Upgrade(error),
                     }));
             }
-            handler::Event::IdentificationTimedout => self
-                .events
-                .push_back(NetworkBehaviourAction::GenerateEvent(Event::Timeout)),
+            handler::Event::IdentificationTimedout => {
+                self.events
+                    .push_back(NetworkBehaviourAction::GenerateEvent(Event::Error {
+                        peer_id,
+                        error: Error::Timeout,
+                    }))
+            }
         }
     }
 
@@ -462,10 +467,17 @@ pub enum Event {
         /// The peer with whom the error originated.
         peer_id: PeerId,
         /// The error that occurred.
-        error: libp2p_core::UpgradeError<UpgradeError>,
+        error: Error,
     },
+}
 
-    /// Timeout expired while attempting to identify the remote.
+/// Errors emitted  by the `Event::Error`.
+#[derive(Debug, Error)]
+pub enum Error {
+    /// Error while attempting to identify the remote.
+    #[error("Failed to identify the remote: {0}.")]
+    Upgrade(libp2p_core::UpgradeError<UpgradeError>),
+    #[error("Timeout expired while attempting to identify the remote.")]
     Timeout,
 }
 

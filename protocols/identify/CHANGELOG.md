@@ -6,7 +6,7 @@
   previously Push requests were prioritized. see [PR 3208].
 
 - Update to `libp2p-swarm` `v0.42.0`. Update to the `libp2p_swarm::handler::ConnectionEvent` `DialTimeout`
-  introduction and consequential changes. With that introduce `Event::Timeout`. See [PR 3307].
+  introduction and consequential changes. With that introduce `Error`. See [PR 3307].
 
 
 [PR 3208]: https://github.com/libp2p/rust-libp2p/pull/3208
