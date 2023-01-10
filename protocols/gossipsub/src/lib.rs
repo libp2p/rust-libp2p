@@ -115,7 +115,7 @@
 //! // Create a Swarm to manage peers and events
 //! let mut swarm = {
 //!     // set default parameters for gossipsub
-//!     let gossipsub_config = libp2p_gossipsub::config::Config::default();
+//!     let gossipsub_config = libp2p_gossipsub::Config::default();
 //!     // build a gossipsub network behaviour
 //!     let mut gossipsub: libp2p_gossipsub::Behaviour =
 //!         libp2p_gossipsub::Behaviour::new(message_authenticity, gossipsub_config).unwrap();
@@ -142,7 +142,7 @@ pub mod protocol;
 
 mod backoff;
 mod behaviour;
-pub mod config;
+mod config;
 mod gossip_promises;
 mod handler;
 mod mcache;
@@ -166,9 +166,11 @@ pub use self::peer_score::{
 pub use self::topic::{Hasher, Topic, TopicHash};
 pub use self::types::{FastMessageId, Message, MessageAcceptance, MessageId, RawMessage, Rpc};
 
+pub use self::config::{Builder, Config, ValidationMode, Version};
+
 #[deprecated(
     since = "0.44.0",
-    note = "Use re-exports that omit `Gossipsub` prefix, i.e. `libp2p::gossipsub::config::Config"
+    note = "Use re-exports that omit `Gossipsub` prefix, i.e. `libp2p::gossipsub::Config"
 )]
 pub type GossipsubConfig = config::Config;
 
@@ -192,13 +194,13 @@ pub type RawGossipsubMessage = RawMessage;
 
 #[deprecated(
     since = "0.44.0",
-    note = "Use re-exports that omit `Gossipsub` prefix, i.e. `libp2p::gossipsub::config::Builder"
+    note = "Use re-exports that omit `Gossipsub` prefix, i.e. `libp2p::gossipsub::Builder"
 )]
 pub type GossipsubBuilder = config::Builder;
 
 #[deprecated(
     since = "0.44.0",
-    note = "Use re-exports that omit `Gossipsub` prefix, i.e. `libp2p::gossipsub::config::Version"
+    note = "Use re-exports that omit `Gossipsub` prefix, i.e. `libp2p::gossipsub::Version"
 )]
 pub type GossipsubVersion = config::Version;
 
