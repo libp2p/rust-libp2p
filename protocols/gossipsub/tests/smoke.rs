@@ -232,7 +232,7 @@ fn multi_hop_propagation() {
         // Wait for all nodes to receive the published message.
         let mut received_msgs = 0;
         let all_received = graph.wait_for(move |ev| {
-            if let gossipsub::Event::ProtobufMessage { .. } = ev {
+            if let gossipsub::Event::Message { .. } = ev {
                 received_msgs += 1;
                 if received_msgs == number_nodes - 1 {
                     return true;

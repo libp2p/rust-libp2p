@@ -119,7 +119,7 @@ impl MessageAuthenticity {
 #[derive(Debug)]
 pub enum Event {
     /// A message has been received.
-    ProtobufMessage {
+    Message {
         /// The peer that forwarded us this message.
         propagation_source: PeerId,
         /// The [`MessageId`] of the message. This should be referenced by the application when
@@ -1818,13 +1818,12 @@ where
         // Dispatch the message to the user if we are subscribed to any of the topics
         if self.mesh.contains_key(&message.topic) {
             debug!("Sending received message to user");
-            self.events.push_back(NetworkBehaviourAction::GenerateEvent(
-                Event::ProtobufMessage {
+            self.events
+                .push_back(NetworkBehaviourAction::GenerateEvent(Event::Message {
                     propagation_source: *propagation_source,
                     message_id: msg_id.clone(),
                     message,
-                },
-            ));
+                }));
         } else {
             debug!(
                 "Received message on a topic we are not subscribed to: {:?}",
