@@ -155,11 +155,15 @@ pub enum Event {
         renewed: bool,
     },
     /// Accepting an inbound reservation request failed.
-    ReservationReqAcceptFailed { error: inbound_hop::UpgradeError },
+    ReservationReqAcceptFailed {
+        error: inbound_hop::FatalUpgradeError,
+    },
     /// An inbound reservation request has been denied.
     ReservationReqDenied {},
     /// Denying an inbound reservation request has failed.
-    ReservationReqDenyFailed { error: inbound_hop::UpgradeError },
+    ReservationReqDenyFailed {
+        error: inbound_hop::FatalUpgradeError,
+    },
     /// An inbound reservation has timed out.
     ReservationTimedOut {},
     /// An inbound circuit request has been received.
@@ -178,7 +182,7 @@ pub enum Event {
     CircuitReqDenyFailed {
         circuit_id: Option<CircuitId>,
         dst_peer_id: PeerId,
-        error: inbound_hop::UpgradeError,
+        error: inbound_hop::FatalUpgradeError,
     },
     /// An inbound cirucit request has been accepted.
     CircuitReqAccepted {
@@ -189,7 +193,7 @@ pub enum Event {
     CircuitReqAcceptFailed {
         circuit_id: CircuitId,
         dst_peer_id: PeerId,
-        error: inbound_hop::UpgradeError,
+        error: inbound_hop::FatalUpgradeError,
     },
     /// An outbound substream for an inbound circuit request has been
     /// negotiated.
@@ -428,12 +432,12 @@ pub struct Handler {
 
     /// Futures accepting an inbound circuit request.
     circuit_accept_futures:
-        Futures<Result<CircuitParts, (CircuitId, PeerId, inbound_hop::UpgradeError)>>,
+        Futures<Result<CircuitParts, (CircuitId, PeerId, inbound_hop::FatalUpgradeError)>>,
     /// Futures deying an inbound circuit request.
     circuit_deny_futures: Futures<(
         Option<CircuitId>,
         PeerId,
-        Result<(), inbound_hop::UpgradeError>,
+        Result<(), inbound_hop::FatalUpgradeError>,
     )>,
     /// Tracks substreams lend out to other [`Handler`]s.
     ///
@@ -528,7 +532,7 @@ impl Handler {
                 ));
                 return;
             }
-            upgrade::UpgradeError::Apply(inbound_hop::UpgradeError::Fatal(error)) => {
+            upgrade::UpgradeError::Apply(error) => {
                 self.pending_error = Some(upgrade::UpgradeError::Apply(EitherError::A(error)));
                 return;
             }
@@ -606,8 +610,8 @@ impl Handler {
 }
 
 enum ReservationRequestFuture {
-    Accepting(BoxFuture<'static, Result<(), inbound_hop::UpgradeError>>),
-    Denying(BoxFuture<'static, Result<(), inbound_hop::UpgradeError>>),
+    Accepting(BoxFuture<'static, Result<(), inbound_hop::FatalUpgradeError>>),
+    Denying(BoxFuture<'static, Result<(), inbound_hop::FatalUpgradeError>>),
 }
 
 type Futures<T> = FuturesUnordered<BoxFuture<'static, T>>;

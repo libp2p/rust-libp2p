@@ -47,7 +47,7 @@ impl upgrade::UpgradeInfo for Upgrade {
 
 impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
     type Output = Req;
-    type Error = UpgradeError;
+    type Error = FatalUpgradeError;
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
     fn upgrade_inbound(self, substream: NegotiatedSubstream, _: Self::Info) -> Self::Future {
@@ -79,26 +79,12 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
                         .map_err(|_| FatalUpgradeError::ParsePeerId)?;
                     Req::Connect(CircuitReq { dst, substream })
                 }
-                hop_message::Type::Status => {
-                    return Err(FatalUpgradeError::UnexpectedTypeStatus.into())
-                }
+                hop_message::Type::Status => return Err(FatalUpgradeError::UnexpectedTypeStatus),
             };
 
             Ok(req)
         }
         .boxed()
-    }
-}
-
-#[derive(Debug, Error)]
-pub enum UpgradeError {
-    #[error("Fatal")]
-    Fatal(#[from] FatalUpgradeError),
-}
-
-impl From<prost_codec::Error> for UpgradeError {
-    fn from(error: prost_codec::Error) -> Self {
-        Self::Fatal(error.into())
     }
 }
 
@@ -131,7 +117,7 @@ pub struct ReservationReq {
 }
 
 impl ReservationReq {
-    pub async fn accept(self, addrs: Vec<Multiaddr>) -> Result<(), UpgradeError> {
+    pub async fn accept(self, addrs: Vec<Multiaddr>) -> Result<(), FatalUpgradeError> {
         let msg = HopMessage {
             r#type: hop_message::Type::Status.into(),
             peer: None,
@@ -158,7 +144,7 @@ impl ReservationReq {
         self.send(msg).await
     }
 
-    pub async fn deny(self, status: Status) -> Result<(), UpgradeError> {
+    pub async fn deny(self, status: Status) -> Result<(), FatalUpgradeError> {
         let msg = HopMessage {
             r#type: hop_message::Type::Status.into(),
             peer: None,
@@ -170,7 +156,7 @@ impl ReservationReq {
         self.send(msg).await
     }
 
-    async fn send(mut self, msg: HopMessage) -> Result<(), UpgradeError> {
+    async fn send(mut self, msg: HopMessage) -> Result<(), FatalUpgradeError> {
         self.substream.send(msg).await?;
         self.substream.flush().await?;
         self.substream.close().await?;
@@ -189,7 +175,7 @@ impl CircuitReq {
         self.dst
     }
 
-    pub async fn accept(mut self) -> Result<(NegotiatedSubstream, Bytes), UpgradeError> {
+    pub async fn accept(mut self) -> Result<(NegotiatedSubstream, Bytes), FatalUpgradeError> {
         let msg = HopMessage {
             r#type: hop_message::Type::Status.into(),
             peer: None,
@@ -214,7 +200,7 @@ impl CircuitReq {
         Ok((io, read_buffer.freeze()))
     }
 
-    pub async fn deny(mut self, status: Status) -> Result<(), UpgradeError> {
+    pub async fn deny(mut self, status: Status) -> Result<(), FatalUpgradeError> {
         let msg = HopMessage {
             r#type: hop_message::Type::Status.into(),
             peer: None,
