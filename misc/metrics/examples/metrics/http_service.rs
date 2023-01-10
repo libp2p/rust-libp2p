@@ -29,6 +29,8 @@ use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 
+const METRICS_CONTENT_TYPE: &str = "application/openmetrics-text;charset=utf-8;version=1.0.0";
+
 pub async fn metrics_server(registry: Registry) -> Result<(), std::io::Error> {
     // Serve on localhost.
     let addr = ([127, 0, 0, 1], 0).into();
@@ -55,27 +57,31 @@ impl MetricService {
     fn get_reg(&mut self) -> SharedRegistry {
         Arc::clone(&self.reg)
     }
-    fn respond_with_metrics(&mut self) -> Response<Body> {
-        let mut encoded: Vec<u8> = Vec::new();
+    fn respond_with_metrics(&mut self) -> Response<String> {
+        let mut response: Response<String> = Response::default();
+
+        response.headers_mut().insert(
+            hyper::header::CONTENT_TYPE,
+            METRICS_CONTENT_TYPE.try_into().unwrap(),
+        );
+
         let reg = self.get_reg();
-        encode(&mut encoded, &reg.lock().unwrap()).unwrap();
-        let metrics_content_type = "application/openmetrics-text;charset=utf-8;version=1.0.0";
-        Response::builder()
-            .status(StatusCode::OK)
-            .header(hyper::header::CONTENT_TYPE, metrics_content_type)
-            .body(Body::from(encoded))
-            .unwrap()
+        encode(&mut response.body_mut(), &reg.lock().unwrap()).unwrap();
+
+        *response.status_mut() = StatusCode::OK;
+
+        response
     }
-    fn respond_with_404_not_found(&mut self) -> Response<Body> {
+    fn respond_with_404_not_found(&mut self) -> Response<String> {
         Response::builder()
             .status(StatusCode::NOT_FOUND)
-            .body(Body::from("Not found try localhost:[port]/metrics"))
+            .body("Not found try localhost:[port]/metrics".to_string())
             .unwrap()
     }
 }
 
 impl Service<Request<Body>> for MetricService {
-    type Response = Response<Body>;
+    type Response = Response<String>;
     type Error = hyper::Error;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
 
