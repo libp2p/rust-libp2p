@@ -44,6 +44,7 @@ use std::io::{Error, ErrorKind, IoSlice};
 use std::ops::DerefMut;
 use std::pin::Pin;
 use std::task::{Context, Poll};
+use thiserror::Error;
 use transport::Transport;
 
 /// The events produced by the client `Behaviour`.
@@ -60,13 +61,7 @@ pub enum Event {
         relay_peer_id: PeerId,
         /// Indicates whether the request replaces an existing reservation.
         renewal: bool,
-        error: UpgradeError<outbound_hop::ReservationFailedReason>,
-    },
-    // A reservation request timeout expired.
-    ReservationReqTimedOut {
-        relay_peer_id: PeerId,
-        /// Indicates whether the request replaces an existing reservation.
-        renewal: bool,
+        error: InboundError<outbound_hop::ReservationFailedReason>,
     },
     OutboundCircuitEstablished {
         relay_peer_id: PeerId,
@@ -74,11 +69,8 @@ pub enum Event {
     },
     OutboundCircuitReqFailed {
         relay_peer_id: PeerId,
-        error: UpgradeError<outbound_hop::CircuitFailedReason>,
+        error: InboundError<outbound_hop::CircuitFailedReason>,
     },
-    /// An inbound circuit timeout expired.
-    OutboundCircuitReqTimedOut { relay_peer_id: PeerId },
-
     /// An inbound circuit has been established.
     InboundCircuitEstablished {
         src_peer_id: PeerId,
@@ -95,6 +87,14 @@ pub enum Event {
         src_peer_id: PeerId,
         error: inbound_stop::UpgradeError,
     },
+}
+
+#[derive(Debug, Error)]
+pub enum InboundError<T> {
+    #[error("An outbound request upgrade failed: {0}.")]
+    Upgrade(UpgradeError<T>),
+    #[error("An inbound request timeout expired.")]
+    Timeout,
 }
 
 /// [`NetworkBehaviour`] implementation of the relay client
@@ -222,15 +222,15 @@ impl NetworkBehaviour for Behaviour {
                 self.queued_actions.push_back(Event::ReservationReqFailed {
                     relay_peer_id: event_source,
                     renewal,
-                    error,
+                    error: InboundError::Upgrade(error),
                 })
             }
             handler::Event::ReservationReqTimeout { renewal } => {
-                self.queued_actions
-                    .push_back(Event::ReservationReqTimedOut {
-                        relay_peer_id: event_source,
-                        renewal,
-                    })
+                self.queued_actions.push_back(Event::ReservationReqFailed {
+                    relay_peer_id: event_source,
+                    renewal,
+                    error: InboundError::Timeout,
+                })
             }
             handler::Event::OutboundCircuitEstablished { limit } => {
                 self.queued_actions
@@ -243,13 +243,14 @@ impl NetworkBehaviour for Behaviour {
                 self.queued_actions
                     .push_back(Event::OutboundCircuitReqFailed {
                         relay_peer_id: event_source,
-                        error,
+                        error: InboundError::Upgrade(error),
                     })
             }
             handler::Event::OutboundCircuitReqTimedOut => {
                 self.queued_actions
-                    .push_back(Event::OutboundCircuitReqTimedOut {
+                    .push_back(Event::OutboundCircuitReqFailed {
                         relay_peer_id: event_source,
+                        error: InboundError::Timeout,
                     })
             }
             handler::Event::InboundCircuitEstablished { src_peer_id, limit } => self

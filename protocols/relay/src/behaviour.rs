@@ -39,6 +39,7 @@ use std::num::NonZeroU32;
 use std::ops::Add;
 use std::task::{Context, Poll};
 use std::time::Duration;
+use thiserror::Error;
 
 /// Configuration for the relay [`Behaviour`].
 ///
@@ -170,12 +171,7 @@ pub enum Event {
     CircuitReqOutboundConnectFailed {
         src_peer_id: PeerId,
         dst_peer_id: PeerId,
-        error: UpgradeError<outbound_stop::CircuitFailedReason>,
-    },
-    /// An outbound connect for an inbound circuit timeout expired.
-    CircuitReqOutboundConectTimedOut {
-        src_peer_id: PeerId,
-        dst_peer_id: PeerId,
+        error: OutboundError,
     },
     /// Accepting an inbound circuit request failed.
     CircuitReqAcceptFailed {
@@ -189,6 +185,14 @@ pub enum Event {
         dst_peer_id: PeerId,
         error: Option<std::io::Error>,
     },
+}
+
+#[derive(Debug, Error)]
+pub enum OutboundError {
+    #[error("An outbound request upgrade failed: {0}.")]
+    Upgrade(UpgradeError<outbound_stop::CircuitFailedReason>),
+    #[error("An outbound request timeout expired.")]
+    Timeout,
 }
 
 /// [`NetworkBehaviour`] implementation of the relay server
@@ -591,7 +595,7 @@ impl NetworkBehaviour for Behaviour {
                     NetworkBehaviourAction::GenerateEvent(Event::CircuitReqOutboundConnectFailed {
                         src_peer_id,
                         dst_peer_id: event_source,
-                        error,
+                        error: OutboundError::Upgrade(error),
                     })
                     .into(),
                 );
@@ -616,12 +620,11 @@ impl NetworkBehaviour for Behaviour {
                     .into(),
                 );
                 self.queued_actions.push_back(
-                    NetworkBehaviourAction::GenerateEvent(
-                        Event::CircuitReqOutboundConectTimedOut {
-                            src_peer_id,
-                            dst_peer_id: event_source,
-                        },
-                    )
+                    NetworkBehaviourAction::GenerateEvent(Event::CircuitReqOutboundConnectFailed {
+                        src_peer_id,
+                        dst_peer_id: event_source,
+                        error: OutboundError::Timeout,
+                    })
                     .into(),
                 );
             }
