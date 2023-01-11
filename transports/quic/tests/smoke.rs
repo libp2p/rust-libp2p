@@ -1,12 +1,15 @@
 #![cfg(any(feature = "async-std", feature = "tokio"))]
 
 use futures::channel::{mpsc, oneshot};
+use futures::future::BoxFuture;
 use futures::future::{poll_fn, Either};
 use futures::stream::StreamExt;
 use futures::{future, AsyncReadExt, AsyncWriteExt, FutureExt, SinkExt};
+use futures_timer::Delay;
 use libp2p_core::either::EitherOutput;
 use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerExt, SubstreamBox};
 use libp2p_core::transport::{Boxed, OrTransport, TransportEvent};
+use libp2p_core::transport::{ListenerId, TransportError};
 use libp2p_core::{multiaddr::Protocol, upgrade, Multiaddr, PeerId, Transport};
 use libp2p_noise as noise;
 use libp2p_quic as quic;
@@ -19,6 +22,10 @@ use std::io;
 use std::num::NonZeroU8;
 use std::task::Poll;
 use std::time::Duration;
+use std::{
+    pin::Pin,
+    sync::{Arc, Mutex},
+};
 
 #[cfg(feature = "tokio")]
 #[tokio::test]
@@ -85,6 +92,113 @@ async fn ipv4_dial_ipv6() {
     let a_addr = start_listening(&mut a_transport, "/ip6/::1/udp/0/quic-v1").await;
     let ((a_connected, _, _), (b_connected, _)) =
         connect(&mut a_transport, &mut b_transport, a_addr).await;
+
+    assert_eq!(a_connected, b_peer_id);
+    assert_eq!(b_connected, a_peer_id);
+}
+
+/// Tests that a [`Transport::dial`] wakes up the task previously polling [`Transport::poll`].
+///
+/// See https://github.com/libp2p/rust-libp2p/pull/3306 for context.
+#[cfg(feature = "async-std")]
+#[async_std::test]
+async fn wrapped_with_dns() {
+    let _ = env_logger::try_init();
+
+    struct DialDelay(Arc<Mutex<Boxed<(PeerId, StreamMuxerBox)>>>);
+
+    impl Transport for DialDelay {
+        type Output = (PeerId, StreamMuxerBox);
+        type Error = std::io::Error;
+        type ListenerUpgrade = Pin<Box<dyn Future<Output = io::Result<Self::Output>> + Send>>;
+        type Dial = BoxFuture<'static, Result<Self::Output, Self::Error>>;
+
+        fn listen_on(
+            &mut self,
+            addr: Multiaddr,
+        ) -> Result<ListenerId, TransportError<Self::Error>> {
+            self.0.lock().unwrap().listen_on(addr)
+        }
+
+        fn remove_listener(&mut self, id: ListenerId) -> bool {
+            self.0.lock().unwrap().remove_listener(id)
+        }
+
+        fn address_translation(
+            &self,
+            listen: &Multiaddr,
+            observed: &Multiaddr,
+        ) -> Option<Multiaddr> {
+            self.0.lock().unwrap().address_translation(listen, observed)
+        }
+
+        /// Delayed dial, i.e. calling [`Transport::dial`] on the inner [`Transport`] not within the
+        /// synchronous [`Transport::dial`] method, but within the [`Future`] returned by the outer
+        /// [`Transport::dial`].
+        fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+            let t = self.0.clone();
+            Ok(async move {
+                // Simulate DNS lookup. Giving the `Transport::poll` the chance to return
+                // `Poll::Pending` and thus suspending its task, waiting for a wakeup from the dial
+                // on the inner transport below.
+                Delay::new(Duration::from_millis(100)).await;
+
+                let dial = t.lock().unwrap().dial(addr).map_err(|e| match e {
+                    TransportError::MultiaddrNotSupported(_) => {
+                        panic!()
+                    }
+                    TransportError::Other(e) => e,
+                })?;
+                dial.await
+            }
+            .boxed())
+        }
+
+        fn dial_as_listener(
+            &mut self,
+            addr: Multiaddr,
+        ) -> Result<Self::Dial, TransportError<Self::Error>> {
+            self.0.lock().unwrap().dial_as_listener(addr)
+        }
+
+        fn poll(
+            self: Pin<&mut Self>,
+            cx: &mut std::task::Context<'_>,
+        ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
+            Pin::new(&mut *self.0.lock().unwrap()).poll(cx)
+        }
+    }
+
+    let (a_peer_id, mut a_transport) = create_default_transport::<quic::async_std::Provider>();
+    let (b_peer_id, mut b_transport) = {
+        let (id, transport) = create_default_transport::<quic::async_std::Provider>();
+        (id, DialDelay(Arc::new(Mutex::new(transport))).boxed())
+    };
+
+    // Spawn a
+    let a_addr = start_listening(&mut a_transport, "/ip6/::1/udp/0/quic-v1").await;
+    let listener = async_std::task::spawn(async move {
+        let (upgrade, _) = a_transport
+            .select_next_some()
+            .await
+            .into_incoming()
+            .unwrap();
+        let (peer_id, _) = upgrade.await.unwrap();
+
+        peer_id
+    });
+
+    // Spawn b
+    //
+    // Note that the dial is spawned on a different task than the transport allowing the transport
+    // task to poll the transport once and then suspend, waiting for the wakeup from the dial.
+    let dial = async_std::task::spawn({
+        let dial = b_transport.dial(a_addr).unwrap();
+        async { dial.await.unwrap().0 }
+    });
+    async_std::task::spawn(async move { b_transport.next().await });
+
+    let (a_connected, b_connected) = future::join(listener, dial).await;
 
     assert_eq!(a_connected, b_peer_id);
     assert_eq!(b_connected, a_peer_id);
