@@ -211,10 +211,7 @@ impl From<MessageAuthenticity> for PublishConfig {
 ///
 /// The TopicSubscriptionFilter allows applications to implement specific filters on topics to
 /// prevent unwanted messages being propagated and evaluated.
-pub struct Gossipsub<
-    D: DataTransform = IdentityTransform,
-    F: TopicSubscriptionFilter = AllowAllSubscriptionFilter,
-> {
+pub struct Gossipsub<D = IdentityTransform, F = AllowAllSubscriptionFilter> {
     /// Configuration providing gossipsub performance parameters.
     config: GossipsubConfig,
 
