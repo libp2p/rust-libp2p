@@ -30,8 +30,6 @@ use libp2p_core::upgrade::{EitherUpgrade, UpgradeError};
 use libp2p_core::{ConnectedPoint, PeerId};
 use std::task::{Context, Poll};
 
-use super::AddressChange;
-
 /// Auxiliary type to allow implementing [`IntoConnectionHandler`]. As [`IntoConnectionHandler`] is
 /// already implemented for T, we cannot implement it for Either<A, B>.
 pub enum IntoEitherHandler<L, R> {
@@ -92,207 +90,190 @@ impl<L, R> IntoEitherHandler<L, R> {
     }
 }
 
-impl<'a, RIP, LIP, LOP, ROP, LIOP, RIOP, LOOP, ROOP>
-    ConnectionEvent<
-        'a,
-        EitherUpgrade<SendWrapper<LIP>, SendWrapper<RIP>>,
-        EitherUpgrade<SendWrapper<LOP>, SendWrapper<ROP>>,
-        Either<LIOP, RIOP>,
-        Either<LOOP, ROOP>,
-    >
+impl<LIP, RIP, LIOI, RIOI>
+    FullyNegotiatedInbound<EitherUpgrade<SendWrapper<LIP>, SendWrapper<RIP>>, Either<LIOI, RIOI>>
 where
     RIP: InboundUpgradeSend,
     LIP: InboundUpgradeSend,
-    LOP: OutboundUpgradeSend,
-    ROP: OutboundUpgradeSend,
 {
-    /// Transposes a [`ConnectionEvent`] with Either's on it's inner fields to an [`Either`] of connection events.
-    /// Returns Err in case of the [`ConnectionEvent`] being [`AddressChange`] as it isn't transposable.
-    pub fn transpose(
+    fn transpose(
         self,
-    ) -> Result<
-        Either<
-            ConnectionEvent<'a, LIP, LOP, LIOP, LOOP>,
-            ConnectionEvent<'a, RIP, ROP, RIOP, ROOP>,
-        >,
-        AddressChange<'a>,
-    > {
+    ) -> Either<FullyNegotiatedInbound<LIP, LIOI>, FullyNegotiatedInbound<RIP, RIOI>> {
         match self {
-            ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
+            FullyNegotiatedInbound {
                 protocol: EitherOutput::First(protocol),
                 info: Either::Left(info),
-            }) => Ok(Either::Left(ConnectionEvent::FullyNegotiatedInbound(
-                FullyNegotiatedInbound { protocol, info },
-            ))),
-            ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
+            } => Either::Left(FullyNegotiatedInbound { protocol, info }),
+            FullyNegotiatedInbound {
                 protocol: EitherOutput::Second(protocol),
                 info: Either::Right(info),
-            }) => Ok(Either::Right(ConnectionEvent::FullyNegotiatedInbound(
-                FullyNegotiatedInbound { protocol, info },
-            ))),
-            ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
-                protocol: EitherOutput::First(protocol),
-                info: Either::Left(info),
-            }) => Ok(Either::Left(ConnectionEvent::FullyNegotiatedOutbound(
-                FullyNegotiatedOutbound { protocol, info },
-            ))),
-            ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
-                protocol: EitherOutput::Second(protocol),
-                info: Either::Right(info),
-            }) => Ok(Either::Right(ConnectionEvent::FullyNegotiatedOutbound(
-                FullyNegotiatedOutbound { protocol, info },
-            ))),
-            ConnectionEvent::DialUpgradeError(DialUpgradeError {
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::A(error))),
-                info: Either::Left(info),
-            }) => Ok(Either::Left(ConnectionEvent::DialUpgradeError(
-                DialUpgradeError {
-                    error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(error)),
-                    info,
-                },
-            ))),
-            ConnectionEvent::DialUpgradeError(DialUpgradeError {
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::B(error))),
-                info: Either::Right(info),
-            }) => Ok(Either::Right(ConnectionEvent::DialUpgradeError(
-                DialUpgradeError {
-                    error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(error)),
-                    info,
-                },
-            ))),
-            ConnectionEvent::DialUpgradeError(DialUpgradeError {
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(error)),
-                info: Either::Left(info),
-            }) => Ok(Either::Left(ConnectionEvent::DialUpgradeError(
-                DialUpgradeError {
-                    error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(error)),
-                    info,
-                },
-            ))),
-            ConnectionEvent::DialUpgradeError(DialUpgradeError {
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(error)),
-                info: Either::Right(info),
-            }) => Ok(Either::Right(ConnectionEvent::DialUpgradeError(
-                DialUpgradeError {
-                    error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(error)),
-                    info,
-                },
-            ))),
-            ConnectionEvent::DialUpgradeError(DialUpgradeError {
-                error: ConnectionHandlerUpgrErr::Timer,
-                info: Either::Left(info),
-            }) => Ok(Either::Left(ConnectionEvent::DialUpgradeError(
-                DialUpgradeError {
-                    error: ConnectionHandlerUpgrErr::Timer,
-                    info,
-                },
-            ))),
-            ConnectionEvent::DialUpgradeError(DialUpgradeError {
-                error: ConnectionHandlerUpgrErr::Timer,
-                info: Either::Right(info),
-            }) => Ok(Either::Right(ConnectionEvent::DialUpgradeError(
-                DialUpgradeError {
-                    error: ConnectionHandlerUpgrErr::Timer,
-                    info,
-                },
-            ))),
-            ConnectionEvent::DialUpgradeError(DialUpgradeError {
-                error: ConnectionHandlerUpgrErr::Timeout,
-                info: Either::Left(info),
-            }) => Ok(Either::Left(ConnectionEvent::DialUpgradeError(
-                DialUpgradeError {
-                    error: ConnectionHandlerUpgrErr::Timeout,
-                    info,
-                },
-            ))),
-            ConnectionEvent::DialUpgradeError(DialUpgradeError {
-                error: ConnectionHandlerUpgrErr::Timeout,
-                info: Either::Right(info),
-            }) => Ok(Either::Right(ConnectionEvent::DialUpgradeError(
-                DialUpgradeError {
-                    error: ConnectionHandlerUpgrErr::Timeout,
-                    info,
-                },
-            ))),
-            ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::A(error))),
-                info: Either::Left(info),
-            }) => Ok(Either::Left(ConnectionEvent::ListenUpgradeError(
-                ListenUpgradeError {
-                    error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(error)),
-                    info,
-                },
-            ))),
-            ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::B(error))),
-                info: Either::Right(info),
-            }) => Ok(Either::Right(ConnectionEvent::ListenUpgradeError(
-                ListenUpgradeError {
-                    error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(error)),
-                    info,
-                },
-            ))),
-            ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(error)),
-                info: Either::Left(info),
-            }) => Ok(Either::Left(ConnectionEvent::ListenUpgradeError(
-                ListenUpgradeError {
-                    error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(error)),
-                    info,
-                },
-            ))),
-            ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(error)),
-                info: Either::Right(info),
-            }) => Ok(Either::Right(ConnectionEvent::ListenUpgradeError(
-                ListenUpgradeError {
-                    error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(error)),
-                    info,
-                },
-            ))),
-            ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
-                error: ConnectionHandlerUpgrErr::Timer,
-                info: Either::Left(info),
-            }) => Ok(Either::Left(ConnectionEvent::ListenUpgradeError(
-                ListenUpgradeError {
-                    error: ConnectionHandlerUpgrErr::Timer,
-                    info,
-                },
-            ))),
-            ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
-                error: ConnectionHandlerUpgrErr::Timer,
-                info: Either::Right(info),
-            }) => Ok(Either::Right(ConnectionEvent::ListenUpgradeError(
-                ListenUpgradeError {
-                    error: ConnectionHandlerUpgrErr::Timer,
-                    info,
-                },
-            ))),
-            ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
-                error: ConnectionHandlerUpgrErr::Timeout,
-                info: Either::Left(info),
-            }) => Ok(Either::Left(ConnectionEvent::ListenUpgradeError(
-                ListenUpgradeError {
-                    error: ConnectionHandlerUpgrErr::Timeout,
-                    info,
-                },
-            ))),
-            ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
-                error: ConnectionHandlerUpgrErr::Timeout,
-                info: Either::Right(info),
-            }) => Ok(Either::Right(ConnectionEvent::ListenUpgradeError(
-                ListenUpgradeError {
-                    error: ConnectionHandlerUpgrErr::Timeout,
-                    info,
-                },
-            ))),
-            ConnectionEvent::AddressChange(AddressChange { new_address }) => {
-                Err(AddressChange { new_address })
-            }
+            } => Either::Right(FullyNegotiatedInbound { protocol, info }),
             _ => unreachable!(),
         }
     }
 }
+
+impl<LOP, ROP, LOOI, ROOI>
+    FullyNegotiatedOutbound<EitherUpgrade<SendWrapper<LOP>, SendWrapper<ROP>>, Either<LOOI, ROOI>>
+where
+    LOP: OutboundUpgradeSend,
+    ROP: OutboundUpgradeSend,
+{
+    fn transpose(
+        self,
+    ) -> Either<FullyNegotiatedOutbound<LOP, LOOI>, FullyNegotiatedOutbound<ROP, ROOI>> {
+        match self {
+            FullyNegotiatedOutbound {
+                protocol: EitherOutput::First(protocol),
+                info: Either::Left(info),
+            } => Either::Left(FullyNegotiatedOutbound { protocol, info }),
+            FullyNegotiatedOutbound {
+                protocol: EitherOutput::Second(protocol),
+                info: Either::Right(info),
+            } => Either::Right(FullyNegotiatedOutbound { protocol, info }),
+            _ => unreachable!(),
+        }
+    }
+}
+
+impl<LOP, ROP, LOOI, ROOI>
+    DialUpgradeError<Either<LOOI, ROOI>, EitherUpgrade<SendWrapper<LOP>, SendWrapper<ROP>>>
+where
+    LOP: OutboundUpgradeSend,
+    ROP: OutboundUpgradeSend,
+{
+    fn transpose(self) -> Either<DialUpgradeError<LOOI, LOP>, DialUpgradeError<ROOI, ROP>> {
+        match self {
+            DialUpgradeError {
+                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::A(error))),
+                info: Either::Left(info),
+            } => Either::Left(DialUpgradeError {
+                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(error)),
+                info,
+            }),
+            DialUpgradeError {
+                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::B(error))),
+                info: Either::Right(info),
+            } => Either::Right(DialUpgradeError {
+                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(error)),
+                info,
+            }),
+            DialUpgradeError {
+                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(error)),
+                info: Either::Left(info),
+            } => Either::Left(DialUpgradeError {
+                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(error)),
+                info,
+            }),
+            DialUpgradeError {
+                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(error)),
+                info: Either::Right(info),
+            } => Either::Right(DialUpgradeError {
+                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(error)),
+                info,
+            }),
+            DialUpgradeError {
+                error: ConnectionHandlerUpgrErr::Timer,
+                info: Either::Left(info),
+            } => Either::Left(DialUpgradeError {
+                error: ConnectionHandlerUpgrErr::Timer,
+                info,
+            }),
+            DialUpgradeError {
+                error: ConnectionHandlerUpgrErr::Timer,
+                info: Either::Right(info),
+            } => Either::Right(DialUpgradeError {
+                error: ConnectionHandlerUpgrErr::Timer,
+                info,
+            }),
+            DialUpgradeError {
+                error: ConnectionHandlerUpgrErr::Timeout,
+                info: Either::Left(info),
+            } => Either::Left(DialUpgradeError {
+                error: ConnectionHandlerUpgrErr::Timeout,
+                info,
+            }),
+            DialUpgradeError {
+                error: ConnectionHandlerUpgrErr::Timeout,
+                info: Either::Right(info),
+            } => Either::Right(DialUpgradeError {
+                error: ConnectionHandlerUpgrErr::Timeout,
+                info,
+            }),
+            _ => unreachable!(),
+        }
+    }
+}
+
+impl<LIP, RIP, LIOI, RIOI>
+    ListenUpgradeError<Either<LIOI, RIOI>, EitherUpgrade<SendWrapper<LIP>, SendWrapper<RIP>>>
+where
+    RIP: InboundUpgradeSend,
+    LIP: InboundUpgradeSend,
+{
+    fn transpose(self) -> Either<ListenUpgradeError<LIOI, LIP>, ListenUpgradeError<RIOI, RIP>> {
+        match self {
+            ListenUpgradeError {
+                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::A(error))),
+                info: Either::Left(info),
+            } => Either::Left(ListenUpgradeError {
+                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(error)),
+                info,
+            }),
+            ListenUpgradeError {
+                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::B(error))),
+                info: Either::Right(info),
+            } => Either::Right(ListenUpgradeError {
+                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(error)),
+                info,
+            }),
+            ListenUpgradeError {
+                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(error)),
+                info: Either::Left(info),
+            } => Either::Left(ListenUpgradeError {
+                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(error)),
+                info,
+            }),
+            ListenUpgradeError {
+                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(error)),
+                info: Either::Right(info),
+            } => Either::Right(ListenUpgradeError {
+                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(error)),
+                info,
+            }),
+            ListenUpgradeError {
+                error: ConnectionHandlerUpgrErr::Timer,
+                info: Either::Left(info),
+            } => Either::Left(ListenUpgradeError {
+                error: ConnectionHandlerUpgrErr::Timer,
+                info,
+            }),
+            ListenUpgradeError {
+                error: ConnectionHandlerUpgrErr::Timer,
+                info: Either::Right(info),
+            } => Either::Right(ListenUpgradeError {
+                error: ConnectionHandlerUpgrErr::Timer,
+                info,
+            }),
+            ListenUpgradeError {
+                error: ConnectionHandlerUpgrErr::Timeout,
+                info: Either::Left(info),
+            } => Either::Left(ListenUpgradeError {
+                error: ConnectionHandlerUpgrErr::Timeout,
+                info,
+            }),
+            ListenUpgradeError {
+                error: ConnectionHandlerUpgrErr::Timeout,
+                info: Either::Right(info),
+            } => Either::Right(ListenUpgradeError {
+                error: ConnectionHandlerUpgrErr::Timeout,
+                info,
+            }),
+            _ => unreachable!(),
+        }
+    }
+}
+
 /// Implementation of a [`ConnectionHandler`] that represents either of two [`ConnectionHandler`]
 /// implementations.
 impl<L, R> ConnectionHandler for Either<L, R>
@@ -374,20 +355,63 @@ where
             Self::OutboundOpenInfo,
         >,
     ) {
-        match (event.transpose(), self) {
-            (Err(address_change), Either::Left(handler)) => {
-                handler.on_connection_event(ConnectionEvent::AddressChange(address_change))
+        match event {
+            ConnectionEvent::FullyNegotiatedInbound(fully_negotiated_inbound) => {
+                match (fully_negotiated_inbound.transpose(), self) {
+                    (Either::Left(fully_negotiated_inbound), Either::Left(handler)) => handler
+                        .on_connection_event(ConnectionEvent::FullyNegotiatedInbound(
+                            fully_negotiated_inbound,
+                        )),
+                    (Either::Right(fully_negotiated_inbound), Either::Right(handler)) => handler
+                        .on_connection_event(ConnectionEvent::FullyNegotiatedInbound(
+                            fully_negotiated_inbound,
+                        )),
+                    _ => unreachable!(),
+                }
             }
-            (Err(address_change), Either::Right(handler)) => {
-                handler.on_connection_event(ConnectionEvent::AddressChange(address_change))
+            ConnectionEvent::FullyNegotiatedOutbound(fully_negotiated_outbound) => {
+                match (fully_negotiated_outbound.transpose(), self) {
+                    (Either::Left(fully_negotiated_outbound), Either::Left(handler)) => handler
+                        .on_connection_event(ConnectionEvent::FullyNegotiatedOutbound(
+                            fully_negotiated_outbound,
+                        )),
+                    (Either::Right(fully_negotiated_outbound), Either::Right(handler)) => handler
+                        .on_connection_event(ConnectionEvent::FullyNegotiatedOutbound(
+                            fully_negotiated_outbound,
+                        )),
+                    _ => unreachable!(),
+                }
             }
-            (Ok(Either::Left(event)), Either::Left(handler)) => handler.on_connection_event(event),
-            (Ok(Either::Right(event)), Either::Right(handler)) => {
-                handler.on_connection_event(event)
+            ConnectionEvent::DialUpgradeError(dial_upgrade_error) => {
+                match (dial_upgrade_error.transpose(), self) {
+                    (Either::Left(dial_upgrade_error), Either::Left(handler)) => handler
+                        .on_connection_event(ConnectionEvent::DialUpgradeError(dial_upgrade_error)),
+                    (Either::Right(dial_upgrade_error), Either::Right(handler)) => handler
+                        .on_connection_event(ConnectionEvent::DialUpgradeError(dial_upgrade_error)),
+                    _ => unreachable!(),
+                }
             }
-            (Ok(Either::Left(_)), Either::Right(_)) | (Ok(Either::Right(_)), Either::Left(_)) => {
-                unreachable!()
+            ConnectionEvent::ListenUpgradeError(listen_upgrade_error) => {
+                match (listen_upgrade_error.transpose(), self) {
+                    (Either::Left(listen_upgrade_error), Either::Left(handler)) => handler
+                        .on_connection_event(ConnectionEvent::ListenUpgradeError(
+                            listen_upgrade_error,
+                        )),
+                    (Either::Right(listen_upgrade_error), Either::Right(handler)) => handler
+                        .on_connection_event(ConnectionEvent::ListenUpgradeError(
+                            listen_upgrade_error,
+                        )),
+                    _ => unreachable!(),
+                }
             }
+            ConnectionEvent::AddressChange(address_change) => match self {
+                Either::Left(handler) => {
+                    handler.on_connection_event(ConnectionEvent::AddressChange(address_change))
+                }
+                Either::Right(handler) => {
+                    handler.on_connection_event(ConnectionEvent::AddressChange(address_change))
+                }
+            },
         }
     }
 }
