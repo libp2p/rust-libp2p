@@ -299,7 +299,7 @@ jobs:
 
       - name: Check PR title length
         run: |
-          title="${{ github.event.pull_request.title }}"
+          title='${{ github.event.pull_request.title }}'
           title_length=${#title}
           if [ $title_length -gt 72 ]
           then
