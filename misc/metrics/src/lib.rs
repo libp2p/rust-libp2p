@@ -136,8 +136,8 @@ impl Recorder<libp2p_ping::Event> for Metrics {
 }
 
 #[cfg(feature = "relay")]
-impl Recorder<libp2p_relay::v2::relay::Event> for Metrics {
-    fn record(&self, event: &libp2p_relay::v2::relay::Event) {
+impl Recorder<libp2p_relay::Event> for Metrics {
+    fn record(&self, event: &libp2p_relay::Event) {
         self.relay.record(event)
     }
 }

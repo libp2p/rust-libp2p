@@ -27,6 +27,7 @@ mod payload_proto {
 
 use crate::io::{framed::NoiseFramed, NoiseOutput};
 use crate::protocol::{KeypairIdentity, Protocol, PublicKey};
+#[allow(deprecated)]
 use crate::LegacyConfig;
 use crate::NoiseError;
 use bytes::Bytes;
@@ -77,6 +78,7 @@ pub struct State<T> {
     /// The known or received public identity key of the remote, if any.
     id_remote_pubkey: Option<identity::PublicKey>,
     /// Legacy configuration parameters.
+    #[allow(deprecated)]
     legacy: LegacyConfig,
 }
 
@@ -86,6 +88,7 @@ impl<T> State<T> {
     /// will be sent and received on the given I/O resource and using the
     /// provided session for cryptographic operations according to the chosen
     /// Noise handshake pattern.
+    #[allow(deprecated)]
     pub fn new(
         io: T,
         session: snow::HandshakeState,
@@ -177,6 +180,7 @@ where
 
     let mut pb_result = payload_proto::NoiseHandshakePayload::decode(&msg[..]);
 
+    #[allow(deprecated)]
     if pb_result.is_err() && state.legacy.recv_legacy_handshake {
         // NOTE: This is support for legacy handshake payloads. As long as
         // the frame length is less than 256 bytes, which is the case for
@@ -238,6 +242,7 @@ where
         pb.identity_sig = sig.clone()
     }
 
+    #[allow(deprecated)]
     let mut msg = if state.legacy.send_legacy_handshake {
         let mut msg = Vec::with_capacity(2 + pb.encoded_len());
         msg.extend_from_slice(&(pb.encoded_len() as u16).to_be_bytes());
@@ -264,6 +269,7 @@ where
         pb.identity_sig = sig.clone()
     }
 
+    #[allow(deprecated)]
     let mut msg = if state.legacy.send_legacy_handshake {
         let mut msg = Vec::with_capacity(2 + pb.encoded_len());
         msg.extend_from_slice(&(pb.encoded_len() as u16).to_be_bytes());
