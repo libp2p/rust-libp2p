@@ -107,7 +107,7 @@ impl<H, C: Zeroize, R> NoiseConfig<H, C, R> {
 
     /// Sets the legacy configuration options to use, if any.
     #[deprecated(
-        since = "0.41.1",
+        since = "0.42.0",
         note = "`LegacyConfig` will be removed without replacement."
     )]
     #[allow(deprecated)]
@@ -592,7 +592,7 @@ where
 /// Legacy configuration options.
 #[derive(Clone, Copy, Default)]
 #[deprecated(
-    since = "0.41.1",
+    since = "0.42.0",
     note = "`LegacyConfig` will be removed without replacement."
 )]
 pub struct LegacyConfig {
