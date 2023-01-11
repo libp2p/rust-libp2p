@@ -79,6 +79,7 @@ use zeroize::Zeroize;
 pub struct NoiseConfig<P, C: Zeroize, R = ()> {
     dh_keys: AuthenticKeypair<C>,
     params: ProtocolParams,
+    #[allow(deprecated)]
     legacy: LegacyConfig,
     remote: R,
     _marker: std::marker::PhantomData<P>,
@@ -105,6 +106,11 @@ impl<H, C: Zeroize, R> NoiseConfig<H, C, R> {
     }
 
     /// Sets the legacy configuration options to use, if any.
+    #[deprecated(
+        since = "0.42.0",
+        note = "`LegacyConfig` will be removed without replacement."
+    )]
+    #[allow(deprecated)]
     pub fn set_legacy_config(&mut self, cfg: LegacyConfig) -> &mut Self {
         self.legacy = cfg;
         self
@@ -150,7 +156,10 @@ where
         NoiseConfig {
             dh_keys,
             params: C::params_ix(),
-            legacy: LegacyConfig::default(),
+            legacy: {
+                #[allow(deprecated)]
+                LegacyConfig::default()
+            },
             remote: (),
             _marker: std::marker::PhantomData,
             prologue: Vec::default(),
@@ -167,7 +176,10 @@ where
         NoiseConfig {
             dh_keys,
             params: C::params_xx(),
-            legacy: LegacyConfig::default(),
+            legacy: {
+                #[allow(deprecated)]
+                LegacyConfig::default()
+            },
             remote: (),
             _marker: std::marker::PhantomData,
             prologue: Vec::default(),
@@ -187,7 +199,10 @@ where
         NoiseConfig {
             dh_keys,
             params: C::params_ik(),
-            legacy: LegacyConfig::default(),
+            legacy: {
+                #[allow(deprecated)]
+                LegacyConfig::default()
+            },
             remote: (),
             _marker: std::marker::PhantomData,
             prologue: Vec::default(),
@@ -211,7 +226,10 @@ where
         NoiseConfig {
             dh_keys,
             params: C::params_ik(),
-            legacy: LegacyConfig::default(),
+            legacy: {
+                #[allow(deprecated)]
+                LegacyConfig::default()
+            },
             remote: (remote_dh, remote_id),
             _marker: std::marker::PhantomData,
             prologue: Vec::default(),
@@ -573,6 +591,10 @@ where
 
 /// Legacy configuration options.
 #[derive(Clone, Copy, Default)]
+#[deprecated(
+    since = "0.42.0",
+    note = "`LegacyConfig` will be removed without replacement."
+)]
 pub struct LegacyConfig {
     /// Whether to continue sending legacy handshake payloads,
     /// i.e. length-prefixed protobuf payloads inside a length-prefixed
