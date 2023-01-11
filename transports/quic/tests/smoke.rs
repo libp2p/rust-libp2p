@@ -141,7 +141,7 @@ async fn wrapped_with_dns() {
                 // Simulate DNS lookup. Giving the `Transport::poll` the chance to return
                 // `Poll::Pending` and thus suspending its task, waiting for a wakeup from the dial
                 // on the inner transport below.
-                Delay::new(Duration::from_millis(1)).await;
+                Delay::new(Duration::from_millis(100)).await;
 
                 let dial = t.lock().unwrap().dial(addr).map_err(|e| match e {
                     TransportError::MultiaddrNotSupported(_) => {
