@@ -216,14 +216,13 @@ impl<P: Provider> Transport for GenTransport<P> {
             self.dialer.remove(&key);
         }
 
-        match self.listeners.poll_next_unpin(cx) {
-            Poll::Ready(Some(ev)) => return Poll::Ready(ev),
-            _ => {}
+        if let Poll::Ready(Some(ev)) = self.listeners.poll_next_unpin(cx) {
+            return Poll::Ready(ev);
         }
 
         self.dialer_waker = Some(cx.waker().clone());
 
-        return Poll::Pending;
+        Poll::Pending
     }
 }
 
