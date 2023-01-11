@@ -8,7 +8,7 @@
 - Add `estblished_in` to `SwarmEvent::ConnectionEstablished`. See [PR 3134].
 
 - Remove deprecated `inject_*` methods from `NetworkBehaviour` and `ConnectionHandler`.
-  see [PR 3260].
+  see [PR 3264].
 
 - Update to `libp2p-swarm-derive` `v0.32.0`.
 
@@ -18,7 +18,7 @@
 [PR 3170]: https://github.com/libp2p/rust-libp2p/pull/3170
 [PR 3134]: https://github.com/libp2p/rust-libp2p/pull/3134
 [PR 3153]: https://github.com/libp2p/rust-libp2p/pull/3153
-[PR 3260]: https://github.com/libp2p/rust-libp2p/pull/3260
+[PR 3264]: https://github.com/libp2p/rust-libp2p/pull/3264
 [PR 3272]: https://github.com/libp2p/rust-libp2p/pull/3272
 
 # 0.41.1
