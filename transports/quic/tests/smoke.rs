@@ -105,9 +105,9 @@ async fn ipv4_dial_ipv6() {
 async fn wrapped_with_dns() {
     let _ = env_logger::try_init();
 
-    struct FakeDns(Arc<Mutex<Boxed<(PeerId, StreamMuxerBox)>>>);
+    struct DialDelay(Arc<Mutex<Boxed<(PeerId, StreamMuxerBox)>>>);
 
-    impl Transport for FakeDns {
+    impl Transport for DialDelay {
         type Output = (PeerId, StreamMuxerBox);
         type Error = std::io::Error;
         type ListenerUpgrade = Pin<Box<dyn Future<Output = io::Result<Self::Output>> + Send>>;
@@ -172,7 +172,7 @@ async fn wrapped_with_dns() {
     let (a_peer_id, mut a_transport) = create_default_transport::<quic::async_std::Provider>();
     let (b_peer_id, mut b_transport) = {
         let (id, transport) = create_default_transport::<quic::async_std::Provider>();
-        (id, FakeDns(Arc::new(Mutex::new(transport))).boxed())
+        (id, DialDelay(Arc::new(Mutex::new(transport))).boxed())
     };
 
     // Spawn a
