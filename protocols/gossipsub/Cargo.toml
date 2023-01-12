@@ -33,7 +33,7 @@ thiserror = "1.0"
 wasm-timer = "0.2.5"
 instant = "0.1.11"
 # Metrics dependencies
-prometheus-client = "0.18.0"
+prometheus-client = "0.19.0"
 
 [dev-dependencies]
 async-std = "1.6.3"

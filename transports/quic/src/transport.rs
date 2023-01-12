@@ -71,6 +71,7 @@ pub struct GenTransport<P: Provider> {
     listeners: SelectAll<Listener<P>>,
     /// Dialer for each socket family if no matching listener exists.
     dialer: HashMap<SocketFamily, Dialer>,
+    dialer_waker: Option<Waker>,
 }
 
 impl<P: Provider> GenTransport<P> {
@@ -84,6 +85,7 @@ impl<P: Provider> GenTransport<P> {
             quinn_config,
             handshake_timeout,
             dialer: HashMap::new(),
+            dialer_waker: None,
             support_draft_29,
         }
     }
@@ -128,7 +130,9 @@ impl<P: Provider> Transport for GenTransport<P> {
     }
 
     fn address_translation(&self, listen: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        if !is_quic_addr(listen) || !is_quic_addr(observed) {
+        if !is_quic_addr(listen, self.support_draft_29)
+            || !is_quic_addr(observed, self.support_draft_29)
+        {
             return None;
         }
         Some(observed.clone())
@@ -176,6 +180,12 @@ impl<P: Provider> Transport for GenTransport<P> {
                 &mut listeners[index].dialer_state
             }
         };
+
+        // Wakeup the task polling [`Transport::poll`] to drive the new dial.
+        if let Some(waker) = self.dialer_waker.take() {
+            waker.wake();
+        }
+
         Ok(dialer_state.new_dial(socket_addr, self.handshake_timeout, version))
     }
 
@@ -205,10 +215,14 @@ impl<P: Provider> Transport for GenTransport<P> {
             // Drop dialer and all pending dials so that the connection receiver is notified.
             self.dialer.remove(&key);
         }
-        match self.listeners.poll_next_unpin(cx) {
-            Poll::Ready(Some(ev)) => Poll::Ready(ev),
-            _ => Poll::Pending,
+
+        if let Poll::Ready(Some(ev)) = self.listeners.poll_next_unpin(cx) {
+            return Poll::Ready(ev);
         }
+
+        self.dialer_waker = Some(cx.waker().clone());
+
+        Poll::Pending
     }
 }
 
@@ -252,12 +266,11 @@ impl Drop for Dialer {
     }
 }
 
-/// Pending dials to be sent to the endpoint was the [`endpoint::Channel`]
-/// has capacity
+/// Pending dials to be sent to the endpoint once the [`endpoint::Channel`]
+/// has capacity.
 #[derive(Default, Debug)]
 struct DialerState {
     pending_dials: VecDeque<ToEndpoint>,
-    waker: Option<Waker>,
 }
 
 impl DialerState {
@@ -276,10 +289,6 @@ impl DialerState {
         };
 
         self.pending_dials.push_back(message);
-
-        if let Some(waker) = self.waker.take() {
-            waker.wake();
-        }
 
         async move {
             // Our oneshot getting dropped means the message didn't make it to the endpoint driver.
@@ -305,7 +314,6 @@ impl DialerState {
                 Err(endpoint::Disconnected {}) => return Poll::Ready(Error::EndpointDriverCrashed),
             }
         }
-        self.waker = Some(cx.waker().clone());
         Poll::Pending
     }
 }
@@ -597,7 +605,7 @@ fn multiaddr_to_socketaddr(
 }
 
 /// Whether an [`Multiaddr`] is a valid for the QUIC transport.
-fn is_quic_addr(addr: &Multiaddr) -> bool {
+fn is_quic_addr(addr: &Multiaddr, support_draft_29: bool) -> bool {
     use Protocol::*;
     let mut iter = addr.iter();
     let first = match iter.next() {
@@ -617,7 +625,11 @@ fn is_quic_addr(addr: &Multiaddr) -> bool {
 
     matches!(first, Ip4(_) | Ip6(_) | Dns(_) | Dns4(_) | Dns6(_))
         && matches!(second, Udp(_))
-        && matches!(third, QuicV1)
+        && if support_draft_29 {
+            matches!(third, QuicV1 | Quic)
+        } else {
+            matches!(third, QuicV1)
+        }
         && matches!(fourth, Some(P2p(_)) | None)
         && matches!(fifth, None)
 }

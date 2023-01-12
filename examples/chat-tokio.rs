@@ -92,10 +92,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Create a Swarm to manage peers and events.
     let mdns_behaviour = mdns::Behaviour::new(Default::default(), peer_id)?;
-    let behaviour = MyBehaviour {
+    let mut behaviour = MyBehaviour {
         floodsub: Floodsub::new(peer_id),
         mdns: mdns_behaviour,
     };
+
+    behaviour.floodsub.subscribe(floodsub_topic.clone());
+
     let mut swarm = libp2p_swarm::Swarm::with_tokio_executor(transport, behaviour, peer_id);
 
     // Reach out to another node if specified
