@@ -324,7 +324,7 @@ jobs:
         id: glob
         with:
           files: |
-            **/generated/**.proto
+            **/**.proto
 
       - name: Generated proto files and diff
         run: |
