@@ -1416,6 +1416,7 @@ where
                                 peer_score.add_penalty(peer_id, 1);
 
                                 // check the flood cutoff
+								#[allow(clippy::unchecked_duration_subtraction)] // False-positive: https://github.com/rust-lang/rust-clippy/issues/10061
                                 let flood_cutoff = (backoff_time
                                     + self.config.graft_flood_threshold())
                                     - self.config.prune_backoff();
