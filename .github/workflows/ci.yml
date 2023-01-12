@@ -310,6 +310,10 @@ jobs:
   check-proto-files:
     name: Check for changes in proto files
     runs-on: ubuntu-latest
+    inputs:
+      proto-files:
+        description: "Proto files"
+        default: "**/generated/**.proto"
     steps:
       - uses: actions/checkout@v3
 
@@ -320,10 +324,6 @@ jobs:
           override: true
 
       - name: Generated proto files and diff
-        inputs:
-          proto-files:
-            description: "Proto files"
-            default: "**/generated/**.proto"
         run: |
           cargo install pb-rs 
           pb-rs "${{ inputs.proto-files }}"
