@@ -320,7 +320,11 @@ jobs:
           override: true
 
       - name: Generated proto files and diff
+        inputs:
+          proto-files:
+            description: "Proto files"
+            default: "**/generated/**.proto"
         run: |
           cargo install pb-rs 
-          pb-rs "**/generated/**.proto"
+          pb-rs "${{ inputs.proto-files }}"
           git diff --exit-code ${{ github.ref }}
