@@ -19,7 +19,7 @@ use super::*;
 pub struct Envelope<'a> {
     pub public_key: Option<keys_proto::PublicKey<'a>>,
     pub payload_type: Cow<'a, [u8]>,
-    pub payload: Cow<'a,    [u8]>,
+    pub payload: Cow<'a, [u8]>,
     pub signature: Cow<'a, [u8]>,
 }
 
