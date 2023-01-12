@@ -326,8 +326,10 @@ jobs:
           files: |
             **/**.proto
 
-      - name: Generated proto files and diff
+      - name: Generated proto files
         run: |
-          cargo install pb-rs 
+          cargo install pb-rs
           pb-rs ${{ steps.glob.outputs.paths }}
-          git diff --exit-code
+
+      - name: Ensure generated files are unmodified # https://stackoverflow.com/a/5737794
+        run: test -z "$(git status --porcelain)"
