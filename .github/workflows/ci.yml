@@ -319,10 +319,16 @@ jobs:
           toolchain: stable
           override: true
 
+      - name: Glob match
+        uses: tj-actions/glob@v16
+        id: glob
+        with:
+          files: |
+            **/generated/**.proto
+
       - name: Generated proto files and diff
         run: |
           cargo install pb-rs 
-          PROTOFILES=(**/generated/**.proto) 
-          echo $PROTOFILES
-          pb-rs $PROTOFILES
+          echo "${{ steps.glob.outputs.paths }}"
+          pb-rs "${{ steps.glob.outputs.paths }}"
           git diff --exit-code ${{ github.ref }}
