@@ -328,4 +328,6 @@ jobs:
         run: pb-rs ${{ steps.glob.outputs.paths }}
 
       - name: Ensure generated files are unmodified # https://stackoverflow.com/a/5737794
-        run: test -z "$(git status --porcelain)"
+        run: |
+            git status --porcelain # Show output to the user
+            test -z "$(git status --porcelain)" # Fail CI if there are any modifications
