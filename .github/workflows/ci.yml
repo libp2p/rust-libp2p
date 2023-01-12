@@ -5,10 +5,6 @@ on:
   push:
     branches:
       - master
-  inputs:
-    proto-files:
-      description: "Proto files"
-      default: "**/generated/**.proto"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -326,5 +322,6 @@ jobs:
       - name: Generated proto files and diff
         run: |
           cargo install pb-rs 
-          pb-rs "${{ inputs.proto-files }}"
+          protofiles="**/generated/**.proto" 
+          pb-rs $protofiles
           git diff --exit-code ${{ github.ref }}
