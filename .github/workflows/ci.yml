@@ -331,4 +331,4 @@ jobs:
           cargo install pb-rs 
           echo ${{ steps.glob.outputs.paths }}
           pb-rs ${{ steps.glob.outputs.paths }}
-          git diff --exit-code ${{ github.ref }}
+          git diff --exit-code
