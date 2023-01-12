@@ -329,6 +329,5 @@ jobs:
       - name: Generated proto files and diff
         run: |
           cargo install pb-rs 
-          echo ${{ steps.glob.outputs.paths }}
           pb-rs ${{ steps.glob.outputs.paths }}
           git diff --exit-code
