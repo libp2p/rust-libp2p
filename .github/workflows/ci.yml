@@ -5,6 +5,10 @@ on:
   push:
     branches:
       - master
+  inputs:
+    proto-files:
+      description: "Proto files"
+      default: "**/generated/**.proto"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -310,10 +314,6 @@ jobs:
   check-proto-files:
     name: Check for changes in proto files
     runs-on: ubuntu-latest
-    inputs:
-      proto-files:
-        description: "Proto files"
-        default: "**/generated/**.proto"
     steps:
       - uses: actions/checkout@v3
 
