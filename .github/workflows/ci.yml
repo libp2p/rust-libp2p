@@ -322,6 +322,7 @@ jobs:
       - name: Generated proto files and diff
         run: |
           cargo install pb-rs 
-          protofiles="**/generated/**.proto" 
-          pb-rs $protofiles
+          PROTOFILES=(**/generated/**.proto) 
+          echo $PROTOFILES
+          pb-rs $PROTOFILES
           git diff --exit-code ${{ github.ref }}
