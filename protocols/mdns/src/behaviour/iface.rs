@@ -56,6 +56,8 @@ pub struct InterfaceState<U, T> {
     recv_buffer: [u8; 4096],
     /// Buffers pending to send on the main socket.
     send_buffer: VecDeque<Vec<u8>>,
+    /// Discovery initial delay (can be 0).
+    initial_delay: Duration,
     /// Discovery interval.
     query_interval: Duration,
     /// Discovery timer.
@@ -115,11 +117,17 @@ where
         let send_socket = U::from_std(UdpSocket::bind(bind_addr)?)?;
 
         // randomize timer to prevent all converging and firing at the same time.
-        let query_interval = {
+        let (query_interval, initial_delay) = {
             use rand::Rng;
             let mut rng = rand::thread_rng();
             let jitter = rng.gen_range(0..100);
-            config.query_interval + Duration::from_millis(jitter)
+            let jitter = Duration::from_millis(jitter);
+            let initial_delay = if config.initial_delay.is_zero() {
+                config.initial_delay
+            } else {
+                config.initial_delay + jitter
+            };
+            (config.query_interval + jitter, initial_delay)
         };
         let multicast_addr = match addr {
             IpAddr::V4(_) => IpAddr::V4(crate::IPV4_MDNS_MULTICAST_ADDRESS),
@@ -132,8 +140,9 @@ where
             recv_buffer: [0; 4096],
             send_buffer: Default::default(),
             discovered: Default::default(),
+            initial_delay,
             query_interval,
-            timeout: T::interval_at(Instant::now(), query_interval),
+            timeout: T::interval_at(Instant::now() + initial_delay, query_interval),
             multicast_addr,
             ttl: config.ttl,
             local_peer_id,
@@ -145,7 +154,7 @@ where
     }
 
     pub fn fire_timer(&mut self) {
-        self.timeout = T::interval_at(Instant::now(), self.query_interval);
+        self.timeout = T::interval_at(Instant::now() + self.initial_delay, self.query_interval);
     }
 
     pub fn poll(

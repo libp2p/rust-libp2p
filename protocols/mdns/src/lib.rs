@@ -83,6 +83,9 @@ pub const IPV6_MDNS_MULTICAST_ADDRESS: Ipv6Addr = Ipv6Addr::new(0xFF02, 0, 0, 0,
 pub struct Config {
     /// TTL to use for mdns records.
     pub ttl: Duration,
+    /// Initial delay before polling the network for new peers.
+    /// Defaults to 0ms.
+    pub initial_delay: Duration,
     /// Interval at which to poll the network for new peers. This isn't
     /// necessary during normal operation but avoids the case that an
     /// initial packet was lost and not discovering any peers until a new
@@ -97,6 +100,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             ttl: Duration::from_secs(6 * 60),
+            initial_delay: Duration::from_millis(0),
             query_interval: Duration::from_secs(5 * 60),
             enable_ipv6: false,
         }
