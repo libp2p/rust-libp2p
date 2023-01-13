@@ -322,7 +322,7 @@ jobs:
         id: glob
         with:
           files: |
-            **/**.proto
+            **/generated/*.proto
 
       - name: Generate proto files
         run: pb-rs ${{ steps.glob.outputs.paths }}
