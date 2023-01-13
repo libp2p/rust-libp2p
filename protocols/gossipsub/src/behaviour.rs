@@ -1417,7 +1417,7 @@ where
 
                                 // check the flood cutoff
                                 // See: https://github.com/rust-lang/rust-clippy/issues/10061
-								#[allow(clippy::unchecked_duration_subtraction, unknown_lints)]
+								#[allow(unknown_lints, clippy::unchecked_duration_subtraction)]
                                 let flood_cutoff = (backoff_time
                                     + self.config.graft_flood_threshold())
                                     - self.config.prune_backoff();
