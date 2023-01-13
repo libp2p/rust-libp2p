@@ -315,7 +315,7 @@ where
     D: DataTransform + Default,
     F: TopicSubscriptionFilter + Default,
 {
-    /// Creates a [`Behaviour`] struct given a set of parameters specified via a
+    /// Creates a Gossipsub [`Behaviour`] struct given a set of parameters specified via a
     /// [`Config`]. This has no subscription filter and uses no compression.
     pub fn new(privacy: MessageAuthenticity, config: Config) -> Result<Self, &'static str> {
         Self::new_with_subscription_filter_and_transform(
@@ -327,7 +327,7 @@ where
         )
     }
 
-    /// Creates a [`Behaviour`] struct given a set of parameters specified via a
+    /// Creates a Gossipsub [`Behaviour`] struct given a set of parameters specified via a
     /// [`Config`]. This has no subscription filter and uses no compression.
     /// Metrics can be evaluated by passing a reference to a [`Registry`].
     pub fn new_with_metrics(
@@ -351,7 +351,7 @@ where
     D: DataTransform + Default,
     F: TopicSubscriptionFilter,
 {
-    /// Creates a [`Behaviour`] struct given a set of parameters specified via a
+    /// Creates a Gossipsub [`Behaviour`] struct given a set of parameters specified via a
     /// [`Config`] and a custom subscription filter.
     pub fn new_with_subscription_filter(
         privacy: MessageAuthenticity,
@@ -374,7 +374,7 @@ where
     D: DataTransform,
     F: TopicSubscriptionFilter + Default,
 {
-    /// Creates a [`Behaviour`] struct given a set of parameters specified via a
+    /// Creates a Gossipsub [`Behaviour`] struct given a set of parameters specified via a
     /// [`Config`] and a custom data transform.
     pub fn new_with_transform(
         privacy: MessageAuthenticity,
@@ -397,7 +397,7 @@ where
     D: DataTransform,
     F: TopicSubscriptionFilter,
 {
-    /// Creates a [`Behaviour`] struct given a set of parameters specified via a
+    /// Creates a Gossipsub [`Behaviour`] struct given a set of parameters specified via a
     /// [`Config`] and a custom subscription filter and data transform.
     pub fn new_with_subscription_filter_and_transform(
         privacy: MessageAuthenticity,
@@ -663,7 +663,7 @@ where
                     }
                 }
 
-                // Behaviour peers
+                // Gossipsub peers
                 if self.mesh.get(&topic_hash).is_none() {
                     debug!("Topic: {:?} not in the mesh", topic_hash);
                     // If we have fanout peers add them to the map.
@@ -912,7 +912,7 @@ where
         }
     }
 
-    /// Behaviour JOIN(topic) - adds topic peers to mesh and sends them GRAFT messages.
+    /// Gossipsub JOIN(topic) - adds topic peers to mesh and sends them GRAFT messages.
     fn join(&mut self, topic_hash: &TopicHash) {
         debug!("Running JOIN for topic: {:?}", topic_hash);
 
@@ -1059,7 +1059,7 @@ where
             None => {
                 error!("Attempted to Prune an unknown peer");
             }
-            _ => {} // Behaviour 1.1 peer perform the `Prune`
+            _ => {} // Gossipsub 1.1 peer perform the `Prune`
         }
 
         // Select peers for peer exchange
@@ -1094,7 +1094,7 @@ where
         }
     }
 
-    /// Behaviour LEAVE(topic) - Notifies mesh\[topic\] peers with PRUNE messages.
+    /// Gossipsub LEAVE(topic) - Notifies mesh\[topic\] peers with PRUNE messages.
     fn leave(&mut self, topic_hash: &TopicHash) {
         debug!("Running LEAVE for topic {:?}", topic_hash);
 
@@ -2876,7 +2876,7 @@ where
         self.pending_iwant_msgs.clear();
     }
 
-    /// Send a BehaviourRpc message to a peer. This will wrap the message in an arc if it
+    /// Send a [`Rpc`] message to a peer. This will wrap the message in an arc if it
     /// is not already an arc.
     fn send_message(
         &mut self,
