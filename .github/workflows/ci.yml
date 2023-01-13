@@ -178,12 +178,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        rust-version: [
-          stable,
-          beta
-        ]
         include:
-            rust-version: beta
+          - rust-version: stable
+          - rust-version: beta
             rustflags: "-A clippy::unchecked_duration_subtraction"
     steps:
       - name: Install Protoc
