@@ -178,10 +178,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - rust-version: stable
-          - rust-version: beta
-            rustflags: "-A clippy::unchecked_duration_subtraction"
+        rust-version: [
+          stable,
+          beta
+        ]
     steps:
       - name: Install Protoc
         run: sudo apt-get install protobuf-compiler
@@ -203,8 +203,6 @@ jobs:
         uses: actions-rs/cargo@844f36862e911db73fe0815f00a4a2602c279505 # v1.0.3
         with:
           command: custom-clippy # cargo alias to allow reuse of config locally
-        env:
-          RUSTFLAGS: ${{ matrix.rustflags }}
 
   ipfs-integration-test:
     name: IPFS Integration tests
