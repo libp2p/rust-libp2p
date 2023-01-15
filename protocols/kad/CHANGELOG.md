@@ -6,7 +6,7 @@
 
 - Remove lifetime from `RecordStore` and use GATs instead. See [PR 3239].
 
-- Limit number of active outbound streams. See [PR 3287].
+- Limit number of active outbound streams to 32. See [PR 3287].
 
 - Bump MSRV to 1.65.0.
 

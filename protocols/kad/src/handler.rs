@@ -91,14 +91,14 @@ pub struct KademliaHandler<TUserData> {
     next_connec_unique_id: UniqueConnecId,
 
     /// List of active outbound substreams with the state they are in.
-    active_outbound_substreams: SelectAll<OutboundSubstreamState<TUserData>>,
+    outbound_substreams: SelectAll<OutboundSubstreamState<TUserData>>,
 
     /// Number of outbound streams being upgraded right now.
-    num_upgrading_outbound_streams: usize,
+    num_requested_outbound_streams: usize,
 
     /// List of outbound substreams that are waiting to become active next.
     /// Contains the request we want to send, and the user data if we expect an answer.
-    next_outbound_streams:
+    requested_streams:
         VecDeque<SubstreamProtocol<KademliaProtocolConfig, (KadRequestMsg, Option<TUserData>)>>,
 
     /// List of active inbound substreams with the state they are in.
@@ -528,9 +528,9 @@ where
             remote_peer_id,
             next_connec_unique_id: UniqueConnecId(0),
             inbound_substreams: Default::default(),
-            active_outbound_substreams: Default::default(),
-            num_upgrading_outbound_streams: 0,
-            next_outbound_streams: Default::default(),
+            outbound_substreams: Default::default(),
+            num_requested_outbound_streams: 0,
+            requested_streams: Default::default(),
             keep_alive,
             protocol_status: ProtocolStatus::Unconfirmed,
         }
@@ -546,11 +546,11 @@ where
             <Self as ConnectionHandler>::OutboundOpenInfo,
         >,
     ) {
-        self.active_outbound_substreams
+        self.outbound_substreams
             .push(OutboundSubstreamState::PendingSend(
                 protocol, msg, user_data,
             ));
-        self.num_upgrading_outbound_streams -= 1;
+        self.num_requested_outbound_streams -= 1;
         if let ProtocolStatus::Unconfirmed = self.protocol_status {
             // Upon the first successfully negotiated substream, we know that the
             // remote is configured with the same protocol name and we want
@@ -629,10 +629,10 @@ where
         // TODO: cache the fact that the remote doesn't support kademlia at all, so that we don't
         //       continue trying
         if let Some(user_data) = user_data {
-            self.active_outbound_substreams
+            self.outbound_substreams
                 .push(OutboundSubstreamState::ReportError(error.into(), user_data));
         }
-        self.num_upgrading_outbound_streams -= 1;
+        self.num_requested_outbound_streams -= 1;
     }
 }
 
@@ -676,7 +676,7 @@ where
             }
             KademliaHandlerIn::FindNodeReq { key, user_data } => {
                 let msg = KadRequestMsg::FindNode { key };
-                self.next_outbound_streams.push_back(SubstreamProtocol::new(
+                self.requested_streams.push_back(SubstreamProtocol::new(
                     self.config.protocol_config.clone(),
                     (msg, Some(user_data)),
                 ));
@@ -687,7 +687,7 @@ where
             } => self.answer_pending_request(request_id, KadResponseMsg::FindNode { closer_peers }),
             KademliaHandlerIn::GetProvidersReq { key, user_data } => {
                 let msg = KadRequestMsg::GetProviders { key };
-                self.next_outbound_streams.push_back(SubstreamProtocol::new(
+                self.requested_streams.push_back(SubstreamProtocol::new(
                     self.config.protocol_config.clone(),
                     (msg, Some(user_data)),
                 ));
@@ -705,21 +705,21 @@ where
             ),
             KademliaHandlerIn::AddProvider { key, provider } => {
                 let msg = KadRequestMsg::AddProvider { key, provider };
-                self.next_outbound_streams.push_back(SubstreamProtocol::new(
+                self.requested_streams.push_back(SubstreamProtocol::new(
                     self.config.protocol_config.clone(),
                     (msg, None),
                 ));
             }
             KademliaHandlerIn::GetRecord { key, user_data } => {
                 let msg = KadRequestMsg::GetValue { key };
-                self.next_outbound_streams.push_back(SubstreamProtocol::new(
+                self.requested_streams.push_back(SubstreamProtocol::new(
                     self.config.protocol_config.clone(),
                     (msg, Some(user_data)),
                 ));
             }
             KademliaHandlerIn::PutRecord { record, user_data } => {
                 let msg = KadRequestMsg::PutValue { record };
-                self.next_outbound_streams.push_back(SubstreamProtocol::new(
+                self.requested_streams.push_back(SubstreamProtocol::new(
                     self.config.protocol_config.clone(),
                     (msg, Some(user_data)),
                 ));
@@ -771,16 +771,7 @@ where
             ));
         }
 
-        let num_in_progress_outbound_substreams =
-            self.active_outbound_substreams.len() + self.num_upgrading_outbound_streams;
-        if MAX_NUM_SUBSTREAMS.saturating_sub(num_in_progress_outbound_substreams) > 0 {
-            if let Some(protocol) = self.next_outbound_streams.pop_front() {
-                self.num_upgrading_outbound_streams += 1;
-                return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest { protocol });
-            }
-        }
-
-        if let Poll::Ready(Some(event)) = self.active_outbound_substreams.poll_next_unpin(cx) {
+        if let Poll::Ready(Some(event)) = self.outbound_substreams.poll_next_unpin(cx) {
             return Poll::Ready(event);
         }
 
@@ -788,7 +779,16 @@ where
             return Poll::Ready(event);
         }
 
-        if self.active_outbound_substreams.is_empty() && self.inbound_substreams.is_empty() {
+        let num_in_progress_outbound_substreams =
+            self.outbound_substreams.len() + self.num_requested_outbound_streams;
+        if MAX_NUM_SUBSTREAMS.saturating_sub(num_in_progress_outbound_substreams) > 0 {
+            if let Some(protocol) = self.requested_streams.pop_front() {
+                self.num_requested_outbound_streams += 1;
+                return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest { protocol });
+            }
+        }
+
+        if self.outbound_substreams.is_empty() && self.inbound_substreams.is_empty() {
             // We destroyed all substreams in this function.
             self.keep_alive = KeepAlive::Until(Instant::now() + self.config.idle_timeout);
         } else {
