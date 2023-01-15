@@ -35,7 +35,7 @@ use libp2p_core::{
     identity::PublicKey, InboundUpgrade, OutboundUpgrade, PeerId, ProtocolName, UpgradeInfo,
 };
 use log::{debug, warn};
-use prost::Message as ProtobufMessage;
+use prost::Message as _;
 use std::pin::Pin;
 use unsigned_varint::codec;
 

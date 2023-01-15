@@ -159,7 +159,7 @@ fn build_node() -> (Multiaddr, Swarm<gossipsub::Behaviour>) {
     // reduce the default values of the heartbeat, so that all nodes will receive gossip in a
     // timely fashion.
 
-    let config = gossipsub::Builder::default()
+    let config = gossipsub::ConfigBuilder::default()
         .heartbeat_initial_delay(Duration::from_millis(100))
         .heartbeat_interval(Duration::from_millis(200))
         .history_length(10)

@@ -107,8 +107,8 @@ impl Config {
     /// `/<prefix>/<supported-versions>`, but can optionally be changed to a literal form by providing some Version as custom_id_version.
     /// As gossipsub supports version 1.0 and 1.1, there are two suffixes supported for the resulting protocol id.
     ///
-    /// Calling `Builder::protocol_id_prefix` will set a new prefix and retain the prefix logic.
-    /// Calling `Builder::protocol_id` will set a custom `protocol_id` and disable the prefix logic.
+    /// Calling [`ConfigBuilder::protocol_id_prefix`] will set a new prefix and retain the prefix logic.
+    /// Calling [`ConfigBuilder::protocol_id`] will set a custom `protocol_id` and disable the prefix logic.
     ///
     /// The default prefix is `meshsub`, giving the supported protocol ids: `/meshsub/1.1.0` and `/meshsub/1.0.0`, negotiated in that order.
     pub fn protocol_id(&self) -> &Cow<'static, str> {
@@ -392,21 +392,21 @@ impl Config {
 
 impl Default for Config {
     fn default() -> Self {
-        // use Builder to also validate defaults
-        Builder::default()
+        // use ConfigBuilder to also validate defaults
+        ConfigBuilder::default()
             .build()
             .expect("Default config parameters should be valid parameters")
     }
 }
 
 /// The builder struct for constructing a gossipsub configuration.
-pub struct Builder {
+pub struct ConfigBuilder {
     config: Config,
 }
 
-impl Default for Builder {
+impl Default for ConfigBuilder {
     fn default() -> Self {
-        Builder {
+        ConfigBuilder {
             config: Config {
                 protocol_id: Cow::Borrowed("meshsub"),
                 custom_id_version: None,
@@ -465,13 +465,13 @@ impl Default for Builder {
     }
 }
 
-impl From<Config> for Builder {
+impl From<Config> for ConfigBuilder {
     fn from(config: Config) -> Self {
-        Builder { config }
+        ConfigBuilder { config }
     }
 }
 
-impl Builder {
+impl ConfigBuilder {
     /// The protocol id prefix to negotiate this protocol (default is `/meshsub/1.0.0`).
     pub fn protocol_id_prefix(
         &mut self,
@@ -894,7 +894,7 @@ mod test {
 
     #[test]
     fn create_thing() {
-        let builder: Config = Builder::default()
+        let builder: Config = ConfigBuilder::default()
             .protocol_id_prefix("purple")
             .build()
             .unwrap();
@@ -927,7 +927,7 @@ mod test {
 
     #[test]
     fn create_config_with_message_id_as_plain_function() {
-        let builder: Config = Builder::default()
+        let builder: Config = ConfigBuilder::default()
             .protocol_id_prefix("purple")
             .message_id_fn(message_id_plain_function)
             .build()
@@ -947,7 +947,7 @@ mod test {
             MessageId::from(v)
         };
 
-        let builder: Config = Builder::default()
+        let builder: Config = ConfigBuilder::default()
             .protocol_id_prefix("purple")
             .message_id_fn(closure)
             .build()
@@ -968,7 +968,7 @@ mod test {
             MessageId::from(v)
         };
 
-        let builder: Config = Builder::default()
+        let builder: Config = ConfigBuilder::default()
             .protocol_id_prefix("purple")
             .message_id_fn(closure)
             .build()
@@ -980,7 +980,7 @@ mod test {
 
     #[test]
     fn create_config_with_protocol_id_prefix() {
-        let builder: Config = Builder::default()
+        let builder: Config = ConfigBuilder::default()
             .protocol_id_prefix("purple")
             .validation_mode(ValidationMode::Anonymous)
             .message_id_fn(message_id_plain_function)
@@ -1004,7 +1004,7 @@ mod test {
 
     #[test]
     fn create_config_with_custom_protocol_id() {
-        let builder: Config = Builder::default()
+        let builder: Config = ConfigBuilder::default()
             .protocol_id("purple", Version::V1_0)
             .validation_mode(ValidationMode::Anonymous)
             .message_id_fn(message_id_plain_function)

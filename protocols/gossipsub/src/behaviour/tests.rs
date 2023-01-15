@@ -25,7 +25,9 @@ use crate::error::ValidationError;
 use crate::subscription_filter::WhitelistSubscriptionFilter;
 use crate::transform::{DataTransform, IdentityTransform};
 use crate::types::FastMessageId;
-use crate::{config::Builder, config::Config, IdentTopic as Topic, Message, TopicScoreParams};
+use crate::{
+    config::Config, config::ConfigBuilder, IdentTopic as Topic, Message, TopicScoreParams,
+};
 use async_std::net::Ipv4Addr;
 use byteorder::{BigEndian, ByteOrder};
 use libp2p_core::{ConnectedPoint, Endpoint};
@@ -632,7 +634,10 @@ fn test_publish_without_flood_publishing() {
     // - Insert message into gs.mcache and gs.received
 
     //turn off flood publish to test old behaviour
-    let config = Builder::default().flood_publish(false).build().unwrap();
+    let config = ConfigBuilder::default()
+        .flood_publish(false)
+        .build()
+        .unwrap();
 
     let publish_topic = String::from("test_publish");
     let (mut gs, _, topic_hashes) = inject_nodes1()
@@ -711,7 +716,10 @@ fn test_fanout() {
     // - Insert message into gs.mcache and gs.received
 
     //turn off flood publish to test fanout behaviour
-    let config = Builder::default().flood_publish(false).build().unwrap();
+    let config = ConfigBuilder::default()
+        .flood_publish(false)
+        .build()
+        .unwrap();
 
     let fanout_topic = String::from("test_fanout");
     let (mut gs, _, topic_hashes) = inject_nodes1()
@@ -935,7 +943,7 @@ fn test_handle_received_subscriptions() {
 /// Test Gossipsub.get_random_peers() function
 fn test_get_random_peers() {
     // generate a default Config
-    let gs_config = Builder::default()
+    let gs_config = ConfigBuilder::default()
         .validation_mode(ValidationMode::Anonymous)
         .build()
         .unwrap();
@@ -1402,7 +1410,7 @@ fn test_explicit_peer_gets_connected() {
 
 #[test]
 fn test_explicit_peer_reconnects() {
-    let config = Builder::default()
+    let config = ConfigBuilder::default()
         .check_explicit_peers_ticks(2)
         .build()
         .unwrap();
@@ -1937,7 +1945,7 @@ fn test_prune_backoffed_peer_on_graft() {
 
 #[test]
 fn test_do_not_graft_within_backoff_period() {
-    let config = Builder::default()
+    let config = ConfigBuilder::default()
         .backoff_slack(1)
         .heartbeat_interval(Duration::from_millis(100))
         .build()
@@ -1987,7 +1995,7 @@ fn test_do_not_graft_within_backoff_period() {
 #[test]
 fn test_do_not_graft_within_default_backoff_period_after_receiving_prune_without_backoff() {
     //set default backoff period to 1 second
-    let config = Builder::default()
+    let config = ConfigBuilder::default()
         .prune_backoff(Duration::from_millis(90))
         .backoff_slack(1)
         .heartbeat_interval(Duration::from_millis(100))
@@ -2036,7 +2044,7 @@ fn test_do_not_graft_within_default_backoff_period_after_receiving_prune_without
 #[test]
 fn test_unsubscribe_backoff() {
     const HEARTBEAT_INTERVAL: Duration = Duration::from_millis(100);
-    let config = Builder::default()
+    let config = ConfigBuilder::default()
         .backoff_slack(1)
         // ensure a prune_backoff > unsubscribe_backoff
         .prune_backoff(Duration::from_secs(5))
@@ -2288,7 +2296,7 @@ fn test_do_not_remove_too_many_outbound_peers() {
     //use an extreme case to catch errors with high probability
     let m = 50;
     let n = 2 * m;
-    let config = Builder::default()
+    let config = ConfigBuilder::default()
         .mesh_n_high(n)
         .mesh_n(n)
         .mesh_n_low(n)
@@ -2493,7 +2501,11 @@ fn test_ignore_px_from_negative_scored_peer() {
 
 #[test]
 fn test_only_send_nonnegative_scoring_peers_in_px() {
-    let config = Builder::default().prune_peers(16).do_px().build().unwrap();
+    let config = ConfigBuilder::default()
+        .prune_peers(16)
+        .do_px()
+        .build()
+        .unwrap();
 
     // Build mesh with three peer
     let (mut gs, peers, topics) = inject_nodes1()
@@ -2779,7 +2791,10 @@ fn test_ihave_msg_from_peer_below_gossip_threshold_gets_ignored() {
 
 #[test]
 fn test_do_not_publish_to_peer_below_publish_threshold() {
-    let config = Builder::default().flood_publish(false).build().unwrap();
+    let config = ConfigBuilder::default()
+        .flood_publish(false)
+        .build()
+        .unwrap();
     let peer_score_params = PeerScoreParams::default();
     let peer_score_thresholds = PeerScoreThresholds {
         gossip_threshold: 0.5 * peer_score_params.behaviour_penalty_weight,
@@ -3032,7 +3047,7 @@ fn test_ignore_rpc_from_peers_below_graylist_threshold() {
 
 #[test]
 fn test_ignore_px_from_peers_below_accept_px_threshold() {
-    let config = Builder::default().prune_peers(16).build().unwrap();
+    let config = ConfigBuilder::default().prune_peers(16).build().unwrap();
     let peer_score_params = PeerScoreParams::default();
     let peer_score_thresholds = PeerScoreThresholds {
         accept_px_threshold: peer_score_params.app_specific_weight,
@@ -3100,7 +3115,7 @@ fn test_ignore_px_from_peers_below_accept_px_threshold() {
 
 #[test]
 fn test_keep_best_scoring_peers_on_oversubscription() {
-    let config = Builder::default()
+    let config = ConfigBuilder::default()
         .mesh_n_low(15)
         .mesh_n(30)
         .mesh_n_high(60)
@@ -3430,7 +3445,7 @@ fn test_scoring_p3() {
 
 #[test]
 fn test_scoring_p3b() {
-    let config = Builder::default()
+    let config = ConfigBuilder::default()
         .prune_backoff(Duration::from_millis(100))
         .build()
         .unwrap();
@@ -3526,7 +3541,10 @@ fn test_scoring_p3b() {
 
 #[test]
 fn test_scoring_p4_valid_message() {
-    let config = Builder::default().validate_messages().build().unwrap();
+    let config = ConfigBuilder::default()
+        .validate_messages()
+        .build()
+        .unwrap();
     let mut peer_score_params = PeerScoreParams::default();
     let topic = Topic::new("test");
     let topic_hash = topic.hash();
@@ -3582,7 +3600,10 @@ fn test_scoring_p4_valid_message() {
 
 #[test]
 fn test_scoring_p4_invalid_signature() {
-    let config = Builder::default().validate_messages().build().unwrap();
+    let config = ConfigBuilder::default()
+        .validate_messages()
+        .build()
+        .unwrap();
     let mut peer_score_params = PeerScoreParams::default();
     let topic = Topic::new("test");
     let topic_hash = topic.hash();
@@ -3638,7 +3659,10 @@ fn test_scoring_p4_invalid_signature() {
 
 #[test]
 fn test_scoring_p4_message_from_self() {
-    let config = Builder::default().validate_messages().build().unwrap();
+    let config = ConfigBuilder::default()
+        .validate_messages()
+        .build()
+        .unwrap();
     let mut peer_score_params = PeerScoreParams::default();
     let topic = Topic::new("test");
     let topic_hash = topic.hash();
@@ -3685,7 +3709,10 @@ fn test_scoring_p4_message_from_self() {
 
 #[test]
 fn test_scoring_p4_ignored_message() {
-    let config = Builder::default().validate_messages().build().unwrap();
+    let config = ConfigBuilder::default()
+        .validate_messages()
+        .build()
+        .unwrap();
     let mut peer_score_params = PeerScoreParams::default();
     let topic = Topic::new("test");
     let topic_hash = topic.hash();
@@ -3741,7 +3768,10 @@ fn test_scoring_p4_ignored_message() {
 
 #[test]
 fn test_scoring_p4_application_invalidated_message() {
-    let config = Builder::default().validate_messages().build().unwrap();
+    let config = ConfigBuilder::default()
+        .validate_messages()
+        .build()
+        .unwrap();
     let mut peer_score_params = PeerScoreParams::default();
     let topic = Topic::new("test");
     let topic_hash = topic.hash();
@@ -3800,7 +3830,10 @@ fn test_scoring_p4_application_invalidated_message() {
 
 #[test]
 fn test_scoring_p4_application_invalid_message_from_two_peers() {
-    let config = Builder::default().validate_messages().build().unwrap();
+    let config = ConfigBuilder::default()
+        .validate_messages()
+        .build()
+        .unwrap();
     let mut peer_score_params = PeerScoreParams::default();
     let topic = Topic::new("test");
     let topic_hash = topic.hash();
@@ -3867,7 +3900,10 @@ fn test_scoring_p4_application_invalid_message_from_two_peers() {
 
 #[test]
 fn test_scoring_p4_three_application_invalid_messages() {
-    let config = Builder::default().validate_messages().build().unwrap();
+    let config = ConfigBuilder::default()
+        .validate_messages()
+        .build()
+        .unwrap();
     let mut peer_score_params = PeerScoreParams::default();
     let topic = Topic::new("test");
     let topic_hash = topic.hash();
@@ -3948,7 +3984,10 @@ fn test_scoring_p4_three_application_invalid_messages() {
 
 #[test]
 fn test_scoring_p4_decay() {
-    let config = Builder::default().validate_messages().build().unwrap();
+    let config = ConfigBuilder::default()
+        .validate_messages()
+        .build()
+        .unwrap();
     let mut peer_score_params = PeerScoreParams::default();
     let topic = Topic::new("test");
     let topic_hash = topic.hash();
@@ -4169,7 +4208,7 @@ fn test_scoring_p6() {
 
 #[test]
 fn test_scoring_p7_grafts_before_backoff() {
-    let config = Builder::default()
+    let config = ConfigBuilder::default()
         .prune_backoff(Duration::from_millis(200))
         .graft_flood_threshold(Duration::from_millis(100))
         .build()
@@ -4239,7 +4278,7 @@ fn test_scoring_p7_grafts_before_backoff() {
 
 #[test]
 fn test_opportunistic_grafting() {
-    let config = Builder::default()
+    let config = ConfigBuilder::default()
         .mesh_n_low(3)
         .mesh_n(5)
         .mesh_n_high(7)
@@ -4406,7 +4445,10 @@ fn test_ignore_too_many_iwants_from_same_peer_for_same_message() {
 
 #[test]
 fn test_ignore_too_many_ihaves() {
-    let config = Builder::default().max_ihave_messages(10).build().unwrap();
+    let config = ConfigBuilder::default()
+        .max_ihave_messages(10)
+        .build()
+        .unwrap();
     //build gossipsub with full mesh
     let (mut gs, _, topics) = inject_nodes1()
         .peer_no(config.mesh_n_high())
@@ -4477,7 +4519,7 @@ fn test_ignore_too_many_ihaves() {
 
 #[test]
 fn test_ignore_too_many_messages_in_ihave() {
-    let config = Builder::default()
+    let config = ConfigBuilder::default()
         .max_ihave_messages(10)
         .max_ihave_length(10)
         .build()
@@ -4557,7 +4599,7 @@ fn test_ignore_too_many_messages_in_ihave() {
 
 #[test]
 fn test_limit_number_of_message_ids_inside_ihave() {
-    let config = Builder::default()
+    let config = ConfigBuilder::default()
         .max_ihave_messages(10)
         .max_ihave_length(100)
         .build()
@@ -4640,7 +4682,7 @@ fn test_limit_number_of_message_ids_inside_ihave() {
 fn test_iwant_penalties() {
     let _ = env_logger::try_init();
 
-    let config = Builder::default()
+    let config = ConfigBuilder::default()
         .iwant_followup_time(Duration::from_secs(4))
         .build()
         .unwrap();
@@ -4758,7 +4800,10 @@ fn test_iwant_penalties() {
 
 #[test]
 fn test_publish_to_floodsub_peers_without_flood_publish() {
-    let config = Builder::default().flood_publish(false).build().unwrap();
+    let config = ConfigBuilder::default()
+        .flood_publish(false)
+        .build()
+        .unwrap();
     let (mut gs, _, topics) = inject_nodes1()
         .peer_no(config.mesh_n_low() - 1)
         .topics(vec!["test".into()])
@@ -4812,7 +4857,10 @@ fn test_publish_to_floodsub_peers_without_flood_publish() {
 
 #[test]
 fn test_do_not_use_floodsub_in_fanout() {
-    let config = Builder::default().flood_publish(false).build().unwrap();
+    let config = ConfigBuilder::default()
+        .flood_publish(false)
+        .build()
+        .unwrap();
     let (mut gs, _, _) = inject_nodes1()
         .peer_no(config.mesh_n_low() - 1)
         .topics(Vec::new())
@@ -5081,7 +5129,7 @@ fn test_msg_id_fn_only_called_once_with_fast_message_ids() {
         }
         id
     };
-    let config = Builder::default()
+    let config = ConfigBuilder::default()
         .message_id_fn(message_id_fn)
         .fast_message_id_fn(fast_message_id_fn)
         .build()

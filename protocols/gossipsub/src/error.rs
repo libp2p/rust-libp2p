@@ -86,6 +86,12 @@ impl From<SigningError> for PublishError {
     }
 }
 
+#[deprecated(
+    since = "0.44.0",
+    note = "Use re-exports that omit `Gossipsub` prefix, i.e. `libp2p::gossipsub::error::HandleError"
+)]
+pub type GossipsubHandlerError = HandlerError;
+
 /// Errors that can occur in the protocols handler.
 #[derive(Debug, Error)]
 pub enum HandlerError {

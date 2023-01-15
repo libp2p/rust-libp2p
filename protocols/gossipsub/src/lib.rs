@@ -166,13 +166,33 @@ pub use self::peer_score::{
 pub use self::topic::{Hasher, Topic, TopicHash};
 pub use self::types::{FastMessageId, Message, MessageAcceptance, MessageId, RawMessage, Rpc};
 
-pub use self::config::{Builder, Config, ValidationMode, Version};
+pub use self::config::{Config, ConfigBuilder, ValidationMode, Version};
+
+pub use self::error::{HandlerError, PublishError, SubscriptionError, ValidationError};
+
+#[deprecated(
+    since = "0.44.0",
+    note = "Use re-exports that omit `Gossipsub` prefix, i.e. `libp2p::gossipsub::error::HandleError"
+)]
+pub type GossipsubHandlerError = HandlerError;
+
+#[deprecated(
+    since = "0.44.0",
+    note = "Use `Behaviour` instead of `Gossipsub` for Network Behaviour, i.e. `libp2p::gossipsub::Behaviour"
+)]
+pub type Gossipsub = Behaviour;
+
+#[deprecated(
+    since = "0.44.0",
+    note = "Use re-exports that omit `Gossipsub` prefix, i.e. `libp2p::gossipsub::Event"
+)]
+pub type GossipsubEvent = Event;
 
 #[deprecated(
     since = "0.44.0",
     note = "Use re-exports that omit `Gossipsub` prefix, i.e. `libp2p::gossipsub::Config"
 )]
-pub type GossipsubConfig = config::Config;
+pub type GossipsubConfig = Config;
 
 #[deprecated(
     since = "0.44.0",
@@ -194,15 +214,15 @@ pub type RawGossipsubMessage = RawMessage;
 
 #[deprecated(
     since = "0.44.0",
-    note = "Use re-exports that omit `Gossipsub` prefix, i.e. `libp2p::gossipsub::Builder"
+    note = "Use re-exports that omit `Gossipsub` prefix, i.e. `libp2p::gossipsub::ConfigBuilder"
 )]
-pub type GossipsubBuilder = config::Builder;
+pub type GossipsubConfigBuilder = ConfigBuilder;
 
 #[deprecated(
     since = "0.44.0",
     note = "Use re-exports that omit `Gossipsub` prefix, i.e. `libp2p::gossipsub::Version"
 )]
-pub type GossipsubVersion = config::Version;
+pub type GossipsubVersion = Version;
 
 pub type IdentTopic = Topic<self::topic::IdentityHash>;
 pub type Sha256Topic = Topic<self::topic::Sha256Hash>;
