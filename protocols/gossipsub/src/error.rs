@@ -88,7 +88,7 @@ impl From<SigningError> for PublishError {
 
 #[deprecated(
     since = "0.44.0",
-    note = "Use re-exports that omit `Gossipsub` prefix, i.e. `libp2p::gossipsub::error::HandleError"
+    note = "Use re-exports that omit `Gossipsub` prefix, i.e. `libp2p::gossipsub::HandlerError"
 )]
 pub type GossipsubHandlerError = HandlerError;
 

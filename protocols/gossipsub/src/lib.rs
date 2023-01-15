@@ -67,24 +67,24 @@
 //!
 //! # Using Gossipsub
 //!
-//! ## GossipsubConfig
+//! ## Gossipsub Config
 //!
-//! The [`GossipsubConfig`] struct specifies various network performance/tuning configuration
+//! The [`Config`] struct specifies various network performance/tuning configuration
 //! parameters. Specifically it specifies:
 //!
-//! [`GossipsubConfig`]: struct.Config.html
+//! [`Config`]: struct.Config.html
 //!
 //! This struct implements the [`Default`] trait and can be initialised via
-//! [`GossipsubConfig::default()`].
+//! [`Config::default()`].
 //!
 //!
-//! ## Gossipsub
+//! ## Behaviour
 //!
-//! The [`Gossipsub`] struct implements the [`libp2p_swarm::NetworkBehaviour`] trait allowing it to
+//! The [`Behaviour`] struct implements the [`libp2p_swarm::NetworkBehaviour`] trait allowing it to
 //! act as the routing behaviour in a [`libp2p_swarm::Swarm`]. This struct requires an instance of
-//! [`libp2p_core::PeerId`] and [`GossipsubConfig`].
+//! [`libp2p_core::PeerId`] and [`Config`].
 //!
-//! [`Gossipsub`]: struct.Gossipsub.html
+//! [`Behaviour`]: struct.Behaviour.html
 
 //! ## Example
 //!
@@ -172,7 +172,7 @@ pub use self::error::{HandlerError, PublishError, SubscriptionError, ValidationE
 
 #[deprecated(
     since = "0.44.0",
-    note = "Use re-exports that omit `Gossipsub` prefix, i.e. `libp2p::gossipsub::error::HandleError"
+    note = "Use re-exports that omit `Gossipsub` prefix, i.e. `libp2p::gossipsub::HandlerError"
 )]
 pub type GossipsubHandlerError = HandlerError;
 
