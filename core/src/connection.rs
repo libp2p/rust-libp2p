@@ -28,6 +28,16 @@ static NEXT_CONNECTION_ID: AtomicUsize = AtomicUsize::new(0);
 pub struct ConnectionId(usize);
 
 impl ConnectionId {
+    /// Creates a `ConnectionId` from a non-negative integer.
+    ///
+    /// This is primarily useful for creating connection IDs
+    /// in test environments. There is in general no guarantee
+    /// that all connection IDs are based on non-negative integers.
+    #[deprecated(since = "0.39.0", note = "Use `ConnectionId::next` instead.")]
+    pub fn new(id: usize) -> Self {
+        Self(id)
+    }
+
     /// Returns the next available [`ConnectionId`].
     pub fn next() -> Self {
         Self(NEXT_CONNECTION_ID.fetch_add(1, Ordering::SeqCst))
