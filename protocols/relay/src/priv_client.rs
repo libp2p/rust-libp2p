@@ -145,7 +145,7 @@ impl Behaviour {
                     }
                 }
                 hash_map::Entry::Vacant(_) => {
-                    unreachable!("`inject_connection_closed` for unconnected peer.")
+                    unreachable!("`on_connection_closed` for unconnected peer.")
                 }
             };
         }
