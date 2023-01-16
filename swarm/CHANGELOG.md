@@ -15,11 +15,18 @@
 - Remove type parameter from `PendingOutboundConnectionError` and `PendingInboundConnectionError`.
   These two types are always used with `std::io::Error`. See [PR 3272].
 
+- Remove `handler` field from `NetworkBehaviourAction::Dial`.
+  Instead of constructing the handler early, you now get to pass a `ConnectionId`.
+  `ConnectionId` are `Copy` and will be used throughout the entire lifetime of the connection to report events.
+  This allows you to send events to a very specific connection, much like you previously could directly set state in the handler.
+  See [PR 3328].
+
 [PR 3170]: https://github.com/libp2p/rust-libp2p/pull/3170
 [PR 3134]: https://github.com/libp2p/rust-libp2p/pull/3134
 [PR 3153]: https://github.com/libp2p/rust-libp2p/pull/3153
 [PR 3264]: https://github.com/libp2p/rust-libp2p/pull/3264
 [PR 3272]: https://github.com/libp2p/rust-libp2p/pull/3272
+[PR 3328]: https://github.com/libp2p/rust-libp2p/pull/3328
 
 # 0.41.1
 
