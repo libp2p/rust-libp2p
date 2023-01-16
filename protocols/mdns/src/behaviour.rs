@@ -36,6 +36,7 @@ use libp2p_swarm::{
 use smallvec::SmallVec;
 use std::collections::hash_map::{Entry, HashMap};
 use std::{cmp, fmt, io, net::IpAddr, pin::Pin, task::Context, task::Poll, time::Instant};
+use void::Void;
 
 /// An abstraction to allow for compatibility with various async runtimes.
 pub trait Provider: 'static {
@@ -231,7 +232,7 @@ where
         &mut self,
         cx: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, dummy::ConnectionHandler>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Void>> {
         // Poll ifwatch.
         while let Poll::Ready(Some(event)) = Pin::new(&mut self.if_watch).poll_next(cx) {
             match event {

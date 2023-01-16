@@ -24,7 +24,7 @@ use crate::behaviour::{
 };
 use crate::{
     ConnectionHandler, IntoConnectionHandler, NetworkBehaviour, NetworkBehaviourAction,
-    PollParameters,
+    PollParameters, THandlerInEvent,
 };
 use libp2p_core::{
     connection::ConnectionId, multiaddr::Multiaddr, transport::ListenerId, ConnectedPoint, PeerId,
@@ -47,7 +47,7 @@ where
     /// The next action to return from `poll`.
     ///
     /// An action is only returned once.
-    pub next_action: Option<NetworkBehaviourAction<TOutEvent, THandler>>,
+    pub next_action: Option<NetworkBehaviourAction<TOutEvent, THandler::InEvent>>,
 }
 
 impl<THandler, TOutEvent> MockBehaviour<THandler, TOutEvent>
@@ -84,7 +84,7 @@ where
         &mut self,
         _: &mut Context,
         _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>> {
         self.next_action.take().map_or(Poll::Pending, Poll::Ready)
     }
 
@@ -390,14 +390,14 @@ where
             }
             FromSwarm::DialFailure(DialFailure {
                 peer_id,
-                handler,
+                connection_id,
                 error,
             }) => {
                 self.on_dial_failure.push(peer_id);
                 self.inner
                     .on_swarm_event(FromSwarm::DialFailure(DialFailure {
                         peer_id,
-                        handler,
+                        connection_id,
                         error,
                     }));
             }
@@ -481,7 +481,7 @@ where
         &mut self,
         cx: &mut Context,
         args: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>> {
         self.poll += 1;
         self.inner.poll(cx, args)
     }

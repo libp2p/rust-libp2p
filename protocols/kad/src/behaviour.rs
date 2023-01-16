@@ -46,7 +46,7 @@ use libp2p_swarm::behaviour::{
 use libp2p_swarm::{
     dial_opts::{self, DialOpts},
     DialError, ExternalAddresses, ListenAddresses, NetworkBehaviour, NetworkBehaviourAction,
-    NotifyHandler, PollParameters,
+    NotifyHandler, PollParameters, THandlerInEvent,
 };
 use log::{debug, info, warn};
 use smallvec::SmallVec;
@@ -101,7 +101,7 @@ pub struct Kademlia<TStore> {
     connection_idle_timeout: Duration,
 
     /// Queued events to return when the behaviour is being polled.
-    queued_events: VecDeque<NetworkBehaviourAction<KademliaEvent, KademliaHandlerProto<QueryId>>>,
+    queued_events: VecDeque<NetworkBehaviourAction<KademliaEvent, KademliaHandlerIn<QueryId>>>,
 
     listen_addresses: ListenAddresses,
 
@@ -571,10 +571,9 @@ where
                         RoutingUpdate::Failed
                     }
                     kbucket::InsertResult::Pending { disconnected } => {
-                        let handler = self.new_handler();
                         self.queued_events.push_back(NetworkBehaviourAction::Dial {
                             opts: DialOpts::peer_id(disconnected.into_preimage()).build(),
-                            handler,
+                            connection_id: ConnectionId::next(),
                         });
                         RoutingUpdate::Pending
                     }
@@ -1221,11 +1220,10 @@ where
                                 //
                                 // Only try dialing peer if not currently connected.
                                 if !self.connected_peers.contains(disconnected.preimage()) {
-                                    let handler = self.new_handler();
                                     self.queued_events.push_back(NetworkBehaviourAction::Dial {
                                         opts: DialOpts::peer_id(disconnected.into_preimage())
                                             .build(),
-                                        handler,
+                                        connection_id: ConnectionId::next(),
                                     })
                                 }
                             }
@@ -1917,12 +1915,7 @@ where
         }
     }
 
-    fn on_dial_failure(
-        &mut self,
-        DialFailure { peer_id, error, .. }: DialFailure<
-            <Self as NetworkBehaviour>::ConnectionHandler,
-        >,
-    ) {
+    fn on_dial_failure(&mut self, DialFailure { peer_id, error, .. }: DialFailure) {
         let peer_id = match peer_id {
             Some(id) => id,
             // Not interested in dial failures to unknown peers.
@@ -2293,7 +2286,7 @@ where
         &mut self,
         cx: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>> {
         let now = Instant::now();
 
         // Calculate the available capacity for queries triggered by background jobs.
@@ -2392,10 +2385,9 @@ where
                                 });
                         } else if &peer_id != self.kbuckets.local_key().preimage() {
                             query.inner.pending_rpcs.push((peer_id, event));
-                            let handler = self.new_handler();
                             self.queued_events.push_back(NetworkBehaviourAction::Dial {
                                 opts: DialOpts::peer_id(peer_id).build(),
-                                handler,
+                                connection_id: ConnectionId::next(),
                             });
                         }
                     }

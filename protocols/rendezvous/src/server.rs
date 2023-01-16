@@ -20,7 +20,7 @@
 
 use crate::codec::{Cookie, ErrorCode, Namespace, NewRegistration, Registration, Ttl};
 use crate::handler::inbound;
-use crate::substream_handler::{InboundSubstreamId, SubstreamConnectionHandler};
+use crate::substream_handler::{InEvent, InboundSubstreamId, SubstreamConnectionHandler};
 use crate::{handler, MAX_TTL, MIN_TTL};
 use bimap::BiMap;
 use futures::future::BoxFuture;
@@ -32,6 +32,7 @@ use libp2p_core::PeerId;
 use libp2p_swarm::behaviour::FromSwarm;
 use libp2p_swarm::{
     CloseConnection, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
+    THandlerInEvent,
 };
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::iter::FromIterator;
@@ -40,9 +41,7 @@ use std::time::Duration;
 use void::Void;
 
 pub struct Behaviour {
-    events: VecDeque<
-        NetworkBehaviourAction<Event, SubstreamConnectionHandler<inbound::Stream, Void, ()>>,
-    >,
+    events: VecDeque<NetworkBehaviourAction<Event, InEvent<(), inbound::InEvent, Void>>>,
     registrations: Registrations,
 }
 
@@ -148,7 +147,7 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         cx: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>> {
         if let Poll::Ready(ExpiredRegistration(registration)) = self.registrations.poll(cx) {
             return Poll::Ready(NetworkBehaviourAction::GenerateEvent(
                 Event::RegistrationExpired(registration),
@@ -186,7 +185,7 @@ fn handle_inbound_event(
     connection: ConnectionId,
     id: InboundSubstreamId,
     registrations: &mut Registrations,
-) -> Vec<NetworkBehaviourAction<Event, SubstreamConnectionHandler<inbound::Stream, Void, ()>>> {
+) -> Vec<NetworkBehaviourAction<Event, InEvent<(), inbound::InEvent, Void>>> {
     match event {
         // bad registration
         inbound::OutEvent::RegistrationRequested(registration)

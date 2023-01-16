@@ -28,18 +28,11 @@ pub use listen_addresses::ListenAddresses;
 
 use crate::dial_opts::DialOpts;
 use crate::handler::{ConnectionHandler, IntoConnectionHandler};
-use crate::{AddressRecord, AddressScore, DialError};
+use crate::{AddressRecord, AddressScore, DialError, THandlerInEvent};
 use libp2p_core::{
     connection::ConnectionId, transport::ListenerId, ConnectedPoint, Multiaddr, PeerId,
 };
 use std::{task::Context, task::Poll};
-
-/// Custom event that can be received by the [`ConnectionHandler`].
-pub(crate) type THandlerInEvent<THandler> =
-    <<THandler as IntoConnectionHandler>::Handler as ConnectionHandler>::InEvent;
-
-pub(crate) type THandlerOutEvent<THandler> =
-    <<THandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent;
 
 /// A [`NetworkBehaviour`] defines the behaviour of the local node on the network.
 ///
@@ -184,7 +177,7 @@ pub trait NetworkBehaviour: 'static {
         &mut self,
         cx: &mut Context<'_>,
         params: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>>;
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>>;
 }
 
 /// Parameters passed to `poll()`, that the `NetworkBehaviour` has access to.
@@ -230,16 +223,8 @@ pub trait PollParameters {
 /// in whose context it is executing.
 ///
 /// [`Swarm`]: super::Swarm
-//
-// Note: `TInEvent` is needed to be able to implement
-// [`NetworkBehaviourAction::map_in`], mapping the handler `InEvent` leaving the
-// handler itself untouched.
 #[derive(Debug)]
-pub enum NetworkBehaviourAction<
-    TOutEvent,
-    THandler: IntoConnectionHandler,
-    TInEvent = THandlerInEvent<THandler>,
-> {
+pub enum NetworkBehaviourAction<TOutEvent, TInEvent> {
     /// Instructs the `Swarm` to return an event when it is being polled.
     GenerateEvent(TOutEvent),
 
@@ -248,177 +233,13 @@ pub enum NetworkBehaviourAction<
     /// On success, [`NetworkBehaviour::on_swarm_event`] with `ConnectionEstablished` is invoked.
     /// On failure, [`NetworkBehaviour::on_swarm_event`] with `DialFailure` is invoked.
     ///
-    /// Note that the provided handler is returned to the [`NetworkBehaviour`] on connection failure
-    /// and connection closing. Thus it can be used to carry state, which otherwise would have to be
-    /// tracked in the [`NetworkBehaviour`] itself. E.g. a message destined to an unconnected peer
-    /// can be included in the handler, and thus directly send on connection success or extracted by
-    /// the [`NetworkBehaviour`] on connection failure.
-    ///
-    /// # Example carrying state in the handler
-    ///
-    /// ```rust
-    /// # use futures::executor::block_on;
-    /// # use futures::stream::StreamExt;
-    /// # use libp2p_core::connection::ConnectionId;
-    /// # use libp2p_core::identity;
-    /// # use libp2p_core::transport::{MemoryTransport, Transport};
-    /// # use libp2p_core::upgrade::{self, DeniedUpgrade, InboundUpgrade, OutboundUpgrade};
-    /// # use libp2p_core::PeerId;
-    /// # use libp2p_plaintext::PlainText2Config;
-    /// # use libp2p_swarm::{
-    /// #     FromSwarm, DialFailure, DialError, IntoConnectionHandler, KeepAlive, NegotiatedSubstream,
-    /// #     NetworkBehaviour, NetworkBehaviourAction, PollParameters, ConnectionHandler,
-    /// #     ConnectionHandlerEvent, ConnectionHandlerUpgrErr, SubstreamProtocol, Swarm, SwarmEvent,
-    /// # };
-    /// # use libp2p_swarm::handler::ConnectionEvent;
-    /// # use libp2p_swarm::dial_opts::{DialOpts, PeerCondition};
-    /// # use libp2p_yamux as yamux;
-    /// # use std::collections::VecDeque;
-    /// # use std::task::{Context, Poll};
-    /// # use void::Void;
-    /// #
-    /// # let local_key = identity::Keypair::generate_ed25519();
-    /// # let local_public_key = local_key.public();
-    /// # let local_peer_id = PeerId::from(local_public_key.clone());
-    /// #
-    /// # let transport = MemoryTransport::default()
-    /// #     .upgrade(upgrade::Version::V1)
-    /// #     .authenticate(PlainText2Config { local_public_key })
-    /// #     .multiplex(yamux::YamuxConfig::default())
-    /// #     .boxed();
-    /// #
-    /// # let mut swarm = Swarm::with_threadpool_executor(transport, MyBehaviour::default(), local_peer_id);
-    /// #
-    /// // Super precious message that we should better not lose.
-    /// let message = PreciousMessage("My precious message".to_string());
-    ///
-    /// // Unfortunately this peer is offline, thus sending our message to it will fail.
-    /// let offline_peer = PeerId::random();
-    ///
-    /// // Let's send it anyways. We should get it back in case connecting to the peer fails.
-    /// swarm.behaviour_mut().send(offline_peer, message);
-    ///
-    /// block_on(async {
-    ///     // As expected, sending failed. But great news, we got our message back.
-    ///     matches!(
-    ///         swarm.next().await.expect("Infinite stream"),
-    ///         SwarmEvent::Behaviour(PreciousMessage(_))
-    ///     );
-    /// });
-    ///
-    /// #[derive(Default)]
-    /// struct MyBehaviour {
-    ///     outbox_to_swarm: VecDeque<NetworkBehaviourAction<PreciousMessage, MyHandler>>,
-    /// }
-    ///
-    /// impl MyBehaviour {
-    ///     fn send(&mut self, peer_id: PeerId, msg: PreciousMessage) {
-    ///         self.outbox_to_swarm
-    ///             .push_back(NetworkBehaviourAction::Dial {
-    ///                 opts: DialOpts::peer_id(peer_id)
-    ///                           .condition(PeerCondition::Always)
-    ///                           .build(),
-    ///                 handler: MyHandler { message: Some(msg) },
-    ///             });
-    ///     }
-    /// }
-    /// #
-    /// impl NetworkBehaviour for MyBehaviour {
-    ///     # type ConnectionHandler = MyHandler;
-    ///     # type OutEvent = PreciousMessage;
-    ///     #
-    ///     # fn new_handler(&mut self) -> Self::ConnectionHandler {
-    ///     #     MyHandler { message: None }
-    ///     # }
-    ///     #
-    ///     #
-    ///     # fn on_connection_handler_event(
-    ///     #     &mut self,
-    ///     #     _: PeerId,
-    ///     #     _: ConnectionId,
-    ///     #     _: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent,
-    ///     # ) {
-    ///     #     unreachable!();
-    ///     # }
-    ///     #
-    ///      fn on_swarm_event(
-    ///         &mut self,
-    ///         event: FromSwarm<Self::ConnectionHandler>,
-    ///     ) {
-    ///         // As expected, sending the message failed. But lucky us, we got the handler back, thus
-    ///         // the precious message is not lost and we can return it back to the user.
-    ///         if let FromSwarm::DialFailure(DialFailure { handler, .. }) = event {
-    ///             let msg = handler.message.unwrap();
-    ///             self.outbox_to_swarm
-    ///               .push_back(NetworkBehaviourAction::GenerateEvent(msg))
-    ///         }
-    ///     }
-    ///     #
-    ///     # fn poll(
-    ///     #     &mut self,
-    ///     #     _: &mut Context<'_>,
-    ///     #     _: &mut impl PollParameters,
-    ///     # ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
-    ///     #     if let Some(action) = self.outbox_to_swarm.pop_front() {
-    ///     #         return Poll::Ready(action);
-    ///     #     }
-    ///     #     Poll::Pending
-    ///     # }
-    /// }
-    ///
-    /// # struct MyHandler {
-    /// #     message: Option<PreciousMessage>,
-    /// # }
-    /// #
-    /// # impl ConnectionHandler for MyHandler {
-    /// #     type InEvent = Void;
-    /// #     type OutEvent = Void;
-    /// #     type Error = Void;
-    /// #     type InboundProtocol = DeniedUpgrade;
-    /// #     type OutboundProtocol = DeniedUpgrade;
-    /// #     type InboundOpenInfo = ();
-    /// #     type OutboundOpenInfo = Void;
-    /// #
-    /// #     fn listen_protocol(
-    /// #         &self,
-    /// #     ) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
-    /// #         SubstreamProtocol::new(DeniedUpgrade, ())
-    /// #     }
-    /// #
-    /// #     fn on_behaviour_event(&mut self, _event: Self::InEvent) {}
-    /// #
-    /// #     fn on_connection_event(
-    /// #        &mut self,
-    /// #        event: ConnectionEvent<
-    /// #            Self::InboundProtocol,
-    /// #            Self::OutboundProtocol,
-    /// #            Self::InboundOpenInfo,
-    /// #            Self::OutboundOpenInfo,
-    /// #        >,
-    /// #     ) {}
-    /// #
-    /// #     fn connection_keep_alive(&self) -> KeepAlive {
-    /// #         KeepAlive::Yes
-    /// #     }
-    /// #
-    /// #     fn poll(
-    /// #         &mut self,
-    /// #         _: &mut Context<'_>,
-    /// #     ) -> Poll<
-    /// #         ConnectionHandlerEvent<
-    /// #             Self::OutboundProtocol,
-    /// #             Self::OutboundOpenInfo,
-    /// #             Self::OutEvent,
-    /// #             Self::Error,
-    /// #         >,
-    /// #     > {
-    /// #         todo!("If `Self::message.is_some()` send the message to the remote.")
-    /// #     }
-    /// # }
-    /// # #[derive(Debug, PartialEq, Eq)]
-    /// # struct PreciousMessage(String);
-    /// ```
-    Dial { opts: DialOpts, handler: THandler },
+    /// The provided [`ConnectionId`] will be used throughout the connection's lifecycle to associate
+    /// events with it. This allows a [`NetworkBehaviour`] to identify a connection that resulted out
+    /// of its own dial request.
+    Dial {
+        opts: DialOpts,
+        connection_id: ConnectionId,
+    },
 
     /// Instructs the `Swarm` to send an event to the handler dedicated to a
     /// connection with a peer.
@@ -478,19 +299,21 @@ pub enum NetworkBehaviourAction<
     },
 }
 
-impl<TOutEvent, THandler: IntoConnectionHandler, TInEventOld>
-    NetworkBehaviourAction<TOutEvent, THandler, TInEventOld>
-{
+impl<TOutEvent, TInEventOld> NetworkBehaviourAction<TOutEvent, TInEventOld> {
     /// Map the handler event.
     pub fn map_in<TInEventNew>(
         self,
         f: impl FnOnce(TInEventOld) -> TInEventNew,
-    ) -> NetworkBehaviourAction<TOutEvent, THandler, TInEventNew> {
+    ) -> NetworkBehaviourAction<TOutEvent, TInEventNew> {
         match self {
             NetworkBehaviourAction::GenerateEvent(e) => NetworkBehaviourAction::GenerateEvent(e),
-            NetworkBehaviourAction::Dial { opts, handler } => {
-                NetworkBehaviourAction::Dial { opts, handler }
-            }
+            NetworkBehaviourAction::Dial {
+                opts,
+                connection_id,
+            } => NetworkBehaviourAction::Dial {
+                opts,
+                connection_id,
+            },
             NetworkBehaviourAction::NotifyHandler {
                 peer_id,
                 handler,
@@ -514,100 +337,20 @@ impl<TOutEvent, THandler: IntoConnectionHandler, TInEventOld>
     }
 }
 
-impl<TOutEvent, THandler: IntoConnectionHandler> NetworkBehaviourAction<TOutEvent, THandler> {
+impl<TOutEvent, THandlerIn> NetworkBehaviourAction<TOutEvent, THandlerIn> {
     /// Map the event the swarm will return.
-    pub fn map_out<E>(self, f: impl FnOnce(TOutEvent) -> E) -> NetworkBehaviourAction<E, THandler> {
+    pub fn map_out<E>(
+        self,
+        f: impl FnOnce(TOutEvent) -> E,
+    ) -> NetworkBehaviourAction<E, THandlerIn> {
         match self {
             NetworkBehaviourAction::GenerateEvent(e) => NetworkBehaviourAction::GenerateEvent(f(e)),
-            NetworkBehaviourAction::Dial { opts, handler } => {
-                NetworkBehaviourAction::Dial { opts, handler }
-            }
-            NetworkBehaviourAction::NotifyHandler {
-                peer_id,
-                handler,
-                event,
-            } => NetworkBehaviourAction::NotifyHandler {
-                peer_id,
-                handler,
-                event,
-            },
-            NetworkBehaviourAction::ReportObservedAddr { address, score } => {
-                NetworkBehaviourAction::ReportObservedAddr { address, score }
-            }
-            NetworkBehaviourAction::CloseConnection {
-                peer_id,
-                connection,
-            } => NetworkBehaviourAction::CloseConnection {
-                peer_id,
-                connection,
-            },
-        }
-    }
-}
-
-impl<TInEvent, TOutEvent, THandlerOld> NetworkBehaviourAction<TOutEvent, THandlerOld>
-where
-    THandlerOld: IntoConnectionHandler,
-    <THandlerOld as IntoConnectionHandler>::Handler: ConnectionHandler<InEvent = TInEvent>,
-{
-    /// Map the handler.
-    pub fn map_handler<THandlerNew>(
-        self,
-        f: impl FnOnce(THandlerOld) -> THandlerNew,
-    ) -> NetworkBehaviourAction<TOutEvent, THandlerNew>
-    where
-        THandlerNew: IntoConnectionHandler,
-        <THandlerNew as IntoConnectionHandler>::Handler: ConnectionHandler<InEvent = TInEvent>,
-    {
-        match self {
-            NetworkBehaviourAction::GenerateEvent(e) => NetworkBehaviourAction::GenerateEvent(e),
-            NetworkBehaviourAction::Dial { opts, handler } => NetworkBehaviourAction::Dial {
+            NetworkBehaviourAction::Dial {
                 opts,
-                handler: f(handler),
-            },
-            NetworkBehaviourAction::NotifyHandler {
-                peer_id,
-                handler,
-                event,
-            } => NetworkBehaviourAction::NotifyHandler {
-                peer_id,
-                handler,
-                event,
-            },
-            NetworkBehaviourAction::ReportObservedAddr { address, score } => {
-                NetworkBehaviourAction::ReportObservedAddr { address, score }
-            }
-            NetworkBehaviourAction::CloseConnection {
-                peer_id,
-                connection,
-            } => NetworkBehaviourAction::CloseConnection {
-                peer_id,
-                connection,
-            },
-        }
-    }
-}
-
-impl<TInEventOld, TOutEvent, THandlerOld> NetworkBehaviourAction<TOutEvent, THandlerOld>
-where
-    THandlerOld: IntoConnectionHandler,
-    <THandlerOld as IntoConnectionHandler>::Handler: ConnectionHandler<InEvent = TInEventOld>,
-{
-    /// Map the handler and handler event.
-    pub fn map_handler_and_in<THandlerNew, TInEventNew>(
-        self,
-        f_handler: impl FnOnce(THandlerOld) -> THandlerNew,
-        f_in_event: impl FnOnce(TInEventOld) -> TInEventNew,
-    ) -> NetworkBehaviourAction<TOutEvent, THandlerNew>
-    where
-        THandlerNew: IntoConnectionHandler,
-        <THandlerNew as IntoConnectionHandler>::Handler: ConnectionHandler<InEvent = TInEventNew>,
-    {
-        match self {
-            NetworkBehaviourAction::GenerateEvent(e) => NetworkBehaviourAction::GenerateEvent(e),
-            NetworkBehaviourAction::Dial { opts, handler } => NetworkBehaviourAction::Dial {
+                connection_id,
+            } => NetworkBehaviourAction::Dial {
                 opts,
-                handler: f_handler(handler),
+                connection_id,
             },
             NetworkBehaviourAction::NotifyHandler {
                 peer_id,
@@ -616,7 +359,7 @@ where
             } => NetworkBehaviourAction::NotifyHandler {
                 peer_id,
                 handler,
-                event: f_in_event(event),
+                event,
             },
             NetworkBehaviourAction::ReportObservedAddr { address, score } => {
                 NetworkBehaviourAction::ReportObservedAddr { address, score }
@@ -672,13 +415,13 @@ pub enum FromSwarm<'a, Handler: IntoConnectionHandler> {
     AddressChange(AddressChange<'a>),
     /// Informs the behaviour that the dial to a known
     /// or unknown node failed.
-    DialFailure(DialFailure<'a, Handler>),
+    DialFailure(DialFailure<'a>),
     /// Informs the behaviour that an error
     /// happened on an incoming connection during its initial handshake.
     ///
     /// This can include, for example, an error during the handshake of the encryption layer, or the
     /// connection unexpectedly closed.
-    ListenFailure(ListenFailure<'a, Handler>),
+    ListenFailure(ListenFailure<'a>),
     /// Informs the behaviour that a new listener was created.
     NewListener(NewListener),
     /// Informs the behaviour that we have started listening on a new multiaddr.
@@ -733,10 +476,10 @@ pub struct AddressChange<'a> {
 /// [`FromSwarm`] variant that informs the behaviour that the dial to a known
 /// or unknown node failed.
 #[derive(Clone, Copy)]
-pub struct DialFailure<'a, Handler> {
+pub struct DialFailure<'a> {
     pub peer_id: Option<PeerId>,
-    pub handler: Handler,
     pub error: &'a DialError,
+    pub connection_id: ConnectionId,
 }
 
 /// [`FromSwarm`] variant that informs the behaviour that an error
@@ -745,10 +488,9 @@ pub struct DialFailure<'a, Handler> {
 /// This can include, for example, an error during the handshake of the encryption layer, or the
 /// connection unexpectedly closed.
 #[derive(Clone, Copy)]
-pub struct ListenFailure<'a, Handler> {
+pub struct ListenFailure<'a> {
     pub local_addr: &'a Multiaddr,
     pub send_back_addr: &'a Multiaddr,
-    pub handler: Handler,
 }
 
 /// [`FromSwarm`] variant that informs the behaviour that a new listener was created.
@@ -804,7 +546,6 @@ pub struct ExpiredExternalAddr<'a> {
 impl<'a, Handler: IntoConnectionHandler> FromSwarm<'a, Handler> {
     fn map_handler<NewHandler>(
         self,
-        map_into_handler: impl FnOnce(Handler) -> NewHandler,
         map_handler: impl FnOnce(
             <Handler as IntoConnectionHandler>::Handler,
         ) -> <NewHandler as IntoConnectionHandler>::Handler,
@@ -812,13 +553,12 @@ impl<'a, Handler: IntoConnectionHandler> FromSwarm<'a, Handler> {
     where
         NewHandler: IntoConnectionHandler,
     {
-        self.maybe_map_handler(|h| Some(map_into_handler(h)), |h| Some(map_handler(h)))
+        self.maybe_map_handler(|h| Some(map_handler(h)))
             .expect("To return Some as all closures return Some.")
     }
 
     fn maybe_map_handler<NewHandler>(
         self,
-        map_into_handler: impl FnOnce(Handler) -> Option<NewHandler>,
         map_handler: impl FnOnce(
             <Handler as IntoConnectionHandler>::Handler,
         ) -> Option<<NewHandler as IntoConnectionHandler>::Handler>,
@@ -866,21 +606,19 @@ impl<'a, Handler: IntoConnectionHandler> FromSwarm<'a, Handler> {
             })),
             FromSwarm::DialFailure(DialFailure {
                 peer_id,
-                handler,
                 error,
+                connection_id,
             }) => Some(FromSwarm::DialFailure(DialFailure {
                 peer_id,
-                handler: map_into_handler(handler)?,
                 error,
+                connection_id,
             })),
             FromSwarm::ListenFailure(ListenFailure {
                 local_addr,
                 send_back_addr,
-                handler,
             }) => Some(FromSwarm::ListenFailure(ListenFailure {
                 local_addr,
                 send_back_addr,
-                handler: map_into_handler(handler)?,
             })),
             FromSwarm::NewListener(NewListener { listener_id }) => {
                 Some(FromSwarm::NewListener(NewListener { listener_id }))

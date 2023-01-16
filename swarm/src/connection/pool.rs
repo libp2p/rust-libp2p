@@ -21,7 +21,6 @@
 
 use crate::connection::Connection;
 use crate::{
-    behaviour::{THandlerInEvent, THandlerOutEvent},
     connection::{
         Connected, ConnectionError, ConnectionLimit, IncomingInfo, PendingConnectionError,
         PendingInboundConnectionError, PendingOutboundConnectionError,
@@ -98,7 +97,7 @@ where
     >,
 
     /// The pending connections that are currently being negotiated.
-    pending: HashMap<ConnectionId, PendingConnection<THandler>>,
+    pending: HashMap<ConnectionId, PendingConnection>,
 
     /// Size of the task command buffer (per task).
     task_command_buffer_size: usize,
@@ -184,11 +183,9 @@ impl<TInEvent> EstablishedConnection<TInEvent> {
     }
 }
 
-struct PendingConnection<THandler> {
+struct PendingConnection {
     /// [`PeerId`] of the remote peer.
     peer_id: Option<PeerId>,
-    /// Handler to handle connection once no longer pending but established.
-    handler: THandler,
     endpoint: PendingPoint,
     /// When dropped, notifies the task which then knows to terminate.
     abort_notifier: Option<oneshot::Sender<Void>>,
@@ -196,7 +193,7 @@ struct PendingConnection<THandler> {
     accepted_at: Instant,
 }
 
-impl<THandler> PendingConnection<THandler> {
+impl PendingConnection {
     fn is_for_same_remote_as(&self, other: PeerId) -> bool {
         self.peer_id.map_or(false, |peer| peer == other)
     }
@@ -266,8 +263,6 @@ pub enum PoolEvent<THandler: IntoConnectionHandler> {
         id: ConnectionId,
         /// The error that occurred.
         error: PendingOutboundConnectionError,
-        /// The handler that was supposed to handle the connection.
-        handler: THandler,
         /// The (expected) peer of the failed connection.
         peer: Option<PeerId>,
     },
@@ -282,8 +277,6 @@ pub enum PoolEvent<THandler: IntoConnectionHandler> {
         local_addr: Multiaddr,
         /// The error that occurred.
         error: PendingInboundConnectionError,
-        /// The handler that was supposed to handle the connection.
-        handler: THandler,
     },
 
     /// A node has produced an event.
@@ -291,7 +284,7 @@ pub enum PoolEvent<THandler: IntoConnectionHandler> {
         id: ConnectionId,
         peer_id: PeerId,
         /// The produced event.
-        event: THandlerOutEvent<THandler>,
+        event: <<THandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent,
     },
 
     /// The connection to a node has changed its address.
@@ -344,7 +337,11 @@ where
     pub fn get_established(
         &mut self,
         id: ConnectionId,
-    ) -> Option<&mut EstablishedConnection<THandlerInEvent<THandler>>> {
+    ) -> Option<
+        &mut EstablishedConnection<
+            <<THandler as IntoConnectionHandler>::Handler as ConnectionHandler>::InEvent,
+        >,
+    > {
         self.established
             .values_mut()
             .find_map(|connections| connections.get_mut(&id))
@@ -434,20 +431,16 @@ where
             >,
         >,
         peer: Option<PeerId>,
-        handler: THandler,
         role_override: Endpoint,
         dial_concurrency_factor_override: Option<NonZeroU8>,
-    ) -> Result<ConnectionId, (ConnectionLimit, THandler)> {
-        if let Err(limit) = self.counters.check_max_pending_outgoing() {
-            return Err((limit, handler));
-        };
+        connection_id: ConnectionId,
+    ) -> Result<(), ConnectionLimit> {
+        self.counters.check_max_pending_outgoing()?;
 
         let dial = ConcurrentDial::new(
             dials,
             dial_concurrency_factor_override.unwrap_or(self.dial_concurrency_factor),
         );
-
-        let connection_id = ConnectionId::next();
 
         let (abort_notifier, abort_receiver) = oneshot::channel();
 
@@ -468,13 +461,13 @@ where
             connection_id,
             PendingConnection {
                 peer_id: peer,
-                handler,
                 endpoint,
                 abort_notifier: Some(abort_notifier),
                 accepted_at: Instant::now(),
             },
         );
-        Ok(connection_id)
+
+        Ok(())
     }
 
     /// Adds a pending incoming connection to the pool in the form of a
@@ -485,17 +478,14 @@ where
     pub fn add_incoming<TFut>(
         &mut self,
         future: TFut,
-        handler: THandler,
         info: IncomingInfo<'_>,
-    ) -> Result<ConnectionId, (ConnectionLimit, THandler)>
+    ) -> Result<ConnectionId, ConnectionLimit>
     where
         TFut: Future<Output = Result<(PeerId, StreamMuxerBox), std::io::Error>> + Send + 'static,
     {
         let endpoint = info.create_connected_point();
 
-        if let Err(limit) = self.counters.check_max_pending_incoming() {
-            return Err((limit, handler));
-        }
+        self.counters.check_max_pending_incoming()?;
 
         let connection_id = ConnectionId::next();
 
@@ -516,7 +506,6 @@ where
             connection_id,
             PendingConnection {
                 peer_id: None,
-                handler,
                 endpoint: endpoint.into(),
                 abort_notifier: Some(abort_notifier),
                 accepted_at: Instant::now(),
@@ -526,7 +515,11 @@ where
     }
 
     /// Polls the connection pool for events.
-    pub fn poll(&mut self, cx: &mut Context<'_>) -> Poll<PoolEvent<THandler>>
+    pub fn poll(
+        &mut self,
+        cx: &mut Context<'_>,
+        mut new_handler_fn: impl FnMut() -> THandler,
+    ) -> Poll<PoolEvent<THandler>>
     where
         THandler: IntoConnectionHandler + 'static,
         THandler::Handler: ConnectionHandler + Send,
@@ -610,7 +603,6 @@ where
                 } => {
                     let PendingConnection {
                         peer_id: expected_peer_id,
-                        handler,
                         endpoint,
                         abort_notifier: _,
                         accepted_at,
@@ -713,7 +705,6 @@ where
                                     id,
                                     error: error
                                         .map(|t| vec![(endpoint.get_remote_address().clone(), t)]),
-                                    handler,
                                     peer: expected_peer_id.or(Some(obtained_peer_id)),
                                 })
                             }
@@ -724,7 +715,6 @@ where
                                 return Poll::Ready(PoolEvent::PendingInboundConnectionError {
                                     id,
                                     error,
-                                    handler,
                                     send_back_addr,
                                     local_addr,
                                 })
@@ -749,7 +739,7 @@ where
 
                     let connection = Connection::new(
                         muxer,
-                        handler.into_handler(&obtained_peer_id, &endpoint),
+                        new_handler_fn().into_handler(&obtained_peer_id, &endpoint),
                         self.substream_upgrade_protocol_override,
                         self.max_negotiating_inbound_streams,
                     );
@@ -776,7 +766,6 @@ where
                 task::PendingConnectionEvent::PendingFailed { id, error } => {
                     if let Some(PendingConnection {
                         peer_id,
-                        handler,
                         endpoint,
                         abort_notifier: _,
                         accepted_at: _, // Ignoring the time it took for the connection to fail.
@@ -789,7 +778,6 @@ where
                                 return Poll::Ready(PoolEvent::PendingOutboundConnectionError {
                                     id,
                                     error,
-                                    handler,
                                     peer: peer_id,
                                 });
                             }
@@ -803,7 +791,6 @@ where
                                 return Poll::Ready(PoolEvent::PendingInboundConnectionError {
                                     id,
                                     error,
-                                    handler,
                                     send_back_addr,
                                     local_addr,
                                 });
