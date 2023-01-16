@@ -91,7 +91,6 @@ pub enum Event {
     },
     OutboundConnectNegotiated {
         remote_addrs: Vec<Multiaddr>,
-        attempt: u8,
     },
 }
 
@@ -117,13 +116,9 @@ impl fmt::Debug for Event {
                 .debug_struct("Event::OutboundNegotiationFailed")
                 .field("error", error)
                 .finish(),
-            Event::OutboundConnectNegotiated {
-                remote_addrs,
-                attempt,
-            } => f
+            Event::OutboundConnectNegotiated { remote_addrs } => f
                 .debug_struct("Event::OutboundConnectNegotiated")
                 .field("remote_addrs", remote_addrs)
-                .field("attempt", attempt)
                 .finish(),
         }
     }
@@ -194,7 +189,7 @@ impl Handler {
         &mut self,
         FullyNegotiatedOutbound {
             protocol: protocol::outbound::Connect { obs_addrs },
-            info: attempt,
+            ..
         }: FullyNegotiatedOutbound<
             <Self as ConnectionHandler>::OutboundProtocol,
             <Self as ConnectionHandler>::OutboundOpenInfo,
@@ -207,7 +202,6 @@ impl Handler {
         self.queued_events.push_back(ConnectionHandlerEvent::Custom(
             Event::OutboundConnectNegotiated {
                 remote_addrs: obs_addrs,
-                attempt,
             },
         ));
     }
