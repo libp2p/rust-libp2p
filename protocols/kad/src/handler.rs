@@ -781,7 +781,7 @@ where
 
         let num_in_progress_outbound_substreams =
             self.outbound_substreams.len() + self.num_requested_outbound_streams;
-        if MAX_NUM_SUBSTREAMS.saturating_sub(num_in_progress_outbound_substreams) > 0 {
+        if num_in_progress_outbound_substreams < MAX_NUM_SUBSTREAMS {
             if let Some(protocol) = self.requested_streams.pop_front() {
                 self.num_requested_outbound_streams += 1;
                 return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest { protocol });
