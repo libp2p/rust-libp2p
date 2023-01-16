@@ -1,3 +1,9 @@
+# 0.39.0 [unreleased]
+
+- Deprecate `ConnectionId::new` in favor of `ConnectionId::next`. See [PR 3327].
+
+[PR 3327]: https://github.com/libp2p/rust-libp2p/pull/3327
+
 # 0.38.0
 
 - Remove deprecated functions `StreamMuxerExt::next_{inbound,outbound}`. See [PR 3031].
