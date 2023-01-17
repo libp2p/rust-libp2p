@@ -36,7 +36,7 @@ use std::num::NonZeroU8;
 ///
 /// - [`DialOpts::unknown_peer_id`] dialing an unknown peer
 #[derive(Debug)]
-pub struct DialOpts(pub(super) Opts);
+pub struct DialOpts(Opts);
 
 impl DialOpts {
     /// Dial a known peer.
@@ -200,7 +200,7 @@ impl From<PeerId> for DialOpts {
 /// - [`DialOpts::peer_id`] dialing a known peer
 /// - [`DialOpts::unknown_peer_id`] dialing an unknown peer
 #[derive(Debug)]
-pub(super) enum Opts {
+enum Opts {
     WithPeerId(WithPeerId),
     WithPeerIdWithAddresses(WithPeerIdWithAddresses),
     WithoutPeerIdWithAddress(WithoutPeerIdWithAddress),
@@ -208,10 +208,10 @@ pub(super) enum Opts {
 
 #[derive(Debug)]
 pub struct WithPeerId {
-    pub(crate) peer_id: PeerId,
-    pub(crate) condition: PeerCondition,
-    pub(crate) role_override: Endpoint,
-    pub(crate) dial_concurrency_factor_override: Option<NonZeroU8>,
+    peer_id: PeerId,
+    condition: PeerCondition,
+    role_override: Endpoint,
+    dial_concurrency_factor_override: Option<NonZeroU8>,
 }
 
 impl WithPeerId {
@@ -262,12 +262,12 @@ impl WithPeerId {
 
 #[derive(Debug)]
 pub struct WithPeerIdWithAddresses {
-    pub(crate) peer_id: PeerId,
-    pub(crate) condition: PeerCondition,
-    pub(crate) addresses: Vec<Multiaddr>,
-    pub(crate) extend_addresses_through_behaviour: bool,
-    pub(crate) role_override: Endpoint,
-    pub(crate) dial_concurrency_factor_override: Option<NonZeroU8>,
+    peer_id: PeerId,
+    condition: PeerCondition,
+    addresses: Vec<Multiaddr>,
+    extend_addresses_through_behaviour: bool,
+    role_override: Endpoint,
+    dial_concurrency_factor_override: Option<NonZeroU8>,
 }
 
 impl WithPeerIdWithAddresses {
@@ -323,8 +323,8 @@ impl WithoutPeerId {
 
 #[derive(Debug)]
 pub struct WithoutPeerIdWithAddress {
-    pub(crate) address: Multiaddr,
-    pub(crate) role_override: Endpoint,
+    address: Multiaddr,
+    role_override: Endpoint,
 }
 
 impl WithoutPeerIdWithAddress {
