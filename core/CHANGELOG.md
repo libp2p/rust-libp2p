@@ -18,7 +18,7 @@
 
 - Remove `EitherUpgrade` in favor of implementing `UpgradeInfo`, `InboundUpgrade` and `OutboundUpgrade` on `either::Either`. See [PR 3339].
 
-- Remove `EitherFuture2` in favor of `EitherFuture`. See [PR XXXX].
+- Remove `EitherFuture2` in favor of `EitherFuture`. See [PR 3340].
 
 [PR 3031]: https://github.com/libp2p/rust-libp2p/pull/3031
 [PR 3058]: https://github.com/libp2p/rust-libp2p/pull/3058
@@ -28,7 +28,7 @@
 [PR 3337]: https://github.com/libp2p/rust-libp2p/pull/3337
 [PR 3338]: https://github.com/libp2p/rust-libp2p/pull/3338
 [PR 3339]: https://github.com/libp2p/rust-libp2p/pull/3339
-[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+[PR 3340]: https://github.com/libp2p/rust-libp2p/pull/3340
 
 # 0.37.0
 
