@@ -102,7 +102,7 @@ async fn ipv4_dial_ipv6() {
 /// See https://github.com/libp2p/rust-libp2p/pull/3306 for context.
 #[cfg(feature = "async-std")]
 #[async_std::test]
-async fn wrapped_with_dns() {
+async fn wrapped_with_delay() {
     let _ = env_logger::try_init();
 
     struct DialDelay(Arc<Mutex<Boxed<(PeerId, StreamMuxerBox)>>>);
@@ -175,7 +175,7 @@ async fn wrapped_with_dns() {
         (id, DialDelay(Arc::new(Mutex::new(transport))).boxed())
     };
 
-    // Spawn a
+    // Spawn A
     let a_addr = start_listening(&mut a_transport, "/ip6/::1/udp/0/quic-v1").await;
     let listener = async_std::task::spawn(async move {
         let (upgrade, _) = a_transport
@@ -188,7 +188,7 @@ async fn wrapped_with_dns() {
         peer_id
     });
 
-    // Spawn b
+    // Spawn B
     //
     // Note that the dial is spawned on a different task than the transport allowing the transport
     // task to poll the transport once and then suspend, waiting for the wakeup from the dial.
