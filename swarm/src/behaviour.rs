@@ -233,13 +233,10 @@ pub enum NetworkBehaviourAction<TOutEvent, TInEvent> {
     /// On success, [`NetworkBehaviour::on_swarm_event`] with `ConnectionEstablished` is invoked.
     /// On failure, [`NetworkBehaviour::on_swarm_event`] with `DialFailure` is invoked.
     ///
-    /// The provided [`ConnectionId`] will be used throughout the connection's lifecycle to associate
-    /// events with it. This allows a [`NetworkBehaviour`] to identify a connection that resulted out
-    /// of its own dial request.
-    Dial {
-        opts: DialOpts,
-        connection_id: ConnectionId,
-    },
+    /// [`DialOpts`] provides access to the [`ConnectionId`] via [`DialOpts::connection_id`].
+    /// This [`ConnectionId`] will be used throughout the connection's lifecycle to associate events with it.
+    /// This allows a [`NetworkBehaviour`] to identify a connection that resulted out of its own dial request.
+    Dial { opts: DialOpts },
 
     /// Instructs the `Swarm` to send an event to the handler dedicated to a
     /// connection with a peer.
@@ -307,13 +304,7 @@ impl<TOutEvent, TInEventOld> NetworkBehaviourAction<TOutEvent, TInEventOld> {
     ) -> NetworkBehaviourAction<TOutEvent, TInEventNew> {
         match self {
             NetworkBehaviourAction::GenerateEvent(e) => NetworkBehaviourAction::GenerateEvent(e),
-            NetworkBehaviourAction::Dial {
-                opts,
-                connection_id,
-            } => NetworkBehaviourAction::Dial {
-                opts,
-                connection_id,
-            },
+            NetworkBehaviourAction::Dial { opts } => NetworkBehaviourAction::Dial { opts },
             NetworkBehaviourAction::NotifyHandler {
                 peer_id,
                 handler,
@@ -345,13 +336,7 @@ impl<TOutEvent, THandlerIn> NetworkBehaviourAction<TOutEvent, THandlerIn> {
     ) -> NetworkBehaviourAction<E, THandlerIn> {
         match self {
             NetworkBehaviourAction::GenerateEvent(e) => NetworkBehaviourAction::GenerateEvent(f(e)),
-            NetworkBehaviourAction::Dial {
-                opts,
-                connection_id,
-            } => NetworkBehaviourAction::Dial {
-                opts,
-                connection_id,
-            },
+            NetworkBehaviourAction::Dial { opts } => NetworkBehaviourAction::Dial { opts },
             NetworkBehaviourAction::NotifyHandler {
                 peer_id,
                 handler,

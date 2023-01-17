@@ -290,18 +290,17 @@ impl NetworkBehaviour for Behaviour {
                     ));
             }
             Either::Left(handler::relayed::Event::InboundConnectNegotiated(remote_addrs)) => {
-                let maybe_direct_connection_id = ConnectionId::next();
+                let opts = DialOpts::peer_id(event_source)
+                    .addresses(remote_addrs)
+                    .condition(dial_opts::PeerCondition::Always)
+                    .build();
+
+                let maybe_direct_connection_id = opts.connection_id();
 
                 self.direct_to_relayed_connections
                     .insert(maybe_direct_connection_id, relayed_connection_id);
-
-                self.queued_events.push_back(NetworkBehaviourAction::Dial {
-                    opts: DialOpts::peer_id(event_source)
-                        .addresses(remote_addrs)
-                        .condition(dial_opts::PeerCondition::Always)
-                        .build(),
-                    connection_id: maybe_direct_connection_id,
-                });
+                self.queued_events
+                    .push_back(NetworkBehaviourAction::Dial { opts });
             }
             Either::Left(handler::relayed::Event::OutboundNegotiationFailed { error }) => {
                 self.queued_events
@@ -313,7 +312,13 @@ impl NetworkBehaviour for Behaviour {
                     ));
             }
             Either::Left(handler::relayed::Event::OutboundConnectNegotiated { remote_addrs }) => {
-                let maybe_direct_connection_id = ConnectionId::next();
+                let opts = DialOpts::peer_id(event_source)
+                    .condition(dial_opts::PeerCondition::Always)
+                    .addresses(remote_addrs)
+                    .override_role()
+                    .build();
+
+                let maybe_direct_connection_id = opts.connection_id();
 
                 self.direct_to_relayed_connections
                     .insert(maybe_direct_connection_id, relayed_connection_id);
@@ -321,15 +326,8 @@ impl NetworkBehaviour for Behaviour {
                     .outgoing_direct_connection_attempts
                     .entry((maybe_direct_connection_id, event_source))
                     .or_default() += 1;
-
-                self.queued_events.push_back(NetworkBehaviourAction::Dial {
-                    opts: DialOpts::peer_id(event_source)
-                        .condition(dial_opts::PeerCondition::Always)
-                        .addresses(remote_addrs)
-                        .override_role()
-                        .build(),
-                    connection_id: maybe_direct_connection_id,
-                });
+                self.queued_events
+                    .push_back(NetworkBehaviourAction::Dial { opts });
             }
             Either::Right(handler::direct::Event::DirectConnectionEstablished) => {
                 self.queued_events.extend([

@@ -19,7 +19,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use libp2p_core::connection::Endpoint;
+use libp2p_core::connection::{ConnectionId, Endpoint};
 use libp2p_core::multiaddr::Protocol;
 use libp2p_core::multihash::Multihash;
 use libp2p_core::{Multiaddr, PeerId};
@@ -43,6 +43,7 @@ pub struct DialOpts {
     extend_addresses_through_behaviour: bool,
     role_override: Endpoint,
     dial_concurrency_factor_override: Option<NonZeroU8>,
+    connection_id: ConnectionId,
 }
 
 impl DialOpts {
@@ -83,6 +84,14 @@ impl DialOpts {
         self.peer_id
     }
 
+    /// Get the [`ConnectionId`] of this dial attempt.
+    ///
+    /// All future events of this dial will be associated with this ID.
+    /// See [`DialFailure`](crate::DialFailure) and [`ConnectionEstablished`](crate::behaviour::ConnectionEstablished).
+    pub fn connection_id(&self) -> ConnectionId {
+        self.connection_id
+    }
+
     /// Retrieves the [`PeerId`] from the [`DialOpts`] if specified or otherwise tries to parse it
     /// from the multihash in the `/p2p` part of the address, if present.
     ///
@@ -94,12 +103,12 @@ impl DialOpts {
     /// See <https://github.com/multiformats/rust-multiaddr/issues/73>.
     pub(crate) fn get_or_parse_peer_id(&self) -> Result<Option<PeerId>, Multihash> {
         if let Some(peer_id) = self.peer_id {
-            return Ok(Some(peer_id))
+            return Ok(Some(peer_id));
         }
 
         let first_address = match self.addresses.first() {
             Some(first_address) => first_address,
-            None => return Ok(None)
+            None => return Ok(None),
         };
 
         let maybe_peer_id = first_address
@@ -207,6 +216,7 @@ impl WithPeerId {
             extend_addresses_through_behaviour: false,
             role_override: self.role_override,
             dial_concurrency_factor_override: self.dial_concurrency_factor_override,
+            connection_id: ConnectionId::next(),
         }
     }
 }
@@ -262,6 +272,7 @@ impl WithPeerIdWithAddresses {
             extend_addresses_through_behaviour: self.extend_addresses_through_behaviour,
             role_override: self.role_override,
             dial_concurrency_factor_override: self.dial_concurrency_factor_override,
+            connection_id: ConnectionId::next(),
         }
     }
 }
@@ -305,6 +316,7 @@ impl WithoutPeerIdWithAddress {
             extend_addresses_through_behaviour: false,
             role_override: self.role_override,
             dial_concurrency_factor_override: None,
+            connection_id: ConnectionId::next(),
         }
     }
 }

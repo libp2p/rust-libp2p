@@ -420,7 +420,6 @@ where
         if let Some(request) = self.try_send_request(peer, request) {
             self.pending_events.push_back(NetworkBehaviourAction::Dial {
                 opts: DialOpts::peer_id(*peer).build(),
-                connection_id: ConnectionId::next(),
             });
             self.pending_outbound_requests
                 .entry(*peer)

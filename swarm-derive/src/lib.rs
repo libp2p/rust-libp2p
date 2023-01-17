@@ -612,8 +612,8 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             loop {
                 match #trait_to_impl::poll(&mut self.#field, cx, poll_params) {
                     #generate_event_match_arm
-                    std::task::Poll::Ready(#network_behaviour_action::Dial { opts, connection_id }) => {
-                        return std::task::Poll::Ready(#network_behaviour_action::Dial { opts, connection_id });
+                    std::task::Poll::Ready(#network_behaviour_action::Dial { opts }) => {
+                        return std::task::Poll::Ready(#network_behaviour_action::Dial { opts });
                     }
                     std::task::Poll::Ready(#network_behaviour_action::NotifyHandler { peer_id, handler, event }) => {
                         return std::task::Poll::Ready(#network_behaviour_action::NotifyHandler {

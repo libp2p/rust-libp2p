@@ -285,17 +285,15 @@ impl NetworkBehaviour for Behaviour {
                         event: Either::Left(handler::In::Reserve { to_listener }),
                     },
                     None => {
-                        let relayed_connection_id = ConnectionId::next();
+                        let opts = DialOpts::peer_id(relay_peer_id)
+                            .addresses(vec![relay_addr])
+                            .extend_addresses_through_behaviour()
+                            .build();
+                        let relayed_connection_id = opts.connection_id();
 
                         self.pending_handler_commands
                             .insert(relayed_connection_id, handler::In::Reserve { to_listener });
-                        NetworkBehaviourAction::Dial {
-                            opts: DialOpts::peer_id(relay_peer_id)
-                                .addresses(vec![relay_addr])
-                                .extend_addresses_through_behaviour()
-                                .build(),
-                            connection_id: relayed_connection_id,
-                        }
+                        NetworkBehaviourAction::Dial { opts }
                     }
                 }
             }
@@ -320,7 +318,11 @@ impl NetworkBehaviour for Behaviour {
                         }),
                     },
                     None => {
-                        let connection_id = ConnectionId::next();
+                        let opts = DialOpts::peer_id(relay_peer_id)
+                            .addresses(vec![relay_addr])
+                            .extend_addresses_through_behaviour()
+                            .build();
+                        let connection_id = opts.connection_id();
 
                         self.pending_handler_commands.insert(
                             connection_id,
@@ -330,13 +332,7 @@ impl NetworkBehaviour for Behaviour {
                             },
                         );
 
-                        NetworkBehaviourAction::Dial {
-                            opts: DialOpts::peer_id(relay_peer_id)
-                                .addresses(vec![relay_addr])
-                                .extend_addresses_through_behaviour()
-                                .build(),
-                            connection_id,
-                        }
+                        NetworkBehaviourAction::Dial { opts }
                     }
                 }
             }

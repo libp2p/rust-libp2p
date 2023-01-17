@@ -105,7 +105,6 @@ impl Floodsub {
         if self.target_peers.insert(peer_id) {
             self.events.push_back(NetworkBehaviourAction::Dial {
                 opts: DialOpts::peer_id(peer_id).build(),
-                connection_id: ConnectionId::next(),
             });
         }
     }
@@ -327,7 +326,6 @@ impl Floodsub {
         if self.target_peers.contains(&peer_id) {
             self.events.push_back(NetworkBehaviourAction::Dial {
                 opts: DialOpts::peer_id(peer_id).build(),
-                connection_id: ConnectionId::next(),
             });
         }
     }

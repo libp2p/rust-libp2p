@@ -504,18 +504,15 @@ where
     /// swarm.dial("/ip6/::1/tcp/12345".parse::<Multiaddr>().unwrap());
     /// ```
     pub fn dial(&mut self, opts: impl Into<DialOpts>) -> Result<(), DialError> {
-        self.dial_with_id(opts.into(), ConnectionId::next())
+        self._dial(opts.into())
     }
 
-    fn dial_with_id(
-        &mut self,
-        dial_opts: DialOpts,
-        connection_id: ConnectionId,
-    ) -> Result<(), DialError> {
+    fn _dial(&mut self, dial_opts: DialOpts) -> Result<(), DialError> {
         let peer_id = dial_opts
             .get_or_parse_peer_id()
             .map_err(DialError::InvalidPeerId)?;
         let condition = dial_opts.peer_condition();
+        let connection_id = dial_opts.connection_id();
 
         let should_dial = match (condition, peer_id) {
             (PeerCondition::Always, _) => true,
@@ -1058,12 +1055,9 @@ where
             NetworkBehaviourAction::GenerateEvent(event) => {
                 return Some(SwarmEvent::Behaviour(event))
             }
-            NetworkBehaviourAction::Dial {
-                opts,
-                connection_id,
-            } => {
+            NetworkBehaviourAction::Dial { opts } => {
                 let peer_id = opts.get_or_parse_peer_id();
-                if let Ok(()) = self.dial_with_id(opts, connection_id) {
+                if let Ok(()) = self._dial(opts) {
                     if let Ok(Some(peer_id)) = peer_id {
                         return Some(SwarmEvent::Dialing(peer_id));
                     }

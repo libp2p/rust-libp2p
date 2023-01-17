@@ -201,7 +201,6 @@ impl Behaviour {
 
                 self.events.push_back(NetworkBehaviourAction::Dial {
                     opts: DialOpts::peer_id(p).build(),
-                    connection_id: ConnectionId::next(),
                 });
             }
         }
