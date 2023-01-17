@@ -30,7 +30,8 @@ use if_watch::IfEvent;
 use libp2p_core::{Multiaddr, PeerId};
 use libp2p_swarm::behaviour::{ConnectionClosed, FromSwarm};
 use libp2p_swarm::{
-    dummy, ConnectionHandler, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
+    dummy, ConnectionHandler, ListenAddresses, NetworkBehaviour, NetworkBehaviourAction,
+    PollParameters,
 };
 use smallvec::SmallVec;
 use std::collections::hash_map::{Entry, HashMap};
@@ -121,6 +122,10 @@ where
     ///
     /// `None` if `discovered_nodes` is empty.
     closest_expiration: Option<P::Timer>,
+
+    listen_addresses: ListenAddresses,
+
+    local_peer_id: PeerId,
 }
 
 impl<P> Behaviour<P>
@@ -128,13 +133,15 @@ where
     P: Provider,
 {
     /// Builds a new `Mdns` behaviour.
-    pub fn new(config: Config) -> io::Result<Self> {
+    pub fn new(config: Config, local_peer_id: PeerId) -> io::Result<Self> {
         Ok(Self {
             config,
             if_watch: P::new_watcher()?,
             iface_states: Default::default(),
             discovered_nodes: Default::default(),
             closest_expiration: Default::default(),
+            listen_addresses: Default::default(),
+            local_peer_id,
         })
     }
 
@@ -189,6 +196,8 @@ where
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+        self.listen_addresses.on_swarm_event(&event);
+
         match event {
             FromSwarm::ConnectionClosed(ConnectionClosed {
                 peer_id,
@@ -221,7 +230,7 @@ where
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
-        params: &mut impl PollParameters,
+        _: &mut impl PollParameters,
     ) -> Poll<NetworkBehaviourAction<Self::OutEvent, dummy::ConnectionHandler>> {
         // Poll ifwatch.
         while let Poll::Ready(Some(event)) = Pin::new(&mut self.if_watch).poll_next(cx) {
@@ -237,7 +246,7 @@ where
                         continue;
                     }
                     if let Entry::Vacant(e) = self.iface_states.entry(addr) {
-                        match InterfaceState::new(addr, self.config.clone()) {
+                        match InterfaceState::new(addr, self.config.clone(), self.local_peer_id) {
                             Ok(iface_state) => {
                                 e.insert(iface_state);
                             }
@@ -257,7 +266,9 @@ where
         // Emit discovered event.
         let mut discovered = SmallVec::<[(PeerId, Multiaddr); 4]>::new();
         for iface_state in self.iface_states.values_mut() {
-            while let Poll::Ready((peer, addr, expiration)) = iface_state.poll(cx, params) {
+            while let Poll::Ready((peer, addr, expiration)) =
+                iface_state.poll(cx, &self.listen_addresses)
+            {
                 if let Some((_, _, cur_expires)) = self
                     .discovered_nodes
                     .iter_mut()

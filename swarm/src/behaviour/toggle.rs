@@ -18,12 +18,12 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::behaviour::{inject_from_swarm, FromSwarm};
+use crate::behaviour::FromSwarm;
 use crate::connection::ConnectionId;
 use crate::handler::{
-    ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr,
-    DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound, IntoConnectionHandler,
-    KeepAlive, ListenUpgradeError, SubstreamProtocol,
+    AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent,
+    ConnectionHandlerUpgrErr, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
+    IntoConnectionHandler, KeepAlive, ListenUpgradeError, SubstreamProtocol,
 };
 use crate::upgrade::SendWrapper;
 use crate::{NetworkBehaviour, NetworkBehaviourAction, PollParameters};
@@ -88,7 +88,7 @@ where
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
         if let Some(behaviour) = &mut self.inner {
             if let Some(event) = event.maybe_map_handler(|h| h.inner, |h| h.inner) {
-                inject_from_swarm(behaviour, event);
+                behaviour.on_swarm_event(event);
             }
         }
     }
@@ -100,8 +100,7 @@ where
         event: crate::THandlerOutEvent<Self>,
     ) {
         if let Some(behaviour) = &mut self.inner {
-            #[allow(deprecated)]
-            behaviour.inject_event(peer_id, connection_id, event)
+            behaviour.on_connection_handler_event(peer_id, connection_id, event)
         }
     }
 
@@ -177,13 +176,17 @@ where
         };
 
         if let Either::Left(info) = info {
-            #[allow(deprecated)]
             self.inner
                 .as_mut()
                 .expect("Can't receive an inbound substream if disabled; QED")
-                .inject_fully_negotiated_inbound(out, info)
+                .on_connection_event(ConnectionEvent::FullyNegotiatedInbound(
+                    FullyNegotiatedInbound {
+                        protocol: out,
+                        info,
+                    },
+                ));
         } else {
-            panic!("Unexpected Either::Right in enabled `inject_fully_negotiated_inbound`.")
+            panic!("Unexpected Either::Right in enabled `on_fully_negotiated_inbound`.")
         }
     }
 
@@ -200,11 +203,11 @@ where
             (None, Either::Right(())) => return,
             (Some(_), Either::Right(())) => panic!(
                 "Unexpected `Either::Right` inbound info through \
-                 `inject_listen_upgrade_error` in enabled state.",
+                 `on_listen_upgrade_error` in enabled state.",
             ),
             (None, Either::Left(_)) => panic!(
                 "Unexpected `Either::Left` inbound info through \
-                 `inject_listen_upgrade_error` in disabled state.",
+                 `on_listen_upgrade_error` in disabled state.",
             ),
         };
 
@@ -219,8 +222,10 @@ where
             }
         };
 
-        #[allow(deprecated)]
-        inner.inject_listen_upgrade_error(info, err)
+        inner.on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
+            info,
+            error: err,
+        }));
     }
 }
 
@@ -252,11 +257,10 @@ where
     }
 
     fn on_behaviour_event(&mut self, event: Self::InEvent) {
-        #[allow(deprecated)]
         self.inner
             .as_mut()
             .expect("Can't receive events if disabled; QED")
-            .inject_event(event)
+            .on_behaviour_event(event)
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
@@ -300,28 +304,31 @@ where
             ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
                 protocol: out,
                 info,
-            }) =>
-            {
-                #[allow(deprecated)]
-                self.inner
-                    .as_mut()
-                    .expect("Can't receive an outbound substream if disabled; QED")
-                    .inject_fully_negotiated_outbound(out, info)
-            }
+            }) => self
+                .inner
+                .as_mut()
+                .expect("Can't receive an outbound substream if disabled; QED")
+                .on_connection_event(ConnectionEvent::FullyNegotiatedOutbound(
+                    FullyNegotiatedOutbound {
+                        protocol: out,
+                        info,
+                    },
+                )),
             ConnectionEvent::AddressChange(address_change) => {
                 if let Some(inner) = self.inner.as_mut() {
-                    #[allow(deprecated)]
-                    inner.inject_address_change(address_change.new_address)
+                    inner.on_connection_event(ConnectionEvent::AddressChange(AddressChange {
+                        new_address: address_change.new_address,
+                    }));
                 }
             }
-            ConnectionEvent::DialUpgradeError(DialUpgradeError { info, error: err }) =>
-            {
-                #[allow(deprecated)]
-                self.inner
-                    .as_mut()
-                    .expect("Can't receive an outbound substream if disabled; QED")
-                    .inject_dial_upgrade_error(info, err)
-            }
+            ConnectionEvent::DialUpgradeError(DialUpgradeError { info, error: err }) => self
+                .inner
+                .as_mut()
+                .expect("Can't receive an outbound substream if disabled; QED")
+                .on_connection_event(ConnectionEvent::DialUpgradeError(DialUpgradeError {
+                    info,
+                    error: err,
+                })),
             ConnectionEvent::ListenUpgradeError(listen_upgrade_error) => {
                 self.on_listen_upgrade_error(listen_upgrade_error)
             }

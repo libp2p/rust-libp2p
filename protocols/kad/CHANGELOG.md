@@ -1,6 +1,20 @@
 # 0.43.0 [unreleased]
 
+- Update to `libp2p-core` `v0.39.0`.
+
 - Update to `libp2p-swarm` `v0.42.0`.
+
+- Remove lifetime from `RecordStore` and use GATs instead. See [PR 3239].
+
+- Bump MSRV to 1.65.0.
+
+[PR 3239]: https://github.com/libp2p/rust-libp2p/pull/3239
+
+# 0.42.1
+
+- Skip unparsable multiaddr in `Peer::addrs`. See [PR 3280].
+
+[PR 3280]: https://github.com/libp2p/rust-libp2p/pull/3280
 
 # 0.42.0
 

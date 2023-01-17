@@ -23,7 +23,7 @@ use crate::rpc_proto;
 use crate::TopicHash;
 use libp2p_core::PeerId;
 use libp2p_swarm::ConnectionId;
-use prometheus_client::encoding::text::Encode;
+use prometheus_client::encoding::EncodeLabelValue;
 use prost::Message;
 use std::fmt;
 use std::fmt::Debug;
@@ -96,7 +96,7 @@ pub struct PeerConnections {
 }
 
 /// Describes the types of peers that can exist in the gossipsub context.
-#[derive(Debug, Clone, PartialEq, Hash, Encode, Eq)]
+#[derive(Debug, Clone, PartialEq, Hash, EncodeLabelValue, Eq)]
 pub enum PeerKind {
     /// A gossipsub 1.1 peer.
     Gossipsubv1_1,

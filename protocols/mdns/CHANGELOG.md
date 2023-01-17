@@ -1,6 +1,12 @@
 # 0.43.0 [unreleased]
 
+- Update to `libp2p-core` `v0.39.0`.
+
+- Require the node's local `PeerId` to be passed into the constructor of `libp2p_mdns::Behaviour`. See [PR 3153].
+
 - Update to `libp2p-swarm` `v0.42.0`.
+
+[PR 3153]: https://github.com/libp2p/rust-libp2p/pull/3153
 
 # 0.42.0
 

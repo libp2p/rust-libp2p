@@ -256,21 +256,19 @@ fn custom_event_emit_event_through_poll() {
     }
 
     #[allow(dead_code, unreachable_code, clippy::diverging_sub_expression)]
-    fn bar() {
+    async fn bar() {
         require_net_behaviour::<Foo>();
 
         let mut _swarm: libp2p_swarm::Swarm<Foo> = unimplemented!();
 
         // check that the event is bubbled up all the way to swarm
-        let _ = async {
-            loop {
-                match _swarm.select_next_some().await {
-                    SwarmEvent::Behaviour(BehaviourOutEvent::Ping(_)) => break,
-                    SwarmEvent::Behaviour(BehaviourOutEvent::Identify(_)) => break,
-                    _ => {}
-                }
+        loop {
+            match _swarm.select_next_some().await {
+                SwarmEvent::Behaviour(BehaviourOutEvent::Ping(_)) => break,
+                SwarmEvent::Behaviour(BehaviourOutEvent::Identify(_)) => break,
+                _ => {}
             }
-        };
+        }
     }
 }
 

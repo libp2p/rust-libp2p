@@ -218,7 +218,7 @@ impl fmt::Debug for PublicKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("PublicKey(asn.1 uncompressed): ")?;
         for byte in &self.encode_der() {
-            write!(f, "{:x}", byte)?;
+            write!(f, "{byte:x}")?;
         }
         Ok(())
     }

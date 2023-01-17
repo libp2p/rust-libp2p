@@ -101,8 +101,8 @@
 //! // This is test transport (memory).
 //! let transport = MemoryTransport::default()
 //!            .upgrade(libp2p_core::upgrade::Version::V1)
-//!            .authenticate(libp2p::noise::NoiseAuthenticated::xx(&local_key).unwrap())
-//!            .multiplex(libp2p::mplex::MplexConfig::new())
+//!            .authenticate(libp2p_noise::NoiseAuthenticated::xx(&local_key).unwrap())
+//!            .multiplex(libp2p_mplex::MplexConfig::new())
 //!            .boxed();
 //!
 //! // Create a Gossipsub topic
@@ -153,10 +153,6 @@ pub mod time_cache;
 mod topic;
 mod transform;
 mod types;
-
-#[cfg(test)]
-#[macro_use]
-extern crate derive_builder;
 
 mod rpc_proto;
 

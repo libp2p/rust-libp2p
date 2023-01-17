@@ -1,13 +1,27 @@
 # 0.42.0 [unreleased]
 
+- Update to `libp2p-core` `v0.39.0`.
+
 - Removed deprecated Swarm constructors. For transition notes see [0.41.0](#0.41.0). See [PR 3170].
+- Deprecate functions on `PollParameters` in preparation for `PollParameters` to be removed entirely eventually. See [PR 3153].
 
 - Add `estblished_in` to `SwarmEvent::ConnectionEstablished`. See [PR 3134].
+
+- Remove deprecated `inject_*` methods from `NetworkBehaviour` and `ConnectionHandler`.
+  see [PR 3264].
+
+- Update to `libp2p-swarm-derive` `v0.32.0`.
+
+- Remove type parameter from `PendingOutboundConnectionError` and `PendingInboundConnectionError`.
+  These two types are always used with `std::io::Error`. See [PR 3272].
 
 - Moved `ConnectionId` from `libp2p-core` to `libp2p-swarm`. See [PR 3221].
 
 [PR 3170]: https://github.com/libp2p/rust-libp2p/pull/3170
 [PR 3134]: https://github.com/libp2p/rust-libp2p/pull/3134
+[PR 3153]: https://github.com/libp2p/rust-libp2p/pull/3153
+[PR 3264]: https://github.com/libp2p/rust-libp2p/pull/3264
+[PR 3272]: https://github.com/libp2p/rust-libp2p/pull/3272
 [PR 3221]: https://github.com/libp2p/rust-libp2p/pull/3221
 
 # 0.41.1

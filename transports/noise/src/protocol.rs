@@ -245,7 +245,7 @@ impl snow::resolvers::CryptoResolver for Resolver {
 
     fn resolve_dh(&self, choice: &snow::params::DHChoice) -> Option<Box<dyn snow::types::Dh>> {
         if let snow::params::DHChoice::Curve25519 = choice {
-            Some(Box::new(Keypair::<x25519::X25519>::default()))
+            Some(Box::new(Keypair::<x25519_spec::X25519Spec>::default()))
         } else {
             None
         }
@@ -308,7 +308,7 @@ impl snow::types::Random for Rng {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::X25519;
+    use crate::X25519Spec;
     use once_cell::sync::Lazy;
 
     #[test]
@@ -334,9 +334,9 @@ mod tests {
     }
 
     fn xx_builder(prologue: &'static [u8]) -> snow::Builder<'static> {
-        X25519::params_xx().into_builder(prologue, TEST_KEY.secret(), None)
+        X25519Spec::params_xx().into_builder(prologue, TEST_KEY.secret(), None)
     }
 
     // Hack to work around borrow-checker.
-    static TEST_KEY: Lazy<Keypair<X25519>> = Lazy::new(Keypair::<X25519>::new);
+    static TEST_KEY: Lazy<Keypair<X25519Spec>> = Lazy::new(Keypair::<X25519Spec>::new);
 }
