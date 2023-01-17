@@ -36,7 +36,9 @@ use std::num::NonZeroU8;
 ///
 /// - [`DialOpts::unknown_peer_id`] dialing an unknown peer
 #[derive(Debug)]
-pub struct DialOpts(Opts);
+pub struct DialOpts {
+    inner: Opts,
+}
 
 impl DialOpts {
     /// Dial a known peer.
@@ -74,11 +76,15 @@ impl DialOpts {
     /// Get the [`PeerId`] specified in a [`DialOpts`] if any.
     pub fn get_peer_id(&self) -> Option<PeerId> {
         match self {
-            DialOpts(Opts::WithPeerId(WithPeerId { peer_id, .. })) => Some(*peer_id),
-            DialOpts(Opts::WithPeerIdWithAddresses(WithPeerIdWithAddresses {
-                peer_id, ..
-            })) => Some(*peer_id),
-            DialOpts(Opts::WithoutPeerIdWithAddress(_)) => None,
+            DialOpts {
+                inner: Opts::WithPeerId(WithPeerId { peer_id, .. }),
+            } => Some(*peer_id),
+            DialOpts {
+                inner: Opts::WithPeerIdWithAddresses(WithPeerIdWithAddresses { peer_id, .. }),
+            } => Some(*peer_id),
+            DialOpts {
+                inner: Opts::WithoutPeerIdWithAddress(_),
+            } => None,
         }
     }
 
@@ -93,13 +99,15 @@ impl DialOpts {
     /// See <https://github.com/multiformats/rust-multiaddr/issues/73>.
     pub(crate) fn get_or_parse_peer_id(&self) -> Result<Option<PeerId>, Multihash> {
         match self {
-            DialOpts(Opts::WithPeerId(WithPeerId { peer_id, .. })) => Ok(Some(*peer_id)),
-            DialOpts(Opts::WithPeerIdWithAddresses(WithPeerIdWithAddresses {
-                peer_id, ..
-            })) => Ok(Some(*peer_id)),
-            DialOpts(Opts::WithoutPeerIdWithAddress(WithoutPeerIdWithAddress {
-                address, ..
-            })) => {
+            DialOpts {
+                inner: Opts::WithPeerId(WithPeerId { peer_id, .. }),
+            } => Ok(Some(*peer_id)),
+            DialOpts {
+                inner: Opts::WithPeerIdWithAddresses(WithPeerIdWithAddresses { peer_id, .. }),
+            } => Ok(Some(*peer_id)),
+            DialOpts {
+                inner: Opts::WithoutPeerIdWithAddress(WithoutPeerIdWithAddress { address, .. }),
+            } => {
                 let peer_id = address
                     .iter()
                     .last()
@@ -119,64 +127,83 @@ impl DialOpts {
 
     pub(crate) fn get_addresses(&self) -> Vec<Multiaddr> {
         match self {
-            DialOpts(Opts::WithPeerId(WithPeerId { .. })) => vec![],
-            DialOpts(Opts::WithPeerIdWithAddresses(WithPeerIdWithAddresses {
-                addresses, ..
-            })) => addresses.clone(),
-            DialOpts(Opts::WithoutPeerIdWithAddress(WithoutPeerIdWithAddress {
-                address, ..
-            })) => vec![address.clone()],
+            DialOpts {
+                inner: Opts::WithPeerId(WithPeerId { .. }),
+            } => vec![],
+            DialOpts {
+                inner: Opts::WithPeerIdWithAddresses(WithPeerIdWithAddresses { addresses, .. }),
+            } => addresses.clone(),
+            DialOpts {
+                inner: Opts::WithoutPeerIdWithAddress(WithoutPeerIdWithAddress { address, .. }),
+            } => vec![address.clone()],
         }
     }
 
     pub(crate) fn extend_addresses_through_behaviour(&self) -> bool {
         match self {
-            DialOpts(Opts::WithPeerId(WithPeerId { .. })) => true,
-            DialOpts(Opts::WithPeerIdWithAddresses(WithPeerIdWithAddresses {
-                extend_addresses_through_behaviour,
-                ..
-            })) => *extend_addresses_through_behaviour,
-            DialOpts(Opts::WithoutPeerIdWithAddress(WithoutPeerIdWithAddress { .. })) => true,
+            DialOpts {
+                inner: Opts::WithPeerId(WithPeerId { .. }),
+            } => true,
+            DialOpts {
+                inner:
+                    Opts::WithPeerIdWithAddresses(WithPeerIdWithAddresses {
+                        extend_addresses_through_behaviour,
+                        ..
+                    }),
+            } => *extend_addresses_through_behaviour,
+            DialOpts {
+                inner: Opts::WithoutPeerIdWithAddress(WithoutPeerIdWithAddress { .. }),
+            } => true,
         }
     }
 
     pub(crate) fn peer_condition(&self) -> PeerCondition {
         match self {
-            DialOpts(
-                Opts::WithPeerId(WithPeerId { condition, .. })
-                | Opts::WithPeerIdWithAddresses(WithPeerIdWithAddresses { condition, .. }),
-            ) => *condition,
-            DialOpts(Opts::WithoutPeerIdWithAddress(WithoutPeerIdWithAddress { .. })) => {
-                PeerCondition::Always
-            }
+            DialOpts {
+                inner:
+                    Opts::WithPeerId(WithPeerId { condition, .. })
+                    | Opts::WithPeerIdWithAddresses(WithPeerIdWithAddresses { condition, .. }),
+            } => *condition,
+            DialOpts {
+                inner: Opts::WithoutPeerIdWithAddress(WithoutPeerIdWithAddress { .. }),
+            } => PeerCondition::Always,
         }
     }
 
     pub(crate) fn dial_concurrency_override(&self) -> Option<NonZeroU8> {
         match self {
-            DialOpts(Opts::WithPeerId(WithPeerId {
-                dial_concurrency_factor_override,
-                ..
-            })) => *dial_concurrency_factor_override,
-            DialOpts(Opts::WithPeerIdWithAddresses(WithPeerIdWithAddresses {
-                dial_concurrency_factor_override,
-                ..
-            })) => *dial_concurrency_factor_override,
-            DialOpts(Opts::WithoutPeerIdWithAddress(WithoutPeerIdWithAddress { .. })) => None,
+            DialOpts {
+                inner:
+                    Opts::WithPeerId(WithPeerId {
+                        dial_concurrency_factor_override,
+                        ..
+                    }),
+            } => *dial_concurrency_factor_override,
+            DialOpts {
+                inner:
+                    Opts::WithPeerIdWithAddresses(WithPeerIdWithAddresses {
+                        dial_concurrency_factor_override,
+                        ..
+                    }),
+            } => *dial_concurrency_factor_override,
+            DialOpts {
+                inner: Opts::WithoutPeerIdWithAddress(WithoutPeerIdWithAddress { .. }),
+            } => None,
         }
     }
 
     pub(crate) fn role_override(&self) -> Endpoint {
         match self {
-            DialOpts(Opts::WithPeerId(WithPeerId { role_override, .. })) => *role_override,
-            DialOpts(Opts::WithPeerIdWithAddresses(WithPeerIdWithAddresses {
-                role_override,
-                ..
-            })) => *role_override,
-            DialOpts(Opts::WithoutPeerIdWithAddress(WithoutPeerIdWithAddress {
-                role_override,
-                ..
-            })) => *role_override,
+            DialOpts {
+                inner: Opts::WithPeerId(WithPeerId { role_override, .. }),
+            } => *role_override,
+            DialOpts {
+                inner: Opts::WithPeerIdWithAddresses(WithPeerIdWithAddresses { role_override, .. }),
+            } => *role_override,
+            DialOpts {
+                inner:
+                    Opts::WithoutPeerIdWithAddress(WithoutPeerIdWithAddress { role_override, .. }),
+            } => *role_override,
         }
     }
 }
@@ -256,7 +283,9 @@ impl WithPeerId {
     /// Addresses to dial the peer are retrieved via
     /// [`NetworkBehaviour::addresses_of_peer`](crate::behaviour::NetworkBehaviour::addresses_of_peer).
     pub fn build(self) -> DialOpts {
-        DialOpts(Opts::WithPeerId(self))
+        DialOpts {
+            inner: Opts::WithPeerId(self),
+        }
     }
 }
 
@@ -304,7 +333,9 @@ impl WithPeerIdWithAddresses {
 
     /// Build the final [`DialOpts`].
     pub fn build(self) -> DialOpts {
-        DialOpts(Opts::WithPeerIdWithAddresses(self))
+        DialOpts {
+            inner: Opts::WithPeerIdWithAddresses(self),
+        }
     }
 }
 
@@ -340,7 +371,9 @@ impl WithoutPeerIdWithAddress {
     }
     /// Build the final [`DialOpts`].
     pub fn build(self) -> DialOpts {
-        DialOpts(Opts::WithoutPeerIdWithAddress(self))
+        DialOpts {
+            inner: Opts::WithoutPeerIdWithAddress(self),
+        }
     }
 }
 
