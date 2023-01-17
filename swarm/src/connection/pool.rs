@@ -19,27 +19,27 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::connection::{Connection, ConnectionId};
+use crate::connection::{Connection, ConnectionId, PendingPoint};
 use crate::{
     behaviour::{THandlerInEvent, THandlerOutEvent},
+    ConnectedPoint,
     connection::{
         Connected, ConnectionError, ConnectionLimit, IncomingInfo, PendingConnectionError,
         PendingInboundConnectionError, PendingOutboundConnectionError,
     },
-    transport::TransportError,
-    ConnectedPoint, ConnectionHandler, Executor, IntoConnectionHandler, Multiaddr, PeerId,
+    ConnectionHandler, Executor, IntoConnectionHandler, Multiaddr, PeerId, transport::TransportError,
 };
 use concurrent_dial::ConcurrentDial;
 use fnv::FnvHashMap;
 use futures::prelude::*;
 use futures::{
     channel::{mpsc, oneshot},
-    future::{poll_fn, BoxFuture, Either},
+    future::{BoxFuture, Either, poll_fn},
     ready,
     stream::FuturesUnordered,
 };
 use instant::Instant;
-use libp2p_core::connection::{Endpoint, PendingPoint};
+use libp2p_core::connection::Endpoint;
 use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerExt};
 use std::{
     collections::{hash_map, HashMap},
