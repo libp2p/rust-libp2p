@@ -23,9 +23,62 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
+mod behaviour;
+mod copy_future;
+mod priv_client;
+mod protocol;
 pub mod v2;
+
+#[allow(clippy::derive_partial_eq_without_eq)]
+mod message_proto {
+    include!(concat!(env!("OUT_DIR"), "/message_v2.pb.rs"));
+}
+
+pub use behaviour::{Behaviour, CircuitId, Config, Event};
+pub use protocol::{HOP_PROTOCOL_NAME, STOP_PROTOCOL_NAME};
+
+/// Types related to the relay protocol inbound.
+pub mod inbound {
+    pub mod hop {
+        pub use crate::protocol::inbound_hop::FatalUpgradeError;
+    }
+    pub mod stop {
+        pub use crate::protocol::inbound_stop::FatalUpgradeError;
+    }
+}
+
+/// Types related to the relay protocol outbound.
+pub mod outbound {
+    pub mod hop {
+        pub use crate::protocol::outbound_hop::FatalUpgradeError;
+    }
+    pub mod stop {
+        pub use crate::protocol::outbound_stop::FatalUpgradeError;
+    }
+}
+
+/// Everything related to the relay protocol from a client's perspective.
+pub mod client {
+    pub use crate::priv_client::{new, transport::Transport, Behaviour, Connection, Event};
+
+    pub mod transport {
+        pub use crate::priv_client::transport::Error;
+    }
+}
 
 // Check that we can safely cast a `usize` to a `u64`.
 static_assertions::const_assert! {
     std::mem::size_of::<usize>() <= std::mem::size_of::<u64>()
+}
+
+/// The ID of an outgoing / incoming, relay / destination request.
+// TODO remove this type and it's usage on `TransportToBehaviourMsg::DialReq`
+// when removed from `v2`.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub struct RequestId(u64);
+
+impl RequestId {
+    fn new() -> RequestId {
+        RequestId(rand::random())
+    }
 }

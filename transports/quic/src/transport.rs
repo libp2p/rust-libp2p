@@ -128,7 +128,9 @@ impl<P: Provider> Transport for GenTransport<P> {
     }
 
     fn address_translation(&self, listen: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
-        if !is_quic_addr(listen) || !is_quic_addr(observed) {
+        if !is_quic_addr(listen, self.support_draft_29)
+            || !is_quic_addr(observed, self.support_draft_29)
+        {
             return None;
         }
         Some(observed.clone())
@@ -597,7 +599,7 @@ fn multiaddr_to_socketaddr(
 }
 
 /// Whether an [`Multiaddr`] is a valid for the QUIC transport.
-fn is_quic_addr(addr: &Multiaddr) -> bool {
+fn is_quic_addr(addr: &Multiaddr, support_draft_29: bool) -> bool {
     use Protocol::*;
     let mut iter = addr.iter();
     let first = match iter.next() {
@@ -617,7 +619,11 @@ fn is_quic_addr(addr: &Multiaddr) -> bool {
 
     matches!(first, Ip4(_) | Ip6(_) | Dns(_) | Dns4(_) | Dns6(_))
         && matches!(second, Udp(_))
-        && matches!(third, QuicV1)
+        && if support_draft_29 {
+            matches!(third, QuicV1 | Quic)
+        } else {
+            matches!(third, QuicV1)
+        }
         && matches!(fourth, Some(P2p(_)) | None)
         && matches!(fifth, None)
 }

@@ -1,10 +1,12 @@
 # 0.12.0 [unreleased]
 
-- Update to `libp2p-core` `v0.39.0`.
+- Update to `prometheus-client` `v0.19.0`. See [PR 3207].
 
 - Add `connections_establishment_duration` metric. See [PR 3134].
 
 - Bump MSRV to 1.65.0.
+
+- Update to `libp2p-core` `v0.39.0`.
 
 - Update to `libp2p-dcutr` `v0.9.0`.
 
@@ -19,6 +21,7 @@
 - Update to `libp2p-swarm` `v0.42.0`.
 
 [PR 3134]: https://github.com/libp2p/rust-libp2p/pull/3134/
+[PR 3207]: https://github.com/libp2p/rust-libp2p/pull/3207/
 
 # 0.11.0
 
