@@ -94,12 +94,12 @@ impl DialOpts {
     /// See <https://github.com/multiformats/rust-multiaddr/issues/73>.
     pub(crate) fn get_or_parse_peer_id(&self) -> Result<Option<PeerId>, Multihash> {
         if let Some(peer_id) = self.peer_id {
-            return Ok(Some(peer_id))
+            return Ok(Some(peer_id));
         }
 
         let first_address = match self.addresses.first() {
             Some(first_address) => first_address,
-            None => return Ok(None)
+            None => return Ok(None),
         };
 
         let maybe_peer_id = first_address
