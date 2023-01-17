@@ -204,7 +204,7 @@ impl WithPeerId {
             peer_id: Some(self.peer_id),
             condition: self.condition,
             addresses: vec![],
-            extend_addresses_through_behaviour: false,
+            extend_addresses_through_behaviour: true,
             role_override: self.role_override,
             dial_concurrency_factor_override: self.dial_concurrency_factor_override,
         }
