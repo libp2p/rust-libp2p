@@ -12,7 +12,7 @@
 
 - Improve error messages in case keys cannot be decoded because of missing feature flags. See [PR 2972].
 
-- Remove `EitherError` in favor of `either::Either`. See [PR XXXX].
+- Remove `EitherError` in favor of `either::Either`. See [PR 3337].
 
 - Remove `EitherTransport` in favor of implementing `Transport` on `either::Either`. See [PR XXXX].
 
@@ -21,7 +21,7 @@
 [PR 3097]: https://github.com/libp2p/rust-libp2p/pull/3097
 [PR 3090]: https://github.com/libp2p/rust-libp2p/pull/3090
 [PR 2972]: https://github.com/libp2p/rust-libp2p/pull/2972
-[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+[PR 3337]: https://github.com/libp2p/rust-libp2p/pull/3337
 
 # 0.37.0
 
