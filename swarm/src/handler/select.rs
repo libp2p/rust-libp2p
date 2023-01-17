@@ -28,7 +28,7 @@ use crate::upgrade::SendWrapper;
 
 use either::Either;
 use libp2p_core::{
-    either::{EitherError, EitherOutput},
+    either::EitherOutput,
     upgrade::{EitherUpgrade, NegotiationError, ProtocolError, SelectUpgrade, UpgradeError},
     ConnectedPoint, PeerId,
 };
@@ -186,7 +186,7 @@ where
             }),
             DialUpgradeError {
                 info: EitherOutput::First(info),
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::A(err))),
+                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(Either::Left(err))),
             } => Either::Left(DialUpgradeError {
                 info,
                 error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(err)),
@@ -214,7 +214,7 @@ where
             }),
             DialUpgradeError {
                 info: EitherOutput::Second(info),
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::B(err))),
+                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(Either::Right(err))),
             } => Either::Right(DialUpgradeError {
                 info,
                 error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(err)),
@@ -318,14 +318,14 @@ where
                         error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(e2)),
                     }));
             }
-            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::A(e))) => {
+            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(Either::Left(e))) => {
                 self.proto1
                     .on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
                         info: i1,
                         error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)),
                     }));
             }
-            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::B(e))) => {
+            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(Either::Right(e))) => {
                 self.proto2
                     .on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
                         info: i2,
@@ -343,7 +343,7 @@ where
 {
     type InEvent = EitherOutput<TProto1::InEvent, TProto2::InEvent>;
     type OutEvent = EitherOutput<TProto1::OutEvent, TProto2::OutEvent>;
-    type Error = EitherError<TProto1::Error, TProto2::Error>;
+    type Error = Either<TProto1::Error, TProto2::Error>;
     type InboundProtocol = SelectUpgrade<
         SendWrapper<<TProto1 as ConnectionHandler>::InboundProtocol>,
         SendWrapper<<TProto2 as ConnectionHandler>::InboundProtocol>,
@@ -395,7 +395,7 @@ where
                 return Poll::Ready(ConnectionHandlerEvent::Custom(EitherOutput::First(event)));
             }
             Poll::Ready(ConnectionHandlerEvent::Close(event)) => {
-                return Poll::Ready(ConnectionHandlerEvent::Close(EitherError::A(event)));
+                return Poll::Ready(ConnectionHandlerEvent::Close(Either::Left(event)));
             }
             Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest { protocol }) => {
                 return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
@@ -412,7 +412,7 @@ where
                 return Poll::Ready(ConnectionHandlerEvent::Custom(EitherOutput::Second(event)));
             }
             Poll::Ready(ConnectionHandlerEvent::Close(event)) => {
-                return Poll::Ready(ConnectionHandlerEvent::Close(EitherError::B(event)));
+                return Poll::Ready(ConnectionHandlerEvent::Close(Either::Right(event)));
             }
             Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest { protocol }) => {
                 return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
