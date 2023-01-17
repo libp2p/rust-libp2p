@@ -302,7 +302,7 @@ fn mk_transport() -> (PeerId, transport::Boxed<(PeerId, StreamMuxerBox)>) {
             .upgrade(upgrade::Version::V1)
             .authenticate(NoiseAuthenticated::xx(&id_keys).unwrap())
             .multiplex(libp2p_yamux::YamuxConfig::default())
-            .boxed(),
+            .box_multiplexed(),
     )
 }
 

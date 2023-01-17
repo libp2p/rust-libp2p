@@ -338,7 +338,7 @@ where
         .upgrade(upgrade::Version::V1)
         .authenticate(PlainText2Config { local_public_key })
         .multiplex(libp2p_yamux::YamuxConfig::default())
-        .boxed()
+        .box_multiplexed()
 }
 
 #[derive(NetworkBehaviour)]

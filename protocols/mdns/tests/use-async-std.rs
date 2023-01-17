@@ -62,7 +62,7 @@ async fn create_swarm(config: Config) -> Result<Swarm<Behaviour>, Box<dyn Error>
         .upgrade(Version::V1)
         .authenticate(libp2p_noise::NoiseAuthenticated::xx(&id_keys).unwrap())
         .multiplex(libp2p_yamux::YamuxConfig::default())
-        .boxed();
+        .box_multiplexed();
     let behaviour = Behaviour::new(config, peer_id)?;
     let mut swarm = Swarm::with_async_std_executor(transport, behaviour, peer_id);
     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;

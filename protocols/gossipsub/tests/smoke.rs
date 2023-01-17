@@ -153,7 +153,7 @@ fn build_node() -> (Multiaddr, Swarm<Gossipsub>) {
             local_public_key: public_key.clone(),
         })
         .multiplex(yamux::YamuxConfig::default())
-        .boxed();
+        .box_multiplexed();
 
     let peer_id = public_key.to_peer_id();
 

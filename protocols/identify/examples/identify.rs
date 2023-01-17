@@ -53,7 +53,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .upgrade(Version::V1)
         .authenticate(libp2p_noise::NoiseAuthenticated::xx(&local_key).unwrap())
         .multiplex(libp2p_yamux::YamuxConfig::default())
-        .boxed();
+        .box_multiplexed();
 
     // Create a identify network behaviour.
     let behaviour = identify::Behaviour::new(identify::Config::new(

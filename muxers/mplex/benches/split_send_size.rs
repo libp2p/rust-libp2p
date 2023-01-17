@@ -174,7 +174,7 @@ fn tcp_transport(split_send_size: usize) -> BenchTransport {
         .authenticate(PlainText2Config { local_public_key })
         .multiplex(mplex)
         .timeout(Duration::from_secs(5))
-        .boxed()
+        .box_multiplexed()
 }
 
 fn mem_transport(split_send_size: usize) -> BenchTransport {
@@ -189,7 +189,7 @@ fn mem_transport(split_send_size: usize) -> BenchTransport {
         .authenticate(PlainText2Config { local_public_key })
         .multiplex(mplex)
         .timeout(Duration::from_secs(5))
-        .boxed()
+        .box_multiplexed()
 }
 
 criterion_group!(split_send_size, prepare);

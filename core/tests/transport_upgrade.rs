@@ -86,7 +86,7 @@ fn upgrade_pipeline() {
         .apply(HelloUpgrade {})
         .apply(HelloUpgrade {})
         .multiplex(MplexConfig::default())
-        .boxed();
+        .box_multiplexed();
 
     let dialer_keys = identity::Keypair::generate_ed25519();
     let dialer_id = dialer_keys.public().to_peer_id();
@@ -97,7 +97,7 @@ fn upgrade_pipeline() {
         .apply(HelloUpgrade {})
         .apply(HelloUpgrade {})
         .multiplex(MplexConfig::default())
-        .boxed();
+        .box_multiplexed();
 
     let listen_addr1 = Multiaddr::from(Protocol::Memory(random::<u64>()));
     let listen_addr2 = listen_addr1.clone();

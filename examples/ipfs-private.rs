@@ -69,7 +69,7 @@ pub fn build_transport(
         .authenticate(noise_config)
         .multiplex(yamux_config)
         .timeout(Duration::from_secs(20))
-        .boxed()
+        .box_multiplexed()
 }
 
 /// Get the current ipfs repo path, either from the IPFS_PATH environment variable or

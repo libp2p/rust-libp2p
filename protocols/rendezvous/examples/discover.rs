@@ -43,7 +43,7 @@ async fn main() {
             .upgrade(Version::V1)
             .authenticate(libp2p_noise::NoiseAuthenticated::xx(&identity).unwrap())
             .multiplex(libp2p_yamux::YamuxConfig::default())
-            .boxed(),
+            .box_multiplexed(),
         MyBehaviour {
             rendezvous: rendezvous::client::Behaviour::new(identity.clone()),
             ping: ping::Behaviour::new(ping::Config::new().with_interval(Duration::from_secs(1))),

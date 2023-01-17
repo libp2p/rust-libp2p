@@ -486,7 +486,7 @@ pub enum NetworkBehaviourAction<
     /// #     .upgrade(upgrade::Version::V1)
     /// #     .authenticate(PlainText2Config { local_public_key })
     /// #     .multiplex(yamux::YamuxConfig::default())
-    /// #     .boxed();
+    /// #     .box_multiplexed();
     /// #
     /// # let mut swarm = Swarm::with_threadpool_executor(transport, MyBehaviour::default(), local_peer_id);
     /// #

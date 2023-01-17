@@ -45,7 +45,7 @@ fn mk_transport(up: upgrade::Version) -> (PeerId, TestTransport) {
                 local_public_key: keys.public(),
             })
             .multiplex(MplexConfig::default())
-            .boxed(),
+            .box_multiplexed(),
     )
 }
 

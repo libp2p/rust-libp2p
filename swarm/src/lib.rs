@@ -1743,7 +1743,7 @@ mod tests {
                 local_public_key: local_public_key.clone(),
             })
             .multiplex(yamux::YamuxConfig::default())
-            .boxed();
+            .box_multiplexed();
         let behaviour = CallTraceBehaviour::new(MockBehaviour::new(handler_proto));
         match ThreadPool::new().ok() {
             Some(tp) => {

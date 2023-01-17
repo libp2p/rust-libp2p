@@ -211,7 +211,7 @@ pub async fn development_transport(
             mplex::MplexConfig::default(),
         ))
         .timeout(std::time::Duration::from_secs(20))
-        .boxed())
+        .box_multiplexed())
 }
 
 /// Builds a `Transport` based on TCP/IP that supports the most commonly-used features of libp2p:
@@ -267,5 +267,5 @@ pub fn tokio_development_transport(
             mplex::MplexConfig::default(),
         ))
         .timeout(std::time::Duration::from_secs(20))
-        .boxed())
+        .box_multiplexed())
 }

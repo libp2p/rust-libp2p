@@ -41,7 +41,7 @@ async fn init_swarm(config: Config) -> Swarm<Behaviour> {
         .upgrade(Version::V1)
         .authenticate(noise::NoiseAuthenticated::xx(&keypair).unwrap())
         .multiplex(yamux::YamuxConfig::default())
-        .boxed();
+        .box_multiplexed();
     let behaviour = Behaviour::new(local_id, config);
     Swarm::with_async_std_executor(transport, behaviour, local_id)
 }

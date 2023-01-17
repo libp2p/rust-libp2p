@@ -82,7 +82,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             .upgrade(Version::V1)
             .authenticate(noise::NoiseAuthenticated::xx(&local_key)?)
             .multiplex(yamux::YamuxConfig::default())
-            .boxed(),
+            .box_multiplexed(),
         Behaviour::new(local_pub_key),
         local_peer_id,
     );

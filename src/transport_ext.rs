@@ -62,7 +62,7 @@ pub trait TransportExt: Transport {
     ///             .expect("Signing libp2p-noise static DH keypair failed."),
     ///     )
     ///     .multiplex(mplex::MplexConfig::new())
-    ///     .boxed();
+    ///     .box_multiplexed();
     ///
     /// let (transport, sinks) = transport.with_bandwidth_logging();
     /// ```

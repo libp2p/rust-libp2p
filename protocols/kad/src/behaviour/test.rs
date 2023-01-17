@@ -60,7 +60,7 @@ fn build_node_with_config(cfg: KademliaConfig) -> (Multiaddr, TestSwarm) {
         .upgrade(upgrade::Version::V1)
         .authenticate(noise::NoiseAuthenticated::xx(&local_key).unwrap())
         .multiplex(yamux::YamuxConfig::default())
-        .boxed();
+        .box_multiplexed();
 
     let local_id = local_public_key.to_peer_id();
     let store = MemoryStore::new(local_id);

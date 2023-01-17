@@ -102,7 +102,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             .expect("Signing libp2p-noise static DH keypair failed."),
     )
     .multiplex(libp2p_yamux::YamuxConfig::default())
-    .boxed();
+    .box_multiplexed();
 
     #[derive(NetworkBehaviour)]
     #[behaviour(

@@ -62,7 +62,7 @@ fn make_swarm() -> Swarm<keep_alive::Behaviour> {
         .upgrade(Version::V1)
         .authenticate(libp2p_tls::Config::new(&identity).unwrap())
         .multiplex(libp2p_yamux::YamuxConfig::default())
-        .boxed();
+        .box_multiplexed();
 
     Swarm::without_executor(
         transport,

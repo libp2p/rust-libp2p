@@ -58,7 +58,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 .expect("Signing libp2p-noise static DH keypair failed."),
         )
         .multiplex(mplex::MplexConfig::new())
-        .boxed();
+        .box_multiplexed();
 
     // Create a Floodsub topic
     let floodsub_topic = floodsub::Topic::new("chat");

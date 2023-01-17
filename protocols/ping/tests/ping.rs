@@ -254,7 +254,7 @@ fn mk_transport(muxer: MuxerChoice) -> (PeerId, transport::Boxed<(PeerId, Stream
                 MuxerChoice::Yamux => upgrade::EitherUpgrade::A(yamux::YamuxConfig::default()),
                 MuxerChoice::Mplex => upgrade::EitherUpgrade::B(mplex::MplexConfig::default()),
             })
-            .boxed(),
+            .box_multiplexed(),
     )
 }
 

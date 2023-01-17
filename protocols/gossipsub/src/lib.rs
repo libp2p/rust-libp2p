@@ -103,7 +103,7 @@
 //!            .upgrade(libp2p_core::upgrade::Version::V1)
 //!            .authenticate(libp2p_noise::NoiseAuthenticated::xx(&local_key).unwrap())
 //!            .multiplex(libp2p_mplex::MplexConfig::new())
-//!            .boxed();
+//!            .box_multiplexed();
 //!
 //! // Create a Gossipsub topic
 //! let topic = libp2p_gossipsub::IdentTopic::new("example");

@@ -545,7 +545,7 @@ mod tests {
             .upgrade(upgrade::Version::V1)
             .authenticate(noise::NoiseConfig::xx(noise_keys).into_authenticated())
             .multiplex(MplexConfig::new())
-            .boxed();
+            .box_multiplexed();
         (pubkey, transport)
     }
 

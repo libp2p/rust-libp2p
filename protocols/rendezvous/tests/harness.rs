@@ -51,7 +51,7 @@ where
             MplexConfig::new(),
         ))
         .timeout(Duration::from_secs(5))
-        .boxed();
+        .box_multiplexed();
 
     Swarm::with_tokio_executor(transport, behaviour_fn(peer_id, identity), peer_id)
 }

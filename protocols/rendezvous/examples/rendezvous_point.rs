@@ -47,7 +47,7 @@ async fn main() {
             .upgrade(Version::V1)
             .authenticate(libp2p_noise::NoiseAuthenticated::xx(&identity).unwrap())
             .multiplex(libp2p_yamux::YamuxConfig::default())
-            .boxed(),
+            .box_multiplexed(),
         MyBehaviour {
             identify: identify::Behaviour::new(identify::Config::new(
                 "rendezvous-example/1.0.0".to_string(),
