@@ -67,6 +67,8 @@ impl SubstreamHandler for Stream {
                 .send(sent_message.clone())
                 .map_err(Error::WriteMessage)
                 .await?;
+            stream.close().map_err(Error::WriteMessage).await?;
+
             let received_message = stream.try_next().map_err(Error::ReadMessage).await?;
             let received_message = received_message.ok_or(Error::UnexpectedEndOfStream)?;
 
@@ -87,8 +89,6 @@ impl SubstreamHandler for Stream {
                 }
                 (.., other) => return Err(Error::BadMessage(other)),
             };
-
-            stream.close().map_err(Error::WriteMessage).await?;
 
             Ok(event)
         }))
