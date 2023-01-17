@@ -141,11 +141,18 @@ impl IntoConnectionHandler for Prototype {
             // Deny all substreams on relayed connection.
             Either::Right(dummy::ConnectionHandler)
         } else {
-            let mut handler = Handler::new(
-                self.local_peer_id,
-                *remote_peer_id,
-                endpoint.get_remote_address().clone(),
-            );
+            let mut handler = Handler {
+                remote_peer_id: *remote_peer_id,
+                remote_addr: endpoint.get_remote_address().clone(),
+                local_peer_id: self.local_peer_id,
+                queued_events: Default::default(),
+                pending_error: Default::default(),
+                reservation: Reservation::None,
+                alive_lend_out_substreams: Default::default(),
+                circuit_deny_futs: Default::default(),
+                send_error_futs: Default::default(),
+                keep_alive: KeepAlive::Yes,
+            };
 
             if let Some(event) = self.initial_in {
                 handler.on_behaviour_event(event)
@@ -206,21 +213,6 @@ pub struct Handler {
 }
 
 impl Handler {
-    fn new(local_peer_id: PeerId, remote_peer_id: PeerId, remote_addr: Multiaddr) -> Self {
-        Self {
-            local_peer_id,
-            remote_peer_id,
-            remote_addr,
-            queued_events: Default::default(),
-            pending_error: Default::default(),
-            reservation: Reservation::None,
-            alive_lend_out_substreams: Default::default(),
-            circuit_deny_futs: Default::default(),
-            send_error_futs: Default::default(),
-            keep_alive: KeepAlive::Yes,
-        }
-    }
-
     fn on_fully_negotiated_inbound(
         &mut self,
         FullyNegotiatedInbound {
