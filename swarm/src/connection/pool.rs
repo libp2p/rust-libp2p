@@ -22,19 +22,19 @@
 use crate::connection::{Connection, ConnectionId, PendingPoint};
 use crate::{
     behaviour::{THandlerInEvent, THandlerOutEvent},
-    ConnectedPoint,
     connection::{
         Connected, ConnectionError, ConnectionLimit, IncomingInfo, PendingConnectionError,
         PendingInboundConnectionError, PendingOutboundConnectionError,
     },
-    ConnectionHandler, Executor, IntoConnectionHandler, Multiaddr, PeerId, transport::TransportError,
+    transport::TransportError,
+    ConnectedPoint, ConnectionHandler, Executor, IntoConnectionHandler, Multiaddr, PeerId,
 };
 use concurrent_dial::ConcurrentDial;
 use fnv::FnvHashMap;
 use futures::prelude::*;
 use futures::{
     channel::{mpsc, oneshot},
-    future::{BoxFuture, Either, poll_fn},
+    future::{poll_fn, BoxFuture, Either},
     ready,
     stream::FuturesUnordered,
 };
