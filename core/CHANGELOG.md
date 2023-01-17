@@ -12,6 +12,11 @@
 
 - Improve error messages in case keys cannot be decoded because of missing feature flags. See [PR 2972].
 
+- Add `Transport::box_multiplexed` implementation for boxing multiplexed transports into the
+  `Boxed<(PeerId, StreamMuxerBox)>` type used with the swarm.
+  Deprecate `Multiplexed::boxed` in favor of `box_multiplexed`. See [PR 3313].  
+
+[PR 3313]: https://github.com/libp2p/rust-libp2p/pull/3313
 [PR 3031]: https://github.com/libp2p/rust-libp2p/pull/3031
 [PR 3058]: https://github.com/libp2p/rust-libp2p/pull/3058
 [PR 3097]: https://github.com/libp2p/rust-libp2p/pull/3097
