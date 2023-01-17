@@ -24,7 +24,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 static NEXT_CONNECTION_ID: AtomicUsize = AtomicUsize::new(0);
 
 /// Connection identifier.
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub struct ConnectionId(usize);
 
 impl ConnectionId {
