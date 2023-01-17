@@ -293,6 +293,7 @@ pub struct Multiplexed<T>(#[pin] T);
 impl<T> Multiplexed<T> {
     /// Boxes the authenticated, multiplexed transport, including
     /// the [`StreamMuxer`] and custom transport errors.
+    #[deprecated(since = "0.39.0", note = "Use `Transport::box_multiplexed` instead.")]
     pub fn boxed<M>(self) -> super::Boxed<(PeerId, StreamMuxerBox)>
     where
         T: Transport<Output = (PeerId, M)> + Sized + Send + Unpin + 'static,
