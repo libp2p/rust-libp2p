@@ -193,7 +193,7 @@ async fn recv<T>(mut socket: T) -> Result<Info, UpgradeError>
 where
     T: AsyncRead + AsyncWrite + Unpin,
 {
-    socket.close().await?;
+    socket.flush().await?;
 
     let info = FramedRead::new(
         socket,
