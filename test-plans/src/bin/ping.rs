@@ -13,7 +13,7 @@ use libp2p::websocket::WsConfig;
 use libp2p::{
     core, identity, mplex, noise, ping, webrtc, yamux, Multiaddr, PeerId, Swarm, Transport as _,
 };
-use testplan::{run_ping, Muxer, PingSwarm, SecProtocol, Transport};
+use testcases::{run_ping, Muxer, PingSwarm, SecProtocol, Transport};
 
 fn build_builder<T, C>(
     builder: core::transport::upgrade::Builder<T>,
@@ -55,7 +55,7 @@ async fn main() -> Result<()> {
     let local_peer_id = PeerId::from(local_key.public());
 
     let transport_param: Transport =
-        testplan::from_env("transport").context("unsupported transport")?;
+        testcases::from_env("transport").context("unsupported transport")?;
 
     let ip = env::var("ip").context("ip environment variable is not set")?;
 
@@ -81,10 +81,10 @@ async fn main() -> Result<()> {
                 .upgrade(libp2p::core::upgrade::Version::V1Lazy);
 
             let secure_channel_param: SecProtocol =
-                testplan::from_env("security").context("unsupported secure channel")?;
+                testcases::from_env("security").context("unsupported secure channel")?;
 
             let muxer_param: Muxer =
-                testplan::from_env("muxer").context("unsupported multiplexer")?;
+                testcases::from_env("muxer").context("unsupported multiplexer")?;
 
             (
                 build_builder(builder, secure_channel_param, muxer_param, &local_key),
@@ -98,10 +98,10 @@ async fn main() -> Result<()> {
             .upgrade(libp2p::core::upgrade::Version::V1Lazy);
 
             let secure_channel_param: SecProtocol =
-                testplan::from_env("security").context("unsupported secure channel")?;
+                testcases::from_env("security").context("unsupported secure channel")?;
 
             let muxer_param: Muxer =
-                testplan::from_env("muxer").context("unsupported multiplexer")?;
+                testcases::from_env("muxer").context("unsupported multiplexer")?;
 
             (
                 build_builder(builder, secure_channel_param, muxer_param, &local_key),

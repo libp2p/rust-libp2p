@@ -17,5 +17,5 @@ redis = { version = "0.22.1", features = ["tokio-native-tls-comp", "tokio-comp"]
 tokio = { version = "1.24.1", features = ["full"] }
 
 libp2p = { path = "../", default_features = false, features = ["websocket", "quic",  "mplex", "yamux", "tcp", "tokio", "ping", "noise", "tls", "dns", "rsa", "macros", "webrtc"] }
-testplan = { version = "0.2.0", git = "https://github.com/jxs/test-plans/", branch = "add-webrtc-transport-multidim-interop" }
 rand = "0.8.5"
+strum = { version = "0.24.1", features = ["derive"] }
