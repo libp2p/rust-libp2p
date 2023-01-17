@@ -20,6 +20,7 @@
 
 //! Integration tests for the `Ping` network behaviour.
 
+use either::Either;
 use futures::{channel::mpsc, prelude::*};
 use libp2p_core::{
     identity,
@@ -251,8 +252,8 @@ fn mk_transport(muxer: MuxerChoice) -> (PeerId, transport::Boxed<(PeerId, Stream
             .upgrade(upgrade::Version::V1)
             .authenticate(noise::NoiseAuthenticated::xx(&id_keys).unwrap())
             .multiplex(match muxer {
-                MuxerChoice::Yamux => upgrade::EitherUpgrade::A(yamux::YamuxConfig::default()),
-                MuxerChoice::Mplex => upgrade::EitherUpgrade::B(mplex::MplexConfig::default()),
+                MuxerChoice::Yamux => Either::Left(yamux::YamuxConfig::default()),
+                MuxerChoice::Mplex => Either::Right(mplex::MplexConfig::default()),
             })
             .boxed(),
     )

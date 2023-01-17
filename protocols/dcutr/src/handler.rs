@@ -21,7 +21,7 @@
 use crate::protocol;
 use either::Either;
 use libp2p_core::connection::ConnectionId;
-use libp2p_core::upgrade::{self, DeniedUpgrade};
+use libp2p_core::upgrade::DeniedUpgrade;
 use libp2p_core::{ConnectedPoint, PeerId};
 use libp2p_swarm::dummy;
 use libp2p_swarm::handler::SendWrapper;
@@ -70,11 +70,11 @@ impl IntoConnectionHandler for Prototype {
 
     fn inbound_protocol(&self) -> <Self::Handler as ConnectionHandler>::InboundProtocol {
         match self {
-            Prototype::UnknownConnection => upgrade::EitherUpgrade::A(SendWrapper(
-                upgrade::EitherUpgrade::A(protocol::inbound::Upgrade {}),
-            )),
+            Prototype::UnknownConnection => {
+                Either::Left(SendWrapper(Either::Left(protocol::inbound::Upgrade {})))
+            }
             Prototype::DirectConnection { .. } => {
-                upgrade::EitherUpgrade::A(SendWrapper(upgrade::EitherUpgrade::B(DeniedUpgrade)))
+                Either::Left(SendWrapper(Either::Right(DeniedUpgrade)))
             }
         }
     }
