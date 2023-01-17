@@ -120,7 +120,7 @@ where
     max_negotiating_inbound_streams: usize,
 
     /// How many [`task::EstablishedConnectionEvent`]s can be buffered before the connection is back-pressured.
-    task_event_buffer_size: usize,
+    per_connection_event_buffer_size: usize,
 
     /// The executor to use for running connection tasks. Can either be a global executor
     /// or a local queue.
@@ -332,7 +332,7 @@ where
             dial_concurrency_factor: config.dial_concurrency_factor,
             substream_upgrade_protocol_override: config.substream_upgrade_protocol_override,
             max_negotiating_inbound_streams: config.max_negotiating_inbound_streams,
-            task_event_buffer_size: config.per_connection_event_buffer_size,
+            per_connection_event_buffer_size: config.per_connection_event_buffer_size,
             executor,
             pending_connection_events_tx,
             pending_connection_events_rx,
@@ -754,7 +754,7 @@ where
 
                     let (command_sender, command_receiver) =
                         mpsc::channel(self.task_command_buffer_size);
-                    let (event_sender, event_receiver) = mpsc::channel(self.task_event_buffer_size);
+                    let (event_sender, event_receiver) = mpsc::channel(self.per_connection_event_buffer_size);
 
                     conns.insert(
                         id,
