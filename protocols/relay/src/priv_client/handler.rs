@@ -28,7 +28,6 @@ use futures::sink::SinkExt;
 use futures::stream::{FuturesUnordered, StreamExt};
 use futures_timer::Delay;
 use instant::Instant;
-use libp2p_core::either::EitherError;
 use libp2p_core::multiaddr::Protocol;
 use libp2p_core::{upgrade, ConnectedPoint, Multiaddr, PeerId};
 use libp2p_swarm::handler::{
@@ -174,7 +173,7 @@ pub struct Handler {
     /// A pending fatal error that results in the connection being closed.
     pending_error: Option<
         ConnectionHandlerUpgrErr<
-            EitherError<inbound_stop::FatalUpgradeError, outbound_hop::FatalUpgradeError>,
+            Either<inbound_stop::FatalUpgradeError, outbound_hop::FatalUpgradeError>,
         >,
     >,
     /// Until when to keep the connection alive.
@@ -366,7 +365,7 @@ impl Handler {
                 inbound_stop::UpgradeError::Fatal(error),
             )) => {
                 self.pending_error = Some(ConnectionHandlerUpgrErr::Upgrade(
-                    upgrade::UpgradeError::Apply(EitherError::A(error)),
+                    upgrade::UpgradeError::Apply(Either::Left(error)),
                 ));
                 return;
             }
@@ -413,7 +412,7 @@ impl Handler {
                         match error {
                             outbound_hop::UpgradeError::Fatal(error) => {
                                 self.pending_error = Some(ConnectionHandlerUpgrErr::Upgrade(
-                                    upgrade::UpgradeError::Apply(EitherError::B(error)),
+                                    upgrade::UpgradeError::Apply(Either::Right(error)),
                                 ));
                                 return;
                             }
@@ -476,7 +475,7 @@ impl Handler {
                         match error {
                             outbound_hop::UpgradeError::Fatal(error) => {
                                 self.pending_error = Some(ConnectionHandlerUpgrErr::Upgrade(
-                                    upgrade::UpgradeError::Apply(EitherError::B(error)),
+                                    upgrade::UpgradeError::Apply(Either::Right(error)),
                                 ));
                                 return;
                             }
@@ -510,7 +509,7 @@ impl ConnectionHandler for Handler {
     type InEvent = In;
     type OutEvent = Event;
     type Error = ConnectionHandlerUpgrErr<
-        EitherError<inbound_stop::FatalUpgradeError, outbound_hop::FatalUpgradeError>,
+        Either<inbound_stop::FatalUpgradeError, outbound_hop::FatalUpgradeError>,
     >;
     type InboundProtocol = inbound_stop::Upgrade;
     type OutboundProtocol = outbound_hop::Upgrade;
