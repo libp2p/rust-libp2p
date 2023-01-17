@@ -116,102 +116,6 @@ pub trait ConnectionHandler: Send + 'static {
     /// >           This allows a remote to put the list of supported protocols in a cache.
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo>;
 
-    /// Injects the output of a successful upgrade on a new inbound substream.
-    ///
-    /// Note that it is up to the [`ConnectionHandler`] implementation to manage the lifetime of the
-    /// negotiated inbound substreams. E.g. the implementation has to enforce a limit on the number
-    /// of simultaneously open negotiated inbound substreams. In other words it is up to the
-    /// [`ConnectionHandler`] implementation to stop a malicious remote node to open and keep alive
-    /// an excessive amount of inbound substreams.
-    #[deprecated(
-        since = "0.41.0",
-        note = "Handle `ConnectionEvent::FullyNegotiatedInbound` on `ConnectionHandler::on_connection_event` instead.
-        The default implemention of this `inject_*` method delegates to it."
-    )]
-    fn inject_fully_negotiated_inbound(
-        &mut self,
-        protocol: <Self::InboundProtocol as InboundUpgradeSend>::Output,
-        info: Self::InboundOpenInfo,
-    ) {
-        self.on_connection_event(ConnectionEvent::FullyNegotiatedInbound(
-            FullyNegotiatedInbound { protocol, info },
-        ))
-    }
-
-    /// Injects the output of a successful upgrade on a new outbound substream.
-    ///
-    /// The second argument is the information that was previously passed to
-    /// [`ConnectionHandlerEvent::OutboundSubstreamRequest`].
-    #[deprecated(
-        since = "0.41.0",
-        note = "Handle `ConnectionEvent::FullyNegotiatedOutbound` on `ConnectionHandler::on_connection_event` instead.
-        The default implemention of this `inject_*` method delegates to it."
-    )]
-    fn inject_fully_negotiated_outbound(
-        &mut self,
-        protocol: <Self::OutboundProtocol as OutboundUpgradeSend>::Output,
-        info: Self::OutboundOpenInfo,
-    ) {
-        self.on_connection_event(ConnectionEvent::FullyNegotiatedOutbound(
-            FullyNegotiatedOutbound { protocol, info },
-        ))
-    }
-
-    /// Injects an event coming from the outside in the handler.
-    #[deprecated(
-        since = "0.41.0",
-        note = "Implement `ConnectionHandler::on_behaviour_event` instead. The default implementation of `inject_event` delegates to it."
-    )]
-    fn inject_event(&mut self, event: Self::InEvent) {
-        self.on_behaviour_event(event);
-    }
-
-    /// Notifies the handler of a change in the address of the remote.
-    #[deprecated(
-        since = "0.41.0",
-        note = "Handle `ConnectionEvent::AddressChange` on `ConnectionHandler::on_connection_event` instead.
-        The default implemention of this `inject_*` method delegates to it."
-    )]
-    fn inject_address_change(&mut self, new_address: &Multiaddr) {
-        self.on_connection_event(ConnectionEvent::AddressChange(AddressChange {
-            new_address,
-        }))
-    }
-
-    /// Indicates to the handler that upgrading an outbound substream to the given protocol has failed.
-    #[deprecated(
-        since = "0.41.0",
-        note = "Handle `ConnectionEvent::DialUpgradeError` on `ConnectionHandler::on_connection_event` instead.
-        The default implemention of this `inject_*` method delegates to it."
-    )]
-    fn inject_dial_upgrade_error(
-        &mut self,
-        info: Self::OutboundOpenInfo,
-        error: ConnectionHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>,
-    ) {
-        self.on_connection_event(ConnectionEvent::DialUpgradeError(DialUpgradeError {
-            info,
-            error,
-        }))
-    }
-
-    /// Indicates to the handler that upgrading an inbound substream to the given protocol has failed.
-    #[deprecated(
-        since = "0.41.0",
-        note = "Handle `ConnectionEvent::ListenUpgradeError` on `ConnectionHandler::on_connection_event` instead.
-        The default implemention of this `inject_*` method delegates to it."
-    )]
-    fn inject_listen_upgrade_error(
-        &mut self,
-        info: Self::InboundOpenInfo,
-        error: ConnectionHandlerUpgrErr<<Self::InboundProtocol as InboundUpgradeSend>::Error>,
-    ) {
-        self.on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
-            info,
-            error,
-        }))
-    }
-
     /// Returns until when the connection should be kept alive.
     ///
     /// This method is called by the `Swarm` after each invocation of
@@ -279,18 +183,17 @@ pub trait ConnectionHandler: Send + 'static {
     }
 
     /// Informs the handler about an event from the [`NetworkBehaviour`](super::NetworkBehaviour).
-    fn on_behaviour_event(&mut self, _event: Self::InEvent) {}
+    fn on_behaviour_event(&mut self, _event: Self::InEvent);
 
     fn on_connection_event(
         &mut self,
-        _event: ConnectionEvent<
+        event: ConnectionEvent<
             Self::InboundProtocol,
             Self::OutboundProtocol,
             Self::InboundOpenInfo,
             Self::OutboundOpenInfo,
         >,
-    ) {
-    }
+    );
 }
 
 /// Enumeration with the list of the possible stream events

@@ -25,7 +25,7 @@ impl ListenAddresses {
                 self.addresses.insert((*addr).clone());
             }
             FromSwarm::ExpiredListenAddr(ExpiredListenAddr { addr, .. }) => {
-                self.addresses.insert((*addr).clone());
+                self.addresses.remove(addr);
             }
             _ => {}
         }

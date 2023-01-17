@@ -10,6 +10,12 @@
 
 [PR 3239]: https://github.com/libp2p/rust-libp2p/pull/3239
 
+# 0.42.1
+
+- Skip unparsable multiaddr in `Peer::addrs`. See [PR 3280].
+
+[PR 3280]: https://github.com/libp2p/rust-libp2p/pull/3280
+
 # 0.42.0
 
 - Update to `libp2p-core` `v0.38.0`.

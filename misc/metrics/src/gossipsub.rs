@@ -30,11 +30,7 @@ impl Metrics {
         let sub_registry = registry.sub_registry_with_prefix("gossipsub");
 
         let messages = Counter::default();
-        sub_registry.register(
-            "messages",
-            "Number of messages received",
-            Box::new(messages.clone()),
-        );
+        sub_registry.register("messages", "Number of messages received", messages.clone());
 
         Self { messages }
     }

@@ -23,8 +23,8 @@
 mod handler;
 pub mod rate_limiter;
 
-use crate::v2::message_proto;
-use crate::v2::protocol::inbound_hop;
+use crate::message_proto;
+use crate::protocol::{inbound_hop, outbound_stop};
 use crate::v2::relay::handler::Handler;
 use either::Either;
 use instant::Instant;
@@ -43,9 +43,7 @@ use std::ops::Add;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
-use super::protocol::outbound_stop;
-
-/// Configuration for the [`Relay`] [`NetworkBehaviour`].
+/// Configuration for the relay [`Behaviour`].
 ///
 /// # Panics
 ///
@@ -128,7 +126,7 @@ impl Default for Config {
     }
 }
 
-/// The events produced by the [`Relay`] behaviour.
+/// The events produced by the relay `Behaviour`.
 #[derive(Debug)]
 pub enum Event {
     /// An inbound reservation request has been accepted.
@@ -191,9 +189,9 @@ pub enum Event {
     },
 }
 
-/// [`Relay`] is a [`NetworkBehaviour`] that implements the relay server
+/// [`NetworkBehaviour`] implementation of the relay server
 /// functionality of the circuit relay v2 protocol.
-pub struct Relay {
+pub struct Behaviour {
     config: Config,
 
     local_peer_id: PeerId,
@@ -207,7 +205,7 @@ pub struct Relay {
     external_addresses: ExternalAddresses,
 }
 
-impl Relay {
+impl Behaviour {
     pub fn new(local_peer_id: PeerId, config: Config) -> Self {
         Self {
             config,
@@ -253,7 +251,7 @@ impl Relay {
     }
 }
 
-impl NetworkBehaviour for Relay {
+impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = Either<Handler, dummy::ConnectionHandler>;
     type OutEvent = Event;
 
@@ -312,7 +310,7 @@ impl NetworkBehaviour for Relay {
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
-        self.external_addresses.on_swarn_event(&event);
+        self.external_addresses.on_swarm_event(&event);
 
         match event {
             FromSwarm::ConnectionClosed(connection_closed) => {
@@ -791,7 +789,7 @@ impl Add<u64> for CircuitId {
 }
 
 /// A [`NetworkBehaviourAction`], either complete, or still requiring data from [`PollParameters`]
-/// before being returned in [`Relay::poll`].
+/// before being returned in [`Behaviour::poll`].
 #[allow(clippy::large_enum_variant)]
 enum Action {
     Done(NetworkBehaviourAction<Event, THandlerInEvent<Relay>>),

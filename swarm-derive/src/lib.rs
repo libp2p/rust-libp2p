@@ -179,11 +179,23 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             .enumerate()
             .map(|(field_n, field)| match field.ident {
                 Some(ref i) => quote! {
-                    #[allow(deprecated)]
-                    self.#i.inject_connection_established(&peer_id, &connection_id, endpoint, Some(&failed_addresses.into()), other_established);},
+                    self.#i.on_swarm_event(#from_swarm::ConnectionEstablished(#connection_established {
+                        peer_id,
+                        connection_id,
+                        endpoint,
+                        failed_addresses,
+                        other_established,
+                    }));
+                },
                 None => quote! {
-                    #[allow(deprecated)]
-                    self.#field_n.inject_connection_established(&peer_id, &connection_id, endpoint, Some(&failed_addresses.into()), other_established);},
+                    self.#field_n.on_swarm_event(#from_swarm::ConnectionEstablished(#connection_established {
+                        peer_id,
+                        connection_id,
+                        endpoint,
+                        failed_addresses,
+                        other_established,
+                    }));
+                },
             })
     };
 
@@ -196,18 +208,29 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             .enumerate()
             .map(|(field_n, field)| match field.ident {
                 Some(ref i) => quote! {
-                #[allow(deprecated)]
-                self.#i.inject_address_change(&peer_id, &connection_id, old, new);},
+                self.#i.on_swarm_event(#from_swarm::AddressChange(#address_change {
+                        peer_id,
+                        connection_id,
+                        old,
+                        new,
+                    }));
+                },
                 None => quote! {
-                #[allow(deprecated)]
-                self.#field_n.inject_address_change(&peer_id, &connection_id, old, new);},
+                self.#field_n.on_swarm_event(#from_swarm::AddressChange(#address_change {
+                        peer_id,
+                        connection_id,
+                        old,
+                        new,
+                    }));
+                },
             })
     };
 
     // Build the list of statements to put in the body of `on_swarm_event()`
     // for the `FromSwarm::ConnectionClosed` variant.
     let on_connection_closed_stmts = {
-        data_struct.fields
+        data_struct
+            .fields
             .iter()
             .enumerate()
             // The outmost handler belongs to the last behaviour.
@@ -224,11 +247,23 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 };
                 let inject = match field.ident {
                     Some(ref i) => quote! {
-                    #[allow(deprecated)]
-                    self.#i.inject_connection_closed(&peer_id, &connection_id, endpoint, handler, remaining_established);},
+                    self.#i.on_swarm_event(#from_swarm::ConnectionClosed(#connection_closed {
+                            peer_id,
+                            connection_id,
+                            endpoint,
+                            handler,
+                            remaining_established,
+                        }));
+                    },
                     None => quote! {
-                    #[allow(deprecated)]
-                    self.#enum_n.inject_connection_closed(&peer_id, &connection_id, endpoint, handler, remaining_established);},
+                    self.#enum_n.on_swarm_event(#from_swarm::ConnectionClosed(#connection_closed {
+                            peer_id,
+                            connection_id,
+                            endpoint,
+                            handler,
+                            remaining_established,
+                        }));
+                    },
                 };
 
                 quote! {
@@ -250,13 +285,20 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             .map(|(enum_n, field)| {
                 let inject = match field.ident {
                     Some(ref i) => quote! {
-                    #[allow(deprecated)]
-                    self.#i.inject_dial_failure(peer_id, error, id);},
+                    self.#i.on_swarm_event(#from_swarm::DialFailure(#dial_failure {
+                            peer_id,
+                            id,
+                            error,
+                        }));
+                    },
                     None => quote! {
-                    #[allow(deprecated)]
-                    self.#enum_n.inject_dial_failure(peer_id, error, id);},
+                    self.#enum_n.on_swarm_event(#from_swarm::DialFailure(#dial_failure {
+                            peer_id,
+                            id,
+                            error,
+                        }));
+                    },
                 };
-
                 quote! {
                     #inject;
                 }
@@ -271,19 +313,21 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             .iter()
             .rev()
             .enumerate()
-            .map(|(enum_n, field)| {
-                let inject = match field.ident {
-                    Some(ref i) => quote! {
-                    #[allow(deprecated)]
-                    self.#i.inject_listen_failure(local_addr, send_back_addr, id);},
-                    None => quote! {
-                    #[allow(deprecated)]
-                    self.#enum_n.inject_listen_failure(local_addr, send_back_addr, id);},
-                };
-
-                quote! {
-                    #inject;
-                }
+            .map(|(enum_n, field)| match field.ident {
+                Some(ref i) => quote! {
+                    self.#i.on_swarm_event(#from_swarm::ListenFailure(#listen_failure {
+                        local_addr,
+                        send_back_addr,
+                        id,
+                    }));
+                },
+                None => quote! {
+                    self.#enum_n.on_swarm_event(#from_swarm::ListenFailure(#listen_failure {
+                        local_addr,
+                        send_back_addr,
+                        id
+                    }));
+                },
             })
     };
 
@@ -296,11 +340,15 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             .enumerate()
             .map(|(field_n, field)| match field.ident {
                 Some(ref i) => quote! {
-                #[allow(deprecated)]
-                self.#i.inject_new_listener(listener_id);},
+                self.#i.on_swarm_event(#from_swarm::NewListener(#new_listener {
+                        listener_id,
+                    }));
+                },
                 None => quote! {
-                #[allow(deprecated)]
-                self.#field_n.inject_new_listener(listener_id);},
+                self.#field_n.on_swarm_event(#from_swarm::NewListener(#new_listener {
+                        listener_id,
+                    }));
+                },
             })
     };
 
@@ -313,11 +361,17 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             .enumerate()
             .map(|(field_n, field)| match field.ident {
                 Some(ref i) => quote! {
-                #[allow(deprecated)]
-                self.#i.inject_new_listen_addr(listener_id, addr);},
+                self.#i.on_swarm_event(#from_swarm::NewListenAddr(#new_listen_addr {
+                        listener_id,
+                        addr,
+                    }));
+                },
                 None => quote! {
-                #[allow(deprecated)]
-                self.#field_n.inject_new_listen_addr(listener_id, addr);},
+                self.#field_n.on_swarm_event(#from_swarm::NewListenAddr(#new_listen_addr {
+                        listener_id,
+                        addr,
+                    }));
+                },
             })
     };
 
@@ -330,11 +384,17 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             .enumerate()
             .map(|(field_n, field)| match field.ident {
                 Some(ref i) => quote! {
-                #[allow(deprecated)]
-                self.#i.inject_expired_listen_addr(listener_id, addr);},
+                self.#i.on_swarm_event(#from_swarm::ExpiredListenAddr(#expired_listen_addr {
+                        listener_id,
+                        addr,
+                    }));
+                },
                 None => quote! {
-                #[allow(deprecated)]
-                self.#field_n.inject_expired_listen_addr(listener_id, addr);},
+                self.#field_n.on_swarm_event(#from_swarm::ExpiredListenAddr(#expired_listen_addr {
+                        listener_id,
+                        addr,
+                    }));
+                },
             })
     };
 
@@ -347,11 +407,15 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             .enumerate()
             .map(|(field_n, field)| match field.ident {
                 Some(ref i) => quote! {
-                #[allow(deprecated)]
-                self.#i.inject_new_external_addr(addr);},
+                self.#i.on_swarm_event(#from_swarm::NewExternalAddr(#new_external_addr {
+                        addr,
+                    }));
+                },
                 None => quote! {
-                #[allow(deprecated)]
-                self.#field_n.inject_new_external_addr(addr);},
+                self.#field_n.on_swarm_event(#from_swarm::NewExternalAddr(#new_external_addr {
+                        addr,
+                    }));
+                },
             })
     };
 
@@ -364,11 +428,15 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             .enumerate()
             .map(|(field_n, field)| match field.ident {
                 Some(ref i) => quote! {
-                #[allow(deprecated)]
-                self.#i.inject_expired_external_addr(addr);},
+                self.#i.on_swarm_event(#from_swarm::ExpiredExternalAddr(#expired_external_addr {
+                        addr,
+                    }));
+                },
                 None => quote! {
-                 #[allow(deprecated)]
-                self.#field_n.inject_expired_external_addr(addr);},
+                self.#field_n.on_swarm_event(#from_swarm::ExpiredExternalAddr(#expired_external_addr {
+                        addr,
+                    }));
+                },
             })
     };
 
@@ -381,11 +449,17 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             .enumerate()
             .map(|(field_n, field)| match field.ident {
                 Some(ref i) => quote! {
-                #[allow(deprecated)]
-                self.#i.inject_listener_error(listener_id, err);},
+                    self.#i.on_swarm_event(#from_swarm::ListenerError(#listener_error {
+                        listener_id,
+                        err,
+                    }));
+                },
                 None => quote! {
-                #[allow(deprecated)]
-                self.#field_n.inject_listener_error(listener_id, err);},
+                    self.#field_n.on_swarm_event(#from_swarm::ListenerError(#listener_error {
+                        listener_id,
+                        err,
+                    }));
+                },
             })
     };
 
@@ -398,11 +472,17 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             .enumerate()
             .map(|(field_n, field)| match field.ident {
                 Some(ref i) => quote! {
-                #[allow(deprecated)]
-                self.#i.inject_listener_closed(listener_id, reason);},
+                self.#i.on_swarm_event(#from_swarm::ListenerClosed(#listener_closed {
+                        listener_id,
+                        reason,
+                    }));
+                },
                 None => quote! {
-                #[allow(deprecated)]
-                self.#field_n.inject_listener_closed(listener_id, reason);},
+                self.#field_n.on_swarm_event(#from_swarm::ListenerClosed(#listener_closed {
+                        listener_id,
+                        reason,
+                    }));
+                },
             })
     };
 
@@ -429,11 +509,9 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
                 Some(match field.ident {
                     Some(ref i) => quote! { #elem => {
-                    #[allow(deprecated)]
-                    #trait_to_impl::inject_event(&mut self.#i, peer_id, connection_id, ev) }},
+                    #trait_to_impl::on_connection_handler_event(&mut self.#i, peer_id, connection_id, ev) }},
                     None => quote! { #elem => {
-                    #[allow(deprecated)]
-                    #trait_to_impl::inject_event(&mut self.#field_n, peer_id, connection_id, ev) }},
+                    #trait_to_impl::on_connection_handler_event(&mut self.#field_n, peer_id, connection_id, ev) }},
                 })
             });
 
