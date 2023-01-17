@@ -7,7 +7,10 @@
 
 - Update to `libp2p-swarm` `v0.42.0`.
 
+- Close outbound streams directly after finishing to write. See [PR 3345].
+
 [PR 3208]: https://github.com/libp2p/rust-libp2p/pull/3208
+[PR 3345]: https://github.com/libp2p/rust-libp2p/pull/3345
 
 # 0.41.1
 
