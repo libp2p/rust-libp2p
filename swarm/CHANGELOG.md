@@ -15,14 +15,11 @@
 - Remove type parameter from `PendingOutboundConnectionError` and `PendingInboundConnectionError`.
   These two types are always used with `std::io::Error`. See [PR 3272].
 
-- Moved `ConnectionId` from `libp2p-core` to `libp2p-swarm`. See [PR 3221].
-
 [PR 3170]: https://github.com/libp2p/rust-libp2p/pull/3170
 [PR 3134]: https://github.com/libp2p/rust-libp2p/pull/3134
 [PR 3153]: https://github.com/libp2p/rust-libp2p/pull/3153
 [PR 3264]: https://github.com/libp2p/rust-libp2p/pull/3264
 [PR 3272]: https://github.com/libp2p/rust-libp2p/pull/3272
-[PR 3221]: https://github.com/libp2p/rust-libp2p/pull/3221
 
 # 0.41.1
 
