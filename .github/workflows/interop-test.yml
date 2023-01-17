@@ -30,9 +30,6 @@ jobs:
     name: Run multidimensional interoperability tests
     needs: build-ping-container
     uses: "libp2p/test-plans/.github/workflows/run-testplans.yml@master"
-    env:
-      GIT_TARGET: github.com/${{ github.event.pull_request.head.repo.full_name || github.event.repository.full_name }}
-      GIT_REF: ${{ github.event.pull_request.head.sha || github.sha }}
     with:
       dir: "multidim-interop"
       extra-versions: ping-versions
