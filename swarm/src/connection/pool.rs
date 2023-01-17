@@ -754,7 +754,8 @@ where
 
                     let (command_sender, command_receiver) =
                         mpsc::channel(self.task_command_buffer_size);
-                    let (event_sender, event_receiver) = mpsc::channel(self.per_connection_event_buffer_size);
+                    let (event_sender, event_receiver) =
+                        mpsc::channel(self.per_connection_event_buffer_size);
 
                     conns.insert(
                         id,
