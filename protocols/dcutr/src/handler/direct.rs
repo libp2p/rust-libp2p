@@ -21,11 +21,11 @@
 //! [`ConnectionHandler`] handling direct connection upgraded through a relayed connection.
 
 use libp2p_core::connection::ConnectionId;
-use libp2p_core::upgrade::{DeniedUpgrade, InboundUpgrade, OutboundUpgrade};
+use libp2p_core::upgrade::DeniedUpgrade;
 use libp2p_swarm::handler::ConnectionEvent;
 use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
-    NegotiatedSubstream, SubstreamProtocol,
+    SubstreamProtocol,
 };
 use std::task::{Context, Poll};
 use void::Void;
@@ -62,30 +62,7 @@ impl ConnectionHandler for Handler {
         SubstreamProtocol::new(DeniedUpgrade, ())
     }
 
-    fn inject_fully_negotiated_inbound(
-        &mut self,
-        _: <Self::InboundProtocol as InboundUpgrade<NegotiatedSubstream>>::Output,
-        _: Self::InboundOpenInfo,
-    ) {
-    }
-
-    fn inject_fully_negotiated_outbound(
-        &mut self,
-        _: <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Output,
-        _: Self::OutboundOpenInfo,
-    ) {
-    }
-
     fn on_behaviour_event(&mut self, _: Self::InEvent) {}
-
-    fn inject_dial_upgrade_error(
-        &mut self,
-        _: Self::OutboundOpenInfo,
-        _: ConnectionHandlerUpgrErr<
-            <Self::OutboundProtocol as OutboundUpgrade<NegotiatedSubstream>>::Error,
-        >,
-    ) {
-    }
 
     fn connection_keep_alive(&self) -> KeepAlive {
         KeepAlive::No

@@ -32,7 +32,7 @@ use libp2p_dns::DnsConfig;
 use libp2p_identify as identify;
 use libp2p_noise as noise;
 use libp2p_ping as ping;
-use libp2p_relay::v2::client::{self, Client};
+use libp2p_relay as relay;
 use libp2p_swarm::{NetworkBehaviour, SwarmBuilder, SwarmEvent};
 use libp2p_tcp as tcp;
 use log::info;
@@ -87,7 +87,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let local_peer_id = PeerId::from(local_key.public());
     info!("Local peer id: {:?}", local_peer_id);
 
-    let (relay_transport, client) = Client::new_transport_and_behaviour(local_peer_id);
+    let (relay_transport, client) = relay::client::new(local_peer_id);
 
     let transport = OrTransport::new(
         relay_transport,
@@ -111,10 +111,10 @@ fn main() -> Result<(), Box<dyn Error>> {
         prelude = "libp2p_swarm::derive_prelude"
     )]
     struct Behaviour {
-        relay_client: Client,
+        relay_client: relay::client::Behaviour,
         ping: ping::Behaviour,
         identify: identify::Behaviour,
-        dcutr: dcutr::behaviour::Behaviour,
+        dcutr: dcutr::Behaviour,
     }
 
     #[derive(Debug)]
@@ -122,8 +122,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     enum Event {
         Ping(ping::Event),
         Identify(identify::Event),
-        Relay(client::Event),
-        Dcutr(dcutr::behaviour::Event),
+        Relay(relay::client::Event),
+        Dcutr(dcutr::Event),
     }
 
     impl From<ping::Event> for Event {
@@ -138,14 +138,14 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    impl From<client::Event> for Event {
-        fn from(e: client::Event) -> Self {
+    impl From<relay::client::Event> for Event {
+        fn from(e: relay::client::Event) -> Self {
             Event::Relay(e)
         }
     }
 
-    impl From<dcutr::behaviour::Event> for Event {
-        fn from(e: dcutr::behaviour::Event) -> Self {
+    impl From<dcutr::Event> for Event {
+        fn from(e: dcutr::Event) -> Self {
             Event::Dcutr(e)
         }
     }
@@ -157,7 +157,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             "/TODO/0.0.1".to_string(),
             local_key.public(),
         )),
-        dcutr: dcutr::behaviour::Behaviour::new(local_peer_id),
+        dcutr: dcutr::Behaviour::new(local_peer_id),
     };
 
     let mut swarm = match ThreadPool::new() {
@@ -252,9 +252,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                 SwarmEvent::NewListenAddr { address, .. } => {
                     info!("Listening on {:?}", address);
                 }
-                SwarmEvent::Behaviour(Event::Relay(client::Event::ReservationReqAccepted {
-                    ..
-                })) => {
+                SwarmEvent::Behaviour(Event::Relay(
+                    relay::client::Event::ReservationReqAccepted { .. },
+                )) => {
                     assert!(opts.mode == Mode::Listen);
                     info!("Relay accepted our reservation request.");
                 }

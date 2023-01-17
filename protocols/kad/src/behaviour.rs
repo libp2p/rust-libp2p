@@ -401,8 +401,7 @@ impl KademliaConfig {
 
 impl<TStore> Kademlia<TStore>
 where
-    for<'a> TStore: RecordStore<'a>,
-    TStore: Send + 'static,
+    TStore: RecordStore + Send + 'static,
 {
     /// Creates a new `Kademlia` network behaviour with a default configuration.
     pub fn new(id: PeerId, store: TStore) -> Self {
@@ -1987,8 +1986,7 @@ fn exp_decrease(ttl: Duration, exp: u32) -> Duration {
 
 impl<TStore> NetworkBehaviour for Kademlia<TStore>
 where
-    for<'a> TStore: RecordStore<'a>,
-    TStore: Send + 'static,
+    TStore: RecordStore + Send + 'static,
 {
     type ConnectionHandler = KademliaHandlerProto<QueryId>;
     type OutEvent = KademliaEvent;
@@ -2416,7 +2414,7 @@ where
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
         self.listen_addresses.on_swarm_event(&event);
-        self.external_addresses.on_swarn_event(&event);
+        self.external_addresses.on_swarm_event(&event);
 
         match event {
             FromSwarm::ConnectionEstablished(connection_established) => {

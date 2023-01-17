@@ -27,7 +27,10 @@ pub use error::{
     PendingOutboundConnectionError,
 };
 
-use crate::handler::ConnectionHandler;
+use crate::handler::{
+    AddressChange, ConnectionEvent, ConnectionHandler, DialUpgradeError, FullyNegotiatedInbound,
+    FullyNegotiatedOutbound, ListenUpgradeError,
+};
 use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper};
 use crate::{ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive, SubstreamProtocol};
 use futures::stream::FuturesUnordered;
@@ -150,8 +153,7 @@ where
 
     /// Notifies the connection handler of an event.
     pub fn on_behaviour_event(&mut self, event: THandler::InEvent) {
-        #[allow(deprecated)]
-        self.handler.inject_event(event);
+        self.handler.on_behaviour_event(event);
     }
 
     /// Begins an orderly shutdown of the connection, returning the connection
@@ -180,9 +182,13 @@ where
         loop {
             match requested_substreams.poll_next_unpin(cx) {
                 Poll::Ready(Some(Ok(()))) => continue,
-                Poll::Ready(Some(Err(user_data))) => {
-                    #[allow(deprecated)]
-                    handler.inject_dial_upgrade_error(user_data, ConnectionHandlerUpgrErr::Timeout);
+                Poll::Ready(Some(Err(info))) => {
+                    handler.on_connection_event(ConnectionEvent::DialUpgradeError(
+                        DialUpgradeError {
+                            info,
+                            error: ConnectionHandlerUpgrErr::Timeout,
+                        },
+                    ));
                     continue;
                 }
                 Poll::Ready(None) | Poll::Pending => {}
@@ -209,14 +215,16 @@ where
             // In case the [`ConnectionHandler`] can not make any more progress, poll the negotiating outbound streams.
             match negotiating_out.poll_next_unpin(cx) {
                 Poll::Pending | Poll::Ready(None) => {}
-                Poll::Ready(Some((user_data, Ok(upgrade)))) => {
-                    #[allow(deprecated)]
-                    handler.inject_fully_negotiated_outbound(upgrade, user_data);
+                Poll::Ready(Some((info, Ok(protocol)))) => {
+                    handler.on_connection_event(ConnectionEvent::FullyNegotiatedOutbound(
+                        FullyNegotiatedOutbound { protocol, info },
+                    ));
                     continue;
                 }
-                Poll::Ready(Some((user_data, Err(err)))) => {
-                    #[allow(deprecated)]
-                    handler.inject_dial_upgrade_error(user_data, err);
+                Poll::Ready(Some((info, Err(error)))) => {
+                    handler.on_connection_event(ConnectionEvent::DialUpgradeError(
+                        DialUpgradeError { info, error },
+                    ));
                     continue;
                 }
             }
@@ -225,14 +233,16 @@ where
             // make any more progress, poll the negotiating inbound streams.
             match negotiating_in.poll_next_unpin(cx) {
                 Poll::Pending | Poll::Ready(None) => {}
-                Poll::Ready(Some((user_data, Ok(upgrade)))) => {
-                    #[allow(deprecated)]
-                    handler.inject_fully_negotiated_inbound(upgrade, user_data);
+                Poll::Ready(Some((info, Ok(protocol)))) => {
+                    handler.on_connection_event(ConnectionEvent::FullyNegotiatedInbound(
+                        FullyNegotiatedInbound { protocol, info },
+                    ));
                     continue;
                 }
-                Poll::Ready(Some((user_data, Err(err)))) => {
-                    #[allow(deprecated)]
-                    handler.inject_listen_upgrade_error(user_data, err);
+                Poll::Ready(Some((info, Err(error)))) => {
+                    handler.on_connection_event(ConnectionEvent::ListenUpgradeError(
+                        ListenUpgradeError { info, error },
+                    ));
                     continue;
                 }
             }
@@ -279,8 +289,9 @@ where
             match muxing.poll_unpin(cx)? {
                 Poll::Pending => {}
                 Poll::Ready(StreamMuxerEvent::AddressChange(address)) => {
-                    #[allow(deprecated)]
-                    handler.inject_address_change(&address);
+                    handler.on_connection_event(ConnectionEvent::AddressChange(AddressChange {
+                        new_address: &address,
+                    }));
                     return Poll::Ready(Ok(Event::AddressChange(address)));
                 }
             }
@@ -757,32 +768,33 @@ mod tests {
             SubstreamProtocol::new(DeniedUpgrade, ()).with_timeout(self.upgrade_timeout)
         }
 
-        fn inject_fully_negotiated_inbound(
+        fn on_connection_event(
             &mut self,
-            protocol: <Self::InboundProtocol as InboundUpgradeSend>::Output,
-            _: Self::InboundOpenInfo,
+            event: ConnectionEvent<
+                Self::InboundProtocol,
+                Self::OutboundProtocol,
+                Self::InboundOpenInfo,
+                Self::OutboundOpenInfo,
+            >,
         ) {
-            void::unreachable(protocol)
+            match event {
+                ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
+                    protocol,
+                    ..
+                }) => void::unreachable(protocol),
+                ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
+                    protocol,
+                    ..
+                }) => void::unreachable(protocol),
+                ConnectionEvent::DialUpgradeError(DialUpgradeError { error, .. }) => {
+                    self.error = Some(error)
+                }
+                ConnectionEvent::AddressChange(_) | ConnectionEvent::ListenUpgradeError(_) => {}
+            }
         }
 
-        fn inject_fully_negotiated_outbound(
-            &mut self,
-            protocol: <Self::OutboundProtocol as OutboundUpgradeSend>::Output,
-            _: Self::OutboundOpenInfo,
-        ) {
-            void::unreachable(protocol)
-        }
-
-        fn inject_event(&mut self, event: Self::InEvent) {
+        fn on_behaviour_event(&mut self, event: Self::InEvent) {
             void::unreachable(event)
-        }
-
-        fn inject_dial_upgrade_error(
-            &mut self,
-            _: Self::OutboundOpenInfo,
-            error: ConnectionHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>,
-        ) {
-            self.error = Some(error)
         }
 
         fn connection_keep_alive(&self) -> KeepAlive {

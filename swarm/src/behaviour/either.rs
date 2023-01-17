@@ -18,9 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::behaviour::{
-    self, inject_from_swarm, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
-};
+use crate::behaviour::{self, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use crate::handler::either::IntoEitherHandler;
 use either::Either;
 use libp2p_core::{Multiaddr, PeerId};
@@ -51,26 +49,20 @@ where
 
     fn on_swarm_event(&mut self, event: behaviour::FromSwarm<Self::ConnectionHandler>) {
         match self {
-            Either::Left(b) => inject_from_swarm(
-                b,
-                event.map_handler(
-                    |h| h.unwrap_left(),
-                    |h| match h {
-                        Either::Left(h) => h,
-                        Either::Right(_) => unreachable!(),
-                    },
-                ),
-            ),
-            Either::Right(b) => inject_from_swarm(
-                b,
-                event.map_handler(
-                    |h| h.unwrap_right(),
-                    |h| match h {
-                        Either::Right(h) => h,
-                        Either::Left(_) => unreachable!(),
-                    },
-                ),
-            ),
+            Either::Left(b) => b.on_swarm_event(event.map_handler(
+                |h| h.unwrap_left(),
+                |h| match h {
+                    Either::Left(h) => h,
+                    Either::Right(_) => unreachable!(),
+                },
+            )),
+            Either::Right(b) => b.on_swarm_event(event.map_handler(
+                |h| h.unwrap_right(),
+                |h| match h {
+                    Either::Right(h) => h,
+                    Either::Left(_) => unreachable!(),
+                },
+            )),
         }
     }
 
@@ -82,12 +74,10 @@ where
     ) {
         match (self, event) {
             (Either::Left(left), Either::Left(event)) => {
-                #[allow(deprecated)]
-                left.inject_event(peer_id, connection_id, event);
+                left.on_connection_handler_event(peer_id, connection_id, event);
             }
             (Either::Right(right), Either::Right(event)) => {
-                #[allow(deprecated)]
-                right.inject_event(peer_id, connection_id, event);
+                right.on_connection_handler_event(peer_id, connection_id, event);
             }
             _ => unreachable!(),
         }

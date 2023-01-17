@@ -1,7 +1,7 @@
 [package]
 name = "libp2p-metrics"
 edition = "2021"
-rust-version = "1.62.0"
+rust-version = "1.65.0"
 description = "Metrics for libp2p"
 version = "0.12.0"
 authors = ["Max Inden <mail@max-inden.de>"]
@@ -19,14 +19,14 @@ relay = ["libp2p-relay"]
 dcutr = ["libp2p-dcutr"]
 
 [dependencies]
-libp2p-core = { version = "0.38.0", path = "../../core" }
+libp2p-core = { version = "0.39.0", path = "../../core" }
 libp2p-dcutr =  { version = "0.9.0", path = "../../protocols/dcutr", optional = true }
 libp2p-identify = { version = "0.42.0", path = "../../protocols/identify", optional = true }
 libp2p-kad = { version = "0.43.0", path = "../../protocols/kad", optional = true }
 libp2p-ping = { version = "0.42.0", path = "../../protocols/ping", optional = true }
 libp2p-relay =  { version = "0.15.0", path = "../../protocols/relay", optional = true }
 libp2p-swarm = { version = "0.42.0", path = "../../swarm" }
-prometheus-client = "0.18.0"
+prometheus-client = "0.19.0"
 
 [target.'cfg(not(target_os = "unknown"))'.dependencies]
 libp2p-gossipsub =  { version = "0.44.0", path = "../../protocols/gossipsub", optional = true }
@@ -52,4 +52,4 @@ rustc-args = ["--cfg", "docsrs"]
 
 [[example]]
 name = "metrics"
-required-features = ["ping"]
+required-features = ["ping", "identify"]

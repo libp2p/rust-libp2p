@@ -1,6 +1,6 @@
 [package]
 name = "libp2p-webrtc"
-version = "0.4.0-alpha"
+version = "0.4.0-alpha.2"
 authors = ["Parity Technologies <admin@parity.io>"]
 description = "WebRTC transport for libp2p"
 repository = "https://github.com/libp2p/rust-libp2p"
@@ -18,10 +18,10 @@ futures = "0.3"
 futures-timer = "3"
 hex = "0.4"
 if-watch = "3.0"
-libp2p-core = { version = "0.38.0", path = "../../core"  }
-libp2p-noise = { version = "0.41.0", path = "../../transports/noise" }
+libp2p-core = { version = "0.39.0", path = "../../core"  }
+libp2p-noise = { version = "0.42.0", path = "../../transports/noise" }
 log = "0.4"
-multihash = { version = "0.16", default-features = false, features = ["sha2"] }
+multihash = { version = "0.17.0", default-features = false, features = ["sha2"] }
 prost = "0.11"
 prost-codec = { version = "0.3.0", path = "../../misc/prost-codec" }
 rand = "0.8"

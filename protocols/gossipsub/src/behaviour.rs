@@ -25,7 +25,6 @@ use std::{
     collections::{BTreeSet, HashMap},
     fmt,
     net::IpAddr,
-    sync::Arc,
     task::{Context, Poll},
     time::Duration,
 };
@@ -201,9 +200,6 @@ impl From<MessageAuthenticity> for PublishConfig {
     }
 }
 
-type GossipsubNetworkBehaviourAction =
-    NetworkBehaviourAction<GossipsubEvent, GossipsubHandler, Arc<GossipsubHandlerIn>>;
-
 /// Network behaviour that handles the gossipsub protocol.
 ///
 /// NOTE: Initialisation requires a [`MessageAuthenticity`] and [`GossipsubConfig`] instance. If
@@ -215,15 +211,12 @@ type GossipsubNetworkBehaviourAction =
 ///
 /// The TopicSubscriptionFilter allows applications to implement specific filters on topics to
 /// prevent unwanted messages being propagated and evaluated.
-pub struct Gossipsub<
-    D: DataTransform = IdentityTransform,
-    F: TopicSubscriptionFilter = AllowAllSubscriptionFilter,
-> {
+pub struct Gossipsub<D = IdentityTransform, F = AllowAllSubscriptionFilter> {
     /// Configuration providing gossipsub performance parameters.
     config: GossipsubConfig,
 
     /// Events that need to be yielded to the outside when polling.
-    events: VecDeque<GossipsubNetworkBehaviourAction>,
+    events: VecDeque<NetworkBehaviourAction<GossipsubEvent, GossipsubHandler>>,
 
     /// Pools non-urgent control messages between heartbeats.
     control_pool: HashMap<PeerId, Vec<GossipsubControlAction>>,
@@ -1423,6 +1416,8 @@ where
                                 peer_score.add_penalty(peer_id, 1);
 
                                 // check the flood cutoff
+                                // See: https://github.com/rust-lang/rust-clippy/issues/10061
+                                #[allow(unknown_lints, clippy::unchecked_duration_subtraction)]
                                 let flood_cutoff = (backoff_time
                                     + self.config.graft_flood_threshold())
                                     - self.config.prune_backoff();
@@ -2903,7 +2898,7 @@ where
             self.events
                 .push_back(NetworkBehaviourAction::NotifyHandler {
                     peer_id,
-                    event: Arc::new(GossipsubHandlerIn::Message(message)),
+                    event: GossipsubHandlerIn::Message(message),
                     handler: NotifyHandler::Any,
                 })
         }
@@ -3163,7 +3158,7 @@ where
                                     self.events
                                         .push_back(NetworkBehaviourAction::NotifyHandler {
                                             peer_id,
-                                            event: Arc::new(GossipsubHandlerIn::JoinedMesh),
+                                            event: GossipsubHandlerIn::JoinedMesh,
                                             handler: NotifyHandler::One(connections.connections[0]),
                                         });
                                     break;
@@ -3449,10 +3444,7 @@ where
         _: &mut impl PollParameters,
     ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
         if let Some(event) = self.events.pop_front() {
-            return Poll::Ready(event.map_in(|e: Arc<GossipsubHandlerIn>| {
-                // clone send event reference if others references are present
-                Arc::try_unwrap(e).unwrap_or_else(|e| (*e).clone())
-            }));
+            return Poll::Ready(event);
         }
 
         // update scores
@@ -3499,7 +3491,7 @@ fn peer_added_to_mesh(
     new_topics: Vec<&TopicHash>,
     mesh: &HashMap<TopicHash, BTreeSet<PeerId>>,
     known_topics: Option<&BTreeSet<TopicHash>>,
-    events: &mut VecDeque<GossipsubNetworkBehaviourAction>,
+    events: &mut VecDeque<NetworkBehaviourAction<GossipsubEvent, GossipsubHandler>>,
     connections: &HashMap<PeerId, PeerConnections>,
 ) {
     // Ensure there is an active connection
@@ -3527,7 +3519,7 @@ fn peer_added_to_mesh(
     // This is the first mesh the peer has joined, inform the handler
     events.push_back(NetworkBehaviourAction::NotifyHandler {
         peer_id,
-        event: Arc::new(GossipsubHandlerIn::JoinedMesh),
+        event: GossipsubHandlerIn::JoinedMesh,
         handler: NotifyHandler::One(connection_id),
     });
 }
@@ -3540,7 +3532,7 @@ fn peer_removed_from_mesh(
     old_topic: &TopicHash,
     mesh: &HashMap<TopicHash, BTreeSet<PeerId>>,
     known_topics: Option<&BTreeSet<TopicHash>>,
-    events: &mut VecDeque<GossipsubNetworkBehaviourAction>,
+    events: &mut VecDeque<NetworkBehaviourAction<GossipsubEvent, GossipsubHandler>>,
     connections: &HashMap<PeerId, PeerConnections>,
 ) {
     // Ensure there is an active connection
@@ -3566,7 +3558,7 @@ fn peer_removed_from_mesh(
     // The peer is not in any other mesh, inform the handler
     events.push_back(NetworkBehaviourAction::NotifyHandler {
         peer_id,
-        event: Arc::new(GossipsubHandlerIn::LeftMesh),
+        event: GossipsubHandlerIn::LeftMesh,
         handler: NotifyHandler::One(*connection_id),
     });
 }

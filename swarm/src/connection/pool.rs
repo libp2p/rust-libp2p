@@ -26,7 +26,7 @@ use crate::{
         Connected, ConnectionError, ConnectionLimit, IncomingInfo, PendingConnectionError,
         PendingInboundConnectionError, PendingOutboundConnectionError,
     },
-    transport::{Transport, TransportError},
+    transport::TransportError,
     ConnectedPoint, ConnectionHandler, Executor, IntoConnectionHandler, Multiaddr, PeerId,
 };
 use concurrent_dial::ConcurrentDial;
@@ -81,9 +81,8 @@ impl ExecSwitch {
 }
 
 /// A connection `Pool` manages a set of connections for each peer.
-pub struct Pool<THandler, TTrans>
+pub struct Pool<THandler>
 where
-    TTrans: Transport,
     THandler: IntoConnectionHandler,
 {
     local_id: PeerId,
@@ -129,10 +128,10 @@ where
 
     /// Sender distributed to pending tasks for reporting events back
     /// to the pool.
-    pending_connection_events_tx: mpsc::Sender<task::PendingConnectionEvent<TTrans>>,
+    pending_connection_events_tx: mpsc::Sender<task::PendingConnectionEvent>,
 
     /// Receiver for events reported from pending tasks.
-    pending_connection_events_rx: mpsc::Receiver<task::PendingConnectionEvent<TTrans>>,
+    pending_connection_events_rx: mpsc::Receiver<task::PendingConnectionEvent>,
 
     /// Waker in case we haven't established any connections yet.
     no_established_connections_waker: Option<Waker>,
@@ -216,7 +215,7 @@ impl<THandler> PendingConnection<THandler> {
     }
 }
 
-impl<THandler: IntoConnectionHandler, TTrans: Transport> fmt::Debug for Pool<THandler, TTrans> {
+impl<THandler: IntoConnectionHandler> fmt::Debug for Pool<THandler> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         f.debug_struct("Pool")
             .field("counters", &self.counters)
@@ -226,10 +225,7 @@ impl<THandler: IntoConnectionHandler, TTrans: Transport> fmt::Debug for Pool<THa
 
 /// Event that can happen on the `Pool`.
 #[derive(Debug)]
-pub enum PoolEvent<THandler: IntoConnectionHandler, TTrans>
-where
-    TTrans: Transport,
-{
+pub enum PoolEvent<THandler: IntoConnectionHandler> {
     /// A new connection has been established.
     ConnectionEstablished {
         id: ConnectionId,
@@ -242,7 +238,7 @@ where
         /// [`Some`] when the new connection is an outgoing connection.
         /// Addresses are dialed in parallel. Contains the addresses and errors
         /// of dial attempts that failed before the one successful dial.
-        concurrent_dial_errors: Option<Vec<(Multiaddr, TransportError<TTrans::Error>)>>,
+        concurrent_dial_errors: Option<Vec<(Multiaddr, TransportError<std::io::Error>)>>,
         /// How long it took to establish this connection.
         established_in: std::time::Duration,
     },
@@ -275,7 +271,7 @@ where
         /// The ID of the failed connection.
         id: ConnectionId,
         /// The error that occurred.
-        error: PendingOutboundConnectionError<TTrans::Error>,
+        error: PendingOutboundConnectionError,
         /// The handler that was supposed to handle the connection.
         handler: THandler,
         /// The (expected) peer of the failed connection.
@@ -291,7 +287,7 @@ where
         /// Local connection address.
         local_addr: Multiaddr,
         /// The error that occurred.
-        error: PendingInboundConnectionError<TTrans::Error>,
+        error: PendingInboundConnectionError,
         /// The handler that was supposed to handle the connection.
         handler: THandler,
     },
@@ -315,10 +311,9 @@ where
     },
 }
 
-impl<THandler, TTrans> Pool<THandler, TTrans>
+impl<THandler> Pool<THandler>
 where
     THandler: IntoConnectionHandler,
-    TTrans: Transport,
 {
     /// Creates a new empty `Pool`.
     pub fn new(local_id: PeerId, config: PoolConfig, limits: ConnectionLimits) -> Self {
@@ -337,7 +332,7 @@ where
             dial_concurrency_factor: config.dial_concurrency_factor,
             substream_upgrade_protocol_override: config.substream_upgrade_protocol_override,
             max_negotiating_inbound_streams: config.max_negotiating_inbound_streams,
-            task_event_buffer_size: config.task_event_buffer_size,
+            task_event_buffer_size: config.per_connection_event_buffer_size,
             executor,
             pending_connection_events_tx,
             pending_connection_events_rx,
@@ -431,12 +426,9 @@ where
     }
 }
 
-impl<THandler, TTrans> Pool<THandler, TTrans>
+impl<THandler> Pool<THandler>
 where
     THandler: IntoConnectionHandler,
-    TTrans: Transport + 'static,
-    TTrans::Output: Send + 'static,
-    TTrans::Error: Send + 'static,
 {
     /// Adds a pending outgoing connection to the pool in the form of a `Future`
     /// that establishes and negotiates the connection.
@@ -450,10 +442,7 @@ where
                 'static,
                 (
                     Multiaddr,
-                    Result<
-                        <TTrans as Transport>::Output,
-                        TransportError<<TTrans as Transport>::Error>,
-                    >,
+                    Result<(PeerId, StreamMuxerBox), TransportError<std::io::Error>>,
                 ),
             >,
         >,
@@ -461,11 +450,7 @@ where
         handler: THandler,
         role_override: Endpoint,
         dial_concurrency_factor_override: Option<NonZeroU8>,
-    ) -> Result<ConnectionId, (ConnectionLimit, THandler)>
-    where
-        TTrans: Send,
-        TTrans::Dial: Send + 'static,
-    {
+    ) -> Result<ConnectionId, (ConnectionLimit, THandler)> {
         if let Err(limit) = self.counters.check_max_pending_outgoing() {
             return Err((limit, handler));
         };
@@ -517,7 +502,7 @@ where
         info: IncomingInfo<'_>,
     ) -> Result<ConnectionId, (ConnectionLimit, THandler)>
     where
-        TFut: Future<Output = Result<TTrans::Output, TTrans::Error>> + Send + 'static,
+        TFut: Future<Output = Result<(PeerId, StreamMuxerBox), std::io::Error>> + Send + 'static,
     {
         let endpoint = info.create_connected_point();
 
@@ -554,9 +539,8 @@ where
     }
 
     /// Polls the connection pool for events.
-    pub fn poll(&mut self, cx: &mut Context<'_>) -> Poll<PoolEvent<THandler, TTrans>>
+    pub fn poll(&mut self, cx: &mut Context<'_>) -> Poll<PoolEvent<THandler>>
     where
-        TTrans: Transport<Output = (PeerId, StreamMuxerBox)>,
         THandler: IntoConnectionHandler + 'static,
         THandler::Handler: ConnectionHandler + Send,
         <THandler::Handler as ConnectionHandler>::OutboundOpenInfo: Send,
@@ -681,7 +665,7 @@ where
                         ),
                     };
 
-                    let error: Result<(), PendingInboundConnectionError<_>> = self
+                    let error = self
                         .counters
                         // Check general established connection limit.
                         .check_max_established(&endpoint)
@@ -1096,7 +1080,7 @@ pub struct PoolConfig {
 
     /// Size of the pending connection task event buffer and the established connection task event
     /// buffer.
-    pub task_event_buffer_size: usize,
+    pub per_connection_event_buffer_size: usize,
 
     /// Number of addresses concurrently dialed for a single outbound connection attempt.
     pub dial_concurrency_factor: NonZeroU8,
@@ -1115,7 +1099,7 @@ impl PoolConfig {
         Self {
             executor,
             task_command_buffer_size: 32,
-            task_event_buffer_size: 7,
+            per_connection_event_buffer_size: 7,
             dial_concurrency_factor: NonZeroU8::new(8).expect("8 > 0"),
             substream_upgrade_protocol_override: None,
             max_negotiating_inbound_streams: 128,
@@ -1140,8 +1124,8 @@ impl PoolConfig {
     /// When the buffer is full, the background tasks of all connections will stall.
     /// In this way, the consumers of network events exert back-pressure on
     /// the network connection I/O.
-    pub fn with_connection_event_buffer_size(mut self, n: usize) -> Self {
-        self.task_event_buffer_size = n;
+    pub fn with_per_connection_event_buffer_size(mut self, n: usize) -> Self {
+        self.per_connection_event_buffer_size = n;
         self
     }
 
