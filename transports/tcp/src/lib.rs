@@ -310,9 +310,9 @@ where
     /// The configuration of port reuse when dialing.
     port_reuse: PortReuse,
     /// All the active listeners.
-    /// The [`TcpListenStream`] struct contains a stream that we want to be pinned. Since the `VecDeque`
+    /// The [`ListenStream`] struct contains a stream that we want to be pinned. Since the `VecDeque`
     /// can be resized, the only way is to use a `Pin<Box<>>`.
-    listeners: VecDeque<Pin<Box<TcpListenStream<T>>>>,
+    listeners: VecDeque<Pin<Box<ListenStream<T>>>>,
     /// Pending transport events to return from [`libp2p_core::Transport::poll`].
     pending_events:
         VecDeque<TransportEvent<<Self as libp2p_core::Transport>::ListenerUpgrade, io::Error>>,
@@ -373,7 +373,7 @@ where
         &mut self,
         id: ListenerId,
         socket_addr: SocketAddr,
-    ) -> io::Result<TcpListenStream<T>> {
+    ) -> io::Result<ListenStream<T>> {
         let socket = self.create_socket(&socket_addr)?;
         socket.bind(&socket_addr.into())?;
         socket.listen(self.config.backlog as _)?;
@@ -382,7 +382,7 @@ where
         let local_addr = listener.local_addr()?;
 
         if local_addr.ip().is_unspecified() {
-            return TcpListenStream::<T>::new(
+            return ListenStream::<T>::new(
                 id,
                 listener,
                 Some(T::new_if_watcher()?),
@@ -396,7 +396,7 @@ where
             listener_id: id,
             listen_addr,
         });
-        TcpListenStream::<T>::new(id, listener, None, self.port_reuse.clone())
+        ListenStream::<T>::new(id, listener, None, self.port_reuse.clone())
     }
 }
 
@@ -615,7 +615,7 @@ where
     }
 }
 
-/// Event produced by a [`TcpListenStream`].
+/// Event produced by a [`ListenStream`].
 #[derive(Debug)]
 enum TcpListenerEvent<S> {
     /// The listener is listening on a new additional [`Multiaddr`].
@@ -639,7 +639,7 @@ enum TcpListenerEvent<S> {
 }
 
 /// A stream of incoming connections on one or more interfaces.
-struct TcpListenStream<T>
+struct ListenStream<T>
 where
     T: Provider,
 {
@@ -671,11 +671,11 @@ where
     pause: Option<Delay>,
 }
 
-impl<T> TcpListenStream<T>
+impl<T> ListenStream<T>
 where
     T: Provider,
 {
-    /// Constructs a [`TcpListenStream`] for incoming connections around
+    /// Constructs a [`ListenStream`] for incoming connections around
     /// the given [`TcpListener`].
     fn new(
         listener_id: ListenerId,
@@ -686,7 +686,7 @@ where
         let listen_addr = listener.local_addr()?;
         let listener = T::new_listener(listener)?;
 
-        Ok(TcpListenStream {
+        Ok(ListenStream {
             port_reuse,
             listener,
             listener_id,
@@ -699,7 +699,7 @@ where
 
     /// Disables port reuse for any listen address of this stream.
     ///
-    /// This is done when the `TcpListenStream` encounters a fatal
+    /// This is done when the [`ListenStream`] encounters a fatal
     /// error (for the stream) or is dropped.
     ///
     /// Has no effect if port reuse is disabled.
@@ -718,7 +718,7 @@ where
     }
 }
 
-impl<T> Drop for TcpListenStream<T>
+impl<T> Drop for ListenStream<T>
 where
     T: Provider,
 {
@@ -727,7 +727,7 @@ where
     }
 }
 
-impl<T> Stream for TcpListenStream<T>
+impl<T> Stream for ListenStream<T>
 where
     T: Provider,
     T::Listener: Unpin,

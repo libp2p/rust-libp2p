@@ -41,3 +41,11 @@ libp2p-yamux = { path = "../../muxers/yamux" }
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 rustc-args = ["--cfg", "docsrs"]
+
+[[example]]
+name = "client"
+path = "examples/autonat_client.rs" 
+
+[[example]]
+name = "server"
+path = "examples/autonat_server.rs" 
