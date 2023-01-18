@@ -27,6 +27,7 @@ use crate::handler::{
 use crate::upgrade::SendWrapper;
 
 use either::Either;
+use futures::future;
 use libp2p_core::{
     upgrade::{NegotiationError, ProtocolError, SelectUpgrade, UpgradeError},
     ConnectedPoint, PeerId,
@@ -112,11 +113,11 @@ where
     ) -> Either<FullyNegotiatedOutbound<S1OP, S1OOI>, FullyNegotiatedOutbound<S2OP, S2OOI>> {
         match self {
             FullyNegotiatedOutbound {
-                protocol: Either::Left(protocol),
+                protocol: future::Either::Left(protocol),
                 info: Either::Left(info),
             } => Either::Left(FullyNegotiatedOutbound { protocol, info }),
             FullyNegotiatedOutbound {
-                protocol: Either::Right(protocol),
+                protocol: future::Either::Right(protocol),
                 info: Either::Right(info),
             } => Either::Right(FullyNegotiatedOutbound { protocol, info }),
             _ => panic!("wrong API usage: the protocol doesn't match the upgrade info"),
@@ -135,11 +136,11 @@ where
     ) -> Either<FullyNegotiatedInbound<S1IP, S1IOI>, FullyNegotiatedInbound<S2IP, S2IOI>> {
         match self {
             FullyNegotiatedInbound {
-                protocol: Either::Left(protocol),
+                protocol: future::Either::Left(protocol),
                 info: (i1, _i2),
             } => Either::Left(FullyNegotiatedInbound { protocol, info: i1 }),
             FullyNegotiatedInbound {
-                protocol: Either::Right(protocol),
+                protocol: future::Either::Right(protocol),
                 info: (_i1, i2),
             } => Either::Right(FullyNegotiatedInbound { protocol, info: i2 }),
         }

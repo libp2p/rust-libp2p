@@ -123,15 +123,15 @@ where
     AFuture: TryFuture<Ok = AInner>,
     BFuture: TryFuture<Ok = BInner>,
 {
-    type Output = Result<Either<AInner, BInner>, Either<AFuture::Error, BFuture::Error>>;
+    type Output = Result<future::Either<AInner, BInner>, Either<AFuture::Error, BFuture::Error>>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         match self.project() {
             EitherFutureProj::First(a) => TryFuture::try_poll(a, cx)
-                .map_ok(Either::Left)
+                .map_ok(future::Either::Left)
                 .map_err(Either::Left),
             EitherFutureProj::Second(a) => TryFuture::try_poll(a, cx)
-                .map_ok(Either::Right)
+                .map_ok(future::Either::Right)
                 .map_err(Either::Right),
         }
     }

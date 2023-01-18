@@ -561,8 +561,8 @@ where
         // If `self.allow_listening` is false, then we produced a `DeniedUpgrade` and `protocol`
         // is a `Void`.
         let protocol = match protocol {
-            Either::Left(p) => p,
-            Either::Right(p) => void::unreachable(p),
+            future::Either::Left(p) => p,
+            future::Either::Right(p) => void::unreachable(p),
         };
 
         if let ProtocolStatus::Unconfirmed = self.protocol_status {

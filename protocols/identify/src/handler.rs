@@ -200,7 +200,7 @@ impl Handler {
         >,
     ) {
         match output {
-            Either::Left(substream) => {
+            future::Either::Left(substream) => {
                 self.events
                     .push(ConnectionHandlerEvent::Custom(Event::Identify));
                 if !self.reply_streams.is_empty() {
@@ -212,7 +212,7 @@ impl Handler {
                 }
                 self.reply_streams.push_back(substream);
             }
-            Either::Right(fut) => {
+            future::Either::Right(fut) => {
                 if self.inbound_identify_push.replace(fut).is_some() {
                     warn!(
                         "New inbound identify push stream from {} while still \
@@ -234,14 +234,14 @@ impl Handler {
         >,
     ) {
         match output {
-            Either::Left(remote_info) => {
+            future::Either::Left(remote_info) => {
                 self.events
                     .push(ConnectionHandlerEvent::Custom(Event::Identified(
                         remote_info,
                     )));
                 self.keep_alive = KeepAlive::No;
             }
-            Either::Right(()) => self
+            future::Either::Right(()) => self
                 .events
                 .push(ConnectionHandlerEvent::Custom(Event::IdentificationPushed)),
         }

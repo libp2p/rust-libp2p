@@ -25,6 +25,7 @@ use crate::handler::{
 };
 use crate::upgrade::SendWrapper;
 use either::Either;
+use futures::future;
 use libp2p_core::upgrade::UpgradeError;
 use libp2p_core::{ConnectedPoint, PeerId};
 use std::task::{Context, Poll};
@@ -100,11 +101,11 @@ where
     ) -> Either<FullyNegotiatedInbound<LIP, LIOI>, FullyNegotiatedInbound<RIP, RIOI>> {
         match self {
             FullyNegotiatedInbound {
-                protocol: Either::Left(protocol),
+                protocol: future::Either::Left(protocol),
                 info: Either::Left(info),
             } => Either::Left(FullyNegotiatedInbound { protocol, info }),
             FullyNegotiatedInbound {
-                protocol: Either::Right(protocol),
+                protocol: future::Either::Right(protocol),
                 info: Either::Right(info),
             } => Either::Right(FullyNegotiatedInbound { protocol, info }),
             _ => unreachable!(),
