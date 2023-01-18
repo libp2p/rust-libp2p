@@ -1,6 +1,6 @@
 [package]
 edition = "2021"
-name = "testcases"
+name = "interop-tests"
 version = "0.1.0"
 
 # Required to avoid conflicts with parent workspace.

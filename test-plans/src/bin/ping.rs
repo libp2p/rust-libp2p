@@ -1,10 +1,10 @@
-use std::collections::HashSet;
 use std::env;
+use std::str::FromStr;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use async_trait::async_trait;
 use either::Either;
+use env_logger::Env;
 use futures::{AsyncRead, AsyncWrite, StreamExt};
 use libp2p::core::muxing::StreamMuxerBox;
 use libp2p::core::transport::Boxed;
@@ -13,8 +13,56 @@ use libp2p::websocket::WsConfig;
 use libp2p::{
     core, identity, mplex, noise, ping, webrtc, yamux, Multiaddr, PeerId, Swarm, Transport as _,
 };
-use testcases::{run_ping, Muxer, PingSwarm, SecProtocol, Transport};
+use redis::AsyncCommands;
+use strum::EnumString;
 
+const REDIS_TIMEOUT: usize = 10;
+
+/// Supported transports by rust-libp2p.
+#[derive(Clone, Debug, EnumString)]
+#[strum(serialize_all = "kebab-case")]
+pub enum Transport {
+    Tcp,
+    QuicV1,
+    Webrtc,
+    Ws,
+}
+
+/// Supported stream multiplexers by rust-libp2p.
+#[derive(Clone, Debug, EnumString)]
+#[strum(serialize_all = "kebab-case")]
+pub enum Muxer {
+    Mplex,
+    Yamux,
+}
+
+/// Supported security protocols by rust-libp2p.
+#[derive(Clone, Debug, EnumString)]
+#[strum(serialize_all = "kebab-case")]
+pub enum SecProtocol {
+    Noise,
+    Tls,
+}
+
+#[derive(NetworkBehaviour)]
+struct Behaviour {
+    ping: ping::Behaviour,
+    keep_alive: keep_alive::Behaviour,
+}
+
+/// Helper function to get a ENV variable into an test parameter like `Transport`.
+pub fn from_env<T>(env_var: &str) -> Result<T>
+where
+    T: FromStr,
+    T::Err: std::error::Error + Send + Sync + 'static,
+{
+    env::var(env_var)
+        .with_context(|| format!("{env_var} environment variable is not set"))?
+        .parse()
+        .map_err(Into::into)
+}
+
+/// Build the Tcp and Ws transports multiplexer and security protocol.
 fn build_builder<T, C>(
     builder: core::transport::upgrade::Builder<T>,
     secure_channel_param: SecProtocol,
@@ -37,12 +85,12 @@ where
 
     match secure_channel_param {
         SecProtocol::Noise => builder
-            .authenticate(noise::NoiseAuthenticated::xx(&local_key).unwrap())
+            .authenticate(noise::NoiseAuthenticated::xx(local_key).unwrap())
             .multiplex(mux_upgrade)
             .timeout(timeout)
             .boxed(),
         SecProtocol::Tls => builder
-            .authenticate(libp2p::tls::Config::new(&local_key).unwrap())
+            .authenticate(libp2p::tls::Config::new(local_key).unwrap())
             .multiplex(mux_upgrade)
             .timeout(timeout)
             .boxed(),
@@ -54,21 +102,21 @@ async fn main() -> Result<()> {
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
 
-    let transport_param: Transport =
-        testcases::from_env("transport").context("unsupported transport")?;
+    let transport_param: Transport = from_env("transport").context("unsupported transport")?;
 
     let ip = env::var("ip").context("ip environment variable is not set")?;
 
     let is_dialer = env::var("is_dialer")
-        .unwrap_or("true".into())
+        .unwrap_or_else(|_| "true".into())
         .parse::<bool>()?;
 
     let redis_addr = env::var("REDIS_ADDR")
         .map(|addr| format!("redis://{addr}"))
-        .unwrap_or("redis://redis:6379".into());
+        .unwrap_or_else(|_| "redis://redis:6379".into());
 
     let client = redis::Client::open(redis_addr).context("Could not connect to redis")?;
 
+    // Build the transport from the passed ENV var.
     let (boxed_transport, local_addr) = match transport_param {
         Transport::QuicV1 => {
             let builder =
@@ -81,10 +129,9 @@ async fn main() -> Result<()> {
                 .upgrade(libp2p::core::upgrade::Version::V1Lazy);
 
             let secure_channel_param: SecProtocol =
-                testcases::from_env("security").context("unsupported secure channel")?;
+                from_env("security").context("unsupported secure channel")?;
 
-            let muxer_param: Muxer =
-                testcases::from_env("muxer").context("unsupported multiplexer")?;
+            let muxer_param: Muxer = from_env("muxer").context("unsupported multiplexer")?;
 
             (
                 build_builder(builder, secure_channel_param, muxer_param, &local_key),
@@ -98,10 +145,9 @@ async fn main() -> Result<()> {
             .upgrade(libp2p::core::upgrade::Version::V1Lazy);
 
             let secure_channel_param: SecProtocol =
-                testcases::from_env("security").context("unsupported secure channel")?;
+                from_env("security").context("unsupported secure channel")?;
 
-            let muxer_param: Muxer =
-                testcases::from_env("muxer").context("unsupported multiplexer")?;
+            let muxer_param: Muxer = from_env("muxer").context("unsupported multiplexer")?;
 
             (
                 build_builder(builder, secure_channel_param, muxer_param, &local_key),
@@ -119,89 +165,80 @@ async fn main() -> Result<()> {
         ),
     };
 
-    let swarm = OrphanRuleWorkaround(Swarm::with_tokio_executor(
+    let mut swarm = Swarm::with_tokio_executor(
         boxed_transport,
         Behaviour {
             ping: ping::Behaviour::new(ping::Config::new().with_interval(Duration::from_secs(1))),
             keep_alive: keep_alive::Behaviour,
         },
         local_peer_id,
-    ));
+    );
 
-    // Use peer id as a String so that `run_ping` does not depend on a specific libp2p version.
-    let local_peer_id = local_peer_id.to_string();
-    run_ping(client, swarm, &local_addr, &local_peer_id, is_dialer).await?;
+    let mut conn = client.get_async_connection().await?;
 
-    Ok(())
-}
+    log::info!("Running ping test: {}", swarm.local_peer_id());
+    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
-#[derive(NetworkBehaviour)]
-struct Behaviour {
-    ping: ping::Behaviour,
-    keep_alive: keep_alive::Behaviour,
-}
-struct OrphanRuleWorkaround(Swarm<Behaviour>);
+    log::info!(
+        "Test instance, listening for incoming connections on: {:?}.",
+        local_addr
+    );
+    let id = swarm.listen_on(local_addr.parse()?)?;
 
-#[async_trait]
-impl PingSwarm for OrphanRuleWorkaround {
-    async fn listen_on(&mut self, address: &str) -> Result<String> {
-        let id = self.0.listen_on(address.parse()?)?;
+    // Run a ping interop test. Based on `is_dialer`, either dial the address
+    // retrieved via `listenAddr` key over the redis connection. Or wait to be pinged and have
+    // `dialerDone` key ready on the redis connection.
+    if is_dialer {
+        let result: Vec<String> = conn.blpop("listenerAddr", REDIS_TIMEOUT).await?;
+        let other = result
+            .get(1)
+            .context("Failed to wait for listener to be ready")?;
 
+        swarm.dial(other.parse::<Multiaddr>()?)?;
+        log::info!("Test instance, dialing multiaddress on: {}.", other);
+
+        loop {
+            if let Some(SwarmEvent::Behaviour(BehaviourEvent::Ping(ping::Event {
+                peer: _,
+                result: Ok(ping::Success::Ping { rtt }),
+            }))) = swarm.next().await
+            {
+                log::info!("Ping successful: {rtt:?}");
+                break;
+            }
+        }
+
+        conn.rpush("dialerDone", "").await?;
+    } else {
         loop {
             if let Some(SwarmEvent::NewListenAddr {
                 listener_id,
                 address,
-            }) = self.0.next().await
+            }) = swarm.next().await
             {
                 if address.to_string().contains("127.0.0.1") {
                     continue;
                 }
                 if listener_id == id {
-                    return Ok(address.to_string());
+                    let ma = format!("{address}/p2p/{local_peer_id}");
+                    conn.rpush("listenerAddr", ma).await?;
+                    break;
                 }
             }
         }
-    }
 
-    fn dial(&mut self, address: &str) -> Result<()> {
-        self.0.dial(address.parse::<Multiaddr>()?)?;
-
-        Ok(())
-    }
-
-    async fn await_connections(&mut self, number: usize) {
-        let mut connected = HashSet::with_capacity(number);
-
-        while connected.len() < number {
-            if let Some(SwarmEvent::ConnectionEstablished { peer_id, .. }) = self.0.next().await {
-                connected.insert(peer_id);
+        // Drive Swarm in the background while we await for `dialerDone` to be ready.
+        tokio::spawn(async move {
+            loop {
+                swarm.next().await;
             }
-        }
+        });
+
+        let done: Vec<String> = conn.blpop("dialerDone", REDIS_TIMEOUT).await?;
+        done.get(1)
+            .context("Failed to wait for dialer conclusion")?;
+        log::info!("Ping successful");
     }
 
-    async fn await_pings(&mut self, number: usize) -> Vec<Duration> {
-        let mut received_pings = Vec::with_capacity(number);
-
-        while received_pings.len() < number {
-            if let Some(SwarmEvent::Behaviour(BehaviourEvent::Ping(ping::Event {
-                peer: _,
-                result: Ok(ping::Success::Ping { rtt }),
-            }))) = self.0.next().await
-            {
-                received_pings.push(rtt);
-            }
-        }
-
-        received_pings
-    }
-
-    async fn loop_on_next(&mut self) {
-        loop {
-            self.0.next().await;
-        }
-    }
-
-    fn local_peer_id(&self) -> String {
-        self.0.local_peer_id().to_string()
-    }
+    Ok(())
 }
