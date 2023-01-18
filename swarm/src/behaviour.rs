@@ -26,12 +26,11 @@ pub mod toggle;
 pub use external_addresses::ExternalAddresses;
 pub use listen_addresses::ListenAddresses;
 
+use crate::connection::ConnectionId;
 use crate::dial_opts::DialOpts;
 use crate::handler::{ConnectionHandler, IntoConnectionHandler};
 use crate::{AddressRecord, AddressScore, DialError, THandlerInEvent};
-use libp2p_core::{
-    connection::ConnectionId, transport::ListenerId, ConnectedPoint, Multiaddr, PeerId,
-};
+use libp2p_core::{transport::ListenerId, ConnectedPoint, Multiaddr, PeerId};
 use std::{task::Context, task::Poll};
 
 /// A [`NetworkBehaviour`] defines the behaviour of the local node on the network.

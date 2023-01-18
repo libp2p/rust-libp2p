@@ -47,9 +47,9 @@ mod protocol;
 
 use handler::Handler;
 pub use handler::{Config, Failure, Success};
-use libp2p_core::{connection::ConnectionId, PeerId};
+use libp2p_core::PeerId;
 use libp2p_swarm::{
-    behaviour::FromSwarm, NetworkBehaviour, NetworkBehaviourAction, PollParameters, THandlerInEvent,
+    behaviour::FromSwarm, ConnectionId, NetworkBehaviour, NetworkBehaviourAction, PollParameters, THandlerInEvent,
 };
 use std::{
     collections::VecDeque,

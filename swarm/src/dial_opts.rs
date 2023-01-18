@@ -19,7 +19,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use libp2p_core::connection::{ConnectionId, Endpoint};
+use crate::ConnectionId;
+use libp2p_core::connection::Endpoint;
 use libp2p_core::multiaddr::Protocol;
 use libp2p_core::multihash::Multihash;
 use libp2p_core::{Multiaddr, PeerId};

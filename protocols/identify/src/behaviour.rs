@@ -20,10 +20,9 @@
 
 use crate::handler::{self, InEvent, Proto};
 use crate::protocol::{Info, Protocol, UpgradeError};
-use libp2p_core::{
-    connection::ConnectionId, multiaddr, ConnectedPoint, Multiaddr, PeerId, PublicKey,
-};
+use libp2p_core::{multiaddr, ConnectedPoint, Multiaddr, PeerId, PublicKey};
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm};
+use libp2p_swarm::ConnectionId;
 use libp2p_swarm::{
     dial_opts::DialOpts, AddressScore, ConnectionHandler, ConnectionHandlerUpgrErr, DialError,
     ExternalAddresses, IntoConnectionHandler, ListenAddresses, NetworkBehaviour,

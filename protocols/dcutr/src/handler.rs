@@ -20,7 +20,6 @@
 
 use crate::protocol;
 use either::Either;
-use libp2p_core::upgrade;
 use libp2p_core::{ConnectedPoint, PeerId};
 use libp2p_swarm::handler::SendWrapper;
 use libp2p_swarm::{ConnectionHandler, IntoConnectionHandler};
@@ -42,8 +41,6 @@ impl IntoConnectionHandler for Prototype {
     }
 
     fn inbound_protocol(&self) -> <Self::Handler as ConnectionHandler>::InboundProtocol {
-        upgrade::EitherUpgrade::A(SendWrapper(upgrade::EitherUpgrade::A(
-            protocol::inbound::Upgrade {},
-        )))
+        Either::Left(SendWrapper(Either::Left(protocol::inbound::Upgrade {})))
     }
 }
