@@ -18,9 +18,33 @@
 - Remove `ConnectionId::new`. Manually creating `ConnectionId`s is now unsupported. See [PR 3327].
 
 - Remove `handler` field from `NetworkBehaviourAction::Dial`.
-  Instead of constructing the handler early, you now get to pass a `ConnectionId`.
-  `ConnectionId` are `Copy` and will be used throughout the entire lifetime of the connection to report events.
+  Instead of constructing the handler early, you can now access the `ConnectionId` of the future connection on `DialOpts`.
+  `ConnectionId`s are `Copy` and will be used throughout the entire lifetime of the connection to report events.
   This allows you to send events to a very specific connection, much like you previously could directly set state in the handler.
+
+  Removing the `handler` field also reduces the type parameters of `NetworkBehaviourAction` from three to two.
+  The third one used to be defaulted to the `InEvent` of the `ConnectionHandler`.
+  You now have to manually specify that where you previously had to specify the `ConnectionHandler`.
+  This very likely will trigger **convoluted compile errors** about traits not being implemented.
+  
+  Within `NetworkBehaviourAction::poll`, the easiest way to migrate is to do this (in the example of `libp2p-floodsub`):
+  ```diff
+  --- a/protocols/floodsub/src/layer.rs
+  +++ b/protocols/floodsub/src/layer.rs
+  @@ -472,7 +465,7 @@ impl NetworkBehaviour for Floodsub {
+       &mut self,
+       _: &mut Context<'_>,
+       _: &mut impl PollParameters,
+  -    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+  +    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>> {
+  ```
+  
+  In other words:
+
+  |Search|Replace|
+  |---|---|
+  |`NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>`|`NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>`|
+
   See [PR 3328].
 
 [PR 3170]: https://github.com/libp2p/rust-libp2p/pull/3170
