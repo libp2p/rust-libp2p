@@ -90,7 +90,7 @@ where
 /// Convert `Pin<&mut Either<A, B>>` to `Either<Pin<&mut A>, Pin<&mut B>>`,
 /// pinned projections of the inner variants.
 ///
-/// Local function until https://github.com/rust-lang/futures-rs/pull/2691 is merged.
+/// Local function until <https://github.com/rust-lang/futures-rs/pull/2691> is merged.
 fn as_pin_mut<A, B>(
     either: Pin<&mut future::Either<A, B>>,
 ) -> future::Either<Pin<&mut A>, Pin<&mut B>> {
