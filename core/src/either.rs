@@ -252,33 +252,6 @@ where
     }
 }
 
-#[pin_project(project = EitherFuture2Proj)]
-#[derive(Debug, Copy, Clone)]
-#[must_use = "futures do nothing unless polled"]
-pub enum EitherFuture2<A, B> {
-    A(#[pin] A),
-    B(#[pin] B),
-}
-
-impl<AFut, BFut, AItem, BItem, AError, BError> Future for EitherFuture2<AFut, BFut>
-where
-    AFut: TryFuture<Ok = AItem, Error = AError>,
-    BFut: TryFuture<Ok = BItem, Error = BError>,
-{
-    type Output = Result<EitherOutput<AItem, BItem>, Either<AError, BError>>;
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        match self.project() {
-            EitherFuture2Proj::A(a) => TryFuture::try_poll(a, cx)
-                .map_ok(EitherOutput::First)
-                .map_err(Either::Left),
-            EitherFuture2Proj::B(a) => TryFuture::try_poll(a, cx)
-                .map_ok(EitherOutput::Second)
-                .map_err(Either::Right),
-        }
-    }
-}
-
 #[derive(Debug, Clone)]
 pub enum EitherName<A, B> {
     A(A),
