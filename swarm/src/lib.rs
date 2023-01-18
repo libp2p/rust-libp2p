@@ -84,6 +84,7 @@ pub mod derive_prelude {
     pub use crate::behaviour::NewExternalAddr;
     pub use crate::behaviour::NewListenAddr;
     pub use crate::behaviour::NewListener;
+    pub use crate::connection::ConnectionId;
     pub use crate::ConnectionHandler;
     pub use crate::DialError;
     pub use crate::IntoConnectionHandler;
@@ -92,7 +93,6 @@ pub mod derive_prelude {
     pub use crate::NetworkBehaviourAction;
     pub use crate::PollParameters;
     pub use futures::prelude as futures;
-    pub use libp2p_core::connection::ConnectionId;
     pub use libp2p_core::either::EitherOutput;
     pub use libp2p_core::transport::ListenerId;
     pub use libp2p_core::ConnectedPoint;
@@ -108,8 +108,8 @@ pub use behaviour::{
 };
 pub use connection::pool::{ConnectionCounters, ConnectionLimits};
 pub use connection::{
-    ConnectionError, ConnectionLimit, PendingConnectionError, PendingInboundConnectionError,
-    PendingOutboundConnectionError,
+    ConnectionError, ConnectionId, ConnectionLimit, PendingConnectionError,
+    PendingInboundConnectionError, PendingOutboundConnectionError,
 };
 pub use executor::Executor;
 pub use handler::{
@@ -125,7 +125,6 @@ use connection::pool::{EstablishedConnection, Pool, PoolConfig, PoolEvent};
 use connection::IncomingInfo;
 use dial_opts::{DialOpts, PeerCondition};
 use futures::{executor::ThreadPoolBuilder, prelude::*, stream::FusedStream};
-use libp2p_core::connection::ConnectionId;
 use libp2p_core::muxing::SubstreamBox;
 use libp2p_core::{
     connection::ConnectedPoint,
