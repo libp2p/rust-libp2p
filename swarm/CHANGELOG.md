@@ -28,6 +28,9 @@
     |---|---|
   |`NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>`|`NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>`|
 
+  If you reference `NetworkBehaviourAction` somewhere else as well,
+  you may have to fill in the type of `ConnectionHandler::InEvent` manually as the 2nd parameter.
+
   See [PR 3328].
 
 - Update to `libp2p-core` `v0.39.0`.
