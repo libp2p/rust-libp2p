@@ -21,11 +21,12 @@
 use crate::protocol::{
     self, Identify, InboundPush, Info, OutboundPush, Protocol, Push, UpgradeError,
 };
+use either::Either;
 use futures::future::BoxFuture;
 use futures::prelude::*;
 use futures::stream::FuturesUnordered;
 use futures_timer::Delay;
-use libp2p_core::either::{EitherError, EitherOutput};
+use libp2p_core::either::EitherOutput;
 use libp2p_core::upgrade::{EitherUpgrade, SelectUpgrade};
 use libp2p_core::{ConnectedPoint, Multiaddr, PeerId, PublicKey};
 use libp2p_swarm::handler::{
@@ -259,8 +260,8 @@ impl Handler {
 
         let err = err.map_upgrade_err(|e| match e {
             UpgradeError::Select(e) => UpgradeError::Select(e),
-            UpgradeError::Apply(EitherError::A(ioe)) => UpgradeError::Apply(ioe),
-            UpgradeError::Apply(EitherError::B(ioe)) => UpgradeError::Apply(ioe),
+            UpgradeError::Apply(Either::Left(ioe)) => UpgradeError::Apply(ioe),
+            UpgradeError::Apply(Either::Right(ioe)) => UpgradeError::Apply(ioe),
         });
         self.events
             .push(ConnectionHandlerEvent::Custom(Event::IdentificationError(
