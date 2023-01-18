@@ -84,6 +84,7 @@ pub mod derive_prelude {
     pub use crate::behaviour::NewExternalAddr;
     pub use crate::behaviour::NewListenAddr;
     pub use crate::behaviour::NewListener;
+    pub use crate::connection::ConnectionId;
     pub use crate::ConnectionHandler;
     pub use crate::DialError;
     pub use crate::IntoConnectionHandler;
@@ -92,7 +93,6 @@ pub mod derive_prelude {
     pub use crate::NetworkBehaviourAction;
     pub use crate::PollParameters;
     pub use futures::prelude as futures;
-    pub use libp2p_core::connection::ConnectionId;
     pub use libp2p_core::either::EitherOutput;
     pub use libp2p_core::transport::ListenerId;
     pub use libp2p_core::ConnectedPoint;
@@ -108,8 +108,8 @@ pub use behaviour::{
 };
 pub use connection::pool::{ConnectionCounters, ConnectionLimits};
 pub use connection::{
-    ConnectionError, ConnectionLimit, PendingConnectionError, PendingInboundConnectionError,
-    PendingOutboundConnectionError,
+    ConnectionError, ConnectionId, ConnectionLimit, PendingConnectionError,
+    PendingInboundConnectionError, PendingOutboundConnectionError,
 };
 pub use executor::Executor;
 pub use handler::{
@@ -125,7 +125,6 @@ use connection::pool::{EstablishedConnection, Pool, PoolConfig, PoolEvent};
 use connection::IncomingInfo;
 use dial_opts::{DialOpts, PeerCondition};
 use futures::{executor::ThreadPoolBuilder, prelude::*, stream::FusedStream};
-use libp2p_core::connection::ConnectionId;
 use libp2p_core::muxing::SubstreamBox;
 use libp2p_core::{
     connection::ConnectedPoint,
@@ -1750,12 +1749,11 @@ fn p2p_addr(peer: Option<PeerId>, addr: Multiaddr) -> Result<Multiaddr, Multiadd
 mod tests {
     use super::*;
     use crate::test::{CallTraceBehaviour, MockBehaviour};
+    use either::Either;
     use futures::executor::block_on;
     use futures::executor::ThreadPool;
     use futures::future::poll_fn;
-    use futures::future::Either;
     use futures::{executor, future, ready};
-    use libp2p_core::either::EitherError;
     use libp2p_core::multiaddr::multiaddr;
     use libp2p_core::transport::memory::MemoryTransportError;
     use libp2p_core::transport::TransportEvent;
@@ -2225,13 +2223,13 @@ mod tests {
                         match futures::future::select(transport.select_next_some(), swarm.next())
                             .await
                         {
-                            Either::Left((TransportEvent::Incoming { .. }, _)) => {
+                            future::Either::Left((TransportEvent::Incoming { .. }, _)) => {
                                 break;
                             }
-                            Either::Left(_) => {
+                            future::Either::Left(_) => {
                                 panic!("Unexpected transport event.")
                             }
-                            Either::Right((e, _)) => {
+                            future::Either::Right((e, _)) => {
                                 panic!("Expect swarm to not emit any event {e:?}")
                             }
                         }
@@ -2633,7 +2631,7 @@ mod tests {
             "/ip4/127.0.0.1/tcp/80".parse().unwrap(),
             TransportError::Other(io::Error::new(
                 io::ErrorKind::Other,
-                EitherError::<_, Void>::A(EitherError::<Void, _>::B(UpgradeError::Apply(
+                Either::<_, Void>::Left(Either::<Void, _>::Right(UpgradeError::Apply(
                     MemoryTransportError::Unreachable,
                 ))),
             )),
