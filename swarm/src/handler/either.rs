@@ -20,8 +20,8 @@
 
 use crate::handler::{
     ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr,
-    FullyNegotiatedInbound, InboundUpgradeSend,
-    IntoConnectionHandler, KeepAlive, ListenUpgradeError, SubstreamProtocol,
+    FullyNegotiatedInbound, InboundUpgradeSend, IntoConnectionHandler, KeepAlive,
+    ListenUpgradeError, SubstreamProtocol,
 };
 use crate::upgrade::SendWrapper;
 use either::Either;

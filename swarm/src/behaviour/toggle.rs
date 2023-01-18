@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::behaviour::FromSwarm;
+use crate::connection::ConnectionId;
 use crate::handler::{
     AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent,
     ConnectionHandlerUpgrErr, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
@@ -27,11 +28,9 @@ use crate::handler::{
 use crate::upgrade::SendWrapper;
 use crate::{NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use either::Either;
-use libp2p_core::{
-    upgrade::DeniedUpgrade, ConnectedPoint, Multiaddr, PeerId,
-};
-use std::{task::Context, task::Poll};
 use futures::future;
+use libp2p_core::{upgrade::DeniedUpgrade, ConnectedPoint, Multiaddr, PeerId};
+use std::{task::Context, task::Poll};
 
 /// Implementation of `NetworkBehaviour` that can be either in the disabled or enabled state.
 ///
@@ -94,7 +93,7 @@ where
     fn on_connection_handler_event(
         &mut self,
         peer_id: PeerId,
-        connection_id: libp2p_core::connection::ConnectionId,
+        connection_id: ConnectionId,
         event: crate::THandlerOutEvent<Self>,
     ) {
         if let Some(behaviour) = &mut self.inner {

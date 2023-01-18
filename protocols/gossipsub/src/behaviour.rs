@@ -36,14 +36,13 @@ use prost::Message;
 use rand::{seq::SliceRandom, thread_rng};
 
 use libp2p_core::{
-    connection::ConnectionId, identity::Keypair, multiaddr::Protocol::Ip4,
-    multiaddr::Protocol::Ip6, Multiaddr, PeerId,
+    identity::Keypair, multiaddr::Protocol::Ip4, multiaddr::Protocol::Ip6, Multiaddr, PeerId,
 };
 use libp2p_swarm::{
     behaviour::{AddressChange, ConnectionClosed, ConnectionEstablished, FromSwarm},
     dial_opts::DialOpts,
-    ConnectionHandler, IntoConnectionHandler, NetworkBehaviour, NetworkBehaviourAction,
-    NotifyHandler, PollParameters,
+    ConnectionHandler, ConnectionId, IntoConnectionHandler, NetworkBehaviour,
+    NetworkBehaviourAction, NotifyHandler, PollParameters,
 };
 use wasm_timer::Instant;
 

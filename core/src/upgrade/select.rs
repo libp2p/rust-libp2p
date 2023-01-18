@@ -20,7 +20,7 @@
 
 use crate::either::EitherFuture;
 use crate::{
-    either::{EitherName},
+    either::EitherName,
     upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo},
 };
 use either::Either;

@@ -23,7 +23,6 @@ use crate::{
     upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo},
 };
 use either::Either;
-use futures::future;
 
 impl<A, B> UpgradeInfo for Either<A, B>
 where

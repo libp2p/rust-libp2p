@@ -100,10 +100,7 @@ impl<TProto1, TProto2> ConnectionHandlerSelect<TProto1, TProto2> {
 }
 
 impl<S1OOI, S2OOI, S1OP, S2OP>
-    FullyNegotiatedOutbound<
-        Either<SendWrapper<S1OP>, SendWrapper<S2OP>>,
-        Either<S1OOI, S2OOI>,
-    >
+    FullyNegotiatedOutbound<Either<SendWrapper<S1OP>, SendWrapper<S2OP>>, Either<S1OOI, S2OOI>>
 where
     S1OP: OutboundUpgradeSend,
     S2OP: OutboundUpgradeSend,
@@ -157,7 +154,9 @@ where
     S1OOI: Send + 'static,
     S2OOI: Send + 'static,
 {
-    pub(crate) fn transpose(self) -> Either<DialUpgradeError<S1OOI, S1OP>, DialUpgradeError<S2OOI, S2OP>> {
+    pub(crate) fn transpose(
+        self,
+    ) -> Either<DialUpgradeError<S1OOI, S1OP>, DialUpgradeError<S2OOI, S2OP>> {
         match self {
             DialUpgradeError {
                 info: Either::Left(info),

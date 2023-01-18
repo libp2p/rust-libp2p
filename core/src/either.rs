@@ -25,9 +25,7 @@ use crate::{
     Multiaddr, ProtocolName,
 };
 use either::Either;
-use futures::{
-    prelude::*,
-};
+use futures::prelude::*;
 use pin_project::pin_project;
 use std::{pin::Pin, task::Context, task::Poll};
 
@@ -93,7 +91,9 @@ where
 /// pinned projections of the inner variants.
 ///
 /// Local function until https://github.com/rust-lang/futures-rs/pull/2691 is merged.
-fn as_pin_mut<A, B>(either: Pin<&mut future::Either<A, B>>) -> future::Either<Pin<&mut A>, Pin<&mut B>> {
+fn as_pin_mut<A, B>(
+    either: Pin<&mut future::Either<A, B>>,
+) -> future::Either<Pin<&mut A>, Pin<&mut B>> {
     // SAFETY: `get_unchecked_mut` is fine because we don't move anything.
     // We can use `new_unchecked` because the `inner` parts are guaranteed
     // to be pinned, as they come from `self` which is pinned, and we never
@@ -102,7 +102,9 @@ fn as_pin_mut<A, B>(either: Pin<&mut future::Either<A, B>>) -> future::Either<Pi
     unsafe {
         match *Pin::get_unchecked_mut(either) {
             future::Either::Left(ref mut inner) => future::Either::Left(Pin::new_unchecked(inner)),
-            future::Either::Right(ref mut inner) => future::Either::Right(Pin::new_unchecked(inner)),
+            future::Either::Right(ref mut inner) => {
+                future::Either::Right(Pin::new_unchecked(inner))
+            }
         }
     }
 }
@@ -121,15 +123,15 @@ where
     AFuture: TryFuture<Ok = AInner>,
     BFuture: TryFuture<Ok = BInner>,
 {
-    type Output = Result<future::Either<AInner, BInner>, Either<AFuture::Error, BFuture::Error>>;
+    type Output = Result<Either<AInner, BInner>, Either<AFuture::Error, BFuture::Error>>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         match self.project() {
             EitherFutureProj::First(a) => TryFuture::try_poll(a, cx)
-                .map_ok(future::Either::Left)
+                .map_ok(Either::Left)
                 .map_err(Either::Left),
             EitherFutureProj::Second(a) => TryFuture::try_poll(a, cx)
-                .map_ok(future::Either::Right)
+                .map_ok(Either::Right)
                 .map_err(Either::Right),
         }
     }
