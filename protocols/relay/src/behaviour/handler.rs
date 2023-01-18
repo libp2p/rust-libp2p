@@ -350,19 +350,7 @@ impl IntoConnectionHandler for Prototype {
             // Deny all substreams on relayed connection.
             Either::Right(dummy::ConnectionHandler)
         } else {
-            Either::Left(Handler {
-                endpoint: endpoint.clone(),
-                config: self.config,
-                queued_events: Default::default(),
-                pending_error: Default::default(),
-                reservation_request_future: Default::default(),
-                circuit_accept_futures: Default::default(),
-                circuit_deny_futures: Default::default(),
-                alive_lend_out_substreams: Default::default(),
-                circuits: Default::default(),
-                active_reservation: Default::default(),
-                keep_alive: KeepAlive::Yes,
-            })
+            Either::Left(Handler::new(self.config, endpoint.clone()))
         }
     }
 
@@ -431,6 +419,22 @@ pub struct Handler {
 }
 
 impl Handler {
+    fn new(config: Config, endpoint: ConnectedPoint) -> Handler {
+        Handler {
+            endpoint,
+            config,
+            queued_events: Default::default(),
+            pending_error: Default::default(),
+            reservation_request_future: Default::default(),
+            circuit_accept_futures: Default::default(),
+            circuit_deny_futures: Default::default(),
+            alive_lend_out_substreams: Default::default(),
+            circuits: Default::default(),
+            active_reservation: Default::default(),
+            keep_alive: KeepAlive::Yes,
+        }
+    }
+
     fn on_fully_negotiated_inbound(
         &mut self,
         FullyNegotiatedInbound {
