@@ -1,8 +1,9 @@
 # 0.39.0 [unreleased]
 
-- Deprecate `ConnectionId::new` in favor of `ConnectionId::next`. See [PR 3327].
+- Move `ConnectionId` to `libp2p-swarm`. See [PR 3221].
+- Move `PendingPoint` to `libp2p-swarm` and make it crate-private. See [PR 3221].
 
-[PR 3327]: https://github.com/libp2p/rust-libp2p/pull/3327
+[PR 3221]: https://github.com/libp2p/rust-libp2p/pull/3221
 
 # 0.38.0
 
@@ -22,6 +23,8 @@
 
 - Remove `EitherTransport` in favor of implementing `Transport` on `either::Either`. See [PR 3338].
 
+- Remove `EitherUpgrade` in favor of implementing `UpgradeInfo`, `InboundUpgrade` and `OutboundUpgrade` on `either::Either`. See [PR 3339].
+
 [PR 3031]: https://github.com/libp2p/rust-libp2p/pull/3031
 [PR 3058]: https://github.com/libp2p/rust-libp2p/pull/3058
 [PR 3097]: https://github.com/libp2p/rust-libp2p/pull/3097
@@ -29,6 +32,7 @@
 [PR 2972]: https://github.com/libp2p/rust-libp2p/pull/2972
 [PR 3337]: https://github.com/libp2p/rust-libp2p/pull/3337
 [PR 3338]: https://github.com/libp2p/rust-libp2p/pull/3338
+[PR 3339]: https://github.com/libp2p/rust-libp2p/pull/3339
 
 # 0.37.0
 
