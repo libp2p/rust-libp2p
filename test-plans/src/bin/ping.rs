@@ -4,10 +4,10 @@ use std::time::Duration;
 
 use anyhow::{Context, Result};
 use async_trait::async_trait;
+use either::Either;
 use futures::{AsyncRead, AsyncWrite, StreamExt};
 use libp2p::core::muxing::StreamMuxerBox;
 use libp2p::core::transport::Boxed;
-use libp2p::core::upgrade::EitherUpgrade;
 use libp2p::swarm::{keep_alive, NetworkBehaviour, SwarmEvent};
 use libp2p::websocket::WsConfig;
 use libp2p::{
@@ -29,8 +29,8 @@ where
     C: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
     let mux_upgrade = match muxer_param {
-        Muxer::Yamux => EitherUpgrade::A(yamux::YamuxConfig::default()),
-        Muxer::Mplex => EitherUpgrade::B(mplex::MplexConfig::default()),
+        Muxer::Yamux => Either::Left(yamux::YamuxConfig::default()),
+        Muxer::Mplex => Either::Right(mplex::MplexConfig::default()),
     };
 
     let timeout = Duration::from_secs(5);

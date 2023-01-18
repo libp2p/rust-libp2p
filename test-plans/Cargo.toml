@@ -19,3 +19,4 @@ tokio = { version = "1.24.1", features = ["full"] }
 libp2p = { path = "../", default_features = false, features = ["websocket", "quic",  "mplex", "yamux", "tcp", "tokio", "ping", "noise", "tls", "dns", "rsa", "macros", "webrtc"] }
 rand = "0.8.5"
 strum = { version = "0.24.1", features = ["derive"] }
+either = "1.8.0"
