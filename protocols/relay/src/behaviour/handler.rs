@@ -355,7 +355,7 @@ impl IntoConnectionHandler for Prototype {
     }
 
     fn inbound_protocol(&self) -> <Self::Handler as ConnectionHandler>::InboundProtocol {
-        upgrade::EitherUpgrade::A(SendWrapper(inbound_hop::Upgrade {
+        Either::Left(SendWrapper(inbound_hop::Upgrade {
             reservation_duration: self.config.reservation_duration,
             max_circuit_duration: self.config.max_circuit_duration,
             max_circuit_bytes: self.config.max_circuit_bytes,

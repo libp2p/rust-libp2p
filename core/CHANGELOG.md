@@ -16,6 +16,8 @@
 
 - Remove `EitherTransport` in favor of implementing `Transport` on `either::Either`. See [PR 3338].
 
+- Remove `EitherUpgrade` in favor of implementing `UpgradeInfo`, `InboundUpgrade` and `OutboundUpgrade` on `either::Either`. See [PR 3339].
+
 [PR 3031]: https://github.com/libp2p/rust-libp2p/pull/3031
 [PR 3058]: https://github.com/libp2p/rust-libp2p/pull/3058
 [PR 3097]: https://github.com/libp2p/rust-libp2p/pull/3097
@@ -23,6 +25,7 @@
 [PR 2972]: https://github.com/libp2p/rust-libp2p/pull/2972
 [PR 3337]: https://github.com/libp2p/rust-libp2p/pull/3337
 [PR 3338]: https://github.com/libp2p/rust-libp2p/pull/3338
+[PR 3339]: https://github.com/libp2p/rust-libp2p/pull/3339
 
 # 0.37.0
 
