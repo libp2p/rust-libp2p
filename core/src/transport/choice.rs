@@ -23,6 +23,7 @@ use crate::transport::{ListenerId, Transport, TransportError, TransportEvent};
 use either::Either;
 use multiaddr::Multiaddr;
 use std::{pin::Pin, task::Context, task::Poll};
+use futures::future::BoxFuture;
 
 /// Struct returned by `or_transport()`.
 #[derive(Debug, Copy, Clone)]
@@ -42,8 +43,6 @@ where
 {
     type Output = EitherOutput<A::Output, B::Output>;
     type Error = Either<A::Error, B::Error>;
-    type ListenerUpgrade = EitherFuture<A::ListenerUpgrade, B::ListenerUpgrade>;
-    type Dial = EitherFuture<A::Dial, B::Dial>;
 
     fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
         let addr = match self.0.listen_on(addr) {
@@ -63,7 +62,7 @@ where
         self.0.remove_listener(id) || self.1.remove_listener(id)
     }
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(&mut self, addr: Multiaddr) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>> {
         let addr = match self.0.dial(addr) {
             Ok(connec) => return Ok(EitherFuture::First(connec)),
             Err(TransportError::MultiaddrNotSupported(addr)) => addr,
@@ -86,9 +85,9 @@ where
     fn dial_as_listener(
         &mut self,
         addr: Multiaddr,
-    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+    ) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>> {
         let addr = match self.0.dial_as_listener(addr) {
-            Ok(connec) => return Ok(EitherFuture::First(connec)),
+            Ok(connec) => return Ok(connec),
             Err(TransportError::MultiaddrNotSupported(addr)) => addr,
             Err(TransportError::Other(err)) => {
                 return Err(TransportError::Other(Either::Left(err)))
@@ -96,7 +95,7 @@ where
         };
 
         let addr = match self.1.dial_as_listener(addr) {
-            Ok(connec) => return Ok(EitherFuture::Second(connec)),
+            Ok(connec) => return Ok(connec),
             Err(TransportError::MultiaddrNotSupported(addr)) => addr,
             Err(TransportError::Other(err)) => {
                 return Err(TransportError::Other(Either::Right(err)))
@@ -117,7 +116,7 @@ where
     fn poll(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
+    ) -> Poll<TransportEvent<Self::Output, Self::Error>> {
         let this = self.project();
         match this.0.poll(cx) {
             Poll::Ready(ev) => {

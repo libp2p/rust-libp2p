@@ -22,6 +22,7 @@ use crate::transport::{ListenerId, Transport, TransportError, TransportEvent};
 use crate::Multiaddr;
 use futures::{prelude::*, task::Context, task::Poll};
 use std::{fmt, io, marker::PhantomData, pin::Pin};
+use futures::future::BoxFuture;
 
 /// Implementation of `Transport` that doesn't support any multiaddr.
 ///
@@ -56,8 +57,6 @@ impl<TOut> Clone for DummyTransport<TOut> {
 impl<TOut> Transport for DummyTransport<TOut> {
     type Output = TOut;
     type Error = io::Error;
-    type ListenerUpgrade = futures::future::Pending<Result<Self::Output, io::Error>>;
-    type Dial = futures::future::Pending<Result<Self::Output, io::Error>>;
 
     fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
         Err(TransportError::MultiaddrNotSupported(addr))
@@ -67,14 +66,14 @@ impl<TOut> Transport for DummyTransport<TOut> {
         false
     }
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(&mut self, addr: Multiaddr) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>> {
         Err(TransportError::MultiaddrNotSupported(addr))
     }
 
     fn dial_as_listener(
         &mut self,
         addr: Multiaddr,
-    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+    ) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>> {
         Err(TransportError::MultiaddrNotSupported(addr))
     }
 
@@ -85,7 +84,7 @@ impl<TOut> Transport for DummyTransport<TOut> {
     fn poll(
         self: Pin<&mut Self>,
         _: &mut Context<'_>,
-    ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
+    ) -> Poll<TransportEvent<Self::Output, Self::Error>> {
         Poll::Pending
     }
 }

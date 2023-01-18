@@ -26,6 +26,7 @@ use either::Either;
 use futures::prelude::*;
 use multiaddr::Multiaddr;
 use std::{error, marker::PhantomPinned, pin::Pin, task::Context, task::Poll};
+use futures::future::BoxFuture;
 
 /// See the [`Transport::and_then`] method.
 #[pin_project::pin_project]
@@ -51,8 +52,6 @@ where
 {
     type Output = O;
     type Error = Either<T::Error, F::Error>;
-    type ListenerUpgrade = AndThenFuture<T::ListenerUpgrade, C, F>;
-    type Dial = AndThenFuture<T::Dial, C, F>;
 
     fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
         self.transport
@@ -64,7 +63,7 @@ where
         self.transport.remove_listener(id)
     }
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(&mut self, addr: Multiaddr) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>> {
         let dialed_fut = self
             .transport
             .dial(addr.clone())
@@ -80,13 +79,13 @@ where
             )),
             _marker: PhantomPinned,
         };
-        Ok(future)
+        Ok(future.boxed())
     }
 
     fn dial_as_listener(
         &mut self,
         addr: Multiaddr,
-    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+    ) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>> {
         let dialed_fut = self
             .transport
             .dial_as_listener(addr.clone())
@@ -112,7 +111,7 @@ where
     fn poll(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
+    ) -> Poll<TransportEvent<Self::Output, Self::Error>> {
         let this = self.project();
         match this.transport.poll(cx) {
             Poll::Ready(TransportEvent::Incoming {

@@ -22,6 +22,7 @@ use crate::transport::{ListenerId, Transport, TransportError, TransportEvent};
 use futures::prelude::*;
 use multiaddr::Multiaddr;
 use std::{error, pin::Pin, task::Context, task::Poll};
+use futures::future::BoxFuture;
 
 /// See `Transport::map_err`.
 #[derive(Debug, Copy, Clone)]
@@ -47,8 +48,6 @@ where
 {
     type Output = T::Output;
     type Error = TErr;
-    type ListenerUpgrade = MapErrListenerUpgrade<T, F>;
-    type Dial = MapErrDial<T, F>;
 
     fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
         let map = self.map.clone();
@@ -59,13 +58,10 @@ where
         self.transport.remove_listener(id)
     }
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(&mut self, addr: Multiaddr) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>> {
         let map = self.map.clone();
         match self.transport.dial(addr) {
-            Ok(future) => Ok(MapErrDial {
-                inner: future,
-                map: Some(map),
-            }),
+            Ok(future) => Ok(future.map_err(map).boxed()),
             Err(err) => Err(err.map(map)),
         }
     }
@@ -73,13 +69,10 @@ where
     fn dial_as_listener(
         &mut self,
         addr: Multiaddr,
-    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+    ) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>> {
         let map = self.map.clone();
-        match self.transport.dial_as_listener(addr) {
-            Ok(future) => Ok(MapErrDial {
-                inner: future,
-                map: Some(map),
-            }),
+        match self.transport.dial(addr) {
+            Ok(future) => Ok(future.map_err(map).boxed()),
             Err(err) => Err(err.map(map)),
         }
     }
@@ -91,71 +84,11 @@ where
     fn poll(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
+    ) -> Poll<TransportEvent<Self::Output, Self::Error>> {
         let this = self.project();
         let map = &*this.map;
         this.transport.poll(cx).map(|ev| {
-            ev.map_upgrade(move |value| MapErrListenerUpgrade {
-                inner: value,
-                map: Some(map.clone()),
-            })
-            .map_err(map.clone())
+            ev.map_out(|out| out.map_err(map)).map_err(map.clone())
         })
-    }
-}
-
-/// Listening upgrade future for `MapErr`.
-#[pin_project::pin_project]
-pub struct MapErrListenerUpgrade<T: Transport, F> {
-    #[pin]
-    inner: T::ListenerUpgrade,
-    map: Option<F>,
-}
-
-impl<T, F, TErr> Future for MapErrListenerUpgrade<T, F>
-where
-    T: Transport,
-    F: FnOnce(T::Error) -> TErr,
-{
-    type Output = Result<T::Output, TErr>;
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let this = self.project();
-        match Future::poll(this.inner, cx) {
-            Poll::Ready(Ok(value)) => Poll::Ready(Ok(value)),
-            Poll::Pending => Poll::Pending,
-            Poll::Ready(Err(err)) => {
-                let map = this.map.take().expect("poll() called again after error");
-                Poll::Ready(Err(map(err)))
-            }
-        }
-    }
-}
-
-/// Dialing future for `MapErr`.
-#[pin_project::pin_project]
-pub struct MapErrDial<T: Transport, F> {
-    #[pin]
-    inner: T::Dial,
-    map: Option<F>,
-}
-
-impl<T, F, TErr> Future for MapErrDial<T, F>
-where
-    T: Transport,
-    F: FnOnce(T::Error) -> TErr,
-{
-    type Output = Result<T::Output, TErr>;
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let this = self.project();
-        match Future::poll(this.inner, cx) {
-            Poll::Ready(Ok(value)) => Poll::Ready(Ok(value)),
-            Poll::Pending => Poll::Pending,
-            Poll::Ready(Err(err)) => {
-                let map = this.map.take().expect("poll() called again after error");
-                Poll::Ready(Err(map(err)))
-            }
-        }
     }
 }

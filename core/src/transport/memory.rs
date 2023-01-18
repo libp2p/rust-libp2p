@@ -22,7 +22,7 @@ use crate::transport::{ListenerId, Transport, TransportError, TransportEvent};
 use fnv::FnvHashMap;
 use futures::{
     channel::mpsc,
-    future::{self, Ready},
+    future::{self},
     prelude::*,
     task::Context,
     task::Poll,
@@ -37,6 +37,7 @@ use std::{
     num::NonZeroU64,
     pin::Pin,
 };
+use futures::future::BoxFuture;
 
 static HUB: Lazy<Hub> = Lazy::new(|| Hub(Mutex::new(FnvHashMap::default())));
 
@@ -176,8 +177,6 @@ impl Future for DialFuture {
 impl Transport for MemoryTransport {
     type Output = Channel<Vec<u8>>;
     type Error = MemoryTransportError;
-    type ListenerUpgrade = Ready<Result<Self::Output, Self::Error>>;
-    type Dial = DialFuture;
 
     fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
         let port = if let Ok(port) = parse_memory_addr(&addr) {
@@ -216,7 +215,7 @@ impl Transport for MemoryTransport {
         }
     }
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<DialFuture, TransportError<Self::Error>> {
+    fn dial(&mut self, addr: Multiaddr) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>> {
         let port = if let Ok(port) = parse_memory_addr(&addr) {
             if let Some(port) = NonZeroU64::new(port) {
                 port
@@ -227,14 +226,14 @@ impl Transport for MemoryTransport {
             return Err(TransportError::MultiaddrNotSupported(addr));
         };
 
-        DialFuture::new(port).ok_or(TransportError::Other(MemoryTransportError::Unreachable))
+        Ok(DialFuture::new(port).ok_or(TransportError::Other(MemoryTransportError::Unreachable))?.boxed())
     }
 
     fn dial_as_listener(
         &mut self,
         addr: Multiaddr,
-    ) -> Result<DialFuture, TransportError<Self::Error>> {
-        self.dial(addr)
+    ) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>> {
+        Ok(self.dial(addr)?.boxed())
     }
 
     fn address_translation(&self, _server: &Multiaddr, _observed: &Multiaddr) -> Option<Multiaddr> {
@@ -244,7 +243,7 @@ impl Transport for MemoryTransport {
     fn poll(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>>
+    ) -> Poll<TransportEvent<Self::Output, Self::Error>>
     where
         Self: Sized,
     {

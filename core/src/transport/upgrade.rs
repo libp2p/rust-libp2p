@@ -44,6 +44,7 @@ use std::{
     task::{Context, Poll},
     time::Duration,
 };
+use futures::future::BoxFuture;
 
 /// A `Builder` facilitates upgrading of a [`Transport`] for use with
 /// a `Swarm`.
@@ -296,8 +297,6 @@ impl<T> Multiplexed<T> {
     pub fn boxed<M>(self) -> super::Boxed<(PeerId, StreamMuxerBox)>
     where
         T: Transport<Output = (PeerId, M)> + Sized + Send + Unpin + 'static,
-        T::Dial: Send + 'static,
-        T::ListenerUpgrade: Send + 'static,
         T::Error: Send + Sync,
         M: StreamMuxer + Send + 'static,
         M::Substream: Send + 'static,
@@ -331,10 +330,8 @@ where
 {
     type Output = T::Output;
     type Error = T::Error;
-    type ListenerUpgrade = T::ListenerUpgrade;
-    type Dial = T::Dial;
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(&mut self, addr: Multiaddr) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>> {
         self.0.dial(addr)
     }
 
@@ -345,7 +342,7 @@ where
     fn dial_as_listener(
         &mut self,
         addr: Multiaddr,
-    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+    ) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>> {
         self.0.dial_as_listener(addr)
     }
 
@@ -360,7 +357,7 @@ where
     fn poll(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
+    ) -> Poll<TransportEvent<Self::Output, Self::Error>> {
         self.project().0.poll(cx)
     }
 }
@@ -396,10 +393,8 @@ where
 {
     type Output = (PeerId, D);
     type Error = TransportUpgradeError<T::Error, E>;
-    type ListenerUpgrade = ListenerUpgradeFuture<T::ListenerUpgrade, U, C>;
-    type Dial = DialUpgradeFuture<T::Dial, U, C>;
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(&mut self, addr: Multiaddr) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>> {
         let future = self
             .inner
             .dial(addr)
@@ -417,7 +412,7 @@ where
     fn dial_as_listener(
         &mut self,
         addr: Multiaddr,
-    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+    ) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>> {
         let future = self
             .inner
             .dial_as_listener(addr)
@@ -441,7 +436,7 @@ where
     fn poll(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
+    ) -> Poll<TransportEvent<Self::Output, Self::Error>> {
         let this = self.project();
         let upgrade = this.upgrade.clone();
         this.inner.poll(cx).map(|event| {

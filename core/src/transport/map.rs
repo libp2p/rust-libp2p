@@ -22,6 +22,7 @@ use crate::{
     connection::{ConnectedPoint, Endpoint},
     transport::{Transport, TransportError, TransportEvent},
 };
+use futures::future::BoxFuture;
 use futures::prelude::*;
 use multiaddr::Multiaddr;
 use std::{pin::Pin, task::Context, task::Poll};
@@ -58,8 +59,6 @@ where
 {
     type Output = D;
     type Error = T::Error;
-    type ListenerUpgrade = MapFuture<T::ListenerUpgrade, F>;
-    type Dial = MapFuture<T::Dial, F>;
 
     fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
         self.transport.listen_on(addr)
@@ -69,31 +68,45 @@ where
         self.transport.remove_listener(id)
     }
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>>
+    {
         let future = self.transport.dial(addr.clone())?;
-        let p = ConnectedPoint::Dialer {
-            address: addr,
-            role_override: Endpoint::Dialer,
-        };
-        Ok(MapFuture {
-            inner: future,
-            args: Some((self.fun.clone(), p)),
-        })
+        let f = self.fun.clone();
+
+        Ok(future
+            .map(|o| {
+                f(
+                    o,
+                    ConnectedPoint::Dialer {
+                        address: addr,
+                        role_override: Endpoint::Dialer,
+                    },
+                )
+            })
+            .boxed())
     }
 
     fn dial_as_listener(
         &mut self,
         addr: Multiaddr,
-    ) -> Result<Self::Dial, TransportError<Self::Error>> {
-        let future = self.transport.dial_as_listener(addr.clone())?;
-        let p = ConnectedPoint::Dialer {
-            address: addr,
-            role_override: Endpoint::Listener,
-        };
-        Ok(MapFuture {
-            inner: future,
-            args: Some((self.fun.clone(), p)),
-        })
+    ) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>> {
+        let future = self.transport.dial(addr.clone())?;
+        let f = self.fun.clone();
+
+        Ok(future
+            .map(|o| {
+                f(
+                    o,
+                    ConnectedPoint::Dialer {
+                        address: addr,
+                        role_override: Endpoint::Listener,
+                    },
+                )
+            })
+            .boxed())
     }
 
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
@@ -103,7 +116,7 @@ where
     fn poll(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
+    ) -> Poll<TransportEvent<Self::Output, Self::Error>> {
         let this = self.project();
         match this.transport.poll(cx) {
             Poll::Ready(TransportEvent::Incoming {

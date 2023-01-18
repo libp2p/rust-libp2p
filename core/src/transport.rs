@@ -33,6 +33,7 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
 };
+use futures::future::BoxFuture;
 
 pub mod and_then;
 pub mod choice;
@@ -93,21 +94,6 @@ pub trait Transport {
     /// An error that occurred during connection setup.
     type Error: Error;
 
-    /// A pending [`Output`](Transport::Output) for an inbound connection,
-    /// obtained from the [`Transport`] stream.
-    ///
-    /// After a connection has been accepted by the transport, it may need to go through
-    /// asynchronous post-processing (i.e. protocol upgrade negotiations). Such
-    /// post-processing should not block the `Listener` from producing the next
-    /// connection, hence further connection setup proceeds asynchronously.
-    /// Once a `ListenerUpgrade` future resolves it yields the [`Output`](Transport::Output)
-    /// of the connection setup process.
-    type ListenerUpgrade: Future<Output = Result<Self::Output, Self::Error>>;
-
-    /// A pending [`Output`](Transport::Output) for an outbound connection,
-    /// obtained from [dialing](Transport::dial).
-    type Dial: Future<Output = Result<Self::Output, Self::Error>>;
-
     /// Listens on the given [`Multiaddr`] for inbound connections.
     fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>>;
 
@@ -121,7 +107,7 @@ pub trait Transport {
     ///
     /// If [`TransportError::MultiaddrNotSupported`] is returned, it may be desirable to
     /// try an alternative [`Transport`], if available.
-    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>>;
+    fn dial(&mut self, addr: Multiaddr) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>>;
 
     /// As [`Transport::dial`] but has the local node act as a listener on the outgoing connection.
     ///
@@ -131,7 +117,7 @@ pub trait Transport {
     fn dial_as_listener(
         &mut self,
         addr: Multiaddr,
-    ) -> Result<Self::Dial, TransportError<Self::Error>>;
+    ) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>>;
 
     /// Poll for [`TransportEvent`]s.
     ///
@@ -147,7 +133,7 @@ pub trait Transport {
     fn poll(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>>;
+    ) -> Poll<TransportEvent<Self::Output, Self::Error>>;
 
     /// Performs a transport-specific mapping of an address `observed` by a remote onto a
     /// local `listen` address to yield an address for the local node that may be reachable
@@ -171,8 +157,6 @@ pub trait Transport {
     fn boxed(self) -> boxed::Boxed<Self::Output>
     where
         Self: Sized + Send + Unpin + 'static,
-        Self::Dial: Send + 'static,
-        Self::ListenerUpgrade: Send + 'static,
         Self::Error: Send + Sync,
     {
         boxed::boxed(self)
@@ -256,7 +240,7 @@ impl Default for ListenerId {
 }
 
 /// Event produced by [`Transport`]s.
-pub enum TransportEvent<TUpgr, TErr> {
+pub enum TransportEvent<TOut, TErr> {
     /// A new address is being listened on.
     NewAddress {
         /// The listener that is listening on the new address.
@@ -276,7 +260,7 @@ pub enum TransportEvent<TUpgr, TErr> {
         /// The listener that produced the upgrade.
         listener_id: ListenerId,
         /// The produced upgrade.
-        upgrade: TUpgr,
+        upgrade: BoxFuture<'static, Result<TOut, TErr>>,
         /// Local connection address.
         local_addr: Multiaddr,
         /// Address used to send back data to the incoming client.
@@ -302,10 +286,9 @@ pub enum TransportEvent<TUpgr, TErr> {
     },
 }
 
-impl<TUpgr, TErr> TransportEvent<TUpgr, TErr> {
-    /// In case this [`TransportEvent`] is an upgrade, apply the given function
-    /// to the upgrade and produce another transport event based the the function's result.
-    pub fn map_upgrade<U>(self, map: impl FnOnce(TUpgr) -> U) -> TransportEvent<U, TErr> {
+impl<TOut, TErr> TransportEvent<TOut, TErr> {
+    /// TODO
+    pub fn map_out<U>(self, map: impl Fn(TOut) -> U) -> TransportEvent<U, TErr> {
         match self {
             TransportEvent::Incoming {
                 listener_id,
@@ -314,7 +297,7 @@ impl<TUpgr, TErr> TransportEvent<TUpgr, TErr> {
                 send_back_addr,
             } => TransportEvent::Incoming {
                 listener_id,
-                upgrade: map(upgrade),
+                upgrade: upgrade.map(map).boxed(),
                 local_addr,
                 send_back_addr,
             },
@@ -348,7 +331,7 @@ impl<TUpgr, TErr> TransportEvent<TUpgr, TErr> {
     /// In case this [`TransportEvent`] is an [`ListenerError`](TransportEvent::ListenerError),
     /// or [`ListenerClosed`](TransportEvent::ListenerClosed) apply the given function to the
     /// error and produce another transport event based on the function's result.
-    pub fn map_err<E>(self, map_err: impl FnOnce(TErr) -> E) -> TransportEvent<TUpgr, E> {
+    pub fn map_err<E>(self, map_err: impl FnOnce(TErr) -> E) -> TransportEvent<TOut, E> {
         match self {
             TransportEvent::Incoming {
                 listener_id,
@@ -399,7 +382,7 @@ impl<TUpgr, TErr> TransportEvent<TUpgr, TErr> {
     ///
     /// Returns `None` if the event is not actually an incoming connection,
     /// otherwise the upgrade and the remote address.
-    pub fn into_incoming(self) -> Option<(TUpgr, Multiaddr)> {
+    pub fn into_incoming(self) -> Option<(TOut, Multiaddr)> {
         if let TransportEvent::Incoming {
             upgrade,
             send_back_addr,

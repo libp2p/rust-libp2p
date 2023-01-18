@@ -31,6 +31,7 @@ use crate::{
 use futures::prelude::*;
 use futures_timer::Delay;
 use std::{error, fmt, io, pin::Pin, task::Context, task::Poll, time::Duration};
+use futures::future::BoxFuture;
 
 /// A `TransportTimeout` is a `Transport` that wraps another `Transport` and adds
 /// timeouts to all inbound and outbound connection attempts.
@@ -82,8 +83,6 @@ where
 {
     type Output = InnerTrans::Output;
     type Error = TransportTimeoutError<InnerTrans::Error>;
-    type ListenerUpgrade = Timeout<InnerTrans::ListenerUpgrade>;
-    type Dial = Timeout<InnerTrans::Dial>;
 
     fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
         self.inner
@@ -95,7 +94,7 @@ where
         self.inner.remove_listener(id)
     }
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(&mut self, addr: Multiaddr) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>> {
         let dial = self
             .inner
             .dial(addr)
@@ -109,7 +108,7 @@ where
     fn dial_as_listener(
         &mut self,
         addr: Multiaddr,
-    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+    ) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>> {
         let dial = self
             .inner
             .dial_as_listener(addr)
@@ -127,7 +126,7 @@ where
     fn poll(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
+    ) -> Poll<TransportEvent<Self::Output, Self::Error>> {
         let this = self.project();
         let timeout = *this.incoming_timeout;
         this.inner.poll(cx).map(|event| {

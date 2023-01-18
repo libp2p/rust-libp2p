@@ -21,6 +21,7 @@
 use crate::transport::{ListenerId, Transport, TransportError, TransportEvent};
 use multiaddr::Multiaddr;
 use std::{pin::Pin, task::Context, task::Poll};
+use futures::future::BoxFuture;
 
 /// Transport that is possibly disabled.
 ///
@@ -57,8 +58,6 @@ where
 {
     type Output = T::Output;
     type Error = T::Error;
-    type ListenerUpgrade = T::ListenerUpgrade;
-    type Dial = T::Dial;
 
     fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
         if let Some(inner) = self.0.as_mut() {
@@ -76,7 +75,7 @@ where
         }
     }
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(&mut self, addr: Multiaddr) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>> {
         if let Some(inner) = self.0.as_mut() {
             inner.dial(addr)
         } else {
@@ -87,7 +86,7 @@ where
     fn dial_as_listener(
         &mut self,
         addr: Multiaddr,
-    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+    ) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>> {
         if let Some(inner) = self.0.as_mut() {
             inner.dial_as_listener(addr)
         } else {
@@ -106,7 +105,7 @@ where
     fn poll(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
+    ) -> Poll<TransportEvent<Self::Output, Self::Error>> {
         if let Some(inner) = self.project().0.as_pin_mut() {
             inner.poll(cx)
         } else {

@@ -27,15 +27,13 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
 };
+use futures::future::BoxFuture;
 
 /// Creates a new [`Boxed`] transport from the given transport.
 pub fn boxed<T>(transport: T) -> Boxed<T::Output>
 where
     T: Transport + Send + Unpin + 'static,
-    T::Error: Send + Sync,
-    T::Dial: Send + 'static,
-    T::ListenerUpgrade: Send + 'static,
-{
+    T::Error: Send + Sync {
     Boxed {
         inner: Box::new(transport) as Box<_>,
     }
@@ -67,8 +65,6 @@ impl<T, O> Abstract<O> for T
 where
     T: Transport<Output = O> + 'static,
     T::Error: Send + Sync,
-    T::Dial: Send + 'static,
-    T::ListenerUpgrade: Send + 'static,
 {
     fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<io::Error>> {
         Transport::listen_on(self, addr).map_err(|e| e.map(box_err))
@@ -102,7 +98,7 @@ where
     ) -> Poll<TransportEvent<ListenerUpgrade<O>, io::Error>> {
         self.poll(cx).map(|event| {
             event
-                .map_upgrade(|upgrade| {
+                .map_out(|upgrade| {
                     let up = upgrade.map_err(box_err);
                     Box::pin(up) as ListenerUpgrade<O>
                 })
@@ -120,8 +116,6 @@ impl<O> fmt::Debug for Boxed<O> {
 impl<O> Transport for Boxed<O> {
     type Output = O;
     type Error = io::Error;
-    type ListenerUpgrade = ListenerUpgrade<O>;
-    type Dial = Dial<O>;
 
     fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
         self.inner.listen_on(addr)
@@ -131,14 +125,14 @@ impl<O> Transport for Boxed<O> {
         self.inner.remove_listener(id)
     }
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+    fn dial(&mut self, addr: Multiaddr) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>> {
         self.inner.dial(addr)
     }
 
     fn dial_as_listener(
         &mut self,
         addr: Multiaddr,
-    ) -> Result<Self::Dial, TransportError<Self::Error>> {
+    ) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>> {
         self.inner.dial_as_listener(addr)
     }
 
@@ -149,7 +143,7 @@ impl<O> Transport for Boxed<O> {
     fn poll(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
+    ) -> Poll<TransportEvent<Self::Output, Self::Error>> {
         Pin::new(self.inner.as_mut()).poll(cx)
     }
 }
