@@ -31,8 +31,7 @@ use libp2p_core::PeerId;
 use libp2p_swarm::behaviour::FromSwarm;
 use libp2p_swarm::{
     CloseConnection, ConnectionId, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
-    PollParameters,
-    THandlerInEvent,
+    PollParameters, THandlerInEvent,
 };
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::iter::FromIterator;
