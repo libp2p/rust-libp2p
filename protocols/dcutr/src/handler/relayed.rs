@@ -21,9 +21,10 @@
 //! [`ConnectionHandler`] handling relayed connection potentially upgraded to a direct connection.
 
 use crate::protocol;
+use either::Either;
 use futures::future::{BoxFuture, FutureExt};
 use instant::Instant;
-use libp2p_core::either::{EitherError, EitherOutput};
+use libp2p_core::either::EitherOutput;
 use libp2p_core::multiaddr::Multiaddr;
 use libp2p_core::upgrade::{self, DeniedUpgrade, NegotiationError, UpgradeError};
 use libp2p_core::ConnectedPoint;
@@ -134,7 +135,7 @@ pub struct Handler {
     /// A pending fatal error that results in the connection being closed.
     pending_error: Option<
         ConnectionHandlerUpgrErr<
-            EitherError<protocol::inbound::UpgradeError, protocol::outbound::UpgradeError>,
+            Either<protocol::inbound::UpgradeError, protocol::outbound::UpgradeError>,
         >,
     >,
     /// Queue of events to return when polled.
@@ -252,8 +253,8 @@ impl Handler {
                 // the remote peer and results in closing the connection.
                 self.pending_error = Some(error.map_upgrade_err(|e| {
                     e.map_err(|e| match e {
-                        EitherError::A(e) => EitherError::A(e),
-                        EitherError::B(v) => void::unreachable(v),
+                        Either::Left(e) => Either::Left(e),
+                        Either::Right(v) => void::unreachable(v),
                     })
                 }));
             }
@@ -292,7 +293,7 @@ impl Handler {
             _ => {
                 // Anything else is considered a fatal error or misbehaviour of
                 // the remote peer and results in closing the connection.
-                self.pending_error = Some(error.map_upgrade_err(|e| e.map_err(EitherError::B)));
+                self.pending_error = Some(error.map_upgrade_err(|e| e.map_err(Either::Right)));
             }
         }
     }
@@ -302,7 +303,7 @@ impl ConnectionHandler for Handler {
     type InEvent = Command;
     type OutEvent = Event;
     type Error = ConnectionHandlerUpgrErr<
-        EitherError<protocol::inbound::UpgradeError, protocol::outbound::UpgradeError>,
+        Either<protocol::inbound::UpgradeError, protocol::outbound::UpgradeError>,
     >;
     type InboundProtocol = upgrade::EitherUpgrade<protocol::inbound::Upgrade, DeniedUpgrade>;
     type OutboundProtocol = protocol::outbound::Upgrade;
@@ -393,7 +394,7 @@ impl ConnectionHandler for Handler {
                 }
                 Err(e) => {
                     return Poll::Ready(ConnectionHandlerEvent::Close(
-                        ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::A(e))),
+                        ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(Either::Left(e))),
                     ))
                 }
             }
