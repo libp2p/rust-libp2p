@@ -349,24 +349,12 @@ impl IntoConnectionHandler for Prototype {
             // Deny all substreams on relayed connection.
             Either::Right(dummy::ConnectionHandler)
         } else {
-            Either::Left(Handler {
-                endpoint: endpoint.clone(),
-                config: self.config,
-                queued_events: Default::default(),
-                pending_error: Default::default(),
-                reservation_request_future: Default::default(),
-                circuit_accept_futures: Default::default(),
-                circuit_deny_futures: Default::default(),
-                alive_lend_out_substreams: Default::default(),
-                circuits: Default::default(),
-                active_reservation: Default::default(),
-                keep_alive: KeepAlive::Yes,
-            })
+            Either::Left(Handler::new(self.config, endpoint.clone()))
         }
     }
 
     fn inbound_protocol(&self) -> <Self::Handler as ConnectionHandler>::InboundProtocol {
-        upgrade::EitherUpgrade::A(SendWrapper(inbound_hop::Upgrade {
+        Either::Left(SendWrapper(inbound_hop::Upgrade {
             reservation_duration: self.config.reservation_duration,
             max_circuit_duration: self.config.max_circuit_duration,
             max_circuit_bytes: self.config.max_circuit_bytes,
@@ -430,6 +418,22 @@ pub struct Handler {
 }
 
 impl Handler {
+    fn new(config: Config, endpoint: ConnectedPoint) -> Handler {
+        Handler {
+            endpoint,
+            config,
+            queued_events: Default::default(),
+            pending_error: Default::default(),
+            reservation_request_future: Default::default(),
+            circuit_accept_futures: Default::default(),
+            circuit_deny_futures: Default::default(),
+            alive_lend_out_substreams: Default::default(),
+            circuits: Default::default(),
+            active_reservation: Default::default(),
+            keep_alive: KeepAlive::Yes,
+        }
+    }
+
     fn on_fully_negotiated_inbound(
         &mut self,
         FullyNegotiatedInbound {
