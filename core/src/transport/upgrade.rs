@@ -99,10 +99,10 @@ where
     ) -> Authenticated<AndThen<T, impl FnOnce(C, ConnectedPoint) -> Authenticate<C, U> + Clone>>
     where
         T: Transport<Output = C>,
-        C: AsyncRead + AsyncWrite + Unpin,
+        C: AsyncRead + AsyncWrite + Unpin + Send + 'static,
         D: AsyncRead + AsyncWrite + Unpin,
-        U: InboundUpgrade<Negotiated<C>, Output = (PeerId, D), Error = E>,
-        U: OutboundUpgrade<Negotiated<C>, Output = (PeerId, D), Error = E> + Clone,
+        U: InboundUpgrade<Negotiated<C>, Output = (PeerId, D), Error = E> + Send + 'static,
+        U: OutboundUpgrade<Negotiated<C>, Output = (PeerId, D), Error = E> + Clone + Send + 'static,
         E: Error + 'static,
     {
         let version = self.version;
@@ -236,8 +236,8 @@ where
         T: Transport<Output = (PeerId, C)>,
         C: AsyncRead + AsyncWrite + Unpin,
         M: StreamMuxer,
-        U: InboundUpgrade<Negotiated<C>, Output = M, Error = E>,
-        U: OutboundUpgrade<Negotiated<C>, Output = M, Error = E> + Clone,
+        U: InboundUpgrade<Negotiated<C>, Output = M, Error = E> + Send + 'static,
+        U: OutboundUpgrade<Negotiated<C>, Output = M, Error = E> + Clone + Send + 'static,
         E: Error + 'static,
     {
         let version = self.0.version;
@@ -272,7 +272,7 @@ where
         U: InboundUpgrade<Negotiated<C>, Output = M, Error = E>,
         U: OutboundUpgrade<Negotiated<C>, Output = M, Error = E> + Clone,
         E: Error + 'static,
-        F: for<'a> FnOnce(&'a PeerId, &'a ConnectedPoint) -> U + Clone,
+        F: for<'a> FnOnce(&'a PeerId, &'a ConnectedPoint) -> U + Clone + Send + 'static,
     {
         let version = self.0.version;
         Multiplexed(self.0.inner.and_then(move |(peer_id, c), endpoint| {
@@ -402,7 +402,7 @@ where
         Ok(DialUpgradeFuture {
             future: Box::pin(future),
             upgrade: future::Either::Left(Some(self.upgrade.clone())),
-        })
+        }.boxed())
     }
 
     fn remove_listener(&mut self, id: ListenerId) -> bool {
@@ -420,7 +420,7 @@ where
         Ok(DialUpgradeFuture {
             future: Box::pin(future),
             upgrade: future::Either::Left(Some(self.upgrade.clone())),
-        })
+        }.boxed())
     }
 
     fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {

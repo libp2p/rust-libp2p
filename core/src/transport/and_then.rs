@@ -23,10 +23,10 @@ use crate::{
     transport::{ListenerId, Transport, TransportError, TransportEvent},
 };
 use either::Either;
+use futures::future::BoxFuture;
 use futures::prelude::*;
 use multiaddr::Multiaddr;
 use std::{error, marker::PhantomPinned, pin::Pin, task::Context, task::Poll};
-use futures::future::BoxFuture;
 
 /// See the [`Transport::and_then`] method.
 #[pin_project::pin_project]
@@ -46,8 +46,8 @@ impl<T, C> AndThen<T, C> {
 impl<T, C, F, O> Transport for AndThen<T, C>
 where
     T: Transport,
-    C: FnOnce(T::Output, ConnectedPoint) -> F + Clone,
-    F: TryFuture<Ok = O>,
+    C: FnOnce(T::Output, ConnectedPoint) -> F + Clone + Send + 'static,
+    F: TryFuture<Ok = O> + Send + 'static,
     F::Error: error::Error,
 {
     type Output = O;
@@ -63,7 +63,11 @@ where
         self.transport.remove_listener(id)
     }
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>> {
+    fn dial(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>>
+    {
         let dialed_fut = self
             .transport
             .dial(addr.clone())
@@ -85,7 +89,8 @@ where
     fn dial_as_listener(
         &mut self,
         addr: Multiaddr,
-    ) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>> {
+    ) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>>
+    {
         let dialed_fut = self
             .transport
             .dial_as_listener(addr.clone())
@@ -101,7 +106,7 @@ where
             )),
             _marker: PhantomPinned,
         };
-        Ok(future)
+        Ok(future.boxed())
     }
 
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
@@ -130,15 +135,14 @@ where
                         inner: Either::Left(Box::pin(upgrade)),
                         args: Some((this.fun.clone(), point)),
                         _marker: PhantomPinned,
-                    },
+                    }
+                    .boxed(),
                     local_addr,
                     send_back_addr,
                 })
             }
             Poll::Ready(other) => {
-                let mapped = other
-                    .map_upgrade(|_upgrade| unreachable!("case already matched"))
-                    .map_err(Either::Left);
+                let mapped = other.map_out(|_| unreachable!("case already matched")).map_err(Either::Left);
                 Poll::Ready(mapped)
             }
             Poll::Pending => Poll::Pending,

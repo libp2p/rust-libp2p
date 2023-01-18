@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::transport::{ListenerId, Transport, TransportError, TransportEvent};
+use futures::future::BoxFuture;
 use futures::{prelude::*, stream::FusedStream};
 use multiaddr::Multiaddr;
 use std::{
@@ -27,13 +28,13 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
 };
-use futures::future::BoxFuture;
 
 /// Creates a new [`Boxed`] transport from the given transport.
 pub fn boxed<T>(transport: T) -> Boxed<T::Output>
 where
     T: Transport + Send + Unpin + 'static,
-    T::Error: Send + Sync {
+    T::Error: Send + Sync,
+{
     Boxed {
         inner: Box::new(transport) as Box<_>,
     }
@@ -92,18 +93,8 @@ where
         Transport::address_translation(self, server, observed)
     }
 
-    fn poll(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<TransportEvent<ListenerUpgrade<O>, io::Error>> {
-        self.poll(cx).map(|event| {
-            event
-                .map_out(|upgrade| {
-                    let up = upgrade.map_err(box_err);
-                    Box::pin(up) as ListenerUpgrade<O>
-                })
-                .map_err(box_err)
-        })
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<TransportEvent<O, io::Error>> {
+        self.poll(cx).map(|event| event.map_err(box_err))
     }
 }
 
@@ -125,14 +116,19 @@ impl<O> Transport for Boxed<O> {
         self.inner.remove_listener(id)
     }
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>> {
+    fn dial(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>>
+    {
         self.inner.dial(addr)
     }
 
     fn dial_as_listener(
         &mut self,
         addr: Multiaddr,
-    ) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>> {
+    ) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>>
+    {
         self.inner.dial_as_listener(addr)
     }
 

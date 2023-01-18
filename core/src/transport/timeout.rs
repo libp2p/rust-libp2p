@@ -28,10 +28,10 @@ use crate::{
     transport::{ListenerId, TransportError, TransportEvent},
     Multiaddr, Transport,
 };
+use futures::future::BoxFuture;
 use futures::prelude::*;
 use futures_timer::Delay;
 use std::{error, fmt, io, pin::Pin, task::Context, task::Poll, time::Duration};
-use futures::future::BoxFuture;
 
 /// A `TransportTimeout` is a `Transport` that wraps another `Transport` and adds
 /// timeouts to all inbound and outbound connection attempts.
@@ -94,7 +94,11 @@ where
         self.inner.remove_listener(id)
     }
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>> {
+    fn dial(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>>
+    {
         let dial = self
             .inner
             .dial(addr)
@@ -102,13 +106,15 @@ where
         Ok(Timeout {
             inner: dial,
             timer: Delay::new(self.outgoing_timeout),
-        })
+        }
+        .boxed())
     }
 
     fn dial_as_listener(
         &mut self,
         addr: Multiaddr,
-    ) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>> {
+    ) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>>
+    {
         let dial = self
             .inner
             .dial_as_listener(addr)
@@ -116,7 +122,8 @@ where
         Ok(Timeout {
             inner: dial,
             timer: Delay::new(self.outgoing_timeout),
-        })
+        }
+        .boxed())
     }
 
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
@@ -129,14 +136,9 @@ where
     ) -> Poll<TransportEvent<Self::Output, Self::Error>> {
         let this = self.project();
         let timeout = *this.incoming_timeout;
-        this.inner.poll(cx).map(|event| {
-            event
-                .map_upgrade(move |inner_fut| Timeout {
-                    inner: inner_fut,
-                    timer: Delay::new(timeout),
-                })
-                .map_err(TransportTimeoutError::Other)
-        })
+        this.inner
+            .poll(cx)
+            .map(|event| event.map_err(TransportTimeoutError::Other))
     }
 }
 

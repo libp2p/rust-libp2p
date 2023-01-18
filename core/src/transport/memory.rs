@@ -264,7 +264,7 @@ impl Transport for MemoryTransport {
                 Poll::Pending => None,
                 Poll::Ready(Some((channel, dial_port))) => Some(TransportEvent::Incoming {
                     listener_id: listener.id,
-                    upgrade: future::ready(Ok(channel)),
+                    upgrade: future::ready(Ok(channel)).boxed(),
                     local_addr: listener.addr.clone(),
                     send_back_addr: Protocol::Memory(dial_port.get()).into(),
                 }),

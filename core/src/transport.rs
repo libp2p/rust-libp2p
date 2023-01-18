@@ -204,7 +204,7 @@ pub trait Transport {
     fn and_then<C, F, O>(self, f: C) -> and_then::AndThen<Self, C>
     where
         Self: Sized,
-        C: FnOnce(Self::Output, ConnectedPoint) -> F,
+        C: FnOnce(Self::Output, ConnectedPoint) -> F + Send + 'static,
         F: TryFuture<Ok = O>,
         <F as TryFuture>::Error: Error + 'static,
     {
@@ -297,7 +297,7 @@ impl<TOut, TErr> TransportEvent<TOut, TErr> {
                 send_back_addr,
             } => TransportEvent::Incoming {
                 listener_id,
-                upgrade: upgrade.map(map).boxed(),
+                upgrade: upgrade.map_ok(map).boxed(),
                 local_addr,
                 send_back_addr,
             },
@@ -340,7 +340,7 @@ impl<TOut, TErr> TransportEvent<TOut, TErr> {
                 send_back_addr,
             } => TransportEvent::Incoming {
                 listener_id,
-                upgrade,
+                upgrade: upgrade.map_err(map_err).boxed(),
                 local_addr,
                 send_back_addr,
             },
@@ -382,7 +382,7 @@ impl<TOut, TErr> TransportEvent<TOut, TErr> {
     ///
     /// Returns `None` if the event is not actually an incoming connection,
     /// otherwise the upgrade and the remote address.
-    pub fn into_incoming(self) -> Option<(TOut, Multiaddr)> {
+    pub fn into_incoming(self) -> Option<(BoxFuture<'static, Result<TOut, TErr>>, Multiaddr)> {
         if let TransportEvent::Incoming {
             upgrade,
             send_back_addr,

@@ -24,6 +24,7 @@ use either::Either;
 use multiaddr::Multiaddr;
 use std::{pin::Pin, task::Context, task::Poll};
 use futures::future::BoxFuture;
+use futures::{StreamExt, TryFutureExt, FutureExt};
 
 /// Struct returned by `or_transport()`.
 #[derive(Debug, Copy, Clone)]
@@ -64,7 +65,7 @@ where
 
     fn dial(&mut self, addr: Multiaddr) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>> {
         let addr = match self.0.dial(addr) {
-            Ok(connec) => return Ok(EitherFuture::First(connec)),
+            Ok(connec) => return Ok(connec.map_ok(EitherOutput::First).map_err(Either::Left).boxed()),
             Err(TransportError::MultiaddrNotSupported(addr)) => addr,
             Err(TransportError::Other(err)) => {
                 return Err(TransportError::Other(Either::Left(err)))
@@ -72,7 +73,7 @@ where
         };
 
         let addr = match self.1.dial(addr) {
-            Ok(connec) => return Ok(EitherFuture::Second(connec)),
+            Ok(connec) => return Ok(connec.map_ok(EitherOutput::Second).map_err(Either::Right).boxed()),
             Err(TransportError::MultiaddrNotSupported(addr)) => addr,
             Err(TransportError::Other(err)) => {
                 return Err(TransportError::Other(Either::Right(err)))
@@ -87,7 +88,7 @@ where
         addr: Multiaddr,
     ) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>> {
         let addr = match self.0.dial_as_listener(addr) {
-            Ok(connec) => return Ok(connec),
+            Ok(connec) => return Ok(connec.map_ok(EitherOutput::First).map_err(Either::Left).boxed()),
             Err(TransportError::MultiaddrNotSupported(addr)) => addr,
             Err(TransportError::Other(err)) => {
                 return Err(TransportError::Other(Either::Left(err)))
@@ -95,7 +96,7 @@ where
         };
 
         let addr = match self.1.dial_as_listener(addr) {
-            Ok(connec) => return Ok(connec),
+            Ok(connec) => return Ok(connec.map_ok(EitherOutput::Second).map_err(Either::Right).boxed()),
             Err(TransportError::MultiaddrNotSupported(addr)) => addr,
             Err(TransportError::Other(err)) => {
                 return Err(TransportError::Other(Either::Right(err)))
@@ -120,13 +121,13 @@ where
         let this = self.project();
         match this.0.poll(cx) {
             Poll::Ready(ev) => {
-                return Poll::Ready(ev.map_upgrade(EitherFuture::First).map_err(Either::Left))
+                return Poll::Ready(ev.map_out(EitherOutput::First).map_err(Either::Left))
             }
             Poll::Pending => {}
         }
         match this.1.poll(cx) {
             Poll::Ready(ev) => {
-                return Poll::Ready(ev.map_upgrade(EitherFuture::Second).map_err(Either::Right))
+                return Poll::Ready(ev.map_out(EitherOutput::Second).map_err(Either::Right))
             }
             Poll::Pending => {}
         }

@@ -88,7 +88,7 @@ where
         let this = self.project();
         let map = &*this.map;
         this.transport.poll(cx).map(|ev| {
-            ev.map_out(|out| out.map_err(map)).map_err(map.clone())
+            ev.map_out(|out| out.map_err(map.clone()))
         })
     }
 }

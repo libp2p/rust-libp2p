@@ -77,7 +77,7 @@ where
         let f = self.fun.clone();
 
         Ok(future
-            .map(|o| {
+            .map_ok(|o| {
                 f(
                     o,
                     ConnectedPoint::Dialer {
@@ -97,7 +97,7 @@ where
         let f = self.fun.clone();
 
         Ok(future
-            .map(|o| {
+            .map_ok(|o| {
                 f(
                     o,
                     ConnectedPoint::Dialer {
@@ -134,14 +134,13 @@ where
                     upgrade: MapFuture {
                         inner: upgrade,
                         args: Some((this.fun.clone(), point)),
-                    },
+                    }.boxed(),
                     local_addr,
                     send_back_addr,
                 })
             }
             Poll::Ready(other) => {
-                let mapped = other.map_upgrade(|_upgrade| unreachable!("case already matched"));
-                Poll::Ready(mapped)
+                Poll::Ready(other)
             }
             Poll::Pending => Poll::Pending,
         }
