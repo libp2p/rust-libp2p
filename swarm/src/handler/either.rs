@@ -25,7 +25,7 @@ use crate::handler::{
 };
 use crate::upgrade::SendWrapper;
 use either::Either;
-use libp2p_core::either::{EitherError, EitherOutput};
+use libp2p_core::either::EitherOutput;
 use libp2p_core::upgrade::{EitherUpgrade, UpgradeError};
 use libp2p_core::{ConnectedPoint, PeerId};
 use std::task::{Context, Poll};
@@ -145,14 +145,14 @@ where
     fn transpose(self) -> Either<DialUpgradeError<LOOI, LOP>, DialUpgradeError<ROOI, ROP>> {
         match self {
             DialUpgradeError {
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::A(error))),
+                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(Either::Left(error))),
                 info: Either::Left(info),
             } => Either::Left(DialUpgradeError {
                 error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(error)),
                 info,
             }),
             DialUpgradeError {
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::B(error))),
+                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(Either::Right(error))),
                 info: Either::Right(info),
             } => Either::Right(DialUpgradeError {
                 error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(error)),
@@ -214,14 +214,14 @@ where
     fn transpose(self) -> Either<ListenUpgradeError<LIOI, LIP>, ListenUpgradeError<RIOI, RIP>> {
         match self {
             ListenUpgradeError {
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::A(error))),
+                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(Either::Left(error))),
                 info: Either::Left(info),
             } => Either::Left(ListenUpgradeError {
                 error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(error)),
                 info,
             }),
             ListenUpgradeError {
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(EitherError::B(error))),
+                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(Either::Right(error))),
                 info: Either::Right(info),
             } => Either::Right(ListenUpgradeError {
                 error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(error)),

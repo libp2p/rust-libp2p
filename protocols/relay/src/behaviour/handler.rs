@@ -30,7 +30,6 @@ use futures::io::AsyncWriteExt;
 use futures::stream::{FuturesUnordered, StreamExt};
 use futures_timer::Delay;
 use instant::Instant;
-use libp2p_core::either::EitherError;
 use libp2p_core::{upgrade, ConnectedPoint, Multiaddr, PeerId};
 use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
@@ -396,7 +395,7 @@ pub struct Handler {
     /// A pending fatal error that results in the connection being closed.
     pending_error: Option<
         ConnectionHandlerUpgrErr<
-            EitherError<inbound_hop::FatalUpgradeError, outbound_stop::FatalUpgradeError>,
+            Either<inbound_hop::FatalUpgradeError, outbound_stop::FatalUpgradeError>,
         >,
     >,
 
@@ -520,7 +519,7 @@ impl Handler {
                 inbound_hop::UpgradeError::Fatal(error),
             )) => {
                 self.pending_error = Some(ConnectionHandlerUpgrErr::Upgrade(
-                    upgrade::UpgradeError::Apply(EitherError::A(error)),
+                    upgrade::UpgradeError::Apply(Either::Left(error)),
                 ));
                 return;
             }
@@ -571,7 +570,7 @@ impl Handler {
             ConnectionHandlerUpgrErr::Upgrade(upgrade::UpgradeError::Apply(error)) => match error {
                 outbound_stop::UpgradeError::Fatal(error) => {
                     self.pending_error = Some(ConnectionHandlerUpgrErr::Upgrade(
-                        upgrade::UpgradeError::Apply(EitherError::B(error)),
+                        upgrade::UpgradeError::Apply(Either::Right(error)),
                     ));
                     return;
                 }
@@ -623,7 +622,7 @@ impl ConnectionHandler for Handler {
     type InEvent = In;
     type OutEvent = Event;
     type Error = ConnectionHandlerUpgrErr<
-        EitherError<inbound_hop::FatalUpgradeError, outbound_stop::FatalUpgradeError>,
+        Either<inbound_hop::FatalUpgradeError, outbound_stop::FatalUpgradeError>,
     >;
     type InboundProtocol = inbound_hop::Upgrade;
     type OutboundProtocol = outbound_stop::Upgrade;
