@@ -293,15 +293,8 @@ impl<A: ProtocolName, B: ProtocolName> ProtocolName for EitherName<A, B> {
         }
     }
 }
-#[pin_project(project = EitherTransportProj)]
-#[derive(Debug)]
-#[must_use = "transports do nothing unless polled"]
-pub enum EitherTransport<A, B> {
-    Left(#[pin] A),
-    Right(#[pin] B),
-}
 
-impl<A, B> Transport for EitherTransport<A, B>
+impl<A, B> Transport for Either<A, B>
 where
     B: Transport,
     A: Transport,
@@ -315,14 +308,14 @@ where
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
-        match self.project() {
-            EitherTransportProj::Left(a) => match a.poll(cx) {
+        match self.as_pin_mut() {
+            Either::Left(a) => match a.poll(cx) {
                 Poll::Pending => Poll::Pending,
                 Poll::Ready(event) => {
                     Poll::Ready(event.map_upgrade(EitherFuture::First).map_err(Either::Left))
                 }
             },
-            EitherTransportProj::Right(b) => match b.poll(cx) {
+            Either::Right(b) => match b.poll(cx) {
                 Poll::Pending => Poll::Pending,
                 Poll::Ready(event) => Poll::Ready(
                     event
@@ -335,19 +328,19 @@ where
 
     fn remove_listener(&mut self, id: ListenerId) -> bool {
         match self {
-            EitherTransport::Left(t) => t.remove_listener(id),
-            EitherTransport::Right(t) => t.remove_listener(id),
+            Either::Left(t) => t.remove_listener(id),
+            Either::Right(t) => t.remove_listener(id),
         }
     }
 
     fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
         use TransportError::*;
         match self {
-            EitherTransport::Left(a) => a.listen_on(addr).map_err(|e| match e {
+            Either::Left(a) => a.listen_on(addr).map_err(|e| match e {
                 MultiaddrNotSupported(addr) => MultiaddrNotSupported(addr),
                 Other(err) => Other(Either::Left(err)),
             }),
-            EitherTransport::Right(b) => b.listen_on(addr).map_err(|e| match e {
+            Either::Right(b) => b.listen_on(addr).map_err(|e| match e {
                 MultiaddrNotSupported(addr) => MultiaddrNotSupported(addr),
                 Other(err) => Other(Either::Right(err)),
             }),
@@ -357,12 +350,12 @@ where
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
         use TransportError::*;
         match self {
-            EitherTransport::Left(a) => match a.dial(addr) {
+            Either::Left(a) => match a.dial(addr) {
                 Ok(connec) => Ok(EitherFuture::First(connec)),
                 Err(MultiaddrNotSupported(addr)) => Err(MultiaddrNotSupported(addr)),
                 Err(Other(err)) => Err(Other(Either::Left(err))),
             },
-            EitherTransport::Right(b) => match b.dial(addr) {
+            Either::Right(b) => match b.dial(addr) {
                 Ok(connec) => Ok(EitherFuture::Second(connec)),
                 Err(MultiaddrNotSupported(addr)) => Err(MultiaddrNotSupported(addr)),
                 Err(Other(err)) => Err(Other(Either::Right(err))),
@@ -379,12 +372,12 @@ where
     {
         use TransportError::*;
         match self {
-            EitherTransport::Left(a) => match a.dial_as_listener(addr) {
+            Either::Left(a) => match a.dial_as_listener(addr) {
                 Ok(connec) => Ok(EitherFuture::First(connec)),
                 Err(MultiaddrNotSupported(addr)) => Err(MultiaddrNotSupported(addr)),
                 Err(Other(err)) => Err(Other(Either::Left(err))),
             },
-            EitherTransport::Right(b) => match b.dial_as_listener(addr) {
+            Either::Right(b) => match b.dial_as_listener(addr) {
                 Ok(connec) => Ok(EitherFuture::Second(connec)),
                 Err(MultiaddrNotSupported(addr)) => Err(MultiaddrNotSupported(addr)),
                 Err(Other(err)) => Err(Other(Either::Right(err))),
@@ -394,8 +387,8 @@ where
 
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
         match self {
-            EitherTransport::Left(a) => a.address_translation(server, observed),
-            EitherTransport::Right(b) => b.address_translation(server, observed),
+            Either::Left(a) => a.address_translation(server, observed),
+            Either::Right(b) => b.address_translation(server, observed),
         }
     }
 }

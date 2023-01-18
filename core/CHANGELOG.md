@@ -14,12 +14,15 @@
 
 - Remove `EitherError` in favor of `either::Either`. See [PR 3337].
 
+- Remove `EitherTransport` in favor of implementing `Transport` on `either::Either`. See [PR 3338].
+
 [PR 3031]: https://github.com/libp2p/rust-libp2p/pull/3031
 [PR 3058]: https://github.com/libp2p/rust-libp2p/pull/3058
 [PR 3097]: https://github.com/libp2p/rust-libp2p/pull/3097
 [PR 3090]: https://github.com/libp2p/rust-libp2p/pull/3090
 [PR 2972]: https://github.com/libp2p/rust-libp2p/pull/2972
 [PR 3337]: https://github.com/libp2p/rust-libp2p/pull/3337
+[PR 3338]: https://github.com/libp2p/rust-libp2p/pull/3338
 
 # 0.37.0
 
