@@ -28,7 +28,7 @@ use crate::upgrade::SendWrapper;
 use crate::{NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use either::Either;
 use libp2p_core::{
-    either::{EitherError, EitherOutput},
+    either::EitherOutput,
     upgrade::{DeniedUpgrade, EitherUpgrade},
     ConnectedPoint, Multiaddr, PeerId,
 };
@@ -215,8 +215,8 @@ where
             ConnectionHandlerUpgrErr::Timer => ConnectionHandlerUpgrErr::Timer,
             ConnectionHandlerUpgrErr::Upgrade(err) => {
                 ConnectionHandlerUpgrErr::Upgrade(err.map_err(|err| match err {
-                    EitherError::A(e) => e,
-                    EitherError::B(v) => void::unreachable(v),
+                    Either::Left(e) => e,
+                    Either::Right(v) => void::unreachable(v),
                 }))
             }
         };

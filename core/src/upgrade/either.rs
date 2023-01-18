@@ -19,9 +19,10 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
-    either::{EitherError, EitherFuture2, EitherName, EitherOutput},
+    either::{EitherFuture2, EitherName, EitherOutput},
     upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo},
 };
+use either::Either;
 
 /// A type to represent two possible upgrade types (inbound or outbound).
 #[derive(Debug, Clone)]
@@ -55,7 +56,7 @@ where
     B: InboundUpgrade<C, Output = TB, Error = EB>,
 {
     type Output = EitherOutput<TA, TB>;
-    type Error = EitherError<EA, EB>;
+    type Error = Either<EA, EB>;
     type Future = EitherFuture2<A::Future, B::Future>;
 
     fn upgrade_inbound(self, sock: C, info: Self::Info) -> Self::Future {
@@ -77,7 +78,7 @@ where
     B: OutboundUpgrade<C, Output = TB, Error = EB>,
 {
     type Output = EitherOutput<TA, TB>;
-    type Error = EitherError<EA, EB>;
+    type Error = Either<EA, EB>;
     type Future = EitherFuture2<A::Future, B::Future>;
 
     fn upgrade_outbound(self, sock: C, info: Self::Info) -> Self::Future {
