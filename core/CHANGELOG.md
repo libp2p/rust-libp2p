@@ -1,3 +1,10 @@
+# 0.39.0 [unreleased]
+
+- Move `ConnectionId` to `libp2p-swarm`. See [PR 3221].
+- Move `PendingPoint` to `libp2p-swarm` and make it crate-private. See [PR 3221].
+
+[PR 3221]: https://github.com/libp2p/rust-libp2p/pull/3221
+
 # 0.38.0
 
 - Remove deprecated functions `StreamMuxerExt::next_{inbound,outbound}`. See [PR 3031].

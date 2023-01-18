@@ -20,12 +20,11 @@
 
 use crate::protocol;
 use either::Either;
-use libp2p_core::connection::ConnectionId;
 use libp2p_core::upgrade::DeniedUpgrade;
 use libp2p_core::{ConnectedPoint, PeerId};
 use libp2p_swarm::dummy;
 use libp2p_swarm::handler::SendWrapper;
-use libp2p_swarm::{ConnectionHandler, IntoConnectionHandler};
+use libp2p_swarm::{ConnectionHandler, ConnectionId, IntoConnectionHandler};
 
 pub mod direct;
 pub mod relayed;
