@@ -37,11 +37,6 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
-#[allow(clippy::derive_partial_eq_without_eq)]
-mod keys_proto {
-    include!(concat!(env!("OUT_DIR"), "/keys_proto.rs"));
-}
-
 mod envelope_proto {
     include!(concat!(env!("OUT_DIR"), "/envelope_proto.rs"));
 }
@@ -55,25 +50,46 @@ mod peer_record_proto {
 pub use multiaddr;
 pub type Negotiated<T> = multistream_select::Negotiated<T>;
 
-mod peer_id;
+// #[deprecated(since = "0.39.0", note = "Depend on `libp2p-identity` instead.")]
+pub mod identity {
+    pub use libp2p_identity::Keypair;
+    pub use libp2p_identity::PublicKey;
+
+    pub mod ed25519 {
+        pub use libp2p_identity::ed25519::Keypair;
+        pub use libp2p_identity::ed25519::PublicKey;
+        pub use libp2p_identity::ed25519::SecretKey;
+    }
+
+    pub mod error {
+        pub use libp2p_identity::DecodingError;
+        pub use libp2p_identity::SigningError;
+    }
+}
+
 mod translation;
 
 pub mod connection;
 pub mod either;
-pub mod identity;
 pub mod muxing;
 pub mod peer_record;
 pub mod signed_envelope;
 pub mod transport;
 pub mod upgrade;
 
+// #[deprecated(since = "0.39.0", note = "Depend on `libp2p-identity` instead.")]
+pub type PublicKey = libp2p_identity::PublicKey;
+
+// #[deprecated(since = "0.39.0", note = "Depend on `libp2p-identity` instead.")]
+pub type PeerId = libp2p_identity::PeerId;
+
+// #[deprecated(since = "0.39.0", note = "Depend on `libp2p-identity` instead.")]
+pub type ParseError = libp2p_identity::ParseError;
+
 pub use connection::{ConnectedPoint, Endpoint};
-pub use identity::PublicKey;
 pub use multiaddr::Multiaddr;
 pub use multihash;
 pub use muxing::StreamMuxer;
-pub use peer_id::ParseError;
-pub use peer_id::PeerId;
 pub use peer_record::PeerRecord;
 pub use signed_envelope::SignedEnvelope;
 pub use translation::address_translation;

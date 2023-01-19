@@ -18,7 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::PublicKey;
 use multiaddr::{Multiaddr, Protocol};
 use multihash::{Code, Error, Multihash, MultihashDigest};
 use rand::Rng;
@@ -55,7 +54,13 @@ impl fmt::Display for PeerId {
 
 impl PeerId {
     /// Builds a `PeerId` from a public key.
-    pub fn from_public_key(key: &PublicKey) -> PeerId {
+    #[cfg(any(
+        feature = "ecdsa",
+        feature = "secp256k1",
+        feature = "ed25519",
+        feature = "rsa"
+    ))]
+    pub fn from_public_key(key: &crate::keypair::PublicKey) -> PeerId {
         let key_enc = key.to_protobuf_encoding();
 
         let hash_algorithm = if key_enc.len() <= MAX_INLINE_KEY_LENGTH {
@@ -126,7 +131,13 @@ impl PeerId {
     ///
     /// Returns `None` if this `PeerId`s hash algorithm is not supported when encoding the
     /// given public key, otherwise `Some` boolean as the result of an equality check.
-    pub fn is_public_key(&self, public_key: &PublicKey) -> Option<bool> {
+    #[cfg(any(
+        feature = "ecdsa",
+        feature = "secp256k1",
+        feature = "ed25519",
+        feature = "rsa"
+    ))]
+    pub fn is_public_key(&self, public_key: &crate::PublicKey) -> Option<bool> {
         let alg = Code::try_from(self.multihash.code())
             .expect("Internal multihash is always a valid `Code`");
         let enc = public_key.to_protobuf_encoding();
@@ -134,14 +145,26 @@ impl PeerId {
     }
 }
 
-impl From<PublicKey> for PeerId {
-    fn from(key: PublicKey) -> PeerId {
+#[cfg(any(
+    feature = "ecdsa",
+    feature = "secp256k1",
+    feature = "ed25519",
+    feature = "rsa"
+))]
+impl From<crate::PublicKey> for PeerId {
+    fn from(key: crate::PublicKey) -> PeerId {
         PeerId::from_public_key(&key)
     }
 }
 
-impl From<&PublicKey> for PeerId {
-    fn from(key: &PublicKey) -> PeerId {
+#[cfg(any(
+    feature = "ecdsa",
+    feature = "secp256k1",
+    feature = "ed25519",
+    feature = "rsa"
+))]
+impl From<&crate::PublicKey> for PeerId {
+    fn from(key: &crate::PublicKey) -> PeerId {
         PeerId::from_public_key(key)
     }
 }
@@ -254,25 +277,26 @@ impl FromStr for PeerId {
 
 #[cfg(test)]
 mod tests {
-    use crate::{identity, PeerId};
+    use super::*;
+    use crate::keypair::Keypair;
 
     #[test]
     fn peer_id_is_public_key() {
-        let key = identity::Keypair::generate_ed25519().public();
+        let key = Keypair::generate_ed25519().public();
         let peer_id = key.to_peer_id();
         assert_eq!(peer_id.is_public_key(&key), Some(true));
     }
 
     #[test]
     fn peer_id_into_bytes_then_from_bytes() {
-        let peer_id = identity::Keypair::generate_ed25519().public().to_peer_id();
+        let peer_id = Keypair::generate_ed25519().public().to_peer_id();
         let second = PeerId::from_bytes(&peer_id.to_bytes()).unwrap();
         assert_eq!(peer_id, second);
     }
 
     #[test]
     fn peer_id_to_base58_then_back() {
-        let peer_id = identity::Keypair::generate_ed25519().public().to_peer_id();
+        let peer_id = Keypair::generate_ed25519().public().to_peer_id();
         let second: PeerId = peer_id.to_base58().parse().unwrap();
         assert_eq!(peer_id, second);
     }

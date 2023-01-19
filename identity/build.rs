@@ -19,6 +19,5 @@
 // DEALINGS IN THE SOFTWARE.
 
 fn main() {
-    prost_build::compile_protos(&["src/envelope.proto", "src/peer_record.proto"], &["src"])
-        .unwrap();
+    prost_build::compile_protos(&["src/keys.proto"], &["src"]).unwrap();
 }

@@ -144,6 +144,7 @@ libp2p-tcp = { path = "transports/tcp", features = ["tokio"] }
 [workspace]
 members = [
     "core",
+    "identity",
     "misc/metrics",
     "misc/multistream-select",
     "misc/rw-stream-sink",

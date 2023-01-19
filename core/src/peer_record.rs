@@ -1,8 +1,8 @@
-use crate::identity::error::SigningError;
-use crate::identity::Keypair;
 use crate::signed_envelope::SignedEnvelope;
 use crate::{peer_record_proto, signed_envelope, DecodeError, Multiaddr, PeerId};
 use instant::SystemTime;
+use libp2p_identity::Keypair;
+use libp2p_identity::SigningError;
 use std::convert::TryInto;
 
 const PAYLOAD_TYPE: &str = "/libp2p/routing-state-record";
