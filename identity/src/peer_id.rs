@@ -101,7 +101,7 @@ impl PeerId {
     /// will return the encapsulated [`PeerId`], otherwise it will return `None`.
     #[deprecated(
         since = "0.1.0",
-        note = "`Multiaddr will become type-safe in a future release, making this function obsolete. See https://github.com/multiformats/rust-multiaddr/issues/73."
+        note = "`Multiaddr` will become type-safe in a future release, making this function obsolete. See https://github.com/multiformats/rust-multiaddr/issues/73."
     )]
     pub fn try_from_multiaddr(address: &Multiaddr) -> Option<PeerId> {
         address.iter().last().and_then(|p| match p {
