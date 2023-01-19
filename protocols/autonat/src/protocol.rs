@@ -134,15 +134,16 @@ impl DialRequest {
             PeerId::try_from(peer_id)
                 .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid peer id"))?
         };
-        let addrs = {
-            let mut maddrs = vec![];
-            for addr in addrs.into_iter() {
-                let maddr = Multiaddr::try_from(addr)
-                    .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?;
-                maddrs.push(maddr);
-            }
-            maddrs
-        };
+        let addrs = addrs
+            .into_iter()
+            .filter_map(|a| match Multiaddr::try_from(a) {
+                Ok(a) => Some(a),
+                Err(e) => {
+                    log::debug!("Unable to parse multiaddr: {e}");
+                    None
+                }
+            })
+            .collect();
         Ok(Self {
             peer_id,
             addresses: addrs,
@@ -332,5 +333,36 @@ mod tests {
         let bytes = response.clone().into_bytes();
         let response2 = DialResponse::from_bytes(&bytes).unwrap();
         assert_eq!(response, response2);
+    }
+
+    #[test]
+    fn test_skip_unparsable_multiaddr() {
+        let valid_multiaddr: Multiaddr = "/ip6/2001:db8::/tcp/1234".parse().unwrap();
+        let valid_multiaddr_bytes = valid_multiaddr.to_vec();
+
+        let invalid_multiaddr = {
+            let a = vec![255; 8];
+            assert!(Multiaddr::try_from(a.clone()).is_err());
+            a
+        };
+
+        let msg = structs_proto::Message {
+            r#type: Some(structs_proto::message::MessageType::Dial.into()),
+            dial: Some(structs_proto::message::Dial {
+                peer: Some(structs_proto::message::PeerInfo {
+                    id: Some(PeerId::random().to_bytes()),
+                    addrs: vec![valid_multiaddr_bytes, invalid_multiaddr],
+                }),
+            }),
+            dial_response: None,
+        };
+
+        let mut bytes = Vec::with_capacity(msg.encoded_len());
+        msg.encode(&mut bytes)
+            .expect("Vec<u8> provides capacity as needed");
+
+        let request = DialRequest::from_bytes(&bytes).expect("not to fail");
+
+        assert_eq!(request.addresses, vec![valid_multiaddr])
     }
 }
