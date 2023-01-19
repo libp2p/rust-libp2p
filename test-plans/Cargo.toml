@@ -3,9 +3,6 @@ edition = "2021"
 name = "interop-tests"
 version = "0.1.0"
 
-# Required to avoid conflicts with parent workspace.
-[workspace]
-
 [dependencies]
 anyhow = "1"
 async-trait = "0.1.58"
