@@ -166,6 +166,7 @@ members = [
     "protocols/request-response",
     "swarm",
     "swarm-derive",
+    "test-plans",
     "transports/deflate",
     "transports/dns",
     "transports/noise",
