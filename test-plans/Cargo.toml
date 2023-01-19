@@ -2,6 +2,7 @@
 edition = "2021"
 name = "interop-tests"
 version = "0.1.0"
+publish = false
 
 [dependencies]
 anyhow = "1"
