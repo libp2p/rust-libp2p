@@ -25,7 +25,7 @@ use std::convert::TryFrom;
 #[cfg(feature = "ed25519")]
 use crate::ed25519;
 
-#[cfg(feature = "rsa")]
+#[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
 use crate::rsa;
 
 #[cfg(feature = "secp256k1")]
