@@ -23,6 +23,7 @@ use crate::protocol::{
     KademliaProtocolConfig,
 };
 use crate::record::{self, Record};
+use either::Either;
 use futures::prelude::*;
 use futures::stream::SelectAll;
 use instant::Instant;
@@ -68,9 +69,9 @@ impl<T: Clone + fmt::Debug + Send + 'static + Unpin> IntoConnectionHandler
 
     fn inbound_protocol(&self) -> <Self::Handler as ConnectionHandler>::InboundProtocol {
         if self.config.allow_listening {
-            upgrade::EitherUpgrade::A(self.config.protocol_config.clone())
+            Either::Left(self.config.protocol_config.clone())
         } else {
-            upgrade::EitherUpgrade::B(upgrade::DeniedUpgrade)
+            Either::Right(upgrade::DeniedUpgrade)
         }
     }
 }
@@ -633,7 +634,7 @@ where
     type InEvent = KademliaHandlerIn<TUserData>;
     type OutEvent = KademliaHandlerEvent<TUserData>;
     type Error = io::Error; // TODO: better error type?
-    type InboundProtocol = upgrade::EitherUpgrade<KademliaProtocolConfig, upgrade::DeniedUpgrade>;
+    type InboundProtocol = Either<KademliaProtocolConfig, upgrade::DeniedUpgrade>;
     type OutboundProtocol = KademliaProtocolConfig;
     // Message of the request to send to the remote, and user data if we expect an answer.
     type OutboundOpenInfo = (KadRequestMsg, Option<TUserData>);
@@ -642,9 +643,9 @@ where
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
         if self.config.allow_listening {
             SubstreamProtocol::new(self.config.protocol_config.clone(), ())
-                .map_upgrade(upgrade::EitherUpgrade::A)
+                .map_upgrade(Either::Left)
         } else {
-            SubstreamProtocol::new(upgrade::EitherUpgrade::B(upgrade::DeniedUpgrade), ())
+            SubstreamProtocol::new(Either::Right(upgrade::DeniedUpgrade), ())
         }
     }
 
