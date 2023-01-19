@@ -1,7 +1,9 @@
 all: ping-image.tar
 
 ping-image.tar: Dockerfile Cargo.toml $(wildcard src/*)
-	CARGO_TARGET_DIR=./target cargo build --release -p interop-tests
+	cargo build --release -p interop-tests
+	mkdir -p target/release/
+	cp ../target/release/ping target/release
 	docker build -t rust-libp2p-head .
 	docker image save -o $@ rust-libp2p-head
 
