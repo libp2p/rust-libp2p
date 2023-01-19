@@ -13,6 +13,14 @@ jobs:
       - uses: actions/checkout@v3
         with:
           submodules: recursive
+      - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
+        with:
+          shared-key: interop-tests
+          save-if: <master branch>
+      - name: Install Protoc
+        run: sudo apt-get install protobuf-compiler
+      - name: build test plans
+        run: cargo build --release -p interop-tests
       - name: Build image
         working-directory: ./test-plans
         run: make
