@@ -32,6 +32,7 @@ use crate::{
 use concurrent_dial::ConcurrentDial;
 use fnv::FnvHashMap;
 use futures::prelude::*;
+use futures::stream::SelectAll;
 use futures::{
     channel::{mpsc, oneshot},
     future::{poll_fn, BoxFuture, Either},
@@ -41,6 +42,7 @@ use futures::{
 use instant::Instant;
 use libp2p_core::connection::Endpoint;
 use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerExt};
+use std::task::Waker;
 use std::{
     collections::{hash_map, HashMap},
     convert::TryFrom as _,
@@ -117,6 +119,9 @@ where
     /// See [`Connection::max_negotiating_inbound_streams`].
     max_negotiating_inbound_streams: usize,
 
+    /// How many [`task::EstablishedConnectionEvent`]s can be buffered before the connection is back-pressured.
+    per_connection_event_buffer_size: usize,
+
     /// The executor to use for running connection tasks. Can either be a global executor
     /// or a local queue.
     executor: ExecSwitch,
@@ -128,14 +133,12 @@ where
     /// Receiver for events reported from pending tasks.
     pending_connection_events_rx: mpsc::Receiver<task::PendingConnectionEvent>,
 
-    /// Sender distributed to established tasks for reporting events back
-    /// to the pool.
-    established_connection_events_tx:
-        mpsc::Sender<task::EstablishedConnectionEvent<THandler::Handler>>,
+    /// Waker in case we haven't established any connections yet.
+    no_established_connections_waker: Option<Waker>,
 
-    /// Receiver for events reported from established tasks.
-    established_connection_events_rx:
-        mpsc::Receiver<task::EstablishedConnectionEvent<THandler::Handler>>,
+    /// Receivers for events reported from established connections.
+    established_connection_events:
+        SelectAll<mpsc::Receiver<task::EstablishedConnectionEvent<THandler::Handler>>>,
 }
 
 #[derive(Debug)]
@@ -315,8 +318,6 @@ where
     /// Creates a new empty `Pool`.
     pub fn new(local_id: PeerId, config: PoolConfig, limits: ConnectionLimits) -> Self {
         let (pending_connection_events_tx, pending_connection_events_rx) = mpsc::channel(0);
-        let (established_connection_events_tx, established_connection_events_rx) =
-            mpsc::channel(config.task_event_buffer_size);
         let executor = match config.executor {
             Some(exec) => ExecSwitch::Executor(exec),
             None => ExecSwitch::LocalSpawn(Default::default()),
@@ -331,11 +332,12 @@ where
             dial_concurrency_factor: config.dial_concurrency_factor,
             substream_upgrade_protocol_override: config.substream_upgrade_protocol_override,
             max_negotiating_inbound_streams: config.max_negotiating_inbound_streams,
+            per_connection_event_buffer_size: config.per_connection_event_buffer_size,
             executor,
             pending_connection_events_tx,
             pending_connection_events_rx,
-            established_connection_events_tx,
-            established_connection_events_rx,
+            no_established_connections_waker: None,
+            established_connection_events: Default::default(),
         }
     }
 
@@ -547,9 +549,11 @@ where
         //
         // Note that established connections are polled before pending connections, thus
         // prioritizing established connections over pending connections.
-        match self.established_connection_events_rx.poll_next_unpin(cx) {
+        match self.established_connection_events.poll_next_unpin(cx) {
             Poll::Pending => {}
-            Poll::Ready(None) => unreachable!("Pool holds both sender and receiver."),
+            Poll::Ready(None) => {
+                self.no_established_connections_waker = Some(cx.waker().clone());
+            }
 
             Poll::Ready(Some(task::EstablishedConnectionEvent::Notify { id, peer_id, event })) => {
                 return Poll::Ready(PoolEvent::ConnectionEvent { peer_id, id, event });
@@ -750,6 +754,9 @@ where
 
                     let (command_sender, command_receiver) =
                         mpsc::channel(self.task_command_buffer_size);
+                    let (event_sender, event_receiver) =
+                        mpsc::channel(self.per_connection_event_buffer_size);
+
                     conns.insert(
                         id,
                         EstablishedConnection {
@@ -757,6 +764,10 @@ where
                             sender: command_sender,
                         },
                     );
+                    self.established_connection_events.push(event_receiver);
+                    if let Some(waker) = self.no_established_connections_waker.take() {
+                        waker.wake();
+                    }
 
                     let connection = Connection::new(
                         muxer,
@@ -764,13 +775,14 @@ where
                         self.substream_upgrade_protocol_override,
                         self.max_negotiating_inbound_streams,
                     );
+
                     self.spawn(
                         task::new_for_established_connection(
                             id,
                             obtained_peer_id,
                             connection,
                             command_receiver,
-                            self.established_connection_events_tx.clone(),
+                            event_sender,
                         )
                         .boxed(),
                     );
@@ -1069,7 +1081,7 @@ pub struct PoolConfig {
 
     /// Size of the pending connection task event buffer and the established connection task event
     /// buffer.
-    pub task_event_buffer_size: usize,
+    pub per_connection_event_buffer_size: usize,
 
     /// Number of addresses concurrently dialed for a single outbound connection attempt.
     pub dial_concurrency_factor: NonZeroU8,
@@ -1088,7 +1100,7 @@ impl PoolConfig {
         Self {
             executor,
             task_command_buffer_size: 32,
-            task_event_buffer_size: 7,
+            per_connection_event_buffer_size: 7,
             dial_concurrency_factor: NonZeroU8::new(8).expect("8 > 0"),
             substream_upgrade_protocol_override: None,
             max_negotiating_inbound_streams: 128,
@@ -1113,8 +1125,8 @@ impl PoolConfig {
     /// When the buffer is full, the background tasks of all connections will stall.
     /// In this way, the consumers of network events exert back-pressure on
     /// the network connection I/O.
-    pub fn with_connection_event_buffer_size(mut self, n: usize) -> Self {
-        self.task_event_buffer_size = n;
+    pub fn with_per_connection_event_buffer_size(mut self, n: usize) -> Self {
+        self.per_connection_event_buffer_size = n;
         self
     }
 
