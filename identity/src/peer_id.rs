@@ -99,6 +99,10 @@ impl PeerId {
     ///
     /// In case the given [`Multiaddr`] ends with `/p2p/<peer-id>`, this function
     /// will return the encapsulated [`PeerId`], otherwise it will return `None`.
+    #[deprecated(
+        since = "0.1.0",
+        note = "`Multiaddr will become type-safe in a future release, making this function obsolete. See https://github.com/multiformats/rust-multiaddr/issues/73."
+    )]
     pub fn try_from_multiaddr(address: &Multiaddr) -> Option<PeerId> {
         address.iter().last().and_then(|p| match p {
             Protocol::P2p(hash) => PeerId::from_multihash(hash).ok(),
@@ -316,6 +320,7 @@ mod tests {
             .parse()
             .unwrap();
 
+        #[allow(deprecated)]
         let peer_id = PeerId::try_from_multiaddr(&address).unwrap();
 
         assert_eq!(
@@ -330,6 +335,7 @@ mod tests {
     fn no_panic_on_extract_peer_id_from_multi_address_if_not_present() {
         let address = "/memory/1234".to_string().parse().unwrap();
 
+        #[allow(deprecated)]
         let maybe_empty = PeerId::try_from_multiaddr(&address);
 
         assert!(maybe_empty.is_none());
