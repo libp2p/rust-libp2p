@@ -212,17 +212,19 @@ impl<P: Provider> Transport for GenTransport<P> {
                 errored.push(*key);
             }
         }
-        self.waker = Some(cx.waker().clone());
 
         for key in errored {
             // Endpoint driver of dialer crashed.
             // Drop dialer and all pending dials so that the connection receiver is notified.
             self.dialer.remove(&key);
         }
-        match self.listeners.poll_next_unpin(cx) {
-            Poll::Ready(Some(ev)) => Poll::Ready(ev),
-            _ => Poll::Pending,
+
+        if let Poll::Ready(Some(ev)) = self.listeners.poll_next_unpin(cx) {
+            return Poll::Ready(ev);
         }
+
+        self.waker = Some(cx.waker().clone());
+        Poll::Pending
     }
 }
 
