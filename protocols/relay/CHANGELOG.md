@@ -11,6 +11,8 @@
 
 - Update to `libp2p-swarm` `v0.42.0`.
 
+- Optimize listeners polling behaviour in the tcp transport, fixing [2781](https://github.com/libp2p/rust-libp2p/issues/2781).
+
 [PR 3238]: https://github.com/libp2p/rust-libp2p/pull/3238
 [discussion 2174]: https://github.com/libp2p/rust-libp2p/issues/2174
 
