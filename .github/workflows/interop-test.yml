@@ -24,18 +24,18 @@ jobs:
       - name: Install Protoc
         run: sudo apt-get install protobuf-compiler
       - name: Build image
-        working-directory: ./test-plans
+        working-directory: ./interop-tests
         run: make
       - name: Upload ping versions info
         uses: actions/upload-artifact@v3
         with:
           name: ping-versions
-          path: ./test-plans/ping-versions.json
+          path: ./interop-tests/ping-versions.json
       - name: Upload image tar
         uses: actions/upload-artifact@v3
         with:
           name: ping-image
-          path: ./test-plans/ping-image.tar
+          path: ./interop-tests/ping-image.tar
   run-multidim-interop:
     name: Run multidimensional interoperability tests
     needs: build-ping-container
