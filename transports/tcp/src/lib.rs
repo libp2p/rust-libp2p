@@ -559,6 +559,8 @@ where
                         break;
                     }
                 }
+
+                // COVERED
                 Poll::Ready(Some(Ok(TcpListenerEvent::Upgrade {
                     upgrade,
                     local_addr,
@@ -573,6 +575,8 @@ where
                         send_back_addr: remote_addr,
                     });
                 }
+
+                // COVERED
                 Poll::Ready(Some(Ok(TcpListenerEvent::NewAddress(a)))) => {
                     let id = listener.listener_id;
                     self.listeners.push_front(listener);
@@ -581,6 +585,8 @@ where
                         listen_addr: a,
                     });
                 }
+
+                // COVERED
                 Poll::Ready(Some(Ok(TcpListenerEvent::AddressExpired(a)))) => {
                     let id = listener.listener_id;
                     self.listeners.push_front(listener);
@@ -589,6 +595,8 @@ where
                         listen_addr: a,
                     });
                 }
+
+                // COVERED
                 Poll::Ready(Some(Ok(TcpListenerEvent::Error(error)))) => {
                     let id = listener.listener_id;
                     self.listeners.push_front(listener);
@@ -597,12 +605,15 @@ where
                         error,
                     });
                 }
+
                 Poll::Ready(None) => {
                     return Poll::Ready(TransportEvent::ListenerClosed {
                         listener_id: listener.listener_id,
                         reason: Ok(()),
                     });
                 }
+
+                // NEVER HAPPENS
                 Poll::Ready(Some(Err(err))) => {
                     return Poll::Ready(TransportEvent::ListenerClosed {
                         listener_id: listener.listener_id,
@@ -733,7 +744,8 @@ where
     T::Listener: Unpin,
     T::Stream: Unpin,
 {
-    type Item = Result<TcpListenerEvent<T::Stream>, io::Error>;
+    // type Item = Result<TcpListenerEvent<T::Stream>, io::Error>;
+    type Item = TransportEvent<T::Stream, io::Error>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         let me = Pin::into_inner(self);
@@ -757,7 +769,13 @@ where
                             let ma = ip_to_multiaddr(ip, me.listen_addr.port());
                             log::debug!("New listen address: {}", ma);
                             me.port_reuse.register(ip, me.listen_addr.port());
-                            return Poll::Ready(Some(Ok(TcpListenerEvent::NewAddress(ma))));
+                            return Poll::Ready(Some(
+                                // Ok(TcpListenerEvent::NewAddress(ma))
+                                TransportEvent::NewAddress {
+                                    listener_id: self.listener_id,
+                                    listen_addr: ma,
+                                },
+                            ));
                         }
                     }
                     Ok(IfEvent::Down(inet)) => {
@@ -766,12 +784,24 @@ where
                             let ma = ip_to_multiaddr(ip, me.listen_addr.port());
                             log::debug!("Expired listen address: {}", ma);
                             me.port_reuse.unregister(ip, me.listen_addr.port());
-                            return Poll::Ready(Some(Ok(TcpListenerEvent::AddressExpired(ma))));
+                            return Poll::Ready(Some(
+                                // Ok(TcpListenerEvent::AddressExpired(ma))
+                                TransportEvent::AddressExpired {
+                                    listener_id: self.listener_id,
+                                    listen_addr: ma,
+                                },
+                            ));
                         }
                     }
-                    Err(err) => {
+                    Err(error) => {
                         me.pause = Some(Delay::new(me.sleep_on_error));
-                        return Poll::Ready(Some(Ok(TcpListenerEvent::Error(err))));
+                        return Poll::Ready(Some(
+                            // Ok(TcpListenerEvent::Error(err))
+                            TransportEvent::ListenerError {
+                                listener_id: self.listener_id,
+                                error,
+                            },
+                        ));
                     }
                 }
             }
@@ -789,16 +819,30 @@ where
 
                 log::debug!("Incoming connection from {} at {}", remote_addr, local_addr);
 
-                return Poll::Ready(Some(Ok(TcpListenerEvent::Upgrade {
-                    upgrade: future::ok(stream),
-                    local_addr,
-                    remote_addr,
-                })));
+                return Poll::Ready(Some(
+                    //     Ok(TcpListenerEvent::Upgrade {
+                    //     upgrade: future::ok(stream),
+                    //     local_addr,
+                    //     remote_addr,
+                    // })
+                    TransportEvent::Incoming {
+                        listener_id: self.listener_id,
+                        upgrade: future::ok(stream),
+                        local_addr,
+                        send_back_addr: remote_addr,
+                    },
+                ));
             }
             Poll::Ready(Err(e)) => {
                 // These errors are non-fatal for the listener stream.
                 me.pause = Some(Delay::new(me.sleep_on_error));
-                return Poll::Ready(Some(Ok(TcpListenerEvent::Error(e))));
+                return Poll::Ready(Some(
+                    // Ok(TcpListenerEvent::Error(e))
+                    TransportEvent::ListenerError {
+                        listener_id: self.listener_id,
+                        error,
+                    },
+                ));
             }
             Poll::Pending => {}
         };
