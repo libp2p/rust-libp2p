@@ -84,6 +84,7 @@ pub mod derive_prelude {
     pub use crate::behaviour::NewExternalAddr;
     pub use crate::behaviour::NewListenAddr;
     pub use crate::behaviour::NewListener;
+    pub use crate::connection::ConnectionId;
     pub use crate::ConnectionHandler;
     pub use crate::DialError;
     pub use crate::IntoConnectionHandler;
@@ -92,7 +93,6 @@ pub mod derive_prelude {
     pub use crate::NetworkBehaviourAction;
     pub use crate::PollParameters;
     pub use futures::prelude as futures;
-    pub use libp2p_core::connection::ConnectionId;
     pub use libp2p_core::either::EitherOutput;
     pub use libp2p_core::transport::ListenerId;
     pub use libp2p_core::ConnectedPoint;
@@ -108,8 +108,8 @@ pub use behaviour::{
 };
 pub use connection::pool::{ConnectionCounters, ConnectionLimits};
 pub use connection::{
-    ConnectionError, ConnectionLimit, PendingConnectionError, PendingInboundConnectionError,
-    PendingOutboundConnectionError,
+    ConnectionError, ConnectionId, ConnectionLimit, PendingConnectionError,
+    PendingInboundConnectionError, PendingOutboundConnectionError,
 };
 pub use executor::Executor;
 pub use handler::{
@@ -125,7 +125,6 @@ use connection::pool::{EstablishedConnection, Pool, PoolConfig, PoolEvent};
 use connection::IncomingInfo;
 use dial_opts::{DialOpts, PeerCondition};
 use futures::{executor::ThreadPoolBuilder, prelude::*, stream::FusedStream};
-use libp2p_core::connection::ConnectionId;
 use libp2p_core::muxing::SubstreamBox;
 use libp2p_core::{
     connection::ConnectedPoint,
@@ -1490,31 +1489,19 @@ where
         self
     }
 
-    /// Configures the number of extra events from the [`ConnectionHandler`] in
-    /// destination to the [`NetworkBehaviour`] that can be buffered before
-    /// the [`ConnectionHandler`] has to go to sleep.
+    /// Configures the size of the buffer for events sent by a [`ConnectionHandler`] to the
+    /// [`NetworkBehaviour`].
     ///
-    /// There exists a buffer of events received from [`ConnectionHandler`]s
-    /// that the [`NetworkBehaviour`] has yet to process. This buffer is
-    /// shared between all instances of [`ConnectionHandler`]. Each instance of
-    /// [`ConnectionHandler`] is guaranteed one slot in this buffer, meaning
-    /// that delivering an event for the first time is guaranteed to be
-    /// instantaneous. Any extra event delivery, however, must wait for that
-    /// first event to be delivered or for an "extra slot" to be available.
+    /// Each connection has its own buffer.
     ///
-    /// This option configures the number of such "extra slots" in this
-    /// shared buffer. These extra slots are assigned in a first-come,
-    /// first-served basis.
-    ///
-    /// The ideal value depends on the executor used, the CPU speed, the
-    /// average number of connections, and the volume of events. If this value
-    /// is too low, then the [`ConnectionHandler`]s will be sleeping more often
+    /// The ideal value depends on the executor used, the CPU speed and the volume of events.
+    /// If this value is too low, then the [`ConnectionHandler`]s will be sleeping more often
     /// than necessary. Increasing this value increases the overall memory
     /// usage, and more importantly the latency between the moment when an
     /// event is emitted and the moment when it is received by the
     /// [`NetworkBehaviour`].
-    pub fn connection_event_buffer_size(mut self, n: usize) -> Self {
-        self.pool_config = self.pool_config.with_connection_event_buffer_size(n);
+    pub fn per_connection_event_buffer_size(mut self, n: usize) -> Self {
+        self.pool_config = self.pool_config.with_per_connection_event_buffer_size(n);
         self
     }
 
@@ -1750,12 +1737,11 @@ fn p2p_addr(peer: Option<PeerId>, addr: Multiaddr) -> Result<Multiaddr, Multiadd
 mod tests {
     use super::*;
     use crate::test::{CallTraceBehaviour, MockBehaviour};
+    use either::Either;
     use futures::executor::block_on;
     use futures::executor::ThreadPool;
     use futures::future::poll_fn;
-    use futures::future::Either;
     use futures::{executor, future, ready};
-    use libp2p_core::either::EitherError;
     use libp2p_core::multiaddr::multiaddr;
     use libp2p_core::transport::memory::MemoryTransportError;
     use libp2p_core::transport::TransportEvent;
@@ -2225,13 +2211,13 @@ mod tests {
                         match futures::future::select(transport.select_next_some(), swarm.next())
                             .await
                         {
-                            Either::Left((TransportEvent::Incoming { .. }, _)) => {
+                            future::Either::Left((TransportEvent::Incoming { .. }, _)) => {
                                 break;
                             }
-                            Either::Left(_) => {
+                            future::Either::Left(_) => {
                                 panic!("Unexpected transport event.")
                             }
-                            Either::Right((e, _)) => {
+                            future::Either::Right((e, _)) => {
                                 panic!("Expect swarm to not emit any event {e:?}")
                             }
                         }
@@ -2633,7 +2619,7 @@ mod tests {
             "/ip4/127.0.0.1/tcp/80".parse().unwrap(),
             TransportError::Other(io::Error::new(
                 io::ErrorKind::Other,
-                EitherError::<_, Void>::A(EitherError::<Void, _>::B(UpgradeError::Apply(
+                Either::<_, Void>::Left(Either::<Void, _>::Right(UpgradeError::Apply(
                     MemoryTransportError::Unreachable,
                 ))),
             )),

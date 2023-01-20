@@ -28,7 +28,6 @@ use futures::sink::SinkExt;
 use futures::stream::{FuturesUnordered, StreamExt};
 use futures_timer::Delay;
 use instant::Instant;
-use libp2p_core::either::EitherError;
 use libp2p_core::multiaddr::Protocol;
 use libp2p_core::{upgrade, ConnectedPoint, Multiaddr, PeerId};
 use libp2p_swarm::handler::{
@@ -141,18 +140,11 @@ impl IntoConnectionHandler for Prototype {
             // Deny all substreams on relayed connection.
             Either::Right(dummy::ConnectionHandler)
         } else {
-            let mut handler = Handler {
-                remote_peer_id: *remote_peer_id,
-                remote_addr: endpoint.get_remote_address().clone(),
-                local_peer_id: self.local_peer_id,
-                queued_events: Default::default(),
-                pending_error: Default::default(),
-                reservation: Reservation::None,
-                alive_lend_out_substreams: Default::default(),
-                circuit_deny_futs: Default::default(),
-                send_error_futs: Default::default(),
-                keep_alive: KeepAlive::Yes,
-            };
+            let mut handler = Handler::new(
+                self.local_peer_id,
+                *remote_peer_id,
+                endpoint.get_remote_address().clone(),
+            );
 
             if let Some(event) = self.initial_in {
                 handler.on_behaviour_event(event)
@@ -163,7 +155,7 @@ impl IntoConnectionHandler for Prototype {
     }
 
     fn inbound_protocol(&self) -> <Self::Handler as ConnectionHandler>::InboundProtocol {
-        upgrade::EitherUpgrade::A(SendWrapper(inbound_stop::Upgrade {}))
+        Either::Left(SendWrapper(inbound_stop::Upgrade {}))
     }
 }
 
@@ -174,7 +166,7 @@ pub struct Handler {
     /// A pending fatal error that results in the connection being closed.
     pending_error: Option<
         ConnectionHandlerUpgrErr<
-            EitherError<inbound_stop::FatalUpgradeError, outbound_hop::FatalUpgradeError>,
+            Either<inbound_stop::FatalUpgradeError, outbound_hop::FatalUpgradeError>,
         >,
     >,
     /// Until when to keep the connection alive.
@@ -213,6 +205,21 @@ pub struct Handler {
 }
 
 impl Handler {
+    fn new(local_peer_id: PeerId, remote_peer_id: PeerId, remote_addr: Multiaddr) -> Self {
+        Self {
+            local_peer_id,
+            remote_peer_id,
+            remote_addr,
+            queued_events: Default::default(),
+            pending_error: Default::default(),
+            reservation: Reservation::None,
+            alive_lend_out_substreams: Default::default(),
+            circuit_deny_futs: Default::default(),
+            send_error_futs: Default::default(),
+            keep_alive: KeepAlive::Yes,
+        }
+    }
+
     fn on_fully_negotiated_inbound(
         &mut self,
         FullyNegotiatedInbound {
@@ -366,7 +373,7 @@ impl Handler {
                 inbound_stop::UpgradeError::Fatal(error),
             )) => {
                 self.pending_error = Some(ConnectionHandlerUpgrErr::Upgrade(
-                    upgrade::UpgradeError::Apply(EitherError::A(error)),
+                    upgrade::UpgradeError::Apply(Either::Left(error)),
                 ));
                 return;
             }
@@ -413,7 +420,7 @@ impl Handler {
                         match error {
                             outbound_hop::UpgradeError::Fatal(error) => {
                                 self.pending_error = Some(ConnectionHandlerUpgrErr::Upgrade(
-                                    upgrade::UpgradeError::Apply(EitherError::B(error)),
+                                    upgrade::UpgradeError::Apply(Either::Right(error)),
                                 ));
                                 return;
                             }
@@ -476,7 +483,7 @@ impl Handler {
                         match error {
                             outbound_hop::UpgradeError::Fatal(error) => {
                                 self.pending_error = Some(ConnectionHandlerUpgrErr::Upgrade(
-                                    upgrade::UpgradeError::Apply(EitherError::B(error)),
+                                    upgrade::UpgradeError::Apply(Either::Right(error)),
                                 ));
                                 return;
                             }
@@ -510,7 +517,7 @@ impl ConnectionHandler for Handler {
     type InEvent = In;
     type OutEvent = Event;
     type Error = ConnectionHandlerUpgrErr<
-        EitherError<inbound_stop::FatalUpgradeError, outbound_hop::FatalUpgradeError>,
+        Either<inbound_stop::FatalUpgradeError, outbound_hop::FatalUpgradeError>,
     >;
     type InboundProtocol = inbound_stop::Upgrade;
     type OutboundProtocol = outbound_hop::Upgrade;
