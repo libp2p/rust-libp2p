@@ -18,8 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::either::EitherFuture;
 use crate::{
-    either::{EitherFuture2, EitherName, EitherOutput},
+    either::{EitherName, EitherOutput},
     upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo},
 };
 use either::Either;
@@ -66,12 +67,12 @@ where
 {
     type Output = EitherOutput<TA, TB>;
     type Error = Either<EA, EB>;
-    type Future = EitherFuture2<A::Future, B::Future>;
+    type Future = EitherFuture<A::Future, B::Future>;
 
     fn upgrade_inbound(self, sock: C, info: Self::Info) -> Self::Future {
         match info {
-            EitherName::A(info) => EitherFuture2::A(self.0.upgrade_inbound(sock, info)),
-            EitherName::B(info) => EitherFuture2::B(self.1.upgrade_inbound(sock, info)),
+            EitherName::A(info) => EitherFuture::First(self.0.upgrade_inbound(sock, info)),
+            EitherName::B(info) => EitherFuture::Second(self.1.upgrade_inbound(sock, info)),
         }
     }
 }
@@ -83,12 +84,12 @@ where
 {
     type Output = EitherOutput<TA, TB>;
     type Error = Either<EA, EB>;
-    type Future = EitherFuture2<A::Future, B::Future>;
+    type Future = EitherFuture<A::Future, B::Future>;
 
     fn upgrade_outbound(self, sock: C, info: Self::Info) -> Self::Future {
         match info {
-            EitherName::A(info) => EitherFuture2::A(self.0.upgrade_outbound(sock, info)),
-            EitherName::B(info) => EitherFuture2::B(self.1.upgrade_outbound(sock, info)),
+            EitherName::A(info) => EitherFuture::First(self.0.upgrade_outbound(sock, info)),
+            EitherName::B(info) => EitherFuture::Second(self.1.upgrade_outbound(sock, info)),
         }
     }
 }
