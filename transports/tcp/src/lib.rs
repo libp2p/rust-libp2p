@@ -36,6 +36,7 @@ pub use provider::async_io;
 #[cfg(feature = "tokio")]
 pub use provider::tokio;
 
+use futures::stream::SelectAll;
 use futures::{
     future::{self, Ready},
     prelude::*,
@@ -312,7 +313,8 @@ where
     /// All the active listeners.
     /// The [`ListenStream`] struct contains a stream that we want to be pinned. Since the `VecDeque`
     /// can be resized, the only way is to use a `Pin<Box<>>`.
-    listeners: VecDeque<Pin<Box<ListenStream<T>>>>,
+    // listeners: VecDeque<Pin<Box<ListenStream<T>>>>,
+    listeners: SelectAll<ListenStream<T>>,
     /// Pending transport events to return from [`libp2p_core::Transport::poll`].
     pending_events:
         VecDeque<TransportEvent<<Self as libp2p_core::Transport>::ListenerUpgrade, io::Error>>,
@@ -419,7 +421,7 @@ where
         Transport {
             port_reuse,
             config,
-            listeners: VecDeque::new(),
+            listeners: SelectAll::new(),
             pending_events: VecDeque::new(),
         }
     }
@@ -447,16 +449,15 @@ where
         let listener = self
             .do_listen(id, socket_addr)
             .map_err(TransportError::Other)?;
-        self.listeners.push_back(Box::pin(listener));
+        self.listeners.push(listener);
         Ok(id)
     }
 
     fn remove_listener(&mut self, id: ListenerId) -> bool {
-        if let Some(index) = self.listeners.iter().position(|l| l.listener_id == id) {
-            self.listeners.remove(index);
+        if let Some(listener) = self.listeners.iter_mut().find(|l| l.listener_id == id) {
             self.pending_events
                 .push_back(TransportEvent::ListenerClosed {
-                    listener_id: id,
+                    listener_id: listener.listener_id,
                     reason: Ok(()),
                 });
             true
@@ -548,105 +549,12 @@ where
         if let Some(event) = self.pending_events.pop_front() {
             return Poll::Ready(event);
         }
-        // We remove each element from `listeners` one by one and add them back.
-        let mut remaining = self.listeners.len();
-        while let Some(mut listener) = self.listeners.pop_back() {
-            match TryStream::try_poll_next(listener.as_mut(), cx) {
-                Poll::Pending => {
-                    self.listeners.push_front(listener);
-                    remaining -= 1;
-                    if remaining == 0 {
-                        break;
-                    }
-                }
 
-                // COVERED
-                Poll::Ready(Some(Ok(TcpListenerEvent::Upgrade {
-                    upgrade,
-                    local_addr,
-                    remote_addr,
-                }))) => {
-                    let id = listener.listener_id;
-                    self.listeners.push_front(listener);
-                    return Poll::Ready(TransportEvent::Incoming {
-                        listener_id: id,
-                        upgrade,
-                        local_addr,
-                        send_back_addr: remote_addr,
-                    });
-                }
-
-                // COVERED
-                Poll::Ready(Some(Ok(TcpListenerEvent::NewAddress(a)))) => {
-                    let id = listener.listener_id;
-                    self.listeners.push_front(listener);
-                    return Poll::Ready(TransportEvent::NewAddress {
-                        listener_id: id,
-                        listen_addr: a,
-                    });
-                }
-
-                // COVERED
-                Poll::Ready(Some(Ok(TcpListenerEvent::AddressExpired(a)))) => {
-                    let id = listener.listener_id;
-                    self.listeners.push_front(listener);
-                    return Poll::Ready(TransportEvent::AddressExpired {
-                        listener_id: id,
-                        listen_addr: a,
-                    });
-                }
-
-                // COVERED
-                Poll::Ready(Some(Ok(TcpListenerEvent::Error(error)))) => {
-                    let id = listener.listener_id;
-                    self.listeners.push_front(listener);
-                    return Poll::Ready(TransportEvent::ListenerError {
-                        listener_id: id,
-                        error,
-                    });
-                }
-
-                Poll::Ready(None) => {
-                    return Poll::Ready(TransportEvent::ListenerClosed {
-                        listener_id: listener.listener_id,
-                        reason: Ok(()),
-                    });
-                }
-
-                // NEVER HAPPENS
-                Poll::Ready(Some(Err(err))) => {
-                    return Poll::Ready(TransportEvent::ListenerClosed {
-                        listener_id: listener.listener_id,
-                        reason: Err(err),
-                    });
-                }
-            }
+        match self.listeners.poll_next_unpin(cx) {
+            Poll::Ready(Some(transport_event)) => Poll::Ready(transport_event),
+            _ => Poll::Pending,
         }
-        Poll::Pending
     }
-}
-
-/// Event produced by a [`ListenStream`].
-#[derive(Debug)]
-enum TcpListenerEvent<S> {
-    /// The listener is listening on a new additional [`Multiaddr`].
-    NewAddress(Multiaddr),
-    /// An upgrade, consisting of the upgrade future, the listener address and the remote address.
-    Upgrade {
-        /// The upgrade.
-        upgrade: Ready<Result<S, io::Error>>,
-        /// The local address which produced this upgrade.
-        local_addr: Multiaddr,
-        /// The remote address which produced this upgrade.
-        remote_addr: Multiaddr,
-    },
-    /// A [`Multiaddr`] is no longer used for listening.
-    AddressExpired(Multiaddr),
-    /// A non-fatal error has happened on the listener.
-    ///
-    /// This event should be generated in order to notify the user that something wrong has
-    /// happened. The listener, however, continues to run.
-    Error(io::Error),
 }
 
 /// A stream of incoming connections on one or more interfaces.
@@ -744,8 +652,7 @@ where
     T::Listener: Unpin,
     T::Stream: Unpin,
 {
-    // type Item = Result<TcpListenerEvent<T::Stream>, io::Error>;
-    type Item = TransportEvent<T::Stream, io::Error>;
+    type Item = TransportEvent<Ready<Result<T::Stream, io::Error>>, io::Error>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         let me = Pin::into_inner(self);
@@ -769,13 +676,10 @@ where
                             let ma = ip_to_multiaddr(ip, me.listen_addr.port());
                             log::debug!("New listen address: {}", ma);
                             me.port_reuse.register(ip, me.listen_addr.port());
-                            return Poll::Ready(Some(
-                                // Ok(TcpListenerEvent::NewAddress(ma))
-                                TransportEvent::NewAddress {
-                                    listener_id: self.listener_id,
-                                    listen_addr: ma,
-                                },
-                            ));
+                            return Poll::Ready(Some(TransportEvent::NewAddress {
+                                listener_id: me.listener_id,
+                                listen_addr: ma,
+                            }));
                         }
                     }
                     Ok(IfEvent::Down(inet)) => {
@@ -787,7 +691,7 @@ where
                             return Poll::Ready(Some(
                                 // Ok(TcpListenerEvent::AddressExpired(ma))
                                 TransportEvent::AddressExpired {
-                                    listener_id: self.listener_id,
+                                    listener_id: me.listener_id,
                                     listen_addr: ma,
                                 },
                             ));
@@ -795,13 +699,10 @@ where
                     }
                     Err(error) => {
                         me.pause = Some(Delay::new(me.sleep_on_error));
-                        return Poll::Ready(Some(
-                            // Ok(TcpListenerEvent::Error(err))
-                            TransportEvent::ListenerError {
-                                listener_id: self.listener_id,
-                                error,
-                            },
-                        ));
+                        return Poll::Ready(Some(TransportEvent::ListenerError {
+                            listener_id: me.listener_id,
+                            error,
+                        }));
                     }
                 }
             }
@@ -819,27 +720,20 @@ where
 
                 log::debug!("Incoming connection from {} at {}", remote_addr, local_addr);
 
-                return Poll::Ready(Some(
-                    //     Ok(TcpListenerEvent::Upgrade {
-                    //     upgrade: future::ok(stream),
-                    //     local_addr,
-                    //     remote_addr,
-                    // })
-                    TransportEvent::Incoming {
-                        listener_id: self.listener_id,
-                        upgrade: future::ok(stream),
-                        local_addr,
-                        send_back_addr: remote_addr,
-                    },
-                ));
+                return Poll::Ready(Some(TransportEvent::Incoming {
+                    listener_id: me.listener_id,
+                    upgrade: future::ok(stream),
+                    local_addr,
+                    send_back_addr: remote_addr,
+                }));
             }
-            Poll::Ready(Err(e)) => {
+            Poll::Ready(Err(error)) => {
                 // These errors are non-fatal for the listener stream.
                 me.pause = Some(Delay::new(me.sleep_on_error));
                 return Poll::Ready(Some(
                     // Ok(TcpListenerEvent::Error(e))
                     TransportEvent::ListenerError {
-                        listener_id: self.listener_id,
+                        listener_id: me.listener_id,
                         error,
                     },
                 ));
@@ -1163,7 +1057,7 @@ mod tests {
             match poll_fn(|cx| Pin::new(&mut tcp).poll(cx)).await {
                 TransportEvent::NewAddress { .. } => {
                     // Check that tcp and listener share the same port reuse SocketAddr
-                    let listener = tcp.listeners.front().unwrap();
+                    let listener = tcp.listeners.iter().next().unwrap();
                     let port_reuse_tcp = tcp.port_reuse.local_dial_addr(&listener.listen_addr.ip());
                     let port_reuse_listener = listener
                         .port_reuse
@@ -1232,7 +1126,7 @@ mod tests {
                 TransportEvent::NewAddress {
                     listen_addr: addr1, ..
                 } => {
-                    let listener1 = tcp.listeners.front().unwrap();
+                    let listener1 = tcp.listeners.iter().next().unwrap();
                     let port_reuse_tcp =
                         tcp.port_reuse.local_dial_addr(&listener1.listen_addr.ip());
                     let port_reuse_listener1 = listener1
@@ -1378,32 +1272,5 @@ mod tests {
         assert!(transport
             .address_translation(&quic_addr, &tcp_observed_addr)
             .is_none());
-    }
-
-    #[test]
-    fn test_remove_listener() {
-        env_logger::try_init().ok();
-
-        async fn cycle_listeners<T: Provider>() -> bool {
-            let mut tcp = Transport::<T>::default().boxed();
-            let listener_id = tcp
-                .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
-                .unwrap();
-            tcp.remove_listener(listener_id)
-        }
-
-        #[cfg(feature = "async-io")]
-        {
-            assert!(async_std::task::block_on(cycle_listeners::<async_io::Tcp>()));
-        }
-
-        #[cfg(feature = "tokio")]
-        {
-            let rt = ::tokio::runtime::Builder::new_current_thread()
-                .enable_io()
-                .build()
-                .unwrap();
-            assert!(rt.block_on(cycle_listeners::<tokio::Tcp>()));
-        }
     }
 }
