@@ -199,20 +199,6 @@ requested from any rust-libp2p users.
 Long term, given that this will give us a great performance gain, we should definitely tackle it. It
 also allows us to catch up and thus be consistent with go-libp2p.
 
-### Bitswap implementation
-
-| Category | Status | Target Completion | Tracking                                          | Dependencies | Dependents |
-|----------|--------|-------------------|---------------------------------------------------|--------------|------------|
-|          | todo   |                   | https://github.com/libp2p/rust-libp2p/issues/2632 |              |            |
-
-I think this is a common component that many users need to build peer-to-peer applications. In
-addition, it is very performance critical and thus likely challenges many of our existing designs in
-rust-libp2p.
-
-I would prioritize it below [handshake optimization](#handshake-optimizations) following the
-convention of improving existing components over introducing new ones. Users have and can implement
-their own implementations and are thus not blocked on the rust-libp2p project.
-
 ### WebTransport
 
 | Category                    | Status | Target Completion | Tracking                                          | Dependencies                       | Dependents |
