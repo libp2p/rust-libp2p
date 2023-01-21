@@ -41,9 +41,9 @@
 //! and begin pinging each other.
 
 use futures::prelude::*;
-use libp2p::swarm::{NetworkBehaviour, Swarm, SwarmEvent};
+use libp2p::swarm::{Swarm, SwarmEvent};
 use libp2p::{identity, ping, Multiaddr, PeerId};
-use libp2p_swarm::keep_alive;
+use libp2p_swarm::{behaviour::And, keep_alive};
 use std::error::Error;
 
 #[async_std::main]
@@ -54,7 +54,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let transport = libp2p::development_transport(local_key).await?;
 
-    let mut swarm = Swarm::with_async_std_executor(transport, Behaviour::default(), local_peer_id);
+    // Our network behaviour.
+    //
+    // For illustrative purposes, this includes the [`KeepAlive`](behaviour::KeepAlive) behaviour so a continuous sequence of
+    // pings can be observed.
+    let behaviour = And::<keep_alive::Behaviour, ping::Behaviour>::default();
+    let mut swarm = Swarm::with_async_std_executor(transport, behaviour, local_peer_id);
 
     // Tell the swarm to listen on all interfaces and a random, OS-assigned
     // port.
@@ -75,14 +80,4 @@ async fn main() -> Result<(), Box<dyn Error>> {
             _ => {}
         }
     }
-}
-
-/// Our network behaviour.
-///
-/// For illustrative purposes, this includes the [`KeepAlive`](behaviour::KeepAlive) behaviour so a continuous sequence of
-/// pings can be observed.
-#[derive(NetworkBehaviour, Default)]
-struct Behaviour {
-    keep_alive: keep_alive::Behaviour,
-    ping: ping::Behaviour,
 }
