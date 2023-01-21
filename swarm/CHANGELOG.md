@@ -1,5 +1,10 @@
 # 0.42.0 [unreleased]
 
+- Add `And` struct that combines two `NetworkBehaviour` implementations. Helfpful for when one wants
+  just a simple composition of two `NetworkBehaviour`, no need to create a new struct and derive `NetworkBehaviour`.
+  One other use-case is when wanting to either enable two `NetworkBehaviour`s or disable both, but never enable one but disable the other.
+  i.e. `Toggle<And<BehaviourA, BehaviourB>>`. See [PR XXXX]
+
 - Update to `libp2p-core` `v0.39.0`.
 
 - Removed deprecated Swarm constructors. For transition notes see [0.41.0](#0.41.0). See [PR 3170].
@@ -22,6 +27,7 @@
   If you have previously set `connection_event_buffer_size` you should re-evaluate what a good size for a _per connection_ buffer is.
   See [PR 3188].
 
+[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
 [PR 3170]: https://github.com/libp2p/rust-libp2p/pull/3170
 [PR 3134]: https://github.com/libp2p/rust-libp2p/pull/3134
 [PR 3153]: https://github.com/libp2p/rust-libp2p/pull/3153

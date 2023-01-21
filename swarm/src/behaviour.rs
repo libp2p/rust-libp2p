@@ -31,6 +31,7 @@ use crate::dial_opts::DialOpts;
 use crate::handler::{ConnectionHandler, IntoConnectionHandler};
 use crate::{AddressRecord, AddressScore, DialError};
 use libp2p_core::{transport::ListenerId, ConnectedPoint, Multiaddr, PeerId};
+use std::fmt::Debug;
 use std::{task::Context, task::Poll};
 
 /// Custom event that can be received by the [`ConnectionHandler`].
@@ -39,6 +40,47 @@ pub(crate) type THandlerInEvent<THandler> =
 
 pub(crate) type THandlerOutEvent<THandler> =
     <<THandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent;
+
+/// Implementation of [`NetworkBehaviour`] that combines two underlying implementations.
+#[cfg(feature = "macros")]
+#[derive(Debug, Default, libp2p_swarm_derive::NetworkBehaviour)]
+#[behaviour(prelude = "crate::derive_prelude")]
+pub struct And<A, B> {
+    first: A,
+    second: B,
+}
+
+#[cfg(feature = "macros")]
+impl<A, B> And<A, B>
+where
+    A: crate::NetworkBehaviour,
+    B: crate::NetworkBehaviour,
+{
+    /// Create a new `And` from two [`NetworkBehaviour`]s.
+    pub fn new(first: A, second: B) -> And<A, B> {
+        Self { first, second }
+    }
+
+    /// Returns a reference to the first `NetworkBehaviour`.
+    pub fn first_as_ref(&self) -> &A {
+        &self.first
+    }
+
+    /// Returns a mutable reference to the first underlying `NetworkBehaviour`.
+    pub fn first_as_mut(&mut self) -> &mut A {
+        &mut self.first
+    }
+
+    /// Returns a reference to the second `NetworkBehaviour`.
+    pub fn second_as_ref(&self) -> &B {
+        &self.second
+    }
+
+    /// Returns a mutable reference to the second underlying `NetworkBehaviour`.
+    pub fn second_as_mut(&mut self) -> &mut B {
+        &mut self.second
+    }
+}
 
 /// A [`NetworkBehaviour`] defines the behaviour of the local node on the network.
 ///
