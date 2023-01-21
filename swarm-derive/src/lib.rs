@@ -106,40 +106,81 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             }
             // User did not provide `OutEvent`. Generate it.
             None => {
-                let name: syn::Type = syn::parse_str(&(ast.ident.to_string() + "Event")).unwrap();
+                let enum_name_str = ast.ident.to_string() + "Event";
+                let enum_name: syn::Type = syn::parse_str(&enum_name_str).unwrap();
                 let definition = {
-                    let fields = data_struct
-                        .fields
-                        .iter()
-                        .map(|field| {
-                            let variant: syn::Variant = syn::parse_str(
-                                &field
-                                    .ident
-                                    .clone()
-                                    .expect(
-                                        "Fields of NetworkBehaviour implementation to be named.",
-                                    )
-                                    .to_string()
-                                    .to_upper_camel_case(),
-                            )
-                            .unwrap();
-                            let ty = &field.ty;
-                            quote! {#variant(<#ty as #trait_to_impl>::OutEvent)}
-                        })
-                        .collect::<Vec<_>>();
+                    let fields = data_struct.fields.iter().map(|field| {
+                        let variant: syn::Variant = syn::parse_str(
+                            &field
+                                .ident
+                                .clone()
+                                .expect("Fields of NetworkBehaviour implementation to be named.")
+                                .to_string()
+                                .to_upper_camel_case(),
+                        )
+                        .unwrap();
+                        let ty = &field.ty;
+                        (variant, ty)
+                    });
+
+                    let enum_variants = fields
+                        .clone()
+                        .map(|(variant, ty)| quote! {#variant(<#ty as #trait_to_impl>::OutEvent)});
+
                     let visibility = &ast.vis;
 
+                    let additional = fields
+                        .clone()
+                        .map(|(_variant, tp)| quote! { #tp : #trait_to_impl })
+                        .collect::<Vec<_>>();
+
+                    let additional_debug = fields
+                        .clone()
+                        .map(|(_variant, ty)| quote! { <#ty as #trait_to_impl>::OutEvent : ::core::fmt::Debug })
+                        .collect::<Vec<_>>();
+
+                    let where_clause = {
+                        if let Some(where_clause) = where_clause {
+                            if where_clause.predicates.trailing_punct() {
+                                Some(quote! {#where_clause #(#additional),* })
+                            } else {
+                                Some(quote! {#where_clause, #(#additional),*})
+                            }
+                        } else if additional.is_empty() {
+                            None
+                        } else {
+                            Some(quote! {where #(#additional),*})
+                        }
+                    };
+
+                    let where_clause_debug = where_clause
+                        .as_ref()
+                        .map(|where_clause| quote! {#where_clause, #(#additional_debug),*});
+
+                    let match_variants = fields.map(|(variant, _ty)| variant);
+                    let msg = format!("`NetworkBehaviour::OutEvent` produced by {name}.");
+
                     Some(quote! {
-                        #[derive(::std::fmt::Debug)]
-                        #visibility enum #name #impl_generics
+                        #[doc = #msg]
+                        #visibility enum #enum_name #ty_generics
                             #where_clause
                         {
-                            #(#fields),*
+                            #(#enum_variants),*
+                        }
+
+                        impl #impl_generics ::core::fmt::Debug for #enum_name #ty_generics #where_clause_debug {
+                            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+                                match &self {
+                                    #(#enum_name::#match_variants(event) => {
+                                        write!(f, "{}: {:?}", #enum_name_str, event)
+                                    }),*
+                                }
+                            }
                         }
                     })
                 };
                 let from_clauses = vec![];
-                (name, definition, from_clauses)
+                (enum_name, definition, from_clauses)
             }
         }
     };
