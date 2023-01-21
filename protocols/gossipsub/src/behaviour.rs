@@ -36,14 +36,13 @@ use prost::Message;
 use rand::{seq::SliceRandom, thread_rng};
 
 use libp2p_core::{
-    connection::ConnectionId, identity::Keypair, multiaddr::Protocol::Ip4,
-    multiaddr::Protocol::Ip6, Multiaddr, PeerId,
+    identity::Keypair, multiaddr::Protocol::Ip4, multiaddr::Protocol::Ip6, Multiaddr, PeerId,
 };
 use libp2p_swarm::{
     behaviour::{AddressChange, ConnectionClosed, ConnectionEstablished, FromSwarm},
     dial_opts::DialOpts,
-    ConnectionHandler, IntoConnectionHandler, NetworkBehaviour, NetworkBehaviourAction,
-    NotifyHandler, PollParameters,
+    ConnectionHandler, ConnectionId, IntoConnectionHandler, NetworkBehaviour,
+    NetworkBehaviourAction, NotifyHandler, PollParameters,
 };
 use wasm_timer::Instant;
 
@@ -211,10 +210,7 @@ impl From<MessageAuthenticity> for PublishConfig {
 ///
 /// The TopicSubscriptionFilter allows applications to implement specific filters on topics to
 /// prevent unwanted messages being propagated and evaluated.
-pub struct Gossipsub<
-    D: DataTransform = IdentityTransform,
-    F: TopicSubscriptionFilter = AllowAllSubscriptionFilter,
-> {
+pub struct Gossipsub<D = IdentityTransform, F = AllowAllSubscriptionFilter> {
     /// Configuration providing gossipsub performance parameters.
     config: GossipsubConfig,
 
@@ -1419,6 +1415,8 @@ where
                                 peer_score.add_penalty(peer_id, 1);
 
                                 // check the flood cutoff
+                                // See: https://github.com/rust-lang/rust-clippy/issues/10061
+                                #[allow(unknown_lints, clippy::unchecked_duration_subtraction)]
                                 let flood_cutoff = (backoff_time
                                     + self.config.graft_flood_threshold())
                                     - self.config.prune_backoff();

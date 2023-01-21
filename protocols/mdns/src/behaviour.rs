@@ -189,7 +189,7 @@ where
     fn on_connection_handler_event(
         &mut self,
         _: PeerId,
-        _: libp2p_core::connection::ConnectionId,
+        _: libp2p_swarm::ConnectionId,
         ev: <Self::ConnectionHandler as ConnectionHandler>::OutEvent,
     ) {
         void::unreachable(ev)
