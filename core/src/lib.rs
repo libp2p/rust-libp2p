@@ -38,9 +38,10 @@
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
 mod proto {
-    pub use crate::generated::{
+    include!("generated/mod.rs");
+    pub use self::{
         envelope_proto::*, keys_proto::*, peer_record_proto::mod_PeerRecord::*,
-        peer_record_proto::*,
+        peer_record_proto::PeerRecord,
     };
 }
 
@@ -48,7 +49,6 @@ mod proto {
 pub use multiaddr;
 pub type Negotiated<T> = multistream_select::Negotiated<T>;
 
-mod generated;
 mod peer_id;
 mod translation;
 
