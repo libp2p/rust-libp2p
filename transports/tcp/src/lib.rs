@@ -313,7 +313,6 @@ where
     /// All the active listeners.
     /// The [`ListenStream`] struct contains a stream that we want to be pinned. Since the `VecDeque`
     /// can be resized, the only way is to use a `Pin<Box<>>`.
-    // listeners: VecDeque<Pin<Box<ListenStream<T>>>>,
     listeners: SelectAll<ListenStream<T>>,
     /// Pending transport events to return from [`libp2p_core::Transport::poll`].
     pending_events:
@@ -455,11 +454,7 @@ where
 
     fn remove_listener(&mut self, id: ListenerId) -> bool {
         if let Some(listener) = self.listeners.iter_mut().find(|l| l.listener_id == id) {
-            self.pending_events
-                .push_back(TransportEvent::ListenerClosed {
-                    listener_id: listener.listener_id,
-                    reason: Ok(()),
-                });
+            listener.close(Ok(()));
             true
         } else {
             false
@@ -588,6 +583,10 @@ where
     sleep_on_error: Duration,
     /// The current pause, if any.
     pause: Option<Delay>,
+    /// Queue of events to report when polled.
+    queued_events: VecDeque<<Self as Stream>::Item>,
+    /// The listener can be closed manually with [`Transport::remove_listener`](libp2p_core::Transport).
+    is_closed: bool,
 }
 
 impl<T> ListenStream<T>
@@ -613,6 +612,8 @@ where
             if_watcher,
             pause: None,
             sleep_on_error: Duration::from_millis(100),
+            queued_events: Default::default(),
+            is_closed: false,
         })
     }
 
@@ -634,6 +635,20 @@ where
                 .port_reuse
                 .unregister(self.listen_addr.ip(), self.listen_addr.port()),
         }
+    }
+
+    /// Close the listener.
+    ///
+    /// This will create a [`TransportEvent::ListenerClosed`] event
+    /// and terminate the stream once all remaining events in queue have
+    /// been reported.
+    fn close(&mut self, reason: Result<(), io::Error>) {
+        self.queued_events
+            .push_back(TransportEvent::ListenerClosed {
+                listener_id: self.listener_id,
+                reason,
+            });
+        self.is_closed = true;
     }
 }
 
@@ -665,6 +680,15 @@ where
                     return Poll::Pending;
                 }
             }
+        }
+
+        if let Some(event) = me.queued_events.pop_front() {
+            return Poll::Ready(Some(event));
+        }
+
+        if me.is_closed {
+            // Terminate the stream if the listener closed and all remaining events have been reported.
+            return Poll::Ready(None);
         }
 
         if let Some(if_watcher) = me.if_watcher.as_mut() {
