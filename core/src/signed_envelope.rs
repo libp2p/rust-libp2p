@@ -1,8 +1,10 @@
+use std::borrow::Cow;
 use crate::identity::error::SigningError;
 use crate::identity::Keypair;
-use crate::{identity, DecodeError, PublicKey};
+use crate::{identity, DecodeError, PublicKey, proto};
 use std::convert::TryInto;
 use std::fmt;
+use quick_protobuf::{BytesReader, Writer};
 use unsigned_varint::encode::usize_buffer;
 
 /// A signed envelope contains an arbitrary byte string payload, a signature of the payload, and the public key that can be used to verify the signature.
@@ -73,37 +75,38 @@ impl SignedEnvelope {
 
     /// Encode this [`SignedEnvelope`] using the protobuf encoding specified in the RFC.
     pub fn into_protobuf_encoding(self) -> Vec<u8> {
-        use prost::Message;
+        use quick_protobuf::MessageWrite;
 
-        let envelope = crate::envelope_proto::Envelope {
+        let envelope = proto::Envelope {
             public_key: Some((&self.key).into()),
-            payload_type: self.payload_type,
-            payload: self.payload,
-            signature: self.signature,
+            payload_type: Cow::Borrowed(&self.payload_type),
+            payload: Cow::Borrowed(&self.payload),
+            signature: Cow::Borrowed(&self.signature),
         };
 
-        let mut buf = Vec::with_capacity(envelope.encoded_len());
-        envelope
-            .encode(&mut buf)
-            .expect("Vec<u8> provides capacity as needed");
+        let mut buf = Vec::with_capacity(envelope.get_size());
+        let mut writer = Writer::new(&mut buf);
+
+        envelope.write_message(&mut writer).expect("Encoding to succeed");
 
         buf
     }
 
     /// Decode a [`SignedEnvelope`] using the protobuf encoding specified in the RFC.
     pub fn from_protobuf_encoding(bytes: &[u8]) -> Result<Self, DecodingError> {
-        use prost::Message;
+        use quick_protobuf::MessageRead;
 
-        let envelope = crate::envelope_proto::Envelope::decode(bytes).map_err(DecodeError)?;
+        let mut reader = BytesReader::from_bytes(bytes);
+        let envelope = proto::Envelope::from_reader(&mut reader, bytes).map_err(DecodeError)?;
 
         Ok(Self {
             key: envelope
                 .public_key
                 .ok_or(DecodingError::MissingPublicKey)?
                 .try_into()?,
-            payload_type: envelope.payload_type,
-            payload: envelope.payload,
-            signature: envelope.signature,
+            payload_type: envelope.payload_type.to_vec(),
+            payload: envelope.payload.to_vec(),
+            signature: envelope.signature.to_vec(),
         })
     }
 }
