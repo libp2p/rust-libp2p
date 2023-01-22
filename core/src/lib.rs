@@ -38,16 +38,19 @@
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
 mod proto {
-    pub use crate::generated::{keys_proto::*,  envelope_proto::*, peer_record_proto::*, peer_record_proto::mod_PeerRecord::*};
+    pub use crate::generated::{
+        envelope_proto::*, keys_proto::*, peer_record_proto::mod_PeerRecord::*,
+        peer_record_proto::*,
+    };
 }
 
 /// Multi-address re-export.
 pub use multiaddr;
 pub type Negotiated<T> = multistream_select::Negotiated<T>;
 
+mod generated;
 mod peer_id;
 mod translation;
-mod generated;
 
 pub mod connection;
 pub mod either;

@@ -42,11 +42,11 @@ pub mod secp256k1;
 
 pub mod error;
 
-use std::borrow::Cow;
 use self::error::*;
-use crate::{PeerId, proto};
-use std::convert::{TryFrom, TryInto};
+use crate::{proto, PeerId};
 use quick_protobuf::{BytesReader, Writer};
+use std::borrow::Cow;
+use std::convert::{TryFrom, TryInto};
 
 /// Identity keypair of a node.
 ///
@@ -180,7 +180,6 @@ impl Keypair {
             .map_err(|e| DecodingError::bad_protobuf("private key bytes", e))
             .map(zeroize::Zeroizing::new)?;
 
-
         match private_key.Type {
             proto::KeyType::Ed25519 => {
                 ed25519::Keypair::decode(private_key.Data.to_mut()).map(Keypair::Ed25519)
@@ -243,7 +242,9 @@ impl PublicKey {
 
         let mut buf = Vec::with_capacity(public_key.get_size());
         let mut writer = Writer::new(&mut buf);
-        public_key.write_message(&mut writer).expect("Encoding to succeed");
+        public_key
+            .write_message(&mut writer)
+            .expect("Encoding to succeed");
 
         buf
     }
@@ -297,15 +298,12 @@ impl TryFrom<proto::PublicKey<'_>> for PublicKey {
     type Error = DecodingError;
 
     fn try_from(pubkey: proto::PublicKey) -> Result<Self, Self::Error> {
-
         match pubkey.Type {
             proto::KeyType::Ed25519 => {
                 ed25519::PublicKey::decode(&pubkey.Data).map(PublicKey::Ed25519)
             }
             #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
-            proto::KeyType::RSA => {
-                rsa::PublicKey::decode_x509(&pubkey.Data).map(PublicKey::Rsa)
-            }
+            proto::KeyType::RSA => rsa::PublicKey::decode_x509(&pubkey.Data).map(PublicKey::Rsa),
             #[cfg(any(not(feature = "rsa"), target_arch = "wasm32"))]
             proto::KeyType::RSA => {
                 log::debug!("support for RSA was disabled at compile-time");

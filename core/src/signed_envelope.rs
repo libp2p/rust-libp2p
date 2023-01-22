@@ -1,10 +1,10 @@
-use std::borrow::Cow;
 use crate::identity::error::SigningError;
 use crate::identity::Keypair;
-use crate::{identity, DecodeError, PublicKey, proto};
+use crate::{identity, proto, DecodeError, PublicKey};
+use quick_protobuf::{BytesReader, Writer};
+use std::borrow::Cow;
 use std::convert::TryInto;
 use std::fmt;
-use quick_protobuf::{BytesReader, Writer};
 use unsigned_varint::encode::usize_buffer;
 
 /// A signed envelope contains an arbitrary byte string payload, a signature of the payload, and the public key that can be used to verify the signature.
@@ -87,7 +87,9 @@ impl SignedEnvelope {
         let mut buf = Vec::with_capacity(envelope.get_size());
         let mut writer = Writer::new(&mut buf);
 
-        envelope.write_message(&mut writer).expect("Encoding to succeed");
+        envelope
+            .write_message(&mut writer)
+            .expect("Encoding to succeed");
 
         buf
     }

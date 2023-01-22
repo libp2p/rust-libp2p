@@ -1,12 +1,12 @@
-use std::borrow::Cow;
 use crate::identity::error::SigningError;
 use crate::identity::Keypair;
 use crate::proto;
 use crate::signed_envelope::SignedEnvelope;
 use crate::{signed_envelope, DecodeError, Multiaddr, PeerId};
 use instant::SystemTime;
-use std::convert::TryInto;
 use quick_protobuf::{BytesReader, Writer};
+use std::borrow::Cow;
+use std::convert::TryInto;
 
 const PAYLOAD_TYPE: &str = "/libp2p/routing-state-record";
 const DOMAIN_SEP: &str = "libp2p-routing-state";
@@ -86,7 +86,9 @@ impl PeerRecord {
 
             let mut buf = Vec::with_capacity(record.get_size());
             let mut writer = Writer::new(&mut buf);
-            record.write_message(&mut writer).expect("Encoding to succeed");
+            record
+                .write_message(&mut writer)
+                .expect("Encoding to succeed");
 
             buf
         };
@@ -185,7 +187,9 @@ mod tests {
 
                 let mut buf = Vec::with_capacity(record.get_size());
                 let mut writer = Writer::new(&mut buf);
-                record.write_message(&mut writer).expect("Encoding to succeed");
+                record
+                    .write_message(&mut writer)
+                    .expect("Encoding to succeed");
 
                 buf
             };
