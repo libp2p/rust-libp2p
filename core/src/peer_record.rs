@@ -166,7 +166,7 @@ mod tests {
 
     #[test]
     fn mismatched_signature() {
-        use prost::Message;
+        use quick_protobuf::MessageWrite;
 
         let addr: Multiaddr = HOME.parse().unwrap();
 
@@ -175,18 +175,18 @@ mod tests {
             let identity_b = Keypair::generate_ed25519();
 
             let payload = {
-                let record = peer_record_proto::PeerRecord {
-                    peer_id: identity_a.public().to_peer_id().to_bytes(),
+                let record = proto::PeerRecord {
+                    peer_id: Cow::from(identity_a.public().to_peer_id().to_bytes()),
                     seq: 0,
-                    addresses: vec![peer_record_proto::peer_record::AddressInfo {
-                        multiaddr: addr.to_vec(),
+                    addresses: vec![proto::AddressInfo {
+                        multiaddr: Cow::from(addr.to_vec()),
                     }],
                 };
 
-                let mut buf = Vec::with_capacity(record.encoded_len());
-                record
-                    .encode(&mut buf)
-                    .expect("Vec<u8> provides capacity as needed");
+                let mut buf = Vec::with_capacity(record.get_size());
+                let mut writer = Writer::new(&mut buf);
+                record.write_message(&mut writer).expect("Encoding to succeed");
+
                 buf
             };
 
