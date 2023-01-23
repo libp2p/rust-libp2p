@@ -53,6 +53,14 @@ mod error;
     feature = "rsa"
 ))]
 mod keypair;
+#[cfg(all(
+    not(feature = "ecdsa"),
+    not(feature = "secp256k1"),
+    not(feature = "ed25519"),
+    not(feature = "rsa")
+))]
+#[path = "./keypair_dummy.rs"]
+mod keypair;
 #[cfg(feature = "peerid")]
 mod peer_id;
 
@@ -102,12 +110,6 @@ mod keys_proto {
 }
 
 pub use error::{DecodingError, SigningError};
-#[cfg(any(
-    feature = "ecdsa",
-    feature = "secp256k1",
-    feature = "ed25519",
-    feature = "rsa"
-))]
 pub use keypair::{Keypair, PublicKey};
 #[cfg(feature = "peerid")]
 pub use peer_id::{ParseError, PeerId};

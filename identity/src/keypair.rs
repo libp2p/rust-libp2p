@@ -315,6 +315,7 @@ mod tests {
     use std::str::FromStr;
 
     #[test]
+    #[cfg(feature = "ed25519")]
     fn keypair_protobuf_roundtrip() {
         let expected_keypair = Keypair::generate_ed25519();
         let expected_peer_id = expected_keypair.public().to_peer_id();

@@ -35,6 +35,7 @@ impl DecodingError {
         feature = "ecdsa",
         feature = "rsa",
         feature = "secp256k1",
+        feature = "ed25519",
         not(target_arch = "wasm32")
     )))]
     pub(crate) fn missing_feature(feature_name: &'static str) -> Self {
@@ -44,6 +45,12 @@ impl DecodingError {
         }
     }
 
+    #[cfg(any(
+        feature = "ecdsa",
+        feature = "secp256k1",
+        feature = "ed25519",
+        feature = "rsa"
+    ))]
     pub(crate) fn failed_to_parse<E, S>(what: &'static str, source: S) -> Self
     where
         E: Error + Send + Sync + 'static,
@@ -58,6 +65,12 @@ impl DecodingError {
         }
     }
 
+    #[cfg(any(
+        feature = "ecdsa",
+        feature = "secp256k1",
+        feature = "ed25519",
+        feature = "rsa"
+    ))]
     pub(crate) fn bad_protobuf(
         what: &'static str,
         source: impl Error + Send + Sync + 'static,
@@ -68,6 +81,12 @@ impl DecodingError {
         }
     }
 
+    #[cfg(any(
+        feature = "ecdsa",
+        feature = "secp256k1",
+        feature = "ed25519",
+        feature = "rsa"
+    ))]
     pub(crate) fn unknown_key_type(key_type: i32) -> Self {
         Self {
             msg: format!("unknown key-type {key_type}"),
@@ -75,6 +94,7 @@ impl DecodingError {
         }
     }
 
+    #[cfg(any(feature = "ecdsa", feature = "secp256k1", feature = "rsa"))]
     pub(crate) fn decoding_unsupported(key_type: &'static str) -> Self {
         Self {
             msg: format!("decoding {key_type} key from Protobuf is unsupported"),
