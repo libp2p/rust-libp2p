@@ -2,7 +2,7 @@
 
 use std::str::FromStr;
 
-use libp2p_core::PeerId;
+use libp2p_identity::PeerId;
 
 #[test]
 pub fn serialize_peer_id_json() {

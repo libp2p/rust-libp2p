@@ -42,6 +42,8 @@ peerid = [ "multihash", "multiaddr", "bs58", "rand", "thiserror" ]
 [dev-dependencies]
 quickcheck = { package = "quickcheck-ext", path = "../misc/quickcheck-ext" }
 base64 = "0.20.0"
+serde_json = "1.0"
+rmp-serde = "1.0"
 
 [build-dependencies]
 prost-build = "0.11"
