@@ -79,7 +79,7 @@ https://github.com/libp2p/rust-libp2p/issues/2883.
 
 | Category     | Status | Target Completion | Tracking                                 | Dependencies                                   | Dependents                                                        |
 |--------------|--------|-------------------|------------------------------------------|------------------------------------------------|-------------------------------------------------------------------|
-| Connectivity | Done   | Q4/2022           | https://github.com/libp2p/specs/pull/412 | https://github.com/libp2p/test-plans/issues/53 | [WebRTC (browser-to-browser)](#webrtc-support-browser-to-browser) |
+| Connectivity | Done   | Q4/2022           | https://github.com/libp2p/specs/pull/412 | https://github.com/libp2p/test-plans/pull/100 | [WebRTC (browser-to-browser)](#webrtc-support-browser-to-browser) |
 
 
 We are currently implementing WebRTC for **browser-to-server** connectivity in
