@@ -19,6 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::behaviour::FromSwarm;
+use crate::connection::ConnectionId;
 use crate::handler::{
     AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent,
     ConnectionHandlerUpgrErr, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
@@ -27,11 +28,8 @@ use crate::handler::{
 use crate::upgrade::SendWrapper;
 use crate::{NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use either::Either;
-use libp2p_core::{
-    either::{EitherError, EitherOutput},
-    upgrade::{DeniedUpgrade, EitherUpgrade},
-    ConnectedPoint, Multiaddr, PeerId,
-};
+use futures::future;
+use libp2p_core::{upgrade::DeniedUpgrade, ConnectedPoint, Multiaddr, PeerId};
 use std::{task::Context, task::Poll};
 
 /// Implementation of `NetworkBehaviour` that can be either in the disabled or enabled state.
@@ -95,7 +93,7 @@ where
     fn on_connection_handler_event(
         &mut self,
         peer_id: PeerId,
-        connection_id: libp2p_core::connection::ConnectionId,
+        connection_id: ConnectionId,
         event: crate::THandlerOutEvent<Self>,
     ) {
         if let Some(behaviour) = &mut self.inner {
@@ -143,9 +141,9 @@ where
 
     fn inbound_protocol(&self) -> <Self::Handler as ConnectionHandler>::InboundProtocol {
         if let Some(inner) = self.inner.as_ref() {
-            EitherUpgrade::A(SendWrapper(inner.inbound_protocol()))
+            Either::Left(SendWrapper(inner.inbound_protocol()))
         } else {
-            EitherUpgrade::B(SendWrapper(DeniedUpgrade))
+            Either::Right(SendWrapper(DeniedUpgrade))
         }
     }
 }
@@ -170,8 +168,8 @@ where
         >,
     ) {
         let out = match out {
-            EitherOutput::First(out) => out,
-            EitherOutput::Second(v) => void::unreachable(v),
+            future::Either::Left(out) => out,
+            future::Either::Right(v) => void::unreachable(v),
         };
 
         if let Either::Left(info) = info {
@@ -215,8 +213,8 @@ where
             ConnectionHandlerUpgrErr::Timer => ConnectionHandlerUpgrErr::Timer,
             ConnectionHandlerUpgrErr::Upgrade(err) => {
                 ConnectionHandlerUpgrErr::Upgrade(err.map_err(|err| match err {
-                    EitherError::A(e) => e,
-                    EitherError::B(v) => void::unreachable(v),
+                    Either::Left(e) => e,
+                    Either::Right(v) => void::unreachable(v),
                 }))
             }
         };
@@ -235,8 +233,7 @@ where
     type InEvent = TInner::InEvent;
     type OutEvent = TInner::OutEvent;
     type Error = TInner::Error;
-    type InboundProtocol =
-        EitherUpgrade<SendWrapper<TInner::InboundProtocol>, SendWrapper<DeniedUpgrade>>;
+    type InboundProtocol = Either<SendWrapper<TInner::InboundProtocol>, SendWrapper<DeniedUpgrade>>;
     type OutboundProtocol = TInner::OutboundProtocol;
     type OutboundOpenInfo = TInner::OutboundOpenInfo;
     type InboundOpenInfo = Either<TInner::InboundOpenInfo, ()>;
@@ -245,13 +242,10 @@ where
         if let Some(inner) = self.inner.as_ref() {
             inner
                 .listen_protocol()
-                .map_upgrade(|u| EitherUpgrade::A(SendWrapper(u)))
+                .map_upgrade(|u| Either::Left(SendWrapper(u)))
                 .map_info(Either::Left)
         } else {
-            SubstreamProtocol::new(
-                EitherUpgrade::B(SendWrapper(DeniedUpgrade)),
-                Either::Right(()),
-            )
+            SubstreamProtocol::new(Either::Right(SendWrapper(DeniedUpgrade)), Either::Right(()))
         }
     }
 

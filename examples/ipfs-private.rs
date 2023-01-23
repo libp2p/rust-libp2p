@@ -32,11 +32,10 @@
 //! You can ping this node, or use pubsub (gossipsub) on the topic "chat". For this
 //! to work, the ipfs node needs to be configured to use gossipsub.
 use async_std::io;
+use either::Either;
 use futures::{prelude::*, select};
 use libp2p::{
-    core::{
-        either::EitherTransport, muxing::StreamMuxerBox, transport, transport::upgrade::Version,
-    },
+    core::{muxing::StreamMuxerBox, transport, transport::upgrade::Version},
     gossipsub::{self, Gossipsub, GossipsubConfigBuilder, GossipsubEvent, MessageAuthenticity},
     identify, identity,
     multiaddr::Protocol,
@@ -59,10 +58,10 @@ pub fn build_transport(
 
     let base_transport = tcp::async_io::Transport::new(tcp::Config::default().nodelay(true));
     let maybe_encrypted = match psk {
-        Some(psk) => EitherTransport::Left(
+        Some(psk) => Either::Left(
             base_transport.and_then(move |socket, _| PnetConfig::new(psk).handshake(socket)),
         ),
-        None => EitherTransport::Right(base_transport),
+        None => Either::Right(base_transport),
     };
     maybe_encrypted
         .upgrade(Version::V1)

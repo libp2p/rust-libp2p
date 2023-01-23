@@ -1,9 +1,9 @@
 use crate::behaviour::{FromSwarm, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
+use crate::connection::ConnectionId;
 use crate::handler::{
     ConnectionEvent, ConnectionHandlerEvent, FullyNegotiatedInbound, FullyNegotiatedOutbound,
     KeepAlive, SubstreamProtocol,
 };
-use libp2p_core::connection::ConnectionId;
 use libp2p_core::upgrade::DeniedUpgrade;
 use libp2p_core::PeerId;
 use std::task::{Context, Poll};
