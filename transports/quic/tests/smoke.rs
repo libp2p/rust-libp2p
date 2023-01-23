@@ -6,7 +6,6 @@ use futures::future::{poll_fn, Either};
 use futures::stream::StreamExt;
 use futures::{future, AsyncReadExt, AsyncWriteExt, FutureExt, SinkExt};
 use futures_timer::Delay;
-use libp2p_core::either::EitherOutput;
 use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerExt, SubstreamBox};
 use libp2p_core::transport::{Boxed, OrTransport, TransportEvent};
 use libp2p_core::transport::{ListenerId, TransportError};
@@ -245,8 +244,8 @@ fn new_tcp_quic_transport() -> (PeerId, Boxed<(PeerId, StreamMuxerBox)>) {
 
     let transport = OrTransport::new(quic_transport, tcp_transport)
         .map(|either_output, _| match either_output {
-            EitherOutput::First((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
-            EitherOutput::Second((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
+            Either::Left((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
+            Either::Right((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
         })
         .boxed();
 

@@ -28,9 +28,8 @@ use crate::handler::{
 use crate::upgrade::SendWrapper;
 use crate::{NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use either::Either;
-use libp2p_core::{
-    either::EitherOutput, upgrade::DeniedUpgrade, ConnectedPoint, Multiaddr, PeerId,
-};
+use futures::future;
+use libp2p_core::{upgrade::DeniedUpgrade, ConnectedPoint, Multiaddr, PeerId};
 use std::{task::Context, task::Poll};
 
 /// Implementation of `NetworkBehaviour` that can be either in the disabled or enabled state.
@@ -169,8 +168,8 @@ where
         >,
     ) {
         let out = match out {
-            EitherOutput::First(out) => out,
-            EitherOutput::Second(v) => void::unreachable(v),
+            future::Either::Left(out) => out,
+            future::Either::Right(v) => void::unreachable(v),
         };
 
         if let Either::Left(info) = info {
