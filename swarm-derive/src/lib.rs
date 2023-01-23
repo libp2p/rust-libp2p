@@ -53,7 +53,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
     let multiaddr = quote! { #prelude_path::Multiaddr };
     let trait_to_impl = quote! { #prelude_path::NetworkBehaviour };
-    let either_ident = quote! { #prelude_path::EitherOutput };
+    let either_ident = quote! { #prelude_path::Either };
     let network_behaviour_action = quote! { #prelude_path::NetworkBehaviourAction };
     let into_connection_handler = quote! { #prelude_path::IntoConnectionHandler };
     let connection_handler = quote! { #prelude_path::ConnectionHandler };
@@ -531,13 +531,13 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             .enumerate()
             .map(|(enum_n, (field_n, field))| {
                 let mut elem = if enum_n != 0 {
-                    quote! { #either_ident::Second(ev) }
+                    quote! { #either_ident::Right(ev) }
                 } else {
                     quote! { ev }
                 };
 
                 for _ in 0..data_struct.fields.len() - 1 - enum_n {
-                    elem = quote! { #either_ident::First(#elem) };
+                    elem = quote! { #either_ident::Left(#elem) };
                 }
 
                 Some(match field.ident {
@@ -599,12 +599,12 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             .expect("Fields of NetworkBehaviour implementation to be named.");
 
         let mut wrapped_event = if field_n != 0 {
-            quote!{ #either_ident::Second(event) }
+            quote!{ #either_ident::Right(event) }
         } else {
             quote!{ event }
         };
         for _ in 0 .. data_struct.fields.len() - 1 - field_n {
-            wrapped_event = quote!{ #either_ident::First(#wrapped_event) };
+            wrapped_event = quote!{ #either_ident::Left(#wrapped_event) };
         }
 
         // `Dial` provides a handler of the specific behaviour triggering the

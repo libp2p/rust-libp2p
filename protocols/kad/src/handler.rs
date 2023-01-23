@@ -27,7 +27,7 @@ use either::Either;
 use futures::prelude::*;
 use futures::stream::SelectAll;
 use instant::Instant;
-use libp2p_core::{either::EitherOutput, upgrade, ConnectedPoint, PeerId};
+use libp2p_core::{upgrade, ConnectedPoint, PeerId};
 use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
@@ -561,8 +561,8 @@ where
         // If `self.allow_listening` is false, then we produced a `DeniedUpgrade` and `protocol`
         // is a `Void`.
         let protocol = match protocol {
-            EitherOutput::First(p) => p,
-            EitherOutput::Second(p) => void::unreachable(p),
+            future::Either::Left(p) => p,
+            future::Either::Right(p) => void::unreachable(p),
         };
 
         if let ProtocolStatus::Unconfirmed = self.protocol_status {
