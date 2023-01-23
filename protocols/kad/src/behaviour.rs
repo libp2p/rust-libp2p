@@ -64,10 +64,7 @@ pub use crate::query::QueryStats;
 
 /// `Kademlia` is a `NetworkBehaviour` that implements the libp2p
 /// Kademlia protocol.
-pub struct Kademlia<TStore>
-where
-    TStore: RecordStore + Send + 'static,
-{
+pub struct Kademlia<TStore> {
     /// The Kademlia routing table.
     kbuckets: KBucketsTable<kbucket::Key<PeerId>, Addresses>,
 

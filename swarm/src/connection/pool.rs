@@ -207,10 +207,7 @@ impl PendingConnection {
     }
 }
 
-impl<THandler> fmt::Debug for Pool<THandler>
-where
-    THandler: ConnectionHandler,
-{
+impl<THandler: ConnectionHandler> fmt::Debug for Pool<THandler> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         f.debug_struct("Pool")
             .field("counters", &self.counters)
@@ -221,10 +218,7 @@ where
 /// Event that can happen on the `Pool`.
 #[derive(Debug)]
 #[allow(clippy::large_enum_variant)]
-pub enum PoolEvent<THandler>
-where
-    THandler: ConnectionHandler,
-{
+pub enum PoolEvent<THandler: ConnectionHandler> {
     /// A new connection has been established.
     ConnectionEstablished {
         id: ConnectionId,

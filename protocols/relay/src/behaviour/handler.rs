@@ -399,13 +399,13 @@ impl Handler {
             config,
             queued_events: Default::default(),
             pending_error: Default::default(),
-            keep_alive: KeepAlive::Yes,
             reservation_request_future: Default::default(),
-            active_reservation: Default::default(),
             circuit_accept_futures: Default::default(),
             circuit_deny_futures: Default::default(),
             alive_lend_out_substreams: Default::default(),
             circuits: Default::default(),
+            active_reservation: Default::default(),
+            keep_alive: KeepAlive::Yes,
         }
     }
 

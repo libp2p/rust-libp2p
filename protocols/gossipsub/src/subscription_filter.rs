@@ -23,7 +23,7 @@ use crate::TopicHash;
 use log::debug;
 use std::collections::{BTreeSet, HashMap, HashSet};
 
-pub trait TopicSubscriptionFilter: Send + 'static {
+pub trait TopicSubscriptionFilter {
     /// Returns true iff the topic is of interest and we can subscribe to it.
     fn can_subscribe(&mut self, topic_hash: &TopicHash) -> bool;
 
@@ -193,7 +193,7 @@ where
 
 impl<T> TopicSubscriptionFilter for CallbackSubscriptionFilter<T>
 where
-    T: FnMut(&TopicHash) -> bool + Send + 'static,
+    T: FnMut(&TopicHash) -> bool,
 {
     fn can_subscribe(&mut self, topic_hash: &TopicHash) -> bool {
         (self.0)(topic_hash)
