@@ -393,8 +393,8 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(endpoint: ConnectedPoint, config: Config) -> Self {
-        Self {
+    pub fn new(config: Config, endpoint: ConnectedPoint) -> Handler {
+        Handler {
             endpoint,
             config,
             queued_events: Default::default(),

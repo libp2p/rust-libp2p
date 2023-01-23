@@ -271,14 +271,14 @@ impl NetworkBehaviour for Behaviour {
         }
 
         Ok(Either::Left(Handler::new(
-            ConnectedPoint::Listener {
-                local_addr: local_addr.clone(),
-                send_back_addr: remote_addr.clone(),
-            },
             handler::Config {
                 reservation_duration: self.config.reservation_duration,
                 max_circuit_duration: self.config.max_circuit_duration,
                 max_circuit_bytes: self.config.max_circuit_bytes,
+            },
+            ConnectedPoint::Listener {
+                local_addr: local_addr.clone(),
+                send_back_addr: remote_addr.clone(),
             },
         )))
     }
@@ -298,14 +298,14 @@ impl NetworkBehaviour for Behaviour {
         }
 
         Ok(Either::Left(Handler::new(
-            ConnectedPoint::Dialer {
-                address: addr.clone(),
-                role_override,
-            },
             handler::Config {
                 reservation_duration: self.config.reservation_duration,
                 max_circuit_duration: self.config.max_circuit_duration,
                 max_circuit_bytes: self.config.max_circuit_bytes,
+            },
+            ConnectedPoint::Dialer {
+                address: addr.clone(),
+                role_override,
             },
         )))
     }

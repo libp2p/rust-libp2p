@@ -160,13 +160,13 @@ impl Handler {
             local_peer_id,
             remote_peer_id,
             remote_addr,
-            pending_error: Default::default(),
-            keep_alive: KeepAlive::Yes,
             queued_events: Default::default(),
+            pending_error: Default::default(),
             reservation: Reservation::None,
             alive_lend_out_substreams: Default::default(),
             circuit_deny_futs: Default::default(),
             send_error_futs: Default::default(),
+            keep_alive: KeepAlive::Yes,
         }
     }
 
