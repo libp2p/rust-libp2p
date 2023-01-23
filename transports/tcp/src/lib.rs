@@ -36,10 +36,11 @@ pub use provider::async_io;
 #[cfg(feature = "tokio")]
 pub use provider::tokio;
 
-use futures::stream::SelectAll;
 use futures::{
     future::{self, Ready},
     prelude::*,
+    ready,
+    stream::SelectAll,
 };
 use futures_timer::Delay;
 use if_watch::IfEvent;
@@ -583,9 +584,9 @@ where
     sleep_on_error: Duration,
     /// The current pause, if any.
     pause: Option<Delay>,
-    /// Queue of events to report when polled.
-    queued_events: VecDeque<<Self as Stream>::Item>,
-    /// The listener can be closed manually with [`Transport::remove_listener`](libp2p_core::Transport).
+    /// Pending event to reported.
+    pending_event: Option<<Self as Stream>::Item>,
+    /// The listener can be manually closed with [`Transport::remove_listener`](libp2p_core::Transport::remove_listener).
     is_closed: bool,
 }
 
@@ -612,7 +613,7 @@ where
             if_watcher,
             pause: None,
             sleep_on_error: Duration::from_millis(100),
-            queued_events: Default::default(),
+            pending_event: None,
             is_closed: false,
         })
     }
@@ -643,12 +644,62 @@ where
     /// and terminate the stream once all remaining events in queue have
     /// been reported.
     fn close(&mut self, reason: Result<(), io::Error>) {
-        self.queued_events
-            .push_back(TransportEvent::ListenerClosed {
-                listener_id: self.listener_id,
-                reason,
-            });
+        if self.is_closed {
+            return;
+        }
+        self.pending_event = Some(TransportEvent::ListenerClosed {
+            listener_id: self.listener_id,
+            reason,
+        });
         self.is_closed = true;
+    }
+
+    /// Poll for a next If Event.
+    fn poll_if_addr(&mut self, cx: &mut Context<'_>) -> Poll<<Self as Stream>::Item> {
+        let if_watcher = match self.if_watcher.as_mut() {
+            Some(if_watcher) => if_watcher,
+            None => return Poll::Pending,
+        };
+
+        let my_listen_addr_port = self.listen_addr.port();
+
+        while let Poll::Ready(Some(event)) = if_watcher.poll_next_unpin(cx) {
+            match event {
+                Ok(IfEvent::Up(inet)) => {
+                    let ip = inet.addr();
+                    if self.listen_addr.is_ipv4() == ip.is_ipv4() {
+                        let ma = ip_to_multiaddr(ip, my_listen_addr_port);
+                        log::debug!("New listen address: {}", ma);
+                        self.port_reuse.register(ip, my_listen_addr_port);
+                        return Poll::Ready(TransportEvent::NewAddress {
+                            listener_id: self.listener_id,
+                            listen_addr: ma,
+                        });
+                    }
+                }
+                Ok(IfEvent::Down(inet)) => {
+                    let ip = inet.addr();
+                    if self.listen_addr.is_ipv4() == ip.is_ipv4() {
+                        let ma = ip_to_multiaddr(ip, my_listen_addr_port);
+                        log::debug!("Expired listen address: {}", ma);
+                        self.port_reuse.unregister(ip, my_listen_addr_port);
+                        return Poll::Ready(TransportEvent::AddressExpired {
+                            listener_id: self.listener_id,
+                            listen_addr: ma,
+                        });
+                    }
+                }
+                Err(error) => {
+                    self.pause = Some(Delay::new(self.sleep_on_error));
+                    return Poll::Ready(TransportEvent::ListenerError {
+                        listener_id: self.listener_id,
+                        error,
+                    });
+                }
+            }
+        }
+
+        Poll::Pending
     }
 }
 
@@ -669,103 +720,58 @@ where
 {
     type Item = TransportEvent<Ready<Result<T::Stream, io::Error>>, io::Error>;
 
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        let me = Pin::into_inner(self);
-
-        if let Some(mut pause) = me.pause.take() {
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+        if let Some(mut pause) = self.pause.take() {
             match pause.poll_unpin(cx) {
                 Poll::Ready(_) => {}
                 Poll::Pending => {
-                    me.pause = Some(pause);
+                    self.pause = Some(pause);
                     return Poll::Pending;
                 }
             }
         }
 
-        if let Some(event) = me.queued_events.pop_front() {
+        if let Some(event) = self.pending_event.take() {
             return Poll::Ready(Some(event));
         }
 
-        if me.is_closed {
+        if self.is_closed {
             // Terminate the stream if the listener closed and all remaining events have been reported.
             return Poll::Ready(None);
         }
 
-        if let Some(if_watcher) = me.if_watcher.as_mut() {
-            while let Poll::Ready(Some(event)) = if_watcher.poll_next_unpin(cx) {
-                match event {
-                    Ok(IfEvent::Up(inet)) => {
-                        let ip = inet.addr();
-                        if me.listen_addr.is_ipv4() == ip.is_ipv4() {
-                            let ma = ip_to_multiaddr(ip, me.listen_addr.port());
-                            log::debug!("New listen address: {}", ma);
-                            me.port_reuse.register(ip, me.listen_addr.port());
-                            return Poll::Ready(Some(TransportEvent::NewAddress {
-                                listener_id: me.listener_id,
-                                listen_addr: ma,
-                            }));
-                        }
-                    }
-                    Ok(IfEvent::Down(inet)) => {
-                        let ip = inet.addr();
-                        if me.listen_addr.is_ipv4() == ip.is_ipv4() {
-                            let ma = ip_to_multiaddr(ip, me.listen_addr.port());
-                            log::debug!("Expired listen address: {}", ma);
-                            me.port_reuse.unregister(ip, me.listen_addr.port());
-                            return Poll::Ready(Some(
-                                // Ok(TcpListenerEvent::AddressExpired(ma))
-                                TransportEvent::AddressExpired {
-                                    listener_id: me.listener_id,
-                                    listen_addr: ma,
-                                },
-                            ));
-                        }
-                    }
-                    Err(error) => {
-                        me.pause = Some(Delay::new(me.sleep_on_error));
-                        return Poll::Ready(Some(TransportEvent::ListenerError {
-                            listener_id: me.listener_id,
-                            error,
-                        }));
-                    }
-                }
-            }
+        if let Poll::Ready(event) = self.poll_if_addr(cx) {
+            return Poll::Ready(Some(event));
         }
 
         // Take the pending connection from the backlog.
-        match T::poll_accept(&mut me.listener, cx) {
-            Poll::Ready(Ok(Incoming {
+        return match ready!(T::poll_accept(&mut self.listener, cx)) {
+            Ok(Incoming {
                 local_addr,
                 remote_addr,
                 stream,
-            })) => {
+            }) => {
                 let local_addr = ip_to_multiaddr(local_addr.ip(), local_addr.port());
                 let remote_addr = ip_to_multiaddr(remote_addr.ip(), remote_addr.port());
 
                 log::debug!("Incoming connection from {} at {}", remote_addr, local_addr);
 
-                return Poll::Ready(Some(TransportEvent::Incoming {
-                    listener_id: me.listener_id,
+                Poll::Ready(Some(TransportEvent::Incoming {
+                    listener_id: self.listener_id,
                     upgrade: future::ok(stream),
                     local_addr,
                     send_back_addr: remote_addr,
-                }));
+                }))
             }
-            Poll::Ready(Err(error)) => {
+            Err(error) => {
                 // These errors are non-fatal for the listener stream.
-                me.pause = Some(Delay::new(me.sleep_on_error));
-                return Poll::Ready(Some(
-                    // Ok(TcpListenerEvent::Error(e))
-                    TransportEvent::ListenerError {
-                        listener_id: me.listener_id,
-                        error,
-                    },
-                ));
+                self.pause = Some(Delay::new(self.sleep_on_error));
+                Poll::Ready(Some(TransportEvent::ListenerError {
+                    listener_id: self.listener_id,
+                    error,
+                }))
             }
-            Poll::Pending => {}
         };
-
-        Poll::Pending
     }
 }
 
