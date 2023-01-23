@@ -7,8 +7,9 @@ use std::thread;
 mod config;
 
 use clap::Parser;
-use libp2p_core::identity::{self, ed25519};
-use libp2p_core::PeerId;
+use libp2p_identity as identity;
+use libp2p_identity::ed25519;
+use libp2p_identity::PeerId;
 use zeroize::Zeroizing;
 
 #[derive(Debug, Parser)]

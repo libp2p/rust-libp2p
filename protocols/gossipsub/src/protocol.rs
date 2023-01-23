@@ -32,9 +32,9 @@ use byteorder::{BigEndian, ByteOrder};
 use bytes::BytesMut;
 use futures::future;
 use futures::prelude::*;
-use libp2p_core::{
-    identity::PublicKey, InboundUpgrade, OutboundUpgrade, PeerId, ProtocolName, UpgradeInfo,
-};
+use libp2p_core::{InboundUpgrade, OutboundUpgrade, ProtocolName, UpgradeInfo};
+use libp2p_identity::PeerId;
+use libp2p_identity::PublicKey;
 use log::{debug, warn};
 use prost::Message as ProtobufMessage;
 use std::{borrow::Cow, pin::Pin};

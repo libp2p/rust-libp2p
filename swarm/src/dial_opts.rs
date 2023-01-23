@@ -22,7 +22,8 @@
 use libp2p_core::connection::Endpoint;
 use libp2p_core::multiaddr::Protocol;
 use libp2p_core::multihash::Multihash;
-use libp2p_core::{Multiaddr, PeerId};
+use libp2p_core::Multiaddr;
+use libp2p_identity::PeerId;
 use std::num::NonZeroU8;
 
 /// Options to configure a dial to a known or unknown peer.
@@ -43,7 +44,7 @@ impl DialOpts {
     ///
     ///   ```
     ///   # use libp2p_swarm::dial_opts::{DialOpts, PeerCondition};
-    ///   # use libp2p_core::PeerId;
+    ///   # use libp2p_identity::PeerId;
     ///   DialOpts::peer_id(PeerId::random())
     ///      .condition(PeerCondition::Disconnected)
     ///      .addresses(vec!["/ip6/::1/tcp/12345".parse().unwrap()])
@@ -349,7 +350,7 @@ impl WithoutPeerIdWithAddress {
 ///
 /// ```
 /// # use libp2p_swarm::dial_opts::{DialOpts, PeerCondition};
-/// # use libp2p_core::PeerId;
+/// # use libp2p_identity::PeerId;
 /// #
 /// DialOpts::peer_id(PeerId::random())
 ///    .condition(PeerCondition::Disconnected)

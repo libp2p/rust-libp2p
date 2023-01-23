@@ -26,7 +26,8 @@ use crate::{
     ConnectionHandler, ConnectionId, IntoConnectionHandler, NetworkBehaviour,
     NetworkBehaviourAction, PollParameters,
 };
-use libp2p_core::{multiaddr::Multiaddr, transport::ListenerId, ConnectedPoint, PeerId};
+use libp2p_core::{multiaddr::Multiaddr, transport::ListenerId, ConnectedPoint};
+use libp2p_identity::PeerId;
 use std::collections::HashMap;
 use std::task::{Context, Poll};
 

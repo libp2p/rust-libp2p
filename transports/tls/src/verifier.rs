@@ -24,7 +24,7 @@
 //! and signatures allegedly by the given certificates.
 
 use crate::certificate;
-use libp2p_core::PeerId;
+use libp2p_identity::PeerId;
 use rustls::{
     cipher_suite::{
         TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384, TLS13_CHACHA20_POLY1305_SHA256,

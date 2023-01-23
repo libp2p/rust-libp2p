@@ -50,7 +50,7 @@ mod peer_record_proto {
 pub use multiaddr;
 pub type Negotiated<T> = multistream_select::Negotiated<T>;
 
-// #[deprecated(since = "0.39.0", note = "Depend on `libp2p-identity` instead.")]
+#[deprecated(since = "0.39.0", note = "Depend on `libp2p-identity` instead.")]
 pub mod identity {
     pub use libp2p_identity::Keypair;
     pub use libp2p_identity::PublicKey;
@@ -77,13 +77,13 @@ pub mod signed_envelope;
 pub mod transport;
 pub mod upgrade;
 
-// #[deprecated(since = "0.39.0", note = "Depend on `libp2p-identity` instead.")]
+#[deprecated(since = "0.39.0", note = "Depend on `libp2p-identity` instead.")]
 pub type PublicKey = libp2p_identity::PublicKey;
 
-// #[deprecated(since = "0.39.0", note = "Depend on `libp2p-identity` instead.")]
+#[deprecated(since = "0.39.0", note = "Depend on `libp2p-identity` instead.")]
 pub type PeerId = libp2p_identity::PeerId;
 
-// #[deprecated(since = "0.39.0", note = "Depend on `libp2p-identity` instead.")]
+#[deprecated(since = "0.39.0", note = "Depend on `libp2p-identity` instead.")]
 pub type ParseError = libp2p_identity::ParseError;
 
 pub use connection::{ConnectedPoint, Endpoint};

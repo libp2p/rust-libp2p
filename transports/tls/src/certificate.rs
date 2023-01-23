@@ -22,7 +22,8 @@
 //!
 //! This module handles generation, signing, and verification of certificates.
 
-use libp2p_core::{identity, PeerId};
+use libp2p_identity as identity;
+use libp2p_identity::PeerId;
 use x509_parser::{prelude::*, signature_algorithm::SignatureAlgorithm};
 
 /// The libp2p Public Key Extension is a X.509 extension

@@ -21,7 +21,7 @@
 use super::*;
 use crate::kbucket::{Key, KeyBytes};
 use instant::Instant;
-use libp2p_core::PeerId;
+use libp2p_identity::PeerId;
 use std::{
     collections::HashMap,
     iter::{Cycle, Map, Peekable},

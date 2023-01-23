@@ -23,12 +23,13 @@
 use async_trait::async_trait;
 use futures::{channel::mpsc, prelude::*, AsyncWriteExt};
 use libp2p_core::{
-    identity,
     muxing::StreamMuxerBox,
     transport,
     upgrade::{self, read_length_prefixed, write_length_prefixed},
-    Multiaddr, PeerId, Transport,
+    Multiaddr, Transport,
 };
+use libp2p_identity as identity;
+use libp2p_identity::PeerId;
 use libp2p_noise::NoiseAuthenticated;
 use libp2p_request_response::*;
 use libp2p_swarm::{Swarm, SwarmEvent};

@@ -23,7 +23,7 @@ use super::*;
 use crate::kbucket::{Distance, Key, KeyBytes};
 use crate::{ALPHA_VALUE, K_VALUE};
 use instant::Instant;
-use libp2p_core::PeerId;
+use libp2p_identity::PeerId;
 use std::collections::btree_map::{BTreeMap, Entry};
 use std::{iter::FromIterator, num::NonZeroUsize, time::Duration};
 
@@ -475,10 +475,8 @@ enum PeerState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use libp2p_core::{
-        multihash::{Code, Multihash},
-        PeerId,
-    };
+    use libp2p_core::multihash::{Code, Multihash};
+    use libp2p_identity::PeerId;
     use quickcheck::*;
     use rand::{rngs::StdRng, Rng, SeedableRng};
     use std::{iter, time::Duration};

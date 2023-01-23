@@ -23,11 +23,12 @@
 use either::Either;
 use futures::{channel::mpsc, prelude::*};
 use libp2p_core::{
-    identity,
     muxing::StreamMuxerBox,
     transport::{self, Transport},
-    upgrade, Multiaddr, PeerId,
+    upgrade, Multiaddr,
 };
+use libp2p_identity as identity;
+use libp2p_identity::PeerId;
 use libp2p_mplex as mplex;
 use libp2p_noise as noise;
 use libp2p_ping as ping;

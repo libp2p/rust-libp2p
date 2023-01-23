@@ -1,7 +1,8 @@
 use crate::signed_envelope::SignedEnvelope;
-use crate::{peer_record_proto, signed_envelope, DecodeError, Multiaddr, PeerId};
+use crate::{peer_record_proto, signed_envelope, DecodeError, Multiaddr};
 use instant::SystemTime;
 use libp2p_identity::Keypair;
+use libp2p_identity::PeerId;
 use libp2p_identity::SigningError;
 use std::convert::TryInto;
 

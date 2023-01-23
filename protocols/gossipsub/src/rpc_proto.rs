@@ -24,7 +24,7 @@ include!(concat!(env!("OUT_DIR"), "/gossipsub.pb.rs"));
 #[cfg(test)]
 mod test {
     use crate::IdentTopic as Topic;
-    use libp2p_core::PeerId;
+    use libp2p_identity::PeerId;
     use prost::Message;
     use rand::Rng;
 

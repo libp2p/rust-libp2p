@@ -21,7 +21,8 @@
 use crate::protocol;
 use either::Either;
 use libp2p_core::upgrade::DeniedUpgrade;
-use libp2p_core::{ConnectedPoint, PeerId};
+use libp2p_core::ConnectedPoint;
+use libp2p_identity::PeerId;
 use libp2p_swarm::dummy;
 use libp2p_swarm::handler::SendWrapper;
 use libp2p_swarm::{ConnectionHandler, ConnectionId, IntoConnectionHandler};

@@ -20,12 +20,13 @@
 
 use futures::{channel::oneshot, prelude::*, ready};
 use libp2p_core::{
-    identity,
     multiaddr::Protocol,
     muxing::StreamMuxerBox,
     transport::{self, MemoryTransport},
-    upgrade, Multiaddr, PeerId, Transport,
+    upgrade, Multiaddr, Transport,
 };
+use libp2p_identity as identity;
+use libp2p_identity::PeerId;
 use libp2p_mplex::MplexConfig;
 use libp2p_plaintext::PlainText2Config;
 use libp2p_swarm::{dummy, Swarm, SwarmEvent};

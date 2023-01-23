@@ -107,7 +107,8 @@ pub mod relay {
 
     pub mod rate_limiter {
         use instant::Instant;
-        use libp2p_core::{Multiaddr, PeerId};
+        use libp2p_core::Multiaddr;
+        use libp2p_identity::PeerId;
 
         #[deprecated(
             since = "0.15.0",

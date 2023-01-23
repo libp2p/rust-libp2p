@@ -25,7 +25,7 @@ use futures::{
     stream::{FuturesUnordered, StreamExt},
 };
 use libp2p_core::muxing::StreamMuxerBox;
-use libp2p_core::PeerId;
+use libp2p_identity::PeerId;
 use std::{
     num::NonZeroU8,
     pin::Pin,

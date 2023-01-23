@@ -1,6 +1,6 @@
-use crate::{DecodeError, PublicKey};
-use libp2p_identity::Keypair;
+use crate::DecodeError;
 use libp2p_identity::SigningError;
+use libp2p_identity::{Keypair, PublicKey};
 use std::fmt;
 use unsigned_varint::encode::usize_buffer;
 

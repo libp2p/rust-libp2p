@@ -29,13 +29,12 @@ use std::{
 };
 
 use futures::StreamExt;
-use libp2p_core::{
-    identity, multiaddr::Protocol, transport::MemoryTransport, upgrade, Multiaddr, Transport,
-};
+use libp2p_core::{multiaddr::Protocol, transport::MemoryTransport, upgrade, Multiaddr, Transport};
 use libp2p_gossipsub::{
     Gossipsub, GossipsubConfigBuilder, GossipsubEvent, IdentTopic as Topic, MessageAuthenticity,
     ValidationMode,
 };
+use libp2p_identity as identity;
 use libp2p_plaintext::PlainText2Config;
 use libp2p_swarm::{Swarm, SwarmEvent};
 use libp2p_yamux as yamux;

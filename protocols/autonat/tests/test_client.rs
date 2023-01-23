@@ -23,7 +23,8 @@ use futures_timer::Delay;
 use libp2p_autonat::{
     Behaviour, Config, Event, NatStatus, OutboundProbeError, OutboundProbeEvent, ResponseError,
 };
-use libp2p_core::{identity::Keypair, upgrade::Version, Multiaddr, PeerId, Transport};
+use libp2p_core::{upgrade::Version, Multiaddr, Transport};
+use libp2p_identity::{Keypair, PeerId};
 use libp2p_noise as noise;
 use libp2p_swarm::{AddressScore, Swarm, SwarmEvent};
 use libp2p_tcp as tcp;

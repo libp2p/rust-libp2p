@@ -25,7 +25,8 @@ use futures::{
 };
 use libp2p_core::transport::Transport;
 use libp2p_core::upgrade::{apply_inbound, apply_outbound, Negotiated};
-use libp2p_core::{identity, transport, upgrade};
+use libp2p_core::{transport, upgrade};
+use libp2p_identity as identity;
 use libp2p_noise::{
     Keypair, NoiseAuthenticated, NoiseConfig, NoiseError, NoiseOutput, RemoteIdentity, X25519Spec,
 };

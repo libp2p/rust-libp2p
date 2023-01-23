@@ -51,8 +51,10 @@
 use env_logger::Env;
 use futures::executor::block_on;
 use futures::stream::StreamExt;
-use libp2p_core::{identity, upgrade::Version, Multiaddr, PeerId, Transport};
+use libp2p_core::{upgrade::Version, Multiaddr, Transport};
 use libp2p_identify as identify;
+use libp2p_identity as identity;
+use libp2p_identity::PeerId;
 use libp2p_metrics::{Metrics, Recorder};
 use libp2p_noise as noise;
 use libp2p_ping as ping;

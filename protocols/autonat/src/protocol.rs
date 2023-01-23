@@ -21,7 +21,8 @@
 use crate::structs_proto;
 use async_trait::async_trait;
 use futures::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
-use libp2p_core::{upgrade, Multiaddr, PeerId};
+use libp2p_core::{upgrade, Multiaddr};
+use libp2p_identity::PeerId;
 use libp2p_request_response::{self as request_response, ProtocolName};
 use prost::Message;
 use std::{convert::TryFrom, io};

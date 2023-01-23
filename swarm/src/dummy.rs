@@ -5,8 +5,8 @@ use crate::handler::{
 };
 use crate::{ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive, SubstreamProtocol};
 use libp2p_core::upgrade::DeniedUpgrade;
-use libp2p_core::PeerId;
 use libp2p_core::UpgradeError;
+use libp2p_identity::PeerId;
 use std::task::{Context, Poll};
 use void::Void;
 

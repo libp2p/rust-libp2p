@@ -27,9 +27,9 @@ use futures::future::poll_fn;
 use futures::prelude::*;
 use futures::{channel::oneshot, future::join};
 use libp2p_core::muxing::StreamMuxerExt;
-use libp2p_core::{
-    identity, multiaddr::multiaddr, muxing, transport, upgrade, Multiaddr, PeerId, Transport,
-};
+use libp2p_core::{multiaddr::multiaddr, muxing, transport, upgrade, Multiaddr, Transport};
+use libp2p_identity as identity;
+use libp2p_identity::PeerId;
 use libp2p_mplex as mplex;
 use libp2p_plaintext::PlainText2Config;
 use std::pin::Pin;

@@ -24,9 +24,9 @@ use libp2p_autonat::{
     Behaviour, Config, Event, InboundProbeError, InboundProbeEvent, ResponseError,
 };
 use libp2p_core::{
-    identity::Keypair, multiaddr::Protocol, upgrade::Version, ConnectedPoint, Endpoint, Multiaddr,
-    PeerId, Transport,
+    multiaddr::Protocol, upgrade::Version, ConnectedPoint, Endpoint, Multiaddr, Transport,
 };
+use libp2p_identity::{Keypair, PeerId};
 use libp2p_noise as noise;
 use libp2p_swarm::DialError;
 use libp2p_swarm::{AddressScore, Swarm, SwarmEvent};

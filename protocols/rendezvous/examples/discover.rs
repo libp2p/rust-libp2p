@@ -19,7 +19,9 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::StreamExt;
-use libp2p_core::{identity, multiaddr::Protocol, upgrade::Version, Multiaddr, PeerId, Transport};
+use libp2p_core::{multiaddr::Protocol, upgrade::Version, Multiaddr, Transport};
+use libp2p_identity as identity;
+use libp2p_identity::PeerId;
 use libp2p_ping as ping;
 use libp2p_rendezvous as rendezvous;
 use libp2p_swarm::{keep_alive, Swarm, SwarmEvent};

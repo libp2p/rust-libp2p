@@ -19,7 +19,9 @@
 // DEALINGS IN THE SOFTWARE.use futures::StreamExt;
 
 use futures::StreamExt;
-use libp2p_core::{identity, upgrade::Version, PeerId, Transport};
+use libp2p_core::{upgrade::Version, Transport};
+use libp2p_identity as identity;
+use libp2p_identity::PeerId;
 use libp2p_mdns::Event;
 use libp2p_mdns::{async_io::Behaviour, Config};
 use libp2p_swarm::{Swarm, SwarmEvent};

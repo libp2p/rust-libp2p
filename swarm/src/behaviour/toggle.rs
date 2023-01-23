@@ -28,9 +28,8 @@ use crate::handler::{
 use crate::upgrade::SendWrapper;
 use crate::{NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use either::Either;
-use libp2p_core::{
-    either::EitherOutput, upgrade::DeniedUpgrade, ConnectedPoint, Multiaddr, PeerId,
-};
+use libp2p_core::{either::EitherOutput, upgrade::DeniedUpgrade, ConnectedPoint, Multiaddr};
+use libp2p_identity::PeerId;
 use std::{task::Context, task::Poll};
 
 /// Implementation of `NetworkBehaviour` that can be either in the disabled or enabled state.

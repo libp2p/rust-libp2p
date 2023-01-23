@@ -38,8 +38,10 @@
 
 use futures::prelude::*;
 use libp2p_core::upgrade::Version;
-use libp2p_core::{identity, Multiaddr, PeerId, Transport};
+use libp2p_core::{Multiaddr, Transport};
 use libp2p_identify as identify;
+use libp2p_identity as identity;
+use libp2p_identity::PeerId;
 use libp2p_swarm::{Swarm, SwarmEvent};
 use std::error::Error;
 

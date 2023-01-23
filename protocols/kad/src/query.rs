@@ -31,7 +31,7 @@ use crate::{ALPHA_VALUE, K_VALUE};
 use either::Either;
 use fnv::FnvHashMap;
 use instant::Instant;
-use libp2p_core::PeerId;
+use libp2p_identity::PeerId;
 use std::{num::NonZeroUsize, time::Duration};
 
 /// A `QueryPool` provides an aggregate state machine for driving `Query`s to completion.

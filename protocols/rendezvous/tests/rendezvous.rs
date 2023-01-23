@@ -24,7 +24,7 @@ pub mod harness;
 use crate::harness::{await_event_or_timeout, await_events_or_timeout, new_swarm, SwarmExt};
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
-use libp2p_core::identity;
+use libp2p_identity as identity;
 use libp2p_rendezvous as rendezvous;
 use libp2p_swarm::{DialError, Swarm, SwarmEvent};
 use std::convert::TryInto;

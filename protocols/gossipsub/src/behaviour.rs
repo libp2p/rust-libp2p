@@ -35,9 +35,9 @@ use prometheus_client::registry::Registry;
 use prost::Message;
 use rand::{seq::SliceRandom, thread_rng};
 
-use libp2p_core::{
-    identity::Keypair, multiaddr::Protocol::Ip4, multiaddr::Protocol::Ip6, Multiaddr, PeerId,
-};
+use libp2p_core::{multiaddr::Protocol::Ip4, multiaddr::Protocol::Ip6, Multiaddr};
+use libp2p_identity::Keypair;
+use libp2p_identity::PeerId;
 use libp2p_swarm::{
     behaviour::{AddressChange, ConnectionClosed, ConnectionEstablished, FromSwarm},
     dial_opts::DialOpts,

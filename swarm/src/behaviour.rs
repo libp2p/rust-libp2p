@@ -30,7 +30,8 @@ use crate::connection::ConnectionId;
 use crate::dial_opts::DialOpts;
 use crate::handler::{ConnectionHandler, IntoConnectionHandler};
 use crate::{AddressRecord, AddressScore, DialError};
-use libp2p_core::{transport::ListenerId, ConnectedPoint, Multiaddr, PeerId};
+use libp2p_core::{transport::ListenerId, ConnectedPoint, Multiaddr};
+use libp2p_identity::PeerId;
 use std::{task::Context, task::Poll};
 
 /// Custom event that can be received by the [`ConnectionHandler`].
@@ -261,7 +262,7 @@ pub enum NetworkBehaviourAction<
     /// # use libp2p_core::identity;
     /// # use libp2p_core::transport::{MemoryTransport, Transport};
     /// # use libp2p_core::upgrade::{self, DeniedUpgrade, InboundUpgrade, OutboundUpgrade};
-    /// # use libp2p_core::PeerId;
+    /// # use libp2p_identity::PeerId;
     /// # use libp2p_plaintext::PlainText2Config;
     /// # use libp2p_swarm::{
     /// #     ConnectionId, DialError, IntoConnectionHandler, KeepAlive, NegotiatedSubstream,

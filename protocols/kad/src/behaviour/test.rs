@@ -29,12 +29,13 @@ use futures::{executor::block_on, future::poll_fn, prelude::*};
 use futures_timer::Delay;
 use libp2p_core::{
     connection::ConnectedPoint,
-    identity,
     multiaddr::{multiaddr, Multiaddr, Protocol},
     multihash::{Code, Multihash, MultihashDigest},
     transport::MemoryTransport,
-    upgrade, Endpoint, PeerId, Transport,
+    upgrade, Endpoint, Transport,
 };
+use libp2p_identity as identity;
+use libp2p_identity::PeerId;
 use libp2p_noise as noise;
 use libp2p_swarm::{ConnectionId, Swarm, SwarmEvent};
 use libp2p_yamux as yamux;

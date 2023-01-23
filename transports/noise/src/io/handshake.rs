@@ -32,7 +32,7 @@ use crate::LegacyConfig;
 use crate::NoiseError;
 use bytes::Bytes;
 use futures::prelude::*;
-use libp2p_core::identity;
+use libp2p_identity as identity;
 use prost::Message;
 use std::io;
 

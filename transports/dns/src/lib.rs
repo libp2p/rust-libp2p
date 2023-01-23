@@ -580,8 +580,9 @@ mod tests {
     use libp2p_core::{
         multiaddr::{Multiaddr, Protocol},
         transport::{TransportError, TransportEvent},
-        PeerId, Transport,
+        Transport,
     };
+    use libp2p_identity::PeerId;
 
     #[test]
     fn basic_resolve() {

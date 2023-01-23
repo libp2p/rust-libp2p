@@ -22,7 +22,7 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
-use libp2p_core::PeerId;
+use libp2p_identity::PeerId;
 
 pub mod protocol;
 
