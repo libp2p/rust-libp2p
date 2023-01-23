@@ -21,12 +21,13 @@
 use crate::handler::{self, InEvent, Proto};
 use crate::protocol::{Info, Protocol, UpgradeError};
 use libp2p_core::{multiaddr, ConnectedPoint, Multiaddr, PeerId, PublicKey};
-use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm};
 use libp2p_swarm::{
-    dial_opts::DialOpts, AddressScore, ConnectionHandlerUpgrErr, DialError, ExternalAddresses,
+    behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm},
+    dial_opts::DialOpts,
+    AddressScore, ConnectionHandlerUpgrErr, ConnectionId, DialError, ExternalAddresses,
     ListenAddresses, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
+    THandlerOutEvent,
 };
-use libp2p_swarm::{ConnectionId, THandlerOutEvent};
 use lru::LruCache;
 use std::num::NonZeroUsize;
 use std::{
