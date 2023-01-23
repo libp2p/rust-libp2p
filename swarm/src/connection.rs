@@ -45,30 +45,30 @@ use libp2p_core::upgrade::{InboundUpgradeApply, OutboundUpgradeApply};
 use libp2p_core::{upgrade, UpgradeError};
 use libp2p_core::{Endpoint, PeerId};
 use std::future::Future;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::task::Waker;
 use std::time::Duration;
 use std::{fmt, io, mem, pin::Pin, task::Context, task::Poll};
+
+static NEXT_CONNECTION_ID: AtomicUsize = AtomicUsize::new(1);
 
 /// Connection identifier.
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ConnectionId(usize);
 
 impl ConnectionId {
-    /// Creates a `ConnectionId` from a non-negative integer.
+    /// A "dummy" [`ConnectionId`].
     ///
-    /// This is primarily useful for creating connection IDs
-    /// in test environments. There is in general no guarantee
-    /// that all connection IDs are based on non-negative integers.
-    pub fn new(id: usize) -> Self {
-        Self(id)
-    }
-}
+    /// Really, you should not use this, not even for testing but it is here if you need it.
+    #[deprecated(
+        since = "0.42.0",
+        note = "Don't use this, it will be removed at a later stage again."
+    )]
+    pub const DUMMY: ConnectionId = ConnectionId(0);
 
-impl std::ops::Add<usize> for ConnectionId {
-    type Output = Self;
-
-    fn add(self, other: usize) -> Self {
-        Self(self.0 + other)
+    /// Returns the next available [`ConnectionId`].
+    pub(crate) fn next() -> Self {
+        Self(NEXT_CONNECTION_ID.fetch_add(1, Ordering::SeqCst))
     }
 }
 
