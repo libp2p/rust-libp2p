@@ -27,6 +27,8 @@
 
 - Remove `EitherFuture2` in favor of `EitherFuture`. See [PR 3340].
 
+- Remove `EitherOutput` in favor of `future::Either`. See [PR 3341].
+
 [PR 3031]: https://github.com/libp2p/rust-libp2p/pull/3031
 [PR 3058]: https://github.com/libp2p/rust-libp2p/pull/3058
 [PR 3097]: https://github.com/libp2p/rust-libp2p/pull/3097
@@ -36,6 +38,7 @@
 [PR 3338]: https://github.com/libp2p/rust-libp2p/pull/3338
 [PR 3339]: https://github.com/libp2p/rust-libp2p/pull/3339
 [PR 3340]: https://github.com/libp2p/rust-libp2p/pull/3340
+[PR 3341]: https://github.com/libp2p/rust-libp2p/pull/3341
 
 # 0.37.0
 

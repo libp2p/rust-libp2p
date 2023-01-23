@@ -26,8 +26,8 @@ use crate::handler::{
 use crate::upgrade::SendWrapper;
 
 use either::Either;
+use futures::future;
 use libp2p_core::{
-    either::EitherOutput,
     upgrade::{NegotiationError, ProtocolError, SelectUpgrade, UpgradeError},
     ConnectedPoint, PeerId,
 };
@@ -114,11 +114,11 @@ where
     ) -> Either<FullyNegotiatedOutbound<S1OP, S1OOI>, FullyNegotiatedOutbound<S2OP, S2OOI>> {
         match self {
             FullyNegotiatedOutbound {
-                protocol: EitherOutput::First(protocol),
+                protocol: future::Either::Left(protocol),
                 info: Either::Left(info),
             } => Either::Left(FullyNegotiatedOutbound { protocol, info }),
             FullyNegotiatedOutbound {
-                protocol: EitherOutput::Second(protocol),
+                protocol: future::Either::Right(protocol),
                 info: Either::Right(info),
             } => Either::Right(FullyNegotiatedOutbound { protocol, info }),
             _ => panic!("wrong API usage: the protocol doesn't match the upgrade info"),
@@ -139,11 +139,11 @@ where
     ) -> Either<FullyNegotiatedInbound<S1OP, S1OOI>, FullyNegotiatedInbound<S2OP, S2OOI>> {
         match self {
             FullyNegotiatedInbound {
-                protocol: EitherOutput::First(protocol),
+                protocol: future::Either::Left(protocol),
                 info: Either::Left(info),
             } => Either::Left(FullyNegotiatedInbound { protocol, info }),
             FullyNegotiatedInbound {
-                protocol: EitherOutput::Second(protocol),
+                protocol: future::Either::Right(protocol),
                 info: Either::Right(info),
             } => Either::Right(FullyNegotiatedInbound { protocol, info }),
             _ => panic!("wrong API usage: the protocol doesn't match the upgrade info"),
@@ -162,11 +162,11 @@ where
     ) -> Either<FullyNegotiatedInbound<S1IP, S1IOI>, FullyNegotiatedInbound<S2IP, S2IOI>> {
         match self {
             FullyNegotiatedInbound {
-                protocol: EitherOutput::First(protocol),
+                protocol: future::Either::Left(protocol),
                 info: (i1, _i2),
             } => Either::Left(FullyNegotiatedInbound { protocol, info: i1 }),
             FullyNegotiatedInbound {
-                protocol: EitherOutput::Second(protocol),
+                protocol: future::Either::Right(protocol),
                 info: (_i1, i2),
             } => Either::Right(FullyNegotiatedInbound { protocol, info: i2 }),
         }
@@ -436,8 +436,8 @@ where
     TProto1: ConnectionHandler,
     TProto2: ConnectionHandler,
 {
-    type InEvent = EitherOutput<TProto1::InEvent, TProto2::InEvent>;
-    type OutEvent = EitherOutput<TProto1::OutEvent, TProto2::OutEvent>;
+    type InEvent = Either<TProto1::InEvent, TProto2::InEvent>;
+    type OutEvent = Either<TProto1::OutEvent, TProto2::OutEvent>;
     type Error = Either<TProto1::Error, TProto2::Error>;
     type InboundProtocol = SelectUpgrade<
         SendWrapper<<TProto1 as ConnectionHandler>::InboundProtocol>,
@@ -460,8 +460,8 @@ where
 
     fn on_behaviour_event(&mut self, event: Self::InEvent) {
         match event {
-            EitherOutput::First(event) => self.proto1.on_behaviour_event(event),
-            EitherOutput::Second(event) => self.proto2.on_behaviour_event(event),
+            Either::Left(event) => self.proto1.on_behaviour_event(event),
+            Either::Right(event) => self.proto2.on_behaviour_event(event),
         }
     }
 
@@ -485,7 +485,7 @@ where
     > {
         match self.proto1.poll(cx) {
             Poll::Ready(ConnectionHandlerEvent::Custom(event)) => {
-                return Poll::Ready(ConnectionHandlerEvent::Custom(EitherOutput::First(event)));
+                return Poll::Ready(ConnectionHandlerEvent::Custom(Either::Left(event)));
             }
             Poll::Ready(ConnectionHandlerEvent::Close(event)) => {
                 return Poll::Ready(ConnectionHandlerEvent::Close(Either::Left(event)));
@@ -502,7 +502,7 @@ where
 
         match self.proto2.poll(cx) {
             Poll::Ready(ConnectionHandlerEvent::Custom(event)) => {
-                return Poll::Ready(ConnectionHandlerEvent::Custom(EitherOutput::Second(event)));
+                return Poll::Ready(ConnectionHandlerEvent::Custom(Either::Right(event)));
             }
             Poll::Ready(ConnectionHandlerEvent::Close(event)) => {
                 return Poll::Ready(ConnectionHandlerEvent::Close(Either::Right(event)));
