@@ -22,11 +22,14 @@
   If you have previously set `connection_event_buffer_size` you should re-evaluate what a good size for a _per connection_ buffer is.
   See [PR 3188].
 
+- Remove `ConnectionId::new`. Manually creating `ConnectionId`s is now unsupported. See [PR 3327].
+
 [PR 3170]: https://github.com/libp2p/rust-libp2p/pull/3170
 [PR 3134]: https://github.com/libp2p/rust-libp2p/pull/3134
 [PR 3153]: https://github.com/libp2p/rust-libp2p/pull/3153
 [PR 3264]: https://github.com/libp2p/rust-libp2p/pull/3264
 [PR 3272]: https://github.com/libp2p/rust-libp2p/pull/3272
+[PR 3327]: https://github.com/libp2p/rust-libp2p/pull/3327
 [PR 3188]: https://github.com/libp2p/rust-libp2p/pull/3188
 
 # 0.41.1
