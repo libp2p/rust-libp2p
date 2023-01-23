@@ -324,10 +324,9 @@ fn my_method() -> impl Future<Output = Response> {
 }
 ```
 
-When accepting a **command** that eventually results in a response through an event, either require
-that command to contain a unique ID, which is later on contained in the asynchronous response event,
-or allow the user to provide an instance of a custom type which again is later on returned in the
-response event.
+When accepting a **command** () that eventually results in a response through an event require that
+command to contain a unique ID, which is later on contained in the asynchronous response event. One
+such example is the `Swarm` accepting a `NetworkBehaviourAction::Dial` from the `NetworkBehaviour`.
 
 ``` rust
 struct Command {
