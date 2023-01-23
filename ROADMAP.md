@@ -171,7 +171,7 @@ newcomers to get started.
 | Developer ergonomics | todo   | Q2/2023           | https://github.com/libp2p/rust-libp2p/issues/2617 |              | [WebRTC](#webrtc-support-browser-to-browser) |
 
 The project supports Wasm already today, though the developer experience is cumbersome at best.
-Properly supporting Wasm opens rust-libp2p to hole new set of use-cases. I would love for this to
+Properly supporting Wasm opens rust-libp2p to a whole new set of use-cases. I would love for this to
 happen earlier. Though (a) I think we should prioritize improving existing functionality over new
 functionality and (b) we don't have high demand for this feature from the community. (One could
 argue that that demand follows this roadmap item and not the other way round.)
