@@ -55,6 +55,24 @@ async fn test_expired_async_std() -> Result<(), Box<dyn Error>> {
         .map_err(|e| Box::new(e) as Box<dyn Error>)
 }
 
+#[async_std::test]
+async fn test_connection_close_dont_expire_async_std() -> Result<(), Box<dyn Error>> {
+    env_logger::try_init().ok();
+    let config = Config {
+        ttl: Duration::from_secs(10),
+        query_interval: Duration::from_secs(10),
+        ..Default::default()
+    };
+
+    async_std::future::timeout(
+        Duration::from_secs(6),
+        run_connection_close_expiration_test(config),
+    )
+    .await
+    .map(|_| ())
+    .map_err(|e| Box::new(e) as Box<dyn Error>)
+}
+
 async fn create_swarm(config: Config) -> Result<Swarm<Behaviour>, Box<dyn Error>> {
     let id_keys = identity::Keypair::generate_ed25519();
     let peer_id = PeerId::from(id_keys.public());
@@ -123,6 +141,52 @@ async fn run_peer_expiration_test(config: Config) -> Result<(), Box<dyn Error>> 
                     }
                 }
             }
+        }
+    }
+}
+
+async fn run_connection_close_dont_expire_test(config: Config) -> Result<(), Box<dyn Error>> {
+    let mut a = create_swarm(config.clone()).await?;
+    let mut b = create_swarm(config).await?;
+    let mut connection_count = 0;
+
+    loop {
+        futures::select! {
+            ev = a.select_next_some() => match ev {
+                SwarmEvent::Behaviour(Event::Discovered(peers)) => {
+                    for (peer, addr) in peers {
+                        if peer == *b.local_peer_id() {
+                            // Connect to all addresses of b to 'expire' all of them
+                            a.dial(addr)?;
+                            connection_count += 1;
+                        }
+                    }
+                }
+                SwarmEvent::ConnectionEstablished { peer_id, .. } => {
+                    if peer_id == *b.local_peer_id() {
+                        if !connection_count > 0 {
+                            // We disconnect all connections that were initiated in
+                            // the discovered event
+                            a.disconnect_peer_id(peer_id).unwrap();
+                        } else {
+                            // If the connection attempt after connection close
+                            // succeeded the mDNS record wasn't expired by
+                            // connection close
+                            return Ok(())
+                        }
+                    }
+                }
+                SwarmEvent::ConnectionClosed { peer_id, .. } => {
+                    if peer_id == *b.local_peer_id() {
+                        // Dial a second time to make sure connection is still
+                        // possible
+                        a.dial(peer_id)?;
+                        connection_count -= 1;
+                    }
+                }
+                _ => {}
+            },
+            _ = b.select_next_some() => {}
         }
     }
 }
