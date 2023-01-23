@@ -23,12 +23,10 @@ use crate::behaviour::{
     FromSwarm, ListenerClosed, ListenerError, NewExternalAddr, NewListenAddr, NewListener,
 };
 use crate::{
-    ConnectionHandler, NetworkBehaviour, NetworkBehaviourAction, PollParameters, THandlerInEvent,
-    THandlerOutEvent,
+    ConnectionHandler, ConnectionId, IntoConnectionHandler, NetworkBehaviour,
+    NetworkBehaviourAction, PollParameters, THandlerInEvent,
 };
-use libp2p_core::{
-    connection::ConnectionId, multiaddr::Multiaddr, transport::ListenerId, ConnectedPoint, PeerId,
-};
+use libp2p_core::{multiaddr::Multiaddr, transport::ListenerId, ConnectedPoint, PeerId};
 use std::collections::HashMap;
 use std::task::{Context, Poll};
 
@@ -49,7 +47,7 @@ where
     /// The next action to return from `poll`.
     ///
     /// An action is only returned once.
-    pub next_action: Option<NetworkBehaviourAction<TOutEvent, THandlerInEvent<Self>>>,
+    pub next_action: Option<NetworkBehaviourAction<TOutEvent, THandler::InEvent>>,
 }
 
 impl<THandler, TOutEvent> MockBehaviour<THandler, TOutEvent>
@@ -385,10 +383,18 @@ where
             FromSwarm::ConnectionClosed(connection_closed) => {
                 self.on_connection_closed(connection_closed)
             }
-            FromSwarm::DialFailure(DialFailure { peer_id, error, id }) => {
+            FromSwarm::DialFailure(DialFailure {
+                peer_id,
+                connection_id,
+                error,
+            }) => {
                 self.on_dial_failure.push(peer_id);
                 self.inner
-                    .on_swarm_event(FromSwarm::DialFailure(DialFailure { peer_id, id, error }));
+                    .on_swarm_event(FromSwarm::DialFailure(DialFailure {
+                        peer_id,
+                        connection_id,
+                        error,
+                    }));
             }
             FromSwarm::NewListener(NewListener { listener_id }) => {
                 self.on_new_listener.push(listener_id);

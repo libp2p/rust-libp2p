@@ -20,7 +20,6 @@
 
 //! [`ConnectionHandler`] handling direct connection upgraded through a relayed connection.
 
-use libp2p_core::connection::ConnectionId;
 use libp2p_core::upgrade::DeniedUpgrade;
 use libp2p_swarm::handler::ConnectionEvent;
 use libp2p_swarm::{
@@ -32,21 +31,12 @@ use void::Void;
 
 #[derive(Debug)]
 pub enum Event {
-    DirectConnectionUpgradeSucceeded { relayed_connection_id: ConnectionId },
+    DirectConnectionEstablished,
 }
 
+#[derive(Default)]
 pub struct Handler {
-    relayed_connection_id: ConnectionId,
     reported: bool,
-}
-
-impl Handler {
-    pub(crate) fn new(relayed_connection_id: ConnectionId) -> Self {
-        Self {
-            reported: false,
-            relayed_connection_id,
-        }
-    }
 }
 
 impl ConnectionHandler for Handler {
@@ -82,9 +72,7 @@ impl ConnectionHandler for Handler {
         if !self.reported {
             self.reported = true;
             return Poll::Ready(ConnectionHandlerEvent::Custom(
-                Event::DirectConnectionUpgradeSucceeded {
-                    relayed_connection_id: self.relayed_connection_id,
-                },
+                Event::DirectConnectionEstablished,
             ));
         }
         Poll::Pending

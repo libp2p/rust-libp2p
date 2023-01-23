@@ -23,7 +23,6 @@ use crate::handler::{
 };
 use crate::upgrade::SendWrapper;
 use either::Either;
-use libp2p_core::upgrade::EitherUpgrade;
 use std::task::{Context, Poll};
 
 /// Implementation of a [`ConnectionHandler`] that represents either of two [`ConnectionHandler`]
@@ -36,10 +35,9 @@ where
     type InEvent = Either<L::InEvent, R::InEvent>;
     type OutEvent = Either<L::OutEvent, R::OutEvent>;
     type Error = Either<L::Error, R::Error>;
-    type InboundProtocol =
-        EitherUpgrade<SendWrapper<L::InboundProtocol>, SendWrapper<R::InboundProtocol>>;
+    type InboundProtocol = Either<SendWrapper<L::InboundProtocol>, SendWrapper<R::InboundProtocol>>;
     type OutboundProtocol =
-        EitherUpgrade<SendWrapper<L::OutboundProtocol>, SendWrapper<R::OutboundProtocol>>;
+        Either<SendWrapper<L::OutboundProtocol>, SendWrapper<R::OutboundProtocol>>;
     type InboundOpenInfo = Either<L::InboundOpenInfo, R::InboundOpenInfo>;
     type OutboundOpenInfo = Either<L::OutboundOpenInfo, R::OutboundOpenInfo>;
 
@@ -47,11 +45,11 @@ where
         match self {
             Either::Left(a) => a
                 .listen_protocol()
-                .map_upgrade(|u| EitherUpgrade::A(SendWrapper(u)))
+                .map_upgrade(|u| Either::Left(SendWrapper(u)))
                 .map_info(Either::Left),
             Either::Right(b) => b
                 .listen_protocol()
-                .map_upgrade(|u| EitherUpgrade::B(SendWrapper(u)))
+                .map_upgrade(|u| Either::Right(SendWrapper(u)))
                 .map_info(Either::Right),
         }
     }
@@ -86,12 +84,12 @@ where
             Either::Left(handler) => futures::ready!(handler.poll(cx))
                 .map_custom(Either::Left)
                 .map_close(Either::Left)
-                .map_protocol(|p| EitherUpgrade::A(SendWrapper(p)))
+                .map_protocol(|p| Either::Left(SendWrapper(p)))
                 .map_outbound_open_info(Either::Left),
             Either::Right(handler) => futures::ready!(handler.poll(cx))
                 .map_custom(Either::Right)
                 .map_close(Either::Right)
-                .map_protocol(|p| EitherUpgrade::B(SendWrapper(p)))
+                .map_protocol(|p| Either::Right(SendWrapper(p)))
                 .map_outbound_open_info(Either::Right),
         };
 

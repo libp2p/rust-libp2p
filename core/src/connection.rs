@@ -19,38 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::multiaddr::{Multiaddr, Protocol};
-use std::fmt;
 use std::fmt::Debug;
-use std::sync::atomic::{AtomicU64, Ordering};
-
-static NEXT_CONNECTION_ID: AtomicU64 = AtomicU64::new(0);
-
-/// Connection identifier.
-#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
-pub struct ConnectionId(u64);
-
-impl ConnectionId {
-    /// Creates a `ConnectionId` from a non-negative integer.
-    ///
-    /// This is primarily useful for creating connection IDs
-    /// in test environments. There is in general no guarantee
-    /// that all connection IDs are based on non-negative integers.
-    #[deprecated(note = "IDs must be unique and should not be constructed directly.")]
-    pub fn new(id: usize) -> Self {
-        Self(id as u64)
-    }
-
-    /// Allocates a new [`ConnectionId`].
-    pub fn next() -> Self {
-        Self(NEXT_CONNECTION_ID.fetch_add(1, Ordering::SeqCst))
-    }
-}
-
-impl fmt::Display for ConnectionId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
 
 /// The endpoint roles associated with a peer-to-peer communication channel.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -81,42 +50,6 @@ impl Endpoint {
     /// Is this endpoint a listener?
     pub fn is_listener(self) -> bool {
         matches!(self, Endpoint::Listener)
-    }
-}
-
-/// The endpoint roles associated with a pending peer-to-peer connection.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum PendingPoint {
-    /// The socket comes from a dialer.
-    ///
-    /// There is no single address associated with the Dialer of a pending
-    /// connection. Addresses are dialed in parallel. Only once the first dial
-    /// is successful is the address of the connection known.
-    Dialer {
-        /// Same as [`ConnectedPoint::Dialer`] `role_override`.
-        role_override: Endpoint,
-    },
-    /// The socket comes from a listener.
-    Listener {
-        /// Local connection address.
-        local_addr: Multiaddr,
-        /// Address used to send back data to the remote.
-        send_back_addr: Multiaddr,
-    },
-}
-
-impl From<ConnectedPoint> for PendingPoint {
-    fn from(endpoint: ConnectedPoint) -> Self {
-        match endpoint {
-            ConnectedPoint::Dialer { role_override, .. } => PendingPoint::Dialer { role_override },
-            ConnectedPoint::Listener {
-                local_addr,
-                send_back_addr,
-            } => PendingPoint::Listener {
-                local_addr,
-                send_back_addr,
-            },
-        }
     }
 }
 

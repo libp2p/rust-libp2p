@@ -73,9 +73,9 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     let expired_external_addr = quote! { #prelude_path::ExpiredExternalAddr };
     let listener_error = quote! { #prelude_path::ListenerError };
     let listener_closed = quote! { #prelude_path::ListenerClosed };
+    let t_handler = quote! { #prelude_path::THandler };
     let t_handler_in_event = quote! { #prelude_path::THandlerInEvent };
     let t_handler_out_event = quote! { #prelude_path::THandlerOutEvent };
-    let t_handler = quote! { #prelude_path::THandler };
     let endpoint = quote! { #prelude_path::Endpoint };
 
     // Build the generics.
@@ -279,22 +279,20 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         data_struct
             .fields
             .iter()
-            // The outmost handler belongs to the last behaviour.
-            .rev()
             .enumerate()
             .map(|(enum_n, field)| {
                 let inject = match field.ident {
                     Some(ref i) => quote! {
                     self.#i.on_swarm_event(#from_swarm::DialFailure(#dial_failure {
                             peer_id,
-                            id,
+                            connection_id,
                             error,
                         }));
                     },
                     None => quote! {
                     self.#enum_n.on_swarm_event(#from_swarm::DialFailure(#dial_failure {
                             peer_id,
-                            id,
+                            connection_id,
                             error,
                         }));
                     },
@@ -311,23 +309,26 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
         data_struct
             .fields
             .iter()
-            .rev()
             .enumerate()
-            .map(|(enum_n, field)| match field.ident {
-                Some(ref i) => quote! {
+            .map(|(enum_n, field)| {
+                let inject = match field.ident {
+                    Some(ref i) => quote! {
                     self.#i.on_swarm_event(#from_swarm::ListenFailure(#listen_failure {
-                        local_addr,
-                        send_back_addr,
-                        id,
-                    }));
-                },
-                None => quote! {
+                            local_addr,
+                            send_back_addr,
+                        }));
+                    },
+                    None => quote! {
                     self.#enum_n.on_swarm_event(#from_swarm::ListenFailure(#listen_failure {
-                        local_addr,
-                        send_back_addr,
-                        id
-                    }));
-                },
+                            local_addr,
+                            send_back_addr,
+                        }));
+                    },
+                };
+
+                quote! {
+                    #inject;
+                }
             })
     };
 
@@ -665,8 +666,8 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             loop {
                 match #trait_to_impl::poll(&mut self.#field, cx, poll_params) {
                     #generate_event_match_arm
-                    std::task::Poll::Ready(#network_behaviour_action::Dial { opts, id }) => {
-                        return std::task::Poll::Ready(#network_behaviour_action::Dial { opts, id });
+                    std::task::Poll::Ready(#network_behaviour_action::Dial { opts }) => {
+                        return std::task::Poll::Ready(#network_behaviour_action::Dial { opts });
                     }
                     std::task::Poll::Ready(#network_behaviour_action::NotifyHandler { peer_id, handler, event }) => {
                         return std::task::Poll::Ready(#network_behaviour_action::NotifyHandler {
@@ -777,10 +778,10 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                         #connection_closed { peer_id, connection_id, endpoint, handler: handlers, remaining_established })
                     => { #(#on_connection_closed_stmts)* }
                     #from_swarm::DialFailure(
-                        #dial_failure { peer_id, error, id })
+                        #dial_failure { peer_id, connection_id, error })
                     => { #(#on_dial_failure_stmts)* }
                     #from_swarm::ListenFailure(
-                        #listen_failure { local_addr, send_back_addr, id })
+                        #listen_failure { local_addr, send_back_addr })
                     => { #(#on_listen_failure_stmts)* }
                     #from_swarm::NewListener(
                         #new_listener { listener_id })

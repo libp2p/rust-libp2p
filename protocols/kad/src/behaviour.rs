@@ -39,14 +39,14 @@ use crate::record::{
 use crate::K_VALUE;
 use fnv::{FnvHashMap, FnvHashSet};
 use instant::Instant;
-use libp2p_core::{connection::ConnectionId, ConnectedPoint, Endpoint, Multiaddr, PeerId};
+use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr, PeerId};
 use libp2p_swarm::behaviour::{
     AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm,
 };
 use libp2p_swarm::{
     dial_opts::{self, DialOpts},
-    DialError, ExternalAddresses, ListenAddresses, NetworkBehaviour, NetworkBehaviourAction,
-    NotifyHandler, PollParameters, THandler, THandlerInEvent, THandlerOutEvent,
+    ConnectionId, DialError, ExternalAddresses, ListenAddresses, NetworkBehaviour,
+    NetworkBehaviourAction, NotifyHandler, PollParameters, THandlerInEvent,
 };
 use log::{debug, info, warn};
 use smallvec::SmallVec;
@@ -105,7 +105,7 @@ where
     connection_idle_timeout: Duration,
 
     /// Queued events to return when the behaviour is being polled.
-    queued_events: VecDeque<NetworkBehaviourAction<KademliaEvent, THandlerInEvent<Self>>>,
+    queued_events: VecDeque<NetworkBehaviourAction<KademliaEvent, KademliaHandlerIn<QueryId>>>,
 
     listen_addresses: ListenAddresses,
 
@@ -577,7 +577,6 @@ where
                     kbucket::InsertResult::Pending { disconnected } => {
                         self.queued_events.push_back(NetworkBehaviourAction::Dial {
                             opts: DialOpts::peer_id(disconnected.into_preimage()).build(),
-                            id: ConnectionId::next(),
                         });
                         RoutingUpdate::Pending
                     }
@@ -1227,7 +1226,6 @@ where
                                     self.queued_events.push_back(NetworkBehaviourAction::Dial {
                                         opts: DialOpts::peer_id(disconnected.into_preimage())
                                             .build(),
-                                        id: ConnectionId::next(),
                                     })
                                 }
                             }
@@ -2426,7 +2424,6 @@ where
                             query.inner.pending_rpcs.push((peer_id, event));
                             self.queued_events.push_back(NetworkBehaviourAction::Dial {
                                 opts: DialOpts::peer_id(peer_id).build(),
-                                id: ConnectionId::next(),
                             });
                         }
                     }

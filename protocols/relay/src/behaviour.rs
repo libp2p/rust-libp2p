@@ -28,13 +28,12 @@ use crate::protocol::{inbound_hop, outbound_stop};
 use crate::v2::relay::handler::Handler;
 use either::Either;
 use instant::Instant;
-use libp2p_core::connection::ConnectionId;
 use libp2p_core::multiaddr::Protocol;
 use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr, PeerId};
 use libp2p_swarm::behaviour::{ConnectionClosed, FromSwarm};
 use libp2p_swarm::{
-    dummy, ConnectionHandlerUpgrErr, ExternalAddresses, NetworkBehaviour, NetworkBehaviourAction,
-    NotifyHandler, PollParameters, THandler, THandlerInEvent, THandlerOutEvent,
+    ConnectionHandlerUpgrErr, ConnectionId, ExternalAddresses, NetworkBehaviour,
+    NetworkBehaviourAction, NotifyHandler, PollParameters, THandlerInEvent,
 };
 use std::collections::{hash_map, HashMap, HashSet, VecDeque};
 use std::error::Error;
@@ -42,6 +41,7 @@ use std::num::NonZeroU32;
 use std::ops::Add;
 use std::task::{Context, Poll};
 use std::time::Duration;
+use void::Void;
 
 /// Configuration for the relay [`Behaviour`].
 ///
@@ -792,7 +792,7 @@ impl Add<u64> for CircuitId {
 /// before being returned in [`Behaviour::poll`].
 #[allow(clippy::large_enum_variant)]
 enum Action {
-    Done(NetworkBehaviourAction<Event, THandlerInEvent<Relay>>),
+    Done(NetworkBehaviourAction<Event, Either<handler::In, Void>>),
     AcceptReservationPrototype {
         inbound_reservation_req: inbound_hop::ReservationReq,
         handler: NotifyHandler,
@@ -800,8 +800,8 @@ enum Action {
     },
 }
 
-impl From<NetworkBehaviourAction<Event, THandlerInEvent<Relay>>> for Action {
-    fn from(action: NetworkBehaviourAction<Event, THandlerInEvent<Relay>>) -> Self {
+impl From<NetworkBehaviourAction<Event, Either<handler::In, Void>>> for Action {
+    fn from(action: NetworkBehaviourAction<Event, Either<handler::In, Void>>) -> Self {
         Self::Done(action)
     }
 }
@@ -811,7 +811,7 @@ impl Action {
         self,
         local_peer_id: PeerId,
         external_addresses: &ExternalAddresses,
-    ) -> NetworkBehaviourAction<Event, THandlerInEvent<Relay>> {
+    ) -> NetworkBehaviourAction<Event, Either<handler::In, Void>> {
         match self {
             Action::Done(action) => action,
             Action::AcceptReservationPrototype {

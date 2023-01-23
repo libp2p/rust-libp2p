@@ -28,9 +28,7 @@ use as_server::AsServer;
 pub use as_server::{InboundProbeError, InboundProbeEvent};
 use futures_timer::Delay;
 use instant::Instant;
-use libp2p_core::{
-    connection::ConnectionId, multiaddr::Protocol, ConnectedPoint, Endpoint, Multiaddr, PeerId,
-};
+use libp2p_core::{multiaddr::Protocol, ConnectedPoint, Endpoint, Multiaddr, PeerId};
 use libp2p_request_response::{
     self as request_response, ProtocolSupport, RequestId, ResponseChannel,
 };
@@ -39,8 +37,8 @@ use libp2p_swarm::{
         AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, ExpiredExternalAddr,
         ExpiredListenAddr, FromSwarm,
     },
-    ExternalAddresses, ListenAddresses, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
-    THandler, THandlerInEvent, THandlerOutEvent,
+    ConnectionHandler, ConnectionId, ExternalAddresses, IntoConnectionHandler, ListenAddresses,
+    NetworkBehaviour, NetworkBehaviourAction, PollParameters, THandlerInEvent,
 };
 use std::error::Error;
 use std::{
@@ -385,9 +383,20 @@ impl Behaviour {
         }
     }
 
-    fn on_dial_failure(&mut self, DialFailure { peer_id, error, id }: DialFailure) {
+    fn on_dial_failure(
+        &mut self,
+        DialFailure {
+            peer_id,
+            connection_id,
+            error,
+        }: DialFailure,
+    ) {
         self.inner
-            .on_swarm_event(FromSwarm::DialFailure(DialFailure { peer_id, error, id }));
+            .on_swarm_event(FromSwarm::DialFailure(DialFailure {
+                peer_id,
+                connection_id,
+                error,
+            }));
         if let Some(event) = self.as_server().on_outbound_dial_error(peer_id, error) {
             self.pending_actions
                 .push_back(NetworkBehaviourAction::GenerateEvent(Event::InboundProbe(

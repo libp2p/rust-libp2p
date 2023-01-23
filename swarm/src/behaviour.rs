@@ -26,12 +26,13 @@ pub mod toggle;
 pub use external_addresses::ExternalAddresses;
 pub use listen_addresses::ListenAddresses;
 
+use crate::connection::ConnectionId;
 use crate::dial_opts::DialOpts;
 #[allow(deprecated)]
 use crate::handler::IntoConnectionHandler;
 use crate::{AddressRecord, AddressScore, DialError, THandler, THandlerInEvent, THandlerOutEvent};
 use libp2p_core::{
-    connection::ConnectionId, transport::ListenerId, ConnectedPoint, Endpoint, Multiaddr, PeerId,
+    transport::ListenerId, ConnectedPoint, Endpoint, Multiaddr, PeerId,
 };
 use std::{task::Context, task::Poll};
 
@@ -317,17 +318,20 @@ pub trait PollParameters {
 /// in whose context it is executing.
 ///
 /// [`Swarm`]: super::Swarm
-//
-// Note: `TInEvent` is needed to be able to implement
-// [`NetworkBehaviourAction::map_in`], mapping the handler `InEvent` leaving the
-// handler itself untouched.
 #[derive(Debug)]
 pub enum NetworkBehaviourAction<TOutEvent, TInEvent> {
     /// Instructs the `Swarm` to return an event when it is being polled.
     GenerateEvent(TOutEvent),
 
     /// Instructs the swarm to start a dial.
-    Dial { opts: DialOpts, id: ConnectionId },
+    ///
+    /// On success, [`NetworkBehaviour::on_swarm_event`] with `ConnectionEstablished` is invoked.
+    /// On failure, [`NetworkBehaviour::on_swarm_event`] with `DialFailure` is invoked.
+    ///
+    /// [`DialOpts`] provides access to the [`ConnectionId`] via [`DialOpts::connection_id`].
+    /// This [`ConnectionId`] will be used throughout the connection's lifecycle to associate events with it.
+    /// This allows a [`NetworkBehaviour`] to identify a connection that resulted out of its own dial request.
+    Dial { opts: DialOpts },
 
     /// Instructs the `Swarm` to send an event to the handler dedicated to a
     /// connection with a peer.
@@ -387,20 +391,6 @@ pub enum NetworkBehaviourAction<TOutEvent, TInEvent> {
     },
 }
 
-impl<TOutEvent, TInEvent> NetworkBehaviourAction<TOutEvent, TInEvent> {
-    /// TODO: Docs
-    pub fn dial(opts: impl Into<DialOpts>) -> (Self, ConnectionId) {
-        let id = ConnectionId::next();
-
-        let action = Self::Dial {
-            opts: opts.into(),
-            id,
-        };
-
-        (action, id)
-    }
-}
-
 impl<TOutEvent, TInEventOld> NetworkBehaviourAction<TOutEvent, TInEventOld> {
     /// Map the handler event.
     pub fn map_in<TInEventNew>(
@@ -409,7 +399,7 @@ impl<TOutEvent, TInEventOld> NetworkBehaviourAction<TOutEvent, TInEventOld> {
     ) -> NetworkBehaviourAction<TOutEvent, TInEventNew> {
         match self {
             NetworkBehaviourAction::GenerateEvent(e) => NetworkBehaviourAction::GenerateEvent(e),
-            NetworkBehaviourAction::Dial { opts, id } => NetworkBehaviourAction::Dial { opts, id },
+            NetworkBehaviourAction::Dial { opts } => NetworkBehaviourAction::Dial { opts },
             NetworkBehaviourAction::NotifyHandler {
                 peer_id,
                 handler,
@@ -433,12 +423,15 @@ impl<TOutEvent, TInEventOld> NetworkBehaviourAction<TOutEvent, TInEventOld> {
     }
 }
 
-impl<TOutEvent, TInEvent> NetworkBehaviourAction<TOutEvent, TInEvent> {
+impl<TOutEvent, THandlerIn> NetworkBehaviourAction<TOutEvent, THandlerIn> {
     /// Map the event the swarm will return.
-    pub fn map_out<E>(self, f: impl FnOnce(TOutEvent) -> E) -> NetworkBehaviourAction<E, TInEvent> {
+    pub fn map_out<E>(
+        self,
+        f: impl FnOnce(TOutEvent) -> E,
+    ) -> NetworkBehaviourAction<E, THandlerIn> {
         match self {
             NetworkBehaviourAction::GenerateEvent(e) => NetworkBehaviourAction::GenerateEvent(f(e)),
-            NetworkBehaviourAction::Dial { opts, id } => NetworkBehaviourAction::Dial { opts, id },
+            NetworkBehaviourAction::Dial { opts } => NetworkBehaviourAction::Dial { opts },
             NetworkBehaviourAction::NotifyHandler {
                 peer_id,
                 handler,
@@ -568,7 +561,7 @@ pub struct AddressChange<'a> {
 pub struct DialFailure<'a> {
     pub peer_id: Option<PeerId>,
     pub error: &'a DialError,
-    pub id: ConnectionId,
+    pub connection_id: ConnectionId,
 }
 
 /// [`FromSwarm`] variant that informs the behaviour that an error
@@ -580,7 +573,6 @@ pub struct DialFailure<'a> {
 pub struct ListenFailure<'a> {
     pub local_addr: &'a Multiaddr,
     pub send_back_addr: &'a Multiaddr,
-    pub id: ConnectionId,
 }
 
 /// [`FromSwarm`] variant that informs the behaviour that a new listener was created.
@@ -695,17 +687,21 @@ impl<'a, Handler: IntoConnectionHandler> FromSwarm<'a, Handler> {
                 old,
                 new,
             })),
-            FromSwarm::DialFailure(DialFailure { peer_id, error, id }) => {
-                Some(FromSwarm::DialFailure(DialFailure { peer_id, error, id }))
-            }
+            FromSwarm::DialFailure(DialFailure {
+                peer_id,
+                error,
+                connection_id,
+            }) => Some(FromSwarm::DialFailure(DialFailure {
+                peer_id,
+                error,
+                connection_id,
+            })),
             FromSwarm::ListenFailure(ListenFailure {
                 local_addr,
                 send_back_addr,
-                id,
             }) => Some(FromSwarm::ListenFailure(ListenFailure {
                 local_addr,
                 send_back_addr,
-                id,
             })),
             FromSwarm::NewListener(NewListener { listener_id }) => {
                 Some(FromSwarm::NewListener(NewListener { listener_id }))

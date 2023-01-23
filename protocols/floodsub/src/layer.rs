@@ -26,11 +26,11 @@ use crate::topic::Topic;
 use crate::FloodsubConfig;
 use cuckoofilter::{CuckooError, CuckooFilter};
 use fnv::FnvHashSet;
-use libp2p_core::{connection::ConnectionId, Endpoint, Multiaddr, PeerId};
+use libp2p_core::PeerId;
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm};
 use libp2p_swarm::{
-    dial_opts::DialOpts, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, OneShotHandler,
-    PollParameters, THandler, THandlerInEvent, THandlerOutEvent,
+    dial_opts::DialOpts, ConnectionId, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
+    OneShotHandler, PollParameters, THandlerInEvent,
 };
 use log::warn;
 use smallvec::SmallVec;
@@ -41,7 +41,7 @@ use std::{collections::VecDeque, iter};
 /// Network behaviour that handles the floodsub protocol.
 pub struct Floodsub {
     /// Events that need to be yielded to the outside when polling.
-    events: VecDeque<NetworkBehaviourAction<FloodsubEvent, THandlerInEvent<Self>>>,
+    events: VecDeque<NetworkBehaviourAction<FloodsubEvent, FloodsubRpc>>,
 
     config: FloodsubConfig,
 
@@ -104,7 +104,6 @@ impl Floodsub {
         if self.target_peers.insert(peer_id) {
             self.events.push_back(NetworkBehaviourAction::Dial {
                 opts: DialOpts::peer_id(peer_id).build(),
-                id: ConnectionId::next(),
             });
         }
     }
@@ -326,7 +325,6 @@ impl Floodsub {
         if self.target_peers.contains(&peer_id) {
             self.events.push_back(NetworkBehaviourAction::Dial {
                 opts: DialOpts::peer_id(peer_id).build(),
-                id: ConnectionId::next(),
             });
         }
     }

@@ -19,9 +19,9 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::behaviour::{self, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
+use crate::connection::ConnectionId;
 use crate::{THandler, THandlerInEvent, THandlerOutEvent};
 use either::Either;
-use libp2p_core::connection::ConnectionId;
 use libp2p_core::{Endpoint, Multiaddr, PeerId};
 use std::error::Error;
 use std::{task::Context, task::Poll};
@@ -144,7 +144,7 @@ where
     fn on_connection_handler_event(
         &mut self,
         peer_id: PeerId,
-        connection_id: libp2p_core::connection::ConnectionId,
+        connection_id: ConnectionId,
         event: THandlerOutEvent<Self>,
     ) {
         match (self, event) {

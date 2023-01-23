@@ -24,18 +24,20 @@ use crate::handler;
 use crate::handler::{direct, relayed, Role};
 use crate::protocol;
 use either::Either;
-use libp2p_core::connection::{ConnectedPoint, ConnectionId};
+use libp2p_core::connection::ConnectedPoint;
 use libp2p_core::multiaddr::Protocol;
 use libp2p_core::{Endpoint, Multiaddr, PeerId};
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm};
 use libp2p_swarm::dial_opts::{self, DialOpts};
+use libp2p_swarm::ConnectionId;
 use libp2p_swarm::{
-    dummy, ConnectionHandlerUpgrErr, ExternalAddresses, NetworkBehaviour, NetworkBehaviourAction,
-    NotifyHandler, PollParameters, THandler, THandlerInEvent, THandlerOutEvent,
+    ConnectionHandler, ConnectionHandlerUpgrErr, ExternalAddresses, IntoConnectionHandler,
+    NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters, THandlerInEvent,
 };
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::task::{Context, Poll};
 use thiserror::Error;
+use void::Void;
 
 const MAX_NUMBER_OF_UPGRADE_ATTEMPTS: u8 = 3;
 
@@ -69,7 +71,7 @@ pub enum Error {
 
 pub struct Behaviour {
     /// Queue of actions to return when polled.
-    queued_events: VecDeque<NetworkBehaviourAction<Event, handler::Prototype>>,
+    queued_events: VecDeque<NetworkBehaviourAction<Event, Either<handler::relayed::Command, Void>>>,
 
     direct_outgoing_connection_attempts: HashMap<ConnectionId, (ConnectionId, handler::Role)>,
 
@@ -79,6 +81,10 @@ pub struct Behaviour {
     external_addresses: ExternalAddresses,
 
     local_peer_id: PeerId,
+
+    direct_to_relayed_connections: HashMap<ConnectionId, ConnectionId>,
+
+    outgoing_direct_connection_attempts: HashMap<(ConnectionId, PeerId), u8>,
 }
 
 impl Behaviour {
@@ -89,6 +95,8 @@ impl Behaviour {
             direct_connections: Default::default(),
             external_addresses: Default::default(),
             local_peer_id,
+            direct_to_relayed_connections: Default::default(),
+            outgoing_direct_connection_attempts: Default::default(),
         }
     }
 
@@ -295,9 +303,20 @@ impl NetworkBehaviour for Behaviour {
     fn on_connection_handler_event(
         &mut self,
         event_source: PeerId,
-        relayed_connection_id: ConnectionId,
-        handler_event: THandlerOutEvent<Self>,
+        connection_id: ConnectionId,
+        handler_event: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent,
     ) {
+        let relayed_connection_id = match handler_event.as_ref() {
+            Either::Left(_) => connection_id,
+            Either::Right(_) => match self.direct_to_relayed_connections.get(&connection_id) {
+                None => {
+                    // If the connection ID is unknown to us, it means we didn't create it so ignore any event coming from it.
+                    return;
+                }
+                Some(relayed_connection_id) => *relayed_connection_id,
+            },
+        };
+
         match handler_event {
             Either::Left(handler::relayed::Event::InboundConnectRequest {
                 inbound_connect,
@@ -330,19 +349,17 @@ impl NetworkBehaviour for Behaviour {
                     ));
             }
             Either::Left(handler::relayed::Event::InboundConnectNegotiated(remote_addrs)) => {
-                let connection_id = ConnectionId::next();
+                let opts = DialOpts::peer_id(event_source)
+                    .addresses(remote_addrs)
+                    .condition(dial_opts::PeerCondition::Always)
+                    .build();
 
-                self.queued_events.push_back(NetworkBehaviourAction::Dial {
-                    opts: DialOpts::peer_id(event_source)
-                        .addresses(remote_addrs)
-                        .condition(dial_opts::PeerCondition::Always)
-                        .build(),
-                    connection_id,
-                });
-                self.direct_outgoing_connection_attempts.insert(
-                    connection_id,
-                    (relayed_connection_id, handler::Role::Listener),
-                );
+                let maybe_direct_connection_id = opts.connection_id();
+
+                self.direct_to_relayed_connections
+                    .insert(maybe_direct_connection_id, relayed_connection_id);
+                self.queued_events
+                    .push_back(NetworkBehaviourAction::Dial { opts });
             }
             Either::Left(handler::relayed::Event::OutboundNegotiationFailed { error }) => {
                 self.queued_events
@@ -353,30 +370,25 @@ impl NetworkBehaviour for Behaviour {
                         },
                     ));
             }
-            Either::Left(handler::relayed::Event::OutboundConnectNegotiated {
-                remote_addrs,
-                attempt,
-            }) => {
-                let connection_id = ConnectionId::next();
+            Either::Left(handler::relayed::Event::OutboundConnectNegotiated { remote_addrs }) => {
+                let opts = DialOpts::peer_id(event_source)
+                    .condition(dial_opts::PeerCondition::Always)
+                    .addresses(remote_addrs)
+                    .override_role()
+                    .build();
 
-                self.queued_events.push_back(NetworkBehaviourAction::Dial {
-                    opts: DialOpts::peer_id(event_source)
-                        .condition(dial_opts::PeerCondition::Always)
-                        .addresses(remote_addrs)
-                        .override_role()
-                        .build(),
-                    connection_id,
-                });
-                self.direct_outgoing_connection_attempts.insert(
-                    connection_id,
-                    (relayed_connection_id, handler::Role::Initiator { attempt }),
-                );
+                let maybe_direct_connection_id = opts.connection_id();
+
+                self.direct_to_relayed_connections
+                    .insert(maybe_direct_connection_id, relayed_connection_id);
+                *self
+                    .outgoing_direct_connection_attempts
+                    .entry((maybe_direct_connection_id, event_source))
+                    .or_default() += 1;
+                self.queued_events
+                    .push_back(NetworkBehaviourAction::Dial { opts });
             }
-            Either::Right(Either::Left(
-                handler::direct::Event::DirectConnectionUpgradeSucceeded {
-                    relayed_connection_id,
-                },
-            )) => {
+            Either::Right(handler::direct::Event::DirectConnectionEstablished) => {
                 self.queued_events.extend([
                     NetworkBehaviourAction::NotifyHandler {
                         peer_id: event_source,
@@ -392,7 +404,6 @@ impl NetworkBehaviour for Behaviour {
                     ),
                 ]);
             }
-            Either::Right(Either::Right(event)) => void::unreachable(event),
         };
     }
 

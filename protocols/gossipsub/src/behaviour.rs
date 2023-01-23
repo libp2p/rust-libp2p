@@ -36,14 +36,13 @@ use prost::Message;
 use rand::{seq::SliceRandom, thread_rng};
 
 use libp2p_core::{
-    connection::ConnectionId, identity::Keypair, multiaddr::Protocol::Ip4,
-    multiaddr::Protocol::Ip6, Endpoint, Multiaddr, PeerId,
+    identity::Keypair, multiaddr::Protocol::Ip4, multiaddr::Protocol::Ip6, Endpoint, Multiaddr, PeerId,
 };
 use libp2p_swarm::{
     behaviour::{AddressChange, ConnectionClosed, ConnectionEstablished, FromSwarm},
     dial_opts::DialOpts,
-    NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters, THandler,
-    THandlerInEvent, THandlerOutEvent,
+    ConnectionHandler, ConnectionId, IntoConnectionHandler, NetworkBehaviour,
+    NetworkBehaviourAction, NotifyHandler, PollParameters, THandlerInEvent,
 };
 use wasm_timer::Instant;
 
@@ -216,7 +215,7 @@ pub struct Gossipsub<D = IdentityTransform, F = AllowAllSubscriptionFilter> {
     config: GossipsubConfig,
 
     /// Events that need to be yielded to the outside when polling.
-    events: VecDeque<NetworkBehaviourAction<GossipsubEvent, THandlerInEvent<Self>>>,
+    events: VecDeque<NetworkBehaviourAction<GossipsubEvent, GossipsubHandlerIn>>,
 
     /// Pools non-urgent control messages between heartbeats.
     control_pool: HashMap<PeerId, Vec<GossipsubControlAction>>,
@@ -1136,7 +1135,6 @@ where
             debug!("Connecting to explicit peer {:?}", peer_id);
             self.events.push_back(NetworkBehaviourAction::Dial {
                 opts: DialOpts::peer_id(*peer_id).build(),
-                id: ConnectionId::next(),
             });
         }
     }
@@ -1636,7 +1634,6 @@ where
                 // dial peer
                 self.events.push_back(NetworkBehaviourAction::Dial {
                     opts: DialOpts::peer_id(peer_id).build(),
-                    id: ConnectionId::next(),
                 });
             }
         }
@@ -3518,7 +3515,7 @@ fn peer_added_to_mesh(
     new_topics: Vec<&TopicHash>,
     mesh: &HashMap<TopicHash, BTreeSet<PeerId>>,
     known_topics: Option<&BTreeSet<TopicHash>>,
-    events: &mut VecDeque<NetworkBehaviourAction<GossipsubEvent, THandlerInEvent<Gossipsub>>>,
+    events: &mut VecDeque<NetworkBehaviourAction<GossipsubEvent, GossipsubHandlerIn>>,
     connections: &HashMap<PeerId, PeerConnections>,
 ) {
     // Ensure there is an active connection
@@ -3559,7 +3556,7 @@ fn peer_removed_from_mesh(
     old_topic: &TopicHash,
     mesh: &HashMap<TopicHash, BTreeSet<PeerId>>,
     known_topics: Option<&BTreeSet<TopicHash>>,
-    events: &mut VecDeque<NetworkBehaviourAction<GossipsubEvent, THandlerInEvent<Gossipsub>>>,
+    events: &mut VecDeque<NetworkBehaviourAction<GossipsubEvent, GossipsubHandlerIn>>,
     connections: &HashMap<PeerId, PeerConnections>,
 ) {
     // Ensure there is an active connection

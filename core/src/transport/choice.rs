@@ -18,8 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::either::{EitherError, EitherFuture, EitherOutput};
+use crate::either::{EitherFuture, EitherOutput};
 use crate::transport::{ListenerId, Transport, TransportError, TransportEvent};
+use either::Either;
 use multiaddr::Multiaddr;
 use std::{pin::Pin, task::Context, task::Poll};
 
@@ -40,19 +41,19 @@ where
     A: Transport,
 {
     type Output = EitherOutput<A::Output, B::Output>;
-    type Error = EitherError<A::Error, B::Error>;
+    type Error = Either<A::Error, B::Error>;
     type ListenerUpgrade = EitherFuture<A::ListenerUpgrade, B::ListenerUpgrade>;
     type Dial = EitherFuture<A::Dial, B::Dial>;
 
     fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
         let addr = match self.0.listen_on(addr) {
             Err(TransportError::MultiaddrNotSupported(addr)) => addr,
-            res => return res.map_err(|err| err.map(EitherError::A)),
+            res => return res.map_err(|err| err.map(Either::Left)),
         };
 
         let addr = match self.1.listen_on(addr) {
             Err(TransportError::MultiaddrNotSupported(addr)) => addr,
-            res => return res.map_err(|err| err.map(EitherError::B)),
+            res => return res.map_err(|err| err.map(Either::Right)),
         };
 
         Err(TransportError::MultiaddrNotSupported(addr))
@@ -67,7 +68,7 @@ where
             Ok(connec) => return Ok(EitherFuture::First(connec)),
             Err(TransportError::MultiaddrNotSupported(addr)) => addr,
             Err(TransportError::Other(err)) => {
-                return Err(TransportError::Other(EitherError::A(err)))
+                return Err(TransportError::Other(Either::Left(err)))
             }
         };
 
@@ -75,7 +76,7 @@ where
             Ok(connec) => return Ok(EitherFuture::Second(connec)),
             Err(TransportError::MultiaddrNotSupported(addr)) => addr,
             Err(TransportError::Other(err)) => {
-                return Err(TransportError::Other(EitherError::B(err)))
+                return Err(TransportError::Other(Either::Right(err)))
             }
         };
 
@@ -90,7 +91,7 @@ where
             Ok(connec) => return Ok(EitherFuture::First(connec)),
             Err(TransportError::MultiaddrNotSupported(addr)) => addr,
             Err(TransportError::Other(err)) => {
-                return Err(TransportError::Other(EitherError::A(err)))
+                return Err(TransportError::Other(Either::Left(err)))
             }
         };
 
@@ -98,7 +99,7 @@ where
             Ok(connec) => return Ok(EitherFuture::Second(connec)),
             Err(TransportError::MultiaddrNotSupported(addr)) => addr,
             Err(TransportError::Other(err)) => {
-                return Err(TransportError::Other(EitherError::B(err)))
+                return Err(TransportError::Other(Either::Right(err)))
             }
         };
 
@@ -120,13 +121,13 @@ where
         let this = self.project();
         match this.0.poll(cx) {
             Poll::Ready(ev) => {
-                return Poll::Ready(ev.map_upgrade(EitherFuture::First).map_err(EitherError::A))
+                return Poll::Ready(ev.map_upgrade(EitherFuture::First).map_err(Either::Left))
             }
             Poll::Pending => {}
         }
         match this.1.poll(cx) {
             Poll::Ready(ev) => {
-                return Poll::Ready(ev.map_upgrade(EitherFuture::Second).map_err(EitherError::B))
+                return Poll::Ready(ev.map_upgrade(EitherFuture::Second).map_err(Either::Right))
             }
             Poll::Pending => {}
         }

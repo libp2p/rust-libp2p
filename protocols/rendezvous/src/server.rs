@@ -20,19 +20,18 @@
 
 use crate::codec::{Cookie, ErrorCode, Namespace, NewRegistration, Registration, Ttl};
 use crate::handler::inbound;
-use crate::substream_handler::{InboundSubstreamId, SubstreamConnectionHandler};
+use crate::substream_handler::{InEvent, InboundSubstreamId, SubstreamConnectionHandler};
 use crate::{handler, MAX_TTL, MIN_TTL};
 use bimap::BiMap;
 use futures::future::BoxFuture;
 use futures::ready;
 use futures::stream::FuturesUnordered;
 use futures::{FutureExt, StreamExt};
-use libp2p_core::connection::ConnectionId;
 use libp2p_core::{Endpoint, Multiaddr, PeerId};
 use libp2p_swarm::behaviour::FromSwarm;
 use libp2p_swarm::{
-    CloseConnection, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
-    THandler, THandlerInEvent, THandlerOutEvent,
+    CloseConnection, ConnectionId, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
+    PollParameters, THandlerInEvent,
 };
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::iter::FromIterator;
@@ -41,7 +40,7 @@ use std::time::Duration;
 use void::Void;
 
 pub struct Behaviour {
-    events: VecDeque<NetworkBehaviourAction<Event, THandlerInEvent<Self>>>,
+    events: VecDeque<NetworkBehaviourAction<Event, InEvent<(), inbound::InEvent, Void>>>,
     registrations: Registrations,
 }
 
@@ -203,7 +202,7 @@ fn handle_inbound_event(
     connection: ConnectionId,
     id: InboundSubstreamId,
     registrations: &mut Registrations,
-) -> Vec<NetworkBehaviourAction<Event, THandlerInEvent<Behaviour>>> {
+) -> Vec<NetworkBehaviourAction<Event, InEvent<(), inbound::InEvent, Void>>> {
     match event {
         // bad registration
         inbound::OutEvent::RegistrationRequested(registration)

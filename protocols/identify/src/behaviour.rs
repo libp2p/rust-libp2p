@@ -20,14 +20,13 @@
 
 use crate::handler::{self, Handler, InEvent};
 use crate::protocol::{Info, Protocol, UpgradeError};
-use libp2p_core::{
-    connection::ConnectionId, multiaddr, ConnectedPoint, Endpoint, Multiaddr, PeerId, PublicKey,
-};
+use libp2p_core::{multiaddr, ConnectedPoint, Endpoint, Multiaddr, PeerId, PublicKey};
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm};
+use libp2p_swarm::ConnectionId;
 use libp2p_swarm::{
-    dial_opts::DialOpts, AddressScore, ConnectionHandlerUpgrErr, DialError, ExternalAddresses,
-    ListenAddresses, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
-    THandler, THandlerInEvent, THandlerOutEvent,
+    dial_opts::DialOpts, AddressScore, ConnectionHandler, ConnectionHandlerUpgrErr, DialError,
+    ExternalAddresses, IntoConnectionHandler, ListenAddresses, NetworkBehaviour,
+    NetworkBehaviourAction, NotifyHandler, PollParameters, THandlerInEvent,
 };
 use lru::LruCache;
 use std::error::Error;
@@ -55,7 +54,7 @@ pub struct Behaviour {
     /// with current information about the local peer.
     requests: Vec<Request>,
     /// Pending events to be emitted when polled.
-    events: VecDeque<NetworkBehaviourAction<Event, THandlerInEvent<Self>>>,
+    events: VecDeque<NetworkBehaviourAction<Event, InEvent>>,
     /// The addresses of all peers that we have discovered.
     discovered_peers: PeerCache,
 
@@ -202,7 +201,6 @@ impl Behaviour {
 
                 self.events.push_back(NetworkBehaviourAction::Dial {
                     opts: DialOpts::peer_id(p).build(),
-                    id: ConnectionId::next(),
                 });
             }
         }

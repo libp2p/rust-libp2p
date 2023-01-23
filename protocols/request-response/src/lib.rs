@@ -70,12 +70,12 @@ pub use handler::ProtocolSupport;
 
 use futures::channel::oneshot;
 use handler::{Handler, RequestProtocol};
-use libp2p_core::{connection::ConnectionId, ConnectedPoint, Endpoint, Multiaddr, PeerId};
+use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr, PeerId};
 use libp2p_swarm::{
     behaviour::{AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm},
     dial_opts::DialOpts,
-    NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters, THandler,
-    THandlerInEvent, THandlerOutEvent,
+    ConnectionId, IntoConnectionHandler, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
+    PollParameters, THandlerInEvent,
 };
 use smallvec::SmallVec;
 use std::{
@@ -350,7 +350,7 @@ where
     codec: TCodec,
     /// Pending events to return from `poll`.
     pending_events: VecDeque<
-        NetworkBehaviourAction<Event<TCodec::Request, TCodec::Response>, THandlerInEvent<Self>>,
+        NetworkBehaviourAction<Event<TCodec::Request, TCodec::Response>, RequestProtocol<TCodec>>,
     >,
     /// The currently connected peers, their pending outbound and inbound responses and their known,
     /// reachable addresses, if any.
@@ -420,7 +420,6 @@ where
         if let Some(request) = self.try_send_request(peer, request) {
             self.pending_events.push_back(NetworkBehaviourAction::Dial {
                 opts: DialOpts::peer_id(*peer).build(),
-                id: ConnectionId::next(),
             });
             self.pending_outbound_requests
                 .entry(*peer)
