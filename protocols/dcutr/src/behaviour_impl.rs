@@ -20,7 +20,7 @@
 
 //! [`NetworkBehaviour`] to act as a direct connection upgrade through relay node.
 
-use crate::handler::{direct, relayed, Role};
+use crate::handler::{direct, relayed};
 use either::Either;
 use libp2p_core::connection::ConnectedPoint;
 use libp2p_core::multiaddr::Protocol;
@@ -72,8 +72,6 @@ pub struct Behaviour {
     queued_actions:
         VecDeque<NetworkBehaviourAction<Event, Either<relayed::Command, Either<Void, Void>>>>,
 
-    direct_outgoing_connection_attempts: HashMap<ConnectionId, (ConnectionId, Role)>,
-
     /// All direct (non-relayed) connections.
     direct_connections: HashMap<PeerId, HashSet<ConnectionId>>,
 
@@ -90,7 +88,6 @@ impl Behaviour {
     pub fn new(local_peer_id: PeerId) -> Self {
         Behaviour {
             queued_actions: Default::default(),
-            direct_outgoing_connection_attempts: Default::default(),
             direct_connections: Default::default(),
             external_addresses: Default::default(),
             local_peer_id,
@@ -164,19 +161,25 @@ impl Behaviour {
             ..
         }: DialFailure,
     ) {
-        let (relayed_connection_id, role) = match self
-            .direct_outgoing_connection_attempts
-            .remove(&failed_direct_connection)
+        let peer_id = match peer_id {
+            None => return,
+            Some(peer_id) => peer_id,
+        };
+        let attempt = match self
+            .outgoing_direct_connection_attempts
+            .remove(&(failed_direct_connection, peer_id))
         {
             None => return,
-            Some((relayed_connection_id, role)) => (relayed_connection_id, role),
+            Some(attempt) => attempt,
         };
-        let attempt = match role {
-            Role::Listener => return,
-            Role::Initiator { attempt } => attempt,
+        let relayed_connection_id = match self
+            .direct_to_relayed_connections
+            .get(&failed_direct_connection)
+        {
+            None => return,
+            Some(relayed_connection_id) => *relayed_connection_id,
         };
 
-        let peer_id = peer_id.expect("Peer of `Prototype::DirectConnection` is always known.");
         if attempt < MAX_NUMBER_OF_UPGRADE_ATTEMPTS {
             self.queued_actions
                 .push_back(NetworkBehaviourAction::NotifyHandler {
@@ -234,7 +237,7 @@ impl NetworkBehaviour for Behaviour {
 
     fn handle_established_inbound_connection(
         &mut self,
-        _peer: PeerId,
+        peer: PeerId,
         connection_id: ConnectionId,
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
@@ -242,8 +245,8 @@ impl NetworkBehaviour for Behaviour {
         let is_relayed = local_addr.iter().any(|p| p == Protocol::P2pCircuit); // TODO: Make this an extension on `Multiaddr`.
 
         match self
-            .direct_outgoing_connection_attempts
-            .remove(&connection_id)
+            .outgoing_direct_connection_attempts
+            .remove(&(connection_id, peer))
         {
             None => {
                 let handler = if is_relayed {
@@ -257,8 +260,7 @@ impl NetworkBehaviour for Behaviour {
 
                 Ok(handler)
             }
-            // TODO: Why are we ignoring `Role`?
-            Some((_, _)) => {
+            Some(_) => {
                 assert!(
                     !is_relayed,
                     "`Prototype::DirectConnection` is never created for relayed connection."
@@ -271,7 +273,7 @@ impl NetworkBehaviour for Behaviour {
 
     fn handle_established_outbound_connection(
         &mut self,
-        _peer: PeerId,
+        peer: PeerId,
         addr: &Multiaddr,
         role_override: Endpoint,
         connection_id: ConnectionId,
@@ -279,8 +281,8 @@ impl NetworkBehaviour for Behaviour {
         let is_relayed = addr.iter().any(|p| p == Protocol::P2pCircuit); // TODO: Make this an extension on `Multiaddr`.
 
         match self
-            .direct_outgoing_connection_attempts
-            .remove(&connection_id)
+            .outgoing_direct_connection_attempts
+            .remove(&(connection_id, peer))
         {
             None => {
                 let handler = if is_relayed {
@@ -294,8 +296,7 @@ impl NetworkBehaviour for Behaviour {
 
                 Ok(handler)
             }
-            // TODO: Why are we ignoring `Role`?
-            Some((_, _)) => {
+            Some(_) => {
                 assert!(
                     !is_relayed,
                     "`Prototype::DirectConnection` is never created for relayed connection."

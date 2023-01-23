@@ -20,8 +20,3 @@
 
 pub mod direct;
 pub mod relayed;
-
-pub enum Role {
-    Initiator { attempt: u8 },
-    Listener,
-}
