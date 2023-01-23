@@ -69,7 +69,7 @@ pub enum Error {
 
 pub struct Behaviour {
     /// Queue of actions to return when polled.
-    queued_actions:
+    queued_events:
         VecDeque<NetworkBehaviourAction<Event, Either<relayed::Command, Either<Void, Void>>>>,
 
     /// All direct (non-relayed) connections.
@@ -87,7 +87,7 @@ pub struct Behaviour {
 impl Behaviour {
     pub fn new(local_peer_id: PeerId) -> Self {
         Behaviour {
-            queued_actions: Default::default(),
+            queued_events: Default::default(),
             direct_connections: Default::default(),
             external_addresses: Default::default(),
             local_peer_id,
@@ -125,7 +125,7 @@ impl Behaviour {
                 // connection upgrade by initiating a direct connection to A.
                 //
                 // https://github.com/libp2p/specs/blob/master/relay/DCUtR.md#the-protocol
-                self.queued_actions.extend([
+                self.queued_events.extend([
                     NetworkBehaviourAction::NotifyHandler {
                         peer_id,
                         handler: NotifyHandler::One(connection_id),
@@ -181,7 +181,7 @@ impl Behaviour {
         };
 
         if attempt < MAX_NUMBER_OF_UPGRADE_ATTEMPTS {
-            self.queued_actions
+            self.queued_events
                 .push_back(NetworkBehaviourAction::NotifyHandler {
                     peer_id,
                     handler: NotifyHandler::One(relayed_connection_id),
@@ -191,7 +191,7 @@ impl Behaviour {
                     }),
                 });
         } else {
-            self.queued_actions.extend([
+            self.queued_events.extend([
                 NetworkBehaviourAction::NotifyHandler {
                     peer_id,
                     handler: NotifyHandler::One(relayed_connection_id),
@@ -329,7 +329,7 @@ impl NetworkBehaviour for Behaviour {
                 inbound_connect,
                 remote_addr,
             }) => {
-                self.queued_actions.extend([
+                self.queued_events.extend([
                     NetworkBehaviourAction::NotifyHandler {
                         handler: NotifyHandler::One(relayed_connection_id),
                         peer_id: event_source,
@@ -347,7 +347,7 @@ impl NetworkBehaviour for Behaviour {
                 ]);
             }
             Either::Left(relayed::Event::InboundNegotiationFailed { error }) => {
-                self.queued_actions
+                self.queued_events
                     .push_back(NetworkBehaviourAction::GenerateEvent(
                         Event::DirectConnectionUpgradeFailed {
                             remote_peer_id: event_source,
@@ -365,11 +365,11 @@ impl NetworkBehaviour for Behaviour {
 
                 self.direct_to_relayed_connections
                     .insert(maybe_direct_connection_id, relayed_connection_id);
-                self.queued_actions
+                self.queued_events
                     .push_back(NetworkBehaviourAction::Dial { opts });
             }
             Either::Left(relayed::Event::OutboundNegotiationFailed { error }) => {
-                self.queued_actions
+                self.queued_events
                     .push_back(NetworkBehaviourAction::GenerateEvent(
                         Event::DirectConnectionUpgradeFailed {
                             remote_peer_id: event_source,
@@ -392,11 +392,11 @@ impl NetworkBehaviour for Behaviour {
                     .outgoing_direct_connection_attempts
                     .entry((maybe_direct_connection_id, event_source))
                     .or_default() += 1;
-                self.queued_actions
+                self.queued_events
                     .push_back(NetworkBehaviourAction::Dial { opts });
             }
             Either::Right(Either::Left(direct::Event::DirectConnectionEstablished)) => {
-                self.queued_actions.extend([
+                self.queued_events.extend([
                     NetworkBehaviourAction::NotifyHandler {
                         peer_id: event_source,
                         handler: NotifyHandler::One(relayed_connection_id),
@@ -418,7 +418,7 @@ impl NetworkBehaviour for Behaviour {
         _cx: &mut Context<'_>,
         _: &mut impl PollParameters,
     ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>> {
-        if let Some(event) = self.queued_actions.pop_front() {
+        if let Some(event) = self.queued_events.pop_front() {
             return Poll::Ready(event);
         }
 
