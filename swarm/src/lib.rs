@@ -166,7 +166,7 @@ type THandlerInEvent<TBehaviour> =
     <<THandler<TBehaviour> as IntoConnectionHandler>::Handler as ConnectionHandler>::InEvent;
 
 /// Custom event that can be produced by the [`ConnectionHandler`] of the [`NetworkBehaviour`].
-type THandlerOutEvent<TBehaviour> =
+pub type THandlerOutEvent<TBehaviour> =
     <<THandler<TBehaviour> as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent;
 
 /// Custom error that can be produced by the [`ConnectionHandler`] of the [`NetworkBehaviour`].

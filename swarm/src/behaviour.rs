@@ -29,16 +29,13 @@ pub use listen_addresses::ListenAddresses;
 use crate::connection::ConnectionId;
 use crate::dial_opts::DialOpts;
 use crate::handler::{ConnectionHandler, IntoConnectionHandler};
-use crate::{AddressRecord, AddressScore, DialError};
+use crate::{AddressRecord, AddressScore, DialError, THandlerOutEvent};
 use libp2p_core::{transport::ListenerId, ConnectedPoint, Multiaddr, PeerId};
 use std::{task::Context, task::Poll};
 
 /// Custom event that can be received by the [`ConnectionHandler`].
 pub(crate) type THandlerInEvent<THandler> =
     <<THandler as IntoConnectionHandler>::Handler as ConnectionHandler>::InEvent;
-
-pub(crate) type THandlerOutEvent<THandler> =
-    <<THandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent;
 
 /// A [`NetworkBehaviour`] defines the behaviour of the local node on the network.
 ///
@@ -122,7 +119,7 @@ pub(crate) type THandlerOutEvent<THandler> =
 ///   }
 /// }
 /// ```
-pub trait NetworkBehaviour: 'static {
+pub trait NetworkBehaviour: Sized + 'static {
     /// Handler for all the protocols the network behaviour supports.
     type ConnectionHandler: IntoConnectionHandler;
 
@@ -170,8 +167,7 @@ pub trait NetworkBehaviour: 'static {
         &mut self,
         _peer_id: PeerId,
         _connection_id: ConnectionId,
-        _event: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as
-        ConnectionHandler>::OutEvent,
+        _event: THandlerOutEvent<Self>,
     ) {
     }
 
@@ -335,7 +331,7 @@ pub enum NetworkBehaviourAction<
     ///     #     &mut self,
     ///     #     _: PeerId,
     ///     #     _: ConnectionId,
-    ///     #     _: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent,
+    ///     #     _: THandlerOutEvent<Self>,
     ///     # ) {
     ///     #     unreachable!();
     ///     # }
