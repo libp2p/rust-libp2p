@@ -71,6 +71,8 @@ pub struct GenTransport<P: Provider> {
     listeners: SelectAll<Listener<P>>,
     /// Dialer for each socket family if no matching listener exists.
     dialer: HashMap<SocketFamily, Dialer>,
+    /// Waker to poll the transport again when a new dialer or listener is added.
+    waker: Option<Waker>,
 }
 
 impl<P: Provider> GenTransport<P> {
@@ -84,6 +86,7 @@ impl<P: Provider> GenTransport<P> {
             quinn_config,
             handshake_timeout,
             dialer: HashMap::new(),
+            waker: None,
             support_draft_29,
         }
     }
@@ -107,6 +110,10 @@ impl<P: Provider> Transport for GenTransport<P> {
             version,
         )?;
         self.listeners.push(listener);
+
+        if let Some(waker) = self.waker.take() {
+            waker.wake();
+        }
 
         // Remove dialer endpoint so that the endpoint is dropped once the last
         // connection that uses it is closed.
@@ -163,6 +170,9 @@ impl<P: Provider> Transport for GenTransport<P> {
                 let dialer = match self.dialer.entry(socket_family) {
                     Entry::Occupied(occupied) => occupied.into_mut(),
                     Entry::Vacant(vacant) => {
+                        if let Some(waker) = self.waker.take() {
+                            waker.wake();
+                        }
                         vacant.insert(Dialer::new::<P>(self.quinn_config.clone(), socket_family)?)
                     }
                 };
@@ -202,15 +212,19 @@ impl<P: Provider> Transport for GenTransport<P> {
                 errored.push(*key);
             }
         }
+
         for key in errored {
             // Endpoint driver of dialer crashed.
             // Drop dialer and all pending dials so that the connection receiver is notified.
             self.dialer.remove(&key);
         }
-        match self.listeners.poll_next_unpin(cx) {
-            Poll::Ready(Some(ev)) => Poll::Ready(ev),
-            _ => Poll::Pending,
+
+        if let Poll::Ready(Some(ev)) = self.listeners.poll_next_unpin(cx) {
+            return Poll::Ready(ev);
         }
+
+        self.waker = Some(cx.waker().clone());
+        Poll::Pending
     }
 }
 
