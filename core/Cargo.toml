@@ -35,7 +35,6 @@ void = "1"
 
 [dev-dependencies]
 async-std = { version = "1.6.2", features = ["attributes"] }
-criterion = "0.4"
 libp2p-mplex = { path = "../muxers/mplex" }
 libp2p-noise = { path = "../transports/noise" }
 multihash = { version = "0.17.0", default-features = false, features = ["arb"] }
@@ -49,10 +48,6 @@ secp256k1 = [ "libp2p-identity/secp256k1" ]
 ecdsa = [ "libp2p-identity/ecdsa" ]
 rsa = [ "libp2p-identity/rsa" ]
 serde = ["multihash/serde-codec", "dep:serde", "libp2p-identity/serde"]
-
-[[bench]]
-name = "peer_id"
-harness = false
 
 # Passing arguments to the docsrs builder in order to properly document cfg's.
 # More information: https://docs.rs/about/builds#cross-compiling
