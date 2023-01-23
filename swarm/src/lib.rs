@@ -577,7 +577,7 @@ where
                         let num_addresses = addresses.len();
 
                         if num_addresses > 0 {
-                            log::debug!("discarding {num_addresses} addresses from `NetworkBehaviour` because `DialOpts::extend_addresses_through_behaviour is `false` for connection {connection_id}")
+                            log::debug!("discarding {num_addresses} addresses from `NetworkBehaviour` because `DialOpts::extend_addresses_through_behaviour is `false` for connection {connection_id:?}")
                         }
                     }
                 }
@@ -588,7 +588,7 @@ where
                         .on_swarm_event(FromSwarm::DialFailure(DialFailure {
                             peer_id,
                             error: &error,
-                            id: connection_id,
+                            connection_id,
                         }));
 
                     return Err(error);
@@ -954,7 +954,7 @@ where
                     let dial_error = DialError::Denied { cause };
                     self.behaviour
                         .on_swarm_event(FromSwarm::DialFailure(DialFailure {
-                            id,
+                            connection_id: id,
                             error: &dial_error,
                             peer_id: Some(peer_id),
                         }));

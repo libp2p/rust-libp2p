@@ -31,9 +31,7 @@ use crate::dial_opts::DialOpts;
 #[allow(deprecated)]
 use crate::handler::IntoConnectionHandler;
 use crate::{AddressRecord, AddressScore, DialError, THandler, THandlerInEvent, THandlerOutEvent};
-use libp2p_core::{
-    transport::ListenerId, ConnectedPoint, Endpoint, Multiaddr, PeerId,
-};
+use libp2p_core::{transport::ListenerId, ConnectedPoint, Endpoint, Multiaddr, PeerId};
 use std::{task::Context, task::Poll};
 
 /// A [`NetworkBehaviour`] defines the behaviour of the local node on the network.

@@ -26,11 +26,11 @@ use crate::topic::Topic;
 use crate::FloodsubConfig;
 use cuckoofilter::{CuckooError, CuckooFilter};
 use fnv::FnvHashSet;
-use libp2p_core::PeerId;
+use libp2p_core::{Endpoint, Multiaddr, PeerId};
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm};
 use libp2p_swarm::{
     dial_opts::DialOpts, ConnectionId, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
-    OneShotHandler, PollParameters, THandlerInEvent,
+    OneShotHandler, PollParameters, THandler, THandlerInEvent, THandlerOutEvent,
 };
 use log::warn;
 use smallvec::SmallVec;

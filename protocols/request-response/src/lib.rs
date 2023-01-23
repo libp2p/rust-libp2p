@@ -74,8 +74,8 @@ use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr, PeerId};
 use libp2p_swarm::{
     behaviour::{AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm},
     dial_opts::DialOpts,
-    ConnectionId, IntoConnectionHandler, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
-    PollParameters, THandlerInEvent,
+    ConnectionId, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
+    THandler, THandlerInEvent, THandlerOutEvent,
 };
 use smallvec::SmallVec;
 use std::{

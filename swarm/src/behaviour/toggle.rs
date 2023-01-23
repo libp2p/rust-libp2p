@@ -26,9 +26,12 @@ use crate::handler::{
     KeepAlive, ListenUpgradeError, SubstreamProtocol,
 };
 use crate::upgrade::SendWrapper;
-use crate::{NetworkBehaviour, NetworkBehaviourAction, PollParameters, THandler, THandlerInEvent, THandlerOutEvent};
+use crate::{
+    NetworkBehaviour, NetworkBehaviourAction, PollParameters, THandler, THandlerInEvent,
+    THandlerOutEvent,
+};
 use either::Either;
-use libp2p_core::{either::EitherOutput, upgrade::DeniedUpgrade, Multiaddr, PeerId, Endpoint};
+use libp2p_core::{either::EitherOutput, upgrade::DeniedUpgrade, Endpoint, Multiaddr, PeerId};
 use std::error::Error;
 use std::{task::Context, task::Poll};
 

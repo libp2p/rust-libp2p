@@ -23,17 +23,18 @@
 mod handler;
 pub mod rate_limiter;
 
+use crate::behaviour::handler::Handler;
 use crate::message_proto;
 use crate::protocol::{inbound_hop, outbound_stop};
-use crate::v2::relay::handler::Handler;
 use either::Either;
 use instant::Instant;
 use libp2p_core::multiaddr::Protocol;
 use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr, PeerId};
 use libp2p_swarm::behaviour::{ConnectionClosed, FromSwarm};
 use libp2p_swarm::{
-    ConnectionHandlerUpgrErr, ConnectionId, ExternalAddresses, NetworkBehaviour,
-    NetworkBehaviourAction, NotifyHandler, PollParameters, THandlerInEvent,
+    dummy, ConnectionHandlerUpgrErr, ConnectionId, ExternalAddresses, NetworkBehaviour,
+    NetworkBehaviourAction, NotifyHandler, PollParameters, THandler, THandlerInEvent,
+    THandlerOutEvent,
 };
 use std::collections::{hash_map, HashMap, HashSet, VecDeque};
 use std::error::Error;

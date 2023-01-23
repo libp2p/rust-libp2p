@@ -23,6 +23,7 @@
 mod handler;
 pub(crate) mod transport;
 
+use crate::priv_client::handler::Handler;
 use crate::protocol::{self, inbound_stop, outbound_hop};
 use bytes::Bytes;
 use either::Either;
@@ -32,12 +33,14 @@ use futures::future::{BoxFuture, FutureExt};
 use futures::io::{AsyncRead, AsyncWrite};
 use futures::ready;
 use futures::stream::StreamExt;
-use libp2p_core::PeerId;
+use libp2p_core::multiaddr::Protocol;
+use libp2p_core::{Endpoint, Multiaddr, PeerId};
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm};
 use libp2p_swarm::dial_opts::DialOpts;
 use libp2p_swarm::{
-    ConnectionHandlerUpgrErr, ConnectionId, NegotiatedSubstream, NetworkBehaviour,
-    NetworkBehaviourAction, NotifyHandler, PollParameters, THandlerInEvent,
+    dummy, ConnectionHandler, ConnectionHandlerUpgrErr, ConnectionId, NegotiatedSubstream,
+    NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters, THandler,
+    THandlerInEvent, THandlerOutEvent,
 };
 use std::collections::{hash_map, HashMap, VecDeque};
 use std::io::{Error, ErrorKind, IoSlice};
@@ -103,8 +106,6 @@ pub struct Behaviour {
     queued_actions: VecDeque<NetworkBehaviourAction<Event, Either<handler::In, Void>>>,
 
     pending_handler_commands: HashMap<ConnectionId, handler::In>,
-
-    pending_events: HashMap<ConnectionId, handler::In>,
 }
 
 /// Create a new client relay [`Behaviour`] with it's corresponding [`Transport`].
@@ -115,7 +116,7 @@ pub fn new(local_peer_id: PeerId) -> (Transport, Behaviour) {
         from_transport,
         directly_connected_peers: Default::default(),
         queued_actions: Default::default(),
-        pending_events: Default::default(),
+        pending_handler_commands: Default::default(),
     };
     (transport, behaviour)
 }
@@ -176,7 +177,7 @@ impl NetworkBehaviour for Behaviour {
 
         let mut handler = Handler::new(self.local_peer_id, peer, remote_addr.clone());
 
-        if let Some(event) = self.pending_events.remove(&connection_id) {
+        if let Some(event) = self.pending_handler_commands.remove(&connection_id) {
             handler.on_behaviour_event(event)
         }
 
@@ -198,7 +199,7 @@ impl NetworkBehaviour for Behaviour {
 
         let mut handler = Handler::new(self.local_peer_id, peer, addr.clone());
 
-        if let Some(event) = self.pending_events.remove(&connection_id) {
+        if let Some(event) = self.pending_handler_commands.remove(&connection_id) {
             handler.on_behaviour_event(event)
         }
 

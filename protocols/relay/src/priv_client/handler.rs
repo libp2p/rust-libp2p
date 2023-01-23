@@ -21,6 +21,7 @@
 use crate::message_proto::Status;
 use crate::priv_client::transport;
 use crate::protocol::{self, inbound_stop, outbound_hop};
+use either::Either;
 use futures::channel::{mpsc, oneshot};
 use futures::future::{BoxFuture, FutureExt};
 use futures::sink::SinkExt;

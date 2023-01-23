@@ -23,8 +23,8 @@ use crate::behaviour::{
     FromSwarm, ListenerClosed, ListenerError, NewExternalAddr, NewListenAddr, NewListener,
 };
 use crate::{
-    ConnectionHandler, ConnectionId, IntoConnectionHandler, NetworkBehaviour,
-    NetworkBehaviourAction, PollParameters, THandlerInEvent,
+    ConnectionHandler, ConnectionId, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
+    THandlerInEvent, THandlerOutEvent,
 };
 use libp2p_core::{multiaddr::Multiaddr, transport::ListenerId, ConnectedPoint, PeerId};
 use std::collections::HashMap;

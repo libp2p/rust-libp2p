@@ -34,7 +34,7 @@ use libp2p_core::{Endpoint, Multiaddr, PeerId, PeerRecord};
 use libp2p_swarm::behaviour::FromSwarm;
 use libp2p_swarm::{
     CloseConnection, ConnectionId, ExternalAddresses, NetworkBehaviour, NetworkBehaviourAction,
-    NotifyHandler, PollParameters, THandlerInEvent,
+    NotifyHandler, PollParameters, THandler, THandlerInEvent, THandlerOutEvent,
 };
 use std::collections::{HashMap, VecDeque};
 use std::error::Error;

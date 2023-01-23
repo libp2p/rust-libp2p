@@ -37,8 +37,8 @@ use libp2p_swarm::{
         AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, ExpiredExternalAddr,
         ExpiredListenAddr, FromSwarm,
     },
-    ConnectionHandler, ConnectionId, ExternalAddresses, IntoConnectionHandler, ListenAddresses,
-    NetworkBehaviour, NetworkBehaviourAction, PollParameters, THandlerInEvent,
+    ConnectionId, ExternalAddresses, ListenAddresses, NetworkBehaviour, NetworkBehaviourAction,
+    PollParameters, THandler, THandlerInEvent, THandlerOutEvent,
 };
 use std::error::Error;
 use std::{

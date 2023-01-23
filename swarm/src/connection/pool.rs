@@ -41,10 +41,10 @@ use futures::{
 use instant::Instant;
 use libp2p_core::connection::Endpoint;
 use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerExt};
-use std::task::Waker;
 use libp2p_core::ProtocolName;
 use smallvec::SmallVec;
 use std::error::Error;
+use std::task::Waker;
 use std::{
     collections::{hash_map, HashMap},
     convert::TryFrom as _,
@@ -131,7 +131,8 @@ where
     no_established_connections_waker: Option<Waker>,
 
     /// Receivers for events reported from established connections.
-    established_connection_events: SelectAll<mpsc::Receiver<task::EstablishedConnectionEvent<THandler>>>,
+    established_connection_events:
+        SelectAll<mpsc::Receiver<task::EstablishedConnectionEvent<THandler>>>,
 }
 
 #[derive(Debug)]

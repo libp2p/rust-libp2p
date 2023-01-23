@@ -47,10 +47,10 @@ mod protocol;
 
 use handler::Handler;
 pub use handler::{Config, Failure, Success};
-use libp2p_core::PeerId;
+use libp2p_core::{Endpoint, Multiaddr, PeerId};
 use libp2p_swarm::{
     behaviour::FromSwarm, ConnectionId, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
-    THandlerInEvent,
+    THandler, THandlerInEvent, THandlerOutEvent,
 };
 use std::error::Error;
 use std::{

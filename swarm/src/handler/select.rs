@@ -102,7 +102,7 @@ impl<TProto1, TProto2> ConnectionHandlerSelect<TProto1, TProto2> {
 }
 
 impl<S1OOI, S2OOI, S1OP, S2OP>
-    FullyNegotiatedOutbound<EitherOutput<SendWrapper<S1OP>, SendWrapper<S2OP>>, Either<S1OOI, S2OOI>>
+    FullyNegotiatedOutbound<Either<SendWrapper<S1OP>, SendWrapper<S2OP>>, Either<S1OOI, S2OOI>>
 where
     S1OP: OutboundUpgradeSend,
     S2OP: OutboundUpgradeSend,
@@ -127,10 +127,7 @@ where
 }
 
 impl<S1OOI, S2OOI, S1OP, S2OP>
-    FullyNegotiatedInbound<
-        Either<SendWrapper<S1OP>, SendWrapper<S2OP>>,
-        Either<S1OOI, S2OOI>,
-    >
+    FullyNegotiatedInbound<Either<SendWrapper<S1OP>, SendWrapper<S2OP>>, Either<S1OOI, S2OOI>>
 where
     S1OP: InboundUpgradeSend,
     S2OP: InboundUpgradeSend,
@@ -142,11 +139,11 @@ where
     ) -> Either<FullyNegotiatedInbound<S1OP, S1OOI>, FullyNegotiatedInbound<S2OP, S2OOI>> {
         match self {
             FullyNegotiatedInbound {
-                protocol: Either::Left(protocol),
+                protocol: EitherOutput::First(protocol),
                 info: Either::Left(info),
             } => Either::Left(FullyNegotiatedInbound { protocol, info }),
             FullyNegotiatedInbound {
-                protocol: Either::Right(protocol),
+                protocol: EitherOutput::Second(protocol),
                 info: Either::Right(info),
             } => Either::Right(FullyNegotiatedInbound { protocol, info }),
             _ => panic!("wrong API usage: the protocol doesn't match the upgrade info"),
@@ -448,7 +445,7 @@ where
     >;
     type OutboundProtocol =
         Either<SendWrapper<TProto1::OutboundProtocol>, SendWrapper<TProto2::OutboundProtocol>>;
-    type OutboundOpenInfo = EitherOutput<TProto1::OutboundOpenInfo, TProto2::OutboundOpenInfo>;
+    type OutboundOpenInfo = Either<TProto1::OutboundOpenInfo, TProto2::OutboundOpenInfo>;
     type InboundOpenInfo = (TProto1::InboundOpenInfo, TProto2::InboundOpenInfo);
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
@@ -497,7 +494,7 @@ where
                 return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
                     protocol: protocol
                         .map_upgrade(|u| Either::Left(SendWrapper(u)))
-                        .map_info(EitherOutput::First),
+                        .map_info(Either::Left),
                 });
             }
             Poll::Pending => (),
@@ -514,7 +511,7 @@ where
                 return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
                     protocol: protocol
                         .map_upgrade(|u| Either::Right(SendWrapper(u)))
-                        .map_info(EitherOutput::Second),
+                        .map_info(Either::Right),
                 });
             }
             Poll::Pending => (),
