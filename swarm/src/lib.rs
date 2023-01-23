@@ -93,8 +93,8 @@ pub mod derive_prelude {
     pub use crate::NetworkBehaviourAction;
     pub use crate::PollParameters;
     pub use crate::THandlerInEvent;
+    pub use either::Either;
     pub use futures::prelude as futures;
-    pub use libp2p_core::either::EitherOutput;
     pub use libp2p_core::transport::ListenerId;
     pub use libp2p_core::ConnectedPoint;
     pub use libp2p_core::Multiaddr;
