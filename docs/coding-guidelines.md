@@ -340,15 +340,3 @@ struct Response {
   // ...
 }
 ```
-
-``` rust
-struct Command<UserData> {
-  user_data: UserData,
-  // ...
-}
-
-struct Response<UserData> {
-  command_user_data: UserData,
-  // ...
-}
-```
