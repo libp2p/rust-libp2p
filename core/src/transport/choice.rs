@@ -18,9 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::either::{EitherFuture, EitherOutput};
+use crate::either::EitherFuture;
 use crate::transport::{ListenerId, Transport, TransportError, TransportEvent};
 use either::Either;
+use futures::future;
 use multiaddr::Multiaddr;
 use std::{pin::Pin, task::Context, task::Poll};
 
@@ -40,7 +41,7 @@ where
     B: Transport,
     A: Transport,
 {
-    type Output = EitherOutput<A::Output, B::Output>;
+    type Output = future::Either<A::Output, B::Output>;
     type Error = Either<A::Error, B::Error>;
     type ListenerUpgrade = EitherFuture<A::ListenerUpgrade, B::ListenerUpgrade>;
     type Dial = EitherFuture<A::Dial, B::Dial>;
