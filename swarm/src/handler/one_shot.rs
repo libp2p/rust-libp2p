@@ -212,8 +212,9 @@ where
                 self.events_out.push(out.into());
             }
             ConnectionEvent::DialUpgradeError(DialUpgradeError { error, .. }) => {
-                log::debug!("failed to open stream: {}", error);
-                self.keep_alive = KeepAlive::No;
+                if self.pending_error.is_none() {
+                    self.pending_error = Some(error);
+                }
             }
             ConnectionEvent::AddressChange(_) | ConnectionEvent::ListenUpgradeError(_) => {}
         }
