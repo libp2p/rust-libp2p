@@ -3,7 +3,7 @@
 - Add `And` struct that combines two `NetworkBehaviour` implementations. Helfpful for when one wants
   just a simple composition of two `NetworkBehaviour`, no need to create a new struct and derive `NetworkBehaviour`.
   One other use-case is when wanting to either enable two `NetworkBehaviour`s or disable both, but never enable one but disable the other.
-  i.e. `Toggle<And<BehaviourA, BehaviourB>>`. See [PR XXXX]
+  i.e. `Toggle<And<BehaviourA, BehaviourB>>`. See [PR 3366]
 
 - Update to `libp2p-core` `v0.39.0`.
 
@@ -21,18 +21,21 @@
 - Remove type parameter from `PendingOutboundConnectionError` and `PendingInboundConnectionError`.
   These two types are always used with `std::io::Error`. See [PR 3272].
 
-- Replace `SwarmBuilder::connection_event_buffer_size` with `SwarmBuilder::per_connection_event_buffer_size` . 
+- Replace `SwarmBuilder::connection_event_buffer_size` with `SwarmBuilder::per_connection_event_buffer_size` .
   The configured value now applies _per_ connection.
   The default values remains 7.
   If you have previously set `connection_event_buffer_size` you should re-evaluate what a good size for a _per connection_ buffer is.
   See [PR 3188].
 
-[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+- Remove `ConnectionId::new`. Manually creating `ConnectionId`s is now unsupported. See [PR 3327].
+
+[PR 3366]: https://github.com/libp2p/rust-libp2p/pull/3366
 [PR 3170]: https://github.com/libp2p/rust-libp2p/pull/3170
 [PR 3134]: https://github.com/libp2p/rust-libp2p/pull/3134
 [PR 3153]: https://github.com/libp2p/rust-libp2p/pull/3153
 [PR 3264]: https://github.com/libp2p/rust-libp2p/pull/3264
 [PR 3272]: https://github.com/libp2p/rust-libp2p/pull/3272
+[PR 3327]: https://github.com/libp2p/rust-libp2p/pull/3327
 [PR 3188]: https://github.com/libp2p/rust-libp2p/pull/3188
 
 # 0.41.1

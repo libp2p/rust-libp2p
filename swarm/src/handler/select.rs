@@ -27,8 +27,8 @@ use crate::handler::{
 use crate::upgrade::SendWrapper;
 
 use either::Either;
+use futures::future;
 use libp2p_core::{
-    either::EitherOutput,
     upgrade::{NegotiationError, ProtocolError, SelectUpgrade, UpgradeError},
     ConnectedPoint, PeerId,
 };
@@ -101,27 +101,24 @@ impl<TProto1, TProto2> ConnectionHandlerSelect<TProto1, TProto2> {
 }
 
 impl<S1OOI, S2OOI, S1OP, S2OP>
-    FullyNegotiatedOutbound<
-        Either<SendWrapper<S1OP>, SendWrapper<S2OP>>,
-        EitherOutput<S1OOI, S2OOI>,
-    >
+    FullyNegotiatedOutbound<Either<SendWrapper<S1OP>, SendWrapper<S2OP>>, Either<S1OOI, S2OOI>>
 where
     S1OP: OutboundUpgradeSend,
     S2OP: OutboundUpgradeSend,
     S1OOI: Send + 'static,
     S2OOI: Send + 'static,
 {
-    fn transpose(
+    pub(crate) fn transpose(
         self,
     ) -> Either<FullyNegotiatedOutbound<S1OP, S1OOI>, FullyNegotiatedOutbound<S2OP, S2OOI>> {
         match self {
             FullyNegotiatedOutbound {
-                protocol: EitherOutput::First(protocol),
-                info: EitherOutput::First(info),
+                protocol: future::Either::Left(protocol),
+                info: Either::Left(info),
             } => Either::Left(FullyNegotiatedOutbound { protocol, info }),
             FullyNegotiatedOutbound {
-                protocol: EitherOutput::Second(protocol),
-                info: EitherOutput::Second(info),
+                protocol: future::Either::Right(protocol),
+                info: Either::Right(info),
             } => Either::Right(FullyNegotiatedOutbound { protocol, info }),
             _ => panic!("wrong API usage: the protocol doesn't match the upgrade info"),
         }
@@ -134,16 +131,16 @@ where
     S1IP: InboundUpgradeSend,
     S2IP: InboundUpgradeSend,
 {
-    fn transpose(
+    pub(crate) fn transpose(
         self,
     ) -> Either<FullyNegotiatedInbound<S1IP, S1IOI>, FullyNegotiatedInbound<S2IP, S2IOI>> {
         match self {
             FullyNegotiatedInbound {
-                protocol: EitherOutput::First(protocol),
+                protocol: future::Either::Left(protocol),
                 info: (i1, _i2),
             } => Either::Left(FullyNegotiatedInbound { protocol, info: i1 }),
             FullyNegotiatedInbound {
-                protocol: EitherOutput::Second(protocol),
+                protocol: future::Either::Right(protocol),
                 info: (_i1, i2),
             } => Either::Right(FullyNegotiatedInbound { protocol, info: i2 }),
         }
@@ -151,66 +148,68 @@ where
 }
 
 impl<S1OOI, S2OOI, S1OP, S2OP>
-    DialUpgradeError<EitherOutput<S1OOI, S2OOI>, Either<SendWrapper<S1OP>, SendWrapper<S2OP>>>
+    DialUpgradeError<Either<S1OOI, S2OOI>, Either<SendWrapper<S1OP>, SendWrapper<S2OP>>>
 where
     S1OP: OutboundUpgradeSend,
     S2OP: OutboundUpgradeSend,
     S1OOI: Send + 'static,
     S2OOI: Send + 'static,
 {
-    fn transpose(self) -> Either<DialUpgradeError<S1OOI, S1OP>, DialUpgradeError<S2OOI, S2OP>> {
+    pub(crate) fn transpose(
+        self,
+    ) -> Either<DialUpgradeError<S1OOI, S1OP>, DialUpgradeError<S2OOI, S2OP>> {
         match self {
             DialUpgradeError {
-                info: EitherOutput::First(info),
+                info: Either::Left(info),
                 error: ConnectionHandlerUpgrErr::Timer,
             } => Either::Left(DialUpgradeError {
                 info,
                 error: ConnectionHandlerUpgrErr::Timer,
             }),
             DialUpgradeError {
-                info: EitherOutput::First(info),
+                info: Either::Left(info),
                 error: ConnectionHandlerUpgrErr::Timeout,
             } => Either::Left(DialUpgradeError {
                 info,
                 error: ConnectionHandlerUpgrErr::Timeout,
             }),
             DialUpgradeError {
-                info: EitherOutput::First(info),
+                info: Either::Left(info),
                 error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(err)),
             } => Either::Left(DialUpgradeError {
                 info,
                 error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(err)),
             }),
             DialUpgradeError {
-                info: EitherOutput::First(info),
+                info: Either::Left(info),
                 error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(Either::Left(err))),
             } => Either::Left(DialUpgradeError {
                 info,
                 error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(err)),
             }),
             DialUpgradeError {
-                info: EitherOutput::Second(info),
+                info: Either::Right(info),
                 error: ConnectionHandlerUpgrErr::Timer,
             } => Either::Right(DialUpgradeError {
                 info,
                 error: ConnectionHandlerUpgrErr::Timer,
             }),
             DialUpgradeError {
-                info: EitherOutput::Second(info),
+                info: Either::Right(info),
                 error: ConnectionHandlerUpgrErr::Timeout,
             } => Either::Right(DialUpgradeError {
                 info,
                 error: ConnectionHandlerUpgrErr::Timeout,
             }),
             DialUpgradeError {
-                info: EitherOutput::Second(info),
+                info: Either::Right(info),
                 error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(err)),
             } => Either::Right(DialUpgradeError {
                 info,
                 error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(err)),
             }),
             DialUpgradeError {
-                info: EitherOutput::Second(info),
+                info: Either::Right(info),
                 error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(Either::Right(err))),
             } => Either::Right(DialUpgradeError {
                 info,
@@ -338,8 +337,8 @@ where
     TProto1: ConnectionHandler,
     TProto2: ConnectionHandler,
 {
-    type InEvent = EitherOutput<TProto1::InEvent, TProto2::InEvent>;
-    type OutEvent = EitherOutput<TProto1::OutEvent, TProto2::OutEvent>;
+    type InEvent = Either<TProto1::InEvent, TProto2::InEvent>;
+    type OutEvent = Either<TProto1::OutEvent, TProto2::OutEvent>;
     type Error = Either<TProto1::Error, TProto2::Error>;
     type InboundProtocol = SelectUpgrade<
         SendWrapper<<TProto1 as ConnectionHandler>::InboundProtocol>,
@@ -347,7 +346,7 @@ where
     >;
     type OutboundProtocol =
         Either<SendWrapper<TProto1::OutboundProtocol>, SendWrapper<TProto2::OutboundProtocol>>;
-    type OutboundOpenInfo = EitherOutput<TProto1::OutboundOpenInfo, TProto2::OutboundOpenInfo>;
+    type OutboundOpenInfo = Either<TProto1::OutboundOpenInfo, TProto2::OutboundOpenInfo>;
     type InboundOpenInfo = (TProto1::InboundOpenInfo, TProto2::InboundOpenInfo);
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
@@ -362,8 +361,8 @@ where
 
     fn on_behaviour_event(&mut self, event: Self::InEvent) {
         match event {
-            EitherOutput::First(event) => self.proto1.on_behaviour_event(event),
-            EitherOutput::Second(event) => self.proto2.on_behaviour_event(event),
+            Either::Left(event) => self.proto1.on_behaviour_event(event),
+            Either::Right(event) => self.proto2.on_behaviour_event(event),
         }
     }
 
@@ -387,7 +386,7 @@ where
     > {
         match self.proto1.poll(cx) {
             Poll::Ready(ConnectionHandlerEvent::Custom(event)) => {
-                return Poll::Ready(ConnectionHandlerEvent::Custom(EitherOutput::First(event)));
+                return Poll::Ready(ConnectionHandlerEvent::Custom(Either::Left(event)));
             }
             Poll::Ready(ConnectionHandlerEvent::Close(event)) => {
                 return Poll::Ready(ConnectionHandlerEvent::Close(Either::Left(event)));
@@ -396,7 +395,7 @@ where
                 return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
                     protocol: protocol
                         .map_upgrade(|u| Either::Left(SendWrapper(u)))
-                        .map_info(EitherOutput::First),
+                        .map_info(Either::Left),
                 });
             }
             Poll::Pending => (),
@@ -404,7 +403,7 @@ where
 
         match self.proto2.poll(cx) {
             Poll::Ready(ConnectionHandlerEvent::Custom(event)) => {
-                return Poll::Ready(ConnectionHandlerEvent::Custom(EitherOutput::Second(event)));
+                return Poll::Ready(ConnectionHandlerEvent::Custom(Either::Right(event)));
             }
             Poll::Ready(ConnectionHandlerEvent::Close(event)) => {
                 return Poll::Ready(ConnectionHandlerEvent::Close(Either::Right(event)));
@@ -413,7 +412,7 @@ where
                 return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
                     protocol: protocol
                         .map_upgrade(|u| Either::Right(SendWrapper(u)))
-                        .map_info(EitherOutput::Second),
+                        .map_info(Either::Right),
                 });
             }
             Poll::Pending => (),

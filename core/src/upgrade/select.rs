@@ -20,10 +20,11 @@
 
 use crate::either::EitherFuture;
 use crate::{
-    either::{EitherName, EitherOutput},
+    either::EitherName,
     upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo},
 };
 use either::Either;
+use futures::future;
 
 /// Upgrade that combines two upgrades into one. Supports all the protocols supported by either
 /// sub-upgrade.
@@ -65,7 +66,7 @@ where
     A: InboundUpgrade<C, Output = TA, Error = EA>,
     B: InboundUpgrade<C, Output = TB, Error = EB>,
 {
-    type Output = EitherOutput<TA, TB>;
+    type Output = future::Either<TA, TB>;
     type Error = Either<EA, EB>;
     type Future = EitherFuture<A::Future, B::Future>;
 
@@ -82,7 +83,7 @@ where
     A: OutboundUpgrade<C, Output = TA, Error = EA>,
     B: OutboundUpgrade<C, Output = TB, Error = EB>,
 {
-    type Output = EitherOutput<TA, TB>;
+    type Output = future::Either<TA, TB>;
     type Error = Either<EA, EB>;
     type Future = EitherFuture<A::Future, B::Future>;
 
