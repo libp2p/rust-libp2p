@@ -324,7 +324,7 @@ fn my_method() -> impl Future<Output = Response> {
 }
 ```
 
-When accepting a **command** () that eventually results in a response through an event require that
+When accepting a **command** that eventually results in a response through an event require that
 command to contain a unique ID, which is later on contained in the asynchronous response event. One
 such example is the `Swarm` accepting a `NetworkBehaviourAction::Dial` from the `NetworkBehaviour`.
 
