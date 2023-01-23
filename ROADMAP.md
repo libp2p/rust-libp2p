@@ -9,16 +9,6 @@ This is the roadmap of the Rust implementation of libp2p. See also the [general 
 roadmap](https://github.com/libp2p/specs/blob/master/ROADMAP.md).
 
 ## Table of Contents <!-- omit in toc -->
-- [🛣️ Milestones](#️-milestones)
-  - [2022](#2022)
-    - [Mid Q4 (November)](#mid-q4-november)
-    - [Mid/End of Q4](#midend-of-q4)
-  - [2023](#2023)
-    - [Sometime Q1](#sometime-q1)
-    - [End of Q1 (March)](#end-of-q1-march)
-    - [Sometime Q2](#sometime-q2)
-  - [Up Next](#up-next)
-- [Appendix](#appendix)
   - [QUIC support](#quic-support)
   - [WebRTC support (browser-to-server)](#webrtc-support-browser-to-server)
   - [Cross Behaviour communication](#cross-behaviour-communication)
@@ -33,37 +23,6 @@ roadmap](https://github.com/libp2p/specs/blob/master/ROADMAP.md).
   - [Bitswap implementation](#bitswap-implementation)
   - [WebTransport](#webtransport)
 
-## 🛣️ Milestones
-
-### 2022
-
-#### Mid Q4 (November)
-- [***➡️ test-plans/Interop tests for all existing/developing libp2p transports***](https://github.com/libp2p/test-plans/blob/master/ROADMAP.md#2-interop-test-plans-for-all-existingdeveloping-libp2p-transports)
-- [***➡️ test-plans/Benchmarking using nix-builders***](https://github.com/libp2p/test-plans/blob/master/ROADMAP.md#1-benchmarking-using-nix-builders)
-
-#### Mid/End of Q4
-- [QUIC support](#quic-support)
-- [WebRTC support (browser-to-server)](#webrtc-support-browser-to-server)
-
-### 2023
-
-#### Sometime Q1
-
-#### End of Q1 (March)
-- [***➡️ test-plans/Benchmarking using remote runners***](https://github.com/libp2p/test-plans/blob/master/ROADMAP.md#2-benchmarking-using-remote-runners)
-
-#### Sometime Q2
-- [WebRTC support (browser-to-browser](#webrtc-support-browser-to-browser)
-- [Improved Wasm support](#improved-wasm-support)
-- [Handshake optimizations](#handshake-optimizations)
-
-### Up Next
-- [***➡️ test-plans/Expansive protocol test coverage***](https://github.com/libp2p/test-plans/blob/master/ROADMAP.md#d-expansive-protocol-test-coverage)
-- [Bitswap implementation](#bitswap-implementation)
-- [WebTransport](#webtransport)
-
-## Appendix
-
 ### Alpha QUIC support
 
 | Category     | Status | Target Completion | Tracking                                          | Dependencies                                   | Dependents |
@@ -74,7 +33,7 @@ QUIC has been on the roadmap for a long time. It enables various performance imp
 higher hole punching success rates. We are close to finishing a first version with
 https://github.com/libp2p/rust-libp2p/pull/2289.
 
-### WebRTC support (browser-to-server)
+## WebRTC support (browser-to-server)
 
 | Category     | Status      | Target Completion | Tracking                                 | Dependencies                                   | Dependents |
 |--------------|-------------|-------------------|------------------------------------------|------------------------------------------------|------------|
@@ -89,7 +48,7 @@ certificates. See https://github.com/libp2p/specs/pull/412 for in-depth motivati
 Long term we should enable rust-libp2p running in the browser via Wasm to use the browser's WebRTC
 stack. Though that should only happen after improved Wasm support, see below.
 
-### Cross Behaviour communication
+## Cross Behaviour communication
 
 | Category             | Status | Target Completion | Tracking                                          | Dependencies                                      | Dependents                                    |
 |----------------------|--------|-------------------|---------------------------------------------------|---------------------------------------------------|-----------------------------------------------|
@@ -106,7 +65,7 @@ protocols) between `NetworkBehaviour` implementations.
 Long term we might consider a generic approach for `NetworkBehaviours` to exchange data. Though that
 would deserve its own roadmap item.
 
-### Generic connection management
+## Generic connection management
 
 | Category             | Status | Target Completion | Tracking                                          | Dependencies | Dependents |
 |----------------------|--------|-------------------|---------------------------------------------------|--------------|------------|
@@ -118,7 +77,7 @@ management generic allows users to build advanced and efficient abstractions on 
 
 First draft is in https://github.com/libp2p/rust-libp2p/pull/2828
 
-### QUIC - evaluate and move to quinn
+## QUIC - evaluate and move to quinn
 
 | Category     | Status | Target Completion | Tracking                                          | Dependencies | Dependents |
 |--------------|--------|-------------------|---------------------------------------------------|--------------|------------|
@@ -126,7 +85,7 @@ First draft is in https://github.com/libp2p/rust-libp2p/pull/2828
 
 We added alpha support for QUIC in Q4/2022 wrapping `quinn-proto`. Evaluate using `quinn` directly, replacing the wrapper.
 
-### Kademlia efficient querying
+## Kademlia efficient querying
 
 | Category     | Status      | Target Completion | Tracking                                        | Dependencies | Dependents |
 |--------------|-------------|-------------------|-------------------------------------------------|--------------|------------|
@@ -136,7 +95,7 @@ Users of rust-libp2p like [iroh](https://github.com/n0-computer/iroh) need this 
 usage of `libp2p-kad`. The rust-libp2p maintainers can pick this up unless iroh folks finish the
 work before that.
 
-### Kademlia client mode
+## Kademlia client mode
 
 | Category     | Status | Target Completion | Tracking                                          | Dependencies                                                    | Dependents |
 |--------------|--------|-------------------|---------------------------------------------------|-----------------------------------------------------------------|------------|
@@ -145,7 +104,7 @@ work before that.
 Kademlia client mode will enhance routing table health and thus have a positive impact on all
 Kademlia operations.
 
-### Optimize Hole punching
+## Optimize Hole punching
 
 | Category     | Status | Target Completion | Tracking | Dependencies | Dependents |
 |--------------|--------|-------------------|----------|--------------|------------|
@@ -160,7 +119,7 @@ action](https://discuss.libp2p.io/t/decentralized-nat-hole-punching-measurement-
 case you want to help. Based on this data we will likely find many optimizations we can do to our
 hole punching stack.
 
-### Streaming response protocol aka. the ultimate escape hatch
+## Streaming response protocol aka. the ultimate escape hatch
 
 | Category             | Status | Target Completion | Tracking                                          | Dependencies | Dependents |
 |----------------------|--------|-------------------|---------------------------------------------------|--------------|------------|
@@ -171,7 +130,7 @@ for this, and I think we should not change directions here. That said, the ultim
 allowing users to create a stream and do whatever they want with it - will make it easier for
 newcomers to get started.
 
-### WebRTC support (browser-to-browser)
+## WebRTC support (browser-to-browser)
 
 | Category     | Status      | Target Completion | Tracking                                 | Dependencies                                   | Dependents |
 |--------------|-------------|-------------------|------------------------------------------|------------------------------------------------|------------|
@@ -181,7 +140,7 @@ newcomers to get started.
 Once WebRTC for browser-to-server is complete, we can begin work on **browser-to-browser** and complete the WebRTC connectivity story.
 The specification needs to be written and completed first.
 
-### Improved Wasm support
+## Improved Wasm support
 
 | Category             | Status | Target Completion | Tracking                                          | Dependencies | Dependents                                 |
 |----------------------|--------|-------------------|---------------------------------------------------|--------------|--------------------------------------------|
@@ -193,7 +152,7 @@ happen earlier. Though (a) I think we should prioritize improving existing funct
 functionality and (b) we don't have high demand for this feature from the community. (One could
 argue that that demand follows this roadmap item and not the other way round.)
 
-### Handshake optimizations
+## Handshake optimizations
 
 | Category     | Status | Target Completion | Tracking                                                                                                                                                | Dependencies | Dependents |
 |--------------|--------|-------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------|--------------|------------|
@@ -206,7 +165,7 @@ requested from any rust-libp2p users.
 Long term, given that this will give us a great performance gain, we should definitely tackle it. It
 also allows us to catch up and thus be consistent with go-libp2p.
 
-### WebTransport
+## WebTransport
 
 | Category                    | Status | Target Completion | Tracking                                          | Dependencies                       | Dependents |
 |-----------------------------|--------|-------------------|---------------------------------------------------|------------------------------------|------------|
