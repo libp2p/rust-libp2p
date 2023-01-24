@@ -244,9 +244,6 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
                     libp2p_swarm::DialError::WrongPeerId { .. } => {
                         record(OutgoingConnectionError::WrongPeerId)
                     }
-                    libp2p_swarm::DialError::ConnectionIo(_) => {
-                        record(OutgoingConnectionError::ConnectionIo)
-                    }
                 };
             }
             libp2p_swarm::SwarmEvent::BannedPeer { endpoint, .. } => {
@@ -345,7 +342,6 @@ enum OutgoingConnectionError {
     Aborted,
     InvalidPeerId,
     WrongPeerId,
-    ConnectionIo,
     TransportMultiaddrNotSupported,
     TransportOther,
 }
