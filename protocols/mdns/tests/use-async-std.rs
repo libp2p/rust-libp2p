@@ -150,17 +150,16 @@ async fn run_no_expiration_on_close_test(config: Config) -> Result<(), Box<dyn E
     let mut b = create_swarm(config).await?;
 
     let mut closed = false;
-    let mut dialed = false;
 
     loop {
         futures::select! {
             ev = a.select_next_some() => match ev {
                 SwarmEvent::Behaviour(Event::Discovered(peers)) => {
                     for (peer, addr) in peers {
-                        if peer == *b.local_peer_id() && !dialed {
+                        if peer == *b.local_peer_id() {
                             // Connect to all addresses of b to 'expire' all of them
                             a.dial(addr)?;
-                            dialed = true;
+                            break;
                         }
                     }
                 }
