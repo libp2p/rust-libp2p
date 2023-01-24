@@ -32,8 +32,8 @@ jobs:
         run: |
           cd test-plans;
           # cargo build --release
-          touch ../target/release/ping
           mkdir -p target/release/
-          cp ../target/release/ping target/release
+          # cp ../target/release/ping target/release
+          touch target/release/ping
           docker build -t ghcr.io/$GITHUB_REPOSITORY/ping-interop:${{ github.event.release.tag_name }} .
           docker push ghcr.io/$GITHUB_REPOSITORY/ping-interop:${{ github.event.release.tag_name }}
