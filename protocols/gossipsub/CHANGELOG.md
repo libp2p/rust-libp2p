@@ -6,7 +6,10 @@
 
 - Update to `libp2p-swarm` `v0.42.0`.
 
+- Initialize `ProtocolConfig` via `GossipsubConfig`. See [PR XXXX].
+
 [PR 3207]: https://github.com/libp2p/rust-libp2p/pull/3207/
+[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX/
 
 # 0.43.0
 
