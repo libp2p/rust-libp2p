@@ -61,6 +61,27 @@ pub mod identity {
         pub use libp2p_identity::ed25519::SecretKey;
     }
 
+    #[cfg(feature = "ecdsa")]
+    pub mod ecdsa {
+        pub use libp2p_identity::ecdsa::Keypair;
+        pub use libp2p_identity::ecdsa::PublicKey;
+        pub use libp2p_identity::ecdsa::SecretKey;
+    }
+
+    #[cfg(feature = "secp256k1")]
+    pub mod secp256k1 {
+        pub use libp2p_identity::secp256k1::Keypair;
+        pub use libp2p_identity::secp256k1::PublicKey;
+        pub use libp2p_identity::secp256k1::SecretKey;
+    }
+
+    #[cfg(feature = "rsa")]
+    pub mod rsa {
+        pub use libp2p_identity::rsa::Keypair;
+        pub use libp2p_identity::rsa::PublicKey;
+        pub use libp2p_identity::rsa::SecretKey;
+    }
+
     pub mod error {
         pub use libp2p_identity::DecodingError;
         pub use libp2p_identity::SigningError;
