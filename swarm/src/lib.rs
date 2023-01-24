@@ -1695,8 +1695,6 @@ pub enum ListenError {
         obtained: PeerId,
         endpoint: ConnectedPoint,
     },
-    /// An I/O error occurred on the connection.
-    ConnectionIo(io::Error),
     /// An error occurred while negotiating the transport protocol(s) on a connection.
     Transport(TransportError<io::Error>),
 }
@@ -1728,9 +1726,6 @@ impl fmt::Display for ListenError {
                 f,
                 "Listen error: Unexpected peer ID {obtained} at {endpoint:?}."
             ),
-            ListenError::ConnectionIo(_) => {
-                write!(f, "Listen error: An I/O error occurred on the connection")
-            }
             ListenError::Transport(_) => {
                 write!(f, "Listen error: Failed to negotiate transport protocol(s)")
             }
@@ -1743,7 +1738,6 @@ impl error::Error for ListenError {
         match self {
             ListenError::ConnectionLimit(err) => Some(err),
             ListenError::WrongPeerId { .. } => None,
-            ListenError::ConnectionIo(err) => Some(err),
             ListenError::Transport(err) => Some(err),
             ListenError::Aborted => None,
         }
