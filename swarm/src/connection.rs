@@ -376,7 +376,7 @@ impl<'a> IncomingInfo<'a> {
 }
 
 /// Information about a connection limit.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct ConnectionLimit {
     /// The maximum number of connections.
     pub limit: u32,

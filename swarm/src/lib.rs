@@ -233,7 +233,7 @@ pub enum SwarmEvent<TBehaviourOutEvent, THandlerErr> {
         /// Address used to send back data to the remote.
         send_back_addr: Multiaddr,
         /// The error that happened.
-        error: PendingInboundConnectionError,
+        error: ListenError,
     },
     /// Outgoing connection attempt failed.
     OutgoingConnectionError {
@@ -850,11 +850,14 @@ where
                 error,
                 handler,
             } => {
+                let error = error.into();
+
                 log::debug!("Incoming connection failed: {:?}", error);
                 self.behaviour
                     .on_swarm_event(FromSwarm::ListenFailure(ListenFailure {
                         local_addr: &local_addr,
                         send_back_addr: &send_back_addr,
+                        error: &error,
                         handler,
                     }));
                 return Some(SwarmEvent::IncomingConnectionError {
@@ -970,10 +973,13 @@ where
                         });
                     }
                     Err((connection_limit, handler)) => {
+                        let error = ListenError::ConnectionLimit(connection_limit);
+
                         self.behaviour
                             .on_swarm_event(FromSwarm::ListenFailure(ListenFailure {
                                 local_addr: &local_addr,
                                 send_back_addr: &send_back_addr,
+                                error: &error,
                                 handler,
                             }));
                         log::warn!("Incoming connection rejected: {:?}", connection_limit);
@@ -1681,6 +1687,34 @@ impl error::Error for DialError {
             DialError::WrongPeerId { .. } => None,
             DialError::ConnectionIo(_) => None,
             DialError::Transport(_) => None,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum ListenError {
+    /// The peer is currently banned.
+    Banned,
+    /// The configured limit for simultaneous outgoing connections
+    /// has been reached.
+    ConnectionLimit(ConnectionLimit),
+    /// Pending connection attempt has been aborted.
+    Aborted,
+    /// The peer identity obtained on the connection did not match the one that was expected.
+    WrongPeerId {
+        obtained: PeerId,
+        endpoint: ConnectedPoint,
+    },
+    /// An I/O error occurred on the connection.
+    ConnectionIo(io::Error),
+    /// An error occurred while negotiating the transport protocol(s) on a connection.
+    Transport(Vec<(Multiaddr, TransportError<io::Error>)>),
+}
+
+impl From<PendingInboundConnectionError> for ListenError {
+    fn from(error: PendingInboundConnectionError) -> Self {
+        match error {
+
         }
     }
 }
