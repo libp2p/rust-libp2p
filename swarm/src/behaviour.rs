@@ -195,9 +195,11 @@ pub trait NetworkBehaviour: 'static {
     /// We have access to:
     ///
     /// - The [`PeerId`], if known. Remember that we can dial without a [`PeerId`].
-    /// - All addresses passes to [`DialOpts`] are passed in here too.
+    /// - All addresses passed to [`DialOpts`] are passed in here too.
     /// - The effective [`Role`](Endpoint) of this peer in the dial attempt. Typically, this is set to [`Endpoint::Dialer`] except if we are attempting a hole-punch.
     /// - The [`ConnectionId`] identifying the future connection resulting from this dial, if successful.
+    ///
+    /// Note that the addresses returned from this function are only used for dialing if [`DialOpts::extend_addresses_through_behaviour`] is set.
     ///
     /// Any error returned from this function will immediately abort the dial attempt.
     fn handle_pending_outbound_connection(
