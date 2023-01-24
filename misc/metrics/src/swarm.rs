@@ -362,6 +362,7 @@ enum IncomingConnectionError {
     TransportErrorOther,
     Aborted,
     ConnectionLimit,
+    Denied,
 }
 
 impl From<&libp2p_swarm::ListenError> for IncomingConnectionError {
@@ -378,6 +379,7 @@ impl From<&libp2p_swarm::ListenError> for IncomingConnectionError {
                 libp2p_core::transport::TransportError::Other(_),
             ) => IncomingConnectionError::TransportErrorOther,
             libp2p_swarm::ListenError::Aborted => IncomingConnectionError::Aborted,
+            libp2p_swarm::ListenError::Denied { .. } => IncomingConnectionError::Denied,
         }
     }
 }

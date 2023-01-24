@@ -879,7 +879,7 @@ where
                 });
             }
             PoolEvent::PendingInboundConnectionError {
-                id,
+                id: _,
                 send_back_addr,
                 local_addr,
                 error,
@@ -971,13 +971,19 @@ where
                     local_addr,
                     send_back_addr,
                 } => {
+                    let listen_error = ListenError::Denied { cause };
+                    self.behaviour
+                        .on_swarm_event(FromSwarm::ListenFailure(ListenFailure {
+                            local_addr: &local_addr,
+                            send_back_addr: &send_back_addr,
+                            error: &listen_error,
+                        }));
+
                     return Some(SwarmEvent::IncomingConnectionError {
                         send_back_addr,
                         local_addr,
-                        error: todo!(
-                            "Got a 'pending' error here but we have an established connection ..."
-                        ),
-                    })
+                        error: listen_error,
+                    });
                 }
             },
             PoolEvent::ConnectionEvent { peer_id, id, event } => {
@@ -1031,10 +1037,21 @@ where
                     &send_back_addr,
                 ) {
                     Ok(()) => {}
-                    Err(error) => {
-                        // TODO: self.behaviour.on_swarm_event(FromSwarm::ListenFailure())
+                    Err(cause) => {
+                        let listen_error = ListenError::Denied { cause };
 
-                        return Some(todo!("Report connection error event, these are currently modeled in a weird way where we split them by incoming/outgoing on the `SwarmEvent` level but everywhere else by established/pending"));
+                        self.behaviour
+                            .on_swarm_event(FromSwarm::ListenFailure(ListenFailure {
+                                local_addr: &local_addr,
+                                send_back_addr: &send_back_addr,
+                                error: &listen_error,
+                            }));
+
+                        return Some(SwarmEvent::IncomingConnectionError {
+                            local_addr,
+                            send_back_addr,
+                            error: listen_error,
+                        });
                     }
                 }
 
@@ -1753,7 +1770,7 @@ impl fmt::Display for DialError {
                 Ok(())
             }
             DialError::Denied { .. } => {
-                write!(f, "Dial was denied")
+                write!(f, "Outbound connection was denied")
             }
         }
     }
@@ -1799,6 +1816,9 @@ pub enum ListenError {
         obtained: PeerId,
         endpoint: ConnectedPoint,
     },
+    Denied {
+        cause: Box<dyn error::Error + Send + 'static>,
+    },
     /// An error occurred while negotiating the transport protocol(s) on a connection.
     Transport(TransportError<io::Error>),
 }
@@ -1833,6 +1853,9 @@ impl fmt::Display for ListenError {
             ListenError::Transport(_) => {
                 write!(f, "Listen error: Failed to negotiate transport protocol(s)")
             }
+            ListenError::Denied { .. } => {
+                write!(f, "Inbound connection was denied")
+            }
         }
     }
 }
@@ -1844,6 +1867,7 @@ impl error::Error for ListenError {
             ListenError::WrongPeerId { .. } => None,
             ListenError::Transport(err) => Some(err),
             ListenError::Aborted => None,
+            ListenError::Denied { cause } => Some(cause.as_ref()),
         }
     }
 }
