@@ -130,27 +130,27 @@ for this, and I think we should not change directions here. That said, the ultim
 allowing users to create a stream and do whatever they want with it - will make it easier for
 newcomers to get started.
 
-## WebRTC support (browser-to-browser)
-
-| Category     | Status      | Target Completion | Tracking                                 | Dependencies                                   | Dependents |
-|--------------|-------------|-------------------|------------------------------------------|------------------------------------------------|------------|
-| Connectivity | todo        |     Q2/2023       | https://github.com/libp2p/specs/issues/475 | https://github.com/libp2p/rust-libp2p/pull/2622 https://github.com/libp2p/test-plans/issues/53 |            |
-
-
-Once WebRTC for browser-to-server is complete, we can begin work on **browser-to-browser** and complete the WebRTC connectivity story.
-The specification needs to be written and completed first.
-
 ## Improved Wasm support
 
-| Category             | Status | Target Completion | Tracking                                          | Dependencies | Dependents                                 |
-|----------------------|--------|-------------------|---------------------------------------------------|--------------|--------------------------------------------|
-| Developer ergonomics | todo   | Q2/2023           | https://github.com/libp2p/rust-libp2p/issues/2617 |              | WebRTC browser-to-server and browser side |
+| Category             | Status | Target Completion | Tracking                                          | Dependencies | Dependents                                   |
+|----------------------|--------|-------------------|---------------------------------------------------|--------------|----------------------------------------------|
+| Developer ergonomics | todo   | Q2/2023           | https://github.com/libp2p/rust-libp2p/issues/2617 |              | [WebRTC](#webrtc-support-browser-to-browser) |
 
 The project supports Wasm already today, though the developer experience is cumbersome at best.
-Properly supporting Wasm opens rust-libp2p to hole new set of use-cases. I would love for this to
+Properly supporting Wasm opens rust-libp2p to a whole new set of use-cases. I would love for this to
 happen earlier. Though (a) I think we should prioritize improving existing functionality over new
 functionality and (b) we don't have high demand for this feature from the community. (One could
 argue that that demand follows this roadmap item and not the other way round.)
+
+## WebRTC support (browser-to-browser)
+
+| Category     | Status | Target Completion | Tracking                                   | Dependencies                                                                              | Dependents |
+|--------------|--------|-------------------|--------------------------------------------|-------------------------------------------------------------------------------------------|------------|
+| Connectivity | todo   | Q2/2023           | https://github.com/libp2p/specs/issues/475 | [Improved WASM support](#improved-wasm-support), https://github.com/libp2p/specs/pull/497 |            |
+
+
+Once WebRTC for browser-to-server is complete, we can begin work on **browser-to-browser** and complete the WebRTC connectivity story.
+We need to improve rust-libp2p's WASM story first.
 
 ## Handshake optimizations
 
