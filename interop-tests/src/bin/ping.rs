@@ -16,8 +16,6 @@ use libp2p::{
 use redis::AsyncCommands;
 use strum::EnumString;
 
-const REDIS_TIMEOUT: usize = 10;
-
 /// Supported transports by rust-libp2p.
 #[derive(Clone, Debug, EnumString)]
 #[strum(serialize_all = "kebab-case")]
@@ -110,6 +108,10 @@ async fn main() -> Result<()> {
         .unwrap_or_else(|_| "true".into())
         .parse::<bool>()?;
 
+    let test_timeout = env::var("test_timeout")
+        .unwrap_or_else(|_| "10".into())
+        .parse::<usize>()?;
+
     let redis_addr = env::var("REDIS_ADDR")
         .map(|addr| format!("redis://{addr}"))
         .unwrap_or_else(|_| "redis://redis:6379".into());
@@ -191,7 +193,7 @@ async fn main() -> Result<()> {
     // retrieved via `listenAddr` key over the redis connection. Or wait to be pinged and have
     // `dialerDone` key ready on the redis connection.
     if is_dialer {
-        let result: Vec<String> = conn.blpop("listenerAddr", REDIS_TIMEOUT).await?;
+        let result: Vec<String> = conn.blpop("listenerAddr", test_timeout).await?;
         let other = result
             .get(1)
             .context("Failed to wait for listener to be ready")?;
@@ -236,7 +238,7 @@ async fn main() -> Result<()> {
             }
         });
 
-        let done: Vec<String> = conn.blpop("dialerDone", REDIS_TIMEOUT).await?;
+        let done: Vec<String> = conn.blpop("dialerDone", test_timeout).await?;
         done.get(1)
             .context("Failed to wait for dialer conclusion")?;
         log::info!("Ping successful");
