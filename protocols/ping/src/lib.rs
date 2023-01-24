@@ -49,10 +49,9 @@ use handler::Handler;
 pub use handler::{Config, Failure, Success};
 use libp2p_core::{Endpoint, Multiaddr, PeerId};
 use libp2p_swarm::{
-    behaviour::FromSwarm, ConnectionId, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
-    THandler, THandlerInEvent, THandlerOutEvent,
+    behaviour::FromSwarm, ConnectionDenied, ConnectionId, NetworkBehaviour, NetworkBehaviourAction,
+    PollParameters, THandler, THandlerInEvent, THandlerOutEvent,
 };
-use std::error::Error;
 use std::{
     collections::VecDeque,
     task::{Context, Poll},
@@ -127,7 +126,7 @@ impl NetworkBehaviour for Behaviour {
         _: ConnectionId,
         _: &Multiaddr,
         _: &Multiaddr,
-    ) -> std::result::Result<THandler<Self>, Box<dyn Error + Send + 'static>> {
+    ) -> std::result::Result<THandler<Self>, ConnectionDenied> {
         Ok(Handler::new(self.config.clone()))
     }
 
@@ -137,7 +136,7 @@ impl NetworkBehaviour for Behaviour {
         _: &Multiaddr,
         _: Endpoint,
         _: ConnectionId,
-    ) -> std::result::Result<THandler<Self>, Box<dyn Error + Send + 'static>> {
+    ) -> std::result::Result<THandler<Self>, ConnectionDenied> {
         Ok(Handler::new(self.config.clone()))
     }
 

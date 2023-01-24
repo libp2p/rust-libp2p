@@ -33,11 +33,11 @@ use libp2p_core::identity::Keypair;
 use libp2p_core::{Endpoint, Multiaddr, PeerId, PeerRecord};
 use libp2p_swarm::behaviour::FromSwarm;
 use libp2p_swarm::{
-    CloseConnection, ConnectionId, ExternalAddresses, NetworkBehaviour, NetworkBehaviourAction,
-    NotifyHandler, PollParameters, THandler, THandlerInEvent, THandlerOutEvent,
+    CloseConnection, ConnectionDenied, ConnectionId, ExternalAddresses, NetworkBehaviour,
+    NetworkBehaviourAction, NotifyHandler, PollParameters, THandler, THandlerInEvent,
+    THandlerOutEvent,
 };
 use std::collections::{HashMap, VecDeque};
-use std::error::Error;
 use std::iter::FromIterator;
 use std::task::{Context, Poll};
 use void::Void;
@@ -175,7 +175,7 @@ impl NetworkBehaviour for Behaviour {
         _: ConnectionId,
         _: &Multiaddr,
         _: &Multiaddr,
-    ) -> Result<THandler<Self>, Box<dyn std::error::Error + Send + 'static>> {
+    ) -> Result<THandler<Self>, ConnectionDenied> {
         Ok(SubstreamConnectionHandler::new_outbound_only(
             Duration::from_secs(30),
         ))
@@ -187,7 +187,7 @@ impl NetworkBehaviour for Behaviour {
         _addresses: &[Multiaddr],
         _effective_role: Endpoint,
         _connection_id: ConnectionId,
-    ) -> Result<Vec<Multiaddr>, Box<dyn Error + Send + 'static>> {
+    ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
         let peer = match maybe_peer {
             None => return Ok(vec![]),
             Some(peer) => peer,
@@ -210,7 +210,7 @@ impl NetworkBehaviour for Behaviour {
         _: &Multiaddr,
         _: Endpoint,
         _: ConnectionId,
-    ) -> Result<THandler<Self>, Box<dyn std::error::Error + Send + 'static>> {
+    ) -> Result<THandler<Self>, ConnectionDenied> {
         Ok(SubstreamConnectionHandler::new_outbound_only(
             Duration::from_secs(30),
         ))

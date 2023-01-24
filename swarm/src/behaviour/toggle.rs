@@ -27,13 +27,12 @@ use crate::handler::{
 };
 use crate::upgrade::SendWrapper;
 use crate::{
-    NetworkBehaviour, NetworkBehaviourAction, PollParameters, THandler, THandlerInEvent,
-    THandlerOutEvent,
+    ConnectionDenied, NetworkBehaviour, NetworkBehaviourAction, PollParameters, THandler,
+    THandlerInEvent, THandlerOutEvent,
 };
 use either::Either;
 use futures::future;
 use libp2p_core::{upgrade::DeniedUpgrade, Endpoint, Multiaddr, PeerId};
-use std::error::Error;
 use std::{task::Context, task::Poll};
 
 /// Implementation of `NetworkBehaviour` that can be either in the disabled or enabled state.
@@ -78,7 +77,7 @@ where
         connection_id: ConnectionId,
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
-    ) -> Result<(), Box<dyn Error + Send + 'static>> {
+    ) -> Result<(), ConnectionDenied> {
         let inner = match self.inner.as_mut() {
             None => return Ok(()),
             Some(inner) => inner,
@@ -95,7 +94,7 @@ where
         connection_id: ConnectionId,
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
-    ) -> Result<THandler<Self>, Box<dyn Error + Send + 'static>> {
+    ) -> Result<THandler<Self>, ConnectionDenied> {
         let inner = match self.inner.as_mut() {
             None => return Ok(ToggleConnectionHandler { inner: None }),
             Some(inner) => inner,
@@ -119,7 +118,7 @@ where
         addresses: &[Multiaddr],
         effective_role: Endpoint,
         connection_id: ConnectionId,
-    ) -> Result<Vec<Multiaddr>, Box<dyn Error + Send + 'static>> {
+    ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
         let inner = match self.inner.as_mut() {
             None => return Ok(vec![]),
             Some(inner) => inner,
@@ -141,7 +140,7 @@ where
         addr: &Multiaddr,
         role_override: Endpoint,
         connection_id: ConnectionId,
-    ) -> Result<THandler<Self>, Box<dyn Error + Send + 'static>> {
+    ) -> Result<THandler<Self>, ConnectionDenied> {
         let inner = match self.inner.as_mut() {
             None => return Ok(ToggleConnectionHandler { inner: None }),
             Some(inner) => inner,

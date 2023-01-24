@@ -77,6 +77,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
     let t_handler_in_event = quote! { #prelude_path::THandlerInEvent };
     let t_handler_out_event = quote! { #prelude_path::THandlerOutEvent };
     let endpoint = quote! { #prelude_path::Endpoint };
+    let connection_denied = quote! { #prelude_path::ConnectionDenied };
 
     // Build the generics.
     let impl_generics = {
@@ -712,7 +713,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 connection_id: #connection_id,
                 local_addr: &#multiaddr,
                 remote_addr: &#multiaddr,
-            ) -> Result<(), Box<dyn ::std::error::Error + Send + 'static>> {
+            ) -> Result<(), #connection_denied> {
                 #(#handle_pending_inbound_connection_stmts)*
 
                 Ok(())
@@ -725,7 +726,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 connection_id: #connection_id,
                 local_addr: &#multiaddr,
                 remote_addr: &#multiaddr,
-            ) -> Result<#t_handler<Self>, Box<dyn ::std::error::Error + Send + 'static>> {
+            ) -> Result<#t_handler<Self>, #connection_denied> {
                 Ok(#handle_established_inbound_connection)
             }
 
@@ -736,7 +737,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 addresses: &[#multiaddr],
                 effective_role: #endpoint,
                 connection_id: #connection_id,
-            ) -> Result<::std::vec::Vec<#multiaddr>, Box<dyn ::std::error::Error + Send + 'static>> {
+            ) -> Result<::std::vec::Vec<#multiaddr>, #connection_denied> {
                 #handle_pending_outbound_connection
             }
 
@@ -747,7 +748,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 addr: &#multiaddr,
                 role_override: #endpoint,
                 connection_id: #connection_id,
-            ) -> Result<#t_handler<Self>, Box<dyn ::std::error::Error + Send + 'static>> {
+            ) -> Result<#t_handler<Self>, #connection_denied> {
                 Ok(#handle_established_outbound_connection)
             }
 

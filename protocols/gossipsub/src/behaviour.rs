@@ -42,8 +42,8 @@ use libp2p_core::{
 use libp2p_swarm::{
     behaviour::{AddressChange, ConnectionClosed, ConnectionEstablished, FromSwarm},
     dial_opts::DialOpts,
-    ConnectionId, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
-    THandler, THandlerInEvent, THandlerOutEvent,
+    ConnectionDenied, ConnectionId, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
+    PollParameters, THandler, THandlerInEvent, THandlerOutEvent,
 };
 use wasm_timer::Instant;
 
@@ -3300,7 +3300,7 @@ where
         _: ConnectionId,
         _: &Multiaddr,
         _: &Multiaddr,
-    ) -> Result<THandler<Self>, Box<dyn std::error::Error + Send + 'static>> {
+    ) -> Result<THandler<Self>, ConnectionDenied> {
         let protocol_config = ProtocolConfig::new(
             self.config.protocol_id().clone(),
             self.config.custom_id_version().clone(),
@@ -3321,7 +3321,7 @@ where
         _: &Multiaddr,
         _: Endpoint,
         _: ConnectionId,
-    ) -> Result<THandler<Self>, Box<dyn std::error::Error + Send + 'static>> {
+    ) -> Result<THandler<Self>, ConnectionDenied> {
         let protocol_config = ProtocolConfig::new(
             self.config.protocol_id().clone(),
             self.config.custom_id_version().clone(),

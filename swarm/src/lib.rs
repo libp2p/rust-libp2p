@@ -85,6 +85,7 @@ pub mod derive_prelude {
     pub use crate::behaviour::NewListenAddr;
     pub use crate::behaviour::NewListener;
     pub use crate::connection::ConnectionId;
+    pub use crate::ConnectionDenied;
     pub use crate::ConnectionHandler;
     pub use crate::ConnectionHandlerSelect;
     pub use crate::DialError;
@@ -1710,9 +1711,8 @@ pub enum DialError {
         obtained: PeerId,
         endpoint: ConnectedPoint,
     },
-    // TODO: Should this include the role_override?
     Denied {
-        cause: Box<dyn error::Error + Send + 'static>,
+        cause: ConnectionDenied,
     },
     /// An error occurred while negotiating the transport protocol(s) on a connection.
     Transport(Vec<(Multiaddr, TransportError<io::Error>)>),
@@ -1770,7 +1770,7 @@ impl fmt::Display for DialError {
                 Ok(())
             }
             DialError::Denied { .. } => {
-                write!(f, "Outbound connection was denied")
+                write!(f, "Dial error")
             }
         }
     }
@@ -1798,7 +1798,7 @@ impl error::Error for DialError {
             DialError::InvalidPeerId { .. } => None,
             DialError::WrongPeerId { .. } => None,
             DialError::Transport(_) => None,
-            DialError::Denied { cause } => Some(cause.as_ref()),
+            DialError::Denied { cause } => Some(cause),
         }
     }
 }
@@ -1817,7 +1817,7 @@ pub enum ListenError {
         endpoint: ConnectedPoint,
     },
     Denied {
-        cause: Box<dyn error::Error + Send + 'static>,
+        cause: ConnectionDenied,
     },
     /// An error occurred while negotiating the transport protocol(s) on a connection.
     Transport(TransportError<io::Error>),
@@ -1854,7 +1854,7 @@ impl fmt::Display for ListenError {
                 write!(f, "Listen error: Failed to negotiate transport protocol(s)")
             }
             ListenError::Denied { .. } => {
-                write!(f, "Inbound connection was denied")
+                write!(f, "Listen error")
             }
         }
     }
@@ -1867,8 +1867,33 @@ impl error::Error for ListenError {
             ListenError::WrongPeerId { .. } => None,
             ListenError::Transport(err) => Some(err),
             ListenError::Aborted => None,
-            ListenError::Denied { cause } => Some(cause.as_ref()),
+            ListenError::Denied { cause } => Some(cause),
         }
+    }
+}
+
+#[derive(Debug)]
+pub struct ConnectionDenied {
+    inner: Box<dyn error::Error + Send + Sync + 'static>,
+}
+
+impl ConnectionDenied {
+    pub fn new(cause: impl error::Error + Send + Sync + 'static) -> Self {
+        Self {
+            inner: Box::new(cause),
+        }
+    }
+}
+
+impl fmt::Display for ConnectionDenied {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "connection denied")
+    }
+}
+
+impl error::Error for ConnectionDenied {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        Some(self.inner.as_ref())
     }
 }
 

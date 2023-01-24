@@ -38,9 +38,9 @@ use libp2p_core::{Endpoint, Multiaddr, PeerId};
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm};
 use libp2p_swarm::dial_opts::DialOpts;
 use libp2p_swarm::{
-    dummy, ConnectionHandler, ConnectionHandlerUpgrErr, ConnectionId, NegotiatedSubstream,
-    NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters, THandler,
-    THandlerInEvent, THandlerOutEvent,
+    dummy, ConnectionDenied, ConnectionHandler, ConnectionHandlerUpgrErr, ConnectionId,
+    NegotiatedSubstream, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
+    THandler, THandlerInEvent, THandlerOutEvent,
 };
 use std::collections::{hash_map, HashMap, VecDeque};
 use std::io::{Error, ErrorKind, IoSlice};
@@ -168,7 +168,7 @@ impl NetworkBehaviour for Behaviour {
         connection_id: ConnectionId,
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
-    ) -> Result<THandler<Self>, Box<dyn std::error::Error + Send + 'static>> {
+    ) -> Result<THandler<Self>, ConnectionDenied> {
         let is_relayed = local_addr.iter().any(|p| p == Protocol::P2pCircuit); // TODO: Make this an extension on `Multiaddr`.
 
         if is_relayed {
@@ -190,7 +190,7 @@ impl NetworkBehaviour for Behaviour {
         addr: &Multiaddr,
         _role_override: Endpoint,
         connection_id: ConnectionId,
-    ) -> Result<THandler<Self>, Box<dyn std::error::Error + Send + 'static>> {
+    ) -> Result<THandler<Self>, ConnectionDenied> {
         let is_relayed = addr.iter().any(|p| p == Protocol::P2pCircuit); // TODO: Make this an extension on `Multiaddr`.
 
         if is_relayed {

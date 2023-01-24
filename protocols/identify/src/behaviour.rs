@@ -23,13 +23,12 @@ use crate::protocol::{Info, Protocol, UpgradeError};
 use libp2p_core::{multiaddr, ConnectedPoint, Endpoint, Multiaddr, PeerId, PublicKey};
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm};
 use libp2p_swarm::{
-    dial_opts::DialOpts, AddressScore, ConnectionHandlerUpgrErr, DialError, ExternalAddresses,
-    ListenAddresses, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
-    THandlerInEvent,
+    dial_opts::DialOpts, AddressScore, ConnectionDenied, ConnectionHandlerUpgrErr, DialError,
+    ExternalAddresses, ListenAddresses, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
+    PollParameters, THandlerInEvent,
 };
 use libp2p_swarm::{ConnectionId, THandler, THandlerOutEvent};
 use lru::LruCache;
-use std::error::Error;
 use std::num::NonZeroUsize;
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -424,7 +423,7 @@ impl NetworkBehaviour for Behaviour {
         _: ConnectionId,
         _: &Multiaddr,
         remote_addr: &Multiaddr,
-    ) -> Result<THandler<Self>, Box<dyn Error + Send + 'static>> {
+    ) -> Result<THandler<Self>, ConnectionDenied> {
         Ok(Handler::new(
             self.config.initial_delay,
             self.config.interval,
@@ -442,7 +441,7 @@ impl NetworkBehaviour for Behaviour {
         addr: &Multiaddr,
         _: Endpoint,
         _: ConnectionId,
-    ) -> Result<THandler<Self>, Box<dyn Error + Send + 'static>> {
+    ) -> Result<THandler<Self>, ConnectionDenied> {
         Ok(Handler::new(
             self.config.initial_delay,
             self.config.interval,

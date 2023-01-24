@@ -27,7 +27,7 @@ use libp2p_core::multiaddr::Protocol;
 use libp2p_core::{Endpoint, Multiaddr, PeerId};
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm};
 use libp2p_swarm::dial_opts::{self, DialOpts};
-use libp2p_swarm::{dummy, ConnectionId, THandler, THandlerOutEvent};
+use libp2p_swarm::{dummy, ConnectionDenied, ConnectionId, THandler, THandlerOutEvent};
 use libp2p_swarm::{
     ConnectionHandlerUpgrErr, ExternalAddresses, NetworkBehaviour, NetworkBehaviourAction,
     NotifyHandler, PollParameters, THandlerInEvent,
@@ -244,7 +244,7 @@ impl NetworkBehaviour for Behaviour {
         connection_id: ConnectionId,
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
-    ) -> Result<THandler<Self>, Box<dyn std::error::Error + Send + 'static>> {
+    ) -> Result<THandler<Self>, ConnectionDenied> {
         let is_relayed = local_addr.iter().any(|p| p == Protocol::P2pCircuit); // TODO: Make this an extension on `Multiaddr`.
 
         match self
@@ -282,7 +282,7 @@ impl NetworkBehaviour for Behaviour {
         addr: &Multiaddr,
         role_override: Endpoint,
         connection_id: ConnectionId,
-    ) -> Result<THandler<Self>, Box<dyn std::error::Error + Send + 'static>> {
+    ) -> Result<THandler<Self>, ConnectionDenied> {
         let is_relayed = addr.iter().any(|p| p == Protocol::P2pCircuit); // TODO: Make this an extension on `Multiaddr`.
 
         match self

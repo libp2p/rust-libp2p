@@ -30,12 +30,11 @@ use if_watch::IfEvent;
 use libp2p_core::{Endpoint, Multiaddr, PeerId};
 use libp2p_swarm::behaviour::{ConnectionClosed, FromSwarm};
 use libp2p_swarm::{
-    dummy, ConnectionId, ListenAddresses, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
-    THandler, THandlerOutEvent,
+    dummy, ConnectionDenied, ConnectionId, ListenAddresses, NetworkBehaviour,
+    NetworkBehaviourAction, PollParameters, THandler, THandlerOutEvent,
 };
 use smallvec::SmallVec;
 use std::collections::hash_map::{Entry, HashMap};
-use std::error::Error;
 use std::{cmp, fmt, io, net::IpAddr, pin::Pin, task::Context, task::Poll, time::Instant};
 use void::Void;
 
@@ -182,7 +181,7 @@ where
         _: ConnectionId,
         _: &Multiaddr,
         _: &Multiaddr,
-    ) -> Result<THandler<Self>, Box<dyn std::error::Error + Send + 'static>> {
+    ) -> Result<THandler<Self>, ConnectionDenied> {
         Ok(dummy::ConnectionHandler)
     }
 
@@ -192,7 +191,7 @@ where
         _addresses: &[Multiaddr],
         _effective_role: Endpoint,
         _connection_id: ConnectionId,
-    ) -> Result<Vec<Multiaddr>, Box<dyn Error + Send + 'static>> {
+    ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
         let peer_id = match maybe_peer {
             None => return Ok(vec![]),
             Some(peer) => peer,
@@ -212,7 +211,7 @@ where
         _: &Multiaddr,
         _: Endpoint,
         _: ConnectionId,
-    ) -> Result<THandler<Self>, Box<dyn std::error::Error + Send + 'static>> {
+    ) -> Result<THandler<Self>, ConnectionDenied> {
         Ok(dummy::ConnectionHandler)
     }
 

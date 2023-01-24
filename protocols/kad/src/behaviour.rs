@@ -45,14 +45,13 @@ use libp2p_swarm::behaviour::{
 };
 use libp2p_swarm::{
     dial_opts::{self, DialOpts},
-    ConnectionId, DialError, ExternalAddresses, ListenAddresses, NetworkBehaviour,
-    NetworkBehaviourAction, NotifyHandler, PollParameters, THandler, THandlerInEvent,
-    THandlerOutEvent,
+    ConnectionDenied, ConnectionId, DialError, ExternalAddresses, ListenAddresses,
+    NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters, THandler,
+    THandlerInEvent, THandlerOutEvent,
 };
 use log::{debug, info, warn};
 use smallvec::SmallVec;
 use std::collections::{BTreeMap, HashSet, VecDeque};
-use std::error::Error;
 use std::fmt;
 use std::num::NonZeroUsize;
 use std::task::{Context, Poll};
@@ -1990,7 +1989,7 @@ where
         _: ConnectionId,
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
-    ) -> Result<THandler<Self>, Box<dyn Error + Send + 'static>> {
+    ) -> Result<THandler<Self>, ConnectionDenied> {
         Ok(KademliaHandler::new(
             KademliaHandlerConfig {
                 protocol_config: self.protocol_config.clone(),
@@ -2011,7 +2010,7 @@ where
         addr: &Multiaddr,
         role_override: Endpoint,
         _: ConnectionId,
-    ) -> Result<THandler<Self>, Box<dyn Error + Send + 'static>> {
+    ) -> Result<THandler<Self>, ConnectionDenied> {
         Ok(KademliaHandler::new(
             KademliaHandlerConfig {
                 protocol_config: self.protocol_config.clone(),

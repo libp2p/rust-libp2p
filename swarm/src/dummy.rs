@@ -5,13 +5,12 @@ use crate::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
 use crate::{
-    ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive, SubstreamProtocol, THandler,
-    THandlerInEvent, THandlerOutEvent,
+    ConnectionDenied, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
+    SubstreamProtocol, THandler, THandlerInEvent, THandlerOutEvent,
 };
 use libp2p_core::upgrade::DeniedUpgrade;
 use libp2p_core::UpgradeError;
 use libp2p_core::{Endpoint, PeerId};
-use std::error::Error;
 use std::task::{Context, Poll};
 use void::Void;
 
@@ -28,7 +27,7 @@ impl NetworkBehaviour for Behaviour {
         _: ConnectionId,
         _: &Multiaddr,
         _: &Multiaddr,
-    ) -> Result<THandler<Self>, Box<dyn Error + Send + 'static>> {
+    ) -> Result<THandler<Self>, ConnectionDenied> {
         Ok(ConnectionHandler)
     }
 
@@ -38,7 +37,7 @@ impl NetworkBehaviour for Behaviour {
         _: &Multiaddr,
         _: Endpoint,
         _: ConnectionId,
-    ) -> Result<THandler<Self>, Box<dyn Error + Send + 'static>> {
+    ) -> Result<THandler<Self>, ConnectionDenied> {
         Ok(ConnectionHandler)
     }
 

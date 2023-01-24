@@ -29,8 +29,8 @@ use fnv::FnvHashSet;
 use libp2p_core::{Endpoint, Multiaddr, PeerId};
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm};
 use libp2p_swarm::{
-    dial_opts::DialOpts, ConnectionId, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
-    OneShotHandler, PollParameters, THandler, THandlerInEvent, THandlerOutEvent,
+    dial_opts::DialOpts, ConnectionDenied, ConnectionId, NetworkBehaviour, NetworkBehaviourAction,
+    NotifyHandler, OneShotHandler, PollParameters, THandler, THandlerInEvent, THandlerOutEvent,
 };
 use log::warn;
 use smallvec::SmallVec;
@@ -340,7 +340,7 @@ impl NetworkBehaviour for Floodsub {
         _: ConnectionId,
         _: &Multiaddr,
         _: &Multiaddr,
-    ) -> Result<THandler<Self>, Box<dyn std::error::Error + Send + 'static>> {
+    ) -> Result<THandler<Self>, ConnectionDenied> {
         Ok(Default::default())
     }
 
@@ -350,7 +350,7 @@ impl NetworkBehaviour for Floodsub {
         _: &Multiaddr,
         _: Endpoint,
         _: ConnectionId,
-    ) -> Result<THandler<Self>, Box<dyn std::error::Error + Send + 'static>> {
+    ) -> Result<THandler<Self>, ConnectionDenied> {
         Ok(Default::default())
     }
 

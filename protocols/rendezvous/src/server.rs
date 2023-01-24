@@ -30,8 +30,8 @@ use futures::{FutureExt, StreamExt};
 use libp2p_core::{Endpoint, Multiaddr, PeerId};
 use libp2p_swarm::behaviour::FromSwarm;
 use libp2p_swarm::{
-    CloseConnection, ConnectionId, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
-    PollParameters, THandler, THandlerInEvent, THandlerOutEvent,
+    CloseConnection, ConnectionDenied, ConnectionId, NetworkBehaviour, NetworkBehaviourAction,
+    NotifyHandler, PollParameters, THandler, THandlerInEvent, THandlerOutEvent,
 };
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::iter::FromIterator;
@@ -117,7 +117,7 @@ impl NetworkBehaviour for Behaviour {
         _: ConnectionId,
         _: &Multiaddr,
         _: &Multiaddr,
-    ) -> Result<THandler<Self>, Box<dyn std::error::Error + Send + 'static>> {
+    ) -> Result<THandler<Self>, ConnectionDenied> {
         Ok(SubstreamConnectionHandler::new_inbound_only(
             Duration::from_secs(30),
         ))
@@ -129,7 +129,7 @@ impl NetworkBehaviour for Behaviour {
         _: &Multiaddr,
         _: Endpoint,
         _: ConnectionId,
-    ) -> Result<THandler<Self>, Box<dyn std::error::Error + Send + 'static>> {
+    ) -> Result<THandler<Self>, ConnectionDenied> {
         Ok(SubstreamConnectionHandler::new_inbound_only(
             Duration::from_secs(30),
         ))

@@ -26,7 +26,7 @@ use crate::{
         PendingInboundConnectionError, PendingOutboundConnectionError,
     },
     transport::TransportError,
-    ConnectedPoint, ConnectionHandler, Executor, Multiaddr, PeerId,
+    ConnectedPoint, ConnectionDenied, ConnectionHandler, Executor, Multiaddr, PeerId,
 };
 use concurrent_dial::ConcurrentDial;
 use fnv::FnvHashMap;
@@ -43,7 +43,6 @@ use libp2p_core::connection::Endpoint;
 use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerExt};
 use libp2p_core::ProtocolName;
 use smallvec::SmallVec;
-use std::error::Error;
 use std::task::Waker;
 use std::{
     collections::{hash_map, HashMap},
@@ -269,7 +268,7 @@ pub enum PoolEvent<THandler: ConnectionHandler> {
         id: ConnectionId,
         peer_id: PeerId,
         endpoint: ConnectedPoint,
-        cause: Box<dyn Error + Send + 'static>,
+        cause: ConnectionDenied,
     },
 
     /// An outbound connection attempt failed.
@@ -531,7 +530,7 @@ where
             PeerId,
             &ConnectedPoint,
             ConnectionId,
-        ) -> Result<THandler, Box<dyn Error + Send + 'static>>,
+        ) -> Result<THandler, ConnectionDenied>,
         cx: &mut Context<'_>,
     ) -> Poll<PoolEvent<THandler>>
     where

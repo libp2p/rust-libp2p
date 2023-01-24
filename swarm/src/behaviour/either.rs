@@ -20,10 +20,9 @@
 
 use crate::behaviour::{self, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use crate::connection::ConnectionId;
-use crate::{THandler, THandlerInEvent, THandlerOutEvent};
+use crate::{ConnectionDenied, THandler, THandlerInEvent, THandlerOutEvent};
 use either::Either;
 use libp2p_core::{Endpoint, Multiaddr, PeerId};
-use std::error::Error;
 use std::{task::Context, task::Poll};
 
 /// Implementation of [`NetworkBehaviour`] that can be either of two implementations.
@@ -40,7 +39,7 @@ where
         connection_id: ConnectionId,
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
-    ) -> Result<(), Box<dyn Error + Send + 'static>> {
+    ) -> Result<(), ConnectionDenied> {
         match self {
             Either::Left(inner) => {
                 inner.handle_pending_inbound_connection(connection_id, local_addr, remote_addr)?
@@ -59,7 +58,7 @@ where
         connection_id: ConnectionId,
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
-    ) -> Result<THandler<Self>, Box<dyn Error + Send + 'static>> {
+    ) -> Result<THandler<Self>, ConnectionDenied> {
         match self {
             Either::Left(inner) => Ok(Either::Left(inner.handle_established_inbound_connection(
                 peer,
@@ -84,7 +83,7 @@ where
         addresses: &[Multiaddr],
         effective_role: Endpoint,
         connection_id: ConnectionId,
-    ) -> Result<Vec<Multiaddr>, Box<dyn Error + Send + 'static>> {
+    ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
         let addresses = match self {
             Either::Left(inner) => inner.handle_pending_outbound_connection(
                 maybe_peer,
@@ -109,7 +108,7 @@ where
         addr: &Multiaddr,
         role_override: Endpoint,
         connection_id: ConnectionId,
-    ) -> Result<THandler<Self>, Box<dyn Error + Send + 'static>> {
+    ) -> Result<THandler<Self>, ConnectionDenied> {
         match self {
             Either::Left(inner) => Ok(Either::Left(inner.handle_established_outbound_connection(
                 peer,

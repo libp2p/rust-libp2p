@@ -37,10 +37,9 @@ use libp2p_swarm::{
         AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, ExpiredExternalAddr,
         ExpiredListenAddr, FromSwarm,
     },
-    ConnectionId, ExternalAddresses, ListenAddresses, NetworkBehaviour, NetworkBehaviourAction,
-    PollParameters, THandler, THandlerInEvent, THandlerOutEvent,
+    ConnectionDenied, ConnectionId, ExternalAddresses, ListenAddresses, NetworkBehaviour,
+    NetworkBehaviourAction, PollParameters, THandler, THandlerInEvent, THandlerOutEvent,
 };
-use std::error::Error;
 use std::{
     collections::{HashMap, VecDeque},
     iter,
@@ -491,7 +490,7 @@ impl NetworkBehaviour for Behaviour {
         connection_id: ConnectionId,
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
-    ) -> Result<(), Box<dyn Error + Send + 'static>> {
+    ) -> Result<(), ConnectionDenied> {
         self.inner
             .handle_pending_inbound_connection(connection_id, local_addr, remote_addr)
     }
@@ -502,7 +501,7 @@ impl NetworkBehaviour for Behaviour {
         connection_id: ConnectionId,
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
-    ) -> Result<THandler<Self>, Box<dyn Error + Send + 'static>> {
+    ) -> Result<THandler<Self>, ConnectionDenied> {
         self.inner.handle_established_inbound_connection(
             peer,
             connection_id,
@@ -517,7 +516,7 @@ impl NetworkBehaviour for Behaviour {
         addresses: &[Multiaddr],
         effective_role: Endpoint,
         connection_id: ConnectionId,
-    ) -> Result<Vec<Multiaddr>, Box<dyn Error + Send + 'static>> {
+    ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
         self.inner.handle_pending_outbound_connection(
             maybe_peer,
             addresses,
@@ -532,7 +531,7 @@ impl NetworkBehaviour for Behaviour {
         addr: &Multiaddr,
         role_override: Endpoint,
         connection_id: ConnectionId,
-    ) -> Result<THandler<Self>, Box<dyn Error + Send + 'static>> {
+    ) -> Result<THandler<Self>, ConnectionDenied> {
         self.inner
             .handle_established_outbound_connection(peer, addr, role_override, connection_id)
     }

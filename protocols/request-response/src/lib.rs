@@ -74,8 +74,8 @@ use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr, PeerId};
 use libp2p_swarm::{
     behaviour::{AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm},
     dial_opts::DialOpts,
-    ConnectionId, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
-    THandler, THandlerInEvent, THandlerOutEvent,
+    ConnectionDenied, ConnectionId, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
+    PollParameters, THandler, THandlerInEvent, THandlerOutEvent,
 };
 use smallvec::SmallVec;
 use std::{
@@ -732,7 +732,7 @@ where
         _: ConnectionId,
         _: &Multiaddr,
         _: &Multiaddr,
-    ) -> Result<THandler<Self>, Box<dyn std::error::Error + Send + 'static>> {
+    ) -> Result<THandler<Self>, ConnectionDenied> {
         Ok(Handler::new(
             self.inbound_protocols.clone(),
             self.codec.clone(),
@@ -748,7 +748,7 @@ where
         _addresses: &[Multiaddr],
         _effective_role: Endpoint,
         _connection_id: ConnectionId,
-    ) -> Result<Vec<Multiaddr>, Box<dyn std::error::Error + Send + 'static>> {
+    ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
         let peer = match maybe_peer {
             None => return Ok(vec![]),
             Some(peer) => peer,
@@ -771,7 +771,7 @@ where
         _: &Multiaddr,
         _: Endpoint,
         _: ConnectionId,
-    ) -> Result<THandler<Self>, Box<dyn std::error::Error + Send + 'static>> {
+    ) -> Result<THandler<Self>, ConnectionDenied> {
         Ok(Handler::new(
             self.inbound_protocols.clone(),
             self.codec.clone(),

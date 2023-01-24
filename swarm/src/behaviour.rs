@@ -31,8 +31,8 @@ use crate::dial_opts::DialOpts;
 #[allow(deprecated)]
 use crate::handler::IntoConnectionHandler;
 use crate::{
-    AddressRecord, AddressScore, DialError, ListenError, THandler, THandlerInEvent,
-    THandlerOutEvent,
+    AddressRecord, AddressScore, ConnectionDenied, DialError, ListenError, THandler,
+    THandlerInEvent, THandlerOutEvent,
 };
 use libp2p_core::{transport::ListenerId, ConnectedPoint, Endpoint, Multiaddr, PeerId};
 use std::{task::Context, task::Poll};
@@ -162,7 +162,7 @@ pub trait NetworkBehaviour: 'static {
         _connection_id: ConnectionId,
         _local_addr: &Multiaddr,
         _remote_addr: &Multiaddr,
-    ) -> Result<(), Box<dyn std::error::Error + Send + 'static>> {
+    ) -> Result<(), ConnectionDenied> {
         Ok(())
     }
 
@@ -179,7 +179,7 @@ pub trait NetworkBehaviour: 'static {
         _connection_id: ConnectionId,
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
-    ) -> Result<THandler<Self>, Box<dyn std::error::Error + Send + 'static>> {
+    ) -> Result<THandler<Self>, ConnectionDenied> {
         #[allow(deprecated)]
         Ok(self.new_handler().into_handler(
             &peer,
@@ -206,7 +206,7 @@ pub trait NetworkBehaviour: 'static {
         _addresses: &[Multiaddr],
         _effective_role: Endpoint,
         _connection_id: ConnectionId,
-    ) -> Result<Vec<Multiaddr>, Box<dyn std::error::Error + Send + 'static>> {
+    ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
         #[allow(deprecated)]
         if let Some(peer_id) = maybe_peer {
             Ok(self.addresses_of_peer(&peer_id))
@@ -227,7 +227,7 @@ pub trait NetworkBehaviour: 'static {
         addr: &Multiaddr,
         role_override: Endpoint,
         _connection_id: ConnectionId,
-    ) -> Result<THandler<Self>, Box<dyn std::error::Error + Send + 'static>> {
+    ) -> Result<THandler<Self>, ConnectionDenied> {
         #[allow(deprecated)]
         Ok(self.new_handler().into_handler(
             &peer,
