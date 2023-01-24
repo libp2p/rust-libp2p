@@ -27,7 +27,7 @@
   This was never constructed.
   See [PR 3373].
 
-- Remove `DialError:ConnectionIo` variant.
+- Remove `DialError::ConnectionIo` variant.
   This was never constructed.
   See [PR 3374].
 
