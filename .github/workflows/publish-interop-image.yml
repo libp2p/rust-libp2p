@@ -3,6 +3,11 @@ name: Publish interop ping test docker image
 on:
   release:
     types: [created]
+  workflow_dispatch:
+    inputs:
+      dockerTag:
+        description: 'Docker image tag'
+        required: true
 
 jobs:
   publish-ping-interop-image:
@@ -38,5 +43,5 @@ jobs:
           mkdir -p target/release/
           # cp ../target/release/ping target/release
           touch target/release/ping
-          docker build -t ghcr.io/$GITHUB_REPOSITORY/ping-interop:${{ github.event.release.tag_name }} .
-          docker push ghcr.io/$GITHUB_REPOSITORY/ping-interop:${{ github.event.release.tag_name }}
+          docker build -t ghcr.io/$GITHUB_REPOSITORY/ping-interop:${{ inputs.dockerTag || github.event.release.tag_name }} .
+          docker push ghcr.io/$GITHUB_REPOSITORY/ping-interop:${{ inputs.dockerTag || github.event.release.tag_name }}
