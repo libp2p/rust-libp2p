@@ -267,6 +267,7 @@ where
            // peer_connections.connections should never be empty.
         let mut active_connections = peer_connections.connections.len();
         for connection_id in peer_connections.connections.clone() {
+            #[allow(deprecated)] // To be fixed with https://github.com/libp2p/rust-libp2p/issues/3371.
             let handler = gs.new_handler();
             active_connections = active_connections.checked_sub(1).unwrap();
             gs.on_swarm_event(FromSwarm::ConnectionClosed(ConnectionClosed {
