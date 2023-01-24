@@ -3301,16 +3301,8 @@ where
         _: &Multiaddr,
         _: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        let protocol_config = ProtocolConfig::new(
-            self.config.protocol_id().clone(),
-            self.config.custom_id_version().clone(),
-            self.config.max_transmit_size(),
-            self.config.validation_mode().clone(),
-            self.config.support_floodsub(),
-        );
-
         Ok(GossipsubHandler::new(
-            protocol_config,
+            ProtocolConfig::new(&self.config),
             self.config.idle_timeout(),
         ))
     }
@@ -3322,16 +3314,8 @@ where
         _: Endpoint,
         _: ConnectionId,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        let protocol_config = ProtocolConfig::new(
-            self.config.protocol_id().clone(),
-            self.config.custom_id_version().clone(),
-            self.config.max_transmit_size(),
-            self.config.validation_mode().clone(),
-            self.config.support_floodsub(),
-        );
-
         Ok(GossipsubHandler::new(
-            protocol_config,
+            ProtocolConfig::new(&self.config),
             self.config.idle_timeout(),
         ))
     }
