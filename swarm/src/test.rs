@@ -23,10 +23,10 @@ use crate::behaviour::{
     FromSwarm, ListenerClosed, ListenerError, NewExternalAddr, NewListenAddr, NewListener,
 };
 use crate::{
-    ConnectionHandler, ConnectionId, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
-    THandlerInEvent, THandlerOutEvent,
+    ConnectionDenied, ConnectionHandler, ConnectionId, NetworkBehaviour, NetworkBehaviourAction,
+    PollParameters, THandler, THandlerInEvent, THandlerOutEvent,
 };
-use libp2p_core::{multiaddr::Multiaddr, transport::ListenerId, ConnectedPoint, PeerId};
+use libp2p_core::{multiaddr::Multiaddr, transport::ListenerId, ConnectedPoint, Endpoint, PeerId};
 use std::collections::HashMap;
 use std::task::{Context, Poll};
 
@@ -125,7 +125,11 @@ where
 {
     inner: TInner,
 
-    pub addresses_of_peer: Vec<PeerId>,
+    pub handle_pending_inbound_connection: Vec<(ConnectionId, Multiaddr, Multiaddr)>,
+    pub handle_pending_outbound_connection:
+        Vec<(Option<PeerId>, Vec<Multiaddr>, Endpoint, ConnectionId)>,
+    pub handle_established_inbound_connection: Vec<(PeerId, ConnectionId, Multiaddr, Multiaddr)>,
+    pub handle_established_outbound_connection: Vec<(PeerId, Multiaddr, Endpoint, ConnectionId)>,
     pub on_connection_established: Vec<(PeerId, ConnectionId, ConnectedPoint, usize)>,
     pub on_connection_closed: Vec<(PeerId, ConnectionId, ConnectedPoint, usize)>,
     pub on_connection_handler_event: Vec<(PeerId, ConnectionId, THandlerOutEvent<TInner>)>,
@@ -148,7 +152,10 @@ where
     pub fn new(inner: TInner) -> Self {
         Self {
             inner,
-            addresses_of_peer: Vec::new(),
+            handle_pending_inbound_connection: Vec::new(),
+            handle_pending_outbound_connection: Vec::new(),
+            handle_established_inbound_connection: Vec::new(),
+            handle_established_outbound_connection: Vec::new(),
             on_connection_established: Vec::new(),
             on_connection_closed: Vec::new(),
             on_connection_handler_event: Vec::new(),
@@ -166,7 +173,10 @@ where
 
     #[allow(dead_code)]
     pub fn reset(&mut self) {
-        self.addresses_of_peer = Vec::new();
+        self.handle_pending_inbound_connection = Vec::new();
+        self.handle_pending_outbound_connection = Vec::new();
+        self.handle_established_inbound_connection = Vec::new();
+        self.handle_established_outbound_connection = Vec::new();
         self.on_connection_established = Vec::new();
         self.on_connection_closed = Vec::new();
         self.on_connection_handler_event = Vec::new();
@@ -366,13 +376,78 @@ where
     type ConnectionHandler = TInner::ConnectionHandler;
     type OutEvent = TInner::OutEvent;
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
-        self.inner.new_handler()
+    fn handle_pending_inbound_connection(
+        &mut self,
+        connection_id: ConnectionId,
+        local_addr: &Multiaddr,
+        remote_addr: &Multiaddr,
+    ) -> Result<(), ConnectionDenied> {
+        self.handle_pending_inbound_connection.push((
+            connection_id,
+            local_addr.clone(),
+            remote_addr.clone(),
+        ));
+        self.inner
+            .handle_pending_inbound_connection(connection_id, local_addr, remote_addr)
     }
 
-    fn addresses_of_peer(&mut self, p: &PeerId) -> Vec<Multiaddr> {
-        self.addresses_of_peer.push(*p);
-        self.inner.addresses_of_peer(p)
+    fn handle_established_inbound_connection(
+        &mut self,
+        peer: PeerId,
+        connection_id: ConnectionId,
+        local_addr: &Multiaddr,
+        remote_addr: &Multiaddr,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        self.handle_established_inbound_connection.push((
+            peer,
+            connection_id,
+            local_addr.clone(),
+            remote_addr.clone(),
+        ));
+        self.inner.handle_established_inbound_connection(
+            peer,
+            connection_id,
+            local_addr,
+            remote_addr,
+        )
+    }
+
+    fn handle_pending_outbound_connection(
+        &mut self,
+        maybe_peer: Option<PeerId>,
+        addresses: &[Multiaddr],
+        effective_role: Endpoint,
+        connection_id: ConnectionId,
+    ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
+        self.handle_pending_outbound_connection.push((
+            maybe_peer,
+            addresses.to_vec(),
+            effective_role,
+            connection_id,
+        ));
+        self.inner.handle_pending_outbound_connection(
+            maybe_peer,
+            addresses,
+            effective_role,
+            connection_id,
+        )
+    }
+
+    fn handle_established_outbound_connection(
+        &mut self,
+        peer: PeerId,
+        addr: &Multiaddr,
+        role_override: Endpoint,
+        connection_id: ConnectionId,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        self.handle_established_outbound_connection.push((
+            peer,
+            addr.clone(),
+            role_override,
+            connection_id,
+        ));
+        self.inner
+            .handle_established_outbound_connection(peer, addr, role_override, connection_id)
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
