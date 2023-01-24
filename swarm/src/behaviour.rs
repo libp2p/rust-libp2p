@@ -172,8 +172,7 @@ pub trait NetworkBehaviour: 'static {
         _connection_id: ConnectionId,
         _event: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as
         ConnectionHandler>::OutEvent,
-    ) {
-    }
+    );
 
     /// Polls for things that swarm should do.
     ///
