@@ -221,7 +221,7 @@ pub enum SwarmEvent<TBehaviourOutEvent, THandlerErr> {
         /// Address used to send back data to the remote.
         send_back_addr: Multiaddr,
     },
-    /// An error happened on a connection during its initial handshake.
+    /// An error happened on an inbound connection during its initial handshake.
     ///
     /// This can include, for example, an error during the handshake of the encryption layer, or
     /// the connection unexpectedly closed.
@@ -235,7 +235,7 @@ pub enum SwarmEvent<TBehaviourOutEvent, THandlerErr> {
         /// The error that happened.
         error: ListenError,
     },
-    /// Outgoing connection attempt failed.
+    /// An error happened on an outbound connection.
     OutgoingConnectionError {
         /// If known, [`PeerId`] of the peer we tried to reach.
         peer_id: Option<PeerId>,
@@ -1578,7 +1578,7 @@ where
     }
 }
 
-/// The possible failures of dialing.
+/// Possible errors when trying to establish or upgrade an outbound connection.
 #[derive(Debug)]
 pub enum DialError {
     /// The peer is currently banned.
@@ -1683,6 +1683,7 @@ impl error::Error for DialError {
     }
 }
 
+/// Possible errors when upgrading an inbound connection.
 #[derive(Debug)]
 pub enum ListenError {
     /// The configured limit for simultaneous outgoing connections
