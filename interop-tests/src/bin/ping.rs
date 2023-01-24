@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use anyhow::{Context, Result};
 use either::Either;
-use env_logger::Env;
+use env_logger::{Env, Target};
 use futures::{AsyncRead, AsyncWrite, StreamExt};
 use libp2p::core::muxing::StreamMuxerBox;
 use libp2p::core::transport::Boxed;
@@ -177,7 +177,9 @@ async fn main() -> Result<()> {
     let mut conn = client.get_async_connection().await?;
 
     log::info!("Running ping test: {}", swarm.local_peer_id());
-    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
+    env_logger::Builder::from_env(Env::default().default_filter_or("info"))
+        .target(Target::Stdout)
+        .init();
 
     log::info!(
         "Test instance, listening for incoming connections on: {:?}.",
