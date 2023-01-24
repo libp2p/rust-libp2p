@@ -102,7 +102,7 @@ pub enum PendingConnectionError<TTransErr> {
         endpoint: ConnectedPoint,
     },
 
-    /// The peer identity obtained on the connection is the local one.
+    /// The connection was dropped because it resolved to our own [`PeerId`].
     LocalPeerId { endpoint: ConnectedPoint },
 
     /// An I/O error occurred on the connection.

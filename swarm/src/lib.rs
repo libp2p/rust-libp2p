@@ -1580,7 +1580,7 @@ pub enum DialError {
     /// The configured limit for simultaneous outgoing connections
     /// has been reached.
     ConnectionLimit(ConnectionLimit),
-    /// The peer being dialed is the local peer and thus the dial was aborted.
+    /// The peer identity obtained on the connection matches the local peer.
     LocalPeerId { endpoint: ConnectedPoint },
     /// [`NetworkBehaviour::addresses_of_peer`] returned no addresses
     /// for the peer to dial.
