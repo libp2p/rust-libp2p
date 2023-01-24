@@ -30,7 +30,10 @@ use crate::connection::ConnectionId;
 use crate::dial_opts::DialOpts;
 #[allow(deprecated)]
 use crate::handler::IntoConnectionHandler;
-use crate::{AddressRecord, AddressScore, DialError, THandler, THandlerInEvent, THandlerOutEvent};
+use crate::{
+    AddressRecord, AddressScore, DialError, ListenError, THandler, THandlerInEvent,
+    THandlerOutEvent,
+};
 use libp2p_core::{transport::ListenerId, ConnectedPoint, Endpoint, Multiaddr, PeerId};
 use std::{task::Context, task::Poll};
 
@@ -570,6 +573,7 @@ pub struct DialFailure<'a> {
 pub struct ListenFailure<'a> {
     pub local_addr: &'a Multiaddr,
     pub send_back_addr: &'a Multiaddr,
+    pub error: &'a ListenError,
 }
 
 /// [`FromSwarm`] variant that informs the behaviour that a new listener was created.
@@ -696,9 +700,11 @@ impl<'a, Handler: IntoConnectionHandler> FromSwarm<'a, Handler> {
             FromSwarm::ListenFailure(ListenFailure {
                 local_addr,
                 send_back_addr,
+                error,
             }) => Some(FromSwarm::ListenFailure(ListenFailure {
                 local_addr,
                 send_back_addr,
+                error,
             })),
             FromSwarm::NewListener(NewListener { listener_id }) => {
                 Some(FromSwarm::NewListener(NewListener { listener_id }))

@@ -223,7 +223,7 @@ pub enum SwarmEvent<TBehaviourOutEvent, THandlerErr> {
         /// Address used to send back data to the remote.
         send_back_addr: Multiaddr,
     },
-    /// An error happened on a connection during its initial handshake.
+    /// An error happened on an inbound connection during its initial handshake.
     ///
     /// This can include, for example, an error during the handshake of the encryption layer, or
     /// the connection unexpectedly closed.
@@ -235,9 +235,9 @@ pub enum SwarmEvent<TBehaviourOutEvent, THandlerErr> {
         /// Address used to send back data to the remote.
         send_back_addr: Multiaddr,
         /// The error that happened.
-        error: PendingInboundConnectionError,
+        error: ListenError,
     },
-    /// Outgoing connection attempt failed.
+    /// An error happened on an outbound connection.
     OutgoingConnectionError {
         /// If known, [`PeerId`] of the peer we tried to reach.
         peer_id: Option<PeerId>,
@@ -884,11 +884,14 @@ where
                 local_addr,
                 error,
             } => {
+                let error = error.into();
+
                 log::debug!("Incoming connection failed: {:?}", error);
                 self.behaviour
                     .on_swarm_event(FromSwarm::ListenFailure(ListenFailure {
                         local_addr: &local_addr,
                         send_back_addr: &send_back_addr,
+                        error: &error,
                     }));
                 return Some(SwarmEvent::IncomingConnectionError {
                     local_addr,
@@ -1050,10 +1053,12 @@ where
                         });
                     }
                     Err(connection_limit) => {
+                        let error = ListenError::ConnectionLimit(connection_limit);
                         self.behaviour
                             .on_swarm_event(FromSwarm::ListenFailure(ListenFailure {
                                 local_addr: &local_addr,
                                 send_back_addr: &send_back_addr,
+                                error: &error,
                             }));
                         log::warn!("Incoming connection rejected: {:?}", connection_limit);
                     }
@@ -1663,7 +1668,7 @@ where
     }
 }
 
-/// The possible failures of dialing.
+/// Possible errors when trying to establish or upgrade an outbound connection.
 #[derive(Debug)]
 pub enum DialError {
     /// The peer is currently banned.
@@ -1692,8 +1697,6 @@ pub enum DialError {
     Denied {
         cause: Box<dyn error::Error + Send + 'static>,
     },
-    /// An I/O error occurred on the connection.
-    ConnectionIo(io::Error),
     /// An error occurred while negotiating the transport protocol(s) on a connection.
     Transport(Vec<(Multiaddr, TransportError<io::Error>)>),
 }
@@ -1706,7 +1709,6 @@ impl From<PendingOutboundConnectionError> for DialError {
             PendingConnectionError::WrongPeerId { obtained, endpoint } => {
                 DialError::WrongPeerId { obtained, endpoint }
             }
-            PendingConnectionError::IO(e) => DialError::ConnectionIo(e),
             PendingConnectionError::Transport(e) => DialError::Transport(e),
         }
     }
@@ -1737,11 +1739,6 @@ impl fmt::Display for DialError {
                 f,
                 "Dial error: Unexpected peer ID {} at {:?}.",
                 obtained, endpoint
-            ),
-            DialError::ConnectionIo(e) => write!(
-                f,
-                "Dial error: An I/O error occurred on the connection: {:?}.",
-                e
             ),
             DialError::Transport(errors) => {
                 write!(f, "Failed to negotiate transport protocol(s): [")?;
@@ -1783,9 +1780,70 @@ impl error::Error for DialError {
             DialError::Aborted => None,
             DialError::InvalidPeerId { .. } => None,
             DialError::WrongPeerId { .. } => None,
-            DialError::ConnectionIo(_) => None,
             DialError::Transport(_) => None,
             DialError::Denied { cause } => Some(cause.as_ref()),
+        }
+    }
+}
+
+/// Possible errors when upgrading an inbound connection.
+#[derive(Debug)]
+pub enum ListenError {
+    /// The configured limit for simultaneous outgoing connections
+    /// has been reached.
+    ConnectionLimit(ConnectionLimit),
+    /// Pending connection attempt has been aborted.
+    Aborted,
+    /// The peer identity obtained on the connection did not match the one that was expected.
+    WrongPeerId {
+        obtained: PeerId,
+        endpoint: ConnectedPoint,
+    },
+    /// An error occurred while negotiating the transport protocol(s) on a connection.
+    Transport(TransportError<io::Error>),
+}
+
+impl From<PendingInboundConnectionError> for ListenError {
+    fn from(error: PendingInboundConnectionError) -> Self {
+        match error {
+            PendingInboundConnectionError::Transport(inner) => ListenError::Transport(inner),
+            PendingInboundConnectionError::ConnectionLimit(inner) => {
+                ListenError::ConnectionLimit(inner)
+            }
+            PendingInboundConnectionError::Aborted => ListenError::Aborted,
+            PendingInboundConnectionError::WrongPeerId { obtained, endpoint } => {
+                ListenError::WrongPeerId { obtained, endpoint }
+            }
+        }
+    }
+}
+
+impl fmt::Display for ListenError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ListenError::ConnectionLimit(_) => write!(f, "Listen error"),
+            ListenError::Aborted => write!(
+                f,
+                "Listen error: Pending connection attempt has been aborted."
+            ),
+            ListenError::WrongPeerId { obtained, endpoint } => write!(
+                f,
+                "Listen error: Unexpected peer ID {obtained} at {endpoint:?}."
+            ),
+            ListenError::Transport(_) => {
+                write!(f, "Listen error: Failed to negotiate transport protocol(s)")
+            }
+        }
+    }
+}
+
+impl error::Error for ListenError {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match self {
+            ListenError::ConnectionLimit(err) => Some(err),
+            ListenError::WrongPeerId { .. } => None,
+            ListenError::Transport(err) => Some(err),
+            ListenError::Aborted => None,
         }
     }
 }
@@ -2436,7 +2494,7 @@ mod tests {
                                 network_1_established = true;
                             }
                             Poll::Ready(Some(SwarmEvent::IncomingConnectionError {
-                                error: PendingConnectionError::ConnectionLimit(err),
+                                error: ListenError::ConnectionLimit(err),
                                 ..
                             })) => {
                                 assert_eq!(err.limit, limit);
