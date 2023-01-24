@@ -22,9 +22,9 @@
 
 use crate::protocol;
 use either::Either;
+use futures::future;
 use futures::future::{BoxFuture, FutureExt};
 use instant::Instant;
-use libp2p_core::either::EitherOutput;
 use libp2p_core::multiaddr::Multiaddr;
 use libp2p_core::upgrade::{DeniedUpgrade, NegotiationError, UpgradeError};
 use libp2p_core::ConnectedPoint;
@@ -174,7 +174,7 @@ impl Handler {
         >,
     ) {
         match output {
-            EitherOutput::First(inbound_connect) => {
+            future::Either::Left(inbound_connect) => {
                 let remote_addr = match &self.endpoint {
                     ConnectedPoint::Dialer { address, role_override: _ } => address.clone(),
                     ConnectedPoint::Listener { ..} => unreachable!("`<Handler as ConnectionHandler>::listen_protocol` denies all incoming substreams as a listener."),
@@ -187,7 +187,7 @@ impl Handler {
                 ));
             }
             // A connection listener denies all incoming substreams, thus none can ever be fully negotiated.
-            EitherOutput::Second(output) => void::unreachable(output),
+            future::Either::Right(output) => void::unreachable(output),
         }
     }
 

@@ -79,7 +79,6 @@ pub mod identity {
     pub mod rsa {
         pub use libp2p_identity::rsa::Keypair;
         pub use libp2p_identity::rsa::PublicKey;
-        pub use libp2p_identity::rsa::SecretKey;
     }
 
     pub mod error {
