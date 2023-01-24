@@ -4,9 +4,6 @@ on:
   release:
     types: [created]
 
-env:
-  REGISTRY: ghcr.io
-
 jobs:
   publish-ping-interop-image:
     runs-on: ubuntu-latest
@@ -23,9 +20,6 @@ jobs:
           override: true
 
       - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
-        with:
-          shared-key: stable-cache
-          save-if: false
 
       - name: Log in to the Container registry
         uses: docker/login-action@f054a8b539a109f9f41c372932f1ae047eff08c9
@@ -40,5 +34,5 @@ jobs:
           cargo build --release
           mkdir -p target/release/
           cp ../target/release/ping target/release
-          docker build -t rust-libp2p-ping-interop:${{ github.event.release.tag_name }} .
-          docker push rust-libp2p-ping-interop:${{ github.event.release.tag_name }}
+          docker build -t ghcr.io/libp2p/rust-libp2p/ping-interop:${{ github.event.release.tag_name }} .
+          docker push ghcr.io/libp2p/rust-libp2p/ping-interop:${{ github.event.release.tag_name }}
