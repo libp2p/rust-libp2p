@@ -1692,8 +1692,6 @@ impl error::Error for DialError {
 
 #[derive(Debug)]
 pub enum ListenError {
-    /// The peer is currently banned.
-    Banned,
     /// The configured limit for simultaneous outgoing connections
     /// has been reached.
     ConnectionLimit(ConnectionLimit),
@@ -1707,13 +1705,54 @@ pub enum ListenError {
     /// An I/O error occurred on the connection.
     ConnectionIo(io::Error),
     /// An error occurred while negotiating the transport protocol(s) on a connection.
-    Transport(Vec<(Multiaddr, TransportError<io::Error>)>),
+    Transport(TransportError<io::Error>),
 }
 
 impl From<PendingInboundConnectionError> for ListenError {
     fn from(error: PendingInboundConnectionError) -> Self {
         match error {
+            PendingInboundConnectionError::Transport(inner) => ListenError::Transport(inner),
+            PendingInboundConnectionError::ConnectionLimit(inner) => {
+                ListenError::ConnectionLimit(inner)
+            }
+            PendingInboundConnectionError::Aborted => ListenError::Aborted,
+            PendingInboundConnectionError::WrongPeerId { obtained, endpoint } => {
+                ListenError::WrongPeerId { obtained, endpoint }
+            }
+        }
+    }
+}
 
+impl fmt::Display for ListenError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ListenError::ConnectionLimit(_) => write!(f, "Listen error"),
+            ListenError::Aborted => write!(
+                f,
+                "Listen error: Pending connection attempt has been aborted."
+            ),
+            ListenError::WrongPeerId { obtained, endpoint } => write!(
+                f,
+                "Listen error: Unexpected peer ID {obtained} at {endpoint:?}."
+            ),
+            ListenError::ConnectionIo(_) => {
+                write!(f, "Listen error: An I/O error occurred on the connection")
+            }
+            ListenError::Transport(_) => {
+                write!(f, "Listen error: Failed to negotiate transport protocol(s)")
+            }
+        }
+    }
+}
+
+impl error::Error for ListenError {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match self {
+            ListenError::ConnectionLimit(err) => Some(err),
+            ListenError::WrongPeerId { .. } => None,
+            ListenError::ConnectionIo(err) => Some(err),
+            ListenError::Transport(err) => Some(err),
+            ListenError::Aborted => None,
         }
     }
 }
@@ -2364,7 +2403,7 @@ mod tests {
                                 network_1_established = true;
                             }
                             Poll::Ready(Some(SwarmEvent::IncomingConnectionError {
-                                error: PendingConnectionError::ConnectionLimit(err),
+                                error: ListenError::ConnectionLimit(err),
                                 ..
                             })) => {
                                 assert_eq!(err.limit, limit);

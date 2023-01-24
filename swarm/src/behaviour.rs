@@ -875,7 +875,8 @@ impl<'a, Handler: IntoConnectionHandler> FromSwarm<'a, Handler> {
             FromSwarm::ListenFailure(ListenFailure {
                 local_addr,
                 send_back_addr,
-                                         error, handler,
+                error,
+                handler,
             }) => Some(FromSwarm::ListenFailure(ListenFailure {
                 local_addr,
                 send_back_addr,
