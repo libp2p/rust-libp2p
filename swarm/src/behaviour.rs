@@ -260,7 +260,7 @@ pub enum NetworkBehaviourAction<
     /// # use libp2p_plaintext::PlainText2Config;
     /// # use libp2p_swarm::{
     /// #     ConnectionId, DialError, IntoConnectionHandler, KeepAlive, NegotiatedSubstream,
-    /// #     FromSwarm, DialFailure,
+    /// #     FromSwarm, DialFailure, THandlerOutEvent,
     /// #     NetworkBehaviour, NetworkBehaviourAction, PollParameters, ConnectionHandler,
     /// #     ConnectionHandlerEvent, ConnectionHandlerUpgrErr, SubstreamProtocol, Swarm, SwarmEvent,
     /// # };
