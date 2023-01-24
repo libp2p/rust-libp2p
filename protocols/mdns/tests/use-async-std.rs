@@ -56,17 +56,17 @@ async fn test_expired_async_std() -> Result<(), Box<dyn Error>> {
 }
 
 #[async_std::test]
-async fn test_connection_close_dont_expire_async_std() -> Result<(), Box<dyn Error>> {
+async fn test_no_expiration_on_close_async_std() -> Result<(), Box<dyn Error>> {
     env_logger::try_init().ok();
     let config = Config {
-        ttl: Duration::from_secs(10),
+        ttl: Duration::from_secs(120),
         query_interval: Duration::from_secs(10),
         ..Default::default()
     };
 
     async_std::future::timeout(
         Duration::from_secs(6),
-        run_connection_close_expiration_test(config),
+        run_no_expiration_on_close_test(config),
     )
     .await
     .map(|_| ())
@@ -145,28 +145,30 @@ async fn run_peer_expiration_test(config: Config) -> Result<(), Box<dyn Error>> 
     }
 }
 
-async fn run_connection_close_dont_expire_test(config: Config) -> Result<(), Box<dyn Error>> {
+async fn run_no_expiration_on_close_test(config: Config) -> Result<(), Box<dyn Error>> {
     let mut a = create_swarm(config.clone()).await?;
     let mut b = create_swarm(config).await?;
-    let mut connection_count = 0;
+
+    let mut closed = false;
+    let mut dialed = false;
 
     loop {
         futures::select! {
             ev = a.select_next_some() => match ev {
                 SwarmEvent::Behaviour(Event::Discovered(peers)) => {
                     for (peer, addr) in peers {
-                        if peer == *b.local_peer_id() {
+                        if peer == *b.local_peer_id() && !dialed {
                             // Connect to all addresses of b to 'expire' all of them
                             a.dial(addr)?;
-                            connection_count += 1;
+                            dialed = true;
                         }
                     }
                 }
                 SwarmEvent::ConnectionEstablished { peer_id, .. } => {
                     if peer_id == *b.local_peer_id() {
-                        if !connection_count > 0 {
-                            // We disconnect all connections that were initiated in
-                            // the discovered event
+                        if !closed {
+                            // We disconnect the connection that was initiated
+                            // in the discovered event
                             a.disconnect_peer_id(peer_id).unwrap();
                         } else {
                             // If the connection attempt after connection close
@@ -176,12 +178,20 @@ async fn run_connection_close_dont_expire_test(config: Config) -> Result<(), Box
                         }
                     }
                 }
-                SwarmEvent::ConnectionClosed { peer_id, .. } => {
+                SwarmEvent::ConnectionClosed { peer_id, num_established, .. } => {
                     if peer_id == *b.local_peer_id() {
-                        // Dial a second time to make sure connection is still
-                        // possible
-                        a.dial(peer_id)?;
-                        connection_count -= 1;
+                        if num_established == 0 {
+                            // Dial a second time to make sure connection is still
+                            // possible only via the peer id
+                            closed = true;
+
+                            // Either wait for the expiration event to give mDNS enough time to expire
+                            // or timeout after 1 second of not receiving the expiration event
+                            let _ = async_std::future::timeout(Duration::from_secs(1), a.select_next_some()).await;
+
+                            // If the record expired this will fail because the peer has no addresses
+                            a.dial(peer_id).expect("Expected peer addresses to not expire after connection close");
+                        }
                     }
                 }
                 _ => {}
