@@ -31,8 +31,9 @@ jobs:
       - name: Build and push ping interop docker image
         run: |
           cd test-plans;
-          cargo build --release
+          # cargo build --release
+          touch target/release/ping
           mkdir -p target/release/
           cp ../target/release/ping target/release
-          docker build -t ghcr.io/libp2p/rust-libp2p/ping-interop:${{ github.event.release.tag_name }} .
-          docker push ghcr.io/libp2p/rust-libp2p/ping-interop:${{ github.event.release.tag_name }}
+          docker build -t ghcr.io/$GITHUB_REPOSITORY/ping-interop:${{ github.event.release.tag_name }} .
+          docker push ghcr.io/$GITHUB_REPOSITORY/ping-interop:${{ github.event.release.tag_name }}
