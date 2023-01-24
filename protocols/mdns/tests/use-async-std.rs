@@ -149,27 +149,34 @@ async fn run_no_expiration_on_close_test(config: Config) -> Result<(), Box<dyn E
     let mut a = create_swarm(config.clone()).await?;
     let mut b = create_swarm(config).await?;
 
-    let mut closed = false;
+    #[derive(PartialEq)]
+    enum State {
+        Initial,
+        Dialed,
+        Closed,
+    }
+
+    let mut state = State::Initial;
 
     loop {
         futures::select! {
             ev = a.select_next_some() => match ev {
                 SwarmEvent::Behaviour(Event::Discovered(peers)) => {
                     for (peer, addr) in peers {
-                        if peer == *b.local_peer_id() {
+                        if peer == *b.local_peer_id() && state == State::Initial {
                             // Connect to all addresses of b to 'expire' all of them
                             a.dial(addr)?;
-                            break;
+                            state = State::Dialed;
                         }
                     }
                 }
                 SwarmEvent::ConnectionEstablished { peer_id, .. } => {
                     if peer_id == *b.local_peer_id() {
-                        if !closed {
+                        if state == State::Dialed {
                             // We disconnect the connection that was initiated
                             // in the discovered event
                             a.disconnect_peer_id(peer_id).unwrap();
-                        } else {
+                        } else if state == State::Closed {
                             // If the connection attempt after connection close
                             // succeeded the mDNS record wasn't expired by
                             // connection close
@@ -182,7 +189,7 @@ async fn run_no_expiration_on_close_test(config: Config) -> Result<(), Box<dyn E
                         if num_established == 0 {
                             // Dial a second time to make sure connection is still
                             // possible only via the peer id
-                            closed = true;
+                            state = State::Closed;
 
                             // Either wait for the expiration event to give mDNS enough time to expire
                             // or timeout after 1 second of not receiving the expiration event
