@@ -1932,7 +1932,7 @@ where
         match error {
             DialError::Banned
             | DialError::ConnectionLimit(_)
-            | DialError::LocalPeerId
+            | DialError::LocalPeerId { .. }
             | DialError::InvalidPeerId { .. }
             | DialError::WrongPeerId { .. }
             | DialError::Aborted
