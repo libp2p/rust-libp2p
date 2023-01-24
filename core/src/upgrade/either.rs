@@ -19,10 +19,11 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::{
-    either::{EitherFuture, EitherName, EitherOutput},
+    either::{EitherFuture, EitherName},
     upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo},
 };
 use either::Either;
+use futures::future;
 
 impl<A, B> UpgradeInfo for Either<A, B>
 where
@@ -48,7 +49,7 @@ where
     A: InboundUpgrade<C, Output = TA, Error = EA>,
     B: InboundUpgrade<C, Output = TB, Error = EB>,
 {
-    type Output = EitherOutput<TA, TB>;
+    type Output = future::Either<TA, TB>;
     type Error = Either<EA, EB>;
     type Future = EitherFuture<A::Future, B::Future>;
 
@@ -70,7 +71,7 @@ where
     A: OutboundUpgrade<C, Output = TA, Error = EA>,
     B: OutboundUpgrade<C, Output = TB, Error = EB>,
 {
-    type Output = EitherOutput<TA, TB>;
+    type Output = future::Either<TA, TB>;
     type Error = Either<EA, EB>;
     type Future = EitherFuture<A::Future, B::Future>;
 

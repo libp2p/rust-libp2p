@@ -168,8 +168,7 @@ pub trait NetworkBehaviour: Sized + 'static {
         _peer_id: PeerId,
         _connection_id: ConnectionId,
         _event: THandlerOutEvent<Self>,
-    ) {
-    }
+    );
 
     /// Polls for things that swarm should do.
     ///

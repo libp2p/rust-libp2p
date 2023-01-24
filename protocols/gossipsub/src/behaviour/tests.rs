@@ -223,15 +223,17 @@ where
         }
     };
 
+    #[allow(deprecated)]
     gs.on_swarm_event(FromSwarm::ConnectionEstablished(ConnectionEstablished {
         peer_id: peer,
-        connection_id: ConnectionId::new(0),
+        connection_id: ConnectionId::DUMMY,
         endpoint: &endpoint,
         failed_addresses: &[],
         other_established: 0, // first connection
     }));
     if let Some(kind) = kind {
-        gs.on_connection_handler_event(peer, ConnectionId::new(1), HandlerEvent::PeerKind(kind));
+        #[allow(deprecated)]
+        gs.on_connection_handler_event(peer, ConnectionId::DUMMY, HandlerEvent::PeerKind(kind));
     }
     if explicit {
         gs.add_explicit_peer(&peer);
@@ -577,9 +579,10 @@ fn test_join() {
     for _ in 0..3 {
         let random_peer = PeerId::random();
         // inform the behaviour of a new peer
+        #[allow(deprecated)]
         gs.on_swarm_event(FromSwarm::ConnectionEstablished(ConnectionEstablished {
             peer_id: random_peer,
-            connection_id: ConnectionId::new(1),
+            connection_id: ConnectionId::DUMMY,
             endpoint: &ConnectedPoint::Dialer {
                 address: "/ip4/127.0.0.1".parse::<Multiaddr>().unwrap(),
                 role_override: Endpoint::Dialer,
@@ -959,7 +962,10 @@ fn test_get_random_peers() {
                 *p,
                 PeerConnections {
                     kind: PeerKind::Gossipsubv1_1,
-                    connections: vec![ConnectionId::new(1)],
+                    connections: vec![
+                        #[allow(deprecated)]
+                        ConnectionId::DUMMY,
+                    ],
                 },
             )
         })
@@ -3009,7 +3015,8 @@ fn test_ignore_rpc_from_peers_below_graylist_threshold() {
     //receive from p1
     gs.on_connection_handler_event(
         p1,
-        ConnectionId::new(0),
+        #[allow(deprecated)]
+        ConnectionId::DUMMY,
         HandlerEvent::Message {
             rpc: GossipsubRpc {
                 messages: vec![raw_message1],
@@ -3035,7 +3042,8 @@ fn test_ignore_rpc_from_peers_below_graylist_threshold() {
     //receive from p2
     gs.on_connection_handler_event(
         p2,
-        ConnectionId::new(0),
+        #[allow(deprecated)]
+        ConnectionId::DUMMY,
         HandlerEvent::Message {
             rpc: GossipsubRpc {
                 messages: vec![raw_message3],
@@ -3647,7 +3655,8 @@ fn test_scoring_p4_invalid_signature() {
 
     gs.on_connection_handler_event(
         peers[0],
-        ConnectionId::new(0),
+        #[allow(deprecated)]
+        ConnectionId::DUMMY,
         HandlerEvent::Message {
             rpc: GossipsubRpc {
                 messages: vec![],
@@ -4128,10 +4137,11 @@ fn test_scoring_p6() {
     }
 
     //add additional connection for 3 others with addr
+    #[allow(deprecated)]
     for id in others.iter().take(3) {
         gs.on_swarm_event(FromSwarm::ConnectionEstablished(ConnectionEstablished {
             peer_id: *id,
-            connection_id: ConnectionId::new(0),
+            connection_id: ConnectionId::DUMMY,
             endpoint: &ConnectedPoint::Dialer {
                 address: addr.clone(),
                 role_override: Endpoint::Dialer,
@@ -4150,9 +4160,10 @@ fn test_scoring_p6() {
 
     //add additional connection for 3 of the peers to addr2
     for peer in peers.iter().take(3) {
+        #[allow(deprecated)]
         gs.on_swarm_event(FromSwarm::ConnectionEstablished(ConnectionEstablished {
             peer_id: *peer,
-            connection_id: ConnectionId::new(0),
+            connection_id: ConnectionId::DUMMY,
             endpoint: &ConnectedPoint::Dialer {
                 address: addr2.clone(),
                 role_override: Endpoint::Dialer,
@@ -4180,9 +4191,10 @@ fn test_scoring_p6() {
     );
 
     //two times same ip doesn't count twice
+    #[allow(deprecated)]
     gs.on_swarm_event(FromSwarm::ConnectionEstablished(ConnectionEstablished {
         peer_id: peers[0],
-        connection_id: ConnectionId::new(0),
+        connection_id: ConnectionId::DUMMY,
         endpoint: &ConnectedPoint::Dialer {
             address: addr,
             role_override: Endpoint::Dialer,
@@ -5194,7 +5206,8 @@ fn test_subscribe_and_graft_with_negative_score() {
 
     let (mut gs2, _, _) = inject_nodes1().create_network();
 
-    let connection_id = ConnectionId::new(0);
+    #[allow(deprecated)]
+    let connection_id = ConnectionId::DUMMY;
 
     let topic = Topic::new("test");
 
