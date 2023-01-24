@@ -99,7 +99,7 @@ pub struct Behaviour {
     directly_connected_peers: HashMap<PeerId, Vec<ConnectionId>>,
 
     /// Queue of actions to return when polled.
-    queued_actions: VecDeque<Event>,
+    queued_actions: VecDeque<NetworkBehaviourAction<Event, handler::Prototype>>,
 }
 
 /// Create a new client relay [`Behaviour`] with it's corresponding [`Transport`].
@@ -241,7 +241,8 @@ impl NetworkBehaviour for Behaviour {
             }
         };
 
-        self.queued_actions.push_back(event);
+        self.queued_actions
+            .push_back(NetworkBehaviourAction::GenerateEvent(event));
     }
 
     fn poll(
@@ -250,7 +251,7 @@ impl NetworkBehaviour for Behaviour {
         _poll_parameters: &mut impl PollParameters,
     ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
         if let Some(event) = self.queued_actions.pop_front() {
-            return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event));
+            return Poll::Ready(event);
         }
 
         let action = match ready!(self.from_transport.poll_next_unpin(cx)) {
