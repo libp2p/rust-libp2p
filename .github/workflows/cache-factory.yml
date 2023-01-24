@@ -75,6 +75,3 @@ jobs:
 
       - name: Render docs
         run: cargo doc --all-features --workspace
-
-      - name: Install tools
-        run: cargo install cargo-semver-checks --locked
