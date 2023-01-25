@@ -179,10 +179,11 @@ impl NetworkBehaviour for Behaviour {
 
     fn on_connection_handler_event(
         &mut self,
-        _peer_id: PeerId,
-        _connection_id: ConnectionId,
-        _event: THandlerOutEvent<Self>,
+        _id: PeerId,
+        _: ConnectionId,
+        event: THandlerOutEvent<Self>,
     ) {
+        void::unreachable(event)
     }
 
     fn poll(
