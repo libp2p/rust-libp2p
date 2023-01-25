@@ -228,7 +228,7 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
                     libp2p_swarm::DialError::ConnectionLimit(_) => {
                         record(OutgoingConnectionErrorError::ConnectionLimit)
                     }
-                    libp2p_swarm::DialError::LocalPeerId => {
+                    libp2p_swarm::DialError::LocalPeerId { .. } => {
                         record(OutgoingConnectionErrorError::LocalPeerId)
                     }
                     libp2p_swarm::DialError::NoAddresses => {
