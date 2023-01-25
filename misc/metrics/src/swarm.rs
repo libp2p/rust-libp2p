@@ -245,7 +245,7 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
                         record(OutgoingConnectionError::WrongPeerId)
                     }
                     libp2p_swarm::DialError::Denied { .. } => {
-                        todo!()
+                        record(OutgoingConnectionError::Denied)
                     }
                 };
             }
@@ -347,6 +347,7 @@ enum OutgoingConnectionError {
     WrongPeerId,
     TransportMultiaddrNotSupported,
     TransportOther,
+    Denied,
 }
 
 #[derive(EncodeLabelSet, Hash, Clone, Eq, PartialEq, Debug)]
