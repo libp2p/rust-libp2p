@@ -137,7 +137,8 @@ pub trait NetworkBehaviour: 'static {
     ///
     /// The network behaviour (ie. the implementation of this trait) and the handlers it has spawned
     /// (ie. the objects returned by `new_handler`) can communicate by passing messages. Messages
-    /// sent from the handler to the behaviour are injected with [`NetworkBehaviour::inject_event`],
+    /// sent from the handler to the behaviour are invoked with
+    /// [`NetworkBehaviour::on_connection_handler_event`],
     /// and the behaviour can send a message to the handler by making [`NetworkBehaviour::poll`]
     /// return [`NetworkBehaviourAction::NotifyHandler`].
     ///
