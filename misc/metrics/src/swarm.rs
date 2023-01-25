@@ -361,6 +361,7 @@ struct IncomingConnectionErrorLabels {
 #[derive(EncodeLabelValue, Hash, Clone, Eq, PartialEq, Debug)]
 enum PendingInboundConnectionError {
     WrongPeerId,
+    LocalPeerId,
     TransportErrorMultiaddrNotSupported,
     TransportErrorOther,
     Aborted,
@@ -373,6 +374,9 @@ impl From<&libp2p_swarm::PendingInboundConnectionError> for PendingInboundConnec
         match error {
             libp2p_swarm::PendingInboundConnectionError::WrongPeerId { .. } => {
                 PendingInboundConnectionError::WrongPeerId
+            }
+            libp2p_swarm::PendingInboundConnectionError::LocalPeerId { .. } => {
+                PendingInboundConnectionError::LocalPeerId
             }
             libp2p_swarm::PendingInboundConnectionError::ConnectionLimit(_) => {
                 PendingInboundConnectionError::ConnectionLimit
