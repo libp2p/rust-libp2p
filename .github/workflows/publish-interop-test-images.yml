@@ -10,7 +10,8 @@ on:
         required: true
 
 env:
-  PING_TEST_IMAGE_NAME: ghcr.io/${{ github.repository }}/ping-interop-test:${{ inputs.dockerTag || github.event.release.tag_name }}
+  REGISTRY: ghcr.io
+  PING_TEST_IMAGE_NAME: ${{ github.repository }}/ping-interop-test
 
 jobs:
   publish-interop-test-images:
@@ -35,7 +36,7 @@ jobs:
       - name: Log in to the Container registry
         uses: docker/login-action@f054a8b539a109f9f41c372932f1ae047eff08c9
         with:
-          registry: ghcr.io
+          registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
@@ -46,5 +47,7 @@ jobs:
 
       - name: Build and push ping interop docker image
         run: |
-          docker build -t ${{ env.PING_TEST_IMAGE_NAME }} --build-arg=TEST_BINARY=target/release/ping . -f interop-tests/Dockerfile
-          docker push ${{ env.PING_TEST_IMAGE_NAME }}
+          TAG="${{ env.REGISTRY }}/${{ env.PING_TEST_IMAGE_NAME }}:${{ inputs.dockerTag || github.event.release.tag_name }}"
+          
+          docker build -t $TAG --build-arg=TEST_BINARY=target/release/ping . -f interop-tests/Dockerfile
+          docker push $TAG
