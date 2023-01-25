@@ -4,7 +4,7 @@
 *
 
 # CI will build and copy over the release binary.
-target/release/ping
+!target/release/ping
 
 # Locally, we might want to build it as `debug` binary to accelerate the build process.
-target/debug/ping
+!target/debug/ping
