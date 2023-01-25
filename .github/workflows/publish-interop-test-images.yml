@@ -20,9 +20,6 @@ jobs:
       contents: read
       packages: write
     steps:
-      - name: Install Protoc
-        run: sudo apt-get install protobuf-compiler
-
       - uses: actions/checkout@v3
 
       - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
@@ -43,7 +40,10 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - run: cargo build --release -p interop-tests
+      - name: Build test binaries
+        run: |
+          sudo apt-get install protobuf-compiler
+          cargo build --release -p interop-tests
 
       - name: Build and push ping interop docker image
         run: |
