@@ -69,6 +69,8 @@ impl NetworkBehaviour for Behaviour {
         _: &Multiaddr,
         _: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
+        self.pending_inbound_connections.remove(&connection_id);
+
         self.check_limit(
             self.limits.max_established_incoming,
             self.established_inbound_connections.len(),
@@ -86,7 +88,6 @@ impl NetworkBehaviour for Behaviour {
                 + self.established_outbound_connections.len(),
         )?;
 
-        self.pending_inbound_connections.remove(&connection_id);
         self.established_inbound_connections.insert(connection_id);
         self.established_per_peer
             .entry(peer)
@@ -120,6 +121,8 @@ impl NetworkBehaviour for Behaviour {
         _: Endpoint,
         connection_id: ConnectionId,
     ) -> Result<THandler<Self>, ConnectionDenied> {
+        self.pending_outbound_connections.remove(&connection_id);
+
         self.check_limit(
             self.limits.max_established_outgoing,
             self.established_outbound_connections.len(),
@@ -137,7 +140,6 @@ impl NetworkBehaviour for Behaviour {
                 + self.established_outbound_connections.len(),
         )?;
 
-        self.pending_outbound_connections.remove(&connection_id);
         self.established_outbound_connections.insert(connection_id);
         self.established_per_peer
             .entry(peer)
