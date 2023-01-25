@@ -2,8 +2,8 @@ name: Publish interop test docker images
 
 on:
   release:
-    types: [ created ]
-  workflow_dispatch:
+    types: [ created ] # Publishing of a containers is triggered on _releases_. Releases are a GH concept building on top of tags.
+  workflow_dispatch: # This workflow can also be triggered manually which is useful for testing, updates to test binaries or publishing of test binaries for older libp2p versions.
     inputs:
       dockerTag:
         description: 'Docker image tag'
