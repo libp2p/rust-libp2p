@@ -11,7 +11,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  PING_TEST_IMAGE_NAME: ${{ github.repository }}/ping-interop-test
+  PING_TEST_IMAGE_NAME: ${{ env.REGISTRY }}/${{ env.PING_TEST_IMAGE_NAME }}:${{ inputs.dockerTag || github.event.release.tag_name }}
 
 jobs:
   publish-ping-interop-image:
@@ -44,8 +44,5 @@ jobs:
 
       - name: Build and push ping interop docker image
         run: |
-          mkdir -p test-plans/target/release/
-          cp target/release/ping p test-plans/target/release
-          
-          docker build -t ${{ env.REGISTRY }}/${{ env.PING_TEST_IMAGE_NAME }}:${{ inputs.dockerTag || github.event.release.tag_name }} .
-          docker push ${{ env.REGISTRY }}/${{ env.PING_TEST_IMAGE_NAME }}:${{ inputs.dockerTag || github.event.release.tag_name }}
+          docker build -t ${{ env.PING_TEST_IMAGE_NAME }} --build-arg=TEST_BINARY=target/release/ping . -f interop-tests/Dockerfile
+          docker push ${{ env.PING_TEST_IMAGE_NAME }}
