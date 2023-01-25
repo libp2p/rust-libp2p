@@ -1,4 +1,4 @@
-name: Publish interop ping test docker image
+name: Publish interop test docker images
 
 on:
   release:
@@ -14,7 +14,7 @@ env:
   PING_TEST_IMAGE_NAME: ${{ env.REGISTRY }}/${{ github.repository }}/ping-interop-test:${{ inputs.dockerTag || github.event.release.tag_name }}
 
 jobs:
-  publish-ping-interop-image:
+  publish-interop-test-images:
     runs-on: ubuntu-latest
     permissions:
       contents: read
