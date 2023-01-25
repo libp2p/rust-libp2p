@@ -2,12 +2,16 @@ name: Publish interop ping test docker image
 
 on:
   release:
-    types: [created]
+    types: [ created ]
   workflow_dispatch:
     inputs:
       dockerTag:
         description: 'Docker image tag'
         required: true
+
+env:
+  REGISTRY: ghcr.io
+  PING_TEST_IMAGE_NAME: ${{ github.repository }}/ping-interop-test
 
 jobs:
   publish-ping-interop-image:
@@ -32,16 +36,16 @@ jobs:
       - name: Log in to the Container registry
         uses: docker/login-action@f054a8b539a109f9f41c372932f1ae047eff08c9
         with:
-          registry: ghcr.io
+          registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - run: cargo build --release -p interop-tests
+
       - name: Build and push ping interop docker image
         run: |
-          cd test-plans;
-          # cargo build --release
-          mkdir -p target/release/
-          # cp ../target/release/ping target/release
-          touch target/release/ping
-          docker build -t ghcr.io/$GITHUB_REPOSITORY/ping-interop-test:${{ inputs.dockerTag || github.event.release.tag_name }} .
-          docker push ghcr.io/$GITHUB_REPOSITORY/ping-interop-test:${{ inputs.dockerTag || github.event.release.tag_name }}
+          mkdir -p test-plans/target/release/
+          cp target/release/ping p test-plans/target/release
+          
+          docker build -t ${{ env.REGISTRY }}/${{ env.PING_TEST_IMAGE_NAME }}:${{ inputs.dockerTag || github.event.release.tag_name }} .
+          docker push ${{ env.REGISTRY }}/${{ env.PING_TEST_IMAGE_NAME }}:${{ inputs.dockerTag || github.event.release.tag_name }}
