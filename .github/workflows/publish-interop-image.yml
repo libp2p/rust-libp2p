@@ -11,7 +11,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  PING_TEST_IMAGE_NAME: ${{ env.REGISTRY }}/${{ env.PING_TEST_IMAGE_NAME }}:${{ inputs.dockerTag || github.event.release.tag_name }}
+  PING_TEST_IMAGE_NAME: ${{ env.REGISTRY }}/${{ github.repository }}/ping-interop-test:${{ inputs.dockerTag || github.event.release.tag_name }}
 
 jobs:
   publish-ping-interop-image:
