@@ -10,8 +10,7 @@ on:
         required: true
 
 env:
-  REGISTRY: ghcr.io
-  PING_TEST_IMAGE_NAME: ${{ env.REGISTRY }}/${{ github.repository }}/ping-interop-test:${{ inputs.dockerTag || github.event.release.tag_name }}
+  PING_TEST_IMAGE_NAME: ghcr.io/${{ github.repository }}/ping-interop-test:${{ inputs.dockerTag || github.event.release.tag_name }}
 
 jobs:
   publish-interop-test-images:
@@ -36,7 +35,7 @@ jobs:
       - name: Log in to the Container registry
         uses: docker/login-action@f054a8b539a109f9f41c372932f1ae047eff08c9
         with:
-          registry: ${{ env.REGISTRY }}
+          registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
