@@ -1734,28 +1734,23 @@ impl From<PendingOutboundConnectionError> for DialError {
 impl fmt::Display for DialError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            DialError::ConnectionLimit(err) => write!(f, "Dial error: {}", err),
+            DialError::ConnectionLimit(err) => write!(f, "Dial error: {err}"),
             DialError::NoAddresses => write!(f, "Dial error: no addresses for peer."),
             DialError::LocalPeerId => write!(f, "Dial error: tried to dial local peer id."),
             DialError::Banned => write!(f, "Dial error: peer is banned."),
             DialError::DialPeerConditionFalse(c) => {
-                write!(
-                    f,
-                    "Dial error: condition {:?} for dialing peer was false.",
-                    c
-                )
+                write!(f, "Dial error: condition {c:?} for dialing peer was false.",)
             }
             DialError::Aborted => write!(
                 f,
                 "Dial error: Pending connection attempt has been aborted."
             ),
             DialError::InvalidPeerId(multihash) => {
-                write!(f, "Dial error: multihash {:?} is not a PeerId", multihash)
+                write!(f, "Dial error: multihash {multihash:?} is not a PeerId")
             }
             DialError::WrongPeerId { obtained, endpoint } => write!(
                 f,
-                "Dial error: Unexpected peer ID {} at {:?}.",
-                obtained, endpoint
+                "Dial error: Unexpected peer ID {obtained} at {endpoint:?}.",
             ),
             DialError::Transport(errors) => {
                 write!(f, "Failed to negotiate transport protocol(s): [")?;
