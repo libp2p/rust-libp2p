@@ -62,6 +62,7 @@ mod test;
 mod upgrade;
 
 pub mod behaviour;
+pub mod connection_limits;
 pub mod dial_opts;
 pub mod dummy;
 mod executor;
@@ -1635,6 +1636,7 @@ where
     }
 
     /// Configures the connection limits.
+    #[deprecated(note = "Use the `connection_limits::Behaviour` instead.")]
     pub fn connection_limits(mut self, limits: ConnectionLimits) -> Self {
         self.connection_limits = limits;
         self

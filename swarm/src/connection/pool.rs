@@ -1021,12 +1021,12 @@ fn num_peer_established<TInEvent>(
 /// By default no connection limits apply.
 #[derive(Debug, Clone, Default)]
 pub struct ConnectionLimits {
-    max_pending_incoming: Option<u32>,
-    max_pending_outgoing: Option<u32>,
-    max_established_incoming: Option<u32>,
-    max_established_outgoing: Option<u32>,
-    max_established_per_peer: Option<u32>,
-    max_established_total: Option<u32>,
+    pub(crate) max_pending_incoming: Option<u32>,
+    pub(crate) max_pending_outgoing: Option<u32>,
+    pub(crate) max_established_incoming: Option<u32>,
+    pub(crate) max_established_outgoing: Option<u32>,
+    pub(crate) max_established_per_peer: Option<u32>,
+    pub(crate) max_established_total: Option<u32>,
 }
 
 impl ConnectionLimits {
