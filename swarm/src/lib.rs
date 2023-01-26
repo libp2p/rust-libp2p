@@ -1597,8 +1597,6 @@ pub enum DialError {
         obtained: PeerId,
         endpoint: ConnectedPoint,
     },
-    /// An I/O error occurred on the connection.
-    ConnectionIo(io::Error),
     /// An error occurred while negotiating the transport protocol(s) on a connection.
     Transport(Vec<(Multiaddr, TransportError<io::Error>)>),
 }
@@ -1641,10 +1639,6 @@ impl fmt::Display for DialError {
                 f,
                 "Dial error: Unexpected peer ID {obtained} at {endpoint:?}."
             ),
-            DialError::ConnectionIo(e) => write!(
-                f,
-                "Dial error: An I/O error occurred on the connection: {e:?}."
-            ),
             DialError::Transport(errors) => {
                 write!(f, "Failed to negotiate transport protocol(s): [")?;
 
@@ -1682,7 +1676,6 @@ impl error::Error for DialError {
             DialError::Aborted => None,
             DialError::InvalidPeerId { .. } => None,
             DialError::WrongPeerId { .. } => None,
-            DialError::ConnectionIo(_) => None,
             DialError::Transport(_) => None,
         }
     }
