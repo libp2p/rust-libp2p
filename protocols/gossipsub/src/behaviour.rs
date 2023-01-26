@@ -3294,7 +3294,7 @@ where
     type OutEvent = Event;
 
     fn new_handler(&mut self) -> Self::ConnectionHandler {
-        GossipsubHandler::new(
+        Handler::new(
             ProtocolConfig::new(&self.config),
             self.config.idle_timeout(),
         )

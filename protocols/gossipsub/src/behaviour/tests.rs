@@ -269,10 +269,8 @@ where
         for connection_id in peer_connections.connections.clone() {
             active_connections = active_connections.checked_sub(1).unwrap();
 
-            let dummy_handler = GossipsubHandler::new(
-                ProtocolConfig::new(&GossipsubConfig::default()),
-                Duration::ZERO,
-            );
+            let dummy_handler =
+                Handler::new(ProtocolConfig::new(&Config::default()), Duration::ZERO);
 
             gs.on_swarm_event(FromSwarm::ConnectionClosed(ConnectionClosed {
                 peer_id: *peer_id,

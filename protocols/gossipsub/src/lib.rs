@@ -157,18 +157,15 @@ mod types;
 mod rpc_proto;
 
 pub use self::behaviour::{Behaviour, Event, MessageAuthenticity};
-pub use self::transform::{DataTransform, IdentityTransform};
-
+pub use self::config::{Config, ConfigBuilder, ValidationMode, Version};
+pub use self::error::{HandlerError, PublishError, SubscriptionError, ValidationError};
 pub use self::peer_score::{
     score_parameter_decay, score_parameter_decay_with_base, PeerScoreParams, PeerScoreThresholds,
     TopicScoreParams,
 };
 pub use self::topic::{Hasher, Topic, TopicHash};
+pub use self::transform::{DataTransform, IdentityTransform};
 pub use self::types::{FastMessageId, Message, MessageAcceptance, MessageId, RawMessage, Rpc};
-
-pub use self::config::{Config, ConfigBuilder, ValidationMode, Version};
-
-pub use self::error::{HandlerError, PublishError, SubscriptionError, ValidationError};
 
 #[deprecated(
     since = "0.44.0",

@@ -25,7 +25,7 @@ use crate::topic::TopicHash;
 use crate::types::{
     ControlAction, MessageId, PeerInfo, PeerKind, RawMessage, Rpc, Subscription, SubscriptionAction,
 };
-use crate::{rpc_proto, GossipsubConfig};
+use crate::{rpc_proto, Config};
 use asynchronous_codec::{Decoder, Encoder, Framed};
 use byteorder::{BigEndian, ByteOrder};
 use bytes::BytesMut;
@@ -56,15 +56,15 @@ impl ProtocolConfig {
     /// Builds a new [`ProtocolConfig`].
     ///
     /// Sets the maximum gossip transmission size.
-    pub fn new(gossipsub_config: &GossipsubConfig) -> ProtocolConfig {
+    pub fn new(gossipsub_config: &Config) -> ProtocolConfig {
         let protocol_ids = match gossipsub_config.custom_id_version() {
             Some(v) => match v {
-                GossipsubVersion::V1_0 => vec![ProtocolId::new(
+                Version::V1_0 => vec![ProtocolId::new(
                     gossipsub_config.protocol_id(),
                     PeerKind::Gossipsub,
                     false,
                 )],
-                GossipsubVersion::V1_1 => vec![ProtocolId::new(
+                Version::V1_1 => vec![ProtocolId::new(
                     gossipsub_config.protocol_id(),
                     PeerKind::Gossipsubv1_1,
                     false,
