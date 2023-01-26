@@ -50,7 +50,7 @@ pub use handler::{Config, Failure, Success};
 use libp2p_core::PeerId;
 use libp2p_swarm::{
     behaviour::FromSwarm, ConnectionId, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
-    THandlerInEvent,
+    THandlerInEvent, THandlerOutEvent,
 };
 use std::{
     collections::VecDeque,
@@ -124,7 +124,12 @@ impl NetworkBehaviour for Behaviour {
         Handler::new(self.config.clone())
     }
 
-    fn on_connection_handler_event(&mut self, peer: PeerId, _: ConnectionId, result: Result) {
+    fn on_connection_handler_event(
+        &mut self,
+        peer: PeerId,
+        _: ConnectionId,
+        result: THandlerOutEvent<Self>,
+    ) {
         self.events.push_front(Event { peer, result })
     }
 

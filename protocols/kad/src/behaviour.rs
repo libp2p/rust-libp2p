@@ -46,7 +46,7 @@ use libp2p_swarm::behaviour::{
 use libp2p_swarm::{
     dial_opts::{self, DialOpts},
     ConnectionId, DialError, ExternalAddresses, ListenAddresses, NetworkBehaviour,
-    NetworkBehaviourAction, NotifyHandler, PollParameters, THandlerInEvent,
+    NetworkBehaviourAction, NotifyHandler, PollParameters, THandlerInEvent, THandlerOutEvent,
 };
 use log::{debug, info, warn};
 use smallvec::SmallVec;
@@ -1923,11 +1923,10 @@ where
         match error {
             DialError::Banned
             | DialError::ConnectionLimit(_)
-            | DialError::LocalPeerId
+            | DialError::LocalPeerId { .. }
             | DialError::InvalidPeerId { .. }
             | DialError::WrongPeerId { .. }
             | DialError::Aborted
-            | DialError::ConnectionIo(_)
             | DialError::Transport(_)
             | DialError::NoAddresses => {
                 if let DialError::Transport(addresses) = error {
@@ -2017,7 +2016,7 @@ where
         &mut self,
         source: PeerId,
         connection: ConnectionId,
-        event: KademliaHandlerEvent<QueryId>,
+        event: THandlerOutEvent<Self>,
     ) {
         match event {
             KademliaHandlerEvent::ProtocolConfirmed { endpoint } => {

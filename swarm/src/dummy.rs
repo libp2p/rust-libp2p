@@ -4,7 +4,8 @@ use crate::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
 };
 use crate::{
-    ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive, SubstreamProtocol, THandlerInEvent,
+    ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive, SubstreamProtocol,
+    THandlerInEvent, THandlerOutEvent,
 };
 use libp2p_core::upgrade::DeniedUpgrade;
 use libp2p_core::PeerId;
@@ -23,7 +24,12 @@ impl NetworkBehaviour for Behaviour {
         ConnectionHandler
     }
 
-    fn on_connection_handler_event(&mut self, _: PeerId, _: ConnectionId, event: Void) {
+    fn on_connection_handler_event(
+        &mut self,
+        _: PeerId,
+        _: ConnectionId,
+        event: THandlerOutEvent<Self>,
+    ) {
         void::unreachable(event)
     }
 

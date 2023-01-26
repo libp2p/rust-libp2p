@@ -37,8 +37,8 @@ use libp2p_swarm::{
         AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, ExpiredExternalAddr,
         ExpiredListenAddr, FromSwarm,
     },
-    ConnectionHandler, ConnectionId, ExternalAddresses, IntoConnectionHandler, ListenAddresses,
-    NetworkBehaviour, NetworkBehaviourAction, PollParameters, THandlerInEvent,
+    ConnectionId, ExternalAddresses, ListenAddresses, NetworkBehaviour, NetworkBehaviourAction,
+    PollParameters, THandlerInEvent, THandlerOutEvent,
 };
 use std::{
     collections::{HashMap, VecDeque},
@@ -550,8 +550,7 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         peer_id: PeerId,
         connection_id: ConnectionId,
-        event:  <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as
-    ConnectionHandler>::OutEvent,
+        event: THandlerOutEvent<Self>,
     ) {
         self.inner
             .on_connection_handler_event(peer_id, connection_id, event)

@@ -32,7 +32,7 @@ use libp2p_core::PeerId;
 use libp2p_swarm::behaviour::{ConnectionClosed, FromSwarm};
 use libp2p_swarm::{
     ConnectionHandlerUpgrErr, ConnectionId, ExternalAddresses, NetworkBehaviour,
-    NetworkBehaviourAction, NotifyHandler, PollParameters, THandlerInEvent,
+    NetworkBehaviourAction, NotifyHandler, PollParameters, THandlerInEvent, THandlerOutEvent,
 };
 use std::collections::{hash_map, HashMap, HashSet, VecDeque};
 use std::num::NonZeroU32;
@@ -288,7 +288,7 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         event_source: PeerId,
         connection: ConnectionId,
-        event: Either<handler::Event, void::Void>,
+        event: THandlerOutEvent<Self>,
     ) {
         let event = match event {
             Either::Left(e) => e,

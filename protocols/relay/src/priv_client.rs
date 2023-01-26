@@ -37,7 +37,7 @@ use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm
 use libp2p_swarm::dial_opts::DialOpts;
 use libp2p_swarm::{
     ConnectionHandlerUpgrErr, ConnectionId, DialFailure, NegotiatedSubstream, NetworkBehaviour,
-    NetworkBehaviourAction, NotifyHandler, PollParameters, THandlerInEvent,
+    NetworkBehaviourAction, NotifyHandler, PollParameters, THandlerInEvent, THandlerOutEvent,
 };
 use std::collections::{hash_map, HashMap, VecDeque};
 use std::io::{Error, ErrorKind, IoSlice};
@@ -209,7 +209,7 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         event_source: PeerId,
         _connection: ConnectionId,
-        handler_event: Either<handler::Event, void::Void>,
+        handler_event: THandlerOutEvent<Self>,
     ) {
         let handler_event = match handler_event {
             Either::Left(e) => e,

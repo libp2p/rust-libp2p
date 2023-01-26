@@ -28,8 +28,10 @@ pub use listen_addresses::ListenAddresses;
 
 use crate::connection::ConnectionId;
 use crate::dial_opts::DialOpts;
-use crate::handler::{ConnectionHandler, IntoConnectionHandler};
-use crate::{AddressRecord, AddressScore, DialError, THandlerInEvent};
+use crate::handler::IntoConnectionHandler;
+use crate::{
+    AddressRecord, AddressScore, DialError, ListenError, THandlerInEvent, THandlerOutEvent,
+};
 use libp2p_core::{transport::ListenerId, ConnectedPoint, Multiaddr, PeerId};
 use std::{task::Context, task::Poll};
 
@@ -163,8 +165,7 @@ pub trait NetworkBehaviour: 'static {
         &mut self,
         _peer_id: PeerId,
         _connection_id: ConnectionId,
-        _event: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as
-        ConnectionHandler>::OutEvent,
+        _event: THandlerOutEvent<Self>,
     );
 
     /// Polls for things that swarm should do.
@@ -474,6 +475,7 @@ pub struct DialFailure<'a> {
 pub struct ListenFailure<'a> {
     pub local_addr: &'a Multiaddr,
     pub send_back_addr: &'a Multiaddr,
+    pub error: &'a ListenError,
     pub connection_id: ConnectionId,
 }
 
@@ -601,10 +603,12 @@ impl<'a, Handler: IntoConnectionHandler> FromSwarm<'a, Handler> {
                 local_addr,
                 send_back_addr,
                 connection_id,
+                error,
             }) => Some(FromSwarm::ListenFailure(ListenFailure {
                 local_addr,
                 send_back_addr,
                 connection_id,
+                error,
             })),
             FromSwarm::NewListener(NewListener { listener_id }) => {
                 Some(FromSwarm::NewListener(NewListener { listener_id }))
