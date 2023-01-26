@@ -36,7 +36,7 @@ use libp2p_core::PeerId;
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm};
 use libp2p_swarm::dial_opts::DialOpts;
 use libp2p_swarm::{
-    ConnectionHandlerUpgrErr, ConnectionId, NegotiatedSubstream, NetworkBehaviour,
+    ConnectionHandlerUpgrErr, ConnectionId, DialFailure, NegotiatedSubstream, NetworkBehaviour,
     NetworkBehaviourAction, NotifyHandler, PollParameters, THandlerInEvent,
 };
 use std::collections::{hash_map, HashMap, VecDeque};
@@ -190,8 +190,10 @@ impl NetworkBehaviour for Behaviour {
             FromSwarm::ConnectionClosed(connection_closed) => {
                 self.on_connection_closed(connection_closed)
             }
+            FromSwarm::DialFailure(DialFailure { connection_id, .. }) => {
+                self.pending_handler_commands.remove(&connection_id);
+            }
             FromSwarm::AddressChange(_)
-            | FromSwarm::DialFailure(_)
             | FromSwarm::ListenFailure(_)
             | FromSwarm::NewListener(_)
             | FromSwarm::NewListenAddr(_)
