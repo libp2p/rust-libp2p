@@ -30,8 +30,8 @@ use if_watch::IfEvent;
 use libp2p_core::{Multiaddr, PeerId};
 use libp2p_swarm::behaviour::{ConnectionClosed, FromSwarm};
 use libp2p_swarm::{
-    dummy, ConnectionHandler, ListenAddresses, NetworkBehaviour, NetworkBehaviourAction,
-    PollParameters,
+    dummy, ListenAddresses, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
+    THandlerOutEvent,
 };
 use smallvec::SmallVec;
 use std::collections::hash_map::{Entry, HashMap};
@@ -190,7 +190,7 @@ where
         &mut self,
         _: PeerId,
         _: libp2p_swarm::ConnectionId,
-        ev: <Self::ConnectionHandler as ConnectionHandler>::OutEvent,
+        ev: THandlerOutEvent<Self>,
     ) {
         void::unreachable(ev)
     }

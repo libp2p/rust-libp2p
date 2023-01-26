@@ -21,7 +21,7 @@
 
 use crate::connection::{Connection, ConnectionId, PendingPoint};
 use crate::{
-    behaviour::{THandlerInEvent, THandlerOutEvent},
+    behaviour::THandlerInEvent,
     connection::{
         Connected, ConnectionError, ConnectionLimit, IncomingInfo, PendingConnectionError,
         PendingInboundConnectionError, PendingOutboundConnectionError,
@@ -294,7 +294,7 @@ pub enum PoolEvent<THandler: IntoConnectionHandler> {
         id: ConnectionId,
         peer_id: PeerId,
         /// The produced event.
-        event: THandlerOutEvent<THandler>,
+        event: <<THandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent,
     },
 
     /// The connection to a node has changed its address.
@@ -686,8 +686,7 @@ where
                         // Check peer is not local peer.
                         .and_then(|()| {
                             if self.local_id == obtained_peer_id {
-                                Err(PendingConnectionError::WrongPeerId {
-                                    obtained: obtained_peer_id,
+                                Err(PendingConnectionError::LocalPeerId {
                                     endpoint: endpoint.clone(),
                                 })
                             } else {
