@@ -69,9 +69,9 @@
 - Introduce `ListenError` and use it within `SwarmEvent::IncomingConnectionError`.
   See [PR 3375].
 
-[PR 3364]: https://github.com/libp2p/rust-libp2p/pull/3364
 - Remove `ConnectionId::new`. Manually creating `ConnectionId`s is now unsupported. See [PR 3327].
 
+[PR 3364]: https://github.com/libp2p/rust-libp2p/pull/3364
 [PR 3170]: https://github.com/libp2p/rust-libp2p/pull/3170
 [PR 3134]: https://github.com/libp2p/rust-libp2p/pull/3134
 [PR 3153]: https://github.com/libp2p/rust-libp2p/pull/3153
