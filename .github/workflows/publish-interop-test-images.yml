@@ -1,0 +1,53 @@
+name: Publish interop test docker images
+
+on:
+  release:
+    types: [ created ] # Publishing of a containers is triggered on _releases_. Releases are a GH concept building on top of tags.
+  workflow_dispatch: # This workflow can also be triggered manually which is useful for testing, updates to test binaries or publishing of test binaries for older libp2p versions.
+    inputs:
+      dockerTag:
+        description: 'Docker image tag'
+        required: true
+
+env:
+  REGISTRY: ghcr.io
+  PING_TEST_IMAGE_NAME: ${{ github.repository }}/ping-interop-test
+
+jobs:
+  publish-interop-test-images:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+
+      - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
+        with:
+          shared-key: interop-tests
+          save-if: false
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@f054a8b539a109f9f41c372932f1ae047eff08c9
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build test binaries
+        run: |
+          sudo apt-get install protobuf-compiler
+          cargo build --release -p interop-tests
+
+      - name: Build and push ping interop docker image
+        run: |
+          TAG="${{ env.REGISTRY }}/${{ env.PING_TEST_IMAGE_NAME }}:${{ inputs.dockerTag || github.event.release.tag_name }}"
+          
+          docker build -t $TAG --build-arg=TEST_BINARY=target/release/ping . -f interop-tests/Dockerfile
+          docker push $TAG

@@ -686,8 +686,7 @@ where
                         // Check peer is not local peer.
                         .and_then(|()| {
                             if self.local_id == obtained_peer_id {
-                                Err(PendingConnectionError::WrongPeerId {
-                                    obtained: obtained_peer_id,
+                                Err(PendingConnectionError::LocalPeerId {
                                     endpoint: endpoint.clone(),
                                 })
                             } else {

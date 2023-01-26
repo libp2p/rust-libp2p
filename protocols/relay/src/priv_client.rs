@@ -99,7 +99,7 @@ pub struct Behaviour {
     directly_connected_peers: HashMap<PeerId, Vec<ConnectionId>>,
 
     /// Queue of actions to return when polled.
-    queued_actions: VecDeque<Event>,
+    queued_actions: VecDeque<NetworkBehaviourAction<Event, handler::Prototype>>,
 }
 
 /// Create a new client relay [`Behaviour`] with it's corresponding [`Transport`].
@@ -201,52 +201,48 @@ impl NetworkBehaviour for Behaviour {
             Either::Right(v) => void::unreachable(v),
         };
 
-        match handler_event {
-            handler::Event::ReservationReqAccepted { renewal, limit } => self
-                .queued_actions
-                .push_back(Event::ReservationReqAccepted {
+        let event = match handler_event {
+            handler::Event::ReservationReqAccepted { renewal, limit } => {
+                Event::ReservationReqAccepted {
                     relay_peer_id: event_source,
                     renewal,
                     limit,
-                }),
+                }
+            }
             handler::Event::ReservationReqFailed { renewal, error } => {
-                self.queued_actions.push_back(Event::ReservationReqFailed {
+                Event::ReservationReqFailed {
                     relay_peer_id: event_source,
                     renewal,
                     error,
-                })
+                }
             }
             handler::Event::OutboundCircuitEstablished { limit } => {
-                self.queued_actions
-                    .push_back(Event::OutboundCircuitEstablished {
-                        relay_peer_id: event_source,
-                        limit,
-                    })
+                Event::OutboundCircuitEstablished {
+                    relay_peer_id: event_source,
+                    limit,
+                }
             }
-            handler::Event::OutboundCircuitReqFailed { error } => {
-                self.queued_actions
-                    .push_back(Event::OutboundCircuitReqFailed {
-                        relay_peer_id: event_source,
-                        error,
-                    })
+            handler::Event::OutboundCircuitReqFailed { error } => Event::OutboundCircuitReqFailed {
+                relay_peer_id: event_source,
+                error,
+            },
+            handler::Event::InboundCircuitEstablished { src_peer_id, limit } => {
+                Event::InboundCircuitEstablished { src_peer_id, limit }
             }
-            handler::Event::InboundCircuitEstablished { src_peer_id, limit } => self
-                .queued_actions
-                .push_back(Event::InboundCircuitEstablished { src_peer_id, limit }),
-            handler::Event::InboundCircuitReqFailed { error } => {
-                self.queued_actions
-                    .push_back(Event::InboundCircuitReqFailed {
-                        relay_peer_id: event_source,
-                        error,
-                    })
+            handler::Event::InboundCircuitReqFailed { error } => Event::InboundCircuitReqFailed {
+                relay_peer_id: event_source,
+                error,
+            },
+            handler::Event::InboundCircuitReqDenied { src_peer_id } => {
+                Event::InboundCircuitReqDenied { src_peer_id }
             }
-            handler::Event::InboundCircuitReqDenied { src_peer_id } => self
-                .queued_actions
-                .push_back(Event::InboundCircuitReqDenied { src_peer_id }),
-            handler::Event::InboundCircuitReqDenyFailed { src_peer_id, error } => self
-                .queued_actions
-                .push_back(Event::InboundCircuitReqDenyFailed { src_peer_id, error }),
-        }
+            handler::Event::InboundCircuitReqDenyFailed { src_peer_id, error } => {
+                Event::InboundCircuitReqDenyFailed { src_peer_id, error }
+            }
+        };
+
+        self.queued_actions
+            .push_back(NetworkBehaviourAction::GenerateEvent(event));
     }
 
     fn poll(
@@ -255,7 +251,7 @@ impl NetworkBehaviour for Behaviour {
         _poll_parameters: &mut impl PollParameters,
     ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
         if let Some(event) = self.queued_actions.pop_front() {
-            return Poll::Ready(NetworkBehaviourAction::GenerateEvent(event));
+            return Poll::Ready(event);
         }
 
         let action = match ready!(self.from_transport.poll_next_unpin(cx)) {

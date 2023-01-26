@@ -1,6 +1,6 @@
-# test-plans test implementation
+# Interop tests implementation
 
-This folder defines the implementation for the test-plans interop tests.
+This folder defines the implementation for the interop tests.
 
 # Running this test locally
 
