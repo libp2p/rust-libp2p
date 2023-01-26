@@ -767,50 +767,50 @@ where
                     self.banned_peer_connections.insert(id);
                     self.pool.disconnect(peer_id);
                     return Some(SwarmEvent::BannedPeer { peer_id, endpoint });
-                } else {
-                    let num_established = NonZeroU32::new(
-                        u32::try_from(other_established_connection_ids.len() + 1).unwrap(),
-                    )
-                    .expect("n + 1 is always non-zero; qed");
-                    let non_banned_established = other_established_connection_ids
-                        .into_iter()
-                        .filter(|conn_id| !self.banned_peer_connections.contains(conn_id))
-                        .count();
+                }
 
-                    log::debug!(
+                let num_established = NonZeroU32::new(
+                    u32::try_from(other_established_connection_ids.len() + 1).unwrap(),
+                )
+                .expect("n + 1 is always non-zero; qed");
+                let non_banned_established = other_established_connection_ids
+                    .into_iter()
+                    .filter(|conn_id| !self.banned_peer_connections.contains(conn_id))
+                    .count();
+
+                log::debug!(
                             "Connection established: {:?} {:?}; Total (peer): {}. Total non-banned (peer): {}",
                             peer_id,
                             endpoint,
                             num_established,
                             non_banned_established + 1,
                         );
-                    let failed_addresses = concurrent_dial_errors
-                        .as_ref()
-                        .map(|es| {
-                            es.iter()
-                                .map(|(a, _)| a)
-                                .cloned()
-                                .collect::<Vec<Multiaddr>>()
-                        })
-                        .unwrap_or_default();
-                    self.behaviour
-                        .on_swarm_event(FromSwarm::ConnectionEstablished(
-                            behaviour::ConnectionEstablished {
-                                peer_id,
-                                connection_id: id,
-                                endpoint: &endpoint,
-                                failed_addresses: &failed_addresses,
-                                other_established: non_banned_established,
-                            },
-                        ));
-                    return Some(SwarmEvent::ConnectionEstablished {
-                        peer_id,
-                        num_established,
-                        endpoint,
-                        concurrent_dial_errors,
-                        established_in,
-                    });
-                }
+                let failed_addresses = concurrent_dial_errors
+                    .as_ref()
+                    .map(|es| {
+                        es.iter()
+                            .map(|(a, _)| a)
+                            .cloned()
+                            .collect::<Vec<Multiaddr>>()
+                    })
+                    .unwrap_or_default();
+                self.behaviour
+                    .on_swarm_event(FromSwarm::ConnectionEstablished(
+                        behaviour::ConnectionEstablished {
+                            peer_id,
+                            connection_id: id,
+                            endpoint: &endpoint,
+                            failed_addresses: &failed_addresses,
+                            other_established: non_banned_established,
+                        },
+                    ));
+                return Some(SwarmEvent::ConnectionEstablished {
+                    peer_id,
+                    num_established,
+                    endpoint,
+                    concurrent_dial_errors,
+                    established_in,
+                });
             }
             PoolEvent::PendingOutboundConnectionError {
                 id: connection_id,
