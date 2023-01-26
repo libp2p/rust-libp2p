@@ -1612,7 +1612,6 @@ impl From<PendingOutboundConnectionError> for DialError {
                 DialError::WrongPeerId { obtained, endpoint }
             }
             PendingConnectionError::LocalPeerId { endpoint } => DialError::LocalPeerId { endpoint },
-            PendingConnectionError::IO(e) => DialError::ConnectionIo(e),
             PendingConnectionError::Transport(e) => DialError::Transport(e),
         }
     }

@@ -365,7 +365,6 @@ enum PendingInboundConnectionError {
     TransportErrorMultiaddrNotSupported,
     TransportErrorOther,
     Aborted,
-    Io,
     ConnectionLimit,
 }
 
@@ -390,7 +389,6 @@ impl From<&libp2p_swarm::PendingInboundConnectionError> for PendingInboundConnec
             libp2p_swarm::PendingInboundConnectionError::Aborted => {
                 PendingInboundConnectionError::Aborted
             }
-            libp2p_swarm::PendingInboundConnectionError::IO(_) => PendingInboundConnectionError::Io,
         }
     }
 }

@@ -104,10 +104,6 @@ pub enum PendingConnectionError<TTransErr> {
 
     /// The connection was dropped because it resolved to our own [`PeerId`].
     LocalPeerId { endpoint: ConnectedPoint },
-
-    /// An I/O error occurred on the connection.
-    // TODO: Eventually this should also be a custom error?
-    IO(io::Error),
 }
 
 impl<T> PendingConnectionError<T> {
@@ -124,7 +120,6 @@ impl<T> PendingConnectionError<T> {
             PendingConnectionError::LocalPeerId { endpoint } => {
                 PendingConnectionError::LocalPeerId { endpoint }
             }
-            PendingConnectionError::IO(e) => PendingConnectionError::IO(e),
         }
     }
 }
@@ -135,7 +130,6 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            PendingConnectionError::IO(err) => write!(f, "Pending connection: I/O error: {err}"),
             PendingConnectionError::Aborted => write!(f, "Pending connection: Aborted."),
             PendingConnectionError::Transport(err) => {
                 write!(
@@ -165,7 +159,6 @@ where
 {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
-            PendingConnectionError::IO(err) => Some(err),
             PendingConnectionError::Transport(_) => None,
             PendingConnectionError::WrongPeerId { .. } => None,
             PendingConnectionError::LocalPeerId { .. } => None,

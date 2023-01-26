@@ -1,0 +1,10 @@
+# This Docker ignore file aims to optimise the build process of the interop tests.
+# The Dockerfile in ./interop-tests/Dockerfile copies a locally built binary into the container and
+# thus does not need anything else to be present in the working directory.
+*
+
+# CI will build and copy over the release binary.
+!target/release/ping
+
+# Locally, we might want to build it as `debug` binary to accelerate the build process.
+!target/debug/ping
