@@ -56,6 +56,11 @@
   If you have previously set `connection_event_buffer_size` you should re-evaluate what a good size for a _per connection_ buffer is.
   See [PR 3188].
 
+- Remove `PendingConnectionError:::IO` variant.
+  This was never constructed.
+  See [PR 3373].
+
+[PR 3364]: https://github.com/libp2p/rust-libp2p/pull/3364
 - Remove `ConnectionId::new`. Manually creating `ConnectionId`s is now unsupported. See [PR 3327].
 
 [PR 3170]: https://github.com/libp2p/rust-libp2p/pull/3170
@@ -66,6 +71,7 @@
 [PR 3327]: https://github.com/libp2p/rust-libp2p/pull/3327
 [PR 3328]: https://github.com/libp2p/rust-libp2p/pull/3328
 [PR 3188]: https://github.com/libp2p/rust-libp2p/pull/3188
+[PR 3373]: https://github.com/libp2p/rust-libp2p/pull/3373
 
 # 0.41.1
 

@@ -33,6 +33,7 @@ use async_std::net::Ipv4Addr;
 use byteorder::{BigEndian, ByteOrder};
 use libp2p_core::{ConnectedPoint, Endpoint};
 use rand::Rng;
+use std::borrow::Cow;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::thread::sleep;
@@ -265,15 +266,21 @@ where
             role_override: Endpoint::Dialer,
         }; // this is not relevant
            // peer_connections.connections should never be empty.
+
         let mut active_connections = peer_connections.connections.len();
         for connection_id in peer_connections.connections.clone() {
-            let handler = gs.new_handler();
             active_connections = active_connections.checked_sub(1).unwrap();
+
+            let dummy_handler = GossipsubHandler::new(
+                ProtocolConfig::new(Cow::from(""), None, 0, ValidationMode::None, false),
+                Duration::ZERO,
+            );
+
             gs.on_swarm_event(FromSwarm::ConnectionClosed(ConnectionClosed {
                 peer_id: *peer_id,
                 connection_id,
                 endpoint: &fake_endpoint,
-                handler,
+                handler: dummy_handler,
                 remaining_established: active_connections,
             }));
         }
