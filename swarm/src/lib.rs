@@ -1580,8 +1580,8 @@ pub enum DialError {
     /// The configured limit for simultaneous outgoing connections
     /// has been reached.
     ConnectionLimit(ConnectionLimit),
-    /// The peer being dialed is the local peer and thus the dial was aborted.
-    LocalPeerId,
+    /// The peer identity obtained on the connection matches the local peer.
+    LocalPeerId { endpoint: ConnectedPoint },
     /// [`NetworkBehaviour::addresses_of_peer`] returned no addresses
     /// for the peer to dial.
     NoAddresses,
@@ -1597,8 +1597,6 @@ pub enum DialError {
         obtained: PeerId,
         endpoint: ConnectedPoint,
     },
-    /// An I/O error occurred on the connection.
-    ConnectionIo(io::Error),
     /// An error occurred while negotiating the transport protocol(s) on a connection.
     Transport(Vec<(Multiaddr, TransportError<io::Error>)>),
 }
@@ -1611,7 +1609,7 @@ impl From<PendingOutboundConnectionError> for DialError {
             PendingConnectionError::WrongPeerId { obtained, endpoint } => {
                 DialError::WrongPeerId { obtained, endpoint }
             }
-            PendingConnectionError::IO(e) => DialError::ConnectionIo(e),
+            PendingConnectionError::LocalPeerId { endpoint } => DialError::LocalPeerId { endpoint },
             PendingConnectionError::Transport(e) => DialError::Transport(e),
         }
     }
@@ -1622,7 +1620,10 @@ impl fmt::Display for DialError {
         match self {
             DialError::ConnectionLimit(err) => write!(f, "Dial error: {err}"),
             DialError::NoAddresses => write!(f, "Dial error: no addresses for peer."),
-            DialError::LocalPeerId => write!(f, "Dial error: tried to dial local peer id."),
+            DialError::LocalPeerId { endpoint } => write!(
+                f,
+                "Dial error: tried to dial local peer id at {endpoint:?}."
+            ),
             DialError::Banned => write!(f, "Dial error: peer is banned."),
             DialError::DialPeerConditionFalse(c) => {
                 write!(f, "Dial error: condition {c:?} for dialing peer was false.")
@@ -1637,10 +1638,6 @@ impl fmt::Display for DialError {
             DialError::WrongPeerId { obtained, endpoint } => write!(
                 f,
                 "Dial error: Unexpected peer ID {obtained} at {endpoint:?}."
-            ),
-            DialError::ConnectionIo(e) => write!(
-                f,
-                "Dial error: An I/O error occurred on the connection: {e:?}."
             ),
             DialError::Transport(errors) => {
                 write!(f, "Failed to negotiate transport protocol(s): [")?;
@@ -1672,14 +1669,13 @@ impl error::Error for DialError {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
             DialError::ConnectionLimit(err) => Some(err),
-            DialError::LocalPeerId => None,
+            DialError::LocalPeerId { .. } => None,
             DialError::NoAddresses => None,
             DialError::Banned => None,
             DialError::DialPeerConditionFalse(_) => None,
             DialError::Aborted => None,
             DialError::InvalidPeerId { .. } => None,
             DialError::WrongPeerId { .. } => None,
-            DialError::ConnectionIo(_) => None,
             DialError::Transport(_) => None,
         }
     }
@@ -2488,7 +2484,7 @@ mod tests {
                 match swarm.poll_next_unpin(cx) {
                     Poll::Ready(Some(SwarmEvent::OutgoingConnectionError {
                         peer_id,
-                        error: DialError::WrongPeerId { .. },
+                        error: DialError::LocalPeerId { .. },
                         ..
                     })) => {
                         assert_eq!(&peer_id.unwrap(), swarm.local_peer_id());
