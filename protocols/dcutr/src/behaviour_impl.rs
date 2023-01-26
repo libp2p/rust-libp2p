@@ -27,11 +27,11 @@ use libp2p_core::multiaddr::Protocol;
 use libp2p_core::{Multiaddr, PeerId};
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm};
 use libp2p_swarm::dial_opts::{self, DialOpts};
-use libp2p_swarm::ConnectionId;
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerUpgrErr, ExternalAddresses, IntoConnectionHandler,
-    NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
+    ConnectionHandlerUpgrErr, ExternalAddresses, NetworkBehaviour, NetworkBehaviourAction,
+    NotifyHandler, PollParameters,
 };
+use libp2p_swarm::{ConnectionId, THandlerOutEvent};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::task::{Context, Poll};
 use thiserror::Error;
@@ -222,8 +222,7 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         event_source: PeerId,
         connection: ConnectionId,
-        handler_event: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as
-            ConnectionHandler>::OutEvent,
+        handler_event: THandlerOutEvent<Self>,
     ) {
         match handler_event {
             Either::Left(handler::relayed::Event::InboundConnectRequest {
