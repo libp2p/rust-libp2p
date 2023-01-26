@@ -12,7 +12,7 @@ concurrency:
 jobs:
   build-ping-container:
     name: Build Ping interop container
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v3
         with:
@@ -24,18 +24,20 @@ jobs:
       - name: Install Protoc
         run: sudo apt-get install protobuf-compiler
       - name: Build image
-        working-directory: ./test-plans
-        run: make
+        run: |
+          cargo build --release -p interop-tests
+          docker build -t rust-libp2p-head --build-arg=TEST_BINARY=target/release/ping . -f ./interop-tests/Dockerfile
+          docker image save -o ./interop-tests/ping-image.tar rust-libp2p-head
       - name: Upload ping versions info
         uses: actions/upload-artifact@v3
         with:
           name: ping-versions
-          path: ./test-plans/ping-versions.json
+          path: ./interop-tests/ping-versions.json
       - name: Upload image tar
         uses: actions/upload-artifact@v3
         with:
           name: ping-image
-          path: ./test-plans/ping-image.tar
+          path: ./interop-tests/ping-image.tar
   run-multidim-interop:
     name: Run multidimensional interoperability tests
     needs: build-ping-container

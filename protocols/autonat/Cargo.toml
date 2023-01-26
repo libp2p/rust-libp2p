@@ -44,8 +44,8 @@ rustc-args = ["--cfg", "docsrs"]
 
 [[example]]
 name = "client"
-path = "examples/autonat_client.rs" 
+path = "examples/autonat_client.rs"
 
 [[example]]
 name = "server"
-path = "examples/autonat_server.rs" 
+path = "examples/autonat_server.rs"
