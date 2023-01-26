@@ -65,7 +65,12 @@ impl fmt::Display for LocalStreamId {
 }
 
 impl Hash for LocalStreamId {
-    #![allow(clippy::derive_hash_xor_eq)]
+    #![allow(
+        unknown_lints, // Prior to Rust 1.68, ignore the new `derived_hash_with_manual_eq` lint.
+        renamed_and_removed_lints, // After Rust 1.68, ignore usage of the old `derive_hash_xor_eq` lint.
+        clippy::derive_hash_xor_eq, // Prior to Rust 1.68, silence the lint.
+        clippy::derived_hash_with_manual_eq // After Rust 1.68, silence the lint.
+    )]
     fn hash<H: Hasher>(&self, state: &mut H) {
         state.write_u64(self.num);
     }
