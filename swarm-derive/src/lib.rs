@@ -703,30 +703,28 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             }
         };
 
-        Some(quote!{
-            loop {
-                match #trait_to_impl::poll(&mut self.#field, cx, poll_params) {
-                    #generate_event_match_arm
-                    std::task::Poll::Ready(#network_behaviour_action::Dial { opts, handler: provided_handler }) => {
-                        return std::task::Poll::Ready(#network_behaviour_action::Dial { opts, handler: #provided_handler_and_new_handlers });
-                    }
-                    std::task::Poll::Ready(#network_behaviour_action::NotifyHandler { peer_id, handler, event }) => {
-                        return std::task::Poll::Ready(#network_behaviour_action::NotifyHandler {
-                            peer_id,
-                            handler,
-                            event: #wrapped_event,
-                        });
-                    }
-                    std::task::Poll::Ready(#network_behaviour_action::ReportObservedAddr { address, score }) => {
-                        return std::task::Poll::Ready(#network_behaviour_action::ReportObservedAddr { address, score });
-                    }
-                    std::task::Poll::Ready(#network_behaviour_action::CloseConnection { peer_id, connection }) => {
-                        return std::task::Poll::Ready(#network_behaviour_action::CloseConnection { peer_id, connection });
-                    }
-                    std::task::Poll::Pending => break,
+        quote!{
+            match #trait_to_impl::poll(&mut self.#field, cx, poll_params) {
+                #generate_event_match_arm
+                std::task::Poll::Ready(#network_behaviour_action::Dial { opts, handler: provided_handler }) => {
+                    return std::task::Poll::Ready(#network_behaviour_action::Dial { opts, handler: #provided_handler_and_new_handlers });
                 }
+                std::task::Poll::Ready(#network_behaviour_action::NotifyHandler { peer_id, handler, event }) => {
+                    return std::task::Poll::Ready(#network_behaviour_action::NotifyHandler {
+                        peer_id,
+                        handler,
+                        event: #wrapped_event,
+                    });
+                }
+                std::task::Poll::Ready(#network_behaviour_action::ReportObservedAddr { address, score }) => {
+                    return std::task::Poll::Ready(#network_behaviour_action::ReportObservedAddr { address, score });
+                }
+                std::task::Poll::Ready(#network_behaviour_action::CloseConnection { peer_id, connection }) => {
+                    return std::task::Poll::Ready(#network_behaviour_action::CloseConnection { peer_id, connection });
+                }
+                std::task::Poll::Pending => {},
             }
-        })
+        }
     });
 
     let out_event_reference = if out_event_definition.is_some() {
