@@ -26,7 +26,7 @@ use crate::handler::{
     IntoConnectionHandler, KeepAlive, ListenUpgradeError, SubstreamProtocol,
 };
 use crate::upgrade::SendWrapper;
-use crate::{NetworkBehaviour, NetworkBehaviourAction, PollParameters};
+use crate::{NetworkBehaviour, NetworkBehaviourAction, PollParameters, THandlerOutEvent};
 use either::Either;
 use futures::future;
 use libp2p_core::{upgrade::DeniedUpgrade, ConnectedPoint, Multiaddr, PeerId};
@@ -94,7 +94,7 @@ where
         &mut self,
         peer_id: PeerId,
         connection_id: ConnectionId,
-        event: crate::THandlerOutEvent<Self>,
+        event: THandlerOutEvent<Self>,
     ) {
         if let Some(behaviour) = &mut self.inner {
             behaviour.on_connection_handler_event(peer_id, connection_id, event)
