@@ -849,7 +849,7 @@ where
                 });
             }
             PoolEvent::PendingInboundConnectionError {
-                id: _,
+                id,
                 send_back_addr,
                 local_addr,
                 error,
@@ -859,6 +859,7 @@ where
                     .on_swarm_event(FromSwarm::ListenFailure(ListenFailure {
                         local_addr: &local_addr,
                         send_back_addr: &send_back_addr,
+                        connection_id: id,
                     }));
                 return Some(SwarmEvent::IncomingConnectionError {
                     local_addr,
@@ -957,14 +958,17 @@ where
                 local_addr,
                 send_back_addr,
             } => {
+                let connection_id = ConnectionId::next();
+
                 match self.pool.add_incoming(
                     upgrade,
                     IncomingInfo {
                         local_addr: &local_addr,
                         send_back_addr: &send_back_addr,
                     },
+                    connection_id,
                 ) {
-                    Ok(_connection_id) => {
+                    Ok(()) => {
                         return Some(SwarmEvent::IncomingConnection {
                             local_addr,
                             send_back_addr,
@@ -975,6 +979,7 @@ where
                             .on_swarm_event(FromSwarm::ListenFailure(ListenFailure {
                                 local_addr: &local_addr,
                                 send_back_addr: &send_back_addr,
+                                connection_id,
                             }));
                         log::warn!("Incoming connection rejected: {:?}", connection_limit);
                     }

@@ -478,15 +478,14 @@ where
         &mut self,
         future: TFut,
         info: IncomingInfo<'_>,
-    ) -> Result<ConnectionId, ConnectionLimit>
+        connection_id: ConnectionId,
+    ) -> Result<(), ConnectionLimit>
     where
         TFut: Future<Output = Result<(PeerId, StreamMuxerBox), std::io::Error>> + Send + 'static,
     {
         let endpoint = info.create_connected_point();
 
         self.counters.check_max_pending_incoming()?;
-
-        let connection_id = ConnectionId::next();
 
         let (abort_notifier, abort_receiver) = oneshot::channel();
 
@@ -510,7 +509,7 @@ where
                 accepted_at: Instant::now(),
             },
         );
-        Ok(connection_id)
+        Ok(())
     }
 
     pub fn spawn_connection(
