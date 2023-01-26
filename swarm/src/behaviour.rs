@@ -119,7 +119,7 @@ pub(crate) type THandlerInEvent<THandler> =
 ///   }
 /// }
 /// ```
-pub trait NetworkBehaviour: Sized + 'static {
+pub trait NetworkBehaviour: 'static {
     /// Handler for all the protocols the network behaviour supports.
     type ConnectionHandler: IntoConnectionHandler;
 
