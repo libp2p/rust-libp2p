@@ -757,7 +757,7 @@ where
                 peer_id,
                 id,
                 endpoint,
-                other_established_connection_ids,
+                connection,
                 concurrent_dial_errors,
                 established_in,
             } => {
@@ -769,6 +769,17 @@ where
                     return Some(SwarmEvent::BannedPeer { peer_id, endpoint });
                 }
 
+                let handler = self
+                    .behaviour
+                    .new_handler()
+                    .into_handler(&peer_id, &endpoint);
+                self.pool
+                    .spawn_connection(id, peer_id, &endpoint, connection, handler);
+
+                let other_established_connection_ids = self
+                    .pool
+                    .iter_established_connections_of_peer(&peer_id)
+                    .collect::<Vec<_>>();
                 let num_established = NonZeroU32::new(
                     u32::try_from(other_established_connection_ids.len() + 1).unwrap(),
                 )
@@ -1200,7 +1211,7 @@ where
             }
 
             // Poll the known peers.
-            match this.pool.poll(cx, || this.behaviour.new_handler()) {
+            match this.pool.poll(cx) {
                 Poll::Pending => {}
                 Poll::Ready(pool_event) => {
                     if let Some(swarm_event) = this.handle_pool_event(pool_event) {

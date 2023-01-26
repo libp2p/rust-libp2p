@@ -225,10 +225,7 @@ pub enum PoolEvent<THandler: IntoConnectionHandler> {
         id: ConnectionId,
         peer_id: PeerId,
         endpoint: ConnectedPoint,
-        /// List of other connections to the same peer.
-        ///
-        /// Note: Does not include the connection reported through this event.
-        other_established_connection_ids: Vec<ConnectionId>,
+        connection: StreamMuxerBox,
         /// [`Some`] when the new connection is an outgoing connection.
         /// Addresses are dialed in parallel. Contains the addresses and errors
         /// of dial attempts that failed before the one successful dial.
@@ -516,12 +513,53 @@ where
         Ok(connection_id)
     }
 
-    /// Polls the connection pool for events.
-    pub fn poll(
+    pub fn spawn_connection(
         &mut self,
-        cx: &mut Context<'_>,
-        mut new_handler_fn: impl FnMut() -> THandler,
-    ) -> Poll<PoolEvent<THandler>>
+        id: ConnectionId,
+        obtained_peer_id: PeerId,
+        endpoint: &ConnectedPoint,
+        muxer: StreamMuxerBox,
+        handler: <THandler as IntoConnectionHandler>::Handler,
+    ) {
+        let conns = self.established.entry(obtained_peer_id).or_default();
+        self.counters.inc_established(endpoint);
+
+        let (command_sender, command_receiver) = mpsc::channel(self.task_command_buffer_size);
+        let (event_sender, event_receiver) = mpsc::channel(self.per_connection_event_buffer_size);
+
+        conns.insert(
+            id,
+            EstablishedConnection {
+                endpoint: endpoint.clone(),
+                sender: command_sender,
+            },
+        );
+        self.established_connection_events.push(event_receiver);
+        if let Some(waker) = self.no_established_connections_waker.take() {
+            waker.wake();
+        }
+
+        let connection = Connection::new(
+            muxer,
+            handler,
+            self.substream_upgrade_protocol_override,
+            self.max_negotiating_inbound_streams,
+        );
+
+        self.spawn(
+            task::new_for_established_connection(
+                id,
+                obtained_peer_id,
+                connection,
+                command_receiver,
+                event_sender,
+            )
+            .boxed(),
+        );
+    }
+
+    /// Polls the connection pool for events.
+    pub fn poll(&mut self, cx: &mut Context<'_>) -> Poll<PoolEvent<THandler>>
     where
         THandler: IntoConnectionHandler + 'static,
         THandler::Handler: ConnectionHandler + Send,
@@ -726,51 +764,13 @@ where
                         };
                     }
 
-                    // Add the connection to the pool.
-                    let conns = self.established.entry(obtained_peer_id).or_default();
-                    let other_established_connection_ids = conns.keys().cloned().collect();
-                    self.counters.inc_established(&endpoint);
-
-                    let (command_sender, command_receiver) =
-                        mpsc::channel(self.task_command_buffer_size);
-                    let (event_sender, event_receiver) =
-                        mpsc::channel(self.per_connection_event_buffer_size);
-
-                    conns.insert(
-                        id,
-                        EstablishedConnection {
-                            endpoint: endpoint.clone(),
-                            sender: command_sender,
-                        },
-                    );
-                    self.established_connection_events.push(event_receiver);
-                    if let Some(waker) = self.no_established_connections_waker.take() {
-                        waker.wake();
-                    }
-
-                    let connection = Connection::new(
-                        muxer,
-                        new_handler_fn().into_handler(&obtained_peer_id, &endpoint),
-                        self.substream_upgrade_protocol_override,
-                        self.max_negotiating_inbound_streams,
-                    );
-
-                    self.spawn(
-                        task::new_for_established_connection(
-                            id,
-                            obtained_peer_id,
-                            connection,
-                            command_receiver,
-                            event_sender,
-                        )
-                        .boxed(),
-                    );
                     let established_in = accepted_at.elapsed();
+
                     return Poll::Ready(PoolEvent::ConnectionEstablished {
                         peer_id: obtained_peer_id,
                         endpoint,
                         id,
-                        other_established_connection_ids,
+                        connection: muxer,
                         concurrent_dial_errors,
                         established_in,
                     });
