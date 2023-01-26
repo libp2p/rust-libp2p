@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use anyhow::{Context, Result};
 use either::Either;
-use env_logger::Env;
+use env_logger::{Env, Target};
 use futures::{AsyncRead, AsyncWrite, StreamExt};
 use libp2p::core::muxing::StreamMuxerBox;
 use libp2p::core::transport::Boxed;
@@ -15,8 +15,6 @@ use libp2p::{
 };
 use redis::AsyncCommands;
 use strum::EnumString;
-
-const REDIS_TIMEOUT: usize = 10;
 
 /// Supported transports by rust-libp2p.
 #[derive(Clone, Debug, EnumString)]
@@ -110,6 +108,10 @@ async fn main() -> Result<()> {
         .unwrap_or_else(|_| "true".into())
         .parse::<bool>()?;
 
+    let test_timeout = env::var("test_timeout")
+        .unwrap_or_else(|_| "10".into())
+        .parse::<usize>()?;
+
     let redis_addr = env::var("REDIS_ADDR")
         .map(|addr| format!("redis://{addr}"))
         .unwrap_or_else(|_| "redis://redis:6379".into());
@@ -177,7 +179,9 @@ async fn main() -> Result<()> {
     let mut conn = client.get_async_connection().await?;
 
     log::info!("Running ping test: {}", swarm.local_peer_id());
-    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
+    env_logger::Builder::from_env(Env::default().default_filter_or("info"))
+        .target(Target::Stdout)
+        .init();
 
     log::info!(
         "Test instance, listening for incoming connections on: {:?}.",
@@ -189,7 +193,7 @@ async fn main() -> Result<()> {
     // retrieved via `listenAddr` key over the redis connection. Or wait to be pinged and have
     // `dialerDone` key ready on the redis connection.
     if is_dialer {
-        let result: Vec<String> = conn.blpop("listenerAddr", REDIS_TIMEOUT).await?;
+        let result: Vec<String> = conn.blpop("listenerAddr", test_timeout).await?;
         let other = result
             .get(1)
             .context("Failed to wait for listener to be ready")?;
@@ -234,7 +238,7 @@ async fn main() -> Result<()> {
             }
         });
 
-        let done: Vec<String> = conn.blpop("dialerDone", REDIS_TIMEOUT).await?;
+        let done: Vec<String> = conn.blpop("dialerDone", test_timeout).await?;
         done.get(1)
             .context("Failed to wait for dialer conclusion")?;
         log::info!("Ping successful");

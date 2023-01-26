@@ -228,7 +228,7 @@ impl<TBvEv, THandleErr> super::Recorder<libp2p_swarm::SwarmEvent<TBvEv, THandleE
                     libp2p_swarm::DialError::ConnectionLimit(_) => {
                         record(OutgoingConnectionError::ConnectionLimit)
                     }
-                    libp2p_swarm::DialError::LocalPeerId => {
+                    libp2p_swarm::DialError::LocalPeerId { .. } => {
                         record(OutgoingConnectionError::LocalPeerId)
                     }
                     libp2p_swarm::DialError::NoAddresses => {
@@ -355,6 +355,7 @@ struct IncomingConnectionErrorLabels {
 #[derive(EncodeLabelValue, Hash, Clone, Eq, PartialEq, Debug)]
 enum IncomingConnectionError {
     WrongPeerId,
+    LocalPeerId,
     TransportErrorMultiaddrNotSupported,
     TransportErrorOther,
     Aborted,
@@ -368,6 +369,7 @@ impl From<&libp2p_swarm::ListenError> for IncomingConnectionError {
             libp2p_swarm::ListenError::ConnectionLimit(_) => {
                 IncomingConnectionError::ConnectionLimit
             }
+            libp2p_swarm::ListenError::LocalPeerId { .. } => IncomingConnectionError::LocalPeerId,
             libp2p_swarm::ListenError::Transport(
                 libp2p_core::transport::TransportError::MultiaddrNotSupported(_),
             ) => IncomingConnectionError::TransportErrorMultiaddrNotSupported,
