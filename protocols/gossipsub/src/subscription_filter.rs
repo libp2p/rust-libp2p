@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::types::GossipsubSubscription;
+use crate::types::Subscription;
 use crate::TopicHash;
 use log::debug;
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -32,10 +32,10 @@ pub trait TopicSubscriptionFilter {
     /// [`Self::filter_incoming_subscription_set`] on the filtered set.
     fn filter_incoming_subscriptions<'a>(
         &mut self,
-        subscriptions: &'a [GossipsubSubscription],
+        subscriptions: &'a [Subscription],
         currently_subscribed_topics: &BTreeSet<TopicHash>,
-    ) -> Result<HashSet<&'a GossipsubSubscription>, String> {
-        let mut filtered_subscriptions: HashMap<TopicHash, &GossipsubSubscription> = HashMap::new();
+    ) -> Result<HashSet<&'a Subscription>, String> {
+        let mut filtered_subscriptions: HashMap<TopicHash, &Subscription> = HashMap::new();
         for subscription in subscriptions {
             use std::collections::hash_map::Entry::*;
             match filtered_subscriptions.entry(subscription.topic_hash.clone()) {
@@ -59,9 +59,9 @@ pub trait TopicSubscriptionFilter {
     /// By default this filters the elements based on [`Self::allow_incoming_subscription`].
     fn filter_incoming_subscription_set<'a>(
         &mut self,
-        mut subscriptions: HashSet<&'a GossipsubSubscription>,
+        mut subscriptions: HashSet<&'a Subscription>,
         _currently_subscribed_topics: &BTreeSet<TopicHash>,
-    ) -> Result<HashSet<&'a GossipsubSubscription>, String> {
+    ) -> Result<HashSet<&'a Subscription>, String> {
         subscriptions.retain(|s| {
             if self.allow_incoming_subscription(s) {
                 true
@@ -78,7 +78,7 @@ pub trait TopicSubscriptionFilter {
     /// whether to filter out a subscription or not.
     /// By default this uses can_subscribe to decide the same for incoming subscriptions as for
     /// outgoing ones.
-    fn allow_incoming_subscription(&mut self, subscription: &GossipsubSubscription) -> bool {
+    fn allow_incoming_subscription(&mut self, subscription: &Subscription) -> bool {
         self.can_subscribe(&subscription.topic_hash)
     }
 }
@@ -119,9 +119,9 @@ impl<T: TopicSubscriptionFilter> TopicSubscriptionFilter for MaxCountSubscriptio
 
     fn filter_incoming_subscriptions<'a>(
         &mut self,
-        subscriptions: &'a [GossipsubSubscription],
+        subscriptions: &'a [Subscription],
         currently_subscribed_topics: &BTreeSet<TopicHash>,
-    ) -> Result<HashSet<&'a GossipsubSubscription>, String> {
+    ) -> Result<HashSet<&'a Subscription>, String> {
         if subscriptions.len() > self.max_subscriptions_per_request {
             return Err("too many subscriptions per request".into());
         }
@@ -129,7 +129,7 @@ impl<T: TopicSubscriptionFilter> TopicSubscriptionFilter for MaxCountSubscriptio
             .filter
             .filter_incoming_subscriptions(subscriptions, currently_subscribed_topics)?;
 
-        use crate::types::GossipsubSubscriptionAction::*;
+        use crate::types::SubscriptionAction::*;
 
         let mut unsubscribed = 0;
         let mut new_subscribed = 0;
@@ -176,9 +176,9 @@ where
 
     fn filter_incoming_subscription_set<'a>(
         &mut self,
-        subscriptions: HashSet<&'a GossipsubSubscription>,
+        subscriptions: HashSet<&'a Subscription>,
         currently_subscribed_topics: &BTreeSet<TopicHash>,
-    ) -> Result<HashSet<&'a GossipsubSubscription>, String> {
+    ) -> Result<HashSet<&'a Subscription>, String> {
         let intermediate = self
             .filter1
             .filter_incoming_subscription_set(subscriptions, currently_subscribed_topics)?;
@@ -217,8 +217,8 @@ pub mod regex {
     #[cfg(test)]
     mod test {
         use super::*;
-        use crate::types::GossipsubSubscription;
-        use crate::types::GossipsubSubscriptionAction::*;
+        use crate::types::Subscription;
+        use crate::types::SubscriptionAction::*;
 
         #[test]
         fn test_regex_subscription_filter() {
@@ -230,15 +230,15 @@ pub mod regex {
 
             let old = Default::default();
             let subscriptions = vec![
-                GossipsubSubscription {
+                Subscription {
                     action: Subscribe,
                     topic_hash: t1,
                 },
-                GossipsubSubscription {
+                Subscription {
                     action: Subscribe,
                     topic_hash: t2,
                 },
-                GossipsubSubscription {
+                Subscription {
                     action: Subscribe,
                     topic_hash: t3,
                 },
@@ -255,7 +255,7 @@ pub mod regex {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::types::GossipsubSubscriptionAction::*;
+    use crate::types::SubscriptionAction::*;
     use std::iter::FromIterator;
 
     #[test]
@@ -267,23 +267,23 @@ mod test {
 
         let old = BTreeSet::from_iter(vec![t1.clone()].into_iter());
         let subscriptions = vec![
-            GossipsubSubscription {
+            Subscription {
                 action: Unsubscribe,
                 topic_hash: t1.clone(),
             },
-            GossipsubSubscription {
+            Subscription {
                 action: Unsubscribe,
                 topic_hash: t2.clone(),
             },
-            GossipsubSubscription {
+            Subscription {
                 action: Subscribe,
                 topic_hash: t2,
             },
-            GossipsubSubscription {
+            Subscription {
                 action: Subscribe,
                 topic_hash: t1.clone(),
             },
-            GossipsubSubscription {
+            Subscription {
                 action: Unsubscribe,
                 topic_hash: t1,
             },
@@ -304,11 +304,11 @@ mod test {
 
         let old = Default::default();
         let subscriptions = vec![
-            GossipsubSubscription {
+            Subscription {
                 action: Subscribe,
                 topic_hash: t1,
             },
-            GossipsubSubscription {
+            Subscription {
                 action: Subscribe,
                 topic_hash: t2,
             },
@@ -333,15 +333,15 @@ mod test {
         let old = Default::default();
 
         let subscriptions = vec![
-            GossipsubSubscription {
+            Subscription {
                 action: Subscribe,
                 topic_hash: t1.clone(),
             },
-            GossipsubSubscription {
+            Subscription {
                 action: Unsubscribe,
                 topic_hash: t1.clone(),
             },
-            GossipsubSubscription {
+            Subscription {
                 action: Subscribe,
                 topic_hash: t1,
             },
@@ -366,11 +366,11 @@ mod test {
         let old = t[0..2].iter().cloned().collect();
 
         let subscriptions = vec![
-            GossipsubSubscription {
+            Subscription {
                 action: Subscribe,
                 topic_hash: t[2].clone(),
             },
-            GossipsubSubscription {
+            Subscription {
                 action: Subscribe,
                 topic_hash: t[3].clone(),
             },
@@ -395,23 +395,23 @@ mod test {
         let old = t[0..2].iter().cloned().collect();
 
         let subscriptions = vec![
-            GossipsubSubscription {
+            Subscription {
                 action: Subscribe,
                 topic_hash: t[4].clone(),
             },
-            GossipsubSubscription {
+            Subscription {
                 action: Subscribe,
                 topic_hash: t[2].clone(),
             },
-            GossipsubSubscription {
+            Subscription {
                 action: Subscribe,
                 topic_hash: t[3].clone(),
             },
-            GossipsubSubscription {
+            Subscription {
                 action: Unsubscribe,
                 topic_hash: t[0].clone(),
             },
-            GossipsubSubscription {
+            Subscription {
                 action: Unsubscribe,
                 topic_hash: t[1].clone(),
             },
@@ -432,11 +432,11 @@ mod test {
 
         let old = Default::default();
         let subscriptions = vec![
-            GossipsubSubscription {
+            Subscription {
                 action: Subscribe,
                 topic_hash: t1,
             },
-            GossipsubSubscription {
+            Subscription {
                 action: Subscribe,
                 topic_hash: t2,
             },
