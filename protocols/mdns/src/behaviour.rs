@@ -28,7 +28,7 @@ use crate::Config;
 use futures::Stream;
 use if_watch::IfEvent;
 use libp2p_core::{Multiaddr, PeerId};
-use libp2p_swarm::behaviour::{ConnectionClosed, FromSwarm};
+use libp2p_swarm::behaviour::FromSwarm;
 use libp2p_swarm::{
     dummy, ListenAddresses, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
     THandlerOutEvent,
@@ -199,22 +199,14 @@ where
         self.listen_addresses.on_swarm_event(&event);
 
         match event {
-            FromSwarm::ConnectionClosed(ConnectionClosed {
-                peer_id,
-                remaining_established,
-                ..
-            }) => {
-                if remaining_established == 0 {
-                    self.expire_node(&peer_id);
-                }
-            }
             FromSwarm::NewListener(_) => {
                 log::trace!("waking interface state because listening address changed");
                 for iface in self.iface_states.values_mut() {
                     iface.fire_timer();
                 }
             }
-            FromSwarm::ConnectionEstablished(_)
+            FromSwarm::ConnectionClosed(_)
+            | FromSwarm::ConnectionEstablished(_)
             | FromSwarm::DialFailure(_)
             | FromSwarm::AddressChange(_)
             | FromSwarm::ListenFailure(_)
