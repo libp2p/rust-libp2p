@@ -30,9 +30,8 @@ use libp2p_core::PeerId;
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm};
 use libp2p_swarm::{
     dial_opts::DialOpts, ConnectionId, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
-    OneShotHandler, PollParameters,
+    OneShotHandler, PollParameters, THandlerOutEvent,
 };
-use libp2p_swarm::{ConnectionHandler, IntoConnectionHandler};
 use log::warn;
 use smallvec::SmallVec;
 use std::collections::hash_map::{DefaultHasher, HashMap};
@@ -352,8 +351,7 @@ impl NetworkBehaviour for Floodsub {
         &mut self,
         propagation_source: PeerId,
         _connection_id: ConnectionId,
-        event: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as
-            ConnectionHandler>::OutEvent,
+        event: THandlerOutEvent<Self>,
     ) {
         // We ignore successful sends or timeouts.
         let event = match event {

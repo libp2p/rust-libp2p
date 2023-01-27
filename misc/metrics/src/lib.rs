@@ -108,8 +108,8 @@ impl Recorder<libp2p_dcutr::Event> for Metrics {
 
 #[cfg(feature = "gossipsub")]
 #[cfg(not(target_os = "unknown"))]
-impl Recorder<libp2p_gossipsub::GossipsubEvent> for Metrics {
-    fn record(&self, event: &libp2p_gossipsub::GossipsubEvent) {
+impl Recorder<libp2p_gossipsub::Event> for Metrics {
+    fn record(&self, event: &libp2p_gossipsub::Event) {
         self.gossipsub.record(event)
     }
 }

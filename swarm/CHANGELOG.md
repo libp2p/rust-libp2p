@@ -14,7 +14,8 @@
 - Add `estblished_in` to `SwarmEvent::ConnectionEstablished`. See [PR 3134].
 
 - Remove deprecated `inject_*` methods from `NetworkBehaviour` and `ConnectionHandler`.
-  see [PR 3264].
+  Make the implementation of `on_swarm_event` and `on_connection_handler_event`
+  both mandatory. See [PR 3264] and [PR 3364].
 
 - Update to `libp2p-swarm-derive` `v0.32.0`.
 
@@ -27,9 +28,21 @@
   If you have previously set `connection_event_buffer_size` you should re-evaluate what a good size for a _per connection_ buffer is.
   See [PR 3188].
 
-- Remove `ConnectionId::new`. Manually creating `ConnectionId`s is now unsupported. See [PR 3327].
+- Add `PendingConnectionError::LocalPeerId` to differentiate wrong VS local peer ID errors. See [PR 3377].
+
+- Remove `PendingConnectionError:::IO` variant.
+  This was never constructed.
+  See [PR 3373].
+
+- Remove `DialError::ConnectionIo` variant.
+  This was never constructed.
+  See [PR 3374].
+
+- Introduce `ListenError` and use it within `SwarmEvent::IncomingConnectionError`.
+  See [PR 3375].
 
 [PR 3366]: https://github.com/libp2p/rust-libp2p/pull/3366
+[PR 3364]: https://github.com/libp2p/rust-libp2p/pull/3364
 [PR 3170]: https://github.com/libp2p/rust-libp2p/pull/3170
 [PR 3134]: https://github.com/libp2p/rust-libp2p/pull/3134
 [PR 3153]: https://github.com/libp2p/rust-libp2p/pull/3153
@@ -37,6 +50,10 @@
 [PR 3272]: https://github.com/libp2p/rust-libp2p/pull/3272
 [PR 3327]: https://github.com/libp2p/rust-libp2p/pull/3327
 [PR 3188]: https://github.com/libp2p/rust-libp2p/pull/3188
+[PR 3377]: https://github.com/libp2p/rust-libp2p/pull/3377
+[PR 3373]: https://github.com/libp2p/rust-libp2p/pull/3373
+[PR 3374]: https://github.com/libp2p/rust-libp2p/pull/3374
+[PR 3375]: https://github.com/libp2p/rust-libp2p/pull/3375
 
 # 0.41.1
 
