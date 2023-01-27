@@ -212,7 +212,6 @@ mod network {
     use futures::channel::{mpsc, oneshot};
     use libp2p::core::upgrade::{read_length_prefixed, write_length_prefixed, ProtocolName};
     use libp2p::identity;
-    use libp2p::identity::ed25519;
     use libp2p::kad::record::store::MemoryStore;
     use libp2p::kad::{GetProvidersOk, Kademlia, KademliaEvent, QueryId, QueryResult};
     use libp2p::multiaddr::Protocol;
@@ -237,10 +236,7 @@ mod network {
             Some(seed) => {
                 let mut bytes = [0u8; 32];
                 bytes[0] = seed;
-                let secret_key = ed25519::SecretKey::from_bytes(&mut bytes).expect(
-                    "this returns `Err` only if the length is wrong; the length is correct; qed",
-                );
-                identity::Keypair::Ed25519(secret_key.into())
+                identity::Keypair::ed25519_from_bytes(bytes).expect("only errors on wrong length")
             }
             None => identity::Keypair::generate_ed25519(),
         };

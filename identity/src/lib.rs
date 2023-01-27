@@ -83,6 +83,7 @@ mod keys_proto {
 
     impl From<&crate::PublicKey> for PublicKey {
         fn from(key: &crate::PublicKey) -> Self {
+            #[allow(deprecated)]
             match key {
                 #[cfg(feature = "ed25519")]
                 crate::PublicKey::Ed25519(key) => PublicKey {

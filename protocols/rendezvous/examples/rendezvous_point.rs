@@ -41,8 +41,8 @@ async fn main() {
     env_logger::init();
 
     let bytes = [0u8; 32];
-    let key = identity::ed25519::SecretKey::from_bytes(bytes).expect("we always pass 32 bytes");
-    let identity = identity::Keypair::Ed25519(key.into());
+    let identity =
+        identity::Keypair::ed25519_from_bytes(bytes).expect("only errors on wrong length");
 
     let mut swarm = Swarm::with_tokio_executor(
         libp2p_tcp::tokio::Transport::default()

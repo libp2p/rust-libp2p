@@ -56,15 +56,31 @@ use crate::ecdsa;
 pub enum Keypair {
     /// An Ed25519 keypair.
     #[cfg(feature = "ed25519")]
+    #[deprecated(
+        since = "0.1.0",
+        note = "This enum will be made opaque in the future, use `Keypair::into_ed25519` instead."
+    )]
     Ed25519(ed25519::Keypair),
     /// An RSA keypair.
     #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
+    #[deprecated(
+        since = "0.1.0",
+        note = "This enum will be made opaque in the future, use `Keypair::into_rsa` instead."
+    )]
     Rsa(rsa::Keypair),
     /// A Secp256k1 keypair.
     #[cfg(feature = "secp256k1")]
+    #[deprecated(
+        since = "0.1.0",
+        note = "This enum will be made opaque in the future, use `Keypair::into_secp256k1` instead."
+    )]
     Secp256k1(secp256k1::Keypair),
     /// An ECDSA keypair.
     #[cfg(feature = "ecdsa")]
+    #[deprecated(
+        since = "0.1.0",
+        note = "This enum will be made opaque in the future, use `Keypair::into_ecdsa` instead."
+    )]
     Ecdsa(ecdsa::Keypair),
 }
 
@@ -72,19 +88,58 @@ impl Keypair {
     /// Generate a new Ed25519 keypair.
     #[cfg(feature = "ed25519")]
     pub fn generate_ed25519() -> Keypair {
+        #[allow(deprecated)]
         Keypair::Ed25519(ed25519::Keypair::generate())
     }
 
     /// Generate a new Secp256k1 keypair.
     #[cfg(feature = "secp256k1")]
     pub fn generate_secp256k1() -> Keypair {
+        #[allow(deprecated)]
         Keypair::Secp256k1(secp256k1::Keypair::generate())
     }
 
     /// Generate a new ECDSA keypair.
     #[cfg(feature = "ecdsa")]
     pub fn generate_ecdsa() -> Keypair {
+        #[allow(deprecated)]
         Keypair::Ecdsa(ecdsa::Keypair::generate())
+    }
+
+    #[cfg(feature = "ed25519")]
+    pub fn into_ed25519(self) -> Option<ed25519::Keypair> {
+        #[allow(deprecated)]
+        match self {
+            Keypair::Ed25519(inner) => Some(inner),
+            _ => None,
+        }
+    }
+
+    #[cfg(feature = "secp256k1")]
+    pub fn into_secp256k1(self) -> Option<secp256k1::Keypair> {
+        #[allow(deprecated)]
+        match self {
+            Keypair::Secp256k1(inner) => Some(inner),
+            _ => None,
+        }
+    }
+
+    #[cfg(feature = "rsa")]
+    pub fn into_rsa(self) -> Option<rsa::Keypair> {
+        #[allow(deprecated)]
+        match self {
+            Keypair::Rsa(inner) => Some(inner),
+            _ => None,
+        }
+    }
+
+    #[cfg(feature = "ecdsa")]
+    pub fn into_ecdsa(self) -> Option<ecdsa::Keypair> {
+        #[allow(deprecated)]
+        match self {
+            Keypair::Ecdsa(inner) => Some(inner),
+            _ => None,
+        }
     }
 
     /// Decode an keypair from a DER-encoded secret key in PKCS#8 PrivateKeyInfo
@@ -93,6 +148,7 @@ impl Keypair {
     /// [RFC5208]: https://tools.ietf.org/html/rfc5208#section-5
     #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
     pub fn rsa_from_pkcs8(pkcs8_der: &mut [u8]) -> Result<Keypair, DecodingError> {
+        #[allow(deprecated)]
         rsa::Keypair::from_pkcs8(pkcs8_der).map(Keypair::Rsa)
     }
 
@@ -102,14 +158,24 @@ impl Keypair {
     /// [RFC5915]: https://tools.ietf.org/html/rfc5915
     #[cfg(feature = "secp256k1")]
     pub fn secp256k1_from_der(der: &mut [u8]) -> Result<Keypair, DecodingError> {
+        #[allow(deprecated)]
         secp256k1::SecretKey::from_der(der)
             .map(|sk| Keypair::Secp256k1(secp256k1::Keypair::from(sk)))
+    }
+
+    #[cfg(feature = "ed25519")]
+    pub fn ed25519_from_bytes(bytes: impl AsMut<[u8]>) -> Result<Keypair, DecodingError> {
+        #[allow(deprecated)]
+        Ok(Keypair::Ed25519(ed25519::Keypair::from(
+            ed25519::SecretKey::from_bytes(bytes)?,
+        )))
     }
 
     /// Sign a message using the private key of this keypair, producing
     /// a signature that can be verified using the corresponding public key.
     pub fn sign(&self, msg: &[u8]) -> Result<Vec<u8>, SigningError> {
         use Keypair::*;
+        #[allow(deprecated)]
         match self {
             #[cfg(feature = "ed25519")]
             Ed25519(ref pair) => Ok(pair.sign(msg)),
@@ -125,6 +191,7 @@ impl Keypair {
     /// Get the public key of this keypair.
     pub fn public(&self) -> PublicKey {
         use Keypair::*;
+        #[allow(deprecated)]
         match self {
             #[cfg(feature = "ed25519")]
             Ed25519(pair) => PublicKey::Ed25519(pair.public()),
@@ -148,6 +215,7 @@ impl Keypair {
         #[cfg(not(feature = "ed25519"))]
         return Err(DecodingError::missing_feature("ed25519"));
 
+        #[allow(deprecated)]
         let pk: keys_proto::PrivateKey = match self {
             #[cfg(feature = "ed25519")]
             Self::Ed25519(data) => keys_proto::PrivateKey {
@@ -179,7 +247,9 @@ impl Keypair {
 
         match key_type {
             #[cfg(feature = "ed25519")]
-            keys_proto::KeyType::Ed25519 => {
+            keys_proto::KeyType::Ed25519 =>
+            {
+                #[allow(deprecated)]
                 ed25519::Keypair::decode(&mut private_key.data).map(Keypair::Ed25519)
             }
             #[cfg(not(feature = "ed25519"))]
@@ -196,15 +266,32 @@ impl Keypair {
 pub enum PublicKey {
     /// A public Ed25519 key.
     #[cfg(feature = "ed25519")]
+    #[deprecated(
+        since = "0.1.0",
+        note = "This enum will be made opaque in the future, use `PublicKey::into_ed25519` instead."
+    )]
     Ed25519(ed25519::PublicKey),
     #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
     /// A public RSA key.
+
+    #[deprecated(
+        since = "0.1.0",
+        note = "This enum will be made opaque in the future, use `PublicKey::into_rsa` instead."
+    )]
     Rsa(rsa::PublicKey),
     #[cfg(feature = "secp256k1")]
     /// A public Secp256k1 key.
+    #[deprecated(
+        since = "0.1.0",
+        note = "This enum will be made opaque in the future, use `PublicKey::into_secp256k1` instead."
+    )]
     Secp256k1(secp256k1::PublicKey),
     /// A public ECDSA key.
     #[cfg(feature = "ecdsa")]
+    #[deprecated(
+        since = "0.1.0",
+        note = "This enum will be made opaque in the future, use `PublicKey::into_ecdsa` instead."
+    )]
     Ecdsa(ecdsa::PublicKey),
 }
 
@@ -216,6 +303,7 @@ impl PublicKey {
     #[must_use]
     pub fn verify(&self, msg: &[u8], sig: &[u8]) -> bool {
         use PublicKey::*;
+        #[allow(deprecated)]
         match self {
             #[cfg(feature = "ed25519")]
             Ed25519(pk) => pk.verify(msg, sig),
@@ -225,6 +313,42 @@ impl PublicKey {
             Secp256k1(pk) => pk.verify(msg, sig),
             #[cfg(feature = "ecdsa")]
             Ecdsa(pk) => pk.verify(msg, sig),
+        }
+    }
+
+    #[cfg(feature = "ed25519")]
+    pub fn into_ed25519(self) -> Option<ed25519::PublicKey> {
+        #[allow(deprecated)]
+        match self {
+            PublicKey::Ed25519(inner) => Some(inner),
+            _ => None,
+        }
+    }
+
+    #[cfg(feature = "secp256k1")]
+    pub fn into_secp256k1(self) -> Option<secp256k1::PublicKey> {
+        #[allow(deprecated)]
+        match self {
+            PublicKey::Secp256k1(inner) => Some(inner),
+            _ => None,
+        }
+    }
+
+    #[cfg(feature = "rsa")]
+    pub fn into_rsa(self) -> Option<rsa::PublicKey> {
+        #[allow(deprecated)]
+        match self {
+            PublicKey::Rsa(inner) => Some(inner),
+            _ => None,
+        }
+    }
+
+    #[cfg(feature = "ecdsa")]
+    pub fn into_ecdsa(self) -> Option<ecdsa::PublicKey> {
+        #[allow(deprecated)]
+        match self {
+            PublicKey::Ecdsa(inner) => Some(inner),
+            _ => None,
         }
     }
 
@@ -267,6 +391,7 @@ impl TryFrom<keys_proto::PublicKey> for PublicKey {
         let key_type = keys_proto::KeyType::from_i32(pubkey.r#type)
             .ok_or_else(|| DecodingError::unknown_key_type(pubkey.r#type))?;
 
+        #[allow(deprecated)]
         match key_type {
             #[cfg(feature = "ed25519")]
             keys_proto::KeyType::Ed25519 => {
