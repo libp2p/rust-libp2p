@@ -84,6 +84,16 @@ where
         Ok(self.handler_proto.clone())
     }
 
+    fn handle_established_outbound_connection(
+        &mut self,
+        _: PeerId,
+        _: &Multiaddr,
+        _: Endpoint,
+        _: ConnectionId,
+    ) -> Result<THandler, ConnectionDenied> {
+        Ok(self.handler_proto.clone())
+    }
+
     fn handle_pending_outbound_connection(
         &mut self,
         maybe_peer: Option<PeerId>,
@@ -97,16 +107,6 @@ where
         };
 
         Ok(self.addresses.get(&p).map_or(Vec::new(), |v| v.clone()))
-    }
-
-    fn handle_established_outbound_connection(
-        &mut self,
-        _: PeerId,
-        _: &Multiaddr,
-        _: Endpoint,
-        _: ConnectionId,
-    ) -> Result<THandler, ConnectionDenied> {
-        Ok(self.handler_proto.clone())
     }
 
     fn poll(
