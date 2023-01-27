@@ -285,7 +285,7 @@ pub enum NetworkBehaviourAction<TOutEvent, TInEvent> {
     /// corresponding [`ConnectionHandler`](crate::ConnectionHandler).
     /// Closing a connection via a [`ConnectionHandler`](crate::ConnectionHandler) can be done
     /// either in a collaborative manner across [`ConnectionHandler`](crate::ConnectionHandler)s
-    /// with [`ConnectionHandler::connection_keep_alive`] or directly with
+    /// with [`ConnectionHandler::connection_keep_alive`](crate::ConnectionHandler::connection_keep_alive) or directly with
     /// [`ConnectionHandlerEvent::Close`](crate::ConnectionHandlerEvent::Close).
     CloseConnection {
         /// The peer to disconnect.
