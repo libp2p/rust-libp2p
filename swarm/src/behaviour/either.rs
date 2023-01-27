@@ -21,6 +21,7 @@
 use crate::behaviour::{self, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use crate::connection::ConnectionId;
 use crate::handler::either::IntoEitherHandler;
+use crate::THandlerOutEvent;
 use either::Either;
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
@@ -72,7 +73,7 @@ where
         &mut self,
         peer_id: PeerId,
         connection_id: ConnectionId,
-        event: crate::THandlerOutEvent<Self>,
+        event: THandlerOutEvent<Self>,
     ) {
         match (self, event) {
             (Either::Left(left), Either::Left(event)) => {

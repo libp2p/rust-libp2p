@@ -23,12 +23,12 @@ use crate::protocol::{Info, Protocol, UpgradeError};
 use libp2p_core::{multiaddr, ConnectedPoint, Multiaddr};
 use libp2p_identity::PeerId;
 use libp2p_identity::PublicKey;
-use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm};
-use libp2p_swarm::ConnectionId;
 use libp2p_swarm::{
-    dial_opts::DialOpts, AddressScore, ConnectionHandler, ConnectionHandlerUpgrErr, DialError,
-    ExternalAddresses, IntoConnectionHandler, ListenAddresses, NetworkBehaviour,
-    NetworkBehaviourAction, NotifyHandler, PollParameters,
+    behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm},
+    dial_opts::DialOpts,
+    AddressScore, ConnectionHandlerUpgrErr, ConnectionId, DialError, ExternalAddresses,
+    ListenAddresses, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
+    THandlerOutEvent,
 };
 use lru::LruCache;
 use std::num::NonZeroUsize;
@@ -255,7 +255,7 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         peer_id: PeerId,
         connection_id: ConnectionId,
-        event: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent,
+        event: THandlerOutEvent<Self>,
     ) {
         match event {
             handler::Event::Identified(mut info) => {

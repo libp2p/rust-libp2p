@@ -29,10 +29,10 @@ use futures::Stream;
 use if_watch::IfEvent;
 use libp2p_core::Multiaddr;
 use libp2p_identity::PeerId;
-use libp2p_swarm::behaviour::{ConnectionClosed, FromSwarm};
+use libp2p_swarm::behaviour::FromSwarm;
 use libp2p_swarm::{
-    dummy, ConnectionHandler, ListenAddresses, NetworkBehaviour, NetworkBehaviourAction,
-    PollParameters,
+    dummy, ListenAddresses, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
+    THandlerOutEvent,
 };
 use smallvec::SmallVec;
 use std::collections::hash_map::{Entry, HashMap};
@@ -191,7 +191,7 @@ where
         &mut self,
         _: PeerId,
         _: libp2p_swarm::ConnectionId,
-        ev: <Self::ConnectionHandler as ConnectionHandler>::OutEvent,
+        ev: THandlerOutEvent<Self>,
     ) {
         void::unreachable(ev)
     }
@@ -200,22 +200,14 @@ where
         self.listen_addresses.on_swarm_event(&event);
 
         match event {
-            FromSwarm::ConnectionClosed(ConnectionClosed {
-                peer_id,
-                remaining_established,
-                ..
-            }) => {
-                if remaining_established == 0 {
-                    self.expire_node(&peer_id);
-                }
-            }
             FromSwarm::NewListener(_) => {
                 log::trace!("waking interface state because listening address changed");
                 for iface in self.iface_states.values_mut() {
                     iface.fire_timer();
                 }
             }
-            FromSwarm::ConnectionEstablished(_)
+            FromSwarm::ConnectionClosed(_)
+            | FromSwarm::ConnectionEstablished(_)
             | FromSwarm::DialFailure(_)
             | FromSwarm::AddressChange(_)
             | FromSwarm::ListenFailure(_)
