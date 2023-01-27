@@ -215,7 +215,6 @@ impl<THandler: ConnectionHandler> fmt::Debug for Pool<THandler> {
 
 /// Event that can happen on the `Pool`.
 #[derive(Debug)]
-#[allow(clippy::large_enum_variant)]
 pub enum PoolEvent<THandler: ConnectionHandler> {
     /// A new connection has been established.
     ConnectionEstablished {
