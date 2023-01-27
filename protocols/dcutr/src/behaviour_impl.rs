@@ -252,14 +252,12 @@ impl NetworkBehaviour for Behaviour {
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        let is_relayed = local_addr.iter().any(|p| p == Protocol::P2pCircuit); // TODO: Make this an extension on `Multiaddr`.
-
         match self
             .outgoing_direct_connection_attempts
             .remove(&(_connection_id, peer))
         {
             None => {
-                let handler = if is_relayed {
+                let handler = if is_relayed(local_addr) {
                     Either::Left(handler::relayed::Handler::new(ConnectedPoint::Listener {
                         local_addr: local_addr.clone(),
                         send_back_addr: remote_addr.clone(),
@@ -272,7 +270,7 @@ impl NetworkBehaviour for Behaviour {
             }
             Some(_) => {
                 assert!(
-                    !is_relayed,
+                    !is_relayed(local_addr),
                     "`Prototype::DirectConnection` is never created for relayed connection."
                 );
 
@@ -290,14 +288,12 @@ impl NetworkBehaviour for Behaviour {
         addr: &Multiaddr,
         role_override: Endpoint,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        let is_relayed = addr.iter().any(|p| p == Protocol::P2pCircuit); // TODO: Make this an extension on `Multiaddr`.
-
         match self
             .outgoing_direct_connection_attempts
             .remove(&(_connection_id, peer))
         {
             None => {
-                let handler = if is_relayed {
+                let handler = if is_relayed(addr) {
                     Either::Left(handler::relayed::Handler::new(ConnectedPoint::Dialer {
                         address: addr.clone(),
                         role_override,
@@ -310,7 +306,7 @@ impl NetworkBehaviour for Behaviour {
             }
             Some(_) => {
                 assert!(
-                    !is_relayed,
+                    !is_relayed(addr),
                     "`Prototype::DirectConnection` is never created for relayed connection."
                 );
 
@@ -463,4 +459,8 @@ impl NetworkBehaviour for Behaviour {
             | FromSwarm::ExpiredExternalAddr(_) => {}
         }
     }
+}
+
+fn is_relayed(addr: &Multiaddr) -> bool {
+    addr.iter().any(|p| p == Protocol::P2pCircuit)
 }
