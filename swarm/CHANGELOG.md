@@ -33,6 +33,9 @@
   This was never constructed.
   See [PR 3374].
 
+- Introduce `ListenError` and use it within `SwarmEvent::IncomingConnectionError`.
+  See [PR 3375].
+
 [PR 3364]: https://github.com/libp2p/rust-libp2p/pull/3364
 [PR 3170]: https://github.com/libp2p/rust-libp2p/pull/3170
 [PR 3134]: https://github.com/libp2p/rust-libp2p/pull/3134
@@ -44,6 +47,7 @@
 [PR 3377]: https://github.com/libp2p/rust-libp2p/pull/3377
 [PR 3373]: https://github.com/libp2p/rust-libp2p/pull/3373
 [PR 3374]: https://github.com/libp2p/rust-libp2p/pull/3374
+[PR 3375]: https://github.com/libp2p/rust-libp2p/pull/3375
 
 # 0.41.1
 

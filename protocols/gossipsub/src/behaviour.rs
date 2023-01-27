@@ -41,8 +41,8 @@ use libp2p_core::{
 use libp2p_swarm::{
     behaviour::{AddressChange, ConnectionClosed, ConnectionEstablished, FromSwarm},
     dial_opts::DialOpts,
-    ConnectionHandler, ConnectionId, IntoConnectionHandler, NetworkBehaviour,
-    NetworkBehaviourAction, NotifyHandler, PollParameters,
+    ConnectionId, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
+    THandlerOutEvent,
 };
 use wasm_timer::Instant;
 
@@ -3298,23 +3298,17 @@ where
     type OutEvent = GossipsubEvent;
 
     fn new_handler(&mut self) -> Self::ConnectionHandler {
-        let protocol_config = ProtocolConfig::new(
-            self.config.protocol_id().clone(),
-            self.config.custom_id_version().clone(),
-            self.config.max_transmit_size(),
-            self.config.validation_mode().clone(),
-            self.config.support_floodsub(),
-        );
-
-        GossipsubHandler::new(protocol_config, self.config.idle_timeout())
+        GossipsubHandler::new(
+            ProtocolConfig::new(&self.config),
+            self.config.idle_timeout(),
+        )
     }
 
     fn on_connection_handler_event(
         &mut self,
         propagation_source: PeerId,
         _connection_id: ConnectionId,
-        handler_event: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as
-            ConnectionHandler>::OutEvent,
+        handler_event: THandlerOutEvent<Self>,
     ) {
         match handler_event {
             HandlerEvent::PeerKind(kind) => {

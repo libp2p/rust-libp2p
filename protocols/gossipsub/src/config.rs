@@ -885,12 +885,11 @@ impl std::fmt::Debug for GossipsubConfig {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::protocol::ProtocolConfig;
     use crate::topic::IdentityHash;
     use crate::types::PeerKind;
     use crate::Topic;
-    use crate::{Gossipsub, MessageAuthenticity};
     use libp2p_core::UpgradeInfo;
-    use libp2p_swarm::{ConnectionHandler, NetworkBehaviour};
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
 
@@ -992,11 +991,7 @@ mod test {
         assert_eq!(builder.protocol_id(), "purple");
         assert_eq!(builder.custom_id_version(), &None);
 
-        let mut gossipsub: Gossipsub =
-            Gossipsub::new(MessageAuthenticity::Anonymous, builder).expect("Correct configuration");
-
-        let handler = gossipsub.new_handler();
-        let (protocol_config, _) = handler.listen_protocol().into_upgrade();
+        let protocol_config = ProtocolConfig::new(&builder);
         let protocol_ids = protocol_config.protocol_info();
 
         assert_eq!(protocol_ids.len(), 2);
@@ -1020,11 +1015,7 @@ mod test {
         assert_eq!(builder.protocol_id(), "purple");
         assert_eq!(builder.custom_id_version(), &Some(GossipsubVersion::V1_0));
 
-        let mut gossipsub: Gossipsub =
-            Gossipsub::new(MessageAuthenticity::Anonymous, builder).expect("Correct configuration");
-
-        let handler = gossipsub.new_handler();
-        let (protocol_config, _) = handler.listen_protocol().into_upgrade();
+        let protocol_config = ProtocolConfig::new(&builder);
         let protocol_ids = protocol_config.protocol_info();
 
         assert_eq!(protocol_ids.len(), 1);
