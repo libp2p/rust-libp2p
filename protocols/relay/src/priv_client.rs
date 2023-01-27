@@ -164,7 +164,7 @@ impl NetworkBehaviour for Behaviour {
 
     fn handle_established_inbound_connection(
         &mut self,
-        _connection_id: ConnectionId,
+        connection_id: ConnectionId,
         peer: PeerId,
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
@@ -175,7 +175,7 @@ impl NetworkBehaviour for Behaviour {
 
         let mut handler = Handler::new(self.local_peer_id, peer, remote_addr.clone());
 
-        if let Some(event) = self.pending_handler_commands.remove(&_connection_id) {
+        if let Some(event) = self.pending_handler_commands.remove(&connection_id) {
             handler.on_behaviour_event(event)
         }
 
