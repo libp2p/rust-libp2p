@@ -22,7 +22,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - uses: dtolnay/rust-toolchain@v1
+      - uses: dtolnay/rust-toolchain@ce8f65846d7180d2ce63b1e74483d981800b9e22 # v1
         with:
           profile: minimal
           toolchain: stable
