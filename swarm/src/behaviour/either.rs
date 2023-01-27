@@ -48,21 +48,21 @@ where
 
     fn handle_established_inbound_connection(
         &mut self,
+        _connection_id: ConnectionId,
         peer: PeerId,
-        connection_id: ConnectionId,
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         let handler = match self {
             Either::Left(inner) => Either::Left(inner.handle_established_inbound_connection(
+                _connection_id,
                 peer,
-                connection_id,
                 local_addr,
                 remote_addr,
             )?),
             Either::Right(inner) => Either::Right(inner.handle_established_inbound_connection(
+                _connection_id,
                 peer,
-                connection_id,
                 local_addr,
                 remote_addr,
             )?),
@@ -73,23 +73,23 @@ where
 
     fn handle_pending_outbound_connection(
         &mut self,
+        _connection_id: ConnectionId,
         maybe_peer: Option<PeerId>,
-        addresses: &[Multiaddr],
-        effective_role: Endpoint,
-        connection_id: ConnectionId,
+        _addresses: &[Multiaddr],
+        _effective_role: Endpoint,
     ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
         let addresses = match self {
             Either::Left(inner) => inner.handle_pending_outbound_connection(
+                _connection_id,
                 maybe_peer,
-                addresses,
-                effective_role,
-                connection_id,
+                _addresses,
+                _effective_role,
             )?,
             Either::Right(inner) => inner.handle_pending_outbound_connection(
+                _connection_id,
                 maybe_peer,
-                addresses,
-                effective_role,
-                connection_id,
+                _addresses,
+                _effective_role,
             )?,
         };
 
@@ -98,23 +98,23 @@ where
 
     fn handle_established_outbound_connection(
         &mut self,
+        _connection_id: ConnectionId,
         peer: PeerId,
         addr: &Multiaddr,
         role_override: Endpoint,
-        connection_id: ConnectionId,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         let handler = match self {
             Either::Left(inner) => Either::Left(inner.handle_established_outbound_connection(
+                _connection_id,
                 peer,
                 addr,
                 role_override,
-                connection_id,
             )?),
             Either::Right(inner) => Either::Right(inner.handle_established_outbound_connection(
+                _connection_id,
                 peer,
                 addr,
                 role_override,
-                connection_id,
             )?),
         };
 

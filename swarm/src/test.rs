@@ -76,8 +76,8 @@ where
 
     fn handle_established_inbound_connection(
         &mut self,
-        _: PeerId,
         _: ConnectionId,
+        _: PeerId,
         _: &Multiaddr,
         _: &Multiaddr,
     ) -> Result<THandler, ConnectionDenied> {
@@ -86,20 +86,20 @@ where
 
     fn handle_established_outbound_connection(
         &mut self,
+        _: ConnectionId,
         _: PeerId,
         _: &Multiaddr,
         _: Endpoint,
-        _: ConnectionId,
     ) -> Result<THandler, ConnectionDenied> {
         Ok(self.handler_proto.clone())
     }
 
     fn handle_pending_outbound_connection(
         &mut self,
+        _connection_id: ConnectionId,
         maybe_peer: Option<PeerId>,
-        _: &[Multiaddr],
-        _: Endpoint,
-        _: ConnectionId,
+        _addresses: &[Multiaddr],
+        _effective_role: Endpoint,
     ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
         let p = match maybe_peer {
             None => return Ok(vec![]),
@@ -420,20 +420,20 @@ where
 
     fn handle_established_inbound_connection(
         &mut self,
+        _connection_id: ConnectionId,
         peer: PeerId,
-        connection_id: ConnectionId,
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         self.handle_established_inbound_connection.push((
             peer,
-            connection_id,
+            _connection_id,
             local_addr.clone(),
             remote_addr.clone(),
         ));
         self.inner.handle_established_inbound_connection(
+            _connection_id,
             peer,
-            connection_id,
             local_addr,
             remote_addr,
         )
@@ -441,40 +441,40 @@ where
 
     fn handle_pending_outbound_connection(
         &mut self,
+        _connection_id: ConnectionId,
         maybe_peer: Option<PeerId>,
-        addresses: &[Multiaddr],
-        effective_role: Endpoint,
-        connection_id: ConnectionId,
+        _addresses: &[Multiaddr],
+        _effective_role: Endpoint,
     ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
         self.handle_pending_outbound_connection.push((
             maybe_peer,
-            addresses.to_vec(),
-            effective_role,
-            connection_id,
+            _addresses.to_vec(),
+            _effective_role,
+            _connection_id,
         ));
         self.inner.handle_pending_outbound_connection(
+            _connection_id,
             maybe_peer,
-            addresses,
-            effective_role,
-            connection_id,
+            _addresses,
+            _effective_role,
         )
     }
 
     fn handle_established_outbound_connection(
         &mut self,
+        _connection_id: ConnectionId,
         peer: PeerId,
         addr: &Multiaddr,
         role_override: Endpoint,
-        connection_id: ConnectionId,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         self.handle_established_outbound_connection.push((
             peer,
             addr.clone(),
             role_override,
-            connection_id,
+            _connection_id,
         ));
         self.inner
-            .handle_established_outbound_connection(peer, addr, role_override, connection_id)
+            .handle_established_outbound_connection(_connection_id, peer, addr, role_override)
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {

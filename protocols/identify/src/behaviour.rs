@@ -239,8 +239,8 @@ impl NetworkBehaviour for Behaviour {
 
     fn handle_established_inbound_connection(
         &mut self,
-        peer: PeerId,
         _: ConnectionId,
+        peer: PeerId,
         _: &Multiaddr,
         remote_addr: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
@@ -257,10 +257,10 @@ impl NetworkBehaviour for Behaviour {
 
     fn handle_established_outbound_connection(
         &mut self,
+        _: ConnectionId,
         peer: PeerId,
         addr: &Multiaddr,
         _: Endpoint,
-        _: ConnectionId,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         Ok(Handler::new(
             self.config.initial_delay,
@@ -380,10 +380,10 @@ impl NetworkBehaviour for Behaviour {
 
     fn handle_pending_outbound_connection(
         &mut self,
+        _connection_id: ConnectionId,
         maybe_peer: Option<PeerId>,
-        _: &[Multiaddr],
-        _: Endpoint,
-        _: ConnectionId,
+        _addresses: &[Multiaddr],
+        _effective_role: Endpoint,
     ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
         let peer = match maybe_peer {
             None => return Ok(vec![]),

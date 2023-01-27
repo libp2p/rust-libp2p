@@ -1985,8 +1985,8 @@ where
 
     fn handle_established_inbound_connection(
         &mut self,
+        _connection_id: ConnectionId,
         peer: PeerId,
-        _: ConnectionId,
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
@@ -2006,10 +2006,10 @@ where
 
     fn handle_established_outbound_connection(
         &mut self,
+        _connection_id: ConnectionId,
         peer: PeerId,
         addr: &Multiaddr,
         role_override: Endpoint,
-        _: ConnectionId,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         Ok(KademliaHandler::new(
             KademliaHandlerConfig {
@@ -2027,10 +2027,10 @@ where
 
     fn handle_pending_outbound_connection(
         &mut self,
+        _connection_id: ConnectionId,
         maybe_peer: Option<PeerId>,
-        _: &[Multiaddr],
-        _: Endpoint,
-        _: ConnectionId,
+        _addresses: &[Multiaddr],
+        _effective_role: Endpoint,
     ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
         let peer_id = match maybe_peer {
             None => return Ok(vec![]),

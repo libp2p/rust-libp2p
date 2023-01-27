@@ -247,8 +247,8 @@ impl NetworkBehaviour for Behaviour {
 
     fn handle_established_inbound_connection(
         &mut self,
+        _connection_id: ConnectionId,
         peer: PeerId,
-        connection_id: ConnectionId,
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
@@ -256,7 +256,7 @@ impl NetworkBehaviour for Behaviour {
 
         match self
             .outgoing_direct_connection_attempts
-            .remove(&(connection_id, peer))
+            .remove(&(_connection_id, peer))
         {
             None => {
                 let handler = if is_relayed {
@@ -285,16 +285,16 @@ impl NetworkBehaviour for Behaviour {
 
     fn handle_established_outbound_connection(
         &mut self,
+        _connection_id: ConnectionId,
         peer: PeerId,
         addr: &Multiaddr,
         role_override: Endpoint,
-        connection_id: ConnectionId,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         let is_relayed = addr.iter().any(|p| p == Protocol::P2pCircuit); // TODO: Make this an extension on `Multiaddr`.
 
         match self
             .outgoing_direct_connection_attempts
-            .remove(&(connection_id, peer))
+            .remove(&(_connection_id, peer))
         {
             None => {
                 let handler = if is_relayed {

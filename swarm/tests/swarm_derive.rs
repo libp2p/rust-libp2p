@@ -387,8 +387,8 @@ fn custom_out_event_no_type_parameters() {
 
         fn handle_established_inbound_connection(
             &mut self,
-            _: PeerId,
             _: ConnectionId,
+            _: PeerId,
             _: &Multiaddr,
             _: &Multiaddr,
         ) -> Result<THandler<Self>, ConnectionDenied> {
@@ -397,10 +397,10 @@ fn custom_out_event_no_type_parameters() {
 
         fn handle_established_outbound_connection(
             &mut self,
+            _: ConnectionId,
             _: PeerId,
             _: &Multiaddr,
             _: Endpoint,
-            _: ConnectionId,
         ) -> Result<THandler<Self>, ConnectionDenied> {
             Ok(dummy::ConnectionHandler)
         }

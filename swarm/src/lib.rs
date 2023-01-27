@@ -554,10 +554,10 @@ where
             let mut addresses_from_opts = dial_opts.get_addresses();
 
             match self.behaviour.handle_pending_outbound_connection(
+                connection_id,
                 peer_id,
                 addresses_from_opts.as_slice(),
                 dial_opts.role_override(),
-                connection_id,
             ) {
                 Ok(addresses) => {
                     if dial_opts.extend_addresses_through_behaviour() {
@@ -803,10 +803,10 @@ where
                         role_override,
                     } => {
                         match self.behaviour.handle_established_outbound_connection(
+                            id,
                             peer_id,
                             &address,
                             role_override,
-                            id,
                         ) {
                             Ok(handler) => handler,
                             Err(cause) => {
@@ -831,8 +831,8 @@ where
                         send_back_addr,
                     } => {
                         match self.behaviour.handle_established_inbound_connection(
-                            peer_id,
                             id,
+                            peer_id,
                             &local_addr,
                             &send_back_addr,
                         ) {

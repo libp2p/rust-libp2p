@@ -549,7 +549,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             };
 
             let builder = quote! {
-                #field_name.handle_established_inbound_connection(peer, connection_id, local_addr, remote_addr)?
+                #field_name.handle_established_inbound_connection(connection_id, peer, local_addr, remote_addr)?
             };
 
             match out_handler {
@@ -571,10 +571,10 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                 .map(|(field_n, field)| {
                     match field.ident {
                         Some(ref i) => quote! {
-                            combined_addresses.extend(#trait_to_impl::handle_pending_outbound_connection(&mut self.#i, maybe_peer, addresses, effective_role, connection_id)?);
+                            combined_addresses.extend(#trait_to_impl::handle_pending_outbound_connection(&mut self.#i, connection_id, maybe_peer, addresses, effective_role)?);
                         },
                         None => quote! {
-                            combined_addresses.extend(#trait_to_impl::handle_pending_outbound_connection(&mut self.#field_n, maybe_peer, addresses, effective_role, connection_id)?);
+                            combined_addresses.extend(#trait_to_impl::handle_pending_outbound_connection(&mut self.#field_n, connection_id, maybe_peer, addresses, effective_role)?);
                         }
                     }
                 });
@@ -599,7 +599,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             };
 
             let builder = quote! {
-                #field_name.handle_established_outbound_connection(peer, addr, role_override, connection_id)?
+                #field_name.handle_established_outbound_connection(connection_id, peer, addr, role_override)?
             };
 
             match out_handler {
@@ -709,8 +709,8 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             #[allow(clippy::needless_question_mark)]
             fn handle_established_inbound_connection(
                 &mut self,
-                peer: #peer_id,
                 connection_id: #connection_id,
+                peer: #peer_id,
                 local_addr: &#multiaddr,
                 remote_addr: &#multiaddr,
             ) -> Result<#t_handler<Self>, #connection_denied> {
@@ -720,10 +720,10 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             #[allow(clippy::needless_question_mark)]
             fn handle_pending_outbound_connection(
                 &mut self,
+                connection_id: #connection_id,
                 maybe_peer: Option<#peer_id>,
                 addresses: &[#multiaddr],
                 effective_role: #endpoint,
-                connection_id: #connection_id,
             ) -> Result<::std::vec::Vec<#multiaddr>, #connection_denied> {
                 #handle_pending_outbound_connection
             }
@@ -731,10 +731,10 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
             #[allow(clippy::needless_question_mark)]
             fn handle_established_outbound_connection(
                 &mut self,
+                connection_id: #connection_id,
                 peer: #peer_id,
                 addr: &#multiaddr,
                 role_override: #endpoint,
-                connection_id: #connection_id,
             ) -> Result<#t_handler<Self>, #connection_denied> {
                 Ok(#handle_established_outbound_connection)
             }
