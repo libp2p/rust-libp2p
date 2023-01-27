@@ -33,7 +33,6 @@ use async_std::net::Ipv4Addr;
 use byteorder::{BigEndian, ByteOrder};
 use libp2p_core::{ConnectedPoint, Endpoint};
 use rand::Rng;
-use std::borrow::Cow;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::thread::sleep;
@@ -272,7 +271,7 @@ where
             active_connections = active_connections.checked_sub(1).unwrap();
 
             let dummy_handler = GossipsubHandler::new(
-                ProtocolConfig::new(Cow::from(""), None, 0, ValidationMode::None, false),
+                ProtocolConfig::new(&GossipsubConfig::default()),
                 Duration::ZERO,
             );
 
