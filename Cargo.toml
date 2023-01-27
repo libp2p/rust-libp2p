@@ -18,11 +18,12 @@ full = [
     "deflate",
     "dns",
     "ecdsa",
+    "ed25519",
     "floodsub",
     "gossipsub",
     "identify",
-    "ed25519",
     "kad",
+    "macros",
     "mdns",
     "metrics",
     "mplex",
@@ -31,7 +32,6 @@ full = [
     "plaintext",
     "pnet",
     "quic",
-    "macros",
     "relay",
     "rendezvous",
     "request-response",
@@ -99,6 +99,7 @@ libp2p-core = { version = "0.39.0", path = "core" }
 libp2p-dcutr = { version = "0.9.0", path = "protocols/dcutr", optional = true }
 libp2p-floodsub = { version = "0.42.0", path = "protocols/floodsub", optional = true }
 libp2p-identify = { version = "0.42.0", path = "protocols/identify", optional = true }
+libp2p-identity = { version = "0.1.0", path = "identity" }
 libp2p-kad = { version = "0.43.0", path = "protocols/kad", optional = true }
 libp2p-metrics = { version = "0.12.0", path = "misc/metrics", optional = true }
 libp2p-mplex = { version = "0.39.0", path = "muxers/mplex", optional = true }
@@ -113,7 +114,6 @@ libp2p-swarm = { version = "0.42.0", path = "swarm" }
 libp2p-uds = { version = "0.37.0", path = "transports/uds", optional = true }
 libp2p-wasm-ext = { version = "0.39.0", path = "transports/wasm-ext", optional = true }
 libp2p-yamux = { version = "0.43.0", path = "muxers/yamux", optional = true }
-libp2p-identity = { version = "0.1.0", path = "identity" }
 multiaddr = { version = "0.17.0" }
 parking_lot = "0.12.0"
 pin-project = "1.0.0"
