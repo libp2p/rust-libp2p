@@ -36,8 +36,7 @@ use either::Either;
 use futures::{prelude::*, select};
 use libp2p::{
     core::{muxing::StreamMuxerBox, transport, transport::upgrade::Version},
-    gossipsub::{self, Gossipsub, GossipsubConfigBuilder, GossipsubEvent, MessageAuthenticity},
-    identify, identity,
+    gossipsub, identify, identity,
     multiaddr::Protocol,
     noise, ping,
     pnet::{PnetConfig, PreSharedKey},
@@ -150,19 +149,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
     #[derive(NetworkBehaviour)]
     #[behaviour(out_event = "MyBehaviourEvent")]
     struct MyBehaviour {
-        gossipsub: Gossipsub,
+        gossipsub: gossipsub::Behaviour,
         identify: identify::Behaviour,
         ping: ping::Behaviour,
     }
 
     enum MyBehaviourEvent {
-        Gossipsub(GossipsubEvent),
+        Gossipsub(gossipsub::Event),
         Identify(identify::Event),
         Ping(ping::Event),
     }
 
-    impl From<GossipsubEvent> for MyBehaviourEvent {
-        fn from(event: GossipsubEvent) -> Self {
+    impl From<gossipsub::Event> for MyBehaviourEvent {
+        fn from(event: gossipsub::Event) -> Self {
             MyBehaviourEvent::Gossipsub(event)
         }
     }
@@ -181,13 +180,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Create a Swarm to manage peers and events
     let mut swarm = {
-        let gossipsub_config = GossipsubConfigBuilder::default()
+        let gossipsub_config = gossipsub::ConfigBuilder::default()
             .max_transmit_size(262144)
             .build()
             .expect("valid config");
         let mut behaviour = MyBehaviour {
-            gossipsub: Gossipsub::new(
-                MessageAuthenticity::Signed(local_key.clone()),
+            gossipsub: gossipsub::Behaviour::new(
+                gossipsub::MessageAuthenticity::Signed(local_key.clone()),
                 gossipsub_config,
             )
             .expect("Valid configuration"),
@@ -236,7 +235,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     SwarmEvent::Behaviour(MyBehaviourEvent::Identify(event)) => {
                         println!("identify: {event:?}");
                     }
-                    SwarmEvent::Behaviour(MyBehaviourEvent::Gossipsub(GossipsubEvent::Message {
+                    SwarmEvent::Behaviour(MyBehaviourEvent::Gossipsub(gossipsub::Event::Message {
                         propagation_source: peer_id,
                         message_id: id,
                         message,
