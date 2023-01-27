@@ -39,7 +39,6 @@ pub use provider::tokio;
 use futures::{
     future::{self, Ready},
     prelude::*,
-    ready,
     stream::SelectAll,
 };
 use futures_timer::Delay;
@@ -51,6 +50,7 @@ use libp2p_core::{
 };
 use provider::{Incoming, Provider};
 use socket2::{Domain, Socket, Type};
+use std::task::Waker;
 use std::{
     collections::{HashSet, VecDeque},
     io,
@@ -588,6 +588,8 @@ where
     pending_event: Option<<Self as Stream>::Item>,
     /// The listener can be manually closed with [`Transport::remove_listener`](libp2p_core::Transport::remove_listener).
     is_closed: bool,
+    /// The stream must be awaken after it has been closed to deliver the last event.
+    close_listener_waker: Option<Waker>,
 }
 
 impl<T> ListenStream<T>
@@ -615,6 +617,7 @@ where
             sleep_on_error: Duration::from_millis(100),
             pending_event: None,
             is_closed: false,
+            close_listener_waker: None,
         })
     }
 
@@ -652,6 +655,11 @@ where
             reason,
         });
         self.is_closed = true;
+
+        // Wake the stream to deliver the last event.
+        if let Some(waker) = self.close_listener_waker.take() {
+            waker.wake();
+        }
     }
 
     /// Poll for a next If Event.
@@ -745,33 +753,37 @@ where
         }
 
         // Take the pending connection from the backlog.
-        return match ready!(T::poll_accept(&mut self.listener, cx)) {
-            Ok(Incoming {
+        match T::poll_accept(&mut self.listener, cx) {
+            Poll::Ready(Ok(Incoming {
                 local_addr,
                 remote_addr,
                 stream,
-            }) => {
+            })) => {
                 let local_addr = ip_to_multiaddr(local_addr.ip(), local_addr.port());
                 let remote_addr = ip_to_multiaddr(remote_addr.ip(), remote_addr.port());
 
                 log::debug!("Incoming connection from {} at {}", remote_addr, local_addr);
 
-                Poll::Ready(Some(TransportEvent::Incoming {
+                return Poll::Ready(Some(TransportEvent::Incoming {
                     listener_id: self.listener_id,
                     upgrade: future::ok(stream),
                     local_addr,
                     send_back_addr: remote_addr,
-                }))
+                }));
             }
-            Err(error) => {
+            Poll::Ready(Err(error)) => {
                 // These errors are non-fatal for the listener stream.
                 self.pause = Some(Delay::new(self.sleep_on_error));
-                Poll::Ready(Some(TransportEvent::ListenerError {
+                return Poll::Ready(Some(TransportEvent::ListenerError {
                     listener_id: self.listener_id,
                     error,
-                }))
+                }));
             }
-        };
+            Poll::Pending => {}
+        }
+
+        self.close_listener_waker = Some(cx.waker().clone());
+        Poll::Pending
     }
 }
 
