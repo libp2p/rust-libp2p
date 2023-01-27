@@ -149,26 +149,6 @@ impl NetworkBehaviour for Behaviour {
         self.events.push_front(Event { peer, result })
     }
 
-    fn on_swarm_event(
-        &mut self,
-        event: libp2p_swarm::behaviour::FromSwarm<Self::ConnectionHandler>,
-    ) {
-        match event {
-            FromSwarm::ConnectionEstablished(_)
-            | FromSwarm::ConnectionClosed(_)
-            | FromSwarm::AddressChange(_)
-            | FromSwarm::DialFailure(_)
-            | FromSwarm::ListenFailure(_)
-            | FromSwarm::NewListener(_)
-            | FromSwarm::NewListenAddr(_)
-            | FromSwarm::ExpiredListenAddr(_)
-            | FromSwarm::ListenerError(_)
-            | FromSwarm::ListenerClosed(_)
-            | FromSwarm::NewExternalAddr(_)
-            | FromSwarm::ExpiredExternalAddr(_) => {}
-        }
-    }
-
     fn poll(
         &mut self,
         _: &mut Context<'_>,
@@ -186,6 +166,26 @@ impl NetworkBehaviour for Behaviour {
             Poll::Ready(NetworkBehaviourAction::GenerateEvent(e))
         } else {
             Poll::Pending
+        }
+    }
+
+    fn on_swarm_event(
+        &mut self,
+        event: libp2p_swarm::behaviour::FromSwarm<Self::ConnectionHandler>,
+    ) {
+        match event {
+            FromSwarm::ConnectionEstablished(_)
+            | FromSwarm::ConnectionClosed(_)
+            | FromSwarm::AddressChange(_)
+            | FromSwarm::DialFailure(_)
+            | FromSwarm::ListenFailure(_)
+            | FromSwarm::NewListener(_)
+            | FromSwarm::NewListenAddr(_)
+            | FromSwarm::ExpiredListenAddr(_)
+            | FromSwarm::ListenerError(_)
+            | FromSwarm::ListenerClosed(_)
+            | FromSwarm::NewExternalAddr(_)
+            | FromSwarm::ExpiredExternalAddr(_) => {}
         }
     }
 }
