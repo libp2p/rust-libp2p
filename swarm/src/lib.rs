@@ -877,9 +877,6 @@ where
                     .protocol_info()
                     .map(|p| p.protocol_name().to_owned())
                     .collect();
-                self.pool
-                    .spawn_connection(id, peer_id, &endpoint, connection, handler);
-
                 let other_established_connection_ids = self
                     .pool
                     .iter_established_connections_of_peer(&peer_id)
@@ -892,6 +889,9 @@ where
                     .into_iter()
                     .filter(|conn_id| !self.banned_peer_connections.contains(conn_id))
                     .count();
+
+                self.pool
+                    .spawn_connection(id, peer_id, &endpoint, connection, handler);
 
                 log::debug!(
                             "Connection established: {:?} {:?}; Total (peer): {}. Total non-banned (peer): {}",
