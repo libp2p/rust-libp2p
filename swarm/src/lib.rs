@@ -1951,24 +1951,22 @@ mod tests {
                     {
                         // Setup to test that new connections of banned peers are not reported.
                         swarm1.dial(addr2.clone()).unwrap();
-                        s1_expected_conns += 1;
                         stage = Stage::BannedDial;
                     }
                 }
                 Stage::BannedDial => {
-                    if swarm2.network_info().num_peers() == 1 {
-                        // The banned connection was established. Check that it was not reported to
-                        // the behaviour of the banning swarm.
-                        assert_eq!(
-                            swarm2.behaviour.on_connection_established.len(), s2_expected_conns,
-                            "No additional closed connections should be reported for the banned peer"
-                        );
+                    // The banned connection was established. Check that it was not reported to
+                    // the behaviour of the banning swarm.
+                    assert_eq!(
+                        swarm2.behaviour.on_connection_established.len(),
+                        s2_expected_conns,
+                        "No additional closed connections should be reported for the banned peer"
+                    );
 
-                        // Setup to test that the banned connection is not reported upon closing
-                        // even if the peer is unbanned.
-                        swarm2.unban_peer_id(swarm1_id);
-                        stage = Stage::Unbanned;
-                    }
+                    // Setup to test that the banned connection is not reported upon closing
+                    // even if the peer is unbanned.
+                    swarm2.unban_peer_id(swarm1_id);
+                    stage = Stage::Unbanned;
                 }
                 Stage::Unbanned => {
                     if swarm2.network_info().num_peers() == 0 {
