@@ -67,31 +67,31 @@
 //!
 //! # Using Gossipsub
 //!
-//! ## GossipsubConfig
+//! ## Gossipsub Config
 //!
-//! The [`GossipsubConfig`] struct specifies various network performance/tuning configuration
+//! The [`Config`] struct specifies various network performance/tuning configuration
 //! parameters. Specifically it specifies:
 //!
-//! [`GossipsubConfig`]: struct.Config.html
+//! [`Config`]: struct.Config.html
 //!
 //! This struct implements the [`Default`] trait and can be initialised via
-//! [`GossipsubConfig::default()`].
+//! [`Config::default()`].
 //!
 //!
-//! ## Gossipsub
+//! ## Behaviour
 //!
-//! The [`Gossipsub`] struct implements the [`libp2p_swarm::NetworkBehaviour`] trait allowing it to
+//! The [`Behaviour`] struct implements the [`libp2p_swarm::NetworkBehaviour`] trait allowing it to
 //! act as the routing behaviour in a [`libp2p_swarm::Swarm`]. This struct requires an instance of
-//! [`libp2p_core::PeerId`] and [`GossipsubConfig`].
+//! [`libp2p_core::PeerId`] and [`Config`].
 //!
-//! [`Gossipsub`]: struct.Gossipsub.html
+//! [`Behaviour`]: struct.Behaviour.html
 
 //! ## Example
 //!
 //! An example of initialising a gossipsub compatible swarm:
 //!
 //! ```
-//! use libp2p_gossipsub::GossipsubEvent;
+//! use libp2p_gossipsub::Event;
 //! use libp2p_core::{identity::Keypair,transport::{Transport, MemoryTransport}, Multiaddr};
 //! use libp2p_gossipsub::MessageAuthenticity;
 //! let local_key = Keypair::generate_ed25519();
@@ -115,10 +115,10 @@
 //! // Create a Swarm to manage peers and events
 //! let mut swarm = {
 //!     // set default parameters for gossipsub
-//!     let gossipsub_config = libp2p_gossipsub::GossipsubConfig::default();
+//!     let gossipsub_config = libp2p_gossipsub::Config::default();
 //!     // build a gossipsub network behaviour
-//!     let mut gossipsub: libp2p_gossipsub::Gossipsub =
-//!         libp2p_gossipsub::Gossipsub::new(message_authenticity, gossipsub_config).unwrap();
+//!     let mut gossipsub: libp2p_gossipsub::Behaviour =
+//!         libp2p_gossipsub::Behaviour::new(message_authenticity, gossipsub_config).unwrap();
 //!     // subscribe to the topic
 //!     gossipsub.subscribe(&topic);
 //!     // create the swarm (use an executor in a real example)
@@ -156,18 +156,64 @@ mod types;
 
 mod rpc_proto;
 
-pub use self::behaviour::{Gossipsub, GossipsubEvent, MessageAuthenticity};
-pub use self::transform::{DataTransform, IdentityTransform};
-
-pub use self::config::{GossipsubConfig, GossipsubConfigBuilder, GossipsubVersion, ValidationMode};
+pub use self::behaviour::{Behaviour, Event, MessageAuthenticity};
+pub use self::config::{Config, ConfigBuilder, ValidationMode, Version};
+pub use self::error::{HandlerError, PublishError, SubscriptionError, ValidationError};
 pub use self::peer_score::{
     score_parameter_decay, score_parameter_decay_with_base, PeerScoreParams, PeerScoreThresholds,
     TopicScoreParams,
 };
 pub use self::topic::{Hasher, Topic, TopicHash};
-pub use self::types::{
-    FastMessageId, GossipsubMessage, GossipsubRpc, MessageAcceptance, MessageId,
-    RawGossipsubMessage,
-};
+pub use self::transform::{DataTransform, IdentityTransform};
+pub use self::types::{FastMessageId, Message, MessageAcceptance, MessageId, RawMessage, Rpc};
+
+#[deprecated(
+    since = "0.44.0",
+    note = "Use `Behaviour` instead of `Gossipsub` for Network Behaviour, i.e. `libp2p::gossipsub::Behaviour"
+)]
+pub type Gossipsub = Behaviour;
+
+#[deprecated(
+    since = "0.44.0",
+    note = "Use re-exports that omit `Gossipsub` prefix, i.e. `libp2p::gossipsub::Event"
+)]
+pub type GossipsubEvent = Event;
+
+#[deprecated(
+    since = "0.44.0",
+    note = "Use re-exports that omit `Gossipsub` prefix, i.e. `libp2p::gossipsub::Config"
+)]
+pub type GossipsubConfig = Config;
+
+#[deprecated(
+    since = "0.44.0",
+    note = "Use re-exports that omit `Gossipsub` prefix, i.e. `libp2p::gossipsub::Message"
+)]
+pub type GossipsubMessage = Message;
+
+#[deprecated(
+    since = "0.44.0",
+    note = "Use re-exports that omit `Gossipsub` prefix, i.e. `libp2p::gossipsub::Rpc"
+)]
+pub type GossipsubRpc = Rpc;
+
+#[deprecated(
+    since = "0.44.0",
+    note = "Use re-exports that omit `Gossipsub` infix, i.e. `libp2p::gossipsub::RawMessage"
+)]
+pub type RawGossipsubMessage = RawMessage;
+
+#[deprecated(
+    since = "0.44.0",
+    note = "Use re-exports that omit `Gossipsub` prefix, i.e. `libp2p::gossipsub::ConfigBuilder"
+)]
+pub type GossipsubConfigBuilder = ConfigBuilder;
+
+#[deprecated(
+    since = "0.44.0",
+    note = "Use re-exports that omit `Gossipsub` prefix, i.e. `libp2p::gossipsub::Version"
+)]
+pub type GossipsubVersion = Version;
+
 pub type IdentTopic = Topic<self::topic::IdentityHash>;
 pub type Sha256Topic = Topic<self::topic::Sha256Hash>;
