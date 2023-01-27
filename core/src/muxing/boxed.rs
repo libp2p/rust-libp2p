@@ -13,6 +13,12 @@ pub struct StreamMuxerBox {
     inner: Pin<Box<dyn StreamMuxer<Substream = SubstreamBox, Error = io::Error> + Send>>,
 }
 
+impl fmt::Debug for StreamMuxerBox {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("StreamMuxerBox").finish_non_exhaustive()
+    }
+}
+
 /// Abstract type for asynchronous reading and writing.
 ///
 /// A [`SubstreamBox`] erases the concrete type it is given and only retains its `AsyncRead`

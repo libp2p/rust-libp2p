@@ -322,7 +322,7 @@ fn handle_outbound_event(
     peer_id: PeerId,
     discovered_peers: &mut HashMap<(PeerId, Namespace), Vec<Multiaddr>>,
     expiring_registrations: &mut FuturesUnordered<BoxFuture<'static, (PeerId, Namespace)>>,
-) -> Vec<NetworkBehaviourAction<Event, InEvent<outbound::OpenInfo, Void, Void>>> {
+) -> Vec<NetworkBehaviourAction<Event, THandlerInEvent<Behaviour>>> {
     match event {
         outbound::OutEvent::Registered { namespace, ttl } => {
             vec![NetworkBehaviourAction::GenerateEvent(Event::Registered {

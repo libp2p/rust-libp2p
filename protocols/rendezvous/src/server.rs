@@ -202,7 +202,7 @@ fn handle_inbound_event(
     connection: ConnectionId,
     id: InboundSubstreamId,
     registrations: &mut Registrations,
-) -> Vec<NetworkBehaviourAction<Event, InEvent<(), inbound::InEvent, Void>>> {
+) -> Vec<NetworkBehaviourAction<Event, THandlerInEvent<Behaviour>>> {
     match event {
         // bad registration
         inbound::OutEvent::RegistrationRequested(registration)

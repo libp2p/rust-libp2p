@@ -577,6 +577,7 @@ pub struct ListenFailure<'a> {
     pub local_addr: &'a Multiaddr,
     pub send_back_addr: &'a Multiaddr,
     pub error: &'a ListenError,
+    pub connection_id: ConnectionId,
 }
 
 /// [`FromSwarm`] variant that informs the behaviour that a new listener was created.
@@ -703,10 +704,12 @@ impl<'a, Handler: IntoConnectionHandler> FromSwarm<'a, Handler> {
             FromSwarm::ListenFailure(ListenFailure {
                 local_addr,
                 send_back_addr,
+                connection_id,
                 error,
             }) => Some(FromSwarm::ListenFailure(ListenFailure {
                 local_addr,
                 send_back_addr,
+                connection_id,
                 error,
             })),
             FromSwarm::NewListener(NewListener { listener_id }) => {

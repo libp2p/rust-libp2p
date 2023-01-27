@@ -96,11 +96,14 @@ pub enum PendingConnectionError<TTransErr> {
     Aborted,
 
     /// The peer identity obtained on the connection did not
-    /// match the one that was expected or is the local one.
+    /// match the one that was expected.
     WrongPeerId {
         obtained: PeerId,
         endpoint: ConnectedPoint,
     },
+
+    /// The connection was dropped because it resolved to our own [`PeerId`].
+    LocalPeerId { endpoint: ConnectedPoint },
 }
 
 impl<T> PendingConnectionError<T> {
@@ -113,6 +116,9 @@ impl<T> PendingConnectionError<T> {
             PendingConnectionError::Aborted => PendingConnectionError::Aborted,
             PendingConnectionError::WrongPeerId { obtained, endpoint } => {
                 PendingConnectionError::WrongPeerId { obtained, endpoint }
+            }
+            PendingConnectionError::LocalPeerId { endpoint } => {
+                PendingConnectionError::LocalPeerId { endpoint }
             }
         }
     }
@@ -140,6 +146,9 @@ where
                     "Pending connection: Unexpected peer ID {obtained} at {endpoint:?}."
                 )
             }
+            PendingConnectionError::LocalPeerId { endpoint } => {
+                write!(f, "Pending connection: Local peer ID at {endpoint:?}.")
+            }
         }
     }
 }
@@ -152,6 +161,7 @@ where
         match self {
             PendingConnectionError::Transport(_) => None,
             PendingConnectionError::WrongPeerId { .. } => None,
+            PendingConnectionError::LocalPeerId { .. } => None,
             PendingConnectionError::Aborted => None,
             PendingConnectionError::ConnectionLimit(..) => None,
         }

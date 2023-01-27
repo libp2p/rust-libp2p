@@ -276,64 +276,51 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
 
     // Build the list of statements to put in the body of `on_swarm_event()`
     // for the `FromSwarm::DialFailure` variant.
-    let on_dial_failure_stmts = {
-        data_struct
-            .fields
-            .iter()
-            .enumerate()
-            .map(|(enum_n, field)| {
-                let inject = match field.ident {
-                    Some(ref i) => quote! {
-                    self.#i.on_swarm_event(#from_swarm::DialFailure(#dial_failure {
-                            peer_id,
-                            connection_id,
-                            error,
-                        }));
-                    },
-                    None => quote! {
-                    self.#enum_n.on_swarm_event(#from_swarm::DialFailure(#dial_failure {
-                            peer_id,
-                            connection_id,
-                            error,
-                        }));
-                    },
-                };
-                quote! {
-                    #inject;
-                }
-            })
-    };
+    let on_dial_failure_stmts = data_struct
+        .fields
+        .iter()
+        .enumerate()
+        .map(|(enum_n, field)| match field.ident {
+            Some(ref i) => quote! {
+                self.#i.on_swarm_event(#from_swarm::DialFailure(#dial_failure {
+                    peer_id,
+                    connection_id,
+                    error,
+                }));
+            },
+            None => quote! {
+                self.#enum_n.on_swarm_event(#from_swarm::DialFailure(#dial_failure {
+                    peer_id,
+                    connection_id,
+                    error,
+                }));
+            },
+        });
 
     // Build the list of statements to put in the body of `on_swarm_event()`
     // for the `FromSwarm::ListenFailure` variant.
-    let on_listen_failure_stmts = {
-        data_struct
-            .fields
-            .iter()
-            .enumerate()
-            .map(|(enum_n, field)| {
-                let inject = match field.ident {
-                    Some(ref i) => quote! {
-                    self.#i.on_swarm_event(#from_swarm::ListenFailure(#listen_failure {
-                            local_addr,
-                            send_back_addr,
-                            error
-                        }));
-                    },
-                    None => quote! {
-                    self.#enum_n.on_swarm_event(#from_swarm::ListenFailure(#listen_failure {
-                            local_addr,
-                            send_back_addr,
-                            error
-                        }));
-                    },
-                };
-
-                quote! {
-                    #inject;
-                }
-            })
-    };
+    let on_listen_failure_stmts = data_struct
+        .fields
+        .iter()
+        .enumerate()
+        .map(|(enum_n, field)| match field.ident {
+            Some(ref i) => quote! {
+                self.#i.on_swarm_event(#from_swarm::ListenFailure(#listen_failure {
+                    local_addr,
+                    send_back_addr,
+                    connection_id,
+                    error
+                }));
+            },
+            None => quote! {
+                self.#enum_n.on_swarm_event(#from_swarm::ListenFailure(#listen_failure {
+                    local_addr,
+                    send_back_addr,
+                    connection_id,
+                    error
+                }));
+            },
+        });
 
     // Build the list of statements to put in the body of `on_swarm_event()`
     // for the `FromSwarm::NewListener` variant.
@@ -784,7 +771,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                         #dial_failure { peer_id, connection_id, error })
                     => { #(#on_dial_failure_stmts)* }
                     #from_swarm::ListenFailure(
-                        #listen_failure { local_addr, send_back_addr, error })
+                        #listen_failure { local_addr, send_back_addr, connection_id, error })
                     => { #(#on_listen_failure_stmts)* }
                     #from_swarm::NewListener(
                         #new_listener { listener_id })

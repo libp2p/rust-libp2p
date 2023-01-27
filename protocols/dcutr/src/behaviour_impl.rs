@@ -82,6 +82,8 @@ pub struct Behaviour {
 
     direct_to_relayed_connections: HashMap<ConnectionId, ConnectionId>,
 
+    /// Indexed by the [`ConnectionId`] of the relayed connection and
+    /// the [`PeerId`] we are trying to establish a direct connection to.
     outgoing_direct_connection_attempts: HashMap<(ConnectionId, PeerId), u8>,
 }
 
@@ -397,7 +399,7 @@ impl NetworkBehaviour for Behaviour {
                     .insert(maybe_direct_connection_id, relayed_connection_id);
                 *self
                     .outgoing_direct_connection_attempts
-                    .entry((maybe_direct_connection_id, event_source))
+                    .entry((relayed_connection_id, event_source))
                     .or_default() += 1;
                 self.queued_events
                     .push_back(NetworkBehaviourAction::Dial { opts });
