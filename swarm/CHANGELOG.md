@@ -1,6 +1,6 @@
 # 0.42.0 [unreleased]
 
-- Add `And` struct that combines two `NetworkBehaviour` implementations. Helfpful for when one wants
+- Add `And` struct that combines two `NetworkBehaviour` implementations. Helpful for when one wants
   just a simple composition of two `NetworkBehaviour`, no need to create a new struct and derive `NetworkBehaviour`.
   One other use-case is when wanting to either enable two `NetworkBehaviour`s or disable both, but never enable one but disable the other.
   i.e. `Toggle<And<BehaviourA, BehaviourB>>`. See [PR 3366]
