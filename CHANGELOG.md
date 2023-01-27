@@ -55,6 +55,8 @@
 
 - Bump MSRV to 1.65.0.
 
+- Introduce `ed25519` feature. See [PR 3350].
+
 - Update individual crates.
     - Update to [`libp2p-dcutr` `v0.9.0`](protocols/dcutr/CHANGELOG.md#090).
 
@@ -95,6 +97,7 @@
     - Update to [`libp2p-core` `v0.39.0`](core/CHANGELOG.md#0390).
 
 [PR 3191]: https://github.com/libp2p/rust-libp2p/pull/3191
+[PR 3350]: https://github.com/libp2p/rust-libp2p/pull/3350
 
 # 0.50.0
 

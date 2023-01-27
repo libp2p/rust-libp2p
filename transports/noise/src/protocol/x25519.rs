@@ -28,7 +28,8 @@
 use crate::{NoiseConfig, NoiseError, Protocol, ProtocolParams};
 use curve25519_dalek::edwards::CompressedEdwardsY;
 use libp2p_core::UpgradeInfo;
-use libp2p_core::{identity, identity::ed25519};
+use libp2p_identity as identity;
+use libp2p_identity::ed25519;
 use once_cell::sync::Lazy;
 use rand::Rng;
 use sha2::{Digest, Sha512};

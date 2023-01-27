@@ -55,6 +55,7 @@ pub mod identity {
     pub use libp2p_identity::Keypair;
     pub use libp2p_identity::PublicKey;
 
+    #[cfg(feature = "ecdsa")]
     pub mod ed25519 {
         pub use libp2p_identity::ed25519::Keypair;
         pub use libp2p_identity::ed25519::PublicKey;
