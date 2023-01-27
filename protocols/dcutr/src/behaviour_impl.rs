@@ -164,23 +164,28 @@ impl Behaviour {
             ..
         }: DialFailure,
     ) {
-        let peer_id = match peer_id {
-            None => return,
-            Some(peer_id) => peer_id,
+        let peer_id = if let Some(peer_id) = peer_id {
+            peer_id
+        } else {
+            return;
         };
-        let attempt = match self
-            .outgoing_direct_connection_attempts
-            .remove(&(failed_direct_connection, peer_id))
-        {
-            None => return,
-            Some(attempt) => attempt,
-        };
-        let relayed_connection_id = match self
+
+        let relayed_connection_id = if let Some(relayed_connection_id) = self
             .direct_to_relayed_connections
             .get(&failed_direct_connection)
         {
-            None => return,
-            Some(relayed_connection_id) => *relayed_connection_id,
+            *relayed_connection_id
+        } else {
+            return;
+        };
+
+        let attempt = if let Some(attempt) = self
+            .outgoing_direct_connection_attempts
+            .get(&(relayed_connection_id, peer_id))
+        {
+            *attempt
+        } else {
+            return;
         };
 
         if attempt < MAX_NUMBER_OF_UPGRADE_ATTEMPTS {
@@ -192,7 +197,7 @@ impl Behaviour {
                         attempt: attempt + 1,
                         obs_addrs: self.observed_addreses(),
                     }),
-                });
+                })
         } else {
             self.queued_events.extend([
                 NetworkBehaviourAction::NotifyHandler {

@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use std::{
-    cmp::max,
+    cmp::{max, Ordering},
     collections::HashSet,
     collections::VecDeque,
     collections::{BTreeSet, HashMap},
@@ -2223,7 +2223,7 @@ where
                     let score_p1 = *scores.get(p1).unwrap_or(&0.0);
                     let score_p2 = *scores.get(p2).unwrap_or(&0.0);
 
-                    score_p1.partial_cmp(&score_p2).unwrap_or(Equal)
+                    score_p1.partial_cmp(&score_p2).unwrap_or(Ordering::Equal)
                 });
                 // shuffle everything except the last retain_scores many peers (the best ones)
                 shuffled[..peers.len() - self.config.retain_scores()].shuffle(&mut rng);
@@ -3657,7 +3657,7 @@ fn validate_config(
     Ok(())
 }
 
-impl<C: DataTransform, F: TopicSubscriptionFilter> Debug for Gossipsub<C, F> {
+impl<C: DataTransform, F: TopicSubscriptionFilter> fmt::Debug for Gossipsub<C, F> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Gossipsub")
             .field("config", &self.config)
@@ -3675,7 +3675,7 @@ impl<C: DataTransform, F: TopicSubscriptionFilter> Debug for Gossipsub<C, F> {
     }
 }
 
-impl Debug for PublishConfig {
+impl fmt::Debug for PublishConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             PublishConfig::Signing { author, .. } => {

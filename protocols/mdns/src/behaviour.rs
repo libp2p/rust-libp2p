@@ -214,6 +214,15 @@ where
         Ok(dummy::ConnectionHandler)
     }
 
+    fn on_connection_handler_event(
+        &mut self,
+        _: PeerId,
+        _: ConnectionId,
+        ev: THandlerOutEvent<Self>,
+    ) {
+        void::unreachable(ev)
+    }
+
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
         self.listen_addresses.on_swarm_event(&event);
 
@@ -244,15 +253,6 @@ where
             | FromSwarm::NewExternalAddr(_)
             | FromSwarm::ExpiredExternalAddr(_) => {}
         }
-    }
-
-    fn on_connection_handler_event(
-        &mut self,
-        _: PeerId,
-        _: ConnectionId,
-        ev: THandlerOutEvent<Self>,
-    ) {
-        void::unreachable(ev)
     }
 
     fn poll(

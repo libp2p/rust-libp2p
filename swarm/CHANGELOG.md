@@ -71,17 +71,6 @@
 
 - Remove `ConnectionId::new`. Manually creating `ConnectionId`s is now unsupported. See [PR 3327].
 
-- Remove `PendingConnectionError:::IO` variant.
-  This was never constructed.
-  See [PR 3373].
-
-- Remove `DialError::ConnectionIo` variant.
-  This was never constructed.
-  See [PR 3374].
-
-- Introduce `ListenError` and use it within `SwarmEvent::IncomingConnectionError`.
-  See [PR 3375].
-
 [PR 3364]: https://github.com/libp2p/rust-libp2p/pull/3364
 [PR 3364]: https://github.com/libp2p/rust-libp2p/pull/3364
 [PR 3170]: https://github.com/libp2p/rust-libp2p/pull/3170

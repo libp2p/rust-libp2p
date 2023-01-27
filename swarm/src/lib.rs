@@ -348,19 +348,6 @@ impl<TBehaviour> Swarm<TBehaviour>
 where
     TBehaviour: NetworkBehaviour,
 {
-    /// Builds a new `Swarm`.
-    #[deprecated(
-        since = "0.41.0",
-        note = "This constructor is considered ambiguous regarding the executor. Use one of the new, executor-specific constructors or `Swarm::with_threadpool_executor` for the same behaviour."
-    )]
-    pub fn new(
-        transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
-        behaviour: TBehaviour,
-        local_peer_id: PeerId,
-    ) -> Self {
-        Self::with_threadpool_executor(transport, behaviour, local_peer_id)
-    }
-
     /// Builds a new `Swarm` with a provided executor.
     pub fn with_executor(
         transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
@@ -506,7 +493,7 @@ where
     /// # use libp2p_core::transport::dummy::DummyTransport;
     /// # use libp2p_swarm::dummy;
     /// #
-    /// let mut swarm = Swarm::new(
+    /// let mut swarm = Swarm::without_executor(
     ///     DummyTransport::new().boxed(),
     ///     dummy::Behaviour,
     ///     PeerId::random(),
@@ -1761,7 +1748,7 @@ impl fmt::Display for DialError {
             ),
             DialError::Banned => write!(f, "Dial error: peer is banned."),
             DialError::DialPeerConditionFalse(c) => {
-                write!(f, "Dial error: condition {c:?} for dialing peer was false.",)
+                write!(f, "Dial error: condition {c:?} for dialing peer was false.")
             }
             DialError::Aborted => write!(
                 f,
@@ -1772,7 +1759,7 @@ impl fmt::Display for DialError {
             }
             DialError::WrongPeerId { obtained, endpoint } => write!(
                 f,
-                "Dial error: Unexpected peer ID {obtained} at {endpoint:?}.",
+                "Dial error: Unexpected peer ID {obtained} at {endpoint:?}."
             ),
             DialError::Transport(errors) => {
                 write!(f, "Failed to negotiate transport protocol(s): [")?;

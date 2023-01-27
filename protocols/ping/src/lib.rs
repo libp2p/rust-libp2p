@@ -140,6 +140,15 @@ impl NetworkBehaviour for Behaviour {
         Ok(Handler::new(self.config.clone()))
     }
 
+    fn on_connection_handler_event(
+        &mut self,
+        peer: PeerId,
+        _: ConnectionId,
+        result: THandlerOutEvent<Self>,
+    ) {
+        self.events.push_front(Event { peer, result })
+    }
+
     fn on_swarm_event(
         &mut self,
         event: libp2p_swarm::behaviour::FromSwarm<Self::ConnectionHandler>,
@@ -158,15 +167,6 @@ impl NetworkBehaviour for Behaviour {
             | FromSwarm::NewExternalAddr(_)
             | FromSwarm::ExpiredExternalAddr(_) => {}
         }
-    }
-
-    fn on_connection_handler_event(
-        &mut self,
-        peer: PeerId,
-        _: ConnectionId,
-        result: THandlerOutEvent<Self>,
-    ) {
-        self.events.push_front(Event { peer, result })
     }
 
     fn poll(

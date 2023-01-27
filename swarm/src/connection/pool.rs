@@ -19,6 +19,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 use crate::connection::{Connection, ConnectionId, PendingPoint};
+#[allow(deprecated)]
+use crate::IntoConnectionHandler;
 use crate::{
     connection::{
         Connected, ConnectionError, ConnectionLimit, IncomingInfo, PendingConnectionError,
@@ -511,7 +513,7 @@ where
         obtained_peer_id: PeerId,
         endpoint: &ConnectedPoint,
         muxer: StreamMuxerBox,
-        handler: <THandler as crate::IntoConnectionHandler>::Handler,
+        handler: <THandler as IntoConnectionHandler>::Handler,
     ) {
         let conns = self.established.entry(obtained_peer_id).or_default();
         self.counters.inc_established(endpoint);

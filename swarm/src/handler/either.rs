@@ -19,11 +19,112 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::handler::{
-    ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, KeepAlive, SubstreamProtocol,
+    ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, FullyNegotiatedInbound,
+    InboundUpgradeSend, KeepAlive, ListenUpgradeError, SubstreamProtocol,
 };
 use crate::upgrade::SendWrapper;
+use crate::ConnectionHandlerUpgrErr;
 use either::Either;
+use libp2p_core::UpgradeError;
 use std::task::{Context, Poll};
+
+impl<S1OOI, S2OOI, S1OP, S2OP>
+    FullyNegotiatedInbound<Either<SendWrapper<S1OP>, SendWrapper<S2OP>>, Either<S1OOI, S2OOI>>
+where
+    S1OP: InboundUpgradeSend,
+    S2OP: InboundUpgradeSend,
+    S1OOI: Send + 'static,
+    S2OOI: Send + 'static,
+{
+    pub(crate) fn transpose(
+        self,
+    ) -> Either<FullyNegotiatedInbound<S1OP, S1OOI>, FullyNegotiatedInbound<S2OP, S2OOI>> {
+        match self {
+            FullyNegotiatedInbound {
+                protocol: future::Either::Left(protocol),
+                info: Either::Left(info),
+            } => Either::Left(FullyNegotiatedInbound { protocol, info }),
+            FullyNegotiatedInbound {
+                protocol: future::Either::Right(protocol),
+                info: Either::Right(info),
+            } => Either::Right(FullyNegotiatedInbound { protocol, info }),
+            _ => panic!("wrong API usage: the protocol doesn't match the upgrade info"),
+        }
+    }
+}
+
+impl<S1OOI, S2OOI, S1OP, S2OP>
+    ListenUpgradeError<Either<S1OOI, S2OOI>, Either<SendWrapper<S1OP>, SendWrapper<S2OP>>>
+where
+    S1OP: InboundUpgradeSend,
+    S2OP: InboundUpgradeSend,
+    S1OOI: Send + 'static,
+    S2OOI: Send + 'static,
+{
+    pub(crate) fn transpose(
+        self,
+    ) -> Either<ListenUpgradeError<S1OOI, S1OP>, ListenUpgradeError<S2OOI, S2OP>> {
+        match self {
+            ListenUpgradeError {
+                info: Either::Left(info),
+                error: ConnectionHandlerUpgrErr::Timer,
+            } => Either::Left(ListenUpgradeError {
+                info,
+                error: ConnectionHandlerUpgrErr::Timer,
+            }),
+            ListenUpgradeError {
+                info: Either::Left(info),
+                error: ConnectionHandlerUpgrErr::Timeout,
+            } => Either::Left(ListenUpgradeError {
+                info,
+                error: ConnectionHandlerUpgrErr::Timeout,
+            }),
+            ListenUpgradeError {
+                info: Either::Left(info),
+                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(err)),
+            } => Either::Left(ListenUpgradeError {
+                info,
+                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(err)),
+            }),
+            ListenUpgradeError {
+                info: Either::Left(info),
+                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(Either::Left(err))),
+            } => Either::Left(ListenUpgradeError {
+                info,
+                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(err)),
+            }),
+            ListenUpgradeError {
+                info: Either::Right(info),
+                error: ConnectionHandlerUpgrErr::Timer,
+            } => Either::Right(ListenUpgradeError {
+                info,
+                error: ConnectionHandlerUpgrErr::Timer,
+            }),
+            ListenUpgradeError {
+                info: Either::Right(info),
+                error: ConnectionHandlerUpgrErr::Timeout,
+            } => Either::Right(ListenUpgradeError {
+                info,
+                error: ConnectionHandlerUpgrErr::Timeout,
+            }),
+            ListenUpgradeError {
+                info: Either::Right(info),
+                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(err)),
+            } => Either::Right(ListenUpgradeError {
+                info,
+                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(err)),
+            }),
+            ListenUpgradeError {
+                info: Either::Right(info),
+                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(Either::Right(err))),
+            } => Either::Right(ListenUpgradeError {
+                info,
+                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(err)),
+            }),
+            _ => panic!("Wrong API usage; the upgrade error doesn't match the outbound open info"),
+        }
+    }
+}
 
 /// Implementation of a [`ConnectionHandler`] that represents either of two [`ConnectionHandler`]
 /// implementations.
