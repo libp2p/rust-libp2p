@@ -237,6 +237,42 @@ impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = Handler;
     type OutEvent = Event;
 
+    fn handle_established_inbound_connection(
+        &mut self,
+        peer: PeerId,
+        _: ConnectionId,
+        _: &Multiaddr,
+        remote_addr: &Multiaddr,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        Ok(Handler::new(
+            self.config.initial_delay,
+            self.config.interval,
+            peer,
+            self.config.local_public_key.clone(),
+            self.config.protocol_version.clone(),
+            self.config.agent_version.clone(),
+            remote_addr.clone(),
+        ))
+    }
+
+    fn handle_established_outbound_connection(
+        &mut self,
+        peer: PeerId,
+        addr: &Multiaddr,
+        _: Endpoint,
+        _: ConnectionId,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        Ok(Handler::new(
+            self.config.initial_delay,
+            self.config.interval,
+            peer,
+            self.config.local_public_key.clone(),
+            self.config.protocol_version.clone(),
+            self.config.agent_version.clone(),
+            addr.clone(), // TODO: This is weird? That is the public address we dialed, shouldn't need to tell the other party?
+        ))
+    }
+
     fn on_connection_handler_event(
         &mut self,
         peer_id: PeerId,
@@ -342,8 +378,19 @@ impl NetworkBehaviour for Behaviour {
         }
     }
 
-    fn addresses_of_peer(&mut self, peer: &PeerId) -> Vec<Multiaddr> {
-        self.discovered_peers.get(peer)
+    fn handle_pending_outbound_connection(
+        &mut self,
+        maybe_peer: Option<PeerId>,
+        _: &[Multiaddr],
+        _: Endpoint,
+        _: ConnectionId,
+    ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
+        let peer = match maybe_peer {
+            None => return Ok(vec![]),
+            Some(peer) => peer,
+        };
+
+        Ok(self.discovered_peers.get(&peer))
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
@@ -415,42 +462,6 @@ impl NetworkBehaviour for Behaviour {
             | FromSwarm::NewExternalAddr(_)
             | FromSwarm::ExpiredExternalAddr(_) => {}
         }
-    }
-
-    fn handle_established_inbound_connection(
-        &mut self,
-        peer: PeerId,
-        _: ConnectionId,
-        _: &Multiaddr,
-        remote_addr: &Multiaddr,
-    ) -> Result<THandler<Self>, ConnectionDenied> {
-        Ok(Handler::new(
-            self.config.initial_delay,
-            self.config.interval,
-            peer,
-            self.config.local_public_key.clone(),
-            self.config.protocol_version.clone(),
-            self.config.agent_version.clone(),
-            remote_addr.clone(),
-        ))
-    }
-
-    fn handle_established_outbound_connection(
-        &mut self,
-        peer: PeerId,
-        addr: &Multiaddr,
-        _: Endpoint,
-        _: ConnectionId,
-    ) -> Result<THandler<Self>, ConnectionDenied> {
-        Ok(Handler::new(
-            self.config.initial_delay,
-            self.config.interval,
-            peer,
-            self.config.local_public_key.clone(),
-            self.config.protocol_version.clone(),
-            self.config.agent_version.clone(),
-            addr.clone(), // TODO: This is weird? That is the public address we dialed, shouldn't need to tell the other party?
-        ))
     }
 }
 

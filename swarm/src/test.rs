@@ -74,12 +74,39 @@ where
     type ConnectionHandler = THandler;
     type OutEvent = TOutEvent;
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
-        self.handler_proto.clone()
+    fn handle_established_inbound_connection(
+        &mut self,
+        _: PeerId,
+        _: ConnectionId,
+        _: &Multiaddr,
+        _: &Multiaddr,
+    ) -> Result<THandler, ConnectionDenied> {
+        Ok(self.handler_proto.clone())
     }
 
-    fn addresses_of_peer(&mut self, p: &PeerId) -> Vec<Multiaddr> {
-        self.addresses.get(p).map_or(Vec::new(), |v| v.clone())
+    fn handle_pending_outbound_connection(
+        &mut self,
+        maybe_peer: Option<PeerId>,
+        _: &[Multiaddr],
+        _: Endpoint,
+        _: ConnectionId,
+    ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
+        let p = match maybe_peer {
+            None => return Ok(vec![]),
+            Some(peer) => peer,
+        };
+
+        Ok(self.addresses.get(&p).map_or(Vec::new(), |v| v.clone()))
+    }
+
+    fn handle_established_outbound_connection(
+        &mut self,
+        _: PeerId,
+        _: &Multiaddr,
+        _: Endpoint,
+        _: ConnectionId,
+    ) -> Result<THandler, ConnectionDenied> {
+        Ok(self.handler_proto.clone())
     }
 
     fn poll(
