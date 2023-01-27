@@ -21,7 +21,7 @@
 
 use crate::connection::{Connection, ConnectionId, PendingPoint};
 use crate::{
-    behaviour::{THandlerInEvent, THandlerOutEvent},
+    behaviour::THandlerInEvent,
     connection::{
         Connected, ConnectionError, ConnectionLimit, IncomingInfo, PendingConnectionError,
         PendingInboundConnectionError, PendingOutboundConnectionError,
@@ -101,9 +101,6 @@ where
 
     /// The pending connections that are currently being negotiated.
     pending: HashMap<ConnectionId, PendingConnection<THandler>>,
-
-    /// Next available identifier for a new connection / task.
-    next_connection_id: ConnectionId,
 
     /// Size of the task command buffer (per task).
     task_command_buffer_size: usize,
@@ -297,7 +294,7 @@ pub enum PoolEvent<THandler: IntoConnectionHandler> {
         id: ConnectionId,
         peer_id: PeerId,
         /// The produced event.
-        event: THandlerOutEvent<THandler>,
+        event: <<THandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent,
     },
 
     /// The connection to a node has changed its address.
@@ -327,7 +324,6 @@ where
             counters: ConnectionCounters::new(limits),
             established: Default::default(),
             pending: Default::default(),
-            next_connection_id: ConnectionId::new(0),
             task_command_buffer_size: config.task_command_buffer_size,
             dial_concurrency_factor: config.dial_concurrency_factor,
             substream_upgrade_protocol_override: config.substream_upgrade_protocol_override,
@@ -414,13 +410,6 @@ where
         self.established.keys()
     }
 
-    fn next_connection_id(&mut self) -> ConnectionId {
-        let connection_id = self.next_connection_id;
-        self.next_connection_id = self.next_connection_id + 1;
-
-        connection_id
-    }
-
     fn spawn(&mut self, task: BoxFuture<'static, ()>) {
         self.executor.spawn(task)
     }
@@ -460,7 +449,7 @@ where
             dial_concurrency_factor_override.unwrap_or(self.dial_concurrency_factor),
         );
 
-        let connection_id = self.next_connection_id();
+        let connection_id = ConnectionId::next();
 
         let (abort_notifier, abort_receiver) = oneshot::channel();
 
@@ -510,7 +499,7 @@ where
             return Err((limit, handler));
         }
 
-        let connection_id = self.next_connection_id();
+        let connection_id = ConnectionId::next();
 
         let (abort_notifier, abort_receiver) = oneshot::channel();
 
@@ -697,8 +686,7 @@ where
                         // Check peer is not local peer.
                         .and_then(|()| {
                             if self.local_id == obtained_peer_id {
-                                Err(PendingConnectionError::WrongPeerId {
-                                    obtained: obtained_peer_id,
+                                Err(PendingConnectionError::LocalPeerId {
                                     endpoint: endpoint.clone(),
                                 })
                             } else {

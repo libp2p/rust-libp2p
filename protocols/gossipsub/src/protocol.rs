@@ -21,12 +21,12 @@
 use crate::config::{GossipsubVersion, ValidationMode};
 use crate::error::{GossipsubHandlerError, ValidationError};
 use crate::handler::HandlerEvent;
-use crate::rpc_proto;
 use crate::topic::TopicHash;
 use crate::types::{
     GossipsubControlAction, GossipsubRpc, GossipsubSubscription, GossipsubSubscriptionAction,
     MessageId, PeerInfo, PeerKind, RawGossipsubMessage,
 };
+use crate::{rpc_proto, GossipsubConfig};
 use asynchronous_codec::{Decoder, Encoder, Framed};
 use byteorder::{BigEndian, ByteOrder};
 use bytes::BytesMut;
@@ -37,7 +37,7 @@ use libp2p_core::{
 };
 use log::{debug, warn};
 use prost::Message as ProtobufMessage;
-use std::{borrow::Cow, pin::Pin};
+use std::pin::Pin;
 use unsigned_varint::codec;
 
 pub(crate) const SIGNING_PREFIX: &[u8] = b"libp2p-pubsub:";
@@ -57,27 +57,33 @@ impl ProtocolConfig {
     /// Builds a new [`ProtocolConfig`].
     ///
     /// Sets the maximum gossip transmission size.
-    pub fn new(
-        id: Cow<'static, str>,
-        custom_id_peer_kind: Option<GossipsubVersion>,
-        max_transmit_size: usize,
-        validation_mode: ValidationMode,
-        support_floodsub: bool,
-    ) -> ProtocolConfig {
-        let protocol_ids = match custom_id_peer_kind {
+    pub fn new(gossipsub_config: &GossipsubConfig) -> ProtocolConfig {
+        let protocol_ids = match gossipsub_config.custom_id_version() {
             Some(v) => match v {
-                GossipsubVersion::V1_0 => vec![ProtocolId::new(id, PeerKind::Gossipsub, false)],
-                GossipsubVersion::V1_1 => vec![ProtocolId::new(id, PeerKind::Gossipsubv1_1, false)],
+                GossipsubVersion::V1_0 => vec![ProtocolId::new(
+                    gossipsub_config.protocol_id(),
+                    PeerKind::Gossipsub,
+                    false,
+                )],
+                GossipsubVersion::V1_1 => vec![ProtocolId::new(
+                    gossipsub_config.protocol_id(),
+                    PeerKind::Gossipsubv1_1,
+                    false,
+                )],
             },
             None => {
                 let mut protocol_ids = vec![
-                    ProtocolId::new(id.clone(), PeerKind::Gossipsubv1_1, true),
-                    ProtocolId::new(id, PeerKind::Gossipsub, true),
+                    ProtocolId::new(
+                        gossipsub_config.protocol_id(),
+                        PeerKind::Gossipsubv1_1,
+                        true,
+                    ),
+                    ProtocolId::new(gossipsub_config.protocol_id(), PeerKind::Gossipsub, true),
                 ];
 
                 // add floodsub support if enabled.
-                if support_floodsub {
-                    protocol_ids.push(ProtocolId::new(Cow::from(""), PeerKind::Floodsub, false));
+                if gossipsub_config.support_floodsub() {
+                    protocol_ids.push(ProtocolId::new("", PeerKind::Floodsub, false));
                 }
 
                 protocol_ids
@@ -86,8 +92,8 @@ impl ProtocolConfig {
 
         ProtocolConfig {
             protocol_ids,
-            max_transmit_size,
-            validation_mode,
+            max_transmit_size: gossipsub_config.max_transmit_size(),
+            validation_mode: gossipsub_config.validation_mode().clone(),
         }
     }
 }
@@ -103,15 +109,15 @@ pub struct ProtocolId {
 
 /// An RPC protocol ID.
 impl ProtocolId {
-    pub fn new(id: Cow<'static, str>, kind: PeerKind, prefix: bool) -> Self {
+    pub fn new(id: &str, kind: PeerKind, prefix: bool) -> Self {
         let protocol_id = match kind {
             PeerKind::Gossipsubv1_1 => match prefix {
                 true => format!("/{}/{}", id, "1.1.0"),
-                false => format!("{id}"),
+                false => id.to_string(),
             },
             PeerKind::Gossipsub => match prefix {
                 true => format!("/{}/{}", id, "1.0.0"),
-                false => format!("{id}"),
+                false => id.to_string(),
             },
             PeerKind::Floodsub => format!("/{}/{}", "floodsub", "1.0.0"),
             // NOTE: This is used for informing the behaviour of unsupported peers. We do not

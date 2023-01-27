@@ -26,11 +26,10 @@ use crate::handler::{
     IntoConnectionHandler, KeepAlive, ListenUpgradeError, SubstreamProtocol,
 };
 use crate::upgrade::SendWrapper;
-use crate::{NetworkBehaviour, NetworkBehaviourAction, PollParameters};
+use crate::{NetworkBehaviour, NetworkBehaviourAction, PollParameters, THandlerOutEvent};
 use either::Either;
-use libp2p_core::{
-    either::EitherOutput, upgrade::DeniedUpgrade, ConnectedPoint, Multiaddr, PeerId,
-};
+use futures::future;
+use libp2p_core::{upgrade::DeniedUpgrade, ConnectedPoint, Multiaddr, PeerId};
 use std::{task::Context, task::Poll};
 
 /// Implementation of `NetworkBehaviour` that can be either in the disabled or enabled state.
@@ -95,7 +94,7 @@ where
         &mut self,
         peer_id: PeerId,
         connection_id: ConnectionId,
-        event: crate::THandlerOutEvent<Self>,
+        event: THandlerOutEvent<Self>,
     ) {
         if let Some(behaviour) = &mut self.inner {
             behaviour.on_connection_handler_event(peer_id, connection_id, event)
@@ -169,8 +168,8 @@ where
         >,
     ) {
         let out = match out {
-            EitherOutput::First(out) => out,
-            EitherOutput::Second(v) => void::unreachable(v),
+            future::Either::Left(out) => out,
+            future::Either::Right(v) => void::unreachable(v),
         };
 
         if let Either::Left(info) = info {

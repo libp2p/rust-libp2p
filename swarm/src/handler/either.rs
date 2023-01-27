@@ -20,12 +20,12 @@
 
 use crate::handler::{
     ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr,
-    DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound, InboundUpgradeSend,
-    IntoConnectionHandler, KeepAlive, ListenUpgradeError, OutboundUpgradeSend, SubstreamProtocol,
+    FullyNegotiatedInbound, InboundUpgradeSend, IntoConnectionHandler, KeepAlive,
+    ListenUpgradeError, SubstreamProtocol,
 };
 use crate::upgrade::SendWrapper;
 use either::Either;
-use libp2p_core::either::EitherOutput;
+use futures::future;
 use libp2p_core::upgrade::UpgradeError;
 use libp2p_core::{ConnectedPoint, PeerId};
 use std::task::{Context, Poll};
@@ -101,105 +101,13 @@ where
     ) -> Either<FullyNegotiatedInbound<LIP, LIOI>, FullyNegotiatedInbound<RIP, RIOI>> {
         match self {
             FullyNegotiatedInbound {
-                protocol: EitherOutput::First(protocol),
+                protocol: future::Either::Left(protocol),
                 info: Either::Left(info),
             } => Either::Left(FullyNegotiatedInbound { protocol, info }),
             FullyNegotiatedInbound {
-                protocol: EitherOutput::Second(protocol),
+                protocol: future::Either::Right(protocol),
                 info: Either::Right(info),
             } => Either::Right(FullyNegotiatedInbound { protocol, info }),
-            _ => unreachable!(),
-        }
-    }
-}
-
-impl<LOP, ROP, LOOI, ROOI>
-    FullyNegotiatedOutbound<Either<SendWrapper<LOP>, SendWrapper<ROP>>, Either<LOOI, ROOI>>
-where
-    LOP: OutboundUpgradeSend,
-    ROP: OutboundUpgradeSend,
-{
-    fn transpose(
-        self,
-    ) -> Either<FullyNegotiatedOutbound<LOP, LOOI>, FullyNegotiatedOutbound<ROP, ROOI>> {
-        match self {
-            FullyNegotiatedOutbound {
-                protocol: EitherOutput::First(protocol),
-                info: Either::Left(info),
-            } => Either::Left(FullyNegotiatedOutbound { protocol, info }),
-            FullyNegotiatedOutbound {
-                protocol: EitherOutput::Second(protocol),
-                info: Either::Right(info),
-            } => Either::Right(FullyNegotiatedOutbound { protocol, info }),
-            _ => unreachable!(),
-        }
-    }
-}
-
-impl<LOP, ROP, LOOI, ROOI>
-    DialUpgradeError<Either<LOOI, ROOI>, Either<SendWrapper<LOP>, SendWrapper<ROP>>>
-where
-    LOP: OutboundUpgradeSend,
-    ROP: OutboundUpgradeSend,
-{
-    fn transpose(self) -> Either<DialUpgradeError<LOOI, LOP>, DialUpgradeError<ROOI, ROP>> {
-        match self {
-            DialUpgradeError {
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(Either::Left(error))),
-                info: Either::Left(info),
-            } => Either::Left(DialUpgradeError {
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(error)),
-                info,
-            }),
-            DialUpgradeError {
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(Either::Right(error))),
-                info: Either::Right(info),
-            } => Either::Right(DialUpgradeError {
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(error)),
-                info,
-            }),
-            DialUpgradeError {
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(error)),
-                info: Either::Left(info),
-            } => Either::Left(DialUpgradeError {
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(error)),
-                info,
-            }),
-            DialUpgradeError {
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(error)),
-                info: Either::Right(info),
-            } => Either::Right(DialUpgradeError {
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(error)),
-                info,
-            }),
-            DialUpgradeError {
-                error: ConnectionHandlerUpgrErr::Timer,
-                info: Either::Left(info),
-            } => Either::Left(DialUpgradeError {
-                error: ConnectionHandlerUpgrErr::Timer,
-                info,
-            }),
-            DialUpgradeError {
-                error: ConnectionHandlerUpgrErr::Timer,
-                info: Either::Right(info),
-            } => Either::Right(DialUpgradeError {
-                error: ConnectionHandlerUpgrErr::Timer,
-                info,
-            }),
-            DialUpgradeError {
-                error: ConnectionHandlerUpgrErr::Timeout,
-                info: Either::Left(info),
-            } => Either::Left(DialUpgradeError {
-                error: ConnectionHandlerUpgrErr::Timeout,
-                info,
-            }),
-            DialUpgradeError {
-                error: ConnectionHandlerUpgrErr::Timeout,
-                info: Either::Right(info),
-            } => Either::Right(DialUpgradeError {
-                error: ConnectionHandlerUpgrErr::Timeout,
-                info,
-            }),
             _ => unreachable!(),
         }
     }
