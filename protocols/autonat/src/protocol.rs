@@ -138,15 +138,17 @@ impl DialRequest {
             PeerId::try_from(peer_id.to_vec())
                 .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid peer id"))?
         };
-        let addrs = {
-            let mut maddrs = vec![];
-            for addr in addrs.into_iter() {
-                let maddr = Multiaddr::try_from(addr.to_vec())
-                    .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?;
-                maddrs.push(maddr);
-            }
-            maddrs
-        };
+
+        let addrs = addrs
+            .into_iter()
+            .filter_map(|a| match Multiaddr::try_from(a.to_vec()) {
+                Ok(a) => Some(a),
+                Err(e) => {
+                    log::debug!("Unable to parse multiaddr: {e}");
+                    None
+                }
+            })
+            .collect();
         Ok(Self {
             peer_id,
             addresses: addrs,
@@ -300,6 +302,7 @@ impl DialResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use quick_protobuf::MessageWrite;
 
     #[test]
     fn test_request_encode_decode() {
@@ -335,5 +338,39 @@ mod tests {
         let bytes = response.clone().into_bytes();
         let response2 = DialResponse::from_bytes(&bytes).unwrap();
         assert_eq!(response, response2);
+    }
+
+    #[test]
+    fn test_skip_unparsable_multiaddr() {
+        let valid_multiaddr: Multiaddr = "/ip6/2001:db8::/tcp/1234".parse().unwrap();
+        let valid_multiaddr_bytes = valid_multiaddr.to_vec();
+
+        let invalid_multiaddr = {
+            let a = vec![255; 8];
+            assert!(Multiaddr::try_from(a.clone()).is_err());
+            a
+        };
+
+        let msg = proto::Message {
+            type_pb: Some(proto::MessageType::DIAL),
+            dial: Some(proto::Dial {
+                peer: Some(proto::PeerInfo {
+                    id: Some(Cow::from(PeerId::random().to_bytes())),
+                    addrs: vec![
+                        Cow::from(valid_multiaddr_bytes),
+                        Cow::from(invalid_multiaddr),
+                    ],
+                }),
+            }),
+            dialResponse: None,
+        };
+
+        let mut bytes = Vec::with_capacity(msg.get_size());
+        let mut writer = Writer::new(&mut bytes);
+        msg.write_message(&mut writer).expect("Encoding to succeed");
+
+        let request = DialRequest::from_bytes(&bytes).expect("not to fail");
+
+        assert_eq!(request.addresses, vec![valid_multiaddr])
     }
 }
