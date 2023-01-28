@@ -180,7 +180,7 @@ where
 
     let mut framed_io = FramedWrite::new(
         io,
-        prost_codec::Codec::<structs_proto::Identify>::new(MAX_MESSAGE_SIZE_BYTES),
+        quick_protobuf_codec::Codec::<structs_proto::Identify>::new(MAX_MESSAGE_SIZE_BYTES),
     );
 
     framed_io.send(message).await?;
@@ -197,7 +197,7 @@ where
 
     let info = FramedRead::new(
         socket,
-        prost_codec::Codec::<structs_proto::Identify>::new(MAX_MESSAGE_SIZE_BYTES),
+        quick_protobuf_codec::Codec::<structs_proto::Identify>::new(MAX_MESSAGE_SIZE_BYTES),
     )
     .next()
     .await
@@ -255,7 +255,7 @@ impl TryFrom<structs_proto::Identify> for Info {
 #[derive(Debug, Error)]
 pub enum UpgradeError {
     #[error(transparent)]
-    Codec(#[from] prost_codec::Error),
+    Codec(#[from] quick_protobuf_codec::Error),
     #[error("I/O interaction failed")]
     Io(#[from] io::Error),
     #[error("Stream closed")]

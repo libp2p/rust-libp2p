@@ -45,7 +45,7 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
     fn upgrade_inbound(self, substream: NegotiatedSubstream, _: Self::Info) -> Self::Future {
-        let mut substream = Framed::new(substream, prost_codec::Codec::new(MAX_MESSAGE_SIZE));
+        let mut substream = Framed::new(substream, quick_protobuf_codec::Codec::new(MAX_MESSAGE_SIZE));
 
         async move {
             let StopMessage {
@@ -84,8 +84,8 @@ pub enum UpgradeError {
     Fatal(#[from] FatalUpgradeError),
 }
 
-impl From<prost_codec::Error> for UpgradeError {
-    fn from(error: prost_codec::Error) -> Self {
+impl From<quick_protobuf_codec::Error> for UpgradeError {
+    fn from(error: quick_protobuf_codec::Error) -> Self {
         Self::Fatal(error.into())
     }
 }
@@ -93,7 +93,7 @@ impl From<prost_codec::Error> for UpgradeError {
 #[derive(Debug, Error)]
 pub enum FatalUpgradeError {
     #[error(transparent)]
-    Codec(#[from] prost_codec::Error),
+    Codec(#[from] quick_protobuf_codec::Error),
     #[error("Stream closed")]
     StreamClosed,
     #[error("Failed to parse response type field.")]
@@ -107,7 +107,7 @@ pub enum FatalUpgradeError {
 }
 
 pub struct Circuit {
-    substream: Framed<NegotiatedSubstream, prost_codec::Codec<StopMessage>>,
+    substream: Framed<NegotiatedSubstream, quick_protobuf_codec::Codec<StopMessage>>,
     src_peer_id: PeerId,
     limit: Option<protocol::Limit>,
 }
@@ -156,7 +156,7 @@ impl Circuit {
         self.send(msg).await.map_err(Into::into)
     }
 
-    async fn send(&mut self, msg: StopMessage) -> Result<(), prost_codec::Error> {
+    async fn send(&mut self, msg: StopMessage) -> Result<(), quick_protobuf_codec::Error> {
         self.substream.send(msg).await?;
         self.substream.flush().await?;
 

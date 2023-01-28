@@ -191,12 +191,12 @@ pub struct GossipsubCodec {
     /// Determines the level of validation performed on incoming messages.
     validation_mode: ValidationMode,
     /// The codec to handle common encoding/decoding of protobuf messages
-    codec: prost_codec::Codec<rpc_proto::Rpc>,
+    codec: quick_protobuf_codec::Codec<rpc_proto::Rpc>,
 }
 
 impl GossipsubCodec {
     pub fn new(length_codec: codec::UviBytes, validation_mode: ValidationMode) -> GossipsubCodec {
-        let codec = prost_codec::Codec::new(length_codec.max_len());
+        let codec = quick_protobuf_codec::Codec::new(length_codec.max_len());
         GossipsubCodec {
             validation_mode,
             codec,

@@ -106,7 +106,7 @@ pub enum HandlerError {
     #[error("Protocol negotiation failed.")]
     NegotiationProtocolError(ProtocolError),
     #[error("Failed to encode or decode")]
-    Codec(#[from] prost_codec::Error),
+    Codec(#[from] quick_protobuf_codec::Error),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -142,7 +142,7 @@ impl std::error::Error for ValidationError {}
 
 impl From<std::io::Error> for HandlerError {
     fn from(error: std::io::Error) -> HandlerError {
-        HandlerError::Codec(prost_codec::Error::from(error))
+        HandlerError::Codec(quick_protobuf_codec::Error::from(error))
     }
 }
 

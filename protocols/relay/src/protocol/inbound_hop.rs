@@ -51,7 +51,7 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
     type Future = BoxFuture<'static, Result<Self::Output, Self::Error>>;
 
     fn upgrade_inbound(self, substream: NegotiatedSubstream, _: Self::Info) -> Self::Future {
-        let mut substream = Framed::new(substream, prost_codec::Codec::new(MAX_MESSAGE_SIZE));
+        let mut substream = Framed::new(substream, quick_protobuf_codec::Codec::new(MAX_MESSAGE_SIZE));
 
         async move {
             let HopMessage {
@@ -96,8 +96,8 @@ pub enum UpgradeError {
     Fatal(#[from] FatalUpgradeError),
 }
 
-impl From<prost_codec::Error> for UpgradeError {
-    fn from(error: prost_codec::Error) -> Self {
+impl From<quick_protobuf_codec::Error> for UpgradeError {
+    fn from(error: quick_protobuf_codec::Error) -> Self {
         Self::Fatal(error.into())
     }
 }
@@ -105,7 +105,7 @@ impl From<prost_codec::Error> for UpgradeError {
 #[derive(Debug, Error)]
 pub enum FatalUpgradeError {
     #[error(transparent)]
-    Codec(#[from] prost_codec::Error),
+    Codec(#[from] quick_protobuf_codec::Error),
     #[error("Stream closed")]
     StreamClosed,
     #[error("Failed to parse response type field.")]
@@ -124,7 +124,7 @@ pub enum Req {
 }
 
 pub struct ReservationReq {
-    substream: Framed<NegotiatedSubstream, prost_codec::Codec<HopMessage>>,
+    substream: Framed<NegotiatedSubstream, quick_protobuf_codec::Codec<HopMessage>>,
     reservation_duration: Duration,
     max_circuit_duration: Duration,
     max_circuit_bytes: u64,
@@ -181,7 +181,7 @@ impl ReservationReq {
 
 pub struct CircuitReq {
     dst: PeerId,
-    substream: Framed<NegotiatedSubstream, prost_codec::Codec<HopMessage>>,
+    substream: Framed<NegotiatedSubstream, quick_protobuf_codec::Codec<HopMessage>>,
 }
 
 impl CircuitReq {
@@ -226,7 +226,7 @@ impl CircuitReq {
         self.substream.close().await.map_err(Into::into)
     }
 
-    async fn send(&mut self, msg: HopMessage) -> Result<(), prost_codec::Error> {
+    async fn send(&mut self, msg: HopMessage) -> Result<(), quick_protobuf_codec::Error> {
         self.substream.send(msg).await?;
         self.substream.flush().await?;
 

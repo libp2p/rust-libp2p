@@ -238,7 +238,7 @@ impl AsyncWrite for Substream {
 }
 
 fn io_poll_next(
-    io: &mut Framed<Compat<PollDataChannel>, prost_codec::Codec<Message>>,
+    io: &mut Framed<Compat<PollDataChannel>, quick_protobuf_codec::Codec<Message>>,
     cx: &mut Context<'_>,
 ) -> Poll<io::Result<Option<(Option<Flag>, Option<Vec<u8>>)>>> {
     match ready!(io.poll_next_unpin(cx))

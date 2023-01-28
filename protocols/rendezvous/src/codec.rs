@@ -200,13 +200,13 @@ pub enum ErrorCode {
 }
 
 pub struct RendezvousCodec {
-    inner: prost_codec::Codec<wire::Message>,
+    inner: quick_protobuf_codec::Codec<wire::Message>,
 }
 
 impl Default for RendezvousCodec {
     fn default() -> Self {
         Self {
-            inner: prost_codec::Codec::new(1024 * 1024), // 1MB
+            inner: quick_protobuf_codec::Codec::new(1024 * 1024), // 1MB
         }
     }
 }
@@ -239,7 +239,7 @@ impl Decoder for RendezvousCodec {
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error(transparent)]
-    Codec(#[from] prost_codec::Error),
+    Codec(#[from] quick_protobuf_codec::Error),
     #[error("Failed to read/write")]
     Io(#[from] std::io::Error),
     #[error("Failed to convert wire message to internal data model")]
