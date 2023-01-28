@@ -1,3 +1,9 @@
+# 0.1.0 [unreleased]
+
+- Update to `quick-protobuf`. See [PR 3312].
+
+[PR 3312]: https://github.com/libp2p/rust-libp2p/pull/3312
+
 # 0.3.0
 
 - Implement `From` trait for `std::io::Error`. See [PR 2622].
