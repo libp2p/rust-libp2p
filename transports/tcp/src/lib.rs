@@ -642,9 +642,8 @@ where
 
     /// Close the listener.
     ///
-    /// This will create a [`TransportEvent::ListenerClosed`] event
-    /// and terminate the stream once all remaining events in queue have
-    /// been reported.
+    /// This will create a [`TransportEvent::ListenerClosed`] and
+    /// terminate the stream once the event has been reported.
     fn close(&mut self, reason: Result<(), io::Error>) {
         if self.is_closed {
             return;
