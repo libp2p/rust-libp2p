@@ -50,14 +50,13 @@ use libp2p_core::{
 };
 use provider::{Incoming, Provider};
 use socket2::{Domain, Socket, Type};
-use std::task::Waker;
 use std::{
     collections::{HashSet, VecDeque},
     io,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpListener},
     pin::Pin,
     sync::{Arc, RwLock},
-    task::{Context, Poll},
+    task::{Context, Poll, Waker},
     time::Duration,
 };
 
@@ -1314,5 +1313,32 @@ mod tests {
         assert!(transport
             .address_translation(&quic_addr, &tcp_observed_addr)
             .is_none());
+    }
+
+    #[test]
+    fn test_remove_listener() {
+        env_logger::try_init().ok();
+
+        async fn cycle_listeners<T: Provider>() -> bool {
+            let mut tcp = Transport::<T>::default().boxed();
+            let listener_id = tcp
+                .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
+                .unwrap();
+            tcp.remove_listener(listener_id)
+        }
+
+        #[cfg(feature = "async-io")]
+        {
+            assert!(async_std::task::block_on(cycle_listeners::<async_io::Tcp>()));
+        }
+
+        #[cfg(feature = "tokio")]
+        {
+            let rt = ::tokio::runtime::Builder::new_current_thread()
+                .enable_io()
+                .build()
+                .unwrap();
+            assert!(rt.block_on(cycle_listeners::<tokio::Tcp>()));
+        }
     }
 }
