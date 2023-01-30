@@ -55,9 +55,9 @@
 //!        edition = "2021"
 //!
 //!    [dependencies]
-//!        libp2p = "0.43.0"
+//!        libp2p = { version = "0.50", features = ["tcp", "dns", "async-std", "noise", "mplex", "yamux", "websocket", "ping", "macros"] }
 //!        futures = "0.3.21"
-//!        async-std = { version = "1.10.0", features = ["attributes"] }
+//!        async-std = { version = "1.12.0", features = ["attributes"] }
 //!    ```
 //!
 //! ## Network identity
@@ -77,7 +77,7 @@
 //! async fn main() -> Result<(), Box<dyn Error>> {
 //!     let local_key = identity::Keypair::generate_ed25519();
 //!     let local_peer_id = PeerId::from(local_key.public());
-//!     println!("Local peer id: {:?}", local_peer_id);
+//!     println!("Local peer id: {local_peer_id:?}");
 //!
 //!     Ok(())
 //! }
@@ -111,7 +111,7 @@
 //! async fn main() -> Result<(), Box<dyn Error>> {
 //!     let local_key = identity::Keypair::generate_ed25519();
 //!     let local_peer_id = PeerId::from(local_key.public());
-//!     println!("Local peer id: {:?}", local_peer_id);
+//!     println!("Local peer id: {local_peer_id:?}");
 //!
 //!     let transport = libp2p::development_transport(local_key).await?;
 //!
@@ -142,25 +142,31 @@
 //! With the above in mind, let's extend our example, creating a [`ping::Behaviour`](crate::ping::Behaviour) at the end:
 //!
 //! ```rust
-//! use libp2p::{identity, PeerId, ping};
+//! use libp2p::swarm::{keep_alive, NetworkBehaviour};
+//! use libp2p::{identity, ping, PeerId};
 //! use std::error::Error;
 //!
 //! #[async_std::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
 //!     let local_key = identity::Keypair::generate_ed25519();
 //!     let local_peer_id = PeerId::from(local_key.public());
-//!     println!("Local peer id: {:?}", local_peer_id);
+//!     println!("Local peer id: {local_peer_id:?}");
 //!
 //!     let transport = libp2p::development_transport(local_key).await?;
 //!
-//!     // Create a ping network behaviour.
-//!     //
-//!     // For illustrative purposes, the ping protocol is configured to
-//!     // keep the connection alive, so a continuous sequence of pings
-//!     // can be observed.
-//!     let behaviour = ping::Behaviour::new(ping::Config::new().with_keep_alive(true));
+//!     let behaviour = Behaviour::default();
 //!
 //!     Ok(())
+//! }
+//!
+//! /// Our network behaviour.
+//! ///
+//! /// For illustrative purposes, this includes the [`KeepAlive`](behaviour::KeepAlive) behaviour so a continuous sequence of
+//! /// pings can be observed.
+//! #[derive(NetworkBehaviour, Default)]
+//! struct Behaviour {
+//!     keep_alive: keep_alive::Behaviour,
+//!     ping: ping::Behaviour,
 //! }
 //! ```
 //!
@@ -174,27 +180,33 @@
 //! [`Transport`] to the [`NetworkBehaviour`].
 //!
 //! ```rust
-//! use libp2p::{identity, PeerId, ping, Swarm};
+//! use libp2p::swarm::{keep_alive, NetworkBehaviour, Swarm};
+//! use libp2p::{identity, ping, PeerId};
 //! use std::error::Error;
 //!
 //! #[async_std::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
 //!     let local_key = identity::Keypair::generate_ed25519();
 //!     let local_peer_id = PeerId::from(local_key.public());
-//!     println!("Local peer id: {:?}", local_peer_id);
+//!     println!("Local peer id: {local_peer_id:?}");
 //!
 //!     let transport = libp2p::development_transport(local_key).await?;
 //!
-//!     // Create a ping network behaviour.
-//!     //
-//!     // For illustrative purposes, the ping protocol is configured to
-//!     // keep the connection alive, so a continuous sequence of pings
-//!     // can be observed.
-//!     let behaviour = ping::Behaviour::new(ping::Config::new().with_keep_alive(true));
+//!     let behaviour = Behaviour::default();
 //!
 //!     let mut swarm = Swarm::with_async_std_executor(transport, behaviour, local_peer_id);
 //!
 //!     Ok(())
+//! }
+//!
+//! /// Our network behaviour.
+//! ///
+//! /// For illustrative purposes, this includes the [`KeepAlive`](behaviour::
+//! /// KeepAlive) behaviour so a continuous sequence of pings can be observed.
+//! #[derive(NetworkBehaviour, Default)]
+//! struct Behaviour {
+//!     keep_alive: keep_alive::Behaviour,
+//!     ping: ping::Behaviour,
 //! }
 //! ```
 //!
@@ -225,23 +237,19 @@
 //! remote peer.
 //!
 //! ```rust
-//! use libp2p::{identity, Multiaddr, PeerId, ping, Swarm, swarm::dial_opts::DialOpts};
+//! use libp2p::swarm::{keep_alive, NetworkBehaviour, Swarm};
+//! use libp2p::{identity, ping, Multiaddr, PeerId};
 //! use std::error::Error;
 //!
 //! #[async_std::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
 //!     let local_key = identity::Keypair::generate_ed25519();
 //!     let local_peer_id = PeerId::from(local_key.public());
-//!     println!("Local peer id: {:?}", local_peer_id);
+//!     println!("Local peer id: {local_peer_id:?}");
 //!
 //!     let transport = libp2p::development_transport(local_key).await?;
 //!
-//!     // Create a ping network behaviour.
-//!     //
-//!     // For illustrative purposes, the ping protocol is configured to
-//!     // keep the connection alive, so a continuous sequence of pings
-//!     // can be observed.
-//!     let behaviour = ping::Behaviour::new(ping::Config::new().with_keep_alive(true));
+//!     let behaviour = Behaviour::default();
 //!
 //!     let mut swarm = Swarm::with_async_std_executor(transport, behaviour, local_peer_id);
 //!
@@ -254,10 +262,20 @@
 //!     if let Some(addr) = std::env::args().nth(1) {
 //!         let remote: Multiaddr = addr.parse()?;
 //!         swarm.dial(remote)?;
-//!         println!("Dialed {}", addr)
+//!         println!("Dialed {addr}")
 //!     }
 //!
 //!     Ok(())
+//! }
+//!
+//! /// Our network behaviour.
+//! ///
+//! /// For illustrative purposes, this includes the [`KeepAlive`](behaviour::KeepAlive) behaviour so a continuous sequence of
+//! /// pings can be observed.
+//! #[derive(NetworkBehaviour, Default)]
+//! struct Behaviour {
+//!     keep_alive: keep_alive::Behaviour,
+//!     ping: ping::Behaviour,
 //! }
 //! ```
 //!
@@ -269,23 +287,19 @@
 //!
 //! ```no_run
 //! use futures::prelude::*;
-//! use libp2p::{identity, Multiaddr, PeerId, ping, swarm::{Swarm, SwarmEvent, dial_opts::DialOpts}};
+//! use libp2p::swarm::{keep_alive, NetworkBehaviour, Swarm, SwarmEvent};
+//! use libp2p::{identity, ping, Multiaddr, PeerId};
 //! use std::error::Error;
 //!
 //! #[async_std::main]
 //! async fn main() -> Result<(), Box<dyn Error>> {
 //!     let local_key = identity::Keypair::generate_ed25519();
 //!     let local_peer_id = PeerId::from(local_key.public());
-//!     println!("Local peer id: {:?}", local_peer_id);
+//!     println!("Local peer id: {local_peer_id:?}");
 //!
 //!     let transport = libp2p::development_transport(local_key).await?;
 //!
-//!     // Create a ping network behaviour.
-//!     //
-//!     // For illustrative purposes, the ping protocol is configured to
-//!     // keep the connection alive, so a continuous sequence of pings
-//!     // can be observed.
-//!     let behaviour = ping::Behaviour::new(ping::Config::new().with_keep_alive(true));
+//!     let behaviour = Behaviour::default();
 //!
 //!     let mut swarm = Swarm::with_async_std_executor(transport, behaviour, local_peer_id);
 //!
@@ -298,17 +312,26 @@
 //!     if let Some(addr) = std::env::args().nth(1) {
 //!         let remote: Multiaddr = addr.parse()?;
 //!         swarm.dial(remote)?;
-//!         println!("Dialed {}", addr)
+//!         println!("Dialed {addr}")
 //!     }
 //!
 //!     loop {
 //!         match swarm.select_next_some().await {
-//!             SwarmEvent::NewListenAddr { address, .. } => println!("Listening on {:?}", address),
-//!             SwarmEvent::Behaviour(event) => println!("{:?}", event),
+//!             SwarmEvent::NewListenAddr { address, .. } => println!("Listening on {address:?}"),
+//!             SwarmEvent::Behaviour(event) => println!("{event:?}"),
 //!             _ => {}
 //!         }
 //!     }
+//! }
 //!
+//! /// Our network behaviour.
+//! ///
+//! /// For illustrative purposes, this includes the [`KeepAlive`](behaviour::KeepAlive) behaviour so a continuous sequence of
+//! /// pings can be observed.
+//! #[derive(NetworkBehaviour, Default)]
+//! struct Behaviour {
+//!     keep_alive: keep_alive::Behaviour,
+//!     ping: ping::Behaviour,
 //! }
 //! ```
 //!
