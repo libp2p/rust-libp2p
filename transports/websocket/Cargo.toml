@@ -13,7 +13,7 @@ categories = ["network-programming", "asynchronous"]
 [dependencies]
 futures-rustls = "0.22"
 either = "1.5.3"
-futures = "0.3.1"
+futures = "0.3.26"
 libp2p-core = { version = "0.39.0", path = "../../core" }
 log = "0.4.8"
 parking_lot = "0.12.0"
