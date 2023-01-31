@@ -284,7 +284,6 @@ mod tests {
     use super::*;
     // Use the ed25519_compact for testing
     use ed25519_compact;
-    use libp2p_identity as identity;
     use libp2p_identity::ed25519;
     // Use the libsodium-sys-stable crypto_sign imports for testing
     use libsodium_sys::crypto_sign_ed25519_pk_to_curve25519;
