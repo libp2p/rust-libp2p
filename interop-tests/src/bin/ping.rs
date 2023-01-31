@@ -65,7 +65,7 @@ async fn main() -> Result<()> {
             let builder = WsConfig::new(libp2p::tcp::tokio::Transport::new(
                 libp2p::tcp::Config::new(),
             ))
-                .upgrade(libp2p::core::upgrade::Version::V1Lazy);
+            .upgrade(libp2p::core::upgrade::Version::V1Lazy);
 
             let secure_channel_param: SecProtocol =
                 from_env("security").context("unsupported secure channel")?;
@@ -82,8 +82,8 @@ async fn main() -> Result<()> {
                 local_key,
                 webrtc::tokio::Certificate::generate(&mut rand::thread_rng())?,
             )
-                .map(|(peer_id, conn), _| (peer_id, StreamMuxerBox::new(conn)))
-                .boxed(),
+            .map(|(peer_id, conn), _| (peer_id, StreamMuxerBox::new(conn)))
+            .boxed(),
             format!("/ip4/{ip}/udp/0/webrtc"),
         ),
     };
@@ -124,9 +124,9 @@ async fn main() -> Result<()> {
 
         loop {
             if let Some(SwarmEvent::Behaviour(BehaviourEvent::Ping(ping::Event {
-                                                                       peer: _,
-                                                                       result: Ok(ping::Success::Ping { rtt }),
-                                                                   }))) = swarm.next().await
+                peer: _,
+                result: Ok(ping::Success::Ping { rtt }),
+            }))) = swarm.next().await
             {
                 log::info!("Ping successful: {rtt:?}");
                 break;
@@ -137,9 +137,9 @@ async fn main() -> Result<()> {
     } else {
         loop {
             if let Some(SwarmEvent::NewListenAddr {
-                            listener_id,
-                            address,
-                        }) = swarm.next().await
+                listener_id,
+                address,
+            }) = swarm.next().await
             {
                 if address.to_string().contains("127.0.0.1") {
                     continue;
