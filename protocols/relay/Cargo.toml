@@ -28,6 +28,7 @@ smallvec = "1.6.1"
 static_assertions = "1"
 thiserror = "1.0"
 void = "1"
+quick-protobuf = "0.8.1"
 
 [build-dependencies]
 prost-build = "0.11"

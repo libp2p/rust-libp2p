@@ -79,9 +79,9 @@ impl SignedEnvelope {
 
         let envelope = proto::Envelope {
             public_key: Some((&self.key).into()),
-            payload_type: Cow::Borrowed(&self.payload_type),
-            payload: Cow::Borrowed(&self.payload),
-            signature: Cow::Borrowed(&self.signature),
+            payload_type: self.payload_type,
+            payload: self.payload,
+            signature: self.signature,
         };
 
         let mut buf = Vec::with_capacity(envelope.get_size());

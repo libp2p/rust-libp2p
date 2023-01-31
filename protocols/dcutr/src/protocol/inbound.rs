@@ -18,7 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::borrow::Cow;
 use crate::proto;
 use asynchronous_codec::Framed;
 use futures::{future::BoxFuture, prelude::*};
@@ -78,7 +77,6 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
                     .collect::<Vec<Multiaddr>>()
             };
 
-
             match type_pb {
                 proto::Type::CONNECT => {}
                 proto::Type::SYNC => return Err(UpgradeError::UnexpectedTypeSync),
@@ -94,7 +92,7 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
 }
 
 pub struct PendingConnect {
-    substream: Framed<NegotiatedSubstream, quick_protobuf_codec::Codec<proto::HolePunch<'static>>>,
+    substream: Framed<NegotiatedSubstream, quick_protobuf_codec::Codec<proto::HolePunch>>,
     remote_obs_addrs: Vec<Multiaddr>,
 }
 
@@ -105,7 +103,10 @@ impl PendingConnect {
     ) -> Result<Vec<Multiaddr>, UpgradeError> {
         let msg = proto::HolePunch {
             type_pb: proto::Type::CONNECT,
-            ObsAddrs: local_obs_addrs.into_iter().map(|a| a.to_vec()).map(|a| Cow::from(a)).collect(),
+            ObsAddrs: local_obs_addrs
+                .into_iter()
+                .map(|a| a.to_vec())
+                .collect(),
         };
 
         self.substream.send(msg).await?;

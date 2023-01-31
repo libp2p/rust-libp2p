@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::message_proto;
+use crate::proto;
 use std::time::Duration;
 
 pub mod inbound_hop;
@@ -37,8 +37,8 @@ pub struct Limit {
     data_in_bytes: Option<u64>,
 }
 
-impl From<message_proto::Limit> for Limit {
-    fn from(limit: message_proto::Limit) -> Self {
+impl From<proto::Limit> for Limit {
+    fn from(limit: proto::Limit) -> Self {
         Limit {
             duration: limit.duration.map(|d| Duration::from_secs(d.into())),
             data_in_bytes: limit.data,

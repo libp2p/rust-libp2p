@@ -45,7 +45,10 @@ impl<In: MessageWrite, Out> Encoder for Codec<In, Out> {
     }
 }
 
-impl<In, Out: for<'a> MessageRead<'a> + Default> Decoder for Codec<In, Out> {
+impl<In, Out> Decoder for Codec<In, Out>
+where
+    Out: for<'a> MessageRead<'a>,
+{
     type Item = Out;
     type Error = Error;
 

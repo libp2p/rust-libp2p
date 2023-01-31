@@ -9,25 +9,24 @@
 #![cfg_attr(rustfmt, rustfmt_skip)]
 
 
-use std::borrow::Cow;
 use quick_protobuf::{MessageInfo, MessageRead, MessageWrite, BytesReader, Writer, WriterBackend, Result};
 use quick_protobuf::sizeofs::*;
 use super::super::*;
 
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Debug, Default, PartialEq, Clone)]
-pub struct HolePunch<'a> {
+pub struct HolePunch {
     pub type_pb: holepunch::pb::mod_HolePunch::Type,
-    pub ObsAddrs: Vec<Cow<'a, [u8]>>,
+    pub ObsAddrs: Vec<Vec<u8>>,
 }
 
-impl<'a> MessageRead<'a> for HolePunch<'a> {
+impl<'a> MessageRead<'a> for HolePunch {
     fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
                 Ok(8) => msg.type_pb = r.read_enum(bytes)?,
-                Ok(18) => msg.ObsAddrs.push(r.read_bytes(bytes).map(Cow::Borrowed)?),
+                Ok(18) => msg.ObsAddrs.push(r.read_bytes(bytes)?.to_owned()),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -36,7 +35,7 @@ impl<'a> MessageRead<'a> for HolePunch<'a> {
     }
 }
 
-impl<'a> MessageWrite for HolePunch<'a> {
+impl MessageWrite for HolePunch {
     fn get_size(&self) -> usize {
         0
         + 1 + sizeof_varint(*(&self.type_pb) as u64)

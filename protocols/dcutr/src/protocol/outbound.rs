@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::borrow::Cow;
+use crate::proto;
 use asynchronous_codec::Framed;
 use futures::{future::BoxFuture, prelude::*};
 use futures_timer::Delay;
@@ -28,7 +28,6 @@ use libp2p_swarm::NegotiatedSubstream;
 use std::convert::TryFrom;
 use std::iter;
 use thiserror::Error;
-use crate::proto;
 
 pub struct Upgrade {
     obs_addrs: Vec<Multiaddr>,
@@ -62,7 +61,11 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
 
         let msg = proto::HolePunch {
             type_pb: proto::Type::CONNECT,
-            ObsAddrs: self.obs_addrs.into_iter().map(|a| Cow::from(a.to_vec())).collect(),
+            ObsAddrs: self
+                .obs_addrs
+                .into_iter()
+                .map(|a| a.to_vec())
+                .collect(),
         };
 
         async move {

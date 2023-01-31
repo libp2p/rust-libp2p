@@ -45,7 +45,6 @@ pub mod error;
 use self::error::*;
 use crate::{proto, PeerId};
 use quick_protobuf::{BytesReader, Writer};
-use std::borrow::Cow;
 use std::convert::{TryFrom, TryInto};
 
 /// Identity keypair of a node.
@@ -154,7 +153,7 @@ impl Keypair {
         let pk = match self {
             Self::Ed25519(data) => proto::PrivateKey {
                 Type: proto::KeyType::Ed25519,
-                Data: Cow::from(data.encode().to_vec()),
+                Data: data.encode().to_vec(),
             },
             #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
             Self::Rsa(_) => return Err(DecodingError::encoding_unsupported("RSA")),
@@ -182,7 +181,7 @@ impl Keypair {
 
         match private_key.Type {
             proto::KeyType::Ed25519 => {
-                ed25519::Keypair::decode(private_key.Data.to_mut()).map(Keypair::Ed25519)
+                ed25519::Keypair::decode(&mut private_key.Data).map(Keypair::Ed25519)
             }
             proto::KeyType::RSA => Err(DecodingError::decoding_unsupported("RSA")),
             proto::KeyType::Secp256k1 => Err(DecodingError::decoding_unsupported("secp256k1")),
@@ -191,10 +190,10 @@ impl Keypair {
     }
 }
 
-impl zeroize::Zeroize for proto::PrivateKey<'_> {
+impl zeroize::Zeroize for proto::PrivateKey {
     fn zeroize(&mut self) {
         self.Type = proto::KeyType::default();
-        self.Data = Cow::default();
+        self.Data = Vec::default();
     }
 }
 
@@ -268,33 +267,33 @@ impl PublicKey {
     }
 }
 
-impl From<&PublicKey> for proto::PublicKey<'_> {
+impl From<&PublicKey> for proto::PublicKey {
     fn from(key: &PublicKey) -> Self {
         match key {
             PublicKey::Ed25519(key) => proto::PublicKey {
                 Type: proto::KeyType::Ed25519,
-                Data: Cow::from(key.encode().to_vec()),
+                Data: key.encode().to_vec(),
             },
             #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
             PublicKey::Rsa(key) => proto::PublicKey {
                 Type: proto::KeyType::RSA,
-                Data: Cow::from(key.encode_x509()),
+                Data: key.encode_x509(),
             },
             #[cfg(feature = "secp256k1")]
             PublicKey::Secp256k1(key) => proto::PublicKey {
                 Type: proto::KeyType::Secp256k1,
-                Data: Cow::from(key.encode().to_vec()),
+                Data: key.encode().to_vec(),
             },
             #[cfg(feature = "ecdsa")]
             PublicKey::Ecdsa(key) => proto::PublicKey {
                 Type: proto::KeyType::ECDSA,
-                Data: Cow::from(key.encode_der()),
+                Data: key.encode_der(),
             },
         }
     }
 }
 
-impl TryFrom<proto::PublicKey<'_>> for PublicKey {
+impl TryFrom<proto::PublicKey> for PublicKey {
     type Error = DecodingError;
 
     fn try_from(pubkey: proto::PublicKey) -> Result<Self, Self::Error> {

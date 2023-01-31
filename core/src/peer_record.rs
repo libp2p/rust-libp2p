@@ -5,7 +5,6 @@ use crate::signed_envelope::SignedEnvelope;
 use crate::{signed_envelope, DecodeError, Multiaddr, PeerId};
 use instant::SystemTime;
 use quick_protobuf::{BytesReader, Writer};
-use std::borrow::Cow;
 use std::convert::TryInto;
 
 const PAYLOAD_TYPE: &str = "/libp2p/routing-state-record";
@@ -74,12 +73,12 @@ impl PeerRecord {
 
         let payload = {
             let record = proto::PeerRecord {
-                peer_id: Cow::from(peer_id.to_bytes()),
+                peer_id: peer_id.to_bytes(),
                 seq,
                 addresses: addresses
                     .iter()
                     .map(|m| proto::AddressInfo {
-                        multiaddr: Cow::Borrowed(m.as_ref()),
+                        multiaddr: m.to_vec(),
                     })
                     .collect(),
             };

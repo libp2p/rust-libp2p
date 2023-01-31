@@ -9,25 +9,24 @@
 #![cfg_attr(rustfmt, rustfmt_skip)]
 
 
-use std::borrow::Cow;
 use quick_protobuf::{MessageInfo, MessageRead, MessageWrite, BytesReader, Writer, WriterBackend, Result};
 use quick_protobuf::sizeofs::*;
 use super::*;
 
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Debug, Default, PartialEq, Clone)]
-pub struct PeerRecord<'a> {
-    pub peer_id: Cow<'a, [u8]>,
+pub struct PeerRecord {
+    pub peer_id: Vec<u8>,
     pub seq: u64,
-    pub addresses: Vec<peer_record_proto::mod_PeerRecord::AddressInfo<'a>>,
+    pub addresses: Vec<peer_record_proto::mod_PeerRecord::AddressInfo>,
 }
 
-impl<'a> MessageRead<'a> for PeerRecord<'a> {
+impl<'a> MessageRead<'a> for PeerRecord {
     fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.peer_id = r.read_bytes(bytes).map(Cow::Borrowed)?,
+                Ok(10) => msg.peer_id = r.read_bytes(bytes)?.to_owned(),
                 Ok(16) => msg.seq = r.read_uint64(bytes)?,
                 Ok(26) => msg.addresses.push(r.read_message::<peer_record_proto::mod_PeerRecord::AddressInfo>(bytes)?),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
@@ -38,16 +37,16 @@ impl<'a> MessageRead<'a> for PeerRecord<'a> {
     }
 }
 
-impl<'a> MessageWrite for PeerRecord<'a> {
+impl MessageWrite for PeerRecord {
     fn get_size(&self) -> usize {
         0
-        + if self.peer_id == Cow::Borrowed(b"") { 0 } else { 1 + sizeof_len((&self.peer_id).len()) }
+        + if self.peer_id.is_empty() { 0 } else { 1 + sizeof_len((&self.peer_id).len()) }
         + if self.seq == 0u64 { 0 } else { 1 + sizeof_varint(*(&self.seq) as u64) }
         + self.addresses.iter().map(|s| 1 + sizeof_len((s).get_size())).sum::<usize>()
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.peer_id != Cow::Borrowed(b"") { w.write_with_tag(10, |w| w.write_bytes(&**&self.peer_id))?; }
+        if !self.peer_id.is_empty() { w.write_with_tag(10, |w| w.write_bytes(&**&self.peer_id))?; }
         if self.seq != 0u64 { w.write_with_tag(16, |w| w.write_uint64(*&self.seq))?; }
         for s in &self.addresses { w.write_with_tag(26, |w| w.write_message(s))?; }
         Ok(())
@@ -56,21 +55,20 @@ impl<'a> MessageWrite for PeerRecord<'a> {
 
 pub mod mod_PeerRecord {
 
-use std::borrow::Cow;
 use super::*;
 
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Debug, Default, PartialEq, Clone)]
-pub struct AddressInfo<'a> {
-    pub multiaddr: Cow<'a, [u8]>,
+pub struct AddressInfo {
+    pub multiaddr: Vec<u8>,
 }
 
-impl<'a> MessageRead<'a> for AddressInfo<'a> {
+impl<'a> MessageRead<'a> for AddressInfo {
     fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.multiaddr = r.read_bytes(bytes).map(Cow::Borrowed)?,
+                Ok(10) => msg.multiaddr = r.read_bytes(bytes)?.to_owned(),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -79,14 +77,14 @@ impl<'a> MessageRead<'a> for AddressInfo<'a> {
     }
 }
 
-impl<'a> MessageWrite for AddressInfo<'a> {
+impl MessageWrite for AddressInfo {
     fn get_size(&self) -> usize {
         0
-        + if self.multiaddr == Cow::Borrowed(b"") { 0 } else { 1 + sizeof_len((&self.multiaddr).len()) }
+        + if self.multiaddr.is_empty() { 0 } else { 1 + sizeof_len((&self.multiaddr).len()) }
     }
 
     fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
-        if self.multiaddr != Cow::Borrowed(b"") { w.write_with_tag(10, |w| w.write_bytes(&**&self.multiaddr))?; }
+        if !self.multiaddr.is_empty() { w.write_with_tag(10, |w| w.write_bytes(&**&self.multiaddr))?; }
         Ok(())
     }
 }

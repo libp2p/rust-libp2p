@@ -162,14 +162,14 @@ impl DialRequest {
         let addrs = self
             .addresses
             .into_iter()
-            .map(|addr| Cow::from(addr.to_vec()))
+            .map(|addr| addr.to_vec())
             .collect();
 
         let msg = proto::Message {
             type_pb: Some(proto::MessageType::DIAL),
             dial: Some(proto::Dial {
                 peer: Some(proto::PeerInfo {
-                    id: Some(Cow::from(peer_id)),
+                    id: Some(peer_id.to_vec()),
                     addrs,
                 }),
             }),

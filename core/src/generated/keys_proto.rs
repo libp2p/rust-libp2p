@@ -9,7 +9,6 @@
 #![cfg_attr(rustfmt, rustfmt_skip)]
 
 
-use std::borrow::Cow;
 use quick_protobuf::{MessageInfo, MessageRead, MessageWrite, BytesReader, Writer, WriterBackend, Result};
 use quick_protobuf::sizeofs::*;
 use super::*;
@@ -54,18 +53,18 @@ impl<'a> From<&'a str> for KeyType {
 
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Debug, Default, PartialEq, Clone)]
-pub struct PublicKey<'a> {
+pub struct PublicKey {
     pub Type: keys_proto::KeyType,
-    pub Data: Cow<'a, [u8]>,
+    pub Data: Vec<u8>,
 }
 
-impl<'a> MessageRead<'a> for PublicKey<'a> {
+impl<'a> MessageRead<'a> for PublicKey {
     fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
                 Ok(8) => msg.Type = r.read_enum(bytes)?,
-                Ok(18) => msg.Data = r.read_bytes(bytes).map(Cow::Borrowed)?,
+                Ok(18) => msg.Data = r.read_bytes(bytes)?.to_owned(),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -74,7 +73,7 @@ impl<'a> MessageRead<'a> for PublicKey<'a> {
     }
 }
 
-impl<'a> MessageWrite for PublicKey<'a> {
+impl MessageWrite for PublicKey {
     fn get_size(&self) -> usize {
         0
         + 1 + sizeof_varint(*(&self.Type) as u64)
@@ -90,18 +89,18 @@ impl<'a> MessageWrite for PublicKey<'a> {
 
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Debug, Default, PartialEq, Clone)]
-pub struct PrivateKey<'a> {
+pub struct PrivateKey {
     pub Type: keys_proto::KeyType,
-    pub Data: Cow<'a, [u8]>,
+    pub Data: Vec<u8>,
 }
 
-impl<'a> MessageRead<'a> for PrivateKey<'a> {
+impl<'a> MessageRead<'a> for PrivateKey {
     fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
                 Ok(8) => msg.Type = r.read_enum(bytes)?,
-                Ok(18) => msg.Data = r.read_bytes(bytes).map(Cow::Borrowed)?,
+                Ok(18) => msg.Data = r.read_bytes(bytes)?.to_owned(),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -110,7 +109,7 @@ impl<'a> MessageRead<'a> for PrivateKey<'a> {
     }
 }
 
-impl<'a> MessageWrite for PrivateKey<'a> {
+impl MessageWrite for PrivateKey {
     fn get_size(&self) -> usize {
         0
         + 1 + sizeof_varint(*(&self.Type) as u64)
