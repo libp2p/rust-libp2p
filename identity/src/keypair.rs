@@ -287,7 +287,7 @@ pub enum PublicKey {
     )]
     Secp256k1(secp256k1::PublicKey),
     /// A public ECDSA key.
-    #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
+    #[cfg(feature = "ecdsa")]
     #[deprecated(
         since = "0.1.0",
         note = "This enum will be made opaque in the future, use `PublicKey::into_ecdsa` instead."
