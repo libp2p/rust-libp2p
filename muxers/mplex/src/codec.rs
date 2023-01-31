@@ -64,9 +64,16 @@ impl fmt::Display for LocalStreamId {
     }
 }
 
+/// Manual implementation of [`PartialEq`].
+///
+/// This is equivalent to the derived one but we purposely don't derive it because it triggers the
+/// `clippy::derive_hash_xor_eq` lint.
+///
+/// This [`PartialEq`] implementation satisfies the rule of v1 == v2 -> hash(v1) == hash(v2).
+/// The inverse is not true but does not have to be.
 impl PartialEq for LocalStreamId {
     fn eq(&self, other: &Self) -> bool {
-        self.num.eq(&other.num)
+        self.num.eq(&other.num) && self.role.eq(&other.role)
     }
 }
 
