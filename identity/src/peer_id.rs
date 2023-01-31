@@ -54,12 +54,6 @@ impl fmt::Display for PeerId {
 
 impl PeerId {
     /// Builds a `PeerId` from a public key.
-    #[cfg(any(
-        feature = "ecdsa",
-        feature = "secp256k1",
-        feature = "ed25519",
-        feature = "rsa"
-    ))]
     pub fn from_public_key(key: &crate::keypair::PublicKey) -> PeerId {
         use multihash::MultihashDigest as _;
 
@@ -137,12 +131,6 @@ impl PeerId {
     ///
     /// Returns `None` if this `PeerId`s hash algorithm is not supported when encoding the
     /// given public key, otherwise `Some` boolean as the result of an equality check.
-    #[cfg(any(
-        feature = "ecdsa",
-        feature = "secp256k1",
-        feature = "ed25519",
-        feature = "rsa"
-    ))]
     pub fn is_public_key(&self, public_key: &crate::PublicKey) -> Option<bool> {
         use multihash::MultihashDigest as _;
 
@@ -153,24 +141,12 @@ impl PeerId {
     }
 }
 
-#[cfg(any(
-    feature = "ecdsa",
-    feature = "secp256k1",
-    feature = "ed25519",
-    feature = "rsa"
-))]
 impl From<crate::PublicKey> for PeerId {
     fn from(key: crate::PublicKey) -> PeerId {
         PeerId::from_public_key(&key)
     }
 }
 
-#[cfg(any(
-    feature = "ecdsa",
-    feature = "secp256k1",
-    feature = "ed25519",
-    feature = "rsa"
-))]
 impl From<&crate::PublicKey> for PeerId {
     fn from(key: &crate::PublicKey) -> PeerId {
         PeerId::from_public_key(key)
