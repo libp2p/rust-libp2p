@@ -56,7 +56,7 @@ async fn can_establish_connection() {
 }
 
 fn make_swarm() -> Swarm<keep_alive::Behaviour> {
-    let identity = libp2p_core::identity::Keypair::generate_ed25519();
+    let identity = libp2p_identity::Keypair::generate_ed25519();
 
     let transport = MemoryTransport::default()
         .upgrade(Version::V1)
