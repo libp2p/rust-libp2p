@@ -33,6 +33,24 @@
 
   See [PR 3328].
 
+- Allow `NetworkBehaviour`s to manage connections.
+  We deprecate `NetworkBehaviour::new_handler` and `NetworkBehaviour::addresses_of_peer` in favor of four new callbacks:
+
+  - `NetworkBehaviour::handle_pending_inbound_connection`
+  - `NetworkBehaviour::handle_pending_outbound_connection`
+  - `NetworkBehaviour::handle_established_inbound_connection`
+  - `NetworkBehaviour::handle_established_outbound_connection`
+  
+  All four are fallible and returning an error from any of them will abort the given connection.
+  This allows you to create dedicated `NetworkBehaviour`s that only concern themselves with managing connections.
+  For example:
+  - checking the `PeerId` of a newly established connection against an allow/block list
+  - only allowing X connection upgrades at any one time
+  - denying incoming or outgoing connections from a certain IP range
+  - only allowing N connections to or from the same peer
+  
+  See [PR 3254].
+
 - Update to `libp2p-core` `v0.39.0`.
 
 - Removed deprecated Swarm constructors. For transition notes see [0.41.0](#0.41.0). See [PR 3170].
@@ -84,6 +102,7 @@
 [PR 3373]: https://github.com/libp2p/rust-libp2p/pull/3373
 [PR 3374]: https://github.com/libp2p/rust-libp2p/pull/3374
 [PR 3375]: https://github.com/libp2p/rust-libp2p/pull/3375
+[PR 3254]: https://github.com/libp2p/rust-libp2p/pull/3254
 
 # 0.41.1
 
