@@ -31,7 +31,7 @@ use crate::rsa;
 #[cfg(feature = "secp256k1")]
 use crate::secp256k1;
 
-#[cfg(feature = "ecdsa")]
+#[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
 use crate::ecdsa;
 
 /// Identity keypair of a node.
@@ -76,7 +76,7 @@ pub enum Keypair {
     )]
     Secp256k1(secp256k1::Keypair),
     /// An ECDSA keypair.
-    #[cfg(feature = "ecdsa")]
+    #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
     #[deprecated(
         since = "0.1.0",
         note = "This enum will be made opaque in the future, use `Keypair::into_ecdsa` instead."
@@ -100,7 +100,7 @@ impl Keypair {
     }
 
     /// Generate a new ECDSA keypair.
-    #[cfg(feature = "ecdsa")]
+    #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
     pub fn generate_ecdsa() -> Keypair {
         #[allow(deprecated)]
         Keypair::Ecdsa(ecdsa::Keypair::generate())
@@ -133,7 +133,7 @@ impl Keypair {
         }
     }
 
-    #[cfg(feature = "ecdsa")]
+    #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
     pub fn into_ecdsa(self) -> Option<ecdsa::Keypair> {
         #[allow(deprecated)]
         match self {
@@ -183,7 +183,7 @@ impl Keypair {
             Rsa(ref pair) => pair.sign(msg),
             #[cfg(feature = "secp256k1")]
             Secp256k1(ref pair) => pair.secret().sign(msg),
-            #[cfg(feature = "ecdsa")]
+            #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
             Ecdsa(ref pair) => Ok(pair.secret().sign(msg)),
         }
     }
@@ -199,7 +199,7 @@ impl Keypair {
             Rsa(pair) => PublicKey::Rsa(pair.public()),
             #[cfg(feature = "secp256k1")]
             Secp256k1(pair) => PublicKey::Secp256k1(pair.public().clone()),
-            #[cfg(feature = "ecdsa")]
+            #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
             Ecdsa(pair) => PublicKey::Ecdsa(pair.public().clone()),
         }
     }
@@ -226,7 +226,7 @@ impl Keypair {
             Self::Rsa(_) => return Err(DecodingError::encoding_unsupported("RSA")),
             #[cfg(feature = "secp256k1")]
             Self::Secp256k1(_) => return Err(DecodingError::encoding_unsupported("secp256k1")),
-            #[cfg(feature = "ecdsa")]
+            #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
             Self::Ecdsa(_) => return Err(DecodingError::encoding_unsupported("ECDSA")),
         };
 
@@ -287,7 +287,7 @@ pub enum PublicKey {
     )]
     Secp256k1(secp256k1::PublicKey),
     /// A public ECDSA key.
-    #[cfg(feature = "ecdsa")]
+    #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
     #[deprecated(
         since = "0.1.0",
         note = "This enum will be made opaque in the future, use `PublicKey::into_ecdsa` instead."
@@ -311,7 +311,7 @@ impl PublicKey {
             Rsa(pk) => pk.verify(msg, sig),
             #[cfg(feature = "secp256k1")]
             Secp256k1(pk) => pk.verify(msg, sig),
-            #[cfg(feature = "ecdsa")]
+            #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
             Ecdsa(pk) => pk.verify(msg, sig),
         }
     }
@@ -343,7 +343,7 @@ impl PublicKey {
         }
     }
 
-    #[cfg(feature = "ecdsa")]
+    #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
     pub fn into_ecdsa(self) -> Option<ecdsa::PublicKey> {
         #[allow(deprecated)]
         match self {
@@ -420,7 +420,7 @@ impl TryFrom<keys_proto::PublicKey> for PublicKey {
                 log::debug!("support for secp256k1 was disabled at compile-time");
                 Err(DecodingError::missing_feature("secp256k1"))
             }
-            #[cfg(feature = "ecdsa")]
+            #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
             keys_proto::KeyType::Ecdsa => {
                 ecdsa::PublicKey::decode_der(&pubkey.data).map(PublicKey::Ecdsa)
             }
