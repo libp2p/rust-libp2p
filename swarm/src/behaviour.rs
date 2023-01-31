@@ -636,18 +636,13 @@ pub enum NotifyHandler {
 }
 
 /// The options which connections to close.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub enum CloseConnection {
     /// Disconnect a particular connection.
     One(ConnectionId),
     /// Disconnect all connections.
+    #[default]
     All,
-}
-
-impl Default for CloseConnection {
-    fn default() -> Self {
-        CloseConnection::All
-    }
 }
 
 /// Enumeration with the list of the possible events
