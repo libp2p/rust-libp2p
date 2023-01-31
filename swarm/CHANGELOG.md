@@ -34,7 +34,7 @@
   See [PR 3328].
 
 - Allow `NetworkBehaviour`s to manage connections.
-  We deprecate `NetworkBehaviour::new_handler` and `NetworkBehaviour::addresses_of_peer` in favor of four new callbacks:
+  We deprecate[^1] `NetworkBehaviour::new_handler` and `NetworkBehaviour::addresses_of_peer` in favor of four new callbacks:
 
   - `NetworkBehaviour::handle_pending_inbound_connection`
   - `NetworkBehaviour::handle_pending_outbound_connection`
@@ -50,6 +50,10 @@
   - only allowing N connections to or from the same peer
   
   See [PR 3254].
+
+  [^1]: Please note that due to limitations in the Rust compiler,
+  _implementations_ of `new_handler` and `addresses_of_peer` are not flagged as deprecated.
+  Nevertheless, they will be removed in the future.
 
 - Update to `libp2p-core` `v0.39.0`.
 
