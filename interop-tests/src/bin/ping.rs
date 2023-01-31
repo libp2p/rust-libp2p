@@ -7,13 +7,13 @@ use either::Either;
 use env_logger::{Env, Target};
 use futures::{future, AsyncRead, AsyncWrite, StreamExt};
 use libp2p::core::muxing::StreamMuxerBox;
-use libp2p::core::upgrade::{MapInboundUpgrade, MapOutboundUpgrade};
+use libp2p::core::upgrade::{MapInboundUpgrade, MapOutboundUpgrade, Version};
 use libp2p::noise::{NoiseOutput, X25519Spec, XX};
 use libp2p::swarm::{keep_alive, NetworkBehaviour, SwarmEvent};
 use libp2p::tls::TlsStream;
 use libp2p::websocket::WsConfig;
 use libp2p::{
-    identity, mplex, noise, ping, tls, webrtc, yamux, InboundUpgradeExt, Multiaddr,
+    identity, mplex, noise, ping, quic, tcp, tls, webrtc, yamux, InboundUpgradeExt, Multiaddr,
     OutboundUpgradeExt, PeerId, Swarm, Transport as _,
 };
 use redis::AsyncCommands;
@@ -45,14 +45,14 @@ async fn main() -> Result<()> {
     // Build the transport from the passed ENV var.
     let (boxed_transport, local_addr) = match transport_param {
         Transport::QuicV1 => (
-            libp2p::quic::tokio::Transport::new(libp2p::quic::Config::new(&local_key))
+            quic::tokio::Transport::new(quic::Config::new(&local_key))
                 .map(|(p, c), _| (p, StreamMuxerBox::new(c)))
                 .boxed(),
             format!("/ip4/{ip}/udp/0/quic-v1"),
         ),
         Transport::Tcp => (
-            libp2p::tcp::tokio::Transport::new(libp2p::tcp::Config::new())
-                .upgrade(libp2p::core::upgrade::Version::V1Lazy)
+            tcp::tokio::Transport::new(tcp::Config::new())
+                .upgrade(Version::V1Lazy)
                 .authenticate(secure_channel_protocol_from_env(&local_key)?)
                 .multiplex(muxer_protocol_from_env()?)
                 .timeout(Duration::from_secs(5))
@@ -60,14 +60,12 @@ async fn main() -> Result<()> {
             format!("/ip4/{ip}/tcp/0"),
         ),
         Transport::Ws => (
-            WsConfig::new(libp2p::tcp::tokio::Transport::new(
-                libp2p::tcp::Config::new(),
-            ))
-            .upgrade(libp2p::core::upgrade::Version::V1Lazy)
-            .authenticate(secure_channel_protocol_from_env(&local_key)?)
-            .multiplex(muxer_protocol_from_env()?)
-            .timeout(Duration::from_secs(5))
-            .boxed(),
+            WsConfig::new(tcp::tokio::Transport::new(tcp::Config::new()))
+                .upgrade(Version::V1Lazy)
+                .authenticate(secure_channel_protocol_from_env(&local_key)?)
+                .multiplex(muxer_protocol_from_env()?)
+                .timeout(Duration::from_secs(5))
+                .boxed(),
             format!("/ip4/{ip}/tcp/0/ws"),
         ),
         Transport::Webrtc => (
