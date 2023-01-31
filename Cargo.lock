@@ -1917,6 +1917,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "if-addrs"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "26b24dd0826eee92c56edcda7ff190f2cf52115c49eadb2c2da8063e2673a8c2"
+dependencies = [
+ "libc",
+ "windows-sys",
+]
+
+[[package]]
 name = "if-watch"
 version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1926,7 +1936,7 @@ dependencies = [
  "core-foundation",
  "fnv",
  "futures",
- "if-addrs",
+ "if-addrs 0.7.0",
  "ipnet",
  "log",
  "rtnetlink",
@@ -1991,11 +2001,10 @@ name = "interop-tests"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "async-trait",
  "either",
  "env_logger 0.9.3",
  "futures",
- "if-addrs",
+ "if-addrs 0.8.0",
  "libp2p",
  "log",
  "rand 0.8.5",
@@ -2838,14 +2847,17 @@ dependencies = [
 name = "libp2p-websocket"
 version = "0.41.0"
 dependencies = [
+ "async-std",
  "either",
  "futures",
  "futures-rustls",
  "libp2p-core",
+ "libp2p-dns",
  "libp2p-tcp",
  "log",
  "parking_lot 0.12.1",
  "quicksink",
+ "rcgen 0.9.3",
  "rw-stream-sink",
  "soketto",
  "url",
