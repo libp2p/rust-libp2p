@@ -23,6 +23,7 @@ void = "1.0.2"
 
 [dev-dependencies]
 env_logger = "0.10.0"
+libp2p-identity = { path = "../../identity", features = ["ed25519"] }
 quickcheck = { package = "quickcheck-ext", path = "../../misc/quickcheck-ext" }
 rand = "0.8"
 

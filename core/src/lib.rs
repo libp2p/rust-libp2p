@@ -56,7 +56,10 @@ pub mod identity {
     pub use libp2p_identity::PublicKey;
 
     #[cfg(feature = "ed25519")]
-    #[deprecated(since = "0.39.0", note = "The `ed25519` feature-flag is deprecated and will be removed in favor of `libp2p-identity`.")]
+    #[deprecated(
+        since = "0.39.0",
+        note = "The `ed25519` feature-flag is deprecated and will be removed in favor of `libp2p-identity`."
+    )]
     pub mod ed25519 {
         pub use libp2p_identity::ed25519::Keypair;
         pub use libp2p_identity::ed25519::PublicKey;
@@ -64,7 +67,10 @@ pub mod identity {
     }
 
     #[cfg(feature = "ecdsa")]
-    #[deprecated(since = "0.39.0", note = "The `ecdsa` feature-flag is deprecated and will be removed in favor of `libp2p-identity`.")]
+    #[deprecated(
+        since = "0.39.0",
+        note = "The `ecdsa` feature-flag is deprecated and will be removed in favor of `libp2p-identity`."
+    )]
     pub mod ecdsa {
         pub use libp2p_identity::ecdsa::Keypair;
         pub use libp2p_identity::ecdsa::PublicKey;
@@ -72,7 +78,10 @@ pub mod identity {
     }
 
     #[cfg(feature = "secp256k1")]
-    #[deprecated(since = "0.39.0", note = "The `secp256k1` feature-flag is deprecated and will be removed in favor of `libp2p-identity`.")]
+    #[deprecated(
+        since = "0.39.0",
+        note = "The `secp256k1` feature-flag is deprecated and will be removed in favor of `libp2p-identity`."
+    )]
     pub mod secp256k1 {
         pub use libp2p_identity::secp256k1::Keypair;
         pub use libp2p_identity::secp256k1::PublicKey;
@@ -80,7 +89,10 @@ pub mod identity {
     }
 
     #[cfg(feature = "rsa")]
-    #[deprecated(since = "0.39.0", note = "The `rsa` feature-flag is deprecated and will be removed in favor of `libp2p-identity`.")]
+    #[deprecated(
+        since = "0.39.0",
+        note = "The `rsa` feature-flag is deprecated and will be removed in favor of `libp2p-identity`."
+    )]
     pub mod rsa {
         pub use libp2p_identity::rsa::Keypair;
         pub use libp2p_identity::rsa::PublicKey;

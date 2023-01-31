@@ -124,7 +124,7 @@ impl Keypair {
         }
     }
 
-    #[cfg(feature = "rsa")]
+    #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
     pub fn into_rsa(self) -> Option<rsa::Keypair> {
         #[allow(deprecated)]
         match self {
@@ -334,7 +334,7 @@ impl PublicKey {
         }
     }
 
-    #[cfg(feature = "rsa")]
+    #[cfg(all(feature = "rsa", not(target_arch = "wasm32")))]
     pub fn into_rsa(self) -> Option<rsa::PublicKey> {
         #[allow(deprecated)]
         match self {
