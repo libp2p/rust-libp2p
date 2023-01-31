@@ -41,12 +41,12 @@ async fn main() -> Result<()> {
 
     // Build the transport from the passed ENV var.
     let (boxed_transport, local_addr) = match transport_param {
-        Transport::QuicV1 => {
-            let builder =
-                libp2p::quic::tokio::Transport::new(libp2p::quic::Config::new(&local_key))
-                    .map(|(p, c), _| (p, StreamMuxerBox::new(c)));
-            (builder.boxed(), format!("/ip4/{ip}/udp/0/quic-v1"))
-        }
+        Transport::QuicV1 => (
+            libp2p::quic::tokio::Transport::new(libp2p::quic::Config::new(&local_key))
+                .map(|(p, c), _| (p, StreamMuxerBox::new(c)))
+                .boxed(),
+            format!("/ip4/{ip}/udp/0/quic-v1"),
+        ),
         Transport::Tcp => {
             let builder = libp2p::tcp::tokio::Transport::new(libp2p::tcp::Config::new())
                 .upgrade(libp2p::core::upgrade::Version::V1Lazy);
