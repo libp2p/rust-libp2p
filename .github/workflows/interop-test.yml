@@ -41,7 +41,7 @@ jobs:
   run-multidim-interop:
     name: Run multidimensional interoperability tests
     needs: build-ping-container
-    uses: "libp2p/test-plans/.github/workflows/run-testplans.yml@master"
+    uses: "thomaseizinger/test-plans/.github/workflows/run-testplans.yml@experiment-no-clone-test-plans"
     with:
       dir: "multidim-interop"
       extra-versions: ping-versions
