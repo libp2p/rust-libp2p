@@ -320,11 +320,12 @@ impl WithoutPeerIdWithAddress {
 ///    .condition(PeerCondition::Disconnected)
 ///    .build();
 /// ```
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Default)]
 pub enum PeerCondition {
     /// A new dialing attempt is initiated _only if_ the peer is currently
     /// considered disconnected, i.e. there is no established connection
     /// and no ongoing dialing attempt.
+    #[default]
     Disconnected,
     /// A new dialing attempt is initiated _only if_ there is currently
     /// no ongoing dialing attempt, i.e. the peer is either considered
@@ -333,10 +334,4 @@ pub enum PeerCondition {
     /// A new dialing attempt is always initiated, only subject to the
     /// configured connection limits.
     Always,
-}
-
-impl Default for PeerCondition {
-    fn default() -> Self {
-        PeerCondition::Disconnected
-    }
 }
