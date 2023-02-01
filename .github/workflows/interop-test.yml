@@ -43,4 +43,4 @@ jobs:
 #    needs: build-ping-container
     runs-on: ubuntu-22.04
     steps:
-      - uses: thomaseizinger/test-plans@composite-action
+      - uses: thomaseizinger/test-plans/.github/actions/run-interop-ping-test@composite-action
