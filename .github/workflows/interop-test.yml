@@ -45,4 +45,4 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - run: tree /home/runner/work/_actions
-      - uses: thomaseizinger/test-plans/.github/actions/run-interop-ping-test@composite-action
+      - uses: thomaseizinger/test-plans/run-interop-ping-test@composite-action
