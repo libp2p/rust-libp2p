@@ -16,7 +16,7 @@ libp2p-core = { version = "0.39.0", path = "../../core" }
 bytes = "1.0"
 byteorder = "1.3.4"
 fnv = "1.0.7"
-futures = "0.3.5"
+futures = "0.3.26"
 rand = "0.8"
 asynchronous-codec = "0.6"
 unsigned-varint = { version = "0.7.0", features = ["asynchronous_codec"] }

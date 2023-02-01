@@ -11,7 +11,7 @@ license = "MIT"
 [dependencies]
 async-std = { version = "1.12.0", optional = true }
 bytes = "1.2.1"
-futures = "0.3.15"
+futures = "0.3.26"
 futures-timer = "3.0.2"
 if-watch = "3.0.0"
 libp2p-core = { version = "0.39.0", path = "../../core" }
