@@ -10,37 +10,37 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-ping-container:
-    name: Build Ping interop container
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          submodules: recursive
-      - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
-        with:
-          shared-key: interop-tests
-          save-if: ${{ github.ref == 'refs/heads/master' }}
-      - name: Install Protoc
-        run: sudo apt-get install protobuf-compiler
-      - name: Build image
-        run: |
-          cargo build --release -p interop-tests
-          docker build -t rust-libp2p-head --build-arg=TEST_BINARY=target/release/ping . -f interop-tests/Dockerfile
-          docker image save -o ./interop-tests/ping-image.tar rust-libp2p-head
-      - name: Upload ping versions info
-        uses: actions/upload-artifact@v3
-        with:
-          name: ping-versions
-          path: ./interop-tests/ping-versions.json
-      - name: Upload image tar
-        uses: actions/upload-artifact@v3
-        with:
-          name: ping-image
-          path: ./interop-tests/ping-image.tar
+#  build-ping-container:
+#    name: Build Ping interop container
+#    runs-on: ubuntu-22.04
+#    steps:
+#      - uses: actions/checkout@v3
+#        with:
+#          submodules: recursive
+#      - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
+#        with:
+#          shared-key: interop-tests
+#          save-if: ${{ github.ref == 'refs/heads/master' }}
+#      - name: Install Protoc
+#        run: sudo apt-get install protobuf-compiler
+#      - name: Build image
+#        run: |
+#          cargo build --release -p interop-tests
+#          docker build -t rust-libp2p-head --build-arg=TEST_BINARY=target/release/ping . -f interop-tests/Dockerfile
+#          docker image save -o ./interop-tests/ping-image.tar rust-libp2p-head
+#      - name: Upload ping versions info
+#        uses: actions/upload-artifact@v3
+#        with:
+#          name: ping-versions
+#          path: ./interop-tests/ping-versions.json
+#      - name: Upload image tar
+#        uses: actions/upload-artifact@v3
+#        with:
+#          name: ping-image
+#          path: ./interop-tests/ping-image.tar
   run-multidim-interop:
     name: Run multidimensional interoperability tests
-    needs: build-ping-container
+#    needs: build-ping-container
     uses: "thomaseizinger/test-plans/.github/workflows/run-testplans.yml@experiment-no-clone-test-plans"
     with:
       dir: "multidim-interop"
