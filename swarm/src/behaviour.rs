@@ -29,7 +29,7 @@ pub use listen_addresses::ListenAddresses;
 use crate::connection::ConnectionId;
 use crate::dial_opts::DialOpts;
 use crate::handler::{ConnectionHandler, IntoConnectionHandler};
-use crate::{AddressRecord, AddressScore, DialError, THandlerOutEvent};
+use crate::{AddressRecord, AddressScore, DialError, ListenError, THandlerOutEvent};
 use libp2p_core::{transport::ListenerId, ConnectedPoint, Multiaddr, PeerId};
 use std::{task::Context, task::Poll};
 
@@ -636,18 +636,13 @@ pub enum NotifyHandler {
 }
 
 /// The options which connections to close.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub enum CloseConnection {
     /// Disconnect a particular connection.
     One(ConnectionId),
     /// Disconnect all connections.
+    #[default]
     All,
-}
-
-impl Default for CloseConnection {
-    fn default() -> Self {
-        CloseConnection::All
-    }
 }
 
 /// Enumeration with the list of the possible events
@@ -742,6 +737,7 @@ pub struct DialFailure<'a, Handler> {
 pub struct ListenFailure<'a, Handler> {
     pub local_addr: &'a Multiaddr,
     pub send_back_addr: &'a Multiaddr,
+    pub error: &'a ListenError,
     pub handler: Handler,
 }
 
@@ -870,10 +866,12 @@ impl<'a, Handler: IntoConnectionHandler> FromSwarm<'a, Handler> {
             FromSwarm::ListenFailure(ListenFailure {
                 local_addr,
                 send_back_addr,
+                error,
                 handler,
             }) => Some(FromSwarm::ListenFailure(ListenFailure {
                 local_addr,
                 send_back_addr,
+                error,
                 handler: map_into_handler(handler)?,
             })),
             FromSwarm::NewListener(NewListener { listener_id }) => {

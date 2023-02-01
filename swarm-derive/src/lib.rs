@@ -385,6 +385,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                         self.#i.on_swarm_event(#from_swarm::ListenFailure(#listen_failure {
                                 local_addr,
                                 send_back_addr,
+                                error,
                                 handler,
                             }));
                         },
@@ -392,6 +393,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                         self.#enum_n.on_swarm_event(#from_swarm::ListenFailure(#listen_failure {
                                 local_addr,
                                 send_back_addr,
+                                error,
                                 handler,
                             }));
                         },
@@ -786,7 +788,7 @@ fn build_struct(ast: &DeriveInput, data_struct: &DataStruct) -> TokenStream {
                         #dial_failure { peer_id, handler: handlers, error })
                     => { #(#on_dial_failure_stmts)* }
                     #from_swarm::ListenFailure(
-                        #listen_failure { local_addr, send_back_addr, handler: handlers })
+                        #listen_failure { local_addr, send_back_addr, handler: handlers, error })
                     => { #(#on_listen_failure_stmts)* }
                     #from_swarm::NewListener(
                         #new_listener { listener_id })

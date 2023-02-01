@@ -12,7 +12,7 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 either = "1.8.0"
-futures = "0.3.1"
+futures = "0.3.26"
 futures-timer = "3.0.2"
 instant = "0.1.11"
 libp2p-core = { version = "0.39.0", path = "../../core" }
