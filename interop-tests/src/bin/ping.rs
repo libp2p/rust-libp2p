@@ -1,8 +1,8 @@
 use std::env;
 use std::str::FromStr;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use either::Either;
 use env_logger::{Env, Target};
 use futures::{future, AsyncRead, AsyncWrite, StreamExt};
@@ -32,11 +32,11 @@ async fn main() -> Result<()> {
         .unwrap_or_else(|_| "true".into())
         .parse::<bool>()?;
 
-    let test_timeout = env::var("test_timeout")
+    let test_timeout = env::var("test_timeout_seconds")
         .unwrap_or_else(|_| "10".into())
-        .parse::<usize>()?;
+        .parse::<u64>()?;
 
-    let redis_addr = env::var("REDIS_ADDR")
+    let redis_addr = env::var("redis_addr")
         .map(|addr| format!("redis://{addr}"))
         .unwrap_or_else(|_| "redis://redis:6379".into());
 
@@ -105,26 +105,31 @@ async fn main() -> Result<()> {
     // retrieved via `listenAddr` key over the redis connection. Or wait to be pinged and have
     // `dialerDone` key ready on the redis connection.
     if is_dialer {
-        let result: Vec<String> = conn.blpop("listenerAddr", test_timeout).await?;
+        let result: Vec<String> = conn.blpop("listenerAddr", test_timeout as usize).await?;
         let other = result
             .get(1)
             .context("Failed to wait for listener to be ready")?;
 
+        let handshake_start = Instant::now();
+
         swarm.dial(other.parse::<Multiaddr>()?)?;
         log::info!("Test instance, dialing multiaddress on: {}.", other);
 
-        loop {
+        let rtt = loop {
             if let Some(SwarmEvent::Behaviour(BehaviourEvent::Ping(ping::Event {
                 peer: _,
                 result: Ok(ping::Success::Ping { rtt }),
             }))) = swarm.next().await
             {
                 log::info!("Ping successful: {rtt:?}");
-                break;
+                break rtt.as_millis() as f32;
             }
-        }
+        };
 
-        conn.rpush("dialerDone", "").await?;
+        let handshake_plus_ping = handshake_start.elapsed().as_millis() as f32;
+        println!(
+            r#"{{"handshakePlusOneRTTMillis": {handshake_plus_ping:.1}, "pingRTTMilllis": {rtt:.1}}}"#
+        );
     } else {
         loop {
             if let Some(SwarmEvent::NewListenAddr {
@@ -149,11 +154,8 @@ async fn main() -> Result<()> {
                 swarm.next().await;
             }
         });
-
-        let done: Vec<String> = conn.blpop("dialerDone", test_timeout).await?;
-        done.get(1)
-            .context("Failed to wait for dialer conclusion")?;
-        log::info!("Ping successful");
+        tokio::time::sleep(Duration::from_secs(test_timeout)).await;
+        bail!("Test should have been killed by the test runner!");
     }
 
     Ok(())
