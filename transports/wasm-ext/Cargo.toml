@@ -11,7 +11,7 @@ keywords = ["peer-to-peer", "libp2p", "networking"]
 categories = ["network-programming", "asynchronous"]
 
 [dependencies]
-futures = "0.3.1"
+futures = "0.3.26"
 js-sys = "0.3.50"
 libp2p-core = { version = "0.39.0", path = "../../core" }
 parity-send-wrapper = "0.1.0"

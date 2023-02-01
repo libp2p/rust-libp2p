@@ -1560,7 +1560,6 @@ where
             .new_handler()
             .inbound_protocol()
             .protocol_info()
-            .into_iter()
             .map(|info| info.protocol_name().to_vec())
             .collect();
 
