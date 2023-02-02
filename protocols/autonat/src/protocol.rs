@@ -354,11 +354,8 @@ mod tests {
             type_pb: Some(proto::MessageType::DIAL),
             dial: Some(proto::Dial {
                 peer: Some(proto::PeerInfo {
-                    id: Some(Cow::from(PeerId::random().to_bytes())),
-                    addrs: vec![
-                        Cow::from(valid_multiaddr_bytes),
-                        Cow::from(invalid_multiaddr),
-                    ],
+                    id: Some(PeerId::random().to_bytes()),
+                    addrs: vec![valid_multiaddr_bytes, invalid_multiaddr],
                 }),
             }),
             dialResponse: None,
