@@ -6,15 +6,13 @@ publish = false
 
 [dependencies]
 anyhow = "1"
-async-trait = "0.1.58"
 either = "1.8.0"
 env_logger = "0.9.0"
 futures = "0.3.26"
 if-addrs = "0.8.0"
-libp2p = { path = "../", default_features = false, features = ["websocket", "quic",  "mplex", "yamux", "tcp", "tokio", "ping", "noise", "tls", "dns", "rsa", "macros", "webrtc"] }
+libp2p = { path = "../", features = ["websocket", "quic",  "mplex", "yamux", "tcp", "tokio", "ping", "noise", "tls", "dns", "rsa", "macros", "webrtc"] }
 log = "0.4"
 rand = "0.8.5"
 redis = { version = "0.22.1", features = ["tokio-native-tls-comp", "tokio-comp"] }
 strum = { version = "0.24.1", features = ["derive"] }
 tokio = { version = "1.24.1", features = ["full"] }
-
