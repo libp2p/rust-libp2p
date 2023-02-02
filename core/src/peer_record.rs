@@ -177,10 +177,10 @@ mod tests {
 
             let payload = {
                 let record = proto::PeerRecord {
-                    peer_id: Cow::from(identity_a.public().to_peer_id().to_bytes()),
+                    peer_id: identity_a.public().to_peer_id().to_bytes(),
                     seq: 0,
                     addresses: vec![proto::AddressInfo {
-                        multiaddr: Cow::from(addr.to_vec()),
+                        multiaddr: addr.to_vec(),
                     }],
                 };
 

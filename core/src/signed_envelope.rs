@@ -2,7 +2,6 @@ use crate::identity::error::SigningError;
 use crate::identity::Keypair;
 use crate::{identity, proto, DecodeError, PublicKey};
 use quick_protobuf::{BytesReader, Writer};
-use std::borrow::Cow;
 use std::convert::TryInto;
 use std::fmt;
 use unsigned_varint::encode::usize_buffer;
