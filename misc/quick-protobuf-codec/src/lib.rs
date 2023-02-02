@@ -1,7 +1,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
 use asynchronous_codec::{Decoder, Encoder};
-use bytes::BytesMut;
+use bytes::{Bytes, BytesMut};
 use quick_protobuf::{BytesReader, MessageRead, MessageWrite, Writer};
 use std::marker::PhantomData;
 use unsigned_varint::codec::UviBytes;
@@ -35,11 +35,11 @@ impl<In: MessageWrite, Out> Encoder for Codec<In, Out> {
     type Error = Error;
 
     fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
-        let mut encoded_msg = BytesMut::new();
-        let mut writer = Writer::new(encoded_msg.as_mut());
+        let mut encoded_msg = Vec::new();
+        let mut writer = Writer::new(&mut encoded_msg);
         item.write_message(&mut writer)
             .expect("Encoding to succeed");
-        self.uvi.encode(encoded_msg.freeze(), dst)?;
+        self.uvi.encode(Bytes::from(encoded_msg), dst)?;
 
         Ok(())
     }

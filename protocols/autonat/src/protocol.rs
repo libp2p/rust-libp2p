@@ -24,7 +24,6 @@ use futures::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use libp2p_core::{upgrade, Multiaddr, PeerId};
 use libp2p_request_response::{self as request_response, ProtocolName};
 use quick_protobuf::{BytesReader, Writer};
-use std::borrow::Cow;
 use std::{convert::TryFrom, io};
 
 #[derive(Clone, Debug)]
@@ -276,12 +275,12 @@ impl DialResponse {
         let dial_response = match self.result {
             Ok(addr) => proto::DialResponse {
                 status: Some(proto::ResponseStatus::OK),
-                statusText: self.status_text.map(Cow::from),
-                addr: Some(Cow::from(addr.to_vec())),
+                statusText: self.status_text,
+                addr: Some(addr.to_vec()),
             },
             Err(error) => proto::DialResponse {
                 status: Some(error.into()),
-                statusText: self.status_text.map(Cow::from),
+                statusText: self.status_text,
                 addr: None,
             },
         };
