@@ -309,6 +309,44 @@ fn with_either() {
 }
 
 #[test]
+fn with_generics() {
+    #[allow(dead_code)]
+    #[derive(NetworkBehaviour)]
+    #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
+    struct Foo<A, B> {
+        a: A,
+        b: B,
+    }
+
+    #[allow(dead_code)]
+    fn foo() {
+        require_net_behaviour::<
+            Foo<
+                libp2p_kad::Kademlia<libp2p_kad::record::store::MemoryStore>,
+                libp2p_ping::Behaviour,
+            >,
+        >();
+    }
+}
+
+#[test]
+fn with_generics_mixed() {
+    #[allow(dead_code)]
+    #[derive(NetworkBehaviour)]
+    #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
+    struct Foo<A> {
+        a: A,
+        ping: libp2p_ping::Behaviour,
+    }
+
+    #[allow(dead_code)]
+    fn foo() {
+        require_net_behaviour::<Foo<libp2p_kad::Kademlia<libp2p_kad::record::store::MemoryStore>>>(
+        );
+    }
+}
+
+#[test]
 fn custom_event_with_either() {
     use either::Either;
 

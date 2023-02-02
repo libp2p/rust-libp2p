@@ -24,7 +24,7 @@ x25519-dalek = "1.1.0"
 zeroize = "1"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-snow = { version = "0.9.0", features = ["ring-resolver"], default-features = false }
+snow = { version = "0.9.1", features = ["ring-resolver"], default-features = false }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 snow = { version = "0.9.0", features = ["default-resolver"], default-features = false }
