@@ -103,10 +103,7 @@ impl PendingConnect {
     ) -> Result<Vec<Multiaddr>, UpgradeError> {
         let msg = proto::HolePunch {
             type_pb: proto::Type::CONNECT,
-            ObsAddrs: local_obs_addrs
-                .into_iter()
-                .map(|a| a.to_vec())
-                .collect(),
+            ObsAddrs: local_obs_addrs.into_iter().map(|a| a.to_vec()).collect(),
         };
 
         self.substream.send(msg).await?;

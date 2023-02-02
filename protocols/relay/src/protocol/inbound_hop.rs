@@ -227,10 +227,7 @@ impl CircuitReq {
         self.substream.close().await.map_err(Into::into)
     }
 
-    async fn send(
-        &mut self,
-        msg: proto::HopMessage,
-    ) -> Result<(), quick_protobuf_codec::Error> {
+    async fn send(&mut self, msg: proto::HopMessage) -> Result<(), quick_protobuf_codec::Error> {
         self.substream.send(msg).await?;
         self.substream.flush().await?;
 

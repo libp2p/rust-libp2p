@@ -110,8 +110,7 @@ pub enum FatalUpgradeError {
 }
 
 pub struct Circuit {
-    substream:
-        Framed<NegotiatedSubstream, quick_protobuf_codec::Codec<proto::StopMessage>>,
+    substream: Framed<NegotiatedSubstream, quick_protobuf_codec::Codec<proto::StopMessage>>,
     src_peer_id: PeerId,
     limit: Option<protocol::Limit>,
 }
@@ -160,10 +159,7 @@ impl Circuit {
         self.send(msg).await.map_err(Into::into)
     }
 
-    async fn send(
-        &mut self,
-        msg: proto::StopMessage,
-    ) -> Result<(), quick_protobuf_codec::Error> {
+    async fn send(&mut self, msg: proto::StopMessage) -> Result<(), quick_protobuf_codec::Error> {
         self.substream.send(msg).await?;
         self.substream.flush().await?;
 

@@ -61,11 +61,7 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
 
         let msg = proto::HolePunch {
             type_pb: proto::Type::CONNECT,
-            ObsAddrs: self
-                .obs_addrs
-                .into_iter()
-                .map(|a| a.to_vec())
-                .collect(),
+            ObsAddrs: self.obs_addrs.into_iter().map(|a| a.to_vec()).collect(),
         };
 
         async move {
