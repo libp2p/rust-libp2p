@@ -7,8 +7,8 @@ use std::marker::PhantomData;
 use unsigned_varint::codec::UviBytes;
 
 /// [`Codec`] implements [`Encoder`] and [`Decoder`], uses [`unsigned_varint`]
-/// to prefix messages with their length and uses [`prost`] and a provided
-/// `struct` implementing [`Message`] to do the encoding.
+/// to prefix messages with their length and uses [`quick_protobuf`] and a provided
+/// `struct` implementing [`MessageRead`] and [`MessageWrite`] to do the encoding.
 pub struct Codec<In, Out = In> {
     uvi: UviBytes,
     phantom: PhantomData<(In, Out)>,

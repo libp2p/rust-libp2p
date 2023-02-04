@@ -2,7 +2,7 @@
 name = "quick-protobuf-codec"
 edition = "2021"
 rust-version = "1.60.0"
-description = "Asynchronous de-/encoding of Protobuf structs using asynchronous-codec, unsigned-varint and prost."
+description = "Asynchronous de-/encoding of Protobuf structs using asynchronous-codec, unsigned-varint and quick-protobuf."
 version = "0.1.0"
 authors = ["Max Inden <mail@max-inden.de>"]
 license = "MIT"
