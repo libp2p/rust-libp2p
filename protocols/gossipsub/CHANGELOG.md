@@ -14,10 +14,13 @@
   It is preferred to import the gossipsub protocol as a module (`use libp2p::gossipsub;`), and refer to its types via `gossipsub::`.
   For example: `gossipsub::Behaviour` or `gossipsub::RawMessage`. See [PR 3303].
 
+- Migrate from `prost` to `quick-protobuf`. This removes `protoc` dependency. See [PR 3312].
+
 [PR 3207]: https://github.com/libp2p/rust-libp2p/pull/3207/
 [PR 3303]: https://github.com/libp2p/rust-libp2p/pull/3303/
 [PR 3381]: https://github.com/libp2p/rust-libp2p/pull/3381/
 [discussion 2174]: https://github.com/libp2p/rust-libp2p/discussions/2174
+[PR 3312]: https://github.com/libp2p/rust-libp2p/pull/3312
 
 # 0.43.0
 
