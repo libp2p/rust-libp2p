@@ -33,6 +33,7 @@ use libp2p_swarm::{
     KeepAlive, NegotiatedSubstream, SubstreamProtocol,
 };
 use log::warn;
+use smallvec::SmallVec;
 use std::collections::VecDeque;
 use std::{io, pin::Pin, task::Context, task::Poll, time::Duration};
 
@@ -99,7 +100,17 @@ pub struct Handler {
     remote_peer_id: PeerId,
     inbound_identify_push: Option<BoxFuture<'static, Result<Info, UpgradeError>>>,
     /// Pending events to yield.
-    pending_events: FuturesUnordered<
+    events: SmallVec<
+        [ConnectionHandlerEvent<
+            Either<ReadyUpgrade<&'static [u8]>, ReadyUpgrade<&'static [u8]>>,
+            Option<Info>,
+            Event,
+            io::Error,
+        >; 4],
+    >,
+
+    /// Pending identification replies, awaiting being sent and received.
+    pending_replies: FuturesUnordered<
         BoxFuture<
             'static,
             Result<
@@ -184,10 +195,11 @@ impl Handler {
         Self {
             remote_peer_id,
             inbound_identify_push: Default::default(),
-            pending_events: FuturesUnordered::new(),
+            events: SmallVec::new(),
             reply_streams: VecDeque::new(),
             trigger_next_identify: Delay::new(initial_delay),
             keep_alive: KeepAlive::Yes,
+            pending_replies: FuturesUnordered::new(),
             interval,
             public_key,
             protocol_version,
@@ -207,10 +219,8 @@ impl Handler {
     ) {
         match output {
             future::Either::Left(substream) => {
-                self.pending_events
-                    .push(Box::pin(future::ok(ConnectionHandlerEvent::Custom(
-                        Event::Identify,
-                    ))));
+                self.events
+                    .push(ConnectionHandlerEvent::Custom(Event::Identify));
                 if !self.reply_streams.is_empty() {
                     warn!(
                         "New inbound identify request from {} while a previous one \
@@ -252,7 +262,7 @@ impl Handler {
                     let info = protocol::recv(substream).await?;
                     Ok(ConnectionHandlerEvent::Custom(Event::Identified(info)))
                 });
-                self.pending_events.push(fut);
+                self.pending_replies.push(fut);
             }
             future::Either::Right(substream) => {
                 let fut = Box::pin(async move {
@@ -263,7 +273,7 @@ impl Handler {
                     .await?;
                     Ok(ConnectionHandlerEvent::Custom(Event::IdentificationPushed))
                 });
-                self.pending_events.push(fut);
+                self.pending_replies.push(fut);
             }
         }
     }
@@ -307,14 +317,13 @@ impl ConnectionHandler for Handler {
 
         match protocol {
             Protocol::Push => {
-                self.pending_events.push(Box::pin(future::ok(
-                    ConnectionHandlerEvent::OutboundSubstreamRequest {
+                self.events
+                    .push(ConnectionHandlerEvent::OutboundSubstreamRequest {
                         protocol: SubstreamProtocol::new(
                             Either::Right(ReadyUpgrade::new(PUSH_PROTOCOL_NAME)),
                             Some(info),
                         ),
-                    },
-                )));
+                    });
             }
             Protocol::Identify(_) => {
                 let substream = self
@@ -326,7 +335,7 @@ impl ConnectionHandler for Handler {
                     protocol::send(substream, info).await?;
                     Ok(ConnectionHandlerEvent::Custom(Event::Identification(peer)))
                 });
-                self.pending_events.push(fut);
+                self.pending_replies.push(fut);
             }
         }
     }
@@ -341,8 +350,12 @@ impl ConnectionHandler for Handler {
     ) -> Poll<
         ConnectionHandlerEvent<Self::OutboundProtocol, Self::OutboundOpenInfo, Event, Self::Error>,
     > {
-        // Check for pending events to yield.
-        match self.pending_events.poll_next_unpin(cx) {
+        if !self.events.is_empty() {
+            return Poll::Ready(self.events.remove(0));
+        }
+
+        // Check for pending replies to send.
+        match self.pending_replies.poll_next_unpin(cx) {
             Poll::Ready(Some(Ok(event))) => return Poll::Ready(event),
             Poll::Ready(Some(Err(err))) => {
                 return Poll::Ready(ConnectionHandlerEvent::Custom(Event::IdentificationError(
