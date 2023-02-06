@@ -10,13 +10,11 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-ping-container:
-    name: Build Ping interop container
+  run-multidim-interop:
+    name: Run multidimensional interoperability tests
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v3
-        with:
-          submodules: recursive
       - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
         with:
           shared-key: interop-tests
@@ -27,23 +25,7 @@ jobs:
         run: |
           cargo build --release -p interop-tests
           docker build -t rust-libp2p-head --build-arg=TEST_BINARY=target/release/ping . -f interop-tests/Dockerfile
-          docker image save -o ./interop-tests/ping-image.tar rust-libp2p-head
-      - name: Upload ping versions info
-        uses: actions/upload-artifact@v3
+      - uses: libp2p/test-plans/.github/actions/run-interop-ping-test@c9130e425d266e5b222636d61348c0f8d6b978e4
         with:
-          name: ping-versions
-          path: ./interop-tests/ping-versions.json
-      - name: Upload image tar
-        uses: actions/upload-artifact@v3
-        with:
-          name: ping-image
-          path: ./interop-tests/ping-image.tar
-  run-multidim-interop:
-    name: Run multidimensional interoperability tests
-    needs: build-ping-container
-    uses: "libp2p/test-plans/.github/workflows/run-testplans.yml@master"
-    with:
-      dir: "multidim-interop"
-      extra-versions: ping-versions
-      image-tar: ping-image
-      test-filter: "rust-libp2p-head"
+          test-filter: rust-libp2p-head
+          extra-versions: ${{ github.workspace }}/interop-tests/ping-version.json
