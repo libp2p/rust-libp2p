@@ -18,14 +18,15 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::protocol::{self, InboundPush, Info, OutboundPush, Protocol, Push, UpgradeError};
-use crate::PROTOCOL_NAME;
+use crate::protocol::{
+    self, Identify, InboundPush, Info, OutboundPush, Protocol, Push, UpgradeError,
+};
 use either::Either;
 use futures::future::BoxFuture;
 use futures::prelude::*;
 use futures::stream::FuturesUnordered;
 use futures_timer::Delay;
-use libp2p_core::upgrade::{ReadyUpgrade, SelectUpgrade};
+use libp2p_core::upgrade::SelectUpgrade;
 use libp2p_core::{ConnectedPoint, Multiaddr, PeerId, PublicKey};
 use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
@@ -86,7 +87,7 @@ impl IntoConnectionHandler for Proto {
     }
 
     fn inbound_protocol(&self) -> <Self::Handler as ConnectionHandler>::InboundProtocol {
-        SelectUpgrade::new(ReadyUpgrade::new(PROTOCOL_NAME), Push::inbound())
+        SelectUpgrade::new(Identify, Push::inbound())
     }
 }
 
@@ -100,20 +101,14 @@ pub struct Handler {
     inbound_identify_push: Option<BoxFuture<'static, Result<Info, UpgradeError>>>,
     /// Pending events to yield.
     events: SmallVec<
-        [ConnectionHandlerEvent<
-            Either<ReadyUpgrade<&'static [u8]>, Push<OutboundPush>>,
-            (),
-            Event,
-            io::Error,
-        >; 4],
+        [ConnectionHandlerEvent<Either<Identify, Push<OutboundPush>>, (), Event, io::Error>; 4],
     >,
 
     /// Streams awaiting `BehaviourInfo` to then send identify requests.
     reply_streams: VecDeque<NegotiatedSubstream>,
 
-    /// Pending identification replies, awaiting being sent and received.
-    pending_replies:
-        FuturesUnordered<BoxFuture<'static, Result<Either<PeerId, Info>, UpgradeError>>>,
+    /// Pending identification replies, awaiting being sent.
+    pending_replies: FuturesUnordered<BoxFuture<'static, Result<PeerId, UpgradeError>>>,
 
     /// Future that fires when we need to identify the node again.
     trigger_next_identify: Delay,
@@ -240,11 +235,11 @@ impl Handler {
     ) {
         match output {
             future::Either::Left(remote_info) => {
-                let fut = Box::pin(async move {
-                    let info = protocol::recv(remote_info).await?;
-                    Ok(Either::Right(info))
-                });
-                self.pending_replies.push(fut);
+                self.events
+                    .push(ConnectionHandlerEvent::Custom(Event::Identified(
+                        remote_info,
+                    )));
+                self.keep_alive = KeepAlive::No;
             }
             future::Either::Right(()) => self
                 .events
@@ -263,7 +258,7 @@ impl Handler {
 
         let err = err.map_upgrade_err(|e| match e {
             UpgradeError::Select(e) => UpgradeError::Select(e),
-            UpgradeError::Apply(Either::Left(_ioe)) => unreachable!(),
+            UpgradeError::Apply(Either::Left(ioe)) => UpgradeError::Apply(ioe),
             UpgradeError::Apply(Either::Right(ioe)) => UpgradeError::Apply(ioe),
         });
         self.events
@@ -279,16 +274,13 @@ impl ConnectionHandler for Handler {
     type InEvent = InEvent;
     type OutEvent = Event;
     type Error = io::Error;
-    type InboundProtocol = SelectUpgrade<ReadyUpgrade<&'static [u8]>, Push<InboundPush>>;
-    type OutboundProtocol = Either<ReadyUpgrade<&'static [u8]>, Push<OutboundPush>>;
+    type InboundProtocol = SelectUpgrade<Identify, Push<InboundPush>>;
+    type OutboundProtocol = Either<Identify, Push<OutboundPush>>;
     type OutboundOpenInfo = ();
     type InboundOpenInfo = ();
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
-        SubstreamProtocol::new(
-            SelectUpgrade::new(ReadyUpgrade::new(PROTOCOL_NAME), Push::inbound()),
-            (),
-        )
+        SubstreamProtocol::new(SelectUpgrade::new(Identify, Push::inbound()), ())
     }
 
     fn on_behaviour_event(
@@ -323,7 +315,7 @@ impl ConnectionHandler for Handler {
                 let peer = self.remote_peer_id;
                 let fut = Box::pin(async move {
                     protocol::send(substream, info).await?;
-                    Ok(Either::Left(peer))
+                    Ok(peer)
                 });
                 self.pending_replies.push(fut);
             }
@@ -350,10 +342,7 @@ impl ConnectionHandler for Handler {
             Poll::Ready(()) => {
                 self.trigger_next_identify.reset(self.interval);
                 let ev = ConnectionHandlerEvent::OutboundSubstreamRequest {
-                    protocol: SubstreamProtocol::new(
-                        Either::Left(ReadyUpgrade::new(PROTOCOL_NAME)),
-                        (),
-                    ),
+                    protocol: SubstreamProtocol::new(Either::Left(Identify), ()),
                 };
                 return Poll::Ready(ev);
             }
@@ -373,12 +362,9 @@ impl ConnectionHandler for Handler {
 
         // Check for pending replies to send.
         match self.pending_replies.poll_next_unpin(cx) {
-            Poll::Ready(Some(Ok(Either::Left(peer_id)))) => Poll::Ready(
-                ConnectionHandlerEvent::Custom(Event::Identification(peer_id)),
-            ),
-            Poll::Ready(Some(Ok(Either::Right(info)))) => {
-                Poll::Ready(ConnectionHandlerEvent::Custom(Event::Identified(info)))
-            }
+            Poll::Ready(Some(Ok(peer_id))) => Poll::Ready(ConnectionHandlerEvent::Custom(
+                Event::Identification(peer_id),
+            )),
             Poll::Ready(Some(Err(err))) => Poll::Ready(ConnectionHandlerEvent::Custom(
                 Event::IdentificationError(ConnectionHandlerUpgrErr::Upgrade(
                     libp2p_core::upgrade::UpgradeError::Apply(err),

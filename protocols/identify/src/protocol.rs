@@ -35,9 +35,9 @@ use void::Void;
 
 const MAX_MESSAGE_SIZE_BYTES: usize = 4096;
 
-pub const PROTOCOL_NAME: &[u8] = b"/ipfs/id/1.0.0";
+pub const PROTOCOL_NAME: &[u8; 14] = b"/ipfs/id/1.0.0";
 
-pub const PUSH_PROTOCOL_NAME: &[u8] = b"/ipfs/id/push/1.0.0";
+pub const PUSH_PROTOCOL_NAME: &[u8; 19] = b"/ipfs/id/push/1.0.0";
 
 /// The type of the Substream protocol.
 #[derive(Debug, PartialEq, Eq)]
@@ -45,6 +45,10 @@ pub enum Protocol {
     Identify(ConnectionId),
     Push,
 }
+
+/// Substream upgrade protocol for `/ipfs/id/1.0.0`.
+#[derive(Debug, Clone)]
+pub struct Identify;
 
 /// Substream upgrade protocol for `/ipfs/id/push/1.0.0`.
 #[derive(Debug, Clone)]
@@ -81,6 +85,38 @@ pub struct Info {
     pub protocols: Vec<String>,
     /// Address observed by or for the remote.
     pub observed_addr: Multiaddr,
+}
+
+impl UpgradeInfo for Identify {
+    type Info = &'static [u8];
+    type InfoIter = iter::Once<Self::Info>;
+
+    fn protocol_info(&self) -> Self::InfoIter {
+        iter::once(PROTOCOL_NAME)
+    }
+}
+
+impl<C> InboundUpgrade<C> for Identify {
+    type Output = C;
+    type Error = UpgradeError;
+    type Future = future::Ready<Result<Self::Output, UpgradeError>>;
+
+    fn upgrade_inbound(self, socket: C, _: Self::Info) -> Self::Future {
+        future::ok(socket)
+    }
+}
+
+impl<C> OutboundUpgrade<C> for Identify
+where
+    C: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    type Output = Info;
+    type Error = UpgradeError;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
+
+    fn upgrade_outbound(self, socket: C, _: Self::Info) -> Self::Future {
+        recv(socket).boxed()
+    }
 }
 
 impl<T> UpgradeInfo for Push<T> {
@@ -153,7 +189,7 @@ where
     Ok(())
 }
 
-pub async fn recv<T>(mut socket: T) -> Result<Info, UpgradeError>
+async fn recv<T>(mut socket: T) -> Result<Info, UpgradeError>
 where
     T: AsyncRead + AsyncWrite + Unpin,
 {
@@ -236,7 +272,7 @@ mod tests {
     use futures::channel::oneshot;
     use libp2p_core::{
         identity,
-        upgrade::{self, apply_inbound, apply_outbound, ReadyUpgrade},
+        upgrade::{self, apply_inbound, apply_outbound},
         Transport,
     };
     use libp2p_tcp as tcp;
@@ -275,9 +311,7 @@ mod tests {
                 .await
                 .unwrap();
 
-            let sender = apply_inbound(socket, ReadyUpgrade::new(PROTOCOL_NAME))
-                .await
-                .unwrap();
+            let sender = apply_inbound(socket, Identify).await.unwrap();
 
             send(
                 sender,
@@ -301,14 +335,9 @@ mod tests {
             let mut transport = tcp::async_io::Transport::default();
 
             let socket = transport.dial(rx.await.unwrap()).unwrap().await.unwrap();
-            let upgrade = apply_outbound(
-                socket,
-                ReadyUpgrade::new(PROTOCOL_NAME),
-                upgrade::Version::V1,
-            )
-            .await
-            .unwrap();
-            let info = recv(upgrade).await.unwrap();
+            let info = apply_outbound(socket, Identify, upgrade::Version::V1)
+                .await
+                .unwrap();
             assert_eq!(
                 info.observed_addr,
                 "/ip4/100.101.102.103/tcp/5000".parse().unwrap()
