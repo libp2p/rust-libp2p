@@ -48,9 +48,19 @@ mod select;
 
 pub use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper, UpgradeInfoSend};
 
+use std::{fmt::Display, future::Future};
+
+use futures::{stream::FuturesUnordered, Stream, StreamExt};
+use futures_timer::Delay;
 use instant::Instant;
 use libp2p_core::{upgrade::UpgradeError, ConnectedPoint, Multiaddr, PeerId};
-use std::{cmp::Ordering, error, fmt, task::Context, task::Poll, time::Duration};
+use std::{
+    cmp::Ordering,
+    error, fmt,
+    task::Poll,
+    task::{Context, Waker},
+    time::Duration,
+};
 
 pub use map_in::MapInEvent;
 pub use map_out::MapOutEvent;
@@ -563,3 +573,123 @@ impl Ord for KeepAlive {
         }
     }
 }
+
+/// A set of timed futures which may complete in any order.
+/// Requires its inner Futures to complete before the specified duration has elapsed.
+pub struct TimedFutures<T> {
+    inner: FuturesUnordered<TimedFuture<T>>,
+    list_full_waker: Option<Waker>,
+    capacity: usize,
+}
+
+impl<T> TimedFutures<T> {
+    /// Construct a [`TimedFutures`] with the given capacity.
+    pub fn new(capacity: usize) -> Self {
+        TimedFutures {
+            inner: FuturesUnordered::new(),
+            list_full_waker: None,
+            capacity,
+        }
+    }
+
+    /// Whether the list is currently at capacity, i.e. full.
+    pub fn is_full(&self) -> bool {
+        self.inner.len() == self.capacity
+    }
+
+    /// Attempt to push an item to the list with the desired timeout .
+    ///
+    /// This fails in case the list is currently full.
+    /// Typically, you should call [`TimedFutures::poll_push_ready`] before calling this.
+    pub fn try_push(&mut self, fut: T, timeout: Duration) -> Result<(), T> {
+        if self.is_full() {
+            return Err(fut);
+        }
+        self.inner.push(TimedFuture::new(fut, timeout));
+        Ok(())
+    }
+
+    /// Check if we can push an item to the list.
+    ///
+    /// In case the list is full, [`Poll::Pending`] is returned and a waker is registered that will call the current task once there is a slot in the list.
+    pub fn poll_push_ready(&mut self, cx: &mut Context<'_>) -> Poll<()> {
+        if !self.is_full() {
+            return Poll::Ready(());
+        }
+
+        self.list_full_waker = Some(cx.waker().clone());
+        Poll::Pending
+    }
+}
+
+impl<T> Stream for TimedFutures<T>
+where
+    T: Future,
+{
+    type Item = Result<T::Output, Elapsed>;
+
+    fn poll_next(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Self::Item>> {
+        self.inner.poll_next_unpin(cx)
+    }
+}
+
+/// Inner future of [`TimedFutures`]. Requires its inner Future
+///to complete before the specified duration has elapsed.
+#[pin_project::pin_project]
+#[derive(Debug)]
+struct TimedFuture<T> {
+    #[pin]
+    inner: T,
+    #[pin]
+    delay: Delay,
+    duration: Duration,
+}
+
+impl<T> TimedFuture<T> {
+    fn new(inner: T, duration: Duration) -> Self {
+        Self {
+            inner,
+            delay: Delay::new(duration),
+            duration,
+        }
+    }
+}
+impl<T> Future for TimedFuture<T>
+where
+    T: Future,
+{
+    type Output = Result<T::Output, Elapsed>;
+
+    fn poll(self: std::pin::Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let duration = self.duration;
+        let this = self.project();
+
+        // First, try polling the future
+        if let Poll::Ready(v) = this.inner.poll(cx) {
+            return Poll::Ready(Ok(v));
+        }
+
+        match this.delay.poll(cx) {
+            Poll::Ready(()) => Poll::Ready(Err(Elapsed { duration })),
+            Poll::Pending => Poll::Pending,
+        }
+    }
+}
+
+/// Error that is returned when a timeout expires
+/// before a [`TimedFutures`] Future was able to finish.
+#[derive(Debug)]
+pub struct Elapsed {
+    duration: Duration,
+}
+
+impl Display for Elapsed {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Elapsed {:?}", self.duration)
+    }
+}
+
+impl std::error::Error for Elapsed {}
