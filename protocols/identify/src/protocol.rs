@@ -20,13 +20,18 @@
 
 use crate::structs_proto;
 use asynchronous_codec::{FramedRead, FramedWrite};
-use futures::prelude::*;
-use libp2p_core::{identity, multiaddr, Multiaddr, PublicKey};
+use futures::{future::BoxFuture, prelude::*};
+use libp2p_core::{
+    identity, multiaddr,
+    upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo},
+    Multiaddr, PublicKey,
+};
 use libp2p_swarm::ConnectionId;
 use log::{debug, trace};
 use std::convert::TryFrom;
-use std::io;
+use std::{io, iter, pin::Pin};
 use thiserror::Error;
+use void::Void;
 
 const MAX_MESSAGE_SIZE_BYTES: usize = 4096;
 
@@ -39,6 +44,24 @@ pub const PUSH_PROTOCOL_NAME: &[u8] = b"/ipfs/id/push/1.0.0";
 pub enum Protocol {
     Identify(ConnectionId),
     Push,
+}
+
+/// Substream upgrade protocol for `/ipfs/id/push/1.0.0`.
+#[derive(Debug, Clone)]
+pub struct Push<T>(T);
+pub struct InboundPush();
+pub struct OutboundPush(Info);
+
+impl Push<InboundPush> {
+    pub fn inbound() -> Self {
+        Push(InboundPush())
+    }
+}
+
+impl Push<OutboundPush> {
+    pub fn outbound(info: Info) -> Self {
+        Push(OutboundPush(info))
+    }
 }
 
 /// Information of a peer sent in protocol messages.
@@ -58,6 +81,42 @@ pub struct Info {
     pub protocols: Vec<String>,
     /// Address observed by or for the remote.
     pub observed_addr: Multiaddr,
+}
+
+impl<T> UpgradeInfo for Push<T> {
+    type Info = &'static [u8];
+    type InfoIter = iter::Once<Self::Info>;
+
+    fn protocol_info(&self) -> Self::InfoIter {
+        iter::once(PUSH_PROTOCOL_NAME)
+    }
+}
+
+impl<C> InboundUpgrade<C> for Push<InboundPush>
+where
+    C: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    type Output = BoxFuture<'static, Result<Info, UpgradeError>>;
+    type Error = Void;
+    type Future = future::Ready<Result<Self::Output, Self::Error>>;
+
+    fn upgrade_inbound(self, socket: C, _: Self::Info) -> Self::Future {
+        // Lazily upgrade stream, thus allowing upgrade to happen within identify's handler.
+        future::ok(recv(socket).boxed())
+    }
+}
+
+impl<C> OutboundUpgrade<C> for Push<OutboundPush>
+where
+    C: AsyncWrite + Unpin + Send + 'static,
+{
+    type Output = ();
+    type Error = UpgradeError;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
+
+    fn upgrade_outbound(self, socket: C, _: Self::Info) -> Self::Future {
+        send(socket, self.0 .0).boxed()
+    }
 }
 
 pub(crate) async fn send<T>(io: T, info: Info) -> Result<(), UpgradeError>
