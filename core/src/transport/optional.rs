@@ -19,9 +19,9 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::transport::{ListenerId, Transport, TransportError, TransportEvent};
+use futures::future::BoxFuture;
 use multiaddr::Multiaddr;
 use std::{pin::Pin, task::Context, task::Poll};
-use futures::future::BoxFuture;
 
 /// Transport that is possibly disabled.
 ///
@@ -75,7 +75,11 @@ where
         }
     }
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>> {
+    fn dial(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>>
+    {
         if let Some(inner) = self.0.as_mut() {
             inner.dial(addr)
         } else {
@@ -86,7 +90,8 @@ where
     fn dial_as_listener(
         &mut self,
         addr: Multiaddr,
-    ) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>> {
+    ) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>>
+    {
         if let Some(inner) = self.0.as_mut() {
             inner.dial_as_listener(addr)
         } else {

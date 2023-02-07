@@ -33,8 +33,9 @@ use crate::{
         self, apply_inbound, apply_outbound, InboundUpgrade, InboundUpgradeApply, OutboundUpgrade,
         OutboundUpgradeApply, UpgradeError,
     },
-    Negotiated, PeerId,
+    Negotiated, PeerId, UpgradeInfo,
 };
+use futures::future::BoxFuture;
 use futures::{prelude::*, ready};
 use multiaddr::Multiaddr;
 use std::{
@@ -44,7 +45,6 @@ use std::{
     task::{Context, Poll},
     time::Duration,
 };
-use futures::future::BoxFuture;
 
 /// A `Builder` facilitates upgrading of a [`Transport`] for use with
 /// a `Swarm`.
@@ -103,6 +103,10 @@ where
         D: AsyncRead + AsyncWrite + Unpin,
         U: InboundUpgrade<Negotiated<C>, Output = (PeerId, D), Error = E> + Send + 'static,
         U: OutboundUpgrade<Negotiated<C>, Output = (PeerId, D), Error = E> + Clone + Send + 'static,
+        <U as UpgradeInfo>::Info: Send + 'static,
+        <<U as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send + 'static,
+        <U as InboundUpgrade<Negotiated<C>>>::Future: Send + 'static,
+        <U as OutboundUpgrade<Negotiated<C>>>::Future: Send + 'static,
         E: Error + 'static,
     {
         let version = self.version;
@@ -206,10 +210,14 @@ where
     pub fn apply<C, D, U, E>(self, upgrade: U) -> Authenticated<Upgrade<T, U>>
     where
         T: Transport<Output = (PeerId, C)>,
-        C: AsyncRead + AsyncWrite + Unpin,
+        C: AsyncRead + AsyncWrite + Unpin + Send + 'static,
         D: AsyncRead + AsyncWrite + Unpin,
-        U: InboundUpgrade<Negotiated<C>, Output = D, Error = E>,
-        U: OutboundUpgrade<Negotiated<C>, Output = D, Error = E> + Clone,
+        U: InboundUpgrade<Negotiated<C>, Output = D, Error = E> + Send + 'static,
+        U: OutboundUpgrade<Negotiated<C>, Output = D, Error = E> + Clone + Send + 'static,
+        <U as UpgradeInfo>::Info: Send + 'static,
+        <<U as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send + 'static,
+        <U as InboundUpgrade<Negotiated<C>>>::Future: Send + 'static,
+        <U as OutboundUpgrade<Negotiated<C>>>::Future: Send + 'static,
         E: Error + 'static,
     {
         Authenticated(Builder::new(
@@ -331,7 +339,11 @@ where
     type Output = T::Output;
     type Error = T::Error;
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>> {
+    fn dial(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>>
+    {
         self.0.dial(addr)
     }
 
@@ -342,7 +354,8 @@ where
     fn dial_as_listener(
         &mut self,
         addr: Multiaddr,
-    ) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>> {
+    ) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>>
+    {
         self.0.dial_as_listener(addr)
     }
 
@@ -386,15 +399,23 @@ impl<T, C, D, U, E> Transport for Upgrade<T, U>
 where
     T: Transport<Output = (PeerId, C)>,
     T::Error: 'static,
-    C: AsyncRead + AsyncWrite + Unpin,
-    U: InboundUpgrade<Negotiated<C>, Output = D, Error = E>,
-    U: OutboundUpgrade<Negotiated<C>, Output = D, Error = E> + Clone,
+    C: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    U: InboundUpgrade<Negotiated<C>, Output = D, Error = E> + Send + 'static,
+    U: OutboundUpgrade<Negotiated<C>, Output = D, Error = E> + Clone + Send + 'static,
+    <U as UpgradeInfo>::Info: Send + 'static,
+    <<U as UpgradeInfo>::InfoIter as IntoIterator>::IntoIter: Send + 'static,
+    <U as InboundUpgrade<Negotiated<C>>>::Future: Send + 'static,
+    <U as OutboundUpgrade<Negotiated<C>>>::Future: Send + 'static,
     E: Error + 'static,
 {
     type Output = (PeerId, D);
     type Error = TransportUpgradeError<T::Error, E>;
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>> {
+    fn dial(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>>
+    {
         let future = self
             .inner
             .dial(addr)
@@ -402,7 +423,8 @@ where
         Ok(DialUpgradeFuture {
             future: Box::pin(future),
             upgrade: future::Either::Left(Some(self.upgrade.clone())),
-        }.boxed())
+        }
+        .boxed())
     }
 
     fn remove_listener(&mut self, id: ListenerId) -> bool {
@@ -412,7 +434,8 @@ where
     fn dial_as_listener(
         &mut self,
         addr: Multiaddr,
-    ) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>> {
+    ) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>>
+    {
         let future = self
             .inner
             .dial_as_listener(addr)
@@ -420,7 +443,8 @@ where
         Ok(DialUpgradeFuture {
             future: Box::pin(future),
             upgrade: future::Either::Left(Some(self.upgrade.clone())),
-        }.boxed())
+        }
+        .boxed())
     }
 
     fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
@@ -440,12 +464,14 @@ where
         let this = self.project();
         let upgrade = this.upgrade.clone();
         this.inner.poll(cx).map(|event| {
-            event
-                .map_upgrade(move |future| ListenerUpgradeFuture {
-                    future: Box::pin(future),
-                    upgrade: future::Either::Left(Some(upgrade)),
-                })
-                .map_err(TransportUpgradeError::Transport)
+            todo!("event.and_then(upgrade)")
+            //
+            // event
+            //     .map_upgrade(move |future| ListenerUpgradeFuture {
+            //         future: Box::pin(future),
+            //         upgrade: future::Either::Left(Some(upgrade)),
+            //     })
+            //     .map_err(TransportUpgradeError::Transport)
         })
     }
 }

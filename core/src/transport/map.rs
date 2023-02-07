@@ -55,7 +55,7 @@ impl<T, F> Map<T, F> {
 impl<T, F, D> Transport for Map<T, F>
 where
     T: Transport,
-    F: FnOnce(T::Output, ConnectedPoint) -> D + Clone,
+    F: FnOnce(T::Output, ConnectedPoint) -> D + Clone + Send + 'static,
 {
     type Output = D;
     type Error = T::Error;
@@ -92,7 +92,8 @@ where
     fn dial_as_listener(
         &mut self,
         addr: Multiaddr,
-    ) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>> {
+    ) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>>
+    {
         let future = self.transport.dial(addr.clone())?;
         let f = self.fun.clone();
 
@@ -134,14 +135,13 @@ where
                     upgrade: MapFuture {
                         inner: upgrade,
                         args: Some((this.fun.clone(), point)),
-                    }.boxed(),
+                    }
+                    .boxed(),
                     local_addr,
                     send_back_addr,
                 })
             }
-            Poll::Ready(other) => {
-                Poll::Ready(other)
-            }
+            Poll::Ready(other) => Poll::Ready(todo!()),
             Poll::Pending => Poll::Pending,
         }
     }

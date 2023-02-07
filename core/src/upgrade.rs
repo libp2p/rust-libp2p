@@ -139,7 +139,7 @@ pub trait UpgradeInfo {
     /// Opaque type representing a negotiable protocol.
     type Info: ProtocolName + Clone;
     /// Iterator returned by `protocol_info`.
-    type InfoIter: IntoIterator<Item = Self::Info> + Send + 'static;
+    type InfoIter: IntoIterator<Item = Self::Info>;
 
     /// Returns the list of protocols that are supported. Used during the negotiation process.
     fn protocol_info(&self) -> Self::InfoIter;
@@ -192,7 +192,7 @@ pub trait OutboundUpgrade<C>: UpgradeInfo {
     /// Possible error during the handshake.
     type Error;
     /// Future that performs the handshake with the remote.
-    type Future: Future<Output = Result<Self::Output, Self::Error>> + Send + 'static;
+    type Future: Future<Output = Result<Self::Output, Self::Error>>;
 
     /// After we have determined that the remote supports one of the protocols we support, this
     /// method is called to start the handshake.

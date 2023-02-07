@@ -25,6 +25,7 @@
 //! any desired protocols. The rest of the module defines combinators for
 //! modifying a transport through composition with other transports or protocol upgrades.
 
+use futures::future::BoxFuture;
 use futures::prelude::*;
 use multiaddr::Multiaddr;
 use std::{
@@ -33,7 +34,6 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
 };
-use futures::future::BoxFuture;
 
 pub mod and_then;
 pub mod choice;
@@ -107,7 +107,10 @@ pub trait Transport {
     ///
     /// If [`TransportError::MultiaddrNotSupported`] is returned, it may be desirable to
     /// try an alternative [`Transport`], if available.
-    fn dial(&mut self, addr: Multiaddr) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>>;
+    fn dial(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>>;
 
     /// As [`Transport::dial`] but has the local node act as a listener on the outgoing connection.
     ///
@@ -288,7 +291,7 @@ pub enum TransportEvent<TOut, TErr> {
 
 impl<TOut, TErr> TransportEvent<TOut, TErr> {
     /// TODO
-    pub fn map_out<U>(self, map: impl Fn(TOut) -> U) -> TransportEvent<U, TErr> {
+    pub fn map_out<U>(self, map: impl Fn(TOut) -> U + Send + 'static) -> TransportEvent<U, TErr> {
         match self {
             TransportEvent::Incoming {
                 listener_id,
@@ -331,7 +334,10 @@ impl<TOut, TErr> TransportEvent<TOut, TErr> {
     /// In case this [`TransportEvent`] is an [`ListenerError`](TransportEvent::ListenerError),
     /// or [`ListenerClosed`](TransportEvent::ListenerClosed) apply the given function to the
     /// error and produce another transport event based on the function's result.
-    pub fn map_err<E>(self, map_err: impl FnOnce(TErr) -> E) -> TransportEvent<TOut, E> {
+    pub fn map_err<E>(
+        self,
+        map_err: impl FnOnce(TErr) -> E + Send + 'static,
+    ) -> TransportEvent<TOut, E> {
         match self {
             TransportEvent::Incoming {
                 listener_id,

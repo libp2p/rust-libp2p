@@ -25,10 +25,10 @@ use crate::{
     Multiaddr, ProtocolName,
 };
 use either::Either;
+use futures::future::BoxFuture;
 use futures::prelude::*;
 use pin_project::pin_project;
 use std::{pin::Pin, task::Context, task::Poll};
-use futures::future::BoxFuture;
 
 impl<A, B> StreamMuxer for future::Either<A, B>
 where
@@ -147,16 +147,14 @@ where
             Either::Left(a) => match a.poll(cx) {
                 Poll::Pending => Poll::Pending,
                 Poll::Ready(event) => {
-                    Poll::Ready(event.map_out(future::Either::First).map_err(Either::Left))
+                    Poll::Ready(event.map_out(future::Either::Left).map_err(Either::Left))
                 }
             },
             Either::Right(b) => match b.poll(cx) {
                 Poll::Pending => Poll::Pending,
-                Poll::Ready(event) => Poll::Ready(
-                    event
-                        .map_out(future::Either::Second)
-                        .map_err(Either::Right),
-                ),
+                Poll::Ready(event) => {
+                    Poll::Ready(event.map_out(future::Either::Right).map_err(Either::Right))
+                }
             },
         }
     }
@@ -182,16 +180,26 @@ where
         }
     }
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>> {
+    fn dial(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>>
+    {
         use TransportError::*;
         match self {
             Either::Left(a) => match a.dial(addr) {
-                Ok(connec) => Ok(connec.map_ok(future::Either::First).map_err(Either::Left).boxed()),
+                Ok(connec) => Ok(connec
+                    .map_ok(future::Either::Left)
+                    .map_err(Either::Left)
+                    .boxed()),
                 Err(MultiaddrNotSupported(addr)) => Err(MultiaddrNotSupported(addr)),
                 Err(Other(err)) => Err(Other(Either::Left(err))),
             },
             Either::Right(b) => match b.dial(addr) {
-                Ok(connec) => Ok(connec.map_ok(future::Either::Second).map_err(Either::Right).boxed()),
+                Ok(connec) => Ok(connec
+                    .map_ok(future::Either::Right)
+                    .map_err(Either::Right)
+                    .boxed()),
                 Err(MultiaddrNotSupported(addr)) => Err(MultiaddrNotSupported(addr)),
                 Err(Other(err)) => Err(Other(Either::Right(err))),
             },
@@ -208,12 +216,18 @@ where
         use TransportError::*;
         match self {
             Either::Left(a) => match a.dial_as_listener(addr) {
-                Ok(connec) => Ok(connec.map_ok(future::Either::First).map_err(Either::Left).boxed()),
+                Ok(connec) => Ok(connec
+                    .map_ok(future::Either::Left)
+                    .map_err(Either::Left)
+                    .boxed()),
                 Err(MultiaddrNotSupported(addr)) => Err(MultiaddrNotSupported(addr)),
                 Err(Other(err)) => Err(Other(Either::Left(err))),
             },
             Either::Right(b) => match b.dial_as_listener(addr) {
-                Ok(connec) => Ok(connec.map_ok(future::Either::Second).map_err(Either::Right).boxed()),
+                Ok(connec) => Ok(connec
+                    .map_ok(future::Either::Right)
+                    .map_err(Either::Right)
+                    .boxed()),
                 Err(MultiaddrNotSupported(addr)) => Err(MultiaddrNotSupported(addr)),
                 Err(Other(err)) => Err(Other(Either::Right(err))),
             },

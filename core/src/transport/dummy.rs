@@ -20,9 +20,9 @@
 
 use crate::transport::{ListenerId, Transport, TransportError, TransportEvent};
 use crate::Multiaddr;
+use futures::future::BoxFuture;
 use futures::{prelude::*, task::Context, task::Poll};
 use std::{fmt, io, marker::PhantomData, pin::Pin};
-use futures::future::BoxFuture;
 
 /// Implementation of `Transport` that doesn't support any multiaddr.
 ///
@@ -66,14 +66,19 @@ impl<TOut> Transport for DummyTransport<TOut> {
         false
     }
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>> {
+    fn dial(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>>
+    {
         Err(TransportError::MultiaddrNotSupported(addr))
     }
 
     fn dial_as_listener(
         &mut self,
         addr: Multiaddr,
-    ) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>> {
+    ) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>>
+    {
         Err(TransportError::MultiaddrNotSupported(addr))
     }
 

@@ -142,7 +142,9 @@ where
                 })
             }
             Poll::Ready(other) => {
-                let mapped = other.map_out(|_| unreachable!("case already matched")).map_err(Either::Left);
+                let mapped = other
+                    .map_out(|_| unreachable!("case already matched"))
+                    .map_err(Either::Left);
                 Poll::Ready(mapped)
             }
             Poll::Pending => Poll::Pending,

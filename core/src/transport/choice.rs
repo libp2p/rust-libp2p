@@ -18,14 +18,13 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::either::EitherFuture;
 use crate::transport::{ListenerId, Transport, TransportError, TransportEvent};
 use either::Either;
 use futures::future;
+use futures::future::BoxFuture;
+use futures::{FutureExt, TryFutureExt};
 use multiaddr::Multiaddr;
 use std::{pin::Pin, task::Context, task::Poll};
-use futures::future::BoxFuture;
-use futures::{StreamExt, TryFutureExt, FutureExt};
 
 /// Struct returned by `or_transport()`.
 #[derive(Debug, Copy, Clone)]
@@ -64,9 +63,18 @@ where
         self.0.remove_listener(id) || self.1.remove_listener(id)
     }
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>> {
+    fn dial(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>>
+    {
         let addr = match self.0.dial(addr) {
-            Ok(connec) => return Ok(connec.map_ok(future::Either::Left).map_err(Either::Left).boxed()),
+            Ok(connec) => {
+                return Ok(connec
+                    .map_ok(future::Either::Left)
+                    .map_err(Either::Left)
+                    .boxed())
+            }
             Err(TransportError::MultiaddrNotSupported(addr)) => addr,
             Err(TransportError::Other(err)) => {
                 return Err(TransportError::Other(Either::Left(err)))
@@ -74,7 +82,12 @@ where
         };
 
         let addr = match self.1.dial(addr) {
-            Ok(connec) => return Ok(connec.map_ok(future::Either::Right).map_err(Either::Right).boxed()),
+            Ok(connec) => {
+                return Ok(connec
+                    .map_ok(future::Either::Right)
+                    .map_err(Either::Right)
+                    .boxed())
+            }
             Err(TransportError::MultiaddrNotSupported(addr)) => addr,
             Err(TransportError::Other(err)) => {
                 return Err(TransportError::Other(Either::Right(err)))
@@ -87,9 +100,15 @@ where
     fn dial_as_listener(
         &mut self,
         addr: Multiaddr,
-    ) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>> {
+    ) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>>
+    {
         let addr = match self.0.dial_as_listener(addr) {
-            Ok(connec) => return Ok(connec.map_ok(future::Either::Left).map_err(Either::Left).boxed()),
+            Ok(connec) => {
+                return Ok(connec
+                    .map_ok(future::Either::Left)
+                    .map_err(Either::Left)
+                    .boxed())
+            }
             Err(TransportError::MultiaddrNotSupported(addr)) => addr,
             Err(TransportError::Other(err)) => {
                 return Err(TransportError::Other(Either::Left(err)))
@@ -97,7 +116,12 @@ where
         };
 
         let addr = match self.1.dial_as_listener(addr) {
-            Ok(connec) => return Ok(connec.map_ok(future::Either::Right).map_err(Either::Right).boxed()),
+            Ok(connec) => {
+                return Ok(connec
+                    .map_ok(future::Either::Right)
+                    .map_err(Either::Right)
+                    .boxed())
+            }
             Err(TransportError::MultiaddrNotSupported(addr)) => addr,
             Err(TransportError::Other(err)) => {
                 return Err(TransportError::Other(Either::Right(err)))

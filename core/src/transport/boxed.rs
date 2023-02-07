@@ -47,19 +47,19 @@ pub struct Boxed<O> {
     inner: Box<dyn Abstract<O> + Send + Unpin>,
 }
 
-type Dial<O> = Pin<Box<dyn Future<Output = io::Result<O>> + Send>>;
-type ListenerUpgrade<O> = Pin<Box<dyn Future<Output = io::Result<O>> + Send>>;
-
 trait Abstract<O> {
     fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<io::Error>>;
     fn remove_listener(&mut self, id: ListenerId) -> bool;
-    fn dial(&mut self, addr: Multiaddr) -> Result<Dial<O>, TransportError<io::Error>>;
-    fn dial_as_listener(&mut self, addr: Multiaddr) -> Result<Dial<O>, TransportError<io::Error>>;
+    fn dial(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<BoxFuture<'static, io::Result<O>>, TransportError<io::Error>>;
+    fn dial_as_listener(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<BoxFuture<'static, io::Result<O>>, TransportError<io::Error>>;
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr>;
-    fn poll(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<TransportEvent<ListenerUpgrade<O>, io::Error>>;
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<TransportEvent<O, io::Error>>;
 }
 
 impl<T, O> Abstract<O> for T
@@ -75,18 +75,24 @@ where
         Transport::remove_listener(self, id)
     }
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<Dial<O>, TransportError<io::Error>> {
+    fn dial(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<BoxFuture<'static, io::Result<O>>, TransportError<io::Error>> {
         let fut = Transport::dial(self, addr)
             .map(|r| r.map_err(box_err))
             .map_err(|e| e.map(box_err))?;
-        Ok(Box::pin(fut) as Dial<_>)
+        Ok(fut.boxed())
     }
 
-    fn dial_as_listener(&mut self, addr: Multiaddr) -> Result<Dial<O>, TransportError<io::Error>> {
+    fn dial_as_listener(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<BoxFuture<'static, io::Result<O>>, TransportError<io::Error>> {
         let fut = Transport::dial_as_listener(self, addr)
             .map(|r| r.map_err(box_err))
             .map_err(|e| e.map(box_err))?;
-        Ok(Box::pin(fut) as Dial<_>)
+        Ok(Box::pin(fut) as BoxFuture<'static, io::Result<O>>)
     }
 
     fn address_translation(&self, server: &Multiaddr, observed: &Multiaddr) -> Option<Multiaddr> {
@@ -145,7 +151,7 @@ impl<O> Transport for Boxed<O> {
 }
 
 impl<O> Stream for Boxed<O> {
-    type Item = TransportEvent<ListenerUpgrade<O>, io::Error>;
+    type Item = TransportEvent<O, io::Error>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         Transport::poll(self, cx).map(Some)

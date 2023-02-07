@@ -20,6 +20,7 @@
 
 use crate::transport::{ListenerId, Transport, TransportError, TransportEvent};
 use fnv::FnvHashMap;
+use futures::future::BoxFuture;
 use futures::{
     channel::mpsc,
     future::{self},
@@ -37,7 +38,6 @@ use std::{
     num::NonZeroU64,
     pin::Pin,
 };
-use futures::future::BoxFuture;
 
 static HUB: Lazy<Hub> = Lazy::new(|| Hub(Mutex::new(FnvHashMap::default())));
 
@@ -215,7 +215,11 @@ impl Transport for MemoryTransport {
         }
     }
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>> {
+    fn dial(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>>
+    {
         let port = if let Ok(port) = parse_memory_addr(&addr) {
             if let Some(port) = NonZeroU64::new(port) {
                 port
@@ -226,13 +230,16 @@ impl Transport for MemoryTransport {
             return Err(TransportError::MultiaddrNotSupported(addr));
         };
 
-        Ok(DialFuture::new(port).ok_or(TransportError::Other(MemoryTransportError::Unreachable))?.boxed())
+        Ok(DialFuture::new(port)
+            .ok_or(TransportError::Other(MemoryTransportError::Unreachable))?
+            .boxed())
     }
 
     fn dial_as_listener(
         &mut self,
         addr: Multiaddr,
-    ) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>> {
+    ) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>>
+    {
         Ok(self.dial(addr)?.boxed())
     }
 

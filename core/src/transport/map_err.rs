@@ -19,10 +19,10 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::transport::{ListenerId, Transport, TransportError, TransportEvent};
+use futures::future::BoxFuture;
 use futures::prelude::*;
 use multiaddr::Multiaddr;
 use std::{error, pin::Pin, task::Context, task::Poll};
-use futures::future::BoxFuture;
 
 /// See `Transport::map_err`.
 #[derive(Debug, Copy, Clone)]
@@ -43,7 +43,7 @@ impl<T, F> MapErr<T, F> {
 impl<T, F, TErr> Transport for MapErr<T, F>
 where
     T: Transport,
-    F: FnOnce(T::Error) -> TErr + Clone,
+    F: FnOnce(T::Error) -> TErr + Clone + Send + 'static,
     TErr: error::Error,
 {
     type Output = T::Output;
@@ -58,7 +58,11 @@ where
         self.transport.remove_listener(id)
     }
 
-    fn dial(&mut self, addr: Multiaddr) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>> {
+    fn dial(
+        &mut self,
+        addr: Multiaddr,
+    ) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>>
+    {
         let map = self.map.clone();
         match self.transport.dial(addr) {
             Ok(future) => Ok(future.map_err(map).boxed()),
@@ -69,7 +73,8 @@ where
     fn dial_as_listener(
         &mut self,
         addr: Multiaddr,
-    ) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>> {
+    ) -> Result<BoxFuture<'static, Result<Self::Output, Self::Error>>, TransportError<Self::Error>>
+    {
         let map = self.map.clone();
         match self.transport.dial(addr) {
             Ok(future) => Ok(future.map_err(map).boxed()),
@@ -87,8 +92,6 @@ where
     ) -> Poll<TransportEvent<Self::Output, Self::Error>> {
         let this = self.project();
         let map = &*this.map;
-        this.transport.poll(cx).map(|ev| {
-            ev.map_out(|out| out.map_err(map.clone()))
-        })
+        this.transport.poll(cx).map(|ev| ev.map_err(*map))
     }
 }
