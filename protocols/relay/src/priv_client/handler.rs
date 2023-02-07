@@ -155,7 +155,7 @@ impl IntoConnectionHandler for Prototype {
     }
 
     fn inbound_protocol(&self) -> <Self::Handler as ConnectionHandler>::InboundProtocol {
-        upgrade::EitherUpgrade::A(SendWrapper(inbound_stop::Upgrade {}))
+        Either::Left(SendWrapper(inbound_stop::Upgrade {}))
     }
 }
 

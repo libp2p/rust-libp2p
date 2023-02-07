@@ -22,11 +22,11 @@
 
 use crate::protocol;
 use either::Either;
+use futures::future;
 use futures::future::{BoxFuture, FutureExt};
 use instant::Instant;
-use libp2p_core::either::EitherOutput;
 use libp2p_core::multiaddr::Multiaddr;
-use libp2p_core::upgrade::{self, DeniedUpgrade, NegotiationError, UpgradeError};
+use libp2p_core::upgrade::{DeniedUpgrade, NegotiationError, UpgradeError};
 use libp2p_core::ConnectedPoint;
 use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
@@ -174,7 +174,7 @@ impl Handler {
         >,
     ) {
         match output {
-            EitherOutput::First(inbound_connect) => {
+            future::Either::Left(inbound_connect) => {
                 let remote_addr = match &self.endpoint {
                     ConnectedPoint::Dialer { address, role_override: _ } => address.clone(),
                     ConnectedPoint::Listener { ..} => unreachable!("`<Handler as ConnectionHandler>::listen_protocol` denies all incoming substreams as a listener."),
@@ -187,7 +187,7 @@ impl Handler {
                 ));
             }
             // A connection listener denies all incoming substreams, thus none can ever be fully negotiated.
-            EitherOutput::Second(output) => void::unreachable(output),
+            future::Either::Right(output) => void::unreachable(output),
         }
     }
 
@@ -305,7 +305,7 @@ impl ConnectionHandler for Handler {
     type Error = ConnectionHandlerUpgrErr<
         Either<protocol::inbound::UpgradeError, protocol::outbound::UpgradeError>,
     >;
-    type InboundProtocol = upgrade::EitherUpgrade<protocol::inbound::Upgrade, DeniedUpgrade>;
+    type InboundProtocol = Either<protocol::inbound::Upgrade, DeniedUpgrade>;
     type OutboundProtocol = protocol::outbound::Upgrade;
     type OutboundOpenInfo = u8; // Number of upgrade attempts.
     type InboundOpenInfo = ();
@@ -313,7 +313,7 @@ impl ConnectionHandler for Handler {
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
         match self.endpoint {
             ConnectedPoint::Dialer { .. } => {
-                SubstreamProtocol::new(upgrade::EitherUpgrade::A(protocol::inbound::Upgrade {}), ())
+                SubstreamProtocol::new(Either::Left(protocol::inbound::Upgrade {}), ())
             }
             ConnectedPoint::Listener { .. } => {
                 // By the protocol specification the listening side of a relayed connection
@@ -321,7 +321,7 @@ impl ConnectionHandler for Handler {
                 // the relayed connection opens a substream to the dialing side. (Connection roles
                 // and substream roles are reversed.) The listening side on a relayed connection
                 // never expects incoming substreams, hence the denied upgrade below.
-                SubstreamProtocol::new(upgrade::EitherUpgrade::B(DeniedUpgrade), ())
+                SubstreamProtocol::new(Either::Right(DeniedUpgrade), ())
             }
         }
     }

@@ -28,7 +28,7 @@ use crate::K_VALUE;
 use futures::{executor::block_on, future::poll_fn, prelude::*};
 use futures_timer::Delay;
 use libp2p_core::{
-    connection::{ConnectedPoint, ConnectionId},
+    connection::ConnectedPoint,
     identity,
     multiaddr::{multiaddr, Multiaddr, Protocol},
     multihash::{Code, Multihash, MultihashDigest},
@@ -36,7 +36,7 @@ use libp2p_core::{
     upgrade, Endpoint, PeerId, Transport,
 };
 use libp2p_noise as noise;
-use libp2p_swarm::{Swarm, SwarmEvent};
+use libp2p_swarm::{ConnectionId, Swarm, SwarmEvent};
 use libp2p_yamux as yamux;
 use quickcheck::*;
 use rand::{random, rngs::StdRng, thread_rng, Rng, SeedableRng};
@@ -1294,7 +1294,8 @@ fn network_behaviour_on_address_change() {
     let local_peer_id = PeerId::random();
 
     let remote_peer_id = PeerId::random();
-    let connection_id = ConnectionId::new(1);
+    #[allow(deprecated)]
+    let connection_id = ConnectionId::DUMMY;
     let old_address: Multiaddr = Protocol::Memory(1).into();
     let new_address: Multiaddr = Protocol::Memory(2).into();
 

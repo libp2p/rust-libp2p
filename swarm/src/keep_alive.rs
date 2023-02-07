@@ -1,9 +1,10 @@
 use crate::behaviour::{FromSwarm, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
+use crate::connection::ConnectionId;
 use crate::handler::{
     ConnectionEvent, ConnectionHandlerEvent, FullyNegotiatedInbound, FullyNegotiatedOutbound,
     KeepAlive, SubstreamProtocol,
 };
-use libp2p_core::connection::ConnectionId;
+use crate::THandlerOutEvent;
 use libp2p_core::upgrade::DeniedUpgrade;
 use libp2p_core::PeerId;
 use std::task::{Context, Poll};
@@ -26,7 +27,12 @@ impl NetworkBehaviour for Behaviour {
         ConnectionHandler
     }
 
-    fn on_connection_handler_event(&mut self, _: PeerId, _: ConnectionId, event: Void) {
+    fn on_connection_handler_event(
+        &mut self,
+        _: PeerId,
+        _: ConnectionId,
+        event: THandlerOutEvent<Self>,
+    ) {
         void::unreachable(event)
     }
 

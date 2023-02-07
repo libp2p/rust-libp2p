@@ -74,7 +74,6 @@ use futures::future::Future;
 pub use self::{
     apply::{apply, apply_inbound, apply_outbound, InboundUpgradeApply, OutboundUpgradeApply},
     denied::DeniedUpgrade,
-    either::EitherUpgrade,
     error::UpgradeError,
     from_fn::{from_fn, FromFnUpgrade},
     map::{MapInboundUpgrade, MapInboundUpgradeErr, MapOutboundUpgrade, MapOutboundUpgradeErr},

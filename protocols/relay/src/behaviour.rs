@@ -27,13 +27,12 @@ use crate::message_proto;
 use crate::protocol::{inbound_hop, outbound_stop};
 use either::Either;
 use instant::Instant;
-use libp2p_core::connection::ConnectionId;
 use libp2p_core::multiaddr::Protocol;
 use libp2p_core::PeerId;
 use libp2p_swarm::behaviour::{ConnectionClosed, FromSwarm};
 use libp2p_swarm::{
-    ConnectionHandlerUpgrErr, ExternalAddresses, NetworkBehaviour, NetworkBehaviourAction,
-    NotifyHandler, PollParameters,
+    ConnectionHandlerUpgrErr, ConnectionId, ExternalAddresses, NetworkBehaviour,
+    NetworkBehaviourAction, NotifyHandler, PollParameters, THandlerOutEvent,
 };
 use std::collections::{hash_map, HashMap, HashSet, VecDeque};
 use std::num::NonZeroU32;
@@ -288,7 +287,7 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         event_source: PeerId,
         connection: ConnectionId,
-        event: Either<handler::Event, void::Void>,
+        event: THandlerOutEvent<Self>,
     ) {
         let event = match event {
             Either::Left(e) => e,

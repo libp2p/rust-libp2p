@@ -21,7 +21,7 @@
 use futures::StreamExt;
 use libp2p_identify as identify;
 use libp2p_ping as ping;
-use libp2p_swarm::{behaviour::FromSwarm, dummy, NetworkBehaviour, SwarmEvent};
+use libp2p_swarm::{behaviour::FromSwarm, dummy, NetworkBehaviour, SwarmEvent, THandlerOutEvent};
 use std::fmt::Debug;
 
 /// Small utility to check that a type implements `NetworkBehaviour`.
@@ -309,6 +309,44 @@ fn with_either() {
 }
 
 #[test]
+fn with_generics() {
+    #[allow(dead_code)]
+    #[derive(NetworkBehaviour)]
+    #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
+    struct Foo<A, B> {
+        a: A,
+        b: B,
+    }
+
+    #[allow(dead_code)]
+    fn foo() {
+        require_net_behaviour::<
+            Foo<
+                libp2p_kad::Kademlia<libp2p_kad::record::store::MemoryStore>,
+                libp2p_ping::Behaviour,
+            >,
+        >();
+    }
+}
+
+#[test]
+fn with_generics_mixed() {
+    #[allow(dead_code)]
+    #[derive(NetworkBehaviour)]
+    #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
+    struct Foo<A> {
+        a: A,
+        ping: libp2p_ping::Behaviour,
+    }
+
+    #[allow(dead_code)]
+    fn foo() {
+        require_net_behaviour::<Foo<libp2p_kad::Kademlia<libp2p_kad::record::store::MemoryStore>>>(
+        );
+    }
+}
+
+#[test]
 fn custom_event_with_either() {
     use either::Either;
 
@@ -368,11 +406,8 @@ fn generated_out_event_derive_debug() {
 
 #[test]
 fn custom_out_event_no_type_parameters() {
-    use libp2p_core::connection::ConnectionId;
     use libp2p_core::PeerId;
-    use libp2p_swarm::{
-        ConnectionHandler, IntoConnectionHandler, NetworkBehaviourAction, PollParameters,
-    };
+    use libp2p_swarm::{ConnectionId, NetworkBehaviourAction, PollParameters};
     use std::task::Context;
     use std::task::Poll;
 
@@ -392,7 +427,7 @@ fn custom_out_event_no_type_parameters() {
             &mut self,
             _peer: PeerId,
             _connection: ConnectionId,
-            message: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent,
+            message: THandlerOutEvent<Self>,
         ) {
             void::unreachable(message);
         }

@@ -10,6 +10,13 @@
 
 [PR 3153]: https://github.com/libp2p/rust-libp2p/pull/3153
 
+# 0.9.1
+
+- Skip unparsable multiaddr in `DialRequest::from_bytes`. See [PR 3351].
+
+[PR 3351]: https://github.com/libp2p/rust-libp2p/pull/3351
+
+
 # 0.9.0
 
 - Update to `libp2p-core` `v0.38.0`.

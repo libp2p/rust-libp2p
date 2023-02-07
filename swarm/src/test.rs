@@ -23,12 +23,10 @@ use crate::behaviour::{
     FromSwarm, ListenerClosed, ListenerError, NewExternalAddr, NewListenAddr, NewListener,
 };
 use crate::{
-    ConnectionHandler, IntoConnectionHandler, NetworkBehaviour, NetworkBehaviourAction,
-    PollParameters,
+    ConnectionHandler, ConnectionId, IntoConnectionHandler, NetworkBehaviour,
+    NetworkBehaviourAction, PollParameters, THandlerOutEvent,
 };
-use libp2p_core::{
-    connection::ConnectionId, multiaddr::Multiaddr, transport::ListenerId, ConnectedPoint, PeerId,
-};
+use libp2p_core::{multiaddr::Multiaddr, transport::ListenerId, ConnectedPoint, PeerId};
 use std::collections::HashMap;
 use std::task::{Context, Poll};
 
@@ -109,8 +107,7 @@ where
         &mut self,
         _peer_id: PeerId,
         _connection_id: ConnectionId,
-        _event: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as
-            ConnectionHandler>::OutEvent,
+        _event: THandlerOutEvent<Self>,
     ) {
     }
 }
@@ -457,7 +454,7 @@ where
         &mut self,
         p: PeerId,
         c: ConnectionId,
-        e: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent,
+        e: THandlerOutEvent<Self>,
     ) {
         assert!(
             self.on_connection_established

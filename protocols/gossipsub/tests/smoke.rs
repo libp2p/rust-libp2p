@@ -32,20 +32,17 @@ use futures::StreamExt;
 use libp2p_core::{
     identity, multiaddr::Protocol, transport::MemoryTransport, upgrade, Multiaddr, Transport,
 };
-use libp2p_gossipsub::{
-    Gossipsub, GossipsubConfigBuilder, GossipsubEvent, IdentTopic as Topic, MessageAuthenticity,
-    ValidationMode,
-};
+use libp2p_gossipsub as gossipsub;
 use libp2p_plaintext::PlainText2Config;
 use libp2p_swarm::{Swarm, SwarmEvent};
 use libp2p_yamux as yamux;
 
 struct Graph {
-    pub nodes: Vec<(Multiaddr, Swarm<Gossipsub>)>,
+    pub nodes: Vec<(Multiaddr, Swarm<gossipsub::Behaviour>)>,
 }
 
 impl Future for Graph {
-    type Output = (Multiaddr, GossipsubEvent);
+    type Output = (Multiaddr, gossipsub::Event);
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         for (addr, node) in &mut self.nodes {
@@ -77,7 +74,7 @@ impl Graph {
             .cycle()
             .take(num_nodes)
             .map(|_| build_node())
-            .collect::<Vec<(Multiaddr, Swarm<Gossipsub>)>>();
+            .collect::<Vec<(Multiaddr, Swarm<gossipsub::Behaviour>)>>();
 
         let mut connected_nodes = vec![not_connected_nodes.pop().unwrap()];
 
@@ -112,7 +109,7 @@ impl Graph {
     /// `true`.
     ///
     /// Returns [`true`] on success and [`false`] on timeout.
-    fn wait_for<F: FnMut(&GossipsubEvent) -> bool>(&mut self, mut f: F) -> bool {
+    fn wait_for<F: FnMut(&gossipsub::Event) -> bool>(&mut self, mut f: F) -> bool {
         let fut = futures::future::poll_fn(move |cx| match self.poll_unpin(cx) {
             Poll::Ready((_addr, ev)) if f(&ev) => Poll::Ready(()),
             _ => Poll::Pending,
@@ -143,7 +140,7 @@ impl Graph {
     }
 }
 
-fn build_node() -> (Multiaddr, Swarm<Gossipsub>) {
+fn build_node() -> (Multiaddr, Swarm<gossipsub::Behaviour>) {
     let key = identity::Keypair::generate_ed25519();
     let public_key = key.public();
 
@@ -162,15 +159,16 @@ fn build_node() -> (Multiaddr, Swarm<Gossipsub>) {
     // reduce the default values of the heartbeat, so that all nodes will receive gossip in a
     // timely fashion.
 
-    let config = GossipsubConfigBuilder::default()
+    let config = gossipsub::ConfigBuilder::default()
         .heartbeat_initial_delay(Duration::from_millis(100))
         .heartbeat_interval(Duration::from_millis(200))
         .history_length(10)
         .history_gossip(10)
-        .validation_mode(ValidationMode::Permissive)
+        .validation_mode(gossipsub::ValidationMode::Permissive)
         .build()
         .unwrap();
-    let behaviour = Gossipsub::new(MessageAuthenticity::Author(peer_id), config).unwrap();
+    let behaviour =
+        gossipsub::Behaviour::new(gossipsub::MessageAuthenticity::Author(peer_id), config).unwrap();
     let mut swarm = Swarm::without_executor(transport, behaviour, peer_id);
 
     let port = 1 + random::<u64>();
@@ -197,7 +195,7 @@ fn multi_hop_propagation() {
         let number_nodes = graph.nodes.len();
 
         // Subscribe each node to the same topic.
-        let topic = Topic::new("test-net");
+        let topic = gossipsub::IdentTopic::new("test-net");
         for (_addr, node) in &mut graph.nodes {
             node.behaviour_mut().subscribe(&topic).unwrap();
         }
@@ -205,7 +203,7 @@ fn multi_hop_propagation() {
         // Wait for all nodes to be subscribed.
         let mut subscribed = 0;
         let all_subscribed = graph.wait_for(move |ev| {
-            if let GossipsubEvent::Subscribed { .. } = ev {
+            if let gossipsub::Event::Subscribed { .. } = ev {
                 subscribed += 1;
                 if subscribed == (number_nodes - 1) * 2 {
                     return true;
@@ -234,7 +232,7 @@ fn multi_hop_propagation() {
         // Wait for all nodes to receive the published message.
         let mut received_msgs = 0;
         let all_received = graph.wait_for(move |ev| {
-            if let GossipsubEvent::Message { .. } = ev {
+            if let gossipsub::Event::Message { .. } = ev {
                 received_msgs += 1;
                 if received_msgs == number_nodes - 1 {
                     return true;

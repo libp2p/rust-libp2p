@@ -26,8 +26,7 @@ use futures::future::BoxFuture;
 use futures::prelude::*;
 use futures::stream::FuturesUnordered;
 use futures_timer::Delay;
-use libp2p_core::either::EitherOutput;
-use libp2p_core::upgrade::{EitherUpgrade, SelectUpgrade};
+use libp2p_core::upgrade::SelectUpgrade;
 use libp2p_core::{ConnectedPoint, Multiaddr, PeerId, PublicKey};
 use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
@@ -102,8 +101,7 @@ pub struct Handler {
     inbound_identify_push: Option<BoxFuture<'static, Result<Info, UpgradeError>>>,
     /// Pending events to yield.
     events: SmallVec<
-        [ConnectionHandlerEvent<EitherUpgrade<Identify, Push<OutboundPush>>, (), Event, io::Error>;
-            4],
+        [ConnectionHandlerEvent<Either<Identify, Push<OutboundPush>>, (), Event, io::Error>; 4],
     >,
 
     /// Streams awaiting `BehaviourInfo` to then send identify requests.
@@ -202,7 +200,7 @@ impl Handler {
         >,
     ) {
         match output {
-            EitherOutput::First(substream) => {
+            future::Either::Left(substream) => {
                 self.events
                     .push(ConnectionHandlerEvent::Custom(Event::Identify));
                 if !self.reply_streams.is_empty() {
@@ -214,7 +212,7 @@ impl Handler {
                 }
                 self.reply_streams.push_back(substream);
             }
-            EitherOutput::Second(fut) => {
+            future::Either::Right(fut) => {
                 if self.inbound_identify_push.replace(fut).is_some() {
                     warn!(
                         "New inbound identify push stream from {} while still \
@@ -236,14 +234,14 @@ impl Handler {
         >,
     ) {
         match output {
-            EitherOutput::First(remote_info) => {
+            future::Either::Left(remote_info) => {
                 self.events
                     .push(ConnectionHandlerEvent::Custom(Event::Identified(
                         remote_info,
                     )));
                 self.keep_alive = KeepAlive::No;
             }
-            EitherOutput::Second(()) => self
+            future::Either::Right(()) => self
                 .events
                 .push(ConnectionHandlerEvent::Custom(Event::IdentificationPushed)),
         }
@@ -277,7 +275,7 @@ impl ConnectionHandler for Handler {
     type OutEvent = Event;
     type Error = io::Error;
     type InboundProtocol = SelectUpgrade<Identify, Push<InboundPush>>;
-    type OutboundProtocol = EitherUpgrade<Identify, Push<OutboundPush>>;
+    type OutboundProtocol = Either<Identify, Push<OutboundPush>>;
     type OutboundOpenInfo = ();
     type InboundOpenInfo = ();
 
@@ -306,10 +304,7 @@ impl ConnectionHandler for Handler {
             Protocol::Push => {
                 self.events
                     .push(ConnectionHandlerEvent::OutboundSubstreamRequest {
-                        protocol: SubstreamProtocol::new(
-                            EitherUpgrade::B(Push::outbound(info)),
-                            (),
-                        ),
+                        protocol: SubstreamProtocol::new(Either::Right(Push::outbound(info)), ()),
                     });
             }
             Protocol::Identify(_) => {
@@ -347,7 +342,7 @@ impl ConnectionHandler for Handler {
             Poll::Ready(()) => {
                 self.trigger_next_identify.reset(self.interval);
                 let ev = ConnectionHandlerEvent::OutboundSubstreamRequest {
-                    protocol: SubstreamProtocol::new(EitherUpgrade::A(Identify), ()),
+                    protocol: SubstreamProtocol::new(Either::Left(Identify), ()),
                 };
                 return Poll::Ready(ev);
             }
