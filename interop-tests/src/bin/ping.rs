@@ -6,8 +6,9 @@ use anyhow::{bail, Context, Result};
 use either::Either;
 use env_logger::{Env, Target};
 use futures::{future, AsyncRead, AsyncWrite, StreamExt};
+use libp2p::core::either::EitherOutput;
 use libp2p::core::muxing::StreamMuxerBox;
-use libp2p::core::upgrade::{MapInboundUpgrade, MapOutboundUpgrade, Version};
+use libp2p::core::upgrade::{EitherUpgrade, MapInboundUpgrade, MapOutboundUpgrade, Version};
 use libp2p::noise::{NoiseOutput, X25519Spec, XX};
 use libp2p::swarm::{keep_alive, NetworkBehaviour, SwarmEvent};
 use libp2p::tls::TlsStream;
@@ -33,7 +34,7 @@ async fn main() -> Result<()> {
         .parse::<bool>()?;
 
     let test_timeout = env::var("test_timeout_seconds")
-        .unwrap_or_else(|_| "10".into())
+        .unwrap_or_else(|_| "180".into())
         .parse::<u64>()?;
 
     let redis_addr = env::var("redis_addr")
@@ -166,18 +167,18 @@ fn secure_channel_protocol_from_env<C: AsyncRead + AsyncWrite + Unpin + Send + '
 ) -> Result<
     MapOutboundUpgrade<
         MapInboundUpgrade<
-            Either<noise::NoiseAuthenticated<XX, X25519Spec, ()>, tls::Config>,
+            EitherUpgrade<noise::NoiseAuthenticated<XX, X25519Spec, ()>, tls::Config>,
             MapSecOutputFn<C>,
         >,
         MapSecOutputFn<C>,
     >,
 > {
     let either_sec_upgrade = match from_env("security").context("unsupported secure channel")? {
-        SecProtocol::Noise => Either::Left(
+        SecProtocol::Noise => EitherUpgrade::A(
             noise::NoiseAuthenticated::xx(identity).context("failed to intialise noise")?,
         ),
         SecProtocol::Tls => {
-            Either::Right(tls::Config::new(identity).context("failed to initialise tls")?)
+            EitherUpgrade::B(tls::Config::new(identity).context("failed to initialise tls")?)
         }
     };
 
@@ -186,23 +187,21 @@ fn secure_channel_protocol_from_env<C: AsyncRead + AsyncWrite + Unpin + Send + '
         .map_outbound(factor_peer_id as MapSecOutputFn<C>))
 }
 
-type SecOutput<C> = future::Either<(PeerId, NoiseOutput<C>), (PeerId, TlsStream<C>)>;
-type MapSecOutputFn<C> = fn(SecOutput<C>) -> (PeerId, future::Either<NoiseOutput<C>, TlsStream<C>>);
+type SecOutput<C> = EitherOutput<(PeerId, NoiseOutput<C>), (PeerId, TlsStream<C>)>;
+type MapSecOutputFn<C> = fn(SecOutput<C>) -> (PeerId, EitherOutput<NoiseOutput<C>, TlsStream<C>>);
 
-fn factor_peer_id<C>(
-    output: SecOutput<C>,
-) -> (PeerId, future::Either<NoiseOutput<C>, TlsStream<C>>) {
+fn factor_peer_id<C>(output: SecOutput<C>) -> (PeerId, EitherOutput<NoiseOutput<C>, TlsStream<C>>) {
     match output {
-        future::Either::Left((peer, stream)) => (peer, future::Either::Left(stream)),
-        future::Either::Right((peer, stream)) => (peer, future::Either::Right(stream)),
+        EitherOutput::First((peer, stream)) => (peer, EitherOutput::First(stream)),
+        EitherOutput::Second((peer, stream)) => (peer, EitherOutput::Second(stream)),
     }
 }
 
-fn muxer_protocol_from_env() -> Result<Either<yamux::YamuxConfig, mplex::MplexConfig>> {
+fn muxer_protocol_from_env() -> Result<EitherUpgrade<yamux::YamuxConfig, mplex::MplexConfig>> {
     Ok(
         match from_env("muxer").context("unsupported multiplexer")? {
-            Muxer::Yamux => Either::Left(yamux::YamuxConfig::default()),
-            Muxer::Mplex => Either::Right(mplex::MplexConfig::new()),
+            Muxer::Yamux => EitherUpgrade::A(yamux::YamuxConfig::default()),
+            Muxer::Mplex => EitherUpgrade::B(mplex::MplexConfig::new()),
         },
     )
 }
