@@ -154,7 +154,8 @@ members = [
     "transports/tcp",
     "transports/uds",
     "transports/websocket",
-    "transports/wasm-ext"
+    "transports/wasm-ext",
+    "interop-tests"
 ]
 
 [[example]]
