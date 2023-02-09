@@ -11,7 +11,7 @@ WORKDIR /workspace
 ADD . .
 RUN --mount=type=cache,target=./target \
     --mount=type=cache,target=/usr/local/cargo/registry \
-    cd interop-tests && cargo build --bin ping
+    cargo build --package interop-tests
 
 RUN --mount=type=cache,target=./target \
     mv ./target/debug/ping /usr/local/bin/testplan
