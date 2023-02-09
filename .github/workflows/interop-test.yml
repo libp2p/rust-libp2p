@@ -26,5 +26,5 @@ jobs:
           test-filter: rust-libp2p-head
           extra-versions: ${{ github.workspace }}/interop-tests/ping-version.json
           s3-cache-bucket: libp2p-by-tf-aws-bootstrap
-          s3-access-key-id: ${{ vars.TEST_PLANS_BUILD_CACHE_READ_ONLY_KEY_ID }}
-          s3-secret-access-key: ${{ secrets.TEST_PLANS_BUILD_CACHE_READ_ONLY }}
+          s3-access-key-id: ${{ vars.TEST_PLANS_BUILD_CACHE_KEY_ID }}
+          s3-secret-access-key: ${{ secrets.TEST_PLANS_BUILD_CACHE_KEY }}
