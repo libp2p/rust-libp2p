@@ -155,10 +155,6 @@ members = [
     "transports/uds",
     "transports/websocket",
     "transports/wasm-ext",
-<<<<<<< HEAD
-=======
-    "transports/webrtc",
->>>>>>> eeca244c (feat(interop-tests): build test binary inside container (#3441))
     "interop-tests"
 ]
 
