@@ -544,7 +544,9 @@ where
     }
 
     pub fn close_connection(&mut self, muxer: StreamMuxerBox) {
-        self.executor.spawn(muxer.close());
+        self.executor.spawn(async move {
+            let _ = muxer.close().await;
+        });
     }
 
     /// Polls the connection pool for events.
