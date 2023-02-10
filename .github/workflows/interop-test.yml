@@ -15,17 +15,13 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v3
-      - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
-        with:
-          shared-key: interop-tests
-          save-if: ${{ github.ref == 'refs/heads/master' }}
-      - name: Install Protoc
-        run: sudo apt-get install protobuf-compiler
+      - uses: docker/setup-buildx-action@v2
       - name: Build image
-        run: |
-          cargo build --release -p interop-tests
-          docker build -t rust-libp2p-head --build-arg=TEST_BINARY=target/release/ping . -f interop-tests/Dockerfile
-      - uses: libp2p/test-plans/.github/actions/run-interop-ping-test@c9130e425d266e5b222636d61348c0f8d6b978e4
+        run: docker buildx build --load -t rust-libp2p-head . -f interop-tests/Dockerfile
+      - uses: libp2p/test-plans/.github/actions/run-interop-ping-test@482e8ac2e5d91c69d7f432d325337e2ddca39cf9
         with:
           test-filter: rust-libp2p-head
           extra-versions: ${{ github.workspace }}/interop-tests/ping-version.json
+          s3-cache-bucket: libp2p-by-tf-aws-bootstrap
+          s3-access-key-id: ${{ vars.TEST_PLANS_BUILD_CACHE_KEY_ID }}
+          s3-secret-access-key: ${{ secrets.TEST_PLANS_BUILD_CACHE_KEY }}
