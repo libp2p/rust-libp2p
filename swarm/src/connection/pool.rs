@@ -543,6 +543,10 @@ where
         ))
     }
 
+    pub fn close_connection(&mut self, muxer: StreamMuxerBox) {
+        self.executor.spawn(muxer.close());
+    }
+
     /// Polls the connection pool for events.
     pub fn poll(&mut self, cx: &mut Context<'_>) -> Poll<PoolEvent<THandler>>
     where

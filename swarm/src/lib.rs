@@ -756,7 +756,7 @@ where
                 established_in,
             } => {
                 if self.banned_peers.contains(&peer_id) {
-                    self.pool.disconnect(peer_id);
+                    self.pool.close_connection(connection);
                     return Some(SwarmEvent::BannedPeer { peer_id, endpoint });
                 }
 
