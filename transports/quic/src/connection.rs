@@ -22,27 +22,71 @@ mod connecting;
 mod substream;
 
 use crate::{
-    endpoint::{self, ToEndpoint},
     Error,
 };
 pub use connecting::Connecting;
 pub use substream::Substream;
-use substream::{SubstreamState, WriteState};
 
-use futures::{channel::mpsc, ready, FutureExt, StreamExt};
-use futures_timer::Delay;
+use futures::{future::BoxFuture, FutureExt};
 use libp2p_core::muxing::{StreamMuxer, StreamMuxerEvent};
-use parking_lot::Mutex;
 use std::{
-    any::Any,
-    collections::HashMap,
-    net::SocketAddr,
     pin::Pin,
-    sync::Arc,
-    task::{Context, Poll, Waker},
-    time::Instant,
+    task::{Context, Poll},
 };
 
+/// State for a single opened QUIC connection.
+pub struct Connection {
+    connection: quinn::Connection,
+    incoming:
+        BoxFuture<'static, Result<(quinn::SendStream, quinn::RecvStream), quinn::ConnectionError>>,
+    outgoing:
+        BoxFuture<'static, Result<(quinn::SendStream, quinn::RecvStream), quinn::ConnectionError>>,
+}
+
+impl StreamMuxer for Connection {
+    type Substream = Substream;
+    type Error = quinn::ConnectionError; // TODO Error
+
+    fn poll_inbound(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<Self::Substream, Self::Error>> {
+        let this = self.get_mut();
+
+        let (send, recv) = futures::ready!(this.incoming.poll_unpin(cx))?;
+        let connection = this.connection.clone();
+        this.incoming = Box::pin(async move { connection.accept_bi().await });
+        let substream = Substream::new(send, recv);
+        Poll::Ready(Ok(substream))
+    }
+
+    fn poll_outbound(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<Self::Substream, Self::Error>> {
+        let this = self.get_mut();
+
+        let (send, recv) = futures::ready!(this.outgoing.poll_unpin(cx))?;
+        let connection = this.connection.clone();
+        this.outgoing = Box::pin(async move { connection.open_bi().await });
+        let substream = Substream::new(send, recv);
+        Poll::Ready(Ok(substream))
+    }
+
+    fn poll(
+        self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+    ) -> Poll<Result<StreamMuxerEvent, Self::Error>> {
+        Poll::Pending
+    }
+
+    fn poll_close(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        self.connection.close(From::from(0u32), &[]);
+        Poll::Ready(Ok(()))
+    }
+}
+
+/*
 /// State for a single opened QUIC connection.
 #[derive(Debug)]
 pub struct Connection {
@@ -425,3 +469,5 @@ impl State {
             .expect("Substream should be known.")
     }
 }
+
+*/

@@ -19,15 +19,64 @@
 // DEALINGS IN THE SOFTWARE.
 
 use std::{
-    io::{self, Write},
+    io::{self},
     pin::Pin,
-    sync::Arc,
-    task::{Context, Poll, Waker},
+    task::{Context, Poll},
 };
 
 use futures::{AsyncRead, AsyncWrite};
-use parking_lot::Mutex;
 
+
+pub struct Substream {
+    send: quinn::SendStream,
+    recv: quinn::RecvStream,
+    closed: bool,
+}
+
+impl Substream {
+    pub(super) fn new(send: quinn::SendStream, recv: quinn::RecvStream) -> Self {
+        Self {
+            send,
+            recv,
+            closed: false,
+        }
+    }
+}
+
+impl AsyncRead for Substream {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut Context,
+        buf: &mut [u8],
+    ) -> Poll<io::Result<usize>> {
+        AsyncRead::poll_read(Pin::new(&mut self.get_mut().recv), cx, buf)
+    }
+}
+
+impl AsyncWrite for Substream {
+    fn poll_write(self: Pin<&mut Self>, cx: &mut Context, buf: &[u8]) -> Poll<io::Result<usize>> {
+        AsyncWrite::poll_write(Pin::new(&mut self.get_mut().send), cx, buf)
+    }
+
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
+        AsyncWrite::poll_flush(Pin::new(&mut self.get_mut().send), cx)
+    }
+
+    fn poll_close(self: Pin<&mut Self>, cx: &mut Context) -> Poll<io::Result<()>> {
+        let this = self.get_mut();
+        if this.closed {
+            // For some reason poll_close needs to be 'fuse'able
+            return Poll::Ready(Ok(()));
+        }
+        let close_result = AsyncWrite::poll_close(Pin::new(&mut this.send), cx);
+        if close_result.is_ready() {
+            this.closed = true;
+        }
+        close_result
+    }
+}
+
+/*
 use super::State;
 
 /// Wakers for the [`AsyncRead`] and [`AsyncWrite`] on a substream.
@@ -255,3 +304,5 @@ pub enum WriteState {
     /// sent.
     Stopped,
 }
+
+*/

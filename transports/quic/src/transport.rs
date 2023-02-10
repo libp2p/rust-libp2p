@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::endpoint::{Config, QuinnConfig, ToEndpoint};
+use crate::endpoint::{Config, QuinnConfig};
 use crate::provider::Provider;
 use crate::{endpoint, Connecting, Connection, Error};
 
@@ -74,6 +74,9 @@ pub struct GenTransport<P: Provider> {
     waker: Option<Waker>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct Dialer;
+
 impl<P: Provider> GenTransport<P> {
     /// Create a new [`GenTransport`] with the given [`Config`].
     pub fn new(config: Config) -> Self {
@@ -100,11 +103,13 @@ impl<P: Provider> Transport for GenTransport<P> {
     fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
         let (socket_addr, version) = multiaddr_to_socketaddr(&addr, self.support_draft_29)
             .ok_or(TransportError::MultiaddrNotSupported(addr))?;
+        let server_config = quinn::ServerConfig::clone(&self.quinn_config.server_config);
+        let endpoint = quinn::Endpoint::server(server_config, socket_addr).unwrap(); // TODO with runtime + version
         let listener_id = ListenerId::new();
         let listener = Listener::new(
             listener_id,
             socket_addr,
-            self.quinn_config.clone(),
+            endpoint,
             self.handshake_timeout,
             version,
         )?;
@@ -143,6 +148,8 @@ impl<P: Provider> Transport for GenTransport<P> {
     }
 
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
+        return Err(TransportError::MultiaddrNotSupported(addr));
+        /*
         let (socket_addr, version) = multiaddr_to_socketaddr(&addr, self.support_draft_29)
             .ok_or_else(|| TransportError::MultiaddrNotSupported(addr.clone()))?;
         if socket_addr.port() == 0 || socket_addr.ip().is_unspecified() {
@@ -188,6 +195,7 @@ impl<P: Provider> Transport for GenTransport<P> {
             }
         };
         Ok(dialer_state.new_dial(socket_addr, self.handshake_timeout, version))
+        */
     }
 
     fn dial_as_listener(
@@ -205,6 +213,7 @@ impl<P: Provider> Transport for GenTransport<P> {
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
+        /*
         let mut errored = Vec::new();
         for (key, dialer) in &mut self.dialer {
             if let Poll::Ready(_error) = dialer.poll(cx) {
@@ -217,6 +226,7 @@ impl<P: Provider> Transport for GenTransport<P> {
             // Drop dialer and all pending dials so that the connection receiver is notified.
             self.dialer.remove(&key);
         }
+        */
 
         if let Poll::Ready(Some(ev)) = self.listeners.poll_next_unpin(cx) {
             return Poll::Ready(ev);
@@ -233,6 +243,7 @@ impl From<Error> for TransportError<Error> {
     }
 }
 
+/*
 /// Dialer for addresses if no matching listener exists.
 #[derive(Debug)]
 struct Dialer {
@@ -324,6 +335,7 @@ impl DialerState {
         Poll::Pending
     }
 }
+*/
 
 /// Listener for incoming connections.
 struct Listener<P: Provider> {
@@ -332,13 +344,15 @@ struct Listener<P: Provider> {
 
     version: ProtocolVersion,
 
-    /// Channel to the endpoint to initiate dials.
-    endpoint_channel: endpoint::Channel,
-    /// Queued dials.
-    dialer_state: DialerState,
+    /// Endpoint
+    endpoint: quinn::Endpoint,
+    // /// Channel to the endpoint to initiate dials.
+    // endpoint_channel: endpoint::Channel,
+    // /// Queued dials.
+    // dialer_state: DialerState,
 
-    /// Channel where new connections are being sent.
-    new_connections_rx: mpsc::Receiver<Connection>,
+    /// A future to poll new incoming connections.
+    accept: BoxFuture<'static, Option<quinn::Connecting>>,
     /// Timeout for connection establishment on inbound connections.
     handshake_timeout: Duration,
 
@@ -361,12 +375,13 @@ impl<P: Provider> Listener<P> {
     fn new(
         listener_id: ListenerId,
         socket_addr: SocketAddr,
-        config: QuinnConfig,
+        endpoint: quinn::Endpoint,
+        // config: QuinnConfig,
         handshake_timeout: Duration,
         version: ProtocolVersion,
     ) -> Result<Self, Error> {
-        let (endpoint_channel, new_connections_rx) =
-            endpoint::Channel::new_bidirectional::<P>(config, socket_addr)?;
+        // let (endpoint_channel, new_connections_rx) =
+        //     endpoint::Channel::new_bidirectional::<P>(config, socket_addr)?;
 
         let if_watcher;
         let pending_event;
@@ -375,23 +390,28 @@ impl<P: Provider> Listener<P> {
             pending_event = None;
         } else {
             if_watcher = None;
-            let ma = socketaddr_to_multiaddr(endpoint_channel.socket_addr(), version);
+            let ma = socketaddr_to_multiaddr(&socket_addr, version);
             pending_event = Some(TransportEvent::NewAddress {
                 listener_id,
                 listen_addr: ma,
             })
         }
 
+        let endpoint_c = endpoint.clone();
+        let accept = Box::pin(async move { endpoint_c.accept().await });
+
         Ok(Listener {
-            endpoint_channel,
+            endpoint,
+            accept,
+            // endpoint_channel,
             listener_id,
             version,
-            new_connections_rx,
+            // new_connections_rx,
             handshake_timeout,
             if_watcher,
             is_closed: false,
             pending_event,
-            dialer_state: DialerState::default(),
+            // dialer_state: DialerState::default(),
             close_listener_waker: None,
         })
     }
@@ -402,6 +422,7 @@ impl<P: Provider> Listener<P> {
         if self.is_closed {
             return;
         }
+        self.endpoint.close(From::from(0u32), &[]);
         self.pending_event = Some(TransportEvent::ListenerClosed {
             listener_id: self.listener_id,
             reason,
@@ -414,8 +435,13 @@ impl<P: Provider> Listener<P> {
         }
     }
 
+    fn socket_addr(&self) -> SocketAddr {
+        self.endpoint.local_addr().unwrap()
+    }
+
     /// Poll for a next If Event.
     fn poll_if_addr(&mut self, cx: &mut Context<'_>) -> Poll<<Self as Stream>::Item> {
+        let endpoint_addr = self.socket_addr();
         let if_watcher = match self.if_watcher.as_mut() {
             Some(iw) => iw,
             None => return Poll::Pending,
@@ -424,7 +450,7 @@ impl<P: Provider> Listener<P> {
             match ready!(P::poll_if_event(if_watcher, cx)) {
                 Ok(IfEvent::Up(inet)) => {
                     if let Some(listen_addr) = ip_to_listenaddr(
-                        self.endpoint_channel.socket_addr(),
+                        &endpoint_addr,
                         inet.addr(),
                         self.version,
                     ) {
@@ -437,7 +463,7 @@ impl<P: Provider> Listener<P> {
                 }
                 Ok(IfEvent::Down(inet)) => {
                     if let Some(listen_addr) = ip_to_listenaddr(
-                        self.endpoint_channel.socket_addr(),
+                        &endpoint_addr,
                         inet.addr(),
                         self.version,
                     ) {
@@ -458,16 +484,16 @@ impl<P: Provider> Listener<P> {
         }
     }
 
-    /// Poll [`DialerState`] to initiate requested dials.
-    fn poll_dialer(&mut self, cx: &mut Context<'_>) -> Poll<Error> {
-        let Self {
-            dialer_state,
-            endpoint_channel,
-            ..
-        } = self;
+    // /// Poll [`DialerState`] to initiate requested dials.
+    // fn poll_dialer(&mut self, cx: &mut Context<'_>) -> Poll<Error> {
+    //     let Self {
+    //         dialer_state,
+    //         endpoint_channel,
+    //         ..
+    //     } = self;
 
-        dialer_state.poll(endpoint_channel, cx)
-    }
+    //     dialer_state.poll(endpoint_channel, cx)
+    // }
 }
 
 impl<P: Provider> Stream for Listener<P> {
@@ -483,17 +509,21 @@ impl<P: Provider> Stream for Listener<P> {
             if let Poll::Ready(event) = self.poll_if_addr(cx) {
                 return Poll::Ready(Some(event));
             }
-            if let Poll::Ready(error) = self.poll_dialer(cx) {
-                self.close(Err(error));
-                continue;
-            }
-            match self.new_connections_rx.poll_next_unpin(cx) {
-                Poll::Ready(Some(connection)) => {
-                    let local_addr = socketaddr_to_multiaddr(connection.local_addr(), self.version);
+            // if let Poll::Ready(error) = self.poll_dialer(cx) {
+            //     self.close(Err(error));
+            //     continue;
+            // }
+
+            match self.accept.poll_unpin(cx) {
+                Poll::Ready(Some(connecting)) => {
+                    let endpoint = self.endpoint.clone();
+                    self.accept = Box::pin(async move { endpoint.accept().await });
+
+                    let local_addr = socketaddr_to_multiaddr(&self.socket_addr(), self.version);
                     let send_back_addr =
-                        socketaddr_to_multiaddr(&connection.remote_addr(), self.version);
+                        socketaddr_to_multiaddr(&connecting.remote_address(), self.version);
                     let event = TransportEvent::Incoming {
-                        upgrade: Connecting::new(connection, self.handshake_timeout),
+                        upgrade: Connecting::new(connecting, self.handshake_timeout),
                         local_addr,
                         send_back_addr,
                         listener_id: self.listener_id,
@@ -518,19 +548,13 @@ impl<P: Provider> fmt::Debug for Listener<P> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Listener")
             .field("listener_id", &self.listener_id)
-            .field("endpoint_channel", &self.endpoint_channel)
-            .field("dialer_state", &self.dialer_state)
-            .field("new_connections_rx", &self.new_connections_rx)
+            //.field("endpoint_channel", &self.endpoint_channel)
+            //.field("dialer_state", &self.dialer_state)
+            //.field("new_connections_rx", &self.new_connections_rx)
             .field("handshake_timeout", &self.handshake_timeout)
             .field("is_closed", &self.is_closed)
             .field("pending_event", &self.pending_event)
             .finish()
-    }
-}
-
-impl<P: Provider> Drop for Listener<P> {
-    fn drop(&mut self) {
-        self.endpoint_channel.send_on_drop(ToEndpoint::Decoupled);
     }
 }
 
@@ -827,55 +851,56 @@ mod test {
         }
     }
 
-    #[cfg(feature = "tokio")]
-    #[tokio::test]
-    async fn test_dialer_drop() {
-        let keypair = libp2p_core::identity::Keypair::generate_ed25519();
-        let config = Config::new(&keypair);
-        let mut transport = crate::tokio::Transport::new(config);
 
-        let _dial = transport
-            .dial("/ip4/123.45.67.8/udp/1234/quic-v1".parse().unwrap())
-            .unwrap();
+    // #[cfg(feature = "tokio")]
+    // #[tokio::test]
+    // async fn test_dialer_drop() {
+    //     let keypair = libp2p_core::identity::Keypair::generate_ed25519();
+    //     let config = Config::new(&keypair);
+    //     let mut transport = crate::tokio::Transport::new(config);
 
-        // Expect a dialer and its background task to exist.
-        let mut channel = transport
-            .dialer
-            .get(&SocketFamily::Ipv4)
-            .unwrap()
-            .endpoint_channel
-            .clone();
-        assert!(!transport.dialer.contains_key(&SocketFamily::Ipv6));
+    //     let _dial = transport
+    //         .dial("/ip4/123.45.67.8/udp/1234/quic-v1".parse().unwrap())
+    //         .unwrap();
 
-        // Send dummy dial to check that the endpoint driver is running.
-        poll_fn(|cx| {
-            let (tx, _) = oneshot::channel();
-            let _ = channel
-                .try_send(
-                    ToEndpoint::Dial {
-                        addr: SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0),
-                        result: tx,
-                        version: ProtocolVersion::V1,
-                    },
-                    cx,
-                )
-                .unwrap();
-            Poll::Ready(())
-        })
-        .await;
+    //     // Expect a dialer and its background task to exist.
+    //     let mut channel = transport
+    //         .dialer
+    //         .get(&SocketFamily::Ipv4)
+    //         .unwrap()
+    //         .endpoint_channel
+    //         .clone();
+    //     assert!(!transport.dialer.contains_key(&SocketFamily::Ipv6));
 
-        // Start listening so that the dialer and driver are dropped.
-        let _ = transport
-            .listen_on("/ip4/0.0.0.0/udp/0/quic-v1".parse().unwrap())
-            .unwrap();
-        assert!(!transport.dialer.contains_key(&SocketFamily::Ipv4));
+    //     // Send dummy dial to check that the endpoint driver is running.
+    //     poll_fn(|cx| {
+    //         let (tx, _) = oneshot::channel();
+    //         let _ = channel
+    //             .try_send(
+    //                 ToEndpoint::Dial {
+    //                     addr: SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0),
+    //                     result: tx,
+    //                     version: ProtocolVersion::V1,
+    //                 },
+    //                 cx,
+    //             )
+    //             .unwrap();
+    //         Poll::Ready(())
+    //     })
+    //     .await;
 
-        // Check that the [`Driver`] has shut down.
-        Delay::new(Duration::from_millis(10)).await;
-        poll_fn(|cx| {
-            assert!(channel.try_send(ToEndpoint::Decoupled, cx).is_err());
-            Poll::Ready(())
-        })
-        .await;
-    }
+    //     // Start listening so that the dialer and driver are dropped.
+    //     let _ = transport
+    //         .listen_on("/ip4/0.0.0.0/udp/0/quic-v1".parse().unwrap())
+    //         .unwrap();
+    //     assert!(!transport.dialer.contains_key(&SocketFamily::Ipv4));
+
+    //     // Check that the [`Driver`] has shut down.
+    //     Delay::new(Duration::from_millis(10)).await;
+    //     poll_fn(|cx| {
+    //         assert!(channel.try_send(ToEndpoint::Decoupled, cx).is_err());
+    //         Poll::Ready(())
+    //     })
+    //     .await;
+    // }
 }

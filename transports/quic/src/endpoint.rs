@@ -113,9 +113,9 @@ impl Config {
 /// Represents the inner configuration for [`quinn_proto`].
 #[derive(Debug, Clone)]
 pub struct QuinnConfig {
-    client_config: quinn_proto::ClientConfig,
-    server_config: Arc<quinn_proto::ServerConfig>,
-    endpoint_config: Arc<quinn_proto::EndpointConfig>,
+    pub(crate) client_config: quinn_proto::ClientConfig,
+    pub(crate) server_config: Arc<quinn_proto::ServerConfig>,
+    pub(crate) endpoint_config: Arc<quinn_proto::EndpointConfig>,
 }
 
 impl From<Config> for QuinnConfig {
@@ -167,6 +167,7 @@ impl From<Config> for QuinnConfig {
     }
 }
 
+/*
 /// Channel used to send commands to the [`Driver`].
 #[derive(Debug, Clone)]
 pub struct Channel {
@@ -287,11 +288,13 @@ impl Channel {
         let _ = self.to_endpoint.clone().try_send(to_endpoint);
     }
 }
+*/
 
 #[derive(Debug, thiserror::Error, Clone, PartialEq, Eq)]
 #[error("Background task disconnected")]
 pub struct Disconnected {}
 
+/*
 /// Message sent to the endpoint background task.
 #[derive(Debug)]
 pub enum ToEndpoint {
@@ -666,3 +669,4 @@ impl<P: Provider> Future for Driver<P> {
         Poll::Ready(())
     }
 }
+*/
