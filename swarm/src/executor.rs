@@ -39,7 +39,7 @@ pub struct TokioExecutor;
 ))]
 impl Executor for TokioExecutor {
     fn exec(&self, future: Pin<Box<dyn Future<Output = ()> + Send>>) {
-        let _ = tokio::spawn(future);
+        drop(tokio::spawn(future))
     }
 }
 
@@ -56,7 +56,7 @@ pub struct AsyncStdExecutor;
 ))]
 impl Executor for AsyncStdExecutor {
     fn exec(&self, future: Pin<Box<dyn Future<Output = ()> + Send>>) {
-        let _ = async_std::task::spawn(future);
+        drop(async_std::task::spawn(future))
     }
 }
 
