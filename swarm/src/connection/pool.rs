@@ -133,6 +133,9 @@ where
     /// Receivers for events reported from established connections.
     established_connection_events:
         SelectAll<mpsc::Receiver<task::EstablishedConnectionEvent<THandler>>>,
+
+    /// Receivers for [`NewConnection`] objects that are dropped.
+    new_connection_dropped_listeners: FuturesUnordered<oneshot::Receiver<StreamMuxerBox>>,
 }
 
 #[derive(Debug)]
@@ -223,7 +226,7 @@ pub enum PoolEvent<THandler: ConnectionHandler> {
         id: ConnectionId,
         peer_id: PeerId,
         endpoint: ConnectedPoint,
-        connection: StreamMuxerBox,
+        connection: NewConnection,
         /// [`Some`] when the new connection is an outgoing connection.
         /// Addresses are dialed in parallel. Contains the addresses and errors
         /// of dial attempts that failed before the one successful dial.
@@ -322,6 +325,7 @@ where
             pending_connection_events_rx,
             no_established_connections_waker: None,
             established_connection_events: Default::default(),
+            new_connection_dropped_listeners: Default::default(),
         }
     }
 
@@ -500,9 +504,11 @@ where
         id: ConnectionId,
         obtained_peer_id: PeerId,
         endpoint: &ConnectedPoint,
-        muxer: StreamMuxerBox,
+        connection: NewConnection,
         handler: <THandler as IntoConnectionHandler>::Handler,
     ) {
+        let connection = connection.extract();
+
         let conns = self.established.entry(obtained_peer_id).or_default();
         self.counters.inc_established(endpoint);
 
@@ -522,7 +528,7 @@ where
         }
 
         let connection = Connection::new(
-            muxer,
+            connection,
             handler,
             self.substream_upgrade_protocol_override,
             self.max_negotiating_inbound_streams,
@@ -535,10 +541,6 @@ where
             command_receiver,
             event_sender,
         ))
-    }
-
-    pub fn close_connection(&mut self, muxer: StreamMuxerBox) {
-        self.executor.spawn(muxer.close());
     }
 
     /// Polls the connection pool for events.
@@ -613,6 +615,17 @@ where
 
         // Poll for events of pending connections.
         loop {
+            if let Poll::Ready(Some(result)) =
+                self.new_connection_dropped_listeners.poll_next_unpin(cx)
+            {
+                if let Ok(dropped_connection) = result {
+                    self.executor.spawn(async move {
+                        let _ = dropped_connection.close().await;
+                    });
+                }
+                continue;
+            }
+
             let event = match self.pending_connection_events_rx.poll_next_unpin(cx) {
                 Poll::Ready(Some(event)) => event,
                 Poll::Pending => break,
@@ -744,11 +757,14 @@ where
 
                     let established_in = accepted_at.elapsed();
 
+                    let (connection, drop_listener) = NewConnection::new(muxer);
+                    self.new_connection_dropped_listeners.push(drop_listener);
+
                     return Poll::Ready(PoolEvent::ConnectionEstablished {
                         peer_id: obtained_peer_id,
                         endpoint,
                         id,
-                        connection: muxer,
+                        connection,
                         concurrent_dial_errors,
                         established_in,
                     });
@@ -800,6 +816,48 @@ where
         self.executor.advance_local(cx);
 
         Poll::Pending
+    }
+}
+
+/// Opaque type for a new connection.
+///
+/// This connection has just been established but isn't part of the [`Pool`] yet.
+/// It either needs to be spawned via [`Pool::spawn_connection`] or dropped if undesired.
+///
+/// On drop, this type send the connection back to the [`Pool`] where it will be gracefully closed.
+#[derive(Debug)]
+pub struct NewConnection {
+    connection: Option<StreamMuxerBox>,
+    drop_sender: Option<oneshot::Sender<StreamMuxerBox>>,
+}
+
+impl NewConnection {
+    fn new(conn: StreamMuxerBox) -> (Self, oneshot::Receiver<StreamMuxerBox>) {
+        let (sender, receiver) = oneshot::channel();
+
+        (
+            Self {
+                connection: Some(conn),
+                drop_sender: Some(sender),
+            },
+            receiver,
+        )
+    }
+
+    fn extract(mut self) -> StreamMuxerBox {
+        self.connection.take().unwrap()
+    }
+}
+
+impl Drop for NewConnection {
+    fn drop(&mut self) {
+        if let Some(connection) = self.connection.take() {
+            let _ = self
+                .drop_sender
+                .take()
+                .expect("`drop_sender` to always be `Some`")
+                .send(connection);
+        }
     }
 }
 
