@@ -403,10 +403,6 @@ where
     pub fn iter_connected(&self) -> impl Iterator<Item = &PeerId> {
         self.established.keys()
     }
-
-    fn spawn(&mut self, task: BoxFuture<'static, ()>) {
-        self.executor.spawn(task)
-    }
 }
 
 impl<THandler> Pool<THandler>
@@ -443,7 +439,7 @@ where
 
         let (abort_notifier, abort_receiver) = oneshot::channel();
 
-        self.spawn(
+        self.executor.spawn(
             task::new_for_pending_outgoing_connection(
                 connection_id,
                 dial,
@@ -489,7 +485,7 @@ where
 
         let (abort_notifier, abort_receiver) = oneshot::channel();
 
-        self.spawn(
+        self.executor.spawn(
             task::new_for_pending_incoming_connection(
                 connection_id,
                 future,
@@ -545,7 +541,7 @@ where
             self.max_negotiating_inbound_streams,
         );
 
-        self.spawn(
+        self.executor.spawn(
             task::new_for_established_connection(
                 id,
                 obtained_peer_id,
@@ -554,7 +550,7 @@ where
                 event_sender,
             )
             .boxed(),
-        );
+        )
     }
 
     /// Polls the connection pool for events.
@@ -724,7 +720,7 @@ where
                         });
 
                     if let Err(error) = error {
-                        self.spawn(
+                        self.executor.spawn(
                             poll_fn(move |cx| {
                                 if let Err(e) = ready!(muxer.poll_close_unpin(cx)) {
                                     log::debug!(
