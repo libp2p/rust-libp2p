@@ -84,6 +84,7 @@ pub mod derive_prelude {
     pub use crate::behaviour::NewExternalAddr;
     pub use crate::behaviour::NewListenAddr;
     pub use crate::behaviour::NewListener;
+    pub use crate::connection::ConnectionId;
     pub use crate::ConnectionHandler;
     pub use crate::DialError;
     pub use crate::IntoConnectionHandler;
@@ -91,9 +92,8 @@ pub mod derive_prelude {
     pub use crate::NetworkBehaviour;
     pub use crate::NetworkBehaviourAction;
     pub use crate::PollParameters;
+    pub use either::Either;
     pub use futures::prelude as futures;
-    pub use libp2p_core::connection::ConnectionId;
-    pub use libp2p_core::either::EitherOutput;
     pub use libp2p_core::transport::ListenerId;
     pub use libp2p_core::ConnectedPoint;
     pub use libp2p_core::Multiaddr;
@@ -108,8 +108,8 @@ pub use behaviour::{
 };
 pub use connection::pool::{ConnectionCounters, ConnectionLimits};
 pub use connection::{
-    ConnectionError, ConnectionLimit, PendingConnectionError, PendingInboundConnectionError,
-    PendingOutboundConnectionError,
+    ConnectionError, ConnectionId, ConnectionLimit, PendingConnectionError,
+    PendingInboundConnectionError, PendingOutboundConnectionError,
 };
 pub use executor::Executor;
 pub use handler::{
@@ -125,7 +125,6 @@ use connection::pool::{EstablishedConnection, Pool, PoolConfig, PoolEvent};
 use connection::IncomingInfo;
 use dial_opts::{DialOpts, PeerCondition};
 use futures::{executor::ThreadPoolBuilder, prelude::*, stream::FusedStream};
-use libp2p_core::connection::ConnectionId;
 use libp2p_core::muxing::SubstreamBox;
 use libp2p_core::{
     connection::ConnectedPoint,
@@ -167,7 +166,7 @@ type THandlerInEvent<TBehaviour> =
     <<THandler<TBehaviour> as IntoConnectionHandler>::Handler as ConnectionHandler>::InEvent;
 
 /// Custom event that can be produced by the [`ConnectionHandler`] of the [`NetworkBehaviour`].
-type THandlerOutEvent<TBehaviour> =
+pub type THandlerOutEvent<TBehaviour> =
     <<THandler<TBehaviour> as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent;
 
 /// Custom error that can be produced by the [`ConnectionHandler`] of the [`NetworkBehaviour`].
@@ -222,7 +221,7 @@ pub enum SwarmEvent<TBehaviourOutEvent, THandlerErr> {
         /// Address used to send back data to the remote.
         send_back_addr: Multiaddr,
     },
-    /// An error happened on a connection during its initial handshake.
+    /// An error happened on an inbound connection during its initial handshake.
     ///
     /// This can include, for example, an error during the handshake of the encryption layer, or
     /// the connection unexpectedly closed.
@@ -234,9 +233,9 @@ pub enum SwarmEvent<TBehaviourOutEvent, THandlerErr> {
         /// Address used to send back data to the remote.
         send_back_addr: Multiaddr,
         /// The error that happened.
-        error: PendingInboundConnectionError,
+        error: ListenError,
     },
-    /// Outgoing connection attempt failed.
+    /// An error happened on an outbound connection.
     OutgoingConnectionError {
         /// If known, [`PeerId`] of the peer we tried to reach.
         peer_id: Option<PeerId>,
@@ -851,11 +850,14 @@ where
                 error,
                 handler,
             } => {
+                let error = error.into();
+
                 log::debug!("Incoming connection failed: {:?}", error);
                 self.behaviour
                     .on_swarm_event(FromSwarm::ListenFailure(ListenFailure {
                         local_addr: &local_addr,
                         send_back_addr: &send_back_addr,
+                        error: &error,
                         handler,
                     }));
                 return Some(SwarmEvent::IncomingConnectionError {
@@ -971,10 +973,13 @@ where
                         });
                     }
                     Err((connection_limit, handler)) => {
+                        let error = ListenError::ConnectionLimit(connection_limit);
+
                         self.behaviour
                             .on_swarm_event(FromSwarm::ListenFailure(ListenFailure {
                                 local_addr: &local_addr,
                                 send_back_addr: &send_back_addr,
+                                error: &error,
                                 handler,
                             }));
                         log::warn!("Incoming connection rejected: {:?}", connection_limit);
@@ -1490,31 +1495,19 @@ where
         self
     }
 
-    /// Configures the number of extra events from the [`ConnectionHandler`] in
-    /// destination to the [`NetworkBehaviour`] that can be buffered before
-    /// the [`ConnectionHandler`] has to go to sleep.
+    /// Configures the size of the buffer for events sent by a [`ConnectionHandler`] to the
+    /// [`NetworkBehaviour`].
     ///
-    /// There exists a buffer of events received from [`ConnectionHandler`]s
-    /// that the [`NetworkBehaviour`] has yet to process. This buffer is
-    /// shared between all instances of [`ConnectionHandler`]. Each instance of
-    /// [`ConnectionHandler`] is guaranteed one slot in this buffer, meaning
-    /// that delivering an event for the first time is guaranteed to be
-    /// instantaneous. Any extra event delivery, however, must wait for that
-    /// first event to be delivered or for an "extra slot" to be available.
+    /// Each connection has its own buffer.
     ///
-    /// This option configures the number of such "extra slots" in this
-    /// shared buffer. These extra slots are assigned in a first-come,
-    /// first-served basis.
-    ///
-    /// The ideal value depends on the executor used, the CPU speed, the
-    /// average number of connections, and the volume of events. If this value
-    /// is too low, then the [`ConnectionHandler`]s will be sleeping more often
+    /// The ideal value depends on the executor used, the CPU speed and the volume of events.
+    /// If this value is too low, then the [`ConnectionHandler`]s will be sleeping more often
     /// than necessary. Increasing this value increases the overall memory
     /// usage, and more importantly the latency between the moment when an
     /// event is emitted and the moment when it is received by the
     /// [`NetworkBehaviour`].
-    pub fn connection_event_buffer_size(mut self, n: usize) -> Self {
-        self.pool_config = self.pool_config.with_connection_event_buffer_size(n);
+    pub fn per_connection_event_buffer_size(mut self, n: usize) -> Self {
+        self.pool_config = self.pool_config.with_per_connection_event_buffer_size(n);
         self
     }
 
@@ -1566,7 +1559,6 @@ where
             .new_handler()
             .inbound_protocol()
             .protocol_info()
-            .into_iter()
             .map(|info| info.protocol_name().to_vec())
             .collect();
 
@@ -1585,7 +1577,7 @@ where
     }
 }
 
-/// The possible failures of dialing.
+/// Possible errors when trying to establish or upgrade an outbound connection.
 #[derive(Debug)]
 pub enum DialError {
     /// The peer is currently banned.
@@ -1593,8 +1585,8 @@ pub enum DialError {
     /// The configured limit for simultaneous outgoing connections
     /// has been reached.
     ConnectionLimit(ConnectionLimit),
-    /// The peer being dialed is the local peer and thus the dial was aborted.
-    LocalPeerId,
+    /// The peer identity obtained on the connection matches the local peer.
+    LocalPeerId { endpoint: ConnectedPoint },
     /// [`NetworkBehaviour::addresses_of_peer`] returned no addresses
     /// for the peer to dial.
     NoAddresses,
@@ -1610,8 +1602,6 @@ pub enum DialError {
         obtained: PeerId,
         endpoint: ConnectedPoint,
     },
-    /// An I/O error occurred on the connection.
-    ConnectionIo(io::Error),
     /// An error occurred while negotiating the transport protocol(s) on a connection.
     Transport(Vec<(Multiaddr, TransportError<io::Error>)>),
 }
@@ -1624,7 +1614,7 @@ impl From<PendingOutboundConnectionError> for DialError {
             PendingConnectionError::WrongPeerId { obtained, endpoint } => {
                 DialError::WrongPeerId { obtained, endpoint }
             }
-            PendingConnectionError::IO(e) => DialError::ConnectionIo(e),
+            PendingConnectionError::LocalPeerId { endpoint } => DialError::LocalPeerId { endpoint },
             PendingConnectionError::Transport(e) => DialError::Transport(e),
         }
     }
@@ -1635,7 +1625,10 @@ impl fmt::Display for DialError {
         match self {
             DialError::ConnectionLimit(err) => write!(f, "Dial error: {err}"),
             DialError::NoAddresses => write!(f, "Dial error: no addresses for peer."),
-            DialError::LocalPeerId => write!(f, "Dial error: tried to dial local peer id."),
+            DialError::LocalPeerId { endpoint } => write!(
+                f,
+                "Dial error: tried to dial local peer id at {endpoint:?}."
+            ),
             DialError::Banned => write!(f, "Dial error: peer is banned."),
             DialError::DialPeerConditionFalse(c) => {
                 write!(f, "Dial error: condition {c:?} for dialing peer was false.")
@@ -1650,10 +1643,6 @@ impl fmt::Display for DialError {
             DialError::WrongPeerId { obtained, endpoint } => write!(
                 f,
                 "Dial error: Unexpected peer ID {obtained} at {endpoint:?}."
-            ),
-            DialError::ConnectionIo(e) => write!(
-                f,
-                "Dial error: An I/O error occurred on the connection: {e:?}."
             ),
             DialError::Transport(errors) => {
                 write!(f, "Failed to negotiate transport protocol(s): [")?;
@@ -1685,15 +1674,88 @@ impl error::Error for DialError {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
             DialError::ConnectionLimit(err) => Some(err),
-            DialError::LocalPeerId => None,
+            DialError::LocalPeerId { .. } => None,
             DialError::NoAddresses => None,
             DialError::Banned => None,
             DialError::DialPeerConditionFalse(_) => None,
             DialError::Aborted => None,
             DialError::InvalidPeerId { .. } => None,
             DialError::WrongPeerId { .. } => None,
-            DialError::ConnectionIo(_) => None,
             DialError::Transport(_) => None,
+        }
+    }
+}
+
+/// Possible errors when upgrading an inbound connection.
+#[derive(Debug)]
+pub enum ListenError {
+    /// The configured limit for simultaneous outgoing connections
+    /// has been reached.
+    ConnectionLimit(ConnectionLimit),
+    /// Pending connection attempt has been aborted.
+    Aborted,
+    /// The peer identity obtained on the connection did not match the one that was expected.
+    WrongPeerId {
+        obtained: PeerId,
+        endpoint: ConnectedPoint,
+    },
+    /// The peer identity obtained on the connection did not match the one that was expected.
+    LocalPeerId { endpoint: ConnectedPoint },
+    /// An error occurred while negotiating the transport protocol(s) on a connection.
+    Transport(TransportError<io::Error>),
+}
+
+impl From<PendingInboundConnectionError> for ListenError {
+    fn from(error: PendingInboundConnectionError) -> Self {
+        match error {
+            PendingInboundConnectionError::Transport(inner) => ListenError::Transport(inner),
+            PendingInboundConnectionError::ConnectionLimit(inner) => {
+                ListenError::ConnectionLimit(inner)
+            }
+            PendingInboundConnectionError::Aborted => ListenError::Aborted,
+            PendingInboundConnectionError::WrongPeerId { obtained, endpoint } => {
+                ListenError::WrongPeerId { obtained, endpoint }
+            }
+            PendingInboundConnectionError::LocalPeerId { endpoint } => {
+                ListenError::LocalPeerId { endpoint }
+            }
+        }
+    }
+}
+
+impl fmt::Display for ListenError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ListenError::ConnectionLimit(_) => write!(f, "Listen error"),
+            ListenError::Aborted => write!(
+                f,
+                "Listen error: Pending connection attempt has been aborted."
+            ),
+            ListenError::WrongPeerId { obtained, endpoint } => write!(
+                f,
+                "Listen error: Unexpected peer ID {obtained} at {endpoint:?}."
+            ),
+            ListenError::Transport(_) => {
+                write!(f, "Listen error: Failed to negotiate transport protocol(s)")
+            }
+            ListenError::LocalPeerId { endpoint } => {
+                write!(
+                    f,
+                    "Listen error: Pending connection: Local peer ID at {endpoint:?}."
+                )
+            }
+        }
+    }
+}
+
+impl error::Error for ListenError {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        match self {
+            ListenError::ConnectionLimit(err) => Some(err),
+            ListenError::WrongPeerId { .. } => None,
+            ListenError::Transport(err) => Some(err),
+            ListenError::Aborted => None,
+            ListenError::LocalPeerId { .. } => None,
         }
     }
 }
@@ -1750,12 +1812,11 @@ fn p2p_addr(peer: Option<PeerId>, addr: Multiaddr) -> Result<Multiaddr, Multiadd
 mod tests {
     use super::*;
     use crate::test::{CallTraceBehaviour, MockBehaviour};
+    use either::Either;
     use futures::executor::block_on;
     use futures::executor::ThreadPool;
     use futures::future::poll_fn;
-    use futures::future::Either;
     use futures::{executor, future, ready};
-    use libp2p_core::either::EitherError;
     use libp2p_core::multiaddr::multiaddr;
     use libp2p_core::transport::memory::MemoryTransportError;
     use libp2p_core::transport::TransportEvent;
@@ -2225,13 +2286,13 @@ mod tests {
                         match futures::future::select(transport.select_next_some(), swarm.next())
                             .await
                         {
-                            Either::Left((TransportEvent::Incoming { .. }, _)) => {
+                            future::Either::Left((TransportEvent::Incoming { .. }, _)) => {
                                 break;
                             }
-                            Either::Left(_) => {
+                            future::Either::Left(_) => {
                                 panic!("Unexpected transport event.")
                             }
-                            Either::Right((e, _)) => {
+                            future::Either::Right((e, _)) => {
                                 panic!("Expect swarm to not emit any event {e:?}")
                             }
                         }
@@ -2345,7 +2406,7 @@ mod tests {
                                 network_1_established = true;
                             }
                             Poll::Ready(Some(SwarmEvent::IncomingConnectionError {
-                                error: PendingConnectionError::ConnectionLimit(err),
+                                error: ListenError::ConnectionLimit(err),
                                 ..
                             })) => {
                                 assert_eq!(err.limit, limit);
@@ -2502,7 +2563,7 @@ mod tests {
                 match swarm.poll_next_unpin(cx) {
                     Poll::Ready(Some(SwarmEvent::OutgoingConnectionError {
                         peer_id,
-                        error: DialError::WrongPeerId { .. },
+                        error: DialError::LocalPeerId { .. },
                         ..
                     })) => {
                         assert_eq!(&peer_id.unwrap(), swarm.local_peer_id());
@@ -2633,7 +2694,7 @@ mod tests {
             "/ip4/127.0.0.1/tcp/80".parse().unwrap(),
             TransportError::Other(io::Error::new(
                 io::ErrorKind::Other,
-                EitherError::<_, Void>::A(EitherError::<Void, _>::B(UpgradeError::Apply(
+                Either::<_, Void>::Left(Either::<Void, _>::Right(UpgradeError::Apply(
                     MemoryTransportError::Unreachable,
                 ))),
             )),

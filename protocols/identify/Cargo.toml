@@ -12,7 +12,7 @@ categories = ["network-programming", "asynchronous"]
 
 [dependencies]
 asynchronous-codec = "0.6"
-futures = "0.3.1"
+futures = "0.3.26"
 futures-timer = "3.0.2"
 libp2p-core = { version = "0.39.0", path = "../../core" }
 libp2p-swarm = { version = "0.42.0", path = "../../swarm" }
@@ -23,6 +23,7 @@ prost = "0.11"
 smallvec = "1.6.1"
 thiserror = "1.0"
 void = "1.0"
+either = "1.8.0"
 
 [dev-dependencies]
 async-std = { version = "1.6.2", features = ["attributes"] }

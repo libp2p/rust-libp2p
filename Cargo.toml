@@ -87,7 +87,7 @@ yamux = ["dep:libp2p-yamux"]
 
 [dependencies]
 bytes = "1"
-futures = "0.3.1"
+futures = "0.3.26"
 futures-timer = "3.0.2" # Explicit dependency to be used in `wasm-bindgen` feature
 getrandom = "0.2.3" # Explicit dependency to be used in `wasm-bindgen` feature
 instant = "0.1.11" # Explicit dependency to be used in `wasm-bindgen` feature
@@ -132,6 +132,7 @@ libp2p-gossipsub = { version = "0.44.0", path = "protocols/gossipsub", optional 
 [dev-dependencies]
 async-std = { version = "1.6.2", features = ["attributes"] }
 async-trait = "0.1"
+either = "1.8.0"
 env_logger = "0.10.0"
 clap = { version = "4.0.13", features = ["derive"] }
 tokio = { version = "1.15", features = ["io-util", "io-std", "macros", "rt", "rt-multi-thread"] }
@@ -165,6 +166,7 @@ members = [
     "protocols/request-response",
     "swarm",
     "swarm-derive",
+    "interop-tests",
     "transports/deflate",
     "transports/dns",
     "transports/noise",
@@ -176,7 +178,8 @@ members = [
     "transports/uds",
     "transports/websocket",
     "transports/wasm-ext",
-    "transports/webrtc"
+    "transports/webrtc",
+    "interop-tests"
 ]
 
 [[example]]

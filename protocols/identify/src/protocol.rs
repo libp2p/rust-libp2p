@@ -22,11 +22,11 @@ use crate::structs_proto;
 use asynchronous_codec::{FramedRead, FramedWrite};
 use futures::{future::BoxFuture, prelude::*};
 use libp2p_core::{
-    connection::ConnectionId,
     identity, multiaddr,
     upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo},
     Multiaddr, PublicKey,
 };
+use libp2p_swarm::ConnectionId;
 use log::{debug, trace};
 use std::convert::TryFrom;
 use std::{io, iter, pin::Pin};

@@ -27,11 +27,11 @@ use futures::future::BoxFuture;
 use futures::ready;
 use futures::stream::FuturesUnordered;
 use futures::{FutureExt, StreamExt};
-use libp2p_core::connection::ConnectionId;
 use libp2p_core::PeerId;
 use libp2p_swarm::behaviour::FromSwarm;
 use libp2p_swarm::{
-    CloseConnection, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
+    CloseConnection, ConnectionId, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
+    PollParameters, THandlerOutEvent,
 };
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::iter::FromIterator;
@@ -123,7 +123,7 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         peer_id: PeerId,
         connection: ConnectionId,
-        event: handler::InboundOutEvent,
+        event: THandlerOutEvent<Self>,
     ) {
         let new_events = match event {
             handler::InboundOutEvent::InboundEvent { id, message } => {

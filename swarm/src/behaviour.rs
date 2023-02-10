@@ -26,20 +26,16 @@ pub mod toggle;
 pub use external_addresses::ExternalAddresses;
 pub use listen_addresses::ListenAddresses;
 
+use crate::connection::ConnectionId;
 use crate::dial_opts::DialOpts;
 use crate::handler::{ConnectionHandler, IntoConnectionHandler};
-use crate::{AddressRecord, AddressScore, DialError};
-use libp2p_core::{
-    connection::ConnectionId, transport::ListenerId, ConnectedPoint, Multiaddr, PeerId,
-};
+use crate::{AddressRecord, AddressScore, DialError, ListenError, THandlerOutEvent};
+use libp2p_core::{transport::ListenerId, ConnectedPoint, Multiaddr, PeerId};
 use std::{task::Context, task::Poll};
 
 /// Custom event that can be received by the [`ConnectionHandler`].
 pub(crate) type THandlerInEvent<THandler> =
     <<THandler as IntoConnectionHandler>::Handler as ConnectionHandler>::InEvent;
-
-pub(crate) type THandlerOutEvent<THandler> =
-    <<THandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent;
 
 /// A [`NetworkBehaviour`] defines the behaviour of the local node on the network.
 ///
@@ -171,10 +167,8 @@ pub trait NetworkBehaviour: 'static {
         &mut self,
         _peer_id: PeerId,
         _connection_id: ConnectionId,
-        _event: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as
-        ConnectionHandler>::OutEvent,
-    ) {
-    }
+        _event: THandlerOutEvent<Self>,
+    );
 
     /// Polls for things that swarm should do.
     ///
@@ -259,14 +253,14 @@ pub enum NetworkBehaviourAction<
     /// ```rust
     /// # use futures::executor::block_on;
     /// # use futures::stream::StreamExt;
-    /// # use libp2p_core::connection::ConnectionId;
     /// # use libp2p_core::identity;
     /// # use libp2p_core::transport::{MemoryTransport, Transport};
     /// # use libp2p_core::upgrade::{self, DeniedUpgrade, InboundUpgrade, OutboundUpgrade};
     /// # use libp2p_core::PeerId;
     /// # use libp2p_plaintext::PlainText2Config;
     /// # use libp2p_swarm::{
-    /// #     FromSwarm, DialFailure, DialError, IntoConnectionHandler, KeepAlive, NegotiatedSubstream,
+    /// #     ConnectionId, DialError, IntoConnectionHandler, KeepAlive, NegotiatedSubstream,
+    /// #     FromSwarm, DialFailure, THandlerOutEvent,
     /// #     NetworkBehaviour, NetworkBehaviourAction, PollParameters, ConnectionHandler,
     /// #     ConnectionHandlerEvent, ConnectionHandlerUpgrErr, SubstreamProtocol, Swarm, SwarmEvent,
     /// # };
@@ -336,7 +330,7 @@ pub enum NetworkBehaviourAction<
     ///     #     &mut self,
     ///     #     _: PeerId,
     ///     #     _: ConnectionId,
-    ///     #     _: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent,
+    ///     #     _: THandlerOutEvent<Self>,
     ///     # ) {
     ///     #     unreachable!();
     ///     # }
@@ -642,18 +636,13 @@ pub enum NotifyHandler {
 }
 
 /// The options which connections to close.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub enum CloseConnection {
     /// Disconnect a particular connection.
     One(ConnectionId),
     /// Disconnect all connections.
+    #[default]
     All,
-}
-
-impl Default for CloseConnection {
-    fn default() -> Self {
-        CloseConnection::All
-    }
 }
 
 /// Enumeration with the list of the possible events
@@ -748,6 +737,7 @@ pub struct DialFailure<'a, Handler> {
 pub struct ListenFailure<'a, Handler> {
     pub local_addr: &'a Multiaddr,
     pub send_back_addr: &'a Multiaddr,
+    pub error: &'a ListenError,
     pub handler: Handler,
 }
 
@@ -876,10 +866,12 @@ impl<'a, Handler: IntoConnectionHandler> FromSwarm<'a, Handler> {
             FromSwarm::ListenFailure(ListenFailure {
                 local_addr,
                 send_back_addr,
+                error,
                 handler,
             }) => Some(FromSwarm::ListenFailure(ListenFailure {
                 local_addr,
                 send_back_addr,
+                error,
                 handler: map_into_handler(handler)?,
             })),
             FromSwarm::NewListener(NewListener { listener_id }) => {
