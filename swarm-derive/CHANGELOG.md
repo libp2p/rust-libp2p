@@ -1,9 +1,14 @@
 # 0.32.0 [unreleased]
 
+- Fix `NetworkBehaviour` Derive macro for generic types when `out_event` was not provided. Previously the enum generated
+  didn't have the `NetworkBehaviour` impl constraints whilst using the generics for `<Generic>::OutEvent`.
+  See [PR 3393].
+
 - Replace `NetworkBehaviour` Derive macro deprecated `inject_*` method implementations
   with the new `on_swarm_event` and `on_connection_handler_event`.
   See [PR 3011] and [PR 3264].
 
+[PR 3393]: https://github.com/libp2p/rust-libp2p/pull/3393
 [PR 3011]: https://github.com/libp2p/rust-libp2p/pull/3011
 [PR 3264]: https://github.com/libp2p/rust-libp2p/pull/3264
 
@@ -123,3 +128,4 @@ ambiguity. [PR 1681](https://github.com/libp2p/rust-libp2p/pull/1681).
 mechanism through `#[behaviour(event_process = false)]`. This is
 useful if users want to process all events while polling the
 swarm through `SwarmEvent::Behaviour`.
+

@@ -72,7 +72,9 @@ impl ExecSwitch {
         }
     }
 
-    fn spawn(&mut self, task: BoxFuture<'static, ()>) {
+    fn spawn(&mut self, task: impl Future<Output = ()> + Send + 'static) {
+        let task = task.boxed();
+
         match self {
             Self::Executor(executor) => executor.exec(task),
             Self::LocalSpawn(local) => local.push(task),
@@ -396,15 +398,6 @@ where
         self.established.keys()
     }
 
-    fn spawn(&mut self, task: BoxFuture<'static, ()>) {
-        self.executor.spawn(task)
-    }
-}
-
-impl<THandler> Pool<THandler>
-where
-    THandler: ConnectionHandler,
-{
     /// Adds a pending outgoing connection to the pool in the form of a `Future`
     /// that establishes and negotiates the connection.
     ///
@@ -435,15 +428,13 @@ where
 
         let (abort_notifier, abort_receiver) = oneshot::channel();
 
-        self.spawn(
-            task::new_for_pending_outgoing_connection(
+        self.executor
+            .spawn(task::new_for_pending_outgoing_connection(
                 connection_id,
                 dial,
                 abort_receiver,
                 self.pending_connection_events_tx.clone(),
-            )
-            .boxed(),
-        );
+            ));
 
         let endpoint = PendingPoint::Dialer { role_override };
 
@@ -481,15 +472,13 @@ where
 
         let (abort_notifier, abort_receiver) = oneshot::channel();
 
-        self.spawn(
-            task::new_for_pending_incoming_connection(
+        self.executor
+            .spawn(task::new_for_pending_incoming_connection(
                 connection_id,
                 future,
                 abort_receiver,
                 self.pending_connection_events_tx.clone(),
-            )
-            .boxed(),
-        );
+            ));
 
         self.counters.inc_pending_incoming();
         self.pending.insert(
@@ -539,16 +528,17 @@ where
             self.max_negotiating_inbound_streams,
         );
 
-        self.spawn(
-            task::new_for_established_connection(
-                id,
-                obtained_peer_id,
-                connection,
-                command_receiver,
-                event_sender,
-            )
-            .boxed(),
-        );
+        self.executor.spawn(task::new_for_established_connection(
+            id,
+            obtained_peer_id,
+            connection,
+            command_receiver,
+            event_sender,
+        ))
+    }
+
+    pub fn close_connection(&mut self, muxer: StreamMuxerBox) {
+        self.executor.spawn(muxer.close());
     }
 
     /// Polls the connection pool for events.
@@ -717,20 +707,17 @@ where
                         });
 
                     if let Err(error) = error {
-                        self.spawn(
-                            poll_fn(move |cx| {
-                                if let Err(e) = ready!(muxer.poll_close_unpin(cx)) {
-                                    log::debug!(
-                                        "Failed to close connection {:?} to peer {}: {:?}",
-                                        id,
-                                        obtained_peer_id,
-                                        e
-                                    );
-                                }
-                                Poll::Ready(())
-                            })
-                            .boxed(),
-                        );
+                        self.executor.spawn(poll_fn(move |cx| {
+                            if let Err(e) = ready!(muxer.poll_close_unpin(cx)) {
+                                log::debug!(
+                                    "Failed to close connection {:?} to peer {}: {:?}",
+                                    id,
+                                    obtained_peer_id,
+                                    e
+                                );
+                            }
+                            Poll::Ready(())
+                        }));
 
                         match endpoint {
                             ConnectedPoint::Dialer { .. } => {

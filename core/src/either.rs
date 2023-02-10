@@ -41,7 +41,7 @@ where
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Result<Self::Substream, Self::Error>> {
-        match as_pin_mut(self) {
+        match self.as_pin_mut() {
             future::Either::Left(inner) => inner
                 .poll_inbound(cx)
                 .map_ok(future::Either::Left)
@@ -57,7 +57,7 @@ where
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Result<Self::Substream, Self::Error>> {
-        match as_pin_mut(self) {
+        match self.as_pin_mut() {
             future::Either::Left(inner) => inner
                 .poll_outbound(cx)
                 .map_ok(future::Either::Left)
@@ -70,7 +70,7 @@ where
     }
 
     fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        match as_pin_mut(self) {
+        match self.as_pin_mut() {
             future::Either::Left(inner) => inner.poll_close(cx).map_err(Either::Left),
             future::Either::Right(inner) => inner.poll_close(cx).map_err(Either::Right),
         }
@@ -80,31 +80,9 @@ where
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Result<StreamMuxerEvent, Self::Error>> {
-        match as_pin_mut(self) {
+        match self.as_pin_mut() {
             future::Either::Left(inner) => inner.poll(cx).map_err(Either::Left),
             future::Either::Right(inner) => inner.poll(cx).map_err(Either::Right),
-        }
-    }
-}
-
-/// Convert `Pin<&mut Either<A, B>>` to `Either<Pin<&mut A>, Pin<&mut B>>`,
-/// pinned projections of the inner variants.
-///
-/// Local function until <https://github.com/rust-lang/futures-rs/pull/2691> is merged.
-fn as_pin_mut<A, B>(
-    either: Pin<&mut future::Either<A, B>>,
-) -> future::Either<Pin<&mut A>, Pin<&mut B>> {
-    // SAFETY: `get_unchecked_mut` is fine because we don't move anything.
-    // We can use `new_unchecked` because the `inner` parts are guaranteed
-    // to be pinned, as they come from `self` which is pinned, and we never
-    // offer an unpinned `&mut L` or `&mut R` through `Pin<&mut Self>`. We
-    // also don't have an implementation of `Drop`, nor manual `Unpin`.
-    unsafe {
-        match *Pin::get_unchecked_mut(either) {
-            future::Either::Left(ref mut inner) => future::Either::Left(Pin::new_unchecked(inner)),
-            future::Either::Right(ref mut inner) => {
-                future::Either::Right(Pin::new_unchecked(inner))
-            }
         }
     }
 }
