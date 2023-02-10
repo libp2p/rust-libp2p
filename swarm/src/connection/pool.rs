@@ -405,12 +405,7 @@ where
     pub fn iter_connected(&self) -> impl Iterator<Item = &PeerId> {
         self.established.keys()
     }
-}
 
-impl<THandler> Pool<THandler>
-where
-    THandler: IntoConnectionHandler,
-{
     /// Adds a pending outgoing connection to the pool in the form of a `Future`
     /// that establishes and negotiates the connection.
     ///
