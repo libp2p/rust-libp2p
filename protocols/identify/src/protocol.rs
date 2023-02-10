@@ -196,7 +196,7 @@ where
     // Even though we won't write to the stream anymore we don't close it here.
     // The reason for this is that the `close` call on some transport's require the
     // remote's ACK, but it could be that the remote already dropped the stream
-    // after finishing their write. 
+    // after finishing their write.
 
     let info = FramedRead::new(
         socket,
