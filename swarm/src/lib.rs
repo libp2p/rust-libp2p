@@ -1131,8 +1131,8 @@ enum PendingNotifyHandler {
 ///
 /// Returns `None` if the connection is closing or the event has been
 /// successfully sent, in either case the event is consumed.
-fn notify_one<'a, THandlerInEvent>(
-    conn: &mut EstablishedConnection<'a, THandlerInEvent>,
+fn notify_one<THandlerInEvent>(
+    conn: &mut EstablishedConnection<'_, THandlerInEvent>,
     event: THandlerInEvent,
     cx: &mut Context<'_>,
 ) -> Option<THandlerInEvent> {
