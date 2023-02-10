@@ -6,6 +6,7 @@ use anyhow::{bail, Context, Result};
 use either::Either;
 use env_logger::{Env, Target};
 use futures::{future, AsyncRead, AsyncWrite, StreamExt};
+use libp2p::core::either::EitherOutput;
 use libp2p::core::muxing::StreamMuxerBox;
 use libp2p::core::upgrade::{EitherUpgrade, MapInboundUpgrade, MapOutboundUpgrade, Version};
 use libp2p::noise::{NoiseOutput, X25519Spec, XX};
@@ -18,7 +19,6 @@ use libp2p::{
 };
 use redis::AsyncCommands;
 use strum::EnumString;
-use libp2p::core::either::EitherOutput;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -190,9 +190,7 @@ fn secure_channel_protocol_from_env<C: AsyncRead + AsyncWrite + Unpin + Send + '
 type SecOutput<C> = EitherOutput<(PeerId, NoiseOutput<C>), (PeerId, TlsStream<C>)>;
 type MapSecOutputFn<C> = fn(SecOutput<C>) -> (PeerId, EitherOutput<NoiseOutput<C>, TlsStream<C>>);
 
-fn factor_peer_id<C>(
-    output: SecOutput<C>,
-) -> (PeerId, EitherOutput<NoiseOutput<C>, TlsStream<C>>) {
+fn factor_peer_id<C>(output: SecOutput<C>) -> (PeerId, EitherOutput<NoiseOutput<C>, TlsStream<C>>) {
     match output {
         EitherOutput::First((peer, stream)) => (peer, EitherOutput::First(stream)),
         EitherOutput::Second((peer, stream)) => (peer, EitherOutput::Second(stream)),
