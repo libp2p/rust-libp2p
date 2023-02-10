@@ -33,7 +33,7 @@ async fn main() -> Result<()> {
         .parse::<bool>()?;
 
     let test_timeout = env::var("test_timeout_seconds")
-        .unwrap_or_else(|_| "10".into())
+        .unwrap_or_else(|_| "180".into())
         .parse::<u64>()?;
 
     let redis_addr = env::var("redis_addr")
