@@ -25,8 +25,7 @@ To run this test against all released libp2p versions you'll need to have the
 (libp2p/test-plans)[https://github.com/libp2p/test-plans] checked out. Then do
 the following (from the root directory of this repository):
 
-1. Build the ping binary: `cargo build --release -p interop-tests`
-1. Build the image: `docker build -t rust-libp2p-head --build-arg=TEST_BINARY=target/release/ping . -f interop-tests/Dockerfile`.
+1. Build the image: `docker build -t rust-libp2p-head . -f interop-tests/Dockerfile`.
 1. Build the images for all released versions in `libp2p/test-plans`: `(cd <path to >/libp2p/test-plans/multidim-interop/ && make)`.
 1. Run the test:
 ```
