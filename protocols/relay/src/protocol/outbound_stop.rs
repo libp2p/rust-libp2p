@@ -52,9 +52,9 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
 
     fn upgrade_outbound(self, substream: NegotiatedSubstream, _: Self::Info) -> Self::Future {
         let msg = StopMessage {
-            r#type: stop_message::Type::Connect.into(),
+            r#type: Some(stop_message::Type::Connect.into()),
             peer: Some(Peer {
-                id: self.relay_peer_id.to_bytes(),
+                id: Some(self.relay_peer_id.to_bytes()),
                 addrs: vec![],
             }),
             limit: Some(Limit {
@@ -84,7 +84,7 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
                 .ok_or(FatalUpgradeError::StreamClosed)??;
 
             let r#type =
-                stop_message::Type::from_i32(r#type).ok_or(FatalUpgradeError::ParseTypeField)?;
+                stop_message::Type::from_i32(r#type.unwrap()).ok_or(FatalUpgradeError::ParseTypeField)?;
             match r#type {
                 stop_message::Type::Connect => {
                     return Err(FatalUpgradeError::UnexpectedTypeConnect.into())

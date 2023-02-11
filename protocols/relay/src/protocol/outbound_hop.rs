@@ -53,16 +53,16 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
     fn upgrade_outbound(self, substream: NegotiatedSubstream, _: Self::Info) -> Self::Future {
         let msg = match self {
             Upgrade::Reserve => HopMessage {
-                r#type: hop_message::Type::Reserve.into(),
+                r#type: Some(hop_message::Type::Reserve.into()),
                 peer: None,
                 reservation: None,
                 limit: None,
                 status: None,
             },
             Upgrade::Connect { dst_peer_id } => HopMessage {
-                r#type: hop_message::Type::Connect.into(),
+                r#type: Some(hop_message::Type::Connect.into()),
                 peer: Some(Peer {
-                    id: dst_peer_id.to_bytes(),
+                    id: Some(dst_peer_id.to_bytes()),
                     addrs: vec![],
                 }),
                 reservation: None,
@@ -87,7 +87,7 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
                 .ok_or(FatalUpgradeError::StreamClosed)??;
 
             let r#type =
-                hop_message::Type::from_i32(r#type).ok_or(FatalUpgradeError::ParseTypeField)?;
+                hop_message::Type::from_i32(r#type.unwrap()).ok_or(FatalUpgradeError::ParseTypeField)?;
             match r#type {
                 hop_message::Type::Connect => {
                     return Err(FatalUpgradeError::UnexpectedTypeConnect.into())
@@ -132,6 +132,7 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
 
                     let renewal_timeout = reservation
                         .expire
+                        .unwrap()
                         .checked_sub(
                             SystemTime::now()
                                 .duration_since(SystemTime::UNIX_EPOCH)

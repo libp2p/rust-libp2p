@@ -59,11 +59,11 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
                 .ok_or(FatalUpgradeError::StreamClosed)??;
 
             let r#type =
-                stop_message::Type::from_i32(r#type).ok_or(FatalUpgradeError::ParseTypeField)?;
+                stop_message::Type::from_i32(r#type.unwrap()).ok_or(FatalUpgradeError::ParseTypeField)?;
             match r#type {
                 stop_message::Type::Connect => {
                     let src_peer_id =
-                        PeerId::from_bytes(&peer.ok_or(FatalUpgradeError::MissingPeer)?.id)
+                        PeerId::from_bytes(&peer.ok_or(FatalUpgradeError::MissingPeer)?.id.unwrap())
                             .map_err(|_| FatalUpgradeError::ParsePeerId)?;
                     Ok(Circuit {
                         substream,
@@ -123,7 +123,7 @@ impl Circuit {
 
     pub async fn accept(mut self) -> Result<(NegotiatedSubstream, Bytes), UpgradeError> {
         let msg = StopMessage {
-            r#type: stop_message::Type::Status.into(),
+            r#type: Some(stop_message::Type::Status.into()),
             peer: None,
             limit: None,
             status: Some(Status::Ok.into()),
@@ -147,7 +147,7 @@ impl Circuit {
 
     pub async fn deny(mut self, status: Status) -> Result<(), UpgradeError> {
         let msg = StopMessage {
-            r#type: stop_message::Type::Status.into(),
+            r#type: Some(stop_message::Type::Status.into()),
             peer: None,
             limit: None,
             status: Some(status.into()),
