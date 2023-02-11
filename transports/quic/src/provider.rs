@@ -22,7 +22,6 @@ use futures::Future;
 use if_watch::IfEvent;
 use std::{
     io,
-    net::SocketAddr,
     task::{Context, Poll},
 };
 

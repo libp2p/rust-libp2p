@@ -18,13 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use async_std::{net::UdpSocket, task::spawn};
-use futures::{future::BoxFuture, ready, Future, FutureExt, Stream, StreamExt};
+use async_std::task::spawn;
+use futures::Future;
 use std::{
     io,
-    net::SocketAddr,
-    pin::Pin,
-    sync::Arc,
     task::{Context, Poll},
 };
 
@@ -33,16 +30,10 @@ use crate::GenTransport;
 /// Transport with [`async-std`] runtime.
 pub type Transport = GenTransport<Provider>;
 
+// TODO docs
 /// Provider for reading / writing to a sockets and spawning
 /// tasks using [`async-std`].
-pub struct Provider {
-    socket: Arc<UdpSocket>,
-    // Future for sending a packet.
-    // This is needed since [`async_Std::net::UdpSocket`] does not
-    // provide a poll-style interface for sending a packet.
-    send_packet: Option<BoxFuture<'static, Result<(), io::Error>>>,
-    recv_stream: ReceiveStream,
-}
+pub struct Provider;
 
 impl super::Provider for Provider {
     type IfWatcher = if_watch::smol::IfWatcher;
@@ -113,6 +104,7 @@ impl super::Provider for Provider {
     }
 }
 
+/*
 type ReceiveStreamItem = (
     Result<(usize, SocketAddr), io::Error>,
     Arc<UdpSocket>,
@@ -156,3 +148,4 @@ impl Stream for ReceiveStream {
         Poll::Ready(Some(result))
     }
 }
+*/

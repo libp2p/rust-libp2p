@@ -20,7 +20,7 @@
 
 //! Future that drives a QUIC connection until is has performed its TLS handshake.
 
-use crate::{Connection, Error};
+use crate::{Connection, ConnectionError, Error};
 
 use futures::{prelude::*, future::Either};
 use futures_timer::Delay;
@@ -74,7 +74,7 @@ impl Future for Connecting {
 
         let connection = match futures::ready!(connecting.poll(cx)) {
             Either::Right(_) => return Poll::Ready(Err(Error::HandshakeTimedOut)),
-            Either::Left((connection, _)) => connection.map_err(crate::ConnectionError)?,
+            Either::Left((connection, _)) => connection.map_err(ConnectionError)?,
         };
 
         let peer_id = Self::remote_peer_id(&connection);

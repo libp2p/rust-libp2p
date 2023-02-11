@@ -20,9 +20,8 @@
 
 use crate::endpoint::{Config, QuinnConfig};
 use crate::provider::Provider;
-use crate::{endpoint, Connecting, Connection, Error};
+use crate::{Connecting, ConnectError, Connection, Error};
 
-use futures::channel::{mpsc, oneshot};
 use futures::future::BoxFuture;
 use futures::ready;
 use futures::stream::StreamExt;
@@ -36,7 +35,7 @@ use libp2p_core::{
     PeerId, Transport,
 };
 use std::collections::hash_map::{DefaultHasher, Entry};
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, UdpSocket};
@@ -212,7 +211,7 @@ impl<P: Provider> Transport for GenTransport<P> {
             // name. While we don't use domain names, the underlying rustls library
             // is based upon the assumption that we do.
             let connecting = endpoint.connect_with(client_config, socket_addr, "l")
-                .map_err(crate::ConnectError)?;
+                .map_err(ConnectError)?;
             Connecting::new(connecting, handshake_timeout).await
         }))
     }

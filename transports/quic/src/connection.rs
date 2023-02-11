@@ -21,9 +21,6 @@
 mod connecting;
 mod substream;
 
-use crate::{
-    Error,
-};
 pub use connecting::Connecting;
 pub use substream::Substream;
 

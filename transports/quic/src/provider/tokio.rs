@@ -18,26 +18,21 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::{ready, Future};
+use futures::Future;
 use std::{
     io,
-    net::SocketAddr,
     task::{Context, Poll},
 };
-use tokio::{io::ReadBuf, net::UdpSocket};
 
 use crate::GenTransport;
 
 /// Transport with [`tokio`] runtime.
 pub type Transport = GenTransport<Provider>;
 
+// TODO docs
 /// Provider for reading / writing to a sockets and spawning
 /// tasks using [`tokio`].
-pub struct Provider {
-    socket: UdpSocket,
-    socket_recv_buffer: Vec<u8>,
-    next_packet_out: Option<(Vec<u8>, SocketAddr)>,
-}
+pub struct Provider;
 
 impl super::Provider for Provider {
     type IfWatcher = if_watch::tokio::IfWatcher;

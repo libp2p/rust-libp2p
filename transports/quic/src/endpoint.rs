@@ -18,26 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::{
-    provider::Provider,
-    transport::{ProtocolVersion, SocketFamily},
-    ConnectError, Connection, Error,
-};
-
-use bytes::BytesMut;
-use futures::{
-    channel::{mpsc, oneshot},
-    prelude::*,
-};
 use quinn_proto::VarInt;
 use std::{
-    collections::HashMap,
-    net::{Ipv4Addr, Ipv6Addr, SocketAddr},
-    ops::ControlFlow,
-    pin::Pin,
     sync::Arc,
-    task::{Context, Poll},
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 // The `Driver` drops packets if the channel to the connection
