@@ -45,7 +45,7 @@ pub struct Connection {
 
 impl StreamMuxer for Connection {
     type Substream = Substream;
-    type Error = quinn::ConnectionError; // TODO Error
+    type Error = quinn::ConnectionError;
 
     fn poll_inbound(
         self: Pin<&mut Self>,
