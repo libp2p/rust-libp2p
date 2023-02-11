@@ -39,7 +39,7 @@ use std::collections::hash_map::{DefaultHasher, Entry};
 use std::collections::{HashMap, VecDeque};
 use std::fmt;
 use std::hash::{Hash, Hasher};
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, UdpSocket};
 use std::time::Duration;
 use std::{
     net::SocketAddr,
@@ -89,6 +89,11 @@ impl<P: Provider> GenTransport<P> {
             support_draft_29,
         }
     }
+    fn new_endpoint(endpoint_config: quinn::EndpointConfig, server_config: Option<quinn::ServerConfig>, socket_addr: SocketAddr) -> Result<quinn::Endpoint, Error> {
+        let socket = UdpSocket::bind(socket_addr)?;
+        let endpoint = quinn::Endpoint::new(endpoint_config, server_config, socket, quinn::TokioRuntime)?; // TODO with runtime
+        Ok(endpoint)
+    }
 }
 
 impl<P: Provider> Transport for GenTransport<P> {
@@ -100,8 +105,9 @@ impl<P: Provider> Transport for GenTransport<P> {
     fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
         let (socket_addr, version) = multiaddr_to_socketaddr(&addr, self.support_draft_29)
             .ok_or(TransportError::MultiaddrNotSupported(addr))?;
+        let endpoint_config = quinn::EndpointConfig::clone(&self.quinn_config.endpoint_config);
         let server_config = quinn::ServerConfig::clone(&self.quinn_config.server_config);
-        let endpoint = quinn::Endpoint::server(server_config, socket_addr).unwrap(); // TODO with runtime + version
+        let endpoint = Self::new_endpoint(endpoint_config, Some(server_config), socket_addr)?;
         let listener_id = ListenerId::new();
         let listener = Listener::new(
             listener_id,
@@ -178,8 +184,8 @@ impl<P: Provider> Transport for GenTransport<P> {
                             SocketFamily::Ipv4 => SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0),
                             SocketFamily::Ipv6 => SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0),
                         };
-                        let server_config = quinn::ServerConfig::clone(&self.quinn_config.server_config);
-                        let endpoint = quinn::Endpoint::server(server_config, listen_socket_addr).unwrap(); // TODO with runtime + version
+                        let endpoint_config = quinn::EndpointConfig::clone(&self.quinn_config.endpoint_config);
+                        let endpoint = Self::new_endpoint(endpoint_config, None, listen_socket_addr)?;
 
                         vacant.insert(endpoint.clone());
                         endpoint
@@ -197,8 +203,14 @@ impl<P: Provider> Transport for GenTransport<P> {
             }
         };
         let handshake_timeout = self.handshake_timeout;
-        let client_config = quinn::ClientConfig::clone(&self.quinn_config.client_config);
+        let mut client_config = quinn::ClientConfig::clone(&self.quinn_config.client_config);
+        if version == ProtocolVersion::Draft29 {
+            client_config.version(0xff00_001d);
+        }
         Ok(Box::pin(async move {
+            // This `"l"` seems necessary because an empty string is an invalid domain
+            // name. While we don't use domain names, the underlying rustls library
+            // is based upon the assumption that we do.
             let connecting = endpoint.connect_with(client_config, socket_addr, "l").unwrap(); // TODO handle unwrap
             Connecting::new(connecting, handshake_timeout).await
         }))
