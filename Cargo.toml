@@ -178,7 +178,8 @@ members = [
     "transports/uds",
     "transports/websocket",
     "transports/wasm-ext",
-    "transports/webrtc"
+    "transports/webrtc",
+    "interop-tests"
 ]
 
 [[example]]
