@@ -41,7 +41,9 @@ pub struct Provider {
 
 impl super::Provider for Provider {
     type IfWatcher = if_watch::tokio::IfWatcher;
+    type Runtime = quinn::TokioRuntime;
 
+    /*
     fn from_socket(socket: std::net::UdpSocket) -> std::io::Result<Self> {
         let socket = UdpSocket::from_std(socket)?;
         Ok(Provider {
@@ -79,6 +81,11 @@ impl super::Provider for Provider {
 
     fn start_send(&mut self, data: Vec<u8>, addr: SocketAddr) {
         self.next_packet_out = Some((data, addr));
+    }
+    */
+
+    fn runtime() -> Self::Runtime {
+        quinn::TokioRuntime
     }
 
     fn spawn(future: impl Future<Output = ()> + Send + 'static) {

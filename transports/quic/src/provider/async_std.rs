@@ -46,7 +46,9 @@ pub struct Provider {
 
 impl super::Provider for Provider {
     type IfWatcher = if_watch::smol::IfWatcher;
+    type Runtime = quinn::AsyncStdRuntime;
 
+    /*
     fn from_socket(socket: std::net::UdpSocket) -> io::Result<Self> {
         let socket = Arc::new(socket.into());
         let recv_stream = ReceiveStream::new(Arc::clone(&socket));
@@ -88,6 +90,11 @@ impl super::Provider for Provider {
             }
             Poll::Pending => Poll::Pending,
         }
+    }
+    */
+
+    fn runtime() -> Self::Runtime {
+        quinn::AsyncStdRuntime
     }
 
     fn spawn(future: impl Future<Output = ()> + Send + 'static) {

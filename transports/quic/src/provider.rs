@@ -39,27 +39,31 @@ const RECEIVE_BUFFER_SIZE: usize = 65536;
 /// and spawning tasks.
 pub trait Provider: Unpin + Send + Sized + 'static {
     type IfWatcher: Unpin + Send;
+    type Runtime: quinn::Runtime;
 
-    /// Create a new providing that is wrapping the socket.
-    ///
-    /// Note: The socket must be set to non-blocking.
-    fn from_socket(socket: std::net::UdpSocket) -> io::Result<Self>;
+    // /// Create a new providing that is wrapping the socket.
+    // ///
+    // /// Note: The socket must be set to non-blocking.
+    // fn from_socket(socket: std::net::UdpSocket) -> io::Result<Self>;
 
-    /// Receive a single packet.
-    ///
-    /// Returns the message and the address the message came from.
-    fn poll_recv_from(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<(Vec<u8>, SocketAddr)>>;
+    // /// Receive a single packet.
+    // ///
+    // /// Returns the message and the address the message came from.
+    // fn poll_recv_from(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<(Vec<u8>, SocketAddr)>>;
 
-    /// Set sending a packet on the socket.
-    ///
-    /// Since only one packet can be sent at a time, this may only be called if a preceding
-    /// call to [`Provider::poll_send_flush`] returned [`Poll::Ready`].
-    fn start_send(&mut self, data: Vec<u8>, addr: SocketAddr);
+    // /// Set sending a packet on the socket.
+    // ///
+    // /// Since only one packet can be sent at a time, this may only be called if a preceding
+    // /// call to [`Provider::poll_send_flush`] returned [`Poll::Ready`].
+    // fn start_send(&mut self, data: Vec<u8>, addr: SocketAddr);
 
-    /// Flush a packet send in [`Provider::start_send`].
-    ///
-    /// If [`Poll::Ready`] is returned the socket is ready for sending a new packet.
-    fn poll_send_flush(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>>;
+    // /// Flush a packet send in [`Provider::start_send`].
+    // ///
+    // /// If [`Poll::Ready`] is returned the socket is ready for sending a new packet.
+    // fn poll_send_flush(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>>;
+
+    /// Run the corresponding runtime
+    fn runtime() -> Self::Runtime;
 
     /// Run the given future in the background until it ends.
     ///
