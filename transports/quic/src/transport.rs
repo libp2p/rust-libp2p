@@ -211,7 +211,8 @@ impl<P: Provider> Transport for GenTransport<P> {
             // This `"l"` seems necessary because an empty string is an invalid domain
             // name. While we don't use domain names, the underlying rustls library
             // is based upon the assumption that we do.
-            let connecting = endpoint.connect_with(client_config, socket_addr, "l").unwrap(); // TODO handle unwrap
+            let connecting = endpoint.connect_with(client_config, socket_addr, "l")
+                .map_err(crate::ConnectError)?;
             Connecting::new(connecting, handshake_timeout).await
         }))
     }

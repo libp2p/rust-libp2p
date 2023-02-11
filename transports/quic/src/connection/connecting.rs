@@ -74,7 +74,7 @@ impl Future for Connecting {
 
         let connection = match futures::ready!(connecting.poll(cx)) {
             Either::Right(_) => return Poll::Ready(Err(Error::HandshakeTimedOut)),
-            Either::Left((connection, _)) => connection.map_err(|e| Error::Connection(e.into()))?,
+            Either::Left((connection, _)) => connection.map_err(crate::ConnectionError)?,
         };
 
         let peer_id = Self::remote_peer_id(&connection);
