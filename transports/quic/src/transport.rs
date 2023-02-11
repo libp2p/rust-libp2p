@@ -409,7 +409,7 @@ impl<P: Provider> Listener<P> {
             pending_event = None;
         } else {
             if_watcher = None;
-            let ma = socketaddr_to_multiaddr(&endpoint.local_addr().unwrap(), version); // TODO handle unwrap
+            let ma = socketaddr_to_multiaddr(&endpoint.local_addr()?, version);
             pending_event = Some(TransportEvent::NewAddress {
                 listener_id,
                 listen_addr: ma,
