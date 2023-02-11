@@ -39,7 +39,7 @@ use std::collections::hash_map::{DefaultHasher, Entry};
 use std::collections::{HashMap, VecDeque};
 use std::fmt;
 use std::hash::{Hash, Hasher};
-use std::net::IpAddr;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::time::Duration;
 use std::{
     net::SocketAddr,
@@ -69,13 +69,10 @@ pub struct GenTransport<P: Provider> {
     /// Streams of active [`Listener`]s.
     listeners: SelectAll<Listener<P>>,
     /// Dialer for each socket family if no matching listener exists.
-    dialer: HashMap<SocketFamily, Dialer>,
+    dialer: HashMap<SocketFamily, quinn::Endpoint>,
     /// Waker to poll the transport again when a new dialer or listener is added.
     waker: Option<Waker>,
 }
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-struct Dialer;
 
 impl<P: Provider> GenTransport<P> {
     /// Create a new [`GenTransport`] with the given [`Config`].
@@ -148,54 +145,63 @@ impl<P: Provider> Transport for GenTransport<P> {
     }
 
     fn dial(&mut self, addr: Multiaddr) -> Result<Self::Dial, TransportError<Self::Error>> {
-        return Err(TransportError::MultiaddrNotSupported(addr));
-        /*
         let (socket_addr, version) = multiaddr_to_socketaddr(&addr, self.support_draft_29)
             .ok_or_else(|| TransportError::MultiaddrNotSupported(addr.clone()))?;
         if socket_addr.port() == 0 || socket_addr.ip().is_unspecified() {
             return Err(TransportError::MultiaddrNotSupported(addr));
         }
 
-        let mut listeners = self
+        let listeners = self
             .listeners
             .iter_mut()
             .filter(|l| {
                 if l.is_closed {
                     return false;
                 }
-                let listen_addr = l.endpoint_channel.socket_addr();
+                let listen_addr = l.socket_addr();
                 SocketFamily::is_same(&listen_addr.ip(), &socket_addr.ip())
                     && listen_addr.ip().is_loopback() == socket_addr.ip().is_loopback()
             })
             .collect::<Vec<_>>();
 
-        let dialer_state = match listeners.len() {
+        let endpoint = match listeners.len() {
             0 => {
                 // No listener. Get or create an explicit dialer.
                 let socket_family = socket_addr.ip().into();
                 let dialer = match self.dialer.entry(socket_family) {
-                    Entry::Occupied(occupied) => occupied.into_mut(),
+                    Entry::Occupied(occupied) => occupied.get().clone(),
                     Entry::Vacant(vacant) => {
                         if let Some(waker) = self.waker.take() {
                             waker.wake();
                         }
-                        vacant.insert(Dialer::new::<P>(self.quinn_config.clone(), socket_family)?)
+                        let listen_socket_addr = match socket_family {
+                            SocketFamily::Ipv4 => SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0),
+                            SocketFamily::Ipv6 => SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0),
+                        };
+                        let server_config = quinn::ServerConfig::clone(&self.quinn_config.server_config);
+                        let endpoint = quinn::Endpoint::server(server_config, listen_socket_addr).unwrap(); // TODO with runtime + version
+
+                        vacant.insert(endpoint.clone());
+                        endpoint
                     }
                 };
-                &mut dialer.state
+                dialer
             }
-            1 => &mut listeners[0].dialer_state,
             _ => {
                 // Pick any listener to use for dialing.
                 // We hash the socket address to achieve determinism.
                 let mut hasher = DefaultHasher::new();
                 socket_addr.hash(&mut hasher);
                 let index = hasher.finish() as usize % listeners.len();
-                &mut listeners[index].dialer_state
+                listeners[index].endpoint.clone()
             }
         };
-        Ok(dialer_state.new_dial(socket_addr, self.handshake_timeout, version))
-        */
+        let handshake_timeout = self.handshake_timeout;
+        let client_config = quinn::ClientConfig::clone(&self.quinn_config.client_config);
+        Ok(Box::pin(async move {
+            let connecting = endpoint.connect_with(client_config, socket_addr, "l").unwrap(); // TODO handle unwrap
+            Connecting::new(connecting, handshake_timeout).await
+        }))
     }
 
     fn dial_as_listener(
@@ -390,7 +396,7 @@ impl<P: Provider> Listener<P> {
             pending_event = None;
         } else {
             if_watcher = None;
-            let ma = socketaddr_to_multiaddr(&socket_addr, version);
+            let ma = socketaddr_to_multiaddr(&endpoint.local_addr().unwrap(), version); // TODO handle unwrap
             pending_event = Some(TransportEvent::NewAddress {
                 listener_id,
                 listen_addr: ma,
