@@ -38,47 +38,6 @@ impl super::Provider for Provider {
     type IfWatcher = if_watch::tokio::IfWatcher;
     type Runtime = quinn::TokioRuntime;
 
-    /*
-    fn from_socket(socket: std::net::UdpSocket) -> std::io::Result<Self> {
-        let socket = UdpSocket::from_std(socket)?;
-        Ok(Provider {
-            socket,
-            socket_recv_buffer: vec![0; super::RECEIVE_BUFFER_SIZE],
-            next_packet_out: None,
-        })
-    }
-
-    fn poll_send_flush(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
-        let (data, addr) = match self.next_packet_out.as_ref() {
-            Some(pending) => pending,
-            None => return Poll::Ready(Ok(())),
-        };
-        match self.socket.poll_send_to(cx, data.as_slice(), *addr) {
-            Poll::Ready(result) => {
-                self.next_packet_out = None;
-                Poll::Ready(result.map(|_| ()))
-            }
-            Poll::Pending => Poll::Pending,
-        }
-    }
-
-    fn poll_recv_from(&mut self, cx: &mut Context<'_>) -> Poll<io::Result<(Vec<u8>, SocketAddr)>> {
-        let Self {
-            socket,
-            socket_recv_buffer,
-            ..
-        } = self;
-        let mut read_buf = ReadBuf::new(socket_recv_buffer.as_mut_slice());
-        let packet_src = ready!(socket.poll_recv_from(cx, &mut read_buf)?);
-        let bytes = read_buf.filled().to_vec();
-        Poll::Ready(Ok((bytes, packet_src)))
-    }
-
-    fn start_send(&mut self, data: Vec<u8>, addr: SocketAddr) {
-        self.next_packet_out = Some((data, addr));
-    }
-    */
-
     fn runtime() -> Self::Runtime {
         quinn::TokioRuntime
     }
