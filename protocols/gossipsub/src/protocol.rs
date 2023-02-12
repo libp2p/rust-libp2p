@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::config::{ValidationMode, Version};
-use crate::error::{HandlerError, ValidationError};
+use crate::error_priv::{HandlerError, ValidationError};
 use crate::handler::HandlerEvent;
 use crate::topic::TopicHash;
 use crate::types::{

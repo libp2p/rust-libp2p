@@ -21,7 +21,7 @@
 // Collection of tests for the gossipsub network behaviour
 
 use super::*;
-use crate::error::ValidationError;
+use crate::error_priv::ValidationError;
 use crate::subscription_filter::WhitelistSubscriptionFilter;
 use crate::transform::{DataTransform, IdentityTransform};
 use crate::types::FastMessageId;

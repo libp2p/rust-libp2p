@@ -48,7 +48,7 @@ use wasm_timer::Instant;
 
 use crate::backoff::BackoffStorage;
 use crate::config::{Config, ValidationMode};
-use crate::error::{PublishError, SubscriptionError, ValidationError};
+use crate::error_priv::{PublishError, SubscriptionError, ValidationError};
 use crate::gossip_promises::GossipPromises;
 use crate::handler::{Handler, HandlerEvent, HandlerIn};
 use crate::mcache::MessageCache;
