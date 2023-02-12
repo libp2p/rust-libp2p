@@ -22,7 +22,7 @@ pub type GossipsubHandlerError = crate::error_priv::HandlerError;
 
 #[deprecated(
     since = "0.44.0",
-    note = "Use `libp2p::gossipsub::HandlerError instead, as the `error` will become crate-private in the future."
+    note = "Use `libp2p::gossipsub::HandlerError` instead, as the `error` will become crate-private in the future."
 )]
 pub type HandlerError = crate::error_priv::HandlerError;
 
