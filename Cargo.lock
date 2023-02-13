@@ -2614,7 +2614,6 @@ dependencies = [
  "parking_lot 0.12.1",
  "quickcheck",
  "quinn",
- "quinn-proto",
  "rand 0.8.5",
  "rustls 0.20.8",
  "thiserror",

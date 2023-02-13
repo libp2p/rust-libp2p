@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use quinn_proto::VarInt;
+use quinn::VarInt;
 use std::{
     sync::Arc,
     time::Duration,
@@ -97,9 +97,9 @@ impl Config {
 /// Represents the inner configuration for [`quinn_proto`].
 #[derive(Debug, Clone)]
 pub struct QuinnConfig {
-    pub(crate) client_config: quinn_proto::ClientConfig,
-    pub(crate) server_config: Arc<quinn_proto::ServerConfig>,
-    pub(crate) endpoint_config: Arc<quinn_proto::EndpointConfig>,
+    pub(crate) client_config: quinn::ClientConfig,
+    pub(crate) server_config: Arc<quinn::ServerConfig>,
+    pub(crate) endpoint_config: Arc<quinn::EndpointConfig>,
 }
 
 impl From<Config> for QuinnConfig {
@@ -115,7 +115,7 @@ impl From<Config> for QuinnConfig {
             support_draft_29,
             handshake_timeout: _,
         } = config;
-        let mut transport = quinn_proto::TransportConfig::default();
+        let mut transport = quinn::TransportConfig::default();
         // Disable uni-directional streams.
         transport.max_concurrent_uni_streams(0u32.into());
         transport.max_concurrent_bidi_streams(max_concurrent_stream_limit.into());
@@ -128,17 +128,17 @@ impl From<Config> for QuinnConfig {
         transport.receive_window(max_connection_data.into());
         let transport = Arc::new(transport);
 
-        let mut server_config = quinn_proto::ServerConfig::with_crypto(server_tls_config);
+        let mut server_config = quinn::ServerConfig::with_crypto(server_tls_config);
         server_config.transport = Arc::clone(&transport);
         // Disables connection migration.
         // Long-term this should be enabled, however we then need to handle address change
         // on connections in the `Connection`.
         server_config.migration(false);
 
-        let mut client_config = quinn_proto::ClientConfig::new(client_tls_config);
+        let mut client_config = quinn::ClientConfig::new(client_tls_config);
         client_config.transport_config(transport);
 
-        let mut endpoint_config = quinn_proto::EndpointConfig::default();
+        let mut endpoint_config = quinn::EndpointConfig::default();
         if !support_draft_29 {
             endpoint_config.supported_versions(vec![1]);
         }
