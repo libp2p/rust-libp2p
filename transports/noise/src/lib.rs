@@ -285,10 +285,10 @@ pub enum NoiseError {
 
 #[derive(Debug, thiserror::Error)]
 #[error(transparent)]
-pub struct DecodeError(prost::DecodeError);
+pub struct DecodeError(quick_protobuf::Error);
 
-impl From<prost::DecodeError> for NoiseError {
-    fn from(e: prost::DecodeError) -> Self {
+impl From<quick_protobuf::Error> for NoiseError {
+    fn from(e: quick_protobuf::Error) -> Self {
         NoiseError::InvalidPayload(DecodeError(e))
     }
 }
