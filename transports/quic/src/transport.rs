@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::endpoint::{Config, QuinnConfig};
+use crate::config::{Config, QuinnConfig};
 use crate::provider::Provider;
 use crate::{Connecting, ConnectError, Connection, Error};
 
