@@ -33,6 +33,7 @@ use std::{
 
 /// State for a single opened QUIC connection.
 pub struct Connection {
+    /// Underlying connection.
     connection: quinn::Connection,
     /// Future for accepting a new incoming bidirectional stream.
     incoming:

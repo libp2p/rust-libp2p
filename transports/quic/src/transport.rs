@@ -267,6 +267,7 @@ struct Listener<P: Provider> {
     /// Id of the listener.
     listener_id: ListenerId,
 
+    /// Version of the supported quic protocol.
     version: ProtocolVersion,
 
     /// Endpoint
