@@ -28,9 +28,11 @@ use futures::{AsyncRead, AsyncWrite};
 
 /// A single stream on a connection
 pub struct Substream {
+    /// A send part of the stream
     send: quinn::SendStream,
+    /// A receive part of the stream
     recv: quinn::RecvStream,
-    closed: bool,
+    closed: bool, // TODO check whether this is necessary
 }
 
 impl Substream {
