@@ -232,8 +232,8 @@ where
             assert_eq!(
                 self.on_connection_established
                     .iter()
-                    .filter(|(.., reported_aditional_connections)| {
-                        *reported_aditional_connections == 0
+                    .filter(|(.., reported_additional_connections)| {
+                        *reported_additional_connections == 0
                     })
                     .count(),
                 expected_connections
