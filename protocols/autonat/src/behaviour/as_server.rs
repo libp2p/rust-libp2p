@@ -29,7 +29,7 @@ use libp2p_request_response::{
 };
 use libp2p_swarm::{
     dial_opts::{DialOpts, PeerCondition},
-    ConnectionId, DialError, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
+    ConnectionId, DialError, NetworkBehaviourAction, PollParameters,
 };
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -138,7 +138,6 @@ impl<'a> HandleInnerEvent for AsServer<'a> {
                                     )
                                     .addresses(addrs)
                                     .build(),
-                                handler: self.inner.new_handler(),
                             },
                         ])
                     }
