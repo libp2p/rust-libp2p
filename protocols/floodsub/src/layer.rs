@@ -30,7 +30,7 @@ use libp2p_core::PeerId;
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm};
 use libp2p_swarm::{
     dial_opts::DialOpts, ConnectionId, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
-    OneShotHandler, PollParameters, THandlerOutEvent,
+    OneShotHandler, PollParameters, THandlerInEvent, THandlerOutEvent,
 };
 use log::warn;
 use smallvec::SmallVec;
@@ -41,12 +41,7 @@ use std::{collections::VecDeque, iter};
 /// Network behaviour that handles the floodsub protocol.
 pub struct Floodsub {
     /// Events that need to be yielded to the outside when polling.
-    events: VecDeque<
-        NetworkBehaviourAction<
-            FloodsubEvent,
-            OneShotHandler<FloodsubProtocol, FloodsubRpc, InnerMessage>,
-        >,
-    >,
+    events: VecDeque<NetworkBehaviourAction<FloodsubEvent, FloodsubRpc>>,
 
     config: FloodsubConfig,
 
@@ -107,10 +102,8 @@ impl Floodsub {
         }
 
         if self.target_peers.insert(peer_id) {
-            let handler = self.new_handler();
             self.events.push_back(NetworkBehaviourAction::Dial {
                 opts: DialOpts::peer_id(peer_id).build(),
-                handler,
             });
         }
     }
@@ -330,10 +323,8 @@ impl Floodsub {
         // We can be disconnected by the remote in case of inactivity for example, so we always
         // try to reconnect.
         if self.target_peers.contains(&peer_id) {
-            let handler = self.new_handler();
             self.events.push_back(NetworkBehaviourAction::Dial {
                 opts: DialOpts::peer_id(peer_id).build(),
-                handler,
             });
         }
     }
@@ -470,7 +461,7 @@ impl NetworkBehaviour for Floodsub {
         &mut self,
         _: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>> {
         if let Some(event) = self.events.pop_front() {
             return Poll::Ready(event);
         }

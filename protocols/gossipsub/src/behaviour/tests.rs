@@ -1395,7 +1395,7 @@ fn test_explicit_peer_gets_connected() {
         .events
         .iter()
         .filter(|e| match e {
-            NetworkBehaviourAction::Dial { opts, handler: _ } => opts.get_peer_id() == Some(peer),
+            NetworkBehaviourAction::Dial { opts } => opts.get_peer_id() == Some(peer),
             _ => false,
         })
         .count();
@@ -1436,8 +1436,7 @@ fn test_explicit_peer_reconnects() {
         gs.events
             .iter()
             .filter(|e| match e {
-                NetworkBehaviourAction::Dial { opts, handler: _ } =>
-                    opts.get_peer_id() == Some(*peer),
+                NetworkBehaviourAction::Dial { opts } => opts.get_peer_id() == Some(*peer),
                 _ => false,
             })
             .count(),
@@ -1452,8 +1451,7 @@ fn test_explicit_peer_reconnects() {
         gs.events
             .iter()
             .filter(|e| match e {
-                NetworkBehaviourAction::Dial { opts, handler: _ } =>
-                    opts.get_peer_id() == Some(*peer),
+                NetworkBehaviourAction::Dial { opts } => opts.get_peer_id() == Some(*peer),
                 _ => false,
             })
             .count()
@@ -1833,7 +1831,7 @@ fn test_connect_to_px_peers_on_handle_prune() {
         .events
         .iter()
         .filter_map(|e| match e {
-            NetworkBehaviourAction::Dial { opts, handler: _ } => opts.get_peer_id(),
+            NetworkBehaviourAction::Dial { opts } => opts.get_peer_id(),
             _ => None,
         })
         .collect();

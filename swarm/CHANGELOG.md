@@ -1,5 +1,38 @@
 # 0.42.0 [unreleased]
 
+- Remove `handler` field from `NetworkBehaviourAction::Dial`.
+  Instead of constructing the handler early, you can now access the `ConnectionId` of the future connection on `DialOpts`.
+  `ConnectionId`s are `Copy` and will be used throughout the entire lifetime of the connection to report events.
+  This allows you to send events to a very specific connection, much like you previously could directly set state in the handler.
+
+  Removing the `handler` field also reduces the type parameters of `NetworkBehaviourAction` from three to two.
+  The third one used to be defaulted to the `InEvent` of the `ConnectionHandler`.
+  You now have to manually specify that where you previously had to specify the `ConnectionHandler`.
+  This very likely will trigger **convoluted compile errors** about traits not being implemented.
+
+  Within `NetworkBehaviourAction::poll`, the easiest way to migrate is to do this (in the example of `libp2p-floodsub`):
+  ```diff
+  --- a/protocols/floodsub/src/layer.rs
+  +++ b/protocols/floodsub/src/layer.rs
+  @@ -472,7 +465,7 @@ impl NetworkBehaviour for Floodsub {
+       &mut self,
+       _: &mut Context<'_>,
+       _: &mut impl PollParameters,
+  -    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+  +    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>> {
+  ```
+
+  In other words:
+
+  |Search|Replace|
+    |---|---|
+  |`NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>`|`NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>`|
+
+  If you reference `NetworkBehaviourAction` somewhere else as well,
+  you may have to fill in the type of `ConnectionHandler::InEvent` manually as the 2nd parameter.
+
+  See [PR 3328].
+
 - Update to `libp2p-core` `v0.39.0`.
 
 - Removed deprecated Swarm constructors. For transition notes see [0.41.0](#0.41.0). See [PR 3170].
@@ -36,6 +69,8 @@
 - Introduce `ListenError` and use it within `SwarmEvent::IncomingConnectionError`.
   See [PR 3375].
 
+- Remove `ConnectionId::new`. Manually creating `ConnectionId`s is now unsupported. See [PR 3327].
+
 [PR 3364]: https://github.com/libp2p/rust-libp2p/pull/3364
 [PR 3170]: https://github.com/libp2p/rust-libp2p/pull/3170
 [PR 3134]: https://github.com/libp2p/rust-libp2p/pull/3134
@@ -43,6 +78,7 @@
 [PR 3264]: https://github.com/libp2p/rust-libp2p/pull/3264
 [PR 3272]: https://github.com/libp2p/rust-libp2p/pull/3272
 [PR 3327]: https://github.com/libp2p/rust-libp2p/pull/3327
+[PR 3328]: https://github.com/libp2p/rust-libp2p/pull/3328
 [PR 3188]: https://github.com/libp2p/rust-libp2p/pull/3188
 [PR 3377]: https://github.com/libp2p/rust-libp2p/pull/3377
 [PR 3373]: https://github.com/libp2p/rust-libp2p/pull/3373

@@ -20,61 +20,27 @@
 
 use crate::protocol;
 use either::Either;
-use libp2p_core::upgrade::DeniedUpgrade;
 use libp2p_core::{ConnectedPoint, PeerId};
-use libp2p_swarm::dummy;
 use libp2p_swarm::handler::SendWrapper;
-use libp2p_swarm::{ConnectionHandler, ConnectionId, IntoConnectionHandler};
+use libp2p_swarm::{ConnectionHandler, IntoConnectionHandler};
 
 pub mod direct;
 pub mod relayed;
 
-pub enum Prototype {
-    DirectConnection {
-        role: Role,
-        relayed_connection_id: ConnectionId,
-    },
-    UnknownConnection,
-}
-
-pub enum Role {
-    Initiator { attempt: u8 },
-    Listener,
-}
+pub struct Prototype;
 
 impl IntoConnectionHandler for Prototype {
-    type Handler = Either<relayed::Handler, Either<direct::Handler, dummy::ConnectionHandler>>;
+    type Handler = Either<relayed::Handler, direct::Handler>;
 
     fn into_handler(self, _remote_peer_id: &PeerId, endpoint: &ConnectedPoint) -> Self::Handler {
-        match self {
-            Self::UnknownConnection => {
-                if endpoint.is_relayed() {
-                    Either::Left(relayed::Handler::new(endpoint.clone()))
-                } else {
-                    Either::Right(Either::Right(dummy::ConnectionHandler))
-                }
-            }
-            Self::DirectConnection {
-                relayed_connection_id,
-                ..
-            } => {
-                assert!(
-                    !endpoint.is_relayed(),
-                    "`Prototype::DirectConnection` is never created for relayed connection."
-                );
-                Either::Right(Either::Left(direct::Handler::new(relayed_connection_id)))
-            }
+        if endpoint.is_relayed() {
+            Either::Left(relayed::Handler::new(endpoint.clone()))
+        } else {
+            Either::Right(direct::Handler::default()) // This is a direct connection. What we don't know is whether it is the one we created or another one that happened accidentally.
         }
     }
 
     fn inbound_protocol(&self) -> <Self::Handler as ConnectionHandler>::InboundProtocol {
-        match self {
-            Prototype::UnknownConnection => {
-                Either::Left(SendWrapper(Either::Left(protocol::inbound::Upgrade {})))
-            }
-            Prototype::DirectConnection { .. } => {
-                Either::Left(SendWrapper(Either::Right(DeniedUpgrade)))
-            }
-        }
+        Either::Left(SendWrapper(Either::Left(protocol::inbound::Upgrade {})))
     }
 }
