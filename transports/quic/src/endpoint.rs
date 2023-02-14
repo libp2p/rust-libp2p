@@ -24,13 +24,6 @@ use std::{
     time::Duration,
 };
 
-// The `Driver` drops packets if the channel to the connection
-// or transport is full.
-// Set capacity 10 to avoid unnecessary packet drops if the receiver
-// is only very briefly busy, but not buffer a large amount of packets
-// if it is blocked longer.
-const CHANNEL_CAPACITY: usize = 10;
-
 /// Config for the transport.
 #[derive(Clone)]
 pub struct Config {
@@ -150,7 +143,3 @@ impl From<Config> for QuinnConfig {
         }
     }
 }
-
-#[derive(Debug, thiserror::Error, Clone, PartialEq, Eq)]
-#[error("Background task disconnected")]
-pub struct Disconnected {}

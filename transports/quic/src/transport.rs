@@ -232,21 +232,6 @@ impl<P: Provider> Transport for GenTransport<P> {
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<TransportEvent<Self::ListenerUpgrade, Self::Error>> {
-        /*
-        let mut errored = Vec::new();
-        for (key, dialer) in &mut self.dialer {
-            if let Poll::Ready(_error) = dialer.poll(cx) {
-                errored.push(*key);
-            }
-        }
-
-        for key in errored {
-            // Endpoint driver of dialer crashed.
-            // Drop dialer and all pending dials so that the connection receiver is notified.
-            self.dialer.remove(&key);
-        }
-        */
-
         if let Poll::Ready(Some(ev)) = self.listeners.poll_next_unpin(cx) {
             return Poll::Ready(ev);
         }
@@ -272,10 +257,6 @@ struct Listener<P: Provider> {
 
     /// Endpoint
     endpoint: quinn::Endpoint,
-    // /// Channel to the endpoint to initiate dials.
-    // endpoint_channel: endpoint::Channel,
-    // /// Queued dials.
-    // dialer_state: DialerState,
 
     /// A future to poll new incoming connections.
     accept: BoxFuture<'static, Option<quinn::Connecting>>,
@@ -302,13 +283,9 @@ impl<P: Provider> Listener<P> {
         listener_id: ListenerId,
         socket_addr: SocketAddr,
         endpoint: quinn::Endpoint,
-        // config: QuinnConfig,
         handshake_timeout: Duration,
         version: ProtocolVersion,
     ) -> Result<Self, Error> {
-        // let (endpoint_channel, new_connections_rx) =
-        //     endpoint::Channel::new_bidirectional::<P>(config, socket_addr)?;
-
         let if_watcher;
         let pending_event;
         if socket_addr.ip().is_unspecified() {
@@ -329,15 +306,12 @@ impl<P: Provider> Listener<P> {
         Ok(Listener {
             endpoint,
             accept,
-            // endpoint_channel,
             listener_id,
             version,
-            // new_connections_rx,
             handshake_timeout,
             if_watcher,
             is_closed: false,
             pending_event,
-            // dialer_state: DialerState::default(),
             close_listener_waker: None,
         })
     }
@@ -409,17 +383,6 @@ impl<P: Provider> Listener<P> {
             }
         }
     }
-
-    // /// Poll [`DialerState`] to initiate requested dials.
-    // fn poll_dialer(&mut self, cx: &mut Context<'_>) -> Poll<Error> {
-    //     let Self {
-    //         dialer_state,
-    //         endpoint_channel,
-    //         ..
-    //     } = self;
-
-    //     dialer_state.poll(endpoint_channel, cx)
-    // }
 }
 
 impl<P: Provider> Stream for Listener<P> {
@@ -435,10 +398,6 @@ impl<P: Provider> Stream for Listener<P> {
             if let Poll::Ready(event) = self.poll_if_addr(cx) {
                 return Poll::Ready(Some(event));
             }
-            // if let Poll::Ready(error) = self.poll_dialer(cx) {
-            //     self.close(Err(error));
-            //     continue;
-            // }
 
             match self.accept.poll_unpin(cx) {
                 Poll::Ready(Some(connecting)) => {
@@ -474,9 +433,6 @@ impl<P: Provider> fmt::Debug for Listener<P> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Listener")
             .field("listener_id", &self.listener_id)
-            //.field("endpoint_channel", &self.endpoint_channel)
-            //.field("dialer_state", &self.dialer_state)
-            //.field("new_connections_rx", &self.new_connections_rx)
             .field("handshake_timeout", &self.handshake_timeout)
             .field("is_closed", &self.is_closed)
             .field("pending_event", &self.pending_event)

@@ -22,7 +22,7 @@
 
 use crate::{Connection, ConnectionError, Error};
 
-use futures::{prelude::*, future::Either};
+use futures::{prelude::*, future::{Either, select, Select}};
 use futures_timer::Delay;
 use libp2p_core::PeerId;
 use std::{
@@ -34,15 +34,13 @@ use std::{
 /// A QUIC connection currently being negotiated.
 #[derive(Debug)]
 pub struct Connecting {
-    connecting: futures::future::Select<quinn::Connecting, Delay>,
-    //timeout: Delay,
+    connecting: Select<quinn::Connecting, Delay>,
 }
 
 impl Connecting {
     pub(crate) fn new(connection: quinn::Connecting, timeout: Duration) -> Self {
         Connecting {
-            connecting: futures::future::select(connection, Delay::new(timeout)),
-            //timeout: Delay::new(timeout),
+            connecting: select(connection, Delay::new(timeout)),
         }
     }
 }
@@ -51,7 +49,6 @@ impl Connecting {
     /// Returns the address of the node we're connected to.
     /// Panics if the connection is still handshaking.
     fn remote_peer_id(connection: &quinn::Connection) -> PeerId {
-        //debug_assert!(!connection.handshake_data().is_some());
         let identity = connection
             .peer_identity()
             .expect("connection got identity because it passed TLS handshake; qed");
