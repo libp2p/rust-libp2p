@@ -247,7 +247,7 @@ impl DialResponse {
                 let addr = Multiaddr::try_from(addr.to_vec())
                     .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?;
                 Self {
-                    status_text: statusText.map(|status| status.to_string()),
+                    status_text: statusText,
                     result: Ok(addr),
                 }
             }
@@ -256,7 +256,7 @@ impl DialResponse {
                 statusText,
                 addr: None,
             }) => Self {
-                status_text: statusText.map(|status| status.to_string()),
+                status_text: statusText,
                 result: Err(ResponseError::try_from(status)?),
             },
             _ => {
