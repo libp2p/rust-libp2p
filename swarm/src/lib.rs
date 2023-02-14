@@ -1891,8 +1891,10 @@ mod tests {
     /// calls should be registered.
     #[test]
     fn test_connect_disconnect_ban() {
+        let _ = env_logger::try_init();
+
         // Since the test does not try to open any substreams, we can
-        // use the dummy protocols handler.
+        // use keep alive protocols handler.
         let handler_proto = keep_alive::ConnectionHandler;
 
         let mut swarm1 = new_test_swarm::<_, ()>(handler_proto.clone()).build();
@@ -1906,6 +1908,7 @@ mod tests {
 
         let swarm1_id = *swarm1.local_peer_id();
 
+        #[derive(Debug)]
         enum Stage {
             /// Waiting for the peers to connect. Banning has not occurred.
             Connecting,
@@ -1950,25 +1953,31 @@ mod tests {
                     {
                         // Setup to test that new connections of banned peers are not reported.
                         swarm1.dial(addr2.clone()).unwrap();
+                        s1_expected_conns += 1;
                         stage = Stage::BannedDial;
                     }
                 }
                 Stage::BannedDial => {
-                    // The banned connection was established. Check that it was not reported to
-                    // the behaviour of the banning swarm.
-                    assert_eq!(
-                        swarm2.behaviour.on_connection_established.len(),
-                        s2_expected_conns,
-                        "No additional closed connections should be reported for the banned peer"
-                    );
+                    if swarm1.behaviour.assert_disconnected(s1_expected_conns, 2) {
+                        // The banned connection was established. Given the ban, swarm2 closed the
+                        // connection. Check that it was not reported to the behaviour of the
+                        // banning swarm.
+                        assert_eq!(
+                            swarm2.behaviour.on_connection_established.len(),
+                            s2_expected_conns,
+                            "No additional closed connections should be reported for the banned peer"
+                        );
 
-                    // Setup to test that the banned connection is not reported upon closing
-                    // even if the peer is unbanned.
-                    swarm2.unban_peer_id(swarm1_id);
-                    stage = Stage::Unbanned;
+                        // Setup to test that the banned connection is not reported upon closing
+                        // even if the peer is unbanned.
+                        swarm2.unban_peer_id(swarm1_id);
+                        stage = Stage::Unbanned;
+                    }
                 }
                 Stage::Unbanned => {
-                    if swarm2.network_info().num_peers() == 0 {
+                    if swarm1.network_info().num_peers() == 0
+                        && swarm2.network_info().num_peers() == 0
+                    {
                         // The banned connection has closed. Check that it was not reported.
                         assert_eq!(
                             swarm2.behaviour.on_connection_closed.len(), s2_expected_conns,
