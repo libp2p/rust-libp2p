@@ -36,8 +36,8 @@ use libp2p_core::PeerId;
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm};
 use libp2p_swarm::dial_opts::DialOpts;
 use libp2p_swarm::{
-    ConnectionHandlerUpgrErr, ConnectionId, NegotiatedSubstream, NetworkBehaviour,
-    NetworkBehaviourAction, NotifyHandler, PollParameters, THandlerOutEvent,
+    ConnectionHandlerUpgrErr, ConnectionId, DialFailure, NegotiatedSubstream, NetworkBehaviour,
+    NetworkBehaviourAction, NotifyHandler, PollParameters, THandlerInEvent, THandlerOutEvent,
 };
 use std::collections::{hash_map, HashMap, VecDeque};
 use std::io::{Error, ErrorKind, IoSlice};
@@ -45,6 +45,7 @@ use std::ops::DerefMut;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use transport::Transport;
+use void::Void;
 
 /// The events produced by the client `Behaviour`.
 #[derive(Debug)]
@@ -99,7 +100,9 @@ pub struct Behaviour {
     directly_connected_peers: HashMap<PeerId, Vec<ConnectionId>>,
 
     /// Queue of actions to return when polled.
-    queued_actions: VecDeque<NetworkBehaviourAction<Event, handler::Prototype>>,
+    queued_actions: VecDeque<NetworkBehaviourAction<Event, Either<handler::In, Void>>>,
+
+    pending_handler_commands: HashMap<ConnectionId, handler::In>,
 }
 
 /// Create a new client relay [`Behaviour`] with it's corresponding [`Transport`].
@@ -110,6 +113,7 @@ pub fn new(local_peer_id: PeerId) -> (Transport, Behaviour) {
         from_transport,
         directly_connected_peers: Default::default(),
         queued_actions: Default::default(),
+        pending_handler_commands: Default::default(),
     };
     (transport, behaviour)
 }
@@ -173,12 +177,23 @@ impl NetworkBehaviour for Behaviour {
                         .or_default()
                         .push(connection_id);
                 }
+
+                if let Some(event) = self.pending_handler_commands.remove(&connection_id) {
+                    self.queued_actions
+                        .push_back(NetworkBehaviourAction::NotifyHandler {
+                            peer_id,
+                            handler: NotifyHandler::One(connection_id),
+                            event: Either::Left(event),
+                        })
+                }
             }
             FromSwarm::ConnectionClosed(connection_closed) => {
                 self.on_connection_closed(connection_closed)
             }
+            FromSwarm::DialFailure(DialFailure { connection_id, .. }) => {
+                self.pending_handler_commands.remove(&connection_id);
+            }
             FromSwarm::AddressChange(_)
-            | FromSwarm::DialFailure(_)
             | FromSwarm::ListenFailure(_)
             | FromSwarm::NewListener(_)
             | FromSwarm::NewListenAddr(_)
@@ -242,16 +257,16 @@ impl NetworkBehaviour for Behaviour {
         };
 
         self.queued_actions
-            .push_back(NetworkBehaviourAction::GenerateEvent(event));
+            .push_back(NetworkBehaviourAction::GenerateEvent(event))
     }
 
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
         _poll_parameters: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
-        if let Some(event) = self.queued_actions.pop_front() {
-            return Poll::Ready(event);
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>> {
+        if let Some(action) = self.queued_actions.pop_front() {
+            return Poll::Ready(action);
         }
 
         let action = match ready!(self.from_transport.poll_next_unpin(cx)) {
@@ -271,17 +286,15 @@ impl NetworkBehaviour for Behaviour {
                         event: Either::Left(handler::In::Reserve { to_listener }),
                     },
                     None => {
-                        let handler = handler::Prototype::new(
-                            self.local_peer_id,
-                            Some(handler::In::Reserve { to_listener }),
-                        );
-                        NetworkBehaviourAction::Dial {
-                            opts: DialOpts::peer_id(relay_peer_id)
-                                .addresses(vec![relay_addr])
-                                .extend_addresses_through_behaviour()
-                                .build(),
-                            handler,
-                        }
+                        let opts = DialOpts::peer_id(relay_peer_id)
+                            .addresses(vec![relay_addr])
+                            .extend_addresses_through_behaviour()
+                            .build();
+                        let relayed_connection_id = opts.connection_id();
+
+                        self.pending_handler_commands
+                            .insert(relayed_connection_id, handler::In::Reserve { to_listener });
+                        NetworkBehaviourAction::Dial { opts }
                     }
                 }
             }
@@ -306,20 +319,21 @@ impl NetworkBehaviour for Behaviour {
                         }),
                     },
                     None => {
-                        let handler = handler::Prototype::new(
-                            self.local_peer_id,
-                            Some(handler::In::EstablishCircuit {
+                        let opts = DialOpts::peer_id(relay_peer_id)
+                            .addresses(vec![relay_addr])
+                            .extend_addresses_through_behaviour()
+                            .build();
+                        let connection_id = opts.connection_id();
+
+                        self.pending_handler_commands.insert(
+                            connection_id,
+                            handler::In::EstablishCircuit {
                                 send_back,
                                 dst_peer_id,
-                            }),
+                            },
                         );
-                        NetworkBehaviourAction::Dial {
-                            opts: DialOpts::peer_id(relay_peer_id)
-                                .addresses(vec![relay_addr])
-                                .extend_addresses_through_behaviour()
-                                .build(),
-                            handler,
-                        }
+
+                        NetworkBehaviourAction::Dial { opts }
                     }
                 }
             }
