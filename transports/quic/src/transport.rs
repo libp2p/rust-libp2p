@@ -571,7 +571,6 @@ fn socketaddr_to_multiaddr(socket_addr: &SocketAddr, version: ProtocolVersion) -
 #[cfg(any(feature = "async-std", feature = "tokio"))]
 mod test {
     use futures::future::poll_fn;
-    use futures_timer::Delay;
     use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
     use super::*;
@@ -664,125 +663,76 @@ mod test {
         );
     }
 
-    // #[cfg(feature = "async-std")]
-    // #[async_std::test]
-    // async fn test_close_listener() {
-    //     let keypair = libp2p_core::identity::Keypair::generate_ed25519();
-    //     let config = Config::new(&keypair);
-    //     let mut transport = crate::async_std::Transport::new(config);
-    //     assert!(poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx))
-    //         .now_or_never()
-    //         .is_none());
+    #[cfg(feature = "async-std")]
+    #[async_std::test]
+    async fn test_close_listener() {
+        let keypair = libp2p_core::identity::Keypair::generate_ed25519();
+        let config = Config::new(&keypair);
+        let mut transport = crate::async_std::Transport::new(config);
+        assert!(poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx))
+            .now_or_never()
+            .is_none());
 
-    //     // Run test twice to check that there is no unexpected behaviour if `Transport.listener`
-    //     // is temporarily empty.
-    //     for _ in 0..2 {
-    //         let id = transport
-    //             .listen_on("/ip4/0.0.0.0/udp/0/quic-v1".parse().unwrap())
-    //             .unwrap();
+        // Run test twice to check that there is no unexpected behaviour if `Transport.listener`
+        // is temporarily empty.
+        for _ in 0..2 {
+            let id = transport
+                .listen_on("/ip4/0.0.0.0/udp/0/quic-v1".parse().unwrap())
+                .unwrap();
 
-    //         // Copy channel to use it later.
-    //         let mut channel = transport
-    //             .listeners
-    //             .iter()
-    //             .next()
-    //             .unwrap()
-    //             .endpoint_channel
-    //             .clone();
+            match poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx)).await {
+                TransportEvent::NewAddress {
+                    listener_id,
+                    listen_addr,
+                } => {
+                    assert_eq!(listener_id, id);
+                    assert!(
+                        matches!(listen_addr.iter().next(), Some(Protocol::Ip4(a)) if !a.is_unspecified())
+                    );
+                    assert!(
+                        matches!(listen_addr.iter().nth(1), Some(Protocol::Udp(port)) if port != 0)
+                    );
+                    assert!(matches!(listen_addr.iter().nth(2), Some(Protocol::QuicV1)));
+                }
+                e => panic!("Unexpected event: {e:?}"),
+            }
+            assert!(transport.remove_listener(id), "Expect listener to exist.");
+            match poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx)).await {
+                TransportEvent::ListenerClosed {
+                    listener_id,
+                    reason: Ok(()),
+                } => {
+                    assert_eq!(listener_id, id);
+                }
+                e => panic!("Unexpected event: {e:?}"),
+            }
+            // Poll once again so that the listener has the chance to return `Poll::Ready(None)` and
+            // be removed from the list of listeners.
+            assert!(poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx))
+                .now_or_never()
+                .is_none());
+            assert!(transport.listeners.is_empty());
+        }
+    }
 
-    //         match poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx)).await {
-    //             TransportEvent::NewAddress {
-    //                 listener_id,
-    //                 listen_addr,
-    //             } => {
-    //                 assert_eq!(listener_id, id);
-    //                 assert!(
-    //                     matches!(listen_addr.iter().next(), Some(Protocol::Ip4(a)) if !a.is_unspecified())
-    //                 );
-    //                 assert!(
-    //                     matches!(listen_addr.iter().nth(1), Some(Protocol::Udp(port)) if port != 0)
-    //                 );
-    //                 assert!(matches!(listen_addr.iter().nth(2), Some(Protocol::QuicV1)));
-    //             }
-    //             e => panic!("Unexpected event: {e:?}"),
-    //         }
-    //         assert!(transport.remove_listener(id), "Expect listener to exist.");
-    //         match poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx)).await {
-    //             TransportEvent::ListenerClosed {
-    //                 listener_id,
-    //                 reason: Ok(()),
-    //             } => {
-    //                 assert_eq!(listener_id, id);
-    //             }
-    //             e => panic!("Unexpected event: {e:?}"),
-    //         }
-    //         // Poll once again so that the listener has the chance to return `Poll::Ready(None)` and
-    //         // be removed from the list of listeners.
-    //         assert!(poll_fn(|cx| Pin::new(&mut transport).as_mut().poll(cx))
-    //             .now_or_never()
-    //             .is_none());
-    //         assert!(transport.listeners.is_empty());
+    #[cfg(feature = "tokio")]
+    #[tokio::test]
+    async fn test_dialer_drop() {
+        let keypair = libp2p_core::identity::Keypair::generate_ed25519();
+        let config = Config::new(&keypair);
+        let mut transport = crate::tokio::Transport::new(config);
 
-    //         // Check that the [`Driver`] has shut down.
-    //         Delay::new(Duration::from_millis(10)).await;
-    //         poll_fn(|cx| {
-    //             assert!(channel.try_send(ToEndpoint::Decoupled, cx).is_err());
-    //             Poll::Ready(())
-    //         })
-    //         .await;
-    //     }
-    // }
+        let _dial = transport
+            .dial("/ip4/123.45.67.8/udp/1234/quic-v1".parse().unwrap())
+            .unwrap();
 
+        assert!(transport.dialer.contains_key(&SocketFamily::Ipv4));
+        assert!(!transport.dialer.contains_key(&SocketFamily::Ipv6));
 
-    // #[cfg(feature = "tokio")]
-    // #[tokio::test]
-    // async fn test_dialer_drop() {
-    //     let keypair = libp2p_core::identity::Keypair::generate_ed25519();
-    //     let config = Config::new(&keypair);
-    //     let mut transport = crate::tokio::Transport::new(config);
-
-    //     let _dial = transport
-    //         .dial("/ip4/123.45.67.8/udp/1234/quic-v1".parse().unwrap())
-    //         .unwrap();
-
-    //     // Expect a dialer and its background task to exist.
-    //     let mut channel = transport
-    //         .dialer
-    //         .get(&SocketFamily::Ipv4)
-    //         .unwrap()
-    //         .endpoint_channel
-    //         .clone();
-    //     assert!(!transport.dialer.contains_key(&SocketFamily::Ipv6));
-
-    //     // Send dummy dial to check that the endpoint driver is running.
-    //     poll_fn(|cx| {
-    //         let (tx, _) = oneshot::channel();
-    //         let _ = channel
-    //             .try_send(
-    //                 ToEndpoint::Dial {
-    //                     addr: SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0),
-    //                     result: tx,
-    //                     version: ProtocolVersion::V1,
-    //                 },
-    //                 cx,
-    //             )
-    //             .unwrap();
-    //         Poll::Ready(())
-    //     })
-    //     .await;
-
-    //     // Start listening so that the dialer and driver are dropped.
-    //     let _ = transport
-    //         .listen_on("/ip4/0.0.0.0/udp/0/quic-v1".parse().unwrap())
-    //         .unwrap();
-    //     assert!(!transport.dialer.contains_key(&SocketFamily::Ipv4));
-
-    //     // Check that the [`Driver`] has shut down.
-    //     Delay::new(Duration::from_millis(10)).await;
-    //     poll_fn(|cx| {
-    //         assert!(channel.try_send(ToEndpoint::Decoupled, cx).is_err());
-    //         Poll::Ready(())
-    //     })
-    //     .await;
-    // }
+        // Start listening so that the dialer and driver are dropped.
+        let _ = transport
+            .listen_on("/ip4/0.0.0.0/udp/0/quic-v1".parse().unwrap())
+            .unwrap();
+        assert!(!transport.dialer.contains_key(&SocketFamily::Ipv4));
+    }
 }
