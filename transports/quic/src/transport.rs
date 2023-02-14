@@ -104,8 +104,8 @@ impl<P: Provider> Transport for GenTransport<P> {
     fn listen_on(&mut self, addr: Multiaddr) -> Result<ListenerId, TransportError<Self::Error>> {
         let (socket_addr, version) = multiaddr_to_socketaddr(&addr, self.support_draft_29)
             .ok_or(TransportError::MultiaddrNotSupported(addr))?;
-        let endpoint_config = quinn::EndpointConfig::clone(&self.quinn_config.endpoint_config);
-        let server_config = quinn::ServerConfig::clone(&self.quinn_config.server_config);
+        let endpoint_config = self.quinn_config.endpoint_config.clone();
+        let server_config = self.quinn_config.server_config.clone();
         let endpoint = Self::new_endpoint(endpoint_config, Some(server_config), socket_addr)?;
         let listener_id = ListenerId::new();
         let listener = Listener::new(
@@ -183,7 +183,7 @@ impl<P: Provider> Transport for GenTransport<P> {
                             SocketFamily::Ipv4 => SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), 0),
                             SocketFamily::Ipv6 => SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0),
                         };
-                        let endpoint_config = quinn::EndpointConfig::clone(&self.quinn_config.endpoint_config);
+                        let endpoint_config = self.quinn_config.endpoint_config.clone();
                         let endpoint = Self::new_endpoint(endpoint_config, None, listen_socket_addr)?;
 
                         vacant.insert(endpoint.clone());
@@ -202,7 +202,7 @@ impl<P: Provider> Transport for GenTransport<P> {
             }
         };
         let handshake_timeout = self.handshake_timeout;
-        let mut client_config = quinn::ClientConfig::clone(&self.quinn_config.client_config);
+        let mut client_config = self.quinn_config.client_config.clone();
         if version == ProtocolVersion::Draft29 {
             client_config.version(0xff00_001d);
         }

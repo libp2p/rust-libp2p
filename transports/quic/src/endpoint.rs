@@ -98,8 +98,8 @@ impl Config {
 #[derive(Debug, Clone)]
 pub struct QuinnConfig {
     pub(crate) client_config: quinn::ClientConfig,
-    pub(crate) server_config: Arc<quinn::ServerConfig>,
-    pub(crate) endpoint_config: Arc<quinn::EndpointConfig>,
+    pub(crate) server_config: quinn::ServerConfig,
+    pub(crate) endpoint_config: quinn::EndpointConfig,
 }
 
 impl From<Config> for QuinnConfig {
@@ -145,8 +145,8 @@ impl From<Config> for QuinnConfig {
 
         QuinnConfig {
             client_config,
-            server_config: Arc::new(server_config),
-            endpoint_config: Arc::new(endpoint_config),
+            server_config,
+            endpoint_config,
         }
     }
 }
