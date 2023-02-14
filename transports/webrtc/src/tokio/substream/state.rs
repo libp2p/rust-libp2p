@@ -60,19 +60,19 @@ impl State {
         let current = *self;
 
         match (current, flag) {
-            (Self::Open, Flag::Fin) => {
+            (Self::Open, Flag::FIN) => {
                 *self = Self::ReadClosed;
             }
-            (Self::WriteClosed, Flag::Fin) => {
+            (Self::WriteClosed, Flag::FIN) => {
                 *self = Self::BothClosed { reset: false };
             }
-            (Self::Open, Flag::StopSending) => {
+            (Self::Open, Flag::STOP_SENDING) => {
                 *self = Self::WriteClosed;
             }
-            (Self::ReadClosed, Flag::StopSending) => {
+            (Self::ReadClosed, Flag::STOP_SENDING) => {
                 *self = Self::BothClosed { reset: false };
             }
-            (_, Flag::Reset) => {
+            (_, Flag::RESET) => {
                 buffer.clear();
                 *self = Self::BothClosed { reset: true };
             }

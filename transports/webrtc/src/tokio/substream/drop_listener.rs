@@ -100,7 +100,7 @@ impl Future for DropListener {
                 State::SendingReset { mut stream } => match stream.poll_ready_unpin(cx)? {
                     Poll::Ready(()) => {
                         stream.start_send_unpin(Message {
-                            flag: Some(Flag::Reset.into()),
+                            flag: Some(Flag::RESET),
                             message: None,
                         })?;
                         *state = State::Flushing { stream };
