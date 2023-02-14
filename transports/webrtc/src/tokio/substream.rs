@@ -268,7 +268,7 @@ mod tests {
             message: Some(message.to_vec()),
         };
 
-        let mut encoded_msg = BytesMut::new();
+        let mut encoded_msg = Vec::new();
         let mut writer = Writer::new(&mut encoded_msg);
         protobuf
             .write_message(&mut writer)
@@ -277,7 +277,7 @@ mod tests {
 
         let mut uvi = UviBytes::default();
         let mut dst = BytesMut::new();
-        uvi.encode(encoded_msg.clone().freeze(), &mut dst).unwrap();
+        uvi.encode(encoded_msg.as_slice(), &mut dst).unwrap();
 
         // Ensure the varint prefixed and protobuf encoded largest message is no longer than the
         // maximum limit specified in the libp2p WebRTC specification.

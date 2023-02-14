@@ -333,7 +333,7 @@ mod tests {
     fn cannot_read_after_receiving_fin() {
         let mut open = State::Open;
 
-        open.handle_inbound_flag(Flag::Fin, &mut Bytes::default());
+        open.handle_inbound_flag(Flag::FIN, &mut Bytes::default());
         let error = open.read_barrier().unwrap_err();
 
         assert_eq!(error.kind(), ErrorKind::BrokenPipe)
@@ -355,7 +355,7 @@ mod tests {
     fn cannot_write_after_receiving_stop_sending() {
         let mut open = State::Open;
 
-        open.handle_inbound_flag(Flag::StopSending, &mut Bytes::default());
+        open.handle_inbound_flag(Flag::STOP_SENDING, &mut Bytes::default());
         let error = open.write_barrier().unwrap_err();
 
         assert_eq!(error.kind(), ErrorKind::BrokenPipe)
@@ -377,7 +377,7 @@ mod tests {
     fn everything_broken_after_receiving_reset() {
         let mut open = State::Open;
 
-        open.handle_inbound_flag(Flag::Reset, &mut Bytes::default());
+        open.handle_inbound_flag(Flag::RESET, &mut Bytes::default());
         let error1 = open.read_barrier().unwrap_err();
         let error2 = open.write_barrier().unwrap_err();
         let error3 = open.close_write_barrier().unwrap_err();
@@ -393,7 +393,7 @@ mod tests {
     fn should_read_flags_in_async_write_after_read_closed() {
         let mut open = State::Open;
 
-        open.handle_inbound_flag(Flag::Fin, &mut Bytes::default());
+        open.handle_inbound_flag(Flag::FIN, &mut Bytes::default());
 
         assert!(open.read_flags_in_async_write())
     }
@@ -402,8 +402,8 @@ mod tests {
     fn cannot_read_or_write_after_receiving_fin_and_stop_sending() {
         let mut open = State::Open;
 
-        open.handle_inbound_flag(Flag::Fin, &mut Bytes::default());
-        open.handle_inbound_flag(Flag::StopSending, &mut Bytes::default());
+        open.handle_inbound_flag(Flag::FIN, &mut Bytes::default());
+        open.handle_inbound_flag(Flag::STOP_SENDING, &mut Bytes::default());
 
         let error1 = open.read_barrier().unwrap_err();
         let error2 = open.write_barrier().unwrap_err();
@@ -503,7 +503,7 @@ mod tests {
         let mut open = State::Open;
         let mut buffer = Bytes::copy_from_slice(b"foobar");
 
-        open.handle_inbound_flag(Flag::Reset, &mut buffer);
+        open.handle_inbound_flag(Flag::RESET, &mut buffer);
 
         assert!(buffer.is_empty());
     }
