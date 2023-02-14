@@ -329,7 +329,7 @@ jobs:
             **/generated/*.proto
 
       - name: Generate proto files
-        run: pb-rs ${{ steps.glob.outputs.paths }}
+        run: pb-rs -D ${{ steps.glob.outputs.paths }}
 
       - name: Ensure generated files are unmodified # https://stackoverflow.com/a/5737794
         run: |
