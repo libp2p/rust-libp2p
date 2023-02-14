@@ -29,9 +29,7 @@ use crate::GenTransport;
 /// Transport with [`tokio`] runtime.
 pub type Transport = GenTransport<Provider>;
 
-// TODO docs
-/// Provider for reading / writing to a sockets and spawning
-/// tasks using [`tokio`].
+/// Provider for quinn runtime and spawning tasks using [`tokio`].
 pub struct Provider;
 
 impl super::Provider for Provider {

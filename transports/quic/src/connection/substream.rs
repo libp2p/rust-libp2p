@@ -26,6 +26,7 @@ use std::{
 
 use futures::{AsyncRead, AsyncWrite};
 
+/// A single stream on a connection
 pub struct Substream {
     send: quinn::SendStream,
     recv: quinn::RecvStream,

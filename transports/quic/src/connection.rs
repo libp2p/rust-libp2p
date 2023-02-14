@@ -34,10 +34,30 @@ use std::{
 /// State for a single opened QUIC connection.
 pub struct Connection {
     connection: quinn::Connection,
+    /// Future for accepting a new incoming bidirectional stream.
     incoming:
         BoxFuture<'static, Result<(quinn::SendStream, quinn::RecvStream), quinn::ConnectionError>>,
+    /// Future for opening a new outgoing a new bidirectional stream.
     outgoing:
         BoxFuture<'static, Result<(quinn::SendStream, quinn::RecvStream), quinn::ConnectionError>>,
+}
+
+impl Connection {
+    /// Build a [`Connection`] from raw components.
+    ///
+    /// This function assumes that the [`quinn::Connection`] is completely fresh and none of
+    /// its methods has ever been called. Failure to comply might lead to logic errors and panics.
+    fn new(connection: quinn::Connection) -> Self {
+        let connection_c = connection.clone();
+        let incoming = Box::pin(async move { connection_c.accept_bi().await });
+        let connection_c = connection.clone();
+        let outgoing = Box::pin(async move { connection_c.open_bi().await });
+        Self {
+            connection,
+            incoming,
+            outgoing,
+        }
+    }
 }
 
 impl StreamMuxer for Connection {
@@ -74,6 +94,8 @@ impl StreamMuxer for Connection {
         self: Pin<&mut Self>,
         _cx: &mut Context<'_>,
     ) -> Poll<Result<StreamMuxerEvent, Self::Error>> {
+        // TODO: If connection migration is enabled (currently disabled) address
+        // change on the connection needs to be handled.
         Poll::Pending
     }
 

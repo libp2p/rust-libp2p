@@ -30,9 +30,7 @@ use crate::GenTransport;
 /// Transport with [`async-std`] runtime.
 pub type Transport = GenTransport<Provider>;
 
-// TODO docs
-/// Provider for reading / writing to a sockets and spawning
-/// tasks using [`async-std`].
+/// Provider for quinn runtime and spawning tasks using [`async-std`].
 pub struct Provider;
 
 impl super::Provider for Provider {

@@ -88,6 +88,7 @@ impl<P: Provider> GenTransport<P> {
             support_draft_29,
         }
     }
+    /// Create a new [`quinn::Endpoint`] with the given configs.
     fn new_endpoint(endpoint_config: quinn::EndpointConfig, server_config: Option<quinn::ServerConfig>, socket_addr: SocketAddr) -> Result<quinn::Endpoint, Error> {
         let socket = UdpSocket::bind(socket_addr)?;
         let endpoint = quinn::Endpoint::new(endpoint_config, server_config, socket, P::runtime())?;

@@ -34,8 +34,7 @@ pub mod tokio;
 #[cfg(any(feature = "async-std", feature = "tokio"))]
 const RECEIVE_BUFFER_SIZE: usize = 65536;
 
-/// Provider for non-blocking receiving and sending on a [`std::net::UdpSocket`]
-/// and spawning tasks.
+/// Provider for a corresponding quinn runtime and spawning tasks.
 pub trait Provider: Unpin + Send + Sized + 'static {
     type IfWatcher: Unpin + Send;
     type Runtime: quinn::Runtime;

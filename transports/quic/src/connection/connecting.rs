@@ -78,15 +78,7 @@ impl Future for Connecting {
         };
 
         let peer_id = Self::remote_peer_id(&connection);
-        let connection_c = connection.clone();
-        let incoming = Box::pin(async move { connection_c.accept_bi().await });
-        let connection_c = connection.clone();
-        let outgoing = Box::pin(async move { connection_c.open_bi().await });
-        let muxer = Connection {
-            connection,
-            incoming,
-            outgoing,
-        };
+        let muxer = Connection::new(connection);
         Poll::Ready(Ok((peer_id, muxer)))
     }
 }
