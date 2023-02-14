@@ -280,7 +280,7 @@ impl From<Message> for proto::Message {
             Message::RegisterResponse(Err(error)) => proto::Message {
                 type_pb: Some(proto::MessageType::REGISTER_RESPONSE),
                 registerResponse: Some(proto::RegisterResponse {
-                    status: Some(proto::ResponseStatus::from(error).into()),
+                    status: Some(proto::ResponseStatus::from(error)),
                     statusText: None,
                     ttl: None,
                 }),
@@ -342,7 +342,7 @@ impl From<Message> for proto::Message {
                 type_pb: Some(proto::MessageType::DISCOVER_RESPONSE),
                 discoverResponse: Some(proto::DiscoverResponse {
                     registrations: Vec::new(),
-                    status: Some(proto::ResponseStatus::from(error).into()),
+                    status: Some(proto::ResponseStatus::from(error)),
                     statusText: None,
                     cookie: None,
                 }),
