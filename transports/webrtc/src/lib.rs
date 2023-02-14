@@ -80,10 +80,9 @@
 //! is to make the hash a part of the remote's multiaddr. On the server side, we turn
 //! certificate verification off.
 
-mod message_proto {
-    #![allow(clippy::derive_partial_eq_without_eq)]
-
-    include!(concat!(env!("OUT_DIR"), "/webrtc.pb.rs"));
+mod proto {
+    include!("generated/mod.rs");
+    pub use self::webrtc::pb::{mod_Message::Flag, Message};
 }
 
 #[cfg(feature = "tokio")]

@@ -22,7 +22,7 @@ use bytes::Bytes;
 
 use std::io;
 
-use crate::message_proto::message::Flag;
+use crate::proto::Flag;
 
 #[derive(Debug, Copy, Clone)]
 pub enum State {
