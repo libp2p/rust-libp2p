@@ -26,7 +26,9 @@ use crate::handler::{
     IntoConnectionHandler, KeepAlive, ListenUpgradeError, SubstreamProtocol,
 };
 use crate::upgrade::SendWrapper;
-use crate::{NetworkBehaviour, NetworkBehaviourAction, PollParameters, THandlerOutEvent};
+use crate::{
+    NetworkBehaviour, NetworkBehaviourAction, PollParameters, THandlerInEvent, THandlerOutEvent,
+};
 use either::Either;
 use futures::future;
 use libp2p_core::{upgrade::DeniedUpgrade, ConnectedPoint, Multiaddr, PeerId};
@@ -84,7 +86,7 @@ where
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
         if let Some(behaviour) = &mut self.inner {
-            if let Some(event) = event.maybe_map_handler(|h| h.inner, |h| h.inner) {
+            if let Some(event) = event.maybe_map_handler(|h| h.inner) {
                 behaviour.on_swarm_event(event);
             }
         }
@@ -105,11 +107,9 @@ where
         &mut self,
         cx: &mut Context<'_>,
         params: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>> {
         if let Some(inner) = self.inner.as_mut() {
-            inner.poll(cx, params).map(|action| {
-                action.map_handler(|h| ToggleIntoConnectionHandler { inner: Some(h) })
-            })
+            inner.poll(cx, params)
         } else {
             Poll::Pending
         }
