@@ -9,30 +9,8 @@ This is the roadmap of the Rust implementation of libp2p. See also the [general 
 roadmap](https://github.com/libp2p/specs/blob/master/ROADMAP.md).
 
 
-### Alpha QUIC support
-
-| Category     | Status | Target Completion | Tracking                                          | Dependencies                                   | Dependents |
-|--------------|--------|-------------------|---------------------------------------------------|------------------------------------------------|------------|
-| Connectivity | Done   | Q4/2022           | https://github.com/libp2p/rust-libp2p/issues/2883 | https://github.com/libp2p/test-plans/issues/53 |            |
-
-QUIC has been on the roadmap for a long time. It enables various performance improvements as well as
-higher hole punching success rates. We are close to finishing a first version with
-https://github.com/libp2p/rust-libp2p/pull/2289.
-
-## WebRTC support (browser-to-server)
-
-| Category     | Status | Target Completion | Tracking                                 | Dependencies                                   | Dependents                                                        |
-|--------------|--------|-------------------|------------------------------------------|------------------------------------------------|-------------------------------------------------------------------|
-| Connectivity | Done   | Q4/2022           | https://github.com/libp2p/specs/pull/412 | https://github.com/libp2p/test-plans/pull/100 | [WebRTC (browser-to-browser)](#webrtc-support-browser-to-browser) |
 
 
-We are currently implementing WebRTC for **browser-to-server** connectivity in
-https://github.com/libp2p/rust-libp2p/pull/2622. More specifically the server side. This will enable
-browser nodes to connect to rust-libp2p nodes where the latter only have self-signed TLS
-certificates. See https://github.com/libp2p/specs/pull/412 for in-depth motivation.
-
-Long term we should enable rust-libp2p running in the browser via Wasm to use the browser's WebRTC
-stack. Though that should only happen after improved Wasm support, see below.
 
 ## Cross Behaviour communication
 
@@ -71,15 +49,6 @@ First draft is in https://github.com/libp2p/rust-libp2p/pull/2828
 
 We added alpha support for QUIC in Q4/2022 wrapping `quinn-proto`. Evaluate using `quinn` directly, replacing the wrapper.
 
-## Kademlia efficient querying
-
-| Category     | Status      | Target Completion | Tracking                                        | Dependencies | Dependents |
-|--------------|-------------|-------------------|-------------------------------------------------|--------------|------------|
-| Optimization | done        | Q1/2023           | https://github.com/libp2p/rust-libp2p/pull/2712 |              |            |
-
-Users of rust-libp2p like [iroh](https://github.com/n0-computer/iroh) need this for low latency
-usage of `libp2p-kad`. The rust-libp2p maintainers can pick this up unless iroh folks finish the
-work before that.
 
 ## Kademlia client mode
 
@@ -161,3 +130,40 @@ A WebTransport implementation in rust-libp2p will enable browsers to connect to 
 where the latter only have a self-signed TLS certificate. Compared to WebRTC, this would likely be
 more performant. It is dependent on QUIC support in rust-libp2p. Given that we will support WebRTC
 (browser-to-server) this is not a high priority.
+
+## Done
+
+### Alpha QUIC support
+
+| Category     | Status | Target Completion | Tracking                                          | Dependencies                                   | Dependents |
+|--------------|--------|-------------------|---------------------------------------------------|------------------------------------------------|------------|
+| Connectivity | Done   | Q4/2022           | https://github.com/libp2p/rust-libp2p/issues/2883 | https://github.com/libp2p/test-plans/issues/53 |            |
+
+QUIC has been on the roadmap for a long time. It enables various performance improvements as well as
+higher hole punching success rates. We are close to finishing a first version with
+https://github.com/libp2p/rust-libp2p/pull/2289.
+
+### WebRTC support (browser-to-server)
+
+| Category     | Status | Target Completion | Tracking                                 | Dependencies                                   | Dependents                                                        |
+|--------------|--------|-------------------|------------------------------------------|------------------------------------------------|-------------------------------------------------------------------|
+| Connectivity | Done   | Q4/2022           | https://github.com/libp2p/specs/pull/412 | https://github.com/libp2p/test-plans/pull/100 | [WebRTC (browser-to-browser)](#webrtc-support-browser-to-browser) |
+
+
+We are currently implementing WebRTC for **browser-to-server** connectivity in
+https://github.com/libp2p/rust-libp2p/pull/2622. More specifically the server side. This will enable
+browser nodes to connect to rust-libp2p nodes where the latter only have self-signed TLS
+certificates. See https://github.com/libp2p/specs/pull/412 for in-depth motivation.
+
+Long term we should enable rust-libp2p running in the browser via Wasm to use the browser's WebRTC
+stack. Though that should only happen after improved Wasm support, see below.
+
+### Kademlia efficient querying
+
+| Category     | Status      | Target Completion | Tracking                                        | Dependencies | Dependents |
+|--------------|-------------|-------------------|-------------------------------------------------|--------------|------------|
+| Optimization | done        | Q1/2023           | https://github.com/libp2p/rust-libp2p/pull/2712 |              |            |
+
+Users of rust-libp2p like [iroh](https://github.com/n0-computer/iroh) need this for low latency
+usage of `libp2p-kad`. The rust-libp2p maintainers can pick this up unless iroh folks finish the
+work before that.
