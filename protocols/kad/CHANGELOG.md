@@ -10,8 +10,11 @@
 
 - Bump MSRV to 1.65.0.
 
+- Implement ability to acknowledge `AddProvider` before reading further messages from substream. See [PR 3468].
+
 [PR 3239]: https://github.com/libp2p/rust-libp2p/pull/3239
 [PR 3287]: https://github.com/libp2p/rust-libp2p/pull/3287
+[PR 3468]: https://github.com/libp2p/rust-libp2p/pull/3468
 
 # 0.42.1
 
