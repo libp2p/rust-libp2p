@@ -1,4 +1,4 @@
-# rust-libp2p Roadmap <!-- omit in toc -->
+# rust-libp2p Roadmap
 
 Below is a high level roadmap for the rust-libp2p project. Items are ordered by priority (high to
 low).
@@ -8,20 +8,6 @@ This is a living document. Input is always welcome e.g. via GitHub issues or pul
 This is the roadmap of the Rust implementation of libp2p. See also the [general libp2p project
 roadmap](https://github.com/libp2p/specs/blob/master/ROADMAP.md).
 
-## Table of Contents <!-- omit in toc -->
-  - [QUIC support](#quic-support)
-  - [WebRTC support (browser-to-server)](#webrtc-support-browser-to-server)
-  - [Cross Behaviour communication](#cross-behaviour-communication)
-  - [Generic connection management](#generic-connection-management)
-  - [Kademlia efficient querying](#kademlia-efficient-querying)
-  - [Kademlia client mode](#kademlia-client-mode)
-  - [Optimize Hole punching](#optimize-hole-punching)
-  - [Streaming response protocol aka. the ultimate escape hatch](#streaming-response-protocol-aka-the-ultimate-escape-hatch)
-  - [WebRTC support (browser-to-browser)](#webrtc-support-browser-to-browser)
-  - [Improved Wasm support](#improved-wasm-support)
-  - [Handshake optimizations](#handshake-optimizations)
-  - [Bitswap implementation](#bitswap-implementation)
-  - [WebTransport](#webtransport)
 
 ### Alpha QUIC support
 
