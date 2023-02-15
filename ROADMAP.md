@@ -102,19 +102,6 @@ argue that that demand follows this roadmap item and not the other way round.)
 Once WebRTC for browser-to-server is complete, we can begin work on **browser-to-browser** and complete the WebRTC connectivity story.
 We need to improve rust-libp2p's WASM story first.
 
-## Handshake optimizations
-
-| Category     | Status | Target Completion | Tracking                                                                                                                                                | Dependencies | Dependents |
-|--------------|--------|-------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------|--------------|------------|
-| Optimization | todo   | Q2/2023           | Security protocol in multiaddr https://github.com/libp2p/specs/pull/353 and early muxer negotiation https://github.com/libp2p/rust-libp2p/issues/2994 |              |            |
-
-Short term, investing into rust-libp2p's QUIC support will likely give us a larger performance win,
-thus neither of the two optimizations is planned for 2022. While great to have, it has not been
-requested from any rust-libp2p users.
-
-Long term, given that this will give us a great performance gain, we should definitely tackle it. It
-also allows us to catch up and thus be consistent with go-libp2p.
-
 ## WebTransport
 
 | Category                    | Status | Target Completion | Tracking                                          | Dependencies                       | Dependents |
