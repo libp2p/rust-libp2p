@@ -24,8 +24,8 @@ mod test;
 
 use crate::addresses::Addresses;
 use crate::handler::{
-    KademliaHandlerConfig, KademliaHandlerEvent, KademliaHandlerIn, KademliaHandlerProto,
-    KademliaRequestId,
+    InboundStreamEventGuard, KademliaHandlerConfig, KademliaHandlerEvent, KademliaHandlerIn,
+    KademliaHandlerProto, KademliaRequestId,
 };
 use crate::jobs::*;
 use crate::kbucket::{self, Distance, KBucketsTable, NodeStatus};
@@ -53,6 +53,7 @@ use smallvec::SmallVec;
 use std::collections::{BTreeMap, HashSet, VecDeque};
 use std::fmt;
 use std::num::NonZeroUsize;
+use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::vec;
 use std::{borrow::Cow, time::Duration};
@@ -1740,7 +1741,12 @@ where
     }
 
     /// Processes a provider record received from a peer.
-    fn provider_received(&mut self, key: record::Key, provider: KadPeer) {
+    fn provider_received(
+        &mut self,
+        key: record::Key,
+        provider: KadPeer,
+        guard: InboundStreamEventGuard,
+    ) {
         if &provider.node_id != self.kbuckets.local_key().preimage() {
             let record = ProviderRecord {
                 key,
@@ -1758,7 +1764,10 @@ where
                     self.queued_events
                         .push_back(NetworkBehaviourAction::GenerateEvent(
                             KademliaEvent::InboundRequest {
-                                request: InboundRequest::AddProvider { record: None },
+                                request: InboundRequest::AddProvider {
+                                    record: None,
+                                    guard: None,
+                                },
                             },
                         ));
                 }
@@ -1768,6 +1777,7 @@ where
                             KademliaEvent::InboundRequest {
                                 request: InboundRequest::AddProvider {
                                     record: Some(record),
+                                    guard: Some(Arc::new(guard)),
                                 },
                             },
                         ));
@@ -2140,13 +2150,17 @@ where
                 }
             }
 
-            KademliaHandlerEvent::AddProvider { key, provider } => {
+            KademliaHandlerEvent::AddProvider {
+                key,
+                provider,
+                guard,
+            } => {
                 // Only accept a provider record from a legitimate peer.
                 if provider.node_id != source {
                     return;
                 }
 
-                self.provider_received(key, provider);
+                self.provider_received(key, provider, guard);
             }
 
             KademliaHandlerEvent::GetRecord { key, request_id } => {
@@ -2583,8 +2597,12 @@ pub enum InboundRequest {
     /// If filtering [`KademliaStoreInserts::FilterBoth`] is enabled, the [`ProviderRecord`] is
     /// included.
     ///
-    /// See [`KademliaStoreInserts`] and [`KademliaConfig::set_record_filtering`] for details..
-    AddProvider { record: Option<ProviderRecord> },
+    /// See [`KademliaStoreInserts`] and [`KademliaConfig::set_record_filtering`] for details.
+    AddProvider {
+        record: Option<ProviderRecord>,
+        /// Guard corresponding to inbound stream that generated this event.
+        guard: Option<Arc<InboundStreamEventGuard>>,
+    },
     /// Request to retrieve a record.
     GetRecord {
         num_closer_peers: usize,
