@@ -8,9 +8,17 @@ This is a living document. Input is always welcome e.g. via GitHub issues or pul
 This is the roadmap of the Rust implementation of libp2p. See also the [general libp2p project
 roadmap](https://github.com/libp2p/specs/blob/master/ROADMAP.md).
 
+## Generic connection management
 
+| Category             | Status      | Target Completion | Tracking                                          | Dependencies | Dependents |
+|----------------------|-------------|-------------------|---------------------------------------------------|--------------|------------|
+| Developer Ergonomics | in progress | Q1/2023           | https://github.com/libp2p/rust-libp2p/issues/2824 |              |            |
 
+Today connection management functionality in rust-libp2p is limited. Building abstractions on top is
+cumbersome and inefficient. See https://github.com/libp2p/rust-libp2p/issues/2824. Making connection
+management generic allows users to build advanced and efficient abstractions on top of rust-libp2p
 
+First draft is in https://github.com/libp2p/rust-libp2p/pull/2828
 
 ## Cross Behaviour communication
 
@@ -29,27 +37,6 @@ protocols) between `NetworkBehaviour` implementations.
 Long term we might consider a generic approach for `NetworkBehaviours` to exchange data. Though that
 would deserve its own roadmap item.
 
-## Generic connection management
-
-| Category             | Status | Target Completion | Tracking                                          | Dependencies | Dependents |
-|----------------------|--------|-------------------|---------------------------------------------------|--------------|------------|
-| Developer Ergonomics | todo   | Q1/2023           | https://github.com/libp2p/rust-libp2p/issues/2824 |              |            |
-
-Today connection management functionality in rust-libp2p is limited. Building abstractions on top is
-cumbersome and inefficient. See https://github.com/libp2p/rust-libp2p/issues/2824. Making connection
-management generic allows users to build advanced and efficient abstractions on top of rust-libp2p
-
-First draft is in https://github.com/libp2p/rust-libp2p/pull/2828
-
-## QUIC - evaluate and move to quinn
-
-| Category     | Status | Target Completion | Tracking                                          | Dependencies | Dependents |
-|--------------|--------|-------------------|---------------------------------------------------|--------------|------------|
-| Connectivity | todo   | Q1/2023           | https://github.com/libp2p/rust-libp2p/issues/2883 |              |            |
-
-We added alpha support for QUIC in Q4/2022 wrapping `quinn-proto`. Evaluate using `quinn` directly, replacing the wrapper.
-
-
 ## Kademlia client mode
 
 | Category     | Status | Target Completion | Tracking                                          | Dependencies                                                    | Dependents |
@@ -58,6 +45,14 @@ We added alpha support for QUIC in Q4/2022 wrapping `quinn-proto`. Evaluate usin
 
 Kademlia client mode will enhance routing table health and thus have a positive impact on all
 Kademlia operations.
+
+## QUIC - evaluate and move to quinn
+
+| Category     | Status | Target Completion | Tracking                                          | Dependencies | Dependents |
+|--------------|--------|-------------------|---------------------------------------------------|--------------|------------|
+| Connectivity | todo   | Q1/2023           | https://github.com/libp2p/rust-libp2p/issues/2883 |              |            |
+
+We added alpha support for QUIC in Q4/2022 wrapping `quinn-proto`. Evaluate using `quinn` directly, replacing the wrapper.
 
 ## Optimize Hole punching
 
