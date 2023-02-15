@@ -69,17 +69,6 @@ action](https://discuss.libp2p.io/t/decentralized-nat-hole-punching-measurement-
 case you want to help. Based on this data we will likely find many optimizations we can do to our
 hole punching stack.
 
-## Streaming response protocol aka. the ultimate escape hatch
-
-| Category             | Status | Target Completion | Tracking                                          | Dependencies | Dependents |
-|----------------------|--------|-------------------|---------------------------------------------------|--------------|------------|
-| Developer ergonomics | todo   | Q1/2023           | https://github.com/libp2p/rust-libp2p/issues/2657 |              |            |
-
-rust-libp2p is very opinionated on how to write peer-to-peer protocols. There are many good reasons
-for this, and I think we should not change directions here. That said, the ultimate escape hatch -
-allowing users to create a stream and do whatever they want with it - will make it easier for
-newcomers to get started.
-
 ## Improved Wasm support
 
 | Category             | Status | Target Completion | Tracking                                          | Dependencies | Dependents                                   |
