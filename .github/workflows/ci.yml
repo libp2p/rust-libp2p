@@ -55,6 +55,8 @@ jobs:
         with:
           shared-key: stable-cache
           save-if: false
+          cache-directories: |
+            target/semver-checks/cache
 
       - name: Run all tests
         run: cargo test --package ${{ matrix.crate }} --all-features
@@ -72,7 +74,7 @@ jobs:
       - name: Check public API for semver violations
         if: steps.check-released.outputs.code == 200 # Workaround until https://github.com/obi1kenobi/cargo-semver-check/issues/146 is shipped.
         run: |
-          wget -q -O- https://github.com/obi1kenobi/cargo-semver-checks/releases/download/v0.17.1/cargo-semver-checks-x86_64-unknown-linux-gnu.tar.gz | tar -xz -C ~/.cargo/bin
+          wget -q -O- https://github.com/obi1kenobi/cargo-semver-checks/releases/download/v0.18.0/cargo-semver-checks-x86_64-unknown-linux-gnu.tar.gz | tar -xz -C ~/.cargo/bin
           cargo semver-checks check-release -p ${{ matrix.crate }}
 
       - name: Enforce no dependency on meta crate

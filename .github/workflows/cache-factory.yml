@@ -67,9 +67,13 @@ jobs:
       - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
         with:
           shared-key: stable-cache
+          cache-directories: |
+            target/semver-checks/cache # Contains registry baseline rustdoc JSON
 
       - name: Compile workspace with stable Rust
         run: cargo test --all-features --all-targets --workspace --no-run
 
-      - name: Render docs
-        run: cargo doc --all-features --workspace
+      - name: Cache registry baseline rustdoc
+        run: |
+          wget -q -O- https://github.com/obi1kenobi/cargo-semver-checks/releases/download/v0.18.0/cargo-semver-checks-x86_64-unknown-linux-gnu.tar.gz | tar -xz -C ~/.cargo/bin
+          cargo semver-checks check-release --workspace
