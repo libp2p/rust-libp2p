@@ -2276,6 +2276,10 @@ where
                     }
                 }
             }
+
+            KademliaHandlerEvent::Available { .. } => {
+                unreachable!("Processed by handler internally")
+            }
         };
     }
 
