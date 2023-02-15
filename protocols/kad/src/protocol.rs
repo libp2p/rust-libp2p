@@ -36,7 +36,8 @@ use instant::Instant;
 use libp2p_core::upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
 use libp2p_core::{Multiaddr, PeerId};
 use prost::Message;
-use std::{borrow::Cow, convert::TryFrom, time::Duration};
+use std::ops::{Deref, DerefMut};
+use std::{borrow::Cow, convert::TryFrom, fmt, time::Duration};
 use std::{io, iter};
 use unsigned_varint::codec;
 
@@ -198,7 +199,7 @@ where
         let mut codec = UviBytes::default();
         codec.set_max_len(self.max_packet_size);
 
-        future::ok(
+        future::ok(KadInStreamSink(
             Framed::new(incoming, codec)
                 .err_into()
                 .with::<_, _, fn(_) -> _, _>(|response| {
@@ -216,7 +217,7 @@ where
                     };
                     future::ready(proto_to_req_msg(request))
                 }),
-        )
+        ))
     }
 }
 
@@ -232,7 +233,7 @@ where
         let mut codec = UviBytes::default();
         codec.set_max_len(self.max_packet_size);
 
-        future::ok(
+        future::ok(KadOutStreamSink(
             Framed::new(incoming, codec)
                 .err_into()
                 .with::<_, _, fn(_) -> _, _>(|request| {
@@ -250,15 +251,55 @@ where
                     };
                     future::ready(proto_to_resp_msg(response))
                 }),
-        )
+        ))
     }
 }
 
 /// Sink of responses and stream of requests.
-pub type KadInStreamSink<S> = KadStreamSink<S, KadResponseMsg, KadRequestMsg>;
+pub struct KadInStreamSink<S>(KadStreamSink<S, KadResponseMsg, KadRequestMsg>);
+
+impl<S> Deref for KadInStreamSink<S> {
+    type Target = KadStreamSink<S, KadResponseMsg, KadRequestMsg>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<S> DerefMut for KadInStreamSink<S> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl<S> fmt::Debug for KadInStreamSink<S> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("KadInStreamSink")
+    }
+}
 
 /// Sink of requests and stream of responses.
-pub type KadOutStreamSink<S> = KadStreamSink<S, KadRequestMsg, KadResponseMsg>;
+pub struct KadOutStreamSink<S>(KadStreamSink<S, KadRequestMsg, KadResponseMsg>);
+
+impl<S> Deref for KadOutStreamSink<S> {
+    type Target = KadStreamSink<S, KadRequestMsg, KadResponseMsg>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<S> DerefMut for KadOutStreamSink<S> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl<S> fmt::Debug for KadOutStreamSink<S> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("KadOutStreamSink")
+    }
+}
 
 pub type KadStreamSink<S, A, B> = stream::AndThen<
     sink::With<
