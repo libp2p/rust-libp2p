@@ -50,7 +50,7 @@ Kademlia operations.
 
 | Category     | Status | Target Completion | Tracking                                          | Dependencies | Dependents |
 |--------------|--------|-------------------|---------------------------------------------------|--------------|------------|
-| Connectivity | todo   | Q1/2023           | https://github.com/libp2p/rust-libp2p/issues/2883 |              |            |
+| Connectivity | todo   | Q2/2023           | https://github.com/libp2p/rust-libp2p/issues/2883 |              |            |
 
 We added alpha support for QUIC in Q4/2022 wrapping `quinn-proto`. Evaluate using `quinn` directly, replacing the wrapper.
 
@@ -58,7 +58,7 @@ We added alpha support for QUIC in Q4/2022 wrapping `quinn-proto`. Evaluate usin
 
 | Category     | Status | Target Completion | Tracking | Dependencies | Dependents |
 |--------------|--------|-------------------|----------|--------------|------------|
-| Optimization | todo   | Q1/2023           |          |              |            |
+| Optimization | todo   | Q2/2023           |          |              |            |
 
 We released hole punching support with [rust-libp2p
 `v0.43.0`](https://github.com/libp2p/rust-libp2p/releases/tag/v0.43.0), see also
@@ -73,7 +73,7 @@ hole punching stack.
 
 | Category             | Status | Target Completion | Tracking                                          | Dependencies | Dependents                                   |
 |----------------------|--------|-------------------|---------------------------------------------------|--------------|----------------------------------------------|
-| Developer ergonomics | todo   | Q2/2023           | https://github.com/libp2p/rust-libp2p/issues/2617 |              | [WebRTC](#webrtc-support-browser-to-browser) |
+| Developer ergonomics | todo   | Q3/2023           | https://github.com/libp2p/rust-libp2p/issues/2617 |              | [WebRTC](#webrtc-support-browser-to-browser) |
 
 The project supports Wasm already today, though the developer experience is cumbersome at best.
 Properly supporting Wasm opens rust-libp2p to a whole new set of use-cases. I would love for this to
@@ -85,7 +85,7 @@ argue that that demand follows this roadmap item and not the other way round.)
 
 | Category     | Status | Target Completion | Tracking                                   | Dependencies                                                                              | Dependents |
 |--------------|--------|-------------------|--------------------------------------------|-------------------------------------------------------------------------------------------|------------|
-| Connectivity | todo   | Q2/2023           | https://github.com/libp2p/specs/issues/475 | [Improved WASM support](#improved-wasm-support), https://github.com/libp2p/specs/pull/497 |            |
+| Connectivity | todo   | Q3/2023           | https://github.com/libp2p/specs/issues/475 | [Improved WASM support](#improved-wasm-support), https://github.com/libp2p/specs/pull/497 |            |
 
 
 Once WebRTC for browser-to-server is complete, we can begin work on **browser-to-browser** and complete the WebRTC connectivity story.
