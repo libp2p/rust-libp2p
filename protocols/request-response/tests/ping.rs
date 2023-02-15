@@ -285,13 +285,8 @@ fn emits_inbound_connection_closed_if_channel_is_dropped() {
         };
 
         let error = match event {
-<<<<<<< HEAD
             RequestResponseEvent::OutboundFailure { error, .. } => error,
-            e => panic!("unexpected event from peer 2: {:?}", e),
-=======
-            Event::OutboundFailure { error, .. } => error,
             e => panic!("unexpected event from peer 2: {e:?}"),
->>>>>>> d79c93ab (chore: Implement latest clippy warnings (#3220))
         };
 
         assert_eq!(error, OutboundFailure::ConnectionClosed);
