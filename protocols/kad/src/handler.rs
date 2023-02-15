@@ -36,9 +36,10 @@ use libp2p_swarm::{
     KeepAlive, NegotiatedSubstream, SubstreamProtocol,
 };
 use log::trace;
+use parking_lot::Mutex;
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 use std::task::Waker;
 use std::{
     error, fmt, io, marker::PhantomData, pin::Pin, task::Context, task::Poll, time::Duration,
@@ -178,13 +179,14 @@ enum OutboundSubstreamState<TUserData> {
 #[derive(Debug)]
 pub struct InboundStreamEventGuard {
     ready: Arc<AtomicBool>,
-    waker: Option<Waker>,
+    waker: Mutex<Option<Waker>>,
 }
 
 impl Drop for InboundStreamEventGuard {
     fn drop(&mut self) {
         self.ready.store(true, Ordering::Release);
         self.waker
+            .lock()
             .take()
             .expect("Only called once in Drop impl")
             .wake();
@@ -206,9 +208,9 @@ enum InboundSubstreamState<TUserData> {
         KadInStreamSink<NegotiatedSubstream>,
         Option<Waker>,
     ),
-    PendingStateTransition {
-        ready: Arc<AtomicBool>,
-        next_state: Box<InboundSubstreamState<TUserData>>,
+    PendingProcessing {
+        weak_guard: Weak<InboundStreamEventGuard>,
+        substream: KadInStreamSink<NegotiatedSubstream>,
     },
     /// Waiting to send an answer back to the remote.
     PendingSend(
@@ -268,14 +270,11 @@ impl<TUserData> InboundSubstreamState<TUserData> {
         ) {
             InboundSubstreamState::WaitingMessage { substream, .. }
             | InboundSubstreamState::WaitingBehaviour(_, substream, _)
+            | InboundSubstreamState::PendingProcessing { substream, .. }
             | InboundSubstreamState::PendingSend(_, substream, _)
             | InboundSubstreamState::PendingFlush(_, substream)
             | InboundSubstreamState::Closing(substream) => {
                 *self = InboundSubstreamState::Closing(substream);
-            }
-            InboundSubstreamState::PendingStateTransition { next_state, .. } => {
-                *self = *next_state;
-                self.close();
             }
             InboundSubstreamState::Cancelled => {
                 *self = InboundSubstreamState::Cancelled;
@@ -348,7 +347,7 @@ pub enum KademliaHandlerEvent<TUserData> {
         /// The peer that is the provider of the value for `key`.
         provider: KadPeer,
         /// Guard corresponding to inbound stream that generated this event.
-        guard: InboundStreamEventGuard,
+        guard: Arc<InboundStreamEventGuard>,
     },
 
     /// Request to get a value from the dht records
@@ -1077,16 +1076,14 @@ where
                     }
                     Poll::Ready(Some(Ok(KadRequestMsg::AddProvider { key, provider }))) => {
                         let ready = Arc::new(AtomicBool::new(false));
-                        let guard = InboundStreamEventGuard {
-                            ready: ready.clone(),
-                            waker: Some(cx.waker().clone()),
-                        };
-                        let next_state = Box::new(InboundSubstreamState::WaitingMessage {
-                            first: false,
-                            connection_id,
-                            substream,
+                        let guard = Arc::new(InboundStreamEventGuard {
+                            ready,
+                            waker: Mutex::new(Some(cx.waker().clone())),
                         });
-                        *this = InboundSubstreamState::PendingStateTransition { ready, next_state };
+                        *this = InboundSubstreamState::PendingProcessing {
+                            weak_guard: Arc::downgrade(&guard),
+                            substream,
+                        };
 
                         return Poll::Ready(Some(ConnectionHandlerEvent::Custom(
                             KademliaHandlerEvent::AddProvider {
@@ -1145,11 +1142,22 @@ where
 
                     return Poll::Pending;
                 }
-                InboundSubstreamState::PendingStateTransition { ready, next_state } => {
-                    *this = if ready.load(Ordering::Acquire) {
-                        *next_state
+                InboundSubstreamState::PendingProcessing {
+                    weak_guard,
+                    substream,
+                } => {
+                    *this = if let Some(guard) = weak_guard.upgrade() {
+                        let old_waker = guard.waker.lock().replace(cx.waker().clone());
+                        if old_waker.is_none() || guard.ready.load(Ordering::Acquire) {
+                            return Poll::Ready(None);
+                        } else {
+                            InboundSubstreamState::PendingProcessing {
+                                weak_guard,
+                                substream,
+                            }
+                        }
                     } else {
-                        InboundSubstreamState::PendingStateTransition { ready, next_state }
+                        return Poll::Ready(None);
                     };
 
                     return Poll::Pending;

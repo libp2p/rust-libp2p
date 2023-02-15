@@ -1745,7 +1745,7 @@ where
         &mut self,
         key: record::Key,
         provider: KadPeer,
-        guard: InboundStreamEventGuard,
+        guard: Arc<InboundStreamEventGuard>,
     ) {
         if &provider.node_id != self.kbuckets.local_key().preimage() {
             let record = ProviderRecord {
@@ -1777,7 +1777,7 @@ where
                             KademliaEvent::InboundRequest {
                                 request: InboundRequest::AddProvider {
                                     record: Some(record),
-                                    guard: Some(Arc::new(guard)),
+                                    guard: Some(guard),
                                 },
                             },
                         ));

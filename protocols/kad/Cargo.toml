@@ -20,6 +20,7 @@ futures = "0.3.26"
 log = "0.4"
 libp2p-core = { version = "0.39.0", path = "../../core" }
 libp2p-swarm = { version = "0.42.0", path = "../../swarm" }
+parking_lot = "0.12.0"
 prost = "0.11"
 rand = "0.8"
 sha2 = "0.10.0"
