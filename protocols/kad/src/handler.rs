@@ -209,6 +209,7 @@ enum InboundSubstreamState<TUserData> {
         Option<Waker>,
     ),
     PendingProcessing {
+        connection_id: UniqueConnecId,
         weak_guard: Weak<InboundStreamEventGuard>,
         substream: KadInStreamSink<NegotiatedSubstream>,
     },
@@ -1081,6 +1082,7 @@ where
                             waker: Mutex::new(Some(cx.waker().clone())),
                         });
                         *this = InboundSubstreamState::PendingProcessing {
+                            connection_id,
                             weak_guard: Arc::downgrade(&guard),
                             substream,
                         };
@@ -1143,24 +1145,34 @@ where
                     return Poll::Pending;
                 }
                 InboundSubstreamState::PendingProcessing {
+                    connection_id,
                     weak_guard,
                     substream,
                 } => {
-                    *this = if let Some(guard) = weak_guard.upgrade() {
+                    if let Some(guard) = weak_guard.upgrade() {
                         let old_waker = guard.waker.lock().replace(cx.waker().clone());
                         if old_waker.is_none() || guard.ready.load(Ordering::Acquire) {
-                            return Poll::Ready(None);
+                            *this = InboundSubstreamState::WaitingMessage {
+                                first: false,
+                                connection_id,
+                                substream,
+                            };
                         } else {
-                            InboundSubstreamState::PendingProcessing {
+                            *this = InboundSubstreamState::PendingProcessing {
+                                connection_id,
                                 weak_guard,
                                 substream,
-                            }
+                            };
+
+                            return Poll::Pending;
                         }
                     } else {
-                        return Poll::Ready(None);
-                    };
-
-                    return Poll::Pending;
+                        *this = InboundSubstreamState::WaitingMessage {
+                            first: false,
+                            connection_id,
+                            substream,
+                        };
+                    }
                 }
                 InboundSubstreamState::PendingSend(id, mut substream, msg) => {
                     match substream.poll_ready_unpin(cx) {
