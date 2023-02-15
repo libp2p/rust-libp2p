@@ -57,13 +57,13 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
-mod connection;
 mod config;
+mod connection;
 mod provider;
 mod transport;
 
-pub use connection::{Connecting, Connection, Substream};
 pub use config::Config;
+pub use connection::{Connecting, Connection, Substream};
 #[cfg(feature = "async-std")]
 pub use provider::async_std;
 #[cfg(feature = "tokio")]

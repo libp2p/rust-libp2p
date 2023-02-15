@@ -20,7 +20,7 @@
 
 use crate::config::{Config, QuinnConfig};
 use crate::provider::Provider;
-use crate::{Connecting, ConnectError, Connection, Error};
+use crate::{ConnectError, Connecting, Connection, Error};
 
 use futures::future::BoxFuture;
 use futures::ready;
@@ -89,7 +89,11 @@ impl<P: Provider> GenTransport<P> {
         }
     }
     /// Create a new [`quinn::Endpoint`] with the given configs.
-    fn new_endpoint(endpoint_config: quinn::EndpointConfig, server_config: Option<quinn::ServerConfig>, socket_addr: SocketAddr) -> Result<quinn::Endpoint, Error> {
+    fn new_endpoint(
+        endpoint_config: quinn::EndpointConfig,
+        server_config: Option<quinn::ServerConfig>,
+        socket_addr: SocketAddr,
+    ) -> Result<quinn::Endpoint, Error> {
         let socket = UdpSocket::bind(socket_addr)?;
         let endpoint = quinn::Endpoint::new(endpoint_config, server_config, socket, P::runtime())?;
         Ok(endpoint)
@@ -185,7 +189,8 @@ impl<P: Provider> Transport for GenTransport<P> {
                             SocketFamily::Ipv6 => SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0),
                         };
                         let endpoint_config = self.quinn_config.endpoint_config.clone();
-                        let endpoint = Self::new_endpoint(endpoint_config, None, listen_socket_addr)?;
+                        let endpoint =
+                            Self::new_endpoint(endpoint_config, None, listen_socket_addr)?;
 
                         vacant.insert(endpoint.clone());
                         endpoint
@@ -211,7 +216,8 @@ impl<P: Provider> Transport for GenTransport<P> {
             // This `"l"` seems necessary because an empty string is an invalid domain
             // name. While we don't use domain names, the underlying rustls library
             // is based upon the assumption that we do.
-            let connecting = endpoint.connect_with(client_config, socket_addr, "l")
+            let connecting = endpoint
+                .connect_with(client_config, socket_addr, "l")
                 .map_err(ConnectError)?;
             Connecting::new(connecting, handshake_timeout).await
         }))
@@ -349,11 +355,9 @@ impl<P: Provider> Listener<P> {
         loop {
             match ready!(P::poll_if_event(if_watcher, cx)) {
                 Ok(IfEvent::Up(inet)) => {
-                    if let Some(listen_addr) = ip_to_listenaddr(
-                        &endpoint_addr,
-                        inet.addr(),
-                        self.version,
-                    ) {
+                    if let Some(listen_addr) =
+                        ip_to_listenaddr(&endpoint_addr, inet.addr(), self.version)
+                    {
                         log::debug!("New listen address: {}", listen_addr);
                         return Poll::Ready(TransportEvent::NewAddress {
                             listener_id: self.listener_id,
@@ -362,11 +366,9 @@ impl<P: Provider> Listener<P> {
                     }
                 }
                 Ok(IfEvent::Down(inet)) => {
-                    if let Some(listen_addr) = ip_to_listenaddr(
-                        &endpoint_addr,
-                        inet.addr(),
-                        self.version,
-                    ) {
+                    if let Some(listen_addr) =
+                        ip_to_listenaddr(&endpoint_addr, inet.addr(), self.version)
+                    {
                         log::debug!("Expired listen address: {}", listen_addr);
                         return Poll::Ready(TransportEvent::AddressExpired {
                             listener_id: self.listener_id,

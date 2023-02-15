@@ -22,7 +22,10 @@
 
 use crate::{Connection, ConnectionError, Error};
 
-use futures::{prelude::*, future::{Either, select, Select}};
+use futures::{
+    future::{select, Either, Select},
+    prelude::*,
+};
 use futures_timer::Delay;
 use libp2p_core::PeerId;
 use std::{

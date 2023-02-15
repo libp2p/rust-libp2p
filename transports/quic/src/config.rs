@@ -19,10 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use quinn::VarInt;
-use std::{
-    sync::Arc,
-    time::Duration,
-};
+use std::{sync::Arc, time::Duration};
 
 /// Config for the transport.
 #[derive(Clone)]
