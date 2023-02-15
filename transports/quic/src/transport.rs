@@ -59,7 +59,7 @@ use std::{
 /// See <https://github.com/multiformats/multiaddr/issues/145>.
 #[derive(Debug)]
 pub struct GenTransport<P: Provider> {
-    /// Config for the inner [`quinn_proto`] structs.
+    /// Config for the inner [`quinn`] structs.
     quinn_config: QuinnConfig,
     /// Timeout for the [`Connecting`] future.
     handshake_timeout: Duration,

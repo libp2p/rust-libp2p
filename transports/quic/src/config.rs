@@ -36,7 +36,7 @@ pub struct Config {
     /// Must be set lower than the idle_timeout of both
     /// peers to be effective.
     ///
-    /// See [`quinn_proto::TransportConfig::keep_alive_interval`] for more
+    /// See [`quinn::TransportConfig::keep_alive_interval`] for more
     /// info.
     pub keep_alive_interval: Duration,
     /// Maximum number of incoming bidirectional streams that may be open
@@ -60,9 +60,9 @@ pub struct Config {
     /// As client the version is chosen based on the remote's address.
     pub support_draft_29: bool,
 
-    /// TLS client config for the inner [`quinn_proto::ClientConfig`].
+    /// TLS client config for the inner [`quinn::ClientConfig`].
     client_tls_config: Arc<rustls::ClientConfig>,
-    /// TLS server config for the inner [`quinn_proto::ServerConfig`].
+    /// TLS server config for the inner [`quinn::ServerConfig`].
     server_tls_config: Arc<rustls::ServerConfig>,
 }
 
@@ -87,7 +87,7 @@ impl Config {
     }
 }
 
-/// Represents the inner configuration for [`quinn_proto`].
+/// Represents the inner configuration for [`quinn`].
 #[derive(Debug, Clone)]
 pub struct QuinnConfig {
     pub(crate) client_config: quinn::ClientConfig,
