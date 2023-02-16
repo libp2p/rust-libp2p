@@ -8,6 +8,7 @@ updates:
     commit-message:
       prefix: "deps"
     rebase-strategy: "disabled"
+    versioning-strategy: "widen"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

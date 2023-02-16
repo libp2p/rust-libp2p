@@ -19,6 +19,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::ConnectionId;
 use libp2p_core::connection::Endpoint;
 use libp2p_core::multiaddr::Protocol;
 use libp2p_core::multihash::Multihash;
@@ -44,6 +45,7 @@ pub struct DialOpts {
     extend_addresses_through_behaviour: bool,
     role_override: Endpoint,
     dial_concurrency_factor_override: Option<NonZeroU8>,
+    connection_id: ConnectionId,
 }
 
 impl DialOpts {
@@ -82,6 +84,14 @@ impl DialOpts {
     /// Get the [`PeerId`] specified in a [`DialOpts`] if any.
     pub fn get_peer_id(&self) -> Option<PeerId> {
         self.peer_id
+    }
+
+    /// Get the [`ConnectionId`] of this dial attempt.
+    ///
+    /// All future events of this dial will be associated with this ID.
+    /// See [`DialFailure`](crate::DialFailure) and [`ConnectionEstablished`](crate::behaviour::ConnectionEstablished).
+    pub fn connection_id(&self) -> ConnectionId {
+        self.connection_id
     }
 
     /// Retrieves the [`PeerId`] from the [`DialOpts`] if specified or otherwise tries to parse it
@@ -208,6 +218,7 @@ impl WithPeerId {
             extend_addresses_through_behaviour: true,
             role_override: self.role_override,
             dial_concurrency_factor_override: self.dial_concurrency_factor_override,
+            connection_id: ConnectionId::next(),
         }
     }
 }
@@ -263,6 +274,7 @@ impl WithPeerIdWithAddresses {
             extend_addresses_through_behaviour: self.extend_addresses_through_behaviour,
             role_override: self.role_override,
             dial_concurrency_factor_override: self.dial_concurrency_factor_override,
+            connection_id: ConnectionId::next(),
         }
     }
 }
@@ -306,6 +318,7 @@ impl WithoutPeerIdWithAddress {
             extend_addresses_through_behaviour: false,
             role_override: self.role_override,
             dial_concurrency_factor_override: None,
+            connection_id: ConnectionId::next(),
         }
     }
 }
