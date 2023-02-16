@@ -405,7 +405,7 @@ impl NetworkBehaviour for Behaviour {
                 self.queued_events
                     .push_back(NetworkBehaviourAction::Dial { opts });
             }
-            Either::Right(Either::Left(handler::direct::Event::DirectConnectionEstablished)) => {
+            Either::Right(handler::direct::Event::DirectConnectionEstablished) => {
                 self.queued_events.extend([
                     NetworkBehaviourAction::NotifyHandler {
                         peer_id: event_source,
