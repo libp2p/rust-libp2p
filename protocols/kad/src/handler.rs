@@ -164,7 +164,7 @@ enum OutboundSubstreamState<TUserData> {
     /// An error happened on the substream and we should report the error to the user.
     ReportError(KademliaHandlerQueryErr, TUserData),
     /// The substream is available for future reuse.
-    Available(KadOutStreamSink<NegotiatedSubstream>),
+    Idle(KadOutStreamSink<NegotiatedSubstream>),
     /// The substream is complete and will not perform any more work.
     Done,
     Poisoned,
@@ -784,9 +784,8 @@ where
             return Poll::Ready(event);
         }
 
-        while !self.pending_substream_requests.is_empty()
-            && self.outbound_substreams.len() + self.num_requested_outbound_streams
-                < MAX_NUM_SUBSTREAMS
+        while self.outbound_substreams.len() + self.num_requested_outbound_streams
+            < MAX_NUM_SUBSTREAMS
         {
             if let Some((msg, user_data)) = self.pending_substream_requests.pop_front() {
                 if let Some(substream) = self.reusable_outgoing_substreams.pop() {
@@ -805,6 +804,8 @@ where
                         protocol,
                     });
                 }
+            } else {
+                break;
             }
         }
 
@@ -929,7 +930,7 @@ where
                             if let Some(user_data) = user_data {
                                 *this = OutboundSubstreamState::WaitingAnswer(substream, user_data);
                             } else {
-                                *this = OutboundSubstreamState::Available(substream);
+                                *this = OutboundSubstreamState::Idle(substream);
                             }
                         }
                         Poll::Pending => {
@@ -952,7 +953,7 @@ where
                 OutboundSubstreamState::WaitingAnswer(mut substream, user_data) => {
                     match substream.poll_next_unpin(cx) {
                         Poll::Ready(Some(Ok(msg))) => {
-                            *this = OutboundSubstreamState::Available(substream);
+                            *this = OutboundSubstreamState::Idle(substream);
                             let event = process_kad_response(msg, user_data);
 
                             return Poll::Ready(Some(ConnectionHandlerEvent::Custom(event)));
@@ -989,7 +990,7 @@ where
 
                     return Poll::Ready(Some(ConnectionHandlerEvent::Custom(event)));
                 }
-                OutboundSubstreamState::Available(substream) => {
+                OutboundSubstreamState::Idle(substream) => {
                     *this = OutboundSubstreamState::Done;
                     let event = KademliaHandlerEvent::Available { substream };
 
