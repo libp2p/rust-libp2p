@@ -854,7 +854,7 @@ where
             }
         }
 
-        return Err((msg, user_data));
+        Err((msg, user_data))
     }
 }
 
