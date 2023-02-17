@@ -768,30 +768,17 @@ where
             return Poll::Ready(event);
         }
 
-        'outer: while self.outbound_substreams.len() + self.num_requested_outbound_streams
+        while self.outbound_substreams.len() + self.num_requested_outbound_streams
             < MAX_NUM_SUBSTREAMS
         {
             if let Some((msg, user_data)) = self.pending_substream_requests.pop_front() {
-                // Search for outbound substream waiting to be reused first.
-                for outbound_substream in self.outbound_substreams.iter_mut() {
-                    match std::mem::replace(outbound_substream, OutboundSubstreamState::Poisoned) {
-                        OutboundSubstreamState::Idle(substream, waker) => {
-                            *outbound_substream =
-                                OutboundSubstreamState::PendingSend(substream, msg, user_data);
-                            waker.wake();
-                            continue 'outer;
-                        }
-                        other => {
-                            *outbound_substream = other;
-                        }
-                    }
+                if let Err(info) = self.try_reuse_outbound_stream(msg, user_data) {
+                    // If reuse wasn't possible, request new substream.
+                    self.num_requested_outbound_streams += 1;
+                    return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
+                        protocol: SubstreamProtocol::new(self.config.protocol_config.clone(), info),
+                    });
                 }
-
-                // If not found request new substream.
-                self.num_requested_outbound_streams += 1;
-                let protocol =
-                    SubstreamProtocol::new(self.config.protocol_config.clone(), (msg, user_data));
-                return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest { protocol });
             } else {
                 break;
             }
@@ -846,6 +833,28 @@ where
         }
 
         debug_assert!(false, "Cannot find inbound substream for {request_id:?}")
+    }
+
+    fn try_reuse_outbound_stream(
+        &mut self,
+        msg: KadRequestMsg,
+        user_data: Option<TUserData>,
+    ) -> Result<(), (KadRequestMsg, Option<TUserData>)> {
+        // Search for idle outbound substream waiting to be reused.
+        for state in self.outbound_substreams.iter_mut() {
+            match std::mem::replace(state, OutboundSubstreamState::Poisoned) {
+                OutboundSubstreamState::Idle(substream, waker) => {
+                    *state = OutboundSubstreamState::PendingSend(substream, msg, user_data);
+                    waker.wake();
+                    return Ok(());
+                }
+                other => {
+                    *state = other;
+                }
+            }
+        }
+
+        return Err((msg, user_data));
     }
 }
 
