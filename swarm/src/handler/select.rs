@@ -28,10 +28,7 @@ use crate::upgrade::SendWrapper;
 
 use either::Either;
 use futures::future;
-use libp2p_core::{
-    upgrade::{NegotiationError, ProtocolError, SelectUpgrade, UpgradeError},
-    ConnectedPoint, PeerId,
-};
+use libp2p_core::{upgrade::SelectUpgrade, ConnectedPoint, PeerId};
 use std::{cmp, task::Context, task::Poll};
 
 /// Implementation of `IntoConnectionHandler` that combines two protocols into one.
@@ -175,17 +172,10 @@ where
             }),
             DialUpgradeError {
                 info: Either::Left(info),
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(err)),
+                error: ConnectionHandlerUpgrErr::Upgrade(Either::Left(err)),
             } => Either::Left(DialUpgradeError {
                 info,
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(err)),
-            }),
-            DialUpgradeError {
-                info: Either::Left(info),
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(Either::Left(err))),
-            } => Either::Left(DialUpgradeError {
-                info,
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(err)),
+                error: ConnectionHandlerUpgrErr::Upgrade(err),
             }),
             DialUpgradeError {
                 info: Either::Right(info),
@@ -203,17 +193,10 @@ where
             }),
             DialUpgradeError {
                 info: Either::Right(info),
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(err)),
+                error: ConnectionHandlerUpgrErr::Upgrade(Either::Right(err)),
             } => Either::Right(DialUpgradeError {
                 info,
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(err)),
-            }),
-            DialUpgradeError {
-                info: Either::Right(info),
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(Either::Right(err))),
-            } => Either::Right(DialUpgradeError {
-                info,
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(err)),
+                error: ConnectionHandlerUpgrErr::Upgrade(err),
             }),
             _ => panic!("Wrong API usage; the upgrade error doesn't match the outbound open info"),
         }
@@ -262,70 +245,31 @@ where
                         error: ConnectionHandlerUpgrErr::Timeout,
                     }));
             }
-            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)) => {
+            ConnectionHandlerUpgrErr::NegotiationFailed => {
                 self.proto1
                     .on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
                         info: i1,
-                        error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(
-                            NegotiationError::Failed,
-                        )),
+                        error: ConnectionHandlerUpgrErr::NegotiationFailed,
                     }));
 
                 self.proto2
                     .on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
                         info: i2,
-                        error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(
-                            NegotiationError::Failed,
-                        )),
+                        error: ConnectionHandlerUpgrErr::NegotiationFailed,
                     }));
             }
-            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(
-                NegotiationError::ProtocolError(e),
-            )) => {
-                let (e1, e2);
-                match e {
-                    ProtocolError::IoError(e) => {
-                        e1 = NegotiationError::ProtocolError(ProtocolError::IoError(
-                            e.kind().into(),
-                        ));
-                        e2 = NegotiationError::ProtocolError(ProtocolError::IoError(e))
-                    }
-                    ProtocolError::InvalidMessage => {
-                        e1 = NegotiationError::ProtocolError(ProtocolError::InvalidMessage);
-                        e2 = NegotiationError::ProtocolError(ProtocolError::InvalidMessage)
-                    }
-                    ProtocolError::InvalidProtocol => {
-                        e1 = NegotiationError::ProtocolError(ProtocolError::InvalidProtocol);
-                        e2 = NegotiationError::ProtocolError(ProtocolError::InvalidProtocol)
-                    }
-                    ProtocolError::TooManyProtocols => {
-                        e1 = NegotiationError::ProtocolError(ProtocolError::TooManyProtocols);
-                        e2 = NegotiationError::ProtocolError(ProtocolError::TooManyProtocols)
-                    }
-                }
+            ConnectionHandlerUpgrErr::Upgrade(Either::Left(e)) => {
                 self.proto1
                     .on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
                         info: i1,
-                        error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(e1)),
+                        error: ConnectionHandlerUpgrErr::Upgrade(e),
                     }));
+            }
+            ConnectionHandlerUpgrErr::Upgrade(Either::Right(e)) => {
                 self.proto2
                     .on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
                         info: i2,
-                        error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(e2)),
-                    }));
-            }
-            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(Either::Left(e))) => {
-                self.proto1
-                    .on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
-                        info: i1,
-                        error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)),
-                    }));
-            }
-            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(Either::Right(e))) => {
-                self.proto2
-                    .on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {
-                        info: i2,
-                        error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)),
+                        error: ConnectionHandlerUpgrErr::Upgrade(e),
                     }));
             }
         }

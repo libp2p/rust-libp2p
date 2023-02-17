@@ -71,6 +71,11 @@
 
 - Remove `ConnectionId::new`. Manually creating `ConnectionId`s is now unsupported. See [PR 3327].
 
+- Close connections on `multistream-select` protocol violations.
+  As a consequence, `ConnectionHandlerUpgrErr::Upgrade` directly contains the upgrade error now.
+  Additionally, `ConnectionHandlerUpgrErr::NegotiationFailed` is introduced to represent nodes failing to agree on a protocol for a stream.
+  See [PR XXXX].
+
 [PR 3364]: https://github.com/libp2p/rust-libp2p/pull/3364
 [PR 3170]: https://github.com/libp2p/rust-libp2p/pull/3170
 [PR 3134]: https://github.com/libp2p/rust-libp2p/pull/3134
@@ -84,6 +89,7 @@
 [PR 3373]: https://github.com/libp2p/rust-libp2p/pull/3373
 [PR 3374]: https://github.com/libp2p/rust-libp2p/pull/3374
 [PR 3375]: https://github.com/libp2p/rust-libp2p/pull/3375
+[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
 
 # 0.41.1
 

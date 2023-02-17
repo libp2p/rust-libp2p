@@ -31,7 +31,6 @@ pub use protocol::{ProtocolSupport, RequestProtocol, ResponseProtocol};
 
 use futures::{channel::oneshot, future::BoxFuture, prelude::*, stream::FuturesUnordered};
 use instant::Instant;
-use libp2p_core::upgrade::{NegotiationError, UpgradeError};
 use libp2p_swarm::{
     handler::{ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive},
     SubstreamProtocol,
@@ -148,7 +147,7 @@ where
             ConnectionHandlerUpgrErr::Timeout => {
                 self.pending_events.push_back(Event::OutboundTimeout(info));
             }
-            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)) => {
+            ConnectionHandlerUpgrErr::NegotiationFailed => {
                 // The remote merely doesn't support the protocol(s) we requested.
                 // This is no reason to close the connection, which may
                 // successfully communicate with other protocols already.
@@ -175,7 +174,7 @@ where
             ConnectionHandlerUpgrErr::Timeout => {
                 self.pending_events.push_back(Event::InboundTimeout(info))
             }
-            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)) => {
+            ConnectionHandlerUpgrErr::NegotiationFailed => {
                 // The local peer merely doesn't support the protocol(s) requested.
                 // This is no reason to close the connection, which may
                 // successfully communicate with other protocols already.

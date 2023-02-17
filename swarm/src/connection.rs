@@ -41,7 +41,9 @@ use instant::Instant;
 use libp2p_core::connection::ConnectedPoint;
 use libp2p_core::multiaddr::Multiaddr;
 use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerEvent, StreamMuxerExt, SubstreamBox};
-use libp2p_core::upgrade::{InboundUpgradeApply, OutboundUpgradeApply};
+use libp2p_core::upgrade::{
+    InboundUpgradeApply, NegotiationError, OutboundUpgradeApply, ProtocolError,
+};
 use libp2p_core::{upgrade, UpgradeError};
 use libp2p_core::{Endpoint, PeerId};
 use std::future::Future;
@@ -238,17 +240,20 @@ where
             // In case the [`ConnectionHandler`] can not make any more progress, poll the negotiating outbound streams.
             match negotiating_out.poll_next_unpin(cx) {
                 Poll::Pending | Poll::Ready(None) => {}
-                Poll::Ready(Some((info, Ok(protocol)))) => {
+                Poll::Ready(Some((info, Ok(Ok(protocol))))) => {
                     handler.on_connection_event(ConnectionEvent::FullyNegotiatedOutbound(
                         FullyNegotiatedOutbound { protocol, info },
                     ));
                     continue;
                 }
-                Poll::Ready(Some((info, Err(error)))) => {
+                Poll::Ready(Some((info, Ok(Err(error))))) => {
                     handler.on_connection_event(ConnectionEvent::DialUpgradeError(
                         DialUpgradeError { info, error },
                     ));
                     continue;
+                }
+                Poll::Ready(Some((_, Err(e)))) => {
+                    return Poll::Ready(Err(ConnectionError::Protocol(e)))
                 }
             }
 
@@ -256,17 +261,20 @@ where
             // make any more progress, poll the negotiating inbound streams.
             match negotiating_in.poll_next_unpin(cx) {
                 Poll::Pending | Poll::Ready(None) => {}
-                Poll::Ready(Some((info, Ok(protocol)))) => {
+                Poll::Ready(Some((info, Ok(Ok(protocol))))) => {
                     handler.on_connection_event(ConnectionEvent::FullyNegotiatedInbound(
                         FullyNegotiatedInbound { protocol, info },
                     ));
                     continue;
                 }
-                Poll::Ready(Some((info, Err(error)))) => {
+                Poll::Ready(Some((info, Ok(Err(error))))) => {
                     handler.on_connection_event(ConnectionEvent::ListenUpgradeError(
                         ListenUpgradeError { info, error },
                     ));
                     continue;
+                }
+                Poll::Ready(Some((_, Err(e)))) => {
+                    return Poll::Ready(Err(ConnectionError::Protocol(e)))
                 }
             }
 
@@ -464,7 +472,7 @@ where
 {
     type Output = (
         UserData,
-        Result<UpgradeOutput, ConnectionHandlerUpgrErr<TUpgradeError>>,
+        Result<Result<UpgradeOutput, ConnectionHandlerUpgrErr<TUpgradeError>>, ProtocolError>,
     );
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
@@ -474,7 +482,7 @@ where
                     self.user_data
                         .take()
                         .expect("Future not to be polled again once ready."),
-                    Err(ConnectionHandlerUpgrErr::Timeout),
+                    Ok(Err(ConnectionHandlerUpgrErr::Timeout)),
                 ))
             }
 
@@ -486,14 +494,28 @@ where
                 self.user_data
                     .take()
                     .expect("Future not to be polled again once ready."),
-                Ok(upgrade),
+                Ok(Ok(upgrade)),
             )),
-            Poll::Ready(Err(err)) => Poll::Ready((
+            Poll::Ready(Err(UpgradeError::Apply(err))) => Poll::Ready((
                 self.user_data
                     .take()
                     .expect("Future not to be polled again once ready."),
-                Err(ConnectionHandlerUpgrErr::Upgrade(err)),
+                Ok(Err(ConnectionHandlerUpgrErr::Upgrade(err))),
             )),
+            Poll::Ready(Err(UpgradeError::Select(NegotiationError::Failed))) => Poll::Ready((
+                self.user_data
+                    .take()
+                    .expect("Future not to be polled again once ready."),
+                Ok(Err(ConnectionHandlerUpgrErr::NegotiationFailed)),
+            )),
+            Poll::Ready(Err(UpgradeError::Select(NegotiationError::ProtocolError(err)))) => {
+                Poll::Ready((
+                    self.user_data
+                        .take()
+                        .expect("Future not to be polled again once ready."),
+                    Err(err),
+                ))
+            }
             Poll::Pending => Poll::Pending,
         }
     }

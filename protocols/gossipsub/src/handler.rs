@@ -25,7 +25,6 @@ use asynchronous_codec::Framed;
 use futures::prelude::*;
 use futures::StreamExt;
 use instant::Instant;
-use libp2p_core::upgrade::{NegotiationError, UpgradeError};
 use libp2p_swarm::handler::{
     ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr,
     DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound, KeepAlive,
@@ -299,28 +298,21 @@ impl ConnectionHandler for Handler {
                     Some(HandlerError::NegotiationTimeout)
                 }
                 // There was an error post negotiation, close the connection.
-                ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)) => Some(e),
-                ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(negotiation_error)) => {
-                    match negotiation_error {
-                        NegotiationError::Failed => {
-                            // The protocol is not supported
-                            self.protocol_unsupported = true;
-                            if !self.peer_kind_sent {
-                                self.peer_kind_sent = true;
-                                // clear all substreams so the keep alive returns false
-                                self.inbound_substream = None;
-                                self.outbound_substream = None;
-                                self.keep_alive = KeepAlive::No;
-                                return Poll::Ready(ConnectionHandlerEvent::Custom(
-                                    HandlerEvent::PeerKind(PeerKind::NotSupported),
-                                ));
-                            } else {
-                                None
-                            }
-                        }
-                        NegotiationError::ProtocolError(e) => {
-                            Some(HandlerError::NegotiationProtocolError(e))
-                        }
+                ConnectionHandlerUpgrErr::Upgrade(e) => Some(e),
+                ConnectionHandlerUpgrErr::NegotiationFailed => {
+                    // The protocol is not supported
+                    self.protocol_unsupported = true;
+                    if !self.peer_kind_sent {
+                        self.peer_kind_sent = true;
+                        // clear all substreams so the keep alive returns false
+                        self.inbound_substream = None;
+                        self.outbound_substream = None;
+                        self.keep_alive = KeepAlive::No;
+                        return Poll::Ready(ConnectionHandlerEvent::Custom(
+                            HandlerEvent::PeerKind(PeerKind::NotSupported),
+                        ));
+                    } else {
+                        None
                     }
                 }
             };

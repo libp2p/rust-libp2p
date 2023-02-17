@@ -49,7 +49,7 @@ mod select;
 pub use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper, UpgradeInfoSend};
 
 use instant::Instant;
-use libp2p_core::{upgrade::UpgradeError, ConnectedPoint, Multiaddr, PeerId};
+use libp2p_core::{ConnectedPoint, Multiaddr, PeerId};
 use std::{cmp::Ordering, error, fmt, task::Context, task::Poll, time::Duration};
 
 pub use map_in::MapInEvent;
@@ -438,19 +438,22 @@ pub enum ConnectionHandlerUpgrErr<TUpgrErr> {
     /// There was an error in the timer used.
     Timer,
     /// Error while upgrading the substream to the protocol we want.
-    Upgrade(UpgradeError<TUpgrErr>),
+    Upgrade(TUpgrErr),
+    /// Protocol negotiation failed, in other words, the two nodes could not agree on a protocol for this stream.
+    NegotiationFailed,
 }
 
 impl<TUpgrErr> ConnectionHandlerUpgrErr<TUpgrErr> {
     /// Map the inner [`UpgradeError`] type.
     pub fn map_upgrade_err<F, E>(self, f: F) -> ConnectionHandlerUpgrErr<E>
     where
-        F: FnOnce(UpgradeError<TUpgrErr>) -> UpgradeError<E>,
+        F: FnOnce(TUpgrErr) -> E,
     {
         match self {
             ConnectionHandlerUpgrErr::Timeout => ConnectionHandlerUpgrErr::Timeout,
             ConnectionHandlerUpgrErr::Timer => ConnectionHandlerUpgrErr::Timer,
             ConnectionHandlerUpgrErr::Upgrade(e) => ConnectionHandlerUpgrErr::Upgrade(f(e)),
+            ConnectionHandlerUpgrErr::NegotiationFailed => ConnectionHandlerUpgrErr::NegotiationFailed,
         }
     }
 }
@@ -468,6 +471,7 @@ where
                 write!(f, "Timer error while opening a substream")
             }
             ConnectionHandlerUpgrErr::Upgrade(err) => write!(f, "{err}"),
+            ConnectionHandlerUpgrErr::NegotiationFailed => write!(f, "Protocol negotiation failed"),
         }
     }
 }
@@ -481,6 +485,7 @@ where
             ConnectionHandlerUpgrErr::Timeout => None,
             ConnectionHandlerUpgrErr::Timer => None,
             ConnectionHandlerUpgrErr::Upgrade(err) => Some(err),
+            ConnectionHandlerUpgrErr::NegotiationFailed => None,
         }
     }
 }

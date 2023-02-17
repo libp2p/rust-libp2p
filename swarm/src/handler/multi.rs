@@ -29,7 +29,7 @@ use crate::handler::{
 use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, UpgradeInfoSend};
 use crate::NegotiatedSubstream;
 use futures::{future::BoxFuture, prelude::*};
-use libp2p_core::upgrade::{NegotiationError, ProtocolError, ProtocolName, UpgradeError};
+use libp2p_core::upgrade::ProtocolName;
 use libp2p_core::{ConnectedPoint, PeerId};
 use rand::Rng;
 use std::{
@@ -116,94 +116,25 @@ where
                     }
                 }
             }
-            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(NegotiationError::Failed)) => {
+            ConnectionHandlerUpgrErr::NegotiationFailed => {
                 for (k, h) in &mut self.handlers {
                     if let Some(i) = info.take(k) {
                         h.on_connection_event(ConnectionEvent::ListenUpgradeError(
                             ListenUpgradeError {
                                 info: i,
-                                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(
-                                    NegotiationError::Failed,
-                                )),
+                                error: ConnectionHandlerUpgrErr::NegotiationFailed,
                             },
                         ));
                     }
                 }
             }
-            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(
-                NegotiationError::ProtocolError(e),
-            )) => match e {
-                ProtocolError::IoError(e) => {
-                    for (k, h) in &mut self.handlers {
-                        if let Some(i) = info.take(k) {
-                            let e = NegotiationError::ProtocolError(ProtocolError::IoError(
-                                e.kind().into(),
-                            ));
-                            h.on_connection_event(ConnectionEvent::ListenUpgradeError(
-                                ListenUpgradeError {
-                                    info: i,
-                                    error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(
-                                        e,
-                                    )),
-                                },
-                            ));
-                        }
-                    }
-                }
-                ProtocolError::InvalidMessage => {
-                    for (k, h) in &mut self.handlers {
-                        if let Some(i) = info.take(k) {
-                            let e = NegotiationError::ProtocolError(ProtocolError::InvalidMessage);
-                            h.on_connection_event(ConnectionEvent::ListenUpgradeError(
-                                ListenUpgradeError {
-                                    info: i,
-                                    error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(
-                                        e,
-                                    )),
-                                },
-                            ));
-                        }
-                    }
-                }
-                ProtocolError::InvalidProtocol => {
-                    for (k, h) in &mut self.handlers {
-                        if let Some(i) = info.take(k) {
-                            let e = NegotiationError::ProtocolError(ProtocolError::InvalidProtocol);
-                            h.on_connection_event(ConnectionEvent::ListenUpgradeError(
-                                ListenUpgradeError {
-                                    info: i,
-                                    error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(
-                                        e,
-                                    )),
-                                },
-                            ));
-                        }
-                    }
-                }
-                ProtocolError::TooManyProtocols => {
-                    for (k, h) in &mut self.handlers {
-                        if let Some(i) = info.take(k) {
-                            let e =
-                                NegotiationError::ProtocolError(ProtocolError::TooManyProtocols);
-                            h.on_connection_event(ConnectionEvent::ListenUpgradeError(
-                                ListenUpgradeError {
-                                    info: i,
-                                    error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(
-                                        e,
-                                    )),
-                                },
-                            ));
-                        }
-                    }
-                }
-            },
-            ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply((k, e))) => {
+            ConnectionHandlerUpgrErr::Upgrade((k, e)) => {
                 if let Some(h) = self.handlers.get_mut(&k) {
                     if let Some(i) = info.take(&k) {
                         h.on_connection_event(ConnectionEvent::ListenUpgradeError(
                             ListenUpgradeError {
                                 info: i,
-                                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(e)),
+                                error: ConnectionHandlerUpgrErr::Upgrade(e),
                             },
                         ));
                     }

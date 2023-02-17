@@ -254,12 +254,9 @@ impl Handler {
             <Self as ConnectionHandler>::OutboundProtocol,
         >,
     ) {
-        use libp2p_core::upgrade::UpgradeError;
-
         let err = err.map_upgrade_err(|e| match e {
-            UpgradeError::Select(e) => UpgradeError::Select(e),
-            UpgradeError::Apply(Either::Left(ioe)) => UpgradeError::Apply(ioe),
-            UpgradeError::Apply(Either::Right(ioe)) => UpgradeError::Apply(ioe),
+            Either::Left(ioe) => ioe,
+            Either::Right(ioe) => ioe,
         });
         self.events
             .push(ConnectionHandlerEvent::Custom(Event::IdentificationError(
@@ -366,9 +363,7 @@ impl ConnectionHandler for Handler {
                 Event::Identification(peer_id),
             )),
             Poll::Ready(Some(Err(err))) => Poll::Ready(ConnectionHandlerEvent::Custom(
-                Event::IdentificationError(ConnectionHandlerUpgrErr::Upgrade(
-                    libp2p_core::upgrade::UpgradeError::Apply(err),
-                )),
+                Event::IdentificationError(ConnectionHandlerUpgrErr::Upgrade(err)),
             )),
             Poll::Ready(None) | Poll::Pending => Poll::Pending,
         }

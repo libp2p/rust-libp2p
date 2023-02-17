@@ -21,6 +21,7 @@
 use crate::transport::TransportError;
 use crate::Multiaddr;
 use crate::{connection::ConnectionLimit, ConnectedPoint, PeerId};
+use libp2p_core::upgrade::ProtocolError;
 use std::{fmt, io};
 
 /// Errors that can occur in the context of an established `Connection`.
@@ -35,6 +36,11 @@ pub enum ConnectionError<THandlerErr> {
 
     /// The connection handler produced an error.
     Handler(THandlerErr),
+
+    /// A unrecoverable [`ProtocolError`] occurred on one of the streams of this connection.
+    ///
+    /// A protocol violation results in the entire connection being closed.
+    Protocol(ProtocolError),
 }
 
 impl<THandlerErr> fmt::Display for ConnectionError<THandlerErr>
@@ -48,6 +54,7 @@ where
                 write!(f, "Connection closed due to expired keep-alive timeout.")
             }
             ConnectionError::Handler(err) => write!(f, "Connection error: Handler error: {err}"),
+            ConnectionError::Protocol(_) => write!(f, "Unrecoverable protocol error occurred"),
         }
     }
 }
@@ -61,6 +68,7 @@ where
             ConnectionError::IO(err) => Some(err),
             ConnectionError::KeepAliveTimeout => None,
             ConnectionError::Handler(err) => Some(err),
+            ConnectionError::Protocol(err) => Some(err),
         }
     }
 }

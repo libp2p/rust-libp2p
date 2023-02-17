@@ -211,12 +211,11 @@ where
         let err = match err {
             ConnectionHandlerUpgrErr::Timeout => ConnectionHandlerUpgrErr::Timeout,
             ConnectionHandlerUpgrErr::Timer => ConnectionHandlerUpgrErr::Timer,
-            ConnectionHandlerUpgrErr::Upgrade(err) => {
-                ConnectionHandlerUpgrErr::Upgrade(err.map_err(|err| match err {
-                    Either::Left(e) => e,
-                    Either::Right(v) => void::unreachable(v),
-                }))
+            ConnectionHandlerUpgrErr::Upgrade(Either::Left(e)) => {
+                ConnectionHandlerUpgrErr::Upgrade(e)
             }
+            ConnectionHandlerUpgrErr::Upgrade(Either::Right(never)) => void::unreachable(never),
+            ConnectionHandlerUpgrErr::NegotiationFailed => ConnectionHandlerUpgrErr::NegotiationFailed,
         };
 
         inner.on_connection_event(ConnectionEvent::ListenUpgradeError(ListenUpgradeError {

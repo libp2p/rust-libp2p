@@ -26,7 +26,6 @@ use crate::handler::{
 use crate::upgrade::SendWrapper;
 use either::Either;
 use futures::future;
-use libp2p_core::upgrade::UpgradeError;
 use libp2p_core::{ConnectedPoint, PeerId};
 use std::task::{Context, Poll};
 
@@ -122,31 +121,17 @@ where
     fn transpose(self) -> Either<ListenUpgradeError<LIOI, LIP>, ListenUpgradeError<RIOI, RIP>> {
         match self {
             ListenUpgradeError {
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(Either::Left(error))),
+                error: ConnectionHandlerUpgrErr::Upgrade(Either::Left(error)),
                 info: Either::Left(info),
             } => Either::Left(ListenUpgradeError {
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(error)),
+                error: ConnectionHandlerUpgrErr::Upgrade(error),
                 info,
             }),
             ListenUpgradeError {
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(Either::Right(error))),
+                error: ConnectionHandlerUpgrErr::Upgrade(Either::Right(error)),
                 info: Either::Right(info),
             } => Either::Right(ListenUpgradeError {
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Apply(error)),
-                info,
-            }),
-            ListenUpgradeError {
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(error)),
-                info: Either::Left(info),
-            } => Either::Left(ListenUpgradeError {
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(error)),
-                info,
-            }),
-            ListenUpgradeError {
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(error)),
-                info: Either::Right(info),
-            } => Either::Right(ListenUpgradeError {
-                error: ConnectionHandlerUpgrErr::Upgrade(UpgradeError::Select(error)),
+                error: ConnectionHandlerUpgrErr::Upgrade(error),
                 info,
             }),
             ListenUpgradeError {
