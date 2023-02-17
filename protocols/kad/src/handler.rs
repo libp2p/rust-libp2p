@@ -101,9 +101,6 @@ pub struct KademliaHandler<TUserData> {
     /// Contains the request we want to send, and the user data if we expect an answer.
     pending_substream_requests: VecDeque<(KadRequestMsg, Option<TUserData>)>,
 
-    /// Outgoing substreams available for future reuse.
-    reusable_outgoing_substreams: Vec<KadOutStreamSink<NegotiatedSubstream>>,
-
     /// List of active inbound substreams with the state they are in.
     inbound_substreams: SelectAll<InboundSubstreamState<TUserData>>,
 
@@ -164,7 +161,7 @@ enum OutboundSubstreamState<TUserData> {
     /// An error happened on the substream and we should report the error to the user.
     ReportError(KademliaHandlerQueryErr, TUserData),
     /// The substream is available for future reuse.
-    Idle(KadOutStreamSink<NegotiatedSubstream>),
+    Idle(KadOutStreamSink<NegotiatedSubstream>, Waker),
     /// The substream is complete and will not perform any more work.
     Done,
     Poisoned,
@@ -354,12 +351,6 @@ pub enum KademliaHandlerEvent<TUserData> {
         /// The user data passed to the `PutValue`.
         user_data: TUserData,
     },
-
-    /// The substream is available for future reuse.
-    Available {
-        /// Substream to be reused for outgoing requests.
-        substream: KadOutStreamSink<NegotiatedSubstream>,
-    },
 }
 
 /// Error that can happen when requesting an RPC query.
@@ -540,7 +531,6 @@ where
             outbound_substreams: Default::default(),
             num_requested_outbound_streams: 0,
             pending_substream_requests: Default::default(),
-            reusable_outgoing_substreams: Default::default(),
             keep_alive,
             protocol_status: ProtocolStatus::Unconfirmed,
         }
@@ -770,40 +760,38 @@ where
             ));
         }
 
-        while let Poll::Ready(Some(event)) = self.outbound_substreams.poll_next_unpin(cx) {
-            if let ConnectionHandlerEvent::Custom(KademliaHandlerEvent::Available { substream }) =
-                event
-            {
-                self.reusable_outgoing_substreams.push(substream);
-            } else {
-                return Poll::Ready(event);
-            }
+        if let Poll::Ready(Some(event)) = self.outbound_substreams.poll_next_unpin(cx) {
+            return Poll::Ready(event);
         }
 
         if let Poll::Ready(Some(event)) = self.inbound_substreams.poll_next_unpin(cx) {
             return Poll::Ready(event);
         }
 
-        while self.outbound_substreams.len() + self.num_requested_outbound_streams
+        'outer: while self.outbound_substreams.len() + self.num_requested_outbound_streams
             < MAX_NUM_SUBSTREAMS
         {
             if let Some((msg, user_data)) = self.pending_substream_requests.pop_front() {
-                if let Some(substream) = self.reusable_outgoing_substreams.pop() {
-                    self.outbound_substreams
-                        .push(OutboundSubstreamState::PendingSend(
-                            substream, msg, user_data,
-                        ));
-                    cx.waker().wake_by_ref();
-                } else {
-                    self.num_requested_outbound_streams += 1;
-                    let protocol = SubstreamProtocol::new(
-                        self.config.protocol_config.clone(),
-                        (msg, user_data),
-                    );
-                    return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest {
-                        protocol,
-                    });
+                // Search for outbound substream waiting to be reused first.
+                for outbound_substream in self.outbound_substreams.iter_mut() {
+                    match std::mem::replace(outbound_substream, OutboundSubstreamState::Poisoned) {
+                        OutboundSubstreamState::Idle(substream, waker) => {
+                            *outbound_substream =
+                                OutboundSubstreamState::PendingSend(substream, msg, user_data);
+                            waker.wake();
+                            continue 'outer;
+                        }
+                        other => {
+                            *outbound_substream = other;
+                        }
+                    }
                 }
+
+                // If not found request new substream.
+                self.num_requested_outbound_streams += 1;
+                let protocol =
+                    SubstreamProtocol::new(self.config.protocol_config.clone(), (msg, user_data));
+                return Poll::Ready(ConnectionHandlerEvent::OutboundSubstreamRequest { protocol });
             } else {
                 break;
             }
@@ -930,7 +918,7 @@ where
                             if let Some(user_data) = user_data {
                                 *this = OutboundSubstreamState::WaitingAnswer(substream, user_data);
                             } else {
-                                *this = OutboundSubstreamState::Idle(substream);
+                                *this = OutboundSubstreamState::Idle(substream, cx.waker().clone());
                             }
                         }
                         Poll::Pending => {
@@ -953,7 +941,7 @@ where
                 OutboundSubstreamState::WaitingAnswer(mut substream, user_data) => {
                     match substream.poll_next_unpin(cx) {
                         Poll::Ready(Some(Ok(msg))) => {
-                            *this = OutboundSubstreamState::Idle(substream);
+                            *this = OutboundSubstreamState::Idle(substream, cx.waker().clone());
                             let event = process_kad_response(msg, user_data);
 
                             return Poll::Ready(Some(ConnectionHandlerEvent::Custom(event)));
@@ -990,11 +978,9 @@ where
 
                     return Poll::Ready(Some(ConnectionHandlerEvent::Custom(event)));
                 }
-                OutboundSubstreamState::Idle(substream) => {
-                    *this = OutboundSubstreamState::Done;
-                    let event = KademliaHandlerEvent::Available { substream };
-
-                    return Poll::Ready(Some(ConnectionHandlerEvent::Custom(event)));
+                OutboundSubstreamState::Idle(substream, _waker) => {
+                    *this = OutboundSubstreamState::Idle(substream, cx.waker().clone());
+                    return Poll::Pending;
                 }
                 OutboundSubstreamState::Done => {
                     *this = OutboundSubstreamState::Done;
