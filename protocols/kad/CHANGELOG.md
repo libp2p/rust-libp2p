@@ -10,8 +10,11 @@
 
 - Bump MSRV to 1.65.0.
 
+- Outgoing stream reuse. See [PR 3474].
+
 [PR 3239]: https://github.com/libp2p/rust-libp2p/pull/3239
 [PR 3287]: https://github.com/libp2p/rust-libp2p/pull/3287
+[PR 3474]: https://github.com/libp2p/rust-libp2p/pull/3474
 
 # 0.42.1
 
