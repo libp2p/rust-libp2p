@@ -26,7 +26,7 @@ use libp2p_swarm::{
     dial_opts::DialOpts,
     AddressScore, ConnectionHandlerUpgrErr, ConnectionId, DialError, ExternalAddresses,
     ListenAddresses, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
-    THandlerOutEvent,
+    THandlerInEvent, THandlerOutEvent,
 };
 use lru::LruCache;
 use std::num::NonZeroUsize;
@@ -53,7 +53,7 @@ pub struct Behaviour {
     /// with current information about the local peer.
     requests: Vec<Request>,
     /// Pending events to be emitted when polled.
-    events: VecDeque<NetworkBehaviourAction<Event, Proto>>,
+    events: VecDeque<NetworkBehaviourAction<Event, InEvent>>,
     /// The addresses of all peers that we have discovered.
     discovered_peers: PeerCache,
 
@@ -198,10 +198,8 @@ impl Behaviour {
             if !self.requests.contains(&request) {
                 self.requests.push(request);
 
-                let handler = self.new_handler();
                 self.events.push_back(NetworkBehaviourAction::Dial {
                     opts: DialOpts::peer_id(p).build(),
-                    handler,
                 });
             }
         }
@@ -309,7 +307,7 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         _cx: &mut Context<'_>,
         params: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>> {
         if let Some(event) = self.events.pop_front() {
             return Poll::Ready(event);
         }

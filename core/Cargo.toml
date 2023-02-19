@@ -28,7 +28,7 @@ p256 = { version = "0.11.1", default-features = false, features = ["ecdsa", "std
 parking_lot = "0.12.0"
 pin-project = "1.0.0"
 prost = "0.11"
-once_cell = "1.16.0"
+once_cell = "1.17.1"
 rand = "0.8"
 rw-stream-sink = { version = "0.3.0", path = "../misc/rw-stream-sink" }
 sec1 = { version = "0.3.0", features = ["std"] } # Activate `std` feature until https://github.com/RustCrypto/traits/pull/1131 is released.
