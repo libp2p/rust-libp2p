@@ -7,7 +7,10 @@
 
 - Update to `libp2p-swarm` `v0.42.0`.
 
+- Don't close the stream when reading the identify info in `protocol::recv`. See [PR 3344].
+
 [PR 3208]: https://github.com/libp2p/rust-libp2p/pull/3208
+[PR 3344]: https://github.com/libp2p/rust-libp2p/pull/3344
 
 # 0.41.1
 

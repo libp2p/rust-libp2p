@@ -189,11 +189,14 @@ where
     Ok(())
 }
 
-async fn recv<T>(mut socket: T) -> Result<Info, UpgradeError>
+async fn recv<T>(socket: T) -> Result<Info, UpgradeError>
 where
     T: AsyncRead + AsyncWrite + Unpin,
 {
-    socket.close().await?;
+    // Even though we won't write to the stream anymore we don't close it here.
+    // The reason for this is that the `close` call on some transport's require the
+    // remote's ACK, but it could be that the remote already dropped the stream
+    // after finishing their write.
 
     let info = FramedRead::new(
         socket,
