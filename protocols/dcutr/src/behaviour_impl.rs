@@ -247,14 +247,14 @@ impl NetworkBehaviour for Behaviour {
 
     fn handle_established_inbound_connection(
         &mut self,
-        _connection_id: ConnectionId,
+        connection_id: ConnectionId,
         peer: PeerId,
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         match self
             .outgoing_direct_connection_attempts
-            .remove(&(_connection_id, peer))
+            .remove(&(connection_id, peer))
         {
             None => {
                 let handler = if is_relayed(local_addr) {
@@ -283,14 +283,14 @@ impl NetworkBehaviour for Behaviour {
 
     fn handle_established_outbound_connection(
         &mut self,
-        _connection_id: ConnectionId,
+        connection_id: ConnectionId,
         peer: PeerId,
         addr: &Multiaddr,
         role_override: Endpoint,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         match self
             .outgoing_direct_connection_attempts
-            .remove(&(_connection_id, peer))
+            .remove(&(connection_id, peer))
         {
             None => {
                 let handler = if is_relayed(addr) {
