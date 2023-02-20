@@ -47,7 +47,7 @@ fn one_field() {
         ping: ping::Behaviour,
     }
 
-    #[allow(dead_code, unreachable_code, clippy::diverging_sub_expression)]
+    #[allow(dead_code, unreachable_code, clippy::diverging_sub_expression, clippy::used_underscore_binding)]
     fn foo() {
         let _out_event: <Foo as NetworkBehaviour>::OutEvent = unimplemented!();
         match _out_event {
@@ -66,7 +66,7 @@ fn two_fields() {
         identify: identify::Behaviour,
     }
 
-    #[allow(dead_code, unreachable_code, clippy::diverging_sub_expression)]
+    #[allow(dead_code, unreachable_code, clippy::diverging_sub_expression, clippy::used_underscore_binding)]
     fn foo() {
         let _out_event: <Foo as NetworkBehaviour>::OutEvent = unimplemented!();
         match _out_event {
@@ -89,7 +89,7 @@ fn three_fields() {
         kad: libp2p_kad::Kademlia<libp2p_kad::record::store::MemoryStore>,
     }
 
-    #[allow(dead_code, unreachable_code, clippy::diverging_sub_expression)]
+    #[allow(dead_code, unreachable_code, clippy::diverging_sub_expression, clippy::used_underscore_binding)]
     fn foo() {
         let _out_event: <Foo as NetworkBehaviour>::OutEvent = unimplemented!();
         match _out_event {
@@ -217,7 +217,7 @@ fn nested_derives_with_import() {
         foo: Foo,
     }
 
-    #[allow(dead_code, unreachable_code, clippy::diverging_sub_expression)]
+    #[allow(dead_code, unreachable_code, clippy::diverging_sub_expression, clippy::used_underscore_binding)]
     fn foo() {
         let _out_event: <Bar as NetworkBehaviour>::OutEvent = unimplemented!();
         match _out_event {
@@ -257,7 +257,7 @@ fn custom_event_emit_event_through_poll() {
         identify: identify::Behaviour,
     }
 
-    #[allow(dead_code, unreachable_code, clippy::diverging_sub_expression)]
+    #[allow(dead_code, unreachable_code, clippy::diverging_sub_expression, clippy::used_underscore_binding)]
     async fn bar() {
         require_net_behaviour::<Foo>();
 
