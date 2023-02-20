@@ -87,7 +87,8 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
                 .ok_or(FatalUpgradeError::StreamClosed)??;
 
             let r#type =
-                hop_message::Type::from_i32(r#type.unwrap()).ok_or(FatalUpgradeError::ParseTypeField)?;
+                hop_message::Type::from_i32(r#type.ok_or(FatalUpgradeError::MissingTypeField)?)
+                    .ok_or(FatalUpgradeError::ParseTypeField)?;
             match r#type {
                 hop_message::Type::Connect => {
                     return Err(FatalUpgradeError::UnexpectedTypeConnect.into())
@@ -132,7 +133,7 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
 
                     let renewal_timeout = reservation
                         .expire
-                        .unwrap()
+                        .ok_or(FatalUpgradeError::MissingReservationExpireField)?
                         .checked_sub(
                             SystemTime::now()
                                 .duration_since(SystemTime::UNIX_EPOCH)
@@ -242,6 +243,10 @@ pub enum FatalUpgradeError {
     MissingStatusField,
     #[error("Expected 'reservation' field to be set.")]
     MissingReservationField,
+    #[error("Expected 'expire' field to be set.")]
+    MissingReservationExpireField,
+    #[error("Expected 'type' field to be set.")]
+    MissingTypeField,
     #[error("Expected at least one address in reservation.")]
     NoAddressesInReservation,
     #[error("Invalid expiration timestamp in reservation.")]

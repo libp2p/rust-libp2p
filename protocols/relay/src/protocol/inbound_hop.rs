@@ -66,7 +66,8 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
                 .ok_or(FatalUpgradeError::StreamClosed)??;
 
             let r#type =
-                hop_message::Type::from_i32(r#type.unwrap()).ok_or(FatalUpgradeError::ParseTypeField)?;
+                hop_message::Type::from_i32(r#type.ok_or(FatalUpgradeError::MissingTypeField)?)
+                    .ok_or(FatalUpgradeError::ParseTypeField)?;
             let req = match r#type {
                 hop_message::Type::Reserve => Req::Reserve(ReservationReq {
                     substream,
@@ -75,8 +76,13 @@ impl upgrade::InboundUpgrade<NegotiatedSubstream> for Upgrade {
                     max_circuit_bytes: self.max_circuit_bytes,
                 }),
                 hop_message::Type::Connect => {
-                    let dst = PeerId::from_bytes(&peer.ok_or(FatalUpgradeError::MissingPeer)?.id.unwrap())
-                        .map_err(|_| FatalUpgradeError::ParsePeerId)?;
+                    let dst = PeerId::from_bytes(
+                        &peer
+                            .ok_or(FatalUpgradeError::MissingPeer)?
+                            .id
+                            .ok_or(FatalUpgradeError::MissingPeer)?,
+                    )
+                    .map_err(|_| FatalUpgradeError::ParsePeerId)?;
                     Req::Connect(CircuitReq { dst, substream })
                 }
                 hop_message::Type::Status => {
@@ -114,6 +120,8 @@ pub enum FatalUpgradeError {
     ParsePeerId,
     #[error("Expected 'peer' field to be set.")]
     MissingPeer,
+    #[error("Expected 'type' field to be set.")]
+    MissingTypeField,
     #[error("Unexpected message type 'status'")]
     UnexpectedTypeStatus,
 }
@@ -137,10 +145,12 @@ impl ReservationReq {
             peer: None,
             reservation: Some(Reservation {
                 addrs: addrs.into_iter().map(|a| a.to_vec()).collect(),
-                expire: Some((SystemTime::now() + self.reservation_duration)
-                    .duration_since(SystemTime::UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs()),
+                expire: Some(
+                    (SystemTime::now() + self.reservation_duration)
+                        .duration_since(SystemTime::UNIX_EPOCH)
+                        .unwrap()
+                        .as_secs(),
+                ),
                 voucher: None,
             }),
             limit: Some(Limit {

@@ -84,7 +84,8 @@ impl upgrade::OutboundUpgrade<NegotiatedSubstream> for Upgrade {
                 .ok_or(FatalUpgradeError::StreamClosed)??;
 
             let r#type =
-                stop_message::Type::from_i32(r#type.unwrap()).ok_or(FatalUpgradeError::ParseTypeField)?;
+                stop_message::Type::from_i32(r#type.ok_or(FatalUpgradeError::MissingTypeField)?)
+                    .ok_or(FatalUpgradeError::ParseTypeField)?;
             match r#type {
                 stop_message::Type::Connect => {
                     return Err(FatalUpgradeError::UnexpectedTypeConnect.into())
@@ -152,6 +153,8 @@ pub enum FatalUpgradeError {
     StreamClosed,
     #[error("Expected 'status' field to be set.")]
     MissingStatusField,
+    #[error("Expected 'type' field to be set.")]
+    MissingTypeField,
     #[error("Failed to parse response type field.")]
     ParseTypeField,
     #[error("Unexpected message type 'connect'")]
