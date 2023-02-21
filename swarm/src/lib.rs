@@ -2108,17 +2108,17 @@ mod tests {
                         // The banned connection was established. Given the ban, swarm2 closed the
                         // connection. Check that it was not reported to the behaviour of the
                         // banning swarm.
-                    assert_eq!(
+                        assert_eq!(
                         swarm2.behaviour.on_connection_established.len(),
                         s2_expected_conns,
                         "No additional closed connections should be reported for the banned peer"
                     );
 
-                    // Setup to test that the banned connection is not reported upon closing
-                    // even if the peer is unbanned.
-                    swarm2.unban_peer_id(swarm1_id);
-                    stage = Stage::Unbanned;
-                }
+                        // Setup to test that the banned connection is not reported upon closing
+                        // even if the peer is unbanned.
+                        swarm2.unban_peer_id(swarm1_id);
+                        stage = Stage::Unbanned;
+                    }
                 }
                 Stage::Unbanned => {
                     if swarm1.network_info().num_peers() == 0
