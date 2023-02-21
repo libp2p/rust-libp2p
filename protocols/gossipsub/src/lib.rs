@@ -138,18 +138,19 @@
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
 pub mod error;
+pub mod metrics;
 pub mod protocol;
+pub mod subscription_filter;
+pub mod time_cache;
 
 mod backoff;
 mod behaviour;
 mod config;
+mod error_priv;
 mod gossip_promises;
 mod handler;
 mod mcache;
-pub mod metrics;
 mod peer_score;
-pub mod subscription_filter;
-pub mod time_cache;
 mod topic;
 mod transform;
 mod types;
@@ -158,7 +159,7 @@ mod rpc_proto;
 
 pub use self::behaviour::{Behaviour, Event, MessageAuthenticity};
 pub use self::config::{Config, ConfigBuilder, ValidationMode, Version};
-pub use self::error::{HandlerError, PublishError, SubscriptionError, ValidationError};
+pub use self::error_priv::{HandlerError, PublishError, SubscriptionError, ValidationError};
 pub use self::peer_score::{
     score_parameter_decay, score_parameter_decay_with_base, PeerScoreParams, PeerScoreThresholds,
     TopicScoreParams,

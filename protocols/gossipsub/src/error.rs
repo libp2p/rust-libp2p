@@ -1,4 +1,4 @@
-// Copyright 2020 Sigma Prime Pty Ltd.
+// Copyright 2023 Protocol Labs.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the "Software"),
@@ -18,136 +18,32 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! Error types that can result from gossipsub.
+#[deprecated(
+    since = "0.44.0",
+    note = "Use `libp2p::gossipsub::PublishError` instead, as the `error` module will become crate-private in the future."
+)]
+pub type PublishError = crate::error_priv::PublishError;
 
-use libp2p_core::identity::error::SigningError;
-use libp2p_core::upgrade::ProtocolError;
-use thiserror::Error;
-
-/// Error associated with publishing a gossipsub message.
-#[derive(Debug)]
-pub enum PublishError {
-    /// This message has already been published.
-    Duplicate,
-    /// An error occurred whilst signing the message.
-    SigningError(SigningError),
-    /// There were no peers to send this message to.
-    InsufficientPeers,
-    /// The overall message was too large. This could be due to excessive topics or an excessive
-    /// message size.
-    MessageTooLarge,
-    /// The compression algorithm failed.
-    TransformFailed(std::io::Error),
-}
-
-impl std::fmt::Display for PublishError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{self:?}")
-    }
-}
-
-impl std::error::Error for PublishError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Self::SigningError(err) => Some(err),
-            Self::TransformFailed(err) => Some(err),
-            _ => None,
-        }
-    }
-}
-
-/// Error associated with subscribing to a topic.
-#[derive(Debug)]
-pub enum SubscriptionError {
-    /// Couldn't publish our subscription
-    PublishError(PublishError),
-    /// We are not allowed to subscribe to this topic by the subscription filter
-    NotAllowed,
-}
-
-impl std::fmt::Display for SubscriptionError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{self:?}")
-    }
-}
-
-impl std::error::Error for SubscriptionError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Self::PublishError(err) => Some(err),
-            _ => None,
-        }
-    }
-}
-
-impl From<SigningError> for PublishError {
-    fn from(error: SigningError) -> Self {
-        PublishError::SigningError(error)
-    }
-}
+#[deprecated(
+    since = "0.44.0",
+    note = "Use `libp2p::gossipsub::SubscriptionError` instead, as the `error` module will become crate-private in the future."
+)]
+pub type SubscriptionError = crate::error_priv::SubscriptionError;
 
 #[deprecated(
     since = "0.44.0",
     note = "Use re-exports that omit `Gossipsub` prefix, i.e. `libp2p::gossipsub::HandlerError"
 )]
-pub type GossipsubHandlerError = HandlerError;
+pub type GossipsubHandlerError = crate::error_priv::HandlerError;
 
-/// Errors that can occur in the protocols handler.
-#[derive(Debug, Error)]
-pub enum HandlerError {
-    #[error("The maximum number of inbound substreams created has been exceeded.")]
-    MaxInboundSubstreams,
-    #[error("The maximum number of outbound substreams created has been exceeded.")]
-    MaxOutboundSubstreams,
-    #[error("The message exceeds the maximum transmission size.")]
-    MaxTransmissionSize,
-    #[error("Protocol negotiation timeout.")]
-    NegotiationTimeout,
-    #[error("Protocol negotiation failed.")]
-    NegotiationProtocolError(ProtocolError),
-    #[error("Failed to encode or decode")]
-    Codec(#[from] prost_codec::Error),
-}
+#[deprecated(
+    since = "0.44.0",
+    note = "Use `libp2p::gossipsub::HandlerError` instead, as the `error` module will become crate-private in the future."
+)]
+pub type HandlerError = crate::error_priv::HandlerError;
 
-#[derive(Debug, Clone, Copy)]
-pub enum ValidationError {
-    /// The message has an invalid signature,
-    InvalidSignature,
-    /// The sequence number was empty, expected a value.
-    EmptySequenceNumber,
-    /// The sequence number was the incorrect size
-    InvalidSequenceNumber,
-    /// The PeerId was invalid
-    InvalidPeerId,
-    /// Signature existed when validation has been sent to
-    /// [`crate::behaviour::MessageAuthenticity::Anonymous`].
-    SignaturePresent,
-    /// Sequence number existed when validation has been sent to
-    /// [`crate::behaviour::MessageAuthenticity::Anonymous`].
-    SequenceNumberPresent,
-    /// Message source existed when validation has been sent to
-    /// [`crate::behaviour::MessageAuthenticity::Anonymous`].
-    MessageSourcePresent,
-    /// The data transformation failed.
-    TransformFailed,
-}
-
-impl std::fmt::Display for ValidationError {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{self:?}")
-    }
-}
-
-impl std::error::Error for ValidationError {}
-
-impl From<std::io::Error> for HandlerError {
-    fn from(error: std::io::Error) -> HandlerError {
-        HandlerError::Codec(prost_codec::Error::from(error))
-    }
-}
-
-impl From<std::io::Error> for PublishError {
-    fn from(error: std::io::Error) -> PublishError {
-        PublishError::TransformFailed(error)
-    }
-}
+#[deprecated(
+    since = "0.44.0",
+    note = "Use `libp2p::gossipsub::ValidationError` instead, as the `error` module will become crate-private in the future."
+)]
+pub type ValidationError = crate::error_priv::ValidationError;
