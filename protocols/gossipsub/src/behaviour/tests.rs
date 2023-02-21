@@ -21,10 +21,10 @@
 // Collection of tests for the gossipsub network behaviour
 
 use super::*;
-use crate::error::ValidationError;
 use crate::subscription_filter::WhitelistSubscriptionFilter;
 use crate::transform::{DataTransform, IdentityTransform};
 use crate::types::FastMessageId;
+use crate::ValidationError;
 use crate::{
     config::Config, config::ConfigBuilder, IdentTopic as Topic, Message, TopicScoreParams,
 };
@@ -1395,7 +1395,7 @@ fn test_explicit_peer_gets_connected() {
         .events
         .iter()
         .filter(|e| match e {
-            NetworkBehaviourAction::Dial { opts, handler: _ } => opts.get_peer_id() == Some(peer),
+            NetworkBehaviourAction::Dial { opts } => opts.get_peer_id() == Some(peer),
             _ => false,
         })
         .count();
@@ -1436,8 +1436,7 @@ fn test_explicit_peer_reconnects() {
         gs.events
             .iter()
             .filter(|e| match e {
-                NetworkBehaviourAction::Dial { opts, handler: _ } =>
-                    opts.get_peer_id() == Some(*peer),
+                NetworkBehaviourAction::Dial { opts } => opts.get_peer_id() == Some(*peer),
                 _ => false,
             })
             .count(),
@@ -1452,8 +1451,7 @@ fn test_explicit_peer_reconnects() {
         gs.events
             .iter()
             .filter(|e| match e {
-                NetworkBehaviourAction::Dial { opts, handler: _ } =>
-                    opts.get_peer_id() == Some(*peer),
+                NetworkBehaviourAction::Dial { opts } => opts.get_peer_id() == Some(*peer),
                 _ => false,
             })
             .count()
@@ -1833,7 +1831,7 @@ fn test_connect_to_px_peers_on_handle_prune() {
         .events
         .iter()
         .filter_map(|e| match e {
-            NetworkBehaviourAction::Dial { opts, handler: _ } => opts.get_peer_id(),
+            NetworkBehaviourAction::Dial { opts } => opts.get_peer_id(),
             _ => None,
         })
         .collect();
@@ -3236,10 +3234,7 @@ fn random_message(seq: &mut u64, topics: &Vec<TopicHash>) -> RawMessage {
     *seq += 1;
     RawMessage {
         source: Some(PeerId::random()),
-        data: (0..rng.gen_range(10..30))
-            .into_iter()
-            .map(|_| rng.gen())
-            .collect(),
+        data: (0..rng.gen_range(10..30)).map(|_| rng.gen()).collect(),
         sequence_number: Some(*seq),
         topic: topics[rng.gen_range(0..topics.len())].clone(),
         signature: None,
@@ -4311,7 +4306,6 @@ fn test_opportunistic_grafting() {
 
     //add additional 5 peers
     let others: Vec<_> = (0..5)
-        .into_iter()
         .map(|_| add_peer(&mut gs, &topics, false, false))
         .collect();
 
@@ -4670,7 +4664,7 @@ fn test_limit_number_of_message_ids_inside_ihave() {
         (this may fail with a probability < 10^-58"
     );
     assert!(
-        ihaves1.intersection(&ihaves2).into_iter().count() > 0,
+        ihaves1.intersection(&ihaves2).count() > 0,
         "should have sent random messages with some common messages to p1 and p2 \
             (this may fail with a probability < 10^-58"
     );

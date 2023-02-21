@@ -41,13 +41,12 @@ use libp2p_swarm::{
     behaviour::{AddressChange, ConnectionClosed, ConnectionEstablished, FromSwarm},
     dial_opts::DialOpts,
     ConnectionId, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
-    THandlerOutEvent,
+    THandlerInEvent, THandlerOutEvent,
 };
 use wasm_timer::Instant;
 
 use crate::backoff::BackoffStorage;
 use crate::config::{Config, ValidationMode};
-use crate::error::{PublishError, SubscriptionError, ValidationError};
 use crate::gossip_promises::GossipPromises;
 use crate::handler::{Handler, HandlerEvent, HandlerIn};
 use crate::mcache::MessageCache;
@@ -64,6 +63,7 @@ use crate::types::{
 };
 use crate::types::{PeerConnections, PeerKind, Rpc};
 use crate::{rpc_proto::proto, TopicScoreParams};
+use crate::{PublishError, SubscriptionError, ValidationError};
 use quick_protobuf::{MessageWrite, Writer};
 use std::{cmp::Ordering::Equal, fmt::Debug};
 use wasm_timer::Interval;
@@ -215,7 +215,7 @@ pub struct Behaviour<D = IdentityTransform, F = AllowAllSubscriptionFilter> {
     config: Config,
 
     /// Events that need to be yielded to the outside when polling.
-    events: VecDeque<NetworkBehaviourAction<Event, Handler>>,
+    events: VecDeque<NetworkBehaviourAction<Event, HandlerIn>>,
 
     /// Pools non-urgent control messages between heartbeats.
     control_pool: HashMap<PeerId, Vec<ControlAction>>,
@@ -1130,10 +1130,8 @@ where
         if !self.peer_topics.contains_key(peer_id) {
             // Connect to peer
             debug!("Connecting to explicit peer {:?}", peer_id);
-            let handler = self.new_handler();
             self.events.push_back(NetworkBehaviourAction::Dial {
                 opts: DialOpts::peer_id(*peer_id).build(),
-                handler,
             });
         }
     }
@@ -1631,10 +1629,8 @@ where
                 self.px_peers.insert(peer_id);
 
                 // dial peer
-                let handler = self.new_handler();
                 self.events.push_back(NetworkBehaviourAction::Dial {
                     opts: DialOpts::peer_id(peer_id).build(),
-                    handler,
                 });
             }
         }
@@ -3429,7 +3425,7 @@ where
         &mut self,
         cx: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>> {
         if let Some(event) = self.events.pop_front() {
             return Poll::Ready(event);
         }
@@ -3478,7 +3474,7 @@ fn peer_added_to_mesh(
     new_topics: Vec<&TopicHash>,
     mesh: &HashMap<TopicHash, BTreeSet<PeerId>>,
     known_topics: Option<&BTreeSet<TopicHash>>,
-    events: &mut VecDeque<NetworkBehaviourAction<Event, Handler>>,
+    events: &mut VecDeque<NetworkBehaviourAction<Event, HandlerIn>>,
     connections: &HashMap<PeerId, PeerConnections>,
 ) {
     // Ensure there is an active connection
@@ -3519,7 +3515,7 @@ fn peer_removed_from_mesh(
     old_topic: &TopicHash,
     mesh: &HashMap<TopicHash, BTreeSet<PeerId>>,
     known_topics: Option<&BTreeSet<TopicHash>>,
-    events: &mut VecDeque<NetworkBehaviourAction<Event, Handler>>,
+    events: &mut VecDeque<NetworkBehaviourAction<Event, HandlerIn>>,
     connections: &HashMap<PeerId, PeerConnections>,
 ) {
     // Ensure there is an active connection

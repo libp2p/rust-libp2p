@@ -33,7 +33,7 @@ libp2p-gossipsub =  { version = "0.44.0", path = "../../protocols/gossipsub", op
 
 [dev-dependencies]
 env_logger = "0.10.0"
-futures = "0.3.1"
+futures = "0.3.26"
 hyper = { version="0.14", features = ["server", "tcp", "http1"] }
 libp2p-noise = { path = "../../transports/noise" }
 libp2p-ping = { path = "../../protocols/ping" }

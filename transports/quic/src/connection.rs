@@ -330,7 +330,7 @@ impl StreamMuxer for Connection {
 
         let substream_id = match inner.connection.streams().accept(quinn_proto::Dir::Bi) {
             Some(id) => {
-                inner.poll_outbound_waker = None;
+                inner.poll_inbound_waker = None;
                 id
             }
             None => {
