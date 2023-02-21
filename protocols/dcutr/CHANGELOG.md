@@ -19,7 +19,6 @@
 [PR 3214]: https://github.com/libp2p/rust-libp2p/pull/3214
 [PR 3312]: https://github.com/libp2p/rust-libp2p/pull/3312
 
-
 # 0.8.1
 
 - Skip unparsable multiaddr in `InboundUpgrade::upgrade_inbound` and
