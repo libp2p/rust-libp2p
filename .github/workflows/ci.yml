@@ -301,7 +301,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
 
-      - run: cargo install pb-rs --locked
+      - run: cargo install --version 0.10.0 pb-rs --locked
 
       - name: Glob match
         uses: tj-actions/glob@v16
