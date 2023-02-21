@@ -48,7 +48,6 @@ use wasm_timer::Instant;
 
 use crate::backoff::BackoffStorage;
 use crate::config::{Config, ValidationMode};
-use crate::error::{PublishError, SubscriptionError, ValidationError};
 use crate::gossip_promises::GossipPromises;
 use crate::handler::{Handler, HandlerEvent, HandlerIn};
 use crate::mcache::MessageCache;
@@ -65,6 +64,7 @@ use crate::types::{
 };
 use crate::types::{PeerConnections, PeerKind, Rpc};
 use crate::{rpc_proto, TopicScoreParams};
+use crate::{PublishError, SubscriptionError, ValidationError};
 use std::{cmp::Ordering::Equal, fmt::Debug};
 use wasm_timer::Interval;
 
