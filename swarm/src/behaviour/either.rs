@@ -18,10 +18,11 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::behaviour::{
-    self, inject_from_swarm, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
-};
+use crate::behaviour::{self, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
+use crate::connection::ConnectionId;
 use crate::handler::either::IntoEitherHandler;
+use crate::THandlerInEvent;
+use crate::THandlerOutEvent;
 use either::Either;
 use libp2p_core::{Multiaddr, PeerId};
 use std::{task::Context, task::Poll};
@@ -51,43 +52,29 @@ where
 
     fn on_swarm_event(&mut self, event: behaviour::FromSwarm<Self::ConnectionHandler>) {
         match self {
-            Either::Left(b) => inject_from_swarm(
-                b,
-                event.map_handler(
-                    |h| h.unwrap_left(),
-                    |h| match h {
-                        Either::Left(h) => h,
-                        Either::Right(_) => unreachable!(),
-                    },
-                ),
-            ),
-            Either::Right(b) => inject_from_swarm(
-                b,
-                event.map_handler(
-                    |h| h.unwrap_right(),
-                    |h| match h {
-                        Either::Right(h) => h,
-                        Either::Left(_) => unreachable!(),
-                    },
-                ),
-            ),
+            Either::Left(b) => b.on_swarm_event(event.map_handler(|h| match h {
+                Either::Left(h) => h,
+                Either::Right(_) => unreachable!(),
+            })),
+            Either::Right(b) => b.on_swarm_event(event.map_handler(|h| match h {
+                Either::Right(h) => h,
+                Either::Left(_) => unreachable!(),
+            })),
         }
     }
 
     fn on_connection_handler_event(
         &mut self,
         peer_id: PeerId,
-        connection_id: libp2p_core::connection::ConnectionId,
-        event: crate::THandlerOutEvent<Self>,
+        connection_id: ConnectionId,
+        event: THandlerOutEvent<Self>,
     ) {
         match (self, event) {
             (Either::Left(left), Either::Left(event)) => {
-                #[allow(deprecated)]
-                left.inject_event(peer_id, connection_id, event);
+                left.on_connection_handler_event(peer_id, connection_id, event);
             }
             (Either::Right(right), Either::Right(event)) => {
-                #[allow(deprecated)]
-                right.inject_event(peer_id, connection_id, event);
+                right.on_connection_handler_event(peer_id, connection_id, event);
             }
             _ => unreachable!(),
         }
@@ -97,14 +84,14 @@ where
         &mut self,
         cx: &mut Context<'_>,
         params: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>> {
         let event = match self {
             Either::Left(behaviour) => futures::ready!(behaviour.poll(cx, params))
                 .map_out(Either::Left)
-                .map_handler_and_in(IntoEitherHandler::Left, Either::Left),
+                .map_in(Either::Left),
             Either::Right(behaviour) => futures::ready!(behaviour.poll(cx, params))
                 .map_out(Either::Right)
-                .map_handler_and_in(IntoEitherHandler::Right, Either::Right),
+                .map_in(Either::Right),
         };
 
         Poll::Ready(event)

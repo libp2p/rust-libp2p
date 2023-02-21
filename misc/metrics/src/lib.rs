@@ -100,16 +100,16 @@ pub trait Recorder<Event> {
 }
 
 #[cfg(feature = "dcutr")]
-impl Recorder<libp2p_dcutr::behaviour::Event> for Metrics {
-    fn record(&self, event: &libp2p_dcutr::behaviour::Event) {
+impl Recorder<libp2p_dcutr::Event> for Metrics {
+    fn record(&self, event: &libp2p_dcutr::Event) {
         self.dcutr.record(event)
     }
 }
 
 #[cfg(feature = "gossipsub")]
 #[cfg(not(target_os = "unknown"))]
-impl Recorder<libp2p_gossipsub::GossipsubEvent> for Metrics {
-    fn record(&self, event: &libp2p_gossipsub::GossipsubEvent) {
+impl Recorder<libp2p_gossipsub::Event> for Metrics {
+    fn record(&self, event: &libp2p_gossipsub::Event) {
         self.gossipsub.record(event)
     }
 }
@@ -136,8 +136,8 @@ impl Recorder<libp2p_ping::Event> for Metrics {
 }
 
 #[cfg(feature = "relay")]
-impl Recorder<libp2p_relay::v2::relay::Event> for Metrics {
-    fn record(&self, event: &libp2p_relay::v2::relay::Event) {
+impl Recorder<libp2p_relay::Event> for Metrics {
+    fn record(&self, event: &libp2p_relay::Event) {
         self.relay.record(event)
     }
 }

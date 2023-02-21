@@ -21,8 +21,8 @@
 /// A collection of unit tests mostly ported from the go implementation.
 use super::*;
 
-use crate::types::RawGossipsubMessage;
-use crate::{GossipsubMessage, IdentTopic as Topic};
+use crate::types::RawMessage;
+use crate::{IdentTopic as Topic, Message};
 
 // estimates a value within variance
 fn within_variance(value: f64, expected: f64, variance: f64) -> bool {
@@ -33,8 +33,8 @@ fn within_variance(value: f64, expected: f64, variance: f64) -> bool {
 }
 
 // generates a random gossipsub message with sequence number i
-fn make_test_message(seq: u64) -> (MessageId, RawGossipsubMessage) {
-    let raw_message = RawGossipsubMessage {
+fn make_test_message(seq: u64) -> (MessageId, RawMessage) {
+    let raw_message = RawMessage {
         source: Some(PeerId::random()),
         data: vec![12, 34, 56],
         sequence_number: Some(seq),
@@ -44,7 +44,7 @@ fn make_test_message(seq: u64) -> (MessageId, RawGossipsubMessage) {
         validated: true,
     };
 
-    let message = GossipsubMessage {
+    let message = Message {
         source: raw_message.source,
         data: raw_message.data.clone(),
         sequence_number: raw_message.sequence_number,
@@ -55,7 +55,7 @@ fn make_test_message(seq: u64) -> (MessageId, RawGossipsubMessage) {
     (id, raw_message)
 }
 
-fn default_message_id() -> fn(&GossipsubMessage) -> MessageId {
+fn default_message_id() -> fn(&Message) -> MessageId {
     |message| {
         // default message id is: source + sequence number
         // NOTE: If either the peer_id or source is not provided, we set to 0;
@@ -100,8 +100,7 @@ fn test_score_time_in_mesh() {
     let score = peer_score.score(&peer_id);
     assert!(
         score == 0.0,
-        "expected score to start at zero. Score found: {}",
-        score
+        "expected score to start at zero. Score found: {score}"
     );
 
     // The time in mesh depends on how long the peer has been grafted
@@ -116,9 +115,7 @@ fn test_score_time_in_mesh() {
         * (elapsed.as_millis() / topic_params.time_in_mesh_quantum.as_millis()) as f64;
     assert!(
         score >= expected,
-        "The score: {} should be greater than or equal to: {}",
-        score,
-        expected
+        "The score: {score} should be greater than or equal to: {expected}"
     );
 }
 
@@ -148,8 +145,7 @@ fn test_score_time_in_mesh_cap() {
     let score = peer_score.score(&peer_id);
     assert!(
         score == 0.0,
-        "expected score to start at zero. Score found: {}",
-        score
+        "expected score to start at zero. Score found: {score}"
     );
 
     // The time in mesh depends on how long the peer has been grafted
@@ -210,12 +206,7 @@ fn test_score_first_message_deliveries() {
     let score = peer_score.score(&peer_id);
     let expected =
         topic_params.topic_weight * topic_params.first_message_deliveries_weight * messages as f64;
-    assert!(
-        score == expected,
-        "The score: {} should be {}",
-        score,
-        expected
-    );
+    assert!(score == expected, "The score: {score} should be {expected}");
 }
 
 #[test]
@@ -256,12 +247,7 @@ fn test_score_first_message_deliveries_cap() {
     let expected = topic_params.topic_weight
         * topic_params.first_message_deliveries_weight
         * topic_params.first_message_deliveries_cap;
-    assert!(
-        score == expected,
-        "The score: {} should be {}",
-        score,
-        expected
-    );
+    assert!(score == expected, "The score: {score} should be {expected}");
 }
 
 #[test]
@@ -300,12 +286,7 @@ fn test_score_first_message_deliveries_decay() {
         * topic_params.first_message_deliveries_weight
         * topic_params.first_message_deliveries_decay
         * messages as f64;
-    assert!(
-        score == expected,
-        "The score: {} should be {}",
-        score,
-        expected
-    );
+    assert!(score == expected, "The score: {score} should be {expected}");
 
     // refreshing the scores applies the decay param
     let decay_intervals = 10;
@@ -314,12 +295,7 @@ fn test_score_first_message_deliveries_decay() {
         expected *= topic_params.first_message_deliveries_decay;
     }
     let score = peer_score.score(&peer_id);
-    assert!(
-        score == expected,
-        "The score: {} should be {}",
-        score,
-        expected
-    );
+    assert!(score == expected, "The score: {score} should be {expected}");
 }
 
 #[test]
@@ -368,8 +344,7 @@ fn test_score_mesh_message_deliveries() {
         let score = peer_score.score(peer_id);
         assert!(
             score >= 0.0,
-            "expected no mesh delivery penalty before activation time, got score {}",
-            score
+            "expected no mesh delivery penalty before activation time, got score {score}"
         );
     }
 
@@ -402,13 +377,11 @@ fn test_score_mesh_message_deliveries() {
 
     assert!(
         score_a >= 0.0,
-        "expected non-negative score for Peer A, got score {}",
-        score_a
+        "expected non-negative score for Peer A, got score {score_a}"
     );
     assert!(
         score_b >= 0.0,
-        "expected non-negative score for Peer B, got score {}",
-        score_b
+        "expected non-negative score for Peer B, got score {score_b}"
     );
 
     // the penalty is the difference between the threshold and the actual mesh deliveries, squared.
@@ -418,12 +391,7 @@ fn test_score_mesh_message_deliveries() {
     let expected =
         topic_params.topic_weight * topic_params.mesh_message_deliveries_weight * penalty;
 
-    assert!(
-        score_c == expected,
-        "Score: {}. Expected {}",
-        score_c,
-        expected
-    );
+    assert!(score_c == expected, "Score: {score_c}. Expected {expected}");
 }
 
 #[test]
@@ -469,8 +437,7 @@ fn test_score_mesh_message_deliveries_decay() {
     let score_a = peer_score.score(&peer_id_a);
     assert!(
         score_a >= 0.0,
-        "expected non-negative score for Peer A, got score {}",
-        score_a
+        "expected non-negative score for Peer A, got score {score_a}"
     );
 
     let mut decayed_delivery_count = (messages as f64) * topic_params.mesh_message_deliveries_decay;
@@ -545,13 +512,11 @@ fn test_score_mesh_failure_penalty() {
     let score_b = peer_score.score(&peer_id_b);
     assert!(
         score_a >= 0.0,
-        "expected non-negative score for Peer A, got score {}",
-        score_a
+        "expected non-negative score for Peer A, got score {score_a}"
     );
     assert!(
         score_b >= 0.0,
-        "expected non-negative score for Peer B, got score {}",
-        score_b
+        "expected non-negative score for Peer B, got score {score_b}"
     );
 
     // prune peer B to apply the penalty

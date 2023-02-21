@@ -21,7 +21,9 @@
 use futures::StreamExt;
 use libp2p_identify as identify;
 use libp2p_ping as ping;
-use libp2p_swarm::{behaviour::FromSwarm, dummy, NetworkBehaviour, SwarmEvent};
+use libp2p_swarm::{
+    behaviour::FromSwarm, dummy, NetworkBehaviour, SwarmEvent, THandlerInEvent, THandlerOutEvent,
+};
 use std::fmt::Debug;
 
 /// Small utility to check that a type implements `NetworkBehaviour`.
@@ -256,21 +258,19 @@ fn custom_event_emit_event_through_poll() {
     }
 
     #[allow(dead_code, unreachable_code, clippy::diverging_sub_expression)]
-    fn bar() {
+    async fn bar() {
         require_net_behaviour::<Foo>();
 
         let mut _swarm: libp2p_swarm::Swarm<Foo> = unimplemented!();
 
         // check that the event is bubbled up all the way to swarm
-        let _ = async {
-            loop {
-                match _swarm.select_next_some().await {
-                    SwarmEvent::Behaviour(BehaviourOutEvent::Ping(_)) => break,
-                    SwarmEvent::Behaviour(BehaviourOutEvent::Identify(_)) => break,
-                    _ => {}
-                }
+        loop {
+            match _swarm.select_next_some().await {
+                SwarmEvent::Behaviour(BehaviourOutEvent::Ping(_)) => break,
+                SwarmEvent::Behaviour(BehaviourOutEvent::Identify(_)) => break,
+                _ => {}
             }
-        };
+        }
     }
 }
 
@@ -307,6 +307,44 @@ fn with_either() {
     #[allow(dead_code)]
     fn foo() {
         require_net_behaviour::<Foo>();
+    }
+}
+
+#[test]
+fn with_generics() {
+    #[allow(dead_code)]
+    #[derive(NetworkBehaviour)]
+    #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
+    struct Foo<A, B> {
+        a: A,
+        b: B,
+    }
+
+    #[allow(dead_code)]
+    fn foo() {
+        require_net_behaviour::<
+            Foo<
+                libp2p_kad::Kademlia<libp2p_kad::record::store::MemoryStore>,
+                libp2p_ping::Behaviour,
+            >,
+        >();
+    }
+}
+
+#[test]
+fn with_generics_mixed() {
+    #[allow(dead_code)]
+    #[derive(NetworkBehaviour)]
+    #[behaviour(prelude = "libp2p_swarm::derive_prelude")]
+    struct Foo<A> {
+        a: A,
+        ping: libp2p_ping::Behaviour,
+    }
+
+    #[allow(dead_code)]
+    fn foo() {
+        require_net_behaviour::<Foo<libp2p_kad::Kademlia<libp2p_kad::record::store::MemoryStore>>>(
+        );
     }
 }
 
@@ -370,11 +408,8 @@ fn generated_out_event_derive_debug() {
 
 #[test]
 fn custom_out_event_no_type_parameters() {
-    use libp2p_core::connection::ConnectionId;
     use libp2p_core::PeerId;
-    use libp2p_swarm::{
-        ConnectionHandler, IntoConnectionHandler, NetworkBehaviourAction, PollParameters,
-    };
+    use libp2p_swarm::{ConnectionId, NetworkBehaviourAction, PollParameters};
     use std::task::Context;
     use std::task::Poll;
 
@@ -394,7 +429,7 @@ fn custom_out_event_no_type_parameters() {
             &mut self,
             _peer: PeerId,
             _connection: ConnectionId,
-            message: <<Self::ConnectionHandler as IntoConnectionHandler>::Handler as ConnectionHandler>::OutEvent,
+            message: THandlerOutEvent<Self>,
         ) {
             void::unreachable(message);
         }
@@ -403,7 +438,7 @@ fn custom_out_event_no_type_parameters() {
             &mut self,
             _ctx: &mut Context,
             _: &mut impl PollParameters,
-        ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+        ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>> {
             Poll::Pending
         }
 

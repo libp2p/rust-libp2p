@@ -27,7 +27,10 @@ pub use error::{
     PendingOutboundConnectionError,
 };
 
-use crate::handler::ConnectionHandler;
+use crate::handler::{
+    AddressChange, ConnectionEvent, ConnectionHandler, DialUpgradeError, FullyNegotiatedInbound,
+    FullyNegotiatedOutbound, ListenUpgradeError,
+};
 use crate::upgrade::{InboundUpgradeSend, OutboundUpgradeSend, SendWrapper};
 use crate::{ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive, SubstreamProtocol};
 use futures::stream::FuturesUnordered;
@@ -39,12 +42,35 @@ use libp2p_core::connection::ConnectedPoint;
 use libp2p_core::multiaddr::Multiaddr;
 use libp2p_core::muxing::{StreamMuxerBox, StreamMuxerEvent, StreamMuxerExt, SubstreamBox};
 use libp2p_core::upgrade::{InboundUpgradeApply, OutboundUpgradeApply};
-use libp2p_core::PeerId;
 use libp2p_core::{upgrade, UpgradeError};
+use libp2p_core::{Endpoint, PeerId};
 use std::future::Future;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::task::Waker;
 use std::time::Duration;
 use std::{fmt, io, mem, pin::Pin, task::Context, task::Poll};
+
+static NEXT_CONNECTION_ID: AtomicUsize = AtomicUsize::new(1);
+
+/// Connection identifier.
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ConnectionId(usize);
+
+impl ConnectionId {
+    /// A "dummy" [`ConnectionId`].
+    ///
+    /// Really, you should not use this, not even for testing but it is here if you need it.
+    #[deprecated(
+        since = "0.42.0",
+        note = "Don't use this, it will be removed at a later stage again."
+    )]
+    pub const DUMMY: ConnectionId = ConnectionId(0);
+
+    /// Returns the next available [`ConnectionId`].
+    pub(crate) fn next() -> Self {
+        Self(NEXT_CONNECTION_ID.fetch_add(1, Ordering::SeqCst))
+    }
+}
 
 /// Information about a successfully established connection.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -150,8 +176,7 @@ where
 
     /// Notifies the connection handler of an event.
     pub fn on_behaviour_event(&mut self, event: THandler::InEvent) {
-        #[allow(deprecated)]
-        self.handler.inject_event(event);
+        self.handler.on_behaviour_event(event);
     }
 
     /// Begins an orderly shutdown of the connection, returning the connection
@@ -180,9 +205,13 @@ where
         loop {
             match requested_substreams.poll_next_unpin(cx) {
                 Poll::Ready(Some(Ok(()))) => continue,
-                Poll::Ready(Some(Err(user_data))) => {
-                    #[allow(deprecated)]
-                    handler.inject_dial_upgrade_error(user_data, ConnectionHandlerUpgrErr::Timeout);
+                Poll::Ready(Some(Err(info))) => {
+                    handler.on_connection_event(ConnectionEvent::DialUpgradeError(
+                        DialUpgradeError {
+                            info,
+                            error: ConnectionHandlerUpgrErr::Timeout,
+                        },
+                    ));
                     continue;
                 }
                 Poll::Ready(None) | Poll::Pending => {}
@@ -209,14 +238,16 @@ where
             // In case the [`ConnectionHandler`] can not make any more progress, poll the negotiating outbound streams.
             match negotiating_out.poll_next_unpin(cx) {
                 Poll::Pending | Poll::Ready(None) => {}
-                Poll::Ready(Some((user_data, Ok(upgrade)))) => {
-                    #[allow(deprecated)]
-                    handler.inject_fully_negotiated_outbound(upgrade, user_data);
+                Poll::Ready(Some((info, Ok(protocol)))) => {
+                    handler.on_connection_event(ConnectionEvent::FullyNegotiatedOutbound(
+                        FullyNegotiatedOutbound { protocol, info },
+                    ));
                     continue;
                 }
-                Poll::Ready(Some((user_data, Err(err)))) => {
-                    #[allow(deprecated)]
-                    handler.inject_dial_upgrade_error(user_data, err);
+                Poll::Ready(Some((info, Err(error)))) => {
+                    handler.on_connection_event(ConnectionEvent::DialUpgradeError(
+                        DialUpgradeError { info, error },
+                    ));
                     continue;
                 }
             }
@@ -225,14 +256,16 @@ where
             // make any more progress, poll the negotiating inbound streams.
             match negotiating_in.poll_next_unpin(cx) {
                 Poll::Pending | Poll::Ready(None) => {}
-                Poll::Ready(Some((user_data, Ok(upgrade)))) => {
-                    #[allow(deprecated)]
-                    handler.inject_fully_negotiated_inbound(upgrade, user_data);
+                Poll::Ready(Some((info, Ok(protocol)))) => {
+                    handler.on_connection_event(ConnectionEvent::FullyNegotiatedInbound(
+                        FullyNegotiatedInbound { protocol, info },
+                    ));
                     continue;
                 }
-                Poll::Ready(Some((user_data, Err(err)))) => {
-                    #[allow(deprecated)]
-                    handler.inject_listen_upgrade_error(user_data, err);
+                Poll::Ready(Some((info, Err(error)))) => {
+                    handler.on_connection_event(ConnectionEvent::ListenUpgradeError(
+                        ListenUpgradeError { info, error },
+                    ));
                     continue;
                 }
             }
@@ -279,8 +312,9 @@ where
             match muxing.poll_unpin(cx)? {
                 Poll::Pending => {}
                 Poll::Ready(StreamMuxerEvent::AddressChange(address)) => {
-                    #[allow(deprecated)]
-                    handler.inject_address_change(&address);
+                    handler.on_connection_event(ConnectionEvent::AddressChange(AddressChange {
+                        new_address: &address,
+                    }));
                     return Poll::Ready(Ok(Event::AddressChange(address)));
                 }
             }
@@ -342,7 +376,7 @@ impl<'a> IncomingInfo<'a> {
 }
 
 /// Information about a connection limit.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct ConnectionLimit {
     /// The maximum number of connections.
     pub limit: u32,
@@ -757,32 +791,33 @@ mod tests {
             SubstreamProtocol::new(DeniedUpgrade, ()).with_timeout(self.upgrade_timeout)
         }
 
-        fn inject_fully_negotiated_inbound(
+        fn on_connection_event(
             &mut self,
-            protocol: <Self::InboundProtocol as InboundUpgradeSend>::Output,
-            _: Self::InboundOpenInfo,
+            event: ConnectionEvent<
+                Self::InboundProtocol,
+                Self::OutboundProtocol,
+                Self::InboundOpenInfo,
+                Self::OutboundOpenInfo,
+            >,
         ) {
-            void::unreachable(protocol)
+            match event {
+                ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
+                    protocol,
+                    ..
+                }) => void::unreachable(protocol),
+                ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
+                    protocol,
+                    ..
+                }) => void::unreachable(protocol),
+                ConnectionEvent::DialUpgradeError(DialUpgradeError { error, .. }) => {
+                    self.error = Some(error)
+                }
+                ConnectionEvent::AddressChange(_) | ConnectionEvent::ListenUpgradeError(_) => {}
+            }
         }
 
-        fn inject_fully_negotiated_outbound(
-            &mut self,
-            protocol: <Self::OutboundProtocol as OutboundUpgradeSend>::Output,
-            _: Self::OutboundOpenInfo,
-        ) {
-            void::unreachable(protocol)
-        }
-
-        fn inject_event(&mut self, event: Self::InEvent) {
+        fn on_behaviour_event(&mut self, event: Self::InEvent) {
             void::unreachable(event)
-        }
-
-        fn inject_dial_upgrade_error(
-            &mut self,
-            _: Self::OutboundOpenInfo,
-            error: ConnectionHandlerUpgrErr<<Self::OutboundProtocol as OutboundUpgradeSend>::Error>,
-        ) {
-            self.error = Some(error)
         }
 
         fn connection_keep_alive(&self) -> KeepAlive {
@@ -809,6 +844,42 @@ mod tests {
             }
 
             Poll::Pending
+        }
+    }
+}
+
+/// The endpoint roles associated with a pending peer-to-peer connection.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum PendingPoint {
+    /// The socket comes from a dialer.
+    ///
+    /// There is no single address associated with the Dialer of a pending
+    /// connection. Addresses are dialed in parallel. Only once the first dial
+    /// is successful is the address of the connection known.
+    Dialer {
+        /// Same as [`ConnectedPoint::Dialer`] `role_override`.
+        role_override: Endpoint,
+    },
+    /// The socket comes from a listener.
+    Listener {
+        /// Local connection address.
+        local_addr: Multiaddr,
+        /// Address used to send back data to the remote.
+        send_back_addr: Multiaddr,
+    },
+}
+
+impl From<ConnectedPoint> for PendingPoint {
+    fn from(endpoint: ConnectedPoint) -> Self {
+        match endpoint {
+            ConnectedPoint::Dialer { role_override, .. } => PendingPoint::Dialer { role_override },
+            ConnectedPoint::Listener {
+                local_addr,
+                send_back_addr,
+            } => PendingPoint::Listener {
+                local_addr,
+                send_back_addr,
+            },
         }
     }
 }

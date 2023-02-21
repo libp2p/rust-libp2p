@@ -23,7 +23,7 @@
 
 use std::collections::HashMap;
 
-use prometheus_client::encoding::text::Encode;
+use prometheus_client::encoding::{EncodeLabelSet, EncodeLabelValue};
 use prometheus_client::metrics::counter::Counter;
 use prometheus_client::metrics::family::{Family, MetricConstructor};
 use prometheus_client::metrics::gauge::Gauge;
@@ -188,7 +188,7 @@ impl Metrics {
         macro_rules! register_family {
             ($name:expr, $help:expr) => {{
                 let fam = Family::default();
-                registry.register($name, $help, Box::new(fam.clone()));
+                registry.register($name, $help, fam.clone());
                 fam
             }};
         }
@@ -269,7 +269,7 @@ impl Metrics {
         registry.register(
             "score_per_mesh",
             "Histogram of scores per mesh topic",
-            Box::new(score_per_mesh.clone()),
+            score_per_mesh.clone(),
         );
 
         let scoring_penalties = register_family!(
@@ -285,7 +285,7 @@ impl Metrics {
         registry.register(
             "heartbeat_duration",
             "Histogram of observed heartbeat durations",
-            Box::new(heartbeat_duration.clone()),
+            heartbeat_duration.clone(),
         );
 
         let topic_iwant_msgs = register_family!(
@@ -297,7 +297,7 @@ impl Metrics {
             registry.register(
                 "memcache_misses",
                 "Number of times a message is not found in the duplicate cache when validating",
-                Box::new(metric.clone()),
+                metric.clone(),
             );
             metric
         };
@@ -360,7 +360,7 @@ impl Metrics {
         if self.register_topic(topic).is_ok() {
             self.topic_peers_count
                 .get_or_create(topic)
-                .set(count as u64);
+                .set(count as i64);
         }
     }
 
@@ -417,7 +417,7 @@ impl Metrics {
     pub fn set_mesh_peers(&mut self, topic: &TopicHash, count: usize) {
         if self.register_topic(topic).is_ok() {
             // Due to limits, this topic could have not been allowed, so we check.
-            self.mesh_peer_counts.get_or_create(topic).set(count as u64);
+            self.mesh_peer_counts.get_or_create(topic).set(count as i64);
         }
     }
 
@@ -525,7 +525,7 @@ impl Metrics {
 }
 
 /// Reasons why a peer was included in the mesh.
-#[derive(PartialEq, Eq, Hash, Encode, Clone)]
+#[derive(PartialEq, Eq, Hash, EncodeLabelValue, Clone, Debug)]
 pub enum Inclusion {
     /// Peer was a fanaout peer.
     Fanout,
@@ -538,7 +538,7 @@ pub enum Inclusion {
 }
 
 /// Reasons why a peer was removed from the mesh.
-#[derive(PartialEq, Eq, Hash, Encode, Clone)]
+#[derive(PartialEq, Eq, Hash, EncodeLabelValue, Clone, Debug)]
 pub enum Churn {
     /// Peer disconnected.
     Dc,
@@ -553,7 +553,7 @@ pub enum Churn {
 }
 
 /// Kinds of reasons a peer's score has been penalized
-#[derive(PartialEq, Eq, Hash, Encode, Clone)]
+#[derive(PartialEq, Eq, Hash, EncodeLabelValue, Clone, Debug)]
 pub enum Penalty {
     /// A peer grafted before waiting the back-off time.
     GraftBackoff,
@@ -566,27 +566,27 @@ pub enum Penalty {
 }
 
 /// Label for the mesh inclusion event metrics.
-#[derive(PartialEq, Eq, Hash, Encode, Clone)]
+#[derive(PartialEq, Eq, Hash, EncodeLabelSet, Clone, Debug)]
 struct InclusionLabel {
     hash: String,
     reason: Inclusion,
 }
 
 /// Label for the mesh churn event metrics.
-#[derive(PartialEq, Eq, Hash, Encode, Clone)]
+#[derive(PartialEq, Eq, Hash, EncodeLabelSet, Clone, Debug)]
 struct ChurnLabel {
     hash: String,
     reason: Churn,
 }
 
 /// Label for the kinds of protocols peers can connect as.
-#[derive(PartialEq, Eq, Hash, Encode, Clone)]
+#[derive(PartialEq, Eq, Hash, EncodeLabelSet, Clone, Debug)]
 struct ProtocolLabel {
     protocol: PeerKind,
 }
 
 /// Label for the kinds of scoring penalties that can occur
-#[derive(PartialEq, Eq, Hash, Encode, Clone)]
+#[derive(PartialEq, Eq, Hash, EncodeLabelSet, Clone, Debug)]
 struct PenaltyLabel {
     penalty: Penalty,
 }

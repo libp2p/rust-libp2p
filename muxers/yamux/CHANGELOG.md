@@ -1,3 +1,7 @@
+# 0.43.0 [unreleased]
+
+- Update to `libp2p-core` `v0.39.0`.
+
 # 0.43.0-alpha
 
 - Update to `yamux` `v0.11.0`.

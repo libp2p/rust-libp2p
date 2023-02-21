@@ -1,3 +1,18 @@
+# 0.43.0 [unreleased]
+
+- Update to `libp2p-core` `v0.39.0`.
+
+- Require the node's local `PeerId` to be passed into the constructor of `libp2p_mdns::Behaviour`. See [PR 3153].
+
+- Update to `libp2p-swarm` `v0.42.0`.
+
+- Don't expire mDNS records when the last connection was closed.
+  mDNS records will only be expired when the TTL is reached and the DNS record is no longer valid.
+  See [PR 3367].
+
+[PR 3153]: https://github.com/libp2p/rust-libp2p/pull/3153
+[PR 3367]: https://github.com/libp2p/rust-libp2p/pull/3367
+
 # 0.42.0
 
 - Update to `libp2p-core` `v0.38.0`.

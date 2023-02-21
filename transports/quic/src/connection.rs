@@ -236,8 +236,7 @@ impl StreamMuxer for Connection {
                 quinn_proto::Event::Connected | quinn_proto::Event::HandshakeDataReady => {
                     debug_assert!(
                         false,
-                        "Unexpected event {:?} on established QUIC connection",
-                        event
+                        "Unexpected event {event:?} on established QUIC connection"
                     );
                 }
                 quinn_proto::Event::ConnectionLost { reason } => {
@@ -331,7 +330,7 @@ impl StreamMuxer for Connection {
 
         let substream_id = match inner.connection.streams().accept(quinn_proto::Dir::Bi) {
             Some(id) => {
-                inner.poll_outbound_waker = None;
+                inner.poll_inbound_waker = None;
                 id
             }
             None => {

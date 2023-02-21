@@ -4,6 +4,7 @@
 [![dependency status](https://deps.rs/repo/github/libp2p/rust-libp2p/status.svg?style=flat-square)](https://deps.rs/repo/github/libp2p/rust-libp2p)
 [![Crates.io](https://img.shields.io/crates/v/libp2p.svg)](https://crates.io/crates/libp2p)
 [![docs.rs](https://img.shields.io/badge/api-rustdoc-blue.svg)](https://docs.rs/libp2p)
+[![docs.rs master](https://img.shields.io/badge/docs-master-blueviolet)](https://libp2p.github.io/rust-libp2p/libp2p/)
 
 This repository is the central place for Rust development of the [libp2p](https://libp2p.io) spec.
 
@@ -14,8 +15,10 @@ This repository is the central place for Rust development of the [libp2p](https:
 - The **[examples](examples)** folder contains small binaries showcasing the
   many protocols in this repository.
 
-- For **security related issues** please reach out to security@libp2p.io. Please
-  do not file a public issue on GitHub.
+- For **security related issues** please [file a private security vulnerability
+  report](https://github.com/libp2p/rust-libp2p/security/advisories/new)
+  or reach out to [security@libp2p.io](mailto:security@libp2p.io). Please do not
+  file a public issue on GitHub.
 
 - To **report bugs, suggest improvements or request new features** please open a
   GitHub issue on this repository.
@@ -76,6 +79,7 @@ Conduct](https://github.com/ipfs/community/blob/master/code-of-conduct.md).
 (In alphabetical order.)
 
 - Elena Frank ([@elenaf9](https://github.com/elenaf9/))
+- João Oliveira ([@jxs](https://github.com/jxs))
 - Max Inden ([@mxinden](https://github.com/mxinden/))
 - Thomas Eizinger ([@thomaseizinger](https://github.com/thomaseizinger))
 
@@ -88,7 +92,7 @@ Conduct](https://github.com/ipfs/community/blob/master/code-of-conduct.md).
 - [fuel-core](https://github.com/FuelLabs/fuel-core) - A Rust implementation of the Fuel protocol.
 - [HotShot](https://github.com/EspressoSystems/HotShot) - Decentralized sequencer in Rust developed by [Espresso Systems](https://www.espressosys.com/).
 - [ipfs-embed](https://github.com/ipfs-rust/ipfs-embed) - A small embeddable ipfs implementation
-used and maintained by [Actyx][https://www.actyx.com].
+used and maintained by [Actyx](https://www.actyx.com).
 - [iroh](https://github.com/n0-computer/iroh) - Next-generation implementation of IPFS for Cloud & Mobile platforms.
 - [Lighthouse](https://github.com/sigp/lighthouse) - Ethereum consensus client in Rust.
 - [Locutus](https://github.com/freenet/locutus) - Global, observable, decentralized key-value store.

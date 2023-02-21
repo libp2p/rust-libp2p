@@ -1,3 +1,10 @@
+# 0.39.0 [unreleased]
+
+- Update to `libp2p-core` `v0.39.0`.
+- Fix a bug where we removed any other listener in `Transport::remove_listener` except for the one with the provided `ListenerId`. See [PR 3387].
+
+[PR 3387]: https://github.com/libp2p/rust-libp2p/pull/3387
+
 # 0.38.0
 
 - Update to `if-watch`  `v3.0.0` and pass through `tokio` and `async-io` features. See [PR 3101].
