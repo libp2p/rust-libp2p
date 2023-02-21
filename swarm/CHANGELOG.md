@@ -41,7 +41,7 @@
   - `NetworkBehaviour::handle_established_inbound_connection`
   - `NetworkBehaviour::handle_established_outbound_connection`
 
-  Please note that due to limitations in the Rust compiler, _implementations_ of `new_handler` and `addresses_of_peer` are not flagged as deprecated.
+  Please note that due to [limitations](https://github.com/rust-lang/rust/issues/98990) in the Rust compiler, _implementations_ of `new_handler` and `addresses_of_peer` are not flagged as deprecated.
   Nevertheless, they will be removed in the future.
 
   All four are fallible and returning an error from any of them will abort the given connection.
