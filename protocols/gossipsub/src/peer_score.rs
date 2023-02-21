@@ -32,7 +32,7 @@ use std::time::Duration;
 use wasm_timer::Instant;
 
 mod params;
-use crate::error::ValidationError;
+use crate::ValidationError;
 pub use params::{
     score_parameter_decay, score_parameter_decay_with_base, PeerScoreParams, PeerScoreThresholds,
     TopicScoreParams,
