@@ -14,9 +14,7 @@ runs:
       with:
         shared-key: semver-checks-cache
         save-if: ${{ github.ref_name == 'master' }}
-        workspaces: |
-          .
-          target/semver-checks
+        workspaces: target/semver-checks
         cache-directories: |
           ${{ github.workspace }}/target/semver-checks/cache
 
