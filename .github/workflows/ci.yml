@@ -55,8 +55,6 @@ jobs:
         with:
           shared-key: stable-cache
           save-if: false
-          cache-directories: |
-            target/semver-checks/cache
 
       - name: Run all tests
         run: cargo test --package ${{ matrix.crate }} --all-features
@@ -71,7 +69,7 @@ jobs:
           echo "code=${RESPONSE_CODE}"
           echo "code=${RESPONSE_CODE}" >> $GITHUB_OUTPUT
 
-      - run: ./.github/actions/setup-cargo-semver-checks
+      - uses: ./.github/actions/setup-cargo-semver-checks
         if: steps.check-released.outputs.code == 200 # Workaround until https://github.com/obi1kenobi/cargo-semver-check/issues/146 is shipped.
 
       - name: Check public API for semver violations

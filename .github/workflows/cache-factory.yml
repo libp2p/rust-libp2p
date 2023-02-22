@@ -73,7 +73,7 @@ jobs:
       - name: Compile workspace with stable Rust
         run: cargo test --all-features --all-targets --workspace --no-run
 
-      - run: ./.github/actions/setup-cargo-semver-checks
+      - uses: ./.github/actions/setup-cargo-semver-checks
 
       - name: Cache registry baseline rustdoc
         run: cargo semver-checks check-release --workspace
