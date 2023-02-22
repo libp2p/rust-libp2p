@@ -87,7 +87,7 @@ jobs:
         with:
           shared-key: semver-checks-cache
           workspaces: |
-            . -> target/semver-checks/target
+            target/semver-checks
           cache-directories: |
             target/semver-checks/cache
 
