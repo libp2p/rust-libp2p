@@ -69,13 +69,6 @@ jobs:
           echo "code=${RESPONSE_CODE}"
           echo "code=${RESPONSE_CODE}" >> $GITHUB_OUTPUT
 
-      - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
-        with:
-          shared-key: semver-checks-cache
-          save-if: false
-          cache-directories: |
-            target/semver-checks/cache # Contains registry baseline rustdoc JSON
-
       - uses: ./.github/actions/setup-cargo-semver-checks
 
       - name: Check public API for semver violations

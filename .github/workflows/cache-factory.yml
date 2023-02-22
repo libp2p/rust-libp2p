@@ -83,14 +83,6 @@ jobs:
         with:
           toolchain: stable
 
-      - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
-        with:
-          shared-key: semver-checks-cache
-          workspaces: |
-            target/semver-checks
-          cache-directories: |
-            target/semver-checks/cache
-
       - uses: ./.github/actions/setup-cargo-semver-checks
 
       - name: Cache registry baseline rustdoc
