@@ -92,12 +92,14 @@ pub struct SecretKey(SigningKey);
 impl SecretKey {
     /// Generate a new random ECDSA secret key.
     pub fn generate() -> SecretKey {
-        SecretKey(SigningKey::random(rand::thread_rng()))
+        SecretKey(SigningKey::random(&mut rand::thread_rng()))
     }
 
     /// Sign a message with this secret key, producing a DER-encoded ECDSA signature.
     pub fn sign(&self, msg: &[u8]) -> Vec<u8> {
-        self.0.sign(msg).to_der().as_bytes().to_owned()
+        let signature: p256::ecdsa::DerSignature = self.0.sign(msg);
+
+        signature.as_bytes().to_owned()
     }
 
     /// Encode a secret key into a byte buffer.
