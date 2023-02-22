@@ -266,22 +266,6 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ github.event_name == 'pull_request' }}
     steps:
-      - uses: amannn/action-semantic-pull-request@b6bca70dcd3e56e896605356ce09b76f7e1e0d39 # v5.1.0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          # Configure which types are allowed (newline delimited).
-          types: |
-            feat
-            fix
-            chore
-            docs
-            deps
-            test
-            ci
-            refactor
-          require_scope: false
-
       - name: Check PR title length
         env:
           TITLE: ${{ github.event.pull_request.title }}
