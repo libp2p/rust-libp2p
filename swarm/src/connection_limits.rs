@@ -84,8 +84,8 @@ impl NetworkBehaviour for Behaviour {
 
     fn handle_established_inbound_connection(
         &mut self,
-        peer: PeerId,
         connection_id: ConnectionId,
+        peer: PeerId,
         _: &Multiaddr,
         _: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
@@ -119,10 +119,10 @@ impl NetworkBehaviour for Behaviour {
 
     fn handle_pending_outbound_connection(
         &mut self,
+        connection_id: ConnectionId,
         _: Option<PeerId>,
         _: &[Multiaddr],
         _: Endpoint,
-        connection_id: ConnectionId,
     ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
         self.check_limit(
             self.limits.max_pending_outgoing,
@@ -136,10 +136,10 @@ impl NetworkBehaviour for Behaviour {
 
     fn handle_established_outbound_connection(
         &mut self,
+        connection_id: ConnectionId,
         peer: PeerId,
         _: &Multiaddr,
         _: Endpoint,
-        connection_id: ConnectionId,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         self.pending_outbound_connections.remove(&connection_id);
 
