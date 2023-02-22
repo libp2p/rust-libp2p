@@ -54,7 +54,7 @@ impl Behaviour {
         let limit = limit.unwrap_or(u32::MAX);
         let current = current as u32;
 
-        if current > limit {
+        if current >= limit {
             return Err(ConnectionDenied::new(ConnectionLimit { limit, current }));
         }
 
@@ -212,5 +212,211 @@ impl NetworkBehaviour for Behaviour {
         _: &mut impl PollParameters,
     ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>> {
         Poll::Pending
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{DialError, DialOpts, ListenError, Swarm, SwarmEvent};
+    use futures::ready;
+    use futures::future;
+    use futures::StreamExt;
+    use libp2p_core::{identity, multiaddr::multiaddr, transport, upgrade, Transport};
+    use libp2p_plaintext as plaintext;
+    use libp2p_yamux as yamux;
+    use quickcheck::*;
+
+    #[test]
+    fn max_outgoing() {
+        use rand::Rng;
+
+        let outgoing_limit = rand::thread_rng().gen_range(1..10);
+
+        let mut network =
+            new_swarm(ConnectionLimits::default().with_max_pending_outgoing(Some(outgoing_limit)));
+
+        let addr: Multiaddr = "/memory/1234".parse().unwrap();
+
+        let target = PeerId::random();
+        for _ in 0..outgoing_limit {
+            network
+                .dial(
+                    DialOpts::peer_id(target)
+                        .addresses(vec![addr.clone()])
+                        .build(),
+                )
+                .expect("Unexpected connection limit.");
+        }
+
+        match network
+            .dial(DialOpts::peer_id(target).addresses(vec![addr]).build())
+            .expect_err("Unexpected dialing success.")
+        {
+            DialError::Denied { cause } => {
+                let limit = cause
+                    .downcast::<ConnectionLimit>()
+                    .expect("connection denied because of limit");
+
+                assert_eq!(limit.current, outgoing_limit);
+                assert_eq!(limit.limit, outgoing_limit);
+            }
+            e => panic!("Unexpected error: {e:?}"),
+        }
+
+        let info = network.network_info();
+        assert_eq!(info.num_peers(), 0);
+        assert_eq!(
+            info.connection_counters().num_pending_outgoing(),
+            outgoing_limit
+        );
+    }
+
+    #[test]
+    fn max_established_incoming() {
+        #[derive(Debug, Clone)]
+        struct Limit(u32);
+
+        impl Arbitrary for Limit {
+            fn arbitrary(g: &mut Gen) -> Self {
+                Self(g.gen_range(1..10))
+            }
+        }
+
+        fn limits(limit: u32) -> ConnectionLimits {
+            ConnectionLimits::default().with_max_established_incoming(Some(limit))
+        }
+
+        fn prop(limit: Limit) {
+            let limit = limit.0;
+
+            let mut network1 = new_swarm(limits(limit));
+            let mut network2 = new_swarm(limits(limit));
+
+            let _ = network1.listen_on(multiaddr![Memory(0u64)]).unwrap();
+            let listen_addr = async_std::task::block_on(future::poll_fn(|cx| {
+                match ready!(network1.poll_next_unpin(cx)).unwrap() {
+                    SwarmEvent::NewListenAddr { address, .. } => Poll::Ready(address),
+                    e => panic!("Unexpected network event: {e:?}"),
+                }
+            }));
+
+            // Spawn and block on the dialer.
+            async_std::task::block_on({
+                let mut n = 0;
+                network2.dial(listen_addr.clone()).unwrap();
+
+                let mut expected_closed = false;
+                let mut network_1_established = false;
+                let mut network_2_established = false;
+                let mut network_1_limit_reached = false;
+                let mut network_2_limit_reached = false;
+                future::poll_fn(move |cx| {
+                    loop {
+                        let mut network_1_pending = false;
+                        let mut network_2_pending = false;
+
+                        match network1.poll_next_unpin(cx) {
+                            Poll::Ready(Some(SwarmEvent::IncomingConnection { .. })) => {}
+                            Poll::Ready(Some(SwarmEvent::ConnectionEstablished { .. })) => {
+                                network_1_established = true;
+                            }
+                            Poll::Ready(Some(SwarmEvent::IncomingConnectionError {
+                                error: ListenError::Denied { cause },
+                                ..
+                            })) => {
+                                let err = cause
+                                    .downcast::<ConnectionLimit>()
+                                    .expect("connection denied because of limit");
+
+                                assert_eq!(err.limit, limit);
+                                assert_eq!(err.limit, err.current);
+                                let info = network1.network_info();
+                                let counters = info.connection_counters();
+                                assert_eq!(counters.num_established_incoming(), limit);
+                                assert_eq!(counters.num_established(), limit);
+                                network_1_limit_reached = true;
+                            }
+                            Poll::Pending => {
+                                network_1_pending = true;
+                            }
+                            e => panic!("Unexpected network event: {e:?}"),
+                        }
+
+                        match network2.poll_next_unpin(cx) {
+                            Poll::Ready(Some(SwarmEvent::ConnectionEstablished { .. })) => {
+                                network_2_established = true;
+                            }
+                            Poll::Ready(Some(SwarmEvent::ConnectionClosed { .. })) => {
+                                assert!(expected_closed);
+                                let info = network2.network_info();
+                                let counters = info.connection_counters();
+                                assert_eq!(counters.num_established_outgoing(), limit);
+                                assert_eq!(counters.num_established(), limit);
+                                network_2_limit_reached = true;
+                            }
+                            Poll::Pending => {
+                                network_2_pending = true;
+                            }
+                            e => panic!("Unexpected network event: {e:?}"),
+                        }
+
+                        if network_1_pending && network_2_pending {
+                            return Poll::Pending;
+                        }
+
+                        if network_1_established && network_2_established {
+                            network_1_established = false;
+                            network_2_established = false;
+
+                            if n <= limit {
+                                // Dial again until the limit is exceeded.
+                                n += 1;
+                                network2.dial(listen_addr.clone()).unwrap();
+
+                                if n == limit {
+                                    // The the next dialing attempt exceeds the limit, this
+                                    // is the connection we expected to get closed.
+                                    expected_closed = true;
+                                }
+                            } else {
+                                panic!("Expect networks not to establish connections beyond the limit.")
+                            }
+                        }
+
+                        if network_1_limit_reached && network_2_limit_reached {
+                            return Poll::Ready(());
+                        }
+                    }
+                })
+            });
+        }
+
+        quickcheck(prop as fn(_));
+    }
+
+    fn new_swarm(limits: ConnectionLimits) -> Swarm<Behaviour> {
+        let id_keys = identity::Keypair::generate_ed25519();
+        let local_public_key = id_keys.public();
+        let transport = transport::MemoryTransport::default()
+            .upgrade(upgrade::Version::V1)
+            .authenticate(plaintext::PlainText2Config {
+                local_public_key: local_public_key.clone(),
+            })
+            .multiplex(yamux::YamuxConfig::default())
+            .boxed();
+        let behaviour = Behaviour {
+            limits: super::Behaviour::new(limits),
+            keep_alive: crate::keep_alive::Behaviour,
+        };
+
+        Swarm::without_executor(transport, behaviour, local_public_key.to_peer_id())
+    }
+
+    #[derive(libp2p_swarm_derive::NetworkBehaviour)]
+    #[behaviour(prelude = "crate::derive_prelude")]
+    struct Behaviour {
+        limits: crate::connection_limits::Behaviour,
+        keep_alive: crate::keep_alive::Behaviour,
     }
 }

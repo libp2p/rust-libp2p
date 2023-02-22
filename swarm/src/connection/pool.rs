@@ -888,6 +888,7 @@ impl ConnectionCounters {
     }
 
     /// The effective connection limits.
+    #[deprecated(note = "Use the `connection_limits::Behaviour` instead.")]
     pub fn limits(&self) -> &ConnectionLimits {
         &self.limits
     }
