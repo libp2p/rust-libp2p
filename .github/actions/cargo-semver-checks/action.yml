@@ -1,5 +1,9 @@
-name: "Setup cargo semver-checks"
-description: "Installs the cargo semver-checks tool"
+name: "Run cargo semver-checks"
+description: "Install and run the cargo semver-checks tool"
+inputs:
+  args:
+    required: true
+    description: "The arguments to pass to `cargo semver-checks`"
 runs:
   using: "composite"
   steps:
@@ -15,3 +19,6 @@ runs:
           target/semver-checks
         cache-directories: |
           ${{ github.workspace }}/target/semver-checks/cache
+
+    - run: cargo semver-checks ${{ inputs.args }}
+      shell: bash
