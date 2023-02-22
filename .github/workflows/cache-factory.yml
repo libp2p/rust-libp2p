@@ -99,4 +99,4 @@ jobs:
       - uses: ./.github/actions/setup-cargo-semver-checks
 
       - name: Cache registry baseline rustdoc
-        run: cargo semver-checks check-release --workspace
+        run: cargo semver-checks check-release --workspace --verbose
