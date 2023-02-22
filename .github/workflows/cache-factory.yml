@@ -73,7 +73,7 @@ jobs:
       - name: Compile workspace with stable Rust
         run: cargo test --all-features --all-targets --workspace --no-run
 
+      - run: ./.github/actions/setup-cargo-semver-checks
+
       - name: Cache registry baseline rustdoc
-        run: |
-          wget -q -O- https://github.com/obi1kenobi/cargo-semver-checks/releases/download/v0.18.0/cargo-semver-checks-x86_64-unknown-linux-gnu.tar.gz | tar -xz -C ~/.cargo/bin
-          cargo semver-checks check-release --workspace
+        run: cargo semver-checks check-release --workspace
