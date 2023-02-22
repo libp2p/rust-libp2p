@@ -151,6 +151,7 @@ mod gossip_promises;
 mod handler;
 mod mcache;
 mod peer_score;
+mod protocol_priv;
 mod topic;
 mod transform;
 mod types;
@@ -164,6 +165,7 @@ pub use self::peer_score::{
     score_parameter_decay, score_parameter_decay_with_base, PeerScoreParams, PeerScoreThresholds,
     TopicScoreParams,
 };
+pub use self::protocol_priv::{GossipsubCodec, ProtocolConfig, ProtocolId};
 pub use self::topic::{Hasher, Topic, TopicHash};
 pub use self::transform::{DataTransform, IdentityTransform};
 pub use self::types::{FastMessageId, Message, MessageAcceptance, MessageId, RawMessage, Rpc};
