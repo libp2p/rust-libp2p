@@ -1,4 +1,4 @@
-# 0.42.0 [unreleased]
+# 0.42.0
 
 - Remove `handler` field from `NetworkBehaviourAction::Dial`.
   Instead of constructing the handler early, you can now access the `ConnectionId` of the future connection on `DialOpts`.
@@ -55,7 +55,7 @@
   The default values remains 7.
   If you have previously set `connection_event_buffer_size` you should re-evaluate what a good size for a _per connection_ buffer is.
   See [PR 3188].
-  
+
 - Add `PendingConnectionError::LocalPeerId` to differentiate wrong VS local peer ID errors. See [PR 3377].
 
 - Remove `PendingConnectionError:::IO` variant.

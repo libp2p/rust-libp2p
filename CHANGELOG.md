@@ -45,7 +45,7 @@
 
 # `libp2p` facade crate
 
-# 0.51.0 [unreleased]
+# 0.51.0
 
 - Count bandwidth at the application level. Previously `BandwidthLogging` would implement `Transport` and now implements `StreamMuxer` ([PR 3180](https://github.com/libp2p/rust-libp2p/pull/3180)).
     - `BandwidthLogging::new` now requires a 2nd argument: `Arc<BandwidthSinks>`
