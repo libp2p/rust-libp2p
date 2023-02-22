@@ -95,6 +95,7 @@ jobs:
           shared-key: semver-checks-cache
           cache-directories: |
             target/semver-checks/cache # Contains registry baseline rustdoc JSON
+            target/semver-checks/target # Contains debug build symbols
 
       - uses: ./.github/actions/setup-cargo-semver-checks
 
