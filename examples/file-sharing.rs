@@ -547,7 +547,7 @@ mod network {
                             .swarm
                             .dial(peer_addr.with(Protocol::P2p(peer_id.into())))
                         {
-                            Ok(_) => {
+                            Ok(()) => {
                                 e.insert(sender);
                             }
                             Err(e) => {

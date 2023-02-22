@@ -1,6 +1,6 @@
-# test-plans test implementation
+# Interop tests implementation
 
-This folder defines the implementation for the test-plans interop tests.
+This folder defines the implementation for the interop tests.
 
 # Running this test locally
 
@@ -23,12 +23,11 @@ of these nodes with the other version's interop test.
 
 To run this test against all released libp2p versions you'll need to have the
 (libp2p/test-plans)[https://github.com/libp2p/test-plans] checked out. Then do
-the following:
+the following (from the root directory of this repository):
 
-1. Build the image: `make`.
-2. Build the images for all released versions in `libp2p/test-plans`: `(cd <path
-   to >/libp2p/test-plans/multidim-interop/ && make)`.
-3. Make a folder for the specified extra versions: `mkdir extra-versions && mv ping-versions.json extra-versions`
-4. Run the test:
+1. Build the image: `docker build -t rust-libp2p-head . -f interop-tests/Dockerfile`.
+1. Build the images for all released versions in `libp2p/test-plans`: `(cd <path to >/libp2p/test-plans/multidim-interop/ && make)`.
+1. Run the test:
 ```
-RUST_LIBP2P_TEST_PLANS="$PWD"; (cd <path to >/libp2p/test-plans/multidim-interop/ && npm run test -- --extra-versions-dir=$RUST_LIBP2P_TEST_PLANS/extra-versions --name-filter="rust-libp2p-head")
+RUST_LIBP2P="$PWD"; (cd <path to >/libp2p/test-plans/multidim-interop/ && npm run test -- --extra-version=$RUST_LIBP2P/interop-tests/ping-version.json --name-filter="rust-libp2p-head")
+```

@@ -23,6 +23,7 @@
 mod handler;
 pub(crate) mod transport;
 
+use crate::multiaddr_ext::MultiaddrExt;
 use crate::priv_client::handler::Handler;
 use crate::protocol::{self, inbound_stop, outbound_hop};
 use bytes::Bytes;
@@ -33,14 +34,13 @@ use futures::future::{BoxFuture, FutureExt};
 use futures::io::{AsyncRead, AsyncWrite};
 use futures::ready;
 use futures::stream::StreamExt;
-use libp2p_core::multiaddr::Protocol;
 use libp2p_core::{Endpoint, Multiaddr, PeerId};
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm};
 use libp2p_swarm::dial_opts::DialOpts;
 use libp2p_swarm::{
     dummy, ConnectionDenied, ConnectionHandler, ConnectionHandlerUpgrErr, ConnectionId,
-    NegotiatedSubstream, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
-    THandler, THandlerInEvent, THandlerOutEvent,
+    DialFailure, NegotiatedSubstream, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
+    PollParameters, THandler, THandlerInEvent, THandlerOutEvent,
 };
 use std::collections::{hash_map, HashMap, VecDeque};
 use std::io::{Error, ErrorKind, IoSlice};
@@ -164,14 +164,12 @@ impl NetworkBehaviour for Behaviour {
 
     fn handle_established_inbound_connection(
         &mut self,
-        peer: PeerId,
         connection_id: ConnectionId,
+        peer: PeerId,
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        let is_relayed = local_addr.iter().any(|p| p == Protocol::P2pCircuit); // TODO: Make this an extension on `Multiaddr`.
-
-        if is_relayed {
+        if local_addr.is_relayed() {
             return Ok(Either::Right(dummy::ConnectionHandler));
         }
 
@@ -186,14 +184,12 @@ impl NetworkBehaviour for Behaviour {
 
     fn handle_established_outbound_connection(
         &mut self,
+        connection_id: ConnectionId,
         peer: PeerId,
         addr: &Multiaddr,
-        _role_override: Endpoint,
-        connection_id: ConnectionId,
+        _: Endpoint,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        let is_relayed = addr.iter().any(|p| p == Protocol::P2pCircuit); // TODO: Make this an extension on `Multiaddr`.
-
-        if is_relayed {
+        if addr.is_relayed() {
             return Ok(Either::Right(dummy::ConnectionHandler));
         }
 
@@ -233,8 +229,10 @@ impl NetworkBehaviour for Behaviour {
             FromSwarm::ConnectionClosed(connection_closed) => {
                 self.on_connection_closed(connection_closed)
             }
+            FromSwarm::DialFailure(DialFailure { connection_id, .. }) => {
+                self.pending_handler_commands.remove(&connection_id);
+            }
             FromSwarm::AddressChange(_)
-            | FromSwarm::DialFailure(_)
             | FromSwarm::ListenFailure(_)
             | FromSwarm::NewListener(_)
             | FromSwarm::NewListenAddr(_)

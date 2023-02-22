@@ -176,8 +176,8 @@ pub trait NetworkBehaviour: 'static {
     /// Returning an error will immediately close the connection.
     fn handle_established_inbound_connection(
         &mut self,
-        peer: PeerId,
         _connection_id: ConnectionId,
+        peer: PeerId,
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
@@ -205,10 +205,10 @@ pub trait NetworkBehaviour: 'static {
     /// Any error returned from this function will immediately abort the dial attempt.
     fn handle_pending_outbound_connection(
         &mut self,
+        _connection_id: ConnectionId,
         maybe_peer: Option<PeerId>,
         _addresses: &[Multiaddr],
         _effective_role: Endpoint,
-        _connection_id: ConnectionId,
     ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
         #[allow(deprecated)]
         if let Some(peer_id) = maybe_peer {
@@ -226,10 +226,10 @@ pub trait NetworkBehaviour: 'static {
     /// Returning an error will immediately close the connection.
     fn handle_established_outbound_connection(
         &mut self,
+        _connection_id: ConnectionId,
         peer: PeerId,
         addr: &Multiaddr,
         role_override: Endpoint,
-        _connection_id: ConnectionId,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         #[allow(deprecated)]
         Ok(self.new_handler().into_handler(
@@ -468,18 +468,13 @@ pub enum NotifyHandler {
 }
 
 /// The options which connections to close.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub enum CloseConnection {
     /// Disconnect a particular connection.
     One(ConnectionId),
     /// Disconnect all connections.
+    #[default]
     All,
-}
-
-impl Default for CloseConnection {
-    fn default() -> Self {
-        CloseConnection::All
-    }
 }
 
 /// Enumeration with the list of the possible events
@@ -577,6 +572,7 @@ pub struct ListenFailure<'a> {
     pub local_addr: &'a Multiaddr,
     pub send_back_addr: &'a Multiaddr,
     pub error: &'a ListenError,
+    pub connection_id: ConnectionId,
 }
 
 /// [`FromSwarm`] variant that informs the behaviour that a new listener was created.
@@ -703,10 +699,12 @@ impl<'a, Handler: IntoConnectionHandler> FromSwarm<'a, Handler> {
             FromSwarm::ListenFailure(ListenFailure {
                 local_addr,
                 send_back_addr,
+                connection_id,
                 error,
             }) => Some(FromSwarm::ListenFailure(ListenFailure {
                 local_addr,
                 send_back_addr,
+                connection_id,
                 error,
             })),
             FromSwarm::NewListener(NewListener { listener_id }) => {

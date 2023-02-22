@@ -25,6 +25,7 @@ pub mod rate_limiter;
 
 use crate::behaviour::handler::Handler;
 use crate::message_proto;
+use crate::multiaddr_ext::MultiaddrExt;
 use crate::protocol::{inbound_hop, outbound_stop};
 use either::Either;
 use instant::Instant;
@@ -257,14 +258,12 @@ impl NetworkBehaviour for Behaviour {
 
     fn handle_established_inbound_connection(
         &mut self,
-        _peer: PeerId,
-        _connection_id: ConnectionId,
+        _: ConnectionId,
+        _: PeerId,
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        let is_relayed = local_addr.iter().any(|p| p == Protocol::P2pCircuit); // TODO: Make this an extension on `Multiaddr`.
-
-        if is_relayed {
+        if local_addr.is_relayed() {
             // Deny all substreams on relayed connection.
             return Ok(Either::Right(dummy::ConnectionHandler));
         }
@@ -284,14 +283,12 @@ impl NetworkBehaviour for Behaviour {
 
     fn handle_established_outbound_connection(
         &mut self,
-        _peer: PeerId,
+        _: ConnectionId,
+        _: PeerId,
         addr: &Multiaddr,
         role_override: Endpoint,
-        _connection_id: ConnectionId,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        let is_relayed = addr.iter().any(|p| p == Protocol::P2pCircuit); // TODO: Make this an extension on `Multiaddr`.
-
-        if is_relayed {
+        if addr.is_relayed() {
             // Deny all substreams on relayed connection.
             return Ok(Either::Right(dummy::ConnectionHandler));
         }

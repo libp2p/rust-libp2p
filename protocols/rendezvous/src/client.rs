@@ -171,8 +171,8 @@ impl NetworkBehaviour for Behaviour {
 
     fn handle_established_inbound_connection(
         &mut self,
-        _: PeerId,
         _: ConnectionId,
+        _: PeerId,
         _: &Multiaddr,
         _: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
@@ -183,10 +183,10 @@ impl NetworkBehaviour for Behaviour {
 
     fn handle_pending_outbound_connection(
         &mut self,
+        _connection_id: ConnectionId,
         maybe_peer: Option<PeerId>,
         _addresses: &[Multiaddr],
         _effective_role: Endpoint,
-        _connection_id: ConnectionId,
     ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
         let peer = match maybe_peer {
             None => return Ok(vec![]),
@@ -206,10 +206,10 @@ impl NetworkBehaviour for Behaviour {
 
     fn handle_established_outbound_connection(
         &mut self,
+        _: ConnectionId,
         _: PeerId,
         _: &Multiaddr,
         _: Endpoint,
-        _: ConnectionId,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         Ok(SubstreamConnectionHandler::new_outbound_only(
             Duration::from_secs(30),
@@ -322,7 +322,7 @@ fn handle_outbound_event(
     peer_id: PeerId,
     discovered_peers: &mut HashMap<(PeerId, Namespace), Vec<Multiaddr>>,
     expiring_registrations: &mut FuturesUnordered<BoxFuture<'static, (PeerId, Namespace)>>,
-) -> Vec<NetworkBehaviourAction<Event, InEvent<outbound::OpenInfo, Void, Void>>> {
+) -> Vec<NetworkBehaviourAction<Event, THandlerInEvent<Behaviour>>> {
     match event {
         outbound::OutEvent::Registered { namespace, ttl } => {
             vec![NetworkBehaviourAction::GenerateEvent(Event::Registered {

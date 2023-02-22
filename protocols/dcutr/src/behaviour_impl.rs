@@ -82,6 +82,8 @@ pub struct Behaviour {
 
     direct_to_relayed_connections: HashMap<ConnectionId, ConnectionId>,
 
+    /// Indexed by the [`ConnectionId`] of the relayed connection and
+    /// the [`PeerId`] we are trying to establish a direct connection to.
     outgoing_direct_connection_attempts: HashMap<(ConnectionId, PeerId), u8>,
 }
 
@@ -162,23 +164,28 @@ impl Behaviour {
             ..
         }: DialFailure,
     ) {
-        let peer_id = match peer_id {
-            None => return,
-            Some(peer_id) => peer_id,
+        let peer_id = if let Some(peer_id) = peer_id {
+            peer_id
+        } else {
+            return;
         };
-        let attempt = match self
-            .outgoing_direct_connection_attempts
-            .remove(&(failed_direct_connection, peer_id))
-        {
-            None => return,
-            Some(attempt) => attempt,
-        };
-        let relayed_connection_id = match self
+
+        let relayed_connection_id = if let Some(relayed_connection_id) = self
             .direct_to_relayed_connections
             .get(&failed_direct_connection)
         {
-            None => return,
-            Some(relayed_connection_id) => *relayed_connection_id,
+            *relayed_connection_id
+        } else {
+            return;
+        };
+
+        let attempt = if let Some(attempt) = self
+            .outgoing_direct_connection_attempts
+            .get(&(relayed_connection_id, peer_id))
+        {
+            *attempt
+        } else {
+            return;
         };
 
         if attempt < MAX_NUMBER_OF_UPGRADE_ATTEMPTS {
@@ -190,7 +197,7 @@ impl Behaviour {
                         attempt: attempt + 1,
                         obs_addrs: self.observed_addreses(),
                     }),
-                });
+                })
         } else {
             self.queued_events.extend([
                 NetworkBehaviourAction::NotifyHandler {
@@ -240,19 +247,17 @@ impl NetworkBehaviour for Behaviour {
 
     fn handle_established_inbound_connection(
         &mut self,
-        peer: PeerId,
         connection_id: ConnectionId,
+        peer: PeerId,
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        let is_relayed = local_addr.iter().any(|p| p == Protocol::P2pCircuit); // TODO: Make this an extension on `Multiaddr`.
-
         match self
             .outgoing_direct_connection_attempts
             .remove(&(connection_id, peer))
         {
             None => {
-                let handler = if is_relayed {
+                let handler = if is_relayed(local_addr) {
                     Either::Left(handler::relayed::Handler::new(ConnectedPoint::Listener {
                         local_addr: local_addr.clone(),
                         send_back_addr: remote_addr.clone(),
@@ -265,7 +270,7 @@ impl NetworkBehaviour for Behaviour {
             }
             Some(_) => {
                 assert!(
-                    !is_relayed,
+                    !is_relayed(local_addr),
                     "`Prototype::DirectConnection` is never created for relayed connection."
                 );
 
@@ -278,19 +283,17 @@ impl NetworkBehaviour for Behaviour {
 
     fn handle_established_outbound_connection(
         &mut self,
+        connection_id: ConnectionId,
         peer: PeerId,
         addr: &Multiaddr,
         role_override: Endpoint,
-        connection_id: ConnectionId,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        let is_relayed = addr.iter().any(|p| p == Protocol::P2pCircuit); // TODO: Make this an extension on `Multiaddr`.
-
         match self
             .outgoing_direct_connection_attempts
             .remove(&(connection_id, peer))
         {
             None => {
-                let handler = if is_relayed {
+                let handler = if is_relayed(addr) {
                     Either::Left(handler::relayed::Handler::new(ConnectedPoint::Dialer {
                         address: addr.clone(),
                         role_override,
@@ -303,7 +306,7 @@ impl NetworkBehaviour for Behaviour {
             }
             Some(_) => {
                 assert!(
-                    !is_relayed,
+                    !is_relayed(addr),
                     "`Prototype::DirectConnection` is never created for relayed connection."
                 );
 
@@ -397,7 +400,7 @@ impl NetworkBehaviour for Behaviour {
                     .insert(maybe_direct_connection_id, relayed_connection_id);
                 *self
                     .outgoing_direct_connection_attempts
-                    .entry((maybe_direct_connection_id, event_source))
+                    .entry((relayed_connection_id, event_source))
                     .or_default() += 1;
                 self.queued_events
                     .push_back(NetworkBehaviourAction::Dial { opts });
@@ -456,4 +459,8 @@ impl NetworkBehaviour for Behaviour {
             | FromSwarm::ExpiredExternalAddr(_) => {}
         }
     }
+}
+
+fn is_relayed(addr: &Multiaddr) -> bool {
+    addr.iter().any(|p| p == Protocol::P2pCircuit)
 }

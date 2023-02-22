@@ -3,9 +3,11 @@ defaults:
     queue:
       method: squash
       commit_message_template: |
-        {{ title }} (#{{ number }})
+        {{ title }}
         
-        {{ body | get_section("## Description", "") }}   
+        {{ body | get_section("## Description", "") }}
+        
+        Pull-Request: #{{ number }}.
 
 pull_request_rules:
   - name: Ask to resolve conflict

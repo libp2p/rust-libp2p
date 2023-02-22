@@ -128,6 +128,7 @@ pub use handler::{
 pub use libp2p_swarm_derive::NetworkBehaviour;
 pub use registry::{AddAddressResult, AddressRecord, AddressScore};
 
+use crate::handler::UpgradeInfoSend;
 use connection::pool::{EstablishedConnection, Pool, PoolConfig, PoolEvent};
 use connection::IncomingInfo;
 use dial_opts::{DialOpts, PeerCondition};
@@ -139,7 +140,7 @@ use libp2p_core::{
     multihash::Multihash,
     muxing::StreamMuxerBox,
     transport::{self, ListenerId, TransportError, TransportEvent},
-    Endpoint, Multiaddr, Negotiated, PeerId, Transport,
+    Endpoint, Multiaddr, Negotiated, PeerId, ProtocolName, Transport,
 };
 use registry::{AddressIntoIter, Addresses};
 use smallvec::SmallVec;
@@ -330,12 +331,6 @@ where
     /// List of nodes for which we deny any incoming connection.
     banned_peers: HashSet<PeerId>,
 
-    /// Connections for which we withhold any reporting. These belong to banned peers.
-    ///
-    /// Note: Connections to a peer that are established at the time of banning that peer
-    /// are not added here. Instead they are simply closed.
-    banned_peer_connections: HashSet<ConnectionId>,
-
     /// Pending event to be delivered to connection handlers
     /// (or dropped if the peer disconnected) before the `behaviour`
     /// can be polled again.
@@ -348,19 +343,6 @@ impl<TBehaviour> Swarm<TBehaviour>
 where
     TBehaviour: NetworkBehaviour,
 {
-    /// Builds a new `Swarm`.
-    #[deprecated(
-        since = "0.41.0",
-        note = "This constructor is considered ambiguous regarding the executor. Use one of the new, executor-specific constructors or `Swarm::with_threadpool_executor` for the same behaviour."
-    )]
-    pub fn new(
-        transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
-        behaviour: TBehaviour,
-        local_peer_id: PeerId,
-    ) -> Self {
-        Self::with_threadpool_executor(transport, behaviour, local_peer_id)
-    }
-
     /// Builds a new `Swarm` with a provided executor.
     pub fn with_executor(
         transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
@@ -506,7 +488,7 @@ where
     /// # use libp2p_core::transport::dummy::DummyTransport;
     /// # use libp2p_swarm::dummy;
     /// #
-    /// let mut swarm = Swarm::new(
+    /// let mut swarm = Swarm::without_executor(
     ///     DummyTransport::new().boxed(),
     ///     dummy::Behaviour,
     ///     PeerId::random(),
@@ -567,10 +549,10 @@ where
             let mut addresses_from_opts = dial_opts.get_addresses();
 
             match self.behaviour.handle_pending_outbound_connection(
+                connection_id,
                 peer_id,
                 addresses_from_opts.as_slice(),
                 dial_opts.role_override(),
-                connection_id,
             ) {
                 Ok(addresses) => {
                     if dial_opts.extend_addresses_through_behaviour() {
@@ -798,62 +780,126 @@ where
                 peer_id,
                 id,
                 endpoint,
-                other_established_connection_ids,
+                connection,
                 concurrent_dial_errors,
-                supported_protocols,
                 established_in,
             } => {
                 if self.banned_peers.contains(&peer_id) {
-                    // Mark the connection for the banned peer as banned, thus withholding any
-                    // future events from the connection to the behaviour.
-                    self.banned_peer_connections.insert(id);
-                    self.pool.disconnect(peer_id);
                     return Some(SwarmEvent::BannedPeer { peer_id, endpoint });
-                } else {
-                    let num_established = NonZeroU32::new(
-                        u32::try_from(other_established_connection_ids.len() + 1).unwrap(),
-                    )
-                    .expect("n + 1 is always non-zero; qed");
-                    let non_banned_established = other_established_connection_ids
-                        .into_iter()
-                        .filter(|conn_id| !self.banned_peer_connections.contains(conn_id))
-                        .count();
-
-                    log::debug!(
-                            "Connection established: {:?} {:?}; Total (peer): {}. Total non-banned (peer): {}",
-                            peer_id,
-                            endpoint,
-                            num_established,
-                            non_banned_established + 1,
-                        );
-                    let failed_addresses = concurrent_dial_errors
-                        .as_ref()
-                        .map(|es| {
-                            es.iter()
-                                .map(|(a, _)| a)
-                                .cloned()
-                                .collect::<Vec<Multiaddr>>()
-                        })
-                        .unwrap_or_default();
-                    self.behaviour
-                        .on_swarm_event(FromSwarm::ConnectionEstablished(
-                            behaviour::ConnectionEstablished {
-                                peer_id,
-                                connection_id: id,
-                                endpoint: &endpoint,
-                                failed_addresses: &failed_addresses,
-                                other_established: non_banned_established,
-                            },
-                        ));
-                    self.supported_protocols = supported_protocols;
-                    return Some(SwarmEvent::ConnectionEstablished {
-                        peer_id,
-                        num_established,
-                        endpoint,
-                        concurrent_dial_errors,
-                        established_in,
-                    });
                 }
+
+                let handler = match endpoint.clone() {
+                    ConnectedPoint::Dialer {
+                        address,
+                        role_override,
+                    } => {
+                        match self.behaviour.handle_established_outbound_connection(
+                            id,
+                            peer_id,
+                            &address,
+                            role_override,
+                        ) {
+                            Ok(handler) => handler,
+                            Err(cause) => {
+                                let dial_error = DialError::Denied { cause };
+                                self.behaviour.on_swarm_event(FromSwarm::DialFailure(
+                                    DialFailure {
+                                        connection_id: id,
+                                        error: &dial_error,
+                                        peer_id: Some(peer_id),
+                                    },
+                                ));
+
+                                return Some(SwarmEvent::OutgoingConnectionError {
+                                    peer_id: Some(peer_id),
+                                    error: dial_error,
+                                });
+                            }
+                        }
+                    }
+                    ConnectedPoint::Listener {
+                        local_addr,
+                        send_back_addr,
+                    } => {
+                        match self.behaviour.handle_established_inbound_connection(
+                            id,
+                            peer_id,
+                            &local_addr,
+                            &send_back_addr,
+                        ) {
+                            Ok(handler) => handler,
+                            Err(cause) => {
+                                let listen_error = ListenError::Denied { cause };
+                                self.behaviour.on_swarm_event(FromSwarm::ListenFailure(
+                                    ListenFailure {
+                                        local_addr: &local_addr,
+                                        send_back_addr: &send_back_addr,
+                                        error: &listen_error,
+                                        connection_id: id,
+                                    },
+                                ));
+
+                                return Some(SwarmEvent::IncomingConnectionError {
+                                    send_back_addr,
+                                    local_addr,
+                                    error: listen_error,
+                                });
+                            }
+                        }
+                    }
+                };
+
+                let supported_protocols = handler
+                    .listen_protocol()
+                    .upgrade()
+                    .protocol_info()
+                    .map(|p| p.protocol_name().to_owned())
+                    .collect();
+                let other_established_connection_ids = self
+                    .pool
+                    .iter_established_connections_of_peer(&peer_id)
+                    .collect::<Vec<_>>();
+                let num_established = NonZeroU32::new(
+                    u32::try_from(other_established_connection_ids.len() + 1).unwrap(),
+                )
+                .expect("n + 1 is always non-zero; qed");
+
+                self.pool
+                    .spawn_connection(id, peer_id, &endpoint, connection, handler);
+
+                log::debug!(
+                    "Connection established: {:?} {:?}; Total (peer): {}.",
+                    peer_id,
+                    endpoint,
+                    num_established,
+                );
+                let failed_addresses = concurrent_dial_errors
+                    .as_ref()
+                    .map(|es| {
+                        es.iter()
+                            .map(|(a, _)| a)
+                            .cloned()
+                            .collect::<Vec<Multiaddr>>()
+                    })
+                    .unwrap_or_default();
+                self.behaviour
+                    .on_swarm_event(FromSwarm::ConnectionEstablished(
+                        behaviour::ConnectionEstablished {
+                            peer_id,
+                            connection_id: id,
+                            endpoint: &endpoint,
+                            failed_addresses: &failed_addresses,
+                            other_established: other_established_connection_ids.len(),
+                        },
+                    ));
+                self.supported_protocols = supported_protocols;
+                return Some(SwarmEvent::ConnectionEstablished {
+                    peer_id,
+                    num_established,
+                    endpoint,
+                    concurrent_dial_errors,
+                    established_in,
+                });
             }
             PoolEvent::PendingOutboundConnectionError {
                 id: connection_id,
@@ -881,7 +927,7 @@ where
                 });
             }
             PoolEvent::PendingInboundConnectionError {
-                id: _,
+                id,
                 send_back_addr,
                 local_addr,
                 error,
@@ -894,6 +940,7 @@ where
                         local_addr: &local_addr,
                         send_back_addr: &send_back_addr,
                         error: &error,
+                        connection_id: id,
                     }));
                 return Some(SwarmEvent::IncomingConnectionError {
                     local_addr,
@@ -927,21 +974,15 @@ where
                 let endpoint = connected.endpoint;
                 let num_established =
                     u32::try_from(remaining_established_connection_ids.len()).unwrap();
-                let conn_was_reported = !self.banned_peer_connections.remove(&id);
-                if conn_was_reported {
-                    let remaining_non_banned = remaining_established_connection_ids
-                        .into_iter()
-                        .filter(|conn_id| !self.banned_peer_connections.contains(conn_id))
-                        .count();
-                    self.behaviour
-                        .on_swarm_event(FromSwarm::ConnectionClosed(ConnectionClosed {
-                            peer_id,
-                            connection_id: id,
-                            endpoint: &endpoint,
-                            handler,
-                            remaining_established: remaining_non_banned,
-                        }));
-                }
+
+                self.behaviour
+                    .on_swarm_event(FromSwarm::ConnectionClosed(ConnectionClosed {
+                        peer_id,
+                        connection_id: id,
+                        endpoint: &endpoint,
+                        handler,
+                        remaining_established: num_established as usize,
+                    }));
                 return Some(SwarmEvent::ConnectionClosed {
                     peer_id,
                     endpoint,
@@ -949,52 +990,9 @@ where
                     num_established,
                 });
             }
-            PoolEvent::EstablishedConnectionDenied {
-                peer_id,
-                endpoint,
-                cause,
-                id,
-            } => match endpoint {
-                ConnectedPoint::Dialer { .. } => {
-                    let dial_error = DialError::Denied { cause };
-                    self.behaviour
-                        .on_swarm_event(FromSwarm::DialFailure(DialFailure {
-                            connection_id: id,
-                            error: &dial_error,
-                            peer_id: Some(peer_id),
-                        }));
-
-                    return Some(SwarmEvent::OutgoingConnectionError {
-                        peer_id: Some(peer_id),
-                        error: dial_error,
-                    });
-                }
-                ConnectedPoint::Listener {
-                    local_addr,
-                    send_back_addr,
-                } => {
-                    let listen_error = ListenError::Denied { cause };
-                    self.behaviour
-                        .on_swarm_event(FromSwarm::ListenFailure(ListenFailure {
-                            local_addr: &local_addr,
-                            send_back_addr: &send_back_addr,
-                            error: &listen_error,
-                        }));
-
-                    return Some(SwarmEvent::IncomingConnectionError {
-                        send_back_addr,
-                        local_addr,
-                        error: listen_error,
-                    });
-                }
-            },
             PoolEvent::ConnectionEvent { peer_id, id, event } => {
-                if self.banned_peer_connections.contains(&id) {
-                    log::debug!("Ignoring event from banned peer: {} {:?}.", peer_id, id);
-                } else {
-                    self.behaviour
-                        .on_connection_handler_event(peer_id, id, event);
-                }
+                self.behaviour
+                    .on_connection_handler_event(peer_id, id, event);
             }
             PoolEvent::AddressChange {
                 peer_id,
@@ -1002,15 +1000,13 @@ where
                 new_endpoint,
                 old_endpoint,
             } => {
-                if !self.banned_peer_connections.contains(&id) {
-                    self.behaviour
-                        .on_swarm_event(FromSwarm::AddressChange(AddressChange {
-                            peer_id,
-                            connection_id: id,
-                            old: &old_endpoint,
-                            new: &new_endpoint,
-                        }));
-                }
+                self.behaviour
+                    .on_swarm_event(FromSwarm::AddressChange(AddressChange {
+                        peer_id,
+                        connection_id: id,
+                        old: &old_endpoint,
+                        new: &new_endpoint,
+                    }));
             }
         }
 
@@ -1047,6 +1043,7 @@ where
                                 local_addr: &local_addr,
                                 send_back_addr: &send_back_addr,
                                 error: &listen_error,
+                                connection_id,
                             }));
 
                         return Some(SwarmEvent::IncomingConnectionError {
@@ -1078,6 +1075,7 @@ where
                                 local_addr: &local_addr,
                                 send_back_addr: &send_back_addr,
                                 error: &error,
+                                connection_id,
                             }));
                         log::warn!("Incoming connection rejected: {:?}", connection_limit);
                     }
@@ -1314,29 +1312,7 @@ where
             }
 
             // Poll the known peers.
-            match this.pool.poll(
-                |peer, connected_point, connection_id| match connected_point {
-                    ConnectedPoint::Dialer {
-                        address,
-                        role_override,
-                    } => this.behaviour.handle_established_outbound_connection(
-                        peer,
-                        address,
-                        *role_override,
-                        connection_id,
-                    ),
-                    ConnectedPoint::Listener {
-                        local_addr,
-                        send_back_addr,
-                    } => this.behaviour.handle_established_inbound_connection(
-                        peer,
-                        connection_id,
-                        local_addr,
-                        send_back_addr,
-                    ),
-                },
-                cx,
-            ) {
+            match this.pool.poll(cx) {
                 Poll::Pending => {}
                 Poll::Ready(pool_event) => {
                     if let Some(swarm_event) = this.handle_pool_event(pool_event) {
@@ -1682,7 +1658,6 @@ where
             listened_addrs: HashMap::new(),
             external_addrs: Addresses::default(),
             banned_peers: HashSet::new(),
-            banned_peer_connections: HashSet::new(),
             pending_event: None,
         }
     }
@@ -1696,8 +1671,10 @@ pub enum DialError {
     /// The configured limit for simultaneous outgoing connections
     /// has been reached.
     ConnectionLimit(ConnectionLimit),
-    /// The peer being dialed is the local peer and thus the dial was aborted.
-    LocalPeerId,
+    /// The peer identity obtained on the connection matches the local peer.
+    LocalPeerId {
+        endpoint: ConnectedPoint,
+    },
     /// [`NetworkBehaviour::addresses_of_peer`] returned no addresses
     /// for the peer to dial.
     NoAddresses,
@@ -1728,6 +1705,7 @@ impl From<PendingOutboundConnectionError> for DialError {
             PendingConnectionError::WrongPeerId { obtained, endpoint } => {
                 DialError::WrongPeerId { obtained, endpoint }
             }
+            PendingConnectionError::LocalPeerId { endpoint } => DialError::LocalPeerId { endpoint },
             PendingConnectionError::Transport(e) => DialError::Transport(e),
         }
     }
@@ -1738,10 +1716,13 @@ impl fmt::Display for DialError {
         match self {
             DialError::ConnectionLimit(err) => write!(f, "Dial error: {err}"),
             DialError::NoAddresses => write!(f, "Dial error: no addresses for peer."),
-            DialError::LocalPeerId => write!(f, "Dial error: tried to dial local peer id."),
+            DialError::LocalPeerId { endpoint } => write!(
+                f,
+                "Dial error: tried to dial local peer id at {endpoint:?}."
+            ),
             DialError::Banned => write!(f, "Dial error: peer is banned."),
             DialError::DialPeerConditionFalse(c) => {
-                write!(f, "Dial error: condition {c:?} for dialing peer was false.",)
+                write!(f, "Dial error: condition {c:?} for dialing peer was false.")
             }
             DialError::Aborted => write!(
                 f,
@@ -1752,7 +1733,7 @@ impl fmt::Display for DialError {
             }
             DialError::WrongPeerId { obtained, endpoint } => write!(
                 f,
-                "Dial error: Unexpected peer ID {obtained} at {endpoint:?}.",
+                "Dial error: Unexpected peer ID {obtained} at {endpoint:?}."
             ),
             DialError::Transport(errors) => {
                 write!(f, "Failed to negotiate transport protocol(s): [")?;
@@ -1787,7 +1768,7 @@ impl error::Error for DialError {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
         match self {
             DialError::ConnectionLimit(err) => Some(err),
-            DialError::LocalPeerId => None,
+            DialError::LocalPeerId { .. } => None,
             DialError::NoAddresses => None,
             DialError::Banned => None,
             DialError::DialPeerConditionFalse(_) => None,
@@ -1813,6 +1794,10 @@ pub enum ListenError {
         obtained: PeerId,
         endpoint: ConnectedPoint,
     },
+    /// The connection was dropped because it resolved to our own [`PeerId`].
+    LocalPeerId {
+        endpoint: ConnectedPoint,
+    },
     Denied {
         cause: ConnectionDenied,
     },
@@ -1830,6 +1815,9 @@ impl From<PendingInboundConnectionError> for ListenError {
             PendingInboundConnectionError::Aborted => ListenError::Aborted,
             PendingInboundConnectionError::WrongPeerId { obtained, endpoint } => {
                 ListenError::WrongPeerId { obtained, endpoint }
+            }
+            PendingInboundConnectionError::LocalPeerId { endpoint } => {
+                ListenError::LocalPeerId { endpoint }
             }
         }
     }
@@ -1853,6 +1841,9 @@ impl fmt::Display for ListenError {
             ListenError::Denied { .. } => {
                 write!(f, "Listen error")
             }
+            ListenError::LocalPeerId { endpoint } => {
+                write!(f, "Listen error: Local peer ID at {endpoint:?}.")
+            }
         }
     }
 }
@@ -1865,6 +1856,7 @@ impl error::Error for ListenError {
             ListenError::Transport(err) => Some(err),
             ListenError::Aborted => None,
             ListenError::Denied { cause } => Some(cause),
+            ListenError::LocalPeerId { .. } => None,
         }
     }
 }
@@ -2047,8 +2039,10 @@ mod tests {
     /// calls should be registered.
     #[test]
     fn test_connect_disconnect_ban() {
+        let _ = env_logger::try_init();
+
         // Since the test does not try to open any substreams, we can
-        // use the dummy protocols handler.
+        // use keep alive protocols handler.
         let handler_proto = keep_alive::ConnectionHandler;
 
         let mut swarm1 = new_test_swarm::<_, ()>(handler_proto.clone()).build();
@@ -2062,6 +2056,7 @@ mod tests {
 
         let swarm1_id = *swarm1.local_peer_id();
 
+        #[derive(Debug)]
         enum Stage {
             /// Waiting for the peers to connect. Banning has not occurred.
             Connecting,
@@ -2111,13 +2106,15 @@ mod tests {
                     }
                 }
                 Stage::BannedDial => {
-                    if swarm2.network_info().num_peers() == 1 {
-                        // The banned connection was established. Check that it was not reported to
-                        // the behaviour of the banning swarm.
+                    if swarm1.behaviour.assert_disconnected(s1_expected_conns, 2) {
+                        // The banned connection was established. Given the ban, swarm2 closed the
+                        // connection. Check that it was not reported to the behaviour of the
+                        // banning swarm.
                         assert_eq!(
-                            swarm2.behaviour.on_connection_established.len(), s2_expected_conns,
-                            "No additional closed connections should be reported for the banned peer"
-                        );
+                        swarm2.behaviour.on_connection_established.len(),
+                        s2_expected_conns,
+                        "No additional closed connections should be reported for the banned peer"
+                    );
 
                         // Setup to test that the banned connection is not reported upon closing
                         // even if the peer is unbanned.
@@ -2126,13 +2123,14 @@ mod tests {
                     }
                 }
                 Stage::Unbanned => {
-                    if swarm2.network_info().num_peers() == 0 {
+                    if swarm1.network_info().num_peers() == 0
+                        && swarm2.network_info().num_peers() == 0
+                    {
                         // The banned connection has closed. Check that it was not reported.
                         assert_eq!(
                             swarm2.behaviour.on_connection_closed.len(), s2_expected_conns,
                             "No additional closed connections should be reported for the banned peer"
                         );
-                        assert!(swarm2.banned_peer_connections.is_empty());
 
                         // Setup to test that a ban lifted does not affect future connections.
                         for _ in 0..num_connections {
@@ -2697,7 +2695,7 @@ mod tests {
                 match swarm.poll_next_unpin(cx) {
                     Poll::Ready(Some(SwarmEvent::OutgoingConnectionError {
                         peer_id,
-                        error: DialError::WrongPeerId { .. },
+                        error: DialError::LocalPeerId { .. },
                         ..
                     })) => {
                         assert_eq!(&peer_id.unwrap(), swarm.local_peer_id());

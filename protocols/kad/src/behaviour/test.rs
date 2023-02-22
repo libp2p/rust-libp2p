@@ -1320,10 +1320,10 @@ fn network_behaviour_on_address_change() {
     // local routing table and hence no addresses are known.
     assert!(kademlia
         .handle_pending_outbound_connection(
+            connection_id,
             Some(remote_peer_id),
             &[],
-            Endpoint::Dialer,
-            connection_id
+            Endpoint::Dialer
         )
         .unwrap()
         .is_empty());
@@ -1340,10 +1340,10 @@ fn network_behaviour_on_address_change() {
         vec![old_address.clone()],
         kademlia
             .handle_pending_outbound_connection(
+                connection_id,
                 Some(remote_peer_id),
                 &[],
-                Endpoint::Dialer,
-                connection_id
+                Endpoint::Dialer
             )
             .unwrap(),
     );
@@ -1365,10 +1365,10 @@ fn network_behaviour_on_address_change() {
         vec![new_address],
         kademlia
             .handle_pending_outbound_connection(
+                connection_id,
                 Some(remote_peer_id),
                 &[],
-                Endpoint::Dialer,
-                connection_id
+                Endpoint::Dialer
             )
             .unwrap(),
     );

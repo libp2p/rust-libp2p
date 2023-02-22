@@ -28,15 +28,14 @@ use crate::Config;
 use futures::Stream;
 use if_watch::IfEvent;
 use libp2p_core::{Endpoint, Multiaddr, PeerId};
-use libp2p_swarm::behaviour::{ConnectionClosed, FromSwarm};
+use libp2p_swarm::behaviour::FromSwarm;
 use libp2p_swarm::{
     dummy, ConnectionDenied, ConnectionId, ListenAddresses, NetworkBehaviour,
-    NetworkBehaviourAction, PollParameters, THandler, THandlerOutEvent,
+    NetworkBehaviourAction, PollParameters, THandler, THandlerInEvent, THandlerOutEvent,
 };
 use smallvec::SmallVec;
 use std::collections::hash_map::{Entry, HashMap};
 use std::{cmp, fmt, io, net::IpAddr, pin::Pin, task::Context, task::Poll, time::Instant};
-use void::Void;
 
 /// An abstraction to allow for compatibility with various async runtimes.
 pub trait Provider: 'static {
@@ -177,8 +176,8 @@ where
 
     fn handle_established_inbound_connection(
         &mut self,
-        _: PeerId,
         _: ConnectionId,
+        _: PeerId,
         _: &Multiaddr,
         _: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
@@ -187,10 +186,10 @@ where
 
     fn handle_pending_outbound_connection(
         &mut self,
+        _connection_id: ConnectionId,
         maybe_peer: Option<PeerId>,
         _addresses: &[Multiaddr],
         _effective_role: Endpoint,
-        _connection_id: ConnectionId,
     ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
         let peer_id = match maybe_peer {
             None => return Ok(vec![]),
@@ -207,34 +206,35 @@ where
 
     fn handle_established_outbound_connection(
         &mut self,
+        _: ConnectionId,
         _: PeerId,
         _: &Multiaddr,
         _: Endpoint,
-        _: ConnectionId,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         Ok(dummy::ConnectionHandler)
+    }
+
+    fn on_connection_handler_event(
+        &mut self,
+        _: PeerId,
+        _: ConnectionId,
+        ev: THandlerOutEvent<Self>,
+    ) {
+        void::unreachable(ev)
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
         self.listen_addresses.on_swarm_event(&event);
 
         match event {
-            FromSwarm::ConnectionClosed(ConnectionClosed {
-                peer_id,
-                remaining_established,
-                ..
-            }) => {
-                if remaining_established == 0 {
-                    self.expire_node(&peer_id);
-                }
-            }
             FromSwarm::NewListener(_) => {
                 log::trace!("waking interface state because listening address changed");
                 for iface in self.iface_states.values_mut() {
                     iface.fire_timer();
                 }
             }
-            FromSwarm::ConnectionEstablished(_)
+            FromSwarm::ConnectionClosed(_)
+            | FromSwarm::ConnectionEstablished(_)
             | FromSwarm::DialFailure(_)
             | FromSwarm::AddressChange(_)
             | FromSwarm::ListenFailure(_)
@@ -247,20 +247,11 @@ where
         }
     }
 
-    fn on_connection_handler_event(
-        &mut self,
-        _: PeerId,
-        _: ConnectionId,
-        ev: THandlerOutEvent<Self>,
-    ) {
-        void::unreachable(ev)
-    }
-
     fn poll(
         &mut self,
         cx: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Void>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>> {
         // Poll ifwatch.
         while let Poll::Ready(Some(event)) = Pin::new(&mut self.if_watch).poll_next(cx) {
             match event {

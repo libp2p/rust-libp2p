@@ -36,66 +36,60 @@ where
 
     fn handle_pending_inbound_connection(
         &mut self,
-        connection_id: ConnectionId,
+        id: ConnectionId,
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
     ) -> Result<(), ConnectionDenied> {
         match self {
-            Either::Left(inner) => {
-                inner.handle_pending_inbound_connection(connection_id, local_addr, remote_addr)?
-            }
-            Either::Right(inner) => {
-                inner.handle_pending_inbound_connection(connection_id, local_addr, remote_addr)?
-            }
-        };
-
-        Ok(())
+            Either::Left(a) => a.handle_pending_inbound_connection(id, local_addr, remote_addr),
+            Either::Right(b) => b.handle_pending_inbound_connection(id, local_addr, remote_addr),
+        }
     }
 
     fn handle_established_inbound_connection(
         &mut self,
+        _connection_id: ConnectionId,
         peer: PeerId,
-        connection_id: ConnectionId,
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        match self {
-            Either::Left(inner) => Ok(Either::Left(inner.handle_established_inbound_connection(
+        let handler = match self {
+            Either::Left(inner) => Either::Left(inner.handle_established_inbound_connection(
+                _connection_id,
                 peer,
-                connection_id,
                 local_addr,
                 remote_addr,
-            )?)),
-            Either::Right(inner) => {
-                Ok(Either::Right(inner.handle_established_inbound_connection(
-                    peer,
-                    connection_id,
-                    local_addr,
-                    remote_addr,
-                )?))
-            }
-        }
+            )?),
+            Either::Right(inner) => Either::Right(inner.handle_established_inbound_connection(
+                _connection_id,
+                peer,
+                local_addr,
+                remote_addr,
+            )?),
+        };
+
+        Ok(handler)
     }
 
     fn handle_pending_outbound_connection(
         &mut self,
+        _connection_id: ConnectionId,
         maybe_peer: Option<PeerId>,
-        addresses: &[Multiaddr],
-        effective_role: Endpoint,
-        connection_id: ConnectionId,
+        _addresses: &[Multiaddr],
+        _effective_role: Endpoint,
     ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
         let addresses = match self {
             Either::Left(inner) => inner.handle_pending_outbound_connection(
+                _connection_id,
                 maybe_peer,
-                addresses,
-                effective_role,
-                connection_id,
+                _addresses,
+                _effective_role,
             )?,
             Either::Right(inner) => inner.handle_pending_outbound_connection(
+                _connection_id,
                 maybe_peer,
-                addresses,
-                effective_role,
-                connection_id,
+                _addresses,
+                _effective_role,
             )?,
         };
 
@@ -104,27 +98,27 @@ where
 
     fn handle_established_outbound_connection(
         &mut self,
+        _connection_id: ConnectionId,
         peer: PeerId,
         addr: &Multiaddr,
         role_override: Endpoint,
-        connection_id: ConnectionId,
     ) -> Result<THandler<Self>, ConnectionDenied> {
-        match self {
-            Either::Left(inner) => Ok(Either::Left(inner.handle_established_outbound_connection(
+        let handler = match self {
+            Either::Left(inner) => Either::Left(inner.handle_established_outbound_connection(
+                _connection_id,
                 peer,
                 addr,
                 role_override,
-                connection_id,
-            )?)),
-            Either::Right(inner) => Ok(Either::Right(
-                inner.handle_established_outbound_connection(
-                    peer,
-                    addr,
-                    role_override,
-                    connection_id,
-                )?,
-            )),
-        }
+            )?),
+            Either::Right(inner) => Either::Right(inner.handle_established_outbound_connection(
+                _connection_id,
+                peer,
+                addr,
+                role_override,
+            )?),
+        };
+
+        Ok(handler)
     }
 
     fn on_swarm_event(&mut self, event: behaviour::FromSwarm<Self::ConnectionHandler>) {

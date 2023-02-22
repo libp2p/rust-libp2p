@@ -1924,7 +1924,7 @@ where
         match error {
             DialError::Banned
             | DialError::ConnectionLimit(_)
-            | DialError::LocalPeerId
+            | DialError::LocalPeerId { .. }
             | DialError::InvalidPeerId { .. }
             | DialError::WrongPeerId { .. }
             | DialError::Aborted
@@ -1985,8 +1985,8 @@ where
 
     fn handle_established_inbound_connection(
         &mut self,
+        _connection_id: ConnectionId,
         peer: PeerId,
-        _: ConnectionId,
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
@@ -2006,10 +2006,10 @@ where
 
     fn handle_established_outbound_connection(
         &mut self,
+        _connection_id: ConnectionId,
         peer: PeerId,
         addr: &Multiaddr,
         role_override: Endpoint,
-        _: ConnectionId,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         Ok(KademliaHandler::new(
             KademliaHandlerConfig {
@@ -2025,10 +2025,21 @@ where
         ))
     }
 
-    fn addresses_of_peer(&mut self, peer_id: &PeerId) -> Vec<Multiaddr> {
+    fn handle_pending_outbound_connection(
+        &mut self,
+        _connection_id: ConnectionId,
+        maybe_peer: Option<PeerId>,
+        _addresses: &[Multiaddr],
+        _effective_role: Endpoint,
+    ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
+        let peer_id = match maybe_peer {
+            None => return Ok(vec![]),
+            Some(peer) => peer,
+        };
+
         // We should order addresses from decreasing likelyhood of connectivity, so start with
         // the addresses of that peer in the k-buckets.
-        let key = kbucket::Key::from(*peer_id);
+        let key = kbucket::Key::from(peer_id);
         let mut peer_addrs =
             if let kbucket::Entry::Present(mut entry, _) = self.kbuckets.entry(&key) {
                 let addrs = entry.value().iter().cloned().collect::<Vec<_>>();
@@ -2040,12 +2051,12 @@ where
 
         // We add to that a temporary list of addresses from the ongoing queries.
         for query in self.queries.iter() {
-            if let Some(addrs) = query.inner.addresses.get(peer_id) {
+            if let Some(addrs) = query.inner.addresses.get(&peer_id) {
                 peer_addrs.extend(addrs.iter().cloned())
             }
         }
 
-        peer_addrs
+        Ok(peer_addrs)
     }
 
     fn on_connection_handler_event(
