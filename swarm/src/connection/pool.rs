@@ -679,6 +679,8 @@ where
                         ),
                     };
 
+                    #[allow(deprecated)]
+                    // Remove once `PendingConnectionError::ConnectionLimit` is gone.
                     let error = self
                         .counters
                         // Check general established connection limit.

@@ -90,6 +90,9 @@ pub enum PendingConnectionError<TTransErr> {
 
     /// The connection was dropped because the connection limit
     /// for a peer has been reached.
+    #[deprecated(
+        note = "Use `libp2p_swarm::connection_limits::Behaviour` instead and handle `{Dial,Listen}Error::Denied::cause`."
+    )]
     ConnectionLimit(ConnectionLimit),
 
     /// Pending connection attempt has been aborted.
@@ -110,6 +113,7 @@ impl<T> PendingConnectionError<T> {
     pub fn map<U>(self, f: impl FnOnce(T) -> U) -> PendingConnectionError<U> {
         match self {
             PendingConnectionError::Transport(t) => PendingConnectionError::Transport(f(t)),
+            #[allow(deprecated)]
             PendingConnectionError::ConnectionLimit(l) => {
                 PendingConnectionError::ConnectionLimit(l)
             }
@@ -137,6 +141,7 @@ where
                     "Pending connection: Transport error on connection: {err}"
                 )
             }
+            #[allow(deprecated)]
             PendingConnectionError::ConnectionLimit(l) => {
                 write!(f, "Connection error: Connection limit: {l}.")
             }
@@ -163,6 +168,7 @@ where
             PendingConnectionError::WrongPeerId { .. } => None,
             PendingConnectionError::LocalPeerId { .. } => None,
             PendingConnectionError::Aborted => None,
+            #[allow(deprecated)]
             PendingConnectionError::ConnectionLimit(..) => None,
         }
     }

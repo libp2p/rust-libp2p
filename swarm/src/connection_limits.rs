@@ -219,8 +219,8 @@ impl NetworkBehaviour for Behaviour {
 mod tests {
     use super::*;
     use crate::{DialError, DialOpts, ListenError, Swarm, SwarmEvent};
-    use futures::ready;
     use futures::future;
+    use futures::ready;
     use futures::StreamExt;
     use libp2p_core::{identity, multiaddr::multiaddr, transport, upgrade, Transport};
     use libp2p_plaintext as plaintext;
