@@ -62,7 +62,7 @@
 
 - Remove `PendingConnectionError`, `PendingInboundConnectionError` and `PendingOutboundConnectionError` from the public API.
   They are no longer referenced anywhere with the addition of `ListenError`.
-  See [PR XXXX].
+  See [PR 3497].
 
 - Remove `ConnectionId::new`. Manually creating `ConnectionId`s is now unsupported. See [PR 3327].
 
@@ -79,7 +79,7 @@
 [PR 3373]: https://github.com/libp2p/rust-libp2p/pull/3373
 [PR 3374]: https://github.com/libp2p/rust-libp2p/pull/3374
 [PR 3375]: https://github.com/libp2p/rust-libp2p/pull/3375
-[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+[PR 3497]: https://github.com/libp2p/rust-libp2p/pull/3497
 
 # 0.41.1
 
