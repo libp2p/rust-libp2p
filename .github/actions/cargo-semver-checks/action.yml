@@ -10,13 +10,13 @@ runs:
     - run: wget -q -O- https://github.com/obi1kenobi/cargo-semver-checks/releases/download/v0.18.3/cargo-semver-checks-x86_64-unknown-linux-gnu.tar.gz | tar -xz -C ~/.cargo/bin
       shell: bash
 
-    - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
+    - uses: actions/cache@v3
       with:
-        shared-key: semver-checks-cache
-        save-if: ${{ github.ref_name == 'master' }}
-        workspaces: target/semver-checks
-        cache-directories: |
-          ${{ github.workspace }}/target/semver-checks/cache
+        path: ${{ github.workspace }}/target/semver-checks/cache
+        key: semver-checks-cache-${{ hashFiles('Cargo.lock.json') }}
+        restore-keys: |
+          semver-checks-cache
+          semver-checks-cache-${{ hashFiles('Cargo.lock.json') }}
 
     - run: cargo semver-checks ${{ inputs.args }}
       shell: bash
