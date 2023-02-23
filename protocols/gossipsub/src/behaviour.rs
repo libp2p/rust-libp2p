@@ -36,13 +36,14 @@ use prost::Message as _;
 use rand::{seq::SliceRandom, thread_rng};
 
 use libp2p_core::{
-    identity::Keypair, multiaddr::Protocol::Ip4, multiaddr::Protocol::Ip6, Multiaddr, PeerId,
+    identity::Keypair, multiaddr::Protocol::Ip4, multiaddr::Protocol::Ip6, Endpoint, Multiaddr,
+    PeerId,
 };
 use libp2p_swarm::{
     behaviour::{AddressChange, ConnectionClosed, ConnectionEstablished, FromSwarm},
     dial_opts::DialOpts,
-    ConnectionId, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
-    THandlerInEvent, THandlerOutEvent,
+    ConnectionDenied, ConnectionId, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
+    PollParameters, THandler, THandlerInEvent, THandlerOutEvent,
 };
 use wasm_timer::Instant;
 
@@ -3289,11 +3290,30 @@ where
     type ConnectionHandler = Handler;
     type OutEvent = Event;
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
-        Handler::new(
+    fn handle_established_inbound_connection(
+        &mut self,
+        _: ConnectionId,
+        _: PeerId,
+        _: &Multiaddr,
+        _: &Multiaddr,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        Ok(Handler::new(
             ProtocolConfig::new(&self.config),
             self.config.idle_timeout(),
-        )
+        ))
+    }
+
+    fn handle_established_outbound_connection(
+        &mut self,
+        _: ConnectionId,
+        _: PeerId,
+        _: &Multiaddr,
+        _: Endpoint,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        Ok(Handler::new(
+            ProtocolConfig::new(&self.config),
+            self.config.idle_timeout(),
+        ))
     }
 
     fn on_connection_handler_event(

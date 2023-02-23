@@ -18,29 +18,5 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::protocol;
-use either::Either;
-use libp2p_core::{ConnectedPoint, PeerId};
-use libp2p_swarm::handler::SendWrapper;
-use libp2p_swarm::{ConnectionHandler, IntoConnectionHandler};
-
 pub mod direct;
 pub mod relayed;
-
-pub struct Prototype;
-
-impl IntoConnectionHandler for Prototype {
-    type Handler = Either<relayed::Handler, direct::Handler>;
-
-    fn into_handler(self, _remote_peer_id: &PeerId, endpoint: &ConnectedPoint) -> Self::Handler {
-        if endpoint.is_relayed() {
-            Either::Left(relayed::Handler::new(endpoint.clone()))
-        } else {
-            Either::Right(direct::Handler::default()) // This is a direct connection. What we don't know is whether it is the one we created or another one that happened accidentally.
-        }
-    }
-
-    fn inbound_protocol(&self) -> <Self::Handler as ConnectionHandler>::InboundProtocol {
-        Either::Left(SendWrapper(Either::Left(protocol::inbound::Upgrade {})))
-    }
-}

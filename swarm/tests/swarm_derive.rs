@@ -19,10 +19,12 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::StreamExt;
+use libp2p_core::{Endpoint, Multiaddr};
 use libp2p_identify as identify;
 use libp2p_ping as ping;
 use libp2p_swarm::{
-    behaviour::FromSwarm, dummy, NetworkBehaviour, SwarmEvent, THandlerInEvent, THandlerOutEvent,
+    behaviour::FromSwarm, dummy, ConnectionDenied, NetworkBehaviour, SwarmEvent, THandler,
+    THandlerInEvent, THandlerOutEvent,
 };
 use std::fmt::Debug;
 
@@ -421,8 +423,24 @@ fn custom_out_event_no_type_parameters() {
         type ConnectionHandler = dummy::ConnectionHandler;
         type OutEvent = void::Void;
 
-        fn new_handler(&mut self) -> Self::ConnectionHandler {
-            dummy::ConnectionHandler
+        fn handle_established_inbound_connection(
+            &mut self,
+            _: ConnectionId,
+            _: PeerId,
+            _: &Multiaddr,
+            _: &Multiaddr,
+        ) -> Result<THandler<Self>, ConnectionDenied> {
+            Ok(dummy::ConnectionHandler)
+        }
+
+        fn handle_established_outbound_connection(
+            &mut self,
+            _: ConnectionId,
+            _: PeerId,
+            _: &Multiaddr,
+            _: Endpoint,
+        ) -> Result<THandler<Self>, ConnectionDenied> {
+            Ok(dummy::ConnectionHandler)
         }
 
         fn on_connection_handler_event(

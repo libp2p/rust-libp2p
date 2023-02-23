@@ -27,11 +27,11 @@ use futures::future::BoxFuture;
 use futures::ready;
 use futures::stream::FuturesUnordered;
 use futures::{FutureExt, StreamExt};
-use libp2p_core::PeerId;
+use libp2p_core::{Endpoint, Multiaddr, PeerId};
 use libp2p_swarm::behaviour::FromSwarm;
 use libp2p_swarm::{
-    CloseConnection, ConnectionId, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
-    PollParameters, THandlerInEvent, THandlerOutEvent,
+    CloseConnection, ConnectionDenied, ConnectionId, NetworkBehaviour, NetworkBehaviourAction,
+    NotifyHandler, PollParameters, THandler, THandlerInEvent, THandlerOutEvent,
 };
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::iter::FromIterator;
@@ -111,10 +111,28 @@ impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = SubstreamConnectionHandler<inbound::Stream, Void, ()>;
     type OutEvent = Event;
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
-        let initial_keep_alive = Duration::from_secs(30);
+    fn handle_established_inbound_connection(
+        &mut self,
+        _: ConnectionId,
+        _: PeerId,
+        _: &Multiaddr,
+        _: &Multiaddr,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        Ok(SubstreamConnectionHandler::new_inbound_only(
+            Duration::from_secs(30),
+        ))
+    }
 
-        SubstreamConnectionHandler::new_inbound_only(initial_keep_alive)
+    fn handle_established_outbound_connection(
+        &mut self,
+        _: ConnectionId,
+        _: PeerId,
+        _: &Multiaddr,
+        _: Endpoint,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        Ok(SubstreamConnectionHandler::new_inbound_only(
+            Duration::from_secs(30),
+        ))
     }
 
     fn on_connection_handler_event(
