@@ -27,7 +27,7 @@ prost = "0.11"
 
 [dev-dependencies]
 async-std = { version = "1.10", features = ["attributes"] }
-clap = { version = "4.0.13", features = ["derive"] }
+clap = { version = "4.1.6", features = ["derive"] }
 env_logger = "0.10"
 libp2p-identify = { path = "../identify" }
 libp2p-noise = { path = "../../transports/noise" }
