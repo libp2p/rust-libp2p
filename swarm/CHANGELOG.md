@@ -47,20 +47,11 @@
 
 - Update to `libp2p-swarm-derive` `v0.32.0`.
 
-- Remove type parameter from `PendingOutboundConnectionError` and `PendingInboundConnectionError`.
-  These two types are always used with `std::io::Error`. See [PR 3272].
-
 - Replace `SwarmBuilder::connection_event_buffer_size` with `SwarmBuilder::per_connection_event_buffer_size` .
   The configured value now applies _per_ connection.
   The default values remains 7.
   If you have previously set `connection_event_buffer_size` you should re-evaluate what a good size for a _per connection_ buffer is.
   See [PR 3188].
-  
-- Add `PendingConnectionError::LocalPeerId` to differentiate wrong VS local peer ID errors. See [PR 3377].
-
-- Remove `PendingConnectionError:::IO` variant.
-  This was never constructed.
-  See [PR 3373].
 
 - Remove `DialError::ConnectionIo` variant.
   This was never constructed.
@@ -68,6 +59,10 @@
 
 - Introduce `ListenError` and use it within `SwarmEvent::IncomingConnectionError`.
   See [PR 3375].
+
+- Remove `PendingConnectionError`, `PendingInboundConnectionError` and `PendingOutboundConnectionError` from the public API.
+  They are no longer referenced anywhere with the addition of `ListenError`.
+  See [PR 3497].
 
 - Remove `ConnectionId::new`. Manually creating `ConnectionId`s is now unsupported. See [PR 3327].
 
@@ -84,6 +79,7 @@
 [PR 3373]: https://github.com/libp2p/rust-libp2p/pull/3373
 [PR 3374]: https://github.com/libp2p/rust-libp2p/pull/3374
 [PR 3375]: https://github.com/libp2p/rust-libp2p/pull/3375
+[PR 3497]: https://github.com/libp2p/rust-libp2p/pull/3497
 
 # 0.41.1
 
