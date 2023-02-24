@@ -25,6 +25,7 @@
 
 mod behaviour;
 mod copy_future;
+mod multiaddr_ext;
 mod priv_client;
 mod protocol;
 pub mod v2;
