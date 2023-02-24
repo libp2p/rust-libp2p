@@ -106,9 +106,6 @@ pub struct KademliaHandlerConfig {
     /// Configuration of the wire protocol.
     pub protocol_config: KademliaProtocolConfig,
 
-    /// If false, we deny incoming requests.
-    pub allow_listening: bool,
-
     /// Time after which we close an idle connection.
     pub idle_timeout: Duration,
 }
@@ -534,8 +531,6 @@ where
             <Self as ConnectionHandler>::InboundOpenInfo,
         >,
     ) {
-        // If `self.allow_listening` is false, then we produced a `DeniedUpgrade` and `protocol`
-        // is a `Void`.
         let protocol = match protocol {
             future::Either::Left(p) => p,
             future::Either::Right(p) => void::unreachable(p),
@@ -572,7 +567,6 @@ where
             }
         }
 
-        debug_assert!(self.config.allow_listening);
         let connec_unique_id = self.next_connec_unique_id;
         self.next_connec_unique_id.0 += 1;
         self.inbound_substreams
@@ -618,12 +612,7 @@ where
     type InboundOpenInfo = ();
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
-        if self.config.allow_listening {
-            SubstreamProtocol::new(self.config.protocol_config.clone(), ())
-                .map_upgrade(Either::Left)
-        } else {
-            SubstreamProtocol::new(Either::Right(upgrade::DeniedUpgrade), ())
-        }
+        SubstreamProtocol::new(self.config.protocol_config.clone(), ()).map_upgrade(Either::Left)
     }
 
     fn on_behaviour_event(&mut self, message: KademliaHandlerIn<TUserData>) {
@@ -812,7 +801,6 @@ impl Default for KademliaHandlerConfig {
     fn default() -> Self {
         KademliaHandlerConfig {
             protocol_config: Default::default(),
-            allow_listening: true,
             idle_timeout: Duration::from_secs(10),
         }
     }

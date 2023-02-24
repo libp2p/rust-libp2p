@@ -1993,7 +1993,6 @@ where
         Ok(KademliaHandler::new(
             KademliaHandlerConfig {
                 protocol_config: self.protocol_config.clone(),
-                allow_listening: true,
                 idle_timeout: self.connection_idle_timeout,
             },
             ConnectedPoint::Listener {
@@ -2014,7 +2013,6 @@ where
         Ok(KademliaHandler::new(
             KademliaHandlerConfig {
                 protocol_config: self.protocol_config.clone(),
-                allow_listening: true,
                 idle_timeout: self.connection_idle_timeout,
             },
             ConnectedPoint::Dialer {
