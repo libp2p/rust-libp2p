@@ -1,4 +1,4 @@
-# 0.32.0 [unreleased]
+# 0.32.0
 
 - Fix `NetworkBehaviour` Derive macro for generic types when `out_event` was not provided. Previously the enum generated
   didn't have the `NetworkBehaviour` impl constraints whilst using the generics for `<Generic>::OutEvent`.
@@ -128,4 +128,3 @@ ambiguity. [PR 1681](https://github.com/libp2p/rust-libp2p/pull/1681).
 mechanism through `#[behaviour(event_process = false)]`. This is
 useful if users want to process all events while polling the
 swarm through `SwarmEvent::Behaviour`.
-

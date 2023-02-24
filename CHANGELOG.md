@@ -45,7 +45,7 @@
 
 # `libp2p` facade crate
 
-# 0.51.0 [unreleased]
+# 0.51.0
 
 - Enable `NetworkBehaviour`s to manage connections.
   This deprecates `NetworkBehaviour::new_handler` and `NetworkBehaviour::addresses_of_peer`.
