@@ -1,4 +1,4 @@
-# 0.15.0 [unreleased]
+# 0.15.0
 
 - Rename types as per [discussion 2174].
   `Relay` has been renamed to `Behaviour`.
