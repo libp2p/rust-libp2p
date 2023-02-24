@@ -308,22 +308,6 @@ response and a previous request. For example, if a user requests two new connect
 peer, they should be able to match each new connection to the corresponding previous connection
 request without having to guess.
 
-When providing a **method** where the response to that method is delivered asynchronously through an
-event, either synchronously return a request ID which is later on contained in the asynchronous
-response event, or synchronously return a `Future` that eventually resolves into the response.
-
-``` rust
-fn my_method() -> Id {
-  // ...
-}
-```
-
-``` rust
-fn my_method() -> impl Future<Output = Response> {
-  // ...
-}
-```
-
 When accepting a **command** that eventually results in a response through an event require that
 command to contain a unique ID, which is later on contained in the asynchronous response event. One
 such example is the `Swarm` accepting a `NetworkBehaviourAction::Dial` from the `NetworkBehaviour`.
