@@ -19,7 +19,7 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::rpc_proto;
-use base64::encode;
+use base64::prelude::*;
 use prometheus_client::encoding::EncodeLabelSet;
 use prost::Message;
 use sha2::{Digest, Sha256};
@@ -56,7 +56,7 @@ impl Hasher for Sha256Hash {
         topic_descripter
             .encode(&mut bytes)
             .expect("buffer is large enough");
-        let hash = encode(Sha256::digest(&bytes).as_slice());
+        let hash = BASE64_STANDARD.encode(Sha256::digest(&bytes));
         TopicHash { hash }
     }
 }
