@@ -18,14 +18,14 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+#[allow(deprecated)]
+use crate::handler::IntoConnectionHandler;
 use crate::handler::{
     AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent,
     ConnectionHandlerUpgrErr, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
-    InboundUpgradeSend, IntoConnectionHandler, KeepAlive, ListenUpgradeError, OutboundUpgradeSend,
-    SubstreamProtocol,
+    InboundUpgradeSend, KeepAlive, ListenUpgradeError, OutboundUpgradeSend, SubstreamProtocol,
 };
 use crate::upgrade::SendWrapper;
-
 use either::Either;
 use futures::future;
 use libp2p_core::{
@@ -55,6 +55,7 @@ impl<TProto1, TProto2> IntoConnectionHandlerSelect<TProto1, TProto2> {
     }
 }
 
+#[allow(deprecated)]
 impl<TProto1, TProto2> IntoConnectionHandler for IntoConnectionHandlerSelect<TProto1, TProto2>
 where
     TProto1: IntoConnectionHandler,

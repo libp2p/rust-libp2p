@@ -19,10 +19,12 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::StreamExt;
+use libp2p_core::{Endpoint, Multiaddr};
 use libp2p_identify as identify;
 use libp2p_ping as ping;
 use libp2p_swarm::{
-    behaviour::FromSwarm, dummy, NetworkBehaviour, SwarmEvent, THandlerInEvent, THandlerOutEvent,
+    behaviour::FromSwarm, dummy, ConnectionDenied, NetworkBehaviour, SwarmEvent, THandler,
+    THandlerInEvent, THandlerOutEvent,
 };
 use std::fmt::Debug;
 
@@ -47,7 +49,12 @@ fn one_field() {
         ping: ping::Behaviour,
     }
 
-    #[allow(dead_code, unreachable_code, clippy::diverging_sub_expression)]
+    #[allow(
+        dead_code,
+        unreachable_code,
+        clippy::diverging_sub_expression,
+        clippy::used_underscore_binding
+    )]
     fn foo() {
         let _out_event: <Foo as NetworkBehaviour>::OutEvent = unimplemented!();
         match _out_event {
@@ -66,7 +73,12 @@ fn two_fields() {
         identify: identify::Behaviour,
     }
 
-    #[allow(dead_code, unreachable_code, clippy::diverging_sub_expression)]
+    #[allow(
+        dead_code,
+        unreachable_code,
+        clippy::diverging_sub_expression,
+        clippy::used_underscore_binding
+    )]
     fn foo() {
         let _out_event: <Foo as NetworkBehaviour>::OutEvent = unimplemented!();
         match _out_event {
@@ -89,7 +101,12 @@ fn three_fields() {
         kad: libp2p_kad::Kademlia<libp2p_kad::record::store::MemoryStore>,
     }
 
-    #[allow(dead_code, unreachable_code, clippy::diverging_sub_expression)]
+    #[allow(
+        dead_code,
+        unreachable_code,
+        clippy::diverging_sub_expression,
+        clippy::used_underscore_binding
+    )]
     fn foo() {
         let _out_event: <Foo as NetworkBehaviour>::OutEvent = unimplemented!();
         match _out_event {
@@ -217,7 +234,12 @@ fn nested_derives_with_import() {
         foo: Foo,
     }
 
-    #[allow(dead_code, unreachable_code, clippy::diverging_sub_expression)]
+    #[allow(
+        dead_code,
+        unreachable_code,
+        clippy::diverging_sub_expression,
+        clippy::used_underscore_binding
+    )]
     fn foo() {
         let _out_event: <Bar as NetworkBehaviour>::OutEvent = unimplemented!();
         match _out_event {
@@ -257,7 +279,12 @@ fn custom_event_emit_event_through_poll() {
         identify: identify::Behaviour,
     }
 
-    #[allow(dead_code, unreachable_code, clippy::diverging_sub_expression)]
+    #[allow(
+        dead_code,
+        unreachable_code,
+        clippy::diverging_sub_expression,
+        clippy::used_underscore_binding
+    )]
     async fn bar() {
         require_net_behaviour::<Foo>();
 
@@ -421,8 +448,24 @@ fn custom_out_event_no_type_parameters() {
         type ConnectionHandler = dummy::ConnectionHandler;
         type OutEvent = void::Void;
 
-        fn new_handler(&mut self) -> Self::ConnectionHandler {
-            dummy::ConnectionHandler
+        fn handle_established_inbound_connection(
+            &mut self,
+            _: ConnectionId,
+            _: PeerId,
+            _: &Multiaddr,
+            _: &Multiaddr,
+        ) -> Result<THandler<Self>, ConnectionDenied> {
+            Ok(dummy::ConnectionHandler)
+        }
+
+        fn handle_established_outbound_connection(
+            &mut self,
+            _: ConnectionId,
+            _: PeerId,
+            _: &Multiaddr,
+            _: Endpoint,
+        ) -> Result<THandler<Self>, ConnectionDenied> {
+            Ok(dummy::ConnectionHandler)
         }
 
         fn on_connection_handler_event(

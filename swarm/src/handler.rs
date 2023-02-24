@@ -487,6 +487,9 @@ where
 }
 
 /// Prototype for a [`ConnectionHandler`].
+#[deprecated(
+    note = "Implement `ConnectionHandler` directly and use `NetworkBehaviour::{handle_pending_inbound_connection,handle_pending_outbound_connection}` to handle pending connections."
+)]
 pub trait IntoConnectionHandler: Send + 'static {
     /// The protocols handler.
     type Handler: ConnectionHandler;
@@ -513,6 +516,7 @@ pub trait IntoConnectionHandler: Send + 'static {
     }
 }
 
+#[allow(deprecated)]
 impl<T> IntoConnectionHandler for T
 where
     T: ConnectionHandler,

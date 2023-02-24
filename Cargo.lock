@@ -471,12 +471,6 @@ checksum = "9e1b586273c5702936fe7b7d6896644d8be71e6314cfe09d3167c95f712589e8"
 
 [[package]]
 name = "base64"
-version = "0.20.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ea22880d78093b0cbe17c89f64a7d457941e65759157ec6cb31a31d652b05e5"
-
-[[package]]
-name = "base64"
 version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a4a4ddaa51a5bc52a6948f74c06d20aaaddb71924eab79b8c97a8c556e942d6a"
@@ -715,9 +709,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.1.4"
+version = "4.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f13b9c79b5d1dd500d20ef541215a6423c75829ef43117e1b4d17fd8af0b5d76"
+checksum = "ec0b0588d44d4d63a87dbd75c136c166bbfd9a86a31cb89e09906521c7d3f5e3"
 dependencies = [
  "bitflags",
  "clap_derive",
@@ -1706,9 +1700,9 @@ dependencies = [
 
 [[package]]
 name = "heck"
-version = "0.4.0"
+version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2540771e65fc8cb83cd6e8a237f70c319bd5c29f78ed1084ba5d50eeac86f7f9"
+checksum = "95505c38b4572b2d910cecb0281560f54b440a19336cbbcb27bf6ce6adc6f5a8"
 
 [[package]]
 name = "hermit-abi"
@@ -1858,9 +1852,9 @@ checksum = "9a3a5bfb195931eeb336b2a7b4d761daec841b97f947d34394601737a7bba5e4"
 
 [[package]]
 name = "hyper"
-version = "0.14.23"
+version = "0.14.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "034711faac9d2166cb1baf1a2fb0b60b1f277f8492fd72176c17f3515e1abd3c"
+checksum = "5e011372fa0b68db8350aa7a248930ecc7839bf46d8485577d69f117a75f164c"
 dependencies = [
  "bytes",
  "futures-channel",
@@ -2090,8 +2084,8 @@ dependencies = [
 name = "keygen"
 version = "0.1.0"
 dependencies = [
- "base64 0.20.0",
- "clap 4.1.4",
+ "base64 0.21.0",
+ "clap 4.1.6",
  "libp2p-core",
  "libp2p-identity",
  "serde",
@@ -2153,7 +2147,7 @@ dependencies = [
  "async-std",
  "async-trait",
  "bytes",
- "clap 4.1.4",
+ "clap 4.1.6",
  "either",
  "env_logger 0.10.0",
  "futures",
@@ -2202,7 +2196,7 @@ version = "0.10.0"
 dependencies = [
  "async-std",
  "async-trait",
- "clap 4.1.4",
+ "clap 4.1.6",
  "env_logger 0.10.0",
  "futures",
  "futures-timer",
@@ -2259,7 +2253,7 @@ version = "0.9.0"
 dependencies = [
  "asynchronous-codec",
  "bytes",
- "clap 4.1.4",
+ "clap 4.1.6",
  "either",
  "env_logger 0.10.0",
  "futures",
@@ -2341,7 +2335,7 @@ version = "0.44.0"
 dependencies = [
  "async-std",
  "asynchronous-codec",
- "base64 0.20.0",
+ "base64 0.21.0",
  "byteorder",
  "bytes",
  "env_logger 0.10.0",
@@ -2405,7 +2399,7 @@ name = "libp2p-identity"
 version = "0.1.0"
 dependencies = [
  "asn1_der",
- "base64 0.20.0",
+ "base64 0.21.0",
  "bs58",
  "criterion",
  "ed25519-dalek",
@@ -2659,7 +2653,7 @@ version = "0.15.0"
 dependencies = [
  "asynchronous-codec",
  "bytes",
- "clap 4.1.4",
+ "clap 4.1.6",
  "either",
  "env_logger 0.10.0",
  "futures",
@@ -4451,9 +4445,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.91"
+version = "1.0.93"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "877c235533714907a8c2464236f5c4b2a17262ef1bd71f38f35ea592c8da6883"
+checksum = "cad406b69c91885b5107daf2c29572f6c8cdb3c66826821e286c533490c0bc76"
 dependencies = [
  "itoa",
  "ryu",

@@ -284,11 +284,11 @@ async fn test_throttle_global_max() {
             ..Default::default()
         }))
         .await;
-        let mut _handles = Vec::new();
+        let mut handles = Vec::new();
         for _ in 0..2 {
-            let (_handle, rx) = oneshot::channel();
+            let (handle, rx) = oneshot::channel();
             spawn_client(true, false, server_id, server_addr.clone(), rx).await;
-            _handles.push(_handle);
+            handles.push(handle);
         }
 
         let (first_probe_id, first_peer_id) = match next_event(&mut server).await {
