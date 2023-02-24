@@ -47,6 +47,11 @@
 
 # 0.51.0 [unreleased]
 
+- Enable `NetworkBehaviour`s to manage connections.
+  This deprecates `NetworkBehaviour::new_handler` and `NetworkBehaviour::addresses_of_peer`.
+  Due to limitations in the Rust compiler, these deprecations may not show up for you, nevertheless they will be removed in a future release.
+  See [`libp2p-swarm`'s CHANGELOG](swarm/CHANGELOG.md#0420) for details.
+
 - Count bandwidth at the application level. Previously `BandwidthLogging` would implement `Transport` and now implements `StreamMuxer` ([PR 3180](https://github.com/libp2p/rust-libp2p/pull/3180)).
     - `BandwidthLogging::new` now requires a 2nd argument: `Arc<BandwidthSinks>`
     - Remove `BandwidthFuture`

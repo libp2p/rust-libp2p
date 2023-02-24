@@ -23,6 +23,8 @@
 mod handler;
 pub(crate) mod transport;
 
+use crate::multiaddr_ext::MultiaddrExt;
+use crate::priv_client::handler::Handler;
 use crate::protocol::{self, inbound_stop, outbound_hop};
 use bytes::Bytes;
 use either::Either;
@@ -32,12 +34,13 @@ use futures::future::{BoxFuture, FutureExt};
 use futures::io::{AsyncRead, AsyncWrite};
 use futures::ready;
 use futures::stream::StreamExt;
-use libp2p_core::PeerId;
+use libp2p_core::{Endpoint, Multiaddr, PeerId};
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm};
 use libp2p_swarm::dial_opts::DialOpts;
 use libp2p_swarm::{
-    ConnectionHandlerUpgrErr, ConnectionId, DialFailure, NegotiatedSubstream, NetworkBehaviour,
-    NetworkBehaviourAction, NotifyHandler, PollParameters, THandlerInEvent, THandlerOutEvent,
+    dummy, ConnectionDenied, ConnectionHandler, ConnectionHandlerUpgrErr, ConnectionId,
+    DialFailure, NegotiatedSubstream, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
+    PollParameters, THandler, THandlerInEvent, THandlerOutEvent,
 };
 use std::collections::{hash_map, HashMap, VecDeque};
 use std::io::{Error, ErrorKind, IoSlice};
@@ -156,11 +159,47 @@ impl Behaviour {
 }
 
 impl NetworkBehaviour for Behaviour {
-    type ConnectionHandler = handler::Prototype;
+    type ConnectionHandler = Either<Handler, dummy::ConnectionHandler>;
     type OutEvent = Event;
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
-        handler::Prototype::new(self.local_peer_id, None)
+    fn handle_established_inbound_connection(
+        &mut self,
+        connection_id: ConnectionId,
+        peer: PeerId,
+        local_addr: &Multiaddr,
+        remote_addr: &Multiaddr,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        if local_addr.is_relayed() {
+            return Ok(Either::Right(dummy::ConnectionHandler));
+        }
+
+        let mut handler = Handler::new(self.local_peer_id, peer, remote_addr.clone());
+
+        if let Some(event) = self.pending_handler_commands.remove(&connection_id) {
+            handler.on_behaviour_event(event)
+        }
+
+        Ok(Either::Left(handler))
+    }
+
+    fn handle_established_outbound_connection(
+        &mut self,
+        connection_id: ConnectionId,
+        peer: PeerId,
+        addr: &Multiaddr,
+        _: Endpoint,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        if addr.is_relayed() {
+            return Ok(Either::Right(dummy::ConnectionHandler));
+        }
+
+        let mut handler = Handler::new(self.local_peer_id, peer, addr.clone());
+
+        if let Some(event) = self.pending_handler_commands.remove(&connection_id) {
+            handler.on_behaviour_event(event)
+        }
+
+        Ok(Either::Left(handler))
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
