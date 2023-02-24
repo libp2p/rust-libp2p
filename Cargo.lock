@@ -2701,7 +2701,7 @@ dependencies = [
 
 [[package]]
 name = "libp2p-swarm"
-version = "0.42.0"
+version = "0.42.1"
 dependencies = [
  "async-std",
  "either",
