@@ -23,9 +23,9 @@
 mod handler;
 pub mod rate_limiter;
 
-use crate::proto;
 use crate::behaviour::handler::Handler;
 use crate::multiaddr_ext::MultiaddrExt;
+use crate::proto;
 use crate::protocol::{inbound_hop, outbound_stop};
 use either::Either;
 use instant::Instant;
