@@ -1,4 +1,4 @@
-# 0.42.0 [unreleased]
+# 0.42.0
 
 - Allow `NetworkBehaviour`s to manage connections.
   We deprecate `NetworkBehaviour::new_handler` and `NetworkBehaviour::addresses_of_peer` in favor of four new callbacks:
