@@ -47,6 +47,7 @@ mod proto {
 
 /// Multi-address re-export.
 pub use multiaddr;
+use std::fmt::{self, Formatter};
 pub type Negotiated<T> = multistream_select::Negotiated<T>;
 
 mod peer_id;
@@ -75,5 +76,10 @@ pub use transport::Transport;
 pub use upgrade::{InboundUpgrade, OutboundUpgrade, ProtocolName, UpgradeError, UpgradeInfo};
 
 #[derive(thiserror::Error, Debug)]
-#[error(transparent)]
 pub struct DecodeError(quick_protobuf::Error);
+
+impl fmt::Display for DecodeError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}

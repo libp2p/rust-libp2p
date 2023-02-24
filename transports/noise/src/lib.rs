@@ -65,6 +65,8 @@ pub use protocol::x25519::X25519;
 pub use protocol::x25519_spec::X25519Spec;
 pub use protocol::{AuthenticKeypair, Keypair, KeypairIdentity, PublicKey, SecretKey};
 pub use protocol::{Protocol, ProtocolParams, IK, IX, XX};
+use std::fmt;
+use std::fmt::Formatter;
 
 use crate::handshake::State;
 use crate::io::handshake;
@@ -284,8 +286,13 @@ pub enum NoiseError {
 }
 
 #[derive(Debug, thiserror::Error)]
-#[error(transparent)]
 pub struct DecodeError(quick_protobuf::Error);
+
+impl fmt::Display for DecodeError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
 
 impl From<quick_protobuf::Error> for NoiseError {
     fn from(e: quick_protobuf::Error) -> Self {
