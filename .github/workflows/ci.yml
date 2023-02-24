@@ -72,7 +72,7 @@ jobs:
       - uses: ./.github/actions/cargo-semver-checks
         if: steps.check-released.outputs.code == 200 # Workaround until https://github.com/obi1kenobi/cargo-semver-check/issues/146 is shipped.
         with:
-          args: check-release -p ${{ matrix.crate }}
+          crate: ${{ matrix.crate }}
 
       - name: Enforce no dependency on meta crate
         run: |

@@ -1,9 +1,9 @@
 name: "Run cargo semver-checks"
 description: "Install and run the cargo semver-checks tool"
 inputs:
-  args:
+  crate:
     required: true
-    description: "The arguments to pass to `cargo semver-checks`"
+    description: "The crate to run `cargo semver-checks` on."
 runs:
   using: "composite"
   steps:
@@ -13,12 +13,12 @@ runs:
     - uses: actions/cache@v3
       with:
         path: ${{ github.workspace }}/target/semver-checks/cache
-        key: v1-semver-checks-cache-${{ inputs.args }}-${{ hashFiles('Cargo.lock') }}
+        key: v1-semver-checks-cache-${{ inputs.crate }}-${{ hashFiles('Cargo.lock') }}
         restore-keys: |
-          v1-semver-checks-cache-${{ inputs.args }}-
-          v1-semver-checks-cache-${{ inputs.args }}-${{ hashFiles('Cargo.lock') }}
+          v1-semver-checks-cache-${{ inputs.crate }}-
+          v1-semver-checks-cache-${{ inputs.crate }}-${{ hashFiles('Cargo.lock') }}
 
-    - run: cargo semver-checks ${{ inputs.args }}
+    - run: cargo semver-checks check-release --package ${{ inputs.crate }}
       shell: bash
       env:
         CARGO_TERM_VERBOSE: "true"
