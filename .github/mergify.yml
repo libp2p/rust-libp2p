@@ -31,6 +31,7 @@ pull_request_rules:
       - base=master
       - label=send-it
       - author!=@libp2p/rust-libp2p-maintainers
+      - author!=dependabot[bot]
     actions:
       dismiss_reviews:
         message: Approvals have been dismissed because the PR was updated after the `send-it` label was applied.

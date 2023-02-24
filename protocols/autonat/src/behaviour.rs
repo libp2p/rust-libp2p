@@ -497,13 +497,13 @@ impl NetworkBehaviour for Behaviour {
 
     fn handle_established_inbound_connection(
         &mut self,
-        _connection_id: ConnectionId,
+        connection_id: ConnectionId,
         peer: PeerId,
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         self.inner.handle_established_inbound_connection(
-            _connection_id,
+            connection_id,
             peer,
             local_addr,
             remote_addr,
@@ -512,28 +512,28 @@ impl NetworkBehaviour for Behaviour {
 
     fn handle_pending_outbound_connection(
         &mut self,
-        _connection_id: ConnectionId,
+        connection_id: ConnectionId,
         maybe_peer: Option<PeerId>,
-        _addresses: &[Multiaddr],
-        _effective_role: Endpoint,
+        addresses: &[Multiaddr],
+        effective_role: Endpoint,
     ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
         self.inner.handle_pending_outbound_connection(
-            _connection_id,
+            connection_id,
             maybe_peer,
-            _addresses,
-            _effective_role,
+            addresses,
+            effective_role,
         )
     }
 
     fn handle_established_outbound_connection(
         &mut self,
-        _connection_id: ConnectionId,
+        connection_id: ConnectionId,
         peer: PeerId,
         addr: &Multiaddr,
         role_override: Endpoint,
     ) -> Result<THandler<Self>, ConnectionDenied> {
         self.inner
-            .handle_established_outbound_connection(_connection_id, peer, addr, role_override)
+            .handle_established_outbound_connection(connection_id, peer, addr, role_override)
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {

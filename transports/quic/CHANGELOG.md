@@ -1,4 +1,4 @@
-# 0.7.0-alpha.2 [unreleased]
+# 0.7.0-alpha.2
 
 - Update to `libp2p-tls` `v0.2.0`.
 

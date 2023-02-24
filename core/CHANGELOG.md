@@ -1,4 +1,4 @@
-# 0.39.0 [unreleased]
+# 0.39.0
 
 - Move `ConnectionId` to `libp2p-swarm`. See [PR 3221].
 - Move `PendingPoint` to `libp2p-swarm` and make it crate-private. See [PR 3221].
