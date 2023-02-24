@@ -95,7 +95,7 @@ async fn main() {
                                         address.clone()
                                     };
 
-                                swarm.dial(address_with_p2p).unwrap()
+                                swarm.dial(address_with_p2p).unwrap();
                             }
                         }
                     }

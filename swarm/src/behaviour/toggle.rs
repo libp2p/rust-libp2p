@@ -23,15 +23,16 @@ use crate::connection::ConnectionId;
 use crate::handler::{
     AddressChange, ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent,
     ConnectionHandlerUpgrErr, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
-    IntoConnectionHandler, KeepAlive, ListenUpgradeError, SubstreamProtocol,
+    KeepAlive, ListenUpgradeError, SubstreamProtocol,
 };
 use crate::upgrade::SendWrapper;
 use crate::{
-    NetworkBehaviour, NetworkBehaviourAction, PollParameters, THandlerInEvent, THandlerOutEvent,
+    ConnectionDenied, NetworkBehaviour, NetworkBehaviourAction, PollParameters, THandler,
+    THandlerInEvent, THandlerOutEvent,
 };
 use either::Either;
 use futures::future;
-use libp2p_core::{upgrade::DeniedUpgrade, ConnectedPoint, Multiaddr, PeerId};
+use libp2p_core::{upgrade::DeniedUpgrade, Endpoint, Multiaddr, PeerId};
 use std::{task::Context, task::Poll};
 
 /// Implementation of `NetworkBehaviour` that can be either in the disabled or enabled state.
@@ -68,20 +69,93 @@ impl<TBehaviour> NetworkBehaviour for Toggle<TBehaviour>
 where
     TBehaviour: NetworkBehaviour,
 {
-    type ConnectionHandler = ToggleIntoConnectionHandler<TBehaviour::ConnectionHandler>;
+    type ConnectionHandler = ToggleConnectionHandler<THandler<TBehaviour>>;
     type OutEvent = TBehaviour::OutEvent;
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
-        ToggleIntoConnectionHandler {
-            inner: self.inner.as_mut().map(|i| i.new_handler()),
-        }
+    fn handle_pending_inbound_connection(
+        &mut self,
+        connection_id: ConnectionId,
+        local_addr: &Multiaddr,
+        remote_addr: &Multiaddr,
+    ) -> Result<(), ConnectionDenied> {
+        let inner = match self.inner.as_mut() {
+            None => return Ok(()),
+            Some(inner) => inner,
+        };
+
+        inner.handle_pending_inbound_connection(connection_id, local_addr, remote_addr)?;
+
+        Ok(())
     }
 
-    fn addresses_of_peer(&mut self, peer_id: &PeerId) -> Vec<Multiaddr> {
-        self.inner
-            .as_mut()
-            .map(|b| b.addresses_of_peer(peer_id))
-            .unwrap_or_else(Vec::new)
+    fn handle_established_inbound_connection(
+        &mut self,
+        _connection_id: ConnectionId,
+        peer: PeerId,
+        local_addr: &Multiaddr,
+        remote_addr: &Multiaddr,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        let inner = match self.inner.as_mut() {
+            None => return Ok(ToggleConnectionHandler { inner: None }),
+            Some(inner) => inner,
+        };
+
+        let handler = inner.handle_established_inbound_connection(
+            _connection_id,
+            peer,
+            local_addr,
+            remote_addr,
+        )?;
+
+        Ok(ToggleConnectionHandler {
+            inner: Some(handler),
+        })
+    }
+
+    fn handle_pending_outbound_connection(
+        &mut self,
+        _connection_id: ConnectionId,
+        maybe_peer: Option<PeerId>,
+        _addresses: &[Multiaddr],
+        _effective_role: Endpoint,
+    ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
+        let inner = match self.inner.as_mut() {
+            None => return Ok(vec![]),
+            Some(inner) => inner,
+        };
+
+        let addresses = inner.handle_pending_outbound_connection(
+            _connection_id,
+            maybe_peer,
+            _addresses,
+            _effective_role,
+        )?;
+
+        Ok(addresses)
+    }
+
+    fn handle_established_outbound_connection(
+        &mut self,
+        _connection_id: ConnectionId,
+        peer: PeerId,
+        addr: &Multiaddr,
+        role_override: Endpoint,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        let inner = match self.inner.as_mut() {
+            None => return Ok(ToggleConnectionHandler { inner: None }),
+            Some(inner) => inner,
+        };
+
+        let handler = inner.handle_established_outbound_connection(
+            _connection_id,
+            peer,
+            addr,
+            role_override,
+        )?;
+
+        Ok(ToggleConnectionHandler {
+            inner: Some(handler),
+        })
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
@@ -112,38 +186,6 @@ where
             inner.poll(cx, params)
         } else {
             Poll::Pending
-        }
-    }
-}
-
-/// Implementation of `IntoConnectionHandler` that can be in the disabled state.
-pub struct ToggleIntoConnectionHandler<TInner> {
-    inner: Option<TInner>,
-}
-
-impl<TInner> IntoConnectionHandler for ToggleIntoConnectionHandler<TInner>
-where
-    TInner: IntoConnectionHandler,
-{
-    type Handler = ToggleConnectionHandler<TInner::Handler>;
-
-    fn into_handler(
-        self,
-        remote_peer_id: &PeerId,
-        connected_point: &ConnectedPoint,
-    ) -> Self::Handler {
-        ToggleConnectionHandler {
-            inner: self
-                .inner
-                .map(|h| h.into_handler(remote_peer_id, connected_point)),
-        }
-    }
-
-    fn inbound_protocol(&self) -> <Self::Handler as ConnectionHandler>::InboundProtocol {
-        if let Some(inner) = self.inner.as_ref() {
-            Either::Left(SendWrapper(inner.inbound_protocol()))
-        } else {
-            Either::Right(SendWrapper(DeniedUpgrade))
         }
     }
 }

@@ -1,4 +1,5 @@
 use crate::behaviour::{ExpiredListenAddr, FromSwarm, NewListenAddr};
+#[allow(deprecated)]
 use crate::IntoConnectionHandler;
 use libp2p_core::Multiaddr;
 use std::collections::HashSet;
@@ -16,6 +17,7 @@ impl ListenAddresses {
     }
 
     /// Feed a [`FromSwarm`] event to this struct.
+    #[allow(deprecated)]
     pub fn on_swarm_event<THandler>(&mut self, event: &FromSwarm<THandler>)
     where
         THandler: IntoConnectionHandler,
