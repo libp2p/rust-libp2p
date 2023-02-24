@@ -1611,6 +1611,7 @@ where
     }
 
     /// Configures the connection limits.
+    #[deprecated(note = "Use `libp2p_swarm::connection_limits::Behaviour` instead.")]
     pub fn connection_limits(mut self, limits: ConnectionLimits) -> Self {
         self.connection_limits = limits;
         self
@@ -1698,6 +1699,7 @@ pub enum DialError {
 impl From<PendingOutboundConnectionError> for DialError {
     fn from(error: PendingOutboundConnectionError) -> Self {
         match error {
+            #[allow(deprecated)]
             PendingConnectionError::ConnectionLimit(limit) => DialError::ConnectionLimit(limit),
             PendingConnectionError::Aborted => DialError::Aborted,
             PendingConnectionError::WrongPeerId { obtained, endpoint } => {
@@ -1807,6 +1809,7 @@ impl From<PendingInboundConnectionError> for ListenError {
     fn from(error: PendingInboundConnectionError) -> Self {
         match error {
             PendingInboundConnectionError::Transport(inner) => ListenError::Transport(inner),
+            #[allow(deprecated)]
             PendingInboundConnectionError::ConnectionLimit(inner) => {
                 ListenError::ConnectionLimit(inner)
             }
@@ -2446,6 +2449,7 @@ mod tests {
         let outgoing_limit = rand::thread_rng().gen_range(1..10);
 
         let limits = ConnectionLimits::default().with_max_pending_outgoing(Some(outgoing_limit));
+        #[allow(deprecated)]
         let mut network = new_test_swarm::<_, ()>(keep_alive::ConnectionHandler)
             .connection_limits(limits)
             .build();
@@ -2500,9 +2504,11 @@ mod tests {
         fn prop(limit: Limit) {
             let limit = limit.0;
 
+            #[allow(deprecated)]
             let mut network1 = new_test_swarm::<_, ()>(keep_alive::ConnectionHandler)
                 .connection_limits(limits(limit))
                 .build();
+            #[allow(deprecated)]
             let mut network2 = new_test_swarm::<_, ()>(keep_alive::ConnectionHandler)
                 .connection_limits(limits(limit))
                 .build();

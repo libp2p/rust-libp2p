@@ -87,6 +87,8 @@
 
 - Remove `ConnectionId::new`. Manually creating `ConnectionId`s is now unsupported. See [PR 3327].
 
+- Deprecate `SwarmBuilder::connection_limits` in favor of `libp2p::swarm::connection_limits::Behaviour`. See [PR 3386].
+
 [PR 3364]: https://github.com/libp2p/rust-libp2p/pull/3364
 [PR 3170]: https://github.com/libp2p/rust-libp2p/pull/3170
 [PR 3134]: https://github.com/libp2p/rust-libp2p/pull/3134
@@ -102,6 +104,7 @@
 [PR 3375]: https://github.com/libp2p/rust-libp2p/pull/3375
 [PR 3254]: https://github.com/libp2p/rust-libp2p/pull/3254
 [PR 3497]: https://github.com/libp2p/rust-libp2p/pull/3497
+[PR 3386]: https://github.com/libp2p/rust-libp2p/pull/3386
 
 # 0.41.1
 
