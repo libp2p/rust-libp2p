@@ -92,7 +92,7 @@ impl ConnectionHandler for PendingConnectionHandler {
                 info: _info,
             }) => {
                 void::unreachable(protocol);
-                #[allow(unreachable_code)]
+                #[allow(unreachable_code, clippy::used_underscore_binding)]
                 {
                     void::unreachable(_info);
                 }

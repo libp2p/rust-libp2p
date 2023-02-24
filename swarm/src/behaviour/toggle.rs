@@ -90,7 +90,7 @@ where
 
     fn handle_established_inbound_connection(
         &mut self,
-        _connection_id: ConnectionId,
+        connection_id: ConnectionId,
         peer: PeerId,
         local_addr: &Multiaddr,
         remote_addr: &Multiaddr,
@@ -101,7 +101,7 @@ where
         };
 
         let handler = inner.handle_established_inbound_connection(
-            _connection_id,
+            connection_id,
             peer,
             local_addr,
             remote_addr,
@@ -114,10 +114,10 @@ where
 
     fn handle_pending_outbound_connection(
         &mut self,
-        _connection_id: ConnectionId,
+        connection_id: ConnectionId,
         maybe_peer: Option<PeerId>,
-        _addresses: &[Multiaddr],
-        _effective_role: Endpoint,
+        addresses: &[Multiaddr],
+        effective_role: Endpoint,
     ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
         let inner = match self.inner.as_mut() {
             None => return Ok(vec![]),
@@ -125,10 +125,10 @@ where
         };
 
         let addresses = inner.handle_pending_outbound_connection(
-            _connection_id,
+            connection_id,
             maybe_peer,
-            _addresses,
-            _effective_role,
+            addresses,
+            effective_role,
         )?;
 
         Ok(addresses)
@@ -136,7 +136,7 @@ where
 
     fn handle_established_outbound_connection(
         &mut self,
-        _connection_id: ConnectionId,
+        connection_id: ConnectionId,
         peer: PeerId,
         addr: &Multiaddr,
         role_override: Endpoint,
@@ -147,7 +147,7 @@ where
         };
 
         let handler = inner.handle_established_outbound_connection(
-            _connection_id,
+            connection_id,
             peer,
             addr,
             role_override,
