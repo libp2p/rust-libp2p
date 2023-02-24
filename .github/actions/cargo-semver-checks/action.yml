@@ -13,10 +13,10 @@ runs:
     - uses: actions/cache@v3
       with:
         path: ${{ github.workspace }}/target/semver-checks/cache
-        key: semver-checks-cache-${{ hashFiles('Cargo.lock') }}
+        key: v1-semver-checks-cache-${{ inputs.args }}-${{ hashFiles('Cargo.lock') }}
         restore-keys: |
-          semver-checks-cache
-          semver-checks-cache-${{ hashFiles('Cargo.lock') }}
+          v1-semver-checks-cache-${{ inputs.args }}-
+          v1-semver-checks-cache-${{ inputs.args }}-${{ hashFiles('Cargo.lock') }}
 
     - run: cargo semver-checks ${{ inputs.args }}
       shell: bash

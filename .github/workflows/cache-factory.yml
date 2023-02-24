@@ -70,19 +70,3 @@ jobs:
 
       - name: Compile workspace with stable Rust
         run: cargo test --all-features --all-targets --workspace --no-run
-
-  make_cargo_semver_checks_cache:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Install Protoc
-        run: sudo apt-get install protobuf-compiler
-
-      - uses: actions/checkout@v3
-
-      - uses: dtolnay/rust-toolchain@9cd00a88a73addc8617065438eff914dd08d0955 # v1
-        with:
-          toolchain: stable
-
-      - uses: ./.github/actions/cargo-semver-checks
-        with:
-          args: check-release --workspace --verbose
