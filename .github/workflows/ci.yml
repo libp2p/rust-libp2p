@@ -23,6 +23,9 @@ jobs:
       matrix:
         crate: ${{ fromJSON(needs.gather_published_crates.outputs.members) }}
     steps:
+      - name: Install Protoc
+        run: sudo apt-get install protobuf-compiler
+
       - uses: actions/checkout@v3
 
       - name: Get MSRV for ${{ matrix.crate }}
@@ -94,6 +97,16 @@ jobs:
             os: windows-latest
     runs-on: ${{ matrix.os }}
     steps:
+      - name: Install Protoc
+        if: ${{ matrix.os != 'ubuntu-latest' }}
+        uses: arduino/setup-protoc@64c0c85d18e984422218383b81c52f8b077404d3 # v1.1.2
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Protoc
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: sudo apt-get install protobuf-compiler
+
       - uses: actions/checkout@v3
 
       - uses: dtolnay/rust-toolchain@9cd00a88a73addc8617065438eff914dd08d0955 # v1
@@ -117,6 +130,9 @@ jobs:
           - features: "mdns tcp dns tokio"
           - features: "mdns tcp dns async-std"
     steps:
+      - name: Install Protoc
+        run: sudo apt-get install protobuf-compiler
+
       - uses: actions/checkout@v3
 
       - uses: dtolnay/rust-toolchain@9cd00a88a73addc8617065438eff914dd08d0955 # v1
@@ -134,6 +150,9 @@ jobs:
     name: Check rustdoc intra-doc links
     runs-on: ubuntu-latest
     steps:
+      - name: Install Protoc
+        run: sudo apt-get install protobuf-compiler
+
       - uses: actions/checkout@v3
 
       - uses: dtolnay/rust-toolchain@9cd00a88a73addc8617065438eff914dd08d0955 # v1
@@ -157,6 +176,9 @@ jobs:
           beta
         ]
     steps:
+      - name: Install Protoc
+        run: sudo apt-get install protobuf-compiler
+
       - uses: actions/checkout@v3
 
       - uses: dtolnay/rust-toolchain@9cd00a88a73addc8617065438eff914dd08d0955 # v1
