@@ -192,8 +192,9 @@ impl Keypair {
 
 impl zeroize::Zeroize for proto::PrivateKey {
     fn zeroize(&mut self) {
+        // KeyType cannot be zeroized.
         self.Type = proto::KeyType::default();
-        self.Data = Vec::default();
+        self.Data.zeroize();
     }
 }
 
