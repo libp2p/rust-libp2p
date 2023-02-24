@@ -20,7 +20,7 @@ runs:
     - uses: actions/cache@v3
       with:
         path: ${{ github.workspace }}/target/semver-checks/cache
-        key: semver-checks-cache-${{ inputs.crate }}-steps.get-released-version.outputs.version
+        key: semver-checks-cache-${{ inputs.crate }}-${{ steps.get-released-version.outputs.version }}
 
     - run: cargo semver-checks check-release --package ${{ inputs.crate }}
       shell: bash
