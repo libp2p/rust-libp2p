@@ -108,10 +108,7 @@ pub use behaviour::{
     NewListenAddr, NotifyHandler, PollParameters,
 };
 pub use connection::pool::{ConnectionCounters, ConnectionLimits};
-pub use connection::{
-    ConnectionError, ConnectionId, ConnectionLimit, PendingConnectionError,
-    PendingInboundConnectionError, PendingOutboundConnectionError,
-};
+pub use connection::{ConnectionError, ConnectionId, ConnectionLimit};
 pub use executor::Executor;
 pub use handler::{
     ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerSelect, ConnectionHandlerUpgrErr,
@@ -124,6 +121,9 @@ pub use registry::{AddAddressResult, AddressRecord, AddressScore};
 
 use connection::pool::{EstablishedConnection, Pool, PoolConfig, PoolEvent};
 use connection::IncomingInfo;
+use connection::{
+    PendingConnectionError, PendingInboundConnectionError, PendingOutboundConnectionError,
+};
 use dial_opts::{DialOpts, PeerCondition};
 use futures::{executor::ThreadPoolBuilder, prelude::*, stream::FusedStream};
 use libp2p_core::muxing::SubstreamBox;
