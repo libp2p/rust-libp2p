@@ -19,6 +19,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use crate::multiaddr_ext::MultiaddrExt;
 use crate::priv_client::Connection;
 use crate::RequestId;
 use futures::channel::mpsc;
@@ -247,7 +248,7 @@ struct RelayedMultiaddr {
 
 /// Parse a [`Multiaddr`] containing a [`Protocol::P2pCircuit`].
 fn parse_relayed_multiaddr(addr: Multiaddr) -> Result<RelayedMultiaddr, TransportError<Error>> {
-    if !addr.iter().any(|p| matches!(p, Protocol::P2pCircuit)) {
+    if !addr.is_relayed() {
         return Err(TransportError::MultiaddrNotSupported(addr));
     }
 

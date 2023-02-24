@@ -1,5 +1,26 @@
 # 0.42.0 [unreleased]
 
+- Allow `NetworkBehaviour`s to manage connections.
+  We deprecate `NetworkBehaviour::new_handler` and `NetworkBehaviour::addresses_of_peer` in favor of four new callbacks:
+
+  - `NetworkBehaviour::handle_pending_inbound_connection`
+  - `NetworkBehaviour::handle_pending_outbound_connection`
+  - `NetworkBehaviour::handle_established_inbound_connection`
+  - `NetworkBehaviour::handle_established_outbound_connection`
+
+  Please note that due to [limitations](https://github.com/rust-lang/rust/issues/98990) in the Rust compiler, _implementations_ of `new_handler` and `addresses_of_peer` are not flagged as deprecated.
+  Nevertheless, they will be removed in the future.
+
+  All four are fallible and returning an error from any of them will abort the given connection.
+  This allows you to create dedicated `NetworkBehaviour`s that only concern themselves with managing connections.
+  For example:
+  - checking the `PeerId` of a newly established connection against an allow/block list
+  - only allowing X connection upgrades at any one time
+  - denying incoming or outgoing connections from a certain IP range
+  - only allowing N connections to or from the same peer
+
+  See [PR 3254].
+
 - Remove `handler` field from `NetworkBehaviourAction::Dial`.
   Instead of constructing the handler early, you can now access the `ConnectionId` of the future connection on `DialOpts`.
   `ConnectionId`s are `Copy` and will be used throughout the entire lifetime of the connection to report events.
@@ -79,6 +100,7 @@
 [PR 3373]: https://github.com/libp2p/rust-libp2p/pull/3373
 [PR 3374]: https://github.com/libp2p/rust-libp2p/pull/3374
 [PR 3375]: https://github.com/libp2p/rust-libp2p/pull/3375
+[PR 3254]: https://github.com/libp2p/rust-libp2p/pull/3254
 [PR 3497]: https://github.com/libp2p/rust-libp2p/pull/3497
 
 # 0.41.1

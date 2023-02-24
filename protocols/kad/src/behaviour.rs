@@ -24,7 +24,7 @@ mod test;
 
 use crate::addresses::Addresses;
 use crate::handler::{
-    KademliaHandlerConfig, KademliaHandlerEvent, KademliaHandlerIn, KademliaHandlerProto,
+    KademliaHandler, KademliaHandlerConfig, KademliaHandlerEvent, KademliaHandlerIn,
     KademliaRequestId,
 };
 use crate::jobs::*;
@@ -39,14 +39,15 @@ use crate::record::{
 use crate::K_VALUE;
 use fnv::{FnvHashMap, FnvHashSet};
 use instant::Instant;
-use libp2p_core::{ConnectedPoint, Multiaddr, PeerId};
+use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr, PeerId};
 use libp2p_swarm::behaviour::{
     AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm,
 };
 use libp2p_swarm::{
     dial_opts::{self, DialOpts},
-    ConnectionId, DialError, ExternalAddresses, ListenAddresses, NetworkBehaviour,
-    NetworkBehaviourAction, NotifyHandler, PollParameters, THandlerInEvent, THandlerOutEvent,
+    ConnectionDenied, ConnectionId, DialError, ExternalAddresses, ListenAddresses,
+    NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters, THandler,
+    THandlerInEvent, THandlerOutEvent,
 };
 use log::{debug, info, warn};
 use smallvec::SmallVec;
@@ -1927,6 +1928,7 @@ where
             | DialError::InvalidPeerId { .. }
             | DialError::WrongPeerId { .. }
             | DialError::Aborted
+            | DialError::Denied { .. }
             | DialError::Transport(_)
             | DialError::NoAddresses => {
                 if let DialError::Transport(addresses) = error {
@@ -1978,21 +1980,66 @@ impl<TStore> NetworkBehaviour for Kademlia<TStore>
 where
     TStore: RecordStore + Send + 'static,
 {
-    type ConnectionHandler = KademliaHandlerProto<QueryId>;
+    type ConnectionHandler = KademliaHandler<QueryId>;
     type OutEvent = KademliaEvent;
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
-        KademliaHandlerProto::new(KademliaHandlerConfig {
-            protocol_config: self.protocol_config.clone(),
-            allow_listening: true,
-            idle_timeout: self.connection_idle_timeout,
-        })
+    fn handle_established_inbound_connection(
+        &mut self,
+        _connection_id: ConnectionId,
+        peer: PeerId,
+        local_addr: &Multiaddr,
+        remote_addr: &Multiaddr,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        Ok(KademliaHandler::new(
+            KademliaHandlerConfig {
+                protocol_config: self.protocol_config.clone(),
+                allow_listening: true,
+                idle_timeout: self.connection_idle_timeout,
+            },
+            ConnectedPoint::Listener {
+                local_addr: local_addr.clone(),
+                send_back_addr: remote_addr.clone(),
+            },
+            peer,
+        ))
     }
 
-    fn addresses_of_peer(&mut self, peer_id: &PeerId) -> Vec<Multiaddr> {
+    fn handle_established_outbound_connection(
+        &mut self,
+        _connection_id: ConnectionId,
+        peer: PeerId,
+        addr: &Multiaddr,
+        role_override: Endpoint,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        Ok(KademliaHandler::new(
+            KademliaHandlerConfig {
+                protocol_config: self.protocol_config.clone(),
+                allow_listening: true,
+                idle_timeout: self.connection_idle_timeout,
+            },
+            ConnectedPoint::Dialer {
+                address: addr.clone(),
+                role_override,
+            },
+            peer,
+        ))
+    }
+
+    fn handle_pending_outbound_connection(
+        &mut self,
+        _connection_id: ConnectionId,
+        maybe_peer: Option<PeerId>,
+        _addresses: &[Multiaddr],
+        _effective_role: Endpoint,
+    ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
+        let peer_id = match maybe_peer {
+            None => return Ok(vec![]),
+            Some(peer) => peer,
+        };
+
         // We should order addresses from decreasing likelyhood of connectivity, so start with
         // the addresses of that peer in the k-buckets.
-        let key = kbucket::Key::from(*peer_id);
+        let key = kbucket::Key::from(peer_id);
         let mut peer_addrs =
             if let kbucket::Entry::Present(mut entry, _) = self.kbuckets.entry(&key) {
                 let addrs = entry.value().iter().cloned().collect::<Vec<_>>();
@@ -2004,12 +2051,12 @@ where
 
         // We add to that a temporary list of addresses from the ongoing queries.
         for query in self.queries.iter() {
-            if let Some(addrs) = query.inner.addresses.get(peer_id) {
+            if let Some(addrs) = query.inner.addresses.get(&peer_id) {
                 peer_addrs.extend(addrs.iter().cloned())
             }
         }
 
-        peer_addrs
+        Ok(peer_addrs)
     }
 
     fn on_connection_handler_event(
