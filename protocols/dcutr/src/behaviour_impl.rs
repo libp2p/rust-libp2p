@@ -24,14 +24,14 @@ use crate::handler;
 use either::Either;
 use libp2p_core::connection::ConnectedPoint;
 use libp2p_core::multiaddr::Protocol;
-use libp2p_core::{Multiaddr, PeerId};
+use libp2p_core::{Endpoint, Multiaddr, PeerId};
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm};
 use libp2p_swarm::dial_opts::{self, DialOpts};
+use libp2p_swarm::{dummy, ConnectionDenied, ConnectionId, THandler, THandlerOutEvent};
 use libp2p_swarm::{
     ConnectionHandlerUpgrErr, ExternalAddresses, NetworkBehaviour, NetworkBehaviourAction,
     NotifyHandler, PollParameters, THandlerInEvent,
 };
-use libp2p_swarm::{ConnectionId, THandlerOutEvent};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::task::{Context, Poll};
 use thiserror::Error;
@@ -64,12 +64,14 @@ pub enum Error {
     #[error("Failed to dial peer.")]
     Dial,
     #[error("Failed to establish substream: {0}.")]
-    Handler(ConnectionHandlerUpgrErr<void::Void>),
+    Handler(ConnectionHandlerUpgrErr<Void>),
 }
 
 pub struct Behaviour {
     /// Queue of actions to return when polled.
-    queued_events: VecDeque<NetworkBehaviourAction<Event, Either<handler::relayed::Command, Void>>>,
+    queued_events: VecDeque<
+        NetworkBehaviourAction<Event, Either<handler::relayed::Command, Either<Void, Void>>>,
+    >,
 
     /// All direct (non-relayed) connections.
     direct_connections: HashMap<PeerId, HashSet<ConnectionId>>,
@@ -237,11 +239,82 @@ impl Behaviour {
 }
 
 impl NetworkBehaviour for Behaviour {
-    type ConnectionHandler = handler::Prototype;
+    type ConnectionHandler = Either<
+        handler::relayed::Handler,
+        Either<handler::direct::Handler, dummy::ConnectionHandler>,
+    >;
     type OutEvent = Event;
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
-        handler::Prototype
+    fn handle_established_inbound_connection(
+        &mut self,
+        connection_id: ConnectionId,
+        peer: PeerId,
+        local_addr: &Multiaddr,
+        remote_addr: &Multiaddr,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        match self
+            .outgoing_direct_connection_attempts
+            .remove(&(connection_id, peer))
+        {
+            None => {
+                let handler = if is_relayed(local_addr) {
+                    Either::Left(handler::relayed::Handler::new(ConnectedPoint::Listener {
+                        local_addr: local_addr.clone(),
+                        send_back_addr: remote_addr.clone(),
+                    })) // TODO: We could make two `handler::relayed::Handler` here, one inbound one outbound.
+                } else {
+                    Either::Right(Either::Right(dummy::ConnectionHandler))
+                };
+
+                Ok(handler)
+            }
+            Some(_) => {
+                assert!(
+                    !is_relayed(local_addr),
+                    "`Prototype::DirectConnection` is never created for relayed connection."
+                );
+
+                Ok(Either::Right(Either::Left(
+                    handler::direct::Handler::default(),
+                )))
+            }
+        }
+    }
+
+    fn handle_established_outbound_connection(
+        &mut self,
+        connection_id: ConnectionId,
+        peer: PeerId,
+        addr: &Multiaddr,
+        role_override: Endpoint,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        match self
+            .outgoing_direct_connection_attempts
+            .remove(&(connection_id, peer))
+        {
+            None => {
+                let handler = if is_relayed(addr) {
+                    Either::Left(handler::relayed::Handler::new(ConnectedPoint::Dialer {
+                        address: addr.clone(),
+                        role_override,
+                    })) // TODO: We could make two `handler::relayed::Handler` here, one inbound one outbound.
+                } else {
+                    Either::Right(Either::Right(dummy::ConnectionHandler))
+                };
+
+                Ok(handler)
+            }
+            Some(_) => {
+                assert!(
+                    !is_relayed(addr),
+                    "`Prototype::DirectConnection` is never created for relayed connection."
+                );
+
+                Ok(Either::Right(Either::Left(
+                    handler::direct::Handler::default(),
+                )))
+            }
+        }
     }
 
     fn on_connection_handler_event(
@@ -332,7 +405,7 @@ impl NetworkBehaviour for Behaviour {
                 self.queued_events
                     .push_back(NetworkBehaviourAction::Dial { opts });
             }
-            Either::Right(handler::direct::Event::DirectConnectionEstablished) => {
+            Either::Right(Either::Left(handler::direct::Event::DirectConnectionEstablished)) => {
                 self.queued_events.extend([
                     NetworkBehaviourAction::NotifyHandler {
                         peer_id: event_source,
@@ -348,6 +421,7 @@ impl NetworkBehaviour for Behaviour {
                     ),
                 ]);
             }
+            Either::Right(Either::Right(never)) => void::unreachable(never),
         };
     }
 
@@ -385,4 +459,8 @@ impl NetworkBehaviour for Behaviour {
             | FromSwarm::ExpiredExternalAddr(_) => {}
         }
     }
+}
+
+fn is_relayed(addr: &Multiaddr) -> bool {
+    addr.iter().any(|p| p == Protocol::P2pCircuit)
 }

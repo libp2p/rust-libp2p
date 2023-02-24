@@ -20,11 +20,9 @@
 
 use crate::behaviour::{self, NetworkBehaviour, NetworkBehaviourAction, PollParameters};
 use crate::connection::ConnectionId;
-use crate::handler::either::IntoEitherHandler;
-use crate::THandlerInEvent;
-use crate::THandlerOutEvent;
+use crate::{ConnectionDenied, THandler, THandlerInEvent, THandlerOutEvent};
 use either::Either;
-use libp2p_core::{Multiaddr, PeerId};
+use libp2p_core::{Endpoint, Multiaddr, PeerId};
 use std::{task::Context, task::Poll};
 
 /// Implementation of [`NetworkBehaviour`] that can be either of two implementations.
@@ -33,21 +31,94 @@ where
     L: NetworkBehaviour,
     R: NetworkBehaviour,
 {
-    type ConnectionHandler = IntoEitherHandler<L::ConnectionHandler, R::ConnectionHandler>;
+    type ConnectionHandler = Either<THandler<L>, THandler<R>>;
     type OutEvent = Either<L::OutEvent, R::OutEvent>;
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
+    fn handle_pending_inbound_connection(
+        &mut self,
+        id: ConnectionId,
+        local_addr: &Multiaddr,
+        remote_addr: &Multiaddr,
+    ) -> Result<(), ConnectionDenied> {
         match self {
-            Either::Left(a) => IntoEitherHandler::Left(a.new_handler()),
-            Either::Right(b) => IntoEitherHandler::Right(b.new_handler()),
+            Either::Left(a) => a.handle_pending_inbound_connection(id, local_addr, remote_addr),
+            Either::Right(b) => b.handle_pending_inbound_connection(id, local_addr, remote_addr),
         }
     }
 
-    fn addresses_of_peer(&mut self, peer_id: &PeerId) -> Vec<Multiaddr> {
-        match self {
-            Either::Left(a) => a.addresses_of_peer(peer_id),
-            Either::Right(b) => b.addresses_of_peer(peer_id),
-        }
+    fn handle_established_inbound_connection(
+        &mut self,
+        _connection_id: ConnectionId,
+        peer: PeerId,
+        local_addr: &Multiaddr,
+        remote_addr: &Multiaddr,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        let handler = match self {
+            Either::Left(inner) => Either::Left(inner.handle_established_inbound_connection(
+                _connection_id,
+                peer,
+                local_addr,
+                remote_addr,
+            )?),
+            Either::Right(inner) => Either::Right(inner.handle_established_inbound_connection(
+                _connection_id,
+                peer,
+                local_addr,
+                remote_addr,
+            )?),
+        };
+
+        Ok(handler)
+    }
+
+    fn handle_pending_outbound_connection(
+        &mut self,
+        _connection_id: ConnectionId,
+        maybe_peer: Option<PeerId>,
+        _addresses: &[Multiaddr],
+        _effective_role: Endpoint,
+    ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
+        let addresses = match self {
+            Either::Left(inner) => inner.handle_pending_outbound_connection(
+                _connection_id,
+                maybe_peer,
+                _addresses,
+                _effective_role,
+            )?,
+            Either::Right(inner) => inner.handle_pending_outbound_connection(
+                _connection_id,
+                maybe_peer,
+                _addresses,
+                _effective_role,
+            )?,
+        };
+
+        Ok(addresses)
+    }
+
+    fn handle_established_outbound_connection(
+        &mut self,
+        _connection_id: ConnectionId,
+        peer: PeerId,
+        addr: &Multiaddr,
+        role_override: Endpoint,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        let handler = match self {
+            Either::Left(inner) => Either::Left(inner.handle_established_outbound_connection(
+                _connection_id,
+                peer,
+                addr,
+                role_override,
+            )?),
+            Either::Right(inner) => Either::Right(inner.handle_established_outbound_connection(
+                _connection_id,
+                peer,
+                addr,
+                role_override,
+            )?),
+        };
+
+        Ok(handler)
     }
 
     fn on_swarm_event(&mut self, event: behaviour::FromSwarm<Self::ConnectionHandler>) {
