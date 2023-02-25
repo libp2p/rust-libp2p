@@ -20,7 +20,10 @@
 
 //! [`NetworkBehaviour`] of the libp2p perf protocol.
 
-use std::task::{Context, Poll};
+use std::{
+    collections::VecDeque,
+    task::{Context, Poll},
+};
 
 use libp2p_core::PeerId;
 use libp2p_swarm::{
@@ -32,11 +35,15 @@ use crate::server::handler::Handler;
 
 pub enum Event {}
 
-pub struct Behaviour {}
+#[derive(Default)]
+pub struct Behaviour {
+    /// Queue of actions to return when polled.
+    queued_events: VecDeque<NetworkBehaviourAction<Event, THandlerInEvent<Self>>>,
+}
 
 impl Behaviour {
     pub fn new() -> Self {
-        todo!();
+        Self::default()
     }
 }
 
@@ -44,8 +51,21 @@ impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = Handler;
     type OutEvent = Event;
 
-    fn on_swarm_event(&mut self, _event: FromSwarm<Self::ConnectionHandler>) {
-        todo!();
+    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+        match event {
+            FromSwarm::ConnectionEstablished(_) => todo!(),
+            FromSwarm::ConnectionClosed(_) => todo!(),
+            FromSwarm::AddressChange(_) => todo!(),
+            FromSwarm::DialFailure(_) => todo!(),
+            FromSwarm::ListenFailure(_) => todo!(),
+            FromSwarm::NewListener(_) => {}
+            FromSwarm::NewListenAddr(_) => {}
+            FromSwarm::ExpiredListenAddr(_) => todo!(),
+            FromSwarm::ListenerError(_) => todo!(),
+            FromSwarm::ListenerClosed(_) => todo!(),
+            FromSwarm::NewExternalAddr(_) => todo!(),
+            FromSwarm::ExpiredExternalAddr(_) => todo!(),
+        }
     }
 
     fn on_connection_handler_event(
@@ -62,6 +82,10 @@ impl NetworkBehaviour for Behaviour {
         _cx: &mut Context<'_>,
         _: &mut impl PollParameters,
     ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>> {
-        todo!();
+        if let Some(event) = self.queued_events.pop_front() {
+            return Poll::Ready(event);
+        }
+
+        Poll::Pending
     }
 }

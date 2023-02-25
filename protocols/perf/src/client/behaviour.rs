@@ -20,7 +20,10 @@
 
 //! [`NetworkBehaviour`] of the libp2p perf protocol.
 
-use std::task::{Context, Poll};
+use std::{
+    collections::VecDeque,
+    task::{Context, Poll},
+};
 
 use libp2p_core::PeerId;
 use libp2p_swarm::{
@@ -30,13 +33,18 @@ use libp2p_swarm::{
 
 use crate::client::handler::Handler;
 
+#[derive(Debug)]
 pub enum Event {}
 
-pub struct Behaviour {}
+#[derive(Default)]
+pub struct Behaviour {
+    /// Queue of actions to return when polled.
+    queued_events: VecDeque<NetworkBehaviourAction<Event, THandlerInEvent<Self>>>,
+}
 
 impl Behaviour {
     pub fn new() -> Self {
-        todo!();
+        Self::default()
     }
 }
 
@@ -62,6 +70,10 @@ impl NetworkBehaviour for Behaviour {
         _cx: &mut Context<'_>,
         _: &mut impl PollParameters,
     ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>> {
-        todo!();
+        if let Some(event) = self.queued_events.pop_front() {
+            return Poll::Ready(event);
+        }
+
+        Poll::Pending
     }
 }

@@ -18,7 +18,10 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use std::task::{Context, Poll};
+use std::{
+    collections::VecDeque,
+    task::{Context, Poll},
+};
 
 use libp2p_core::upgrade::DeniedUpgrade;
 use libp2p_swarm::{
@@ -30,11 +33,26 @@ use void::Void;
 #[derive(Debug)]
 pub enum Event {}
 
+#[derive(Debug)]
+pub enum Command {
+    Start { to_send: usize, to_receive: usize },
+}
+
 #[derive(Default)]
-pub struct Handler {}
+pub struct Handler {
+    /// Queue of events to return when polled.
+    queued_events: VecDeque<
+        ConnectionHandlerEvent<
+            <Self as ConnectionHandler>::OutboundProtocol,
+            <Self as ConnectionHandler>::OutboundOpenInfo,
+            <Self as ConnectionHandler>::OutEvent,
+            <Self as ConnectionHandler>::Error,
+        >,
+    >,
+}
 
 impl ConnectionHandler for Handler {
-    type InEvent = ();
+    type InEvent = Command;
     type OutEvent = Event;
     type Error = std::io::Error;
     type InboundProtocol = DeniedUpgrade;
@@ -46,24 +64,25 @@ impl ConnectionHandler for Handler {
         SubstreamProtocol::new(DeniedUpgrade, ())
     }
 
-    fn on_behaviour_event(&mut self, _: Self::InEvent) {}
+    fn on_behaviour_event(&mut self, command: Self::InEvent) {
+        match command {
+            Command::Start {
+                to_send: _,
+                to_receive: _,
+            } => todo!(),
+        }
+    }
 
     fn on_connection_event(
         &mut self,
-        event: ConnectionEvent<
+        _event: ConnectionEvent<
             Self::InboundProtocol,
             Self::OutboundProtocol,
             Self::InboundOpenInfo,
             Self::OutboundOpenInfo,
         >,
     ) {
-        match event {
-            ConnectionEvent::FullyNegotiatedInbound(_)
-            | ConnectionEvent::FullyNegotiatedOutbound(_)
-            | ConnectionEvent::DialUpgradeError(_)
-            | ConnectionEvent::ListenUpgradeError(_)
-            | ConnectionEvent::AddressChange(_) => {}
-        }
+        todo!();
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
@@ -82,6 +101,11 @@ impl ConnectionHandler for Handler {
             Self::Error,
         >,
     > {
-        todo!()
+        // Return queued events.
+        if let Some(event) = self.queued_events.pop_front() {
+            return Poll::Ready(event);
+        }
+
+        todo!();
     }
 }

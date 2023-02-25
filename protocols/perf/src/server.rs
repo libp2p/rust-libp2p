@@ -18,5 +18,5 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-mod behaviour;
-mod handler;
+pub mod behaviour;
+pub mod handler;

@@ -24,5 +24,5 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
-mod client;
-mod server;
+pub mod client;
+pub mod server;

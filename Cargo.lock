@@ -2541,9 +2541,13 @@ dependencies = [
 name = "libp2p-perf"
 version = "0.1.0"
 dependencies = [
+ "env_logger 0.10.0",
  "futures",
  "libp2p-core",
+ "libp2p-plaintext",
  "libp2p-swarm",
+ "libp2p-yamux",
+ "rand 0.8.5",
  "void",
 ]
 
