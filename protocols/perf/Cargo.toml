@@ -1,0 +1,25 @@
+[package]
+name = "libp2p-perf"
+edition = "2021"
+rust-version = "1.62.0"
+description = "Direct connection upgrade through relay"
+version = "0.1.0"
+authors = ["Max Inden <mail@max-inden.de>"]
+license = "MIT"
+repository = "https://github.com/libp2p/rust-libp2p"
+keywords = ["peer-to-peer", "libp2p", "networking"]
+categories = ["network-programming", "asynchronous"]
+
+[dependencies]
+futures = "0.3.26"
+libp2p-core = { version = "0.39.0", path = "../../core" }
+libp2p-swarm = { version = "0.42.0", path = "../../swarm" }
+# TODO: Needed?
+void = "1"
+
+# Passing arguments to the docsrs builder in order to properly document cfg's.
+# More information: https://docs.rs/about/builds#cross-compiling
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+rustc-args = ["--cfg", "docsrs"]
