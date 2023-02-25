@@ -20,13 +20,89 @@
 
 use futures::{AsyncRead, AsyncWrite};
 
-async fn perf<S: AsyncRead + AsyncWrite>(stream: S) {
+async fn client<S: AsyncRead + AsyncWrite>(_stream: S) {
     todo!()
 }
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use futures::{executor::block_on, AsyncRead, AsyncWrite};
+    use std::{
+        pin::Pin,
+        sync::{Arc, Mutex},
+        task::Poll,
+    };
+
+    #[derive(Clone)]
+    struct DummyStream {
+        inner: Arc<Mutex<DummyStreamInner>>,
+    }
+
+    struct DummyStreamInner {
+        read: Vec<u8>,
+        write: Vec<u8>,
+    }
+
+    impl DummyStream {
+        fn new(read: Vec<u8>) -> Self {
+            Self {
+                inner: Arc::new(Mutex::new(DummyStreamInner {
+                    read,
+                    write: Vec::new(),
+                })),
+            }
+        }
+    }
+
+    impl Unpin for DummyStream {}
+
+    impl AsyncWrite for DummyStream {
+        fn poll_write(
+            mut self: std::pin::Pin<&mut Self>,
+            cx: &mut std::task::Context<'_>,
+            buf: &[u8],
+        ) -> std::task::Poll<std::io::Result<usize>> {
+            Pin::new(&mut self.inner.lock().unwrap().write).poll_write(cx, buf)
+        }
+
+        fn poll_flush(
+            mut self: std::pin::Pin<&mut Self>,
+            cx: &mut std::task::Context<'_>,
+        ) -> std::task::Poll<std::io::Result<()>> {
+            Pin::new(&mut self.inner.lock().unwrap().write).poll_flush(cx)
+        }
+
+        fn poll_close(
+            mut self: std::pin::Pin<&mut Self>,
+            cx: &mut std::task::Context<'_>,
+        ) -> std::task::Poll<std::io::Result<()>> {
+            Pin::new(&mut self.inner.lock().unwrap().write).poll_close(cx)
+        }
+    }
+
+    impl AsyncRead for DummyStream {
+        fn poll_read(
+            mut self: Pin<&mut Self>,
+            _cx: &mut std::task::Context<'_>,
+            buf: &mut [u8],
+        ) -> std::task::Poll<std::io::Result<usize>> {
+            let amt = std::cmp::min(buf.len(), self.inner.lock().unwrap().read.len());
+            let new = self.inner.lock().unwrap().read.split_off(amt);
+
+            buf[..amt].copy_from_slice(self.inner.lock().unwrap().read.as_slice());
+
+            self.inner.lock().unwrap().read = new;
+            Poll::Ready(Ok(amt))
+        }
+    }
 
     #[test]
-    fn test_request_encode_decode() {}
+    fn test_client() {
+        let stream = DummyStream::new(vec![0]);
+
+        block_on(client(stream.clone()));
+
+        assert_eq!(stream.inner.lock().unwrap().write, vec![0]);
+    }
 }

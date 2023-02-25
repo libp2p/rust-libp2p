@@ -28,14 +28,10 @@ use libp2p_swarm::{
 use void::Void;
 
 #[derive(Debug)]
-pub enum Event {
-    DirectConnectionEstablished,
-}
+pub enum Event {}
 
 #[derive(Default)]
-pub struct Handler {
-    reported: bool,
-}
+pub struct Handler {}
 
 impl ConnectionHandler for Handler {
     type InEvent = ();

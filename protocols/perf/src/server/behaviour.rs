@@ -24,7 +24,7 @@ use std::task::{Context, Poll};
 
 use libp2p_core::PeerId;
 use libp2p_swarm::{
-    dummy, ConnectionId, FromSwarm, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
+    ConnectionId, FromSwarm, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
     THandlerInEvent, THandlerOutEvent,
 };
 
@@ -44,15 +44,15 @@ impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = Handler;
     type OutEvent = Event;
 
-    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+    fn on_swarm_event(&mut self, _event: FromSwarm<Self::ConnectionHandler>) {
         todo!();
     }
 
     fn on_connection_handler_event(
         &mut self,
-        event_source: PeerId,
-        connection_id: ConnectionId,
-        handler_event: THandlerOutEvent<Self>,
+        _event_source: PeerId,
+        _connection_id: ConnectionId,
+        _handler_event: THandlerOutEvent<Self>,
     ) {
         todo!();
     }
