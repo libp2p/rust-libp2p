@@ -18,10 +18,19 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::{AsyncRead, AsyncWrite};
+use futures::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
-async fn client<S: AsyncRead + AsyncWrite>(_stream: S) {
-    todo!()
+async fn send_receive<S: AsyncRead + AsyncWrite + Unpin>(
+    to_send: usize,
+    to_receive: usize,
+    mut stream: S,
+) -> Result<(), std::io::Error> {
+    stream.write_all(vec![0; to_send].as_slice()).await?;
+
+    let mut buf = Vec::with_capacity(to_receive);
+    stream.read_to_end(&mut buf).await?;
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -59,7 +68,7 @@ mod tests {
 
     impl AsyncWrite for DummyStream {
         fn poll_write(
-            mut self: std::pin::Pin<&mut Self>,
+            self: std::pin::Pin<&mut Self>,
             cx: &mut std::task::Context<'_>,
             buf: &[u8],
         ) -> std::task::Poll<std::io::Result<usize>> {
@@ -67,14 +76,14 @@ mod tests {
         }
 
         fn poll_flush(
-            mut self: std::pin::Pin<&mut Self>,
+            self: std::pin::Pin<&mut Self>,
             cx: &mut std::task::Context<'_>,
         ) -> std::task::Poll<std::io::Result<()>> {
             Pin::new(&mut self.inner.lock().unwrap().write).poll_flush(cx)
         }
 
         fn poll_close(
-            mut self: std::pin::Pin<&mut Self>,
+            self: std::pin::Pin<&mut Self>,
             cx: &mut std::task::Context<'_>,
         ) -> std::task::Poll<std::io::Result<()>> {
             Pin::new(&mut self.inner.lock().unwrap().write).poll_close(cx)
@@ -83,7 +92,7 @@ mod tests {
 
     impl AsyncRead for DummyStream {
         fn poll_read(
-            mut self: Pin<&mut Self>,
+            self: Pin<&mut Self>,
             _cx: &mut std::task::Context<'_>,
             buf: &mut [u8],
         ) -> std::task::Poll<std::io::Result<usize>> {
@@ -101,8 +110,8 @@ mod tests {
     fn test_client() {
         let stream = DummyStream::new(vec![0]);
 
-        block_on(client(stream.clone()));
+        block_on(send_receive(0, 0, stream.clone())).unwrap();
 
-        assert_eq!(stream.inner.lock().unwrap().write, vec![0]);
+        assert_eq!(stream.inner.lock().unwrap().write, vec![]);
     }
 }
