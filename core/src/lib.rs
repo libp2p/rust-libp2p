@@ -47,7 +47,6 @@ mod proto {
 
 /// Multi-address re-export.
 pub use multiaddr;
-use std::error::Error;
 pub type Negotiated<T> = multistream_select::Negotiated<T>;
 
 mod peer_id;
@@ -75,6 +74,44 @@ pub use translation::address_translation;
 pub use transport::Transport;
 pub use upgrade::{InboundUpgrade, OutboundUpgrade, ProtocolName, UpgradeError, UpgradeInfo};
 
-#[derive(thiserror::Error, Debug)]
-#[error(transparent)]
-pub struct DecodeError(Box<dyn Error + Send + Sync + 'static>);
+// This type was created to avoid breaking changes
+// caused by quick_protobuf::Error related to auto traits.
+// See https://github.com/libp2p/rust-libp2p/pull/3312.
+#[derive(Debug, thiserror::Error)]
+pub enum DecodeError {
+    #[error("{0}")]
+    Io(String),
+    #[error("{0}")]
+    Utf8(core::str::Utf8Error),
+    #[error("{0}")]
+    Deprecated(&'static str),
+    #[error("{0}")]
+    UnknownWireType(u8),
+    #[error("Varint decoding error")]
+    Varint,
+    #[error("{0}")]
+    Message(String),
+    #[error("{0}")]
+    Map(u8),
+    #[error("Out of data when reading from or writing to a byte buffer")]
+    UnexpectedEndOfBuffer,
+    #[error("The supplied output buffer is not large enough to serialize the message")]
+    OutputBufferTooSmall,
+}
+
+impl From<quick_protobuf::Error> for DecodeError {
+    fn from(e: quick_protobuf::Error) -> Self {
+        use quick_protobuf::Error;
+        match e {
+            Error::Io(e) => Self::Io(e.to_string()),
+            Error::Utf8(e) => Self::Utf8(e),
+            Error::Deprecated(e) => Self::Deprecated(e),
+            Error::UnknownWireType(e) => Self::UnknownWireType(e),
+            Error::Varint => Self::Varint,
+            Error::Message(e) => Self::Message(e),
+            Error::Map(e) => Self::Map(e),
+            Error::UnexpectedEndOfBuffer => Self::UnexpectedEndOfBuffer,
+            Error::OutputBufferTooSmall => Self::OutputBufferTooSmall,
+        }
+    }
+}
