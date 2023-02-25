@@ -24,8 +24,19 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg, doc_auto_cfg))]
 
+use std::time::Instant;
+
 pub mod client;
 mod protocol;
 pub mod server;
 
 pub const PROTOCOL_NAME: &[u8; 11] = b"/perf/1.0.0";
+
+/// Statistics for a single run, i.e. one stream, sending and receiving data.
+#[derive(Debug)]
+pub struct RunStats {
+    pub started_at: Instant,
+    pub finished_at: Instant,
+    pub bytes_sent: usize,
+    pub bytes_received: usize,
+}

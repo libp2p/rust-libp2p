@@ -21,23 +21,30 @@
 use std::{
     collections::VecDeque,
     task::{Context, Poll},
+    time::Instant,
 };
 
-use futures::{future::BoxFuture, stream::FuturesUnordered, FutureExt, StreamExt};
+use futures::{future::BoxFuture, stream::FuturesUnordered, FutureExt, StreamExt, TryFutureExt};
 use libp2p_core::upgrade::{DeniedUpgrade, ReadyUpgrade};
 use libp2p_swarm::{
     handler::{ConnectionEvent, DialUpgradeError, FullyNegotiatedOutbound},
     ConnectionHandler, ConnectionHandlerEvent, KeepAlive, SubstreamProtocol,
 };
 
+use crate::RunStats;
+
 #[derive(Debug)]
 pub enum Event {
-    Finished,
+    Finished { stats: RunStats },
 }
 
 #[derive(Debug)]
 pub enum Command {
-    Start { to_send: usize, to_receive: usize },
+    Start {
+        started_at: Instant,
+        to_send: usize,
+        to_receive: usize,
+    },
 }
 
 #[derive(Default)]
@@ -52,7 +59,7 @@ pub struct Handler {
         >,
     >,
 
-    outbound: FuturesUnordered<BoxFuture<'static, Result<(), std::io::Error>>>,
+    outbound: FuturesUnordered<BoxFuture<'static, Result<RunStats, std::io::Error>>>,
 }
 
 impl ConnectionHandler for Handler {
@@ -69,16 +76,10 @@ impl ConnectionHandler for Handler {
     }
 
     fn on_behaviour_event(&mut self, command: Self::InEvent) {
-        match command {
-            c @ Command::Start {
-                to_send: _,
-                to_receive: _,
-            } => self
-                .queued_events
-                .push_back(ConnectionHandlerEvent::OutboundSubstreamRequest {
-                    protocol: SubstreamProtocol::new(ReadyUpgrade::new(crate::PROTOCOL_NAME), c),
-                }),
-        }
+        self.queued_events
+            .push_back(ConnectionHandlerEvent::OutboundSubstreamRequest {
+                protocol: SubstreamProtocol::new(ReadyUpgrade::new(crate::PROTOCOL_NAME), command),
+            })
     }
 
     fn on_connection_event(
@@ -99,9 +100,18 @@ impl ConnectionHandler for Handler {
                 Command::Start {
                     to_send,
                     to_receive,
+                    started_at,
                 } => {
-                    self.outbound
-                        .push(crate::protocol::send_receive(to_send, to_receive, protocol).boxed());
+                    self.outbound.push(
+                        crate::protocol::send_receive(to_send, to_receive, protocol)
+                            .map_ok(move |()| RunStats {
+                                started_at,
+                                finished_at: Instant::now(),
+                                bytes_sent: to_send,
+                                bytes_received: to_receive,
+                            })
+                            .boxed(),
+                    );
                 }
             },
             ConnectionEvent::AddressChange(_) => todo!(),
@@ -135,7 +145,9 @@ impl ConnectionHandler for Handler {
 
         while let Poll::Ready(Some(result)) = self.outbound.poll_next_unpin(cx) {
             match result {
-                Ok(()) => return Poll::Ready(ConnectionHandlerEvent::Custom(Event::Finished)),
+                Ok(stats) => {
+                    return Poll::Ready(ConnectionHandlerEvent::Custom(Event::Finished { stats }))
+                }
                 Err(e) => {
                     panic!("{e:?}")
                 }

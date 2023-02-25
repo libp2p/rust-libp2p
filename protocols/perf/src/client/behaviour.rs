@@ -31,11 +31,11 @@ use libp2p_swarm::{
     NetworkBehaviourAction, NotifyHandler, PollParameters, THandlerInEvent, THandlerOutEvent,
 };
 
-use crate::client::handler::Handler;
+use crate::{client::handler::Handler, RunStats};
 
 #[derive(Debug)]
 pub enum Event {
-    Finished,
+    Finished { stats: RunStats },
 }
 
 #[derive(Default)]
@@ -84,6 +84,7 @@ impl NetworkBehaviour for Behaviour {
                     peer_id,
                     handler: NotifyHandler::One(connection_id),
                     event: crate::client::handler::Command::Start {
+                        started_at: std::time::Instant::now(),
                         to_send: 0,
                         to_receive: 0,
                     },
@@ -109,9 +110,11 @@ impl NetworkBehaviour for Behaviour {
         handler_event: THandlerOutEvent<Self>,
     ) {
         match handler_event {
-            super::handler::Event::Finished => {
+            super::handler::Event::Finished { stats } => {
                 self.queued_events
-                    .push_back(NetworkBehaviourAction::GenerateEvent(Event::Finished));
+                    .push_back(NetworkBehaviourAction::GenerateEvent(Event::Finished {
+                        stats,
+                    }));
             }
         }
     }

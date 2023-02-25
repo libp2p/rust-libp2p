@@ -70,7 +70,7 @@ fn connect() {
                 SwarmEvent::IncomingConnection { .. } => panic!(),
                 SwarmEvent::ConnectionEstablished { .. } => {}
                 SwarmEvent::Dialing(_) => {}
-                SwarmEvent::Behaviour(client::behaviour::Event::Finished) => break,
+                SwarmEvent::Behaviour(client::behaviour::Event::Finished { stats }) => break,
                 e => panic!("{e:?}"),
             }
         }
