@@ -47,6 +47,7 @@ mod proto {
 
 /// Multi-address re-export.
 pub use multiaddr;
+use std::error::Error;
 pub type Negotiated<T> = multistream_select::Negotiated<T>;
 
 mod peer_id;
@@ -76,4 +77,4 @@ pub use upgrade::{InboundUpgrade, OutboundUpgrade, ProtocolName, UpgradeError, U
 
 #[derive(thiserror::Error, Debug)]
 #[error(transparent)]
-pub struct DecodeError(quick_protobuf::Error);
+pub struct DecodeError(Box<dyn Error + Send + Sync + 'static>);

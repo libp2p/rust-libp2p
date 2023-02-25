@@ -65,6 +65,7 @@ pub use protocol::x25519::X25519;
 pub use protocol::x25519_spec::X25519Spec;
 pub use protocol::{AuthenticKeypair, Keypair, KeypairIdentity, PublicKey, SecretKey};
 pub use protocol::{Protocol, ProtocolParams, IK, IX, XX};
+use std::error::Error;
 
 use crate::handshake::State;
 use crate::io::handshake;
@@ -285,11 +286,11 @@ pub enum NoiseError {
 
 #[derive(Debug, thiserror::Error)]
 #[error(transparent)]
-pub struct DecodeError(quick_protobuf::Error);
+pub struct DecodeError(Box<dyn Error + Send + Sync + 'static>);
 
 impl From<quick_protobuf::Error> for NoiseError {
     fn from(e: quick_protobuf::Error) -> Self {
-        NoiseError::InvalidPayload(DecodeError(e))
+        NoiseError::InvalidPayload(DecodeError(Box::new(e)))
     }
 }
 
