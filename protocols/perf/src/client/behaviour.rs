@@ -106,9 +106,14 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         _event_source: PeerId,
         _connection_id: ConnectionId,
-        _handler_event: THandlerOutEvent<Self>,
+        handler_event: THandlerOutEvent<Self>,
     ) {
-        todo!();
+        match handler_event {
+            super::handler::Event::Finished => {
+                self.queued_events
+                    .push_back(NetworkBehaviourAction::GenerateEvent(Event::Finished));
+            }
+        }
     }
 
     fn poll(

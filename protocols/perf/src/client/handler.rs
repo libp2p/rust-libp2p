@@ -31,7 +31,9 @@ use libp2p_swarm::{
 };
 
 #[derive(Debug)]
-pub enum Event {}
+pub enum Event {
+    Finished,
+}
 
 #[derive(Debug)]
 pub enum Command {
@@ -133,9 +135,7 @@ impl ConnectionHandler for Handler {
 
         while let Poll::Ready(Some(result)) = self.outbound.poll_next_unpin(cx) {
             match result {
-                Ok(()) => {
-                    todo!()
-                }
+                Ok(()) => return Poll::Ready(ConnectionHandlerEvent::Custom(Event::Finished)),
                 Err(e) => {
                     panic!("{e:?}")
                 }
