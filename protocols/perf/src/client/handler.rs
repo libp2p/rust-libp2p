@@ -23,12 +23,12 @@ use std::{
     task::{Context, Poll},
 };
 
-use libp2p_core::upgrade::DeniedUpgrade;
+use futures::{future::BoxFuture, stream::FuturesUnordered, FutureExt, StreamExt};
+use libp2p_core::upgrade::{DeniedUpgrade, ReadyUpgrade};
 use libp2p_swarm::{
-    handler::ConnectionEvent, ConnectionHandler, ConnectionHandlerEvent, KeepAlive,
-    SubstreamProtocol,
+    handler::{ConnectionEvent, DialUpgradeError, FullyNegotiatedOutbound},
+    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, SubstreamProtocol,
 };
-use void::Void;
 
 #[derive(Debug)]
 pub enum Event {}
@@ -49,6 +49,8 @@ pub struct Handler {
             <Self as ConnectionHandler>::Error,
         >,
     >,
+
+    outbound: FuturesUnordered<BoxFuture<'static, Result<(), std::io::Error>>>,
 }
 
 impl ConnectionHandler for Handler {
@@ -56,8 +58,8 @@ impl ConnectionHandler for Handler {
     type OutEvent = Event;
     type Error = std::io::Error;
     type InboundProtocol = DeniedUpgrade;
-    type OutboundProtocol = DeniedUpgrade;
-    type OutboundOpenInfo = Void;
+    type OutboundProtocol = ReadyUpgrade<&'static [u8]>;
+    type OutboundOpenInfo = Command;
     type InboundOpenInfo = ();
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
@@ -66,23 +68,46 @@ impl ConnectionHandler for Handler {
 
     fn on_behaviour_event(&mut self, command: Self::InEvent) {
         match command {
-            Command::Start {
+            c @ Command::Start {
                 to_send: _,
                 to_receive: _,
-            } => todo!(),
+            } => self
+                .queued_events
+                .push_back(ConnectionHandlerEvent::OutboundSubstreamRequest {
+                    protocol: SubstreamProtocol::new(ReadyUpgrade::new(crate::PROTOCOL_NAME), c),
+                }),
         }
     }
 
     fn on_connection_event(
         &mut self,
-        _event: ConnectionEvent<
+        event: ConnectionEvent<
             Self::InboundProtocol,
             Self::OutboundProtocol,
             Self::InboundOpenInfo,
             Self::OutboundOpenInfo,
         >,
     ) {
-        todo!();
+        match event {
+            ConnectionEvent::FullyNegotiatedInbound(_) => todo!(),
+            ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
+                protocol,
+                info,
+            }) => match info {
+                Command::Start {
+                    to_send,
+                    to_receive,
+                } => {
+                    self.outbound
+                        .push(crate::protocol::send_receive(to_send, to_receive, protocol).boxed());
+                }
+            },
+            ConnectionEvent::AddressChange(_) => todo!(),
+            ConnectionEvent::DialUpgradeError(DialUpgradeError { info: _, error }) => {
+                panic!("{error:?}")
+            }
+            ConnectionEvent::ListenUpgradeError(_) => todo!(),
+        }
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
@@ -92,7 +117,7 @@ impl ConnectionHandler for Handler {
 
     fn poll(
         &mut self,
-        _: &mut Context<'_>,
+        cx: &mut Context<'_>,
     ) -> Poll<
         ConnectionHandlerEvent<
             Self::OutboundProtocol,
@@ -106,6 +131,17 @@ impl ConnectionHandler for Handler {
             return Poll::Ready(event);
         }
 
-        todo!();
+        while let Poll::Ready(Some(result)) = self.outbound.poll_next_unpin(cx) {
+            match result {
+                Ok(()) => {
+                    todo!()
+                }
+                Err(e) => {
+                    panic!("{e:?}")
+                }
+            }
+        }
+
+        Poll::Pending
     }
 }

@@ -25,16 +25,18 @@ use std::{
     task::{Context, Poll},
 };
 
-use libp2p_core::PeerId;
+use libp2p_core::{Multiaddr, PeerId};
 use libp2p_swarm::{
-    ConnectionId, FromSwarm, NetworkBehaviour, NetworkBehaviourAction, PollParameters,
-    THandlerInEvent, THandlerOutEvent,
+    derive_prelude::ConnectionEstablished, ConnectionId, FromSwarm, NetworkBehaviour,
+    NetworkBehaviourAction, NotifyHandler, PollParameters, THandlerInEvent, THandlerOutEvent,
 };
 
 use crate::client::handler::Handler;
 
 #[derive(Debug)]
-pub enum Event {}
+pub enum Event {
+    Finished,
+}
 
 #[derive(Default)]
 pub struct Behaviour {
@@ -46,14 +48,58 @@ impl Behaviour {
     pub fn new() -> Self {
         Self::default()
     }
+
+    pub fn perf(&mut self, server: Multiaddr) {
+        self.queued_events.push_back(NetworkBehaviourAction::Dial {
+            opts: server.into(),
+        });
+    }
 }
 
 impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = Handler;
     type OutEvent = Event;
 
-    fn on_swarm_event(&mut self, _event: FromSwarm<Self::ConnectionHandler>) {
-        todo!();
+    fn handle_established_outbound_connection(
+        &mut self,
+        _connection_id: ConnectionId,
+        _peer: PeerId,
+        _addr: &Multiaddr,
+        _role_override: libp2p_core::Endpoint,
+    ) -> Result<libp2p_swarm::THandler<Self>, libp2p_swarm::ConnectionDenied> {
+        Ok(Handler::default())
+    }
+
+    fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
+        match event {
+            FromSwarm::ConnectionEstablished(ConnectionEstablished {
+                peer_id,
+                connection_id,
+                endpoint: _,
+                failed_addresses: _,
+                other_established: _,
+            }) => self
+                .queued_events
+                .push_back(NetworkBehaviourAction::NotifyHandler {
+                    peer_id,
+                    handler: NotifyHandler::One(connection_id),
+                    event: crate::client::handler::Command::Start {
+                        to_send: 0,
+                        to_receive: 0,
+                    },
+                }),
+            FromSwarm::ConnectionClosed(_) => todo!(),
+            FromSwarm::AddressChange(_) => todo!(),
+            FromSwarm::DialFailure(_) => todo!(),
+            FromSwarm::ListenFailure(_) => todo!(),
+            FromSwarm::NewListener(_) => todo!(),
+            FromSwarm::NewListenAddr(_) => todo!(),
+            FromSwarm::ExpiredListenAddr(_) => todo!(),
+            FromSwarm::ListenerError(_) => todo!(),
+            FromSwarm::ListenerClosed(_) => todo!(),
+            FromSwarm::NewExternalAddr(_) => todo!(),
+            FromSwarm::ExpiredExternalAddr(_) => todo!(),
+        }
     }
 
     fn on_connection_handler_event(

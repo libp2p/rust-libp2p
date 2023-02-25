@@ -51,9 +51,19 @@ impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = Handler;
     type OutEvent = Event;
 
+    fn handle_established_inbound_connection(
+        &mut self,
+        _connection_id: ConnectionId,
+        _peer: PeerId,
+        _local_addr: &libp2p_core::Multiaddr,
+        _remote_addr: &libp2p_core::Multiaddr,
+    ) -> Result<libp2p_swarm::THandler<Self>, libp2p_swarm::ConnectionDenied> {
+        Ok(Handler::default())
+    }
+
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
         match event {
-            FromSwarm::ConnectionEstablished(_) => todo!(),
+            FromSwarm::ConnectionEstablished(_) => {}
             FromSwarm::ConnectionClosed(_) => todo!(),
             FromSwarm::AddressChange(_) => todo!(),
             FromSwarm::DialFailure(_) => todo!(),

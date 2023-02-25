@@ -34,7 +34,7 @@ fn connect() {
             local_peer_id,
         );
 
-        server.listen_on(server_address).unwrap();
+        server.listen_on(server_address.clone()).unwrap();
 
         pool.spawner()
             .spawn_obj(server.collect::<Vec<_>>().map(|_| ()).boxed().into())
@@ -62,12 +62,15 @@ fn connect() {
         client
     };
 
-    let event = pool.run_until(async {
+    client.behaviour_mut().perf(server_address);
+
+    pool.run_until(async {
         loop {
             match client.select_next_some().await {
                 SwarmEvent::IncomingConnection { .. } => panic!(),
-                SwarmEvent::ConnectionEstablished { .. } => break,
+                SwarmEvent::ConnectionEstablished { .. } => {}
                 SwarmEvent::Dialing(_) => {}
+                SwarmEvent::Behaviour(client::behaviour::Event::Finished) => break,
                 e => panic!("{e:?}"),
             }
         }
