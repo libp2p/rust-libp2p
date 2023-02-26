@@ -605,14 +605,13 @@ where
     type InEvent = KademliaHandlerIn<TUserData>;
     type OutEvent = KademliaHandlerEvent<TUserData>;
     type Error = io::Error; // TODO: better error type?
-    type InboundProtocol = Either<KademliaProtocolConfig, upgrade::DeniedUpgrade>;
     type OutboundProtocol = KademliaProtocolConfig;
     // Message of the request to send to the remote, and user data if we expect an answer.
     type OutboundOpenInfo = (KadRequestMsg, Option<TUserData>);
     type InboundOpenInfo = ();
 
     fn listen_protocol(&self) -> SubstreamProtocol<Self::InboundProtocol, Self::InboundOpenInfo> {
-        SubstreamProtocol::new(self.config.protocol_config.clone(), ()).map_upgrade(Either::Left)
+        SubstreamProtocol::new(self.config.protocol_config.clone(), ())
     }
 
     fn on_behaviour_event(&mut self, message: KademliaHandlerIn<TUserData>) {
