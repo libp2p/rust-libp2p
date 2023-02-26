@@ -41,7 +41,6 @@ fn main() {
     // Create a random PeerId
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
-    println!("Local peer id: {local_peer_id:?}");
 
     let transport = block_on(DnsConfig::system(libp2p_tcp::async_io::Transport::new(
         libp2p_tcp::Config::default().port_reuse(true),

@@ -23,7 +23,7 @@ use std::task::{Context, Poll};
 use futures::{future::BoxFuture, stream::FuturesUnordered, FutureExt, StreamExt};
 use libp2p_core::upgrade::{DeniedUpgrade, ReadyUpgrade};
 use libp2p_swarm::{
-    handler::{ConnectionEvent, FullyNegotiatedInbound},
+    handler::{ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound},
     ConnectionHandler, ConnectionHandlerEvent, KeepAlive, SubstreamProtocol,
 };
 use void::Void;
@@ -68,10 +68,14 @@ impl ConnectionHandler for Handler {
                 self.inbound
                     .push(crate::protocol::receive_send(protocol).boxed());
             }
-            ConnectionEvent::FullyNegotiatedOutbound(_) => todo!(),
-            ConnectionEvent::AddressChange(_) => todo!(),
-            ConnectionEvent::DialUpgradeError(_) => todo!(),
-            ConnectionEvent::ListenUpgradeError(_) => todo!(),
+            ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound { info, .. }) => {
+                void::unreachable(info)
+            }
+
+            ConnectionEvent::DialUpgradeError(DialUpgradeError { info, .. }) => {
+                void::unreachable(info)
+            }
+            ConnectionEvent::AddressChange(_) | ConnectionEvent::ListenUpgradeError(_) => {}
         }
     }
 
