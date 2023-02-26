@@ -9,7 +9,7 @@ use libp2p_swarm::{Swarm, SwarmEvent};
 use libp2p_yamux::YamuxConfig;
 
 #[test]
-fn connect() {
+fn perf() {
     let _ = env_logger::try_init();
     let mut pool = LocalPool::new();
 
@@ -70,7 +70,7 @@ fn connect() {
                 SwarmEvent::IncomingConnection { .. } => panic!(),
                 SwarmEvent::ConnectionEstablished { .. } => {}
                 SwarmEvent::Dialing(_) => {}
-                SwarmEvent::Behaviour(client::behaviour::Event::Finished { stats }) => break,
+                SwarmEvent::Behaviour(client::behaviour::Event::Finished { stats: _ }) => break,
                 e => panic!("{e:?}"),
             }
         }

@@ -20,11 +20,17 @@
 
 use futures::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
+use crate::RunParams;
+
 pub async fn send_receive<S: AsyncRead + AsyncWrite + Unpin>(
-    to_send: usize,
-    to_receive: usize,
+    params: RunParams,
     mut stream: S,
 ) -> Result<(), std::io::Error> {
+    let RunParams {
+        to_send,
+        to_receive,
+    } = params;
+
     stream.write_all(&(to_receive as u64).to_be_bytes()).await?;
 
     // TODO: Don't allocate.

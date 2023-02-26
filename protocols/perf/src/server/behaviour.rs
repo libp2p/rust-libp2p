@@ -33,6 +33,7 @@ use libp2p_swarm::{
 
 use crate::server::handler::Handler;
 
+#[derive(Debug)]
 pub enum Event {}
 
 #[derive(Default)]
@@ -64,17 +65,17 @@ impl NetworkBehaviour for Behaviour {
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
         match event {
             FromSwarm::ConnectionEstablished(_) => {}
-            FromSwarm::ConnectionClosed(_) => todo!(),
-            FromSwarm::AddressChange(_) => todo!(),
-            FromSwarm::DialFailure(_) => todo!(),
-            FromSwarm::ListenFailure(_) => todo!(),
+            FromSwarm::ConnectionClosed(_) => {}
+            FromSwarm::AddressChange(_) => {}
+            FromSwarm::DialFailure(_) => {}
+            FromSwarm::ListenFailure(_) => {}
             FromSwarm::NewListener(_) => {}
             FromSwarm::NewListenAddr(_) => {}
-            FromSwarm::ExpiredListenAddr(_) => todo!(),
-            FromSwarm::ListenerError(_) => todo!(),
-            FromSwarm::ListenerClosed(_) => todo!(),
-            FromSwarm::NewExternalAddr(_) => todo!(),
-            FromSwarm::ExpiredExternalAddr(_) => todo!(),
+            FromSwarm::ExpiredListenAddr(_) => {}
+            FromSwarm::ListenerError(_) => {}
+            FromSwarm::ListenerClosed(_) => {}
+            FromSwarm::NewExternalAddr(_) => {}
+            FromSwarm::ExpiredExternalAddr(_) => {}
         }
     }
 

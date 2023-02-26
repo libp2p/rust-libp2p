@@ -21,17 +21,18 @@
 //! [`NetworkBehaviour`] of the libp2p perf protocol.
 
 use std::{
-    collections::VecDeque,
+    collections::{HashMap, VecDeque},
     task::{Context, Poll},
 };
 
 use libp2p_core::{Multiaddr, PeerId};
 use libp2p_swarm::{
-    derive_prelude::ConnectionEstablished, ConnectionId, FromSwarm, NetworkBehaviour,
-    NetworkBehaviourAction, NotifyHandler, PollParameters, THandlerInEvent, THandlerOutEvent,
+    derive_prelude::ConnectionEstablished, dial_opts::DialOpts, ConnectionId, FromSwarm,
+    NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters, THandlerInEvent,
+    THandlerOutEvent,
 };
 
-use crate::{client::handler::Handler, RunStats};
+use crate::{client::handler::Handler, RunParams, RunStats};
 
 #[derive(Debug)]
 pub enum Event {
@@ -40,6 +41,7 @@ pub enum Event {
 
 #[derive(Default)]
 pub struct Behaviour {
+    pending_run: HashMap<ConnectionId, RunParams>,
     /// Queue of actions to return when polled.
     queued_events: VecDeque<NetworkBehaviourAction<Event, THandlerInEvent<Self>>>,
 }
@@ -49,10 +51,15 @@ impl Behaviour {
         Self::default()
     }
 
-    pub fn perf(&mut self, server: Multiaddr) {
-        self.queued_events.push_back(NetworkBehaviourAction::Dial {
-            opts: server.into(),
-        });
+    pub fn perf(&mut self, server: Multiaddr, params: RunParams) {
+        let opts: DialOpts = server.into();
+        let connection_id = opts.connection_id();
+
+        self.pending_run.insert(connection_id, params);
+
+        // TODO: What if we are already connected?
+        self.queued_events
+            .push_back(NetworkBehaviourAction::Dial { opts });
     }
 }
 
@@ -85,8 +92,7 @@ impl NetworkBehaviour for Behaviour {
                     handler: NotifyHandler::One(connection_id),
                     event: crate::client::handler::Command::Start {
                         started_at: std::time::Instant::now(),
-                        to_send: 0,
-                        to_receive: 0,
+                        params: self.pending_run.remove(&connection_id).unwrap(),
                     },
                 }),
             FromSwarm::ConnectionClosed(_) => todo!(),

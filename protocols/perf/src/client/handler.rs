@@ -31,7 +31,7 @@ use libp2p_swarm::{
     ConnectionHandler, ConnectionHandlerEvent, KeepAlive, SubstreamProtocol,
 };
 
-use crate::RunStats;
+use crate::{RunParams, RunStats};
 
 #[derive(Debug)]
 pub enum Event {
@@ -42,8 +42,7 @@ pub enum Event {
 pub enum Command {
     Start {
         started_at: Instant,
-        to_send: usize,
-        to_receive: usize,
+        params: RunParams,
     },
 }
 
@@ -97,18 +96,13 @@ impl ConnectionHandler for Handler {
                 protocol,
                 info,
             }) => match info {
-                Command::Start {
-                    to_send,
-                    to_receive,
-                    started_at,
-                } => {
+                Command::Start { params, started_at } => {
                     self.outbound.push(
-                        crate::protocol::send_receive(to_send, to_receive, protocol)
+                        crate::protocol::send_receive(params, protocol)
                             .map_ok(move |()| RunStats {
                                 started_at,
                                 finished_at: Instant::now(),
-                                bytes_sent: to_send,
-                                bytes_received: to_receive,
+                                params,
                             })
                             .boxed(),
                     );

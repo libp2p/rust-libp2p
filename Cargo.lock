@@ -2541,12 +2541,17 @@ dependencies = [
 name = "libp2p-perf"
 version = "0.1.0"
 dependencies = [
+ "clap 4.1.6",
  "env_logger 0.10.0",
  "futures",
  "libp2p-core",
+ "libp2p-dns",
+ "libp2p-noise",
  "libp2p-plaintext",
  "libp2p-swarm",
+ "libp2p-tcp",
  "libp2p-yamux",
+ "log",
  "rand 0.8.5",
  "void",
 ]
