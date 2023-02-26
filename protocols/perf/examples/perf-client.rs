@@ -19,8 +19,10 @@
 // DEALINGS IN THE SOFTWARE.
 
 use clap::Parser;
-use futures::{executor::block_on, StreamExt};
-use libp2p_core::{identity, upgrade, Multiaddr, PeerId, Transport};
+use futures::{executor::block_on, future::Either, StreamExt};
+use libp2p_core::{
+    identity, muxing::StreamMuxerBox, transport::OrTransport, upgrade, Multiaddr, PeerId, Transport,
+};
 use libp2p_dns::DnsConfig;
 use libp2p_perf::RunParams;
 use libp2p_swarm::{SwarmBuilder, SwarmEvent};
@@ -42,23 +44,37 @@ fn main() {
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
 
-    let transport = block_on(DnsConfig::system(libp2p_tcp::async_io::Transport::new(
-        libp2p_tcp::Config::default().port_reuse(true),
-    )))
-    .unwrap()
-    .upgrade(upgrade::Version::V1)
-    .authenticate(
-        libp2p_noise::NoiseAuthenticated::xx(&local_key)
-            .expect("Signing libp2p-noise static DH keypair failed."),
-    )
-    .multiplex(libp2p_yamux::YamuxConfig::default())
-    .boxed();
+    let transport = {
+        let tcp =
+            libp2p_tcp::async_io::Transport::new(libp2p_tcp::Config::default().port_reuse(true))
+                .upgrade(upgrade::Version::V1Lazy)
+                .authenticate(
+                    libp2p_noise::NoiseAuthenticated::xx(&local_key)
+                        .expect("Signing libp2p-noise static DH keypair failed."),
+                )
+                .multiplex(libp2p_yamux::YamuxConfig::default());
+
+        let quic = {
+            let mut config = libp2p_quic::Config::new(&local_key);
+            config.support_draft_29 = true;
+            libp2p_quic::async_std::Transport::new(config)
+        };
+
+        let dns = block_on(DnsConfig::system(OrTransport::new(quic, tcp))).unwrap();
+
+        dns.map(|either_output, _| match either_output {
+            Either::Left((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
+            Either::Right((peer_id, muxer)) => (peer_id, StreamMuxerBox::new(muxer)),
+        })
+        .boxed()
+    };
 
     let mut swarm = SwarmBuilder::with_async_std_executor(
         transport,
         libp2p_perf::client::behaviour::Behaviour::default(),
         local_peer_id,
     )
+    .substream_upgrade_protocol_override(upgrade::Version::V1Lazy)
     .build();
 
     swarm.behaviour_mut().perf(
