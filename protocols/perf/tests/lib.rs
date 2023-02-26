@@ -3,7 +3,7 @@ use libp2p_core::{
     identity, multiaddr::Protocol, transport::MemoryTransport, upgrade::Version, Multiaddr,
     Transport,
 };
-use libp2p_perf::{client, server};
+use libp2p_perf::{client, server, RunParams};
 use libp2p_plaintext::PlainText2Config;
 use libp2p_swarm::{Swarm, SwarmEvent};
 use libp2p_yamux::YamuxConfig;
@@ -62,7 +62,13 @@ fn perf() {
         client
     };
 
-    client.behaviour_mut().perf(server_address);
+    client.behaviour_mut().perf(
+        server_address,
+        RunParams {
+            to_send: 0,
+            to_receive: 0,
+        },
+    );
 
     pool.run_until(async {
         loop {

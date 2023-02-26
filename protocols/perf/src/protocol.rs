@@ -24,6 +24,8 @@ use futures::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 use crate::{RunParams, RunTimers};
 
+const BUF: [u8; 1024] = [0; 1024];
+
 pub async fn send_receive<S: AsyncRead + AsyncWrite + Unpin>(
     params: RunParams,
     mut stream: S,
@@ -33,20 +35,28 @@ pub async fn send_receive<S: AsyncRead + AsyncWrite + Unpin>(
         to_receive,
     } = params;
 
-    let write_start = Instant::now();
+    let mut receive_buf = vec![0; 1024];
 
     stream.write_all(&(to_receive as u64).to_be_bytes()).await?;
 
-    // TODO: Don't allocate.
-    stream.write_all(vec![0; to_send].as_slice()).await?;
+    let write_start = Instant::now();
+
+    let mut sent = 0;
+    while sent < to_send {
+        let n = std::cmp::min(to_send - sent, BUF.len());
+        let buf = &BUF[..n];
+
+        sent += stream.write(buf).await?;
+    }
 
     stream.close().await?;
 
     let write_done = Instant::now();
 
-    // TODO: Don't allocate.
-    let mut buf = Vec::with_capacity(to_receive);
-    stream.read_to_end(&mut buf).await?;
+    let mut received = 0;
+    while received < to_receive {
+        received += stream.read(&mut receive_buf).await?;
+    }
 
     let read_done = Instant::now();
 
@@ -60,21 +70,23 @@ pub async fn send_receive<S: AsyncRead + AsyncWrite + Unpin>(
 pub async fn receive_send<S: AsyncRead + AsyncWrite + Unpin>(
     mut stream: S,
 ) -> Result<(), std::io::Error> {
-    let length = {
+    let to_send = {
         let mut buf = [0; 8];
         stream.read_exact(&mut buf).await?;
 
-        u64::from_be_bytes(buf)
+        u64::from_be_bytes(buf) as usize
     };
 
-    // TODO: Don't allocate.
-    let mut buf = Vec::new();
-    stream.read_to_end(&mut buf).await?;
+    let mut receive_buf = vec![0; 1024];
+    while stream.read(&mut receive_buf).await? != 0 {}
 
-    // TODO: Don't allocate.
-    stream
-        .write_all(vec![0; length as usize].as_slice())
-        .await?;
+    let mut sent = 0;
+    while sent < to_send {
+        let n = std::cmp::min(to_send - sent, BUF.len());
+        let buf = &BUF[..n];
+
+        sent += stream.write(buf).await?;
+    }
 
     stream.close().await?;
 
@@ -158,8 +170,18 @@ mod tests {
     fn test_client() {
         let stream = DummyStream::new(vec![0]);
 
-        block_on(send_receive(0, 0, stream.clone())).unwrap();
+        block_on(send_receive(
+            RunParams {
+                to_send: 0,
+                to_receive: 0,
+            },
+            stream.clone(),
+        ))
+        .unwrap();
 
-        assert_eq!(stream.inner.lock().unwrap().write, vec![]);
+        assert_eq!(
+            stream.inner.lock().unwrap().write,
+            0u64.to_be_bytes().to_vec()
+        );
     }
 }
