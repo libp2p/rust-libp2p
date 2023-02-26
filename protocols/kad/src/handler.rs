@@ -605,6 +605,7 @@ where
     type InEvent = KademliaHandlerIn<TUserData>;
     type OutEvent = KademliaHandlerEvent<TUserData>;
     type Error = io::Error; // TODO: better error type?
+    type InboundProtocol = KademliaProtocolConfig;
     type OutboundProtocol = KademliaProtocolConfig;
     // Message of the request to send to the remote, and user data if we expect an answer.
     type OutboundOpenInfo = (KadRequestMsg, Option<TUserData>);
