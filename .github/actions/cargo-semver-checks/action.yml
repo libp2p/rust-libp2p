@@ -22,7 +22,7 @@ runs:
         path: ${{ github.workspace }}/target/semver-checks/cache
         key: semver-checks-cache-${{ inputs.crate }}-${{ steps.get-released-version.outputs.version }}
 
-    - run: cargo semver-checks check-release --package ${{ inputs.crate }}
+    - run: cargo semver-checks check-release --package ${{ inputs.crate }} --verbose
       shell: bash
       env:
         CARGO_TERM_VERBOSE: "true"
