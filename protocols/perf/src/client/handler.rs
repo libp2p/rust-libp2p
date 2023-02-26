@@ -21,7 +21,6 @@
 use std::{
     collections::VecDeque,
     task::{Context, Poll},
-    time::Instant,
 };
 
 use futures::{future::BoxFuture, stream::FuturesUnordered, FutureExt, StreamExt, TryFutureExt};
@@ -40,10 +39,7 @@ pub enum Event {
 
 #[derive(Debug)]
 pub enum Command {
-    Start {
-        started_at: Instant,
-        params: RunParams,
-    },
+    Start { params: RunParams },
 }
 
 #[derive(Default)]
@@ -96,14 +92,10 @@ impl ConnectionHandler for Handler {
                 protocol,
                 info,
             }) => match info {
-                Command::Start { params, started_at } => {
+                Command::Start { params } => {
                     self.outbound.push(
                         crate::protocol::send_receive(params, protocol)
-                            .map_ok(move |()| RunStats {
-                                started_at,
-                                finished_at: Instant::now(),
-                                params,
-                            })
+                            .map_ok(move |timers| RunStats { params, timers })
                             .boxed(),
                     );
                 }

@@ -18,18 +18,22 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+use std::time::Instant;
+
 use futures::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
-use crate::RunParams;
+use crate::{RunParams, RunTimers};
 
 pub async fn send_receive<S: AsyncRead + AsyncWrite + Unpin>(
     params: RunParams,
     mut stream: S,
-) -> Result<(), std::io::Error> {
+) -> Result<RunTimers, std::io::Error> {
     let RunParams {
         to_send,
         to_receive,
     } = params;
+
+    let write_start = Instant::now();
 
     stream.write_all(&(to_receive as u64).to_be_bytes()).await?;
 
@@ -38,11 +42,19 @@ pub async fn send_receive<S: AsyncRead + AsyncWrite + Unpin>(
 
     stream.close().await?;
 
+    let write_done = Instant::now();
+
     // TODO: Don't allocate.
     let mut buf = Vec::with_capacity(to_receive);
     stream.read_to_end(&mut buf).await?;
 
-    Ok(())
+    let read_done = Instant::now();
+
+    Ok(RunTimers {
+        write_start,
+        write_done,
+        read_done,
+    })
 }
 
 pub async fn receive_send<S: AsyncRead + AsyncWrite + Unpin>(

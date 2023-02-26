@@ -91,7 +91,6 @@ impl NetworkBehaviour for Behaviour {
                     peer_id,
                     handler: NotifyHandler::One(connection_id),
                     event: crate::client::handler::Command::Start {
-                        started_at: std::time::Instant::now(),
                         params: self.pending_run.remove(&connection_id).unwrap(),
                     },
                 }),

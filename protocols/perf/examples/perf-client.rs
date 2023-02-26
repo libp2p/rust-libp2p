@@ -89,10 +89,21 @@ fn main() {
         }
     });
 
+    let sent_mebibytes = stats.params.to_send as f64 / 1024.0 / 1024.0;
+    let sent_time = (stats.timers.write_done - stats.timers.write_start).as_secs_f64();
+    let sent_bandwidth_mebibit_second = (sent_mebibytes * 8.0) as f64 / sent_time;
+
+    let received_mebibytes = stats.params.to_receive as f64 / 1024.0 / 1024.0;
+    let receive_time = (stats.timers.read_done - stats.timers.write_done).as_secs_f64();
+    let receive_bandwidth_mebibit_second = (received_mebibytes * 8.0) as f64 / receive_time;
+
     println!(
-        "Finished run: Sent {} bytes and received {} bytes in {} seconds",
-        stats.params.to_send,
-        stats.params.to_receive,
-        (stats.finished_at - stats.started_at).as_secs_f64()
+        "Finished run: Sent {} MiB in {} s with {} MiBit/s and received {} MiB in {} s with {} MiBit/s",
+        sent_mebibytes,
+        sent_time,
+        sent_bandwidth_mebibit_second,
+        received_mebibytes,
+        receive_time,
+        receive_bandwidth_mebibit_second
     );
 }
