@@ -22,9 +22,7 @@ log = "0.4"
 prost = "0.11"
 prost-codec = { version = "0.3.0", path = "../../misc/prost-codec" }
 rand = "0.8"
-sha2 = "0.10"
 thiserror = "1"
-unsigned-varint = { version = "0.7", features = ["asynchronous_codec"] }
 void = "1"
 
 [dev-dependencies]
