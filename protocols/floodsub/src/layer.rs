@@ -26,11 +26,11 @@ use crate::topic::Topic;
 use crate::FloodsubConfig;
 use cuckoofilter::{CuckooError, CuckooFilter};
 use fnv::FnvHashSet;
-use libp2p_core::PeerId;
+use libp2p_core::{Endpoint, Multiaddr, PeerId};
 use libp2p_swarm::behaviour::{ConnectionClosed, ConnectionEstablished, FromSwarm};
 use libp2p_swarm::{
-    dial_opts::DialOpts, ConnectionId, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler,
-    OneShotHandler, PollParameters, THandlerInEvent, THandlerOutEvent,
+    dial_opts::DialOpts, ConnectionDenied, ConnectionId, NetworkBehaviour, NetworkBehaviourAction,
+    NotifyHandler, OneShotHandler, PollParameters, THandler, THandlerInEvent, THandlerOutEvent,
 };
 use log::warn;
 use smallvec::SmallVec;
@@ -334,8 +334,24 @@ impl NetworkBehaviour for Floodsub {
     type ConnectionHandler = OneShotHandler<FloodsubProtocol, FloodsubRpc, InnerMessage>;
     type OutEvent = FloodsubEvent;
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
-        Default::default()
+    fn handle_established_inbound_connection(
+        &mut self,
+        _: ConnectionId,
+        _: PeerId,
+        _: &Multiaddr,
+        _: &Multiaddr,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        Ok(Default::default())
+    }
+
+    fn handle_established_outbound_connection(
+        &mut self,
+        _: ConnectionId,
+        _: PeerId,
+        _: &Multiaddr,
+        _: Endpoint,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        Ok(Default::default())
     }
 
     fn on_connection_handler_event(

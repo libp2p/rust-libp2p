@@ -33,11 +33,11 @@ use instant::Instant;
 use libp2p_core::{upgrade, ConnectedPoint, Multiaddr, PeerId};
 use libp2p_swarm::handler::{
     ConnectionEvent, DialUpgradeError, FullyNegotiatedInbound, FullyNegotiatedOutbound,
-    ListenUpgradeError, SendWrapper,
+    ListenUpgradeError,
 };
 use libp2p_swarm::{
-    dummy, ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, ConnectionId,
-    IntoConnectionHandler, KeepAlive, NegotiatedSubstream, SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, ConnectionId, KeepAlive,
+    NegotiatedSubstream, SubstreamProtocol,
 };
 use std::collections::VecDeque;
 use std::fmt;
@@ -337,31 +337,6 @@ impl fmt::Debug for Event {
     }
 }
 
-pub struct Prototype {
-    pub config: Config,
-}
-
-impl IntoConnectionHandler for Prototype {
-    type Handler = Either<Handler, dummy::ConnectionHandler>;
-
-    fn into_handler(self, _remote_peer_id: &PeerId, endpoint: &ConnectedPoint) -> Self::Handler {
-        if endpoint.is_relayed() {
-            // Deny all substreams on relayed connection.
-            Either::Right(dummy::ConnectionHandler)
-        } else {
-            Either::Left(Handler::new(self.config, endpoint.clone()))
-        }
-    }
-
-    fn inbound_protocol(&self) -> <Self::Handler as ConnectionHandler>::InboundProtocol {
-        Either::Left(SendWrapper(inbound_hop::Upgrade {
-            reservation_duration: self.config.reservation_duration,
-            max_circuit_duration: self.config.max_circuit_duration,
-            max_circuit_bytes: self.config.max_circuit_bytes,
-        }))
-    }
-}
-
 /// [`ConnectionHandler`] that manages substreams for a relay on a single
 /// connection with a peer.
 pub struct Handler {
@@ -418,7 +393,7 @@ pub struct Handler {
 }
 
 impl Handler {
-    fn new(config: Config, endpoint: ConnectedPoint) -> Handler {
+    pub fn new(config: Config, endpoint: ConnectedPoint) -> Handler {
         Handler {
             endpoint,
             config,

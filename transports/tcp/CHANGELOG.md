@@ -1,4 +1,4 @@
-# 0.39.0 [unreleased]
+# 0.39.0
 
 - Update to `libp2p-core` `v0.39.0`.
 - Fix a bug where we removed any other listener in `Transport::remove_listener` except for the one with the provided `ListenerId`. See [PR 3387].
