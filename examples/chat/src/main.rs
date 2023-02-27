@@ -18,111 +18,94 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-//! A basic chat application demonstrating libp2p and the mDNS and floodsub protocols.
+//! A basic chat application with logs demonstrating libp2p and the gossipsub protocol
+//! combined with mDNS for the discovery of peers to gossip with.
 //!
-//! Using two terminal windows, start two instances. If you local network allows mDNS,
-//! they will automatically connect. Type a message in either terminal and hit return: the
-//! message is sent and printed in the other terminal. Close with Ctrl-c.
-//!
-//! You can of course open more terminal windows and add more participants.
-//! Dialing any of the other peers will propagate the new participant to all
-//! chat members and everyone will receive all messages.
-//!
-//! # If they don't automatically connect
-//!
-//! If the nodes don't automatically connect, take note of the listening addresses of the first
-//! instance and start the second with one of the addresses as the first argument. In the first
-//! terminal window, run:
+//! Using two terminal windows, start two instances, typing the following in each:
 //!
 //! ```sh
 //! cargo run
 //! ```
 //!
-//! It will print the PeerId and the listening addresses, e.g. `Listening on
-//! "/ip4/0.0.0.0/tcp/24915"`
-//!
-//! In the second terminal window, start a new instance of the example with:
+//! Mutual mDNS discovery may take a few seconds. When each peer does discover the other
+//! it will print a message like:
 //!
 //! ```sh
-//! cargo run -- /ip4/127.0.0.1/tcp/24915
+//! mDNS discovered a new peer: {peerId}
 //! ```
 //!
-//! The two nodes then connect.
+//! Type a message and hit return: the message is sent and printed in the other terminal.
+//! Close with Ctrl-c.
+//!
+//! You can open more terminal windows and add more peers using the same line above.
+//!
+//! Once an additional peer is mDNS discovered it can participate in the conversation
+//! and all peers will receive messages sent from it.
+//!
+//! If a participant exits (Control-C or otherwise) the other peers will receive an mDNS expired
+//! event and remove the expired peer from the list of known peers.
 
 use async_std::io;
-use futures::{
-    prelude::{stream::StreamExt, *},
-    select,
-};
+use futures::{prelude::*, select};
 use libp2p::{
-    floodsub::{self, Floodsub, FloodsubEvent},
-    identity, mdns,
-    swarm::{NetworkBehaviour, SwarmEvent},
-    Multiaddr, PeerId, Swarm,
+    gossipsub, identity, mdns, swarm::NetworkBehaviour, swarm::SwarmEvent, PeerId, Swarm,
 };
+use std::collections::hash_map::DefaultHasher;
 use std::error::Error;
+use std::hash::{Hash, Hasher};
+use std::time::Duration;
 
 #[async_std::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    env_logger::init();
-
     // Create a random PeerId
     let local_key = identity::Keypair::generate_ed25519();
     let local_peer_id = PeerId::from(local_key.public());
-    println!("Local peer id: {local_peer_id:?}");
+    println!("Local peer id: {local_peer_id}");
 
-    // Set up an encrypted DNS-enabled TCP Transport over the Mplex and Yamux protocols
-    let transport = libp2p::development_transport(local_key).await?;
+    // Set up an encrypted DNS-enabled TCP Transport over the Mplex protocol.
+    let transport = libp2p::development_transport(local_key.clone()).await?;
 
-    // Create a Floodsub topic
-    let floodsub_topic = floodsub::Topic::new("chat");
-
-    // We create a custom network behaviour that combines floodsub and mDNS.
-    // Use the derive to generate delegating NetworkBehaviour impl.
+    // We create a custom network behaviour that combines Gossipsub and Mdns.
     #[derive(NetworkBehaviour)]
-    #[behaviour(out_event = "OutEvent")]
     struct MyBehaviour {
-        floodsub: Floodsub,
+        gossipsub: gossipsub::Behaviour,
         mdns: mdns::async_io::Behaviour,
     }
 
-    #[allow(clippy::large_enum_variant)]
-    #[derive(Debug)]
-    enum OutEvent {
-        Floodsub(FloodsubEvent),
-        Mdns(mdns::Event),
-    }
+    // To content-address message, we can take the hash of message and use it as an ID.
+    let message_id_fn = |message: &gossipsub::Message| {
+        let mut s = DefaultHasher::new();
+        message.data.hash(&mut s);
+        gossipsub::MessageId::from(s.finish().to_string())
+    };
 
-    impl From<mdns::Event> for OutEvent {
-        fn from(v: mdns::Event) -> Self {
-            Self::Mdns(v)
-        }
-    }
+    // Set a custom gossipsub configuration
+    let gossipsub_config = gossipsub::ConfigBuilder::default()
+        .heartbeat_interval(Duration::from_secs(10)) // This is set to aid debugging by not cluttering the log space
+        .validation_mode(gossipsub::ValidationMode::Strict) // This sets the kind of message validation. The default is Strict (enforce message signing)
+        .message_id_fn(message_id_fn) // content-address messages. No two messages of the same content will be propagated.
+        .build()
+        .expect("Valid config");
 
-    impl From<FloodsubEvent> for OutEvent {
-        fn from(v: FloodsubEvent) -> Self {
-            Self::Floodsub(v)
-        }
-    }
+    // build a gossipsub network behaviour
+    let mut gossipsub = gossipsub::Behaviour::new(
+        gossipsub::MessageAuthenticity::Signed(local_key),
+        gossipsub_config,
+    )
+    .expect("Correct configuration");
+
+    // Create a Gossipsub topic
+    let topic = gossipsub::IdentTopic::new("test-net");
+
+    // subscribes to our topic
+    gossipsub.subscribe(&topic)?;
 
     // Create a Swarm to manage peers and events
     let mut swarm = {
         let mdns = mdns::async_io::Behaviour::new(mdns::Config::default(), local_peer_id)?;
-        let mut behaviour = MyBehaviour {
-            floodsub: Floodsub::new(local_peer_id),
-            mdns,
-        };
-
-        behaviour.floodsub.subscribe(floodsub_topic.clone());
-        Swarm::with_threadpool_executor(transport, behaviour, local_peer_id)
+        let behaviour = MyBehaviour { gossipsub, mdns };
+        Swarm::with_async_std_executor(transport, behaviour, local_peer_id)
     };
-
-    // Reach out to another node if specified
-    if let Some(to_dial) = std::env::args().nth(1) {
-        let addr: Multiaddr = to_dial.parse()?;
-        swarm.dial(addr)?;
-        println!("Dialed {to_dial:?}")
-    }
 
     // Read full lines from stdin
     let mut stdin = io::BufReader::new(io::stdin()).lines().fuse();
@@ -130,48 +113,39 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Listen on all interfaces and whatever port the OS assigns
     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
 
+    println!("Enter messages via STDIN and they will be sent to connected peers using Gossipsub");
+
     // Kick it off
     loop {
         select! {
-            line = stdin.select_next_some() => swarm
-                .behaviour_mut()
-                .floodsub
-                .publish(floodsub_topic.clone(), line.expect("Stdin not to close").as_bytes()),
+            line = stdin.select_next_some() => {
+                if let Err(e) = swarm
+                    .behaviour_mut().gossipsub
+                    .publish(topic.clone(), line.expect("Stdin not to close").as_bytes()) {
+                    println!("Publish error: {e:?}");
+                }
+            },
             event = swarm.select_next_some() => match event {
-                SwarmEvent::NewListenAddr { address, .. } => {
-                    println!("Listening on {address:?}");
-                }
-                SwarmEvent::Behaviour(OutEvent::Floodsub(
-                    FloodsubEvent::Message(message)
-                )) => {
-                    println!(
-                        "Received: '{:?}' from {:?}",
-                        String::from_utf8_lossy(&message.data),
-                        message.source
-                    );
-                }
-                SwarmEvent::Behaviour(OutEvent::Mdns(
-                    mdns::Event::Discovered(list)
-                )) => {
-                    for (peer, _) in list {
-                        swarm
-                            .behaviour_mut()
-                            .floodsub
-                            .add_node_to_partial_view(peer);
-                    }
-                }
-                SwarmEvent::Behaviour(OutEvent::Mdns(mdns::Event::Expired(
-                    list
-                ))) => {
-                    for (peer, _) in list {
-                        if !swarm.behaviour_mut().mdns.has_node(&peer) {
-                            swarm
-                                .behaviour_mut()
-                                .floodsub
-                                .remove_node_from_partial_view(&peer);
-                        }
+                SwarmEvent::Behaviour(MyBehaviourEvent::Mdns(mdns::Event::Discovered(list))) => {
+                    for (peer_id, _multiaddr) in list {
+                        println!("mDNS discovered a new peer: {peer_id}");
+                        swarm.behaviour_mut().gossipsub.add_explicit_peer(&peer_id);
                     }
                 },
+                SwarmEvent::Behaviour(MyBehaviourEvent::Mdns(mdns::Event::Expired(list))) => {
+                    for (peer_id, _multiaddr) in list {
+                        println!("mDNS discover peer has expired: {peer_id}");
+                        swarm.behaviour_mut().gossipsub.remove_explicit_peer(&peer_id);
+                    }
+                },
+                SwarmEvent::Behaviour(MyBehaviourEvent::Gossipsub(gossipsub::Event::Message {
+                    propagation_source: peer_id,
+                    message_id: id,
+                    message,
+                })) => println!(
+                        "Got message: '{}' with id: {id} from peer: {peer_id}",
+                        String::from_utf8_lossy(&message.data),
+                    ),
                 _ => {}
             }
         }
