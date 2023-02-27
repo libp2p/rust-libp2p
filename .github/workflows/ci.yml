@@ -35,7 +35,9 @@ jobs:
           echo "version=${RUST_VERSION}" >> $GITHUB_OUTPUT
 
       - name: Install Rust ${{ steps.parse-msrv.outputs.version }} for MSRV check
-        uses: dtolnay/rust-toolchain@${{ steps.parse-msrv.outputs.version }}
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.parse-msrv.outputs.version }}
 
       - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
         with:
@@ -172,7 +174,9 @@ jobs:
 
       - uses: actions/checkout@v3
 
-      - uses: dtolnay/rust-toolchain@${{ matrix.rust-version }}
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust-version }}
 
       - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
         with:
