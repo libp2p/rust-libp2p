@@ -29,10 +29,9 @@ use futures::future::{self, BoxFuture, Fuse, FusedFuture};
 use futures::FutureExt;
 use instant::Instant;
 use libp2p_core::{InboundUpgrade, OutboundUpgrade, UpgradeInfo};
-use libp2p_swarm::handler::{InboundUpgradeSend, OutboundUpgradeSend};
+use libp2p_swarm::handler::{ConnectionEvent, FullyNegotiatedInbound, FullyNegotiatedOutbound};
 use libp2p_swarm::{
-    ConnectionHandler, ConnectionHandlerEvent, ConnectionHandlerUpgrErr, KeepAlive,
-    NegotiatedSubstream, SubstreamProtocol,
+    ConnectionHandler, ConnectionHandlerEvent, KeepAlive, NegotiatedSubstream, SubstreamProtocol,
 };
 use std::collections::{HashMap, VecDeque};
 use std::fmt;
@@ -52,7 +51,7 @@ pub trait SubstreamHandler: Sized {
     fn upgrade(open_info: Self::OpenInfo)
         -> SubstreamProtocol<PassthroughProtocol, Self::OpenInfo>;
     fn new(substream: NegotiatedSubstream, info: Self::OpenInfo) -> Self;
-    fn inject_event(self, event: Self::InEvent) -> Self;
+    fn on_event(self, event: Self::InEvent) -> Self;
     fn advance(self, cx: &mut Context<'_>) -> Result<Next<Self, Self::OutEvent>, Self::Error>;
 }
 
@@ -367,35 +366,47 @@ where
         TInboundSubstreamHandler::upgrade(())
     }
 
-    fn inject_fully_negotiated_inbound(
+    fn on_connection_event(
         &mut self,
-        protocol: <Self::InboundProtocol as InboundUpgradeSend>::Output,
-        _: Self::InboundOpenInfo,
+        event: ConnectionEvent<
+            Self::InboundProtocol,
+            Self::OutboundProtocol,
+            Self::InboundOpenInfo,
+            Self::OutboundOpenInfo,
+        >,
     ) {
-        self.inbound_substreams.insert(
-            self.next_inbound_substream_id.fetch_and_increment(),
-            TInboundSubstreamHandler::new(protocol, ()),
-        );
+        match event {
+            ConnectionEvent::FullyNegotiatedInbound(FullyNegotiatedInbound {
+                protocol, ..
+            }) => {
+                self.inbound_substreams.insert(
+                    self.next_inbound_substream_id.fetch_and_increment(),
+                    TInboundSubstreamHandler::new(protocol, ()),
+                );
+            }
+            ConnectionEvent::FullyNegotiatedOutbound(FullyNegotiatedOutbound {
+                protocol,
+                info,
+            }) => {
+                self.outbound_substreams.insert(
+                    self.next_outbound_substream_id.fetch_and_increment(),
+                    TOutboundSubstreamHandler::new(protocol, info),
+                );
+            }
+            // TODO: Handle upgrade errors properly
+            ConnectionEvent::AddressChange(_)
+            | ConnectionEvent::ListenUpgradeError(_)
+            | ConnectionEvent::DialUpgradeError(_) => {}
+        }
     }
 
-    fn inject_fully_negotiated_outbound(
-        &mut self,
-        protocol: <Self::OutboundProtocol as OutboundUpgradeSend>::Output,
-        info: Self::OutboundOpenInfo,
-    ) {
-        self.outbound_substreams.insert(
-            self.next_outbound_substream_id.fetch_and_increment(),
-            TOutboundSubstreamHandler::new(protocol, info),
-        );
-    }
-
-    fn inject_event(&mut self, event: Self::InEvent) {
+    fn on_behaviour_event(&mut self, event: Self::InEvent) {
         match event {
             InEvent::NewSubstream { open_info } => self.new_substreams.push_back(open_info),
             InEvent::NotifyInboundSubstream { id, message } => {
                 match self.inbound_substreams.remove(&id) {
                     Some(handler) => {
-                        let new_handler = handler.inject_event(message);
+                        let new_handler = handler.on_event(message);
 
                         self.inbound_substreams.insert(id, new_handler);
                     }
@@ -407,7 +418,7 @@ where
             InEvent::NotifyOutboundSubstream { id, message } => {
                 match self.outbound_substreams.remove(&id) {
                     Some(handler) => {
-                        let new_handler = handler.inject_event(message);
+                        let new_handler = handler.on_event(message);
 
                         self.outbound_substreams.insert(id, new_handler);
                     }
@@ -417,14 +428,6 @@ where
                 }
             }
         }
-    }
-
-    fn inject_dial_upgrade_error(
-        &mut self,
-        _: Self::OutboundOpenInfo,
-        _: ConnectionHandlerUpgrErr<Void>,
-    ) {
-        // TODO: Handle upgrade errors properly
     }
 
     fn connection_keep_alive(&self) -> KeepAlive {
@@ -537,7 +540,7 @@ impl SubstreamHandler for void::Void {
         unreachable!("we should never yield a substream")
     }
 
-    fn inject_event(self, event: Self::InEvent) -> Self {
+    fn on_event(self, event: Self::InEvent) -> Self {
         void::unreachable(event)
     }
 

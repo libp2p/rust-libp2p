@@ -28,7 +28,7 @@ use crate::K_VALUE;
 use futures::{executor::block_on, future::poll_fn, prelude::*};
 use futures_timer::Delay;
 use libp2p_core::{
-    connection::{ConnectedPoint, ConnectionId},
+    connection::ConnectedPoint,
     identity,
     multiaddr::{multiaddr, Multiaddr, Protocol},
     multihash::{Code, Multihash, MultihashDigest},
@@ -36,7 +36,7 @@ use libp2p_core::{
     upgrade, Endpoint, PeerId, Transport,
 };
 use libp2p_noise as noise;
-use libp2p_swarm::{Swarm, SwarmEvent};
+use libp2p_swarm::{ConnectionId, Swarm, SwarmEvent};
 use libp2p_yamux as yamux;
 use quickcheck::*;
 use rand::{random, rngs::StdRng, thread_rng, Rng, SeedableRng};
@@ -1294,7 +1294,8 @@ fn network_behaviour_on_address_change() {
     let local_peer_id = PeerId::random();
 
     let remote_peer_id = PeerId::random();
-    let connection_id = ConnectionId::new(1);
+    #[allow(deprecated)]
+    let connection_id = ConnectionId::DUMMY;
     let old_address: Multiaddr = Protocol::Memory(1).into();
     let new_address: Multiaddr = Protocol::Memory(2).into();
 
@@ -1317,7 +1318,15 @@ fn network_behaviour_on_address_change() {
     // At this point the remote is not yet known to support the
     // configured protocol name, so the peer is not yet in the
     // local routing table and hence no addresses are known.
-    assert!(kademlia.addresses_of_peer(&remote_peer_id).is_empty());
+    assert!(kademlia
+        .handle_pending_outbound_connection(
+            connection_id,
+            Some(remote_peer_id),
+            &[],
+            Endpoint::Dialer
+        )
+        .unwrap()
+        .is_empty());
 
     // Mimick the connection handler confirming the protocol for
     // the test connection, so that the peer is added to the routing table.
@@ -1329,7 +1338,14 @@ fn network_behaviour_on_address_change() {
 
     assert_eq!(
         vec![old_address.clone()],
-        kademlia.addresses_of_peer(&remote_peer_id),
+        kademlia
+            .handle_pending_outbound_connection(
+                connection_id,
+                Some(remote_peer_id),
+                &[],
+                Endpoint::Dialer
+            )
+            .unwrap(),
     );
 
     kademlia.on_swarm_event(FromSwarm::AddressChange(AddressChange {
@@ -1347,7 +1363,14 @@ fn network_behaviour_on_address_change() {
 
     assert_eq!(
         vec![new_address],
-        kademlia.addresses_of_peer(&remote_peer_id),
+        kademlia
+            .handle_pending_outbound_connection(
+                connection_id,
+                Some(remote_peer_id),
+                &[],
+                Endpoint::Dialer
+            )
+            .unwrap(),
     );
 }
 

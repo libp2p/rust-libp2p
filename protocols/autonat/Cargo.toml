@@ -27,7 +27,7 @@ prost = "0.11"
 
 [dev-dependencies]
 async-std = { version = "1.10", features = ["attributes"] }
-clap = { version = "4.0.13", features = ["derive"] }
+clap = { version = "4.1.6", features = ["derive"] }
 env_logger = "0.10"
 libp2p-identify = { path = "../identify" }
 libp2p-noise = { path = "../../transports/noise" }
@@ -41,3 +41,11 @@ libp2p-yamux = { path = "../../muxers/yamux" }
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 rustc-args = ["--cfg", "docsrs"]
+
+[[example]]
+name = "client"
+path = "examples/autonat_client.rs"
+
+[[example]]
+name = "server"
+path = "examples/autonat_server.rs"

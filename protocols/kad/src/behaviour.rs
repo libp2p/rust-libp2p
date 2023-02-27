@@ -24,7 +24,7 @@ mod test;
 
 use crate::addresses::Addresses;
 use crate::handler::{
-    KademliaHandlerConfig, KademliaHandlerEvent, KademliaHandlerIn, KademliaHandlerProto,
+    KademliaHandler, KademliaHandlerConfig, KademliaHandlerEvent, KademliaHandlerIn,
     KademliaRequestId,
 };
 use crate::jobs::*;
@@ -39,14 +39,15 @@ use crate::record::{
 use crate::K_VALUE;
 use fnv::{FnvHashMap, FnvHashSet};
 use instant::Instant;
-use libp2p_core::{connection::ConnectionId, ConnectedPoint, Multiaddr, PeerId};
+use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr, PeerId};
 use libp2p_swarm::behaviour::{
     AddressChange, ConnectionClosed, ConnectionEstablished, DialFailure, FromSwarm,
 };
 use libp2p_swarm::{
     dial_opts::{self, DialOpts},
-    DialError, ExternalAddresses, ListenAddresses, NetworkBehaviour, NetworkBehaviourAction,
-    NotifyHandler, PollParameters,
+    ConnectionDenied, ConnectionId, DialError, ExternalAddresses, ListenAddresses,
+    NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters, THandler,
+    THandlerInEvent, THandlerOutEvent,
 };
 use log::{debug, info, warn};
 use smallvec::SmallVec;
@@ -101,7 +102,7 @@ pub struct Kademlia<TStore> {
     connection_idle_timeout: Duration,
 
     /// Queued events to return when the behaviour is being polled.
-    queued_events: VecDeque<NetworkBehaviourAction<KademliaEvent, KademliaHandlerProto<QueryId>>>,
+    queued_events: VecDeque<NetworkBehaviourAction<KademliaEvent, KademliaHandlerIn<QueryId>>>,
 
     listen_addresses: ListenAddresses,
 
@@ -571,10 +572,8 @@ where
                         RoutingUpdate::Failed
                     }
                     kbucket::InsertResult::Pending { disconnected } => {
-                        let handler = self.new_handler();
                         self.queued_events.push_back(NetworkBehaviourAction::Dial {
                             opts: DialOpts::peer_id(disconnected.into_preimage()).build(),
-                            handler,
                         });
                         RoutingUpdate::Pending
                     }
@@ -1221,11 +1220,9 @@ where
                                 //
                                 // Only try dialing peer if not currently connected.
                                 if !self.connected_peers.contains(disconnected.preimage()) {
-                                    let handler = self.new_handler();
                                     self.queued_events.push_back(NetworkBehaviourAction::Dial {
                                         opts: DialOpts::peer_id(disconnected.into_preimage())
                                             .build(),
-                                        handler,
                                     })
                                 }
                             }
@@ -1917,12 +1914,7 @@ where
         }
     }
 
-    fn on_dial_failure(
-        &mut self,
-        DialFailure { peer_id, error, .. }: DialFailure<
-            <Self as NetworkBehaviour>::ConnectionHandler,
-        >,
-    ) {
+    fn on_dial_failure(&mut self, DialFailure { peer_id, error, .. }: DialFailure) {
         let peer_id = match peer_id {
             Some(id) => id,
             // Not interested in dial failures to unknown peers.
@@ -1932,11 +1924,11 @@ where
         match error {
             DialError::Banned
             | DialError::ConnectionLimit(_)
-            | DialError::LocalPeerId
+            | DialError::LocalPeerId { .. }
             | DialError::InvalidPeerId { .. }
             | DialError::WrongPeerId { .. }
             | DialError::Aborted
-            | DialError::ConnectionIo(_)
+            | DialError::Denied { .. }
             | DialError::Transport(_)
             | DialError::NoAddresses => {
                 if let DialError::Transport(addresses) = error {
@@ -1988,21 +1980,66 @@ impl<TStore> NetworkBehaviour for Kademlia<TStore>
 where
     TStore: RecordStore + Send + 'static,
 {
-    type ConnectionHandler = KademliaHandlerProto<QueryId>;
+    type ConnectionHandler = KademliaHandler<QueryId>;
     type OutEvent = KademliaEvent;
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
-        KademliaHandlerProto::new(KademliaHandlerConfig {
-            protocol_config: self.protocol_config.clone(),
-            allow_listening: true,
-            idle_timeout: self.connection_idle_timeout,
-        })
+    fn handle_established_inbound_connection(
+        &mut self,
+        _connection_id: ConnectionId,
+        peer: PeerId,
+        local_addr: &Multiaddr,
+        remote_addr: &Multiaddr,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        Ok(KademliaHandler::new(
+            KademliaHandlerConfig {
+                protocol_config: self.protocol_config.clone(),
+                allow_listening: true,
+                idle_timeout: self.connection_idle_timeout,
+            },
+            ConnectedPoint::Listener {
+                local_addr: local_addr.clone(),
+                send_back_addr: remote_addr.clone(),
+            },
+            peer,
+        ))
     }
 
-    fn addresses_of_peer(&mut self, peer_id: &PeerId) -> Vec<Multiaddr> {
+    fn handle_established_outbound_connection(
+        &mut self,
+        _connection_id: ConnectionId,
+        peer: PeerId,
+        addr: &Multiaddr,
+        role_override: Endpoint,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        Ok(KademliaHandler::new(
+            KademliaHandlerConfig {
+                protocol_config: self.protocol_config.clone(),
+                allow_listening: true,
+                idle_timeout: self.connection_idle_timeout,
+            },
+            ConnectedPoint::Dialer {
+                address: addr.clone(),
+                role_override,
+            },
+            peer,
+        ))
+    }
+
+    fn handle_pending_outbound_connection(
+        &mut self,
+        _connection_id: ConnectionId,
+        maybe_peer: Option<PeerId>,
+        _addresses: &[Multiaddr],
+        _effective_role: Endpoint,
+    ) -> Result<Vec<Multiaddr>, ConnectionDenied> {
+        let peer_id = match maybe_peer {
+            None => return Ok(vec![]),
+            Some(peer) => peer,
+        };
+
         // We should order addresses from decreasing likelyhood of connectivity, so start with
         // the addresses of that peer in the k-buckets.
-        let key = kbucket::Key::from(*peer_id);
+        let key = kbucket::Key::from(peer_id);
         let mut peer_addrs =
             if let kbucket::Entry::Present(mut entry, _) = self.kbuckets.entry(&key) {
                 let addrs = entry.value().iter().cloned().collect::<Vec<_>>();
@@ -2014,19 +2051,19 @@ where
 
         // We add to that a temporary list of addresses from the ongoing queries.
         for query in self.queries.iter() {
-            if let Some(addrs) = query.inner.addresses.get(peer_id) {
+            if let Some(addrs) = query.inner.addresses.get(&peer_id) {
                 peer_addrs.extend(addrs.iter().cloned())
             }
         }
 
-        peer_addrs
+        Ok(peer_addrs)
     }
 
     fn on_connection_handler_event(
         &mut self,
         source: PeerId,
         connection: ConnectionId,
-        event: KademliaHandlerEvent<QueryId>,
+        event: THandlerOutEvent<Self>,
     ) {
         match event {
             KademliaHandlerEvent::ProtocolConfirmed { endpoint } => {
@@ -2293,7 +2330,7 @@ where
         &mut self,
         cx: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>> {
         let now = Instant::now();
 
         // Calculate the available capacity for queries triggered by background jobs.
@@ -2392,10 +2429,8 @@ where
                                 });
                         } else if &peer_id != self.kbuckets.local_key().preimage() {
                             query.inner.pending_rpcs.push((peer_id, event));
-                            let handler = self.new_handler();
                             self.queued_events.push_back(NetworkBehaviourAction::Dial {
                                 opts: DialOpts::peer_id(peer_id).build(),
-                                handler,
                             });
                         }
                     }
@@ -2414,7 +2449,7 @@ where
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
         self.listen_addresses.on_swarm_event(&event);
-        self.external_addresses.on_swarn_event(&event);
+        self.external_addresses.on_swarm_event(&event);
 
         match event {
             FromSwarm::ConnectionEstablished(connection_established) => {

@@ -18,8 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::v2::message_proto::{hop_message, HopMessage, Peer, Status};
-use crate::v2::protocol::{Limit, HOP_PROTOCOL_NAME, MAX_MESSAGE_SIZE};
+use crate::message_proto::{hop_message, HopMessage, Peer, Status};
+use crate::protocol::{Limit, HOP_PROTOCOL_NAME, MAX_MESSAGE_SIZE};
 use asynchronous_codec::{Framed, FramedParts};
 use bytes::Bytes;
 use futures::{future::BoxFuture, prelude::*};

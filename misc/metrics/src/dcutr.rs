@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use prometheus_client::encoding::text::Encode;
+use prometheus_client::encoding::{EncodeLabelSet, EncodeLabelValue};
 use prometheus_client::metrics::counter::Counter;
 use prometheus_client::metrics::family::Family;
 use prometheus_client::registry::Registry;
@@ -35,19 +35,19 @@ impl Metrics {
         sub_registry.register(
             "events",
             "Events emitted by the relay NetworkBehaviour",
-            Box::new(events.clone()),
+            events.clone(),
         );
 
         Self { events }
     }
 }
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq, Encode)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, EncodeLabelSet)]
 struct EventLabels {
     event: EventType,
 }
 
-#[derive(Debug, Clone, Hash, PartialEq, Eq, Encode)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, EncodeLabelValue)]
 enum EventType {
     InitiateDirectConnectionUpgrade,
     RemoteInitiatedDirectConnectionUpgrade,

@@ -18,7 +18,7 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::v2::message_proto;
+use crate::message_proto;
 use std::time::Duration;
 
 pub mod inbound_hop;

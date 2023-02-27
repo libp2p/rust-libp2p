@@ -18,9 +18,9 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::error::ValidationError;
 use crate::peer_score::RejectReason;
 use crate::MessageId;
+use crate::ValidationError;
 use libp2p_core::PeerId;
 use log::debug;
 use std::collections::HashMap;

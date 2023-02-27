@@ -20,18 +20,18 @@
 
 use crate::codec::{Cookie, ErrorCode, Namespace, NewRegistration, Registration, Ttl};
 use crate::handler::inbound;
-use crate::substream_handler::{InboundSubstreamId, SubstreamConnectionHandler};
+use crate::substream_handler::{InEvent, InboundSubstreamId, SubstreamConnectionHandler};
 use crate::{handler, MAX_TTL, MIN_TTL};
 use bimap::BiMap;
 use futures::future::BoxFuture;
 use futures::ready;
 use futures::stream::FuturesUnordered;
 use futures::{FutureExt, StreamExt};
-use libp2p_core::connection::ConnectionId;
-use libp2p_core::PeerId;
+use libp2p_core::{Endpoint, Multiaddr, PeerId};
 use libp2p_swarm::behaviour::FromSwarm;
 use libp2p_swarm::{
-    CloseConnection, NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters,
+    CloseConnection, ConnectionDenied, ConnectionId, NetworkBehaviour, NetworkBehaviourAction,
+    NotifyHandler, PollParameters, THandler, THandlerInEvent, THandlerOutEvent,
 };
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::iter::FromIterator;
@@ -40,9 +40,7 @@ use std::time::Duration;
 use void::Void;
 
 pub struct Behaviour {
-    events: VecDeque<
-        NetworkBehaviourAction<Event, SubstreamConnectionHandler<inbound::Stream, Void, ()>>,
-    >,
+    events: VecDeque<NetworkBehaviourAction<Event, InEvent<(), inbound::InEvent, Void>>>,
     registrations: Registrations,
 }
 
@@ -113,17 +111,35 @@ impl NetworkBehaviour for Behaviour {
     type ConnectionHandler = SubstreamConnectionHandler<inbound::Stream, Void, ()>;
     type OutEvent = Event;
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
-        let initial_keep_alive = Duration::from_secs(30);
+    fn handle_established_inbound_connection(
+        &mut self,
+        _: ConnectionId,
+        _: PeerId,
+        _: &Multiaddr,
+        _: &Multiaddr,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        Ok(SubstreamConnectionHandler::new_inbound_only(
+            Duration::from_secs(30),
+        ))
+    }
 
-        SubstreamConnectionHandler::new_inbound_only(initial_keep_alive)
+    fn handle_established_outbound_connection(
+        &mut self,
+        _: ConnectionId,
+        _: PeerId,
+        _: &Multiaddr,
+        _: Endpoint,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        Ok(SubstreamConnectionHandler::new_inbound_only(
+            Duration::from_secs(30),
+        ))
     }
 
     fn on_connection_handler_event(
         &mut self,
         peer_id: PeerId,
         connection: ConnectionId,
-        event: handler::InboundOutEvent,
+        event: THandlerOutEvent<Self>,
     ) {
         let new_events = match event {
             handler::InboundOutEvent::InboundEvent { id, message } => {
@@ -148,7 +164,7 @@ impl NetworkBehaviour for Behaviour {
         &mut self,
         cx: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>> {
         if let Poll::Ready(ExpiredRegistration(registration)) = self.registrations.poll(cx) {
             return Poll::Ready(NetworkBehaviourAction::GenerateEvent(
                 Event::RegistrationExpired(registration),
@@ -186,7 +202,7 @@ fn handle_inbound_event(
     connection: ConnectionId,
     id: InboundSubstreamId,
     registrations: &mut Registrations,
-) -> Vec<NetworkBehaviourAction<Event, SubstreamConnectionHandler<inbound::Stream, Void, ()>>> {
+) -> Vec<NetworkBehaviourAction<Event, THandlerInEvent<Behaviour>>> {
     match event {
         // bad registration
         inbound::OutEvent::RegistrationRequested(registration)

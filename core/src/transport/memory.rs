@@ -641,14 +641,14 @@ mod tests {
         };
 
         let dialer = async move {
-            let _chan = MemoryTransport::default()
+            let chan = MemoryTransport::default()
                 .dial(listener_addr_cloned)
                 .unwrap()
                 .await
                 .unwrap();
 
             should_terminate.await.unwrap();
-            drop(_chan);
+            drop(chan);
             terminated.send(()).unwrap();
         };
 

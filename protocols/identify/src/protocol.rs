@@ -22,11 +22,11 @@ use crate::structs_proto;
 use asynchronous_codec::{FramedRead, FramedWrite};
 use futures::{future::BoxFuture, prelude::*};
 use libp2p_core::{
-    connection::ConnectionId,
     identity, multiaddr,
     upgrade::{InboundUpgrade, OutboundUpgrade, UpgradeInfo},
     Multiaddr, PublicKey,
 };
+use libp2p_swarm::ConnectionId;
 use log::{debug, trace};
 use std::convert::TryFrom;
 use std::{io, iter, pin::Pin};
@@ -189,11 +189,14 @@ where
     Ok(())
 }
 
-async fn recv<T>(mut socket: T) -> Result<Info, UpgradeError>
+async fn recv<T>(socket: T) -> Result<Info, UpgradeError>
 where
     T: AsyncRead + AsyncWrite + Unpin,
 {
-    socket.close().await?;
+    // Even though we won't write to the stream anymore we don't close it here.
+    // The reason for this is that the `close` call on some transport's require the
+    // remote's ACK, but it could be that the remote already dropped the stream
+    // after finishing their write.
 
     let info = FramedRead::new(
         socket,

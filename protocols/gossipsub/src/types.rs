@@ -21,9 +21,10 @@
 //! A collection of types using the Gossipsub system.
 use crate::rpc_proto;
 use crate::TopicHash;
-use libp2p_core::{connection::ConnectionId, PeerId};
-use prometheus_client::encoding::text::Encode;
-use prost::Message;
+use libp2p_core::PeerId;
+use libp2p_swarm::ConnectionId;
+use prometheus_client::encoding::EncodeLabelValue;
+use prost::Message as _;
 use std::fmt;
 use std::fmt::Debug;
 
@@ -95,7 +96,7 @@ pub struct PeerConnections {
 }
 
 /// Describes the types of peers that can exist in the gossipsub context.
-#[derive(Debug, Clone, PartialEq, Hash, Encode, Eq)]
+#[derive(Debug, Clone, PartialEq, Hash, EncodeLabelValue, Eq)]
 pub enum PeerKind {
     /// A gossipsub 1.1 peer.
     Gossipsubv1_1,
@@ -109,7 +110,7 @@ pub enum PeerKind {
 
 /// A message received by the gossipsub system and stored locally in caches..
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub struct RawGossipsubMessage {
+pub struct RawMessage {
     /// Id of the peer that published this message.
     pub source: Option<PeerId>,
 
@@ -132,7 +133,7 @@ pub struct RawGossipsubMessage {
     pub validated: bool,
 }
 
-impl RawGossipsubMessage {
+impl RawMessage {
     /// Calculates the encoded length of this message (used for calculating metrics).
     pub fn raw_protobuf_len(&self) -> usize {
         let message = rpc_proto::Message {
@@ -147,10 +148,10 @@ impl RawGossipsubMessage {
     }
 }
 
-/// The message sent to the user after a [`RawGossipsubMessage`] has been transformed by a
+/// The message sent to the user after a [`RawMessage`] has been transformed by a
 /// [`crate::DataTransform`].
 #[derive(Clone, PartialEq, Eq, Hash)]
-pub struct GossipsubMessage {
+pub struct Message {
     /// Id of the peer that published this message.
     pub source: Option<PeerId>,
 
@@ -164,9 +165,9 @@ pub struct GossipsubMessage {
     pub topic: TopicHash,
 }
 
-impl fmt::Debug for GossipsubMessage {
+impl fmt::Debug for Message {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("GossipsubMessage")
+        f.debug_struct("Message")
             .field(
                 "data",
                 &format_args!("{:<20}", &hex_fmt::HexFmt(&self.data)),
@@ -180,16 +181,16 @@ impl fmt::Debug for GossipsubMessage {
 
 /// A subscription received by the gossipsub system.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct GossipsubSubscription {
+pub struct Subscription {
     /// Action to perform.
-    pub action: GossipsubSubscriptionAction,
+    pub action: SubscriptionAction,
     /// The topic from which to subscribe or unsubscribe.
     pub topic_hash: TopicHash,
 }
 
 /// Action that a subscription wants to perform.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum GossipsubSubscriptionAction {
+pub enum SubscriptionAction {
     /// The remote wants to subscribe to the given topic.
     Subscribe,
     /// The remote wants to unsubscribe from the given topic.
@@ -206,7 +207,7 @@ pub struct PeerInfo {
 
 /// A Control message received by the gossipsub system.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum GossipsubControlAction {
+pub enum ControlAction {
     /// Node broadcasts known messages per topic - IHave control message.
     IHave {
         /// The topic of the messages.
@@ -237,16 +238,16 @@ pub enum GossipsubControlAction {
 
 /// An RPC received/sent.
 #[derive(Clone, PartialEq, Eq, Hash)]
-pub struct GossipsubRpc {
+pub struct Rpc {
     /// List of messages that were part of this RPC query.
-    pub messages: Vec<RawGossipsubMessage>,
+    pub messages: Vec<RawMessage>,
     /// List of subscriptions.
-    pub subscriptions: Vec<GossipsubSubscription>,
+    pub subscriptions: Vec<Subscription>,
     /// List of Gossipsub control messages.
-    pub control_msgs: Vec<GossipsubControlAction>,
+    pub control_msgs: Vec<ControlAction>,
 }
 
-impl GossipsubRpc {
+impl Rpc {
     /// Converts the GossipsubRPC into its protobuf format.
     // A convenience function to avoid explicitly specifying types.
     pub fn into_protobuf(self) -> rpc_proto::Rpc {
@@ -254,9 +255,9 @@ impl GossipsubRpc {
     }
 }
 
-impl From<GossipsubRpc> for rpc_proto::Rpc {
+impl From<Rpc> for rpc_proto::Rpc {
     /// Converts the RPC into protobuf format.
-    fn from(rpc: GossipsubRpc) -> Self {
+    fn from(rpc: Rpc) -> Self {
         // Messages
         let mut publish = Vec::new();
 
@@ -278,7 +279,7 @@ impl From<GossipsubRpc> for rpc_proto::Rpc {
             .subscriptions
             .into_iter()
             .map(|sub| rpc_proto::rpc::SubOpts {
-                subscribe: Some(sub.action == GossipsubSubscriptionAction::Subscribe),
+                subscribe: Some(sub.action == SubscriptionAction::Subscribe),
                 topic_id: Some(sub.topic_hash.into_string()),
             })
             .collect::<Vec<_>>();
@@ -296,7 +297,7 @@ impl From<GossipsubRpc> for rpc_proto::Rpc {
         for action in rpc.control_msgs {
             match action {
                 // collect all ihave messages
-                GossipsubControlAction::IHave {
+                ControlAction::IHave {
                     topic_hash,
                     message_ids,
                 } => {
@@ -306,19 +307,19 @@ impl From<GossipsubRpc> for rpc_proto::Rpc {
                     };
                     control.ihave.push(rpc_ihave);
                 }
-                GossipsubControlAction::IWant { message_ids } => {
+                ControlAction::IWant { message_ids } => {
                     let rpc_iwant = rpc_proto::ControlIWant {
                         message_ids: message_ids.into_iter().map(|msg_id| msg_id.0).collect(),
                     };
                     control.iwant.push(rpc_iwant);
                 }
-                GossipsubControlAction::Graft { topic_hash } => {
+                ControlAction::Graft { topic_hash } => {
                     let rpc_graft = rpc_proto::ControlGraft {
                         topic_id: Some(topic_hash.into_string()),
                     };
                     control.graft.push(rpc_graft);
                 }
-                GossipsubControlAction::Prune {
+                ControlAction::Prune {
                     topic_hash,
                     peers,
                     backoff,
@@ -352,7 +353,7 @@ impl From<GossipsubRpc> for rpc_proto::Rpc {
     }
 }
 
-impl fmt::Debug for GossipsubRpc {
+impl fmt::Debug for Rpc {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut b = f.debug_struct("GossipsubRpc");
         if !self.messages.is_empty() {

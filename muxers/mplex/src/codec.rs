@@ -49,7 +49,7 @@ pub(crate) const MAX_FRAME_SIZE: usize = 1024 * 1024;
 /// > we initiated the stream, so the local ID has the role `Endpoint::Dialer`.
 /// > Conversely, when receiving a frame with a flag identifying the remote as a "sender",
 /// > the corresponding local ID has the role `Endpoint::Listener`.
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+#[derive(Copy, Clone, Eq, Debug)]
 pub struct LocalStreamId {
     num: u64,
     role: Endpoint,
@@ -64,8 +64,20 @@ impl fmt::Display for LocalStreamId {
     }
 }
 
+/// Manual implementation of [`PartialEq`].
+///
+/// This is equivalent to the derived one but we purposely don't derive it because it triggers the
+/// `clippy::derive_hash_xor_eq` lint.
+///
+/// This [`PartialEq`] implementation satisfies the rule of v1 == v2 -> hash(v1) == hash(v2).
+/// The inverse is not true but does not have to be.
+impl PartialEq for LocalStreamId {
+    fn eq(&self, other: &Self) -> bool {
+        self.num.eq(&other.num) && self.role.eq(&other.role)
+    }
+}
+
 impl Hash for LocalStreamId {
-    #![allow(clippy::derive_hash_xor_eq)]
     fn hash<H: Hasher>(&self, state: &mut H) {
         state.write_u64(self.num);
     }

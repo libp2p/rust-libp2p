@@ -19,8 +19,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 use crate::rpc_proto;
-use base64::encode;
-use prometheus_client::encoding::text::Encode;
+use base64::prelude::*;
+use prometheus_client::encoding::EncodeLabelSet;
 use prost::Message;
 use sha2::{Digest, Sha256};
 use std::fmt;
@@ -56,12 +56,12 @@ impl Hasher for Sha256Hash {
         topic_descripter
             .encode(&mut bytes)
             .expect("buffer is large enough");
-        let hash = encode(Sha256::digest(&bytes).as_slice());
+        let hash = BASE64_STANDARD.encode(Sha256::digest(&bytes));
         TopicHash { hash }
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Encode)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, EncodeLabelSet)]
 pub struct TopicHash {
     /// The topic hash. Stored as a string to align with the protobuf API.
     hash: String,

@@ -34,14 +34,13 @@ jobs:
         rust: ${{ fromJSON(needs.gather_msrv_versions.outputs.versions) }}
     steps:
       - name: Install Protoc
-        uses: arduino/setup-protoc@64c0c85d18e984422218383b81c52f8b077404d3 # v1.1.2
+        run: sudo apt-get install protobuf-compiler
 
       - uses: actions/checkout@v3
 
-      - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
+      - uses: dtolnay/rust-toolchain@9cd00a88a73addc8617065438eff914dd08d0955 # v1
         with:
-          toolchain: ${{ matrix.rust }}
-          override: true
+          toolchain: ${{ matrix.rust }}          
 
       - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
         with:
@@ -57,14 +56,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Install Protoc
-        uses: arduino/setup-protoc@64c0c85d18e984422218383b81c52f8b077404d3 # v1.1.2
+        run: sudo apt-get install protobuf-compiler
 
       - uses: actions/checkout@v3
 
-      - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
+      - uses: dtolnay/rust-toolchain@9cd00a88a73addc8617065438eff914dd08d0955 # v1
         with:
-          toolchain: stable
-          override: true
+          toolchain: stable          
 
       - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
         with:
@@ -75,6 +73,3 @@ jobs:
 
       - name: Render docs
         run: cargo doc --all-features --workspace
-
-      - name: Install tools
-        run: cargo install cargo-semver-checks --locked

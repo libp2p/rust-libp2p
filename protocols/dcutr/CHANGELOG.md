@@ -1,4 +1,4 @@
-# 0.9.0 [unreleased]
+# 0.9.0
 
 - Update to `libp2p-core` `v0.39.0`.
 
@@ -15,6 +15,13 @@
 [PR 3153]: https://github.com/libp2p/rust-libp2p/pull/3153
 [issue 2217]: https://github.com/libp2p/rust-libp2p/issues/2217
 [PR 3214]: https://github.com/libp2p/rust-libp2p/pull/3214
+
+# 0.8.1
+
+- Skip unparsable multiaddr in `InboundUpgrade::upgrade_inbound` and
+  `OutboundUpgrade::upgrade_outbound`. See [PR 3300].
+
+[PR 3300]: https://github.com/libp2p/rust-libp2p/pull/3300
 
 # 0.8.0
 

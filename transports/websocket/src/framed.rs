@@ -24,7 +24,6 @@ use futures::{future::BoxFuture, prelude::*, ready, stream::BoxStream};
 use futures_rustls::{client, rustls, server};
 use libp2p_core::{
     connection::Endpoint,
-    either::EitherOutput,
     multiaddr::{Multiaddr, Protocol},
     transport::{ListenerId, TransportError, TransportEvent},
     Transport,
@@ -108,7 +107,7 @@ impl<T> WsConfig<T> {
     }
 }
 
-type TlsOrPlain<T> = EitherOutput<EitherOutput<client::TlsStream<T>, server::TlsStream<T>>, T>;
+type TlsOrPlain<T> = future::Either<future::Either<client::TlsStream<T>, server::TlsStream<T>>, T>;
 
 impl<T> Transport for WsConfig<T>
 where
@@ -350,11 +349,11 @@ where
                 })
                 .await?;
 
-            let stream: TlsOrPlain<_> = EitherOutput::First(EitherOutput::First(stream));
+            let stream: TlsOrPlain<_> = future::Either::Left(future::Either::Left(stream));
             stream
         } else {
             // continue with plain stream
-            EitherOutput::Second(stream)
+            future::Either::Right(stream)
         };
 
         trace!("Sending websocket handshake to {}", addr.host_port);
@@ -422,12 +421,12 @@ where
                     })
                     .await?;
 
-                let stream: TlsOrPlain<_> = EitherOutput::First(EitherOutput::Second(stream));
+                let stream: TlsOrPlain<_> = future::Either::Left(future::Either::Right(stream));
 
                 stream
             } else {
                 // continue with plain stream
-                EitherOutput::Second(stream)
+                future::Either::Right(stream)
             };
 
             trace!(

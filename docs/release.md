@@ -36,3 +36,11 @@ documentation will refer to `X.Y.Z` as _major_, _minor_ and _patch_ version.
 
    Note that dropping the `--no-push` flag on `cargo release` might as well do
    the trick.
+
+## Patch release
+
+1. Create a branch `v0.XX` off of the minor release tag.
+
+2. Merge patches into branch in accordance with [development between releases section](#development-between-releases).
+
+3. Cut release in accordance with [releasing one or more crates section](#releasing-one-or-more-crates) replacing `master` with `v0.XX`.

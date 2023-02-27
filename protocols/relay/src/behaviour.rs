@@ -23,27 +23,28 @@
 mod handler;
 pub mod rate_limiter;
 
-use crate::v2::message_proto;
-use crate::v2::protocol::inbound_hop;
+use crate::behaviour::handler::Handler;
+use crate::message_proto;
+use crate::multiaddr_ext::MultiaddrExt;
+use crate::protocol::{inbound_hop, outbound_stop};
 use either::Either;
 use instant::Instant;
-use libp2p_core::connection::ConnectionId;
 use libp2p_core::multiaddr::Protocol;
-use libp2p_core::PeerId;
+use libp2p_core::{ConnectedPoint, Endpoint, Multiaddr, PeerId};
 use libp2p_swarm::behaviour::{ConnectionClosed, FromSwarm};
 use libp2p_swarm::{
-    ConnectionHandlerUpgrErr, ExternalAddresses, NetworkBehaviour, NetworkBehaviourAction,
-    NotifyHandler, PollParameters,
+    dummy, ConnectionDenied, ConnectionHandlerUpgrErr, ConnectionId, ExternalAddresses,
+    NetworkBehaviour, NetworkBehaviourAction, NotifyHandler, PollParameters, THandler,
+    THandlerInEvent, THandlerOutEvent,
 };
 use std::collections::{hash_map, HashMap, HashSet, VecDeque};
 use std::num::NonZeroU32;
 use std::ops::Add;
 use std::task::{Context, Poll};
 use std::time::Duration;
+use void::Void;
 
-use super::protocol::outbound_stop;
-
-/// Configuration for the [`Relay`] [`NetworkBehaviour`].
+/// Configuration for the relay [`Behaviour`].
 ///
 /// # Panics
 ///
@@ -126,7 +127,7 @@ impl Default for Config {
     }
 }
 
-/// The events produced by the [`Relay`] behaviour.
+/// The events produced by the relay `Behaviour`.
 #[derive(Debug)]
 pub enum Event {
     /// An inbound reservation request has been accepted.
@@ -189,9 +190,9 @@ pub enum Event {
     },
 }
 
-/// [`Relay`] is a [`NetworkBehaviour`] that implements the relay server
+/// [`NetworkBehaviour`] implementation of the relay server
 /// functionality of the circuit relay v2 protocol.
-pub struct Relay {
+pub struct Behaviour {
     config: Config,
 
     local_peer_id: PeerId,
@@ -205,7 +206,7 @@ pub struct Relay {
     external_addresses: ExternalAddresses,
 }
 
-impl Relay {
+impl Behaviour {
     pub fn new(local_peer_id: PeerId, config: Config) -> Self {
         Self {
             config,
@@ -251,22 +252,62 @@ impl Relay {
     }
 }
 
-impl NetworkBehaviour for Relay {
-    type ConnectionHandler = handler::Prototype;
+impl NetworkBehaviour for Behaviour {
+    type ConnectionHandler = Either<Handler, dummy::ConnectionHandler>;
     type OutEvent = Event;
 
-    fn new_handler(&mut self) -> Self::ConnectionHandler {
-        handler::Prototype {
-            config: handler::Config {
+    fn handle_established_inbound_connection(
+        &mut self,
+        _: ConnectionId,
+        _: PeerId,
+        local_addr: &Multiaddr,
+        remote_addr: &Multiaddr,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        if local_addr.is_relayed() {
+            // Deny all substreams on relayed connection.
+            return Ok(Either::Right(dummy::ConnectionHandler));
+        }
+
+        Ok(Either::Left(Handler::new(
+            handler::Config {
                 reservation_duration: self.config.reservation_duration,
                 max_circuit_duration: self.config.max_circuit_duration,
                 max_circuit_bytes: self.config.max_circuit_bytes,
             },
+            ConnectedPoint::Listener {
+                local_addr: local_addr.clone(),
+                send_back_addr: remote_addr.clone(),
+            },
+        )))
+    }
+
+    fn handle_established_outbound_connection(
+        &mut self,
+        _: ConnectionId,
+        _: PeerId,
+        addr: &Multiaddr,
+        role_override: Endpoint,
+    ) -> Result<THandler<Self>, ConnectionDenied> {
+        if addr.is_relayed() {
+            // Deny all substreams on relayed connection.
+            return Ok(Either::Right(dummy::ConnectionHandler));
         }
+
+        Ok(Either::Left(Handler::new(
+            handler::Config {
+                reservation_duration: self.config.reservation_duration,
+                max_circuit_duration: self.config.max_circuit_duration,
+                max_circuit_bytes: self.config.max_circuit_bytes,
+            },
+            ConnectedPoint::Dialer {
+                address: addr.clone(),
+                role_override,
+            },
+        )))
     }
 
     fn on_swarm_event(&mut self, event: FromSwarm<Self::ConnectionHandler>) {
-        self.external_addresses.on_swarn_event(&event);
+        self.external_addresses.on_swarm_event(&event);
 
         match event {
             FromSwarm::ConnectionClosed(connection_closed) => {
@@ -290,7 +331,7 @@ impl NetworkBehaviour for Relay {
         &mut self,
         event_source: PeerId,
         connection: ConnectionId,
-        event: Either<handler::Event, void::Void>,
+        event: THandlerOutEvent<Self>,
     ) {
         let event = match event {
             Either::Left(e) => e,
@@ -645,7 +686,7 @@ impl NetworkBehaviour for Relay {
         &mut self,
         _cx: &mut Context<'_>,
         _: &mut impl PollParameters,
-    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, Self::ConnectionHandler>> {
+    ) -> Poll<NetworkBehaviourAction<Self::OutEvent, THandlerInEvent<Self>>> {
         if let Some(action) = self.queued_actions.pop_front() {
             return Poll::Ready(action.build(self.local_peer_id, &self.external_addresses));
         }
@@ -745,10 +786,10 @@ impl Add<u64> for CircuitId {
 }
 
 /// A [`NetworkBehaviourAction`], either complete, or still requiring data from [`PollParameters`]
-/// before being returned in [`Relay::poll`].
+/// before being returned in [`Behaviour::poll`].
 #[allow(clippy::large_enum_variant)]
 enum Action {
-    Done(NetworkBehaviourAction<Event, handler::Prototype>),
+    Done(NetworkBehaviourAction<Event, Either<handler::In, Void>>),
     AcceptReservationPrototype {
         inbound_reservation_req: inbound_hop::ReservationReq,
         handler: NotifyHandler,
@@ -756,8 +797,8 @@ enum Action {
     },
 }
 
-impl From<NetworkBehaviourAction<Event, handler::Prototype>> for Action {
-    fn from(action: NetworkBehaviourAction<Event, handler::Prototype>) -> Self {
+impl From<NetworkBehaviourAction<Event, Either<handler::In, Void>>> for Action {
+    fn from(action: NetworkBehaviourAction<Event, Either<handler::In, Void>>) -> Self {
         Self::Done(action)
     }
 }
@@ -767,7 +808,7 @@ impl Action {
         self,
         local_peer_id: PeerId,
         external_addresses: &ExternalAddresses,
-    ) -> NetworkBehaviourAction<Event, handler::Prototype> {
+    ) -> NetworkBehaviourAction<Event, Either<handler::In, Void>> {
         match self {
             Action::Done(action) => action,
             Action::AcceptReservationPrototype {

@@ -1,6 +1,13 @@
-# 0.42.0 [unreleased]
+# 0.42.0
 
 - Update to `libp2p-core` `v0.39.0`.
+
+- Deprecate non-compliant noise implementation. We intend to remove it in a future release without replacement. See [PR 3227].
+
+- Deprecate `LegacyConfig` without replacement. See [PR 3265].
+
+[PR 3227]: https://github.com/libp2p/rust-libp2p/pull/3227
+[PR 3265]: https://github.com/libp2p/rust-libp2p/pull/3265
 
 # 0.41.0
 

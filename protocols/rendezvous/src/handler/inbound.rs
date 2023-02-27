@@ -97,7 +97,7 @@ impl SubstreamHandler for Stream {
         Stream::PendingRead(Framed::new(substream, RendezvousCodec::default()))
     }
 
-    fn inject_event(self, event: Self::InEvent) -> Self {
+    fn on_event(self, event: Self::InEvent) -> Self {
         match (event, self) {
             (InEvent::RegisterResponse { ttl }, Stream::PendingBehaviour(substream)) => {
                 Stream::PendingSend(substream, Message::RegisterResponse(Ok(ttl)))

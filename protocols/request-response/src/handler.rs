@@ -366,7 +366,7 @@ where
                 Err(oneshot::Canceled) => {
                     // The inbound upgrade has errored or timed out reading
                     // or waiting for the request. The handler is informed
-                    // via `inject_listen_upgrade_error`.
+                    // via `on_connection_event` call with `ConnectionEvent::ListenUpgradeError`.
                 }
             }
         }

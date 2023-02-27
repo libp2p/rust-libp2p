@@ -14,7 +14,7 @@ categories = ["network-programming", "asynchronous"]
 asynchronous-codec = "0.6"
 bytes = "1"
 either = "1.6.0"
-futures = "0.3.1"
+futures = "0.3.26"
 futures-timer = "3"
 instant = "0.1.11"
 libp2p-core = { version = "0.39.0", path = "../../core" }
@@ -33,7 +33,7 @@ void = "1"
 prost-build = "0.11"
 
 [dev-dependencies]
-clap = { version = "4.0.13", features = ["derive"] }
+clap = { version = "4.1.6", features = ["derive"] }
 env_logger = "0.10.0"
 libp2p-identify = { path = "../../protocols/identify" }
 libp2p-noise = { path = "../../transports/noise" }

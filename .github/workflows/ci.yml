@@ -10,6 +10,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  SEGMENT_DOWNLOAD_TIMEOUT_MINS: 2 # Fail cache download after 2 minutes.
+
 jobs:
   test:
     name: Test ${{ matrix.crate }}
@@ -21,9 +24,7 @@ jobs:
         crate: ${{ fromJSON(needs.gather_published_crates.outputs.members) }}
     steps:
       - name: Install Protoc
-        uses: arduino/setup-protoc@64c0c85d18e984422218383b81c52f8b077404d3 # v1.1.2
-        with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+        run: sudo apt-get install protobuf-compiler
 
       - uses: actions/checkout@v3
 
@@ -34,11 +35,9 @@ jobs:
           echo "version=${RUST_VERSION}" >> $GITHUB_OUTPUT
 
       - name: Install Rust ${{ steps.parse-msrv.outputs.version }} for MSRV check
-        uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
+        uses: dtolnay/rust-toolchain@9cd00a88a73addc8617065438eff914dd08d0955 # v1
         with:
-          profile: minimal
           toolchain: ${{ steps.parse-msrv.outputs.version }}
-          override: true
 
       - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
         with:
@@ -48,11 +47,9 @@ jobs:
       - name: Check if ${{ matrix.crate }} compiles on MSRV (Rust ${{ steps.parse-msrv.outputs.version }})
         run: cargo +${{ steps.parse-msrv.outputs.version }} build --package ${{ matrix.crate }} --all-features
 
-      - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
+      - uses: dtolnay/rust-toolchain@9cd00a88a73addc8617065438eff914dd08d0955 # v1
         with:
-          profile: minimal
           toolchain: stable
-          override: true
 
       - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
         with:
@@ -75,7 +72,7 @@ jobs:
       - name: Check public API for semver violations
         if: steps.check-released.outputs.code == 200 # Workaround until https://github.com/obi1kenobi/cargo-semver-check/issues/146 is shipped.
         run: |
-          cargo install cargo-semver-checks --locked
+          wget -q -O- https://github.com/obi1kenobi/cargo-semver-checks/releases/download/v0.17.1/cargo-semver-checks-x86_64-unknown-linux-gnu.tar.gz | tar -xz -C ~/.cargo/bin
           cargo semver-checks check-release -p ${{ matrix.crate }}
 
       - name: Enforce no dependency on meta crate
@@ -101,17 +98,20 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: Install Protoc
+        if: ${{ matrix.os != 'ubuntu-latest' }}
         uses: arduino/setup-protoc@64c0c85d18e984422218383b81c52f8b077404d3 # v1.1.2
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Install Protoc
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        run: sudo apt-get install protobuf-compiler
+
       - uses: actions/checkout@v3
 
-      - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
+      - uses: dtolnay/rust-toolchain@9cd00a88a73addc8617065438eff914dd08d0955 # v1
         with:
-          profile: minimal
           toolchain: stable
-          override: true
           target: ${{ matrix.target }}
 
       - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
@@ -131,17 +131,13 @@ jobs:
           - features: "mdns tcp dns async-std"
     steps:
       - name: Install Protoc
-        uses: arduino/setup-protoc@64c0c85d18e984422218383b81c52f8b077404d3 # v1.1.2
-        with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+        run: sudo apt-get install protobuf-compiler
 
       - uses: actions/checkout@v3
 
-      - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
+      - uses: dtolnay/rust-toolchain@9cd00a88a73addc8617065438eff914dd08d0955 # v1
         with:
-          profile: minimal
           toolchain: stable
-          override: true
 
       - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
         with:
@@ -155,17 +151,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Install Protoc
-        uses: arduino/setup-protoc@64c0c85d18e984422218383b81c52f8b077404d3 # v1.1.2
-        with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+        run: sudo apt-get install protobuf-compiler
 
       - uses: actions/checkout@v3
 
-      - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
+      - uses: dtolnay/rust-toolchain@9cd00a88a73addc8617065438eff914dd08d0955 # v1
         with:
-          profile: minimal
           toolchain: stable
-          override: true
 
       - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
         with:
@@ -180,22 +172,18 @@ jobs:
       fail-fast: false
       matrix:
         rust-version: [
-          stable,
+          1.67.1, # current stable
           beta
         ]
     steps:
       - name: Install Protoc
-        uses: arduino/setup-protoc@64c0c85d18e984422218383b81c52f8b077404d3 # v1.1.2
-        with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+        run: sudo apt-get install protobuf-compiler
 
       - uses: actions/checkout@v3
 
-      - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
+      - uses: dtolnay/rust-toolchain@9cd00a88a73addc8617065438eff914dd08d0955 # v1
         with:
-          profile: minimal
           toolchain: ${{ matrix.rust-version }}
-          override: true
           components: clippy
 
       - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
@@ -212,17 +200,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Install Protoc
-        uses: arduino/setup-protoc@64c0c85d18e984422218383b81c52f8b077404d3 # v1.1.2
-        with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+        run: sudo apt-get install protobuf-compiler
 
       - uses: actions/checkout@v3
 
-      - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
+      - uses: dtolnay/rust-toolchain@9cd00a88a73addc8617065438eff914dd08d0955 # v1
         with:
-          profile: minimal
           toolchain: stable
-          override: true
 
       - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
         with:
@@ -236,11 +220,9 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
+      - uses: dtolnay/rust-toolchain@9cd00a88a73addc8617065438eff914dd08d0955 # v1
         with:
-          profile: minimal
           toolchain: stable
-          override: true
           components: rustfmt
 
       - name: Check formatting
@@ -251,11 +233,9 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - uses: actions-rs/toolchain@16499b5e05bf2e26879000db0c1d13f7e13fa3af # v1.0.7
-        with:
-          profile: minimal
+      - uses: dtolnay/rust-toolchain@9cd00a88a73addc8617065438eff914dd08d0955 # v1
+        with:          
           toolchain: stable
-          override: true
 
       - name: Ensure `full` feature contains all features
         run: |
@@ -286,7 +266,7 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ github.event_name == 'pull_request' }}
     steps:
-      - uses: amannn/action-semantic-pull-request@01d5fd8a8ebb9aafe902c40c53f0f4744f7381eb # v5.0.2
+      - uses: amannn/action-semantic-pull-request@b6bca70dcd3e56e896605356ce09b76f7e1e0d39 # v5.1.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -300,4 +280,15 @@ jobs:
             test
             ci
             refactor
-          requireScope: false
+          require_scope: false
+
+      - name: Check PR title length
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          title_length=${#TITLE}
+          if [ $title_length -gt 72 ]
+          then
+            echo "PR title is too long (greater than 72 characters)"
+            exit 1
+          fi

@@ -18,15 +18,14 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use crate::config::{GossipsubVersion, ValidationMode};
-use crate::error::{GossipsubHandlerError, ValidationError};
+use crate::config::{ValidationMode, Version};
 use crate::handler::HandlerEvent;
-use crate::rpc_proto;
 use crate::topic::TopicHash;
 use crate::types::{
-    GossipsubControlAction, GossipsubRpc, GossipsubSubscription, GossipsubSubscriptionAction,
-    MessageId, PeerInfo, PeerKind, RawGossipsubMessage,
+    ControlAction, MessageId, PeerInfo, PeerKind, RawMessage, Rpc, Subscription, SubscriptionAction,
 };
+use crate::{rpc_proto, Config};
+use crate::{HandlerError, ValidationError};
 use asynchronous_codec::{Decoder, Encoder, Framed};
 use byteorder::{BigEndian, ByteOrder};
 use bytes::BytesMut;
@@ -36,8 +35,8 @@ use libp2p_core::{
     identity::PublicKey, InboundUpgrade, OutboundUpgrade, PeerId, ProtocolName, UpgradeInfo,
 };
 use log::{debug, warn};
-use prost::Message as ProtobufMessage;
-use std::{borrow::Cow, pin::Pin};
+use prost::Message as _;
+use std::pin::Pin;
 use unsigned_varint::codec;
 
 pub(crate) const SIGNING_PREFIX: &[u8] = b"libp2p-pubsub:";
@@ -57,27 +56,33 @@ impl ProtocolConfig {
     /// Builds a new [`ProtocolConfig`].
     ///
     /// Sets the maximum gossip transmission size.
-    pub fn new(
-        id: Cow<'static, str>,
-        custom_id_peer_kind: Option<GossipsubVersion>,
-        max_transmit_size: usize,
-        validation_mode: ValidationMode,
-        support_floodsub: bool,
-    ) -> ProtocolConfig {
-        let protocol_ids = match custom_id_peer_kind {
+    pub fn new(gossipsub_config: &Config) -> ProtocolConfig {
+        let protocol_ids = match gossipsub_config.custom_id_version() {
             Some(v) => match v {
-                GossipsubVersion::V1_0 => vec![ProtocolId::new(id, PeerKind::Gossipsub, false)],
-                GossipsubVersion::V1_1 => vec![ProtocolId::new(id, PeerKind::Gossipsubv1_1, false)],
+                Version::V1_0 => vec![ProtocolId::new(
+                    gossipsub_config.protocol_id(),
+                    PeerKind::Gossipsub,
+                    false,
+                )],
+                Version::V1_1 => vec![ProtocolId::new(
+                    gossipsub_config.protocol_id(),
+                    PeerKind::Gossipsubv1_1,
+                    false,
+                )],
             },
             None => {
                 let mut protocol_ids = vec![
-                    ProtocolId::new(id.clone(), PeerKind::Gossipsubv1_1, true),
-                    ProtocolId::new(id, PeerKind::Gossipsub, true),
+                    ProtocolId::new(
+                        gossipsub_config.protocol_id(),
+                        PeerKind::Gossipsubv1_1,
+                        true,
+                    ),
+                    ProtocolId::new(gossipsub_config.protocol_id(), PeerKind::Gossipsub, true),
                 ];
 
                 // add floodsub support if enabled.
-                if support_floodsub {
-                    protocol_ids.push(ProtocolId::new(Cow::from(""), PeerKind::Floodsub, false));
+                if gossipsub_config.support_floodsub() {
+                    protocol_ids.push(ProtocolId::new("", PeerKind::Floodsub, false));
                 }
 
                 protocol_ids
@@ -86,8 +91,8 @@ impl ProtocolConfig {
 
         ProtocolConfig {
             protocol_ids,
-            max_transmit_size,
-            validation_mode,
+            max_transmit_size: gossipsub_config.max_transmit_size(),
+            validation_mode: gossipsub_config.validation_mode().clone(),
         }
     }
 }
@@ -103,15 +108,15 @@ pub struct ProtocolId {
 
 /// An RPC protocol ID.
 impl ProtocolId {
-    pub fn new(id: Cow<'static, str>, kind: PeerKind, prefix: bool) -> Self {
+    pub fn new(id: &str, kind: PeerKind, prefix: bool) -> Self {
         let protocol_id = match kind {
             PeerKind::Gossipsubv1_1 => match prefix {
                 true => format!("/{}/{}", id, "1.1.0"),
-                false => format!("{id}"),
+                false => id.to_string(),
             },
             PeerKind::Gossipsub => match prefix {
                 true => format!("/{}/{}", id, "1.0.0"),
-                false => format!("{id}"),
+                false => id.to_string(),
             },
             PeerKind::Floodsub => format!("/{}/{}", "floodsub", "1.0.0"),
             // NOTE: This is used for informing the behaviour of unsupported peers. We do not
@@ -143,7 +148,7 @@ where
     TSocket: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     type Output = (Framed<TSocket, GossipsubCodec>, PeerKind);
-    type Error = GossipsubHandlerError;
+    type Error = HandlerError;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
     fn upgrade_inbound(self, socket: TSocket, protocol_id: Self::Info) -> Self::Future {
@@ -164,7 +169,7 @@ where
     TSocket: AsyncWrite + AsyncRead + Unpin + Send + 'static,
 {
     type Output = (Framed<TSocket, GossipsubCodec>, PeerKind);
-    type Error = GossipsubHandlerError;
+    type Error = HandlerError;
     type Future = Pin<Box<dyn Future<Output = Result<Self::Output, Self::Error>> + Send>>;
 
     fn upgrade_outbound(self, socket: TSocket, protocol_id: Self::Info) -> Self::Future {
@@ -265,22 +270,18 @@ impl GossipsubCodec {
 
 impl Encoder for GossipsubCodec {
     type Item = rpc_proto::Rpc;
-    type Error = GossipsubHandlerError;
+    type Error = HandlerError;
 
-    fn encode(
-        &mut self,
-        item: Self::Item,
-        dst: &mut BytesMut,
-    ) -> Result<(), GossipsubHandlerError> {
+    fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), HandlerError> {
         Ok(self.codec.encode(item, dst)?)
     }
 }
 
 impl Decoder for GossipsubCodec {
     type Item = HandlerEvent;
-    type Error = GossipsubHandlerError;
+    type Error = HandlerError;
 
-    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, GossipsubHandlerError> {
+    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, HandlerError> {
         let rpc = match self.codec.decode(src)? {
             Some(p) => p,
             None => return Ok(None),
@@ -335,7 +336,7 @@ impl Decoder for GossipsubCodec {
             // If the initial validation logic failed, add the message to invalid messages and
             // continue processing the others.
             if let Some(validation_error) = invalid_kind.take() {
-                let message = RawGossipsubMessage {
+                let message = RawMessage {
                     source: None, // don't bother inform the application
                     data: message.data.unwrap_or_default(),
                     sequence_number: None, // don't inform the application
@@ -355,7 +356,7 @@ impl Decoder for GossipsubCodec {
 
                 // Build the invalid message (ignoring further validation of sequence number
                 // and source)
-                let message = RawGossipsubMessage {
+                let message = RawMessage {
                     source: None, // don't bother inform the application
                     data: message.data.unwrap_or_default(),
                     sequence_number: None, // don't inform the application
@@ -380,7 +381,7 @@ impl Decoder for GossipsubCodec {
                             seq_no,
                             seq_no.len()
                         );
-                        let message = RawGossipsubMessage {
+                        let message = RawMessage {
                             source: None, // don't bother inform the application
                             data: message.data.unwrap_or_default(),
                             sequence_number: None, // don't inform the application
@@ -399,7 +400,7 @@ impl Decoder for GossipsubCodec {
                 } else {
                     // sequence number was not present
                     debug!("Sequence number not present but expected");
-                    let message = RawGossipsubMessage {
+                    let message = RawMessage {
                         source: None, // don't bother inform the application
                         data: message.data.unwrap_or_default(),
                         sequence_number: None, // don't inform the application
@@ -425,7 +426,7 @@ impl Decoder for GossipsubCodec {
                             Err(_) => {
                                 // invalid peer id, add to invalid messages
                                 debug!("Message source has an invalid PeerId");
-                                let message = RawGossipsubMessage {
+                                let message = RawMessage {
                                     source: None, // don't bother inform the application
                                     data: message.data.unwrap_or_default(),
                                     sequence_number,
@@ -449,7 +450,7 @@ impl Decoder for GossipsubCodec {
             };
 
             // This message has passed all validation, add it to the validated messages.
-            messages.push(RawGossipsubMessage {
+            messages.push(RawMessage {
                 source,
                 data: message.data.unwrap_or_default(),
                 sequence_number,
@@ -464,10 +465,10 @@ impl Decoder for GossipsubCodec {
 
         if let Some(rpc_control) = rpc.control {
             // Collect the gossipsub control messages
-            let ihave_msgs: Vec<GossipsubControlAction> = rpc_control
+            let ihave_msgs: Vec<ControlAction> = rpc_control
                 .ihave
                 .into_iter()
-                .map(|ihave| GossipsubControlAction::IHave {
+                .map(|ihave| ControlAction::IHave {
                     topic_hash: TopicHash::from_raw(ihave.topic_id.unwrap_or_default()),
                     message_ids: ihave
                         .message_ids
@@ -477,10 +478,10 @@ impl Decoder for GossipsubCodec {
                 })
                 .collect();
 
-            let iwant_msgs: Vec<GossipsubControlAction> = rpc_control
+            let iwant_msgs: Vec<ControlAction> = rpc_control
                 .iwant
                 .into_iter()
-                .map(|iwant| GossipsubControlAction::IWant {
+                .map(|iwant| ControlAction::IWant {
                     message_ids: iwant
                         .message_ids
                         .into_iter()
@@ -489,10 +490,10 @@ impl Decoder for GossipsubCodec {
                 })
                 .collect();
 
-            let graft_msgs: Vec<GossipsubControlAction> = rpc_control
+            let graft_msgs: Vec<ControlAction> = rpc_control
                 .graft
                 .into_iter()
-                .map(|graft| GossipsubControlAction::Graft {
+                .map(|graft| ControlAction::Graft {
                     topic_hash: TopicHash::from_raw(graft.topic_id.unwrap_or_default()),
                 })
                 .collect();
@@ -517,7 +518,7 @@ impl Decoder for GossipsubCodec {
                     .collect::<Vec<PeerInfo>>();
 
                 let topic_hash = TopicHash::from_raw(prune.topic_id.unwrap_or_default());
-                prune_msgs.push(GossipsubControlAction::Prune {
+                prune_msgs.push(ControlAction::Prune {
                     topic_hash,
                     peers,
                     backoff: prune.backoff,
@@ -531,16 +532,16 @@ impl Decoder for GossipsubCodec {
         }
 
         Ok(Some(HandlerEvent::Message {
-            rpc: GossipsubRpc {
+            rpc: Rpc {
                 messages,
                 subscriptions: rpc
                     .subscriptions
                     .into_iter()
-                    .map(|sub| GossipsubSubscription {
+                    .map(|sub| Subscription {
                         action: if Some(true) == sub.subscribe {
-                            GossipsubSubscriptionAction::Subscribe
+                            SubscriptionAction::Subscribe
                         } else {
-                            GossipsubSubscriptionAction::Unsubscribe
+                            SubscriptionAction::Unsubscribe
                         },
                         topic_hash: TopicHash::from_raw(sub.topic_id.unwrap_or_default()),
                     })
@@ -555,23 +556,23 @@ impl Decoder for GossipsubCodec {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::GossipsubConfig;
-    use crate::Gossipsub;
+    use crate::config::Config;
+    use crate::Behaviour;
     use crate::IdentTopic as Topic;
     use libp2p_core::identity::Keypair;
     use quickcheck::*;
 
     #[derive(Clone, Debug)]
-    struct Message(RawGossipsubMessage);
+    struct Message(RawMessage);
 
     impl Arbitrary for Message {
         fn arbitrary(g: &mut Gen) -> Self {
             let keypair = TestKeypair::arbitrary(g);
 
             // generate an arbitrary GossipsubMessage using the behaviour signing functionality
-            let config = GossipsubConfig::default();
-            let gs: Gossipsub =
-                Gossipsub::new(crate::MessageAuthenticity::Signed(keypair.0), config).unwrap();
+            let config = Config::default();
+            let gs: Behaviour =
+                Behaviour::new(crate::MessageAuthenticity::Signed(keypair.0), config).unwrap();
             let data = (0..g.gen_range(10..10024u32))
                 .map(|_| u8::arbitrary(g))
                 .collect::<Vec<_>>();
@@ -630,7 +631,7 @@ mod tests {
         fn prop(message: Message) {
             let message = message.0;
 
-            let rpc = GossipsubRpc {
+            let rpc = Rpc {
                 messages: vec![message],
                 subscriptions: vec![],
                 control_msgs: vec![],

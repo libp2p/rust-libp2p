@@ -207,8 +207,8 @@ enum CliArgument {
 mod network {
     use super::*;
     use async_trait::async_trait;
+    use either::Either;
     use futures::channel::{mpsc, oneshot};
-    use libp2p::core::either::EitherError;
     use libp2p::core::upgrade::{read_length_prefixed, write_length_prefixed, ProtocolName};
     use libp2p::identity;
     use libp2p::identity::ed25519;
@@ -405,7 +405,7 @@ mod network {
             &mut self,
             event: SwarmEvent<
                 ComposedEvent,
-                EitherError<ConnectionHandlerUpgrErr<io::Error>, io::Error>,
+                Either<ConnectionHandlerUpgrErr<io::Error>, io::Error>,
             >,
         ) {
             match event {

@@ -9,7 +9,7 @@ license = "MIT"
 exclude = ["src/test_assets"]
 
 [dependencies]
-futures = { version = "0.3.24", default-features = false }
+futures = { version = "0.3.26", default-features = false }
 futures-rustls = "0.22.2"
 libp2p-core = { version = "0.39.0", path = "../../core" }
 rcgen = "0.10.0"
