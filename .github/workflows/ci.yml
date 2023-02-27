@@ -190,10 +190,10 @@ jobs:
         with:
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
+      - uses: r7kamura/rust-problem-matchers@v1
+
       - name: Run cargo clippy
-        uses: actions-rs/cargo@844f36862e911db73fe0815f00a4a2602c279505 # v1.0.3
-        with:
-          command: custom-clippy # cargo alias to allow reuse of config locally
+        run: cargo clippy --workspace --all-features --all-targets -- -A clippy::type_complexity -A clippy::pedantic -W clippy::used_underscore_binding -D warnings 
 
   ipfs-integration-test:
     name: IPFS Integration tests
