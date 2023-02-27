@@ -22,10 +22,10 @@
 //!
 //! [libp2p-noise-spec]: https://github.com/libp2p/specs/tree/master/noise
 
-use once_cell::sync::Lazy;
 use crate::{NoiseConfig, NoiseError, Protocol, ProtocolParams};
 use libp2p_core::identity;
 use libp2p_core::UpgradeInfo;
+use once_cell::sync::Lazy;
 use rand::Rng;
 use x25519_dalek::{x25519, X25519_BASEPOINT_BYTES};
 use zeroize::Zeroize;

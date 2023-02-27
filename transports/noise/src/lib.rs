@@ -216,12 +216,7 @@ where
             )
             .build_initiator()?;
 
-        let state = State::new(
-            socket,
-            session,
-            self.dh_keys.identity,
-            Some(self.remote.1),
-        );
+        let state = State::new(socket, session, self.dh_keys.identity, Some(self.remote.1));
 
         Ok(state)
     }
