@@ -260,19 +260,3 @@ jobs:
         run: |
           WORKSPACE_MEMBERS=$(cargo metadata --format-version=1 --no-deps | jq -c '.packages | .[] | select(.publish == null) | .name' | jq -s '.' | jq -c '.')
           echo "members=${WORKSPACE_MEMBERS}" >> $GITHUB_OUTPUT
-
-  validate_pr_title:
-    name: Validate PR title
-    runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'pull_request' }}
-    steps:
-      - name: Check PR title length
-        env:
-          TITLE: ${{ github.event.pull_request.title }}
-        run: |
-          title_length=${#TITLE}
-          if [ $title_length -gt 72 ]
-          then
-            echo "PR title is too long (greater than 72 characters)"
-            exit 1
-          fi
