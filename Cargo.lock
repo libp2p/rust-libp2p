@@ -635,6 +635,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "chat"
+version = "0.1.0"
+dependencies = [
+ "async-std",
+ "async-trait",
+ "bytes",
+ "clap 4.1.6",
+ "either",
+ "env_logger 0.10.0",
+ "futures",
+ "futures-timer",
+ "getrandom 0.2.8",
+ "instant",
+ "libp2p",
+ "multiaddr",
+ "parking_lot 0.12.1",
+ "pin-project",
+ "smallvec",
+ "tokio",
+]
+
+[[package]]
 name = "ciborium"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
