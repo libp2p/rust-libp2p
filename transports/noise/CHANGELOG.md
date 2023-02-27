@@ -1,3 +1,9 @@
+# 0.43.0 [unreleased]
+
+- Remove deprecated APIs. See [PR XXXX].
+
+[PR XXXX]: https://github.com/libp2p/rust-libp2p/pull/XXXX
+
 # 0.42.0
 
 - Update to `libp2p-core` `v0.39.0`.

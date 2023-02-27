@@ -60,8 +60,6 @@ mod protocol;
 
 pub use io::handshake::RemoteIdentity;
 pub use io::NoiseOutput;
-#[allow(deprecated)]
-pub use protocol::x25519::X25519;
 pub use protocol::x25519_spec::X25519Spec;
 pub use protocol::{AuthenticKeypair, Keypair, KeypairIdentity, PublicKey, SecretKey};
 pub use protocol::{Protocol, ProtocolParams, IK, IX, XX};
@@ -79,8 +77,6 @@ use zeroize::Zeroize;
 pub struct NoiseConfig<P, C: Zeroize, R = ()> {
     dh_keys: AuthenticKeypair<C>,
     params: ProtocolParams,
-    #[allow(deprecated)]
-    legacy: LegacyConfig,
     remote: R,
     _marker: std::marker::PhantomData<P>,
 
@@ -104,17 +100,6 @@ impl<H, C: Zeroize, R> NoiseConfig<H, C, R> {
     pub fn with_prologue(self, prologue: Vec<u8>) -> Self {
         Self { prologue, ..self }
     }
-
-    /// Sets the legacy configuration options to use, if any.
-    #[deprecated(
-        since = "0.42.0",
-        note = "`LegacyConfig` will be removed without replacement."
-    )]
-    #[allow(deprecated)]
-    pub fn set_legacy_config(&mut self, cfg: LegacyConfig) -> &mut Self {
-        self.legacy = cfg;
-        self
-    }
 }
 
 /// Implement `into_responder` and `into_initiator` for all configs where `R = ()`.
@@ -130,7 +115,7 @@ where
             .into_builder(&self.prologue, self.dh_keys.keypair.secret(), None)
             .build_responder()?;
 
-        let state = State::new(socket, session, self.dh_keys.identity, None, self.legacy);
+        let state = State::new(socket, session, self.dh_keys.identity, None);
 
         Ok(state)
     }
@@ -141,7 +126,7 @@ where
             .into_builder(&self.prologue, self.dh_keys.keypair.secret(), None)
             .build_initiator()?;
 
-        let state = State::new(socket, session, self.dh_keys.identity, None, self.legacy);
+        let state = State::new(socket, session, self.dh_keys.identity, None);
 
         Ok(state)
     }
@@ -156,10 +141,6 @@ where
         NoiseConfig {
             dh_keys,
             params: C::params_ix(),
-            legacy: {
-                #[allow(deprecated)]
-                LegacyConfig::default()
-            },
             remote: (),
             _marker: std::marker::PhantomData,
             prologue: Vec::default(),
@@ -176,10 +157,6 @@ where
         NoiseConfig {
             dh_keys,
             params: C::params_xx(),
-            legacy: {
-                #[allow(deprecated)]
-                LegacyConfig::default()
-            },
             remote: (),
             _marker: std::marker::PhantomData,
             prologue: Vec::default(),
@@ -199,10 +176,6 @@ where
         NoiseConfig {
             dh_keys,
             params: C::params_ik(),
-            legacy: {
-                #[allow(deprecated)]
-                LegacyConfig::default()
-            },
             remote: (),
             _marker: std::marker::PhantomData,
             prologue: Vec::default(),
@@ -226,10 +199,6 @@ where
         NoiseConfig {
             dh_keys,
             params: C::params_ik(),
-            legacy: {
-                #[allow(deprecated)]
-                LegacyConfig::default()
-            },
             remote: (remote_dh, remote_id),
             _marker: std::marker::PhantomData,
             prologue: Vec::default(),
@@ -252,7 +221,6 @@ where
             session,
             self.dh_keys.identity,
             Some(self.remote.1),
-            self.legacy,
         );
 
         Ok(state)

@@ -20,7 +20,6 @@
 
 //! Components of a Noise protocol.
 
-pub mod x25519;
 pub mod x25519_spec;
 
 use crate::NoiseError;

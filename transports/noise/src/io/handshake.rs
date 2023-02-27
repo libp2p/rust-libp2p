@@ -27,8 +27,6 @@ mod payload_proto {
 
 use crate::io::{framed::NoiseFramed, NoiseOutput};
 use crate::protocol::{KeypairIdentity, Protocol, PublicKey};
-#[allow(deprecated)]
-use crate::LegacyConfig;
 use crate::NoiseError;
 use bytes::Bytes;
 use futures::prelude::*;
@@ -77,9 +75,6 @@ pub struct State<T> {
     dh_remote_pubkey_sig: Option<Vec<u8>>,
     /// The known or received public identity key of the remote, if any.
     id_remote_pubkey: Option<identity::PublicKey>,
-    /// Legacy configuration parameters.
-    #[allow(deprecated)]
-    legacy: LegacyConfig,
 }
 
 impl<T> State<T> {
@@ -94,14 +89,12 @@ impl<T> State<T> {
         session: snow::HandshakeState,
         identity: KeypairIdentity,
         expected_remote_key: Option<identity::PublicKey>,
-        legacy: LegacyConfig,
     ) -> Self {
         Self {
             identity,
             io: NoiseFramed::new(io, session),
             dh_remote_pubkey_sig: None,
             id_remote_pubkey: expected_remote_key,
-            legacy,
         }
     }
 }
@@ -177,39 +170,7 @@ where
     T: AsyncRead + Unpin,
 {
     let msg = recv(state).await?;
-
-    let mut pb_result = payload_proto::NoiseHandshakePayload::decode(&msg[..]);
-
-    #[allow(deprecated)]
-    if pb_result.is_err() && state.legacy.recv_legacy_handshake {
-        // NOTE: This is support for legacy handshake payloads. As long as
-        // the frame length is less than 256 bytes, which is the case for
-        // all protobuf payloads not containing RSA keys, there is no room
-        // for misinterpretation, since if a two-bytes length prefix is present
-        // the first byte will be 0, which is always an unexpected protobuf tag
-        // value because the fields in the .proto file start with 1 and decoding
-        // thus expects a non-zero first byte. We will therefore always correctly
-        // fall back to the legacy protobuf parsing in these cases (again, not
-        // considering RSA keys, for which there may be a probabilistically
-        // very small chance of misinterpretation).
-        pb_result = pb_result.or_else(|e| {
-            if msg.len() > 2 {
-                let mut buf = [0, 0];
-                buf.copy_from_slice(&msg[..2]);
-                // If there is a second length it must be 2 bytes shorter than the
-                // frame length, because each length is encoded as a `u16`.
-                if usize::from(u16::from_be_bytes(buf)) + 2 == msg.len() {
-                    log::debug!("Attempting fallback legacy protobuf decoding.");
-                    payload_proto::NoiseHandshakePayload::decode(&msg[2..])
-                } else {
-                    Err(e)
-                }
-            } else {
-                Err(e)
-            }
-        });
-    }
-    let pb = pb_result?;
+    let pb = payload_proto::NoiseHandshakePayload::decode(&msg[..])?;
 
     if !pb.identity_key.is_empty() {
         let pk = identity::PublicKey::from_protobuf_encoding(&pb.identity_key)?;
@@ -242,17 +203,10 @@ where
         pb.identity_sig = sig.clone()
     }
 
-    #[allow(deprecated)]
-    let mut msg = if state.legacy.send_legacy_handshake {
-        let mut msg = Vec::with_capacity(2 + pb.encoded_len());
-        msg.extend_from_slice(&(pb.encoded_len() as u16).to_be_bytes());
-        msg
-    } else {
-        Vec::with_capacity(pb.encoded_len())
-    };
-
+    let mut msg = Vec::with_capacity(pb.encoded_len());
     pb.encode(&mut msg)
         .expect("Vec<u8> provides capacity as needed");
+
     state.io.send(&msg).await?;
 
     Ok(())
@@ -269,17 +223,10 @@ where
         pb.identity_sig = sig.clone()
     }
 
-    #[allow(deprecated)]
-    let mut msg = if state.legacy.send_legacy_handshake {
-        let mut msg = Vec::with_capacity(2 + pb.encoded_len());
-        msg.extend_from_slice(&(pb.encoded_len() as u16).to_be_bytes());
-        msg
-    } else {
-        Vec::with_capacity(pb.encoded_len())
-    };
-
+    let mut msg = Vec::with_capacity(pb.encoded_len());
     pb.encode(&mut msg)
         .expect("Vec<u8> provides capacity as needed");
+
     state.io.send(&msg).await?;
 
     Ok(())

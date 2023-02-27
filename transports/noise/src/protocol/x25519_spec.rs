@@ -22,6 +22,7 @@
 //!
 //! [libp2p-noise-spec]: https://github.com/libp2p/specs/tree/master/noise
 
+use once_cell::sync::Lazy;
 use crate::{NoiseConfig, NoiseError, Protocol, ProtocolParams};
 use libp2p_core::identity;
 use libp2p_core::UpgradeInfo;
@@ -33,6 +34,25 @@ use super::*;
 
 /// Prefix of static key signatures for domain separation.
 const STATIC_KEY_DOMAIN: &str = "noise-libp2p-static-key:";
+
+static PARAMS_IK: Lazy<ProtocolParams> = Lazy::new(|| {
+    "Noise_IK_25519_ChaChaPoly_SHA256"
+        .parse()
+        .map(ProtocolParams)
+        .expect("Invalid protocol name")
+});
+static PARAMS_IX: Lazy<ProtocolParams> = Lazy::new(|| {
+    "Noise_IX_25519_ChaChaPoly_SHA256"
+        .parse()
+        .map(ProtocolParams)
+        .expect("Invalid protocol name")
+});
+static PARAMS_XX: Lazy<ProtocolParams> = Lazy::new(|| {
+    "Noise_XX_25519_ChaChaPoly_SHA256"
+        .parse()
+        .map(ProtocolParams)
+        .expect("Invalid protocol name")
+});
 
 /// A X25519 key.
 #[derive(Clone)]
@@ -119,18 +139,15 @@ impl<R> UpgradeInfo for NoiseConfig<IK, X25519Spec, R> {
 /// interoperable with other libp2p implementations.
 impl Protocol<X25519Spec> for X25519Spec {
     fn params_ik() -> ProtocolParams {
-        #[allow(deprecated)]
-        x25519::X25519::params_ik()
+        PARAMS_IK.clone()
     }
 
     fn params_ix() -> ProtocolParams {
-        #[allow(deprecated)]
-        x25519::X25519::params_ix()
+        PARAMS_IX.clone()
     }
 
     fn params_xx() -> ProtocolParams {
-        #[allow(deprecated)]
-        x25519::X25519::params_xx()
+        PARAMS_XX.clone()
     }
 
     fn public_from_bytes(bytes: &[u8]) -> Result<PublicKey<X25519Spec>, NoiseError> {
