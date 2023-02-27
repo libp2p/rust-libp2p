@@ -136,7 +136,7 @@ definitely not it. See below for the many other changes packed into this release
   - Update to [`libp2p-plaintext` `v0.38.0`](transports/plaintext/CHANGELOG.md#0380).
   - Update to [`libp2p-pnet` `v0.22.2`](transports/pnet/CHANGELOG.md#0222).
   - Update to [`libp2p-relay` `v0.14.0`](protocols/relay/CHANGELOG.md#0140).
-  - Update to [`libp2p-rendezvous` `v0.11.0`](protocols/rendezovus/CHANGELOG.md#0110).
+  - Update to [`libp2p-rendezvous` `v0.11.0`](protocols/rendezvous/CHANGELOG.md#0110).
   - Update to [`libp2p-request-response` `v0.23.0`](protocols/request-response/CHANGELOG.md#0230).
   - Update to [`libp2p-swarm` `v0.41.0`](swarm/CHANGELOG.md#0410).
   - Update to [`libp2p-tcp` `v0.38.0`](transports/tcp/CHANGELOG.md#0380).
@@ -183,7 +183,7 @@ definitely not it. See below for the many other changes packed into this release
     - Update to [`libp2p-ping` `v0.40.0`](protocols/ping/CHANGELOG.md#0400).
     - Update to [`libp2p-plaintext` `v0.37.0`](transports/plaintext/CHANGELOG.md#0370).
     - Update to [`libp2p-relay` `v0.13.0`](protocols/relay/CHANGELOG.md#0130).
-    - Update to [`libp2p-rendezvous` `v0.10.0`](protocols/rendezovus/CHANGELOG.md#0100).
+    - Update to [`libp2p-rendezvous` `v0.10.0`](protocols/rendezvous/CHANGELOG.md#0100).
     - Update to [`libp2p-request-response` `v0.22.0`](protocols/request-response/CHANGELOG.md#0220).
     - Update to [`libp2p-swarm-derive` `v0.30.1`](swarm-derive/CHANGELOG.md#0301).
     - Update to [`libp2p-swarm` `v0.40.0`](swarm/CHANGELOG.md#0400).
