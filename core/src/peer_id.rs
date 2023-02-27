@@ -20,10 +20,13 @@
 
 use crate::PublicKey;
 use multiaddr::{Multiaddr, Protocol};
-use multihash::{Code, Error, Multihash, MultihashDigest};
+use multihash::{Code, Error, MultihashDigest, MultihashGeneric};
 use rand::Rng;
+use sha2::Digest as _;
 use std::{convert::TryFrom, fmt, str::FromStr};
 use thiserror::Error;
+
+type Multihash = MultihashGeneric<64>;
 
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -31,6 +34,9 @@ use serde::{Deserialize, Serialize};
 /// Public keys with byte-lengths smaller than `MAX_INLINE_KEY_LENGTH` will be
 /// automatically used as the peer id using an identity multihash.
 const MAX_INLINE_KEY_LENGTH: usize = 42;
+
+const MULTIHASH_IDENTITY_CODE: u64 = 0;
+const MULTIHASH_SHA256_CODE: u64 = 0x12;
 
 /// Identifier of a peer of the network.
 ///
@@ -58,13 +64,13 @@ impl PeerId {
     pub fn from_public_key(key: &PublicKey) -> PeerId {
         let key_enc = key.to_protobuf_encoding();
 
-        let hash_algorithm = if key_enc.len() <= MAX_INLINE_KEY_LENGTH {
-            Code::Identity
+        let multihash = if key_enc.len() <= MAX_INLINE_KEY_LENGTH {
+            Multihash::wrap(MULTIHASH_IDENTITY_CODE, &key_enc)
+                .expect("64 byte multihash provides sufficient space")
         } else {
-            Code::Sha2_256
+            Multihash::wrap(MULTIHASH_SHA256_CODE, &sha2::Sha256::digest(key_enc))
+                .expect("64 byte multihash provides sufficient space")
         };
-
-        let multihash = hash_algorithm.digest(&key_enc);
 
         PeerId { multihash }
     }
@@ -81,9 +87,9 @@ impl PeerId {
     /// or the hash value does not satisfy the constraints for a hashed
     /// peer ID, it is returned as an `Err`.
     pub fn from_multihash(multihash: Multihash) -> Result<PeerId, Multihash> {
-        match Code::try_from(multihash.code()) {
-            Ok(Code::Sha2_256) => Ok(PeerId { multihash }),
-            Ok(Code::Identity) if multihash.digest().len() <= MAX_INLINE_KEY_LENGTH => {
+        match multihash.code() {
+            MULTIHASH_SHA256_CODE => Ok(PeerId { multihash }),
+            MULTIHASH_IDENTITY_CODE if multihash.digest().len() <= MAX_INLINE_KEY_LENGTH => {
                 Ok(PeerId { multihash })
             }
             _ => Err(multihash),

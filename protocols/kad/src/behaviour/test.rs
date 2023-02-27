@@ -31,7 +31,7 @@ use libp2p_core::{
     connection::ConnectedPoint,
     identity,
     multiaddr::{multiaddr, Multiaddr, Protocol},
-    multihash::{Code, Multihash, MultihashDigest},
+    multihash::Multihash,
     transport::MemoryTransport,
     upgrade, Endpoint, PeerId, Transport,
 };
@@ -137,7 +137,7 @@ fn build_fully_connected_nodes_with_config(
 }
 
 fn random_multihash() -> Multihash {
-    Multihash::wrap(Code::Sha2_256.into(), &thread_rng().gen::<[u8; 32]>()).unwrap()
+    Multihash::wrap(0x12, &thread_rng().gen::<[u8; 32]>()).unwrap()
 }
 
 #[derive(Clone, Debug)]
@@ -1099,7 +1099,10 @@ fn disjoint_query_does_not_finish_before_all_paths_did() {
     let mut trudy = build_node(); // Trudy the intrudor, an adversary.
     let mut bob = build_node();
 
-    let key = Key::from(Code::Sha2_256.digest(&thread_rng().gen::<[u8; 32]>()));
+    let key = Key::from(
+        Multihash::wrap(0x12, &thread_rng().gen::<[u8; 32]>())
+            .expect("32 array to fit into 64 byte multihash"),
+    );
     let record_bob = Record::new(key.clone(), b"bob".to_vec());
     let record_trudy = Record::new(key.clone(), b"trudy".to_vec());
 

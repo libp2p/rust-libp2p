@@ -445,7 +445,7 @@ mod tests {
     use super::*;
 
     use crate::K_VALUE;
-    use libp2p_core::multihash::{Code, Multihash};
+    use libp2p_core::multihash::Multihash;
     use quickcheck::*;
     use std::collections::HashSet;
     use std::iter;
@@ -530,9 +530,7 @@ mod tests {
     impl Arbitrary for ArbitraryPeerId {
         fn arbitrary(g: &mut Gen) -> ArbitraryPeerId {
             let hash: [u8; 32] = core::array::from_fn(|_| u8::arbitrary(g));
-            let peer_id =
-                PeerId::from_multihash(Multihash::wrap(Code::Sha2_256.into(), &hash).unwrap())
-                    .unwrap();
+            let peer_id = PeerId::from_multihash(Multihash::wrap(0x12, &hash).unwrap()).unwrap();
             ArbitraryPeerId(peer_id)
         }
     }

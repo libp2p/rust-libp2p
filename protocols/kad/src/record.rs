@@ -160,14 +160,13 @@ impl ProviderRecord {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use libp2p_core::multihash::Code;
     use quickcheck::*;
     use std::time::Duration;
 
     impl Arbitrary for Key {
         fn arbitrary(g: &mut Gen) -> Key {
             let hash: [u8; 32] = core::array::from_fn(|_| u8::arbitrary(g));
-            Key::from(Multihash::wrap(Code::Sha2_256.into(), &hash).unwrap())
+            Key::from(Multihash::wrap(0x12, &hash).unwrap())
         }
     }
 
