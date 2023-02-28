@@ -1883,16 +1883,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "if-addrs"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "26b24dd0826eee92c56edcda7ff190f2cf52115c49eadb2c2da8063e2673a8c2"
-dependencies = [
- "libc",
- "windows-sys",
-]
-
-[[package]]
 name = "if-watch"
 version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1902,7 +1892,7 @@ dependencies = [
  "core-foundation",
  "fnv",
  "futures",
- "if-addrs 0.7.0",
+ "if-addrs",
  "ipnet",
  "log",
  "rtnetlink",
@@ -1970,7 +1960,6 @@ dependencies = [
  "either",
  "env_logger 0.10.0",
  "futures",
- "if-addrs 0.8.0",
  "libp2p",
  "log",
  "rand 0.8.5",
@@ -2153,9 +2142,7 @@ dependencies = [
  "libp2p-websocket",
  "libp2p-yamux",
  "multiaddr",
- "parking_lot 0.12.1",
  "pin-project",
- "smallvec",
  "tokio",
 ]
 
@@ -2232,7 +2219,6 @@ name = "libp2p-dcutr"
 version = "0.9.0"
 dependencies = [
  "asynchronous-codec",
- "bytes",
  "clap 4.1.6",
  "either",
  "env_logger 0.10.0",
@@ -2613,13 +2599,11 @@ dependencies = [
  "libp2p-tcp",
  "libp2p-yamux",
  "log",
- "pin-project",
  "prost",
  "prost-build",
  "prost-codec",
  "quickcheck-ext",
  "rand 0.8.5",
- "smallvec",
  "static_assertions",
  "thiserror",
  "void",
@@ -2649,10 +2633,8 @@ dependencies = [
  "prost-build",
  "prost-codec",
  "rand 0.8.5",
- "sha2 0.10.6",
  "thiserror",
  "tokio",
- "unsigned-varint",
  "void",
 ]
 
@@ -2662,7 +2644,6 @@ version = "0.24.0"
 dependencies = [
  "async-std",
  "async-trait",
- "bytes",
  "env_logger 0.10.0",
  "futures",
  "instant",
@@ -2671,10 +2652,8 @@ dependencies = [
  "libp2p-swarm",
  "libp2p-tcp",
  "libp2p-yamux",
- "log",
  "rand 0.8.5",
  "smallvec",
- "unsigned-varint",
 ]
 
 [[package]]
@@ -2697,11 +2676,9 @@ dependencies = [
  "libp2p-swarm-derive",
  "libp2p-yamux",
  "log",
- "pin-project",
  "quickcheck-ext",
  "rand 0.8.5",
  "smallvec",
- "thiserror",
  "tokio",
  "void",
  "wasm-bindgen-futures",
@@ -2845,7 +2822,6 @@ dependencies = [
  "libp2p-core",
  "libp2p-muxer-test-harness",
  "log",
- "parking_lot 0.12.1",
  "thiserror",
  "yamux",
 ]
@@ -4893,8 +4869,6 @@ checksum = "d86a8dc7f45e4c1b0d30e43038c38f274e77af056aa5f74b93c2cf9eb3c1c836"
 dependencies = [
  "asynchronous-codec",
  "bytes",
- "futures-io",
- "futures-util",
 ]
 
 [[package]]
