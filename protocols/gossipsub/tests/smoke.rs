@@ -18,7 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use async_std::prelude::FutureExt;
 use futures::stream::{FuturesUnordered, SelectAll};
 use futures::StreamExt;
 use libp2p_gossipsub as gossipsub;
@@ -29,6 +28,7 @@ use log::debug;
 use quickcheck_ext::{QuickCheck, TestResult};
 use rand::{seq::SliceRandom, SeedableRng};
 use std::{task::Poll, time::Duration};
+use async_std::prelude::FutureExt;
 
 struct Graph {
     nodes: SelectAll<Swarm<gossipsub::Behaviour>>,

@@ -36,7 +36,7 @@ instant = "0.1.11"
 prometheus-client = "0.19.0"
 
 [dev-dependencies]
-async-std = "1.6.3"
+async-std = { version = "1.6.3", features = ["unstable"] }
 env_logger = "0.10.0"
 hex = "0.4.2"
 libp2p-swarm-test = { path = "../../swarm-test"}
