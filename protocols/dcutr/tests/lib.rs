@@ -122,7 +122,7 @@ fn build_client() -> Swarm<Client> {
         .multiplex(libp2p_yamux::YamuxConfig::default())
         .boxed();
 
-    Swarm::with_async_std_executor(
+    Swarm::without_executor(
         transport,
         Client {
             relay: behaviour,
