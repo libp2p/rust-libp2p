@@ -2549,15 +2549,22 @@ dependencies = [
 
 [[package]]
 name = "libp2p-pnet"
-version = "0.22.2"
+version = "0.22.3"
 dependencies = [
  "futures",
+ "libp2p-core",
+ "libp2p-noise",
+ "libp2p-swarm",
+ "libp2p-tcp",
+ "libp2p-websocket",
+ "libp2p-yamux",
  "log",
  "pin-project",
  "quickcheck-ext",
  "rand 0.8.5",
  "salsa20",
  "sha3",
+ "tokio",
 ]
 
 [[package]]
