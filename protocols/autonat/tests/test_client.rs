@@ -18,6 +18,8 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+mod harness;
+
 use async_std::task::JoinHandle;
 use libp2p_autonat::{
     Behaviour, Config, Event, NatStatus, OutboundProbeError, OutboundProbeEvent, ResponseError,
@@ -112,7 +114,7 @@ async fn test_auto_probe() {
     assert!(client.behaviour().public_address().is_none());
 
     // Test new public listening address
-    listen_on_random_tcp_address(&mut client).await;
+    harness::listen_on_random_tcp_address(&mut client).await;
 
     let id = match client.next_behaviour_event().await {
         Event::OutboundProbe(OutboundProbeEvent::Request { probe_id, peer }) => {
@@ -194,7 +196,7 @@ async fn test_confidence() {
     // Randomly test either for public or for private status the confidence.
     let test_public = rand::random::<bool>();
     if test_public {
-        listen_on_random_tcp_address(&mut client).await;
+        harness::listen_on_random_tcp_address(&mut client).await;
     } else {
         let unreachable_addr = "/ip4/127.0.0.1/tcp/42".parse().unwrap();
         client.add_external_address(unreachable_addr, AddressScore::Infinite);
@@ -274,7 +276,7 @@ async fn test_throttle_server_period() {
         )
     });
 
-    listen_on_random_tcp_address(&mut client).await;
+    harness::listen_on_random_tcp_address(&mut client).await;
 
     let (server_id, addr, _) = new_server_swarm().await;
     client.behaviour_mut().add_server(server_id, Some(addr));
@@ -326,7 +328,7 @@ async fn test_use_connected_as_server() {
 
     let (server_id, addr, _) = new_server_swarm().await;
 
-    listen_on_random_tcp_address(&mut client).await;
+    harness::listen_on_random_tcp_address(&mut client).await;
     let connected = client.dial_and_wait(addr).await;
     assert_eq!(connected, server_id);
 
@@ -370,7 +372,7 @@ async fn test_outbound_failure() {
         servers.push((id, handle));
     }
 
-    listen_on_random_tcp_address(&mut client).await;
+    harness::listen_on_random_tcp_address(&mut client).await;
 
     // First probe should be successful and flip status to public.
     loop {
@@ -431,7 +433,7 @@ async fn test_global_ips_config() {
         )
     });
 
-    listen_on_random_tcp_address(&mut client).await;
+    harness::listen_on_random_tcp_address(&mut client).await;
 
     let (server_id, addr, _) = new_server_swarm().await;
 
@@ -463,37 +465,10 @@ async fn new_server_swarm() -> (PeerId, Multiaddr, JoinHandle<()>) {
         )
     });
 
-    let multiaddr = listen_on_random_tcp_address(&mut swarm).await;
+    let multiaddr = harness::listen_on_random_tcp_address(&mut swarm).await;
     let peer_id = *swarm.local_peer_id();
 
     let task = async_std::task::spawn(swarm.loop_on_next());
 
     (peer_id, multiaddr, task)
-}
-
-// autonat only works with TCP, so we can't use `listen` here.
-async fn listen_on_random_tcp_address(swarm: &mut Swarm<Behaviour>) -> Multiaddr {
-    let tcp_addr_listener_id = swarm
-        .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
-        .unwrap();
-
-    // block until we are actually listening
-    let multiaddr = swarm
-        .wait(|e| match e {
-            SwarmEvent::NewListenAddr {
-                address,
-                listener_id,
-            } => (listener_id == tcp_addr_listener_id).then_some(address),
-            other => {
-                log::debug!(
-                    "Ignoring {:?} while waiting for listening to succeed",
-                    other
-                );
-                None
-            }
-        })
-        .await;
-
-    swarm.add_external_address(multiaddr.clone(), AddressScore::Infinite);
-    multiaddr
 }
