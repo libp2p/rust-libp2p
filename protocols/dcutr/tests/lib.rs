@@ -123,7 +123,7 @@ fn build_client() -> Swarm<Client> {
         .multiplex(libp2p_yamux::YamuxConfig::default())
         .boxed();
 
-    Swarm::with_threadpool_executor(
+    Swarm::with_async_std_executor(
         transport,
         Client {
             relay: behaviour,
@@ -171,7 +171,7 @@ async fn wait_for_reservation(
     let mut new_listen_addr_for_relayed_addr = false;
     let mut reservation_req_accepted = false;
     loop {
-        match client.select_next_some().await {
+        match client.next_or_timeout().await {
             SwarmEvent::NewListenAddr { address, .. } if address != client_addr => {}
             SwarmEvent::NewListenAddr { address, .. } if address == client_addr => {
                 new_listen_addr_for_relayed_addr = true;
