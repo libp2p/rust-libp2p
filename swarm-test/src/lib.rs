@@ -1,15 +1,15 @@
 use async_trait::async_trait;
 use futures::future::Either;
 use futures::StreamExt;
-use libp2p::core::transport::MemoryTransport;
-use libp2p::core::upgrade::Version;
-use libp2p::identity::Keypair;
-use libp2p::multiaddr::Protocol;
-use libp2p::plaintext::PlainText2Config;
-use libp2p::swarm::dial_opts::DialOpts;
-use libp2p::swarm::{AddressScore, NetworkBehaviour, SwarmEvent, THandlerErr};
-use libp2p::yamux::YamuxConfig;
-use libp2p::{Multiaddr, PeerId, Swarm, Transport};
+use libp2p_core::{
+    identity::Keypair, multiaddr::Protocol, transport::MemoryTransport, upgrade::Version,
+    Multiaddr, PeerId, Transport,
+};
+use libp2p_plaintext::PlainText2Config;
+use libp2p_swarm::{
+    dial_opts::DialOpts, AddressScore, NetworkBehaviour, Swarm, SwarmEvent, THandlerErr,
+};
+use libp2p_yamux::YamuxConfig;
 use std::fmt::Debug;
 use std::time::Duration;
 
