@@ -1,4 +1,4 @@
-# Unreleased
+# 0.22.3
 
 - Fix handshake over websocket. See [PR 3476]
 
