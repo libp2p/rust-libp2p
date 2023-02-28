@@ -217,6 +217,7 @@ impl PnetConfig {
             .write_all(&local_nonce)
             .await
             .map_err(PnetError::HandshakeError)?;
+        socket.flush().await?;
         socket
             .read_exact(&mut remote_nonce)
             .await
