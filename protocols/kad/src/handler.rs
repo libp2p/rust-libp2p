@@ -531,11 +531,6 @@ where
             <Self as ConnectionHandler>::InboundOpenInfo,
         >,
     ) {
-        let protocol = match protocol {
-            future::Either::Left(p) => p,
-            future::Either::Right(p) => void::unreachable(p),
-        };
-
         if let ProtocolStatus::Unconfirmed = self.protocol_status {
             // Upon the first successfully negotiated substream, we know that the
             // remote is configured with the same protocol name and we want
