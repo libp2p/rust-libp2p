@@ -13,6 +13,6 @@ if-addrs = "0.8.0"
 libp2p = { path = "../", features = ["websocket", "quic",  "mplex", "yamux", "tcp", "tokio", "ping", "noise", "tls", "dns", "rsa", "macros", "webrtc"] }
 log = "0.4"
 rand = "0.8.5"
-redis = { version = "0.22.1", features = ["tokio-native-tls-comp", "tokio-comp"] }
+redis = { version = "0.22.1", default-features = false, features = ["tokio-comp"] }
 strum = { version = "0.24.1", features = ["derive"] }
 tokio = { version = "1.24.1", features = ["full"] }
