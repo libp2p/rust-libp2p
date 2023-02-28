@@ -170,7 +170,7 @@ where
     async fn listen(&mut self) -> (Multiaddr, Multiaddr) {
         let memory_addr_listener_id = self.listen_on(Protocol::Memory(0).into()).unwrap();
         let tcp_addr_listener_id = self
-            .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
+            .listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap())
             .unwrap();
 
         // block until we are actually listening
