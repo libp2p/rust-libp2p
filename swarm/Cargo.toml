@@ -24,7 +24,7 @@ rand = "0.8"
 smallvec = "1.6.1"
 thiserror = "1.0"
 void = "1"
-wasm-bindgen-futures = { version = "0.4.33", optional = true }
+wasm-bindgen-futures = { version = "0.4.34", optional = true }
 getrandom = { version = "0.2.3", features = ["js"], optional = true } # Explicit dependency to be used in `wasm-bindgen` feature
 
 [target.'cfg(not(any(target_os = "emscripten", target_os = "wasi", target_os = "unknown")))'.dependencies]

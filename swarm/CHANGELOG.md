@@ -1,4 +1,25 @@
-# 0.42.0 [unreleased]
+# 0.42.0
+
+- Allow `NetworkBehaviour`s to manage connections.
+  We deprecate `NetworkBehaviour::new_handler` and `NetworkBehaviour::addresses_of_peer` in favor of four new callbacks:
+
+  - `NetworkBehaviour::handle_pending_inbound_connection`
+  - `NetworkBehaviour::handle_pending_outbound_connection`
+  - `NetworkBehaviour::handle_established_inbound_connection`
+  - `NetworkBehaviour::handle_established_outbound_connection`
+
+  Please note that due to [limitations](https://github.com/rust-lang/rust/issues/98990) in the Rust compiler, _implementations_ of `new_handler` and `addresses_of_peer` are not flagged as deprecated.
+  Nevertheless, they will be removed in the future.
+
+  All four are fallible and returning an error from any of them will abort the given connection.
+  This allows you to create dedicated `NetworkBehaviour`s that only concern themselves with managing connections.
+  For example:
+  - checking the `PeerId` of a newly established connection against an allow/block list
+  - only allowing X connection upgrades at any one time
+  - denying incoming or outgoing connections from a certain IP range
+  - only allowing N connections to or from the same peer
+
+  See [PR 3254].
 
 - Remove `handler` field from `NetworkBehaviourAction::Dial`.
   Instead of constructing the handler early, you can now access the `ConnectionId` of the future connection on `DialOpts`.
@@ -47,20 +68,11 @@
 
 - Update to `libp2p-swarm-derive` `v0.32.0`.
 
-- Remove type parameter from `PendingOutboundConnectionError` and `PendingInboundConnectionError`.
-  These two types are always used with `std::io::Error`. See [PR 3272].
-
 - Replace `SwarmBuilder::connection_event_buffer_size` with `SwarmBuilder::per_connection_event_buffer_size` .
   The configured value now applies _per_ connection.
   The default values remains 7.
   If you have previously set `connection_event_buffer_size` you should re-evaluate what a good size for a _per connection_ buffer is.
   See [PR 3188].
-  
-- Add `PendingConnectionError::LocalPeerId` to differentiate wrong VS local peer ID errors. See [PR 3377].
-
-- Remove `PendingConnectionError:::IO` variant.
-  This was never constructed.
-  See [PR 3373].
 
 - Remove `DialError::ConnectionIo` variant.
   This was never constructed.
@@ -68,6 +80,10 @@
 
 - Introduce `ListenError` and use it within `SwarmEvent::IncomingConnectionError`.
   See [PR 3375].
+
+- Remove `PendingConnectionError`, `PendingInboundConnectionError` and `PendingOutboundConnectionError` from the public API.
+  They are no longer referenced anywhere with the addition of `ListenError`.
+  See [PR 3497].
 
 - Remove `ConnectionId::new`. Manually creating `ConnectionId`s is now unsupported. See [PR 3327].
 
@@ -84,6 +100,8 @@
 [PR 3373]: https://github.com/libp2p/rust-libp2p/pull/3373
 [PR 3374]: https://github.com/libp2p/rust-libp2p/pull/3374
 [PR 3375]: https://github.com/libp2p/rust-libp2p/pull/3375
+[PR 3254]: https://github.com/libp2p/rust-libp2p/pull/3254
+[PR 3497]: https://github.com/libp2p/rust-libp2p/pull/3497
 
 # 0.41.1
 

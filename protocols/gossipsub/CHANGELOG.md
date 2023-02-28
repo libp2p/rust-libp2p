@@ -1,4 +1,4 @@
-# 0.44.0 [unreleased]
+# 0.44.0
 
 - Update to `prometheus-client` `v0.19.0`. See [PR 3207].
 

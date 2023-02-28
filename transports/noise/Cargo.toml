@@ -14,7 +14,7 @@ curve25519-dalek = "3.0.0"
 futures = "0.3.26"
 libp2p-core = { version = "0.39.0", path = "../../core" }
 log = "0.4"
-once_cell = "1.16.0"
+once_cell = "1.17.1"
 prost = "0.11"
 rand = "0.8.3"
 sha2 = "0.10.0"
