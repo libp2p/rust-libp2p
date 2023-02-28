@@ -19,35 +19,37 @@
 // DEALINGS IN THE SOFTWARE.
 
 use futures::StreamExt;
-use libp2p_core::{identity, upgrade::Version, Multiaddr, PeerId, Transport};
-use libp2p_ping as ping;
-use libp2p_rendezvous as rendezvous;
-use libp2p_swarm::AddressScore;
-use libp2p_swarm::{NetworkBehaviour, Swarm, SwarmEvent};
+use libp2p::{
+    core::transport::upgrade::Version,
+    identity, ping, rendezvous,
+    swarm::{derive_prelude, keep_alive, AddressScore, NetworkBehaviour, Swarm, SwarmEvent},
+    Multiaddr, PeerId, Transport,
+};
 use std::time::Duration;
+use void::Void;
 
 #[tokio::main]
 async fn main() {
     env_logger::init();
 
+    let key_pair = identity::Keypair::generate_ed25519();
     let rendezvous_point_address = "/ip4/127.0.0.1/tcp/62649".parse::<Multiaddr>().unwrap();
     let rendezvous_point = "12D3KooWDpJ7As7BWAwRMfu1VU2WCqNjvq387JEYKDBj4kx6nXTN"
         .parse()
         .unwrap();
 
-    let identity = identity::Keypair::generate_ed25519();
-
     let mut swarm = Swarm::with_tokio_executor(
-        libp2p_tcp::tokio::Transport::default()
+        libp2p::tcp::tokio::Transport::default()
             .upgrade(Version::V1)
-            .authenticate(libp2p_noise::NoiseAuthenticated::xx(&identity).unwrap())
-            .multiplex(libp2p_yamux::YamuxConfig::default())
+            .authenticate(libp2p::noise::NoiseAuthenticated::xx(&key_pair).unwrap())
+            .multiplex(libp2p::yamux::YamuxConfig::default())
             .boxed(),
         MyBehaviour {
-            rendezvous: rendezvous::client::Behaviour::new(identity.clone()),
+            rendezvous: rendezvous::client::Behaviour::new(key_pair.clone()),
             ping: ping::Behaviour::new(ping::Config::new().with_interval(Duration::from_secs(1))),
+            keep_alive: keep_alive::Behaviour,
         },
-        PeerId::from(identity.public()),
+        PeerId::from(key_pair.public()),
     );
 
     // In production the external address should be the publicly facing IP address of the rendezvous point.
@@ -57,9 +59,7 @@ async fn main() {
 
     log::info!("Local peer id: {}", swarm.local_peer_id());
 
-    let _ = swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap());
-
-    swarm.dial(rendezvous_point_address).unwrap();
+    swarm.dial(rendezvous_point_address.clone()).unwrap();
 
     while let Some(event) = swarm.next().await {
         match event {
@@ -131,13 +131,20 @@ impl From<ping::Event> for MyEvent {
     }
 }
 
+impl From<Void> for MyEvent {
+    fn from(event: Void) -> Self {
+        void::unreachable(event)
+    }
+}
+
 #[derive(NetworkBehaviour)]
 #[behaviour(
     out_event = "MyEvent",
     event_process = false,
-    prelude = "libp2p_swarm::derive_prelude"
+    prelude = "derive_prelude"
 )]
 struct MyBehaviour {
     rendezvous: rendezvous::client::Behaviour,
     ping: ping::Behaviour,
+    keep_alive: keep_alive::Behaviour,
 }

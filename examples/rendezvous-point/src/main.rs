@@ -18,53 +18,60 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::StreamExt;
-use libp2p_core::{identity, upgrade::Version, PeerId, Transport};
-use libp2p_identify as identify;
-use libp2p_ping as ping;
-use libp2p_rendezvous as rendezvous;
-use libp2p_swarm::{keep_alive, NetworkBehaviour, Swarm, SwarmEvent};
-use void::Void;
-
 /// Examples for the rendezvous protocol:
 ///
 /// 1. Run the rendezvous server:
-///    RUST_LOG=info cargo run --example rendezvous_point
+///     ```
+///     cd rendezvous-point
+///     RUST_LOG=info cargo run
+///     ```
 /// 2. Register a peer:
-///    RUST_LOG=info cargo run --example register_with_identify
+///     ```
+///     cd rendezvous-register
+///     RUST_LOG=info cargo run
+///     ```
 /// 3. Try to discover the peer from (2):
-///    RUST_LOG=info cargo run --example discover
+///     ```
+///     cd rendezvous-discover
+///     RUST_LOG=info cargo run
+///     ```
+use futures::StreamExt;
+use libp2p::{
+    core::transport::upgrade::Version,
+    identify, identity, ping, rendezvous,
+    swarm::{derive_prelude, keep_alive, NetworkBehaviour, Swarm, SwarmEvent},
+    PeerId, Transport,
+};
+use std::time::Duration;
+use void::Void;
+
 #[tokio::main]
 async fn main() {
     env_logger::init();
 
-    let bytes = [0u8; 32];
-    let key = identity::ed25519::SecretKey::from_bytes(bytes).expect("we always pass 32 bytes");
-    let identity = identity::Keypair::Ed25519(key.into());
+    let key_pair = identity::Keypair::generate_ed25519();
 
     let mut swarm = Swarm::with_tokio_executor(
-        libp2p_tcp::tokio::Transport::default()
+        libp2p::tcp::tokio::Transport::default()
             .upgrade(Version::V1)
-            .authenticate(libp2p_noise::NoiseAuthenticated::xx(&identity).unwrap())
-            .multiplex(libp2p_yamux::YamuxConfig::default())
+            .authenticate(libp2p::noise::NoiseAuthenticated::xx(&key_pair).unwrap())
+            .multiplex(libp2p::yamux::YamuxConfig::default())
             .boxed(),
         MyBehaviour {
             identify: identify::Behaviour::new(identify::Config::new(
                 "rendezvous-example/1.0.0".to_string(),
-                identity.public(),
+                key_pair.public(),
             )),
             rendezvous: rendezvous::server::Behaviour::new(rendezvous::server::Config::default()),
-            ping: ping::Behaviour::new(ping::Config::new()),
+            ping: ping::Behaviour::new(ping::Config::new().with_interval(Duration::from_secs(1))),
             keep_alive: keep_alive::Behaviour,
         },
-        PeerId::from(identity.public()),
+        PeerId::from(key_pair.public()),
     );
 
     log::info!("Local peer id: {}", swarm.local_peer_id());
 
-    swarm
-        .listen_on("/ip4/0.0.0.0/tcp/62649".parse().unwrap())
-        .unwrap();
+    let _ = swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap());
 
     while let Some(event) = swarm.next().await {
         match event {
@@ -103,10 +110,11 @@ async fn main() {
 }
 
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 enum MyEvent {
     Rendezvous(rendezvous::server::Event),
-    Ping(ping::Event),
     Identify(identify::Event),
+    Ping(ping::Event),
 }
 
 impl From<rendezvous::server::Event> for MyEvent {
@@ -115,15 +123,15 @@ impl From<rendezvous::server::Event> for MyEvent {
     }
 }
 
-impl From<ping::Event> for MyEvent {
-    fn from(event: ping::Event) -> Self {
-        MyEvent::Ping(event)
-    }
-}
-
 impl From<identify::Event> for MyEvent {
     fn from(event: identify::Event) -> Self {
         MyEvent::Identify(event)
+    }
+}
+
+impl From<ping::Event> for MyEvent {
+    fn from(event: ping::Event) -> Self {
+        MyEvent::Ping(event)
     }
 }
 
@@ -137,7 +145,7 @@ impl From<Void> for MyEvent {
 #[behaviour(
     out_event = "MyEvent",
     event_process = false,
-    prelude = "libp2p_swarm::derive_prelude"
+    prelude = "derive_prelude"
 )]
 struct MyBehaviour {
     identify: identify::Behaviour,
