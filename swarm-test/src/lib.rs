@@ -39,7 +39,7 @@ pub trait SwarmExt {
     /// This function only abstracts away the "dial and wait for `ConnectionEstablished` event" part.
     ///
     /// Because we don't have access to the other [`Swarm`], we can't guarantee that it makes progress.
-    async fn dial_and_wait(&mut self, addr: Multiaddr);
+    async fn dial_and_wait(&mut self, addr: Multiaddr) -> PeerId;
 
     /// Wait for specified condition to return `Some`.
     async fn wait<E, P>(&mut self, predicate: P) -> E
@@ -85,6 +85,7 @@ where
         let peer_id = PeerId::from(identity.public());
 
         let transport = MemoryTransport::default()
+            .or_transport(libp2p_tcp::async_io::Transport::default())
             .upgrade(Version::V1)
             .authenticate(PlainText2Config {
                 local_public_key: identity.public(),
@@ -138,19 +139,19 @@ where
         }
     }
 
-    async fn dial_and_wait(&mut self, to_dial: Multiaddr) {
-        self.dial(to_dial.clone()).unwrap();
+    async fn dial_and_wait(&mut self, addr: Multiaddr) -> PeerId {
+        self.dial(addr.clone()).unwrap();
 
         self.wait(|e| match e {
-            SwarmEvent::ConnectionEstablished { endpoint, .. } => {
-                (endpoint.get_remote_address() == &to_dial).then_some(())
-            }
+            SwarmEvent::ConnectionEstablished {
+                endpoint, peer_id, ..
+            } => (endpoint.get_remote_address() == &addr).then_some(peer_id),
             other => {
                 log::debug!("Ignoring event from dialer {:?}", other);
                 None
             }
         })
-        .await;
+        .await
     }
 
     async fn wait<E, P>(&mut self, predicate: P) -> E
