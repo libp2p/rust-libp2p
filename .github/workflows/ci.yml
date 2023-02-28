@@ -39,6 +39,8 @@ jobs:
         with:
           toolchain: ${{ steps.parse-msrv.outputs.version }}
 
+      - uses: r7kamura/rust-problem-matchers@v1
+
       - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
         with:
           shared-key: msrv-cache
@@ -114,6 +116,8 @@ jobs:
           toolchain: stable
           target: ${{ matrix.target }}
 
+      - uses: r7kamura/rust-problem-matchers@v1
+
       - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
         with:
           key: ${{ matrix.target }}
@@ -139,6 +143,8 @@ jobs:
         with:
           toolchain: stable
 
+      - uses: r7kamura/rust-problem-matchers@v1
+
       - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
         with:
           key: ${{ matrix.features }}
@@ -158,6 +164,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@9cd00a88a73addc8617065438eff914dd08d0955 # v1
         with:
           toolchain: stable
+
+      - uses: r7kamura/rust-problem-matchers@v1
 
       - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
         with:
@@ -186,11 +194,11 @@ jobs:
           toolchain: ${{ matrix.rust-version }}
           components: clippy
 
+      - uses: r7kamura/rust-problem-matchers@v1
+
       - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
         with:
           save-if: ${{ github.ref == 'refs/heads/master' }}
-
-      - uses: r7kamura/rust-problem-matchers@v1
 
       - name: Run cargo clippy
         run: cargo clippy --workspace --all-features --all-targets -- -A clippy::type_complexity -A clippy::pedantic -W clippy::used_underscore_binding -D warnings 
@@ -207,6 +215,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@9cd00a88a73addc8617065438eff914dd08d0955 # v1
         with:
           toolchain: stable
+
+      - uses: r7kamura/rust-problem-matchers@v1
 
       - uses: Swatinem/rust-cache@359a70e43a0bb8a13953b04a90f76428b4959bb6 # v2.2.0
         with:
@@ -225,6 +235,8 @@ jobs:
           toolchain: stable
           components: rustfmt
 
+      - uses: r7kamura/rust-problem-matchers@v1
+
       - name: Check formatting
         run: cargo fmt -- --check
 
@@ -236,6 +248,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@9cd00a88a73addc8617065438eff914dd08d0955 # v1
         with:          
           toolchain: stable
+
+      - uses: r7kamura/rust-problem-matchers@v1
 
       - name: Ensure `full` feature contains all features
         run: |
