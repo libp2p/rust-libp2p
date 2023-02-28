@@ -217,6 +217,9 @@ impl PnetConfig {
             .write_all(&local_nonce)
             .await
             .map_err(PnetError::HandshakeError)?;
+        if let Err(err) = socket.flush().await {
+            log::error!("Error flushing socket: {err}");
+        }
         socket
             .read_exact(&mut remote_nonce)
             .await
