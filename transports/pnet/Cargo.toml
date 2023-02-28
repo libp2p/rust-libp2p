@@ -27,6 +27,8 @@ libp2p-websocket = { path = "../websocket" }
 libp2p-yamux = { path = "../../muxers/yamux" }
 quickcheck = { package = "quickcheck-ext", path = "../../misc/quickcheck-ext" }
 tokio = { version = "1.21.1", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = "0.3"
 
 # Passing arguments to the docsrs builder in order to properly document cfg's. 
 # More information: https://docs.rs/about/builds#cross-compiling

@@ -48,6 +48,10 @@ async fn can_establish_connection_inner_with_timeout<F, T>(
     <T as libp2p_core::Transport>::ListenerUpgrade: Send,
     <T as libp2p_core::Transport>::Dial: Send,
 {
+    _ = tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::TRACE)
+        .try_init();
+
     let task = can_establish_connection_inner(build_transport, listen_addr);
     tokio::time::timeout(TIMEOUT, task).await.unwrap();
 }
