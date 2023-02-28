@@ -51,8 +51,8 @@ pub trait SwarmExt {
 
     /// Listens for incoming connections, polling the [`Swarm`] until the transport is ready to accept connections.
     ///
-    /// The concrete transport is an implementation detail and should not be relied upon.
-    async fn listen(&mut self) -> Multiaddr;
+    /// The first address is for the memory transport, the second one for the TCP transport.
+    async fn listen(&mut self) -> (Multiaddr, Multiaddr);
 
     /// Returns the next [`SwarmEvent`] or times out after 10 seconds.
     ///
@@ -167,11 +167,14 @@ where
         }
     }
 
-    async fn listen(&mut self) -> Multiaddr {
+    async fn listen(&mut self) -> (Multiaddr, Multiaddr) {
         let memory_addr_listener_id = self.listen_on(Protocol::Memory(0).into()).unwrap();
+        let tcp_addr_listener_id = self
+            .listen_on("/ip4/127.0.0.1/tcp/0".parse().unwrap())
+            .unwrap();
 
         // block until we are actually listening
-        let multiaddr = self
+        let memory_multiaddr = self
             .wait(|e| match e {
                 SwarmEvent::NewListenAddr {
                     address,
@@ -188,9 +191,28 @@ where
             .await;
 
         // Memory addresses are externally reachable because they all share the same memory-space.
-        self.add_external_address(multiaddr.clone(), AddressScore::Infinite);
+        self.add_external_address(memory_multiaddr.clone(), AddressScore::Infinite);
 
-        multiaddr
+        let tcp_multiaddr = self
+            .wait(|e| match e {
+                SwarmEvent::NewListenAddr {
+                    address,
+                    listener_id,
+                } => (listener_id == tcp_addr_listener_id).then_some(address),
+                other => {
+                    log::debug!(
+                        "Ignoring {:?} while waiting for listening to succeed",
+                        other
+                    );
+                    None
+                }
+            })
+            .await;
+
+        // TCP addresses are "externally" reachable because we run our tests in the same process and they all can reach localhost.
+        self.add_external_address(tcp_multiaddr.clone(), AddressScore::Infinite);
+
+        (memory_multiaddr, tcp_multiaddr)
     }
 
     async fn next_or_timeout(

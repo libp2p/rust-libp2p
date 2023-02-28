@@ -18,8 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-mod harness;
-
 use libp2p_autonat::{
     Behaviour, Config, Event, InboundProbeError, InboundProbeEvent, ResponseError,
 };
@@ -33,7 +31,7 @@ use std::{num::NonZeroU32, time::Duration};
 async fn test_dial_back() {
     let (mut server, server_id, server_addr) = new_server_swarm(None).await;
     let (mut client, client_id) = new_client_swarm(server_id, server_addr).await;
-    let client_addr = harness::listen_on_random_tcp_address(&mut client).await;
+    let (_, client_addr) = client.listen().await;
     async_std::task::spawn(client.loop_on_next());
 
     let client_port = client_addr
@@ -180,7 +178,7 @@ async fn test_throttle_global_max() {
     .await;
     for _ in 0..2 {
         let (mut client, _) = new_client_swarm(server_id, server_addr.clone()).await;
-        harness::listen_on_random_tcp_address(&mut client).await;
+        client.listen().await;
         async_std::task::spawn(client.loop_on_next());
     }
 
@@ -220,7 +218,7 @@ async fn test_throttle_peer_max() {
     .await;
 
     let (mut client, client_id) = new_client_swarm(server_id, server_addr.clone()).await;
-    harness::listen_on_random_tcp_address(&mut client).await;
+    client.listen().await;
     async_std::task::spawn(client.loop_on_next());
 
     let first_probe_id = match server.next_behaviour_event().await {
@@ -267,7 +265,7 @@ async fn test_dial_multiple_addr() {
     .await;
 
     let (mut client, client_id) = new_client_swarm(server_id, server_addr.clone()).await;
-    harness::listen_on_random_tcp_address(&mut client).await;
+    client.listen().await;
     client.add_external_address(
         "/ip4/127.0.0.1/tcp/12345".parse().unwrap(),
         AddressScore::Infinite,
@@ -321,7 +319,7 @@ async fn test_global_ips_config() {
     .await;
 
     let (mut client, _) = new_client_swarm(server_id, server_addr.clone()).await;
-    harness::listen_on_random_tcp_address(&mut client).await;
+    client.listen().await;
     async_std::task::spawn(client.loop_on_next());
 
     // Expect the probe to be refused as both peers run on the same machine and thus in the same local network.
@@ -344,7 +342,7 @@ async fn new_server_swarm(config: Option<Config>) -> (Swarm<Behaviour>, PeerId, 
 
     let mut server = Swarm::new_ephemeral(|key| Behaviour::new(key.public().to_peer_id(), config));
     let peer_id = *server.local_peer_id();
-    let addr = harness::listen_on_random_tcp_address(&mut server).await;
+    let (_, addr) = server.listen().await;
 
     (server, peer_id, addr)
 }

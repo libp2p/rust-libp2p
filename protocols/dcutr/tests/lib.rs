@@ -18,7 +18,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
-use futures::stream::StreamExt;
 use libp2p_core::multiaddr::{Multiaddr, Protocol};
 use libp2p_core::transport::upgrade::Version;
 use libp2p_core::transport::{MemoryTransport, OrTransport, Transport};
@@ -39,8 +38,8 @@ async fn connect() {
     let mut src = build_client();
 
     // Have all swarms listen on a local memory address.
-    let relay_addr = relay.listen().await;
-    let dst_addr = dst.listen().await;
+    let (relay_addr, _) = relay.listen().await;
+    let (dst_addr, _) = dst.listen().await;
     src.listen().await;
 
     let relay_peer_id = *relay.local_peer_id();
